@@ -1,4 +1,5 @@
 "use client"
+import { RiLoader4Line } from "@remixicon/react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -23,8 +24,6 @@ import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { fetchClient } from "@/lib/fetch"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Loading01Icon } from "@hugeicons-pro/core-stroke-rounded"
 import { useMutation } from "convex/react"
 import { useCallback, useState } from "react"
 
@@ -374,8 +373,7 @@ export function McpServerForm({
             >
               {isTesting ? (
                 <>
-                  <HugeiconsIcon
-                    icon={Loading01Icon}
+                  <RiLoader4Line
                     size={14}
                     className="mr-1 animate-spin"
                   />
@@ -411,8 +409,7 @@ export function McpServerForm({
           >
             {isSaving ? (
               <>
-                <HugeiconsIcon
-                  icon={Loading01Icon}
+                <RiLoader4Line
                   size={14}
                   className="mr-1 animate-spin"
                 />

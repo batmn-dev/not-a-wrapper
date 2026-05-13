@@ -1,4 +1,5 @@
 "use client"
+import { RiAddLine, RiDeleteBinLine, RiPlugLine, RiSettings3Line } from "@remixicon/react"
 
 import {
   AlertDialog,
@@ -18,13 +19,6 @@ import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import { useMutation, useQuery } from "convex/react"
 import { useQuery as useTanstackQuery } from "@tanstack/react-query"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  Add01Icon,
-  Delete01Icon,
-  Plug01Icon,
-  Settings01Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
 import { useState } from "react"
 import { McpServerForm } from "./mcp-server-form"
 import { McpToolApprovals } from "./mcp-tool-approvals"
@@ -141,7 +135,7 @@ export function McpServers() {
         </div>
         {mcpEnabled && (
           <Button size="sm" onClick={handleAdd}>
-            <HugeiconsIcon icon={Add01Icon} size={16} className="mr-1" />
+            <RiAddLine size={16} className="mr-1" />
             Add Server
           </Button>
         )}
@@ -160,8 +154,7 @@ export function McpServers() {
       {/* Empty state */}
       {mcpEnabled && servers.length === 0 && (
         <div className="py-8 text-center">
-          <HugeiconsIcon
-            icon={Plug01Icon}
+          <RiPlugLine
             size={48}
             className="text-muted-foreground mx-auto mb-2"
           />
@@ -173,7 +166,7 @@ export function McpServers() {
             tools.
           </p>
           <Button size="sm" variant="outline" onClick={handleAdd}>
-            <HugeiconsIcon icon={Add01Icon} size={16} className="mr-1" />
+            <RiAddLine size={16} className="mr-1" />
             Add your first server
           </Button>
         </div>
@@ -236,14 +229,14 @@ export function McpServers() {
                       size="icon"
                       onClick={() => handleEdit(server)}
                     >
-                      <HugeiconsIcon icon={Settings01Icon} size={16} />
+                      <RiSettings3Line size={16} />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => handleDeleteClick(server)}
                     >
-                      <HugeiconsIcon icon={Delete01Icon} size={16} />
+                      <RiDeleteBinLine size={16} />
                     </Button>
                   </div>
                 </div>

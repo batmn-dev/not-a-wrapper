@@ -1,4 +1,5 @@
 "use client"
+import { RiArrowUpLine } from "@remixicon/react"
 
 import { PromptSystem } from "@/app/components/suggestions/prompt-system"
 import { ButtonPlusMenu } from "@/app/components/chat-input/button-plus-menu"
@@ -12,8 +13,6 @@ import {
 } from "@/components/ui/prompt-input"
 import { Button } from "@/components/ui/button"
 import { StopBulkRoundedIcon } from "@/lib/icons"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowUp02Icon } from "@hugeicons-pro/core-stroke-rounded"
 import { resolveComposerPrimaryActionState } from "@/app/components/chat-input/primary-action-state"
 import React, { useCallback, useMemo } from "react"
 
@@ -168,9 +167,9 @@ export function MultiChatInput({
                   aria-label={primaryAction.ariaLabel}
                 >
                   {primaryAction.mode === "stop" ? (
-                    <HugeiconsIcon icon={StopBulkRoundedIcon} size={16} />
+                    <StopBulkRoundedIcon size={16} />
                   ) : (
-                    <HugeiconsIcon icon={ArrowUp02Icon} size={20} strokeWidth={2.5} className="size-5" />
+                    <RiArrowUpLine size={20} className="size-5" />
                   )}
                 </Button>
               </PromptInputAction>

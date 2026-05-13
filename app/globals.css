@@ -297,11 +297,18 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --font-heading: var(--font-geist-sans);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --shadow-border: var(--shadow-border-value);
+  --shadow-border-hover: var(--shadow-border-hover-value);
+  --shadow-border-destructive: var(--shadow-border-destructive-value);
+  --shadow-border-xs: var(--shadow-border-xs-value);
 }
 
 :root {
@@ -309,7 +316,7 @@
   --sidebar-width: 16rem;
   --sidebar-rail-width: 3.25rem;
   --sidebar-header-height: 3.25rem;
-  
+
   /* Sidebar spacing */
   --sidebar-section-first-margin-top: 0.5rem;
   --sidebar-section-margin-top: 1rem;
@@ -353,6 +360,19 @@
   --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
   --sidebar-border: oklch(0.92 0.004 286.32);
   --sidebar-ring: oklch(0.705 0.015 286.067);
+  --shadow-border-value:
+    0 0 0 1px color-mix(in oklab, var(--foreground) 14%, transparent),
+    0 1px 2px -1px rgb(0 0 0 / 0.06), 0 2px 4px 0 rgb(0 0 0 / 0.04);
+  --shadow-border-hover-value:
+    0 0 0 1px color-mix(in oklab, var(--foreground) 32%, transparent),
+    0 1px 2px -1px rgb(0 0 0 / 0.08), 0 2px 4px 0 rgb(0 0 0 / 0.06);
+  --shadow-border-destructive-value:
+    0 0 0 1px color-mix(in oklab, var(--destructive) 30%, transparent),
+    0 1px 2px -1px color-mix(in oklab, var(--destructive) 20%, transparent),
+    0 2px 4px 0 color-mix(in oklab, var(--destructive) 12%, transparent);
+  --shadow-border-xs-value:
+    0 0 0 1px color-mix(in oklab, var(--foreground) 14%, transparent),
+    rgb(0 0 0 / 0.08) 0 1px 2px -1px;
 
   /* Composer surface */
   --composer-bg: var(--background);
@@ -393,6 +413,19 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.274 0.006 286.033);
   --sidebar-ring: oklch(0.705 0.015 286.067);
+  --shadow-border-value:
+    0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent),
+    0 1px 2px -1px rgb(0 0 0 / 0.25), 0 2px 4px 0 rgb(0 0 0 / 0.18);
+  --shadow-border-hover-value:
+    0 0 0 1px color-mix(in oklab, var(--foreground) 32%, transparent),
+    0 1px 2px -1px rgb(0 0 0 / 0.3), 0 2px 4px 0 rgb(0 0 0 / 0.22);
+  --shadow-border-destructive-value:
+    0 0 0 1px color-mix(in oklab, var(--destructive) 36%, transparent),
+    0 1px 2px -1px color-mix(in oklab, var(--destructive) 24%, transparent),
+    0 2px 4px 0 color-mix(in oklab, var(--destructive) 16%, transparent);
+  --shadow-border-xs-value:
+    0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent),
+    rgb(0 0 0 / 0.18) 0 1px 2px -1px;
 
   /* Composer surface */
   --composer-bg: oklch(24.56% 0 0);

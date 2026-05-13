@@ -9,12 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import type { Id } from "@/convex/_generated/dataModel"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  MoreHorizontalIcon,
-  PencilEdit01Icon,
-  Delete01Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
+import { RiDeleteBinLine, RiEditLine, RiMoreFill } from "@remixicon/react"
 import { useState } from "react"
 
 type Project = {
@@ -46,12 +41,12 @@ export function SidebarProjectMenu({
         <DropdownMenuTrigger
           render={
             <button
-              className="hover:bg-secondary flex size-7 items-center justify-center rounded-md p-1"
+              className="hover:bg-secondary flex size-7 cursor-pointer items-center justify-center rounded-md p-1"
               onClick={(e) => e.stopPropagation()}
             />
           }
         >
-          <HugeiconsIcon icon={MoreHorizontalIcon} size={20} className="size-5 text-primary" />
+          <RiMoreFill size={20} className="text-primary size-5" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
           <DropdownMenuItem
@@ -60,7 +55,7 @@ export function SidebarProjectMenu({
               onStartEditing()
             }}
           >
-            <HugeiconsIcon icon={PencilEdit01Icon} size={16} className="mr-2" />
+            <RiEditLine size={16} className="mr-2" />
             Rename
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -70,7 +65,7 @@ export function SidebarProjectMenu({
               setIsDeleteDialogOpen(true)
             }}
           >
-            <HugeiconsIcon icon={Delete01Icon} size={16} className="mr-2" />
+            <RiDeleteBinLine size={16} className="mr-2" />
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>

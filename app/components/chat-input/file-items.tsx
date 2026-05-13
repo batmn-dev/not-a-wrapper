@@ -1,4 +1,5 @@
 "use client"
+import { RiCloseLine } from "@remixicon/react"
 
 import {
   HoverCard,
@@ -10,8 +11,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Cancel01Icon } from "@hugeicons-pro/core-stroke-rounded"
 import Image from "next/image"
 import { useEffect, useState } from "react"
 
@@ -105,7 +104,7 @@ export function FileItem({ file, onRemove }: FileItemProps) {
               />
             )}
           >
-            <HugeiconsIcon icon={Cancel01Icon} size={12} className="size-3" />
+            <RiCloseLine size={12} className="size-3" />
           </TooltipTrigger>
           <TooltipContent side="bottom" hideArrow>Remove file</TooltipContent>
         </Tooltip>

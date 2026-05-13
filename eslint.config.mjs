@@ -3,15 +3,11 @@ import nextConfig from "eslint-config-next"
 const eslintConfig = [
   ...nextConfig,
   {
-    ignores: [
-      "convex/_generated/**",
-    ],
+    ignores: ["convex/_generated/**"],
   },
   {
-    // Icon system enforcement: Use HugeIcons (@hugeicons/react + @hugeicons-pro/core-stroke-rounded)
-    // See .agents/archive/icon-mapping-phosphor-hugeicons.md for migration details
+    // Icon system enforcement: use Remix Icons React components for UI icons.
     files: ["**/*.{ts,tsx}"],
-    ignores: ["lib/icons/extras.ts"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -19,25 +15,40 @@ const eslintConfig = [
           paths: [
             {
               name: "lucide-react",
-              message:
-                "Use @hugeicons/react with @hugeicons-pro/core-stroke-rounded instead. See .agents/archive/icon-mapping-phosphor-hugeicons.md",
+              message: "Use @remixicon/react for UI icons.",
             },
             {
               name: "@phosphor-icons/react",
+              message: "Use @remixicon/react for UI icons.",
+            },
+            {
+              name: "@hugeicons/react",
               message:
-                "Use @hugeicons/react with @hugeicons-pro/core-stroke-rounded instead. See .agents/archive/icon-mapping-phosphor-hugeicons.md",
+                "This icon package has been replaced by @remixicon/react.",
+            },
+            {
+              name: "remixicon-react",
+              message: "Use the official @remixicon/react package instead.",
+            },
+            {
+              name: "remixicon",
+              message:
+                "Use @remixicon/react components, not the CSS/webfont package.",
             },
           ],
           patterns: [
             {
               group: ["lucide-react/*"],
-              message:
-                "Use @hugeicons/react with @hugeicons-pro/core-stroke-rounded instead. See .agents/archive/icon-mapping-phosphor-hugeicons.md",
+              message: "Use @remixicon/react for UI icons.",
             },
             {
               group: ["@phosphor-icons/react/*"],
+              message: "Use @remixicon/react for UI icons.",
+            },
+            {
+              group: ["@hugeicons-pro/*"],
               message:
-                "Use @hugeicons/react with @hugeicons-pro/core-stroke-rounded instead. See .agents/archive/icon-mapping-phosphor-hugeicons.md",
+                "This icon package has been replaced by @remixicon/react.",
             },
           ],
         },

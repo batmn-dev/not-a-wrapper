@@ -1,9 +1,8 @@
 "use client"
+import { RiSearchLine } from "@remixicon/react"
 
 import * as React from "react"
 import { Command as CommandPrimitive } from "cmdk"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Search01Icon } from "@hugeicons-pro/core-stroke-rounded"
 
 import { cn } from "@/lib/utils"
 import {
@@ -71,7 +70,7 @@ function CommandInput({
       data-slot="command-input-wrapper"
       className="flex h-9 items-center gap-2 border-b px-3"
     >
-      <HugeiconsIcon icon={Search01Icon} size={16} className="shrink-0 opacity-50" />
+      <RiSearchLine size={16} className="shrink-0 opacity-50" />
       <CommandPrimitive.Input
         data-slot="command-input"
         className={cn(

@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { HugeiconsIcon } from "@hugeicons/react"
 import { GripVertical } from "@/lib/icons"
 import { Group, Panel, Separator } from "react-resizable-panels"
 
@@ -47,7 +46,7 @@ function ResizableHandle({
     >
       {withHandle && (
         <div className="bg-border z-10 flex h-4 w-3 items-center justify-center rounded-xs border">
-          <HugeiconsIcon icon={GripVertical} size={10} className="size-2.5" />
+          <GripVertical size={10} className="size-2.5" />
         </div>
       )}
     </Separator>

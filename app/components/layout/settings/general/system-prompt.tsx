@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { useUser } from "@/lib/user-store/provider"
@@ -46,10 +46,8 @@ export function SystemPromptSection() {
   const hasChanges = effectivePrompt !== (user?.system_prompt || "")
 
   return (
-    <div>
-      <Label htmlFor="system-prompt" className="mb-3 text-sm font-medium">
-        Default system prompt
-      </Label>
+    <Field>
+      <FieldLabel htmlFor="system-prompt">Default system prompt</FieldLabel>
       <div className="relative">
         <Textarea
           id="system-prompt"
@@ -80,9 +78,9 @@ export function SystemPromptSection() {
           )}
         </AnimatePresence>
       </div>
-      <p className="text-muted-foreground mt-2 text-xs text-pretty">
+      <FieldDescription className="text-xs text-pretty">
         This prompt will be used for new chats.
-      </p>
-    </div>
+      </FieldDescription>
+    </Field>
   )
 }

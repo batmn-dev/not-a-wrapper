@@ -1,4 +1,5 @@
 "use client"
+import { RiQuestionLine } from "@remixicon/react"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { useUser } from "@/lib/user-store/provider"
@@ -6,8 +7,6 @@ import { FeedbackForm } from "@/components/common/feedback-form"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Drawer, DrawerContent } from "@/components/ui/drawer"
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { HelpCircleIcon } from "@hugeicons-pro/core-stroke-rounded"
 
 /**
  * Menu item that opens the feedback dialog.
@@ -16,7 +15,7 @@ import { HelpCircleIcon } from "@hugeicons-pro/core-stroke-rounded"
 export function FeedbackMenuItem({ onClick }: { onClick: () => void }) {
   return (
     <DropdownMenuItem onClick={onClick}>
-      <HugeiconsIcon icon={HelpCircleIcon} size={16} />
+      <RiQuestionLine size={16} />
       <span>Feedback</span>
     </DropdownMenuItem>
   )

@@ -1,4 +1,5 @@
 "use client"
+import { RiArrowUpLine } from "@remixicon/react"
 
 import { InputDropZone } from "./input-drop-zone"
 import {
@@ -10,8 +11,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { StopBulkRoundedIcon } from "@/lib/icons"
 import { getModelInfo } from "@/lib/models"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowUp02Icon } from "@hugeicons-pro/core-stroke-rounded"
 import { resolveComposerPrimaryActionState } from "./primary-action-state"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { PromptSystem } from "../suggestions/prompt-system"
@@ -261,9 +260,9 @@ export function ChatInput({
                   aria-label={primaryAction.ariaLabel}
                 >
                   {primaryAction.mode === "stop" ? (
-                    <HugeiconsIcon icon={StopBulkRoundedIcon} size={16} />
+                    <StopBulkRoundedIcon size={16} />
                   ) : (
-                    <HugeiconsIcon icon={ArrowUp02Icon} size={20} strokeWidth={2.5} className="size-5" />
+                    <RiArrowUpLine size={20} className="size-5" />
                   )}
                 </Button>
               </PromptInputAction>

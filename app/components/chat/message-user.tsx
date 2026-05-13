@@ -1,4 +1,5 @@
 "use client"
+import { RiCheckLine, RiEditLine, RiFileCopyLine, RiPencilLine } from "@remixicon/react"
 
 import {
   MorphingDialog,
@@ -19,13 +20,6 @@ import { toast } from "@/components/ui/toast"
 import { isConvexId } from "@/lib/chat-store/types"
 import { cn } from "@/lib/utils"
 import { UIMessage as MessageType } from "@ai-sdk/react"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  Tick02Icon,
-  Copy01Icon,
-  PencilEdit01Icon,
-  PencilEdit02Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
 import Image from "next/image"
 import React, { useEffect, useRef, useState } from "react"
 import { useScrollRoot } from "@/components/ui/scroll-root"
@@ -245,9 +239,9 @@ export function MessageUser({
             type="button"
           >
 {copied ? (
-              <HugeiconsIcon icon={Tick02Icon} size={20} className="size-5" />
+              <RiCheckLine size={20} className="size-5" />
             ) : (
-              <HugeiconsIcon icon={Copy01Icon} size={20} className="size-5" />
+              <RiFileCopyLine size={20} className="size-5" />
             )}
           </button>
         </MessageAction>
@@ -265,9 +259,9 @@ export function MessageUser({
               type="button"
             >
               {isEditing ? (
-                <HugeiconsIcon icon={PencilEdit02Icon} size={20} className="size-5" />
+                <RiPencilLine size={20} className="size-5" />
               ) : (
-                <HugeiconsIcon icon={PencilEdit01Icon} size={20} className="size-5" />
+                <RiEditLine size={20} className="size-5" />
               )}
             </button>
           </MessageAction>

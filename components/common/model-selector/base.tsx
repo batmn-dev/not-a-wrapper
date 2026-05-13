@@ -1,4 +1,5 @@
 "use client"
+import { RiArrowDownSLine, RiCheckLine, RiSearchLine, RiStarLine } from "@remixicon/react"
 
 import { PopoverContentAuth } from "@/app/components/chat-input/popover-content-auth"
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
@@ -27,13 +28,6 @@ import { ModelConfig } from "@/lib/models/types"
 import { PROVIDERS } from "@/lib/providers"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  ArrowDown01Icon,
-  Search01Icon,
-  StarIcon,
-  Tick02Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
 import { AnimatePresence, motion } from "motion/react"
 import { useRef, useState } from "react"
 import { ProModelDialog } from "./pro-dialog"
@@ -167,7 +161,7 @@ export function ModelSelector(props: ModelSelectorProps) {
           </div>
           {isLocked && (
             <div className="border-input bg-accent text-muted-foreground flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
-              <HugeiconsIcon icon={StarIcon} size={8} className="size-2" />
+              <RiStarLine size={8} className="size-2" />
               <span>Locked</span>
             </div>
           )}
@@ -204,7 +198,7 @@ export function ModelSelector(props: ModelSelectorProps) {
         <div className="flex items-center gap-2">
           {isLocked && (
             <div className="border-input bg-accent text-muted-foreground flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
-              <HugeiconsIcon icon={StarIcon} size={8} className="size-2" />
+              <RiStarLine size={8} className="size-2" />
               <span>Locked</span>
             </div>
           )}
@@ -227,8 +221,7 @@ export function ModelSelector(props: ModelSelectorProps) {
         disabled={isLoadingModels}
       >
         <span>{currentModel?.name || "Select model"}</span>
-        <HugeiconsIcon
-          icon={ArrowDown01Icon}
+        <RiArrowDownSLine
           size={16}
           className="opacity-50"
         />
@@ -364,8 +357,7 @@ export function ModelSelector(props: ModelSelectorProps) {
             )}
           </AnimatePresence>
         </div>
-        <HugeiconsIcon
-          icon={ArrowDown01Icon}
+        <RiArrowDownSLine
           size={16}
           className="opacity-50"
         />
@@ -403,8 +395,7 @@ export function ModelSelector(props: ModelSelectorProps) {
             </DrawerHeader>
             <div className="px-4 pb-2">
               <div className="relative">
-                <HugeiconsIcon
-                  icon={Search01Icon}
+                <RiSearchLine
                   size={16}
                   className="text-muted-foreground absolute top-2.5 left-2.5"
                 />
@@ -475,8 +466,7 @@ export function ModelSelector(props: ModelSelectorProps) {
         >
           <div className="bg-background sticky top-0 z-10 rounded-t-md border-b px-0 pt-0 pb-0">
             <div className="relative">
-              <HugeiconsIcon
-                icon={Search01Icon}
+              <RiSearchLine
                 size={16}
                 className="text-muted-foreground absolute top-2.5 left-2.5"
               />
@@ -532,18 +522,18 @@ export function ModelSelector(props: ModelSelectorProps) {
                     {mode === "single" ? (
                       isLocked ? (
                         <div className="border-input bg-accent text-muted-foreground flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
-                          <HugeiconsIcon icon={StarIcon} size={8} className="size-2" />
+                          <RiStarLine size={8} className="size-2" />
                           <span>Locked</span>
                         </div>
                       ) : null
                     ) : (
                       <div className="flex items-center gap-2">
                         {isSelected && (
-                          <HugeiconsIcon icon={Tick02Icon} size={16} />
+                          <RiCheckLine size={16} />
                         )}
                         {isLocked && (
                           <div className="border-input bg-accent text-muted-foreground flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
-                            <HugeiconsIcon icon={StarIcon} size={8} className="size-2" />
+                            <RiStarLine size={8} className="size-2" />
                             <span>Locked</span>
                           </div>
                         )}

@@ -1,18 +1,10 @@
 "use client"
+import { RiBox3Line, RiBrushLine, RiCloseLine, RiKeyLine, RiPlugLine, RiSettings3Line } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
 import { DrawerClose } from "@/components/ui/drawer"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn, isDev } from "@/lib/utils"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  CubeIcon,
-  Settings01Icon,
-  Key01Icon,
-  PaintBrush01Icon,
-  Plug01Icon,
-  Cancel01Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
 import { useState } from "react"
 import { ByokSection } from "./apikeys/byok-section"
 import { InteractionPreferences } from "./appearance/interaction-preferences"
@@ -47,7 +39,7 @@ export function SettingsContent({
         <div className="border-border mb-2 flex items-center justify-between border-b px-4 pb-2">
           <h2 className="text-lg font-medium text-balance">Settings</h2>
           <DrawerClose render={<Button variant="ghost" size="icon" />}>
-            <HugeiconsIcon icon={Cancel01Icon} size={16} />
+            <RiCloseLine size={16} />
           </DrawerClose>
         </div>
       )}
@@ -69,35 +61,35 @@ export function SettingsContent({
                   value="general"
                   className="ml-6 flex shrink-0 items-center gap-2"
                 >
-                  <HugeiconsIcon icon={Settings01Icon} size={16} />
+                  <RiSettings3Line size={16} />
                   <span>General</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="appearance"
                   className="flex shrink-0 items-center gap-2"
                 >
-                  <HugeiconsIcon icon={PaintBrush01Icon} size={16} />
+                  <RiBrushLine size={16} />
                   <span>Appearance</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="apikeys"
                   className="flex shrink-0 items-center gap-2"
                 >
-                  <HugeiconsIcon icon={Key01Icon} size={16} />
+                  <RiKeyLine size={16} />
                   <span>API Keys</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="models"
                   className="flex shrink-0 items-center gap-2"
                 >
-                  <HugeiconsIcon icon={CubeIcon} size={16} />
+                  <RiBox3Line size={16} />
                   <span>Models</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="connections"
                   className="flex shrink-0 items-center gap-2"
                 >
-                  <HugeiconsIcon icon={Plug01Icon} size={16} />
+                  <RiPlugLine size={16} />
                   <span>Connections</span>
                 </TabsTrigger>
               </TabsList>
@@ -139,7 +131,7 @@ export function SettingsContent({
                   className="w-full justify-start rounded-md px-3 py-2 text-left"
                 >
                   <div className="flex items-center gap-2">
-                    <HugeiconsIcon icon={Settings01Icon} size={16} />
+                    <RiSettings3Line size={16} />
                     <span>General</span>
                   </div>
                 </TabsTrigger>
@@ -149,7 +141,7 @@ export function SettingsContent({
                   className="w-full justify-start rounded-md px-3 py-2 text-left"
                 >
                   <div className="flex items-center gap-2">
-                    <HugeiconsIcon icon={PaintBrush01Icon} size={16} />
+                    <RiBrushLine size={16} />
                     <span>Appearance</span>
                   </div>
                 </TabsTrigger>
@@ -159,7 +151,7 @@ export function SettingsContent({
                   className="w-full justify-start rounded-md px-3 py-2 text-left"
                 >
                   <div className="flex items-center gap-2">
-                    <HugeiconsIcon icon={Key01Icon} size={16} />
+                    <RiKeyLine size={16} />
                     <span>API Keys</span>
                   </div>
                 </TabsTrigger>
@@ -168,7 +160,7 @@ export function SettingsContent({
                   className="w-full justify-start rounded-md px-3 py-2 text-left"
                 >
                   <div className="flex items-center gap-2">
-                    <HugeiconsIcon icon={CubeIcon} size={16} />
+                    <RiBox3Line size={16} />
                     <span>Models</span>
                   </div>
                 </TabsTrigger>
@@ -177,7 +169,7 @@ export function SettingsContent({
                   className="w-full justify-start rounded-md px-3 py-2 text-left"
                 >
                   <div className="flex items-center gap-2">
-                    <HugeiconsIcon icon={Plug01Icon} size={16} />
+                    <RiPlugLine size={16} />
                     <span>Connections</span>
                   </div>
                 </TabsTrigger>

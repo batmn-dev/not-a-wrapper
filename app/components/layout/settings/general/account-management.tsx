@@ -1,4 +1,5 @@
 "use client"
+import { RiLogoutBoxRLine } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
@@ -6,8 +7,6 @@ import { useChats } from "@/lib/chat-store/chats/provider"
 import { useMessages } from "@/lib/chat-store/messages/provider"
 import { clearAllIndexedDBStores } from "@/lib/chat-store/persist"
 import { useClerk } from "@clerk/nextjs"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Logout01Icon } from "@hugeicons-pro/core-stroke-rounded"
 
 export function AccountManagement() {
   const { signOut } = useClerk()
@@ -39,7 +38,7 @@ export function AccountManagement() {
         className="flex items-center gap-2"
         onClick={handleSignOut}
       >
-        <HugeiconsIcon icon={Logout01Icon} size={16} />
+        <RiLogoutBoxRLine size={16} />
         <span>Sign out</span>
       </Button>
     </div>

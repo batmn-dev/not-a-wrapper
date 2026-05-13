@@ -1,6 +1,5 @@
+import { RiCloseLine, RiThumbDownLine, RiThumbUpLine } from "@remixicon/react"
 import { cn } from "@/lib/utils"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { ThumbsDownIcon, ThumbsUpIcon, Cancel01Icon } from "@hugeicons-pro/core-stroke-rounded"
 
 type FeedbackBarProps = {
   className?: string
@@ -38,7 +37,7 @@ export function FeedbackBar({
             aria-label="Helpful"
             onClick={onHelpful}
           >
-            <HugeiconsIcon icon={ThumbsUpIcon} size={16} />
+            <RiThumbUpLine size={16} />
           </button>
           <button
             type="button"
@@ -46,7 +45,7 @@ export function FeedbackBar({
             aria-label="Not helpful"
             onClick={onNotHelpful}
           >
-            <HugeiconsIcon icon={ThumbsDownIcon} size={16} />
+            <RiThumbDownLine size={16} />
           </button>
         </div>
         <div className="border-border flex items-center justify-center border-l">
@@ -56,7 +55,7 @@ export function FeedbackBar({
             className="text-muted-foreground hover:text-foreground flex items-center justify-center rounded-md p-3"
             aria-label="Close"
           >
-            <HugeiconsIcon icon={Cancel01Icon} size={20} className="size-5" />
+            <RiCloseLine size={20} className="size-5" />
           </button>
         </div>
       </div>

@@ -19,11 +19,6 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Setup HugeIcons Pro registry
-        run: |
-          echo "@hugeicons-pro:registry=https://npm.hugeicons.com" >> .npmrc
-          echo "//npm.hugeicons.com/:_authToken=${{ secrets.HUGEICONS_LICENSE_KEY }}" >> .npmrc
-
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
@@ -49,11 +44,6 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-
-      - name: Setup HugeIcons Pro registry
-        run: |
-          echo "@hugeicons-pro:registry=https://npm.hugeicons.com" >> .npmrc
-          echo "//npm.hugeicons.com/:_authToken=${{ secrets.HUGEICONS_LICENSE_KEY }}" >> .npmrc
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -81,11 +71,6 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-
-      - name: Setup HugeIcons Pro registry
-        run: |
-          echo "@hugeicons-pro:registry=https://npm.hugeicons.com" >> .npmrc
-          echo "//npm.hugeicons.com/:_authToken=${{ secrets.HUGEICONS_LICENSE_KEY }}" >> .npmrc
 
       - name: Install dependencies
         run: bun install --frozen-lockfile

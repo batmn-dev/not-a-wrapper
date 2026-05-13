@@ -1,9 +1,8 @@
 "use client"
+import { RiSearchLine } from "@remixicon/react"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { cn } from "@/lib/utils"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { SearchList01Icon } from "@hugeicons-pro/core-stroke-rounded"
 import {
   cloneElement,
   isValidElement,
@@ -63,7 +62,7 @@ export function HistoryTrigger({
         aria-label="Search"
         tabIndex={isMobile ? -1 : 0}
       >
-        {icon || <HugeiconsIcon icon={SearchList01Icon} size={24} className="size-6" />}
+        {icon || <RiSearchLine size={24} className="size-6" />}
         {label}
         {trailing}
       </button>

@@ -1,4 +1,5 @@
 "use client"
+import { RiChat3Line, RiCheckLine, RiCloseLine } from "@remixicon/react"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import useClickOutside from "@/app/hooks/use-click-outside"
@@ -6,12 +7,6 @@ import { useSidebar } from "@/components/ui/sidebar"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { Chat } from "@/lib/chat-store/types"
 import { cn } from "@/lib/utils"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  Chat01Icon,
-  Tick02Icon,
-  Cancel01Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
 import Link from "next/link"
 import { useCallback, useMemo, useRef, useState } from "react"
 import { SidebarItemMenu } from "./sidebar-item-menu"
@@ -156,8 +151,7 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
         ref={containerRef}
       >
         <div className="flex items-center p-3">
-          <HugeiconsIcon
-            icon={Chat01Icon}
+          <RiChat3Line
             size={16}
             className="text-muted-foreground mr-3 flex-shrink-0"
           />
@@ -175,14 +169,14 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-6 items-center justify-center rounded-md p-1"
               type="button"
             >
-              <HugeiconsIcon icon={Tick02Icon} size={12} className="size-3" />
+              <RiCheckLine size={12} className="size-3" />
             </button>
             <button
               onClick={handleCancelClick}
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-6 items-center justify-center rounded-md p-1"
               type="button"
             >
-              <HugeiconsIcon icon={Cancel01Icon} size={12} className="size-3" />
+              <RiCloseLine size={12} className="size-3" />
             </button>
           </div>
         </div>

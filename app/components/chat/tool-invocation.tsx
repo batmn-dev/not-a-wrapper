@@ -1,4 +1,5 @@
 "use client"
+import { RiArrowDownSLine, RiCheckLine, RiCloseLine, RiCodeLine, RiFileSearchLine, RiImageLine, RiLink, RiLoader4Line, RiSearchLine, RiToolsLine, RiWrenchLine } from "@remixicon/react"
 
 import { cn } from "@/lib/utils"
 import type { ToolUIPart } from 'ai'
@@ -9,19 +10,6 @@ import {
   type ToolInvocationDisplayMetadata,
   type ToolInvocationStreamMetadata,
 } from "@/lib/tools/ui-metadata"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  AlertCircleIcon,
-  ArrowDown01Icon,
-  CheckmarkCircle01Icon,
-  SourceCodeIcon,
-  Link01Icon,
-  NutIcon,
-  Loading01Icon,
-  Search01Icon,
-  FileSearchIcon,
-  Wrench01Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
 import { AnimatePresence, motion } from "framer-motion"
 import { useMemo, useState } from "react"
 
@@ -53,17 +41,28 @@ const BUILTIN_TOOL_DISPLAY: Record<
   // image_generation: { name: "Image Generation", icon: "image" },
 }
 
-/** Resolve icon component from metadata icon identifier */
-function getToolIcon(iconId: NonNullable<ToolInvocationDisplayMetadata["icon"]>) {
+function ToolInvocationIcon({
+  iconId,
+  size,
+  className,
+}: {
+  iconId: NonNullable<ToolInvocationDisplayMetadata["icon"]>
+  size: number
+  className?: string
+}) {
   switch (iconId) {
     case "search":
-      return Search01Icon
+      return <RiSearchLine size={size} className={className} />
+    case "code":
+      return <RiCodeLine size={size} className={className} />
+    case "image":
+      return <RiImageLine size={size} className={className} />
     case "extract":
-      return FileSearchIcon
+      return <RiFileSearchLine size={size} className={className} />
     case "wrench":
-      return Wrench01Icon
+      return <RiWrenchLine size={size} className={className} />
     default:
-      return Wrench01Icon
+      return <RiWrenchLine size={size} className={className} />
   }
 }
 
@@ -199,14 +198,13 @@ export function ToolInvocation({
           className="hover:bg-accent flex w-full flex-row items-center rounded-t-md px-3 py-2 transition-colors"
         >
           <div className="flex flex-1 flex-row items-center gap-2 text-left text-base">
-            <HugeiconsIcon icon={NutIcon} size={16} className="text-muted-foreground" />
+            <RiToolsLine size={16} className="text-muted-foreground" />
             <span className="text-sm">Tools executed</span>
             <div className="bg-secondary text-secondary-foreground rounded-full px-1.5 py-0.5 font-mono text-xs">
               {uniqueToolIds.length}
             </div>
           </div>
-          <HugeiconsIcon
-            icon={ArrowDown01Icon}
+          <RiArrowDownSLine
             size={16}
             className={cn(
               "h-4 w-4 transition-transform",
@@ -365,7 +363,6 @@ function SingleToolCard({
     displayInfo?.name ??
     humanizeToolName(toolName)
   const iconId = runtimeMetadata?.icon ?? displayInfo?.icon ?? "wrench"
-  const ToolIcon = getToolIcon(iconId)
   const source = runtimeMetadata?.source
   const serviceName = runtimeMetadata?.serviceName
   const estimatedCostPer1k = runtimeMetadata?.estimatedCostPer1k
@@ -465,7 +462,7 @@ function SingleToolCard({
                     className="text-primary group flex items-center gap-1 font-medium hover:underline"
                   >
                     {item.title}
-                    <HugeiconsIcon icon={Link01Icon} size={12} className="h-3 w-3 opacity-70 transition-opacity group-hover:opacity-100" />
+                    <RiLink size={12} className="h-3 w-3 opacity-70 transition-opacity group-hover:opacity-100" />
                   </a>
                   <div className="text-muted-foreground mt-1 font-mono text-xs">
                     {item.url}
@@ -511,7 +508,7 @@ function SingleToolCard({
                 className="text-primary flex items-center gap-1 hover:underline"
               >
                 <span className="font-mono">{htmlUrl}</span>
-                <HugeiconsIcon icon={Link01Icon} size={12} className="h-3 w-3 opacity-70" />
+                <RiLink size={12} className="h-3 w-3 opacity-70" />
               </a>
             </div>
           )}
@@ -551,7 +548,11 @@ function SingleToolCard({
         className="hover:bg-accent flex w-full flex-row items-center rounded-t-md px-3 py-2 transition-colors"
       >
         <div className="flex flex-1 flex-row items-center gap-2 text-left text-base">
-          <HugeiconsIcon icon={ToolIcon} size={16} className="text-muted-foreground" />
+          <ToolInvocationIcon
+            iconId={iconId}
+            size={16}
+            className="text-muted-foreground"
+          />
           <div className="flex min-w-0 flex-col">
             <span className={cn("truncate text-sm", runtimeMetadata || displayInfo ? "" : "font-mono")}>
               {displayName}
@@ -574,7 +575,7 @@ function SingleToolCard({
                 key="loading"
               >
                 <div className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400">
-                  <HugeiconsIcon icon={Loading01Icon} size={12} className="mr-1 h-3 w-3 animate-spin" />
+                  <RiLoader4Line size={12} className="mr-1 h-3 w-3 animate-spin" />
                   Running
                 </div>
               </motion.div>
@@ -587,7 +588,7 @@ function SingleToolCard({
                 key="error"
               >
                 <div className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-xs text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
-                  <HugeiconsIcon icon={AlertCircleIcon} size={12} className="mr-1 h-3 w-3" />
+                  <RiCloseLine size={12} className="mr-1 h-3 w-3" />
                   Failed
                 </div>
               </motion.div>
@@ -600,15 +601,14 @@ function SingleToolCard({
                 key="completed"
               >
                 <div className="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-1.5 py-0.5 text-xs text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400">
-                  <HugeiconsIcon icon={CheckmarkCircle01Icon} size={12} className="mr-1 h-3 w-3" />
+                  <RiCheckLine size={12} className="mr-1 h-3 w-3" />
                   Completed
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
-        <HugeiconsIcon
-          icon={ArrowDown01Icon}
+        <RiArrowDownSLine
           size={16}
           className={cn(
             "h-4 w-4 transition-transform",
@@ -716,7 +716,7 @@ function SingleToolCard({
               {/* Tool call ID */}
               <div className="text-muted-foreground flex items-center justify-between text-xs">
                 <div className="flex items-center">
-                  <HugeiconsIcon icon={SourceCodeIcon} size={12} className="mr-1 inline" />
+                  <RiCodeLine size={12} className="mr-1 inline" />
                   Tool Call ID:{" "}
                   <span className="ml-1 font-mono">{toolCallId}</span>
                 </div>

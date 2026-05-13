@@ -1,13 +1,12 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { HugeiconsIcon, IconSvgElement } from "@hugeicons/react"
 import Link from "next/link"
-import { forwardRef, isValidElement, type ReactNode, type Ref } from "react"
+import { forwardRef, type ReactNode, type Ref } from "react"
 
 type SidebarMenuItemProps = {
-  /** Icon component from Hugeicons, or a custom React node */
-  icon: IconSvgElement | ReactNode
+  /** Icon node */
+  icon: ReactNode
   /** Label text */
   label: string
   /** Navigation href - renders as Link if provided */
@@ -30,6 +29,8 @@ const baseClassName = cn(
   "h-9 pointer-coarse:h-auto",
   // Spacing using CSS variables
   "gap-(--sidebar-item-gap) px-2.5 py-1.5 pointer-coarse:py-3",
+  // Native buttons default to cursor: default; sidebar rows should feel clickable.
+  "cursor-pointer",
   // Colors (instant hover — no transition)
   "text-primary hover:bg-accent/80 hover:text-foreground",
   // Focus states
@@ -38,7 +39,7 @@ const baseClassName = cn(
 
 /**
  * Unified sidebar menu item component.
- * 
+ *
  * Features:
  * - Icon wrapper pattern (ChatGPT style) for consistent alignment
  * - motion-safe: transitions for reduced motion support
@@ -53,23 +54,10 @@ export const SidebarMenuItem = forwardRef<
 ) {
   const hasTrailing = Boolean(trailing)
 
-  // Check if icon is a React element (custom icon) vs Hugeicons IconSvgElement
-  const isCustomIcon = isValidElement(icon)
-
   const content = (
     <>
       {/* Icon wrapper (ChatGPT pattern) for consistent alignment */}
-      <div className="flex items-center justify-center shrink-0">
-        {isCustomIcon ? (
-          icon
-        ) : (
-          <HugeiconsIcon
-            icon={icon as IconSvgElement}
-            size={20}
-            className="group-disabled/menu-item:opacity-50"
-          />
-        )}
-      </div>
+      <div className="flex shrink-0 items-center justify-center">{icon}</div>
       <div className="flex min-w-0 grow items-center gap-(--sidebar-item-gap)">
         <span className="truncate">{label}</span>
       </div>

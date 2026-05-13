@@ -1,8 +1,7 @@
+import { RiArrowDownSLine } from "@remixicon/react"
 import * as React from "react"
 import { NavigationMenu as NavigationMenuPrimitive } from "@base-ui/react/navigation-menu"
 import { cva } from "class-variance-authority"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowDown01Icon } from "@hugeicons-pro/core-stroke-rounded"
 
 import { cn } from "@/lib/utils"
 
@@ -78,8 +77,7 @@ function NavigationMenuTrigger({
       <NavigationMenuPrimitive.Icon
         className="relative top-[1px] ml-1 inline-flex transition duration-300 data-[open]:rotate-180"
       >
-        <HugeiconsIcon
-          icon={ArrowDown01Icon}
+        <RiArrowDownSLine
           size={12}
           aria-hidden="true"
         />

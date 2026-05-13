@@ -1,4 +1,5 @@
 "use client"
+import { RiLogoutBoxRLine } from "@remixicon/react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -18,8 +19,6 @@ import { useMessages } from "@/lib/chat-store/messages/provider"
 import { clearAllIndexedDBStores } from "@/lib/chat-store/persist"
 import { useUser } from "@/lib/user-store/provider"
 import { useClerk } from "@clerk/nextjs"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Logout01Icon } from "@hugeicons-pro/core-stroke-rounded"
 import { useState } from "react"
 import { toast } from "@/components/ui/toast"
 import { AppInfoDialog, AppInfoMenuItem } from "./app-info/app-info-trigger"
@@ -74,7 +73,7 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
         onClick={handleSignOut}
         className="flex items-center gap-2"
       >
-        <HugeiconsIcon icon={Logout01Icon} size={16} />
+        <RiLogoutBoxRLine size={16} />
         <span>Sign out</span>
       </DropdownMenuItem>
     </>

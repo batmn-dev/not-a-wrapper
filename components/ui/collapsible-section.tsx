@@ -1,9 +1,8 @@
 "use client"
+import { RiArrowRightSLine } from "@remixicon/react"
 
 import * as React from "react"
 import { Collapsible } from "@base-ui/react/collapsible"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowRight01Icon } from "@hugeicons-pro/core-stroke-rounded"
 import { cn } from "@/lib/utils"
 
 type CollapsibleSectionProps = {
@@ -87,8 +86,7 @@ export function CollapsibleSection({
         ) : (
           <span className="truncate">{title}</span>
         )}
-        <HugeiconsIcon
-          icon={ArrowRight01Icon}
+        <RiArrowRightSLine
           size={12}
           className={cn(
             "h-3 w-3 shrink-0 motion-safe:transition-all duration-150",

@@ -1,26 +1,24 @@
 # Icon System
 
-This project uses a consolidated icon system with **HugeIcons Pro** as the primary library.
+This project uses **official Remix Icons React components** as the primary UI icon library.
 
 ## Quick Start
 
-### Default: HugeIcons
+### Default: Remix Icons
 
 ```typescript
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Tick02Icon, Cancel01Icon, ArrowDown01Icon } from "@hugeicons-pro/core-stroke-rounded"
+import { RiCheckLine, RiCloseLine } from "@remixicon/react"
 
 // Usage
-<HugeiconsIcon icon={Tick02Icon} size={16} />
-<HugeiconsIcon icon={Cancel01Icon} size={16} className="text-red-500" />
+<RiCheckLine size={16} />
+<RiCloseLine size={16} className="text-red-500" />
 ```
 
 ### Custom Brand Icons
 
 ```typescript
-import { ClaudeIcon, OpenAIIcon } from "@/components/icons/claude"
 // or default import
-import ClaudeIcon from "@/components/icons/claude"
+import ClaudeIcon, { ClaudeIcon, OpenAIIcon } from "@/components/icons/claude"
 ```
 
 All brand icons support the `size` prop:
@@ -35,7 +33,12 @@ All brand icons support the `size` prop:
 Some commonly used icons are re-exported from `@/lib/icons` for convenience:
 
 ```typescript
-import { HugeiconsIcon, PinIcon, PinOffIcon, PanelLeftIcon, GripVerticalIcon } from "@/lib/icons"
+import {
+  GripVerticalIcon,
+  PanelLeftIcon,
+  PinIcon,
+  PinOffIcon,
+} from "@/lib/icons"
 ```
 
 ## Creating New Custom Icons
@@ -78,37 +81,36 @@ MyIcon.displayName = "MyIcon"
 export default MyIcon
 ```
 
-## Icon Mapping Reference
-
-See `.agents/archive/icon-mapping-phosphor-hugeicons.md` for the complete Phosphor → HugeIcons mapping.
-
 ### Common Icons Quick Reference
 
-| Purpose | HugeIcon |
-|---------|----------|
-| Checkmark | `Tick02Icon` |
-| Close/X | `Cancel01Icon` |
-| Arrow down | `ArrowDown01Icon` |
-| Arrow up | `ArrowUp01Icon` |
-| Arrow left | `ArrowLeft01Icon` |
-| Arrow right | `ArrowRight01Icon` |
-| Search | `Search01Icon` |
-| Loading | `Loading01Icon` |
-| Refresh | `RefreshIcon` |
-| Warning | `Alert01Icon` |
-| Error | `AlertCircleIcon` |
-| Info | `InformationCircleIcon` |
-| Delete | `Delete01Icon` |
-| More (horizontal) | `MoreHorizontalIcon` |
-| More (vertical) | `MoreVerticalIcon` |
-| Quote | `QuoteUpIcon` |
-| Chat | `Chat01Icon` |
-| Settings | `Settings01Icon` |
-| User | `User02Icon` |
-| Copy | `Copy01Icon` |
-| Edit | `PencilEdit01Icon` |
-| Add | `Add01Icon` |
-| Minus | `MinusSignIcon` |
+| Purpose     | Remix icon           |
+| ----------- | -------------------- |
+| Checkmark   | `RiCheckLine`        |
+| Close/X     | `RiCloseLine`        |
+| Arrow down  | `RiArrowDownSLine`   |
+| Send/up     | `RiArrowUpLine`      |
+| Arrow up    | `RiArrowUpSLine`     |
+| Back arrow  | `RiArrowLeftLine`    |
+| Prev arrow  | `RiArrowLeftSLine`   |
+| Arrow right | `RiArrowRightSLine`  |
+| Search      | `RiSearchLine`       |
+| Loading     | `RiLoader4Line`      |
+| Refresh     | `RiRefreshLine`      |
+| Warning     | `RiErrorWarningLine` |
+| Error       | `RiCloseCircleLine`  |
+| Info        | `RiInformationLine`  |
+| Delete      | `RiDeleteBinLine`    |
+| More menu   | `RiMoreFill`         |
+| Quote       | `RiDoubleQuotesL`    |
+| Chat        | `RiChat3Line`        |
+| Settings    | `RiSettings3Line`    |
+| User        | `RiUserLine`         |
+| Copy        | `RiFileCopyLine`     |
+| Edit        | `RiEditLine`         |
+| Add         | `RiAddLine`          |
+| New chat    | `RiAddCircleLine`    |
+| Share       | `RiShare2Line`       |
+| Minus       | `RiSubtractLine`     |
 
 ## Available Brand Icons
 
@@ -127,6 +129,6 @@ See `.agents/archive/icon-mapping-phosphor-hugeicons.md` for the complete Phosph
 - `XIcon` (X/Twitter logo)
 - `ZolaIcon`
 
-## Migration Guide
+## Notes
 
-See `.agents/archive/icon-mapping-phosphor-hugeicons.md` for the Phosphor → HugeIcons migration details.
+Use line variants for most UI icons. Use fill variants only when the design calls for a filled glyph.

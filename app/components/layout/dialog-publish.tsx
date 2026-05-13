@@ -1,4 +1,5 @@
 "use client"
+import { RiCheckLine, RiFileCopyLine, RiLoader4Line, RiShare2Line } from "@remixicon/react"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import XIcon from "@/components/icons/x"
@@ -23,13 +24,6 @@ import { APP_DOMAIN } from "@/lib/config"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { useMutation } from "convex/react"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  Tick02Icon,
-  Copy01Icon,
-  Share03Icon,
-  Loading01Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
 import type React from "react"
 import { useState } from "react"
 
@@ -88,9 +82,9 @@ export function DialogPublish() {
       disabled={isLoading}
     >
       {isLoading ? (
-        <HugeiconsIcon icon={Loading01Icon} size={20} className="size-5 animate-spin" />
+        <RiLoader4Line size={20} className="size-5 animate-spin" />
       ) : (
-        <HugeiconsIcon icon={Share03Icon} size={20} className="size-5" />
+        <RiShare2Line size={20} className="size-5" />
       )}
       <span>Share</span>
     </Button>
@@ -109,9 +103,9 @@ export function DialogPublish() {
                 className="bg-background hover:bg-background absolute top-0 right-0 rounded-l-none transition-colors"
               >
                 {copied ? (
-                  <HugeiconsIcon icon={Tick02Icon} size={16} />
+                  <RiCheckLine size={16} />
                 ) : (
-                  <HugeiconsIcon icon={Copy01Icon} size={16} />
+                  <RiFileCopyLine size={16} />
                 )}
               </Button>
             </div>

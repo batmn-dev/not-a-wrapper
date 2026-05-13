@@ -1,4 +1,5 @@
 "use client"
+import { RiChat3Line } from "@remixicon/react"
 
 import { ChatInput } from "@/app/components/chat-input/chat-input"
 import { Conversation } from "@/app/components/chat/conversation"
@@ -25,8 +26,6 @@ import { DefaultChatTransport } from "ai"
 
 // Extended UIMessage type for optimistic updates that includes createdAt
 type OptimisticUIMessage = UIMessage & { createdAt?: Date }
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Chat01Icon } from "@hugeicons-pro/core-stroke-rounded"
 import { useQuery } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "motion/react"
 import { usePathname } from "next/navigation"
@@ -483,7 +482,7 @@ export function ProjectView({ projectId }: ProjectViewProps) {
             }}
           >
             <div className="mb-6 flex items-center justify-center gap-2">
-              <HugeiconsIcon icon={Chat01Icon} size={24} className="size-6 text-muted-foreground" />
+              <RiChat3Line size={24} className="size-6 text-muted-foreground" />
               <h1 className="text-center text-3xl font-medium tracking-tight text-balance">
                 {project?.name || ""}
               </h1>

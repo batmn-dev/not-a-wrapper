@@ -1,10 +1,9 @@
 "use client"
+import { RiArrowRightSLine, RiMoreLine } from "@remixicon/react"
 
 import * as React from "react"
 import { useRender } from "@base-ui/react/use-render"
 import { mergeProps } from "@base-ui/react/merge-props"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowRight01Icon, MoreHorizontalIcon } from "@hugeicons-pro/core-stroke-rounded"
 
 import { cn } from "@/lib/utils"
 
@@ -78,7 +77,7 @@ function BreadcrumbSeparator({
       className={cn("[&>svg]:size-3.5", className)}
       {...props}
     >
-      {children ?? <HugeiconsIcon icon={ArrowRight01Icon} size={14} className="size-3.5" />}
+      {children ?? <RiArrowRightSLine size={14} className="size-3.5" />}
     </li>
   )
 }
@@ -95,7 +94,7 @@ function BreadcrumbEllipsis({
       className={cn("flex size-9 items-center justify-center", className)}
       {...props}
     >
-      <HugeiconsIcon icon={MoreHorizontalIcon} size={16} />
+      <RiMoreLine size={16} />
       <span className="sr-only">More</span>
     </span>
   )

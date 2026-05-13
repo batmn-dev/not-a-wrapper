@@ -1,8 +1,7 @@
 "use client"
+import { RiArrowLeftLine } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowLeft01Icon } from "@hugeicons-pro/core-stroke-rounded"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Suspense } from "react"
@@ -49,7 +48,7 @@ export default function AuthErrorPage() {
           href="/"
           className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-white hover:bg-zinc-700"
         >
-          <HugeiconsIcon icon={ArrowLeft01Icon} size={20} className="size-5 text-white" />
+          <RiArrowLeftLine size={20} className="size-5 text-white" />
           <span className="font-base ml-2 hidden text-sm sm:inline-block">
             Back to Chat
           </span>

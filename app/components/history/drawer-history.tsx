@@ -1,3 +1,4 @@
+import { RiCheckLine, RiCloseLine, RiDeleteBinLine, RiEditLine, RiSearchLine } from "@remixicon/react"
 import { Button } from "@/components/ui/button"
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
@@ -9,14 +10,6 @@ import {
 } from "@/components/ui/tooltip"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { Chats } from "@/lib/chat-store/types"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  Tick02Icon,
-  Search01Icon,
-  PencilEdit01Icon,
-  Delete01Icon,
-  Cancel01Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
 import { Pin, PinOff } from "@/lib/icons"
 import Link from "next/link"
 import { useParams } from "next/navigation"
@@ -143,7 +136,7 @@ export function DrawerHistory({
                     className="h-8 w-8"
                     type="submit"
                   >
-                    <HugeiconsIcon icon={Tick02Icon} size={16} />
+                    <RiCheckLine size={16} />
                   </Button>
                   <Button
                     size="icon"
@@ -152,7 +145,7 @@ export function DrawerHistory({
                     type="button"
                     onClick={handleCancelEdit}
                   >
-                    <HugeiconsIcon icon={Cancel01Icon} size={16} />
+                    <RiCloseLine size={16} />
                   </Button>
                 </div>
               </form>
@@ -190,7 +183,7 @@ export function DrawerHistory({
                     className="text-muted-foreground hover:text-destructive size-8"
                     type="submit"
                   >
-                    <HugeiconsIcon icon={Tick02Icon} size={16} />
+                    <RiCheckLine size={16} />
                   </Button>
                   <Button
                     size="icon"
@@ -199,7 +192,7 @@ export function DrawerHistory({
                     onClick={handleCancelDelete}
                     type="button"
                   >
-                    <HugeiconsIcon icon={Cancel01Icon} size={16} />
+                    <RiCloseLine size={16} />
                   </Button>
                 </div>
               </form>
@@ -240,9 +233,9 @@ export function DrawerHistory({
                     aria-label={chat.pinned ? "Unpin" : "Pin"}
                   >
                     {chat.pinned ? (
-                      <HugeiconsIcon icon={PinOff} size={16} />
+                      <PinOff size={16} />
                     ) : (
-                      <HugeiconsIcon icon={Pin} size={16} />
+                      <Pin size={16} />
                     )}
                   </Button>
                   <Button
@@ -255,7 +248,7 @@ export function DrawerHistory({
                     }}
                     type="button"
                   >
-                    <HugeiconsIcon icon={PencilEdit01Icon} size={16} />
+                    <RiEditLine size={16} />
                   </Button>
                   <Button
                     size="icon"
@@ -267,7 +260,7 @@ export function DrawerHistory({
                     }}
                     type="button"
                   >
-                    <HugeiconsIcon icon={Delete01Icon} size={16} />
+                    <RiDeleteBinLine size={16} />
                   </Button>
                 </div>
               </div>
@@ -310,7 +303,7 @@ export function DrawerHistory({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
-              <HugeiconsIcon icon={Search01Icon} size={14} className="size-3.5 absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 transform text-gray-400" />
+              <RiSearchLine size={14} className="size-3.5 absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 transform text-gray-400" />
             </div>
           </div>
 
@@ -330,7 +323,7 @@ export function DrawerHistory({
                   {pinnedChats.length > 0 && (
                     <div className="space-y-0.5">
                       <h3 className="text-muted-foreground flex items-center gap-1 pl-2 text-sm font-medium">
-                        <HugeiconsIcon icon={Pin} size={12} className="size-3" />
+                        <Pin size={12} className="size-3" />
                         Pinned
                       </h3>
                       <div className="space-y-2">

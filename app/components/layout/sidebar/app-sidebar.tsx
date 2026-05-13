@@ -18,15 +18,14 @@ import {
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
-import Link from "next/link"
-import { HugeiconsIcon, IconSvgElement } from "@hugeicons/react"
 import {
-  Chat01Icon,
-  Cancel01Icon,
-  PencilEdit02Icon,
-  Search01Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
-import { PanelLeft } from "@/lib/icons"
+  RiAddCircleLine,
+  RiChat3Line,
+  RiCloseLine,
+  RiExpandRightLine,
+  RiSearchLine,
+} from "@remixicon/react"
+import Link from "next/link"
 import { useParams } from "next/navigation"
 import React, { useMemo, useRef } from "react"
 import { HistoryTrigger } from "../../history/history-trigger"
@@ -73,7 +72,7 @@ export function AppSidebar() {
         - Expanded content: Always rendered, visible when expanded
         Both use opacity transitions for smooth crossfade
       */}
-      
+
       {/* === COLLAPSED RAIL === */}
       <div
         className={cn(
@@ -82,12 +81,12 @@ export function AppSidebar() {
           // Rail easing: steps(1,start) snaps visible instantly when collapsing;
           // steps(1,end) stays visible until the end when expanding (hidden by panel fade-in)
           "motion-safe:transition-opacity motion-safe:duration-150",
-          isCollapsed 
-            ? "motion-safe:ease-[steps(1,start)]" 
+          isCollapsed
+            ? "motion-safe:ease-[steps(1,start)]"
             : "motion-safe:ease-[steps(1,end)]",
           // Visibility based on state
-          isCollapsed 
-            ? "pointer-events-auto opacity-100" 
+          isCollapsed
+            ? "pointer-events-auto opacity-100"
             : "pointer-events-none opacity-0"
         )}
         aria-hidden={!isCollapsed}
@@ -109,7 +108,7 @@ export function AppSidebar() {
               onClick={() => setOpenMobile(false)}
               className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex size-9 items-center justify-center rounded-md bg-transparent focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
             >
-              <HugeiconsIcon icon={Cancel01Icon} size={24} className="size-6" />
+              <RiCloseLine size={24} className="size-6" />
             </button>
           ) : (
             <CollapsedHeaderToggle />
@@ -119,7 +118,7 @@ export function AppSidebar() {
         {/* Action buttons */}
         <div className="mt-(--sidebar-section-first-margin-top) flex w-full flex-col items-start gap-0 px-1.5">
           <CollapsedMenuItem
-            icon={<HugeiconsIcon icon={PencilEdit02Icon} size={20} className="size-5" />}
+            icon={<RiAddCircleLine size={20} className="size-5" />}
             label="New chat"
             href="/"
             shortcut="⇧⌘O"
@@ -128,7 +127,7 @@ export function AppSidebar() {
             hasSidebar={false}
             trigger={
               <CollapsedMenuItem
-                icon={Search01Icon}
+                icon={<RiSearchLine size={20} className="size-5" />}
                 label="Search"
                 shortcut="⌘K"
               />
@@ -159,8 +158,8 @@ export function AppSidebar() {
           // Linear crossfade in both directions (ChatGPT pattern)
           "motion-safe:transition-opacity motion-safe:duration-150 motion-safe:ease-linear",
           // Visibility based on state
-          isCollapsed 
-            ? "pointer-events-none opacity-0" 
+          isCollapsed
+            ? "pointer-events-none opacity-0"
             : "pointer-events-auto opacity-100"
         )}
         // `inert` prevents focus/interaction when hidden (ChatGPT pattern)
@@ -177,7 +176,7 @@ export function AppSidebar() {
           {/* === STICKY HEADER === */}
           <div
             className={cn(
-              "sticky top-0 z-30 bg-sidebar",
+              "bg-sidebar sticky top-0 z-30",
               // Shadow only on SHORT viewports where actions scroll away (ChatGPT pattern)
               "not-tall:group-data-[scrolled-from-top]/scrollport:shadow-[inset_0_-1px_0_0_var(--sidebar-border)]"
             )}
@@ -187,7 +186,7 @@ export function AppSidebar() {
                 <Link
                   href="/"
                   onClick={isMobile ? () => setOpenMobile(false) : undefined}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-accent"
+                  className="hover:bg-accent flex h-9 w-9 items-center justify-center rounded-lg"
                   data-sidebar-item="true"
                   aria-label="Home"
                 >
@@ -199,7 +198,7 @@ export function AppSidebar() {
                     onClick={() => setOpenMobile(false)}
                     className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex size-9 items-center justify-center rounded-md bg-transparent focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                   >
-                    <HugeiconsIcon icon={Cancel01Icon} size={20} className="size-5" />
+                    <RiCloseLine size={20} className="size-5" />
                   </button>
                 ) : (
                   <Tooltip disableHoverablePopup>
@@ -221,14 +220,14 @@ export function AppSidebar() {
           {/* Conditionally sticky: pinned on tall viewports, scrolls on short ones (ChatGPT pattern) */}
           <div
             className={cn(
-              "z-20 bg-sidebar px-0 pt-(--sidebar-section-first-margin-top)",
+              "bg-sidebar z-20 px-0 pt-(--sidebar-section-first-margin-top)",
               "tall:sticky tall:top-(--sidebar-header-height)",
               "not-tall:relative"
             )}
           >
             <div className="flex w-full flex-col items-start gap-0">
               <SidebarMenuItem
-                icon={<HugeiconsIcon icon={PencilEdit02Icon} size={20} className="size-5" />}
+                icon={<RiAddCircleLine size={20} className="size-5" />}
                 label="New chat"
                 href="/"
                 testId="new-chat-button"
@@ -244,7 +243,7 @@ export function AppSidebar() {
                 hasSidebar={false}
                 trigger={
                   <SidebarMenuItem
-                    icon={<HugeiconsIcon icon={Search01Icon} size={20} className="size-5" />}
+                    icon={<RiSearchLine size={20} className="size-5" />}
                     label="Search"
                     trailing={
                       <KbdGroup>
@@ -297,8 +296,7 @@ export function AppSidebar() {
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-20">
-                <HugeiconsIcon
-                  icon={Chat01Icon}
+                <RiChat3Line
                   size={24}
                   className="text-muted-foreground mb-1 opacity-40"
                 />
@@ -330,13 +328,13 @@ export function AppSidebar() {
             aria-hidden="true"
           >
             <div
-              className="sticky w-full bg-sidebar-border"
+              className="bg-sidebar-border sticky w-full"
               style={{ bottom: "3.75rem", height: "1px" }}
             />
           </div>
 
           {/* === STICKY FOOTER === */}
-          <div className="sticky bottom-0 z-30 bg-sidebar px-2 py-1.5 empty:hidden">
+          <div className="bg-sidebar sticky bottom-0 z-30 px-2 py-1.5 empty:hidden">
             {isLoggedIn ? (
               <UserMenu variant="sidebar" />
             ) : (
@@ -345,7 +343,7 @@ export function AppSidebar() {
                   render={
                     <Link
                       href="/auth/login"
-                      className="text-muted-foreground hover:text-foreground hover:bg-accent inline-flex h-9 w-full items-center justify-center rounded-md border border-border px-4 text-sm font-medium"
+                      className="text-muted-foreground hover:text-foreground hover:bg-accent border-border inline-flex h-9 w-full items-center justify-center rounded-md border px-4 text-sm font-medium"
                     />
                   }
                 >
@@ -379,7 +377,7 @@ function CollapsedHeaderToggle() {
           <button
             type="button"
             onClick={toggleSidebar}
-            className="group/toggle flex h-9 w-9 items-center justify-center rounded-lg cursor-e-resize rtl:cursor-w-resize hover:bg-accent focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+            className="group/toggle hover:bg-accent flex h-9 w-9 cursor-e-resize items-center justify-center rounded-lg focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none rtl:cursor-w-resize"
             aria-label="Open sidebar"
             aria-expanded={false}
             aria-controls={SIDEBAR_CONTAINER_ID}
@@ -389,8 +387,7 @@ function CollapsedHeaderToggle() {
         {/* Default: Logo icon */}
         <NawIcon className="size-5 group-hover/toggle:hidden group-focus-visible/toggle:hidden" />
         {/* Hover: Sidebar icon */}
-        <HugeiconsIcon
-          icon={PanelLeft}
+        <RiExpandRightLine
           size={20}
           className="hidden group-hover/toggle:block group-focus-visible/toggle:block"
         />
@@ -411,23 +408,17 @@ function CollapsedMenuItem({
   onClick,
   shortcut,
 }: {
-  icon: IconSvgElement | React.ReactNode
+  icon: React.ReactNode
   label: string
   href?: string
   onClick?: () => void
   shortcut?: string
 }) {
-  // Check if icon is a React element (custom icon) vs Hugeicons IconSvgElement
-  const isCustomIcon = React.isValidElement(icon)
-
-  const content = (
-    <div className="flex items-center justify-center">
-      {isCustomIcon ? icon : <HugeiconsIcon icon={icon as IconSvgElement} size={20} className="size-5" />}
-    </div>
-  )
+  const content = <div className="flex items-center justify-center">{icon}</div>
 
   const className = cn(
     "flex h-9 w-10 items-center justify-center rounded-lg",
+    "cursor-pointer",
     "hover:bg-accent",
     "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
   )
@@ -461,7 +452,11 @@ function CollapsedMenuItem({
  * Compact user avatar for collapsed rail.
  * 24px (h-6 w-6) matching ChatGPT's pattern.
  */
-function CollapsedUserAvatar({ user }: { user: { display_name?: string; profile_image?: string | null } | null }) {
+function CollapsedUserAvatar({
+  user,
+}: {
+  user: { display_name?: string; profile_image?: string | null } | null
+}) {
   if (!user) {
     return (
       <Tooltip>
@@ -469,7 +464,7 @@ function CollapsedUserAvatar({ user }: { user: { display_name?: string; profile_
           render={
             <Link
               href="/auth/login"
-              className="flex h-9 w-10 items-center justify-center rounded-lg border border-border hover:bg-accent mx-auto"
+              className="border-border hover:bg-accent mx-auto flex h-9 w-10 items-center justify-center rounded-lg border"
             />
           }
         >
@@ -480,7 +475,5 @@ function CollapsedUserAvatar({ user }: { user: { display_name?: string; profile_
     )
   }
 
-  return (
-    <UserMenu variant="sidebar-collapsed" />
-  )
+  return <UserMenu variant="sidebar-collapsed" />
 }

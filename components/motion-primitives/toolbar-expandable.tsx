@@ -1,12 +1,11 @@
 'use client';
+import { RiChat3Line, RiFolderLine, RiUserLine, RiWalletLine } from "@remixicon/react"
 
 import React, { useEffect, useRef, useState } from 'react';
 import useMeasure from 'react-use-measure';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { cn } from '@/lib/utils';
 import useClickOutside from '@/hooks/useClickOutside';
-import { HugeiconsIcon } from '@hugeicons/react';
-import { Folder01Icon, Chat01Icon, User02Icon, Wallet01Icon } from '@hugeicons-pro/core-stroke-rounded';
 
 const transition = {
   type: 'spring' as const,
@@ -18,7 +17,7 @@ const ITEMS = [
   {
     id: 1,
     label: 'User',
-    title: <HugeiconsIcon icon={User02Icon} size={20} className="size-5" />,
+    title: <RiUserLine size={20} className="size-5" />,
     content: (
       <div className='flex flex-col space-y-4'>
         <div className='flex flex-col space-y-1 text-zinc-700'>
@@ -37,7 +36,7 @@ const ITEMS = [
   {
     id: 2,
     label: 'Messages',
-    title: <HugeiconsIcon icon={Chat01Icon} size={20} className="size-5" />,
+    title: <RiChat3Line size={20} className="size-5" />,
     content: (
       <div className='flex flex-col space-y-4'>
         <div className='text-zinc-700'>You have 3 new messages.</div>
@@ -53,7 +52,7 @@ const ITEMS = [
   {
     id: 3,
     label: 'Documents',
-    title: <HugeiconsIcon icon={Folder01Icon} size={20} />,
+    title: <RiFolderLine size={20} />,
     content: (
       <div className='flex flex-col space-y-4'>
         <div className='flex flex-col text-zinc-700'>
@@ -75,7 +74,7 @@ const ITEMS = [
   {
     id: 4,
     label: 'Wallet',
-    title: <HugeiconsIcon icon={Wallet01Icon} size={20} />,
+    title: <RiWalletLine size={20} />,
     content: (
       <div className='flex flex-col space-y-4'>
         <div className='flex flex-col text-zinc-700'>

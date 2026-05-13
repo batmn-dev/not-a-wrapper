@@ -1,4 +1,5 @@
 "use client"
+import { RiMenuLine } from "@remixicon/react"
 
 import { useSidebar } from "@/components/ui/sidebar"
 import {
@@ -7,8 +8,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { MenuTwoLineIcon } from "@hugeicons-pro/core-stroke-rounded"
 
 type HeaderSidebarTriggerProps = React.HTMLAttributes<HTMLButtonElement>
 
@@ -35,7 +34,7 @@ export function HeaderSidebarTrigger({
           />
         }
       >
-        <HugeiconsIcon icon={MenuTwoLineIcon} size={20} className="size-5" />
+        <RiMenuLine size={20} className="size-5" />
         <span className="sr-only">Toggle sidebar</span>
       </TooltipTrigger>
       <TooltipContent>

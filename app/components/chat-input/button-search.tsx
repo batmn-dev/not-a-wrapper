@@ -1,8 +1,7 @@
+import { RiGlobalLine } from "@remixicon/react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { GlobeIcon } from "@hugeicons-pro/core-stroke-rounded"
 import React from "react"
 import { PopoverContentAuth } from "./popover-content-auth"
 
@@ -33,7 +32,7 @@ export function ButtonSearch({
             />
           }
         >
-          <HugeiconsIcon icon={GlobeIcon} size={20} className="size-5" />
+          <RiGlobalLine size={20} className="size-5" />
           Search
         </PopoverTrigger>
         <PopoverContentAuth />
@@ -51,7 +50,7 @@ export function ButtonSearch({
       )}
       onClick={handleClick}
     >
-      <HugeiconsIcon icon={GlobeIcon} size={20} className="size-5" />
+      <RiGlobalLine size={20} className="size-5" />
       <span className="hidden md:block">Search</span>
     </Button>
   )

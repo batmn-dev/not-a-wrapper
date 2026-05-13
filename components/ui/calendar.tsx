@@ -1,8 +1,7 @@
 "use client"
+import { RiArrowDownSLine, RiArrowLeftSLine, RiArrowRightSLine } from "@remixicon/react"
 
 import * as React from "react"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowDown01Icon, ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons-pro/core-stroke-rounded"
 import {
   DayPicker,
   getDefaultClassNames,
@@ -142,18 +141,18 @@ function Calendar({
         Chevron: ({ className, orientation }) => {
           if (orientation === "left") {
             return (
-              <HugeiconsIcon icon={ArrowLeft01Icon} size={16} className={cn(className)} />
+              <RiArrowLeftSLine size={16} className={cn(className)} />
             )
           }
 
           if (orientation === "right") {
             return (
-              <HugeiconsIcon icon={ArrowRight01Icon} size={16} className={cn(className)} />
+              <RiArrowRightSLine size={16} className={cn(className)} />
             )
           }
 
           return (
-            <HugeiconsIcon icon={ArrowDown01Icon} size={16} className={cn(className)} />
+            <RiArrowDownSLine size={16} className={cn(className)} />
           )
         },
         DayButton: CalendarDayButton,

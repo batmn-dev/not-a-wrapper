@@ -1,4 +1,5 @@
 "use client"
+import { RiAddLine, RiAttachment2, RiCheckLine, RiGlobalLine } from "@remixicon/react"
 
 import {
   DropdownMenu,
@@ -17,13 +18,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { ACCEPTED_FILE_PICKER_TYPES } from "@/lib/file-handling"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  Add01Icon,
-  AttachmentIcon,
-  Globe02Icon,
-  Tick02Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
 import { useRef } from "react"
 import { PopoverContentAuth } from "./popover-content-auth"
 
@@ -72,7 +66,7 @@ export function ButtonPlusMenu({
               />
             }
           >
-            <HugeiconsIcon icon={Add01Icon} size={20} className="size-5" />
+            <RiAddLine size={20} className="size-5" />
           </TooltipTrigger>
           <TooltipContent side="bottom" hideArrow>
             More options
@@ -118,7 +112,7 @@ export function ButtonPlusMenu({
               />
             }
           >
-            <HugeiconsIcon icon={Add01Icon} size={20} className="size-5" />
+            <RiAddLine size={20} className="size-5" />
           </TooltipTrigger>
           <TooltipContent side="bottom" hideArrow>
             More options
@@ -138,7 +132,7 @@ export function ButtonPlusMenu({
                 />
               }
             >
-              <HugeiconsIcon icon={AttachmentIcon} size={16} />
+              <RiAttachment2 size={16} />
               Add files or photos
             </TooltipTrigger>
             {!isFileUploadAvailable && (
@@ -162,11 +156,10 @@ export function ButtonPlusMenu({
                 />
               }
             >
-              <HugeiconsIcon icon={Globe02Icon} size={16} />
+              <RiGlobalLine size={16} />
               Web search
               {!isSearchDisabled && enableSearch && (
-                <HugeiconsIcon
-                  icon={Tick02Icon}
+                <RiCheckLine
                   size={14}
                   className="ml-auto"
                 />

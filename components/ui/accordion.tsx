@@ -1,9 +1,8 @@
 "use client"
+import { RiArrowDownSLine } from "@remixicon/react"
 
 import * as React from "react"
 import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowDown01Icon } from "@hugeicons-pro/core-stroke-rounded"
 
 import { cn } from "@/lib/utils"
 
@@ -42,7 +41,7 @@ function AccordionTrigger({
         {...props}
       >
         {children}
-        <HugeiconsIcon icon={ArrowDown01Icon} size={16} className="text-muted-foreground pointer-events-none shrink-0 translate-y-0.5 transition-transform duration-200" />
+        <RiArrowDownSLine size={16} className="text-muted-foreground pointer-events-none shrink-0 translate-y-0.5 transition-transform duration-200" />
       </AccordionPrimitive.Trigger>
     </AccordionPrimitive.Header>
   )

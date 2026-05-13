@@ -1,9 +1,8 @@
 "use client"
+import { RiSubtractLine } from "@remixicon/react"
 
 import * as React from "react"
 import { OTPInput, OTPInputContext } from "input-otp"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { MinusSignIcon } from "@hugeicons-pro/core-stroke-rounded"
 
 import { cn } from "@/lib/utils"
 
@@ -70,7 +69,7 @@ function InputOTPSlot({
 function InputOTPSeparator({ ...props }: React.ComponentProps<"div">) {
   return (
     <div data-slot="input-otp-separator" role="separator" {...props}>
-      <HugeiconsIcon icon={MinusSignIcon} size={16} />
+      <RiSubtractLine size={16} />
     </div>
   )
 }

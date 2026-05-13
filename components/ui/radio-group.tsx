@@ -1,10 +1,9 @@
 "use client"
+import { RiCheckboxBlankCircleFill } from "@remixicon/react"
 
 import * as React from "react"
 import { Radio as RadioPrimitive } from "@base-ui/react/radio"
 import { RadioGroup as RadioGroupPrimitive } from "@base-ui/react/radio-group"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { CircleIcon } from "@hugeicons-pro/core-stroke-rounded"
 
 import { cn } from "@/lib/utils"
 
@@ -38,7 +37,7 @@ function RadioGroupItem({
         data-slot="radio-group-indicator"
         className="relative flex items-center justify-center"
       >
-        <HugeiconsIcon icon={CircleIcon} size={8} className="size-2 fill-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+        <RiCheckboxBlankCircleFill size={8} className="size-2 fill-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
       </RadioPrimitive.Indicator>
     </RadioPrimitive.Root>
   )

@@ -22,11 +22,10 @@
  *     approach is inherently correct and avoids measurement race conditions
  */
 "use client"
+import { RiArrowDownSLine } from "@remixicon/react"
 
 import { TextShimmer } from "@/components/ui/text-shimmer"
 import { cn } from "@/lib/utils"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowDown01Icon } from "@hugeicons-pro/core-stroke-rounded"
 import React, {
   createContext,
   useContext,
@@ -156,7 +155,7 @@ function ReasoningTrigger({
           isOpen ? "rotate-180" : ""
         )}
       >
-        <HugeiconsIcon icon={ArrowDown01Icon} size={16} />
+        <RiArrowDownSLine size={16} />
       </div>
     </button>
   )
@@ -216,7 +215,7 @@ function ReasoningLabel({ className }: ReasoningLabelProps) {
           isOpen ? "rotate-180" : ""
         )}
       >
-        <HugeiconsIcon icon={ArrowDown01Icon} size={14} />
+        <RiArrowDownSLine size={14} />
       </div>
     </button>
   )

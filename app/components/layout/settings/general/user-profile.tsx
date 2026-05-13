@@ -1,9 +1,8 @@
 "use client"
+import { RiUserLine } from "@remixicon/react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useUser } from "@/lib/user-store/provider"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { User02Icon } from "@hugeicons-pro/core-stroke-rounded"
 
 export function UserProfile() {
   const { user } = useUser()
@@ -21,7 +20,7 @@ export function UserProfile() {
               <AvatarFallback>{user?.display_name?.charAt(0)}</AvatarFallback>
             </Avatar>
           ) : (
-            <HugeiconsIcon icon={User02Icon} size={48} className="size-12 text-muted-foreground" />
+            <RiUserLine size={48} className="size-12 text-muted-foreground" />
           )}
         </div>
         <div>

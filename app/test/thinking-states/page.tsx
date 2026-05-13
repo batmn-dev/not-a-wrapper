@@ -1,4 +1,5 @@
 "use client"
+import { RiFileCopyLine, RiRefreshLine } from "@remixicon/react"
 
 import { ChatInput } from "@/app/components/chat-input/chat-input"
 import { SourcesList } from "@/app/components/chat/sources-list"
@@ -26,11 +27,6 @@ import {
 import { SystemMessage } from "@/components/ui/system-message"
 import { ThinkingBar } from "@/components/ui/thinking-bar"
 import { cn } from "@/lib/utils"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  RefreshIcon,
-  Copy01Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
 import type { SourceUrlUIPart, ToolUIPart } from "ai"
 import { useCallback, useState, useEffect, useId } from "react"
 
@@ -392,7 +388,7 @@ function CopyRegenActions() {
           aria-label="Copy text"
           type="button"
         >
-          <HugeiconsIcon icon={Copy01Icon} size={20} className="size-5" />
+          <RiFileCopyLine size={20} className="size-5" />
         </button>
       </MessageAction>
       <MessageAction tooltip="Regenerate" side="bottom" delay={0}>
@@ -401,7 +397,7 @@ function CopyRegenActions() {
           aria-label="Regenerate"
           type="button"
         >
-          <HugeiconsIcon icon={RefreshIcon} size={20} className="size-5" />
+          <RiRefreshLine size={20} className="size-5" />
         </button>
       </MessageAction>
     </MessageActions>

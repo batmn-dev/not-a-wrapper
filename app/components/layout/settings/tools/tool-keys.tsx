@@ -1,4 +1,5 @@
 "use client"
+import { RiDeleteBinLine, RiExternalLinkLine, RiKeyLine, RiLoader4Line, RiSearchLine, RiWrenchLine } from "@remixicon/react"
 
 import {
   AlertDialog,
@@ -16,15 +17,6 @@ import { Label } from "@/components/ui/label"
 import { toast } from "@/components/ui/toast"
 import { fetchClient } from "@/lib/fetch"
 import { cn } from "@/lib/utils"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  Key01Icon,
-  Loading01Icon,
-  Delete01Icon,
-  Search01Icon,
-  Wrench01Icon,
-  LinkSquare01Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
 import { useQuery } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { useMutation } from "@tanstack/react-query"
@@ -39,7 +31,7 @@ type ToolProvider = {
   costEstimate: string
   /** Cost per 1,000 invocations in USD (from ToolMetadata.estimatedCostPer1k) */
   costPer1k: number
-  icon: typeof Search01Icon
+  icon: typeof RiSearchLine
   /** Whether this tool is currently available for use */
   available: boolean
 }
@@ -54,7 +46,7 @@ const TOOL_PROVIDERS: ToolProvider[] = [
     getKeyUrl: "https://dashboard.exa.ai/api-keys",
     costEstimate: "~$0.005 per search",
     costPer1k: 5,
-    icon: Search01Icon,
+    icon: RiSearchLine,
     available: true,
   },
   {
@@ -66,7 +58,7 @@ const TOOL_PROVIDERS: ToolProvider[] = [
     getKeyUrl: "https://www.firecrawl.dev/app/api-keys",
     costEstimate: "~$0.001 per page",
     costPer1k: 1,
-    icon: Wrench01Icon,
+    icon: RiWrenchLine,
     available: false, // Not yet integrated — Phase 7
   },
 ]
@@ -78,7 +70,7 @@ function getStatusBadge(status: KeyStatus) {
     case "user-key":
       return (
         <span className="bg-primary/10 text-primary inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium">
-          <HugeiconsIcon icon={Key01Icon} size={12} className="size-3" />
+          <RiKeyLine size={12} className="size-3" />
           Your key
         </span>
       )
@@ -226,47 +218,47 @@ export function ToolKeys() {
       </p>
 
       <div className="mt-4 space-y-3">
-        {TOOL_PROVIDERS.map((provider) => (
-          <button
-            key={provider.id}
-            type="button"
-            disabled={!provider.available}
-            onClick={() => setSelectedProvider(provider.id)}
-            className={cn(
-              "relative flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors",
-              selectedProvider === provider.id && provider.available
-                ? "border-primary ring-primary/30 ring-2"
-                : "border-border",
-              !provider.available && "cursor-not-allowed opacity-50"
-            )}
-          >
-            <div className="bg-muted flex size-9 shrink-0 items-center justify-center rounded-md">
-              <HugeiconsIcon
-                icon={provider.icon}
-                size={18}
-                className="text-muted-foreground"
-              />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">{provider.name}</span>
-                {provider.available
-                  ? getStatusBadge(keyStatuses[provider.id] ?? "none")
-                  : (
-                    <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium">
-                      Coming soon
-                    </span>
-                  )}
+        {TOOL_PROVIDERS.map((provider) => {
+          const ProviderIcon = provider.icon
+
+          return (
+            <button
+              key={provider.id}
+              type="button"
+              disabled={!provider.available}
+              onClick={() => setSelectedProvider(provider.id)}
+              className={cn(
+                "relative flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors",
+                selectedProvider === provider.id && provider.available
+                  ? "border-primary ring-primary/30 ring-2"
+                  : "border-border",
+                !provider.available && "cursor-not-allowed opacity-50"
+              )}
+            >
+              <div className="bg-muted flex size-9 shrink-0 items-center justify-center rounded-md">
+                <ProviderIcon size={18} className="text-muted-foreground" />
               </div>
-              <p className="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
-                {provider.description}
-              </p>
-            </div>
-            <div className="text-muted-foreground shrink-0 text-right text-xs">
-              {provider.costEstimate}
-            </div>
-          </button>
-        ))}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{provider.name}</span>
+                  {provider.available
+                    ? getStatusBadge(keyStatuses[provider.id] ?? "none")
+                    : (
+                      <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium">
+                        Coming soon
+                      </span>
+                    )}
+                </div>
+                <p className="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
+                  {provider.description}
+                </p>
+              </div>
+              <div className="text-muted-foreground shrink-0 text-right text-xs">
+                {provider.costEstimate}
+              </div>
+            </button>
+          )
+        })}
       </div>
 
       {selectedProviderConfig?.available && (
@@ -304,7 +296,7 @@ export function ToolKeys() {
                 rel="noopener noreferrer"
                 className="text-muted-foreground mt-1 inline-flex items-center gap-1 text-xs hover:underline"
               >
-                <HugeiconsIcon icon={LinkSquare01Icon} size={12} className="size-3" />
+                <RiExternalLinkLine size={12} className="size-3" />
                 Get API key
               </a>
               <div className="flex gap-2">
@@ -319,8 +311,7 @@ export function ToolKeys() {
                       deleteMutation.isPending || saveMutation.isPending
                     }
                   >
-                    <HugeiconsIcon
-                      icon={Delete01Icon}
+                    <RiDeleteBinLine
                       size={16}
                       className="mr-1"
                     />
@@ -335,8 +326,7 @@ export function ToolKeys() {
                   disabled={saveMutation.isPending || deleteMutation.isPending}
                 >
                   {saveMutation.isPending ? (
-                    <HugeiconsIcon
-                      icon={Loading01Icon}
+                    <RiLoader4Line
                       size={16}
                       className="animate-spin"
                     />
@@ -367,8 +357,7 @@ export function ToolKeys() {
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending ? (
-                <HugeiconsIcon
-                  icon={Loading01Icon}
+                <RiLoader4Line
                   size={16}
                   className="mr-2 animate-spin"
                 />

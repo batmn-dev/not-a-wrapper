@@ -1,9 +1,8 @@
 "use client"
+import { RiArrowRightSLine, RiCheckLine, RiCheckboxBlankCircleFill } from "@remixicon/react"
 
 import * as React from "react"
 import { Menu as MenuPrimitive } from "@base-ui/react/menu"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Tick02Icon, ArrowRight01Icon, CircleIcon } from "@hugeicons-pro/core-stroke-rounded"
 
 import { cn } from "@/lib/utils"
 
@@ -115,7 +114,7 @@ function DropdownMenuCheckboxItem({
     >
       <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
         <MenuPrimitive.CheckboxItemIndicator>
-          <HugeiconsIcon icon={Tick02Icon} size={16} />
+          <RiCheckLine size={16} />
         </MenuPrimitive.CheckboxItemIndicator>
       </span>
       {children}
@@ -150,7 +149,7 @@ function DropdownMenuRadioItem({
     >
       <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
         <MenuPrimitive.RadioItemIndicator>
-          <HugeiconsIcon icon={CircleIcon} size={8} className="size-2 fill-current" />
+          <RiCheckboxBlankCircleFill size={8} className="size-2 fill-current" />
         </MenuPrimitive.RadioItemIndicator>
       </span>
       {children}
@@ -232,7 +231,7 @@ function DropdownMenuSubTrigger({
       {...props}
     >
       {children}
-      <HugeiconsIcon icon={ArrowRight01Icon} size={16} className="ml-auto" />
+      <RiArrowRightSLine size={16} className="ml-auto" />
     </MenuPrimitive.SubmenuTrigger>
   )
 }
