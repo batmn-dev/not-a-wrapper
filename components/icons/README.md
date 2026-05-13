@@ -17,8 +17,8 @@ import { RiCheckLine, RiCloseLine } from "@remixicon/react"
 ### Custom Brand Icons
 
 ```typescript
-// or default import
-import ClaudeIcon, { ClaudeIcon, OpenAIIcon } from "@/components/icons/claude"
+import ClaudeIcon from "@/components/icons/claude"
+import OpenAIIcon from "@/components/icons/openai"
 ```
 
 All brand icons support the `size` prop:
