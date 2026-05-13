@@ -1,4 +1,5 @@
 "use client"
+import { RiCheckLine, RiCloseLine, RiDeleteBinLine, RiEditLine } from "@remixicon/react"
 
 import { useKeyShortcut } from "@/app/hooks/use-key-shortcut"
 import { Badge } from "@/components/ui/badge"
@@ -30,15 +31,8 @@ import type { Chats } from "@/lib/chat-store/types"
 import { useChatPreview } from "@/lib/hooks/use-chat-preview"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  Tick02Icon,
-  PencilEdit01Icon,
-  Delete01Icon,
-  Cancel01Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
 import { Pin, PinOff } from "@/lib/icons"
-// Note: Pin and PinOff are HugeIcons data objects used with HugeiconsIcon wrapper
+// Note: Pin and PinOff are local icon component aliases.
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChatPreviewPanel } from "./chat-preview-panel"
@@ -120,7 +114,7 @@ function CommandItemEdit({
               />
             }
           >
-            <HugeiconsIcon icon={Tick02Icon} size={16} className="group-hover/edit-confirm:text-primary" />
+            <RiCheckLine size={16} className="group-hover/edit-confirm:text-primary" />
           </TooltipTrigger>
           <TooltipContent>Confirm</TooltipContent>
         </Tooltip>
@@ -137,7 +131,7 @@ function CommandItemEdit({
               />
             }
           >
-            <HugeiconsIcon icon={Cancel01Icon} size={16} className="group-hover/edit-cancel:text-primary" />
+            <RiCloseLine size={16} className="group-hover/edit-cancel:text-primary" />
           </TooltipTrigger>
           <TooltipContent>Cancel</TooltipContent>
         </Tooltip>
@@ -190,7 +184,7 @@ function CommandItemDelete({
               />
             }
           >
-            <HugeiconsIcon icon={Tick02Icon} size={16} className="group-hover/delete-confirm:text-primary" />
+            <RiCheckLine size={16} className="group-hover/delete-confirm:text-primary" />
           </TooltipTrigger>
           <TooltipContent>Confirm</TooltipContent>
         </Tooltip>
@@ -207,7 +201,7 @@ function CommandItemDelete({
               />
             }
           >
-            <HugeiconsIcon icon={Cancel01Icon} size={16} className="group-hover/delete-cancel:text-primary" />
+            <RiCloseLine size={16} className="group-hover/delete-cancel:text-primary" />
           </TooltipTrigger>
           <TooltipContent>Cancel</TooltipContent>
         </Tooltip>
@@ -260,9 +254,9 @@ function CommandItemRow({
               }
             >
               {chat.pinned ? (
-                <HugeiconsIcon icon={PinOff} size={12} className="size-3 group-hover/edit:text-primary" />
+                <PinOff size={12} className="size-3 group-hover/edit:text-primary" />
               ) : (
-                <HugeiconsIcon icon={Pin} size={12} className="size-3 group-hover/edit:text-primary" />
+                <Pin size={12} className="size-3 group-hover/edit:text-primary" />
               )}
             </TooltipTrigger>
             <TooltipContent>{chat.pinned ? "Unpin" : "Pin"}</TooltipContent>
@@ -284,7 +278,7 @@ function CommandItemRow({
                 />
               }
             >
-              <HugeiconsIcon icon={PencilEdit01Icon} size={16} className="group-hover/edit:text-primary" />
+              <RiEditLine size={16} className="group-hover/edit:text-primary" />
             </TooltipTrigger>
             <TooltipContent>Edit</TooltipContent>
           </Tooltip>
@@ -305,7 +299,7 @@ function CommandItemRow({
                 />
               }
             >
-              <HugeiconsIcon icon={Delete01Icon} size={16} className="group-hover/delete:text-primary" />
+              <RiDeleteBinLine size={16} className="group-hover/delete:text-primary" />
             </TooltipTrigger>
             <TooltipContent>Delete</TooltipContent>
           </Tooltip>
@@ -630,7 +624,7 @@ export function CommandHistory({
                 <CommandGroup
                   heading={
                     <div className="flex items-center gap-1 font-semibold break-all">
-                      <HugeiconsIcon icon={Pin} size={12} className="size-3" />
+                      <Pin size={12} className="size-3" />
                       Pinned
                     </div>
                   }

@@ -1,10 +1,9 @@
 "use client"
+import { RiAlertLine, RiErrorWarningLine, RiInformationLine } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { cva, type VariantProps } from "class-variance-authority"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { AlertCircleIcon, Alert01Icon, InformationCircleIcon } from "@hugeicons-pro/core-stroke-rounded"
 import React from "react"
 
 const systemMessageVariants = cva(
@@ -86,11 +85,11 @@ export function SystemMessage({
 
     switch (variant) {
       case "error":
-        return <HugeiconsIcon icon={AlertCircleIcon} size={16} />
+        return <RiErrorWarningLine size={16} />
       case "warning":
-        return <HugeiconsIcon icon={Alert01Icon} size={16} />
+        return <RiAlertLine size={16} />
       default:
-        return <HugeiconsIcon icon={InformationCircleIcon} size={16} />
+        return <RiInformationLine size={16} />
     }
   }
 

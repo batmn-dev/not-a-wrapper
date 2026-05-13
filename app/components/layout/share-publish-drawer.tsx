@@ -1,4 +1,5 @@
 "use client"
+import { RiCheckLine, RiFileCopyLine } from "@remixicon/react"
 
 import XIcon from "@/components/icons/x"
 import { Button } from "@/components/ui/button"
@@ -11,8 +12,6 @@ import {
 } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
 import { APP_DOMAIN } from "@/lib/config"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Copy01Icon, Tick02Icon } from "@hugeicons-pro/core-stroke-rounded"
 import { useState } from "react"
 
 type SharePublishDrawerProps = {
@@ -74,9 +73,9 @@ export function SharePublishDrawer({
                     className="bg-background hover:bg-background absolute top-0 right-0 rounded-l-none transition-colors"
                   >
                     {copied ? (
-                      <HugeiconsIcon icon={Tick02Icon} size={16} />
+                      <RiCheckLine size={16} />
                     ) : (
-                      <HugeiconsIcon icon={Copy01Icon} size={16} />
+                      <RiFileCopyLine size={16} />
                     )}
                   </Button>
                 </div>

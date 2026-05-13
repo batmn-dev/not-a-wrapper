@@ -1,4 +1,5 @@
 "use client"
+import { RiInformationLine } from "@remixicon/react"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import {
@@ -17,15 +18,13 @@ import {
 } from "@/components/ui/drawer"
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { APP_NAME } from "@/lib/config"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { InformationCircleIcon } from "@hugeicons-pro/core-stroke-rounded"
 import Image from "next/image"
 import { AppInfoContent } from "./app-info-content"
 
 export function AppInfoMenuItem({ onClick }: { onClick: () => void }) {
   return (
     <DropdownMenuItem onClick={onClick}>
-      <HugeiconsIcon icon={InformationCircleIcon} size={16} />
+      <RiInformationLine size={16} />
       <span>About {APP_NAME}</span>
     </DropdownMenuItem>
   )

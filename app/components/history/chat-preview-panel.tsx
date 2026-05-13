@@ -1,12 +1,7 @@
+import { RiErrorWarningLine, RiLoader4Line, RiRefreshLine } from "@remixicon/react"
 import { MessageContent } from "@/components/ui/message"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  AlertCircleIcon,
-  Loading01Icon,
-  RefreshIcon,
-} from "@hugeicons-pro/core-stroke-rounded"
 import { useLayoutEffect, useRef, useState } from "react"
 
 type ChatPreviewPanelProps = {
@@ -98,7 +93,7 @@ function LoadingState() {
   return (
     <div className="flex h-full items-center justify-center">
       <div className="text-muted-foreground flex items-center gap-2">
-        <HugeiconsIcon icon={Loading01Icon} size={16} className="h-4 w-4 animate-spin" />
+        <RiLoader4Line size={16} className="h-4 w-4 animate-spin" />
         <span className="text-sm">Loading messages...</span>
       </div>
     </div>
@@ -122,7 +117,7 @@ function ErrorState({
     <div className="flex h-full items-center justify-center p-4">
       <div className="text-muted-foreground max-w-[300px] space-y-3 text-center">
         <div className="flex justify-center">
-          <HugeiconsIcon icon={AlertCircleIcon} size={32} className="size-8 text-muted-foreground/50 h-8 w-8" />
+          <RiErrorWarningLine size={32} className="size-8 text-muted-foreground/50 h-8 w-8" />
         </div>
         <div className="space-y-1">
           <p className="text-sm font-medium">Failed to load preview</p>
@@ -135,7 +130,7 @@ function ErrorState({
             onClick={onRetry}
             className="h-8 text-xs"
           >
-            <HugeiconsIcon icon={RefreshIcon} size={12} className="size-3 mr-1 h-3 w-3" />
+            <RiRefreshLine size={12} className="size-3 mr-1 h-3 w-3" />
             Try again
           </Button>
         )}

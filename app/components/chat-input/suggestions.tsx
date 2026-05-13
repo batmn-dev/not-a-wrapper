@@ -1,11 +1,26 @@
 "use client"
 
 import { PromptSuggestion } from "@/components/ui/prompt-suggestion"
+import type { SuggestionIconId } from "@/lib/config"
 import { TRANSITION_SUGGESTIONS } from "@/lib/motion"
+import {
+  RiBarChartLine,
+  RiBrainLine,
+  RiBrushLine,
+  RiSearchLine,
+  type RemixiconComponentType,
+} from "@remixicon/react"
 import { AnimatePresence, motion } from "motion/react"
 import React, { memo, useCallback, useMemo, useState } from "react"
 import { SUGGESTIONS as SUGGESTIONS_CONFIG } from "../../../lib/config"
-import { HugeiconsIcon } from "@hugeicons/react"
+
+const suggestionIcons: Record<SuggestionIconId, RemixiconComponentType> = {
+  analysis: RiBarChartLine,
+  code: RiBrainLine,
+  creative: RiBrushLine,
+  learning: RiBrainLine,
+  research: RiSearchLine,
+}
 
 type SuggestionsProps = {
   onValueChange: (value: string) => void
@@ -66,26 +81,30 @@ export const Suggestions = memo(function Suggestions({
           scrollbarWidth: "none",
         }}
       >
-        {SUGGESTIONS_CONFIG.map((suggestion, index) => (
-          <MotionPromptSuggestion
-            key={suggestion.label}
-            onClick={() => handleCategoryClick(suggestion)}
-            className="capitalize"
-            initial="initial"
-            animate="animate"
-            transition={{
-              ...TRANSITION_SUGGESTIONS,
-              delay: index * 0.02,
-            }}
-            variants={{
-              initial: { opacity: 0, scale: 0.8 },
-              animate: { opacity: 1, scale: 1 },
-            }}
-          >
-            <HugeiconsIcon icon={suggestion.icon} size={16} />
-            {suggestion.label}
-          </MotionPromptSuggestion>
-        ))}
+        {SUGGESTIONS_CONFIG.map((suggestion, index) => {
+          const SuggestionIcon = suggestionIcons[suggestion.icon]
+
+          return (
+            <MotionPromptSuggestion
+              key={suggestion.label}
+              onClick={() => handleCategoryClick(suggestion)}
+              className="capitalize"
+              initial="initial"
+              animate="animate"
+              transition={{
+                ...TRANSITION_SUGGESTIONS,
+                delay: index * 0.02,
+              }}
+              variants={{
+                initial: { opacity: 0, scale: 0.8 },
+                animate: { opacity: 1, scale: 1 },
+              }}
+            >
+              <SuggestionIcon size={16} />
+              {suggestion.label}
+            </MotionPromptSuggestion>
+          )
+        })}
       </motion.div>
     ),
     [handleCategoryClick]

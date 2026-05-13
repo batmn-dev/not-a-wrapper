@@ -1,8 +1,7 @@
 "use client"
+import { RiCloseLine } from "@remixicon/react"
 
 import { cn } from "@/lib/utils"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Cancel01Icon } from "@hugeicons-pro/core-stroke-rounded"
 import {
   AnimatePresence,
   motion,
@@ -411,7 +410,7 @@ function MorphingDialogClose({
       exit="exit"
       variants={variants}
     >
-      {children || <HugeiconsIcon icon={Cancel01Icon} size={24} className="size-6" />}
+      {children || <RiCloseLine size={24} className="size-6" />}
     </motion.button>
   )
 }

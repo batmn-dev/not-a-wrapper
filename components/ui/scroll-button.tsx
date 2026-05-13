@@ -1,11 +1,10 @@
 "use client"
+import { RiArrowDownLine } from "@remixicon/react"
 
 import { useContext } from "react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { type VariantProps } from "class-variance-authority"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowDown02Icon } from "@hugeicons-pro/core-stroke-rounded"
 import { useStickToBottomContext } from "use-stick-to-bottom"
 import { ScrollRootContext } from "@/components/ui/scroll-root"
 
@@ -40,7 +39,7 @@ function ScrollButtonInner({
       onClick={() => scrollToBottom()}
       {...props}
     >
-      <HugeiconsIcon icon={ArrowDown02Icon} size={20} className="size-5" />
+      <RiArrowDownLine size={20} className="size-5" />
     </Button>
   )
 }

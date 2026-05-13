@@ -14,11 +14,10 @@
  *   - Verify TextShimmer import path remains correct
  */
 "use client"
+import { RiArrowRightSLine } from "@remixicon/react"
 
 import { TextShimmer } from "@/components/ui/text-shimmer"
 import { cn } from "@/lib/utils"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowRight01Icon } from "@hugeicons-pro/core-stroke-rounded"
 
 type ThinkingBarProps = {
   className?: string
@@ -47,7 +46,7 @@ export function ThinkingBar({
           className="flex items-center gap-1 text-base transition-opacity hover:opacity-80"
         >
           <TextShimmer className="font-medium">{text}</TextShimmer>
-          <HugeiconsIcon icon={ArrowRight01Icon} size={16} className="text-muted-foreground" />
+          <RiArrowRightSLine size={16} className="text-muted-foreground" />
         </button>
       ) : (
         <TextShimmer className="cursor-default font-medium">{text}</TextShimmer>

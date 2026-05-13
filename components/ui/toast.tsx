@@ -1,11 +1,6 @@
 "use client"
+import { RiAlertLine, RiCheckboxCircleLine, RiInformationLine } from "@remixicon/react"
 
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  CheckmarkCircle01Icon,
-  InformationCircleIcon,
-  Alert01Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
 import { toast as sonnerToast } from "sonner"
 import { Button } from "./button"
 
@@ -25,13 +20,13 @@ function Toast({ title, description, button, id, status }: ToastProps) {
     <div className="border-input bg-popover flex items-center overflow-hidden rounded-xl border p-4 shadow-xs backdrop-blur-xl">
       <div className="flex flex-1 items-center">
         {status === "error" ? (
-          <HugeiconsIcon icon={Alert01Icon} size={16} className="text-primary mr-3" />
+          <RiAlertLine size={16} className="text-primary mr-3" />
         ) : null}
         {status === "info" ? (
-          <HugeiconsIcon icon={InformationCircleIcon} size={16} className="text-primary mr-3" />
+          <RiInformationLine size={16} className="text-primary mr-3" />
         ) : null}
         {status === "success" ? (
-          <HugeiconsIcon icon={CheckmarkCircle01Icon} size={16} className="text-primary mr-3" />
+          <RiCheckboxCircleLine size={16} className="text-primary mr-3" />
         ) : null}
         <div className="w-full">
           <p className="text-foreground text-sm font-medium">{title}</p>

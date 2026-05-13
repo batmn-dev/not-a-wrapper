@@ -1,11 +1,10 @@
+import { RiCheckLine, RiCloseLine } from "@remixicon/react"
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import useClickOutside from "@/app/hooks/use-click-outside"
 import { useSidebar } from "@/components/ui/sidebar"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { Chat } from "@/lib/chat-store/types"
 import { cn } from "@/lib/utils"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Tick02Icon, Cancel01Icon } from "@hugeicons-pro/core-stroke-rounded"
 import Link from "next/link"
 import { useCallback, useMemo, useRef, useState } from "react"
 import { SidebarItemMenu } from "./sidebar-item-menu"
@@ -169,14 +168,14 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 items-center justify-center rounded-md p-1"
               type="button"
             >
-              <HugeiconsIcon icon={Tick02Icon} size={16} />
+              <RiCheckLine size={16} />
             </button>
             <button
               onClick={handleCancelClick}
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 items-center justify-center rounded-md p-1"
               type="button"
             >
-              <HugeiconsIcon icon={Cancel01Icon} size={16} />
+              <RiCloseLine size={16} />
             </button>
           </div>
         </div>

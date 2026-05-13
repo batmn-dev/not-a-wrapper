@@ -1,5 +1,4 @@
-import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowLeft01Icon } from "@hugeicons-pro/core-stroke-rounded"
+import { RiArrowLeftLine } from "@remixicon/react"
 import Link from "next/link"
 
 export function HeaderGoBack({ href = "/" }: { href?: string }) {
@@ -10,7 +9,7 @@ export function HeaderGoBack({ href = "/" }: { href?: string }) {
         prefetch
         className="text-foreground hover:bg-muted inline-flex items-center gap-1 rounded-md px-2 py-1"
       >
-        <HugeiconsIcon icon={ArrowLeft01Icon} size={20} className="size-5 text-foreground" />
+        <RiArrowLeftLine size={20} className="size-5 text-foreground" />
         <span className="font-base ml-2 hidden text-sm sm:inline-block">
           Back to Chat
         </span>

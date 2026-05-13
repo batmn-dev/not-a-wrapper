@@ -1,4 +1,5 @@
 "use client"
+import { RiArrowDownSLine, RiCheckboxBlankCircleFill } from "@remixicon/react"
 
 import {
   Collapsible,
@@ -6,8 +7,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowDown01Icon, CircleIcon } from "@hugeicons-pro/core-stroke-rounded"
 import React from "react"
 
 export type ChainOfThoughtItemProps = React.ComponentProps<"div">
@@ -55,18 +54,18 @@ export const ChainOfThoughtTrigger = ({
             {leftIcon}
           </span>
           {swapIconOnHover && (
-            <HugeiconsIcon icon={ArrowDown01Icon} size={16} className="absolute opacity-0 transition-opacity group-hover:opacity-100 group-data-[open]:rotate-180" />
+            <RiArrowDownSLine size={16} className="absolute opacity-0 transition-opacity group-hover:opacity-100 group-data-[open]:rotate-180" />
           )}
         </span>
       ) : (
         <span className="relative inline-flex size-4 items-center justify-center">
-          <HugeiconsIcon icon={CircleIcon} size={8} className="size-2 fill-current" />
+          <RiCheckboxBlankCircleFill size={8} className="size-2 fill-current" />
         </span>
       )}
       <span>{children}</span>
     </div>
     {!leftIcon && (
-      <HugeiconsIcon icon={ArrowDown01Icon} size={16} className="transition-transform group-data-[open]:rotate-180" />
+      <RiArrowDownSLine size={16} className="transition-transform group-data-[open]:rotate-180" />
     )}
   </CollapsibleTrigger>
 )

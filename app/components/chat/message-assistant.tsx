@@ -1,3 +1,4 @@
+import { RiCheckLine, RiFileCopyLine, RiRefreshLine } from "@remixicon/react"
 import {
   Loader,
   StreamingCaret,
@@ -20,12 +21,6 @@ import { cn } from "@/lib/utils"
 import type { UIMessage as MessageAISDK } from "@ai-sdk/react"
 import type { ToolUIPart } from "ai"
 import { isStaticToolUIPart, getStaticToolName } from "ai"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  RefreshIcon,
-  Tick02Icon,
-  Copy01Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
 import { useCallback, useRef, useState } from "react"
 import { getSources } from "./get-sources"
 import { QuoteButton } from "./quote-button"
@@ -345,9 +340,9 @@ export function MessageAssistant({
                     type="button"
                   >
                     {copied ? (
-                      <HugeiconsIcon icon={Tick02Icon} size={20} className="size-5" />
+                      <RiCheckLine size={20} className="size-5" />
                     ) : (
-                      <HugeiconsIcon icon={Copy01Icon} size={20} className="size-5" />
+                      <RiFileCopyLine size={20} className="size-5" />
                     )}
                   </button>
                 </MessageAction>
@@ -363,7 +358,7 @@ export function MessageAssistant({
                       onClick={onReload}
                       type="button"
                     >
-                      <HugeiconsIcon icon={RefreshIcon} size={20} className="size-5" />
+                      <RiRefreshLine size={20} className="size-5" />
                     </button>
                   </MessageAction>
                 ) : null}

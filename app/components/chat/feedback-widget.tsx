@@ -1,4 +1,5 @@
 "use client"
+import { RiQuestionLine } from "@remixicon/react"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { FeedbackForm } from "@/components/common/feedback-form"
@@ -7,8 +8,6 @@ import {
   MorphingPopoverContent,
   MorphingPopoverTrigger,
 } from "@/components/motion-primitives/morphing-popover"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { HelpCircleIcon } from "@hugeicons-pro/core-stroke-rounded"
 import { motion } from "motion/react"
 import { useState } from "react"
 
@@ -62,7 +61,7 @@ export function FeedbackWidget({ authUserId }: FeedbackWidgetProps) {
               delay: isOpen ? 0 : TRANSITION_POPOVER.duration / 2,
             }}
           >
-            <HugeiconsIcon icon={HelpCircleIcon} size={16} className="text-foreground" />
+            <RiQuestionLine size={16} className="text-foreground" />
           </motion.span>
         </MorphingPopoverTrigger>
         <MorphingPopoverContent

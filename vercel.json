@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "bash -c 'echo -e \"@hugeicons-pro:registry=https://npm.hugeicons.com\\n//npm.hugeicons.com/:_authToken=${HUGEICONS_LICENSE_KEY}\" > .npmrc && bun install'",
+  "installCommand": "bun install",
   "buildCommand": "npx convex deploy --cmd 'next build'"
 }

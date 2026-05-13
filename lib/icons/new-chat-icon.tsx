@@ -1,9 +1,8 @@
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Add01Icon } from "@hugeicons-pro/core-stroke-rounded"
+import { RiAddLine } from "@remixicon/react"
 
 /**
  * Custom New Chat icon with 5% opacity circle background.
- * Combines Add01Icon (plus) with a subtle filled circle behind it.
+ * Combines RiAddLine (plus) with a subtle filled circle behind it.
  * The circle extends 2px beyond the icon on all sides.
  */
 export function NewChatIcon({ size = 18, className }: { size?: number; className?: string }) {
@@ -25,9 +24,8 @@ export function NewChatIcon({ size = 18, className }: { size?: number; className
       >
         <circle cx="12" cy="12" r="12" fill="currentColor" opacity="0.1" />
       </svg>
-      {/* Add01Icon (plus sign) on top - slightly smaller and centered */}
-      <HugeiconsIcon
-        icon={Add01Icon}
+      {/* RiAddLine (plus sign) on top - slightly smaller and centered */}
+      <RiAddLine
         size={iconSize}
         className="absolute"
         style={{ top: iconOffset, left: iconOffset }}

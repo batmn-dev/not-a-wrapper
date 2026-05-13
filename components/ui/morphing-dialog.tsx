@@ -1,4 +1,5 @@
 'use client';
+import { RiCloseLine } from "@remixicon/react"
 
 import React, {
   useCallback,
@@ -19,8 +20,6 @@ import {
 } from 'motion/react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
-import { HugeiconsIcon } from '@hugeicons/react';
-import { Cancel01Icon } from '@hugeicons-pro/core-stroke-rounded';
 import useClickOutside from '@/hooks/useClickOutside';
 
 // Hydration-safe hook using useSyncExternalStore (React 19 pattern)
@@ -411,7 +410,7 @@ function MorphingDialogClose({
       exit='exit'
       variants={variants}
     >
-      {children || <HugeiconsIcon icon={Cancel01Icon} size={24} className="size-6" />}
+      {children || <RiCloseLine size={24} className="size-6" />}
     </motion.button>
   );
 }

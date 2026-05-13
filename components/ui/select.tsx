@@ -1,9 +1,8 @@
 "use client"
+import { RiArrowDownSLine, RiArrowUpSLine, RiCheckLine } from "@remixicon/react"
 
 import * as React from "react"
 import { Select as SelectPrimitive } from "@base-ui/react/select"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Tick02Icon, ArrowDown01Icon, ArrowUp01Icon } from "@hugeicons-pro/core-stroke-rounded"
 
 import { cn } from "@/lib/utils"
 
@@ -48,7 +47,7 @@ function SelectTrigger({
       {children}
       <SelectPrimitive.Icon
         render={
-          <HugeiconsIcon icon={ArrowDown01Icon} size={16} className="opacity-50" />
+          <RiArrowDownSLine size={16} className="opacity-50" />
         }
       />
     </SelectPrimitive.Trigger>
@@ -138,7 +137,7 @@ function SelectItem({
       <SelectPrimitive.ItemIndicator
         render={<span className="pointer-events-none absolute right-2 flex size-3.5 items-center justify-center" />}
       >
-        <HugeiconsIcon icon={Tick02Icon} size={16} />
+        <RiCheckLine size={16} />
       </SelectPrimitive.ItemIndicator>
     </SelectPrimitive.Item>
   )
@@ -170,7 +169,7 @@ function SelectScrollUpButton({
       )}
       {...props}
     >
-      <HugeiconsIcon icon={ArrowUp01Icon} size={16} />
+      <RiArrowUpSLine size={16} />
     </SelectPrimitive.ScrollUpArrow>
   )
 }
@@ -188,7 +187,7 @@ function SelectScrollDownButton({
       )}
       {...props}
     >
-      <HugeiconsIcon icon={ArrowDown01Icon} size={16} />
+      <RiArrowDownSLine size={16} />
     </SelectPrimitive.ScrollDownArrow>
   )
 }

@@ -1,3 +1,4 @@
+import { RiAttachment2, RiUpload2Line } from "@remixicon/react"
 import {
   FileUpload,
   FileUploadContent,
@@ -17,11 +18,6 @@ import {
 import { ACCEPTED_FILE_PICKER_TYPES } from "@/lib/file-handling"
 import { getModelInfo } from "@/lib/models"
 import { cn } from "@/lib/utils"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  FileUploadIcon,
-  AttachmentIcon,
-} from "@hugeicons-pro/core-stroke-rounded"
 import React from "react"
 import { PopoverContentAuth } from "./popover-content-auth"
 
@@ -57,7 +53,7 @@ export function ButtonFileUpload({
               />
             }
           >
-            <HugeiconsIcon icon={AttachmentIcon} size={16} />
+            <RiAttachment2 size={16} />
           </TooltipTrigger>
           <TooltipContent side="bottom" hideArrow>Add files</TooltipContent>
         </Tooltip>
@@ -91,7 +87,7 @@ export function ButtonFileUpload({
               />
             }
           >
-            <HugeiconsIcon icon={AttachmentIcon} size={16} />
+            <RiAttachment2 size={16} />
           </TooltipTrigger>
           <TooltipContent side="bottom" hideArrow>Add files</TooltipContent>
         </Tooltip>
@@ -127,13 +123,13 @@ export function ButtonFileUpload({
             />
           }
         >
-          <HugeiconsIcon icon={AttachmentIcon} size={16} />
+          <RiAttachment2 size={16} />
         </TooltipTrigger>
         <TooltipContent side="bottom" hideArrow>Add files</TooltipContent>
       </Tooltip>
       <FileUploadContent>
         <div className="border-input bg-background flex flex-col items-center rounded-lg border border-dashed p-8">
-          <HugeiconsIcon icon={FileUploadIcon} size={32} className="size-8 text-muted-foreground" />
+          <RiUpload2Line size={32} className="size-8 text-muted-foreground" />
           <span className="mt-4 mb-1 text-lg font-medium">Drop files here</span>
           <span className="text-muted-foreground text-sm">
             Drop files here to add them to the conversation

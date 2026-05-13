@@ -1,9 +1,8 @@
 "use client"
+import { RiCloseLine } from "@remixicon/react"
 
 import * as React from "react"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Cancel01Icon } from "@hugeicons-pro/core-stroke-rounded"
 
 import { cn } from "@/lib/utils"
 
@@ -83,7 +82,7 @@ function DialogContent({
             data-slot="dialog-close"
             className="ring-offset-background focus:ring-ring absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
-            <HugeiconsIcon icon={Cancel01Icon} size={16} />
+            <RiCloseLine size={16} />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
         )}

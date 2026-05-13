@@ -1,7 +1,6 @@
+import { RiDoubleQuotesL } from "@remixicon/react"
 import useClickOutside from "@/components/motion-primitives/useClickOutside"
 import { Button } from "@/components/ui/button"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { QuoteUpIcon } from "@hugeicons-pro/core-stroke-rounded"
 import { RefObject, useLayoutEffect, useRef, useState } from "react"
 
 type QuoteButtonProps = {
@@ -51,7 +50,7 @@ export function QuoteButton({
         className="flex size-10 items-center gap-1 rounded-full px-3 py-1 text-base"
         aria-label="Ask follow up"
       >
-        <HugeiconsIcon icon={QuoteUpIcon} size={16} />
+        <RiDoubleQuotesL size={16} />
       </Button>
     </div>
   )

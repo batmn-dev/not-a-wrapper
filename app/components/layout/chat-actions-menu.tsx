@@ -1,4 +1,5 @@
 "use client"
+import { RiDeleteBinLine, RiEditLine, RiLoader4Line, RiMoreFill, RiShare2Line } from "@remixicon/react"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import {
@@ -16,14 +17,6 @@ import type { Id } from "@/convex/_generated/dataModel"
 import { useMutation } from "convex/react"
 import { cn } from "@/lib/utils"
 import { Pin, PinOff } from "@/lib/icons"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  Delete01Icon,
-  Loading01Icon,
-  MoreHorizontalIcon,
-  PencilEdit01Icon,
-  Share03Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
 import { useRouter } from "next/navigation"
 import type React from "react"
 import { useState } from "react"
@@ -109,7 +102,7 @@ export function ChatActionsMenu({
       >
         <DropdownMenuTrigger render={trigger ?? defaultTrigger}>
           {!trigger && (
-            <HugeiconsIcon icon={MoreHorizontalIcon} size={20} className="size-5 text-primary" />
+            <RiMoreFill size={20} className="size-5 text-primary" />
           )}
         </DropdownMenuTrigger>
         <DropdownMenuContent
@@ -126,11 +119,11 @@ export function ChatActionsMenu({
                 handleShare()
               }}
             >
-              <HugeiconsIcon
-                icon={isShareLoading ? Loading01Icon : Share03Icon}
-                size={16}
-                className={cn("mr-2", isShareLoading && "animate-spin")}
-              />
+              {isShareLoading ? (
+                <RiLoader4Line size={16} className="mr-2 animate-spin" />
+              ) : (
+                <RiShare2Line size={16} className="mr-2" />
+              )}
               Share
             </DropdownMenuItem>
           )}
@@ -141,9 +134,9 @@ export function ChatActionsMenu({
             }}
           >
             {chat.pinned ? (
-              <HugeiconsIcon icon={PinOff} size={16} className="mr-2" />
+              <PinOff size={16} className="mr-2" />
             ) : (
-              <HugeiconsIcon icon={Pin} size={16} className="mr-2" />
+              <Pin size={16} className="mr-2" />
             )}
             {chat.pinned ? "Unpin" : "Pin"}
           </DropdownMenuItem>
@@ -153,7 +146,7 @@ export function ChatActionsMenu({
               handleRename()
             }}
           >
-            <HugeiconsIcon icon={PencilEdit01Icon} size={16} className="mr-2" />
+            <RiEditLine size={16} className="mr-2" />
             Rename
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -163,7 +156,7 @@ export function ChatActionsMenu({
               setIsDeleteDialogOpen(true)
             }}
           >
-            <HugeiconsIcon icon={Delete01Icon} size={16} className="mr-2" />
+            <RiDeleteBinLine size={16} className="mr-2" />
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>

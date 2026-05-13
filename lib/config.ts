@@ -1,16 +1,9 @@
-import {
-  Brain01Icon,
-  PaintBrush01Icon,
-  ChartUpIcon,
-  Search01Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
-
-// IconSvgObject type definition for SUGGESTIONS array
-type IconSvgObject = ([string, {
-  [key: string]: string | number;
-}])[] | readonly (readonly [string, {
-  readonly [key: string]: string | number;
-}])[]
+export type SuggestionIconId =
+  | "code"
+  | "research"
+  | "analysis"
+  | "creative"
+  | "learning"
 
 // ============================================================================
 // Rate Limits & Usage
@@ -39,9 +32,7 @@ export const MODEL_DEFAULT_AUTHENTICATED = "gpt-5-mini"
 export const MODEL_DEFAULT = MODEL_DEFAULT_AUTHENTICATED
 
 export function getDefaultModelForUser(isAuthenticated: boolean): string {
-  return isAuthenticated
-    ? MODEL_DEFAULT_AUTHENTICATED
-    : MODEL_DEFAULT_ANONYMOUS
+  return isAuthenticated ? MODEL_DEFAULT_AUTHENTICATED : MODEL_DEFAULT_ANONYMOUS
 }
 
 export const APP_NAME = "Not A Wrapper"
@@ -52,7 +43,7 @@ export const SUGGESTIONS: Array<{
   highlight: string
   prompt: string
   items: string[]
-  icon: IconSvgObject
+  icon: SuggestionIconId
 }> = [
   {
     label: "Code",
@@ -64,7 +55,7 @@ export const SUGGESTIONS: Array<{
       "Help me optimize this database query for better performance",
       "Help me implement authentication in my Next.js app",
     ],
-    icon: Brain01Icon,
+    icon: "code",
   },
   {
     label: "Research",
@@ -76,7 +67,7 @@ export const SUGGESTIONS: Array<{
       "Research how to implement real-time features with WebSockets",
       "Research the latest trends in AI and machine learning",
     ],
-    icon: Search01Icon,
+    icon: "research",
   },
   {
     label: "Analysis",
@@ -88,7 +79,7 @@ export const SUGGESTIONS: Array<{
       "Analyze this dataset and summarize key insights",
       "Analyze the architecture of this system and suggest improvements",
     ],
-    icon: ChartUpIcon,
+    icon: "analysis",
   },
   {
     label: "Creative",
@@ -100,7 +91,7 @@ export const SUGGESTIONS: Array<{
       "Create a README template for my GitHub project",
       "Create a presentation outline for my tech talk",
     ],
-    icon: PaintBrush01Icon,
+    icon: "creative",
   },
   {
     label: "Learning",
@@ -112,7 +103,7 @@ export const SUGGESTIONS: Array<{
       "Explain WebAssembly and when to use it",
       "Explain OAuth 2.0 flow in simple terms",
     ],
-    icon: Brain01Icon,
+    icon: "learning",
   },
 ]
 

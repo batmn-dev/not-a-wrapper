@@ -3,10 +3,6 @@ import type { NextConfig } from "next"
 
 const nextConfig: NextConfig = {
   experimental: {
-    optimizePackageImports: [
-      "@hugeicons/react",
-      "@hugeicons-pro/core-stroke-rounded",
-    ],
     // Disables Turbopack's persistent SST cache to prevent recurring ENOENT crashes
     // from corrupted cache files. Trade-off: slightly slower cold starts (~5-15s).
     // TODO: Re-enable once upstream fix lands — https://github.com/vercel/next.js/issues

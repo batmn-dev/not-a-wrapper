@@ -1,8 +1,7 @@
 "use client"
+import { RiCheckLine } from "@remixicon/react"
 
 import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Tick02Icon } from "@hugeicons-pro/core-stroke-rounded"
 
 import { cn } from "@/lib/utils"
 
@@ -23,7 +22,7 @@ function Checkbox({
         data-slot="checkbox-indicator"
         className="grid place-content-center text-current transition-none"
       >
-        <HugeiconsIcon icon={Tick02Icon} size={14} className="size-3.5" />
+        <RiCheckLine size={14} className="size-3.5" />
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   )

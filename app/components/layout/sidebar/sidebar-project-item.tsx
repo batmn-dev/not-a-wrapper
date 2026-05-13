@@ -1,17 +1,12 @@
 "use client"
 
-import { api } from "@/convex/_generated/api"
-import type { Id } from "@/convex/_generated/dataModel"
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import useClickOutside from "@/app/hooks/use-click-outside"
 import { toast } from "@/components/ui/toast"
+import { api } from "@/convex/_generated/api"
+import type { Id } from "@/convex/_generated/dataModel"
 import { cn } from "@/lib/utils"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  Tick02Icon,
-  Folder01Icon,
-  Cancel01Icon,
-} from "@hugeicons-pro/core-stroke-rounded"
+import { RiCheckLine, RiCloseLine, RiFolderLine } from "@remixicon/react"
 import { useMutation } from "convex/react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -154,7 +149,7 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
   const containerClassName = useMemo(
     () =>
       cn(
-        "hover:bg-accent/80 hover:text-foreground group/project relative w-[calc(100%-var(--spacing)*3)] rounded-md mx-1.5",
+        "hover:bg-accent/80 hover:text-foreground group/project relative w-[calc(100%-var(--spacing)*3)] rounded-md mx-1.5 cursor-pointer",
         isActive && "bg-accent hover:bg-accent text-foreground"
       ),
     [isActive]
@@ -177,7 +172,10 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
     >
       {isEditing ? (
         <div className="bg-accent flex items-center rounded-md py-1 pr-1 pl-2">
-          <HugeiconsIcon icon={Folder01Icon} size={20} className="size-5 text-primary mr-2 flex-shrink-0" />
+          <RiFolderLine
+            size={20}
+            className="text-primary mr-2 size-5 flex-shrink-0"
+          />
           <input
             ref={inputRef}
             value={editName}
@@ -189,17 +187,17 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
           <div className="flex gap-0.5">
             <button
               onClick={handleSaveClick}
-              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 items-center justify-center rounded-md p-1"
+              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-md p-1"
               type="button"
             >
-              <HugeiconsIcon icon={Tick02Icon} size={16} />
+              <RiCheckLine size={16} />
             </button>
             <button
               onClick={handleCancelClick}
-              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 items-center justify-center rounded-md p-1"
+              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-md p-1"
               type="button"
             >
-              <HugeiconsIcon icon={Cancel01Icon} size={16} />
+              <RiCloseLine size={16} />
             </button>
           </div>
         </div>
@@ -207,7 +205,7 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
         <>
           <Link
             href={`/p/${project._id}`}
-            className="block w-full"
+            className="block w-full cursor-pointer"
             prefetch
             onClick={handleLinkClick}
           >
@@ -215,7 +213,7 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
               className="text-primary relative line-clamp-1 flex min-h-9 w-full items-center gap-2 mask-r-from-80% mask-r-to-85% px-2.5 py-1.5 text-sm text-ellipsis whitespace-nowrap"
               title={displayName}
             >
-              <HugeiconsIcon icon={Folder01Icon} size={20} className="size-5" />
+              <RiFolderLine size={20} className="size-5" />
               {displayName}
             </div>
           </Link>
