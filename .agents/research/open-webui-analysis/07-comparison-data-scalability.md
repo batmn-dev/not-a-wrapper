@@ -336,7 +336,7 @@ NaW's file storage is **adequate for current needs** (chat attachments). Gaps em
 - `convex/schema.ts` — Full schema with 12 tables, normalized messages, indexed queries
 - `convex/` — Mutation and query functions (auth patterns, optimistic updates)
 - `lib/chat-store/` — ChatsProvider, MessagesProvider, IndexedDB persistence, optimistic ops
-- `.agents/project/README.md` — current project map
+- `README.md` — current project map
 
 ---
 

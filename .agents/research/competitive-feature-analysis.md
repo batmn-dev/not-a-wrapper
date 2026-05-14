@@ -628,8 +628,8 @@ These provide competitive differentiation but aren't adoption blockers.
 **14. Custom Agents / GPTs**
 
 - **What competitors offer**: ChatGPT's GPT Builder lets users create custom agents with specific instructions, knowledge bases, and tool access. The GPT Store has thousands of community-created agents.
-- **Current state in Not A Wrapper**: Sub-agent architecture is planned but only type definitions and placeholder code exist.
-- **Recommended approach**: Build on the existing sub-agent types in `lib/ai/sub-agents/`. Create a simple agent builder UI: name, system prompt, model selection, optional knowledge files (using Convex storage). Store agent configs in a new `agents` table. Allow users to select agents like they select models. Community sharing can reuse the existing public share infrastructure.
+- **Current state in Not A Wrapper**: No production custom-agent architecture exists.
+- **Recommended approach**: Start from a clean design: name, system prompt, model selection, optional knowledge files using Convex storage. Store agent configs in a new `agents` table. Allow users to select agents like they select models. Community sharing can reuse the existing public share infrastructure.
 - **Estimated complexity**: Large (1+ month)
 - **Dependencies**: Sub-agent architecture implementation; knowledge file RAG.
 

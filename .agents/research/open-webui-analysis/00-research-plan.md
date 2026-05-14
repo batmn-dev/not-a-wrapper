@@ -420,7 +420,7 @@ backend/open_webui/routers/pipelines.py  # Pipeline framework
 - `app/api/chat/route.ts` — Gold standard API route
 - `lib/chat-store/` — State management
 - `convex/schema.ts` — Database schema
-- `.agents/project/README.md` — Project context
+- `README.md` — Project context
 - `middleware.ts` — Auth/CSP middleware
 
 ---
@@ -476,7 +476,7 @@ backend/open_webui/routers/pipelines.py  # Pipeline framework
 - `convex/schema.ts` — Database schema
 - `convex/` — All Convex functions
 - `lib/chat-store/` — Client-side state/cache
-- `.agents/project/README.md` — Database context pointer
+- `convex/schema.ts` — Database schema
 
 ---
 
@@ -510,7 +510,7 @@ backend/open_webui/routers/pipelines.py  # Pipeline framework
 ### Synthesis Agent — Prioritized Recommendations (`09-prioritized-recommendations.md`)
 
 **Depends On**: `05-comparison-architecture.md`, `06-comparison-ai-capabilities.md`, `07-comparison-data-scalability.md`, `08-comparison-ux-extensibility.md`
-**Also Reads**: `competitive-feature-analysis.md`, existing plans in `.agents/plans/`, `.agents/project/README.md`
+**Also Reads**: `competitive-feature-analysis.md`, existing plans in `.agents/plans/`, `README.md`
 
 **Mission**: Synthesize all comparison findings into a single, actionable, prioritized list of recommendations. Reconcile conflicts between comparison tracks. Cross-reference with existing implementation plans and the prior competitive feature analysis to produce a coherent, non-contradictory roadmap.
 

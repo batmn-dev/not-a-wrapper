@@ -348,7 +348,7 @@ Custom Model Presets ── enables ──→ Model Access Control ACLs
 - [Competitive Feature Analysis (ChatGPT/Claude)](../competitive-feature-analysis.md) — Prior competitive research (Feb 6-7, 2026)
 - [Phase 7 Future Integrations](../../plans/phase-7-future-tool-integrations.md) — Future tool subsystems
 - [Cross-Conversation Memory Plan](../../plans/cross-conversation-memory.md) — Memory system design
-- [Project Context](../../project/README.md) — Current NaW system map
+- [README](../../../README.md) — Current NaW system overview
 
 ---
 

@@ -6,7 +6,7 @@ Use this workflow for non-trivial changes. Keep it lightweight for low-risk work
 
 - Read the relevant source first.
 - Search for existing patterns before proposing new abstractions.
-- Use `.agents/project/README.md` for the current project map.
+- Use `AGENTS.md`, `README.md`, and `INSTALL.md` for current project context.
 - Use `.agents/research/` only when a current decision depends on background research.
 
 ## 2. Decide
@@ -38,4 +38,4 @@ Use `bun run build:next` for production-build-sensitive changes.
 - `AGENTS.md` — project rules and required patterns.
 - `CLAUDE.md` — Claude-specific overlay.
 - `.agents/workflows/correctness-decision-workflow.md` — risk-based correctness workflow.
-- `.agents/project/README.md` — current system map.
+- `README.md` and `INSTALL.md` — current setup and system map.

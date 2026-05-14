@@ -94,7 +94,7 @@
 
 **Stack**: React, Tailwind, **Streamdown** (not react-markdown), **no typography plugin**
 
-**Source**: [Research in `.agents/research/webclaw/02-chat-ux-components.md`](../../.agents/research/webclaw/02-chat-ux-components.md), Section 1.2 and Section 9
+**Source**: Historical WebClaw research snapshot, Section 1.2 and Section 9. The local WebClaw research files were removed during context cleanup.
 
 **How typography is applied**:
 
@@ -378,11 +378,11 @@ After adding these overrides, `dark:prose-invert` on the `MessageContent` class 
 | Claim | Evidence Type | Confidence |
 |-------|--------------|------------|
 | Zola's typography code is identical to ours | Direct source comparison (GitHub raw files) | **High** — byte-for-byte identical in key files |
-| WebClaw doesn't use typography plugin | Research document + code analysis | **High** — confirmed via codebase deep dive |
+| WebClaw doesn't use typography plugin | Historical research snapshot + code analysis | **High** — confirmed during codebase deep dive |
 | Open WebUI uses `.markdown-prose` with heavy overrides | Direct source (`src/app.css`, `tailwind.config.js`) | **High** — raw file contents verified |
 | None of the projects override `--tw-prose-*` variables | Searched all CSS files in each project | **High** — no matches found |
 | Color mismatch between prose defaults and oklch tokens | CSS value comparison | **High** — `slate[700]` ≠ `oklch(0.141 0.005 285.823)` (mathematically different) |
 
 ---
 
-*Research completed February 16, 2026. Sources: Zola GitHub repo (main branch), Open WebUI GitHub repo (main branch), WebClaw research (`.agents/research/webclaw/02-chat-ux-components.md`).*
+*Research completed February 16, 2026. Sources: Zola GitHub repo (main branch), Open WebUI GitHub repo (main branch), and the now-removed local WebClaw research snapshot.*
