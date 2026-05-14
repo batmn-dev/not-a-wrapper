@@ -386,7 +386,6 @@ This is the biggest architectural decision to resolve before implementation.
 |----------|-----------|
 | [AI SDK Upgrade Research](ai-sdk-upgrade-research.md) | v6 migration path (complete) |
 | [AI Video Generator macOS App Evaluation](ai-video-generator-macos-app-evaluation.md) | Broader video generation API landscape and NLE design research |
-| [Tool Calling Infrastructure](tool-calling-infrastructure.md) | If video generation is implemented as a tool |
 | [Latest Models — February 2026](latest-models-february-2026.md) | Current model registry state |
 | [Competitive Feature Analysis](competitive-feature-analysis.md) | How competitors handle media generation |
 

@@ -1,6 +1,5 @@
 import type { UIMessage } from "ai"
 import type { ReplayMessage, ReplayPart, ReplayToolExchange } from "../types"
-import { synthesizePlatformToolFallback } from "./platform-tool-fallback"
 import type {
   ReplayCompileContext,
   ReplayCompileResult,
@@ -122,11 +121,6 @@ function compileAssistantParts(
 
     if (!replayToolPart) {
       stats.toolExchangesDropped += 1
-
-      const platformFallback = synthesizePlatformToolFallback(part.tool)
-      if (platformFallback) {
-        compiled.push({ type: "text", text: platformFallback } as MessagePart)
-      }
 
       warnings.push({
         code: "tool_non_replayable",

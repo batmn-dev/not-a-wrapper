@@ -495,7 +495,7 @@ Used by: `[selector]`
 
 ### Naming Convention
 
-Save to: `.agents/context/research/<feature>/[site]-[page]-motion-reference.md`
+Save to: `.agents/research/<feature>/[site]-[page]-motion-reference.md`
 
 Examples:
 - `chatgpt-conversation-motion-reference.md`

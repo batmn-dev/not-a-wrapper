@@ -462,7 +462,7 @@ screens/chat/types.ts                           # TypeScript types (message shap
 - `app/components/chat/use-chat-core.ts` — Monolithic chat hook
 - `lib/chat-store/` — State management
 - `middleware.ts` — Auth middleware
-- `.agents/context/architecture.md` — Architecture doc
+- `.agents/project/README.md` — Project context
 
 ---
 
@@ -676,7 +676,7 @@ WebClaw is small enough (~80 commits, focused codebase) that each agent should b
 | State management | `lib/chat-store/` |
 | Optimistic updates | `lib/chat-store/chats/provider.tsx` |
 | UI primitives | `components/ui/` |
-| Architecture doc | `.agents/context/architecture.md` |
+| Project context | `.agents/project/README.md` |
 
 ---
 

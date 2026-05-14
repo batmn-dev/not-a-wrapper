@@ -223,7 +223,7 @@ function isRetrySafeTool(metadata?: RetrySafetyMetadata): boolean {
   if (!metadata) return false
   if (metadata.idempotent === true) return true
   // Read-only tools are safe to replay in this stack. Side-effectful tools
-  // (pay_purchase, mutations) should always set readOnly: false.
+  // should always set readOnly: false.
   return metadata.readOnly === true && metadata.destructive !== true
 }
 

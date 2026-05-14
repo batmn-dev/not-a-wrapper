@@ -396,7 +396,7 @@ URL pattern: `site.com/path`
 
 ### Naming Convention
 
-Save to: `.agents/context/research/<feature>/[site]-[component]-state-reference.md`
+Save to: `.agents/research/<feature>/[site]-[component]-state-reference.md`
 
 Examples:
 - `chatgpt-composer-state-reference.md`

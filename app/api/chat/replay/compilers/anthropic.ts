@@ -1,7 +1,6 @@
 import type { UIMessage } from "ai"
 import { z } from "zod"
 import type { ReplayMessage, ReplayToolExchange } from "../types"
-import { synthesizePlatformToolFallback } from "./platform-tool-fallback"
 import type {
   ReplayCompileResult,
   ReplayCompileContext,
@@ -177,18 +176,11 @@ function compileMessageParts(
     if (tool.toolName !== "web_search") {
       stats.toolExchangesDropped += 1
 
-      const platformFallback = synthesizePlatformToolFallback(tool)
-      if (platformFallback) {
-        nextParts.push({ type: "text", text: platformFallback } as MessagePart)
-      }
-
       warnings.push({
         code: "tool_non_replayable",
         messageIndex,
         partIndex,
-        detail: platformFallback
-          ? `Dropped platform tool "${tool.toolName}" with continuity summary for Anthropic compiler`
-          : `Dropped unsupported replay tool "${tool.toolName}" for Anthropic compiler`,
+        detail: `Dropped unsupported replay tool "${tool.toolName}" for Anthropic compiler`,
       })
       return
     }

@@ -5,8 +5,7 @@
  * based on task classification. Implements Anthropic's sub-agent pattern
  * to prevent context pollution and optimize token usage.
  *
- * @see CLAUDE.md - Sub-Agent Architecture section
- * @see .agents/research/tech-stack-evaluation.md - Implementation rationale
+ * @see lib/ai/CLAUDE.md - Current module status
  *
  * TODO: Implement after core features are stable
  * TODO: Add streaming support for real-time responses

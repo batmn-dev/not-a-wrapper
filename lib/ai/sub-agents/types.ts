@@ -4,8 +4,7 @@
  * Defines the type system for the multi-agent architecture
  * used to delegate specialized tasks to purpose-built agents.
  *
- * @see CLAUDE.md - Sub-Agent Architecture section
- * @see .agents/research/tech-stack-evaluation.md - Detailed research on sub-agent patterns
+ * @see lib/ai/CLAUDE.md - Current module status
  */
 
 // ============================================================================

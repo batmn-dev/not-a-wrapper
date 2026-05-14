@@ -20,10 +20,9 @@ describe("scrubForAnalytics", () => {
     expect(result.shippingAddress).toBe(R)
   })
 
-  it("redacts payClawCardId and paymentMethod", () => {
-    const input = { payClawCardId: "card_xyz", paymentMethod: { type: "brex" } }
+  it("redacts payment method details", () => {
+    const input = { paymentMethod: { type: "card" } }
     const result = scrubForAnalytics(input)
-    expect(result.payClawCardId).toBe(R)
     expect(result.paymentMethod).toBe(R)
   })
 

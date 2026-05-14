@@ -7,7 +7,7 @@
  * - Token estimation
  *
  * @see https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
- * @see .agents/context/ai-context-engineering-guide.md for implementation details
+ * @see lib/ai/CLAUDE.md for implementation details
  */
 
 import type { UIMessage as AIMessage } from "ai"

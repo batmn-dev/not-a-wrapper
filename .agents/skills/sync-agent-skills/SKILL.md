@@ -43,7 +43,7 @@ When a skill is deleted from `.agents/skills/`, the next sync run detects broken
 
 ## Adding New Tool Directories
 
-Edit `scripts/sync-skills.sh` and add to the `TOOL_DIRS` array:
+Edit `.agents/skills/sync-agent-skills/scripts/sync-skills.sh` and add to the `TOOL_DIRS` array:
 
 ```bash
 TOOL_DIRS=(".cursor/skills" ".claude/skills" ".codex/skills" ".your-tool/skills")

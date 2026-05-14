@@ -173,7 +173,7 @@ export const ANTHROPIC_BETA_HEADERS = {
  * Optimized for cost/performance balance.
  *
  * @see lib/ai/sub-agents/types.ts
- * @see .agents/research/tech-stack-evaluation.md
+ * @see .agents/project/README.md
  */
 // ============================================================================
 // MCP Integration

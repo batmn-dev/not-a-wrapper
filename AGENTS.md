@@ -91,11 +91,11 @@ try {
 
 Load only when needed:
 
-- `.agents/context/`
+- `.agents/project/`
 - `.agents/skills/`
 - `.agents/workflows/`
 - `.agents/troubleshooting/`
-- `.agents/context/glossary.md`
+- `.agents/research/`
 
 ## Output Preferences (SHOULD)
 

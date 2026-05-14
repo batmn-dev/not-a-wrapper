@@ -23,8 +23,7 @@
  * └───────────────┘ └───────────────┘ └───────────────┘ └───────────────┘
  * ```
  *
- * @see CLAUDE.md - Sub-Agent Architecture section
- * @see .agents/research/tech-stack-evaluation.md - Research and rationale
+ * @see lib/ai/CLAUDE.md - Current module status
  *
  * @example
  * ```typescript

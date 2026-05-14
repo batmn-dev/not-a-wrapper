@@ -165,23 +165,19 @@ describe("normalizeReplayMessages", () => {
     expect(result.warnings.some((warning) => warning.code === "tool_non_replayable")).toBe(true)
   })
 
-  it("captures pay_purchase URL from tool input for continuity fallback", () => {
+  it("keeps unsupported tool exchanges non-replayable without tool-specific context", () => {
     const messages = [
       {
-        id: "msg-pay-purchase-1",
+        id: "msg-unsupported-tool-1",
         role: "assistant",
         parts: [
           {
-            type: "tool-pay_purchase",
-            toolName: "pay_purchase",
-            toolCallId: "tc-pay-1",
+            type: "tool-create_ticket",
+            toolName: "create_ticket",
+            toolCallId: "tc-ticket-1",
             state: "output-available",
-            input: { url: "https://store.example.com/mouse", maxSpend: 4800 },
-            output: {
-              jobId: "job_123",
-              status: "created",
-              message: "Purchase job created",
-            },
+            input: { title: "Follow up" },
+            output: { id: "ticket_123", status: "created" },
           },
         ],
       } as unknown as UIMessage,
@@ -191,20 +187,12 @@ describe("normalizeReplayMessages", () => {
     expect(result.warnings.some((warning) => warning.code === "tool_non_replayable")).toBe(true)
     expect(result.messages[0]?.parts[0]).toEqual({
       type: "tool-exchange",
-      tool: {
-        toolName: "pay_purchase",
-        toolCallId: "tc-pay-1",
+        tool: {
+        toolName: "create_ticket",
+        toolCallId: "tc-ticket-1",
         state: "output-available",
         replayable: false,
-        nonReplayableReason:
-          'Platform tool "pay_purchase" is non-replayable (side-effect safety).',
-        platformToolContext: {
-          toolKey: "pay_purchase",
-          jobId: "job_123",
-          status: "created",
-          url: "https://store.example.com/mouse",
-          isTerminal: undefined,
-        },
+        nonReplayableReason: "Unsupported tool for replay: create_ticket",
       },
     })
   })

@@ -117,7 +117,7 @@ if (next.status === "streaming" && next.isLast) return false
 
 - Server streaming pattern: `app/api/chat/route.ts`
 - Client chat flow: `app/components/chat/use-chat-core.ts`
-- SDK guidance: `.agents/context/ai-sdk-v6.md`
+- Project context: `.agents/project/README.md`
 
 ## Official Docs (AI SDK v6)
 

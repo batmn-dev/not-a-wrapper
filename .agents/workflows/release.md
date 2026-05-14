@@ -172,4 +172,4 @@ git push -f origin main  # Requires approval
 
 - `.github/workflows/ci-cd.yml` — CI/CD configuration
 - `vercel.json` — Vercel configuration
-- `.agents/context/deployment.md` — Deployment details
+- `.agents/project/README.md` — Deployment and validation pointers

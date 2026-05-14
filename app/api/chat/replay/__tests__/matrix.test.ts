@@ -121,39 +121,30 @@ describe("replay compiler matrix", () => {
     ).toBe(true)
   })
 
-  // ── Platform tool continuity ──────────────────────────────────────────────
-  // Verifies that pay_purchase / pay_status tool parts in history are
-  // downgraded to text continuity summaries rather than replayed as tool calls.
-  // This guards against the payment status replay incident class.
-
-  it("pay_purchase in history is downgraded to text continuity on Anthropic replay", async () => {
+  it("unsupported tools in history are dropped on Anthropic replay", async () => {
     const history: UIMessage[] = [
       {
-        id: "msg-matrix-pay-user",
+        id: "msg-matrix-tool-user",
         role: "user",
-        parts: [{ type: "text", text: "Buy me the ergonomic mouse" }],
+        parts: [{ type: "text", text: "Create a follow-up ticket" }],
       } as UIMessage,
       {
-        id: "msg-matrix-pay-assistant",
+        id: "msg-matrix-tool-assistant",
         role: "assistant",
         parts: [
           {
-            type: "tool-pay_purchase",
+            type: "tool-create_ticket",
             state: "output-available",
-            toolCallId: "tc_pay_1",
-            toolName: "pay_purchase",
+            toolCallId: "tc_ticket_1",
+            toolName: "create_ticket",
             providerExecuted: false,
-            input: { url: "https://store.example.com/mouse", maxSpend: 4800 },
-            output: {
-              jobId: "job_replay_test_1",
-              status: "created",
-              message: "Provisioning job created.",
-            },
+            input: { title: "Follow up" },
+            output: { id: "ticket_1", status: "created" },
             callProviderMetadata: {
-              openai: { responseId: "msg_pay_openai" },
+              openai: { responseId: "msg_tool_openai" },
             },
           },
-          { type: "text", text: "Your purchase is being processed." },
+          { type: "text", text: "I created the ticket." },
         ],
       } as UIMessage,
     ]
@@ -165,53 +156,38 @@ describe("replay compiler matrix", () => {
       { useReplayCompiler: true },
     )
     const assistant = findAssistant(result.messages)
-    const replayText = assistant?.parts
-      .filter((part): part is { type: "text"; text: string } => part.type === "text")
-      .map((part) => part.text)
-      .join("\n")
 
-    // The pay_purchase tool part should NOT be replayed as a tool invocation
     const toolPart = assistant?.parts.find(
-      (part) => part.type === "tool-pay_purchase" || part.type === "dynamic-tool",
+      (part) => part.type === "tool-create_ticket" || part.type === "dynamic-tool",
     )
     expect(toolPart).toBeUndefined()
-
-    // The assistant message should still contain text (original + continuity summary)
     expect(assistant?.parts.some((part) => part.type === "text")).toBe(true)
-    expect(replayText).toContain("https://store.example.com/mouse")
-    expect(replayText).toContain("job_replay_test_1")
   })
 
-  it("pay_status in history is downgraded to text continuity on OpenAI replay", async () => {
+  it("unsupported tools in history are dropped on OpenAI replay", async () => {
     const history: UIMessage[] = [
       {
-        id: "msg-matrix-status-user",
+        id: "msg-matrix-action-user",
         role: "user",
-        parts: [{ type: "text", text: "What is the status of my order?" }],
+        parts: [{ type: "text", text: "Create a note" }],
       } as UIMessage,
       {
-        id: "msg-matrix-status-assistant",
+        id: "msg-matrix-action-assistant",
         role: "assistant",
         parts: [
           {
-            type: "tool-pay_status",
+            type: "tool-create_note",
             state: "output-available",
-            toolCallId: "tc_status_1",
-            toolName: "pay_status",
+            toolCallId: "tc_note_1",
+            toolName: "create_note",
             providerExecuted: false,
-            input: { jobId: "job_replay_test_2" },
-            output: {
-              jobId: "job_replay_test_2",
-              status: "completed",
-              isTerminal: true,
-              latestMessage: "Order delivered.",
-              eventCount: 5,
-            },
+            input: { text: "Follow up" },
+            output: { id: "note_1", status: "created" },
             callProviderMetadata: {
-              anthropic: { requestId: "req_status_anthropic" },
+              anthropic: { requestId: "req_note_anthropic" },
             },
           },
-          { type: "text", text: "Your order has been delivered." },
+          { type: "text", text: "The note is ready." },
         ],
       } as UIMessage,
     ]
@@ -224,13 +200,10 @@ describe("replay compiler matrix", () => {
     )
     const assistant = findAssistant(result.messages)
 
-    // The pay_status tool part should NOT be replayed as a tool invocation
     const toolPart = assistant?.parts.find(
-      (part) => part.type === "tool-pay_status" || part.type === "dynamic-tool",
+      (part) => part.type === "tool-create_note" || part.type === "dynamic-tool",
     )
     expect(toolPart).toBeUndefined()
-
-    // The assistant message should still contain text
     expect(assistant?.parts.some((part) => part.type === "text")).toBe(true)
   })
 
