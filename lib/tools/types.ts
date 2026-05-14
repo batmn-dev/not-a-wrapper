@@ -170,7 +170,7 @@ export type ToolCapabilities = {
   code?: boolean
   /** MCP server tools (Layer 3). Default: true */
   mcp?: boolean
-  /** Platform tools like Flowglad Pay (Layer 4). Default: true */
+  /** App-owned tools (Layer 4). Default: true */
   platform?: boolean
 }
 

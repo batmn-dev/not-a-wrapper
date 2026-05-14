@@ -33,7 +33,7 @@ describe("capability policy matrix", () => {
         { toolName: "web_search", source: "third-party", capability: "search", readOnly: true },
         { toolName: "extract_content", source: "third-party", capability: "extract", readOnly: true },
         { toolName: "github_create_issue", source: "mcp", capability: "mcp", readOnly: false },
-        { toolName: "pay_purchase", source: "platform", capability: "platform", readOnly: false },
+        { toolName: "create_ticket", source: "platform", capability: "platform", readOnly: false },
       ],
       { isAuthenticated: false, modelTools: true }
     )
@@ -45,7 +45,7 @@ describe("capability policy matrix", () => {
     expect(policy.capabilities.platform).toBe(false)
 
     const mcpDecision = policy.toolDecisions.find((d) => d.toolName === "github_create_issue")
-    const platformDecision = policy.toolDecisions.find((d) => d.toolName === "pay_purchase")
+    const platformDecision = policy.toolDecisions.find((d) => d.toolName === "create_ticket")
     expect(mcpDecision?.allowInEarlySteps).toBe(false)
     expect(platformDecision?.allowInEarlySteps).toBe(false)
   })
@@ -128,9 +128,9 @@ describe("capability policy matrix", () => {
     const policy = policyFor(
       [
         { toolName: "web_search", source: "builtin", capability: "search", readOnly: true },
-        { toolName: "pay_status", source: "platform", capability: "platform", readOnly: true },
+        { toolName: "read_ticket_status", source: "platform", capability: "platform", readOnly: true },
         {
-          toolName: "pay_purchase",
+          toolName: "create_ticket",
           source: "platform",
           capability: "platform",
           readOnly: false,
@@ -149,8 +149,8 @@ describe("capability policy matrix", () => {
 
     const afterThreshold = getActiveToolsForStep(policy, 5, 3) ?? []
     expect(afterThreshold).toContain("web_search")
-    expect(afterThreshold).toContain("pay_status")
-    expect(afterThreshold).not.toContain("pay_purchase")
+    expect(afterThreshold).toContain("read_ticket_status")
+    expect(afterThreshold).not.toContain("create_ticket")
     expect(afterThreshold).not.toContain("filesystem_delete")
   })
 

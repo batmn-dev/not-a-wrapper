@@ -505,9 +505,12 @@ describe("loadUserMcpTools", () => {
         .mockResolvedValueOnce(servers)
         .mockResolvedValueOnce([])
 
-      mockCreateMCPClient
-        .mockResolvedValueOnce(healthyClient) // s1 succeeds
-        .mockRejectedValueOnce(new Error("Connection refused")) // s2 fails
+      mockCreateMCPClient.mockImplementation((options: { transport?: { url?: string } }) => {
+        if (options.transport?.url === "https://broken.example.com") {
+          return Promise.reject(new Error("Connection refused"))
+        }
+        return Promise.resolve(healthyClient)
+      })
 
       const result = await loadUserMcpTools("test-token")
 

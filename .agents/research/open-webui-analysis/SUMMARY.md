@@ -223,7 +223,7 @@ Local tools, OpenAPI servers, and MCP servers all surface through a single typed
 | `phase-7-future-tool-integrations.md` | **Confirmed** | Add task model separation sub-phase; confirm E2B over Pyodide for code execution |
 | `cross-conversation-memory.md` | **Confirmed + Enriched** | Add 3 model-callable memory tools; validate Option B (semantic retrieval) over Option A (full injection) |
 | `thinking-reasoning-configuration.md` | **Confirmed** | Consider content-block metadata for reasoning duration display |
-| `descope-self-hosting.md` | **Strongly Confirmed** | OWUI's self-hosted complexity (100+ env vars, Redis dependency, 3-4GB images) validates cloud-first descope |
+| Self-hosting boundary | **Strongly Confirmed** | OWUI's self-hosted complexity validates NaW's cloud-first direction |
 
 > Source: [09-prioritized-recommendations.md](./09-prioritized-recommendations.md) §9
 
@@ -346,11 +346,9 @@ Custom Model Presets ── enables ──→ Model Access Control ACLs
 ## Related Documents
 
 - [Competitive Feature Analysis (ChatGPT/Claude)](../competitive-feature-analysis.md) — Prior competitive research (Feb 6-7, 2026)
-- [Tool Calling Infrastructure Plan](../../../plans/tool-calling-infrastructure.md) — 7-phase tool implementation plan
-- [Phase 7 Future Integrations](../../../plans/phase-7-future-tool-integrations.md) — Future tool subsystems
-- [Cross-Conversation Memory Plan](../../../plans/cross-conversation-memory.md) — Memory system design
-- [Descope Self-Hosting](../../../plans/descope-self-hosting.md) — Self-hosting strategy
-- [Architecture](../../architecture.md) — Current NaW system architecture
+- [Phase 7 Future Integrations](../../plans/phase-7-future-tool-integrations.md) — Future tool subsystems
+- [Cross-Conversation Memory Plan](../../plans/cross-conversation-memory.md) — Memory system design
+- [README](../../../README.md) — Current NaW system overview
 
 ---
 

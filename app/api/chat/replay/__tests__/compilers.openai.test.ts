@@ -89,6 +89,47 @@ describe("openai replay compiler", () => {
     expect(result.stats.toolExchangesDropped).toBe(1)
   })
 
+  it("preserves platform tool continuity when a tool-only message is non-replayable", async () => {
+    const messages: ReplayMessage[] = [
+      {
+        id: "msg-openai-compile-pay-status",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-exchange",
+            tool: {
+              toolName: "pay_status",
+              replayable: false,
+              nonReplayableReason:
+                'Platform tool "pay_status" is non-replayable (side-effect safety).',
+              platformToolContext: {
+                toolKey: "pay_status",
+                jobId: "job_replay_test_2",
+                status: "completed",
+                isTerminal: true,
+              },
+            },
+          },
+        ],
+      },
+    ]
+
+    const result = await compileReplay(messages, "openai", context)
+    const assistant = result.messages[0]
+
+    expect(hasToolPart(assistant.parts)).toBe(false)
+    expect(assistant.parts).toEqual([
+      {
+        type: "text",
+        text: "Replay context: Purchase status check for job job_replay_test_2: completed (completed).",
+      },
+    ])
+    expect(result.warnings.some((warning) => warning.code === "tool_non_replayable")).toBe(true)
+    expect(result.warnings.some((warning) => warning.code === "message_empty_fallback")).toBe(false)
+    expect(result.stats.toolExchangesCompiled).toBe(0)
+    expect(result.stats.toolExchangesDropped).toBe(1)
+  })
+
   it("drops tool exchanges from non-assistant roles and rewrites tool role to assistant", async () => {
     const messages: ReplayMessage[] = [
       {

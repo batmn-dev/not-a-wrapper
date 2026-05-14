@@ -34,8 +34,6 @@ const BUILTIN_TOOL_DISPLAY: Record<
   web_search: { name: "Web Search", icon: "search" },
   google_search: { name: "Web Search", icon: "search" },
   extract_content: { name: "Read Page", icon: "extract" },
-  pay_purchase: { name: "Purchase", icon: "wrench" },
-  pay_status: { name: "Purchase Status", icon: "wrench" },
   // Future built-in tools:
   // code_execution: { name: "Code Execution", icon: "code" },
   // image_generation: { name: "Image Generation", icon: "image" },

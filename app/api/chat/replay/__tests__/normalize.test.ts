@@ -165,7 +165,7 @@ describe("normalizeReplayMessages", () => {
     expect(result.warnings.some((warning) => warning.code === "tool_non_replayable")).toBe(true)
   })
 
-  it("captures pay_purchase URL from tool input for continuity fallback", () => {
+  it("captures pay_purchase URL from legacy tool input for continuity fallback", () => {
     const messages = [
       {
         id: "msg-pay-purchase-1",
@@ -173,7 +173,6 @@ describe("normalizeReplayMessages", () => {
         parts: [
           {
             type: "tool-pay_purchase",
-            toolName: "pay_purchase",
             toolCallId: "tc-pay-1",
             state: "output-available",
             input: { url: "https://store.example.com/mouse", maxSpend: 4800 },

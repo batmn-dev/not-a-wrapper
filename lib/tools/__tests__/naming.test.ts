@@ -44,7 +44,7 @@ describe("collectInvalidToolNames", () => {
       "built-in": makeToolSet(["web_search"]),
       "third-party-search": makeToolSet(["invalid name"]),
       "content-extraction": makeToolSet(["extract_content"]),
-      platform: makeToolSet(["pay/status"]),
+      platform: makeToolSet(["ticket/status"]),
       mcp: makeToolSet(["my.server_tool"]),
     }
 
@@ -56,7 +56,7 @@ describe("collectInvalidToolNames", () => {
         reason: "allowed characters are ASCII letters, digits, '_', '-', '.'",
       },
       {
-        toolKey: "pay/status",
+        toolKey: "ticket/status",
         layer: "platform",
         reason: "allowed characters are ASCII letters, digits, '_', '-', '.'",
       },
@@ -70,13 +70,13 @@ describe("collectGlobalCollisions", () => {
       "built-in": makeToolSet(["web_search", "shared_builtin_platform"]),
       "third-party-search": makeToolSet(["web_search", "shared_search_content"]),
       "content-extraction": makeToolSet(["extract_content", "shared_search_content"]),
-      platform: makeToolSet(["pay_status", "shared_builtin_platform"]),
-      mcp: makeToolSet(["web_search", "pay_status"]),
+      platform: makeToolSet(["read_ticket_status", "shared_builtin_platform"]),
+      mcp: makeToolSet(["web_search", "read_ticket_status"]),
     }
 
     expect(collectGlobalCollisions(layers)).toEqual([
       {
-        toolKey: "pay_status",
+        toolKey: "read_ticket_status",
         owners: ["platform", "mcp"],
         winner: "mcp",
       },
@@ -103,7 +103,7 @@ describe("collectGlobalCollisions", () => {
       "built-in": makeToolSet(["provider_search"]),
       "third-party-search": makeToolSet(["web_search"]),
       "content-extraction": makeToolSet(["extract_content"]),
-      platform: makeToolSet(["pay_purchase"]),
+      platform: makeToolSet(["create_ticket"]),
       mcp: makeToolSet(["github_list_issues"]),
     }
 
@@ -117,7 +117,7 @@ describe("enforceToolNamingGovernance", () => {
       "built-in": makeToolSet(["web_search", "shared"]),
       "third-party-search": makeToolSet(["invalid name", "shared"]),
       "content-extraction": makeToolSet(["extract_content"]),
-      platform: makeToolSet(["pay_purchase", "pay/status"]),
+      platform: makeToolSet(["create_ticket", "ticket/status"]),
       mcp: makeToolSet(["mcp.valid_tool"]),
     }
 
@@ -130,7 +130,7 @@ describe("enforceToolNamingGovernance", () => {
         reason: "allowed characters are ASCII letters, digits, '_', '-', '.'",
       },
       {
-        toolKey: "pay/status",
+        toolKey: "ticket/status",
         layer: "platform",
         reason: "allowed characters are ASCII letters, digits, '_', '-', '.'",
       },
@@ -148,6 +148,6 @@ describe("enforceToolNamingGovernance", () => {
     expect(result.sanitizedLayers["third-party-search"]).toEqual(
       makeToolSet(["shared"])
     )
-    expect(result.sanitizedLayers.platform).toEqual(makeToolSet(["pay_purchase"]))
+    expect(result.sanitizedLayers.platform).toEqual(makeToolSet(["create_ticket"]))
   })
 })

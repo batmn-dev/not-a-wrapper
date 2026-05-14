@@ -13,7 +13,7 @@
       "Read(./lib/**)",
       "Read(./components/**)",
       "Read(./hooks/**)",
-      "Read(./context/**)",
+      "Read(./.agents/**)",
       "Read(./docs/**)",
       "Read(./*.md)",
       "Read(./*.json)",
@@ -23,10 +23,8 @@
       "Write(./lib/**)",
       "Write(./components/**)",
       "Write(./hooks/**)",
-      "Write(./context/**)",
       "Write(./docs/**)",
-      "Write(./NOTES.md)",
-      "Write(./plan.md)"
+      "Write(./NOTES.md)"
     ],
     "deny": [
       "Bash(curl:*)",

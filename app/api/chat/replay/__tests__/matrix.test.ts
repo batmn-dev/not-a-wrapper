@@ -121,11 +121,6 @@ describe("replay compiler matrix", () => {
     ).toBe(true)
   })
 
-  // ── Platform tool continuity ──────────────────────────────────────────────
-  // Verifies that pay_purchase / pay_status tool parts in history are
-  // downgraded to text continuity summaries rather than replayed as tool calls.
-  // This guards against the payment status replay incident class.
-
   it("pay_purchase in history is downgraded to text continuity on Anthropic replay", async () => {
     const history: UIMessage[] = [
       {
@@ -170,13 +165,10 @@ describe("replay compiler matrix", () => {
       .map((part) => part.text)
       .join("\n")
 
-    // The pay_purchase tool part should NOT be replayed as a tool invocation
     const toolPart = assistant?.parts.find(
       (part) => part.type === "tool-pay_purchase" || part.type === "dynamic-tool",
     )
     expect(toolPart).toBeUndefined()
-
-    // The assistant message should still contain text (original + continuity summary)
     expect(assistant?.parts.some((part) => part.type === "text")).toBe(true)
     expect(replayText).toContain("https://store.example.com/mouse")
     expect(replayText).toContain("job_replay_test_1")
@@ -224,13 +216,10 @@ describe("replay compiler matrix", () => {
     )
     const assistant = findAssistant(result.messages)
 
-    // The pay_status tool part should NOT be replayed as a tool invocation
     const toolPart = assistant?.parts.find(
       (part) => part.type === "tool-pay_status" || part.type === "dynamic-tool",
     )
     expect(toolPart).toBeUndefined()
-
-    // The assistant message should still contain text
     expect(assistant?.parts.some((part) => part.type === "text")).toBe(true)
   })
 

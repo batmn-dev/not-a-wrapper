@@ -127,54 +127,14 @@ export const MESSAGE_MAX_LENGTH = 10000
 
 // ============================================================================
 // Context Management (Anthropic Best Practices)
-// ============================================================================
-
 /**
- * Token threshold before triggering context compaction.
- * Based on Claude Sonnet's 200K context window with safety margin.
- */
-export const CONTEXT_COMPACTION_THRESHOLD = 100_000
-
-/**
- * Number of recent messages to preserve during compaction.
- * These messages are kept in full; older messages are summarized.
- */
-export const CONTEXT_PRESERVE_RECENT_MESSAGES = 10
-
-/**
- * Maximum concurrent sub-agent tasks for parallel processing.
- */
-export const MAX_CONCURRENT_SUB_AGENTS = 3
-
-/**
- * Path to structured notes file for agentic memory.
- */
-export const STRUCTURED_NOTES_FILE = "./NOTES.md"
-
-/**
- * Anthropic API beta headers for extended features.
- * @see https://www.anthropic.com/news/context-management
+ * Anthropic API beta headers used by the chat route.
  */
 export const ANTHROPIC_BETA_HEADERS = {
-  /** Enable context management tools (memory, editing) */
-  contextManagement: "context-management-2025-06-27",
   /** Token-efficient tool use */
   tokenEfficient: "token-efficient-tools-2025-02-19",
-  /** 1M token context window (requires tier 4) */
-  extendedContext: "context-1m-2025-08-07",
 } as const
 
-// ============================================================================
-// Sub-Agent Model Configuration
-// ============================================================================
-
-/**
- * Model assignments for sub-agent architecture.
- * Optimized for cost/performance balance.
- *
- * @see lib/ai/sub-agents/types.ts
- * @see .agents/research/tech-stack-evaluation.md
- */
 // ============================================================================
 // MCP Integration
 // ============================================================================

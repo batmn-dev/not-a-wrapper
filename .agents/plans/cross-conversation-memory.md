@@ -530,7 +530,7 @@ export async function retrieveMemories(
 ): Promise<{ core: Memory[], contextual: Memory[] }> {
   // 1. Always fetch core memories
   const core = await fetchCoreMemories(convexToken)
-  const coreTokens = estimateTokens(core)
+  const coreTokens = estimateMemoryTokens(core)
 
   // 2. Semantic search for contextual (with remaining budget)
   const remainingBudget = tokenBudget - coreTokens

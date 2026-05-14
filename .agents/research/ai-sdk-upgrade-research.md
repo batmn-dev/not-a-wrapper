@@ -85,7 +85,7 @@ All 8 additional questions have been thoroughly researched and answered:
 
 - [x] **Audit current AI SDK usage** (31 files affected)
   - [x] `app/api/chat/route.ts` - Uses `toDataStreamResponse()`, `Message`, `streamText`, `ToolSet`
-  - [x] `lib/ai/context-management.ts` - Uses `Message` type for token estimation
+  - [x] Historical: removed unused context-management placeholder after migration cleanup.
   - [x] `lib/openproviders/index.ts` - Uses `LanguageModelV1` from `@ai-sdk/provider`
   - [x] `lib/models/types.ts` - Uses `LanguageModelV1` type
   - [x] `app/components/chat/use-chat-core.ts` - Uses `useChat`, `Message`, `append`, `reload`
@@ -195,8 +195,7 @@ Step 2: v5.0 → v6.0 (tool/agent improvements)
 ### Critical (Must Review)
 ```
 app/api/chat/route.ts          # Main streaming endpoint
-lib/ai/index.ts                # AI utilities
-lib/ai/context-management.ts   # Context handling
+lib/ai/message-conversion.ts   # Attachment conversion helpers
 lib/openproviders/index.ts     # Provider abstraction
 lib/openproviders/provider-map.ts
 ```
@@ -211,7 +210,7 @@ lib/models/data/*.ts           # Provider-specific configs
 ### May Be Affected
 ```
 app/api/*/route.ts             # Other API routes using AI
-lib/ai/sub-agents/             # Sub-agent implementation
+Historical placeholder sub-agent files have been removed.
 ```
 
 ---
@@ -995,7 +994,7 @@ regenerate({
 
 ### 5. Sub-Agent Architecture Compatibility 🟡 MEDIUM PRIORITY ✅ ANSWERED
 
-**File:** `lib/ai/sub-agents/orchestrator.ts`
+**Historical note:** the sub-agent placeholder module was removed after cleanup.
 
 **Strategic Answer:**
 
