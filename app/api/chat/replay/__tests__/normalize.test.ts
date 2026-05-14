@@ -165,19 +165,22 @@ describe("normalizeReplayMessages", () => {
     expect(result.warnings.some((warning) => warning.code === "tool_non_replayable")).toBe(true)
   })
 
-  it("keeps unsupported tool exchanges non-replayable without tool-specific context", () => {
+  it("captures pay_purchase URL from legacy tool input for continuity fallback", () => {
     const messages = [
       {
-        id: "msg-unsupported-tool-1",
+        id: "msg-pay-purchase-1",
         role: "assistant",
         parts: [
           {
-            type: "tool-create_ticket",
-            toolName: "create_ticket",
-            toolCallId: "tc-ticket-1",
+            type: "tool-pay_purchase",
+            toolCallId: "tc-pay-1",
             state: "output-available",
-            input: { title: "Follow up" },
-            output: { id: "ticket_123", status: "created" },
+            input: { url: "https://store.example.com/mouse", maxSpend: 4800 },
+            output: {
+              jobId: "job_123",
+              status: "created",
+              message: "Purchase job created",
+            },
           },
         ],
       } as unknown as UIMessage,
@@ -187,12 +190,20 @@ describe("normalizeReplayMessages", () => {
     expect(result.warnings.some((warning) => warning.code === "tool_non_replayable")).toBe(true)
     expect(result.messages[0]?.parts[0]).toEqual({
       type: "tool-exchange",
-        tool: {
-        toolName: "create_ticket",
-        toolCallId: "tc-ticket-1",
+      tool: {
+        toolName: "pay_purchase",
+        toolCallId: "tc-pay-1",
         state: "output-available",
         replayable: false,
-        nonReplayableReason: "Unsupported tool for replay: create_ticket",
+        nonReplayableReason:
+          'Platform tool "pay_purchase" is non-replayable (side-effect safety).',
+        platformToolContext: {
+          toolKey: "pay_purchase",
+          jobId: "job_123",
+          status: "created",
+          url: "https://store.example.com/mouse",
+          isTerminal: undefined,
+        },
       },
     })
   })

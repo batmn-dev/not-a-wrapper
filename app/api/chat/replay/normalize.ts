@@ -3,6 +3,7 @@ import {
   replayMessageSchema,
   type ReplayMessage,
   type ReplayPart,
+  type ReplayPlatformToolContext,
   type ReplayProviderOrigin,
   type ReplayToolExchange,
   type ReplayWebSearchResult,
@@ -115,6 +116,44 @@ function isToolPart(part: JsonRecord): boolean {
   )
 }
 
+const PLATFORM_PAYMENT_TOOLS = new Set([
+  "pay_purchase",
+  "pay_status",
+  "Purchase",
+  "Purchase Status",
+])
+
+function extractPlatformToolContext(
+  part: JsonRecord,
+  toolName: string,
+): ReplayPlatformToolContext | undefined {
+  const toolKey =
+    toolName === "Purchase" || toolName === "pay_purchase"
+      ? "pay_purchase"
+      : toolName === "Purchase Status" || toolName === "pay_status"
+        ? "pay_status"
+        : undefined
+
+  if (!toolKey) return undefined
+
+  const input = isRecord(part.input) ? part.input : undefined
+  const output = isRecord(part.output) ? part.output : undefined
+  const purchaseUrl =
+    typeof input?.url === "string"
+      ? input.url
+      : typeof output?.url === "string"
+        ? output.url
+        : undefined
+
+  return {
+    toolKey,
+    jobId: typeof output?.jobId === "string" ? output.jobId : undefined,
+    status: typeof output?.status === "string" ? output.status : undefined,
+    url: purchaseUrl,
+    isTerminal: typeof output?.isTerminal === "boolean" ? output.isTerminal : undefined,
+  }
+}
+
 function normalizeToolExchange(part: JsonRecord): ReplayToolExchange {
   const toolName =
     typeof part.toolName === "string"
@@ -132,9 +171,15 @@ function normalizeToolExchange(part: JsonRecord): ReplayToolExchange {
   }
 
   if (toolName !== "web_search") {
+    const platformCtx = PLATFORM_PAYMENT_TOOLS.has(toolName)
+      ? extractPlatformToolContext(part, toolName)
+      : undefined
     return {
       ...base,
-      nonReplayableReason: `Unsupported tool for replay: ${toolName}`,
+      nonReplayableReason: platformCtx
+        ? `Platform tool "${platformCtx.toolKey}" is non-replayable (side-effect safety).`
+        : `Unsupported tool for replay: ${toolName}`,
+      platformToolContext: platformCtx,
     }
   }
 

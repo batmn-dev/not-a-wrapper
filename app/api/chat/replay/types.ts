@@ -32,6 +32,16 @@ export const replayWebSearchSchema = z.object({
 
 export type ReplayWebSearch = z.infer<typeof replayWebSearchSchema>
 
+export const replayPlatformToolContextSchema = z.object({
+  toolKey: z.string(),
+  jobId: z.string().optional(),
+  status: z.string().optional(),
+  url: z.string().optional(),
+  isTerminal: z.boolean().optional(),
+})
+
+export type ReplayPlatformToolContext = z.infer<typeof replayPlatformToolContextSchema>
+
 export const replayToolExchangeSchema = z.object({
   toolName: z.string(),
   toolCallId: z.string().optional(),
@@ -39,6 +49,7 @@ export const replayToolExchangeSchema = z.object({
   replayable: z.boolean(),
   nonReplayableReason: z.string().optional(),
   webSearch: replayWebSearchSchema.optional(),
+  platformToolContext: replayPlatformToolContextSchema.optional(),
 })
 
 export type ReplayToolExchange = z.infer<typeof replayToolExchangeSchema>
