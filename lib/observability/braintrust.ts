@@ -36,6 +36,8 @@ const AI_CONTENT_KEYS = new Set([
   "arguments",
   "args",
   "content",
+  "errormessage",
+  "error_message",
   "input",
   "message",
   "messages",
@@ -176,12 +178,23 @@ function sanitizeMetadataValue(
   for (const [key, childValue] of Object.entries(
     value as Record<string, unknown>
   )) {
-    result[key] =
-      isSensitiveKey(key) || isUnsafeIdentifierKey(key) || isAIContentKey(key)
-        ? REDACTED
-        : sanitizeMetadataValue(childValue, depth + 1)
+    if (isSensitiveKey(key) || isUnsafeIdentifierKey(key)) {
+      result[key] = REDACTED
+      continue
+    }
+    if (isAIContentKey(key)) {
+      result[key] = shouldLogBraintrustContent()
+        ? sanitizeContentMetadataValue(childValue)
+        : REDACTED
+      continue
+    }
+    result[key] = sanitizeMetadataValue(childValue, depth + 1)
   }
   return result
+}
+
+function sanitizeContentMetadataValue(value: unknown): BraintrustMetadataValue {
+  return scrubForAnalytics(redactSensitiveKeys(value)) as BraintrustMetadataValue
 }
 
 export function sanitizeBraintrustMetadata(

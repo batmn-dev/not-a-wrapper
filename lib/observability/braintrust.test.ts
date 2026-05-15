@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   hashBraintrustIdentifier,
+  getBraintrustErrorMetadata,
   isBraintrustEnabled,
   maskBraintrustPayload,
   sanitizeBraintrustMetadata,
@@ -98,6 +99,20 @@ describe("Braintrust observability helpers", () => {
     })
   })
 
+  it("redacts provider error messages by default", () => {
+    const metadata = getBraintrustErrorMetadata(
+      new Error("Invalid prompt: summarize my private project plan")
+    )
+
+    expect(metadata).toEqual({
+      errorName: "Error",
+      errorCode: null,
+      errorStatus: null,
+      errorStatusCode: null,
+      errorMessage: "[REDACTED]",
+    })
+  })
+
   it("uses the analytics scrubber instead of raw content when content logging is enabled", () => {
     process.env.BRAINTRUST_LOG_CONTENT = "true"
 
@@ -112,6 +127,18 @@ describe("Braintrust observability helpers", () => {
       output: "Call [REDACTED]",
       apiKey: "[REDACTED]",
     })
+  })
+
+  it("scrubs provider error messages when content logging is enabled", () => {
+    process.env.BRAINTRUST_LOG_CONTENT = "true"
+
+    const metadata = getBraintrustErrorMetadata(
+      new Error("Provider rejected prompt from person@example.com")
+    )
+
+    expect(metadata.errorMessage).toBe(
+      "Provider rejected prompt from [REDACTED]"
+    )
   })
 
   it("hashes identifiers without returning the raw value", async () => {
