@@ -23,7 +23,6 @@ import { scrubForAnalytics } from "@/lib/posthog/scrub"
 import type { Provider, ToolKeyMode } from "@/lib/user-keys"
 import {
   UIMessage as MessageAISDK,
-  streamText,
   ToolSet,
   stepCountIs,
   convertToModelMessages,
@@ -76,6 +75,16 @@ import {
   classifyChatError,
   type ChatErrorType,
 } from "@/lib/observability/chat-error-taxonomy"
+import {
+  flushBraintrust,
+  getBraintrustErrorMetadata,
+  getBraintrustStreamText,
+  hashBraintrustIdentifier,
+  logBraintrustTraceMetadata,
+  withBraintrustTrace,
+  type BraintrustChatMetadata,
+  type BraintrustTraceSpan,
+} from "@/lib/observability/braintrust"
 
 export const maxDuration = 60
 
@@ -1056,6 +1065,7 @@ export async function POST(req: Request) {
     // Check if PostHog is configured for LLM analytics
     const phClient = getPostHogClient()
     const startTime = Date.now()
+    const braintrustStreamText = getBraintrustStreamText()
 
     // Schedule PostHog flush after streaming response completes
     // This ensures $ai_generation events are flushed before the serverless function terminates
@@ -1065,6 +1075,9 @@ export async function POST(req: Request) {
         await flushPostHog()
       })
     }
+    after(async () => {
+      await flushBraintrust()
+    })
 
     const adaptationContext: AdaptationContext = {
       targetModelId: model,
@@ -1441,7 +1454,59 @@ export async function POST(req: Request) {
       })
     }
 
-    const result = streamText({
+    const mcpServerCount = new Set(
+      Array.from(mcpToolServerMap.values()).map((info) => info.serverId)
+    ).size
+    const braintrustMetadata: BraintrustChatMetadata = {
+      requestId,
+      route: "api/chat",
+      operation: "stream_text",
+      chatIdHash: await hashBraintrustIdentifier(chatId),
+      model,
+      provider,
+      isAuthenticated,
+      messageCount: messages.length,
+      chatVersionBucket: bucketChatVersion(normalizedChatVersion),
+      searchEnabled: shouldInjectSearch,
+      hasTools: hasAnyTools,
+      keyMode: providerToolKeyMode,
+      exaKeyMode: resolvedExaKeyMode ?? null,
+      maxSteps,
+      capabilities: {
+        search: toolPolicy.capabilities.search,
+        extract: toolPolicy.capabilities.extract,
+        code: toolPolicy.capabilities.code,
+        mcp: toolPolicy.capabilities.mcp,
+        platform: toolPolicy.capabilities.platform,
+      },
+      capabilityReasons: toolPolicy.capabilityReasons,
+      toolPolicy: {
+        userTier: toolPolicy.userTier,
+        keyMode: toolPolicy.keyMode ?? null,
+        keyModeReason: toolPolicy.keyModeReason,
+        totalTools: toolPolicy.toolDecisions.length,
+        earlyAllowedCount: toolPolicy.earlyToolNames.length,
+        lateAllowedCount: toolPolicy.lateToolNames.length,
+      },
+      toolCounts: {
+        builtIn: Object.keys(builtInTools).length,
+        thirdParty: Object.keys(thirdPartyTools).length,
+        content: Object.keys(contentTools).length,
+        mcp: Object.keys(mcpTools).length,
+        total: Object.keys(allTools).length,
+      },
+      mcp: {
+        serverCount: mcpServerCount,
+        toolCount: Object.keys(mcpTools).length,
+      },
+      historyAdaptation: {
+        warningCount: adapterResult.warnings.length,
+        warningCodes: countWarningsByCode(adapterResult.warnings),
+      },
+    }
+
+    const runGeneration = (braintrustSpan: BraintrustTraceSpan) =>
+      braintrustStreamText({
       model: aiModel,
       system: enrichedSystemPrompt,
       messages: modelMessages,
@@ -1650,6 +1715,12 @@ export async function POST(req: Request) {
         resolvePostToolContinuation()
         console.error("Streaming error occurred:", err)
         const errorMessage = extractErrorMessage(err)
+        const errorType = classifyChatError(err)
+        logBraintrustTraceMetadata(braintrustSpan, {
+          ...braintrustMetadata,
+          ...getBraintrustErrorMetadata(err),
+          errorType,
+        })
 
         if (isReplayShapeError(errorMessage)) {
           console.error(
@@ -1755,6 +1826,25 @@ export async function POST(req: Request) {
                   : "success"
 
         const totalLatencyMs = Date.now() - streamStartMs
+        logBraintrustTraceMetadata(braintrustSpan, {
+          ...braintrustMetadata,
+          finishReason: finishReason ?? null,
+          toolOutcome,
+          totalToolCalls,
+          failedToolCalls,
+          timeoutToolCalls,
+          budgetDeniedToolCalls,
+          firstTokenLatencyBucket:
+            firstChunkLatencyMs === null
+              ? null
+              : bucketLatencyMs(firstChunkLatencyMs),
+          totalLatencyBucket: bucketLatencyMs(totalLatencyMs),
+          usage: {
+            inputTokens: usage?.inputTokens ?? null,
+            outputTokens: usage?.outputTokens ?? null,
+          },
+          reasoningDurationMs,
+        })
         Sentry.setTag("chat_finish_reason", finishReason ?? "unknown")
         Sentry.setTag("chat_error_type", "none")
         Sentry.setTag("chat_tool_outcome", toolOutcome)
@@ -2078,6 +2168,21 @@ export async function POST(req: Request) {
         }
       }
     })
+
+    const result = withBraintrustTrace(
+      {
+        name: "POST /api/chat",
+        metadata: braintrustMetadata,
+        onError: (span, error) => {
+          logBraintrustTraceMetadata(span, {
+            ...braintrustMetadata,
+            ...getBraintrustErrorMetadata(error),
+            errorType: classifyChatError(error),
+          })
+        },
+      },
+      runGeneration
+    )
 
     return result.toUIMessageStreamResponse({
       sendReasoning: true,

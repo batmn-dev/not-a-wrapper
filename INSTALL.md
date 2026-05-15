@@ -36,6 +36,26 @@ openssl rand -base64 32
 
 `ENCRYPTION_KEY` must decode to exactly 32 bytes. Keep it stable across deployments; changing it makes existing encrypted user API keys unrecoverable.
 
+## Optional Observability
+
+Braintrust is optional and disabled unless `BRAINTRUST_API_KEY` is present:
+
+```bash
+BRAINTRUST_API_KEY=
+BRAINTRUST_PROJECT_NAME=not-a-wrapper
+# BRAINTRUST_API_URL=
+# BRAINTRUST_ENABLED=true
+# BRAINTRUST_LOG_CONTENT=false
+```
+
+`BRAINTRUST_LOG_CONTENT=false` is the default privacy posture. Chat prompts, responses, tool arguments, and tool results are redacted before upload unless this flag is explicitly set to `true`; even then, content passes through the analytics scrubber.
+
+Observability roles:
+
+- Sentry: application errors, route tracing, and reliability signals.
+- PostHog: product analytics and existing LLM generation analytics.
+- Braintrust: AI traces, streaming/model spans, tool-call visibility, future feedback, datasets, and evals.
+
 ## Clerk And Convex
 
 1. Create a Clerk app and copy the required keys into `.env.local`.

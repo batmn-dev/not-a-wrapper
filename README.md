@@ -69,7 +69,7 @@ For full setup (Clerk auth, Convex database, BYOK encryption), see [INSTALL.md](
 | AI | [Vercel AI SDK v6](https://sdk.vercel.ai/) — Multi-provider streaming, tool calling |
 | State | Zustand + TanStack Query |
 | UI | [Base UI](https://base-ui.com/) + [Tailwind CSS 4](https://tailwindcss.com/) |
-| Analytics | [PostHog](https://posthog.com/) — LLM generation tracking, page views |
+| Observability | [Sentry](https://sentry.io/) for app/error tracing, [PostHog](https://posthog.com/) for product and LLM analytics, [Braintrust](https://www.braintrust.dev/) for AI traces and evals |
 | Testing | [Vitest](https://vitest.dev/) |
 
 ## Architecture
@@ -113,7 +113,7 @@ convex/                     # Database schema, queries, mutations, file storage
 | Web search (native + Exa fallback) | Shipped |
 | MCP tool integration | Shipped |
 | Light/dark themes, layout options | Shipped |
-| PostHog analytics | Shipped |
+| Sentry, PostHog, and Braintrust observability | Shipped |
 | Guest access with rate limiting | Shipped |
 | Code execution tools | Planned |
 
