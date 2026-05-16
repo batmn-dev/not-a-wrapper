@@ -1,7 +1,7 @@
-import { auth } from "@clerk/nextjs/server"
 import { ConvexHttpClient } from "convex/browser"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
+import { getAuthenticatedWorkosSession } from "@/lib/auth/workos"
 import { encryptKey } from "@/lib/encryption"
 import { NextResponse } from "next/server"
 
@@ -43,17 +43,9 @@ export async function POST(request: Request) {
       )
     }
 
-    const { userId, getToken } = await auth()
-    if (!userId) {
+    const authSession = await getAuthenticatedWorkosSession()
+    if (!authSession) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const token = await getToken({ template: "convex" })
-    if (!token) {
-      return NextResponse.json(
-        { error: "Failed to get auth token" },
-        { status: 401 }
-      )
     }
 
     // Encrypt auth value if provided
@@ -67,7 +59,7 @@ export async function POST(request: Request) {
     }
 
     const convex = getConvexClient()
-    convex.setAuth(token)
+    convex.setAuth(authSession.accessToken)
 
     const serverId = await convex.mutation(api.mcpServers.create, {
       name: name.trim(),
@@ -116,21 +108,13 @@ export async function PATCH(request: Request) {
       )
     }
 
-    const { userId, getToken } = await auth()
-    if (!userId) {
+    const authSession = await getAuthenticatedWorkosSession()
+    if (!authSession) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const token = await getToken({ template: "convex" })
-    if (!token) {
-      return NextResponse.json(
-        { error: "Failed to get auth token" },
-        { status: 401 }
-      )
-    }
-
     const convex = getConvexClient()
-    convex.setAuth(token)
+    convex.setAuth(authSession.accessToken)
 
     // Build typed update object — only include fields that were provided
     const updates: {

@@ -1,6 +1,6 @@
-import { auth } from "@clerk/nextjs/server"
 import { loadMCPToolsFromURL } from "@/lib/mcp/load-mcp-from-url"
 import { MCP_CONNECTION_TIMEOUT_MS } from "@/lib/config"
+import { getWorkosSession } from "@/lib/auth/workos"
 import { NextResponse } from "next/server"
 
 /**
@@ -31,8 +31,8 @@ export async function POST(request: Request) {
       )
     }
 
-    const { userId } = await auth()
-    if (!userId) {
+    const { user } = await getWorkosSession()
+    if (!user) {
       return NextResponse.json(
         { error: "Unauthorized", success: false },
         { status: 401 }

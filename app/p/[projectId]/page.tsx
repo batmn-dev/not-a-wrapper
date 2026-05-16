@@ -1,9 +1,9 @@
-import { auth } from "@clerk/nextjs/server"
 import { ConvexHttpClient } from "convex/browser"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { LayoutApp } from "@/app/components/layout/layout-app"
 import { ProjectView } from "@/app/p/[projectId]/project-view"
+import { getAuthenticatedWorkosSession } from "@/lib/auth/workos"
 import { MessagesProvider } from "@/lib/chat-store/messages/provider"
 import { notFound, redirect } from "next/navigation"
 
@@ -39,10 +39,10 @@ function toConvexId(projectId: string): Id<"projects"> | null {
 
 export default async function Page({ params }: Props) {
   const { projectId } = await params
-  const { userId, getToken } = await auth()
+  const authSession = await getAuthenticatedWorkosSession()
 
   // Redirect to home if not authenticated
-  if (!userId) {
+  if (!authSession) {
     redirect("/")
   }
 
@@ -56,14 +56,8 @@ export default async function Page({ params }: Props) {
   // getById has built-in ownership checks and returns null if user doesn't own the project
   let project
   try {
-    const token = await getToken({ template: "convex" })
-    if (!token) {
-      // Can't get auth token - redirect to home
-      redirect("/")
-    }
-
     const convex = getConvexClient()
-    convex.setAuth(token)
+    convex.setAuth(authSession.accessToken)
 
     project = await convex.query(api.projects.getById, {
       projectId: convexId,

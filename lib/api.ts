@@ -67,15 +67,14 @@ export async function checkRateLimits(
 
 /**
  * Get or create a guest user ID
- * Note: With Clerk, guests can use the app without authentication
- * or sign in via Clerk
+ * Note: guests can use the app without authentication or sign in with WorkOS.
  */
 export const getOrCreateGuestUserId = async (
   user: UserProfile | null
 ): Promise<string | null> => {
   if (user?.id) return user.id
 
-  // With Clerk, we generate a local guest ID if no user is authenticated
+  // Generate a local guest ID if no user is authenticated.
   // This is stored in localStorage and used for local state only
   const existingGuestId = localStorage.getItem("guestUserId")
   if (existingGuestId) {

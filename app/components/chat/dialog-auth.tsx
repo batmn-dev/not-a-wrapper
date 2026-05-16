@@ -9,7 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { useSignIn } from "@clerk/nextjs"
 import { useState } from "react"
 
 type DialogAuthProps = {
@@ -18,24 +17,16 @@ type DialogAuthProps = {
 }
 
 export function DialogAuth({ open, setOpen }: DialogAuthProps) {
-  const { signIn, isLoaded } = useSignIn()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleSignInWithGoogle = async () => {
-    if (!isLoaded || !signIn) return
-
+  const handleLogin = () => {
     try {
       setIsLoading(true)
       setError(null)
-
-      await signIn.authenticateWithRedirect({
-        strategy: "oauth_google",
-        redirectUrl: "/auth/callback",
-        redirectUrlComplete: "/",
-      })
+      window.location.assign("/login")
     } catch (err: unknown) {
-      console.error("Error signing in with Google:", err)
+      console.error("Error starting sign in:", err)
       setError(
         (err as Error).message ||
           "An unexpected error occurred. Please try again."
@@ -65,18 +56,10 @@ export function DialogAuth({ open, setOpen }: DialogAuthProps) {
             variant="secondary"
             className="w-full text-base"
             size="lg"
-            onClick={handleSignInWithGoogle}
-            disabled={isLoading || !isLoaded}
+            onClick={handleLogin}
+            disabled={isLoading}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element -- External favicon, optimization not needed */}
-            <img
-              src="https://www.google.com/favicon.ico"
-              alt="Google logo"
-              width={20}
-              height={20}
-              className="mr-2 size-4"
-            />
-            <span>{isLoading ? "Connecting..." : "Continue with Google"}</span>
+            <span>{isLoading ? "Connecting..." : "Sign in"}</span>
           </Button>
         </DialogFooter>
       </DialogContent>

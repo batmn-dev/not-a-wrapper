@@ -78,7 +78,7 @@ export const log = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user) throw new Error("User not found")
@@ -141,7 +141,7 @@ export const listByChat = query({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user) return []
@@ -172,7 +172,7 @@ export const listByUser = query({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user) {

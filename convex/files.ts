@@ -16,7 +16,7 @@ export const generateUploadUrl = mutation({
     // Get user from database
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user) throw new Error("User not found")
@@ -71,7 +71,7 @@ export const saveAttachment = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user) throw new Error("User not found")
@@ -133,7 +133,7 @@ export const checkUploadLimit = query({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user) return { count: 0, limit: 5, canUpload: true }
@@ -174,7 +174,7 @@ export const deleteFile = mutation({
     // Verify ownership
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user || attachment.userId !== user._id) {

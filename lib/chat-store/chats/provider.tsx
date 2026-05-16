@@ -55,7 +55,7 @@ export function ChatsProvider({
   userId?: string
   children: React.ReactNode
 }) {
-  // Check if Convex auth is ready (JWT token synced from Clerk)
+  // Check if Convex auth is ready (JWT token synced from WorkOS AuthKit)
   const { isAuthenticated: isConvexAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth()
 
   // Convex real-time query for chats
@@ -204,7 +204,7 @@ export function ChatsProvider({
     }
 
     // For authenticated users, ensure Convex auth is ready before calling mutations
-    // This prevents "Not authenticated" errors due to Clerk→Convex auth sync delay
+    // This prevents "Not authenticated" errors due to AuthKit to Convex auth sync delay
     if (isAuthenticated && !isConvexAuthenticated && !isConvexAuthLoading) {
       console.warn("createNewChat: Convex auth not ready yet, waiting...")
       // Wait a bit for auth to sync

@@ -342,7 +342,7 @@ export function AppSidebar() {
                 <TooltipTrigger
                   render={
                     <Link
-                      href="/auth/login"
+                      href="/login"
                       className="text-muted-foreground hover:text-foreground hover:bg-accent border-border inline-flex h-9 w-full items-center justify-center rounded-md border px-4 text-sm font-medium"
                     />
                   }
@@ -463,7 +463,7 @@ function CollapsedUserAvatar({
         <TooltipTrigger
           render={
             <Link
-              href="/auth/login"
+              href="/login"
               className="border-border hover:bg-accent mx-auto flex h-9 w-10 items-center justify-center rounded-lg border"
             />
           }

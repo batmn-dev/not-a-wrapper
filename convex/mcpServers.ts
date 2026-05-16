@@ -132,7 +132,7 @@ export const list = query({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user) return []
@@ -155,7 +155,7 @@ export const get = query({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user) return null
@@ -196,7 +196,7 @@ export const create = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user) throw new Error("User not found")
@@ -272,7 +272,7 @@ export const update = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user) throw new Error("User not found")
@@ -342,7 +342,7 @@ export const remove = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user) throw new Error("User not found")
@@ -378,7 +378,7 @@ export const toggleEnabled = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user) throw new Error("User not found")
@@ -408,7 +408,7 @@ export const updateConnectionStatus = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user) throw new Error("User not found")

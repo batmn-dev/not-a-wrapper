@@ -1,21 +1,22 @@
 "use client"
 
 import { ReactNode } from "react"
-import { ClerkProvider } from "@clerk/nextjs"
-import { shadcn } from "@clerk/themes"
+import { AuthKitProvider } from "@workos-inc/authkit-nextjs/components"
+import type { NoUserInfo, UserInfo } from "@workos-inc/authkit-nextjs"
 import { ConvexClientProvider } from "./convex-client-provider"
 import { PostHogProvider } from "./posthog-provider"
 
-export function Providers({ children }: { children: ReactNode }) {
+type ProvidersProps = {
+  children: ReactNode
+  initialAuth: Omit<UserInfo | NoUserInfo, "accessToken">
+}
+
+export function Providers({ children, initialAuth }: ProvidersProps) {
   return (
-    <ClerkProvider
-      appearance={{
-        baseTheme: shadcn,
-      }}
-    >
+    <AuthKitProvider initialAuth={initialAuth}>
       <PostHogProvider>
         <ConvexClientProvider>{children}</ConvexClientProvider>
       </PostHogProvider>
-    </ClerkProvider>
+    </AuthKitProvider>
   )
 }

@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server"
+import { getWorkosSession } from "@/lib/auth/workos"
 import { Provider } from "@/lib/user-keys"
 import { NextRequest, NextResponse } from "next/server"
 
@@ -10,7 +10,8 @@ export async function POST(request: NextRequest) {
   try {
     const { provider, userId } = await request.json()
 
-    const { userId: authUserId } = await auth()
+    const { user: authUser } = await getWorkosSession()
+    const authUserId = authUser?.id
     if (!authUserId || authUserId !== userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }

@@ -62,10 +62,10 @@ export const update = mutation({
       throw new Error("Not authenticated")
     }
     
-    // 2. LOOKUP USER - Get user record by Clerk ID
+    // 2. LOOKUP USER - Get user record by WorkOS user ID
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
     
     if (!user) {
@@ -120,7 +120,7 @@ export const getForCurrentUser = query({
     
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
     
     if (!user) return []
@@ -148,7 +148,7 @@ export const create = mutation({
     
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
     
     if (!user) throw new Error("User not found")
@@ -179,7 +179,7 @@ export const remove = mutation({
     
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
     
     const chat = await ctx.db.get(args.chatId)

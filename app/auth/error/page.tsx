@@ -29,7 +29,7 @@ function AuthErrorContent() {
             className="w-full text-base sm:text-base"
             size="lg"
             nativeButton={false}
-            render={<Link href="/auth/login" />}
+            render={<Link href="/login" />}
           >
             Try Again
           </Button>

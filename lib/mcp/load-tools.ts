@@ -262,7 +262,7 @@ function updateConnectionStatus(
  *
  * **Cleanup**: Callers MUST close returned clients after streaming via `after()`.
  *
- * @param convexToken - Clerk/Convex auth token for user identity resolution
+ * @param convexToken - Convex auth token for user identity resolution
  * @param options - Optional configuration overrides
  */
 export async function loadUserMcpTools(

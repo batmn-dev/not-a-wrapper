@@ -11,7 +11,7 @@ import { ModelProvider } from "@/lib/model-store/provider"
 import { TanstackQueryProvider } from "@/lib/tanstack-query/tanstack-query-provider"
 import { UserPreferencesProvider } from "@/lib/user-preference-store/provider"
 import { UserProvider } from "@/lib/user-store/provider"
-import { getUserProfile } from "@/lib/user/api"
+import { getUserAuth } from "@/lib/user/api"
 import { ThemeProvider } from "next-themes"
 import Script from "next/script"
 import { LayoutClient } from "./layout-client"
@@ -47,7 +47,7 @@ export default async function RootLayout({
 }>) {
   const isDev = process.env.NODE_ENV === "development"
   const isOfficialDeployment = process.env.NAW_OFFICIAL === "true"
-  const userProfile = await getUserProfile()
+  const { initialAuth, userProfile } = await getUserAuth()
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -67,7 +67,7 @@ export default async function RootLayout({
         >
           Skip to content
         </a>
-        <Providers>
+        <Providers initialAuth={initialAuth}>
           <TanstackQueryProvider>
             <LayoutClient />
             <UserProvider initialUser={userProfile}>

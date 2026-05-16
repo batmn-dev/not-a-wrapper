@@ -1,12 +1,13 @@
 # Not A Wrapper Installation Guide
 
-Not A Wrapper is a Next.js AI chat app with Convex persistence, Clerk auth, BYOK provider keys, and Vercel AI SDK v6 streaming.
+Not A Wrapper is a Next.js AI chat app with Convex persistence, WorkOS AuthKit, BYOK provider keys, and Vercel AI SDK v6 streaming.
 
 ## Prerequisites
 
 - Bun 1.3.1 or later.
+- Node 22.11.0 or later.
 - Git.
-- Clerk project.
+- WorkOS project.
 - Convex project.
 - At least one supported AI provider API key.
 
@@ -23,7 +24,7 @@ Fill `.env.local` from `.env.example`. Treat `.env.example` as the canonical env
 
 Required groups:
 
-- Clerk auth: publishable key, secret key, JWT issuer domain, and webhook secret.
+- WorkOS AuthKit: API key, client ID, cookie password, and redirect URI.
 - Convex: deployment name and public URL.
 - Security: `CSRF_SECRET` and `ENCRYPTION_KEY`.
 - AI providers: at least one provider key, such as OpenAI or Anthropic.
@@ -34,7 +35,7 @@ Generate secrets with:
 openssl rand -base64 32
 ```
 
-`ENCRYPTION_KEY` must decode to exactly 32 bytes. Keep it stable across deployments; changing it makes existing encrypted user API keys unrecoverable.
+`WORKOS_COOKIE_PASSWORD` must be at least 32 characters. `ENCRYPTION_KEY` must decode to exactly 32 bytes. Keep `ENCRYPTION_KEY` stable across deployments; changing it makes existing encrypted user API keys unrecoverable.
 
 ## Optional Observability
 
@@ -56,17 +57,26 @@ Observability roles:
 - PostHog: product analytics and existing LLM generation analytics.
 - Braintrust: AI traces, streaming/model spans, tool-call visibility, future feedback, datasets, and evals.
 
-## Clerk And Convex
+## WorkOS AuthKit And Convex
 
-1. Create a Clerk app and copy the required keys into `.env.local`.
-2. Configure Clerk JWT auth for Convex using the issuer domain from Clerk.
-3. Create a Convex project and run:
+1. Create a WorkOS app and copy `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` into `.env.local`.
+2. Set `WORKOS_COOKIE_PASSWORD` to a generated value of at least 32 characters.
+3. Configure WorkOS Redirects:
+   - Local redirect URI: `http://localhost:3000/callback`
+   - Production redirect URI: `https://<production-domain>/callback`
+   - Sign-in endpoint: `https://<production-domain>/login` for production, or `http://localhost:3000/login` locally.
+   - Sign-out redirect: the app root, for example `https://<production-domain>/`.
+4. Set `NEXT_PUBLIC_WORKOS_REDIRECT_URI` to the matching `/callback` URI.
+5. Set Convex env `WORKOS_CLIENT_ID` so `convex/auth.config.ts` can validate WorkOS access tokens.
+6. User rows are created or updated on first authenticated app load; no auth webhook setup is required.
+7. This migration is a clean auth reset. Do not import users from another auth provider.
+8. Create a Convex project and run:
 
 ```bash
 bun run dev:convex
 ```
 
-4. Copy the Convex deployment values into `.env.local`.
+9. Copy the Convex deployment values into `.env.local`.
 
 The Convex schema lives in `convex/schema.ts`; generated Convex types are managed by the Convex dev process.
 
@@ -113,7 +123,7 @@ Deploy the app through Vercel and configure the same environment variables from 
 
 ## Troubleshooting
 
-- Convex auth failures: verify Clerk JWT issuer domain and Convex auth provider settings.
+- Convex auth failures: verify `WORKOS_CLIENT_ID` is set in Convex env and WorkOS redirect URI is `/callback`.
 - Model failures: verify the selected model's provider key is set globally or through BYOK.
 - BYOK failures: verify `ENCRYPTION_KEY` is valid base64 for exactly 32 decoded bytes.
 - Stale local build behavior: try `bun run dev:clean`.

@@ -148,7 +148,7 @@ Run this validation checklist:
 
 4. **No decision gates before destructive actions** — modifying `convex/schema.ts`, deleting files, changing auth logic — all require explicit user approval.
 
-5. **Abstract pattern descriptions** — don't say "follow the auth pattern." Say "follow the auth pattern in `convex/userKeys.ts`: `ctx.auth.getUserIdentity()` → resolve user via `users.by_clerk_id` → verify ownership."
+5. **Abstract pattern descriptions** — don't say "follow the auth pattern." Say "follow the auth pattern in `convex/userKeys.ts`: `ctx.auth.getUserIdentity()` → resolve user via `users.by_workos_user_id` → verify ownership."
 
 6. **Hardcoded values scattered across phases** — define constants once in a Constants Reference section; reference them by name in phases.
 

@@ -1,6 +1,6 @@
-import { auth } from "@clerk/nextjs/server"
 import { ConvexHttpClient } from "convex/browser"
 import { api } from "@/convex/_generated/api"
+import { getAuthenticatedWorkosSession } from "@/lib/auth/workos"
 import { NextRequest, NextResponse } from "next/server"
 import { resolveModelIds } from "@/lib/models/model-id-migration"
 
@@ -19,19 +19,10 @@ function getConvexClient() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId, getToken } = await auth()
+    const authSession = await getAuthenticatedWorkosSession()
 
-    if (!userId) {
+    if (!authSession) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    // Get JWT token for authenticated Convex mutation
-    const token = await getToken({ template: "convex" })
-    if (!token) {
-      return NextResponse.json(
-        { error: "Failed to get auth token" },
-        { status: 401 }
-      )
     }
 
     // Parse the request body
@@ -57,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     // Update favorite models in Convex with authenticated client
     const convex = getConvexClient()
-    convex.setAuth(token)
+    convex.setAuth(authSession.accessToken)
     await convex.mutation(api.users.updateFavoriteModels, {
       favoriteModels: normalizedFavoriteModels,
     })
@@ -77,24 +68,15 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   try {
-    const { userId, getToken } = await auth()
+    const authSession = await getAuthenticatedWorkosSession()
 
-    if (!userId) {
+    if (!authSession) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    // Get JWT token for authenticated Convex query
-    const token = await getToken({ template: "convex" })
-    if (!token) {
-      return NextResponse.json(
-        { error: "Failed to get auth token" },
-        { status: 401 }
-      )
     }
 
     // Fetch user's favorite models from Convex with authenticated client
     const convex = getConvexClient()
-    convex.setAuth(token)
+    convex.setAuth(authSession.accessToken)
     const user = await convex.query(api.users.getCurrent, {})
     const favoriteModels = user?.favoriteModels ?? []
     const normalizedFavoriteModels = resolveModelIds(favoriteModels)

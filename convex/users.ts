@@ -2,14 +2,22 @@ import { v } from "convex/values"
 import { mutation, query } from "./_generated/server"
 
 /**
- * Get user by Clerk ID
+ * Get the authenticated caller by WorkOS user ID.
  */
-export const getByClerkId = query({
-  args: { clerkId: v.string() },
-  handler: async (ctx, { clerkId }) => {
+export const getByWorkosUserId = query({
+  args: { workosUserId: v.string() },
+  handler: async (ctx, { workosUserId }) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) {
+      throw new Error("Not authenticated")
+    }
+    if (identity.subject !== workosUserId) {
+      throw new Error("Cannot read a different user")
+    }
+
     return await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", clerkId))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", workosUserId))
       .unique()
   },
 })
@@ -25,25 +33,33 @@ export const getCurrent = query({
 
     return await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
   },
 })
 
 /**
- * Create or update user from Clerk webhook
+ * Create or update user from the authenticated WorkOS session.
  */
 export const createOrUpdate = mutation({
   args: {
-    clerkId: v.string(),
+    workosUserId: v.string(),
     email: v.string(),
     displayName: v.optional(v.string()),
     profileImage: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) {
+      throw new Error("Not authenticated")
+    }
+    if (identity.subject !== args.workosUserId) {
+      throw new Error("Cannot sync a different user")
+    }
+
     const existingUser = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", args.workosUserId))
       .unique()
 
     if (existingUser) {
@@ -59,7 +75,7 @@ export const createOrUpdate = mutation({
 
     // Create new user
     return await ctx.db.insert("users", {
-      clerkId: args.clerkId,
+      workosUserId: args.workosUserId,
       email: args.email,
       displayName: args.displayName,
       profileImage: args.profileImage,
@@ -84,7 +100,7 @@ export const updateLastActive = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (user) {
@@ -108,7 +124,7 @@ export const updateFavoriteModels = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user) {
@@ -137,7 +153,7 @@ export const updateProfile = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user) {
@@ -160,4 +176,3 @@ export const updateProfile = mutation({
     return { success: true }
   },
 })
-

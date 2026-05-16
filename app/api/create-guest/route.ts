@@ -1,12 +1,8 @@
 /**
  * Create Guest User API
  * 
- * Note: With Clerk + Convex, guest users are handled differently.
- * Clerk provides authentication, and anonymous users should use
- * Clerk's anonymous authentication or the app should work without auth.
- * 
  * This endpoint is kept for backward compatibility but returns a mock
- * guest user. For actual guest functionality, use Clerk's features.
+ * guest user. Actual guest functionality is local and unauthenticated.
  */
 export async function POST(request: Request) {
   try {
@@ -34,9 +30,8 @@ export async function POST(request: Request) {
       })
     }
 
-    // With Clerk + Convex, guest users are managed differently
     // Return a mock user for backward compatibility
-    console.log("Guest user creation handled via local storage or Clerk")
+    console.log("Guest user creation handled via local storage")
     
     return new Response(
       JSON.stringify({ 

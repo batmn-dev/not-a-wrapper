@@ -4,7 +4,7 @@ import { v } from "convex/values"
 export default defineSchema({
   users: defineTable({
     // Identity
-    clerkId: v.string(),
+    workosUserId: v.string(),
     email: v.string(),
     displayName: v.optional(v.string()),
     profileImage: v.optional(v.string()),
@@ -29,7 +29,7 @@ export default defineSchema({
     favoriteModels: v.optional(v.array(v.string())),
     systemPrompt: v.optional(v.string()),
   })
-    .index("by_clerk_id", ["clerkId"])
+    .index("by_workos_user_id", ["workosUserId"])
     .index("by_email", ["email"]),
 
   chats: defineTable({
@@ -121,7 +121,7 @@ export default defineSchema({
   // - extract_content per-domain abuse control
   // - centralized per-tool budgets (platform/BYOK policies)
   toolLimitBuckets: defineTable({
-    actorKey: v.string(), // "user:<clerkId>" or "guest:<anonymousId>"
+    actorKey: v.string(), // "user:<workosUserId>" or "guest:<anonymousId>"
     limitType: v.union(v.literal("domain"), v.literal("budget")),
     toolName: v.string(),
     scopeKey: v.string(), // domain for domain limits, "*" for per-tool budgets

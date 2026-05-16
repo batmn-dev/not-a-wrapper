@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server"
+import { getWorkosSession } from "@/lib/auth/workos"
 import { PROVIDERS } from "@/lib/providers"
 import { NextResponse } from "next/server"
 
@@ -16,9 +16,9 @@ const SUPPORTED_PROVIDERS = PROVIDERS.map((p) => p.id)
  */
 export async function GET() {
   try {
-    const { userId } = await auth()
+    const { user } = await getWorkosSession()
 
-    if (!userId) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 

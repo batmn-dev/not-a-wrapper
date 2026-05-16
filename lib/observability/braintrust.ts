@@ -17,7 +17,7 @@ const MAX_MASK_DEPTH = 20
 const FALSEY_ENV_VALUES = new Set(["0", "false", "off", "no"])
 
 const SENSITIVE_KEY_RE =
-  /(?:^|[_-])(?:api[_-]?key|authorization|bearer|byok|clerk|convex|cookie|credentials?|encryptedkey|id[_-]?token|password|refresh[_-]?token|secret|session|set[_-]?cookie|token)(?:$|[_-])/i
+  /(?:^|[_-])(?:api[_-]?key|authorization|bearer|byok|convex|cookie|credentials?|encryptedkey|id[_-]?token|password|refresh[_-]?token|secret|session|set[_-]?cookie|token)(?:$|[_-])/i
 const SECRET_VALUE_RE =
   /\b(?:Bearer\s+)?(?:bt|gh[pousr]|sk|xox[baprs]?)-[A-Za-z0-9_-]{8,}\b/g
 

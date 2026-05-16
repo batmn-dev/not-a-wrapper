@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server"
+import { getWorkosSession } from "@/lib/auth/workos"
 import { getMessageUsage } from "./api"
 
 export async function GET(req: Request) {
@@ -7,9 +7,9 @@ export async function GET(req: Request) {
   const anonymousId = searchParams.get("userId") ?? undefined
 
   try {
-    // Get auth state from Clerk
-    const { userId: authUserId, getToken } = await auth()
-    const isAuthenticated = !!authUserId
+    // Get auth state from WorkOS AuthKit
+    const authSession = await getWorkosSession()
+    const isAuthenticated = !!authSession.user
 
     // Validate: must have either authenticated user or anonymousId for tracking
     if (!isAuthenticated && !anonymousId) {
@@ -25,7 +25,7 @@ export async function GET(req: Request) {
 
     // Get Convex token for authenticated users
     const convexToken = isAuthenticated
-      ? (await getToken({ template: "convex" })) ?? undefined
+      ? authSession.accessToken
       : undefined
 
     const usage = await getMessageUsage(convexToken, anonymousId, isAuthenticated)
