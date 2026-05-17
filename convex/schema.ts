@@ -24,6 +24,10 @@ export default defineSchema({
 
     // Activity
     lastActiveAt: v.optional(v.number()), // Unix timestamp
+    lastSyncedFromWorkOSAt: v.optional(v.number()), // Unix timestamp
+    workosUpdatedAt: v.optional(v.string()), // ISO timestamp from WorkOS
+    deletedAt: v.optional(v.number()), // Unix timestamp
+    disabledAt: v.optional(v.number()), // Unix timestamp
 
     // Preferences stored directly on user
     favoriteModels: v.optional(v.array(v.string())),

@@ -25,7 +25,7 @@ Fill `.env.local` from `.env.example`. Treat `.env.example` as the canonical env
 Required groups:
 
 - WorkOS AuthKit: API key, client ID, cookie password, and redirect URI.
-- Convex: deployment name and public URL.
+- Convex: deployment name, public URL, and WorkOS webhook sync env.
 - Security: `CSRF_SECRET` and `ENCRYPTION_KEY`.
 - AI providers: at least one provider key, such as OpenAI or Anthropic.
 
@@ -67,16 +67,46 @@ Observability roles:
    - Sign-in endpoint: `https://<production-domain>/login` for production, or `http://localhost:3000/login` locally.
    - Sign-out redirect: the app root, for example `https://<production-domain>/`.
 4. Set `NEXT_PUBLIC_WORKOS_REDIRECT_URI` to the matching `/callback` URI.
-5. Set Convex env `WORKOS_CLIENT_ID` so `convex/auth.config.ts` can validate WorkOS access tokens.
-6. User rows are created or updated on first authenticated app load; no auth webhook setup is required.
-7. This migration is a clean auth reset. Do not import users from another auth provider.
-8. Create a Convex project and run:
+5. Create a Convex project and run:
 
 ```bash
 bun run dev:convex
 ```
 
-9. Copy the Convex deployment values into `.env.local`.
+6. Copy the Convex deployment values into `.env.local`.
+7. Set Convex env so Convex can validate WorkOS access tokens and process WorkOS webhook sync:
+
+```bash
+bunx convex env set WORKOS_CLIENT_ID <client_id>
+bunx convex env set WORKOS_API_KEY <api_key>
+bunx convex env set WORKOS_WEBHOOK_SECRET <secret_from_workos_webhook>
+```
+
+`WORKOS_WEBHOOK_SECRET` comes from the WorkOS dashboard after creating the webhook endpoint. Do not expose it through a `NEXT_PUBLIC_` variable.
+
+The app uses current Convex with the official `@convex-dev/workos-authkit` component. WorkOS remains the source of truth for identity lifecycle, and Convex remains the source of truth for app data. User rows are still created or updated on first authenticated app load as an idempotent fallback, while WorkOS webhooks keep app-owned user data synchronized.
+
+### WorkOS Webhook Setup
+
+In the WorkOS dashboard, create a webhook endpoint:
+
+- Endpoint: `https://<your-convex-deployment>.convex.site/workos/webhook`
+- Events:
+  - `user.created`
+  - `user.updated`
+  - `user.deleted`
+
+Use the WorkOS dashboard endpoint detail page to send test events after saving the endpoint. The webhook handler upserts app users by `workosUserId`; duplicate deliveries and `user.updated` before `user.created` are safe. `user.deleted` soft-deletes/disables the app user row and does not cascade into chats, projects, messages, billing, analytics, roles, organizations, invitations, or sessions.
+
+Optional backfill for existing or test WorkOS users:
+
+```bash
+bunx convex run workosAuth:backfillUsers
+```
+
+Backfill is idempotent and fires the same `user.created` app sync handler. It is not run automatically.
+
+This migration is a clean auth reset. Do not import users from another auth provider.
 
 The Convex schema lives in `convex/schema.ts`; generated Convex types are managed by the Convex dev process.
 
@@ -124,6 +154,7 @@ Deploy the app through Vercel and configure the same environment variables from 
 ## Troubleshooting
 
 - Convex auth failures: verify `WORKOS_CLIENT_ID` is set in Convex env and WorkOS redirect URI is `/callback`.
+- WorkOS webhook failures: verify the WorkOS endpoint is `https://<your-convex-deployment>.convex.site/workos/webhook`, the endpoint subscribes only to `user.created`, `user.updated`, and `user.deleted`, and `WORKOS_WEBHOOK_SECRET` is set in Convex env.
 - Model failures: verify the selected model's provider key is set globally or through BYOK.
 - BYOK failures: verify `ENCRYPTION_KEY` is valid base64 for exactly 32 decoded bytes.
 - Stale local build behavior: try `bun run dev:clean`.

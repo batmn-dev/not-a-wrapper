@@ -1,5 +1,6 @@
 import { v } from "convex/values"
 import { mutation, query } from "./_generated/server"
+import { upsertAppUserFromWorkOS } from "./userSync"
 
 /**
  * Get the authenticated caller by WorkOS user ID.
@@ -33,7 +34,9 @@ export const getCurrent = query({
 
     return await ctx.db
       .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
+      .withIndex("by_workos_user_id", (q) =>
+        q.eq("workosUserId", identity.subject)
+      )
       .unique()
   },
 })
@@ -45,8 +48,11 @@ export const createOrUpdate = mutation({
   args: {
     workosUserId: v.string(),
     email: v.string(),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
     displayName: v.optional(v.string()),
     profileImage: v.optional(v.string()),
+    workosUpdatedAt: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
@@ -57,34 +63,15 @@ export const createOrUpdate = mutation({
       throw new Error("Cannot sync a different user")
     }
 
-    const existingUser = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", args.workosUserId))
-      .unique()
-
-    if (existingUser) {
-      // Update existing user
-      await ctx.db.patch(existingUser._id, {
-        email: args.email,
-        displayName: args.displayName,
-        profileImage: args.profileImage,
-        lastActiveAt: Date.now(),
-      })
-      return existingUser._id
-    }
-
-    // Create new user
-    return await ctx.db.insert("users", {
+    return await upsertAppUserFromWorkOS(ctx, {
       workosUserId: args.workosUserId,
       email: args.email,
+      firstName: args.firstName,
+      lastName: args.lastName,
       displayName: args.displayName,
       profileImage: args.profileImage,
-      anonymous: false,
-      premium: false,
-      messageCount: 0,
-      dailyMessageCount: 0,
-      dailyProMessageCount: 0,
-      lastActiveAt: Date.now(),
+      workosUpdatedAt: args.workosUpdatedAt,
+      markActive: true,
     })
   },
 })
@@ -100,7 +87,9 @@ export const updateLastActive = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
+      .withIndex("by_workos_user_id", (q) =>
+        q.eq("workosUserId", identity.subject)
+      )
       .unique()
 
     if (user) {
@@ -124,7 +113,9 @@ export const updateFavoriteModels = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
+      .withIndex("by_workos_user_id", (q) =>
+        q.eq("workosUserId", identity.subject)
+      )
       .unique()
 
     if (!user) {
@@ -153,7 +144,9 @@ export const updateProfile = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
+      .withIndex("by_workos_user_id", (q) =>
+        q.eq("workosUserId", identity.subject)
+      )
       .unique()
 
     if (!user) {
