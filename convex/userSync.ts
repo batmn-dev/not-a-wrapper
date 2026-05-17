@@ -11,6 +11,17 @@ type AppUserSyncInput = {
   markActive?: boolean
 }
 
+type AppUserDeleteInput = Pick<
+  AppUserSyncInput,
+  | "workosUserId"
+  | "email"
+  | "firstName"
+  | "lastName"
+  | "displayName"
+  | "profileImage"
+  | "workosUpdatedAt"
+>
+
 function displayNameFromWorkOSUser(user: {
   email: string
   firstName?: string | null
@@ -64,20 +75,35 @@ export async function upsertAppUserFromWorkOS(
 
   const now = Date.now()
   const displayName = displayNameFromWorkOSUser(input)
-  const profileImage = input.profileImage ?? undefined
+  const profileImage =
+    input.profileImage === null ? undefined : input.profileImage
   const workosUpdatedAt = input.workosUpdatedAt ?? existingUser?.workosUpdatedAt
 
   if (existingUser) {
-    await ctx.db.patch(existingUser._id, {
+    const updates: {
+      email: string
+      displayName: string
+      profileImage?: string | undefined
+      workosUpdatedAt: string | undefined
+      lastSyncedFromWorkOSAt: number
+      lastActiveAt?: number
+      deletedAt: undefined
+      disabledAt: undefined
+    } = {
       email: input.email,
       displayName,
-      profileImage,
       workosUpdatedAt,
       lastSyncedFromWorkOSAt: now,
       ...(input.markActive ? { lastActiveAt: now } : {}),
       deletedAt: undefined,
       disabledAt: undefined,
-    })
+    }
+
+    if (input.profileImage !== undefined) {
+      updates.profileImage = profileImage
+    }
+
+    await ctx.db.patch(existingUser._id, updates)
     return existingUser._id
   }
 
@@ -99,7 +125,7 @@ export async function upsertAppUserFromWorkOS(
 
 export async function softDeleteAppUserFromWorkOS(
   ctx: MutationCtx,
-  input: Pick<AppUserSyncInput, "workosUserId" | "workosUpdatedAt">
+  input: AppUserDeleteInput
 ) {
   const existingUser = await ctx.db
     .query("users")
@@ -108,15 +134,30 @@ export async function softDeleteAppUserFromWorkOS(
     )
     .unique()
 
-  if (!existingUser) return null
+  const now = Date.now()
 
-  if (
-    isOlderWorkOSUpdate(existingUser.workosUpdatedAt, input.workosUpdatedAt)
-  ) {
+  if (!existingUser) {
+    return await ctx.db.insert("users", {
+      workosUserId: input.workosUserId,
+      email: input.email,
+      displayName: displayNameFromWorkOSUser(input),
+      profileImage: input.profileImage ?? undefined,
+      anonymous: false,
+      premium: false,
+      messageCount: 0,
+      dailyMessageCount: 0,
+      dailyProMessageCount: 0,
+      deletedAt: now,
+      disabledAt: now,
+      lastSyncedFromWorkOSAt: now,
+      workosUpdatedAt: input.workosUpdatedAt ?? undefined,
+    })
+  }
+
+  if (isOlderWorkOSUpdate(existingUser.workosUpdatedAt, input.workosUpdatedAt)) {
     return existingUser._id
   }
 
-  const now = Date.now()
   await ctx.db.patch(existingUser._id, {
     deletedAt: existingUser.deletedAt ?? now,
     disabledAt: existingUser.disabledAt ?? now,
