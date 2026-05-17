@@ -6,13 +6,20 @@
  */
 "use client"
 
-import type { UserProfile } from "@/lib/user/types"
-import type { User as WorkosUser } from "@workos-inc/node"
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react"
-import { useAuth } from "@workos-inc/authkit-nextjs/components"
 import { api } from "@/convex/_generated/api"
-import { useConvexAuth, useMutation, useQuery } from "convex/react"
 import { defaultPreferences } from "@/lib/user-preference-store/utils"
+import type { UserProfile } from "@/lib/user/types"
+import { useAuth } from "@workos-inc/authkit-nextjs/components"
+import type { User as WorkosUser } from "@workos-inc/node"
+import { useConvexAuth, useMutation, useQuery } from "convex/react"
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react"
 
 type UserContextType = {
   user: UserProfile | null
@@ -74,8 +81,10 @@ export function UserProvider({
         await createOrUpdateMutation({
           workosUserId: workosUser.id,
           email: workosUser.email,
-          displayName: getDisplayName(workosUser),
+          firstName: workosUser.firstName ?? undefined,
+          lastName: workosUser.lastName ?? undefined,
           profileImage: workosUser.profilePictureUrl ?? undefined,
+          workosUpdatedAt: workosUser.updatedAt,
         })
         console.log("[UserProvider] Synced user to Convex:", workosUser.id)
       } catch (error) {
@@ -121,28 +130,32 @@ export function UserProvider({
     }
   }, [workosUser, isAuthLoading])
 
-  const updateUser = useCallback(async (updates: Partial<UserProfile>) => {
-    if (!user?.id) return
+  const updateUser = useCallback(
+    async (updates: Partial<UserProfile>) => {
+      if (!user?.id) return
 
-    setIsLoading(true)
-    try {
-      const convexUpdates: { systemPrompt?: string; displayName?: string } = {}
-      if (updates.system_prompt !== undefined) {
-        convexUpdates.systemPrompt = updates.system_prompt ?? undefined
-      }
-      if (updates.display_name !== undefined) {
-        convexUpdates.displayName = updates.display_name
-      }
+      setIsLoading(true)
+      try {
+        const convexUpdates: { systemPrompt?: string; displayName?: string } =
+          {}
+        if (updates.system_prompt !== undefined) {
+          convexUpdates.systemPrompt = updates.system_prompt ?? undefined
+        }
+        if (updates.display_name !== undefined) {
+          convexUpdates.displayName = updates.display_name
+        }
 
-      if (Object.keys(convexUpdates).length > 0) {
-        await updateProfileMutation(convexUpdates)
-      }
+        if (Object.keys(convexUpdates).length > 0) {
+          await updateProfileMutation(convexUpdates)
+        }
 
-      setUser((prev) => (prev ? { ...prev, ...updates } : null))
-    } finally {
-      setIsLoading(false)
-    }
-  }, [user?.id, updateProfileMutation])
+        setUser((prev) => (prev ? { ...prev, ...updates } : null))
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [user?.id, updateProfileMutation]
+  )
 
   return (
     <UserContext.Provider value={{ user, isLoading, updateUser }}>

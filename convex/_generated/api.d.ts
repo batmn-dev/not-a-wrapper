@@ -11,6 +11,7 @@
 import type * as chats from "../chats.js";
 import type * as feedback from "../feedback.js";
 import type * as files from "../files.js";
+import type * as http from "../http.js";
 import type * as mcpServers from "../mcpServers.js";
 import type * as mcpToolApprovals from "../mcpToolApprovals.js";
 import type * as mcpToolCallLog from "../mcpToolCallLog.js";
@@ -21,7 +22,9 @@ import type * as toolLimits from "../toolLimits.js";
 import type * as usage from "../usage.js";
 import type * as userKeys from "../userKeys.js";
 import type * as userPreferences from "../userPreferences.js";
+import type * as userSync from "../userSync.js";
 import type * as users from "../users.js";
+import type * as workosAuth from "../workosAuth.js";
 
 import type {
   ApiFromModules,
@@ -33,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   chats: typeof chats;
   feedback: typeof feedback;
   files: typeof files;
+  http: typeof http;
   mcpServers: typeof mcpServers;
   mcpToolApprovals: typeof mcpToolApprovals;
   mcpToolCallLog: typeof mcpToolCallLog;
@@ -43,7 +47,9 @@ declare const fullApi: ApiFromModules<{
   usage: typeof usage;
   userKeys: typeof userKeys;
   userPreferences: typeof userPreferences;
+  userSync: typeof userSync;
   users: typeof users;
+  workosAuth: typeof workosAuth;
 }>;
 
 /**
@@ -72,4 +78,54 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  workOSAuthKit: {
+    backfill: {
+      startBackfill: FunctionReference<
+        "mutation",
+        "internal",
+        { apiKey: string; logLevel?: "DEBUG"; onEventHandle?: string },
+        null
+      >;
+    };
+    lib: {
+      getAuthUser: FunctionReference<
+        "query",
+        "internal",
+        { id: string },
+        {
+          createdAt: string;
+          email: string;
+          emailVerified: boolean;
+          externalId?: null | string;
+          firstName?: null | string;
+          id: string;
+          lastName?: null | string;
+          lastSignInAt?: null | string;
+          locale?: null | string;
+          metadata: Record<string, any>;
+          profilePictureUrl?: null | string;
+          updatedAt: string;
+        } | null
+      >;
+      onWebhookEvent: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          apiKey: string;
+          event: {
+            context?: Record<string, any>;
+            createdAt: string;
+            data: Record<string, any>;
+            event: string;
+            id: string;
+          };
+          eventTypes?: Array<string>;
+          logLevel?: "DEBUG";
+          onEventHandle?: string;
+        },
+        null
+      >;
+    };
+  };
+};

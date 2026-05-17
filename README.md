@@ -59,13 +59,14 @@ The app runs at [http://localhost:3000](http://localhost:3000). You need at leas
 
 For full setup (WorkOS AuthKit, Convex database, BYOK encryption), see [INSTALL.md](./INSTALL.md).
 Auth is configured as a clean reset with no imported legacy users.
+The current Convex setup uses the official WorkOS AuthKit component for webhook-backed app user sync on `user.created`, `user.updated`, and `user.deleted`.
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
 | Framework | [Next.js 16](https://nextjs.org/) (App Router), React 19, TypeScript |
-| Database | [Convex](https://convex.dev) — Real-time reactive database with file storage |
+| Database | [Convex](https://convex.dev) — Real-time reactive database with file storage and WorkOS webhook-backed user sync |
 | Auth | [WorkOS AuthKit](https://workos.com/authkit) — Hosted authentication with guest access preserved |
 | AI | [Vercel AI SDK v6](https://sdk.vercel.ai/) — Multi-provider streaming, tool calling |
 | State | Zustand + TanStack Query |
