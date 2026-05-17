@@ -12,7 +12,7 @@ export const getForCurrentUser = query({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user) return []
@@ -39,7 +39,7 @@ export const getById = query({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user || project.userId !== user._id) {
@@ -63,13 +63,13 @@ export const getByIdWithOwner = internalQuery({
     const project = await ctx.db.get(projectId)
     if (!project) return null
 
-    // Get the owner's clerkId for ownership verification
+    // Get the owner's WorkOS user ID for ownership verification
     const owner = await ctx.db.get(project.userId)
     if (!owner) return null
 
     return {
       ...project,
-      ownerClerkId: owner.clerkId,
+      ownerWorkosUserId: owner.workosUserId,
     }
   },
 })
@@ -87,7 +87,7 @@ export const create = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user) throw new Error("User not found")
@@ -117,7 +117,7 @@ export const updateName = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user || project.userId !== user._id) {
@@ -143,7 +143,7 @@ export const remove = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user || project.userId !== user._id) {

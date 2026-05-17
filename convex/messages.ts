@@ -19,7 +19,7 @@ export const getForChat = query({
 
       const user = await ctx.db
         .query("users")
-        .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+        .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
         .unique()
 
       if (!user || chat.userId !== user._id) return []
@@ -77,7 +77,7 @@ export const getLastMessages = query({
 
       const user = await ctx.db
         .query("users")
-        .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+        .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
         .unique()
 
       if (!user || chat.userId !== user._id) return []
@@ -124,7 +124,7 @@ export const add = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user || chat.userId !== user._id) {
@@ -202,7 +202,7 @@ export const addBatch = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user || chat.userId !== user._id) {
@@ -250,7 +250,7 @@ export const deleteFromTimestamp = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user || chat.userId !== user._id) {
@@ -290,7 +290,7 @@ export const clearForChat = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
       .unique()
 
     if (!user || chat.userId !== user._id) {

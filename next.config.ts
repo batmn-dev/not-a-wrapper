@@ -26,13 +26,6 @@ const nextConfig: NextConfig = {
         port: "",
         pathname: "/**",
       },
-      // Clerk profile images
-      {
-        protocol: "https",
-        hostname: "img.clerk.com",
-        port: "",
-        pathname: "/**",
-      },
       // Google favicon service (used by web search source citations)
       {
         protocol: "https",

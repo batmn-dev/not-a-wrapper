@@ -65,10 +65,10 @@ export function Header({ hasSidebar }: { hasSidebar: boolean }) {
         <div className="pointer-events-auto flex items-center justify-end gap-0">
           {!isLoggedIn ? (
             <>
-              <Button variant="outline" render={<Link href="/auth/login" />}>
+              <Button variant="outline" render={<Link href="/login" />}>
                 Login
               </Button>
-              <Button render={<Link href="/auth/sign-up" />}>
+              <Button render={<Link href="/sign-up" />}>
                 Sign up
               </Button>
             </>

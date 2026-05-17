@@ -17,7 +17,7 @@ export function isProModel(modelId: string): boolean {
  * Server-side usage check using Convex with authenticated token
  * This enforces rate limits before allowing the request to proceed
  *
- * @param token - Clerk auth token (undefined for anonymous users)
+ * @param token - Convex auth token (undefined for anonymous users)
  * @param modelId - The model being used
  * @param anonymousId - Client-generated ID for anonymous users (required if no token)
  */
@@ -51,7 +51,7 @@ export async function checkServerSideUsage(
  * Server-side usage increment using Convex with authenticated token
  * This is called after successful validation to track usage
  *
- * @param token - Clerk auth token (undefined for anonymous users)
+ * @param token - Convex auth token (undefined for anonymous users)
  * @param modelId - The model being used
  * @param anonymousId - Client-generated ID for anonymous users (required if no token)
  */

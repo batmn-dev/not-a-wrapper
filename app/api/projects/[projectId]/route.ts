@@ -1,7 +1,7 @@
-import { auth } from "@clerk/nextjs/server"
 import { ConvexHttpClient } from "convex/browser"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
+import { getAuthenticatedWorkosSession } from "@/lib/auth/workos"
 import { NextRequest, NextResponse } from "next/server"
 
 // Lazy initialization to avoid build-time errors when env vars aren't set
@@ -39,9 +39,9 @@ export async function GET(
 ) {
   try {
     const { projectId } = await params
-    const { userId, getToken } = await auth()
+    const authSession = await getAuthenticatedWorkosSession()
 
-    if (!userId) {
+    if (!authSession) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -51,19 +51,10 @@ export async function GET(
       return NextResponse.json({ error: "Invalid project ID" }, { status: 400 })
     }
 
-    // Get JWT token for authenticated Convex query
-    const token = await getToken({ template: "convex" })
-    if (!token) {
-      return NextResponse.json(
-        { error: "Failed to get auth token" },
-        { status: 401 }
-      )
-    }
-
     // Fetch project from Convex with authenticated query
     // getById has built-in ownership checks - returns null if user doesn't own the project
     const convex = getConvexClient()
-    convex.setAuth(token)
+    convex.setAuth(authSession.accessToken)
 
     const project = await convex.query(api.projects.getById, {
       projectId: convexId,
@@ -79,7 +70,7 @@ export async function GET(
     return NextResponse.json({
       id: project._id,
       name: project.name,
-      user_id: userId,
+      user_id: authSession.userId,
       created_at: new Date(project._creationTime).toISOString(),
     })
   } catch (err: unknown) {
@@ -108,9 +99,9 @@ export async function PUT(
       )
     }
 
-    const { userId, getToken } = await auth()
+    const authSession = await getAuthenticatedWorkosSession()
 
-    if (!userId) {
+    if (!authSession) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -120,18 +111,9 @@ export async function PUT(
       return NextResponse.json({ error: "Invalid project ID" }, { status: 400 })
     }
 
-    // Get JWT token for authenticated Convex mutation
-    const token = await getToken({ template: "convex" })
-    if (!token) {
-      return NextResponse.json(
-        { error: "Failed to get auth token" },
-        { status: 401 }
-      )
-    }
-
     // Call Convex mutation with auth
     const convex = getConvexClient()
-    convex.setAuth(token)
+    convex.setAuth(authSession.accessToken)
 
     await convex.mutation(api.projects.updateName, {
       projectId: convexId,
@@ -141,7 +123,7 @@ export async function PUT(
     return NextResponse.json({
       id: projectId,
       name: name.trim(),
-      user_id: userId,
+      user_id: authSession.userId,
       updated_at: new Date().toISOString(),
     })
   } catch (err: unknown) {
@@ -169,9 +151,9 @@ export async function DELETE(
 ) {
   try {
     const { projectId } = await params
-    const { userId, getToken } = await auth()
+    const authSession = await getAuthenticatedWorkosSession()
 
-    if (!userId) {
+    if (!authSession) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -181,18 +163,9 @@ export async function DELETE(
       return NextResponse.json({ error: "Invalid project ID" }, { status: 400 })
     }
 
-    // Get JWT token for authenticated Convex mutation
-    const token = await getToken({ template: "convex" })
-    if (!token) {
-      return NextResponse.json(
-        { error: "Failed to get auth token" },
-        { status: 401 }
-      )
-    }
-
     // Call Convex mutation with auth
     const convex = getConvexClient()
-    convex.setAuth(token)
+    convex.setAuth(authSession.accessToken)
 
     await convex.mutation(api.projects.remove, {
       projectId: convexId,

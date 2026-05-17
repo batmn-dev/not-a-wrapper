@@ -18,7 +18,7 @@ import { useChats } from "@/lib/chat-store/chats/provider"
 import { useMessages } from "@/lib/chat-store/messages/provider"
 import { clearAllIndexedDBStores } from "@/lib/chat-store/persist"
 import { useUser } from "@/lib/user-store/provider"
-import { useClerk } from "@clerk/nextjs"
+import { useAuth } from "@workos-inc/authkit-nextjs/components"
 import { useState } from "react"
 import { toast } from "@/components/ui/toast"
 import { AppInfoDialog, AppInfoMenuItem } from "./app-info/app-info-trigger"
@@ -31,7 +31,7 @@ type UserMenuProps = {
 
 export function UserMenu({ variant = "header" }: UserMenuProps) {
   const { user } = useUser()
-  const { signOut } = useClerk()
+  const { signOut } = useAuth()
   const { resetChats } = useChats()
   const { resetMessages } = useMessages()
   const [isMenuOpen, setMenuOpen] = useState(false)
@@ -49,7 +49,7 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
       await resetMessages()
       await resetChats()
       await clearAllIndexedDBStores()
-      await signOut({ redirectUrl: "/" })
+      await signOut({ returnTo: "/" })
     } catch (e) {
       console.error("Sign out failed:", e)
       toast({ title: "Failed to sign out", status: "error" })

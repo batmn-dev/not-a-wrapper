@@ -5,15 +5,15 @@ import type { UserPreferences } from "../user-preference-store/utils"
  *
  * This type represents the user profile data used throughout the application.
  * User data is sourced from:
- * - Clerk for authentication (id, email, name, image)
+ * - WorkOS AuthKit for authentication (id, email, name, image)
  * - Convex for application-specific data (preferences, usage tracking)
  */
 export type UserProfile = {
-  // Identity (from Clerk)
+  // Identity (from WorkOS AuthKit)
   id: string
   email: string
   display_name: string
-  profile_image: string
+  profile_image: string | null
 
   // Status
   anonymous: boolean | null

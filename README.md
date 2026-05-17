@@ -2,7 +2,7 @@
 
 **Not A Wrapper** is an open-source, multi-AI chat platform with a unified interface for 80+ models across 8 providers. Compare models side-by-side, bring your own API keys, connect MCP tools, upload files, and organize conversations into projects — all from a single, clean interface.
 
-Forked from [Zola](https://github.com/ibelick/zola) and rebuilt with Convex, Clerk, and the Vercel AI SDK.
+Forked from [Zola](https://github.com/ibelick/zola) and rebuilt with Convex, WorkOS AuthKit, and the Vercel AI SDK.
 
 ## Features
 
@@ -57,7 +57,8 @@ bun dev                       # Starts Next.js + Convex dev servers
 
 The app runs at [http://localhost:3000](http://localhost:3000). You need at least one AI provider key to chat.
 
-For full setup (Clerk auth, Convex database, BYOK encryption), see [INSTALL.md](./INSTALL.md).
+For full setup (WorkOS AuthKit, Convex database, BYOK encryption), see [INSTALL.md](./INSTALL.md).
+Auth is configured as a clean reset with no imported legacy users.
 
 ## Tech Stack
 
@@ -65,7 +66,7 @@ For full setup (Clerk auth, Convex database, BYOK encryption), see [INSTALL.md](
 |-------|------------|
 | Framework | [Next.js 16](https://nextjs.org/) (App Router), React 19, TypeScript |
 | Database | [Convex](https://convex.dev) — Real-time reactive database with file storage |
-| Auth | [Clerk](https://clerk.com) — Authentication with Google OAuth, guest access |
+| Auth | [WorkOS AuthKit](https://workos.com/authkit) — Hosted authentication with guest access preserved |
 | AI | [Vercel AI SDK v6](https://sdk.vercel.ai/) — Multi-provider streaming, tool calling |
 | State | Zustand + TanStack Query |
 | UI | [Base UI](https://base-ui.com/) + [Tailwind CSS 4](https://tailwindcss.com/) |

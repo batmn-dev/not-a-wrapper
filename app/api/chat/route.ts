@@ -1,4 +1,3 @@
-import { auth } from "@clerk/nextjs/server"
 import * as Sentry from "@sentry/nextjs"
 import { after } from "next/server"
 import {
@@ -32,6 +31,7 @@ import type { ProviderOptions } from "@ai-sdk/provider-utils"
 import { fetchMutation, fetchQuery } from "convex/nextjs"
 import { api } from "@/convex/_generated/api"
 import type { Doc, Id } from "@/convex/_generated/dataModel"
+import { getWorkosSession } from "@/lib/auth/workos"
 import {
   checkServerSideUsage,
   incrementServerSideUsage,
@@ -306,14 +306,15 @@ export async function POST(req: Request) {
     Sentry.setTag("chat_route", "/api/chat")
     Sentry.setTag("chat_operation", "stream_text")
 
-    // Server-side authentication - derive userId from Clerk session
-    const { userId: authUserId, getToken } = await auth()
+    // Server-side authentication - derive user ID from WorkOS AuthKit session
+    const authSession = await getWorkosSession()
+    const authUserId = authSession.user?.id
     const isAuthenticated = !!authUserId
     telemetryIsAuthenticated = isAuthenticated
 
     // Get Convex token for authenticated usage tracking
     const convexToken = isAuthenticated
-      ? (await getToken({ template: "convex" })) ?? undefined
+      ? authSession.accessToken
       : undefined
 
     const {

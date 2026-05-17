@@ -1,6 +1,6 @@
-import { auth } from "@clerk/nextjs/server"
 import { ConvexHttpClient } from "convex/browser"
 import { api } from "@/convex/_generated/api"
+import { getAuthenticatedWorkosSession } from "@/lib/auth/workos"
 import { encryptKey } from "@/lib/encryption"
 import { NextResponse } from "next/server"
 
@@ -30,18 +30,9 @@ export async function POST(request: Request) {
       )
     }
 
-    const { userId, getToken } = await auth()
-    if (!userId) {
+    const authSession = await getAuthenticatedWorkosSession()
+    if (!authSession) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    // Get JWT token for authenticated Convex mutation
-    const token = await getToken({ template: "convex" })
-    if (!token) {
-      return NextResponse.json(
-        { error: "Failed to get auth token" },
-        { status: 401 }
-      )
     }
 
     // Encrypt the key for storage
@@ -49,7 +40,7 @@ export async function POST(request: Request) {
 
     // Get Convex client and set auth
     const convex = getConvexClient()
-    convex.setAuth(token)
+    convex.setAuth(authSession.accessToken)
 
     // Check if key already exists for this provider
     const existingKey = await convex.query(api.userKeys.getByProvider, {
@@ -89,23 +80,14 @@ export async function DELETE(request: Request) {
       )
     }
 
-    const { userId, getToken } = await auth()
-    if (!userId) {
+    const authSession = await getAuthenticatedWorkosSession()
+    if (!authSession) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    // Get JWT token for authenticated Convex mutation
-    const token = await getToken({ template: "convex" })
-    if (!token) {
-      return NextResponse.json(
-        { error: "Failed to get auth token" },
-        { status: 401 }
-      )
     }
 
     // Call Convex mutation to delete the key
     const convex = getConvexClient()
-    convex.setAuth(token)
+    convex.setAuth(authSession.accessToken)
 
     await convex.mutation(api.userKeys.remove, { provider })
 

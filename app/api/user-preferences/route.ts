@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server"
+import { getWorkosSession } from "@/lib/auth/workos"
 import { NextResponse } from "next/server"
 
 /**
@@ -23,9 +23,9 @@ const defaultPreferences = {
 
 export async function GET() {
   try {
-    const { userId } = await auth()
+    const { user } = await getWorkosSession()
 
-    if (!userId) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -51,9 +51,9 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
-    const { userId } = await auth()
+    const { user } = await getWorkosSession()
 
-    if (!userId) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -61,7 +61,7 @@ export async function PUT(request: Request) {
     // Preferences should be updated via Convex useMutation hook client-side.
     // See: lib/user-preference-store/provider.tsx
     console.warn(
-      `[DEPRECATED] PUT /api/user-preferences called by user ${userId}. ` +
+      `[DEPRECATED] PUT /api/user-preferences called by user ${user.id}. ` +
       "This endpoint no longer persists data. Use Convex mutations instead."
     )
 

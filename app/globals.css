@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "katex/dist/katex.min.css";
-@import "@clerk/themes/shadcn.css";
 @import "./vaul-base.css";
 
 @import "tw-animate-css";
