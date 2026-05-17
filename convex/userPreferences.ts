@@ -33,7 +33,6 @@ export const update = mutation({
     promptSuggestions: v.optional(v.boolean()),
     showToolInvocations: v.optional(v.boolean()),
     showConversationPreviews: v.optional(v.boolean()),
-    multiModelEnabled: v.optional(v.boolean()),
     webSearchEnabled: v.optional(v.boolean()),
     hiddenModels: v.optional(v.array(v.string())),
   },

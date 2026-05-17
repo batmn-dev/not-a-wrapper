@@ -27,7 +27,6 @@ type UserPreferencesContextType = {
   setPromptSuggestions: (enabled: boolean) => void
   setShowToolInvocations: (enabled: boolean) => void
   setShowConversationPreviews: (enabled: boolean) => void
-  setMultiModelEnabled: (enabled: boolean) => void
   setWebSearchEnabled: (enabled: boolean) => void
   toggleModelVisibility: (modelId: string) => void
   isModelHidden: (modelId: string) => boolean
@@ -96,7 +95,6 @@ export function UserPreferencesProvider({
         promptSuggestions: convexPreferences.promptSuggestions ?? defaultPreferences.promptSuggestions,
         showToolInvocations: convexPreferences.showToolInvocations ?? defaultPreferences.showToolInvocations,
         showConversationPreviews: convexPreferences.showConversationPreviews ?? defaultPreferences.showConversationPreviews,
-        multiModelEnabled: convexPreferences.multiModelEnabled ?? defaultPreferences.multiModelEnabled,
         webSearchEnabled: convexPreferences.webSearchEnabled ?? defaultPreferences.webSearchEnabled,
         hiddenModels: convexPreferences.hiddenModels ?? defaultPreferences.hiddenModels,
       }
@@ -193,13 +191,6 @@ export function UserPreferencesProvider({
     [updatePreferences]
   )
 
-  const setMultiModelEnabled = useCallback(
-    (enabled: boolean) => {
-      updatePreferences({ multiModelEnabled: enabled })
-    },
-    [updatePreferences]
-  )
-
   const setWebSearchEnabled = useCallback(
     (enabled: boolean) => {
       updatePreferences({ webSearchEnabled: enabled })
@@ -235,7 +226,6 @@ export function UserPreferencesProvider({
         setPromptSuggestions,
         setShowToolInvocations,
         setShowConversationPreviews,
-        setMultiModelEnabled,
         setWebSearchEnabled,
         toggleModelVisibility,
         isModelHidden,

@@ -27,8 +27,6 @@ const UNSAFE_IDENTIFIER_KEYS = new Set([
   "clientuserid",
   "conversationid",
   "distinctid",
-  "message_group_id",
-  "messagegroupid",
   "userid",
 ])
 

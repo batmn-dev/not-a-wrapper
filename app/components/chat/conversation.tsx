@@ -1,7 +1,6 @@
 import { ScrollRootContent } from "@/components/ui/scroll-root"
 import { Message as MessageContainer } from "@/components/ui/message"
 import { ThinkingBar } from "@/components/ui/thinking-bar"
-import { ExtendedMessageAISDK } from "@/lib/chat-store/messages/api"
 import { cn } from "@/lib/utils"
 import { UIMessage as MessageType } from "@ai-sdk/react"
 import { Message } from "./message"
@@ -97,9 +96,6 @@ export function Conversation({
                 metadata={message.metadata as Record<string, unknown> | undefined}
                 status={status}
                 onQuote={onQuote}
-                messageGroupId={
-                  (message as ExtendedMessageAISDK).message_group_id ?? null
-                }
                 isUserAuthenticated={isUserAuthenticated}
                 finishReason={isLast ? lastFinishReason : undefined}
               >

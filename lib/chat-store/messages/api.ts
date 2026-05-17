@@ -7,11 +7,6 @@ export type ExtendedUIMessage = UIMessage & {
   content?: string
 }
 
-export type ExtendedMessageAISDK = {
-  message_group_id?: string
-  model?: string
-} & ExtendedUIMessage
-
 // ============================================================================
 // Cache Operations (IndexedDB)
 // ============================================================================

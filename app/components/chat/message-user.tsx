@@ -45,7 +45,6 @@ export type MessageUserProps = {
   className?: string
   onReload?: () => void
   onEdit?: (id: string, newText: string) => void
-  messageGroupId?: string | null
   isUserAuthenticated?: boolean
 }
 
@@ -57,7 +56,6 @@ export function MessageUser({
   id,
   className,
   onEdit,
-  messageGroupId,
   isUserAuthenticated,
 }: MessageUserProps) {
   const [editInput, setEditInput] = useState(children)
@@ -245,8 +243,7 @@ export function MessageUser({
             )}
           </button>
         </MessageAction>
-        {messageGroupId === null && isUserAuthenticated && (
-          // Enabled if NOT multi-model chat & user is Authenticated
+        {isUserAuthenticated && (
           <MessageAction
             tooltip={isEditing ? "Cancel edit" : "Edit message"}
             side="bottom"

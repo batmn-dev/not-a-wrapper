@@ -1,6 +1,6 @@
 # Not A Wrapper
 
-**Not A Wrapper** is an open-source, multi-AI chat platform with a unified interface for 80+ models across 8 providers. Compare models side-by-side, bring your own API keys, connect MCP tools, upload files, and organize conversations into projects — all from a single, clean interface.
+**Not A Wrapper** is an open-source, multi-AI chat platform with a unified interface for 80+ models across 8 providers. Bring your own API keys, connect MCP tools, upload files, and organize conversations into projects — all from a single, clean interface.
 
 Forked from [Zola](https://github.com/ibelick/zola) and rebuilt with Convex, WorkOS AuthKit, and the Vercel AI SDK.
 
@@ -8,7 +8,6 @@ Forked from [Zola](https://github.com/ibelick/zola) and rebuilt with Convex, Wor
 
 ### Core Chat
 - **Multi-provider AI chat** — Stream responses from OpenAI, Anthropic, Google, Mistral, xAI, Perplexity, DeepSeek, and OpenRouter
-- **Multi-model comparison** — Send one prompt to up to 10 models and compare responses side-by-side
 - **Streaming with reasoning** — See model thinking in real-time (Claude, o3, DeepSeek R1, etc.)
 - **File uploads** — Share documents, images, and code for AI analysis (Convex-backed storage)
 - **Guest access** — Try the app without signing up (5 messages/day, limited model selection)
@@ -82,10 +81,9 @@ app/                        # Next.js App Router
 ├── c/[chatId]/             # Chat pages
 ├── p/[projectId]/          # Project pages
 ├── share/[chatId]/         # Public share pages
-└── components/
-    ├── chat/               # Chat UI, message rendering, tool invocations
-    ├── multi-chat/         # Multi-model comparison
-    ├── layout/             # Sidebar, settings, dialogs
+	└── components/
+	    ├── chat/               # Chat UI, message rendering, tool invocations
+	    ├── layout/             # Sidebar, settings, dialogs
     └── history/            # Chat history
 
 lib/                        # Shared logic
@@ -107,7 +105,6 @@ convex/                     # Database schema, queries, mutations, file storage
 | Feature | Status |
 |---------|--------|
 | Multi-provider chat (8 providers, 80+ models) | Shipped |
-| Multi-model comparison (up to 10 models) | Shipped |
 | BYOK with AES-256-GCM encryption | Shipped |
 | File uploads with Convex storage | Shipped |
 | Projects & chat organization | Shipped |

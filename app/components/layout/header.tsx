@@ -9,7 +9,6 @@ import { NawIcon } from "@/components/icons/naw"
 import { Button } from "@/components/ui/button"
 import { useScrollRoot } from "@/components/ui/scroll-root"
 import { APP_NAME } from "@/lib/config"
-import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { useUser } from "@/lib/user-store/provider"
 import Link from "next/link"
 import { useEffect, useState } from "react"
@@ -20,8 +19,6 @@ export function Header({ hasSidebar }: { hasSidebar: boolean }) {
   const isMobile = useBreakpoint(768)
 
   const { user } = useUser()
-  const { preferences } = useUserPreferences()
-  const isMultiModelEnabled = preferences.multiModelEnabled
 
   const isLoggedIn = !!user
 
@@ -74,7 +71,7 @@ export function Header({ hasSidebar }: { hasSidebar: boolean }) {
             </>
           ) : (
             <>
-              {!isMultiModelEnabled && !isMobile && <DialogPublish />}
+              {!isMobile && <DialogPublish />}
               <ButtonNewChat />
               {!hasSidebar && <HistoryTrigger hasSidebar={hasSidebar} />}
               {!hasSidebar && <UserMenu />}

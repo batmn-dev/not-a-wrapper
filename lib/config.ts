@@ -107,7 +107,7 @@ export const SUGGESTIONS: Array<{
   },
 ]
 
-export const SYSTEM_PROMPT_DEFAULT = `You are a helpful AI assistant powered by Not A Wrapper, an open-source multi-model chat application. You provide thoughtful, accurate, and helpful responses across a wide range of topics.
+export const SYSTEM_PROMPT_DEFAULT = `You are a helpful AI assistant powered by Not A Wrapper, an open-source multi-provider chat application. You provide thoughtful, accurate, and helpful responses across a wide range of topics.
 
 You excel at:
 - Programming and software development across all languages

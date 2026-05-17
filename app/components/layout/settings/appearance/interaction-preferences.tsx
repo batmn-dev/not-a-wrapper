@@ -16,7 +16,6 @@ export function InteractionPreferences() {
     setPromptSuggestions,
     setShowToolInvocations,
     setShowConversationPreviews,
-    setMultiModelEnabled,
     setWebSearchEnabled,
   } = useUserPreferences()
 
@@ -58,18 +57,6 @@ export function InteractionPreferences() {
         <Switch
           checked={preferences.showConversationPreviews}
           onCheckedChange={setShowConversationPreviews}
-        />
-      </Field>
-      <Field orientation="horizontal">
-        <FieldContent>
-          <FieldTitle className="text-balance">Multi-model chat</FieldTitle>
-          <FieldDescription className="text-xs text-pretty">
-            Send prompts to multiple models at once
-          </FieldDescription>
-        </FieldContent>
-        <Switch
-          checked={preferences.multiModelEnabled}
-          onCheckedChange={setMultiModelEnabled}
         />
       </Field>
       <Field orientation="horizontal">
