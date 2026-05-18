@@ -137,6 +137,8 @@ bun run test
 bun run build:next
 ```
 
+Use `bun run test`; the configured test runner is Vitest.
+
 `bun run build` deploys Convex before building and injects
 `NEXT_PUBLIC_CONVEX_URL`; use `bun run build:next` for a local Next.js
 production build without deploying Convex.

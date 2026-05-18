@@ -54,6 +54,9 @@ bunx convex env set WORKOS_WEBHOOK_SECRET <secret>
 ```
 
 `WORKOS_ACTION_SECRET` is only needed if WorkOS actions are added later.
+`WORKOS_WEBHOOK_SECRET` belongs in Convex env, not Vercel. The Convex app
+declares `WORKOS_CLIENT_ID`, `WORKOS_API_KEY`, and `WORKOS_WEBHOOK_SECRET` as
+required deployment env vars in `convex/convex.config.ts`.
 
 To inspect configured Convex env names, use:
 
@@ -82,6 +85,12 @@ Required events:
 - `user.deleted`
 
 Copy the webhook signing secret into Convex env as `WORKOS_WEBHOOK_SECRET`.
+Do not set `WORKOS_WEBHOOK_SECRET` in Vercel; the webhook handler runs in
+Convex.
+
+```bash
+bunx convex env set WORKOS_WEBHOOK_SECRET "<secret>"
+```
 
 ## Vercel Preview
 
@@ -153,3 +162,6 @@ In WorkOS production, configure:
 | Saved API keys stop decrypting                    | Restore the previous `ENCRYPTION_KEY` or migrate encrypted values before rotating it.                        |
 | `bun run env:check` rejects a custom local domain | Set `ALLOW_NON_LOCAL_WORKOS_REDIRECT_URI=1` only for that check.                                             |
 | `CLERK_*` appears in env output                   | Remove stale Clerk variables after confirming the deployment is on WorkOS AuthKit.                           |
+
+Use `bun run test` for test validation. The configured test runner is Vitest;
+raw `bun test` is not the project test command.
