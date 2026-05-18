@@ -22,11 +22,6 @@ const eslintConfig = [
               message: "Use @remixicon/react for UI icons.",
             },
             {
-              name: "@hugeicons/react",
-              message:
-                "This icon package has been replaced by @remixicon/react.",
-            },
-            {
               name: "remixicon-react",
               message: "Use the official @remixicon/react package instead.",
             },
@@ -44,11 +39,6 @@ const eslintConfig = [
             {
               group: ["@phosphor-icons/react/*"],
               message: "Use @remixicon/react for UI icons.",
-            },
-            {
-              group: ["@hugeicons-pro/*"],
-              message:
-                "This icon package has been replaced by @remixicon/react.",
             },
           ],
         },

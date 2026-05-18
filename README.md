@@ -47,17 +47,17 @@ Forked from [Zola](https://github.com/ibelick/zola) and rebuilt with Convex, Wor
 ## Quick Start
 
 ```bash
-git clone https://github.com/batmn-dev/not-a-wrapper.git
+git clone https://github.com/darknightdesigner/not-a-wrapper.git
 cd not-a-wrapper
 bun install
 cp .env.example .env.local   # Edit with your keys
+bun run env:check
 bun dev                       # Starts Next.js + Convex dev servers
 ```
 
 The app runs at [http://localhost:3000](http://localhost:3000). You need at least one AI provider key to chat.
 
-For full setup (WorkOS AuthKit, Convex database, BYOK encryption), see [INSTALL.md](./INSTALL.md).
-Auth is configured as a clean reset with no imported legacy users.
+For full setup (WorkOS AuthKit, Convex database, BYOK encryption), see [INSTALL.md](./INSTALL.md) and [docs/environment.md](./docs/environment.md).
 The current Convex setup uses the official WorkOS AuthKit component for webhook-backed app user sync on `user.created`, `user.updated`, and `user.deleted`.
 
 ## Tech Stack
@@ -121,6 +121,7 @@ convex/                     # Database schema, queries, mutations, file storage
 ```bash
 bun run dev          # Dev server (Next.js + Convex)
 bun run dev:clean    # Dev with fresh .next cache
+bun run env:check    # Validate local environment variables
 bun run lint         # ESLint
 bun run typecheck    # TypeScript checks
 bun run build        # Production build (deploys Convex)
