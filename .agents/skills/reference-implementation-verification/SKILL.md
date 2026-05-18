@@ -1,3 +1,8 @@
+---
+name: reference-implementation-verification
+description: Verify reference-based UI implementations against extracted measurements and checklists. Use after implementing UI from competitor apps, design mockups, or captured reference data before marking the work complete.
+---
+
 # Reference Implementation Verification
 
 **Use this skill when:** Implementing UI features based on reference designs (ChatGPT, competitor apps, design mockups, etc.)

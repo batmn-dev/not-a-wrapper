@@ -1,3 +1,8 @@
+---
+name: ui-component-match
+description: Systematically match a UI component implementation to a reference design by comparing rendered HTML, structure, measurements, spacing, and styling before making UI changes. Use when implementing or debugging UI that must match an existing reference implementation.
+---
+
 # UI Component Match Skill
 
 **Purpose:** Systematically match a UI component implementation to a reference design (e.g., ChatGPT, Linear, Figma) by comparing rendered HTML, extracting measurements, and identifying all differences before making changes.
