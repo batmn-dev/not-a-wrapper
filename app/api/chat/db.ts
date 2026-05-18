@@ -8,11 +8,7 @@ const DEFAULT_STEP = 0
  * This function is kept for processing message content structure.
  */
 export function processFinalAssistantMessage(
-  messages: Message[],
-   
-  _messageGroupId?: string,
-   
-  _model?: string
+  messages: Message[]
 ) {
   const parts: ContentPart[] = []
   const toolMap = new Map<string, ContentPart>()
@@ -89,15 +85,9 @@ export function processFinalAssistantMessage(
  */
 export async function saveFinalAssistantMessage(
   chatId: string,
-  messages: Message[],
-  messageGroupId?: string,
-  model?: string
+  messages: Message[]
 ) {
-  const { content, parts } = processFinalAssistantMessage(
-    messages,
-    messageGroupId,
-    model
-  )
+  const { content, parts } = processFinalAssistantMessage(messages)
 
   // With Convex, this should be handled client-side via the MessagesProvider
   console.warn(
@@ -106,7 +96,5 @@ export async function saveFinalAssistantMessage(
   console.log("Would save message for chat:", chatId, {
     content,
     parts,
-    messageGroupId,
-    model,
   })
 }

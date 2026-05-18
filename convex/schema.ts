@@ -64,8 +64,6 @@ export default defineSchema({
     content: v.optional(v.string()),
     parts: v.optional(v.any()), // AI SDK parts format
     attachments: v.optional(v.array(v.any())), // Legacy field; v6 uses file parts in `parts`
-    messageGroupId: v.optional(v.string()), // For grouping related messages
-    model: v.optional(v.string()), // Model used for this message
   })
     .index("by_chat", ["chatId"])
     .index("by_chat_role", ["chatId", "role"]),
@@ -81,7 +79,6 @@ export default defineSchema({
     promptSuggestions: v.optional(v.boolean()),
     showToolInvocations: v.optional(v.boolean()),
     showConversationPreviews: v.optional(v.boolean()),
-    multiModelEnabled: v.optional(v.boolean()),
     webSearchEnabled: v.optional(v.boolean()),
     hiddenModels: v.optional(v.array(v.string())),
   }).index("by_user", ["userId"]),

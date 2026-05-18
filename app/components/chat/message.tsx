@@ -26,7 +26,6 @@ type MessageProps = {
   status?: "streaming" | "ready" | "submitted" | "error"
   className?: string
   onQuote?: (text: string, messageId: string) => void
-  messageGroupId?: string | null
   isUserAuthenticated?: boolean
   finishReason?: string
 }
@@ -89,7 +88,6 @@ function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
   if (prev.metadata !== next.metadata) return false
   if (prev.finishReason !== next.finishReason) return false
   if (prev.className !== next.className) return false
-  if (prev.messageGroupId !== next.messageGroupId) return false
   if (prev.isUserAuthenticated !== next.isUserAuthenticated) return false
 
   // Attachments: compare all rendered fields
@@ -123,7 +121,6 @@ function MessageInner({
   status,
   className,
   onQuote,
-  messageGroupId,
   isUserAuthenticated,
   finishReason,
 }: MessageProps) {
@@ -145,7 +142,6 @@ function MessageInner({
         id={id}
         attachments={attachments}
         className={className}
-        messageGroupId={messageGroupId}
         isUserAuthenticated={isUserAuthenticated}
       >
         {children}

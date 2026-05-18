@@ -95,7 +95,6 @@ type ChatRequest = {
   systemPrompt: string
   enableSearch: boolean
   chatVersion?: number
-  message_group_id?: string
   userId?: string // Client-provided userId (for anonymous users)
 }
 
@@ -324,7 +323,6 @@ export async function POST(req: Request) {
       systemPrompt,
       enableSearch,
       chatVersion,
-      message_group_id,
       userId: clientUserId,
     } = (await req.json()) as ChatRequest
     const model = resolveModelId(requestedModel)
@@ -1753,7 +1751,6 @@ export async function POST(req: Request) {
               errorMessage,
               properties: {
                 isAuthenticated,
-                messageGroupId: message_group_id,
               },
             })
           } catch (captureErr) {
@@ -1949,7 +1946,6 @@ export async function POST(req: Request) {
               latencyMs,
               properties: {
                 isAuthenticated,
-                messageGroupId: message_group_id,
                 finishReason,
               },
             })

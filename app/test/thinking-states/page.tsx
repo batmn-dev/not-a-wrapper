@@ -723,7 +723,7 @@ export default function ThinkingStatesTestPage() {
                 <StateAnnotation title="ThinkingBar — with onClick (navigable)">
                   When the <code>onClick</code> prop is provided, the shimmer text becomes a
                   <code>&lt;button&gt;</code> with an <code>ArrowRight01Icon</code> arrow. Used in
-                  multi-chat comparison mode where clicking navigates to the full
+                  compact preview surfaces where clicking navigates to the full
                   response. Without <code>onClick</code>, it renders as a non-interactive
                   span (the submitted-state version shown above). The <code>onStop</code>
                   prop is accepted for API compatibility but currently unused in

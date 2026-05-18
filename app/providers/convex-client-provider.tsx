@@ -1,10 +1,16 @@
 "use client"
 
-import { useCallback, type ReactNode } from "react"
-import { useAuth, useAccessToken } from "@workos-inc/authkit-nextjs/components"
+import { useAccessToken, useAuth } from "@workos-inc/authkit-nextjs/components"
 import { ConvexProviderWithAuth, ConvexReactClient } from "convex/react"
+import { useCallback, type ReactNode } from "react"
 
-const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
+const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL
+
+if (!convexUrl) {
+  throw new Error("NEXT_PUBLIC_CONVEX_URL is required")
+}
+
+const convex = new ConvexReactClient(convexUrl)
 
 function useAuthFromAuthKit() {
   const { user, loading: isLoading } = useAuth()
@@ -21,7 +27,10 @@ function useAuthFromAuthKit() {
           : await getAccessToken()
         return token ?? null
       } catch (error) {
-        console.error("[ConvexClientProvider] Failed to get access token:", error)
+        console.error(
+          "[ConvexClientProvider] Failed to get access token:",
+          error
+        )
         return null
       }
     },

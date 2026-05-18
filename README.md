@@ -1,6 +1,6 @@
 # Not A Wrapper
 
-**Not A Wrapper** is an open-source, multi-AI chat platform with a unified interface for 80+ models across 8 providers. Compare models side-by-side, bring your own API keys, connect MCP tools, upload files, and organize conversations into projects — all from a single, clean interface.
+**Not A Wrapper** is an open-source, multi-AI chat platform with a unified interface for 80+ models across 8 providers. Bring your own API keys, connect MCP tools, upload files, and organize conversations into projects — all from a single, clean interface.
 
 Forked from [Zola](https://github.com/ibelick/zola) and rebuilt with Convex, WorkOS AuthKit, and the Vercel AI SDK.
 
@@ -8,7 +8,6 @@ Forked from [Zola](https://github.com/ibelick/zola) and rebuilt with Convex, Wor
 
 ### Core Chat
 - **Multi-provider AI chat** — Stream responses from OpenAI, Anthropic, Google, Mistral, xAI, Perplexity, DeepSeek, and OpenRouter
-- **Multi-model comparison** — Send one prompt to up to 10 models and compare responses side-by-side
 - **Streaming with reasoning** — See model thinking in real-time (Claude, o3, DeepSeek R1, etc.)
 - **File uploads** — Share documents, images, and code for AI analysis (Convex-backed storage)
 - **Guest access** — Try the app without signing up (5 messages/day, limited model selection)
@@ -48,17 +47,17 @@ Forked from [Zola](https://github.com/ibelick/zola) and rebuilt with Convex, Wor
 ## Quick Start
 
 ```bash
-git clone https://github.com/batmn-dev/not-a-wrapper.git
+git clone https://github.com/darknightdesigner/not-a-wrapper.git
 cd not-a-wrapper
 bun install
 cp .env.example .env.local   # Edit with your keys
+bun run env:check
 bun dev                       # Starts Next.js + Convex dev servers
 ```
 
 The app runs at [http://localhost:3000](http://localhost:3000). You need at least one AI provider key to chat.
 
-For full setup (WorkOS AuthKit, Convex database, BYOK encryption), see [INSTALL.md](./INSTALL.md).
-Auth is configured as a clean reset with no imported legacy users.
+For full setup (WorkOS AuthKit, Convex database, BYOK encryption), see [INSTALL.md](./INSTALL.md) and [docs/environment.md](./docs/environment.md).
 The current Convex setup uses the official WorkOS AuthKit component for webhook-backed app user sync on `user.created`, `user.updated`, and `user.deleted`.
 
 ## Tech Stack
@@ -82,10 +81,9 @@ app/                        # Next.js App Router
 ├── c/[chatId]/             # Chat pages
 ├── p/[projectId]/          # Project pages
 ├── share/[chatId]/         # Public share pages
-└── components/
-    ├── chat/               # Chat UI, message rendering, tool invocations
-    ├── multi-chat/         # Multi-model comparison
-    ├── layout/             # Sidebar, settings, dialogs
+	└── components/
+	    ├── chat/               # Chat UI, message rendering, tool invocations
+	    ├── layout/             # Sidebar, settings, dialogs
     └── history/            # Chat history
 
 lib/                        # Shared logic
@@ -107,7 +105,6 @@ convex/                     # Database schema, queries, mutations, file storage
 | Feature | Status |
 |---------|--------|
 | Multi-provider chat (8 providers, 80+ models) | Shipped |
-| Multi-model comparison (up to 10 models) | Shipped |
 | BYOK with AES-256-GCM encryption | Shipped |
 | File uploads with Convex storage | Shipped |
 | Projects & chat organization | Shipped |
@@ -124,6 +121,7 @@ convex/                     # Database schema, queries, mutations, file storage
 ```bash
 bun run dev          # Dev server (Next.js + Convex)
 bun run dev:clean    # Dev with fresh .next cache
+bun run env:check    # Validate local environment variables
 bun run lint         # ESLint
 bun run typecheck    # TypeScript checks
 bun run build        # Production build (deploys Convex)

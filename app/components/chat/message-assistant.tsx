@@ -146,11 +146,10 @@ export function MessageAssistant({
     showToolInvocations: preferences.showToolInvocations,
   })
 
-  const isQuoteEnabled = !preferences.multiModelEnabled
   const messageRef = useRef<HTMLDivElement>(null)
   const { selectionInfo, clearSelection } = useAssistantMessageSelection(
     messageRef,
-    isQuoteEnabled
+    true
   )
   const handleQuoteBtnClick = useCallback(() => {
     if (selectionInfo && onQuote) {
@@ -207,7 +206,7 @@ export function MessageAssistant({
           isLast && "pb-8"
         )}
         // Inner data-message-id for quote selection — closest() finds this before the outer article
-        {...(isQuoteEnabled && { "data-message-id": messageId })}
+        data-message-id={messageId}
       >
         {reasoningPhase !== "idle" && (
           <Reasoning
@@ -367,7 +366,7 @@ export function MessageAssistant({
           </div>
         )}
 
-        {isQuoteEnabled && selectionInfo && selectionInfo.messageId && (
+        {selectionInfo && selectionInfo.messageId && (
           <QuoteButton
             mousePosition={selectionInfo.position}
             onQuote={handleQuoteBtnClick}

@@ -5,7 +5,6 @@ export type UserPreferences = {
   promptSuggestions: boolean
   showToolInvocations: boolean
   showConversationPreviews: boolean
-  multiModelEnabled: boolean
   webSearchEnabled: boolean
   hiddenModels: string[]
 }
@@ -16,7 +15,6 @@ export type UserPreferencesApiFormat = {
   prompt_suggestions?: boolean
   show_tool_invocations?: boolean
   show_conversation_previews?: boolean
-  multi_model_enabled?: boolean
   web_search_enabled?: boolean
   hidden_models?: string[]
 }
@@ -26,7 +24,6 @@ export const defaultPreferences: UserPreferences = {
   promptSuggestions: true,
   showToolInvocations: true,
   showConversationPreviews: true,
-  multiModelEnabled: false,
   webSearchEnabled: true,
   hiddenModels: [],
 }
@@ -38,7 +35,6 @@ export function convertFromApiFormat(apiData: UserPreferencesApiFormat): UserPre
     promptSuggestions: apiData.prompt_suggestions ?? true,
     showToolInvocations: apiData.show_tool_invocations ?? true,
     showConversationPreviews: apiData.show_conversation_previews ?? true,
-    multiModelEnabled: apiData.multi_model_enabled ?? false,
     webSearchEnabled: apiData.web_search_enabled ?? true,
     hiddenModels: apiData.hidden_models || [],
   }
@@ -53,8 +49,6 @@ export function convertToApiFormat(preferences: Partial<UserPreferences>): UserP
     apiData.show_tool_invocations = preferences.showToolInvocations
   if (preferences.showConversationPreviews !== undefined)
     apiData.show_conversation_previews = preferences.showConversationPreviews
-  if (preferences.multiModelEnabled !== undefined)
-    apiData.multi_model_enabled = preferences.multiModelEnabled
   if (preferences.webSearchEnabled !== undefined)
     apiData.web_search_enabled = preferences.webSearchEnabled
   if (preferences.hiddenModels !== undefined)

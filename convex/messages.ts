@@ -111,8 +111,6 @@ export const add = mutation({
     content: v.optional(v.string()),
     parts: v.optional(v.any()),
     attachments: v.optional(v.array(v.any())),
-    messageGroupId: v.optional(v.string()),
-    model: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Verify chat exists and user has access
@@ -131,30 +129,6 @@ export const add = mutation({
       throw new Error("Not authorized")
     }
 
-    // Idempotency guard: prevent duplicate messages from race conditions.
-    // In multi-model chat, concurrent streams finishing near-simultaneously
-    // can cause the same logical message to be inserted twice (different client
-    // IDs, same messageGroupId + model + role). Check before inserting.
-    if (args.messageGroupId) {
-      const existing = await ctx.db
-        .query("messages")
-        .withIndex("by_chat", (q) => q.eq("chatId", args.chatId))
-        .filter((q) =>
-          q.and(
-            q.eq(q.field("messageGroupId"), args.messageGroupId),
-            q.eq(q.field("role"), args.role),
-            // For user messages, dedupe by groupId+role alone (only one user msg per group).
-            // For assistant messages, also match on model (one response per model per group).
-            args.model
-              ? q.eq(q.field("model"), args.model)
-              : true,
-          )
-        )
-        .first()
-
-      if (existing) return existing._id
-    }
-
     // Update chat's updatedAt
     await ctx.db.patch(args.chatId, { updatedAt: Date.now() })
 
@@ -165,8 +139,6 @@ export const add = mutation({
       content: args.content,
       parts: args.parts,
       attachments: args.attachments,
-      messageGroupId: args.messageGroupId,
-      model: args.model,
     })
   },
 })
@@ -188,8 +160,6 @@ export const addBatch = mutation({
         content: v.optional(v.string()),
         parts: v.optional(v.any()),
         attachments: v.optional(v.array(v.any())),
-        messageGroupId: v.optional(v.string()),
-        model: v.optional(v.string()),
       })
     ),
   },
@@ -222,8 +192,6 @@ export const addBatch = mutation({
         content: msg.content,
         parts: msg.parts,
         attachments: msg.attachments,
-        messageGroupId: msg.messageGroupId,
-        model: msg.model,
       })
       ids.push(id)
     }

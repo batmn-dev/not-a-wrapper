@@ -14,8 +14,6 @@ import { useChatSession } from "../session/provider"
 export type ExtendedUIMessage = UIMessage & {
   createdAt?: Date
   content?: string
-  model?: string
-  messageGroupId?: string
 }
 
 type StoredAttachment = {
@@ -135,8 +133,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
         content: msg.content ?? "",
         createdAt: new Date(msg._creationTime),
         parts,
-        model: msg.model ?? undefined,
-        messageGroupId: msg.messageGroupId ?? undefined,
       }
     })
   }, [convexMessages])
@@ -248,9 +244,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
           content: textContent,
           parts: messageToCache.parts,
           attachments: getAttachmentsFromParts(messageToCache.parts),
-          model: messageToCache.model,
-          messageGroupId: messageToCache.messageGroupId
-            ?? (messageToCache as unknown as { message_group_id?: string }).message_group_id,
         })
       } catch (error) {
         // Silently fail for guests (no auth) - they only get local storage
@@ -284,9 +277,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
               content: textContent,
               parts: msg.parts,
               attachments: getAttachmentsFromParts(msg.parts),
-              model: msg.model,
-              messageGroupId: msg.messageGroupId
-                ?? (msg as unknown as { message_group_id?: string }).message_group_id,
             }
           }),
         })

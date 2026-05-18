@@ -17,8 +17,6 @@ type ConvexMessage = {
   content?: string | null
   parts?: MessageAISDK["parts"] | null
   attachments?: unknown[] | null
-  messageGroupId?: string | null
-  model?: string | null
 }
 
 type ArticleProps = {

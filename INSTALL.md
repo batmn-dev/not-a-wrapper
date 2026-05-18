@@ -14,28 +14,21 @@ Not A Wrapper is a Next.js AI chat app with Convex persistence, WorkOS AuthKit, 
 ## Local Setup
 
 ```bash
-git clone https://github.com/batmn-dev/not-a-wrapper.git
+git clone https://github.com/darknightdesigner/not-a-wrapper.git
 cd not-a-wrapper
 bun install
 cp .env.example .env.local
 ```
 
-Fill `.env.local` from `.env.example`. Treat `.env.example` as the canonical environment-variable list.
-
-Required groups:
-
-- WorkOS AuthKit: API key, client ID, cookie password, and redirect URI.
-- Convex: deployment name, public URL, and WorkOS webhook sync env.
-- Security: `CSRF_SECRET` and `ENCRYPTION_KEY`.
-- AI providers: at least one provider key, such as OpenAI or Anthropic.
-
-Generate secrets with:
+Fill `.env.local` from `.env.example`, then validate it:
 
 ```bash
-openssl rand -base64 32
+bun run env:check
 ```
 
-`WORKOS_COOKIE_PASSWORD` must be at least 32 characters. `ENCRYPTION_KEY` must decode to exactly 32 bytes. Keep `ENCRYPTION_KEY` stable across deployments; changing it makes existing encrypted user API keys unrecoverable.
+Treat `.env.example` as the canonical variable list and
+`docs/environment.md` as the canonical ownership guide for local, Convex,
+Vercel preview, and production variables.
 
 ## Optional Observability
 
@@ -59,36 +52,31 @@ Observability roles:
 
 ## WorkOS AuthKit And Convex
 
-1. Create a WorkOS app and copy `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` into `.env.local`.
-2. Set `WORKOS_COOKIE_PASSWORD` to a generated value of at least 32 characters.
-3. Configure WorkOS Redirects:
-   - Local redirect URI: `http://localhost:3000/callback`
-   - Production redirect URI: `https://<production-domain>/callback`
-   - Sign-in endpoint: `https://<production-domain>/login` for production, or `http://localhost:3000/login` locally.
-   - Sign-out redirect: the app root, for example `https://<production-domain>/`.
-4. Set `NEXT_PUBLIC_WORKOS_REDIRECT_URI` to the matching `/callback` URI.
-5. Create a Convex project and run:
+The app uses the official `@convex-dev/workos-authkit` component. WorkOS is the
+source of truth for identity lifecycle, and Convex is the source of truth for
+app data.
+
+Create a Convex project and run:
 
 ```bash
 bun run dev:convex
 ```
 
-6. Copy the Convex deployment values into `.env.local`.
-7. Set Convex env so Convex can validate WorkOS access tokens and process WorkOS webhook sync:
+Then set Convex env so Convex can validate WorkOS access tokens and process
+WorkOS webhook sync:
 
 ```bash
 bunx convex env set WORKOS_CLIENT_ID <client_id>
 bunx convex env set WORKOS_API_KEY <api_key>
-bunx convex env set WORKOS_WEBHOOK_SECRET <secret_from_workos_webhook>
+bunx convex env set WORKOS_WEBHOOK_SECRET <secret>
 ```
 
-`WORKOS_WEBHOOK_SECRET` comes from the WorkOS dashboard after creating the webhook endpoint. Do not expose it through a `NEXT_PUBLIC_` variable.
-
-The app uses current Convex with the official `@convex-dev/workos-authkit` component. WorkOS remains the source of truth for identity lifecycle, and Convex remains the source of truth for app data. User rows are still created or updated on first authenticated app load as an idempotent fallback, while WorkOS webhooks keep app-owned user data synchronized.
+Do not expose `WORKOS_API_KEY`, `WORKOS_WEBHOOK_SECRET`, `CSRF_SECRET`,
+`ENCRYPTION_KEY`, provider keys, or deploy keys through `NEXT_PUBLIC_*`.
 
 ### WorkOS Webhook Setup
 
-In the WorkOS dashboard, create a webhook endpoint:
+In the WorkOS dashboard, create a webhook endpoint for each Convex deployment:
 
 - Endpoint: `https://<your-convex-deployment>.convex.site/workos/webhook`
 - Events:
@@ -96,7 +84,12 @@ In the WorkOS dashboard, create a webhook endpoint:
   - `user.updated`
   - `user.deleted`
 
-Use the WorkOS dashboard endpoint detail page to send test events after saving the endpoint. The webhook handler upserts app users by `workosUserId`; duplicate deliveries and `user.updated` before `user.created` are safe. `user.deleted` soft-deletes/disables the app user row and does not cascade into chats, projects, messages, billing, analytics, roles, organizations, invitations, or sessions.
+Use the WorkOS dashboard endpoint detail page to send test events after saving
+the endpoint. The webhook handler upserts app users by `workosUserId`;
+duplicate deliveries and `user.updated` before `user.created` are safe.
+`user.deleted` soft-deletes/disables the app user row and does not cascade into
+chats, projects, messages, billing, analytics, roles, organizations,
+invitations, or sessions.
 
 Optional backfill for existing or test WorkOS users:
 
@@ -105,8 +98,6 @@ bunx convex run workosAuth:backfillUsers
 ```
 
 Backfill is idempotent and fires the same `user.created` app sync handler. It is not run automatically.
-
-This migration is a clean auth reset. Do not import users from another auth provider.
 
 The Convex schema lives in `convex/schema.ts`; generated Convex types are managed by the Convex dev process.
 
@@ -139,17 +130,28 @@ The script creates gitignored symlinks for supported tools and keeps `.agents/sk
 ## Verification
 
 ```bash
+bun run env:check
 bun run lint
 bun run typecheck
 bun run test
 bun run build:next
 ```
 
-`bun run build` deploys Convex before building; use `bun run build:next` for a local Next.js production build without deploying Convex.
+Use `bun run test`; the configured test runner is Vitest.
+
+`bun run build` deploys Convex before building and injects
+`NEXT_PUBLIC_CONVEX_URL`; use `bun run build:next` for a local Next.js
+production build without deploying Convex.
 
 ## Production Deployment
 
-Deploy the app through Vercel and configure the same environment variables from `.env.example`. The CI workflow runs lint, typecheck, and `build:next`; Convex deploys from the GitHub workflow for `main`.
+Deploy the app through Vercel with:
+
+```bash
+npx convex deploy --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL --cmd 'next build'
+```
+
+Configure Vercel and Convex env according to `docs/environment.md`.
 
 ## Troubleshooting
 
