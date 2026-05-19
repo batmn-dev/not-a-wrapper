@@ -2,6 +2,8 @@
 
 Extracted CSS custom properties and computed styles relevant to the ChatGPT prompt input/composer area (`#thread-bottom-container`).
 
+> **Agent entrypoint:** load `../chatgpt-css.md` first for compact light/dark tokens and the latest live computed composer metrics, then use this file for detailed prompt-input selectors and layout notes. The raw exhaustive CSS archive is lookup-only.
+
 > **Scope guidance:**
 > - Include selectors and variables related to composer layout, actions, sticky behavior, and prompt input states.
 > - Preserve token links (`--composer-*`, `--theme-*`, `--interactive-*`, `--bg-*`, `--text-*`, `--icon-*`).

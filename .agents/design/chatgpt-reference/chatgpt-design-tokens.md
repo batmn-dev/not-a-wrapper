@@ -2,6 +2,10 @@
 
 Extracted: 2026-02-21 | URL: https://chatgpt.com | Viewport: Desktop (default)
 
+> Agent usage: use this as the global foundation reference for ChatGPT-like components. For component layout and state details, pair it with `chatgpt-css.md` and the relevant component reference. Do not start from `raw/chatgpt-css-exhaustive-2026-05-18.md` unless a token is missing here.
+
+> 2026-05-18 cleanup note: high-signal light/dark semantic tokens were refreshed from loaded ChatGPT CSS assets and summarized in `chatgpt-css.md`. This file remains the broader global-token reference.
+
 ---
 
 ## Font Faces
