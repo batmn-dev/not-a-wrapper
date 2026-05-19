@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
 import {
   Tooltip,
@@ -121,8 +122,9 @@ function CommandItemEdit({
               />
             }
           >
-            <RiCheckLine
-              size={16}
+            <Icon
+              icon={RiCheckLine}
+              slotSize={16}
               className="group-hover/edit-confirm:text-primary"
             />
           </TooltipTrigger>
@@ -141,8 +143,9 @@ function CommandItemEdit({
               />
             }
           >
-            <RiCloseLine
-              size={16}
+            <Icon
+              icon={RiCloseLine}
+              slotSize={16}
               className="group-hover/edit-cancel:text-primary"
             />
           </TooltipTrigger>
@@ -197,8 +200,9 @@ function CommandItemDelete({
               />
             }
           >
-            <RiCheckLine
-              size={16}
+            <Icon
+              icon={RiCheckLine}
+              slotSize={16}
               className="group-hover/delete-confirm:text-primary"
             />
           </TooltipTrigger>
@@ -217,8 +221,9 @@ function CommandItemDelete({
               />
             }
           >
-            <RiCloseLine
-              size={16}
+            <Icon
+              icon={RiCloseLine}
+              slotSize={16}
               className="group-hover/delete-cancel:text-primary"
             />
           </TooltipTrigger>
@@ -303,7 +308,11 @@ function CommandItemRow({
                 />
               }
             >
-              <RiEditLine size={16} className="group-hover/edit:text-primary" />
+              <Icon
+                icon={RiEditLine}
+                slotSize={16}
+                className="group-hover/edit:text-primary"
+              />
             </TooltipTrigger>
             <TooltipContent>Edit</TooltipContent>
           </Tooltip>
@@ -324,8 +333,9 @@ function CommandItemRow({
                 />
               }
             >
-              <RiDeleteBinLine
-                size={16}
+              <Icon
+                icon={RiDeleteBinLine}
+                slotSize={16}
                 className="group-hover/delete:text-primary"
               />
             </TooltipTrigger>
@@ -363,7 +373,7 @@ function CustomCommandDialog({
       <DialogContent
         className={cn("overflow-hidden border-none p-0", className)}
       >
-        <Command className="[&_[cmdk-group-heading]]:text-muted-foreground border-none **:data-[slot=command-input-wrapper]:h-12 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5 [&_[cmdk-item]_svg]:border-none">
+        <Command className="[&_[cmdk-group-heading]]:text-muted-foreground border-none **:data-[slot=command-input-wrapper]:h-12 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_[data-slot=icon]]:size-5 [&_[cmdk-input-wrapper]_[data-slot=icon]>svg]:size-[calc(1.25rem_-_var(--icon-glyph-inset))] [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_[data-slot=icon]]:size-5 [&_[cmdk-item]_[data-slot=icon]>svg]:size-[calc(1.25rem_-_var(--icon-glyph-inset))] [&_[cmdk-item]_[data-slot=icon]>svg]:border-none">
           {children}
         </Command>
       </DialogContent>

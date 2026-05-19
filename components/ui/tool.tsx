@@ -1,5 +1,4 @@
 "use client"
-import { RiArrowDownSLine, RiCheckLine, RiCloseLine, RiLoader4Line, RiToolsLine } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -7,7 +6,15 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
+import {
+  RiArrowDownSLine,
+  RiCheckLine,
+  RiCloseLine,
+  RiLoader4Line,
+  RiToolsLine,
+} from "@remixicon/react"
 import { useState } from "react"
 
 export type ToolPart = {
@@ -37,15 +44,33 @@ const Tool = ({ toolPart, defaultOpen = false, className }: ToolProps) => {
   const getStateIcon = () => {
     switch (state) {
       case "input-streaming":
-        return <RiLoader4Line size={16} className="animate-spin text-blue-500" />
+        return (
+          <Icon
+            icon={RiLoader4Line}
+            slotSize={16}
+            className="animate-spin text-blue-500"
+          />
+        )
       case "input-available":
-        return <RiToolsLine size={16} className="text-orange-500" />
+        return (
+          <Icon icon={RiToolsLine} slotSize={16} className="text-orange-500" />
+        )
       case "output-available":
-        return <RiCheckLine size={16} className="text-green-500" />
+        return (
+          <Icon icon={RiCheckLine} slotSize={16} className="text-green-500" />
+        )
       case "output-error":
-        return <RiCloseLine size={16} className="text-red-500" />
+        return (
+          <Icon icon={RiCloseLine} slotSize={16} className="text-red-500" />
+        )
       default:
-        return <RiToolsLine size={16} className="text-muted-foreground" />
+        return (
+          <Icon
+            icon={RiToolsLine}
+            slotSize={16}
+            className="text-muted-foreground"
+          />
+        )
     }
   }
 
@@ -143,7 +168,11 @@ const Tool = ({ toolPart, defaultOpen = false, className }: ToolProps) => {
             </span>
             {getStateBadge()}
           </div>
-          <RiArrowDownSLine size={16} className={cn(isOpen && "rotate-180")} />
+          <Icon
+            icon={RiArrowDownSLine}
+            slotSize={16}
+            className={cn(isOpen && "rotate-180")}
+          />
         </CollapsibleTrigger>
         <CollapsibleContent
           className={cn(

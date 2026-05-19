@@ -1,12 +1,13 @@
 "use client"
-import { RiArrowDownSLine, RiCheckboxBlankCircleFill } from "@remixicon/react"
 
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
+import { RiArrowDownSLine, RiCheckboxBlankCircleFill } from "@remixicon/react"
 import React from "react"
 
 export type ChainOfThoughtItemProps = React.ComponentProps<"div">
@@ -54,18 +55,30 @@ export const ChainOfThoughtTrigger = ({
             {leftIcon}
           </span>
           {swapIconOnHover && (
-            <RiArrowDownSLine size={16} className="absolute opacity-0 transition-opacity group-hover:opacity-100 group-data-[open]:rotate-180" />
+            <Icon
+              icon={RiArrowDownSLine}
+              slotSize={16}
+              className="absolute opacity-0 transition-opacity group-hover:opacity-100 group-data-[open]:rotate-180"
+            />
           )}
         </span>
       ) : (
         <span className="relative inline-flex size-4 items-center justify-center">
-          <RiCheckboxBlankCircleFill size={8} className="size-2 fill-current" />
+          <Icon
+            icon={RiCheckboxBlankCircleFill}
+            slotSize={8}
+            className="fill-current"
+          />
         </span>
       )}
       <span>{children}</span>
     </div>
     {!leftIcon && (
-      <RiArrowDownSLine size={16} className="transition-transform group-data-[open]:rotate-180" />
+      <Icon
+        icon={RiArrowDownSLine}
+        slotSize={16}
+        className="transition-transform group-data-[open]:rotate-180"
+      />
     )}
   </CollapsibleTrigger>
 )

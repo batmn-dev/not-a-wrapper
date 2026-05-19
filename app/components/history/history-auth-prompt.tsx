@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 import { RiSearchLine } from "@remixicon/react"
 import Link from "next/link"
@@ -18,7 +19,7 @@ export function HistoryAuthPrompt({ className }: HistoryAuthPromptProps) {
       )}
     >
       <div className="bg-muted text-muted-foreground mb-5 flex size-11 items-center justify-center rounded-lg">
-        <RiSearchLine size={22} className="size-5.5" aria-hidden="true" />
+        <Icon icon={RiSearchLine} slotSize={22} aria-hidden="true" />
       </div>
       <div className="max-w-sm">
         <h3 className="text-foreground text-base font-medium">

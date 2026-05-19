@@ -97,7 +97,7 @@ function PromptInput({
     >
       <div
         className={cn(
-          "bg-[var(--composer-bg)] cursor-text rounded-[28px] overflow-clip bg-clip-padding border-0 border-black/5 dark:border-white/5 contain-inline-size shadow-composer motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out",
+          "shadow-composer cursor-text overflow-clip rounded-[24px] border-0 border-black/5 bg-[var(--composer-bg)] bg-clip-padding contain-inline-size motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out dark:border-white/5",
           className
         )}
         onClick={() => {
@@ -152,7 +152,7 @@ function PromptInputTextarea({
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={handleKeyDown}
       className={cn(
-        "text-primary min-h-[44px] resize-none border-none bg-transparent dark:bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 overflow-y-auto md:text-base",
+        "text-primary min-h-[44px] resize-none overflow-y-auto border-none bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 md:text-base dark:bg-transparent",
         className
       )}
       style={{

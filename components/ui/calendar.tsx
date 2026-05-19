@@ -1,15 +1,19 @@
 "use client"
-import { RiArrowDownSLine, RiArrowLeftSLine, RiArrowRightSLine } from "@remixicon/react"
 
+import { Button, buttonVariants } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
+import { cn } from "@/lib/utils"
+import {
+  RiArrowDownSLine,
+  RiArrowLeftSLine,
+  RiArrowRightSLine,
+} from "@remixicon/react"
 import * as React from "react"
 import {
   DayPicker,
   getDefaultClassNames,
   type DayButton,
 } from "react-day-picker"
-
-import { cn } from "@/lib/utils"
-import { Button, buttonVariants } from "@/components/ui/button"
 
 function Calendar({
   className,
@@ -30,8 +34,8 @@ function Calendar({
       showOutsideDays={showOutsideDays}
       className={cn(
         "bg-background group/calendar p-3 [--cell-size:--spacing(8)] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
-        String.raw`rtl:**:[.rdp-button\_next>svg]:rotate-180`,
-        String.raw`rtl:**:[.rdp-button\_previous>svg]:rotate-180`,
+        String.raw`rtl:**:[.rdp-button\_next>[data-slot=icon]]:rotate-180`,
+        String.raw`rtl:**:[.rdp-button\_previous>[data-slot=icon]]:rotate-180`,
         className
       )}
       captionLayout={captionLayout}
@@ -81,7 +85,7 @@ function Calendar({
           "select-none font-medium",
           captionLayout === "label"
             ? "text-sm"
-            : "rounded-md pl-2 pr-1 flex items-center gap-1 text-sm h-8 [&>svg]:text-muted-foreground [&>svg]:size-3.5",
+            : "rounded-md pl-2 pr-1 flex items-center gap-1 text-sm h-8 [&>[data-slot=icon]]:text-muted-foreground",
           defaultClassNames.caption_label
         ),
         table: "w-full border-collapse",
@@ -141,18 +145,30 @@ function Calendar({
         Chevron: ({ className, orientation }) => {
           if (orientation === "left") {
             return (
-              <RiArrowLeftSLine size={16} className={cn(className)} />
+              <Icon
+                icon={RiArrowLeftSLine}
+                slotSize={16}
+                className={cn(className)}
+              />
             )
           }
 
           if (orientation === "right") {
             return (
-              <RiArrowRightSLine size={16} className={cn(className)} />
+              <Icon
+                icon={RiArrowRightSLine}
+                slotSize={16}
+                className={cn(className)}
+              />
             )
           }
 
           return (
-            <RiArrowDownSLine size={16} className={cn(className)} />
+            <Icon
+              icon={RiArrowDownSLine}
+              slotSize={14}
+              className={cn(className)}
+            />
           )
         },
         DayButton: CalendarDayButton,

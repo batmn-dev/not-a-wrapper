@@ -1,5 +1,4 @@
 "use client"
-import { RiDeleteBinLine, RiExternalLinkLine, RiKeyLine, RiLoader4Line, RiSearchLine, RiWrenchLine } from "@remixicon/react"
 
 import {
   AlertDialog,
@@ -12,15 +11,24 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "@/components/ui/toast"
+import { api } from "@/convex/_generated/api"
 import { fetchClient } from "@/lib/fetch"
 import { cn } from "@/lib/utils"
-import { useQuery } from "convex/react"
-import { api } from "@/convex/_generated/api"
+import {
+  RiDeleteBinLine,
+  RiExternalLinkLine,
+  RiKeyLine,
+  RiLoader4Line,
+  RiSearchLine,
+  RiWrenchLine,
+} from "@remixicon/react"
 import { useMutation } from "@tanstack/react-query"
-import { useState, useMemo } from "react"
+import { useQuery } from "convex/react"
+import { useMemo, useState } from "react"
 
 type ToolProvider = {
   id: string
@@ -70,7 +78,7 @@ function getStatusBadge(status: KeyStatus) {
     case "user-key":
       return (
         <span className="bg-primary/10 text-primary inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium">
-          <RiKeyLine size={12} className="size-3" />
+          <Icon icon={RiKeyLine} slotSize={12} />
           Your key
         </span>
       )
@@ -136,7 +144,10 @@ export function ToolKeys() {
       if (!res.ok) throw new Error("Failed to save key")
       return res.json()
     },
-    onSuccess: (_response: { isNewKey?: boolean }, { provider }: { provider: string; apiKey: string }) => {
+    onSuccess: (
+      _response: { isNewKey?: boolean },
+      { provider }: { provider: string; apiKey: string }
+    ) => {
       const providerConfig = TOOL_PROVIDERS.find((p) => p.id === provider)
       toast({
         title: "Tool key saved",
@@ -144,7 +155,10 @@ export function ToolKeys() {
       })
       setApiKeys((prev) => ({ ...prev, [provider]: "" }))
     },
-    onError: (_error: Error, { provider }: { provider: string; apiKey: string }) => {
+    onError: (
+      _error: Error,
+      { provider }: { provider: string; apiKey: string }
+    ) => {
       const providerConfig = TOOL_PROVIDERS.find((p) => p.id === provider)
       toast({
         title: "Failed to save key",
@@ -236,18 +250,22 @@ export function ToolKeys() {
               )}
             >
               <div className="bg-muted flex size-9 shrink-0 items-center justify-center rounded-md">
-                <ProviderIcon size={18} className="text-muted-foreground" />
+                <Icon
+                  icon={ProviderIcon}
+                  slotSize={18}
+                  className="text-muted-foreground"
+                />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{provider.name}</span>
-                  {provider.available
-                    ? getStatusBadge(keyStatuses[provider.id] ?? "none")
-                    : (
-                      <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium">
-                        Coming soon
-                      </span>
-                    )}
+                  {provider.available ? (
+                    getStatusBadge(keyStatuses[provider.id] ?? "none")
+                  ) : (
+                    <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium">
+                      Coming soon
+                    </span>
+                  )}
                 </div>
                 <p className="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
                   {provider.description}
@@ -296,7 +314,7 @@ export function ToolKeys() {
                 rel="noopener noreferrer"
                 className="text-muted-foreground mt-1 inline-flex items-center gap-1 text-xs hover:underline"
               >
-                <RiExternalLinkLine size={12} className="size-3" />
+                <Icon icon={RiExternalLinkLine} slotSize={12} />
                 Get API key
               </a>
               <div className="flex gap-2">
@@ -311,8 +329,9 @@ export function ToolKeys() {
                       deleteMutation.isPending || saveMutation.isPending
                     }
                   >
-                    <RiDeleteBinLine
-                      size={16}
+                    <Icon
+                      icon={RiDeleteBinLine}
+                      slotSize={16}
                       className="mr-1"
                     />
                     Delete
@@ -326,8 +345,9 @@ export function ToolKeys() {
                   disabled={saveMutation.isPending || deleteMutation.isPending}
                 >
                   {saveMutation.isPending ? (
-                    <RiLoader4Line
-                      size={16}
+                    <Icon
+                      icon={RiLoader4Line}
+                      slotSize={16}
                       className="animate-spin"
                     />
                   ) : (
@@ -357,8 +377,9 @@ export function ToolKeys() {
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending ? (
-                <RiLoader4Line
-                  size={16}
+                <Icon
+                  icon={RiLoader4Line}
+                  slotSize={16}
                   className="mr-2 animate-spin"
                 />
               ) : null}

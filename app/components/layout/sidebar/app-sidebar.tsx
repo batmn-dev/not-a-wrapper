@@ -4,6 +4,7 @@ import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { useScrollAttributes } from "@/app/hooks/use-scroll-attributes"
 import { NawIcon } from "@/components/icons/naw"
 import { Button } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
 import { Kbd, KbdGroup } from "@/components/ui/kbd"
 import {
   Popover,
@@ -121,7 +122,7 @@ export function AppSidebar() {
               onClick={() => setOpenMobile(false)}
               className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex size-9 items-center justify-center rounded-md bg-transparent focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
             >
-              <RiCloseLine size={24} className="size-6" />
+              <Icon icon={RiCloseLine} slotSize={24} />
             </button>
           ) : (
             <CollapsedHeaderToggle />
@@ -131,7 +132,7 @@ export function AppSidebar() {
         {/* Action buttons */}
         <div className="mt-(--sidebar-section-first-margin-top) flex w-full flex-col items-start gap-0 px-1.5">
           <CollapsedMenuItem
-            icon={<RiAddCircleLine size={20} className="size-5" />}
+            icon={<Icon icon={RiAddCircleLine} slotSize={20} />}
             label="New chat"
             href="/"
             shortcut="⇧⌘O"
@@ -140,7 +141,7 @@ export function AppSidebar() {
             hasSidebar={false}
             trigger={
               <CollapsedMenuItem
-                icon={<RiSearchLine size={20} className="size-5" />}
+                icon={<Icon icon={RiSearchLine} slotSize={20} />}
                 label="Search"
                 shortcut="⌘K"
               />
@@ -211,7 +212,7 @@ export function AppSidebar() {
                     onClick={() => setOpenMobile(false)}
                     className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex size-9 items-center justify-center rounded-md bg-transparent focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                   >
-                    <RiCloseLine size={20} className="size-5" />
+                    <Icon icon={RiCloseLine} slotSize={20} />
                   </button>
                 ) : (
                   <Tooltip disableHoverablePopup>
@@ -240,7 +241,7 @@ export function AppSidebar() {
           >
             <div className="flex w-full flex-col items-start gap-0">
               <SidebarMenuItem
-                icon={<RiAddCircleLine size={20} className="size-5" />}
+                icon={<Icon icon={RiAddCircleLine} slotSize={20} />}
                 label="New chat"
                 href="/"
                 testId="new-chat-button"
@@ -256,7 +257,7 @@ export function AppSidebar() {
                 hasSidebar={false}
                 trigger={
                   <SidebarMenuItem
-                    icon={<RiSearchLine size={20} className="size-5" />}
+                    icon={<Icon icon={RiSearchLine} slotSize={20} />}
                     label="Search"
                     trailing={
                       <KbdGroup>
@@ -316,11 +317,11 @@ export function AppSidebar() {
           {!isLoggedIn && (
             <div className="bg-sidebar z-20 flex w-full flex-col items-start gap-0 px-0 pb-3">
               <SidebarMenuItem
-                icon={<RiSparklingLine size={20} className="size-5" />}
+                icon={<Icon icon={RiSparklingLine} slotSize={20} />}
                 label="See plans and pricing"
               />
               <SidebarMenuItem
-                icon={<RiSettings3Line size={20} className="size-5" />}
+                icon={<Icon icon={RiSettings3Line} slotSize={20} />}
                 label="Settings"
               />
               <SignedOutHelpPopover />
@@ -357,11 +358,11 @@ export function AppSidebar() {
             </div>
           ) : (
             <div className="bg-sidebar border-sidebar-border sticky bottom-0 z-30 border-t p-5">
-              <div className="mb-6 whitespace-normal text-sm">
+              <div className="mb-6 text-sm whitespace-normal">
                 <p className="text-sidebar-foreground mb-4 font-semibold">
                   Get responses tailored to you
                 </p>
-                <p className="text-muted-foreground text-pretty leading-5">
+                <p className="text-muted-foreground leading-5 text-pretty">
                   Log in to save chats, add files, use more models, BYOK, and
                   more.
                 </p>
@@ -412,8 +413,9 @@ function CollapsedHeaderToggle() {
         {/* Default: Logo icon */}
         <NawIcon className="size-5 group-hover/toggle:hidden group-focus-visible/toggle:hidden" />
         {/* Hover: Sidebar icon */}
-        <RiExpandRightLine
-          size={20}
+        <Icon
+          icon={RiExpandRightLine}
+          slotSize={20}
           className="hidden group-hover/toggle:block group-focus-visible/toggle:block"
         />
       </TooltipTrigger>
@@ -513,7 +515,7 @@ function SignedOutHelpPopover() {
           <button
             type="button"
             className={cn(
-              "group/help relative mx-1.5 inline-flex h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer items-center gap-(--sidebar-item-gap) rounded-md bg-transparent px-2.5 py-1.5 text-sm text-primary hover:bg-accent/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 pointer-coarse:h-auto pointer-coarse:py-3",
+              "group/help text-primary hover:bg-accent/80 hover:text-foreground focus-visible:ring-ring relative mx-1.5 inline-flex h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer items-center gap-(--sidebar-item-gap) rounded-md bg-transparent px-2.5 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none pointer-coarse:h-auto pointer-coarse:py-3",
               open && "bg-accent/80 text-foreground"
             )}
             data-sidebar-item="true"
@@ -522,15 +524,16 @@ function SignedOutHelpPopover() {
         }
       >
         <div className="flex shrink-0 items-center justify-center">
-          <RiQuestionLine size={20} className="size-5" />
+          <Icon icon={RiQuestionLine} slotSize={20} />
         </div>
         <div className="flex min-w-0 grow items-center gap-(--sidebar-item-gap)">
           <span className="truncate">Help</span>
         </div>
-        <RiArrowRightSLine
-          size={20}
+        <Icon
+          icon={RiArrowRightSLine}
+          slotSize={20}
           className={cn(
-            "ml-auto size-5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/help:opacity-100",
+            "text-muted-foreground ml-auto size-5 shrink-0 opacity-0 transition-opacity group-hover/help:opacity-100",
             open && "opacity-100"
           )}
           aria-hidden="true"
@@ -544,28 +547,28 @@ function SignedOutHelpPopover() {
       >
         <div className="flex flex-col gap-0">
           <SignedOutHelpPopoverItem
-            icon={<RiQuestionLine size={20} className="size-5" />}
+            icon={<Icon icon={RiQuestionLine} slotSize={20} />}
             label="Help center"
             onClick={() => setOpen(false)}
           />
           <SignedOutHelpPopoverItem
-            icon={<RiQuillPenLine size={20} className="size-5" />}
+            icon={<Icon icon={RiQuillPenLine} slotSize={20} />}
             label="Release notes"
             onClick={() => setOpen(false)}
           />
           <SignedOutHelpPopoverItem
-            icon={<RiDownloadLine size={20} className="size-5" />}
+            icon={<Icon icon={RiDownloadLine} slotSize={20} />}
             label="Download apps"
             onClick={() => setOpen(false)}
           />
-          <div className="mx-2 my-1 h-px bg-border" aria-hidden="true" />
+          <div className="bg-border mx-2 my-1 h-px" aria-hidden="true" />
           <SignedOutHelpPopoverItem
-            icon={<RiFileTextLine size={20} className="size-5" />}
+            icon={<Icon icon={RiFileTextLine} slotSize={20} />}
             label="Terms of Service"
             onClick={() => setOpen(false)}
           />
           <SignedOutHelpPopoverItem
-            icon={<RiInformationLine size={20} className="size-5" />}
+            icon={<Icon icon={RiInformationLine} slotSize={20} />}
             label="Privacy Policy"
             onClick={() => setOpen(false)}
           />
@@ -588,14 +591,14 @@ function SignedOutHelpPopoverItem({
     <button
       type="button"
       onClick={onClick}
-      className="group/help-popover-item inline-flex h-9 w-full cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-left text-sm text-primary outline-none hover:bg-accent/80 hover:text-foreground focus-visible:bg-accent/80 focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring pointer-coarse:h-auto pointer-coarse:py-3"
+      className="group/help-popover-item text-primary hover:bg-accent/80 hover:text-foreground focus-visible:bg-accent/80 focus-visible:text-foreground focus-visible:ring-ring inline-flex h-9 w-full cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset pointer-coarse:h-auto pointer-coarse:py-3"
     >
       <div className="flex shrink-0 items-center justify-center">{icon}</div>
       <div className="flex min-w-0 grow items-center gap-(--sidebar-item-gap)">
         <span className="truncate">{label}</span>
       </div>
-      <div className="shrink-0 text-muted-foreground opacity-0 group-hover/help-popover-item:opacity-100 group-focus-visible/help-popover-item:opacity-100">
-        <RiArrowRightSLine size={16} className="size-4" aria-hidden="true" />
+      <div className="text-muted-foreground shrink-0 opacity-0 group-hover/help-popover-item:opacity-100 group-focus-visible/help-popover-item:opacity-100">
+        <Icon icon={RiArrowRightSLine} slotSize={16} aria-hidden="true" />
       </div>
     </button>
   )

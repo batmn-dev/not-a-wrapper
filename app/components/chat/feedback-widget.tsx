@@ -1,5 +1,4 @@
 "use client"
-import { RiQuestionLine } from "@remixicon/react"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { FeedbackForm } from "@/components/common/feedback-form"
@@ -8,6 +7,8 @@ import {
   MorphingPopoverContent,
   MorphingPopoverTrigger,
 } from "@/components/motion-primitives/morphing-popover"
+import { Icon } from "@/components/ui/icon"
+import { RiQuestionLine } from "@remixicon/react"
 import { motion } from "motion/react"
 import { useState } from "react"
 
@@ -61,7 +62,11 @@ export function FeedbackWidget({ authUserId }: FeedbackWidgetProps) {
               delay: isOpen ? 0 : TRANSITION_POPOVER.duration / 2,
             }}
           >
-            <RiQuestionLine size={16} className="text-foreground" />
+            <Icon
+              icon={RiQuestionLine}
+              slotSize={16}
+              className="text-foreground"
+            />
           </motion.span>
         </MorphingPopoverTrigger>
         <MorphingPopoverContent

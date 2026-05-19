@@ -71,7 +71,7 @@ export const SidebarMenuItem = forwardRef<
 
   const combinedClassName = cn(
     baseClassName,
-    hasTrailing && "justify-between gap-2",
+    hasTrailing && "justify-between",
     isActive && "bg-accent",
     className
   )

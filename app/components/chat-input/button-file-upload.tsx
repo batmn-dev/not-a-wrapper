@@ -1,10 +1,10 @@
-import { RiAttachment2, RiUpload2Line } from "@remixicon/react"
+import { Button } from "@/components/ui/button"
 import {
   FileUpload,
   FileUploadContent,
   FileUploadTrigger,
 } from "@/components/ui/file-upload"
-import { Button } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
 import {
   Popover,
   PopoverContent,
@@ -18,6 +18,7 @@ import {
 import { ACCEPTED_FILE_PICKER_TYPES } from "@/lib/file-handling"
 import { getModelInfo } from "@/lib/models"
 import { cn } from "@/lib/utils"
+import { RiAttachment2, RiUpload2Line } from "@remixicon/react"
 import React from "react"
 import { PopoverContentAuth } from "./popover-content-auth"
 
@@ -53,9 +54,11 @@ export function ButtonFileUpload({
               />
             }
           >
-            <RiAttachment2 size={16} />
+            <Icon icon={RiAttachment2} slotSize={16} />
           </TooltipTrigger>
-          <TooltipContent side="bottom" hideArrow>Add files</TooltipContent>
+          <TooltipContent side="bottom" hideArrow>
+            Add files
+          </TooltipContent>
         </Tooltip>
         <PopoverContent className="p-2">
           <div className="text-secondary-foreground text-sm">
@@ -87,9 +90,11 @@ export function ButtonFileUpload({
               />
             }
           >
-            <RiAttachment2 size={16} />
+            <Icon icon={RiAttachment2} slotSize={16} />
           </TooltipTrigger>
-          <TooltipContent side="bottom" hideArrow>Add files</TooltipContent>
+          <TooltipContent side="bottom" hideArrow>
+            Add files
+          </TooltipContent>
         </Tooltip>
         <PopoverContentAuth />
       </Popover>
@@ -123,13 +128,19 @@ export function ButtonFileUpload({
             />
           }
         >
-          <RiAttachment2 size={16} />
+          <Icon icon={RiAttachment2} slotSize={16} />
         </TooltipTrigger>
-        <TooltipContent side="bottom" hideArrow>Add files</TooltipContent>
+        <TooltipContent side="bottom" hideArrow>
+          Add files
+        </TooltipContent>
       </Tooltip>
       <FileUploadContent>
         <div className="border-input bg-background flex flex-col items-center rounded-lg border border-dashed p-8">
-          <RiUpload2Line size={32} className="size-8 text-muted-foreground" />
+          <Icon
+            icon={RiUpload2Line}
+            slotSize={32}
+            className="text-muted-foreground"
+          />
           <span className="mt-4 mb-1 text-lg font-medium">Drop files here</span>
           <span className="text-muted-foreground text-sm">
             Drop files here to add them to the conversation

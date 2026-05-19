@@ -1,6 +1,13 @@
 "use client"
-import { RiCheckboxCircleLine, RiCloseCircleLine, RiErrorWarningLine, RiInformationLine, RiLoader4Line } from "@remixicon/react"
 
+import { Icon } from "@/components/ui/icon"
+import {
+  RiCheckboxCircleLine,
+  RiCloseCircleLine,
+  RiErrorWarningLine,
+  RiInformationLine,
+  RiLoader4Line,
+} from "@remixicon/react"
 import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 
@@ -12,11 +19,13 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
       icons={{
-        success: <RiCheckboxCircleLine size={16} />,
-        info: <RiInformationLine size={16} />,
-        warning: <RiErrorWarningLine size={16} />,
-        error: <RiCloseCircleLine size={16} />,
-        loading: <RiLoader4Line size={16} className="animate-spin" />,
+        success: <Icon icon={RiCheckboxCircleLine} slotSize={16} />,
+        info: <Icon icon={RiInformationLine} slotSize={16} />,
+        warning: <Icon icon={RiErrorWarningLine} slotSize={16} />,
+        error: <Icon icon={RiCloseCircleLine} slotSize={16} />,
+        loading: (
+          <Icon icon={RiLoader4Line} slotSize={16} className="animate-spin" />
+        ),
       }}
       style={
         {

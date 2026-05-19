@@ -1,5 +1,4 @@
 "use client"
-import { RiLogoutBoxRLine } from "@remixicon/react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -9,6 +8,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Icon } from "@/components/ui/icon"
+import { toast } from "@/components/ui/toast"
 import {
   Tooltip,
   TooltipContent,
@@ -18,12 +19,12 @@ import { useChats } from "@/lib/chat-store/chats/provider"
 import { useMessages } from "@/lib/chat-store/messages/provider"
 import { clearAllIndexedDBStores } from "@/lib/chat-store/persist"
 import { useUser } from "@/lib/user-store/provider"
+import { RiLogoutBoxRLine } from "@remixicon/react"
 import { useAuth } from "@workos-inc/authkit-nextjs/components"
 import { useState } from "react"
-import { toast } from "@/components/ui/toast"
 import { AppInfoDialog, AppInfoMenuItem } from "./app-info/app-info-trigger"
-import { FeedbackMenuItem, FeedbackDialog } from "./feedback/feedback-trigger"
-import { SettingsMenuItem, SettingsDialog } from "./settings/settings-trigger"
+import { FeedbackDialog, FeedbackMenuItem } from "./feedback/feedback-trigger"
+import { SettingsDialog, SettingsMenuItem } from "./settings/settings-trigger"
 
 type UserMenuProps = {
   variant?: "header" | "sidebar" | "sidebar-collapsed"
@@ -73,7 +74,7 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
         onClick={handleSignOut}
         className="flex items-center gap-2"
       >
-        <RiLogoutBoxRLine size={16} />
+        <Icon icon={RiLogoutBoxRLine} slotSize={16} />
         <span>Sign out</span>
       </DropdownMenuItem>
     </>
@@ -106,7 +107,7 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
                 aria-haspopup="menu"
                 aria-expanded={isMenuOpen}
                 data-testid="accounts-profile-button"
-                className="group/menu-item flex h-12 w-full items-center gap-2 rounded-md px-1.5 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                className="group/menu-item hover:bg-accent flex h-12 w-full items-center gap-2 rounded-md px-1.5 text-left text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
               />
             }
           >
@@ -160,7 +161,7 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
                       aria-haspopup="menu"
                       aria-expanded={isMenuOpen}
                       data-testid="accounts-profile-button"
-                      className="mx-auto flex h-10 w-10 items-center justify-center rounded-md hover:bg-accent focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                      className="hover:bg-accent mx-auto flex h-10 w-10 items-center justify-center rounded-md focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                     />
                   }
                 />
@@ -204,10 +205,7 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
           </TooltipTrigger>
           <TooltipContent>Profile</TooltipContent>
         </Tooltip>
-        <DropdownMenuContent
-          className="w-56"
-          align="end"
-        >
+        <DropdownMenuContent className="w-56" align="end">
           {menuContent}
         </DropdownMenuContent>
       </DropdownMenu>

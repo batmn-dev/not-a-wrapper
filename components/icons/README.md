@@ -4,15 +4,24 @@ This project uses **official Remix Icons React components** as the primary UI ic
 
 ## Quick Start
 
-### Default: Remix Icons
+### Default: Remix Icons Through `Icon`
 
 ```typescript
+import { Icon } from "@/components/ui/icon"
 import { RiCheckLine, RiCloseLine } from "@remixicon/react"
 
 // Usage
-<RiCheckLine size={16} />
-<RiCloseLine size={16} className="text-red-500" />
+<Icon icon={RiCheckLine} slotSize={16} />
+<Icon icon={RiCloseLine} slotSize={16} className="text-red-500" />
 ```
+
+The wrapper keeps the layout slot size stable and renders the inner Remix SVG
+2px smaller by default. For example, `slotSize={20}` produces an 18px glyph
+centered inside a 20px slot.
+
+`slotSize` is the preferred sizing prop. `size` is accepted as a compatibility
+alias for migrated Remix icon usage. Refs attach to the wrapper `span`, not the
+inner SVG.
 
 ### Custom Brand Icons
 

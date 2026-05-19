@@ -1,12 +1,13 @@
 "use client"
-import { RiArrowDownLine } from "@remixicon/react"
 
-import { useContext } from "react"
 import { Button, buttonVariants } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
-import { type VariantProps } from "class-variance-authority"
-import { useStickToBottomContext } from "use-stick-to-bottom"
+import { Icon } from "@/components/ui/icon"
 import { ScrollRootContext } from "@/components/ui/scroll-root"
+import { cn } from "@/lib/utils"
+import { RiArrowDownLine } from "@remixicon/react"
+import { type VariantProps } from "class-variance-authority"
+import { useContext } from "react"
+import { useStickToBottomContext } from "use-stick-to-bottom"
 
 export type ScrollButtonProps = {
   className?: string
@@ -32,14 +33,14 @@ function ScrollButtonInner({
       variant={variant}
       size={size}
       className={cn(
-        "h-9 w-9 rounded-full bg-popover/90 hover:bg-accent/90 dark:bg-popover/75 dark:hover:bg-accent/90 backdrop-blur-md transition-opacity duration-150 ease-out pointer-coarse:h-10 pointer-coarse:w-10",
+        "bg-popover/90 hover:bg-accent/90 dark:bg-popover/75 dark:hover:bg-accent/90 h-9 w-9 rounded-full backdrop-blur-md transition-opacity duration-150 ease-out pointer-coarse:h-10 pointer-coarse:w-10",
         !isAtBottom ? "opacity-100" : "pointer-events-none opacity-0",
         className
       )}
       onClick={() => scrollToBottom()}
       {...props}
     >
-      <RiArrowDownLine size={20} className="size-5" />
+      <Icon icon={RiArrowDownLine} slotSize={20} />
     </Button>
   )
 }

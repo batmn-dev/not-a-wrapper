@@ -1,5 +1,4 @@
 "use client"
-import { RiDeleteBinLine, RiEditLine, RiLoader4Line, RiMoreFill, RiShare2Line } from "@remixicon/react"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import {
@@ -8,20 +7,28 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Icon } from "@/components/ui/icon"
+import { api } from "@/convex/_generated/api"
+import type { Id } from "@/convex/_generated/dataModel"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useMessages } from "@/lib/chat-store/messages/provider"
 import { useChatSession } from "@/lib/chat-store/session/provider"
 import type { Chat } from "@/lib/chat-store/types"
-import { api } from "@/convex/_generated/api"
-import type { Id } from "@/convex/_generated/dataModel"
-import { useMutation } from "convex/react"
-import { cn } from "@/lib/utils"
 import { Pin, PinOff } from "@/lib/icons"
+import { cn } from "@/lib/utils"
+import {
+  RiDeleteBinLine,
+  RiEditLine,
+  RiLoader4Line,
+  RiMoreFill,
+  RiShare2Line,
+} from "@remixicon/react"
+import { useMutation } from "convex/react"
 import { useRouter } from "next/navigation"
 import type React from "react"
 import { useState } from "react"
-import { DialogDeleteChat } from "./sidebar/dialog-delete-chat"
 import { SharePublishDrawer } from "./share-publish-drawer"
+import { DialogDeleteChat } from "./sidebar/dialog-delete-chat"
 
 type ChatActionsMenuProps = {
   chat: Chat
@@ -77,7 +84,10 @@ export function ChatActionsMenu({
       return
     }
 
-    const nextTitle = window.prompt("Rename chat", chat.title || "Untitled chat")
+    const nextTitle = window.prompt(
+      "Rename chat",
+      chat.title || "Untitled chat"
+    )
     if (nextTitle === null) return
 
     const title = nextTitle.trim()
@@ -102,7 +112,7 @@ export function ChatActionsMenu({
       >
         <DropdownMenuTrigger render={trigger ?? defaultTrigger}>
           {!trigger && (
-            <RiMoreFill size={20} className="size-5 text-primary" />
+            <Icon icon={RiMoreFill} slotSize={20} className="text-primary" />
           )}
         </DropdownMenuTrigger>
         <DropdownMenuContent
@@ -120,9 +130,13 @@ export function ChatActionsMenu({
               }}
             >
               {isShareLoading ? (
-                <RiLoader4Line size={16} className="mr-2 animate-spin" />
+                <Icon
+                  icon={RiLoader4Line}
+                  slotSize={16}
+                  className="mr-2 animate-spin"
+                />
               ) : (
-                <RiShare2Line size={16} className="mr-2" />
+                <Icon icon={RiShare2Line} slotSize={16} className="mr-2" />
               )}
               Share
             </DropdownMenuItem>
@@ -146,7 +160,7 @@ export function ChatActionsMenu({
               handleRename()
             }}
           >
-            <RiEditLine size={16} className="mr-2" />
+            <Icon icon={RiEditLine} slotSize={16} className="mr-2" />
             Rename
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -156,7 +170,7 @@ export function ChatActionsMenu({
               setIsDeleteDialogOpen(true)
             }}
           >
-            <RiDeleteBinLine size={16} className="mr-2" />
+            <Icon icon={RiDeleteBinLine} slotSize={16} className="mr-2" />
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>

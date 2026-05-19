@@ -1,5 +1,4 @@
 "use client"
-import { RiCheckLine, RiFileCopyLine } from "@remixicon/react"
 
 import XIcon from "@/components/icons/x"
 import { Button } from "@/components/ui/button"
@@ -10,8 +9,10 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer"
+import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
 import { APP_DOMAIN } from "@/lib/config"
+import { RiCheckLine, RiFileCopyLine } from "@remixicon/react"
 import { useState } from "react"
 
 type SharePublishDrawerProps = {
@@ -52,8 +53,8 @@ export function SharePublishDrawer({
         <DrawerHeader>
           <DrawerTitle>Your conversation is now public!</DrawerTitle>
           <DrawerDescription>
-            Anyone with the link can now view this conversation and may appear in
-            community feeds, featured pages, or search results in the future.
+            Anyone with the link can now view this conversation and may appear
+            in community feeds, featured pages, or search results in the future.
           </DrawerDescription>
         </DrawerHeader>
         <div className="flex flex-col gap-4 px-4 pb-6">
@@ -73,9 +74,9 @@ export function SharePublishDrawer({
                     className="bg-background hover:bg-background absolute top-0 right-0 rounded-l-none transition-colors"
                   >
                     {copied ? (
-                      <RiCheckLine size={16} />
+                      <Icon icon={RiCheckLine} slotSize={16} />
                     ) : (
-                      <RiFileCopyLine size={16} />
+                      <Icon icon={RiFileCopyLine} slotSize={16} />
                     )}
                   </Button>
                 </div>

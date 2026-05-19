@@ -1,12 +1,13 @@
 "use client"
-import { RiChat3Line, RiCheckLine, RiCloseLine } from "@remixicon/react"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import useClickOutside from "@/app/hooks/use-click-outside"
+import { Icon } from "@/components/ui/icon"
 import { useSidebar } from "@/components/ui/sidebar"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { Chat } from "@/lib/chat-store/types"
 import { cn } from "@/lib/utils"
+import { RiChat3Line, RiCheckLine, RiCloseLine } from "@remixicon/react"
 import Link from "next/link"
 import { useCallback, useMemo, useRef, useState } from "react"
 import { SidebarItemMenu } from "./sidebar-item-menu"
@@ -114,10 +115,13 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
     [handleCancel]
   )
 
-  const handleLinkClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (isMobile) setOpenMobile(false)
-  }, [isMobile, setOpenMobile])
+  const handleLinkClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation()
+      if (isMobile) setOpenMobile(false)
+    },
+    [isMobile, setOpenMobile]
+  )
 
   // Memoize computed values
   const displayTitle = useMemo(
@@ -151,8 +155,9 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
         ref={containerRef}
       >
         <div className="flex items-center p-3">
-          <RiChat3Line
-            size={16}
+          <Icon
+            icon={RiChat3Line}
+            slotSize={16}
             className="text-muted-foreground mr-3 flex-shrink-0"
           />
           <input
@@ -169,14 +174,14 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-6 items-center justify-center rounded-md p-1"
               type="button"
             >
-              <RiCheckLine size={12} className="size-3" />
+              <Icon icon={RiCheckLine} slotSize={12} />
             </button>
             <button
               onClick={handleCancelClick}
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-6 items-center justify-center rounded-md p-1"
               type="button"
             >
-              <RiCloseLine size={12} className="size-3" />
+              <Icon icon={RiCloseLine} slotSize={12} />
             </button>
           </div>
         </div>
@@ -198,7 +203,9 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
       >
         <div className="flex items-start justify-between">
           <div className="min-w-0 flex-1">
-            <h3 className="truncate font-medium text-balance">{displayTitle}</h3>
+            <h3 className="truncate font-medium text-balance">
+              {displayTitle}
+            </h3>
             <p className="text-muted-foreground mt-1 text-sm">
               {chat.updated_at
                 ? formatDate(chat.updated_at)

@@ -1,8 +1,9 @@
 "use client"
-import { RiArrowDownSLine, RiLink } from "@remixicon/react"
 
+import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
-import type { SourceUrlUIPart } from 'ai'
+import { RiArrowDownSLine, RiLink } from "@remixicon/react"
+import type { SourceUrlUIPart } from "ai"
 import { AnimatePresence, motion } from "motion/react"
 import Image from "next/image"
 import { useState } from "react"
@@ -67,8 +68,9 @@ export function SourcesList({ sources, className }: SourcesListProps) {
               )}
             </div>
           </div>
-          <RiArrowDownSLine
-            size={16}
+          <Icon
+            icon={RiArrowDownSLine}
+            slotSize={16}
             className={cn(
               "h-4 w-4 transition-transform",
               isExpanded ? "rotate-180 transform" : ""
@@ -92,7 +94,10 @@ export function SourcesList({ sources, className }: SourcesListProps) {
                     !faviconUrl || failedFavicons.has(source.url)
 
                   return (
-                    <li key={source.sourceId} className="flex items-center text-sm">
+                    <li
+                      key={source.sourceId}
+                      className="flex items-center text-sm"
+                    >
                       <div className="min-w-0 flex-1 overflow-hidden">
                         <a
                           href={addUTM(source.url)}
@@ -113,7 +118,11 @@ export function SourcesList({ sources, className }: SourcesListProps) {
                             />
                           )}
                           <span className="truncate">{source.title}</span>
-                          <RiLink size={12} className="size-3 inline h-3 w-3 flex-shrink-0 opacity-70 transition-opacity group-hover:opacity-100" />
+                          <Icon
+                            icon={RiLink}
+                            slotSize={12}
+                            className="flex-shrink-0 opacity-70 transition-opacity group-hover:opacity-100"
+                          />
                         </a>
                         <div className="text-muted-foreground line-clamp-1 text-xs">
                           {formatUrl(source.url)}

@@ -1,6 +1,7 @@
-import { RiDoubleQuotesL } from "@remixicon/react"
 import useClickOutside from "@/components/motion-primitives/useClickOutside"
 import { Button } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
+import { RiDoubleQuotesL } from "@remixicon/react"
 import { RefObject, useLayoutEffect, useRef, useState } from "react"
 
 type QuoteButtonProps = {
@@ -50,7 +51,7 @@ export function QuoteButton({
         className="flex size-10 items-center gap-1 rounded-full px-3 py-1 text-base"
         aria-label="Ask follow up"
       >
-        <RiDoubleQuotesL size={16} />
+        <Icon icon={RiDoubleQuotesL} slotSize={16} />
       </Button>
     </div>
   )

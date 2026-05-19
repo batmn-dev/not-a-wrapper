@@ -350,6 +350,10 @@
   --sidebar-expanded-section-margin-bottom: 0.5rem;
   --sidebar-item-gap: 0.375rem;
 
+  /* Icon sizing: wrappers keep the layout slot while Remix SVG glyphs render 2px smaller. */
+  --icon-slot-size: 1rem;
+  --icon-glyph-inset: 2px;
+
   /* Sticky header z-index */
   --header-z-index: 20;
 

@@ -1,7 +1,8 @@
-import { RiGlobalLine } from "@remixicon/react"
 import { Button } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
 import { Popover, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
+import { RiGlobalLine } from "@remixicon/react"
 import React from "react"
 import { PopoverContentAuth } from "./popover-content-auth"
 
@@ -25,14 +26,9 @@ export function ButtonSearch({
     return (
       <Popover>
         <PopoverTrigger
-          render={
-            <Button
-              variant="ghost"
-              className="rounded-full"
-            />
-          }
+          render={<Button variant="ghost" className="rounded-full" />}
         >
-          <RiGlobalLine size={20} className="size-5" />
+          <Icon icon={RiGlobalLine} slotSize={20} />
           Search
         </PopoverTrigger>
         <PopoverContentAuth />
@@ -44,13 +40,13 @@ export function ButtonSearch({
     <Button
       variant="ghost"
       className={cn(
-        "rounded-full transition-all duration-150 has-[>svg]:px-1.75 md:has-[>svg]:px-3",
+        "rounded-full transition-all duration-150 has-[>[data-slot=icon]]:px-1.75 md:has-[>[data-slot=icon]]:px-3",
         // TODO: Create a dedicated color variable for the search-selected state instead of reusing chart-1
         isSelected && "text-chart-1"
       )}
       onClick={handleClick}
     >
-      <RiGlobalLine size={20} className="size-5" />
+      <Icon icon={RiGlobalLine} slotSize={20} />
       <span className="hidden md:block">Search</span>
     </Button>
   )

@@ -1,8 +1,9 @@
 "use client"
-import { RiUserLine } from "@remixicon/react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Icon } from "@/components/ui/icon"
 import { useUser } from "@/lib/user-store/provider"
+import { RiUserLine } from "@remixicon/react"
 
 export function UserProfile() {
   const { user } = useUser()
@@ -20,11 +21,17 @@ export function UserProfile() {
               <AvatarFallback>{user?.display_name?.charAt(0)}</AvatarFallback>
             </Avatar>
           ) : (
-            <RiUserLine size={48} className="size-12 text-muted-foreground" />
+            <Icon
+              icon={RiUserLine}
+              slotSize={48}
+              className="text-muted-foreground"
+            />
           )}
         </div>
         <div>
-          <h4 className="text-sm font-medium text-balance">{user?.display_name}</h4>
+          <h4 className="text-sm font-medium text-balance">
+            {user?.display_name}
+          </h4>
           <p className="text-muted-foreground text-sm">{user?.email}</p>
         </div>
       </div>

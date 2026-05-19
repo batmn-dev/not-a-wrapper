@@ -1,11 +1,11 @@
 "use client"
-import { RiChat3Line } from "@remixicon/react"
 
 import { ChatInput } from "@/app/components/chat-input/chat-input"
 import { Conversation } from "@/app/components/chat/conversation"
 import { useFileUpload } from "@/app/components/chat/use-file-upload"
 import { useModel } from "@/app/components/chat/use-model"
 import { ProjectChatItem } from "@/app/components/layout/sidebar/project-chat-item"
+import { Icon } from "@/components/ui/icon"
 import { toast } from "@/components/ui/toast"
 import { convertAttachmentsToFiles } from "@/lib/ai/message-conversion"
 import { useChats } from "@/lib/chat-store/chats/provider"
@@ -13,23 +13,24 @@ import { useMessages } from "@/lib/chat-store/messages/provider"
 import { MESSAGE_MAX_LENGTH, SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { Attachment } from "@/lib/file-handling"
 import { API_ROUTE_CHAT } from "@/lib/routes"
-import { useUser } from "@/lib/user-store/provider"
+import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import {
   persistWebSearchToggle,
   resolveWebSearchEnabled,
 } from "@/lib/user-preference-store/web-search"
-import { useUserPreferences } from "@/lib/user-preference-store/provider"
+import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
 import type { UIMessage } from "@ai-sdk/react"
 import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport } from "ai"
-
-// Extended UIMessage type for optimistic updates that includes createdAt
-type OptimisticUIMessage = UIMessage & { createdAt?: Date }
+import { RiChat3Line } from "@remixicon/react"
 import { useQuery } from "@tanstack/react-query"
+import { DefaultChatTransport } from "ai"
 import { AnimatePresence, motion } from "motion/react"
 import { usePathname } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+
+// Extended UIMessage type for optimistic updates that includes createdAt
+type OptimisticUIMessage = UIMessage & { createdAt?: Date }
 
 type Project = {
   id: string
@@ -120,29 +121,23 @@ export function ProjectView({ projectId }: ProjectViewProps) {
   )
 
   // Initialize useChat with v6 API
-  const {
-    messages,
-    sendMessage,
-    regenerate,
-    status,
-    stop,
-    setMessages,
-  } = useChat({
-    id: `project-${projectId}-${currentChatId}`,
-    transport,
-    messages: [],
+  const { messages, sendMessage, regenerate, status, stop, setMessages } =
+    useChat({
+      id: `project-${projectId}-${currentChatId}`,
+      transport,
+      messages: [],
 
-    onFinish: ({ message, isAbort, isError }) => {
-      // Skip processing for aborted or errored responses
-      if (isAbort || isError) return
-      // Pass currentChatId explicitly to handle stale closures during chat creation
-      if (currentChatId) {
-        cacheAndAddMessage(message, currentChatId)
-      }
-    },
+      onFinish: ({ message, isAbort, isError }) => {
+        // Skip processing for aborted or errored responses
+        if (isAbort || isError) return
+        // Pass currentChatId explicitly to handle stale closures during chat creation
+        if (currentChatId) {
+          cacheAndAddMessage(message, currentChatId)
+        }
+      },
 
-    onError: handleError,
-  })
+      onError: handleError,
+    })
 
   const { selectedModel, handleModelChange } = useModel({
     currentChat: null,
@@ -269,12 +264,12 @@ export function ProjectView({ projectId }: ProjectViewProps) {
       createdAt: new Date(),
       parts: [
         { type: "text", text: currentInput },
-        ...(optimisticAttachments.map((att) => ({
+        ...optimisticAttachments.map((att) => ({
           type: "file" as const,
           filename: att.name,
           mediaType: att.contentType,
           url: att.url,
-        }))),
+        })),
       ],
     }
 
@@ -482,7 +477,11 @@ export function ProjectView({ projectId }: ProjectViewProps) {
             }}
           >
             <div className="mb-6 flex items-center justify-center gap-2">
-              <RiChat3Line size={24} className="size-6 text-muted-foreground" />
+              <Icon
+                icon={RiChat3Line}
+                slotSize={24}
+                className="text-muted-foreground"
+              />
               <h1 className="text-center text-3xl font-medium tracking-tight text-balance">
                 {project?.name || ""}
               </h1>

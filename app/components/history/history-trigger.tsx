@@ -1,8 +1,9 @@
 "use client"
-import { RiSearchLine } from "@remixicon/react"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
+import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
+import { RiSearchLine } from "@remixicon/react"
 import {
   cloneElement,
   isValidElement,
@@ -38,8 +39,9 @@ export function HistoryTrigger({
   const isMobile = useBreakpoint(768)
   const { openHistory } = useHistorySearch()
   const hasCustomTriggerClass = !!classNameTrigger
-  const defaultTrigger = trigger && isValidElement(trigger)
-    ? cloneElement(trigger, {
+  const defaultTrigger =
+    trigger && isValidElement(trigger) ? (
+      cloneElement(trigger, {
         onClick: (event: MouseEvent<HTMLElement>) => {
           if (typeof trigger.props.onClick === "function") {
             trigger.props.onClick(event)
@@ -49,7 +51,7 @@ export function HistoryTrigger({
         "aria-label": trigger.props["aria-label"] ?? "Search",
         tabIndex: isMobile ? -1 : trigger.props.tabIndex,
       })
-    : (
+    ) : (
       <button
         className={cn(
           !hasCustomTriggerClass &&
@@ -62,7 +64,7 @@ export function HistoryTrigger({
         aria-label="Search"
         tabIndex={isMobile ? -1 : 0}
       >
-        {icon || <RiSearchLine size={24} className="size-6" />}
+        {icon || <Icon icon={RiSearchLine} slotSize={24} />}
         {label}
         {trailing}
       </button>

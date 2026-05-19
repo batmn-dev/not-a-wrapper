@@ -1,12 +1,13 @@
 "use client"
-import { RiQuestionLine } from "@remixicon/react"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
-import { useUser } from "@/lib/user-store/provider"
 import { FeedbackForm } from "@/components/common/feedback-form"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Drawer, DrawerContent } from "@/components/ui/drawer"
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
+import { Icon } from "@/components/ui/icon"
+import { useUser } from "@/lib/user-store/provider"
+import { RiQuestionLine } from "@remixicon/react"
 
 /**
  * Menu item that opens the feedback dialog.
@@ -15,7 +16,7 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 export function FeedbackMenuItem({ onClick }: { onClick: () => void }) {
   return (
     <DropdownMenuItem onClick={onClick}>
-      <RiQuestionLine size={16} />
+      <Icon icon={RiQuestionLine} slotSize={16} />
       <span>Feedback</span>
     </DropdownMenuItem>
   )

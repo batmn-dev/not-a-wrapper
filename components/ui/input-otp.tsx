@@ -1,10 +1,10 @@
 "use client"
-import { RiSubtractLine } from "@remixicon/react"
 
-import * as React from "react"
-import { OTPInput, OTPInputContext } from "input-otp"
-
+import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
+import { RiSubtractLine } from "@remixicon/react"
+import { OTPInput, OTPInputContext } from "input-otp"
+import * as React from "react"
 
 function InputOTP({
   className,
@@ -69,7 +69,7 @@ function InputOTPSlot({
 function InputOTPSeparator({ ...props }: React.ComponentProps<"div">) {
   return (
     <div data-slot="input-otp-separator" role="separator" {...props}>
-      <RiSubtractLine size={16} />
+      <Icon icon={RiSubtractLine} slotSize={16} />
     </div>
   )
 }

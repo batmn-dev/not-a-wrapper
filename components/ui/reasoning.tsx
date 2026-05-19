@@ -22,15 +22,12 @@
  *     approach is inherently correct and avoids measurement race conditions
  */
 "use client"
-import { RiArrowDownSLine } from "@remixicon/react"
 
+import { Icon } from "@/components/ui/icon"
 import { TextShimmer } from "@/components/ui/text-shimmer"
 import { cn } from "@/lib/utils"
-import React, {
-  createContext,
-  useContext,
-  useState,
-} from "react"
+import { RiArrowDownSLine } from "@remixicon/react"
+import React, { createContext, useContext, useState } from "react"
 import { Markdown } from "./markdown"
 
 type ReasoningContextType = {
@@ -155,7 +152,7 @@ function ReasoningTrigger({
           isOpen ? "rotate-180" : ""
         )}
       >
-        <RiArrowDownSLine size={16} />
+        <Icon icon={RiArrowDownSLine} slotSize={16} />
       </div>
     </button>
   )
@@ -215,7 +212,7 @@ function ReasoningLabel({ className }: ReasoningLabelProps) {
           isOpen ? "rotate-180" : ""
         )}
       >
-        <RiArrowDownSLine size={14} />
+        <Icon icon={RiArrowDownSLine} slotSize={14} />
       </div>
     </button>
   )

@@ -1,10 +1,16 @@
 "use client"
-import { RiAddLine, RiDraggable, RiStarLine, RiSubtractLine } from "@remixicon/react"
 
+import { Icon } from "@/components/ui/icon"
 import { useModel } from "@/lib/model-store/provider"
 import { ModelConfig } from "@/lib/models/types"
 import { PROVIDERS } from "@/lib/providers"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
+import {
+  RiAddLine,
+  RiDraggable,
+  RiStarLine,
+  RiSubtractLine,
+} from "@remixicon/react"
 import { AnimatePresence, motion, Reorder } from "framer-motion"
 import { useMemo, useState } from "react"
 import { useFavoriteModels } from "./use-favorite-models"
@@ -143,7 +149,7 @@ export function ModelsSettings() {
                     <div className="border-border flex items-center gap-3 rounded-lg border bg-transparent p-3">
                       {/* Drag Handle */}
                       <div className="text-muted-foreground cursor-grab opacity-60 transition-opacity group-hover:opacity-100 active:cursor-grabbing">
-                        <RiDraggable size={16} />
+                        <Icon icon={RiDraggable} slotSize={16} />
                       </div>
 
                       {/* Provider Icon */}
@@ -175,7 +181,7 @@ export function ModelsSettings() {
                         className="text-muted-foreground rounded-md border p-1 opacity-0 transition-all group-hover:opacity-100"
                         title="Remove from favorites"
                       >
-                        <RiSubtractLine size={16} />
+                        <Icon icon={RiSubtractLine} slotSize={16} />
                       </button>
                     </div>
                   </Reorder.Item>
@@ -189,7 +195,11 @@ export function ModelsSettings() {
               className="border-border text-muted-foreground flex h-32 items-center justify-center rounded-lg border-2 border-dashed"
             >
               <div className="text-center">
-                <RiStarLine size={32} className="size-8 mx-auto mb-2 opacity-50" />
+                <Icon
+                  icon={RiStarLine}
+                  slotSize={32}
+                  className="mx-auto mb-2 opacity-50"
+                />
                 <p className="text-sm">No favorite models yet</p>
                 <p className="text-xs">Add models from the list below</p>
               </div>
@@ -200,7 +210,9 @@ export function ModelsSettings() {
 
       {/* Available Models */}
       <div>
-        <h4 className="mb-3 text-sm font-medium text-balance">Available models</h4>
+        <h4 className="mb-3 text-sm font-medium text-balance">
+          Available models
+        </h4>
         <p className="text-muted-foreground mb-4 text-sm text-pretty">
           Choose models to add to your favorites.
         </p>
@@ -227,7 +239,9 @@ export function ModelsSettings() {
                 <div key={iconKey} className="space-y-3">
                   <div className="flex items-center gap-2">
                     {provider?.icon && <provider.icon className="size-5" />}
-                    <h4 className="font-medium text-balance">{provider?.name || iconKey}</h4>
+                    <h4 className="font-medium text-balance">
+                      {provider?.name || iconKey}
+                    </h4>
                     <span className="text-muted-foreground text-sm">
                       ({modelsGroup.length} models)
                     </span>
@@ -277,7 +291,7 @@ export function ModelsSettings() {
                             className="text-muted-foreground hover:text-foreground border-border rounded-md border p-1 transition-colors"
                             title="Add to favorites"
                           >
-                            <RiAddLine size={16} />
+                            <Icon icon={RiAddLine} slotSize={16} />
                           </button>
                         </motion.div>
                       )

@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button"
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer"
+import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
@@ -145,7 +146,7 @@ export function DrawerHistory({
                     className="h-8 w-8"
                     type="submit"
                   >
-                    <RiCheckLine size={16} />
+                    <Icon icon={RiCheckLine} slotSize={16} />
                   </Button>
                   <Button
                     size="icon"
@@ -154,7 +155,7 @@ export function DrawerHistory({
                     type="button"
                     onClick={handleCancelEdit}
                   >
-                    <RiCloseLine size={16} />
+                    <Icon icon={RiCloseLine} slotSize={16} />
                   </Button>
                 </div>
               </form>
@@ -192,7 +193,7 @@ export function DrawerHistory({
                     className="text-muted-foreground hover:text-destructive size-8"
                     type="submit"
                   >
-                    <RiCheckLine size={16} />
+                    <Icon icon={RiCheckLine} slotSize={16} />
                   </Button>
                   <Button
                     size="icon"
@@ -201,7 +202,7 @@ export function DrawerHistory({
                     onClick={handleCancelDelete}
                     type="button"
                   >
-                    <RiCloseLine size={16} />
+                    <Icon icon={RiCloseLine} slotSize={16} />
                   </Button>
                 </div>
               </form>
@@ -253,7 +254,7 @@ export function DrawerHistory({
                     }}
                     type="button"
                   >
-                    <RiEditLine size={16} />
+                    <Icon icon={RiEditLine} slotSize={16} />
                   </Button>
                   <Button
                     size="icon"
@@ -265,7 +266,7 @@ export function DrawerHistory({
                     }}
                     type="button"
                   >
-                    <RiDeleteBinLine size={16} />
+                    <Icon icon={RiDeleteBinLine} slotSize={16} />
                   </Button>
                 </div>
               </div>
@@ -310,9 +311,10 @@ export function DrawerHistory({
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
-                  <RiSearchLine
-                    size={14}
-                    className="absolute top-1/2 left-2.5 size-3.5 h-3.5 w-3.5 -translate-y-1/2 transform text-gray-400"
+                  <Icon
+                    icon={RiSearchLine}
+                    slotSize={14}
+                    className="absolute top-1/2 left-2.5 -translate-y-1/2 transform text-gray-400"
                   />
                 </div>
               </div>

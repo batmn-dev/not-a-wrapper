@@ -1,23 +1,26 @@
 "use client"
-import { RiAddLine, RiAttachment2, RiCheckLine, RiGlobalLine } from "@remixicon/react"
 
+import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  Popover,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import { Button } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
+import { Popover, PopoverTrigger } from "@/components/ui/popover"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { ACCEPTED_FILE_PICKER_TYPES } from "@/lib/file-handling"
+import {
+  RiAddLine,
+  RiAttachment2,
+  RiCheckLine,
+  RiGlobalLine,
+} from "@remixicon/react"
 import { useRef } from "react"
 import { PopoverContentAuth } from "./popover-content-auth"
 
@@ -57,8 +60,8 @@ export function ButtonPlusMenu({
                 render={
                   <Button
                     size="sm"
-                    variant="secondary"
-                    className="border-border dark:bg-secondary size-9 rounded-full border bg-transparent"
+                    variant="ghost"
+                    className="size-9 rounded-full"
                     type="button"
                     aria-label="More options"
                   />
@@ -66,7 +69,7 @@ export function ButtonPlusMenu({
               />
             }
           >
-            <RiAddLine size={20} className="size-5" />
+            <Icon icon={RiAddLine} slotSize={22} />
           </TooltipTrigger>
           <TooltipContent side="bottom" hideArrow>
             More options
@@ -103,8 +106,8 @@ export function ButtonPlusMenu({
                 render={
                   <Button
                     size="sm"
-                    variant="secondary"
-                    className="border-border dark:bg-secondary size-9 rounded-full border bg-transparent"
+                    variant="ghost"
+                    className="size-9 rounded-full"
                     type="button"
                     aria-label="More options"
                   />
@@ -112,7 +115,7 @@ export function ButtonPlusMenu({
               />
             }
           >
-            <RiAddLine size={20} className="size-5" />
+            <Icon icon={RiAddLine} slotSize={22} />
           </TooltipTrigger>
           <TooltipContent side="bottom" hideArrow>
             More options
@@ -124,7 +127,11 @@ export function ButtonPlusMenu({
               render={
                 <DropdownMenuItem
                   aria-disabled={!isFileUploadAvailable || undefined}
-                  className={!isFileUploadAvailable ? "cursor-not-allowed opacity-50" : ""}
+                  className={
+                    !isFileUploadAvailable
+                      ? "cursor-not-allowed opacity-50"
+                      : ""
+                  }
                   onClick={() => {
                     if (!isFileUploadAvailable) return
                     fileInputRef.current?.click()
@@ -132,12 +139,13 @@ export function ButtonPlusMenu({
                 />
               }
             >
-              <RiAttachment2 size={16} />
+              <Icon icon={RiAttachment2} slotSize={16} />
               Add files or photos
             </TooltipTrigger>
             {!isFileUploadAvailable && (
               <TooltipContent side="right" sideOffset={4}>
-                {fileUploadDisabledMessage ?? "This model doesn\u2019t support file uploads"}
+                {fileUploadDisabledMessage ??
+                  "This model doesn\u2019t support file uploads"}
               </TooltipContent>
             )}
           </Tooltip>
@@ -148,7 +156,9 @@ export function ButtonPlusMenu({
               render={
                 <DropdownMenuItem
                   closeOnClick={false}
-                  className={isSearchDisabled ? "cursor-not-allowed opacity-50" : ""}
+                  className={
+                    isSearchDisabled ? "cursor-not-allowed opacity-50" : ""
+                  }
                   onClick={() => {
                     if (isSearchDisabled) return
                     onToggleSearch(!enableSearch)
@@ -156,18 +166,16 @@ export function ButtonPlusMenu({
                 />
               }
             >
-              <RiGlobalLine size={16} />
+              <Icon icon={RiGlobalLine} slotSize={16} />
               Web search
               {!isSearchDisabled && enableSearch && (
-                <RiCheckLine
-                  size={14}
-                  className="ml-auto"
-                />
+                <Icon icon={RiCheckLine} slotSize={14} className="ml-auto" />
               )}
             </TooltipTrigger>
             {isSearchDisabled && (
               <TooltipContent side="right" sideOffset={4}>
-                {searchDisabledMessage ?? "This model doesn\u2019t support web search"}
+                {searchDisabledMessage ??
+                  "This model doesn\u2019t support web search"}
               </TooltipContent>
             )}
           </Tooltip>

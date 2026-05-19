@@ -1,5 +1,4 @@
 "use client"
-import { RiInformationLine } from "@remixicon/react"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import {
@@ -17,14 +16,16 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
+import { Icon } from "@/components/ui/icon"
 import { APP_NAME } from "@/lib/config"
+import { RiInformationLine } from "@remixicon/react"
 import Image from "next/image"
 import { AppInfoContent } from "./app-info-content"
 
 export function AppInfoMenuItem({ onClick }: { onClick: () => void }) {
   return (
     <DropdownMenuItem onClick={onClick}>
-      <RiInformationLine size={16} />
+      <Icon icon={RiInformationLine} slotSize={16} />
       <span>About {APP_NAME}</span>
     </DropdownMenuItem>
   )

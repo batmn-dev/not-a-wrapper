@@ -2,6 +2,7 @@
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import useClickOutside from "@/app/hooks/use-click-outside"
+import { Icon } from "@/components/ui/icon"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
@@ -172,9 +173,10 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
     >
       {isEditing ? (
         <div className="bg-accent flex items-center rounded-md py-1 pr-1 pl-2">
-          <RiFolderLine
-            size={20}
-            className="text-primary mr-2 size-5 flex-shrink-0"
+          <Icon
+            icon={RiFolderLine}
+            slotSize={20}
+            className="text-primary mr-2 flex-shrink-0"
           />
           <input
             ref={inputRef}
@@ -190,14 +192,14 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-md p-1"
               type="button"
             >
-              <RiCheckLine size={16} />
+              <Icon icon={RiCheckLine} slotSize={16} />
             </button>
             <button
               onClick={handleCancelClick}
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-md p-1"
               type="button"
             >
-              <RiCloseLine size={16} />
+              <Icon icon={RiCloseLine} slotSize={16} />
             </button>
           </div>
         </div>
@@ -213,7 +215,7 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
               className="text-primary relative line-clamp-1 flex min-h-9 w-full items-center gap-2 mask-r-from-80% mask-r-to-85% px-2.5 py-1.5 text-sm text-ellipsis whitespace-nowrap"
               title={displayName}
             >
-              <RiFolderLine size={20} className="size-5" />
+              <Icon icon={RiFolderLine} slotSize={20} />
               {displayName}
             </div>
           </Link>

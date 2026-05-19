@@ -1,10 +1,10 @@
 "use client"
 
-import * as React from "react"
-import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu"
-
+import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
+import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu"
 import { RiArrowRightSLine, RiCheckLine } from "@remixicon/react"
+import * as React from "react"
 
 function ContextMenu({ ...props }: ContextMenuPrimitive.Root.Props) {
   return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />
@@ -52,7 +52,10 @@ function ContextMenuContent({
       >
         <ContextMenuPrimitive.Popup
           data-slot="context-menu-content"
-          className={cn("z-50 max-h-(--available-height) min-w-36 overflow-x-hidden overflow-y-auto rounded-md bg-popover p-1 text-popover-foreground shadow-border-md outline-none", className )}
+          className={cn(
+            "bg-popover text-popover-foreground shadow-border-md z-50 max-h-(--available-height) min-w-36 overflow-x-hidden overflow-y-auto rounded-md p-1 outline-none",
+            className
+          )}
           {...props}
         />
       </ContextMenuPrimitive.Positioner>
@@ -78,7 +81,7 @@ function ContextMenuLabel({
       data-slot="context-menu-label"
       data-inset={inset}
       className={cn(
-        "px-2 py-1.5 text-xs font-medium text-muted-foreground data-inset:pl-8",
+        "text-muted-foreground px-2 py-1.5 text-xs font-medium data-inset:pl-8",
         className
       )}
       {...props}
@@ -101,7 +104,7 @@ function ContextMenuItem({
       data-inset={inset}
       data-variant={variant}
       className={cn(
-        "group/context-menu-item relative flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-inset:pl-8 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 data-disabled:cursor-not-allowed data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 focus:*:[svg]:text-accent-foreground data-[variant=destructive]:*:[svg]:text-destructive",
+        "group/context-menu-item focus:bg-accent focus:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 focus:*:[svg]:text-accent-foreground data-[variant=destructive]:*:[svg]:text-destructive relative flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
@@ -128,13 +131,13 @@ function ContextMenuSubTrigger({
       data-slot="context-menu-sub-trigger"
       data-inset={inset}
       className={cn(
-        "flex cursor-pointer items-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-inset:pl-8 data-open:bg-accent data-open:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "focus:bg-accent focus:text-accent-foreground data-open:bg-accent data-open:text-accent-foreground flex cursor-pointer items-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
     >
       {children}
-      <RiArrowRightSLine className="ml-auto" />
+      <Icon icon={RiArrowRightSLine} className="ml-auto" />
     </ContextMenuPrimitive.SubmenuTrigger>
   )
 }
@@ -166,7 +169,7 @@ function ContextMenuCheckboxItem({
       data-slot="context-menu-checkbox-item"
       data-inset={inset}
       className={cn(
-        "relative flex cursor-pointer items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-inset:pl-8 data-disabled:cursor-not-allowed data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "focus:bg-accent focus:text-accent-foreground relative flex cursor-pointer items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       checked={checked}
@@ -174,8 +177,7 @@ function ContextMenuCheckboxItem({
     >
       <span className="pointer-events-none absolute right-2">
         <ContextMenuPrimitive.CheckboxItemIndicator>
-          <RiCheckLine
-          />
+          <Icon icon={RiCheckLine} />
         </ContextMenuPrimitive.CheckboxItemIndicator>
       </span>
       {children}
@@ -207,15 +209,14 @@ function ContextMenuRadioItem({
       data-slot="context-menu-radio-item"
       data-inset={inset}
       className={cn(
-        "relative flex cursor-pointer items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-inset:pl-8 data-disabled:cursor-not-allowed data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "focus:bg-accent focus:text-accent-foreground relative flex cursor-pointer items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
     >
       <span className="pointer-events-none absolute right-2">
         <ContextMenuPrimitive.RadioItemIndicator>
-          <RiCheckLine
-          />
+          <Icon icon={RiCheckLine} />
         </ContextMenuPrimitive.RadioItemIndicator>
       </span>
       {children}
@@ -230,7 +231,7 @@ function ContextMenuSeparator({
   return (
     <ContextMenuPrimitive.Separator
       data-slot="context-menu-separator"
-      className={cn("-mx-1 my-1 h-px bg-border", className)}
+      className={cn("bg-border -mx-1 my-1 h-px", className)}
       {...props}
     />
   )
@@ -244,7 +245,7 @@ function ContextMenuShortcut({
     <span
       data-slot="context-menu-shortcut"
       className={cn(
-        "ml-auto text-xs tracking-widest text-muted-foreground group-focus/context-menu-item:text-accent-foreground",
+        "text-muted-foreground group-focus/context-menu-item:text-accent-foreground ml-auto text-xs tracking-widest",
         className
       )}
       {...props}

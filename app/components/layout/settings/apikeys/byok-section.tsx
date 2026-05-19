@@ -1,5 +1,4 @@
 "use client"
-import { RiAddLine, RiDeleteBinLine, RiKeyLine, RiLoader4Line } from "@remixicon/react"
 
 import ClaudeIcon from "@/components/icons/claude"
 import GoogleIcon from "@/components/icons/google"
@@ -19,12 +18,19 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "@/components/ui/toast"
 import { fetchClient } from "@/lib/fetch"
 import { useModel } from "@/lib/model-store/provider"
 import { cn } from "@/lib/utils"
+import {
+  RiAddLine,
+  RiDeleteBinLine,
+  RiKeyLine,
+  RiLoader4Line,
+} from "@remixicon/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 
@@ -135,7 +141,10 @@ export function ByokSection() {
       if (!res.ok) throw new Error("Failed to save key")
       return res.json()
     },
-    onSuccess: async (response: { isNewKey?: boolean }, { provider }: { provider: string; apiKey: string }) => {
+    onSuccess: async (
+      response: { isNewKey?: boolean },
+      { provider }: { provider: string; apiKey: string }
+    ) => {
       const providerConfig = PROVIDERS.find((p) => p.id === provider)
 
       toast({
@@ -158,7 +167,10 @@ export function ByokSection() {
         [provider]: providerConfig?.defaultKey || "",
       }))
     },
-    onError: (_error: Error, { provider }: { provider: string; apiKey: string }) => {
+    onError: (
+      _error: Error,
+      { provider }: { provider: string; apiKey: string }
+    ) => {
       const providerConfig = PROVIDERS.find((p) => p.id === provider)
       toast({
         title: "Failed to save API key",
@@ -246,7 +258,11 @@ export function ByokSection() {
           >
             {userKeyStatus[provider.id] && (
               <span className="bg-secondary absolute top-1 right-1 rounded-sm border-[1px] p-1">
-                <RiKeyLine size={14} className="size-3.5 text-secondary-foreground" />
+                <Icon
+                  icon={RiKeyLine}
+                  slotSize={14}
+                  className="text-secondary-foreground"
+                />
               </span>
             )}
             <provider.icon className="size-4" />
@@ -262,7 +278,7 @@ export function ByokSection() {
             "border-primary border-dashed"
           )}
         >
-          <RiAddLine size={16} />
+          <Icon icon={RiAddLine} slotSize={16} />
         </button>
       </div>
 
@@ -307,7 +323,11 @@ export function ByokSection() {
                       deleteMutation.isPending || saveMutation.isPending
                     }
                   >
-                    <RiDeleteBinLine size={16} className="mr-1" />
+                    <Icon
+                      icon={RiDeleteBinLine}
+                      slotSize={16}
+                      className="mr-1"
+                    />
                     Delete
                   </Button>
                 )}
@@ -319,7 +339,11 @@ export function ByokSection() {
                   disabled={saveMutation.isPending || deleteMutation.isPending}
                 >
                   {saveMutation.isPending ? (
-                    <RiLoader4Line size={16} className="animate-spin" />
+                    <Icon
+                      icon={RiLoader4Line}
+                      slotSize={16}
+                      className="animate-spin"
+                    />
                   ) : (
                     "Save"
                   )}
@@ -348,7 +372,11 @@ export function ByokSection() {
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending ? (
-                <RiLoader4Line size={16} className="mr-2 animate-spin" />
+                <Icon
+                  icon={RiLoader4Line}
+                  slotSize={16}
+                  className="mr-2 animate-spin"
+                />
               ) : null}
               Delete
             </AlertDialogAction>
