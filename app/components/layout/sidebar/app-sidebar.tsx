@@ -3,7 +3,13 @@
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { useScrollAttributes } from "@/app/hooks/use-scroll-attributes"
 import { NawIcon } from "@/components/icons/naw"
+import { Button } from "@/components/ui/button"
 import { Kbd, KbdGroup } from "@/components/ui/kbd"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import {
   Sidebar,
   SIDEBAR_CONTAINER_ID,
@@ -20,9 +26,17 @@ import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
 import {
   RiAddCircleLine,
+  RiArrowRightSLine,
   RiCloseLine,
+  RiDownloadLine,
   RiExpandRightLine,
+  RiFileTextLine,
+  RiInformationLine,
+  RiQuestionLine,
+  RiQuillPenLine,
   RiSearchLine,
+  RiSettings3Line,
+  RiSparklingLine,
 } from "@remixicon/react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
@@ -299,48 +313,71 @@ export function AppSidebar() {
           {/* Grow spacer — pushes footer to bottom when content is short (ChatGPT pattern) */}
           <div className="grow" />
 
-          {/* === FOOTER SEPARATOR LINE === */}
-          {/* 1px line with mask-image fade, visible when not scrolled to end (ChatGPT pattern) */}
-          <div
-            className={cn(
-              "pointer-events-none sticky z-40 flex shrink-0 flex-col justify-end",
-              "opacity-0 group-data-[scrolled-from-end]/scrollport:opacity-100",
-              "motion-safe:transition-opacity motion-safe:duration-150"
-            )}
-            style={{
-              bottom: "calc(3.75rem - 1px)",
-              marginTop: "-4px",
-              height: "4px",
-              maskImage: "linear-gradient(to top, transparent 25%, white 75%)",
-            }}
-            aria-hidden="true"
-          >
+          {!isLoggedIn && (
+            <div className="bg-sidebar z-20 flex w-full flex-col items-start gap-0 px-0 pb-3">
+              <SidebarMenuItem
+                icon={<RiSparklingLine size={20} className="size-5" />}
+                label="See plans and pricing"
+              />
+              <SidebarMenuItem
+                icon={<RiSettings3Line size={20} className="size-5" />}
+                label="Settings"
+              />
+              <SignedOutHelpPopover />
+            </div>
+          )}
+
+          {isLoggedIn && (
             <div
-              className="bg-sidebar-border sticky w-full"
-              style={{ bottom: "3.75rem", height: "1px" }}
-            />
-          </div>
+              className={cn(
+                "pointer-events-none sticky z-40 flex shrink-0 flex-col justify-end",
+                "opacity-0 group-data-[scrolled-from-end]/scrollport:opacity-100",
+                "motion-safe:transition-opacity motion-safe:duration-150"
+              )}
+              style={{
+                bottom: "calc(3.75rem - 1px)",
+                marginTop: "-4px",
+                height: "4px",
+                maskImage:
+                  "linear-gradient(to top, transparent 25%, white 75%)",
+              }}
+              aria-hidden="true"
+            >
+              <div
+                className="bg-sidebar-border sticky w-full"
+                style={{ bottom: "3.75rem", height: "1px" }}
+              />
+            </div>
+          )}
 
           {/* === STICKY FOOTER === */}
-          <div className="bg-sidebar sticky bottom-0 z-30 px-2 py-1.5 empty:hidden">
-            {isLoggedIn ? (
+          {isLoggedIn ? (
+            <div className="bg-sidebar sticky bottom-0 z-30 px-2 py-1.5 empty:hidden">
               <UserMenu variant="sidebar" />
-            ) : (
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Link
-                      href="/login"
-                      className="text-muted-foreground hover:text-foreground hover:bg-accent border-border inline-flex h-9 w-full items-center justify-center rounded-md border px-4 text-sm font-medium"
-                    />
-                  }
+            </div>
+          ) : (
+            <div className="bg-sidebar border-sidebar-border sticky bottom-0 z-30 border-t p-5">
+              <div className="mb-6 whitespace-normal text-sm">
+                <p className="text-sidebar-foreground mb-4 font-semibold">
+                  Get responses tailored to you
+                </p>
+                <p className="text-muted-foreground text-pretty leading-5">
+                  Log in to save chats, add files, use more models, BYOK, and
+                  more.
+                </p>
+              </div>
+              <div className="-mx-1.5">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="h-11 w-full px-4 text-sm font-medium"
+                  render={<Link href="/login" />}
                 >
-                  Log in
-                </TooltipTrigger>
-                <TooltipContent side="right">Log in</TooltipContent>
-              </Tooltip>
-            )}
-          </div>
+                  <span>Log in</span>
+                </Button>
+              </div>
+            </div>
+          )}
         </nav>
       </div>
     </Sidebar>
@@ -452,7 +489,7 @@ function CollapsedUserAvatar({
           render={
             <Link
               href="/login"
-              className="border-border hover:bg-accent mx-auto flex h-9 w-10 items-center justify-center rounded-lg border"
+              className="border-border hover:bg-accent mx-auto flex h-9 w-10 items-center justify-center rounded-full border"
             />
           }
         >
@@ -464,4 +501,102 @@ function CollapsedUserAvatar({
   }
 
   return <UserMenu variant="sidebar-collapsed" />
+}
+
+function SignedOutHelpPopover() {
+  const [open, setOpen] = React.useState(false)
+
+  return (
+    <Popover open={open} onOpenChange={(nextOpen) => setOpen(nextOpen)}>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            className={cn(
+              "group/help relative mx-1.5 inline-flex h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer items-center gap-(--sidebar-item-gap) rounded-md bg-transparent px-2.5 py-1.5 text-sm text-primary hover:bg-accent/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 pointer-coarse:h-auto pointer-coarse:py-3",
+              open && "bg-accent/80 text-foreground"
+            )}
+            data-sidebar-item="true"
+            aria-label="Help"
+          />
+        }
+      >
+        <div className="flex shrink-0 items-center justify-center">
+          <RiQuestionLine size={20} className="size-5" />
+        </div>
+        <div className="flex min-w-0 grow items-center gap-(--sidebar-item-gap)">
+          <span className="truncate">Help</span>
+        </div>
+        <RiArrowRightSLine
+          size={20}
+          className={cn(
+            "ml-auto size-5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/help:opacity-100",
+            open && "opacity-100"
+          )}
+          aria-hidden="true"
+        />
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="start"
+        sideOffset={6}
+        className="w-(--anchor-width)"
+      >
+        <div className="flex flex-col gap-0">
+          <SignedOutHelpPopoverItem
+            icon={<RiQuestionLine size={20} className="size-5" />}
+            label="Help center"
+            onClick={() => setOpen(false)}
+          />
+          <SignedOutHelpPopoverItem
+            icon={<RiQuillPenLine size={20} className="size-5" />}
+            label="Release notes"
+            onClick={() => setOpen(false)}
+          />
+          <SignedOutHelpPopoverItem
+            icon={<RiDownloadLine size={20} className="size-5" />}
+            label="Download apps"
+            onClick={() => setOpen(false)}
+          />
+          <div className="mx-2 my-1 h-px bg-border" aria-hidden="true" />
+          <SignedOutHelpPopoverItem
+            icon={<RiFileTextLine size={20} className="size-5" />}
+            label="Terms of Service"
+            onClick={() => setOpen(false)}
+          />
+          <SignedOutHelpPopoverItem
+            icon={<RiInformationLine size={20} className="size-5" />}
+            label="Privacy Policy"
+            onClick={() => setOpen(false)}
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function SignedOutHelpPopoverItem({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group/help-popover-item inline-flex h-9 w-full cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-left text-sm text-primary outline-none hover:bg-accent/80 hover:text-foreground focus-visible:bg-accent/80 focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring pointer-coarse:h-auto pointer-coarse:py-3"
+    >
+      <div className="flex shrink-0 items-center justify-center">{icon}</div>
+      <div className="flex min-w-0 grow items-center gap-(--sidebar-item-gap)">
+        <span className="truncate">{label}</span>
+      </div>
+      <div className="shrink-0 text-muted-foreground opacity-0 group-hover/help-popover-item:opacity-100 group-focus-visible/help-popover-item:opacity-100">
+        <RiArrowRightSLine size={16} className="size-4" aria-hidden="true" />
+      </div>
+    </button>
+  )
 }

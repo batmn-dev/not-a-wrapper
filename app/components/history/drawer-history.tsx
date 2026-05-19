@@ -1,4 +1,3 @@
-import { RiCheckLine, RiCloseLine, RiDeleteBinLine, RiEditLine, RiSearchLine } from "@remixicon/react"
 import { Button } from "@/components/ui/button"
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
@@ -11,9 +10,17 @@ import {
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { Chats } from "@/lib/chat-store/types"
 import { Pin, PinOff } from "@/lib/icons"
+import {
+  RiCheckLine,
+  RiCloseLine,
+  RiDeleteBinLine,
+  RiEditLine,
+  RiSearchLine,
+} from "@remixicon/react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import React, { useCallback, useMemo, useState } from "react"
+import { HistoryAuthPrompt } from "./history-auth-prompt"
 import { formatDate, groupChatsByDate } from "./utils"
 
 type DrawerHistoryProps = {
@@ -23,6 +30,7 @@ type DrawerHistoryProps = {
   trigger?: React.ReactElement
   isOpen: boolean
   setIsOpen: (open: boolean) => void
+  isAuthenticated: boolean
 }
 
 export function DrawerHistory({
@@ -32,6 +40,7 @@ export function DrawerHistory({
   trigger,
   isOpen,
   setIsOpen,
+  isAuthenticated,
 }: DrawerHistoryProps) {
   const { pinnedChats, togglePinned } = useChats()
   const [searchQuery, setSearchQuery] = useState("")
@@ -232,11 +241,7 @@ export function DrawerHistory({
                     type="button"
                     aria-label={chat.pinned ? "Unpin" : "Pin"}
                   >
-                    {chat.pinned ? (
-                      <PinOff size={16} />
-                    ) : (
-                      <Pin size={16} />
-                    )}
+                    {chat.pinned ? <PinOff size={16} /> : <Pin size={16} />}
                   </Button>
                   <Button
                     size="icon"
@@ -295,56 +300,67 @@ export function DrawerHistory({
       )}
       <DrawerContent>
         <div className="flex h-dvh max-h-[80vh] flex-col">
-          <div className="border-b p-4 pb-3">
-            <div className="relative">
-              <Input
-                placeholder="Search..."
-                className="rounded-lg py-1.5 pl-8 text-sm"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <RiSearchLine size={14} className="size-3.5 absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 transform text-gray-400" />
-            </div>
-          </div>
+          {isAuthenticated ? (
+            <>
+              <div className="border-b p-4 pb-3">
+                <div className="relative">
+                  <Input
+                    placeholder="Search..."
+                    className="rounded-lg py-1.5 pl-8 text-sm"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <RiSearchLine
+                    size={14}
+                    className="absolute top-1/2 left-2.5 size-3.5 h-3.5 w-3.5 -translate-y-1/2 transform text-gray-400"
+                  />
+                </div>
+              </div>
 
-          <ScrollArea className="flex-1 overflow-auto">
-            <div className="flex flex-col space-y-6 px-4 pt-4 pb-8">
-              {filteredChat.length === 0 ? (
-                <div className="text-muted-foreground py-4 text-center text-sm">
-                  No chat history found.
-                </div>
-              ) : searchQuery ? (
-                // When searching, display a flat list without grouping
-                <div className="space-y-2">
-                  {filteredChat.map((chat) => renderChatItem(chat))}
-                </div>
-              ) : (
-                <>
-                  {pinnedChats.length > 0 && (
-                    <div className="space-y-0.5">
-                      <h3 className="text-muted-foreground flex items-center gap-1 pl-2 text-sm font-medium">
-                        <Pin size={12} className="size-3" />
-                        Pinned
-                      </h3>
-                      <div className="space-y-2">
-                        {pinnedChats.map((chat) => renderChatItem(chat))}
-                      </div>
+              <ScrollArea className="flex-1 overflow-auto">
+                <div className="flex flex-col space-y-6 px-4 pt-4 pb-8">
+                  {filteredChat.length === 0 ? (
+                    <div className="text-muted-foreground py-4 text-center text-sm">
+                      No chat history found.
                     </div>
+                  ) : searchQuery ? (
+                    // When searching, display a flat list without grouping
+                    <div className="space-y-2">
+                      {filteredChat.map((chat) => renderChatItem(chat))}
+                    </div>
+                  ) : (
+                    <>
+                      {pinnedChats.length > 0 && (
+                        <div className="space-y-0.5">
+                          <h3 className="text-muted-foreground flex items-center gap-1 pl-2 text-sm font-medium">
+                            <Pin size={12} className="size-3" />
+                            Pinned
+                          </h3>
+                          <div className="space-y-2">
+                            {pinnedChats.map((chat) => renderChatItem(chat))}
+                          </div>
+                        </div>
+                      )}
+                      {groupedChats?.map((group) => (
+                        <div key={group.name} className="space-y-0.5">
+                          <h3 className="text-muted-foreground pl-2 text-sm font-medium">
+                            {group.name}
+                          </h3>
+                          <div className="space-y-2">
+                            {group.chats.map((chat) => renderChatItem(chat))}
+                          </div>
+                        </div>
+                      ))}
+                    </>
                   )}
-                  {groupedChats?.map((group) => (
-                    <div key={group.name} className="space-y-0.5">
-                      <h3 className="text-muted-foreground pl-2 text-sm font-medium">
-                        {group.name}
-                      </h3>
-                      <div className="space-y-2">
-                        {group.chats.map((chat) => renderChatItem(chat))}
-                      </div>
-                    </div>
-                  ))}
-                </>
-              )}
+                </div>
+              </ScrollArea>
+            </>
+          ) : (
+            <div className="flex flex-1 items-center">
+              <HistoryAuthPrompt className="min-h-0 flex-1" />
             </div>
-          </ScrollArea>
+          )}
         </div>
       </DrawerContent>
     </Drawer>

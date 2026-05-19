@@ -1,28 +1,26 @@
 "use client"
-import { RiCheckLine } from "@remixicon/react"
 
 import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox"
 
 import { cn } from "@/lib/utils"
+import { RiCheckLine } from "@remixicon/react"
 
-function Checkbox({
-  className,
-  ...props
-}: CheckboxPrimitive.Root.Props) {
+function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
   return (
     <CheckboxPrimitive.Root
       data-slot="checkbox"
       className={cn(
-        "peer border-input dark:bg-input/30 data-[checked]:bg-primary data-[checked]:text-primary-foreground dark:data-[checked]:bg-primary data-[checked]:border-primary focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
+        "peer relative flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[4px] shadow-border transition-shadow outline-none group-has-disabled/field:opacity-50 after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-disabled:cursor-not-allowed data-disabled:opacity-50 aria-invalid:shadow-border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:bg-input/30 dark:aria-invalid:ring-destructive/40 data-checked:bg-primary data-checked:text-primary-foreground data-checked:shadow-none dark:data-checked:bg-primary",
         className
       )}
       {...props}
     >
       <CheckboxPrimitive.Indicator
         data-slot="checkbox-indicator"
-        className="grid place-content-center text-current transition-none"
+        className="grid place-content-center text-current transition-none [&>svg]:size-3.5"
       >
-        <RiCheckLine size={14} className="size-3.5" />
+        <RiCheckLine
+        />
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   )

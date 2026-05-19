@@ -68,7 +68,12 @@ export function Header({ hasSidebar }: { hasSidebar: boolean }) {
               <Button variant="outline" render={<Link href="/login" />}>
                 Login
               </Button>
-              <Button render={<Link href="/sign-up" />}>Sign up</Button>
+              <Button
+                render={<Link href="/sign-up" />}
+                className="max-[360px]:hidden"
+              >
+                Sign up
+              </Button>
             </div>
           ) : (
             <>

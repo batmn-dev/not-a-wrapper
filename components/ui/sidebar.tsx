@@ -307,7 +307,10 @@ function SidebarTrigger({
       }}
       {...props}
     >
-      <PanelLeft size={20} className="size-5" />
+      <PanelLeft
+        size={20}
+        className="size-5 opacity-50 group-hover/button:opacity-100"
+      />
       <span className="sr-only">{open ? "Close sidebar" : "Open sidebar"}</span>
     </Button>
   )

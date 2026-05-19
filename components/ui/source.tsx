@@ -128,7 +128,7 @@ export function SourceContent({
   const { href, domain } = useSourceContext()
 
   return (
-    <HoverCardContent className={cn("w-80 p-0 shadow-xs", className)}>
+    <HoverCardContent className={cn("w-80 p-0 shadow-border-md", className)}>
       <a
         href={href}
         target="_blank"

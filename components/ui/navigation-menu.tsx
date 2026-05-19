@@ -96,7 +96,7 @@ function NavigationMenuContent({
       data-slot="navigation-menu-content"
       className={cn(
         "top-0 left-0 w-full p-2 pr-2.5 md:absolute md:w-auto data-[starting-style]:opacity-0 data-[ending-style]:opacity-0",
-        "group-data-[viewport=false]/navigation-menu:bg-popover group-data-[viewport=false]/navigation-menu:text-popover-foreground group-data-[viewport=false]/navigation-menu:data-[starting-style]:opacity-0 group-data-[viewport=false]/navigation-menu:data-[ending-style]:opacity-0 group-data-[viewport=false]/navigation-menu:top-full group-data-[viewport=false]/navigation-menu:mt-1.5 group-data-[viewport=false]/navigation-menu:overflow-hidden group-data-[viewport=false]/navigation-menu:rounded-md group-data-[viewport=false]/navigation-menu:border group-data-[viewport=false]/navigation-menu:shadow **:data-[slot=navigation-menu-link]:focus:ring-0 **:data-[slot=navigation-menu-link]:focus:outline-none",
+        "group-data-[viewport=false]/navigation-menu:bg-popover group-data-[viewport=false]/navigation-menu:text-popover-foreground group-data-[viewport=false]/navigation-menu:data-[starting-style]:opacity-0 group-data-[viewport=false]/navigation-menu:data-[ending-style]:opacity-0 group-data-[viewport=false]/navigation-menu:top-full group-data-[viewport=false]/navigation-menu:mt-1.5 group-data-[viewport=false]/navigation-menu:overflow-hidden group-data-[viewport=false]/navigation-menu:rounded-md group-data-[viewport=false]/navigation-menu:shadow-border-md **:data-[slot=navigation-menu-link]:focus:ring-0 **:data-[slot=navigation-menu-link]:focus:outline-none",
         className
       )}
       style={{ transition: "opacity 200ms ease-out", ...style }}
@@ -118,7 +118,7 @@ function NavigationMenuViewport({
       <NavigationMenuPrimitive.Popup
         data-slot="navigation-menu-viewport"
         className={cn(
-          "origin-top-center bg-popover text-popover-foreground relative h-(--popup-height) w-full overflow-hidden rounded-md border shadow md:w-(--popup-width) data-[starting-style]:opacity-0 data-[starting-style]:[transform:scale(0.95)] data-[ending-style]:opacity-0 data-[ending-style]:[transform:scale(0.95)]",
+          "origin-top-center bg-popover text-popover-foreground relative h-(--popup-height) w-full overflow-hidden rounded-md shadow-border-md md:w-(--popup-width) data-[starting-style]:opacity-0 data-[starting-style]:[transform:scale(0.95)] data-[ending-style]:opacity-0 data-[ending-style]:[transform:scale(0.95)]",
           className
         )}
         style={{

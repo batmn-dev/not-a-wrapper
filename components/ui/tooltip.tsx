@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 
 import { cn } from "@/lib/utils"
@@ -20,16 +19,19 @@ function TooltipProvider({
 
 function Tooltip({
   delay,
+  disableHoverablePopup = true,
   ...props
 }: TooltipPrimitive.Root.Props & {
-  /** Per-tooltip delay override (wraps in its own TooltipProvider). */
   delay?: number
 }) {
-  const root = <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+  const root = (
+    <TooltipPrimitive.Root
+      data-slot="tooltip"
+      disableHoverablePopup={disableHoverablePopup}
+      {...props}
+    />
+  )
 
-  // Only wrap in a per-instance TooltipProvider when an explicit delay override
-  // is needed. Otherwise inherit the app-level provider (layout.tsx) to avoid
-  // redundant context providers and preserve the global delay setting.
   if (delay !== undefined) {
     return <TooltipProvider delay={delay}>{root}</TooltipProvider>
   }
@@ -37,52 +39,46 @@ function Tooltip({
   return root
 }
 
-function TooltipTrigger({
-  ...props
-}: TooltipPrimitive.Trigger.Props) {
-  return (
-    <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
-  )
+function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
+  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
 }
 
 function TooltipContent({
   className,
-  sideOffset = 8,
   side = "top",
+  sideOffset = 4,
   align = "center",
+  alignOffset = 0,
   children,
   hideArrow = true,
   ...props
 }: TooltipPrimitive.Popup.Props &
   Pick<
     TooltipPrimitive.Positioner.Props,
-    "align" | "side" | "sideOffset"
+    "align" | "alignOffset" | "side" | "sideOffset"
   > & {
     hideArrow?: boolean
   }) {
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Positioner
+        align={align}
+        alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
-        align={align}
         className="isolate z-50"
       >
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           className={cn(
-            "bg-foreground text-background z-50 w-fit rounded-md px-2 py-1 text-xs font-medium text-balance",
+            "z-50 inline-flex w-fit max-w-xs items-center gap-1.5 rounded-md bg-foreground px-2 py-1 text-xs text-background has-data-[slot=kbd]:pr-1.5 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm",
             className
           )}
           {...props}
         >
           {children}
           {!hideArrow && (
-            <TooltipPrimitive.Arrow className="z-50 [&>svg]:fill-foreground">
-              <svg width="12" height="6" viewBox="0 0 12 6">
-                <path d="M0 6L6 0L12 6H0Z" />
-              </svg>
-            </TooltipPrimitive.Arrow>
+            <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5" />
           )}
         </TooltipPrimitive.Popup>
       </TooltipPrimitive.Positioner>
