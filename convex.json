@@ -30,5 +30,8 @@
         "corsOrigins": ["https://${buildEnv.VERCEL_PROJECT_PRODUCTION_URL}"]
       }
     }
+  },
+  "aiFiles": {
+    "enabled": false
   }
 }

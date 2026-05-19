@@ -2,6 +2,8 @@
 
 Extracted CSS custom properties and computed styles from the ChatGPT sidebar element.
 
+> **Agent entrypoint:** load `../chatgpt-css.md` first for compact light/dark tokens, then use this file for detailed sidebar selectors, item states, and collapsed/expanded behavior. The raw exhaustive CSS archive is lookup-only.
+
 > **Scope guidance:**
 > - Include selectors related to sidebar structure, states, and interactions.
 > - Prefer preserving custom properties (`--sidebar-*`, `--bg-*`, token vars).

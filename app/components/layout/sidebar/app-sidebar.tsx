@@ -20,7 +20,6 @@ import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
 import {
   RiAddCircleLine,
-  RiChat3Line,
   RiCloseLine,
   RiExpandRightLine,
   RiSearchLine,
@@ -271,7 +270,7 @@ export function AppSidebar() {
           {/* === SCROLLABLE CONTENT === */}
           <div className="px-0">
             {/* Project and chat lists */}
-            <SidebarProject />
+            <SidebarProject isAuthenticated={isLoggedIn} />
             {isLoading ? (
               <div className="h-full" />
             ) : hasChats ? (
@@ -294,18 +293,7 @@ export function AppSidebar() {
                   />
                 )}
               </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-20">
-                <RiChat3Line
-                  size={24}
-                  className="text-muted-foreground mb-1 opacity-40"
-                />
-                <div className="text-muted-foreground text-center">
-                  <p className="mb-1 text-base font-medium">No chats yet</p>
-                  <p className="text-sm opacity-70">Start a new conversation</p>
-                </div>
-              </div>
-            )}
+            ) : null}
           </div>
 
           {/* Grow spacer — pushes footer to bottom when content is short (ChatGPT pattern) */}

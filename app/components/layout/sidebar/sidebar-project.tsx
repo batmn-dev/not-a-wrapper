@@ -8,10 +8,19 @@ import { DialogCreateProject } from "./dialog-create-project"
 import { SidebarMenuItem } from "./sidebar-menu-item"
 import { SidebarProjectItem } from "./sidebar-project-item"
 
-export function SidebarProject() {
+type SidebarProjectProps = {
+  isAuthenticated: boolean
+}
+
+export function SidebarProject({ isAuthenticated }: SidebarProjectProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const projects = useQuery(api.projects.getForCurrentUser)
+  const projects = useQuery(
+    api.projects.getForCurrentUser,
+    isAuthenticated ? {} : "skip"
+  )
   const isLoading = projects === undefined
+
+  if (!isAuthenticated) return null
 
   return (
     <div className="mb-5">

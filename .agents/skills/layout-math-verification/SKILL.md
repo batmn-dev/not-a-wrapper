@@ -1,3 +1,8 @@
+---
+name: layout-math-verification
+description: Audit viewport units, full-height layouts, and positioning changes to prevent overflow, cropped inputs, and layout calculation bugs. Use when changing app shells, sticky headers, scroll containers, or vh/dvh/svh-based layouts.
+---
+
 # Layout Math Verification
 
 **Use this skill when:** Making changes to layouts that use viewport units (vh, dvh, svh, vw) or changing element positioning schemes

@@ -35,7 +35,10 @@ export function Header({ hasSidebar }: { hasSidebar: boolean }) {
   }, [scrollRef])
 
   return (
-    <header className="pointer-events-none sticky top-0 z-20 h-app-header shrink-0 bg-background [box-shadow:var(--sharp-edge-top-shadow-placeholder)] data-[scrolled]:[box-shadow:var(--sharp-edge-top-shadow)] @7xl/main:bg-transparent @7xl/main:[box-shadow:none]!" data-scrolled={isScrolled || undefined}>
+    <header
+      className="h-app-header bg-background pointer-events-none sticky top-0 z-20 shrink-0 [box-shadow:var(--sharp-edge-top-shadow-placeholder)] data-[scrolled]:[box-shadow:var(--sharp-edge-top-shadow)] @7xl/main:bg-transparent @7xl/main:[box-shadow:none]!"
+      data-scrolled={isScrolled || undefined}
+    >
       <div className="relative mx-auto flex h-full max-w-full items-center justify-between px-2 pointer-coarse:px-2.5">
         {/* LEFT SECTION - natural width, not flex-1 */}
         <div className="flex items-center gap-2">
@@ -61,14 +64,12 @@ export function Header({ hasSidebar }: { hasSidebar: boolean }) {
         {/* RIGHT SECTION - natural width, not flex-1 */}
         <div className="pointer-events-auto flex items-center justify-end gap-0">
           {!isLoggedIn ? (
-            <>
+            <div className="flex items-center gap-2">
               <Button variant="outline" render={<Link href="/login" />}>
                 Login
               </Button>
-              <Button render={<Link href="/sign-up" />}>
-                Sign up
-              </Button>
-            </>
+              <Button render={<Link href="/sign-up" />}>Sign up</Button>
+            </div>
           ) : (
             <>
               {!isMobile && <DialogPublish />}
