@@ -13,10 +13,18 @@ function AlertDialog({
 }
 
 function AlertDialogTrigger({
+  className,
   ...props
 }: AlertDialogPrimitive.Trigger.Props) {
   return (
-    <AlertDialogPrimitive.Trigger data-slot="alert-dialog-trigger" {...props} />
+    <AlertDialogPrimitive.Trigger
+      data-slot="alert-dialog-trigger"
+      className={cn(
+        "cursor-pointer disabled:cursor-not-allowed aria-disabled:cursor-not-allowed data-disabled:cursor-not-allowed",
+        className
+      )}
+      {...props}
+    />
   )
 }
 

@@ -12,10 +12,18 @@ function Drawer({
 }
 
 function DrawerTrigger({
+  className,
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Trigger>) {
   return (
-    <DrawerPrimitive.Trigger data-slot="drawer-trigger" {...props} />
+    <DrawerPrimitive.Trigger
+      data-slot="drawer-trigger"
+      className={cn(
+        "cursor-pointer disabled:cursor-not-allowed aria-disabled:cursor-not-allowed data-disabled:cursor-not-allowed",
+        className
+      )}
+      {...props}
+    />
   )
 }
 

@@ -51,29 +51,6 @@
   --animate-collapsible-down: collapsible-down 200ms ease-out;
   --animate-collapsible-up: collapsible-up 200ms ease-out;
 
-  /* Custom realistic shadows - scale: xs -> sm -> md -> lg -> xl */
-  --shadow-realistic-xs: rgba(0, 0, 0, 0.08) 0px 0.150547px 0.150547px -0.625px,
-    rgba(0, 0, 0, 0.12) 0px 0.572135px 0.572135px -1.25px,
-    rgba(0, 0, 0, 0.08) 0px 2.5px 2.5px -1.875px;
-  --shadow-realistic-sm: rgba(0, 0, 0, 0.06) 0px 0.301094px 0.301094px -1.25px,
-    rgba(0, 0, 0, 0.10) 0px 1.14427px 1.14427px -2.5px,
-    rgba(0, 0, 0, 0.05) 0px 5px 5px -3.75px;
-  --shadow-realistic-md: rgba(0, 0, 0, 0.09) 0.398096px 0.398096px 0.562993px -0.9375px,
-    rgba(0, 0, 0, 0.09) 1.20725px 1.20725px 1.70731px -1.875px,
-    rgba(0, 0, 0, 0.08) 3.19133px 3.19133px 4.51322px -2.8125px,
-    rgba(0, 0, 0, 0.05) 10px 10px 14.1421px -3.75px;
-  --shadow-realistic-lg: rgba(0, 0, 0, 0.09) 0px 0.6px 0.9px -0.625px,
-    rgba(0, 0, 0, 0.09) 0px 2.15px 3.04px -1.25px,
-    rgba(0, 0, 0, 0.08) 0px 5.4px 7.64px -1.875px,
-    rgba(0, 0, 0, 0.07) 0px 12px 16.97px -2.5px,
-    rgba(0, 0, 0, 0.05) 0px 24px 33.94px -3.125px;
-  --shadow-realistic-xl: rgba(0, 0, 0, 0.10) 0px 0.8px 1.2px -0.5px,
-    rgba(0, 0, 0, 0.10) 0px 2.8px 4px -1px,
-    rgba(0, 0, 0, 0.09) 0px 7.2px 10.18px -1.5px,
-    rgba(0, 0, 0, 0.08) 0px 16px 22.63px -2px,
-    rgba(0, 0, 0, 0.06) 0px 32px 45.25px -2.5px,
-    rgba(0, 0, 0, 0.04) 0px 52px 73.54px -3px;
-
   @keyframes loading-dots {
     0%,
     100% {
@@ -172,11 +149,13 @@
     0%,
     100% {
       opacity: 0.55;
-      box-shadow: 0 0 0 0 color-mix(in oklab, var(--foreground) 30%, transparent);
+      box-shadow: 0 0 0 0
+        color-mix(in oklab, var(--foreground) 30%, transparent);
     }
     50% {
       opacity: 1;
-      box-shadow: 0 0 8px 1px color-mix(in oklab, var(--foreground) 45%, transparent);
+      box-shadow: 0 0 8px 1px
+        color-mix(in oklab, var(--foreground) 45%, transparent);
     }
   }
 
@@ -395,39 +374,39 @@
   --shadow-border-hover-value:
     0 0 0 1px color-mix(in oklab, var(--foreground) 32%, transparent),
     rgba(0, 0, 0, 0.06) 0px 0.301094px 0.301094px -1.25px,
-    rgba(0, 0, 0, 0.10) 0px 1.14427px 1.14427px -2.5px,
+    rgba(0, 0, 0, 0.1) 0px 1.14427px 1.14427px -2.5px,
     rgba(0, 0, 0, 0.05) 0px 5px 5px -3.75px;
   --shadow-border-destructive-value:
     0 0 0 1px color-mix(in oklab, var(--destructive) 30%, transparent),
     0 1px 2px -1px color-mix(in oklab, var(--destructive) 20%, transparent),
     0 2px 4px 0 color-mix(in oklab, var(--destructive) 12%, transparent);
   --shadow-border-xs-value:
-    0 0 0 1px color-mix(in oklab, var(--foreground) 14%, transparent),
+    0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent),
     rgba(0, 0, 0, 0.08) 0px 0.150547px 0.150547px -0.625px,
     rgba(0, 0, 0, 0.12) 0px 0.572135px 0.572135px -1.25px,
     rgba(0, 0, 0, 0.08) 0px 2.5px 2.5px -1.875px;
   --shadow-border-sm-value:
-    0 0 0 1px color-mix(in oklab, var(--foreground) 14%, transparent),
+    0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent),
     rgba(0, 0, 0, 0.06) 0px 0.301094px 0.301094px -1.25px,
-    rgba(0, 0, 0, 0.10) 0px 1.14427px 1.14427px -2.5px,
+    rgba(0, 0, 0, 0.1) 0px 1.14427px 1.14427px -2.5px,
     rgba(0, 0, 0, 0.05) 0px 5px 5px -3.75px;
   --shadow-border-md-value:
-    0 0 0 1px color-mix(in oklab, var(--foreground) 14%, transparent),
+    0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent),
     rgba(0, 0, 0, 0.09) 0.398096px 0.398096px 0.562993px -0.9375px,
     rgba(0, 0, 0, 0.09) 1.20725px 1.20725px 1.70731px -1.875px,
     rgba(0, 0, 0, 0.08) 3.19133px 3.19133px 4.51322px -2.8125px,
     rgba(0, 0, 0, 0.05) 10px 10px 14.1421px -3.75px;
   --shadow-border-lg-value:
-    0 0 0 1px color-mix(in oklab, var(--foreground) 14%, transparent),
+    0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent),
     rgba(0, 0, 0, 0.09) 0px 0.6px 0.9px -0.625px,
     rgba(0, 0, 0, 0.09) 0px 2.15px 3.04px -1.25px,
     rgba(0, 0, 0, 0.08) 0px 5.4px 7.64px -1.875px,
     rgba(0, 0, 0, 0.07) 0px 12px 16.97px -2.5px,
     rgba(0, 0, 0, 0.05) 0px 24px 33.94px -3.125px;
   --shadow-border-xl-value:
-    0 0 0 1px color-mix(in oklab, var(--foreground) 14%, transparent),
-    rgba(0, 0, 0, 0.10) 0px 0.8px 1.2px -0.5px,
-    rgba(0, 0, 0, 0.10) 0px 2.8px 4px -1px,
+    0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent),
+    rgba(0, 0, 0, 0.1) 0px 0.8px 1.2px -0.5px,
+    rgba(0, 0, 0, 0.1) 0px 2.8px 4px -1px,
     rgba(0, 0, 0, 0.09) 0px 7.2px 10.18px -1.5px,
     rgba(0, 0, 0, 0.08) 0px 16px 22.63px -2px,
     rgba(0, 0, 0, 0.06) 0px 32px 45.25px -2.5px,
@@ -448,7 +427,7 @@
   --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.985 0 0);
   --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.30 0 0);
+  --secondary: oklch(0.3 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.274 0.006 286.033);
   --muted-foreground: oklch(0.705 0.015 286.067);
@@ -496,13 +475,13 @@
     0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent),
     rgba(0, 0, 0, 0.22) 0.398096px 0.398096px 0.562993px -0.9375px,
     rgba(0, 0, 0, 0.22) 1.20725px 1.20725px 1.70731px -1.875px,
-    rgba(0, 0, 0, 0.20) 3.19133px 3.19133px 4.51322px -2.8125px,
+    rgba(0, 0, 0, 0.2) 3.19133px 3.19133px 4.51322px -2.8125px,
     rgba(0, 0, 0, 0.14) 10px 10px 14.1421px -3.75px;
   --shadow-border-lg-value:
     0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent),
     rgba(0, 0, 0, 0.22) 0px 0.6px 0.9px -0.625px,
     rgba(0, 0, 0, 0.22) 0px 2.15px 3.04px -1.25px,
-    rgba(0, 0, 0, 0.20) 0px 5.4px 7.64px -1.875px,
+    rgba(0, 0, 0, 0.2) 0px 5.4px 7.64px -1.875px,
     rgba(0, 0, 0, 0.18) 0px 12px 16.97px -2.5px,
     rgba(0, 0, 0, 0.14) 0px 24px 33.94px -3.125px;
   --shadow-border-xl-value:
@@ -510,7 +489,7 @@
     rgba(0, 0, 0, 0.24) 0px 0.8px 1.2px -0.5px,
     rgba(0, 0, 0, 0.24) 0px 2.8px 4px -1px,
     rgba(0, 0, 0, 0.22) 0px 7.2px 10.18px -1.5px,
-    rgba(0, 0, 0, 0.20) 0px 16px 22.63px -2px,
+    rgba(0, 0, 0, 0.2) 0px 16px 22.63px -2px,
     rgba(0, 0, 0, 0.16) 0px 32px 45.25px -2.5px,
     rgba(0, 0, 0, 0.12) 0px 52px 73.54px -3px;
 
@@ -542,21 +521,21 @@
     background-image:
       linear-gradient(transparent, var(--background)),
       linear-gradient(transparent 28px, var(--background) 28px);
-    background-size: 100% 28px, 100% 100%;
+    background-size:
+      100% 28px,
+      100% 100%;
     background-repeat: no-repeat;
   }
 
   .shadow-composer {
     --tw-shadow:
-      0px 4px 4px 0px rgba(0, 0, 0, 0.04),
-      0px 0px 1px 0px rgba(0, 0, 0, 0.62);
+      0px 4px 4px 0px rgba(0, 0, 0, 0.04), 0px 0px 1px 0px rgba(0, 0, 0, 0.62);
     --tw-inset-shadow: 0 0 transparent;
     box-shadow:
       var(--tw-inset-shadow, 0 0 transparent),
       var(--tw-inset-ring-shadow, 0 0 transparent),
       var(--tw-ring-offset-shadow, 0 0 transparent),
-      var(--tw-ring-shadow, 0 0 transparent),
-      var(--tw-shadow);
+      var(--tw-ring-shadow, 0 0 transparent), var(--tw-shadow);
   }
   .shadow-composer:where(.dark, .dark *):not(
       :where(.dark .light, .dark .light *)
@@ -599,7 +578,11 @@ code {
   --tw-prose-quote-borders: var(--border);
   --tw-prose-captions: var(--muted-foreground);
   --tw-prose-kbd: var(--foreground);
-  --tw-prose-kbd-shadows: color-mix(in oklab, var(--foreground) 10%, transparent);
+  --tw-prose-kbd-shadows: color-mix(
+    in oklab,
+    var(--foreground) 10%,
+    transparent
+  );
   --tw-prose-code: var(--foreground);
   --tw-prose-pre-code: var(--foreground);
   --tw-prose-pre-bg: var(--muted);
@@ -620,11 +603,17 @@ code {
   line-height: 1.1;
   color: var(--muted-foreground);
   text-decoration: none;
-  transition: background-color 160ms ease, color 160ms ease;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
 }
 
 .prose [data-footnote-ref]:hover {
-  background-color: color-mix(in oklab, var(--muted) 70%, var(--foreground) 30%);
+  background-color: color-mix(
+    in oklab,
+    var(--muted) 70%,
+    var(--foreground) 30%
+  );
   color: var(--foreground);
 }
 

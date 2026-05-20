@@ -11,9 +11,19 @@ function HoverCard({
 }
 
 function HoverCardTrigger({
+  className,
   ...props
 }: HoverCardPrimitive.Trigger.Props) {
-  return <HoverCardPrimitive.Trigger data-slot="hover-card-trigger" {...props} />
+  return (
+    <HoverCardPrimitive.Trigger
+      data-slot="hover-card-trigger"
+      className={cn(
+        "cursor-pointer disabled:cursor-not-allowed aria-disabled:cursor-not-allowed data-disabled:cursor-not-allowed",
+        className
+      )}
+      {...props}
+    />
+  )
 }
 
 function HoverCardContent({

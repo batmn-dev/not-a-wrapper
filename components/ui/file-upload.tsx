@@ -142,7 +142,10 @@ function FileUploadTrigger({
 
   const defaultProps: useRender.ElementProps<"button"> = {
     type: "button",
-    className,
+    className: cn(
+      "cursor-pointer disabled:cursor-not-allowed aria-disabled:cursor-not-allowed data-disabled:cursor-not-allowed",
+      className
+    ),
     disabled: context?.disabled,
     onClick: (e) => {
       e.stopPropagation()
