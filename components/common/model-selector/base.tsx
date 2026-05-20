@@ -1,5 +1,4 @@
 "use client"
-import { RiArrowDownSLine, RiSearchLine, RiStarLine } from "@remixicon/react"
 
 import { PopoverContentAuth } from "@/app/components/chat-input/popover-content-auth"
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
@@ -18,15 +17,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverTrigger } from "@/components/ui/popover"
-import { getModelInfo } from "@/lib/models"
 import { useModel } from "@/lib/model-store/provider"
 import { filterAndSortModels } from "@/lib/model-store/utils"
+import { getModelInfo } from "@/lib/models"
 import { ModelConfig } from "@/lib/models/types"
 import { PROVIDERS } from "@/lib/providers"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
+import { RiArrowDownSLine, RiSearchLine, RiStarLine } from "@remixicon/react"
 import { useRef, useState } from "react"
 import { ProModelDialog } from "./pro-dialog"
 
@@ -117,7 +118,7 @@ export function ModelSelector({
         </div>
         {isLocked && (
           <div className="border-input bg-accent text-muted-foreground flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
-            <RiStarLine size={8} className="size-2" />
+            <Icon icon={RiStarLine} slotSize={8} />
             <span>Locked</span>
           </div>
         )}
@@ -132,7 +133,7 @@ export function ModelSelector({
       disabled={isLoadingModels}
     >
       <span>{currentModel?.name || "Select model"}</span>
-      <RiArrowDownSLine size={16} className="opacity-50" />
+      <Icon icon={RiArrowDownSLine} slotSize={16} className="opacity-50" />
     </Button>
   )
 
@@ -161,8 +162,9 @@ export function ModelSelector({
             </DrawerHeader>
             <div className="px-4 pb-2">
               <div className="relative">
-                <RiSearchLine
-                  size={16}
+                <Icon
+                  icon={RiSearchLine}
+                  slotSize={16}
                   className="text-muted-foreground absolute top-2.5 left-2.5"
                 />
                 <Input
@@ -232,8 +234,9 @@ export function ModelSelector({
         >
           <div className="bg-background sticky top-0 z-10 rounded-t-md border-b px-0 pt-0 pb-0">
             <div className="relative">
-              <RiSearchLine
-                size={16}
+              <Icon
+                icon={RiSearchLine}
+                slotSize={16}
                 className="text-muted-foreground absolute top-2.5 left-2.5"
               />
               <Input
@@ -273,16 +276,14 @@ export function ModelSelector({
                     onClick={() => handleSelect(model.id, isLocked)}
                   >
                     <div className="flex items-center gap-3">
-                      {provider?.icon && (
-                        <provider.icon className="size-5" />
-                      )}
+                      {provider?.icon && <provider.icon className="size-5" />}
                       <div className="flex flex-col gap-0">
                         <span className="text-sm">{model.name}</span>
                       </div>
                     </div>
                     {isLocked ? (
                       <div className="border-input bg-accent text-muted-foreground flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
-                        <RiStarLine size={8} className="size-2" />
+                        <Icon icon={RiStarLine} slotSize={8} />
                         <span>Locked</span>
                       </div>
                     ) : null}

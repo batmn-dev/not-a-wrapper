@@ -1,5 +1,6 @@
-import { RiCloseLine, RiThumbDownLine, RiThumbUpLine } from "@remixicon/react"
+import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
+import { RiCloseLine, RiThumbDownLine, RiThumbUpLine } from "@remixicon/react"
 
 type FeedbackBarProps = {
   className?: string
@@ -37,7 +38,7 @@ export function FeedbackBar({
             aria-label="Helpful"
             onClick={onHelpful}
           >
-            <RiThumbUpLine size={16} />
+            <Icon icon={RiThumbUpLine} slotSize={16} />
           </button>
           <button
             type="button"
@@ -45,7 +46,7 @@ export function FeedbackBar({
             aria-label="Not helpful"
             onClick={onNotHelpful}
           >
-            <RiThumbDownLine size={16} />
+            <Icon icon={RiThumbDownLine} slotSize={16} />
           </button>
         </div>
         <div className="border-border flex items-center justify-center border-l">
@@ -55,7 +56,7 @@ export function FeedbackBar({
             className="text-muted-foreground hover:text-foreground flex items-center justify-center rounded-md p-3"
             aria-label="Close"
           >
-            <RiCloseLine size={20} className="size-5" />
+            <Icon icon={RiCloseLine} slotSize={20} />
           </button>
         </div>
       </div>

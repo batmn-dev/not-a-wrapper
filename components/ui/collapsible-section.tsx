@@ -1,9 +1,10 @@
 "use client"
-import { RiArrowRightSLine } from "@remixicon/react"
 
-import * as React from "react"
-import { Collapsible } from "@base-ui/react/collapsible"
+import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
+import { Collapsible } from "@base-ui/react/collapsible"
+import { RiArrowRightSLine } from "@remixicon/react"
+import * as React from "react"
 
 type CollapsibleSectionProps = {
   /** Section title */
@@ -68,7 +69,7 @@ export function CollapsibleSection({
     >
       <Collapsible.Trigger
         className={cn(
-          "flex items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+          "focus-visible:ring-ring flex items-center rounded-md focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
           isSidebarVariant
             ? [
                 "w-full justify-start gap-0.5 px-4 py-1.5",
@@ -82,14 +83,17 @@ export function CollapsibleSection({
       >
         {icon && <span className="shrink-0">{icon}</span>}
         {isSidebarVariant ? (
-          <span className="__menu-label truncate text-sm font-medium">{title}</span>
+          <span className="__menu-label truncate text-sm font-medium">
+            {title}
+          </span>
         ) : (
           <span className="truncate">{title}</span>
         )}
-        <RiArrowRightSLine
-          size={12}
+        <Icon
+          icon={RiArrowRightSLine}
+          slotSize={12}
           className={cn(
-            "h-3 w-3 shrink-0 motion-safe:transition-all duration-150",
+            "h-3 w-3 shrink-0 duration-150 motion-safe:transition-all",
             isOpen
               ? "rotate-90 opacity-0 group-hover/collapsible-section:opacity-100 group-hover/sidebar-expando-section:opacity-100"
               : "opacity-100"
@@ -104,7 +108,9 @@ export function CollapsibleSection({
           "data-[closed]:animate-collapsible-up"
         )}
       >
-        <div className={cn(isSidebarVariant ? "pt-0.5" : "pt-1")}>{children}</div>
+        <div className={cn(isSidebarVariant ? "pt-0.5" : "pt-1")}>
+          {children}
+        </div>
       </Collapsible.Panel>
     </Collapsible.Root>
   )

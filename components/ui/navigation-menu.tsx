@@ -1,9 +1,9 @@
-import { RiArrowDownSLine } from "@remixicon/react"
-import * as React from "react"
-import { NavigationMenu as NavigationMenuPrimitive } from "@base-ui/react/navigation-menu"
-import { cva } from "class-variance-authority"
-
+import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
+import { NavigationMenu as NavigationMenuPrimitive } from "@base-ui/react/navigation-menu"
+import { RiArrowDownSLine } from "@remixicon/react"
+import { cva } from "class-variance-authority"
+import * as React from "react"
 
 function NavigationMenu({
   className,
@@ -74,13 +74,8 @@ function NavigationMenuTrigger({
       {...props}
     >
       {children}{" "}
-      <NavigationMenuPrimitive.Icon
-        className="relative top-[1px] ml-1 inline-flex transition duration-300 data-[open]:rotate-180"
-      >
-        <RiArrowDownSLine
-          size={12}
-          aria-hidden="true"
-        />
+      <NavigationMenuPrimitive.Icon className="relative top-[1px] ml-1 inline-flex transition duration-300 data-[open]:rotate-180">
+        <Icon icon={RiArrowDownSLine} slotSize={12} aria-hidden="true" />
       </NavigationMenuPrimitive.Icon>
     </NavigationMenuPrimitive.Trigger>
   )
@@ -95,8 +90,8 @@ function NavigationMenuContent({
     <NavigationMenuPrimitive.Content
       data-slot="navigation-menu-content"
       className={cn(
-        "top-0 left-0 w-full p-2 pr-2.5 md:absolute md:w-auto data-[starting-style]:opacity-0 data-[ending-style]:opacity-0",
-        "group-data-[viewport=false]/navigation-menu:bg-popover group-data-[viewport=false]/navigation-menu:text-popover-foreground group-data-[viewport=false]/navigation-menu:data-[starting-style]:opacity-0 group-data-[viewport=false]/navigation-menu:data-[ending-style]:opacity-0 group-data-[viewport=false]/navigation-menu:top-full group-data-[viewport=false]/navigation-menu:mt-1.5 group-data-[viewport=false]/navigation-menu:overflow-hidden group-data-[viewport=false]/navigation-menu:rounded-md group-data-[viewport=false]/navigation-menu:border group-data-[viewport=false]/navigation-menu:shadow **:data-[slot=navigation-menu-link]:focus:ring-0 **:data-[slot=navigation-menu-link]:focus:outline-none",
+        "top-0 left-0 w-full p-2 pr-2.5 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 md:absolute md:w-auto",
+        "group-data-[viewport=false]/navigation-menu:bg-popover group-data-[viewport=false]/navigation-menu:text-popover-foreground group-data-[viewport=false]/navigation-menu:shadow-border-md group-data-[viewport=false]/navigation-menu:top-full group-data-[viewport=false]/navigation-menu:mt-1.5 group-data-[viewport=false]/navigation-menu:overflow-hidden group-data-[viewport=false]/navigation-menu:rounded-md group-data-[viewport=false]/navigation-menu:data-[ending-style]:opacity-0 **:data-[slot=navigation-menu-link]:focus:ring-0 **:data-[slot=navigation-menu-link]:focus:outline-none group-data-[viewport=false]/navigation-menu:data-[starting-style]:opacity-0",
         className
       )}
       style={{ transition: "opacity 200ms ease-out", ...style }}
@@ -118,7 +113,7 @@ function NavigationMenuViewport({
       <NavigationMenuPrimitive.Popup
         data-slot="navigation-menu-viewport"
         className={cn(
-          "origin-top-center bg-popover text-popover-foreground relative h-(--popup-height) w-full overflow-hidden rounded-md border shadow md:w-(--popup-width) data-[starting-style]:opacity-0 data-[starting-style]:[transform:scale(0.95)] data-[ending-style]:opacity-0 data-[ending-style]:[transform:scale(0.95)]",
+          "origin-top-center bg-popover text-popover-foreground shadow-border-md relative h-(--popup-height) w-full overflow-hidden rounded-md data-[ending-style]:[transform:scale(0.95)] data-[ending-style]:opacity-0 data-[starting-style]:[transform:scale(0.95)] data-[starting-style]:opacity-0 md:w-(--popup-width)",
           className
         )}
         style={{

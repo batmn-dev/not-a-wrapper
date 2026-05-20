@@ -1,16 +1,17 @@
 "use client"
-import { RiCloseLine } from "@remixicon/react"
 
 import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
+import { Icon } from "@/components/ui/icon"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { RiCloseLine } from "@remixicon/react"
 import Image from "next/image"
 import { useEffect, useState } from "react"
 
@@ -51,10 +52,7 @@ export function FileItem({ file, onRemove }: FileItemProps) {
 
   return (
     <div className="relative mr-2 mb-0 flex items-center">
-      <HoverCard
-        open={isImage ? isOpen : false}
-        onOpenChange={setIsOpen}
-      >
+      <HoverCard open={isImage ? isOpen : false} onOpenChange={setIsOpen}>
         <HoverCardTrigger className="w-full">
           <div className="bg-background hover:bg-accent border-input flex w-full items-center gap-3 rounded-2xl border p-2 pr-3 transition-colors">
             <div className="bg-accent-foreground flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-md">
@@ -95,18 +93,20 @@ export function FileItem({ file, onRemove }: FileItemProps) {
       {!isRemoving ? (
         <Tooltip>
           <TooltipTrigger
-            render={(
+            render={
               <button
                 type="button"
                 onClick={handleRemove}
                 className="border-background absolute top-1 right-1 z-10 inline-flex size-6 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[3px] bg-black text-white shadow-none transition-colors"
                 aria-label="Remove file"
               />
-            )}
+            }
           >
-            <RiCloseLine size={12} className="size-3" />
+            <Icon icon={RiCloseLine} slotSize={12} />
           </TooltipTrigger>
-          <TooltipContent side="bottom" hideArrow>Remove file</TooltipContent>
+          <TooltipContent side="bottom" hideArrow>
+            Remove file
+          </TooltipContent>
         </Tooltip>
       ) : null}
     </div>

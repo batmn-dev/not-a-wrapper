@@ -1,5 +1,4 @@
 "use client"
-import { RiSettings3Line } from "@remixicon/react"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import {
@@ -10,6 +9,8 @@ import {
 } from "@/components/ui/dialog"
 import { Drawer, DrawerContent } from "@/components/ui/drawer"
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
+import { Icon } from "@/components/ui/icon"
+import { RiSettings3Line } from "@remixicon/react"
 import { SettingsContent } from "./settings-content"
 
 /**
@@ -19,7 +20,7 @@ import { SettingsContent } from "./settings-content"
 export function SettingsMenuItem({ onClick }: { onClick: () => void }) {
   return (
     <DropdownMenuItem onClick={onClick}>
-      <RiSettings3Line size={16} />
+      <Icon icon={RiSettings3Line} slotSize={16} />
       <span>Settings</span>
     </DropdownMenuItem>
   )

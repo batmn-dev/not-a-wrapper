@@ -1,6 +1,11 @@
 "use client"
-import { RiAlertLine, RiCheckboxCircleLine, RiInformationLine } from "@remixicon/react"
 
+import { Icon } from "@/components/ui/icon"
+import {
+  RiAlertLine,
+  RiCheckboxCircleLine,
+  RiInformationLine,
+} from "@remixicon/react"
 import { toast as sonnerToast } from "sonner"
 import { Button } from "./button"
 
@@ -17,16 +22,28 @@ type ToastProps = {
 
 function Toast({ title, description, button, id, status }: ToastProps) {
   return (
-    <div className="border-input bg-popover flex items-center overflow-hidden rounded-xl border p-4 shadow-xs backdrop-blur-xl">
+    <div className="bg-popover shadow-border-md flex items-center overflow-hidden rounded-xl p-4 backdrop-blur-xl">
       <div className="flex flex-1 items-center">
         {status === "error" ? (
-          <RiAlertLine size={16} className="text-primary mr-3" />
+          <Icon
+            icon={RiAlertLine}
+            slotSize={16}
+            className="text-primary mr-3"
+          />
         ) : null}
         {status === "info" ? (
-          <RiInformationLine size={16} className="text-primary mr-3" />
+          <Icon
+            icon={RiInformationLine}
+            slotSize={16}
+            className="text-primary mr-3"
+          />
         ) : null}
         {status === "success" ? (
-          <RiCheckboxCircleLine size={16} className="text-primary mr-3" />
+          <Icon
+            icon={RiCheckboxCircleLine}
+            slotSize={16}
+            className="text-primary mr-3"
+          />
         ) : null}
         <div className="w-full">
           <p className="text-foreground text-sm font-medium">{title}</p>

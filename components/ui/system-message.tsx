@@ -1,8 +1,13 @@
 "use client"
-import { RiAlertLine, RiErrorWarningLine, RiInformationLine } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
+import {
+  RiAlertLine,
+  RiErrorWarningLine,
+  RiInformationLine,
+} from "@remixicon/react"
 import { cva, type VariantProps } from "class-variance-authority"
 import React from "react"
 
@@ -85,11 +90,11 @@ export function SystemMessage({
 
     switch (variant) {
       case "error":
-        return <RiErrorWarningLine size={16} />
+        return <Icon icon={RiErrorWarningLine} slotSize={16} />
       case "warning":
-        return <RiAlertLine size={16} />
+        return <Icon icon={RiAlertLine} slotSize={16} />
       default:
-        return <RiInformationLine size={16} />
+        return <Icon icon={RiInformationLine} slotSize={16} />
     }
   }
 

@@ -1,12 +1,13 @@
 "use client"
-import { RiArrowDownSLine } from "@remixicon/react"
 
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
+import { RiArrowDownSLine } from "@remixicon/react"
 
 export type StepsItemProps = React.ComponentProps<"div">
 
@@ -53,14 +54,22 @@ export const StepsTrigger = ({
             {leftIcon}
           </span>
           {swapIconOnHover && (
-            <RiArrowDownSLine size={16} className="absolute opacity-0 transition-opacity group-hover:opacity-100 group-data-[open]:rotate-180" />
+            <Icon
+              icon={RiArrowDownSLine}
+              slotSize={16}
+              className="absolute opacity-0 transition-opacity group-hover:opacity-100 group-data-[open]:rotate-180"
+            />
           )}
         </span>
       ) : null}
       <span>{children}</span>
     </div>
     {!leftIcon && (
-      <RiArrowDownSLine size={16} className="transition-transform group-data-[open]:rotate-180" />
+      <Icon
+        icon={RiArrowDownSLine}
+        slotSize={16}
+        className="transition-transform group-data-[open]:rotate-180"
+      />
     )}
   </CollapsibleTrigger>
 )

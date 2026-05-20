@@ -8,6 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Icon } from "@/components/ui/icon"
 import type { Id } from "@/convex/_generated/dataModel"
 import { RiDeleteBinLine, RiEditLine, RiMoreFill } from "@remixicon/react"
 import { useState } from "react"
@@ -46,7 +47,7 @@ export function SidebarProjectMenu({
             />
           }
         >
-          <RiMoreFill size={20} className="text-primary size-5" />
+          <Icon icon={RiMoreFill} slotSize={20} className="text-primary" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
           <DropdownMenuItem
@@ -55,7 +56,7 @@ export function SidebarProjectMenu({
               onStartEditing()
             }}
           >
-            <RiEditLine size={16} className="mr-2" />
+            <Icon icon={RiEditLine} slotSize={16} className="mr-2" />
             Rename
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -65,7 +66,7 @@ export function SidebarProjectMenu({
               setIsDeleteDialogOpen(true)
             }}
           >
-            <RiDeleteBinLine size={16} className="mr-2" />
+            <Icon icon={RiDeleteBinLine} slotSize={16} className="mr-2" />
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>

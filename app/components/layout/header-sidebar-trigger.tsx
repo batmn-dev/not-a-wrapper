@@ -1,8 +1,9 @@
 "use client"
-import { RiMenuLine } from "@remixicon/react"
 
+import { Icon } from "@/components/ui/icon"
 import { SIDEBAR_CONTAINER_ID, useSidebar } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
+import { RiMenuLine } from "@remixicon/react"
 
 type HeaderSidebarTriggerProps = React.HTMLAttributes<HTMLButtonElement>
 
@@ -27,7 +28,7 @@ export function HeaderSidebarTrigger({
       )}
       {...props}
     >
-      <RiMenuLine size={20} className="size-5" aria-hidden="true" />
+      <Icon icon={RiMenuLine} slotSize={20} aria-hidden="true" />
       <span className="sr-only">Open sidebar</span>
     </button>
   )

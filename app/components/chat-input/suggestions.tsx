@@ -1,5 +1,6 @@
 "use client"
 
+import { Icon } from "@/components/ui/icon"
 import { PromptSuggestion } from "@/components/ui/prompt-suggestion"
 import type { SuggestionIconId } from "@/lib/config"
 import { TRANSITION_SUGGESTIONS } from "@/lib/motion"
@@ -100,7 +101,7 @@ export const Suggestions = memo(function Suggestions({
                 animate: { opacity: 1, scale: 1 },
               }}
             >
-              <SuggestionIcon size={16} />
+              <Icon icon={SuggestionIcon} slotSize={16} />
               {suggestion.label}
             </MotionPromptSuggestion>
           )

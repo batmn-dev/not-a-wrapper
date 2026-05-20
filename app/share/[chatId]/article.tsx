@@ -1,10 +1,11 @@
-import { RiArrowRightUpLine } from "@remixicon/react"
 import { getSources } from "@/app/components/chat/get-sources"
 import { SourcesList } from "@/app/components/chat/sources-list"
-import { Message, MessageContent } from "@/components/ui/message"
 import { Button } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
+import { Message, MessageContent } from "@/components/ui/message"
 import { cn } from "@/lib/utils"
 import type { UIMessage as MessageAISDK } from "@ai-sdk/react"
+import { RiArrowRightUpLine } from "@remixicon/react"
 import Link from "next/link"
 import { Header } from "./header"
 
@@ -63,7 +64,11 @@ export default function Article({
             >
               Try it{" "}
               <div className="rounded-full bg-black/20 p-2 backdrop-blur-sm transition-colors group-hover:bg-black/30">
-                <RiArrowRightUpLine size={16} className="h-4 w-4 text-white" />
+                <Icon
+                  icon={RiArrowRightUpLine}
+                  slotSize={16}
+                  className="text-white"
+                />
               </div>
             </Button>
           </Link>

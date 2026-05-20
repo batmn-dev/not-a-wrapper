@@ -14,10 +14,11 @@
  *   - Verify TextShimmer import path remains correct
  */
 "use client"
-import { RiArrowRightSLine } from "@remixicon/react"
 
+import { Icon } from "@/components/ui/icon"
 import { TextShimmer } from "@/components/ui/text-shimmer"
 import { cn } from "@/lib/utils"
+import { RiArrowRightSLine } from "@remixicon/react"
 
 type ThinkingBarProps = {
   className?: string
@@ -46,7 +47,11 @@ export function ThinkingBar({
           className="flex items-center gap-1 text-base transition-opacity hover:opacity-80"
         >
           <TextShimmer className="font-medium">{text}</TextShimmer>
-          <RiArrowRightSLine size={16} className="text-muted-foreground" />
+          <Icon
+            icon={RiArrowRightSLine}
+            slotSize={16}
+            className="text-muted-foreground"
+          />
         </button>
       ) : (
         <TextShimmer className="cursor-default font-medium">{text}</TextShimmer>

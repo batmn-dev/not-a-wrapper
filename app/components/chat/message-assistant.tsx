@@ -1,4 +1,4 @@
-import { RiCheckLine, RiFileCopyLine, RiRefreshLine } from "@remixicon/react"
+import { Icon } from "@/components/ui/icon"
 import {
   Loader,
   StreamingCaret,
@@ -19,17 +19,18 @@ import { SystemMessage } from "@/components/ui/system-message"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
 import type { UIMessage as MessageAISDK } from "@ai-sdk/react"
+import { RiCheckLine, RiFileCopyLine, RiRefreshLine } from "@remixicon/react"
 import type { ToolUIPart } from "ai"
-import { isStaticToolUIPart, getStaticToolName } from "ai"
+import { getStaticToolName, isStaticToolUIPart } from "ai"
 import { useCallback, useRef, useState } from "react"
 import { getSources } from "./get-sources"
 import { QuoteButton } from "./quote-button"
-import { useReasoningPhase } from "./use-reasoning-phase"
 import { SearchImages } from "./search-images"
 import { SourcesList } from "./sources-list"
 import { ToolInvocation } from "./tool-invocation"
-import { useAssistantMessageSelection } from "./useAssistantMessageSelection"
 import { useLoadingState } from "./use-loading-state"
+import { useReasoningPhase } from "./use-reasoning-phase"
+import { useAssistantMessageSelection } from "./useAssistantMessageSelection"
 
 type MessageAssistantProps = {
   children: string
@@ -122,14 +123,18 @@ export function MessageAssistant({
   // v6: Use flat properties and official helper for tool name
   const searchImageResults: ImageResult[] =
     parts
-      ?.filter((part): part is ToolUIPart =>
-        isStaticToolUIPart(part) &&
-        part.state === "output-available" &&
-        getStaticToolName(part) === "imageSearch" &&
-        (part.output as { content?: Array<{ type: string }> })?.content?.[0]?.type === "images"
+      ?.filter(
+        (part): part is ToolUIPart =>
+          isStaticToolUIPart(part) &&
+          part.state === "output-available" &&
+          getStaticToolName(part) === "imageSearch" &&
+          (part.output as { content?: Array<{ type: string }> })?.content?.[0]
+            ?.type === "images"
       )
       .flatMap((part) => {
-        const output = part.output as { content?: Array<{ type: string; results?: ImageResult[] }> }
+        const output = part.output as {
+          content?: Array<{ type: string; results?: ImageResult[] }>
+        }
         return output?.content?.[0]?.results ?? []
       }) ?? []
 
@@ -161,7 +166,9 @@ export function MessageAssistant({
   const [contentCaretPhase, setContentCaretPhase] = useState<
     "hidden" | "visible" | "fading"
   >("hidden")
-  const showActiveContentCaret = Boolean(isLast && status === "streaming" && hasContent)
+  const showActiveContentCaret = Boolean(
+    isLast && status === "streaming" && hasContent
+  )
 
   const didStreamInSession = Boolean(isLast && finishReason)
   const showFooterCaret = hasContent && contentCaretPhase !== "hidden"
@@ -181,7 +188,9 @@ export function MessageAssistant({
   ) {
     setContentCaretPhase("fading")
   } else if (
-    (!isLast || !hasContent || (status !== "streaming" && status !== "ready")) &&
+    (!isLast ||
+      !hasContent ||
+      (status !== "streaming" && status !== "ready")) &&
     contentCaretPhase !== "hidden"
   ) {
     setContentCaretPhase("hidden")
@@ -189,10 +198,7 @@ export function MessageAssistant({
 
   return (
     <Message
-      className={cn(
-        "flex w-full flex-1 items-start gap-4",
-        className
-      )}
+      className={cn("flex w-full flex-1 items-start gap-4", className)}
       data-turn="assistant"
       data-message-id={messageId}
       data-scroll-anchor={isLast ? "true" : "false"}
@@ -217,9 +223,7 @@ export function MessageAssistant({
           >
             <ReasoningLabel />
             {!isOpaqueReasoning && (
-              <ReasoningContent markdown>
-                {reasoningText}
-              </ReasoningContent>
+              <ReasoningContent markdown>{reasoningText}</ReasoningContent>
             )}
           </Reasoning>
         )}
@@ -279,7 +283,9 @@ export function MessageAssistant({
           <SystemMessage
             variant="warning"
             fill
-            cta={onReload ? { label: "Regenerate", onClick: onReload } : undefined}
+            cta={
+              onReload ? { label: "Regenerate", onClick: onReload } : undefined
+            }
           >
             Response may be incomplete due to output length limits.
           </SystemMessage>
@@ -339,25 +345,21 @@ export function MessageAssistant({
                     type="button"
                   >
                     {copied ? (
-                      <RiCheckLine size={20} className="size-5" />
+                      <Icon icon={RiCheckLine} slotSize={20} />
                     ) : (
-                      <RiFileCopyLine size={20} className="size-5" />
+                      <Icon icon={RiFileCopyLine} slotSize={20} />
                     )}
                   </button>
                 </MessageAction>
                 {isLast ? (
-                  <MessageAction
-                    tooltip="Regenerate"
-                    side="bottom"
-                    delay={0}
-                  >
+                  <MessageAction tooltip="Regenerate" side="bottom" delay={0}>
                     <button
                       className="hover:bg-accent/60 text-muted-foreground hover:text-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent transition pointer-coarse:h-10 pointer-coarse:w-10"
                       aria-label="Regenerate"
                       onClick={onReload}
                       type="button"
                     >
-                      <RiRefreshLine size={20} className="size-5" />
+                      <Icon icon={RiRefreshLine} slotSize={20} />
                     </button>
                   </MessageAction>
                 ) : null}
@@ -376,5 +378,5 @@ export function MessageAssistant({
         )}
       </div>
     </Message>
-  );
+  )
 }

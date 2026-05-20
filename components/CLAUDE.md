@@ -13,7 +13,7 @@ Reusable UI lives here. Prefer existing components and variants before creating 
 
 - Use Base UI patterns for primitives. Triggers and slot-style composition use the `render` prop.
 - Use Tailwind classes and existing `cva` variants for styling.
-- Use Remix Icons from `@remixicon/react` for UI glyphs.
+- Import Remix Icons from `@remixicon/react`, then render UI glyphs through `components/ui/icon`.
 - Use `components/icons/README.md` for custom brand icon conventions.
 - Keep interactive components keyboard accessible.
 

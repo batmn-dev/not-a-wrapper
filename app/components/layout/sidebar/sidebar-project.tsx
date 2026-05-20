@@ -1,5 +1,6 @@
 "use client"
 
+import { Icon } from "@/components/ui/icon"
 import { api } from "@/convex/_generated/api"
 import { RiFolderAddLine } from "@remixicon/react"
 import { useQuery } from "convex/react"
@@ -25,7 +26,7 @@ export function SidebarProject({ isAuthenticated }: SidebarProjectProps) {
   return (
     <div className="mb-5">
       <SidebarMenuItem
-        icon={<RiFolderAddLine size={20} className="size-5" />}
+        icon={<Icon icon={RiFolderAddLine} slotSize={20} />}
         label="New project"
         onClick={() => setIsDialogOpen(true)}
       />

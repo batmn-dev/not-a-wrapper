@@ -1,21 +1,22 @@
 "use client"
-import { RiArrowUpLine } from "@remixicon/react"
 
-import { InputDropZone } from "./input-drop-zone"
+import { Button } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
 import {
   PromptInput,
   PromptInputAction,
   PromptInputActions,
   PromptInputTextarea,
 } from "@/components/ui/prompt-input"
-import { Button } from "@/components/ui/button"
 import { StopBulkRoundedIcon } from "@/lib/icons"
 import { getModelInfo } from "@/lib/models"
-import { resolveComposerPrimaryActionState } from "./primary-action-state"
+import { RiArrowUpLine } from "@remixicon/react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { PromptSystem } from "../suggestions/prompt-system"
 import { ButtonPlusMenu } from "./button-plus-menu"
 import { FileList } from "./file-list"
+import { InputDropZone } from "./input-drop-zone"
+import { resolveComposerPrimaryActionState } from "./primary-action-state"
 
 type ChatInputProps = {
   defaultValue?: string
@@ -35,9 +36,7 @@ type ChatInputProps = {
   setEnableSearch: (enabled: boolean) => void
   enableSearch: boolean
   quotedText?: { text: string; messageId: string } | null
-  registerInputListener?: (
-    listener: ((value: string) => void) | null
-  ) => void
+  registerInputListener?: (listener: ((value: string) => void) | null) => void
   /** Callback to register a focus function so parents can imperatively focus the textarea */
   registerFocus?: (fn: (() => void) | null) => void
 }
@@ -235,7 +234,7 @@ export function ChatInput({
               placeholder="Ask anything..."
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
-              className="pt-4 px-4 leading-[1.3]"
+              className="px-4 pt-4 leading-[1.3]"
             />
             <PromptInputActions className="w-full justify-between p-2">
               <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
@@ -248,9 +247,7 @@ export function ChatInput({
                   isSearchDisabled={isSearchDisabled}
                 />
               </div>
-              <PromptInputAction
-                tooltip={primaryAction.tooltip}
-              >
+              <PromptInputAction tooltip={primaryAction.tooltip}>
                 <Button
                   size="sm"
                   className="size-9 rounded-full transition-all duration-300 ease-out"
@@ -262,7 +259,7 @@ export function ChatInput({
                   {primaryAction.mode === "stop" ? (
                     <StopBulkRoundedIcon size={16} />
                   ) : (
-                    <RiArrowUpLine size={20} className="size-5" />
+                    <Icon icon={RiArrowUpLine} slotSize={22} />
                   )}
                 </Button>
               </PromptInputAction>

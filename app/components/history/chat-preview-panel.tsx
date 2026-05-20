@@ -1,7 +1,12 @@
-import { RiErrorWarningLine, RiLoader4Line, RiRefreshLine } from "@remixicon/react"
-import { MessageContent } from "@/components/ui/message"
 import { Button } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
+import { MessageContent } from "@/components/ui/message"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  RiErrorWarningLine,
+  RiLoader4Line,
+  RiRefreshLine,
+} from "@remixicon/react"
 import { useLayoutEffect, useRef, useState } from "react"
 
 type ChatPreviewPanelProps = {
@@ -33,9 +38,7 @@ function MessageBubble({ content, role }: MessageBubbleProps) {
     return (
       <div className="flex justify-end">
         <div className="max-w-[70%]">
-          <MessageContent
-            className="bg-accent relative whitespace-pre-wrap rounded-3xl px-5 py-2.5"
-          >
+          <MessageContent className="bg-accent relative rounded-3xl px-5 py-2.5 whitespace-pre-wrap">
             {content}
           </MessageContent>
         </div>
@@ -93,7 +96,7 @@ function LoadingState() {
   return (
     <div className="flex h-full items-center justify-center">
       <div className="text-muted-foreground flex items-center gap-2">
-        <RiLoader4Line size={16} className="h-4 w-4 animate-spin" />
+        <Icon icon={RiLoader4Line} slotSize={16} className="animate-spin" />
         <span className="text-sm">Loading messages...</span>
       </div>
     </div>
@@ -117,7 +120,11 @@ function ErrorState({
     <div className="flex h-full items-center justify-center p-4">
       <div className="text-muted-foreground max-w-[300px] space-y-3 text-center">
         <div className="flex justify-center">
-          <RiErrorWarningLine size={32} className="size-8 text-muted-foreground/50 h-8 w-8" />
+          <Icon
+            icon={RiErrorWarningLine}
+            slotSize={32}
+            className="text-muted-foreground/50"
+          />
         </div>
         <div className="space-y-1">
           <p className="text-sm font-medium">Failed to load preview</p>
@@ -130,7 +137,7 @@ function ErrorState({
             onClick={onRetry}
             className="h-8 text-xs"
           >
-            <RiRefreshLine size={12} className="size-3 mr-1 h-3 w-3" />
+            <Icon icon={RiRefreshLine} slotSize={12} className="mr-1" />
             Try again
           </Button>
         )}
@@ -216,7 +223,11 @@ export function ChatPreviewPanel({
           <EmptyState />
         )}
         {chatId && !isLoading && !error && messages.length > 0 && (
-          <ScrollArea ref={scrollAreaRef} viewportRef={viewportRef} className="h-full">
+          <ScrollArea
+            ref={scrollAreaRef}
+            viewportRef={viewportRef}
+            className="h-full"
+          >
             <div className="space-y-4 p-6">
               <div className="flex justify-center">
                 <div className="text-muted-foreground bg-muted/50 rounded-full px-2 py-1 text-xs">

@@ -1,5 +1,4 @@
 "use client"
-import { RiLoader4Line } from "@remixicon/react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -11,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -24,6 +24,7 @@ import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { fetchClient } from "@/lib/fetch"
+import { RiLoader4Line } from "@remixicon/react"
 import { useMutation } from "convex/react"
 import { useCallback, useState } from "react"
 
@@ -224,8 +225,7 @@ export function McpServerForm({
 
       handleOpenChange(false)
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to save"
+      const message = error instanceof Error ? error.message : "Failed to save"
       toast({ title: message, status: "error" })
     } finally {
       setIsSaving(false)
@@ -373,8 +373,9 @@ export function McpServerForm({
             >
               {isTesting ? (
                 <>
-                  <RiLoader4Line
-                    size={14}
+                  <Icon
+                    icon={RiLoader4Line}
+                    slotSize={14}
                     className="mr-1 animate-spin"
                   />
                   Testing...
@@ -409,8 +410,9 @@ export function McpServerForm({
           >
             {isSaving ? (
               <>
-                <RiLoader4Line
-                  size={14}
+                <Icon
+                  icon={RiLoader4Line}
+                  slotSize={14}
                   className="mr-1 animate-spin"
                 />
                 Saving...

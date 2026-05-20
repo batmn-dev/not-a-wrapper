@@ -1,5 +1,4 @@
 "use client"
-import { RiCheckLine, RiFileCopyLine, RiLoader4Line, RiShare2Line } from "@remixicon/react"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import XIcon from "@/components/icons/x"
@@ -18,11 +17,18 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer"
+import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
-import { useChatSession } from "@/lib/chat-store/session/provider"
-import { APP_DOMAIN } from "@/lib/config"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
+import { useChatSession } from "@/lib/chat-store/session/provider"
+import { APP_DOMAIN } from "@/lib/config"
+import {
+  RiCheckLine,
+  RiFileCopyLine,
+  RiLoader4Line,
+  RiShare2Line,
+} from "@remixicon/react"
 import { useMutation } from "convex/react"
 import type React from "react"
 import { useState } from "react"
@@ -33,7 +39,7 @@ export function DialogPublish() {
   const { chatId } = useChatSession()
   const isMobile = useBreakpoint(768)
   const [copied, setCopied] = useState(false)
-  
+
   const makePublicMutation = useMutation(api.chats.makePublic)
 
   if (!chatId) {
@@ -82,9 +88,9 @@ export function DialogPublish() {
       disabled={isLoading}
     >
       {isLoading ? (
-        <RiLoader4Line size={20} className="size-5 animate-spin" />
+        <Icon icon={RiLoader4Line} slotSize={20} className="animate-spin" />
       ) : (
-        <RiShare2Line size={20} className="size-5" />
+        <Icon icon={RiShare2Line} slotSize={20} />
       )}
       <span>Share</span>
     </Button>
@@ -103,9 +109,9 @@ export function DialogPublish() {
                 className="bg-background hover:bg-background absolute top-0 right-0 rounded-l-none transition-colors"
               >
                 {copied ? (
-                  <RiCheckLine size={16} />
+                  <Icon icon={RiCheckLine} slotSize={16} />
                 ) : (
-                  <RiFileCopyLine size={16} />
+                  <Icon icon={RiFileCopyLine} slotSize={16} />
                 )}
               </Button>
             </div>

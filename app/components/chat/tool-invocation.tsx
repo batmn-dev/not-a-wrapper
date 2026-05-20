@@ -1,15 +1,28 @@
 "use client"
-import { RiArrowDownSLine, RiCheckLine, RiCloseLine, RiCodeLine, RiFileSearchLine, RiImageLine, RiLink, RiLoader4Line, RiSearchLine, RiToolsLine, RiWrenchLine } from "@remixicon/react"
 
-import { cn } from "@/lib/utils"
-import type { ToolUIPart } from 'ai'
-import { getStaticToolName } from 'ai'
+import { Icon } from "@/components/ui/icon"
 import {
   humanizeToolName,
   resolveToolInvocationMetadata,
   type ToolInvocationDisplayMetadata,
   type ToolInvocationStreamMetadata,
 } from "@/lib/tools/ui-metadata"
+import { cn } from "@/lib/utils"
+import {
+  RiArrowDownSLine,
+  RiCheckLine,
+  RiCloseLine,
+  RiCodeLine,
+  RiFileSearchLine,
+  RiImageLine,
+  RiLink,
+  RiLoader4Line,
+  RiSearchLine,
+  RiToolsLine,
+  RiWrenchLine,
+} from "@remixicon/react"
+import type { ToolUIPart } from "ai"
+import { getStaticToolName } from "ai"
 import { AnimatePresence, motion } from "framer-motion"
 import { useMemo, useState } from "react"
 
@@ -50,21 +63,25 @@ function ToolInvocationIcon({
 }) {
   switch (iconId) {
     case "search":
-      return <RiSearchLine size={size} className={className} />
+      return <Icon icon={RiSearchLine} slotSize={size} className={className} />
     case "code":
-      return <RiCodeLine size={size} className={className} />
+      return <Icon icon={RiCodeLine} slotSize={size} className={className} />
     case "image":
-      return <RiImageLine size={size} className={className} />
+      return <Icon icon={RiImageLine} slotSize={size} className={className} />
     case "extract":
-      return <RiFileSearchLine size={size} className={className} />
+      return (
+        <Icon icon={RiFileSearchLine} slotSize={size} className={className} />
+      )
     case "wrench":
-      return <RiWrenchLine size={size} className={className} />
+      return <Icon icon={RiWrenchLine} slotSize={size} className={className} />
     default:
-      return <RiWrenchLine size={size} className={className} />
+      return <Icon icon={RiWrenchLine} slotSize={size} className={className} />
   }
 }
 
-function isToolSource(value: unknown): value is ToolInvocationDisplayMetadata["source"] {
+function isToolSource(
+  value: unknown
+): value is ToolInvocationDisplayMetadata["source"] {
   return (
     value === "builtin" ||
     value === "third-party" ||
@@ -73,7 +90,9 @@ function isToolSource(value: unknown): value is ToolInvocationDisplayMetadata["s
   )
 }
 
-function isToolIcon(value: unknown): value is NonNullable<ToolInvocationDisplayMetadata["icon"]> {
+function isToolIcon(
+  value: unknown
+): value is NonNullable<ToolInvocationDisplayMetadata["icon"]> {
   return (
     value === "search" ||
     value === "code" ||
@@ -95,11 +114,28 @@ function isToolInvocationDisplayMetadata(
   if (
     candidate.estimatedCostPer1k !== undefined &&
     typeof candidate.estimatedCostPer1k !== "number"
-  ) return false
-  if (candidate.readOnly !== undefined && typeof candidate.readOnly !== "boolean") return false
-  if (candidate.destructive !== undefined && typeof candidate.destructive !== "boolean") return false
-  if (candidate.idempotent !== undefined && typeof candidate.idempotent !== "boolean") return false
-  if (candidate.openWorld !== undefined && typeof candidate.openWorld !== "boolean") return false
+  )
+    return false
+  if (
+    candidate.readOnly !== undefined &&
+    typeof candidate.readOnly !== "boolean"
+  )
+    return false
+  if (
+    candidate.destructive !== undefined &&
+    typeof candidate.destructive !== "boolean"
+  )
+    return false
+  if (
+    candidate.idempotent !== undefined &&
+    typeof candidate.idempotent !== "boolean"
+  )
+    return false
+  if (
+    candidate.openWorld !== undefined &&
+    typeof candidate.openWorld !== "boolean"
+  )
+    return false
   return true
 }
 
@@ -196,14 +232,19 @@ export function ToolInvocation({
           className="hover:bg-accent flex w-full flex-row items-center rounded-t-md px-3 py-2 transition-colors"
         >
           <div className="flex flex-1 flex-row items-center gap-2 text-left text-base">
-            <RiToolsLine size={16} className="text-muted-foreground" />
+            <Icon
+              icon={RiToolsLine}
+              slotSize={16}
+              className="text-muted-foreground"
+            />
             <span className="text-sm">Tools executed</span>
             <div className="bg-secondary text-secondary-foreground rounded-full px-1.5 py-0.5 font-mono text-xs">
               {uniqueToolIds.length}
             </div>
           </div>
-          <RiArrowDownSLine
-            size={16}
+          <Icon
+            icon={RiArrowDownSLine}
+            slotSize={16}
             className={cn(
               "h-4 w-4 transition-transform",
               isExpanded ? "rotate-180 transform" : ""
@@ -281,12 +322,8 @@ function SingleToolView({
   // For each toolCallId, get the most informative state (output-available > input-available > input-streaming)
   const toolsToDisplay = Object.values(groupedTools)
     .map((group) => {
-      const resultTool = group.find(
-        (item) => item.state === "output-available"
-      )
-      const callTool = group.find(
-        (item) => item.state === "input-available"
-      )
+      const resultTool = group.find((item) => item.state === "output-available")
+      const callTool = group.find((item) => item.state === "input-available")
       const partialCallTool = group.find(
         (item) => item.state === "input-streaming"
       )
@@ -372,7 +409,12 @@ function SingleToolCard({
   const isLoading = state === "input-available" || state === "input-streaming"
   const isCompleted = state === "output-available"
   const result = isCompleted ? toolData.output : undefined
-  const isError = isCompleted && result != null && typeof result === "object" && "isError" in result && (result as Record<string, unknown>).isError === true
+  const isError =
+    isCompleted &&
+    result != null &&
+    typeof result === "object" &&
+    "isError" in result &&
+    (result as Record<string, unknown>).isError === true
 
   // Parse the result JSON if available
   const { parsedResult, parseError } = useMemo(() => {
@@ -387,7 +429,9 @@ function SingleToolCard({
         result !== null &&
         "content" in result
       ) {
-        const resultObj = result as { content?: Array<{ type: string; text?: string }> }
+        const resultObj = result as {
+          content?: Array<{ type: string; text?: string }>
+        }
         const textContent = resultObj.content?.find(
           (item) => item.type === "text"
         )
@@ -460,7 +504,11 @@ function SingleToolCard({
                     className="text-primary group flex items-center gap-1 font-medium hover:underline"
                   >
                     {item.title}
-                    <RiLink size={12} className="h-3 w-3 opacity-70 transition-opacity group-hover:opacity-100" />
+                    <Icon
+                      icon={RiLink}
+                      slotSize={12}
+                      className="opacity-70 transition-opacity group-hover:opacity-100"
+                    />
                   </a>
                   <div className="text-muted-foreground mt-1 font-mono text-xs">
                     {item.url}
@@ -506,7 +554,7 @@ function SingleToolCard({
                 className="text-primary flex items-center gap-1 hover:underline"
               >
                 <span className="font-mono">{htmlUrl}</span>
-                <RiLink size={12} className="h-3 w-3 opacity-70" />
+                <Icon icon={RiLink} slotSize={12} className="opacity-70" />
               </a>
             </div>
           )}
@@ -552,7 +600,12 @@ function SingleToolCard({
             className="text-muted-foreground"
           />
           <div className="flex min-w-0 flex-col">
-            <span className={cn("truncate text-sm", runtimeMetadata || displayInfo ? "" : "font-mono")}>
+            <span
+              className={cn(
+                "truncate text-sm",
+                runtimeMetadata || displayInfo ? "" : "font-mono"
+              )}
+            >
               {displayName}
             </span>
             {(source || serviceName) && (
@@ -573,7 +626,11 @@ function SingleToolCard({
                 key="loading"
               >
                 <div className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400">
-                  <RiLoader4Line size={12} className="mr-1 h-3 w-3 animate-spin" />
+                  <Icon
+                    icon={RiLoader4Line}
+                    slotSize={12}
+                    className="mr-1 animate-spin"
+                  />
                   Running
                 </div>
               </motion.div>
@@ -586,7 +643,7 @@ function SingleToolCard({
                 key="error"
               >
                 <div className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-xs text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
-                  <RiCloseLine size={12} className="mr-1 h-3 w-3" />
+                  <Icon icon={RiCloseLine} slotSize={12} className="mr-1" />
                   Failed
                 </div>
               </motion.div>
@@ -599,15 +656,16 @@ function SingleToolCard({
                 key="completed"
               >
                 <div className="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-1.5 py-0.5 text-xs text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400">
-                  <RiCheckLine size={12} className="mr-1 h-3 w-3" />
+                  <Icon icon={RiCheckLine} slotSize={12} className="mr-1" />
                   Completed
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
-        <RiArrowDownSLine
-          size={16}
+        <Icon
+          icon={RiArrowDownSLine}
+          slotSize={16}
           className={cn(
             "h-4 w-4 transition-transform",
             isExpanded ? "rotate-180 transform" : ""
@@ -667,43 +725,57 @@ function SingleToolCard({
                   <div className="bg-background space-y-1 rounded border p-2 text-sm">
                     {source && (
                       <div>
-                        <span className="text-muted-foreground font-medium">Source:</span>{" "}
+                        <span className="text-muted-foreground font-medium">
+                          Source:
+                        </span>{" "}
                         {formatSource(source)}
                       </div>
                     )}
                     {serviceName && (
                       <div>
-                        <span className="text-muted-foreground font-medium">Service:</span>{" "}
+                        <span className="text-muted-foreground font-medium">
+                          Service:
+                        </span>{" "}
                         {serviceName}
                       </div>
                     )}
                     {typeof estimatedCostPer1k === "number" && (
                       <div>
-                        <span className="text-muted-foreground font-medium">Estimated cost:</span>{" "}
+                        <span className="text-muted-foreground font-medium">
+                          Estimated cost:
+                        </span>{" "}
                         ${estimatedCostPer1k.toFixed(2)} / 1k calls
                       </div>
                     )}
                     {typeof readOnly === "boolean" && (
                       <div>
-                        <span className="text-muted-foreground font-medium">Read-only:</span>{" "}
+                        <span className="text-muted-foreground font-medium">
+                          Read-only:
+                        </span>{" "}
                         {readOnly ? "Yes" : "No"}
                       </div>
                     )}
                     {typeof destructive === "boolean" && (
                       <div>
-                        <span className="text-muted-foreground font-medium">Destructive:</span>{" "}
+                        <span className="text-muted-foreground font-medium">
+                          Destructive:
+                        </span>{" "}
                         {destructive ? "Yes" : "No"}
                       </div>
                     )}
                     {typeof idempotent === "boolean" && (
                       <div>
-                        <span className="text-muted-foreground font-medium">Idempotent:</span>{" "}
+                        <span className="text-muted-foreground font-medium">
+                          Idempotent:
+                        </span>{" "}
                         {idempotent ? "Yes" : "No"}
                       </div>
                     )}
                     {typeof openWorld === "boolean" && (
                       <div>
-                        <span className="text-muted-foreground font-medium">Open-world:</span>{" "}
+                        <span className="text-muted-foreground font-medium">
+                          Open-world:
+                        </span>{" "}
                         {openWorld ? "Yes" : "No"}
                       </div>
                     )}
@@ -714,7 +786,7 @@ function SingleToolCard({
               {/* Tool call ID */}
               <div className="text-muted-foreground flex items-center justify-between text-xs">
                 <div className="flex items-center">
-                  <RiCodeLine size={12} className="mr-1 inline" />
+                  <Icon icon={RiCodeLine} slotSize={12} className="mr-1" />
                   Tool Call ID:{" "}
                   <span className="ml-1 font-mono">{toolCallId}</span>
                 </div>

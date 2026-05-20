@@ -1,8 +1,12 @@
-import { RiArrowLeftSLine, RiArrowRightSLine, RiMoreLine } from "@remixicon/react"
-import * as React from "react"
-
-import { cn } from "@/lib/utils"
 import { buttonVariants, type Button } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
+import { cn } from "@/lib/utils"
+import {
+  RiArrowLeftSLine,
+  RiArrowRightSLine,
+  RiMoreLine,
+} from "@remixicon/react"
+import * as React from "react"
 
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
   return (
@@ -72,7 +76,7 @@ function PaginationPrevious({
       className={cn("gap-1 px-2.5 sm:pl-2.5", className)}
       {...props}
     >
-      <RiArrowLeftSLine size={16} />
+      <Icon icon={RiArrowLeftSLine} slotSize={16} />
       <span className="hidden sm:block">Previous</span>
     </PaginationLink>
   )
@@ -90,7 +94,7 @@ function PaginationNext({
       {...props}
     >
       <span className="hidden sm:block">Next</span>
-      <RiArrowRightSLine size={16} />
+      <Icon icon={RiArrowRightSLine} slotSize={16} />
     </PaginationLink>
   )
 }
@@ -106,7 +110,7 @@ function PaginationEllipsis({
       className={cn("flex size-9 items-center justify-center", className)}
       {...props}
     >
-      <RiMoreLine size={16} />
+      <Icon icon={RiMoreLine} slotSize={16} />
       <span className="sr-only">More pages</span>
     </span>
   )

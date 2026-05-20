@@ -1,5 +1,6 @@
 "use client"
 
+import { cn } from "@/lib/utils"
 import { Collapsible as CollapsiblePrimitive } from "@base-ui/react/collapsible"
 
 function Collapsible({
@@ -9,10 +10,18 @@ function Collapsible({
 }
 
 function CollapsibleTrigger({
+  className,
   ...props
 }: CollapsiblePrimitive.Trigger.Props) {
   return (
-    <CollapsiblePrimitive.Trigger data-slot="collapsible-trigger" {...props} />
+    <CollapsiblePrimitive.Trigger
+      data-slot="collapsible-trigger"
+      className={cn(
+        "cursor-pointer disabled:cursor-not-allowed aria-disabled:cursor-not-allowed data-disabled:cursor-not-allowed",
+        className
+      )}
+      {...props}
+    />
   )
 }
 

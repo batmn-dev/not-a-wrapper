@@ -1,10 +1,11 @@
-import { RiCheckLine, RiCloseLine } from "@remixicon/react"
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import useClickOutside from "@/app/hooks/use-click-outside"
+import { Icon } from "@/components/ui/icon"
 import { useSidebar } from "@/components/ui/sidebar"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { Chat } from "@/lib/chat-store/types"
 import { cn } from "@/lib/utils"
+import { RiCheckLine, RiCloseLine } from "@remixicon/react"
 import Link from "next/link"
 import { useCallback, useMemo, useRef, useState } from "react"
 import { SidebarItemMenu } from "./sidebar-item-menu"
@@ -112,10 +113,13 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
     [handleCancel]
   )
 
-  const handleLinkClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (isMobile) setOpenMobile(false)
-  }, [isMobile, setOpenMobile])
+  const handleLinkClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation()
+      if (isMobile) setOpenMobile(false)
+    },
+    [isMobile, setOpenMobile]
+  )
 
   // Memoize computed values
   const isActive = useMemo(
@@ -168,14 +172,14 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 items-center justify-center rounded-md p-1"
               type="button"
             >
-              <RiCheckLine size={16} />
+              <Icon icon={RiCheckLine} slotSize={16} />
             </button>
             <button
               onClick={handleCancelClick}
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 items-center justify-center rounded-md p-1"
               type="button"
             >
-              <RiCloseLine size={16} />
+              <Icon icon={RiCloseLine} slotSize={16} />
             </button>
           </div>
         </div>
@@ -189,7 +193,7 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
             onClick={handleLinkClick}
           >
             <div
-              className="text-primary relative line-clamp-1 min-h-9 mask-r-from-80% mask-r-to-85% px-2.5 py-1.5 pointer-coarse:py-3 text-sm text-ellipsis whitespace-nowrap text-balance"
+              className="text-primary relative line-clamp-1 min-h-9 mask-r-from-80% mask-r-to-85% px-2.5 py-1.5 text-sm text-balance text-ellipsis whitespace-nowrap pointer-coarse:py-3"
               title={displayTitle}
             >
               <span dir="auto">{displayTitle}</span>

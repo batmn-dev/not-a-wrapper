@@ -1,5 +1,4 @@
 "use client"
-import { RiCheckLine, RiCloseLine, RiDeleteBinLine, RiEditLine } from "@remixicon/react"
 
 import { useKeyShortcut } from "@/app/hooks/use-key-shortcut"
 import { Badge } from "@/components/ui/badge"
@@ -19,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
 import {
   Tooltip,
@@ -29,14 +29,21 @@ import { useChats } from "@/lib/chat-store/chats/provider"
 import { useChatSession } from "@/lib/chat-store/session/provider"
 import type { Chats } from "@/lib/chat-store/types"
 import { useChatPreview } from "@/lib/hooks/use-chat-preview"
+import { Pin, PinOff } from "@/lib/icons"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
-import { Pin, PinOff } from "@/lib/icons"
+import {
+  RiCheckLine,
+  RiCloseLine,
+  RiDeleteBinLine,
+  RiEditLine,
+} from "@remixicon/react"
 // Note: Pin and PinOff are local icon component aliases.
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChatPreviewPanel } from "./chat-preview-panel"
 import { CommandFooter } from "./command-footer"
+import { HistoryAuthPrompt } from "./history-auth-prompt"
 import { formatDate, groupChatsByDate } from "./utils"
 
 type CommandHistoryProps = {
@@ -49,6 +56,7 @@ type CommandHistoryProps = {
   onOpenChange?: (open: boolean) => void
   hasPopover?: boolean
   enableShortcut?: boolean
+  isAuthenticated: boolean
 }
 
 type CommandItemEditProps = {
@@ -114,7 +122,11 @@ function CommandItemEdit({
               />
             }
           >
-            <RiCheckLine size={16} className="group-hover/edit-confirm:text-primary" />
+            <Icon
+              icon={RiCheckLine}
+              slotSize={16}
+              className="group-hover/edit-confirm:text-primary"
+            />
           </TooltipTrigger>
           <TooltipContent>Confirm</TooltipContent>
         </Tooltip>
@@ -131,7 +143,11 @@ function CommandItemEdit({
               />
             }
           >
-            <RiCloseLine size={16} className="group-hover/edit-cancel:text-primary" />
+            <Icon
+              icon={RiCloseLine}
+              slotSize={16}
+              className="group-hover/edit-cancel:text-primary"
+            />
           </TooltipTrigger>
           <TooltipContent>Cancel</TooltipContent>
         </Tooltip>
@@ -184,7 +200,11 @@ function CommandItemDelete({
               />
             }
           >
-            <RiCheckLine size={16} className="group-hover/delete-confirm:text-primary" />
+            <Icon
+              icon={RiCheckLine}
+              slotSize={16}
+              className="group-hover/delete-confirm:text-primary"
+            />
           </TooltipTrigger>
           <TooltipContent>Confirm</TooltipContent>
         </Tooltip>
@@ -201,7 +221,11 @@ function CommandItemDelete({
               />
             }
           >
-            <RiCloseLine size={16} className="group-hover/delete-cancel:text-primary" />
+            <Icon
+              icon={RiCloseLine}
+              slotSize={16}
+              className="group-hover/delete-cancel:text-primary"
+            />
           </TooltipTrigger>
           <TooltipContent>Cancel</TooltipContent>
         </Tooltip>
@@ -254,9 +278,15 @@ function CommandItemRow({
               }
             >
               {chat.pinned ? (
-                <PinOff size={12} className="size-3 group-hover/edit:text-primary" />
+                <PinOff
+                  size={12}
+                  className="group-hover/edit:text-primary size-3"
+                />
               ) : (
-                <Pin size={12} className="size-3 group-hover/edit:text-primary" />
+                <Pin
+                  size={12}
+                  className="group-hover/edit:text-primary size-3"
+                />
               )}
             </TooltipTrigger>
             <TooltipContent>{chat.pinned ? "Unpin" : "Pin"}</TooltipContent>
@@ -278,7 +308,11 @@ function CommandItemRow({
                 />
               }
             >
-              <RiEditLine size={16} className="group-hover/edit:text-primary" />
+              <Icon
+                icon={RiEditLine}
+                slotSize={16}
+                className="group-hover/edit:text-primary"
+              />
             </TooltipTrigger>
             <TooltipContent>Edit</TooltipContent>
           </Tooltip>
@@ -299,7 +333,11 @@ function CommandItemRow({
                 />
               }
             >
-              <RiDeleteBinLine size={16} className="group-hover/delete:text-primary" />
+              <Icon
+                icon={RiDeleteBinLine}
+                slotSize={16}
+                className="group-hover/delete:text-primary"
+              />
             </TooltipTrigger>
             <TooltipContent>Delete</TooltipContent>
           </Tooltip>
@@ -335,7 +373,7 @@ function CustomCommandDialog({
       <DialogContent
         className={cn("overflow-hidden border-none p-0", className)}
       >
-        <Command className="[&_[cmdk-group-heading]]:text-muted-foreground border-none **:data-[slot=command-input-wrapper]:h-12 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5 [&_[cmdk-item]_svg]:border-none">
+        <Command className="[&_[cmdk-group-heading]]:text-muted-foreground border-none **:data-[slot=command-input-wrapper]:h-12 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_[data-slot=icon]]:size-5 [&_[cmdk-input-wrapper]_[data-slot=icon]>svg]:size-[calc(1.25rem_-_var(--icon-glyph-inset))] [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_[data-slot=icon]]:size-5 [&_[cmdk-item]_[data-slot=icon]>svg]:size-[calc(1.25rem_-_var(--icon-glyph-inset))] [&_[cmdk-item]_[data-slot=icon]>svg]:border-none">
           {children}
         </Command>
       </DialogContent>
@@ -353,6 +391,7 @@ export function CommandHistory({
   onOpenChange,
   hasPopover = true,
   enableShortcut = true,
+  isAuthenticated,
 }: CommandHistoryProps) {
   const { chatId } = useChatSession()
   const router = useRouter()
@@ -371,14 +410,14 @@ export function CommandHistory({
 
   // Prefetch recent chats when dialog opens
   useEffect(() => {
-    if (isOpen && !hasPrefetchedRef.current) {
+    if (isAuthenticated && isOpen && !hasPrefetchedRef.current) {
       const recentChats = chatHistory.slice(0, 10)
       recentChats.forEach((chat) => {
         router.prefetch(`/c/${chat.id}`)
       })
       hasPrefetchedRef.current = true
     }
-  }, [isOpen, chatHistory, router])
+  }, [isAuthenticated, isOpen, chatHistory, router])
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open)
@@ -591,77 +630,89 @@ export function CommandHistory({
       <CustomCommandDialog
         onOpenChange={handleOpenChange}
         open={isOpen}
-        title="Chat History"
-        description="Search through your past conversations"
+        title={isAuthenticated ? "Chat History" : "Log in to search chats"}
+        description={
+          isAuthenticated
+            ? "Search through your past conversations"
+            : "Saved chat history is available after you log in or create an account."
+        }
         className={cn(
-          preferences.showConversationPreviews
+          isAuthenticated && preferences.showConversationPreviews
             ? "sm:max-w-[900px]"
             : "sm:max-w-3xl"
         )}
       >
-        <CommandInput
-          placeholder="Search history..."
-          value={searchQuery}
-          onValueChange={(value) => setSearchQuery(value)}
-        />
-
-        <div className="grid grid-cols-5">
-          <div
-            className={cn(
-              preferences.showConversationPreviews ? "col-span-2" : "col-span-5"
-            )}
-          >
-            <CommandList
-              className={cn(
-                "max-h-[480px] min-h-[480px] flex-1 [&>[cmdk-list-sizer]]:space-y-6 [&>[cmdk-list-sizer]]:py-2"
-              )}
-            >
-              {filteredChat.length === 0 && (
-                <CommandEmpty>No chat history found.</CommandEmpty>
-              )}
-
-              {!searchQuery && pinnedChats.length > 0 && (
-                <CommandGroup
-                  heading={
-                    <div className="flex items-center gap-1 font-semibold break-all">
-                      <Pin size={12} className="size-3" />
-                      Pinned
-                    </div>
-                  }
-                >
-                  {pinnedChats.map((chat) => renderChatItem(chat))}
-                </CommandGroup>
-              )}
-              {searchQuery ? (
-                <CommandGroup className="p-1.5">
-                  {filteredChat.map((chat) => renderChatItem(chat))}
-                </CommandGroup>
-              ) : (
-                groupedChats?.map((group) => (
-                  <CommandGroup
-                    key={group.name}
-                    heading={group.name}
-                    className="space-y-0 px-1.5"
-                  >
-                    {group.chats.map((chat) => renderChatItem(chat))}
-                  </CommandGroup>
-                ))
-              )}
-            </CommandList>
-          </div>
-
-          {preferences.showConversationPreviews && (
-            <ChatPreviewPanel
-              chatId={activePreviewChatId}
-              onHover={handlePreviewHover}
-              messages={messages}
-              isLoading={isLoading}
-              error={error}
-              onFetchPreview={fetchPreview}
+        {isAuthenticated ? (
+          <>
+            <CommandInput
+              placeholder="Search history..."
+              value={searchQuery}
+              onValueChange={(value) => setSearchQuery(value)}
             />
-          )}
-        </div>
-        <CommandFooter />
+
+            <div className="grid grid-cols-5">
+              <div
+                className={cn(
+                  preferences.showConversationPreviews
+                    ? "col-span-2"
+                    : "col-span-5"
+                )}
+              >
+                <CommandList
+                  className={cn(
+                    "max-h-[480px] min-h-[480px] flex-1 [&>[cmdk-list-sizer]]:space-y-6 [&>[cmdk-list-sizer]]:py-2"
+                  )}
+                >
+                  {filteredChat.length === 0 && (
+                    <CommandEmpty>No chat history found.</CommandEmpty>
+                  )}
+
+                  {!searchQuery && pinnedChats.length > 0 && (
+                    <CommandGroup
+                      heading={
+                        <div className="flex items-center gap-1 font-semibold break-all">
+                          <Pin size={12} className="size-3" />
+                          Pinned
+                        </div>
+                      }
+                    >
+                      {pinnedChats.map((chat) => renderChatItem(chat))}
+                    </CommandGroup>
+                  )}
+                  {searchQuery ? (
+                    <CommandGroup className="p-1.5">
+                      {filteredChat.map((chat) => renderChatItem(chat))}
+                    </CommandGroup>
+                  ) : (
+                    groupedChats?.map((group) => (
+                      <CommandGroup
+                        key={group.name}
+                        heading={group.name}
+                        className="space-y-0 px-1.5"
+                      >
+                        {group.chats.map((chat) => renderChatItem(chat))}
+                      </CommandGroup>
+                    ))
+                  )}
+                </CommandList>
+              </div>
+
+              {preferences.showConversationPreviews && (
+                <ChatPreviewPanel
+                  chatId={activePreviewChatId}
+                  onHover={handlePreviewHover}
+                  messages={messages}
+                  isLoading={isLoading}
+                  error={error}
+                  onFetchPreview={fetchPreview}
+                />
+              )}
+            </div>
+            <CommandFooter />
+          </>
+        ) : (
+          <HistoryAuthPrompt />
+        )}
       </CustomCommandDialog>
     </>
   )

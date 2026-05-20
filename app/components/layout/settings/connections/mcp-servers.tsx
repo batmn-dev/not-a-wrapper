@@ -1,5 +1,4 @@
 "use client"
-import { RiAddLine, RiDeleteBinLine, RiPlugLine, RiSettings3Line } from "@remixicon/react"
 
 import {
   AlertDialog,
@@ -14,11 +13,18 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Icon } from "@/components/ui/icon"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
-import { useMutation, useQuery } from "convex/react"
+import {
+  RiAddLine,
+  RiDeleteBinLine,
+  RiPlugLine,
+  RiSettings3Line,
+} from "@remixicon/react"
 import { useQuery as useTanstackQuery } from "@tanstack/react-query"
+import { useMutation, useQuery } from "convex/react"
 import { useState } from "react"
 import { McpServerForm } from "./mcp-server-form"
 import { McpToolApprovals } from "./mcp-tool-approvals"
@@ -135,7 +141,7 @@ export function McpServers() {
         </div>
         {mcpEnabled && (
           <Button size="sm" onClick={handleAdd}>
-            <RiAddLine size={16} className="mr-1" />
+            <Icon icon={RiAddLine} slotSize={16} className="mr-1" />
             Add Server
           </Button>
         )}
@@ -154,8 +160,9 @@ export function McpServers() {
       {/* Empty state */}
       {mcpEnabled && servers.length === 0 && (
         <div className="py-8 text-center">
-          <RiPlugLine
-            size={48}
+          <Icon
+            icon={RiPlugLine}
+            slotSize={48}
             className="text-muted-foreground mx-auto mb-2"
           />
           <h4 className="mb-1 text-sm font-medium text-balance">
@@ -166,7 +173,7 @@ export function McpServers() {
             tools.
           </p>
           <Button size="sm" variant="outline" onClick={handleAdd}>
-            <RiAddLine size={16} className="mr-1" />
+            <Icon icon={RiAddLine} slotSize={16} className="mr-1" />
             Add your first server
           </Button>
         </div>
@@ -181,7 +188,9 @@ export function McpServers() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex items-center gap-2">
-                      <h4 className="truncate font-medium text-balance">{server.name}</h4>
+                      <h4 className="truncate font-medium text-balance">
+                        {server.name}
+                      </h4>
                       {server.lastError ? (
                         <Badge variant="destructive" className="text-xs">
                           Error
@@ -229,14 +238,14 @@ export function McpServers() {
                       size="icon"
                       onClick={() => handleEdit(server)}
                     >
-                      <RiSettings3Line size={16} />
+                      <Icon icon={RiSettings3Line} slotSize={16} />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => handleDeleteClick(server)}
                     >
-                      <RiDeleteBinLine size={16} />
+                      <Icon icon={RiDeleteBinLine} slotSize={16} />
                     </Button>
                   </div>
                 </div>

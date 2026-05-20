@@ -1,10 +1,18 @@
 "use client"
-import { RiBox3Line, RiBrushLine, RiCloseLine, RiKeyLine, RiPlugLine, RiSettings3Line } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
 import { DrawerClose } from "@/components/ui/drawer"
+import { Icon } from "@/components/ui/icon"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn, isDev } from "@/lib/utils"
+import {
+  RiBox3Line,
+  RiBrushLine,
+  RiCloseLine,
+  RiKeyLine,
+  RiPlugLine,
+  RiSettings3Line,
+} from "@remixicon/react"
 import { useState } from "react"
 import { ByokSection } from "./apikeys/byok-section"
 import { InteractionPreferences } from "./appearance/interaction-preferences"
@@ -23,9 +31,7 @@ type SettingsContentProps = {
 
 type TabType = "general" | "appearance" | "models" | "connections"
 
-export function SettingsContent({
-  isDrawer = false,
-}: SettingsContentProps) {
+export function SettingsContent({ isDrawer = false }: SettingsContentProps) {
   const [activeTab, setActiveTab] = useState<TabType>("general")
 
   return (
@@ -39,7 +45,7 @@ export function SettingsContent({
         <div className="border-border mb-2 flex items-center justify-between border-b px-4 pb-2">
           <h2 className="text-lg font-medium text-balance">Settings</h2>
           <DrawerClose render={<Button variant="ghost" size="icon" />}>
-            <RiCloseLine size={16} />
+            <Icon icon={RiCloseLine} slotSize={16} />
           </DrawerClose>
         </div>
       )}
@@ -61,35 +67,35 @@ export function SettingsContent({
                   value="general"
                   className="ml-6 flex shrink-0 items-center gap-2"
                 >
-                  <RiSettings3Line size={16} />
+                  <Icon icon={RiSettings3Line} slotSize={16} />
                   <span>General</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="appearance"
                   className="flex shrink-0 items-center gap-2"
                 >
-                  <RiBrushLine size={16} />
+                  <Icon icon={RiBrushLine} slotSize={16} />
                   <span>Appearance</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="apikeys"
                   className="flex shrink-0 items-center gap-2"
                 >
-                  <RiKeyLine size={16} />
+                  <Icon icon={RiKeyLine} slotSize={16} />
                   <span>API Keys</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="models"
                   className="flex shrink-0 items-center gap-2"
                 >
-                  <RiBox3Line size={16} />
+                  <Icon icon={RiBox3Line} slotSize={16} />
                   <span>Models</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="connections"
                   className="flex shrink-0 items-center gap-2"
                 >
-                  <RiPlugLine size={16} />
+                  <Icon icon={RiPlugLine} slotSize={16} />
                   <span>Connections</span>
                 </TabsTrigger>
               </TabsList>
@@ -131,7 +137,7 @@ export function SettingsContent({
                   className="w-full justify-start rounded-md px-3 py-2 text-left"
                 >
                   <div className="flex items-center gap-2">
-                    <RiSettings3Line size={16} />
+                    <Icon icon={RiSettings3Line} slotSize={16} />
                     <span>General</span>
                   </div>
                 </TabsTrigger>
@@ -141,7 +147,7 @@ export function SettingsContent({
                   className="w-full justify-start rounded-md px-3 py-2 text-left"
                 >
                   <div className="flex items-center gap-2">
-                    <RiBrushLine size={16} />
+                    <Icon icon={RiBrushLine} slotSize={16} />
                     <span>Appearance</span>
                   </div>
                 </TabsTrigger>
@@ -151,7 +157,7 @@ export function SettingsContent({
                   className="w-full justify-start rounded-md px-3 py-2 text-left"
                 >
                   <div className="flex items-center gap-2">
-                    <RiKeyLine size={16} />
+                    <Icon icon={RiKeyLine} slotSize={16} />
                     <span>API Keys</span>
                   </div>
                 </TabsTrigger>
@@ -160,7 +166,7 @@ export function SettingsContent({
                   className="w-full justify-start rounded-md px-3 py-2 text-left"
                 >
                   <div className="flex items-center gap-2">
-                    <RiBox3Line size={16} />
+                    <Icon icon={RiBox3Line} slotSize={16} />
                     <span>Models</span>
                   </div>
                 </TabsTrigger>
@@ -169,7 +175,7 @@ export function SettingsContent({
                   className="w-full justify-start rounded-md px-3 py-2 text-left"
                 >
                   <div className="flex items-center gap-2">
-                    <RiPlugLine size={16} />
+                    <Icon icon={RiPlugLine} slotSize={16} />
                     <span>Connections</span>
                   </div>
                 </TabsTrigger>

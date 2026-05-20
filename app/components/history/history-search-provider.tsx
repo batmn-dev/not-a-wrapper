@@ -5,6 +5,7 @@ import { useKeyShortcut } from "@/app/hooks/use-key-shortcut"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useMessages } from "@/lib/chat-store/messages/provider"
 import { useChatSession } from "@/lib/chat-store/session/provider"
+import { useUser } from "@/lib/user-store/provider"
 import { useRouter } from "next/navigation"
 import {
   createContext,
@@ -24,7 +25,9 @@ type HistorySearchContextValue = {
   isHistoryOpen: boolean
 }
 
-const HistorySearchContext = createContext<HistorySearchContextValue | null>(null)
+const HistorySearchContext = createContext<HistorySearchContextValue | null>(
+  null
+)
 
 export function HistorySearchProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false)
@@ -33,10 +36,15 @@ export function HistorySearchProvider({ children }: { children: ReactNode }) {
   const { chats, updateTitle, deleteChat } = useChats()
   const { deleteMessages } = useMessages()
   const { chatId } = useChatSession()
+  const { user } = useUser()
+  const isAuthenticated = !!user
 
   const openHistory = useCallback(() => setIsOpen(true), [])
   const closeHistory = useCallback(() => setIsOpen(false), [])
-  const toggleHistory = useCallback(() => setIsOpen((previous) => !previous), [])
+  const toggleHistory = useCallback(
+    () => setIsOpen((previous) => !previous),
+    []
+  )
 
   useKeyShortcut(
     (event: KeyboardEvent) =>
@@ -83,6 +91,7 @@ export function HistorySearchProvider({ children }: { children: ReactNode }) {
           onConfirmDelete={handleConfirmDelete}
           isOpen={isOpen}
           setIsOpen={setIsOpen}
+          isAuthenticated={isAuthenticated}
         />
       ) : (
         <CommandHistory
@@ -94,6 +103,7 @@ export function HistorySearchProvider({ children }: { children: ReactNode }) {
           onOpenChange={setIsOpen}
           hasPopover={false}
           enableShortcut={false}
+          isAuthenticated={isAuthenticated}
         />
       )}
     </HistorySearchContext.Provider>
@@ -103,7 +113,9 @@ export function HistorySearchProvider({ children }: { children: ReactNode }) {
 export function useHistorySearch() {
   const context = useContext(HistorySearchContext)
   if (!context) {
-    throw new Error("useHistorySearch must be used within HistorySearchProvider")
+    throw new Error(
+      "useHistorySearch must be used within HistorySearchProvider"
+    )
   }
   return context
 }

@@ -1,9 +1,14 @@
 "use client"
-import { RiArrowLeftLine, RiLoader4Line, RiVerifiedBadgeLine } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
+import {
+  RiArrowLeftLine,
+  RiLoader4Line,
+  RiVerifiedBadgeLine,
+} from "@remixicon/react"
 import { useMutation } from "convex/react"
 import { AnimatePresence, motion } from "motion/react"
 import { useState } from "react"
@@ -76,7 +81,11 @@ export function FeedbackForm({ authUserId, onClose }: FeedbackFormProps) {
             transition={TRANSITION_CONTENT}
           >
             <div className="rounded-full bg-green-500/10 p-1">
-              <RiVerifiedBadgeLine size={24} className="size-6 text-green-500" />
+              <Icon
+                icon={RiVerifiedBadgeLine}
+                slotSize={24}
+                className="text-green-500"
+              />
             </div>
             <p className="text-foreground mt-3 mb-1 text-center text-sm font-medium">
               Thank you for your time!
@@ -129,7 +138,11 @@ export function FeedbackForm({ authUserId, onClose }: FeedbackFormProps) {
                 disabled={status === "submitting"}
                 className="rounded-lg"
               >
-                <RiArrowLeftLine size={16} className="text-foreground" />
+                <Icon
+                  icon={RiArrowLeftLine}
+                  slotSize={16}
+                  className="text-foreground"
+                />
               </Button>
               <Button
                 type="submit"
@@ -149,7 +162,11 @@ export function FeedbackForm({ authUserId, onClose }: FeedbackFormProps) {
                       transition={TRANSITION_CONTENT}
                       className="inline-flex items-center gap-2"
                     >
-                      <RiLoader4Line size={16} className="animate-spin" />
+                      <Icon
+                        icon={RiLoader4Line}
+                        slotSize={16}
+                        className="animate-spin"
+                      />
                       Sending...
                     </motion.span>
                   ) : (

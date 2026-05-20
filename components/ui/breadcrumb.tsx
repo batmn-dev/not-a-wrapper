@@ -1,11 +1,11 @@
 "use client"
-import { RiArrowRightSLine, RiMoreLine } from "@remixicon/react"
 
-import * as React from "react"
-import { useRender } from "@base-ui/react/use-render"
-import { mergeProps } from "@base-ui/react/merge-props"
-
+import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
+import { mergeProps } from "@base-ui/react/merge-props"
+import { useRender } from "@base-ui/react/use-render"
+import { RiArrowRightSLine, RiMoreLine } from "@remixicon/react"
+import * as React from "react"
 
 function Breadcrumb({ ...props }: React.ComponentProps<"nav">) {
   return <nav aria-label="breadcrumb" data-slot="breadcrumb" {...props} />
@@ -77,7 +77,7 @@ function BreadcrumbSeparator({
       className={cn("[&>svg]:size-3.5", className)}
       {...props}
     >
-      {children ?? <RiArrowRightSLine size={14} className="size-3.5" />}
+      {children ?? <Icon icon={RiArrowRightSLine} slotSize={14} />}
     </li>
   )
 }
@@ -94,7 +94,7 @@ function BreadcrumbEllipsis({
       className={cn("flex size-9 items-center justify-center", className)}
       {...props}
     >
-      <RiMoreLine size={16} />
+      <Icon icon={RiMoreLine} slotSize={16} />
       <span className="sr-only">More</span>
     </span>
   )

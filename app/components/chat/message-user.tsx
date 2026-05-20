@@ -1,5 +1,4 @@
 "use client"
-import { RiCheckLine, RiEditLine, RiFileCopyLine, RiPencilLine } from "@remixicon/react"
 
 import {
   MorphingDialog,
@@ -9,20 +8,27 @@ import {
   MorphingDialogImage,
   MorphingDialogTrigger,
 } from "@/components/motion-primitives/morphing-dialog"
+import { Button } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
 import {
   MessageAction,
   MessageActions,
   Message as MessageContainer,
   MessageContent,
 } from "@/components/ui/message"
-import { Button } from "@/components/ui/button"
+import { useScrollRoot } from "@/components/ui/scroll-root"
 import { toast } from "@/components/ui/toast"
 import { isConvexId } from "@/lib/chat-store/types"
 import { cn } from "@/lib/utils"
 import { UIMessage as MessageType } from "@ai-sdk/react"
+import {
+  RiCheckLine,
+  RiEditLine,
+  RiFileCopyLine,
+  RiPencilLine,
+} from "@remixicon/react"
 import Image from "next/image"
 import React, { useEffect, useRef, useState } from "react"
-import { useScrollRoot } from "@/components/ui/scroll-root"
 
 const getTextFromDataUrl = (dataUrl: string) => {
   const base64 = dataUrl.split(",")[1]
@@ -122,14 +128,11 @@ export function MessageUser({
     })
   }, [isEditing, stopScroll, scrollRef])
 
-  const isMultiline = children.includes('\n')
+  const isMultiline = children.includes("\n")
 
   return (
     <MessageContainer
-      className={cn(
-        "flex w-full flex-col items-end gap-0.5",
-        className
-      )}
+      className={cn("flex w-full flex-col items-end gap-0.5", className)}
       data-turn="user"
       data-message-id={id}
       data-scroll-anchor="false"
@@ -220,7 +223,7 @@ export function MessageUser({
       ) : (
         <MessageContent
           className={cn(
-            "bg-accent relative max-w-[var(--user-chat-width,70%)] whitespace-pre-wrap rounded-[18px] px-4",
+            "bg-accent relative max-w-[var(--user-chat-width,70%)] rounded-[18px] px-4 whitespace-pre-wrap",
             isMultiline ? "py-3" : "py-1.5"
           )}
           ref={contentRef}
@@ -236,10 +239,10 @@ export function MessageUser({
             onClick={copyToClipboard}
             type="button"
           >
-{copied ? (
-              <RiCheckLine size={20} className="size-5" />
+            {copied ? (
+              <Icon icon={RiCheckLine} slotSize={20} />
             ) : (
-              <RiFileCopyLine size={20} className="size-5" />
+              <Icon icon={RiFileCopyLine} slotSize={20} />
             )}
           </button>
         </MessageAction>
@@ -256,9 +259,9 @@ export function MessageUser({
               type="button"
             >
               {isEditing ? (
-                <RiPencilLine size={20} className="size-5" />
+                <Icon icon={RiPencilLine} slotSize={20} />
               ) : (
-                <RiEditLine size={20} className="size-5" />
+                <Icon icon={RiEditLine} slotSize={20} />
               )}
             </button>
           </MessageAction>
