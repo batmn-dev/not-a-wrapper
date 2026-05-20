@@ -423,7 +423,7 @@
   --foreground: oklch(0.985 0 0);
   --card: oklch(21.34% 0 0);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(26.45% 0 0);
+  --popover: oklch(32% 0 0);
   --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.985 0 0);
   --primary-foreground: oklch(0.21 0.006 285.885);
@@ -436,7 +436,7 @@
   --destructive: oklch(0.6 0.18 15);
   --destructive-foreground: oklch(0.95 0.01 20);
   --border: oklch(100% 0 0 / 8%);
-  --input: oklch(0.35 0.006 286.033);
+  --input: oklch(0.39 0.006 286.033);
   --ring: oklch(0.442 0.017 285.786);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
@@ -453,7 +453,8 @@
   --sidebar-ring: oklch(0.705 0.015 286.067);
   --shadow-border-value: var(--shadow-border-sm-value);
   --shadow-border-hover-value:
-    0 0 0 1px color-mix(in oklab, var(--foreground) 32%, transparent),
+    inset 0 0 1px color-mix(in oklab, var(--foreground) 32%, transparent),
+    0 0 1px rgba(0, 0, 0, 0.62),
     rgba(0, 0, 0, 0.14) 0px 0.301094px 0.301094px -1.25px,
     rgba(0, 0, 0, 0.22) 0px 1.14427px 1.14427px -2.5px,
     rgba(0, 0, 0, 0.14) 0px 5px 5px -3.75px;
@@ -462,31 +463,34 @@
     0 1px 2px -1px color-mix(in oklab, var(--destructive) 24%, transparent),
     0 2px 4px 0 color-mix(in oklab, var(--destructive) 16%, transparent);
   --shadow-border-xs-value:
-    0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent),
+    inset 0 0 1px color-mix(in oklab, var(--foreground) 20%, transparent),
+    0 0 1px rgba(0, 0, 0, 0.62),
     rgba(0, 0, 0, 0.16) 0px 0.150547px 0.150547px -0.625px,
     rgba(0, 0, 0, 0.22) 0px 0.572135px 0.572135px -1.25px,
     rgba(0, 0, 0, 0.16) 0px 2.5px 2.5px -1.875px;
   --shadow-border-sm-value:
-    0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent),
+    inset 0 0 1px color-mix(in oklab, var(--foreground) 20%, transparent),
+    0 0 1px rgba(0, 0, 0, 0.62),
     rgba(0, 0, 0, 0.14) 0px 0.301094px 0.301094px -1.25px,
     rgba(0, 0, 0, 0.22) 0px 1.14427px 1.14427px -2.5px,
     rgba(0, 0, 0, 0.14) 0px 5px 5px -3.75px;
   --shadow-border-md-value:
-    0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent),
+    inset 0 0 1px color-mix(in oklab, var(--foreground) 20%, transparent),
+    0 0 1px rgba(0, 0, 0, 0.62),
     rgba(0, 0, 0, 0.22) 0.398096px 0.398096px 0.562993px -0.9375px,
     rgba(0, 0, 0, 0.22) 1.20725px 1.20725px 1.70731px -1.875px,
     rgba(0, 0, 0, 0.2) 3.19133px 3.19133px 4.51322px -2.8125px,
     rgba(0, 0, 0, 0.14) 10px 10px 14.1421px -3.75px;
   --shadow-border-lg-value:
-    0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent),
-    rgba(0, 0, 0, 0.22) 0px 0.6px 0.9px -0.625px,
+    inset 0 0 1px color-mix(in oklab, var(--foreground) 20%, transparent),
+    0 0 1px rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.22) 0px 0.6px 0.9px -0.625px,
     rgba(0, 0, 0, 0.22) 0px 2.15px 3.04px -1.25px,
     rgba(0, 0, 0, 0.2) 0px 5.4px 7.64px -1.875px,
     rgba(0, 0, 0, 0.18) 0px 12px 16.97px -2.5px,
     rgba(0, 0, 0, 0.14) 0px 24px 33.94px -3.125px;
   --shadow-border-xl-value:
-    0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent),
-    rgba(0, 0, 0, 0.24) 0px 0.8px 1.2px -0.5px,
+    inset 0 0 1px color-mix(in oklab, var(--foreground) 20%, transparent),
+    0 0 1px rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.24) 0px 0.8px 1.2px -0.5px,
     rgba(0, 0, 0, 0.24) 0px 2.8px 4px -1px,
     rgba(0, 0, 0, 0.22) 0px 7.2px 10.18px -1.5px,
     rgba(0, 0, 0, 0.2) 0px 16px 22.63px -2px,
