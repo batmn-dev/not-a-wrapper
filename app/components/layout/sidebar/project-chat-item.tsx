@@ -171,14 +171,14 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
           <div className="ml-2 flex gap-1">
             <button
               onClick={handleSaveClick}
-              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-6 items-center justify-center rounded-md p-1"
+              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-6 items-center justify-center rounded-lg p-1"
               type="button"
             >
               <Icon icon={RiCheckLine} slotSize={12} />
             </button>
             <button
               onClick={handleCancelClick}
-              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-6 items-center justify-center rounded-md p-1"
+              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-6 items-center justify-center rounded-lg p-1"
               type="button"
             >
               <Icon icon={RiCloseLine} slotSize={12} />

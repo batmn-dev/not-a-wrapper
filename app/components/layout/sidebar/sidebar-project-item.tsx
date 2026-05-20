@@ -150,7 +150,7 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
   const containerClassName = useMemo(
     () =>
       cn(
-        "hover:bg-accent/80 hover:text-foreground group/project relative w-[calc(100%-var(--spacing)*3)] rounded-md mx-1.5 cursor-pointer",
+        "hover:bg-accent/80 hover:text-foreground group/project relative w-[calc(100%-var(--spacing)*3)] rounded-lg mx-1.5 cursor-pointer",
         isActive && "bg-accent hover:bg-accent text-foreground"
       ),
     [isActive]
@@ -172,7 +172,7 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
       ref={containerRef}
     >
       {isEditing ? (
-        <div className="bg-accent flex items-center rounded-md py-1 pr-1 pl-2">
+        <div className="bg-accent flex items-center rounded-lg py-1 pr-1 pl-2">
           <Icon
             icon={RiFolderLine}
             slotSize={20}
@@ -189,14 +189,14 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
           <div className="flex gap-0.5">
             <button
               onClick={handleSaveClick}
-              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-md p-1"
+              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-lg p-1"
               type="button"
             >
               <Icon icon={RiCheckLine} slotSize={16} />
             </button>
             <button
               onClick={handleCancelClick}
-              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-md p-1"
+              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-lg p-1"
               type="button"
             >
               <Icon icon={RiCloseLine} slotSize={16} />

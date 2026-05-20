@@ -74,7 +74,7 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
         onClick={handleSignOut}
         className="flex items-center gap-2"
       >
-        <Icon icon={RiLogoutBoxRLine} slotSize={16} />
+        <Icon icon={RiLogoutBoxRLine} slotSize={20} />
         <span>Sign out</span>
       </DropdownMenuItem>
     </>

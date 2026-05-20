@@ -515,7 +515,7 @@ function SignedOutHelpPopover() {
           <button
             type="button"
             className={cn(
-              "group/help text-primary hover:bg-accent/80 hover:text-foreground focus-visible:ring-ring relative mx-1.5 inline-flex h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer items-center gap-(--sidebar-item-gap) rounded-md bg-transparent px-2.5 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none pointer-coarse:h-auto pointer-coarse:py-3",
+              "group/help text-primary hover:bg-accent/80 hover:text-foreground focus-visible:ring-ring relative mx-1.5 inline-flex h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none pointer-coarse:h-auto pointer-coarse:py-3",
               open && "bg-accent/80 text-foreground"
             )}
             data-sidebar-item="true"

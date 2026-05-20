@@ -27,7 +27,7 @@ export function PopoverContentAuth() {
 
   return (
     <PopoverContent
-      className="w-[300px] overflow-hidden rounded-xl p-0"
+      className="w-[300px] overflow-hidden rounded-2xl p-0"
       side="top"
       align="start"
     >

@@ -132,11 +132,11 @@ export function ChatActionsMenu({
               {isShareLoading ? (
                 <Icon
                   icon={RiLoader4Line}
-                  slotSize={16}
-                  className="mr-2 animate-spin"
+                  slotSize={20}
+                  className="animate-spin"
                 />
               ) : (
-                <Icon icon={RiShare2Line} slotSize={16} className="mr-2" />
+                <Icon icon={RiShare2Line} slotSize={20} />
               )}
               Share
             </DropdownMenuItem>
@@ -148,9 +148,9 @@ export function ChatActionsMenu({
             }}
           >
             {chat.pinned ? (
-              <PinOff size={16} className="mr-2" />
+              <PinOff size={20} />
             ) : (
-              <Pin size={16} className="mr-2" />
+              <Pin size={20} />
             )}
             {chat.pinned ? "Unpin" : "Pin"}
           </DropdownMenuItem>
@@ -160,7 +160,7 @@ export function ChatActionsMenu({
               handleRename()
             }}
           >
-            <Icon icon={RiEditLine} slotSize={16} className="mr-2" />
+            <Icon icon={RiEditLine} slotSize={20} />
             Rename
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -170,7 +170,7 @@ export function ChatActionsMenu({
               setIsDeleteDialogOpen(true)
             }}
           >
-            <Icon icon={RiDeleteBinLine} slotSize={16} className="mr-2" />
+            <Icon icon={RiDeleteBinLine} slotSize={20} />
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>

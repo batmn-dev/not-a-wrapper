@@ -24,7 +24,7 @@ type SidebarMenuItemProps = {
 }
 
 const baseClassName = cn(
-  "group/menu-item relative inline-flex w-[calc(100%-var(--spacing)*3)] items-center rounded-md bg-transparent text-sm mx-1.5",
+  "group/menu-item relative inline-flex w-[calc(100%-var(--spacing)*3)] items-center rounded-lg bg-transparent text-sm mx-1.5",
   // Explicit height for consistency with collapsed state (h-9 = 36px)
   "h-9 pointer-coarse:h-auto",
   // Spacing using CSS variables

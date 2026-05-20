@@ -135,7 +135,7 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
   const containerClassName = useMemo(
     () =>
       cn(
-        "hover:bg-accent/80 hover:text-foreground group/chat relative w-[calc(100%-var(--spacing)*3)] rounded-md mx-1.5",
+        "hover:bg-accent/80 hover:text-foreground group/chat relative w-[calc(100%-var(--spacing)*3)] rounded-lg mx-1.5",
         isActive && "bg-accent hover:bg-accent text-foreground"
       ),
     [isActive]
@@ -157,7 +157,7 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
       ref={containerRef}
     >
       {isEditing ? (
-        <div className="bg-accent flex items-center rounded-md py-1 pr-1 pl-2">
+        <div className="bg-accent flex items-center rounded-lg py-1 pr-1 pl-2">
           <input
             ref={inputRef}
             value={editTitle}
@@ -169,14 +169,14 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
           <div className="flex gap-0.5">
             <button
               onClick={handleSaveClick}
-              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 items-center justify-center rounded-md p-1"
+              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 items-center justify-center rounded-lg p-1"
               type="button"
             >
               <Icon icon={RiCheckLine} slotSize={16} />
             </button>
             <button
               onClick={handleCancelClick}
-              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 items-center justify-center rounded-md p-1"
+              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 items-center justify-center rounded-lg p-1"
               type="button"
             >
               <Icon icon={RiCloseLine} slotSize={16} />
