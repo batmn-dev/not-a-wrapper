@@ -193,10 +193,12 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
             onClick={handleLinkClick}
           >
             <div
-              className="text-primary relative line-clamp-1 min-h-9 mask-r-from-80% mask-r-to-85% px-2.5 py-1.5 text-sm text-balance text-ellipsis whitespace-nowrap pointer-coarse:py-3"
+              className="text-primary relative flex min-h-9 w-full items-center overflow-hidden mask-r-from-80% mask-r-to-85% px-2.5 py-1.5 text-sm pointer-coarse:py-3"
               title={displayTitle}
             >
-              <span dir="auto">{displayTitle}</span>
+              <span className="min-w-0 truncate" dir="auto">
+                {displayTitle}
+              </span>
             </div>
           </Link>
 

@@ -129,7 +129,7 @@ export function ModelSelector({
   const trigger = (
     <Button
       variant="ghost"
-      className={cn("justify-between text-lg font-normal", className)}
+      className={cn("justify-between rounded-lg text-lg font-normal", className)}
       disabled={isLoadingModels}
     >
       <span>{currentModel?.name || "Select model"}</span>

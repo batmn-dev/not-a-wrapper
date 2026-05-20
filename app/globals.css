@@ -494,7 +494,7 @@
     rgba(0, 0, 0, 0.12) 0px 52px 73.54px -3px;
 
   /* Composer surface */
-  --composer-bg: oklch(24.56% 0 0);
+  --composer-bg: oklch(27.5% 0 0);
   --sharp-edge-top-shadow: 0 1px 0 rgba(255, 255, 255, 0.05);
   --sharp-edge-top-shadow-placeholder: 0 1px 0 transparent;
 }
@@ -502,6 +502,17 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+  }
+  button:not(:disabled):not([aria-disabled="true"]):not([data-disabled]),
+  [role="button"]:not([aria-disabled="true"]):not([data-disabled]) {
+    cursor: pointer;
+  }
+  button:disabled,
+  button[aria-disabled="true"],
+  button[data-disabled],
+  [role="button"][aria-disabled="true"],
+  [role="button"][data-disabled] {
+    cursor: not-allowed;
   }
   body {
     @apply bg-background text-foreground;
