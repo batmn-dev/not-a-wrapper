@@ -309,6 +309,7 @@ function SidebarTrigger({
     >
       <PanelLeft
         size={20}
+        glyphInset={0}
         className="size-5 opacity-50 group-hover/button:opacity-100"
       />
       <span className="sr-only">{open ? "Close sidebar" : "Open sidebar"}</span>

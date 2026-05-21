@@ -403,7 +403,7 @@ function CollapsedHeaderToggle() {
           <button
             type="button"
             onClick={toggleSidebar}
-            className="group/toggle hover:bg-accent flex h-9 w-9 cursor-e-resize items-center justify-center rounded-lg focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none rtl:cursor-w-resize"
+            className="group/toggle hover:bg-accent relative flex h-9 w-9 cursor-e-resize items-center justify-center rounded-lg focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none rtl:cursor-w-resize"
             aria-label="Open sidebar"
             aria-expanded={false}
             aria-controls={SIDEBAR_CONTAINER_ID}
@@ -411,12 +411,13 @@ function CollapsedHeaderToggle() {
         }
       >
         {/* Default: Logo icon */}
-        <NawIcon className="size-5 group-hover/toggle:hidden group-focus-visible/toggle:hidden" />
+        <NawIcon className="absolute inset-0 m-auto size-5 transition-opacity group-hover/toggle:opacity-0 group-focus-visible/toggle:opacity-0" />
         {/* Hover: Sidebar icon */}
         <Icon
           icon={RiExpandRightLine}
           slotSize={20}
-          className="hidden group-hover/toggle:block group-focus-visible/toggle:block"
+          glyphInset={0}
+          className="absolute inset-0 m-auto opacity-0 transition-opacity group-hover/toggle:opacity-100 group-focus-visible/toggle:opacity-100"
         />
       </TooltipTrigger>
       <TooltipContent side="right">Open sidebar ⇧⌘S</TooltipContent>
