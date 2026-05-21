@@ -226,7 +226,7 @@ export function ModelSelector({
       >
         <DropdownMenuTrigger render={trigger} />
         <DropdownMenuContent
-          className="flex max-h-[min(22rem,var(--available-height))] w-[300px] flex-col overflow-hidden"
+          className="[--model-selector-fixed-height:3rem] [--model-selector-list-max-height:18rem] w-[300px] overflow-hidden"
           align="start"
           sideOffset={4}
           animated={false}
@@ -251,7 +251,7 @@ export function ModelSelector({
               />
             </div>
           </div>
-          <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-0.5">
+          <div className="max-h-[min(var(--model-selector-list-max-height),max(0px,calc(var(--available-height)-var(--model-selector-fixed-height))))] overflow-y-auto pr-0.5">
             {isLoadingModels ? (
               <div className="flex h-full flex-col items-center justify-center p-6 text-center">
                 <p className="text-muted-foreground mb-2 text-sm">

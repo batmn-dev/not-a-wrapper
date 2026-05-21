@@ -2,7 +2,7 @@
 
 import { Icon } from "@/components/ui/icon"
 import { api } from "@/convex/_generated/api"
-import { RiFolderAddLine } from "@remixicon/react"
+import { RiFolderAddFill, RiFolderAddLine } from "@remixicon/react"
 import { useQuery } from "convex/react"
 import { useState } from "react"
 import { DialogCreateProject } from "./dialog-create-project"
@@ -27,12 +27,14 @@ export function SidebarProject({ isAuthenticated }: SidebarProjectProps) {
     <div className="mb-5">
       <SidebarMenuItem
         icon={<Icon icon={RiFolderAddLine} slotSize={20} />}
+        activeIcon={<Icon icon={RiFolderAddFill} slotSize={20} />}
         label="New project"
         onClick={() => setIsDialogOpen(true)}
+        isActive={isDialogOpen}
       />
 
       {isLoading ? null : (
-        <div className="space-y-1">
+        <div className="flex flex-col">
           {projects?.map((project) => (
             <SidebarProjectItem key={project._id} project={project} />
           ))}

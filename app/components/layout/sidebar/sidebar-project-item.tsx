@@ -7,7 +7,12 @@ import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { cn } from "@/lib/utils"
-import { RiCheckLine, RiCloseLine, RiFolderLine } from "@remixicon/react"
+import {
+  RiCheckLine,
+  RiCloseLine,
+  RiFolderFill,
+  RiFolderLine,
+} from "@remixicon/react"
 import { useMutation } from "convex/react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -150,7 +155,7 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
   const containerClassName = useMemo(
     () =>
       cn(
-        "hover:bg-accent/80 hover:text-foreground group/project relative w-[calc(100%-var(--spacing)*3)] rounded-lg mx-1.5 cursor-pointer",
+        "menu-item-hoverable hover:bg-accent/80 hover:text-foreground group/project relative mx-1.5 h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer rounded-lg",
         isActive && "bg-accent hover:bg-accent text-foreground"
       ),
     [isActive]
@@ -172,9 +177,9 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
       ref={containerRef}
     >
       {isEditing ? (
-        <div className="bg-accent flex items-center rounded-lg py-1 pr-1 pl-2">
+        <div className="flex h-full items-center rounded-lg py-[3px] pr-1 pl-2">
           <Icon
-            icon={RiFolderLine}
+            icon={RiFolderFill}
             slotSize={20}
             className="text-primary mr-2 flex-shrink-0"
           />
@@ -207,15 +212,18 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
         <>
           <Link
             href={`/p/${project._id}`}
-            className="block w-full cursor-pointer"
+            className="block h-full w-full cursor-pointer"
             prefetch
             onClick={handleLinkClick}
           >
             <div
-              className="text-primary relative line-clamp-1 flex min-h-9 w-full items-center gap-2 mask-r-from-80% mask-r-to-85% px-2.5 py-1.5 text-sm text-ellipsis whitespace-nowrap"
+              className="text-primary relative line-clamp-1 flex h-full w-full items-center gap-2 mask-r-from-80% mask-r-to-85% px-2.5 py-1.5 text-sm text-ellipsis whitespace-nowrap"
               title={displayName}
             >
-              <Icon icon={RiFolderLine} slotSize={20} />
+              <Icon
+                icon={isActive ? RiFolderFill : RiFolderLine}
+                slotSize={20}
+              />
               {displayName}
             </div>
           </Link>

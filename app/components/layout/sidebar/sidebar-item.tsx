@@ -135,7 +135,7 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
   const containerClassName = useMemo(
     () =>
       cn(
-        "hover:bg-accent/80 hover:text-foreground group/chat relative w-[calc(100%-var(--spacing)*3)] rounded-lg mx-1.5",
+        "menu-item-hoverable hover:bg-accent/80 hover:text-foreground group/chat relative mx-1.5 h-9 w-[calc(100%-var(--spacing)*3)] rounded-lg pointer-coarse:h-auto",
         isActive && "bg-accent hover:bg-accent text-foreground"
       ),
     [isActive]
@@ -157,7 +157,7 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
       ref={containerRef}
     >
       {isEditing ? (
-        <div className="bg-accent flex items-center rounded-lg py-1 pr-1 pl-2">
+        <div className="flex h-full items-center rounded-lg py-[3px] pr-1 pl-2">
           <input
             ref={inputRef}
             value={editTitle}
@@ -187,13 +187,13 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
         <>
           <Link
             href={`/c/${chat.id}`}
-            className="block w-full"
+            className="block h-full w-full"
             prefetch
             draggable={false}
             onClick={handleLinkClick}
           >
             <div
-              className="text-primary relative flex min-h-9 w-full items-center overflow-hidden mask-r-from-80% mask-r-to-85% px-2.5 py-1.5 text-sm pointer-coarse:py-3"
+              className="text-primary relative flex h-full w-full items-center overflow-hidden mask-r-from-80% mask-r-to-85% px-2.5 py-1.5 text-sm pointer-coarse:h-auto pointer-coarse:py-3"
               title={displayTitle}
             >
               <span className="min-w-0 truncate" dir="auto">

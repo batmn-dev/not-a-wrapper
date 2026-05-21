@@ -71,3 +71,5 @@ bun-debug.log*
 
 # Optional: uncomment to ignore memories directory
 # memories/
+.gstack/
+.gstack/

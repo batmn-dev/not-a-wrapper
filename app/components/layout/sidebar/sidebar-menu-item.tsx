@@ -2,17 +2,27 @@
 
 import { cn } from "@/lib/utils"
 import Link from "next/link"
-import { forwardRef, type ReactNode, type Ref } from "react"
+import {
+  forwardRef,
+  type ComponentPropsWithoutRef,
+  type ReactNode,
+  type Ref,
+} from "react"
 
-type SidebarMenuItemProps = {
+type SidebarMenuItemProps = Omit<
+  ComponentPropsWithoutRef<"button">,
+  "children" | "className" | "type" | "onClick"
+> & {
   /** Icon node */
   icon: ReactNode
+  /** Icon node used when the item is active */
+  activeIcon?: ReactNode
   /** Label text */
   label: string
   /** Navigation href - renders as Link if provided */
   href?: string
   /** Click handler - used when no href (e.g., opens modal) */
-  onClick?: () => void
+  onClick?: ComponentPropsWithoutRef<"button">["onClick"]
   /** Trailing content (keyboard shortcuts, badges, etc.) */
   trailing?: ReactNode
   /** Test ID for e2e testing */
@@ -24,7 +34,7 @@ type SidebarMenuItemProps = {
 }
 
 const baseClassName = cn(
-  "group/menu-item relative inline-flex w-[calc(100%-var(--spacing)*3)] items-center rounded-lg bg-transparent text-sm mx-1.5",
+  "menu-item-hoverable group/menu-item relative inline-flex w-[calc(100%-var(--spacing)*3)] items-center rounded-lg bg-transparent text-sm mx-1.5",
   // Explicit height for consistency with collapsed state (h-9 = 36px)
   "h-9 pointer-coarse:h-auto",
   // Spacing using CSS variables
@@ -49,15 +59,29 @@ export const SidebarMenuItem = forwardRef<
   HTMLAnchorElement | HTMLButtonElement,
   SidebarMenuItemProps
 >(function SidebarMenuItem(
-  { icon, label, href, onClick, trailing, testId, className, isActive },
+  {
+    icon,
+    activeIcon,
+    label,
+    href,
+    onClick,
+    trailing,
+    testId,
+    className,
+    isActive,
+    ...buttonProps
+  },
   ref
 ) {
   const hasTrailing = Boolean(trailing)
+  const resolvedIcon = isActive && activeIcon ? activeIcon : icon
 
   const content = (
     <>
       {/* Icon wrapper (ChatGPT pattern) for consistent alignment */}
-      <div className="flex shrink-0 items-center justify-center">{icon}</div>
+      <div className="flex shrink-0 items-center justify-center">
+        {resolvedIcon}
+      </div>
       <div className="flex min-w-0 grow items-center gap-(--sidebar-item-gap)">
         <span className="truncate">{label}</span>
       </div>
@@ -72,7 +96,7 @@ export const SidebarMenuItem = forwardRef<
   const combinedClassName = cn(
     baseClassName,
     hasTrailing && "justify-between",
-    isActive && "bg-accent",
+    isActive && "bg-accent text-foreground hover:bg-accent",
     className
   )
 
@@ -83,18 +107,22 @@ export const SidebarMenuItem = forwardRef<
       className={combinedClassName}
       data-testid={testId}
       data-sidebar-item="true"
+      data-active={isActive ? "true" : undefined}
+      aria-current={isActive ? "page" : undefined}
       prefetch
     >
       {content}
     </Link>
   ) : (
     <button
+      {...buttonProps}
       ref={ref as Ref<HTMLButtonElement>}
       type="button"
       onClick={onClick}
       className={combinedClassName}
       data-testid={testId}
       data-sidebar-item="true"
+      data-active={isActive ? "true" : undefined}
     >
       {content}
     </button>

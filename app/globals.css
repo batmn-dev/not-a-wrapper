@@ -524,6 +524,11 @@
 }
 
 @layer utilities {
+  .menu-item-hoverable {
+    border-block: 1px solid transparent;
+    background-clip: padding-box;
+  }
+
   /* Content fade: two-layer gradient pseudo behind sticky composer.
      Layer 1 (28px): transparent → background (fade zone matching border-radius).
      Layer 2 (full): transparent for 28px then solid background below. */

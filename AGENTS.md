@@ -43,6 +43,16 @@ Deliver correct, maintainable, well-researched, best practice changes.
 - Never force-push to shared branches.
 - Avoid destructive git commands unless explicitly requested.
 
+### Dirty Worktree And Generated Files (MUST)
+
+- Treat all existing modified, deleted, and untracked files as user-owned unless the user explicitly says they are disposable.
+- Before running tools that may write files, inspect `git status --short` and note the existing dirty state.
+- After running browser, QA, codegen, or agent-helper tools, inspect `git status --short` again and identify any new side effects separately from the requested code change.
+- Do not delete, revert, rewrite, or "clean up" out-of-scope files just to make the final diff look cleaner.
+- If a tool creates generated artifacts such as `.gstack/`, screenshots, logs, traces, or audit files, leave them in place and report them unless the user explicitly asks to remove them.
+- Never delete untracked files to restore scope. Untracked files are not recoverable from git.
+- If accidental out-of-scope edits occur, stop and report the exact paths before attempting repair.
+
 ## Ask Before Making These Changes (MUST)
 
 - Adding dependencies (`bun add ...`)
@@ -107,3 +117,13 @@ Load only when needed:
 1. Run `git fetch origin` before branch comparisons.
 2. Diff and log against `origin/main` (not local `main`).
 3. Scope PR descriptions to commits in `origin/main..HEAD`.
+
+## Scope Verification (MUST)
+
+When making a narrow change, final verification must include:
+
+1. `git diff -- <intended paths>` to confirm the intended change.
+2. `git status --short` to list unrelated dirty files separately.
+3. A final note distinguishing requested edits from pre-existing or tool-generated changes.
+
+Do not stage, delete, or normalize unrelated files during this process.

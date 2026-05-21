@@ -26,6 +26,7 @@ import { useChats } from "@/lib/chat-store/chats/provider"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
 import {
+  RiAddCircleFill,
   RiAddCircleLine,
   RiArrowRightSLine,
   RiCloseLine,
@@ -40,8 +41,10 @@ import {
   RiSparklingLine,
 } from "@remixicon/react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { useParams, usePathname } from "next/navigation"
 import React, { useMemo, useRef } from "react"
+import { PopoverContentAuth } from "../../chat-input/popover-content-auth"
+import { useHistorySearch } from "../../history/history-search-provider"
 import { HistoryTrigger } from "../../history/history-trigger"
 import { UserMenu } from "../user-menu"
 import { SidebarList } from "./sidebar-list"
@@ -51,12 +54,15 @@ import { SidebarProject } from "./sidebar-project"
 export function AppSidebar() {
   const isMobile = useBreakpoint(768)
   const { setOpenMobile, state, toggleSidebar } = useSidebar()
+  const { isHistoryOpen } = useHistorySearch()
   const isCollapsed = state === "collapsed"
   const { chats, pinnedChats, isLoading } = useChats()
   const { user } = useUser()
   const params = useParams<{ chatId: string }>()
+  const pathname = usePathname()
   const currentChatId = params.chatId
   const isLoggedIn = !!user
+  const isNewChatActive = pathname === "/"
 
   // Single scroll container ref for unified scroll model
   const scrollRef = useRef<HTMLElement>(null)
@@ -133,21 +139,28 @@ export function AppSidebar() {
         <div className="mt-(--sidebar-section-first-margin-top) flex w-full flex-col items-start gap-0 px-1.5">
           <CollapsedMenuItem
             icon={<Icon icon={RiAddCircleLine} slotSize={20} />}
+            activeIcon={<Icon icon={RiAddCircleFill} slotSize={20} />}
             label="New chat"
             href="/"
             shortcut="⇧⌘O"
+            isActive={isNewChatActive}
           />
-          <HistoryTrigger
-            hasSidebar={false}
-            trigger={
-              <CollapsedMenuItem
-                icon={<Icon icon={RiSearchLine} slotSize={20} />}
-                label="Search"
-                shortcut="⌘K"
-              />
-            }
-            hasPopover={false}
-          />
+          {isLoggedIn ? (
+            <HistoryTrigger
+              hasSidebar={false}
+              trigger={
+                <CollapsedMenuItem
+                  icon={<Icon icon={RiSearchLine} slotSize={20} />}
+                  label="Search"
+                  shortcut="⌘K"
+                  isActive={isHistoryOpen}
+                />
+              }
+              hasPopover={false}
+            />
+          ) : (
+            <SignedOutCollapsedSearchPopover />
+          )}
         </div>
 
         {/* Spacer */}
@@ -242,9 +255,11 @@ export function AppSidebar() {
             <div className="flex w-full flex-col items-start gap-0">
               <SidebarMenuItem
                 icon={<Icon icon={RiAddCircleLine} slotSize={20} />}
+                activeIcon={<Icon icon={RiAddCircleFill} slotSize={20} />}
                 label="New chat"
                 href="/"
                 testId="new-chat-button"
+                isActive={isNewChatActive}
                 trailing={
                   <KbdGroup>
                     <Kbd label="Shift">⇧</Kbd>
@@ -253,22 +268,27 @@ export function AppSidebar() {
                   </KbdGroup>
                 }
               />
-              <HistoryTrigger
-                hasSidebar={false}
-                trigger={
-                  <SidebarMenuItem
-                    icon={<Icon icon={RiSearchLine} slotSize={20} />}
-                    label="Search"
-                    trailing={
-                      <KbdGroup>
-                        <Kbd label="Command">⌘</Kbd>
-                        <Kbd>K</Kbd>
-                      </KbdGroup>
-                    }
-                  />
-                }
-                hasPopover={false}
-              />
+              {isLoggedIn ? (
+                <HistoryTrigger
+                  hasSidebar={false}
+                  trigger={
+                    <SidebarMenuItem
+                      icon={<Icon icon={RiSearchLine} slotSize={20} />}
+                      label="Search"
+                      isActive={isHistoryOpen}
+                      trailing={
+                        <KbdGroup>
+                          <Kbd label="Command">⌘</Kbd>
+                          <Kbd>K</Kbd>
+                        </KbdGroup>
+                      }
+                    />
+                  }
+                  hasPopover={false}
+                />
+              ) : (
+                <SignedOutSidebarSearchPopover />
+              )}
             </div>
             {/* Solid bg mask below sticky actions — hides scroll seam (ChatGPT pattern) */}
             <div
@@ -431,23 +451,31 @@ function CollapsedHeaderToggle() {
  */
 function CollapsedMenuItem({
   icon,
+  activeIcon,
   label,
   href,
   onClick,
   shortcut,
+  isActive,
 }: {
   icon: React.ReactNode
+  activeIcon?: React.ReactNode
   label: string
   href?: string
   onClick?: () => void
   shortcut?: string
+  isActive?: boolean
 }) {
-  const content = <div className="flex items-center justify-center">{icon}</div>
+  const resolvedIcon = isActive && activeIcon ? activeIcon : icon
+  const content = (
+    <div className="flex items-center justify-center">{resolvedIcon}</div>
+  )
 
   const className = cn(
-    "flex h-9 w-10 items-center justify-center rounded-lg",
+    "menu-item-hoverable flex h-9 w-10 items-center justify-center rounded-lg",
     "cursor-pointer",
     "hover:bg-accent",
+    isActive && "bg-accent text-foreground hover:bg-accent",
     "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
   )
 
@@ -458,13 +486,20 @@ function CollapsedMenuItem({
       <TooltipTrigger
         render={
           href ? (
-            <Link href={href} className={className} data-sidebar-item="true" />
+            <Link
+              href={href}
+              className={className}
+              data-sidebar-item="true"
+              data-active={isActive ? "true" : undefined}
+              aria-current={isActive ? "page" : undefined}
+            />
           ) : (
             <button
               type="button"
               onClick={onClick}
               className={className}
               data-sidebar-item="true"
+              data-active={isActive ? "true" : undefined}
             />
           )
         }
@@ -473,6 +508,65 @@ function CollapsedMenuItem({
       </TooltipTrigger>
       <TooltipContent side="right">{tooltipContent}</TooltipContent>
     </Tooltip>
+  )
+}
+
+function SignedOutSidebarSearchPopover() {
+  const [open, setOpen] = React.useState(false)
+
+  return (
+    <Popover open={open} onOpenChange={(nextOpen) => setOpen(nextOpen)}>
+      <PopoverTrigger
+        render={
+          <SidebarMenuItem
+            icon={<Icon icon={RiSearchLine} slotSize={20} />}
+            label="Search"
+            isActive={open}
+            trailing={
+              <KbdGroup>
+                <Kbd label="Command">⌘</Kbd>
+                <Kbd>K</Kbd>
+              </KbdGroup>
+            }
+          />
+        }
+      />
+      <PopoverContentAuth side="right" align="start" sideOffset={8} />
+    </Popover>
+  )
+}
+
+function SignedOutCollapsedSearchPopover() {
+  const [open, setOpen] = React.useState(false)
+
+  const className = cn(
+    "menu-item-hoverable flex h-9 w-10 items-center justify-center rounded-lg",
+    "cursor-pointer",
+    "hover:bg-accent",
+    open && "bg-accent text-foreground hover:bg-accent",
+    "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+  )
+
+  return (
+    <Popover open={open} onOpenChange={(nextOpen) => setOpen(nextOpen)}>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            className={className}
+            data-sidebar-item="true"
+            data-active={open ? "true" : undefined}
+            aria-label="Search"
+            title="Search ⌘K"
+          />
+        }
+      >
+        <div className="flex items-center justify-center">
+          <Icon icon={RiSearchLine} slotSize={20} />
+        </div>
+      </PopoverTrigger>
+      <PopoverContentAuth side="right" align="start" sideOffset={8} />
+    </Popover>
   )
 }
 
@@ -516,7 +610,7 @@ function SignedOutHelpPopover() {
           <button
             type="button"
             className={cn(
-              "group/help text-primary hover:bg-accent/80 hover:text-foreground focus-visible:ring-ring relative mx-1.5 inline-flex h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none pointer-coarse:h-auto pointer-coarse:py-3",
+              "menu-item-hoverable group/help text-primary hover:bg-accent/80 hover:text-foreground focus-visible:ring-ring relative mx-1.5 inline-flex h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none pointer-coarse:h-auto pointer-coarse:py-3",
               open && "bg-accent/80 text-foreground"
             )}
             data-sidebar-item="true"
@@ -534,7 +628,7 @@ function SignedOutHelpPopover() {
           icon={RiArrowRightSLine}
           slotSize={20}
           className={cn(
-            "text-muted-foreground ml-auto size-5 shrink-0 opacity-0 transition-opacity group-hover/help:opacity-100",
+            "text-muted-foreground ml-auto size-5 shrink-0 opacity-0 transition-none group-hover/help:opacity-100",
             open && "opacity-100"
           )}
           aria-hidden="true"
@@ -592,7 +686,7 @@ function SignedOutHelpPopoverItem({
     <button
       type="button"
       onClick={onClick}
-      className="group/help-popover-item text-primary hover:bg-accent/80 hover:text-foreground focus-visible:bg-accent/80 focus-visible:text-foreground focus-visible:ring-ring inline-flex h-9 w-full cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset pointer-coarse:h-auto pointer-coarse:py-3"
+      className="menu-item-hoverable group/help-popover-item text-primary hover:bg-accent/80 hover:text-foreground focus-visible:bg-accent/80 focus-visible:text-foreground focus-visible:ring-ring inline-flex h-9 w-full cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset pointer-coarse:h-auto pointer-coarse:py-3"
     >
       <div className="flex shrink-0 items-center justify-center">{icon}</div>
       <div className="flex min-w-0 grow items-center gap-(--sidebar-item-gap)">
