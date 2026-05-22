@@ -7,7 +7,7 @@ import { AuthShell } from "../_components/auth-shell"
 
 type ResetPasswordPageProps = {
   searchParams?: Promise<{
-    token?: string
+    token?: string | string[]
   }>
 }
 
@@ -18,7 +18,7 @@ export default async function ResetPasswordPage({
   if (user) redirect("/")
 
   const params = searchParams ? await searchParams : {}
-  const token = params.token ?? ""
+  const token = typeof params.token === "string" ? params.token : ""
 
   return (
     <AuthShell title="Choose a new password">

@@ -3,7 +3,6 @@
 import { APP_DOMAIN } from "@/lib/config"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
-
 import {
   fieldErrorsFromZodError,
   forgotPasswordSchema,
@@ -29,20 +28,28 @@ function formDataToObject(formData: FormData) {
   return Object.fromEntries(formData.entries())
 }
 
+function firstHeaderValue(value: string | null) {
+  return value?.split(",")[0]?.trim() || undefined
+}
+
 async function getRequestContext(pathname: string) {
   const headerStore = await headers()
   const host =
-    headerStore.get("x-forwarded-host") ??
+    firstHeaderValue(headerStore.get("x-forwarded-host")) ??
     headerStore.get("host") ??
     new URL(APP_DOMAIN).host
   const protocol =
-    headerStore.get("x-forwarded-proto") ??
+    firstHeaderValue(headerStore.get("x-forwarded-proto")) ??
     (host.startsWith("localhost") || host.startsWith("127.0.0.1")
       ? "http"
       : "https")
-  const forwardedFor = headerStore.get("x-forwarded-for")
+  // SECURITY: This trusts proxy IP headers because Vercel is the only
+  // deployment target and rewrites them at the edge. If Vercel is not the only
+  // deployment target, flag this and replace it with an explicit trusted-proxy
+  // client IP resolver or omit ipAddress before shipping auth changes.
   const ipAddress =
-    headerStore.get("x-real-ip") ?? forwardedFor?.split(",")[0]?.trim()
+    headerStore.get("x-real-ip") ??
+    firstHeaderValue(headerStore.get("x-forwarded-for"))
 
   return {
     requestUrl: `${protocol}://${host}${pathname}`,
