@@ -19,7 +19,7 @@ export function useGlobalPromptFocus(
       if (e.metaKey || e.ctrlKey || e.altKey) return
 
       // Only handle printable characters (single-char keys)
-      if (e.key.length !== 1) return
+      if (typeof e.key !== "string" || e.key.length !== 1) return
 
       // Don't steal focus from inputs, textareas, selects, or contentEditable
       const target = e.target as HTMLElement

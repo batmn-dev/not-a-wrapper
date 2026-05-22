@@ -1,5 +1,6 @@
 "use client"
 
+import { AuthModalTrigger } from "@/app/auth/_components/auth-modal"
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { useScrollAttributes } from "@/app/hooks/use-scroll-attributes"
 import { NawIcon } from "@/components/icons/naw"
@@ -388,14 +389,13 @@ export function AppSidebar() {
                 </p>
               </div>
               <div className="-mx-1.5">
-                <Button
+                <AuthModalTrigger
                   variant="outline"
                   size="lg"
                   className="h-11 w-full px-4 text-sm font-medium"
-                  render={<Link href="/login" />}
                 >
                   <span>Log in</span>
-                </Button>
+                </AuthModalTrigger>
               </div>
             </div>
           )}

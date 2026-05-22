@@ -95,18 +95,7 @@ Prioritize readable chat workflows, compact controls, and existing primitives ov
 
 ## Colors
 
-Use a restrained neutral palette.
-
-- **Background:** Main app and page background.
-- **Foreground:** Primary text and high-emphasis UI.
-- **Muted:** Secondary text, helper text, and metadata.
-- **Border:** Dividers, outlines, and edges.
-- **Surface:** Muted, card, popover, sidebar, and accent surfaces.
-- **Accent:** Hover, active, and selected UI states.
-- **Primary:** Main actions.
-- **Error:** Destructive actions, validation errors, and warnings.
-
-Avoid new colors unless the existing tokens cannot express the required state.
+Use the existing restrained neutral tokens. Avoid new colors unless the current token set cannot express the required state.
 
 ## Typography
 
@@ -120,15 +109,7 @@ Avoid using more than two font weights in a single view.
 
 ## Layout
 
-Use a compact Tailwind spacing rhythm. The app shell uses `h-svh`, `--spacing-app-header`, `ScrollRoot`, and a flex chat layout. Chat content centers around `40rem`, expanding to `48rem` on larger containers.
-
-Default rhythm:
-
-- Small gaps: `4px-8px`
-- Standard gaps: `16px`
-- Section gaps: `24px-40px`
-
-Prefer stacks, compact grids, constrained widths, and clear sections.
+Use a compact Tailwind spacing rhythm. The app shell uses `h-svh`, `--spacing-app-header`, `ScrollRoot`, and a flex chat layout. Chat content centers around `40rem`, expanding to `48rem` on larger containers. Prefer stacks, compact grids, constrained widths, and clear sections.
 
 ## Elevation & Depth
 
@@ -147,39 +128,14 @@ Do not mix sharp, highly rounded, and ornamental shapes in one view.
 
 ## Components
 
-### Buttons
-
-Use `Button` from `components/ui/button`. Primary buttons are for main actions. Secondary actions are quieter: `outline`, `ghost`, text, or icon buttons.
-
-Button labels should be short, specific, and action-oriented.
-
-### Icons
-
-Use Remix icons through `Icon` with `slotSize`. Line icons are the default; filled icons are mainly for active states.
-
-### Navigation
-
-Use the sticky header plus collapsible sidebar pattern. Sidebar rows are compact, rounded, truncated, and use `bg-accent` for hover/active states.
-
-### Cards
-
-Cards should group related content. Use existing card primitives and `shadow-border-*` surfaces. Avoid nested cards unless the hierarchy is clear.
-
-### Inputs
-
-Use existing `Input`, `Textarea`, `Select`, `Field`, and `Label` patterns. Focus uses `focus-visible:ring-*`; invalid states use destructive tokens.
-
-### Chat
-
-User messages are right-aligned accent bubbles. Assistant messages are transparent prose surfaces with hover actions.
-
-### Overlays
-
-Use existing Base UI wrappers for dialogs, drawers, popovers, dropdowns, and tooltips.
-
-### States
-
-Empty states are simple centered copy with muted text. Loading states use `Skeleton`, `Spinner`, `Loader`, `ThinkingBar`, or streaming indicators.
+- Buttons: use `Button` from `components/ui/button`; common secondary variants are `outline`, `ghost`, text, or icon buttons.
+- Icons: use Remix icons through `Icon` with `slotSize`; line icons are default, filled icons are mainly for active states.
+- Navigation: use the sticky header plus collapsible sidebar pattern. Sidebar rows are compact, rounded, truncated, and use `bg-accent` for hover/active states.
+- Cards: use existing card primitives and `shadow-border-*` surfaces.
+- Inputs: use `Input`, `Textarea`, `Select`, `Field`, and `Label`; focus uses `focus-visible:ring-*`, invalid states use destructive tokens.
+- Chat: user messages are right-aligned accent bubbles; assistant messages are transparent prose surfaces with hover actions.
+- Overlays: use existing Base UI wrappers for dialogs, drawers, popovers, dropdowns, and tooltips.
+- States: use `Empty`, `Skeleton`, `Spinner`, `Loader`, `ThinkingBar`, or streaming indicators.
 
 ## Do's and Don'ts
 
@@ -196,7 +152,6 @@ Don't:
 - Add gradients, decorative shadows, ornamental effects, or new icon systems by default.
 - Invent new colors, fonts, shadows, radii, or spacing scales casually.
 - Overstyle empty states, loading states, or error states.
-- Treat dense tables, illustration, and marketing pages as not established.
 
 ## Not Established Yet
 

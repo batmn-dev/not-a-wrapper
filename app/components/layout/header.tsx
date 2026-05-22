@@ -1,12 +1,12 @@
 "use client"
 
 import { HistoryTrigger } from "@/app/components/history/history-trigger"
+import { AuthModalTrigger } from "@/app/auth/_components/auth-modal"
 import { ButtonNewChat } from "@/app/components/layout/button-new-chat"
 import { ModelSelectorHeader } from "@/app/components/layout/model-selector-header"
 import { UserMenu } from "@/app/components/layout/user-menu"
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { NawIcon } from "@/components/icons/naw"
-import { Button } from "@/components/ui/button"
 import { useScrollRoot } from "@/components/ui/scroll-root"
 import { APP_NAME } from "@/lib/config"
 import { useUser } from "@/lib/user-store/provider"
@@ -65,15 +65,10 @@ export function Header({ hasSidebar }: { hasSidebar: boolean }) {
         <div className="pointer-events-auto flex items-center justify-end gap-0">
           {!isLoggedIn ? (
             <div className="flex items-center gap-2">
-              <Button variant="outline" render={<Link href="/login" />}>
-                Login
-              </Button>
-              <Button
-                render={<Link href="/sign-up" />}
-                className="max-[360px]:hidden"
-              >
+              <AuthModalTrigger variant="outline">Log in</AuthModalTrigger>
+              <AuthModalTrigger className="max-[360px]:hidden">
                 Sign up
-              </Button>
+              </AuthModalTrigger>
             </div>
           ) : (
             <>

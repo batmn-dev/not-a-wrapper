@@ -8,7 +8,11 @@ This project uses **official Remix Icons React components** as the primary UI ic
 
 ```typescript
 import { Icon } from "@/components/ui/icon"
-import { RiCheckLine, RiCloseLine } from "@remixicon/react"
+import {
+  RiCheckLine,
+  RiCloseLine,
+  RiPhoneLine,
+} from "@remixicon/react"
 
 // Usage
 <Icon icon={RiCheckLine} slotSize={16} />
@@ -22,6 +26,14 @@ centered inside a 20px slot.
 `slotSize` is the preferred sizing prop. `size` is accepted as a compatibility
 alias for migrated Remix icon usage. Refs attach to the wrapper `span`, not the
 inner SVG.
+
+Use `glyphSize` for icons whose painted path is visually smaller than their SVG
+viewBox. This keeps the surrounding layout slot stable while scaling the inner
+SVG for optical balance:
+
+```tsx
+<Icon icon={RiPhoneLine} slotSize={20} glyphSize={24} />
+```
 
 ### Custom Brand Icons
 
