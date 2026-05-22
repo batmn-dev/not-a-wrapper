@@ -130,6 +130,8 @@ const MessageAction = ({
     render: children,
     props: mergeProps<"button">(
       {
+        className:
+          "cursor-pointer disabled:cursor-not-allowed aria-disabled:cursor-not-allowed data-disabled:cursor-not-allowed",
         type: "button",
       },
       {}

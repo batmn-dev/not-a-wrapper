@@ -25,7 +25,7 @@ import { AppInfoContent } from "./app-info-content"
 export function AppInfoMenuItem({ onClick }: { onClick: () => void }) {
   return (
     <DropdownMenuItem onClick={onClick}>
-      <Icon icon={RiInformationLine} slotSize={16} />
+      <Icon icon={RiInformationLine} slotSize={20} />
       <span>About {APP_NAME}</span>
     </DropdownMenuItem>
   )

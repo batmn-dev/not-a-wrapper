@@ -121,7 +121,12 @@ export function ButtonPlusMenu({
             More options
           </TooltipContent>
         </Tooltip>
-        <DropdownMenuContent side="top" align="start" animated={false}>
+        <DropdownMenuContent
+          side="top"
+          align="start"
+          animated={false}
+          className="w-max"
+        >
           <Tooltip>
             <TooltipTrigger
               render={
@@ -139,7 +144,7 @@ export function ButtonPlusMenu({
                 />
               }
             >
-              <Icon icon={RiAttachment2} slotSize={16} />
+              <Icon icon={RiAttachment2} slotSize={20} />
               Add files or photos
             </TooltipTrigger>
             {!isFileUploadAvailable && (
@@ -166,10 +171,10 @@ export function ButtonPlusMenu({
                 />
               }
             >
-              <Icon icon={RiGlobalLine} slotSize={16} />
+              <Icon icon={RiGlobalLine} slotSize={20} />
               Web search
               {!isSearchDisabled && enableSearch && (
-                <Icon icon={RiCheckLine} slotSize={14} className="ml-auto" />
+                <Icon icon={RiCheckLine} slotSize={20} className="ml-auto" />
               )}
             </TooltipTrigger>
             {isSearchDisabled && (

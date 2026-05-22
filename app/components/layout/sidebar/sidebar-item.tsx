@@ -135,8 +135,9 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
   const containerClassName = useMemo(
     () =>
       cn(
-        "hover:bg-accent/80 hover:text-foreground group/chat relative w-[calc(100%-var(--spacing)*3)] rounded-md mx-1.5",
-        isActive && "bg-accent hover:bg-accent text-foreground"
+        "menu-item-hoverable hover:bg-accent/80 hover:text-foreground group/chat relative mx-1.5 h-9 w-[calc(100%-var(--spacing)*3)] rounded-lg pointer-coarse:h-auto",
+        isActive &&
+          "bg-accent hover:bg-accent text-foreground group-data-[collapsible=icon]:bg-transparent"
       ),
     [isActive]
   )
@@ -157,7 +158,7 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
       ref={containerRef}
     >
       {isEditing ? (
-        <div className="bg-accent flex items-center rounded-md py-1 pr-1 pl-2">
+        <div className="flex h-full items-center rounded-lg py-[3px] pr-1 pl-2">
           <input
             ref={inputRef}
             value={editTitle}
@@ -169,14 +170,14 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
           <div className="flex gap-0.5">
             <button
               onClick={handleSaveClick}
-              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 items-center justify-center rounded-md p-1"
+              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 items-center justify-center rounded-lg p-1"
               type="button"
             >
               <Icon icon={RiCheckLine} slotSize={16} />
             </button>
             <button
               onClick={handleCancelClick}
-              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 items-center justify-center rounded-md p-1"
+              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 items-center justify-center rounded-lg p-1"
               type="button"
             >
               <Icon icon={RiCloseLine} slotSize={16} />
@@ -187,16 +188,18 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
         <>
           <Link
             href={`/c/${chat.id}`}
-            className="block w-full"
+            className="block h-full w-full"
             prefetch
             draggable={false}
             onClick={handleLinkClick}
           >
             <div
-              className="text-primary relative line-clamp-1 min-h-9 mask-r-from-80% mask-r-to-85% px-2.5 py-1.5 text-sm text-balance text-ellipsis whitespace-nowrap pointer-coarse:py-3"
+              className="text-primary relative flex h-full w-full items-center overflow-hidden mask-r-from-80% mask-r-to-85% px-2.5 py-1.5 text-sm pointer-coarse:h-auto pointer-coarse:py-3"
               title={displayTitle}
             >
-              <span dir="auto">{displayTitle}</span>
+              <span className="min-w-0 truncate" dir="auto">
+                {displayTitle}
+              </span>
             </div>
           </Link>
 

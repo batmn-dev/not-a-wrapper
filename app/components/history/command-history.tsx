@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/command"
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -351,7 +352,10 @@ type CustomCommandDialogProps = React.ComponentProps<typeof Dialog> & {
   title?: string
   description?: string
   className?: string
+  commandClassName?: string
+  contentHeader?: React.ReactNode
   onOpenChange?: (open: boolean) => void
+  showCloseButton?: boolean
 }
 
 // Custom CommandDialog with className support
@@ -360,8 +364,11 @@ function CustomCommandDialog({
   description = "Search for a command to run...",
   children,
   className,
+  commandClassName,
+  contentHeader,
   onOpenChange,
   open,
+  showCloseButton,
   ...props
 }: CustomCommandDialogProps) {
   return (
@@ -372,8 +379,15 @@ function CustomCommandDialog({
       </DialogHeader>
       <DialogContent
         className={cn("overflow-hidden border-none p-0", className)}
+        showCloseButton={showCloseButton}
       >
-        <Command className="[&_[cmdk-group-heading]]:text-muted-foreground border-none **:data-[slot=command-input-wrapper]:h-12 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_[data-slot=icon]]:size-5 [&_[cmdk-input-wrapper]_[data-slot=icon]>svg]:size-[calc(1.25rem_-_var(--icon-glyph-inset))] [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_[data-slot=icon]]:size-5 [&_[cmdk-item]_[data-slot=icon]>svg]:size-[calc(1.25rem_-_var(--icon-glyph-inset))] [&_[cmdk-item]_[data-slot=icon]>svg]:border-none">
+        {contentHeader}
+        <Command
+          className={cn(
+            "[&_[cmdk-group-heading]]:text-muted-foreground border-none **:data-[slot=command-input-wrapper]:h-12 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_[data-slot=icon]]:size-5 [&_[cmdk-input-wrapper]_[data-slot=icon]>svg]:size-[calc(1.25rem_-_var(--icon-glyph-inset))] [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_[data-slot=icon]]:size-5 [&_[cmdk-item]_[data-slot=icon]>svg]:size-[calc(1.25rem_-_var(--icon-glyph-inset))] [&_[cmdk-item]_[data-slot=icon]>svg]:border-none",
+            commandClassName
+          )}
+        >
           {children}
         </Command>
       </DialogContent>
@@ -637,10 +651,38 @@ export function CommandHistory({
             : "Saved chat history is available after you log in or create an account."
         }
         className={cn(
-          isAuthenticated && preferences.showConversationPreviews
-            ? "sm:max-w-[900px]"
-            : "sm:max-w-3xl"
+          isAuthenticated
+            ? preferences.showConversationPreviews
+              ? "sm:max-w-[900px]"
+              : "sm:max-w-3xl"
+            : "z-[100] max-h-[calc(100svh-20px)] w-[calc(100vw-20px)] max-w-[373px] rounded-2xl bg-background text-foreground shadow-[0_18px_60px_rgba(0,0,0,0.18)] sm:max-w-[388px] dark:shadow-[0_18px_60px_rgba(0,0,0,0.45)]"
         )}
+        commandClassName={
+          isAuthenticated
+            ? undefined
+            : "rounded-2xl! bg-background p-0 text-foreground shadow-none"
+        }
+        showCloseButton={isAuthenticated}
+        contentHeader={
+          isAuthenticated ? undefined : (
+            <header className="flex min-h-12 items-start justify-end p-2.5 pb-0">
+              <DialogClose
+                render={
+                  <Button
+                    aria-label="Close"
+                    className="size-9 rounded-full"
+                    size="icon-sm"
+                    type="button"
+                    variant="ghost"
+                  />
+                }
+              >
+                <Icon icon={RiCloseLine} slotSize={20} />
+                <span className="sr-only">Close</span>
+              </DialogClose>
+            </header>
+          )
+        }
       >
         {isAuthenticated ? (
           <>

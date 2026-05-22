@@ -1,8 +1,12 @@
 "use client"
 
 import { Icon } from "@/components/ui/icon"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
-import { Collapsible } from "@base-ui/react/collapsible"
 import { RiArrowRightSLine } from "@remixicon/react"
 import * as React from "react"
 
@@ -58,7 +62,7 @@ export function CollapsibleSection({
   const isSidebarVariant = variant === "sidebar"
 
   return (
-    <Collapsible.Root
+    <Collapsible
       open={isOpen}
       onOpenChange={handleOpenChange}
       className={cn(
@@ -67,7 +71,7 @@ export function CollapsibleSection({
         className
       )}
     >
-      <Collapsible.Trigger
+      <CollapsibleTrigger
         className={cn(
           "focus-visible:ring-ring flex items-center rounded-md focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
           isSidebarVariant
@@ -99,9 +103,9 @@ export function CollapsibleSection({
               : "opacity-100"
           )}
         />
-      </Collapsible.Trigger>
+      </CollapsibleTrigger>
 
-      <Collapsible.Panel
+      <CollapsibleContent
         className={cn(
           "overflow-hidden",
           "data-[open]:animate-collapsible-down",
@@ -111,7 +115,7 @@ export function CollapsibleSection({
         <div className={cn(isSidebarVariant ? "pt-0.5" : "pt-1")}>
           {children}
         </div>
-      </Collapsible.Panel>
-    </Collapsible.Root>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }

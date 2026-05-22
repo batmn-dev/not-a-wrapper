@@ -19,6 +19,7 @@ type IconProps = IconSpanProps & {
   icon: RemixiconComponentType
   size?: IconLength
   slotSize?: IconLength
+  glyphSize?: IconLength
   glyphInset?: IconLength
   iconClassName?: string
   decorative?: boolean
@@ -33,6 +34,7 @@ const Icon = forwardRef<HTMLSpanElement, IconProps>(function Icon(
     icon: IconComponent,
     size,
     slotSize,
+    glyphSize,
     glyphInset,
     iconClassName,
     className,
@@ -51,7 +53,9 @@ const Icon = forwardRef<HTMLSpanElement, IconProps>(function Icon(
   const resolvedSlotSize = slotSize ?? size
   const resolvedStyle: IconStyle = {
     "--icon-glyph-size":
-      "calc(var(--icon-slot-size) - var(--icon-glyph-inset))",
+      glyphSize !== undefined
+        ? toCssLength(glyphSize)
+        : "calc(var(--icon-slot-size) - var(--icon-glyph-inset))",
     ...(resolvedSlotSize !== undefined
       ? {
           "--icon-slot-size": toCssLength(resolvedSlotSize),

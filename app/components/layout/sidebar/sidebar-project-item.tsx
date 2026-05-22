@@ -7,7 +7,12 @@ import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { cn } from "@/lib/utils"
-import { RiCheckLine, RiCloseLine, RiFolderLine } from "@remixicon/react"
+import {
+  RiCheckLine,
+  RiCloseLine,
+  RiFolderFill,
+  RiFolderLine,
+} from "@remixicon/react"
 import { useMutation } from "convex/react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -150,8 +155,9 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
   const containerClassName = useMemo(
     () =>
       cn(
-        "hover:bg-accent/80 hover:text-foreground group/project relative w-[calc(100%-var(--spacing)*3)] rounded-md mx-1.5 cursor-pointer",
-        isActive && "bg-accent hover:bg-accent text-foreground"
+        "menu-item-hoverable hover:bg-accent/80 hover:text-foreground group/project relative mx-1.5 h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer rounded-lg",
+        isActive &&
+          "bg-accent hover:bg-accent text-foreground group-data-[collapsible=icon]:bg-transparent"
       ),
     [isActive]
   )
@@ -172,9 +178,9 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
       ref={containerRef}
     >
       {isEditing ? (
-        <div className="bg-accent flex items-center rounded-md py-1 pr-1 pl-2">
+        <div className="flex h-full items-center rounded-lg py-[3px] pr-1 pl-2">
           <Icon
-            icon={RiFolderLine}
+            icon={RiFolderFill}
             slotSize={20}
             className="text-primary mr-2 flex-shrink-0"
           />
@@ -189,14 +195,14 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
           <div className="flex gap-0.5">
             <button
               onClick={handleSaveClick}
-              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-md p-1"
+              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-lg p-1"
               type="button"
             >
               <Icon icon={RiCheckLine} slotSize={16} />
             </button>
             <button
               onClick={handleCancelClick}
-              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-md p-1"
+              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-lg p-1"
               type="button"
             >
               <Icon icon={RiCloseLine} slotSize={16} />
@@ -207,15 +213,18 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
         <>
           <Link
             href={`/p/${project._id}`}
-            className="block w-full cursor-pointer"
+            className="block h-full w-full cursor-pointer"
             prefetch
             onClick={handleLinkClick}
           >
             <div
-              className="text-primary relative line-clamp-1 flex min-h-9 w-full items-center gap-2 mask-r-from-80% mask-r-to-85% px-2.5 py-1.5 text-sm text-ellipsis whitespace-nowrap"
+              className="text-primary relative line-clamp-1 flex h-full w-full items-center gap-2 mask-r-from-80% mask-r-to-85% px-2.5 py-1.5 text-sm text-ellipsis whitespace-nowrap"
               title={displayName}
             >
-              <Icon icon={RiFolderLine} slotSize={20} />
+              <Icon
+                icon={isActive ? RiFolderFill : RiFolderLine}
+                slotSize={20}
+              />
               {displayName}
             </div>
           </Link>

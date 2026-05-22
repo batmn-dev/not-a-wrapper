@@ -42,7 +42,7 @@ export function SidebarProjectMenu({
         <DropdownMenuTrigger
           render={
             <button
-              className="hover:bg-secondary flex size-7 cursor-pointer items-center justify-center rounded-md p-1"
+              className="hover:bg-secondary flex size-7 cursor-pointer items-center justify-center rounded-lg p-1"
               onClick={(e) => e.stopPropagation()}
             />
           }
@@ -56,7 +56,7 @@ export function SidebarProjectMenu({
               onStartEditing()
             }}
           >
-            <Icon icon={RiEditLine} slotSize={16} className="mr-2" />
+            <Icon icon={RiEditLine} slotSize={20} />
             Rename
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -66,7 +66,7 @@ export function SidebarProjectMenu({
               setIsDeleteDialogOpen(true)
             }}
           >
-            <Icon icon={RiDeleteBinLine} slotSize={16} className="mr-2" />
+            <Icon icon={RiDeleteBinLine} slotSize={20} />
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>

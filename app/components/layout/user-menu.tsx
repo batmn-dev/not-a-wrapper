@@ -74,7 +74,7 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
         onClick={handleSignOut}
         className="flex items-center gap-2"
       >
-        <Icon icon={RiLogoutBoxRLine} slotSize={16} />
+        <Icon icon={RiLogoutBoxRLine} slotSize={20} />
         <span>Sign out</span>
       </DropdownMenuItem>
     </>
@@ -107,7 +107,7 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
                 aria-haspopup="menu"
                 aria-expanded={isMenuOpen}
                 data-testid="accounts-profile-button"
-                className="group/menu-item hover:bg-accent flex h-12 w-full items-center gap-2 rounded-md px-1.5 text-left text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                className="group/menu-item hover:bg-accent flex h-12 w-full items-center gap-2 rounded-xl px-1.5 text-left text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
               />
             }
           >

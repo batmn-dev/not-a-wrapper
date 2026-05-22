@@ -2,7 +2,15 @@
 
 import { api } from "@/convex/_generated/api"
 import { useMutation as useConvexMutation, useQuery as useConvexQuery } from "convex/react"
-import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from "react"
+import {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react"
 import {
   convertFromApiFormat,
   convertToApiFormat,
@@ -20,6 +28,10 @@ export {
 
 const PREFERENCES_STORAGE_KEY = "user-preferences"
 const LAYOUT_STORAGE_KEY = "preferred-layout"
+const PREFERENCES_CHANGE_EVENT = "user-preferences-change"
+
+let localPreferencesSnapshotKey: string | null = null
+let localPreferencesSnapshot: UserPreferences = defaultPreferences
 
 type UserPreferencesContextType = {
   preferences: UserPreferences
@@ -41,20 +53,30 @@ function getLocalStoragePreferences(): UserPreferences {
   if (typeof window === "undefined") return defaultPreferences
 
   const stored = localStorage.getItem(PREFERENCES_STORAGE_KEY)
+  const layout = localStorage.getItem(LAYOUT_STORAGE_KEY) as LayoutType | null
+  const snapshotKey = JSON.stringify([stored, layout])
+
+  if (snapshotKey === localPreferencesSnapshotKey) {
+    return localPreferencesSnapshot
+  }
+
+  localPreferencesSnapshotKey = snapshotKey
+
   if (stored) {
     try {
       const parsed = JSON.parse(stored) as Partial<UserPreferences>
-      return { ...defaultPreferences, ...parsed }
+      localPreferencesSnapshot = { ...defaultPreferences, ...parsed }
+      return localPreferencesSnapshot
     } catch {
       // fallback to legacy layout storage if JSON parsing fails
     }
   }
 
-  const layout = localStorage.getItem(LAYOUT_STORAGE_KEY) as LayoutType | null
-  return {
+  localPreferencesSnapshot = {
     ...defaultPreferences,
     ...(layout ? { layout } : {}),
   }
+  return localPreferencesSnapshot
 }
 
 function saveToLocalStorage(preferences: UserPreferences) {
@@ -62,6 +84,29 @@ function saveToLocalStorage(preferences: UserPreferences) {
 
   localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(preferences))
   localStorage.setItem(LAYOUT_STORAGE_KEY, preferences.layout)
+  window.dispatchEvent(new Event(PREFERENCES_CHANGE_EVENT))
+}
+
+function subscribeLocalStoragePreferences(onStoreChange: () => void) {
+  if (typeof window === "undefined") return () => {}
+
+  const handleStorage = (event: StorageEvent) => {
+    if (
+      event.key === null ||
+      event.key === PREFERENCES_STORAGE_KEY ||
+      event.key === LAYOUT_STORAGE_KEY
+    ) {
+      onStoreChange()
+    }
+  }
+
+  window.addEventListener("storage", handleStorage)
+  window.addEventListener(PREFERENCES_CHANGE_EVENT, onStoreChange)
+
+  return () => {
+    window.removeEventListener("storage", handleStorage)
+    window.removeEventListener(PREFERENCES_CHANGE_EVENT, onStoreChange)
+  }
 }
 
 export function UserPreferencesProvider({
@@ -103,12 +148,11 @@ export function UserPreferencesProvider({
   }, [convexPreferences, isAuthenticated])
 
   // For unauthenticated users, use localStorage
-  const [localStoragePrefs, setLocalStoragePrefs] = useState<UserPreferences>(() => {
-    if (typeof window !== "undefined" && !isAuthenticated) {
-      return getLocalStoragePreferences()
-    }
-    return initialPreferences || defaultPreferences
-  })
+  const localStoragePrefs = useSyncExternalStore(
+    subscribeLocalStoragePreferences,
+    getLocalStoragePreferences,
+    () => initialPreferences || defaultPreferences
+  )
 
   // Derive final preferences: server data + optimistic updates (for authenticated)
   // or localStorage prefs (for unauthenticated)
@@ -127,7 +171,6 @@ export function UserPreferencesProvider({
       if (!isAuthenticated) {
         // For unauthenticated users, update localStorage directly
         const updated = { ...localStoragePrefs, ...update }
-        setLocalStoragePrefs(updated)
         saveToLocalStorage(updated)
         return
       }

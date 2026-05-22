@@ -3,10 +3,18 @@
 import { Button } from "@/components/ui/button"
 import { PopoverContent } from "@/components/ui/popover"
 import { APP_NAME } from "@/lib/config"
+import { cn } from "@/lib/utils"
 import Image from "next/image"
-import { useState } from "react"
+import { useState, type ComponentProps } from "react"
 
-export function PopoverContentAuth() {
+type PopoverContentAuthProps = ComponentProps<typeof PopoverContent>
+
+export function PopoverContentAuth({
+  className,
+  side = "top",
+  align = "start",
+  ...props
+}: PopoverContentAuthProps = {}) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -27,9 +35,10 @@ export function PopoverContentAuth() {
 
   return (
     <PopoverContent
-      className="w-[300px] overflow-hidden rounded-xl p-0"
-      side="top"
-      align="start"
+      className={cn("w-[300px] overflow-hidden rounded-2xl p-0", className)}
+      side={side}
+      align={align}
+      {...props}
     >
       <Image
         src="/banner_forest.jpg"

@@ -129,7 +129,7 @@ export function ModelSelector({
   const trigger = (
     <Button
       variant="ghost"
-      className={cn("justify-between text-lg font-normal", className)}
+      className={cn("justify-between rounded-lg text-lg font-normal", className)}
       disabled={isLoadingModels}
     >
       <span>{currentModel?.name || "Select model"}</span>
@@ -226,23 +226,23 @@ export function ModelSelector({
       >
         <DropdownMenuTrigger render={trigger} />
         <DropdownMenuContent
-          className="flex max-h-55 w-[300px] flex-col space-y-0.5 overflow-visible p-0"
+          className="[--model-selector-fixed-height:3rem] [--model-selector-list-max-height:18rem] w-[300px] overflow-hidden"
           align="start"
           sideOffset={4}
           animated={false}
           side="top"
         >
-          <div className="bg-background sticky top-0 z-10 rounded-t-md border-b px-0 pt-0 pb-0">
+          <div className="shrink-0">
             <div className="relative">
               <Icon
                 icon={RiSearchLine}
                 slotSize={16}
-                className="text-muted-foreground absolute top-2.5 left-2.5"
+                className="text-muted-foreground absolute top-1/2 left-2.5 -translate-y-1/2"
               />
               <Input
                 ref={searchInputRef}
                 placeholder="Search models..."
-                className="dark:bg-popover rounded-b-none border border-none pl-8 shadow-none focus-visible:ring-0"
+                className="h-9 rounded-xl border-none bg-muted/60 pl-8 shadow-none focus-visible:ring-0 dark:bg-muted/40"
                 value={searchQuery}
                 onChange={handleSearchChange}
                 onClick={(e) => e.stopPropagation()}
@@ -251,7 +251,7 @@ export function ModelSelector({
               />
             </div>
           </div>
-          <div className="flex h-full flex-col space-y-0 overflow-y-auto px-1 pt-0 pb-0">
+          <div className="max-h-[min(var(--model-selector-list-max-height),max(0px,calc(var(--available-height)-var(--model-selector-fixed-height))))] overflow-y-auto pr-0.5">
             {isLoadingModels ? (
               <div className="flex h-full flex-col items-center justify-center p-6 text-center">
                 <p className="text-muted-foreground mb-2 text-sm">
@@ -270,19 +270,19 @@ export function ModelSelector({
                   <DropdownMenuItem
                     key={model.id}
                     className={cn(
-                      "flex w-full items-center justify-between px-3 py-2",
+                      "flex w-full items-center justify-between gap-2 px-2",
                       isSelected && "bg-accent"
                     )}
                     onClick={() => handleSelect(model.id, isLocked)}
                   >
-                    <div className="flex items-center gap-3">
-                      {provider?.icon && <provider.icon className="size-5" />}
-                      <div className="flex flex-col gap-0">
-                        <span className="text-sm">{model.name}</span>
-                      </div>
+                    <div className="flex min-w-0 items-center gap-2">
+                      {provider?.icon && (
+                        <provider.icon className="size-5 shrink-0" />
+                      )}
+                      <span className="truncate text-sm">{model.name}</span>
                     </div>
                     {isLocked ? (
-                      <div className="border-input bg-accent text-muted-foreground flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
+                      <div className="border-input bg-accent text-muted-foreground flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
                         <Icon icon={RiStarLine} slotSize={8} />
                         <span>Locked</span>
                       </div>

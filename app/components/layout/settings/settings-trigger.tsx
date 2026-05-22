@@ -20,7 +20,7 @@ import { SettingsContent } from "./settings-content"
 export function SettingsMenuItem({ onClick }: { onClick: () => void }) {
   return (
     <DropdownMenuItem onClick={onClick}>
-      <Icon icon={RiSettings3Line} slotSize={16} />
+      <Icon icon={RiSettings3Line} slotSize={20} />
       <span>Settings</span>
     </DropdownMenuItem>
   )

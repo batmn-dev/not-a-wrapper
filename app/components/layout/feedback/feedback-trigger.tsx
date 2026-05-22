@@ -16,7 +16,7 @@ import { RiQuestionLine } from "@remixicon/react"
 export function FeedbackMenuItem({ onClick }: { onClick: () => void }) {
   return (
     <DropdownMenuItem onClick={onClick}>
-      <Icon icon={RiQuestionLine} slotSize={16} />
+      <Icon icon={RiQuestionLine} slotSize={20} />
       <span>Feedback</span>
     </DropdownMenuItem>
   )

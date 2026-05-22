@@ -1,9 +1,17 @@
 "use client"
 
+import { AuthModalTrigger } from "@/app/auth/_components/auth-modal"
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { useScrollAttributes } from "@/app/hooks/use-scroll-attributes"
 import { NawIcon } from "@/components/icons/naw"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Icon } from "@/components/ui/icon"
 import { Kbd, KbdGroup } from "@/components/ui/kbd"
 import {
@@ -26,6 +34,7 @@ import { useChats } from "@/lib/chat-store/chats/provider"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
 import {
+  RiAddCircleFill,
   RiAddCircleLine,
   RiArrowRightSLine,
   RiCloseLine,
@@ -38,10 +47,13 @@ import {
   RiSearchLine,
   RiSettings3Line,
   RiSparklingLine,
+  RiUserLine,
 } from "@remixicon/react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { useParams, usePathname } from "next/navigation"
 import React, { useMemo, useRef } from "react"
+import { PopoverContentAuth } from "../../chat-input/popover-content-auth"
+import { useHistorySearch } from "../../history/history-search-provider"
 import { HistoryTrigger } from "../../history/history-trigger"
 import { UserMenu } from "../user-menu"
 import { SidebarList } from "./sidebar-list"
@@ -51,15 +63,19 @@ import { SidebarProject } from "./sidebar-project"
 export function AppSidebar() {
   const isMobile = useBreakpoint(768)
   const { setOpenMobile, state, toggleSidebar } = useSidebar()
+  const { isHistoryOpen } = useHistorySearch()
   const isCollapsed = state === "collapsed"
   const { chats, pinnedChats, isLoading } = useChats()
   const { user } = useUser()
   const params = useParams<{ chatId: string }>()
+  const pathname = usePathname()
   const currentChatId = params.chatId
   const isLoggedIn = !!user
+  const isNewChatActive = pathname === "/"
 
   // Single scroll container ref for unified scroll model
   const scrollRef = useRef<HTMLElement>(null)
+  const railPopupOpenRef = useRef(false)
   // Zero-rerender scroll tracking via data attributes
   useScrollAttributes(scrollRef)
 
@@ -70,6 +86,18 @@ export function AppSidebar() {
   const hasChats = chats.length > 0
   const railInteractiveSelector =
     "a,button,input,textarea,select,[role='button'],[data-sidebar-item]"
+  const railPopupSelector =
+    "[data-slot='dropdown-menu-content'],[data-slot='popover-content']"
+  const setRailPopupOpen = React.useCallback((nextOpen: boolean) => {
+    if (nextOpen) {
+      railPopupOpenRef.current = true
+      return
+    }
+
+    window.setTimeout(() => {
+      railPopupOpenRef.current = false
+    }, 0)
+  }, [])
 
   return (
     <Sidebar
@@ -107,6 +135,12 @@ export function AppSidebar() {
         inert={!isCollapsed ? true : undefined}
         onPointerDown={(event) => {
           if (!isCollapsed || isMobile) return
+          if (
+            railPopupOpenRef.current ||
+            document.querySelector(railPopupSelector)
+          ) {
+            return
+          }
           const target = event.target
           if (!(target instanceof Element)) return
           if (target.closest(railInteractiveSelector)) return
@@ -133,21 +167,30 @@ export function AppSidebar() {
         <div className="mt-(--sidebar-section-first-margin-top) flex w-full flex-col items-start gap-0 px-1.5">
           <CollapsedMenuItem
             icon={<Icon icon={RiAddCircleLine} slotSize={20} />}
+            activeIcon={<Icon icon={RiAddCircleFill} slotSize={20} />}
             label="New chat"
             href="/"
             shortcut="⇧⌘O"
+            isActive={isNewChatActive}
           />
-          <HistoryTrigger
-            hasSidebar={false}
-            trigger={
-              <CollapsedMenuItem
-                icon={<Icon icon={RiSearchLine} slotSize={20} />}
-                label="Search"
-                shortcut="⌘K"
-              />
-            }
-            hasPopover={false}
-          />
+          {isLoggedIn ? (
+            <HistoryTrigger
+              hasSidebar={false}
+              trigger={
+                <CollapsedMenuItem
+                  icon={<Icon icon={RiSearchLine} slotSize={20} />}
+                  label="Search"
+                  shortcut="⌘K"
+                  isActive={isHistoryOpen}
+                />
+              }
+              hasPopover={false}
+            />
+          ) : (
+            <SignedOutCollapsedSearchPopover
+              onOpenChange={setRailPopupOpen}
+            />
+          )}
         </div>
 
         {/* Spacer */}
@@ -155,7 +198,10 @@ export function AppSidebar() {
 
         {/* Footer */}
         <div className="mb-1 w-full px-1.5">
-          <CollapsedUserAvatar user={user} />
+          <CollapsedUserAvatar
+            user={user}
+            onSignedOutMenuOpenChange={setRailPopupOpen}
+          />
         </div>
       </div>
 
@@ -242,9 +288,11 @@ export function AppSidebar() {
             <div className="flex w-full flex-col items-start gap-0">
               <SidebarMenuItem
                 icon={<Icon icon={RiAddCircleLine} slotSize={20} />}
+                activeIcon={<Icon icon={RiAddCircleFill} slotSize={20} />}
                 label="New chat"
                 href="/"
                 testId="new-chat-button"
+                isActive={isNewChatActive}
                 trailing={
                   <KbdGroup>
                     <Kbd label="Shift">⇧</Kbd>
@@ -253,22 +301,27 @@ export function AppSidebar() {
                   </KbdGroup>
                 }
               />
-              <HistoryTrigger
-                hasSidebar={false}
-                trigger={
-                  <SidebarMenuItem
-                    icon={<Icon icon={RiSearchLine} slotSize={20} />}
-                    label="Search"
-                    trailing={
-                      <KbdGroup>
-                        <Kbd label="Command">⌘</Kbd>
-                        <Kbd>K</Kbd>
-                      </KbdGroup>
-                    }
-                  />
-                }
-                hasPopover={false}
-              />
+              {isLoggedIn ? (
+                <HistoryTrigger
+                  hasSidebar={false}
+                  trigger={
+                    <SidebarMenuItem
+                      icon={<Icon icon={RiSearchLine} slotSize={20} />}
+                      label="Search"
+                      isActive={isHistoryOpen}
+                      trailing={
+                        <KbdGroup>
+                          <Kbd label="Command">⌘</Kbd>
+                          <Kbd>K</Kbd>
+                        </KbdGroup>
+                      }
+                    />
+                  }
+                  hasPopover={false}
+                />
+              ) : (
+                <SignedOutSidebarSearchPopover />
+              )}
             </div>
             {/* Solid bg mask below sticky actions — hides scroll seam (ChatGPT pattern) */}
             <div
@@ -368,14 +421,13 @@ export function AppSidebar() {
                 </p>
               </div>
               <div className="-mx-1.5">
-                <Button
+                <AuthModalTrigger
                   variant="outline"
                   size="lg"
                   className="h-11 w-full px-4 text-sm font-medium"
-                  render={<Link href="/login" />}
                 >
                   <span>Log in</span>
-                </Button>
+                </AuthModalTrigger>
               </div>
             </div>
           )}
@@ -403,7 +455,7 @@ function CollapsedHeaderToggle() {
           <button
             type="button"
             onClick={toggleSidebar}
-            className="group/toggle hover:bg-accent flex h-9 w-9 cursor-e-resize items-center justify-center rounded-lg focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none rtl:cursor-w-resize"
+            className="group/toggle hover:bg-accent relative flex h-9 w-9 cursor-e-resize items-center justify-center rounded-lg focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none rtl:cursor-w-resize"
             aria-label="Open sidebar"
             aria-expanded={false}
             aria-controls={SIDEBAR_CONTAINER_ID}
@@ -411,12 +463,13 @@ function CollapsedHeaderToggle() {
         }
       >
         {/* Default: Logo icon */}
-        <NawIcon className="size-5 group-hover/toggle:hidden group-focus-visible/toggle:hidden" />
+        <NawIcon className="absolute inset-0 m-auto size-5 transition-opacity group-hover/toggle:opacity-0 group-focus-visible/toggle:opacity-0" />
         {/* Hover: Sidebar icon */}
         <Icon
           icon={RiExpandRightLine}
           slotSize={20}
-          className="hidden group-hover/toggle:block group-focus-visible/toggle:block"
+          glyphInset={0}
+          className="absolute inset-0 m-auto opacity-0 transition-opacity group-hover/toggle:opacity-100 group-focus-visible/toggle:opacity-100"
         />
       </TooltipTrigger>
       <TooltipContent side="right">Open sidebar ⇧⌘S</TooltipContent>
@@ -430,23 +483,31 @@ function CollapsedHeaderToggle() {
  */
 function CollapsedMenuItem({
   icon,
+  activeIcon,
   label,
   href,
   onClick,
   shortcut,
+  isActive,
 }: {
   icon: React.ReactNode
+  activeIcon?: React.ReactNode
   label: string
   href?: string
   onClick?: () => void
   shortcut?: string
+  isActive?: boolean
 }) {
-  const content = <div className="flex items-center justify-center">{icon}</div>
+  const resolvedIcon = isActive && activeIcon ? activeIcon : icon
+  const content = (
+    <div className="flex items-center justify-center">{resolvedIcon}</div>
+  )
 
   const className = cn(
-    "flex h-9 w-10 items-center justify-center rounded-lg",
+    "menu-item-hoverable flex h-9 w-10 items-center justify-center rounded-lg",
     "cursor-pointer",
     "hover:bg-accent",
+    isActive && "text-foreground",
     "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
   )
 
@@ -457,13 +518,20 @@ function CollapsedMenuItem({
       <TooltipTrigger
         render={
           href ? (
-            <Link href={href} className={className} data-sidebar-item="true" />
+            <Link
+              href={href}
+              className={className}
+              data-sidebar-item="true"
+              data-active={isActive ? "true" : undefined}
+              aria-current={isActive ? "page" : undefined}
+            />
           ) : (
             <button
               type="button"
               onClick={onClick}
               className={className}
               data-sidebar-item="true"
+              data-active={isActive ? "true" : undefined}
             />
           )
         }
@@ -475,34 +543,221 @@ function CollapsedMenuItem({
   )
 }
 
+function SignedOutSidebarSearchPopover() {
+  const [open, setOpen] = React.useState(false)
+
+  return (
+    <Popover open={open} onOpenChange={(nextOpen) => setOpen(nextOpen)}>
+      <PopoverTrigger
+        render={
+          <SidebarMenuItem
+            icon={<Icon icon={RiSearchLine} slotSize={20} />}
+            label="Search"
+            isActive={open}
+            trailing={
+              <KbdGroup>
+                <Kbd label="Command">⌘</Kbd>
+                <Kbd>K</Kbd>
+              </KbdGroup>
+            }
+          />
+        }
+      />
+      <PopoverContentAuth side="right" align="start" sideOffset={8} />
+    </Popover>
+  )
+}
+
+function SignedOutCollapsedSearchPopover({
+  onOpenChange,
+}: {
+  onOpenChange?: (open: boolean) => void
+}) {
+  const [open, setOpen] = React.useState(false)
+
+  const className = cn(
+    "menu-item-hoverable flex h-9 w-10 items-center justify-center rounded-lg",
+    "cursor-pointer",
+    "hover:bg-accent",
+    open && "text-foreground",
+    "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+  )
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen)
+        onOpenChange?.(nextOpen)
+      }}
+    >
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            className={className}
+            data-sidebar-item="true"
+            data-active={open ? "true" : undefined}
+            aria-label="Search"
+            title="Search ⌘K"
+          />
+        }
+      >
+        <div className="flex items-center justify-center">
+          <Icon icon={RiSearchLine} slotSize={20} />
+        </div>
+      </PopoverTrigger>
+      <PopoverContentAuth side="right" align="start" sideOffset={8} />
+    </Popover>
+  )
+}
+
 /**
  * Compact user avatar for collapsed rail.
  * 24px (h-6 w-6) matching ChatGPT's pattern.
  */
 function CollapsedUserAvatar({
   user,
+  onSignedOutMenuOpenChange,
 }: {
   user: { display_name?: string; profile_image?: string | null } | null
+  onSignedOutMenuOpenChange?: (open: boolean) => void
 }) {
   if (!user) {
     return (
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Link
-              href="/login"
-              className="border-border hover:bg-accent mx-auto flex h-9 w-10 items-center justify-center rounded-full border"
-            />
-          }
-        >
-          <NawIcon className="size-5" />
-        </TooltipTrigger>
-        <TooltipContent side="right">Log in</TooltipContent>
-      </Tooltip>
+      <SignedOutCollapsedAccountPopover
+        onOpenChange={onSignedOutMenuOpenChange}
+      />
     )
   }
 
   return <UserMenu variant="sidebar-collapsed" />
+}
+
+function SignedOutCollapsedAccountPopover({
+  onOpenChange,
+}: {
+  onOpenChange?: (open: boolean) => void
+}) {
+  const [open, setOpen] = React.useState(false)
+
+  return (
+    <DropdownMenu
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen)
+        onOpenChange?.(nextOpen)
+      }}
+    >
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            role="button"
+            aria-label="Open profile menu"
+            aria-haspopup="menu"
+            aria-expanded={open}
+            data-sidebar-item="true"
+            data-testid="accounts-profile-button"
+            className={cn(
+              "menu-item-hoverable mx-auto flex h-10 w-10 items-center justify-center rounded-xl text-primary",
+              "hover:bg-accent focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
+              open && "bg-accent"
+            )}
+          />
+        }
+      >
+        <div className="bg-muted flex size-6 shrink-0 items-center justify-center rounded-full">
+          <Icon icon={RiUserLine} slotSize={16} />
+        </div>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        side="top"
+        align="start"
+        sideOffset={6}
+        animated={false}
+        className="w-[calc(var(--sidebar-width)-12px)] max-w-xs"
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <SignedOutAccountPopoverContent />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function SignedOutAccountPopoverContent() {
+  return (
+    <>
+      <SignedOutAccountDropdownItem
+        icon={<Icon icon={RiSparklingLine} slotSize={20} />}
+        label="See plans and pricing"
+        showTrailingIcon
+      />
+      <SignedOutAccountDropdownItem
+        icon={<Icon icon={RiSettings3Line} slotSize={20} />}
+        label="Settings"
+      />
+      <DropdownMenuSeparator className="mx-3" />
+      <SignedOutAccountDropdownItem
+        icon={<Icon icon={RiQuestionLine} slotSize={20} />}
+        label="Help center"
+        showTrailingIcon
+      />
+      <SignedOutAccountDropdownItem
+        icon={<Icon icon={RiQuillPenLine} slotSize={20} />}
+        label="Release notes"
+        showTrailingIcon
+      />
+      <SignedOutAccountDropdownItem
+        icon={<Icon icon={RiDownloadLine} slotSize={20} />}
+        label="Download apps"
+        showTrailingIcon
+      />
+      <DropdownMenuSeparator className="mx-3" />
+      <SignedOutAccountDropdownItem
+        icon={<Icon icon={RiFileTextLine} slotSize={20} />}
+        label="Terms of Service"
+        showTrailingIcon
+      />
+      <SignedOutAccountDropdownItem
+        icon={<Icon icon={RiInformationLine} slotSize={20} />}
+        label="Privacy Policy"
+        showTrailingIcon
+      />
+    </>
+  )
+}
+
+function SignedOutAccountDropdownItem({
+  icon,
+  label,
+  showTrailingIcon,
+}: {
+  icon: React.ReactNode
+  label: string
+  showTrailingIcon?: boolean
+}) {
+  return (
+    <DropdownMenuItem
+      closeOnClick={false}
+      onClick={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+      className="gap-1.5"
+    >
+      <div className="flex shrink-0 items-center justify-center">{icon}</div>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {showTrailingIcon && (
+        <Icon
+          icon={RiArrowRightSLine}
+          slotSize={16}
+          className="text-muted-foreground ml-auto shrink-0 opacity-0 group-hover/dropdown-menu-item:opacity-100 group-focus/dropdown-menu-item:opacity-100"
+          aria-hidden="true"
+        />
+      )}
+    </DropdownMenuItem>
+  )
 }
 
 function SignedOutHelpPopover() {
@@ -515,7 +770,7 @@ function SignedOutHelpPopover() {
           <button
             type="button"
             className={cn(
-              "group/help text-primary hover:bg-accent/80 hover:text-foreground focus-visible:ring-ring relative mx-1.5 inline-flex h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer items-center gap-(--sidebar-item-gap) rounded-md bg-transparent px-2.5 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none pointer-coarse:h-auto pointer-coarse:py-3",
+              "menu-item-hoverable group/help text-primary hover:bg-accent/80 hover:text-foreground focus-visible:ring-ring relative mx-1.5 inline-flex h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none pointer-coarse:h-auto pointer-coarse:py-3",
               open && "bg-accent/80 text-foreground"
             )}
             data-sidebar-item="true"
@@ -533,7 +788,7 @@ function SignedOutHelpPopover() {
           icon={RiArrowRightSLine}
           slotSize={20}
           className={cn(
-            "text-muted-foreground ml-auto size-5 shrink-0 opacity-0 transition-opacity group-hover/help:opacity-100",
+            "text-muted-foreground ml-auto size-5 shrink-0 opacity-0 transition-none group-hover/help:opacity-100",
             open && "opacity-100"
           )}
           aria-hidden="true"
@@ -546,28 +801,28 @@ function SignedOutHelpPopover() {
         className="w-(--anchor-width)"
       >
         <div className="flex flex-col gap-0">
-          <SignedOutHelpPopoverItem
+          <SignedOutPopoverItem
             icon={<Icon icon={RiQuestionLine} slotSize={20} />}
             label="Help center"
             onClick={() => setOpen(false)}
           />
-          <SignedOutHelpPopoverItem
+          <SignedOutPopoverItem
             icon={<Icon icon={RiQuillPenLine} slotSize={20} />}
             label="Release notes"
             onClick={() => setOpen(false)}
           />
-          <SignedOutHelpPopoverItem
+          <SignedOutPopoverItem
             icon={<Icon icon={RiDownloadLine} slotSize={20} />}
             label="Download apps"
             onClick={() => setOpen(false)}
           />
-          <div className="bg-border mx-2 my-1 h-px" aria-hidden="true" />
-          <SignedOutHelpPopoverItem
+          <SignedOutPopoverSeparator />
+          <SignedOutPopoverItem
             icon={<Icon icon={RiFileTextLine} slotSize={20} />}
             label="Terms of Service"
             onClick={() => setOpen(false)}
           />
-          <SignedOutHelpPopoverItem
+          <SignedOutPopoverItem
             icon={<Icon icon={RiInformationLine} slotSize={20} />}
             label="Privacy Policy"
             onClick={() => setOpen(false)}
@@ -578,7 +833,11 @@ function SignedOutHelpPopover() {
   )
 }
 
-function SignedOutHelpPopoverItem({
+function SignedOutPopoverSeparator() {
+  return <div className="bg-border mx-2 my-1 h-px" aria-hidden="true" />
+}
+
+function SignedOutPopoverItem({
   icon,
   label,
   onClick,
@@ -591,7 +850,7 @@ function SignedOutHelpPopoverItem({
     <button
       type="button"
       onClick={onClick}
-      className="group/help-popover-item text-primary hover:bg-accent/80 hover:text-foreground focus-visible:bg-accent/80 focus-visible:text-foreground focus-visible:ring-ring inline-flex h-9 w-full cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset pointer-coarse:h-auto pointer-coarse:py-3"
+      className="menu-item-hoverable group/help-popover-item text-primary hover:bg-accent/80 hover:text-foreground focus-visible:bg-accent/80 focus-visible:text-foreground focus-visible:ring-ring inline-flex h-9 w-full cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset pointer-coarse:h-auto pointer-coarse:py-3"
     >
       <div className="flex shrink-0 items-center justify-center">{icon}</div>
       <div className="flex min-w-0 grow items-center gap-(--sidebar-item-gap)">
