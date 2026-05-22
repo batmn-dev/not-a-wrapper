@@ -156,7 +156,8 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
     () =>
       cn(
         "menu-item-hoverable hover:bg-accent/80 hover:text-foreground group/project relative mx-1.5 h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer rounded-lg",
-        isActive && "bg-accent hover:bg-accent text-foreground"
+        isActive &&
+          "bg-accent hover:bg-accent text-foreground group-data-[collapsible=icon]:bg-transparent"
       ),
     [isActive]
   )

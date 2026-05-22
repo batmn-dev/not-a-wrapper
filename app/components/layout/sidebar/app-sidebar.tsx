@@ -5,6 +5,13 @@ import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { useScrollAttributes } from "@/app/hooks/use-scroll-attributes"
 import { NawIcon } from "@/components/icons/naw"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Icon } from "@/components/ui/icon"
 import { Kbd, KbdGroup } from "@/components/ui/kbd"
 import {
@@ -40,6 +47,7 @@ import {
   RiSearchLine,
   RiSettings3Line,
   RiSparklingLine,
+  RiUserLine,
 } from "@remixicon/react"
 import Link from "next/link"
 import { useParams, usePathname } from "next/navigation"
@@ -67,6 +75,7 @@ export function AppSidebar() {
 
   // Single scroll container ref for unified scroll model
   const scrollRef = useRef<HTMLElement>(null)
+  const railPopupOpenRef = useRef(false)
   // Zero-rerender scroll tracking via data attributes
   useScrollAttributes(scrollRef)
 
@@ -77,6 +86,18 @@ export function AppSidebar() {
   const hasChats = chats.length > 0
   const railInteractiveSelector =
     "a,button,input,textarea,select,[role='button'],[data-sidebar-item]"
+  const railPopupSelector =
+    "[data-slot='dropdown-menu-content'],[data-slot='popover-content']"
+  const setRailPopupOpen = React.useCallback((nextOpen: boolean) => {
+    if (nextOpen) {
+      railPopupOpenRef.current = true
+      return
+    }
+
+    window.setTimeout(() => {
+      railPopupOpenRef.current = false
+    }, 0)
+  }, [])
 
   return (
     <Sidebar
@@ -114,6 +135,12 @@ export function AppSidebar() {
         inert={!isCollapsed ? true : undefined}
         onPointerDown={(event) => {
           if (!isCollapsed || isMobile) return
+          if (
+            railPopupOpenRef.current ||
+            document.querySelector(railPopupSelector)
+          ) {
+            return
+          }
           const target = event.target
           if (!(target instanceof Element)) return
           if (target.closest(railInteractiveSelector)) return
@@ -160,7 +187,9 @@ export function AppSidebar() {
               hasPopover={false}
             />
           ) : (
-            <SignedOutCollapsedSearchPopover />
+            <SignedOutCollapsedSearchPopover
+              onOpenChange={setRailPopupOpen}
+            />
           )}
         </div>
 
@@ -169,7 +198,10 @@ export function AppSidebar() {
 
         {/* Footer */}
         <div className="mb-1 w-full px-1.5">
-          <CollapsedUserAvatar user={user} />
+          <CollapsedUserAvatar
+            user={user}
+            onSignedOutMenuOpenChange={setRailPopupOpen}
+          />
         </div>
       </div>
 
@@ -475,7 +507,7 @@ function CollapsedMenuItem({
     "menu-item-hoverable flex h-9 w-10 items-center justify-center rounded-lg",
     "cursor-pointer",
     "hover:bg-accent",
-    isActive && "bg-accent text-foreground hover:bg-accent",
+    isActive && "text-foreground",
     "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
   )
 
@@ -536,19 +568,29 @@ function SignedOutSidebarSearchPopover() {
   )
 }
 
-function SignedOutCollapsedSearchPopover() {
+function SignedOutCollapsedSearchPopover({
+  onOpenChange,
+}: {
+  onOpenChange?: (open: boolean) => void
+}) {
   const [open, setOpen] = React.useState(false)
 
   const className = cn(
     "menu-item-hoverable flex h-9 w-10 items-center justify-center rounded-lg",
     "cursor-pointer",
     "hover:bg-accent",
-    open && "bg-accent text-foreground hover:bg-accent",
+    open && "text-foreground",
     "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
   )
 
   return (
-    <Popover open={open} onOpenChange={(nextOpen) => setOpen(nextOpen)}>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen)
+        onOpenChange?.(nextOpen)
+      }}
+    >
       <PopoverTrigger
         render={
           <button
@@ -576,28 +618,146 @@ function SignedOutCollapsedSearchPopover() {
  */
 function CollapsedUserAvatar({
   user,
+  onSignedOutMenuOpenChange,
 }: {
   user: { display_name?: string; profile_image?: string | null } | null
+  onSignedOutMenuOpenChange?: (open: boolean) => void
 }) {
   if (!user) {
     return (
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Link
-              href="/login"
-              className="border-border hover:bg-accent mx-auto flex h-9 w-10 items-center justify-center rounded-full border"
-            />
-          }
-        >
-          <NawIcon className="size-5" />
-        </TooltipTrigger>
-        <TooltipContent side="right">Log in</TooltipContent>
-      </Tooltip>
+      <SignedOutCollapsedAccountPopover
+        onOpenChange={onSignedOutMenuOpenChange}
+      />
     )
   }
 
   return <UserMenu variant="sidebar-collapsed" />
+}
+
+function SignedOutCollapsedAccountPopover({
+  onOpenChange,
+}: {
+  onOpenChange?: (open: boolean) => void
+}) {
+  const [open, setOpen] = React.useState(false)
+
+  return (
+    <DropdownMenu
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen)
+        onOpenChange?.(nextOpen)
+      }}
+    >
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            role="button"
+            aria-label="Open profile menu"
+            aria-haspopup="menu"
+            aria-expanded={open}
+            data-sidebar-item="true"
+            data-testid="accounts-profile-button"
+            className={cn(
+              "menu-item-hoverable mx-auto flex h-10 w-10 items-center justify-center rounded-xl text-primary",
+              "hover:bg-accent focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
+              open && "bg-accent"
+            )}
+          />
+        }
+      >
+        <div className="bg-muted flex size-6 shrink-0 items-center justify-center rounded-full">
+          <Icon icon={RiUserLine} slotSize={16} />
+        </div>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        side="top"
+        align="start"
+        sideOffset={6}
+        animated={false}
+        className="w-[calc(var(--sidebar-width)-12px)] max-w-xs"
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <SignedOutAccountPopoverContent />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function SignedOutAccountPopoverContent() {
+  return (
+    <>
+      <SignedOutAccountDropdownItem
+        icon={<Icon icon={RiSparklingLine} slotSize={20} />}
+        label="See plans and pricing"
+        showTrailingIcon
+      />
+      <SignedOutAccountDropdownItem
+        icon={<Icon icon={RiSettings3Line} slotSize={20} />}
+        label="Settings"
+      />
+      <DropdownMenuSeparator className="mx-3" />
+      <SignedOutAccountDropdownItem
+        icon={<Icon icon={RiQuestionLine} slotSize={20} />}
+        label="Help center"
+        showTrailingIcon
+      />
+      <SignedOutAccountDropdownItem
+        icon={<Icon icon={RiQuillPenLine} slotSize={20} />}
+        label="Release notes"
+        showTrailingIcon
+      />
+      <SignedOutAccountDropdownItem
+        icon={<Icon icon={RiDownloadLine} slotSize={20} />}
+        label="Download apps"
+        showTrailingIcon
+      />
+      <DropdownMenuSeparator className="mx-3" />
+      <SignedOutAccountDropdownItem
+        icon={<Icon icon={RiFileTextLine} slotSize={20} />}
+        label="Terms of Service"
+        showTrailingIcon
+      />
+      <SignedOutAccountDropdownItem
+        icon={<Icon icon={RiInformationLine} slotSize={20} />}
+        label="Privacy Policy"
+        showTrailingIcon
+      />
+    </>
+  )
+}
+
+function SignedOutAccountDropdownItem({
+  icon,
+  label,
+  showTrailingIcon,
+}: {
+  icon: React.ReactNode
+  label: string
+  showTrailingIcon?: boolean
+}) {
+  return (
+    <DropdownMenuItem
+      closeOnClick={false}
+      onClick={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+      className="gap-1.5"
+    >
+      <div className="flex shrink-0 items-center justify-center">{icon}</div>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {showTrailingIcon && (
+        <Icon
+          icon={RiArrowRightSLine}
+          slotSize={16}
+          className="text-muted-foreground ml-auto shrink-0 opacity-0 group-hover/dropdown-menu-item:opacity-100 group-focus/dropdown-menu-item:opacity-100"
+          aria-hidden="true"
+        />
+      )}
+    </DropdownMenuItem>
+  )
 }
 
 function SignedOutHelpPopover() {
@@ -641,28 +801,28 @@ function SignedOutHelpPopover() {
         className="w-(--anchor-width)"
       >
         <div className="flex flex-col gap-0">
-          <SignedOutHelpPopoverItem
+          <SignedOutPopoverItem
             icon={<Icon icon={RiQuestionLine} slotSize={20} />}
             label="Help center"
             onClick={() => setOpen(false)}
           />
-          <SignedOutHelpPopoverItem
+          <SignedOutPopoverItem
             icon={<Icon icon={RiQuillPenLine} slotSize={20} />}
             label="Release notes"
             onClick={() => setOpen(false)}
           />
-          <SignedOutHelpPopoverItem
+          <SignedOutPopoverItem
             icon={<Icon icon={RiDownloadLine} slotSize={20} />}
             label="Download apps"
             onClick={() => setOpen(false)}
           />
-          <div className="bg-border mx-2 my-1 h-px" aria-hidden="true" />
-          <SignedOutHelpPopoverItem
+          <SignedOutPopoverSeparator />
+          <SignedOutPopoverItem
             icon={<Icon icon={RiFileTextLine} slotSize={20} />}
             label="Terms of Service"
             onClick={() => setOpen(false)}
           />
-          <SignedOutHelpPopoverItem
+          <SignedOutPopoverItem
             icon={<Icon icon={RiInformationLine} slotSize={20} />}
             label="Privacy Policy"
             onClick={() => setOpen(false)}
@@ -673,7 +833,11 @@ function SignedOutHelpPopover() {
   )
 }
 
-function SignedOutHelpPopoverItem({
+function SignedOutPopoverSeparator() {
+  return <div className="bg-border mx-2 my-1 h-px" aria-hidden="true" />
+}
+
+function SignedOutPopoverItem({
   icon,
   label,
   onClick,

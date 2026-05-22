@@ -136,7 +136,8 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
     () =>
       cn(
         "menu-item-hoverable hover:bg-accent/80 hover:text-foreground group/chat relative mx-1.5 h-9 w-[calc(100%-var(--spacing)*3)] rounded-lg pointer-coarse:h-auto",
-        isActive && "bg-accent hover:bg-accent text-foreground"
+        isActive &&
+          "bg-accent hover:bg-accent text-foreground group-data-[collapsible=icon]:bg-transparent"
       ),
     [isActive]
   )

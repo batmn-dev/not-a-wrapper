@@ -96,7 +96,8 @@ export const SidebarMenuItem = forwardRef<
   const combinedClassName = cn(
     baseClassName,
     hasTrailing && "justify-between",
-    isActive && "bg-accent text-foreground hover:bg-accent",
+    isActive &&
+      "bg-accent text-foreground hover:bg-accent group-data-[collapsible=icon]:bg-transparent",
     className
   )
 
