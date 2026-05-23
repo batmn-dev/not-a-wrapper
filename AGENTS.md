@@ -86,7 +86,8 @@ if (!identity) throw new Error("Not authenticated")
 
 - Do not remove fields from `convex/schema.ts` until an expand/migrate/contract migration is complete.
 - Add or update a manifest in `convex/migrations/`, verify aggregate legacy-field counts are zero, then run `bun run convex:schema-guard`.
-- Production deploys must go through `bun run convex:deploy`; it runs the schema contraction preflight before `convex deploy` and fails closed if `origin/main` cannot be read.
+- Production deploys must go through `bun run convex:deploy`; it runs the schema contraction preflight before `convex deploy` and fails closed if the configured base schema cannot be read.
+- Vercel previews use the same deploy command but run required-base dry-run validation before Convex creates or reuses the preview deployment.
 - Never disable Convex schema validation as the fix for stale production documents.
 
 ### Optimistic Update Pattern

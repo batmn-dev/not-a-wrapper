@@ -4,19 +4,29 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 import {
+  baseRefToFetchDestination,
   buildInlineCountQuery,
   checksFromManifests,
   diffSchemaContractions,
   evaluateSchemaContractions,
+  inferBaseBranch,
   loadMigrationManifests,
   parseConvexRunJson,
   parseSchemaFields,
+  resolveBaseFetchPlan,
 } from "./convex-schema-contract-lib.mjs"
 import {
   planPreflight,
   shouldRequireDiffBase,
   validatePreflightResults,
 } from "./convex-schema-contract-preflight.mjs"
+import {
+  convexDeployArgs,
+  deployPlanForEnv,
+  deployPreflightMode,
+  preflightArgsForDeployEnv,
+  runDeploy,
+} from "./convex-deploy.mjs"
 
 const baseSchema = `
 import { defineSchema, defineTable } from "convex/server"
@@ -153,6 +163,229 @@ describe("Convex schema contraction helpers", () => {
     ])
   })
 
+  it("prefers an existing origin remote over Vercel GitHub metadata", () => {
+    const plan = resolveBaseFetchPlan({
+      baseRef: "origin/main",
+      env: {
+        VERCEL_GIT_PROVIDER: "github",
+        VERCEL_GIT_REPO_OWNER: "darknightdesigner",
+        VERCEL_GIT_REPO_SLUG: "not-a-wrapper",
+      },
+      originRemoteUrl: "git@github.com:private/fork.git",
+    })
+
+    expect(plan).toMatchObject({
+      baseBranch: "main",
+      sourceRef: "refs/heads/main",
+      destinationRef: "refs/remotes/origin/main",
+      target: "origin",
+      sourceLabel: "origin remote",
+    })
+  })
+
+  it("uses Vercel public GitHub metadata only when explicitly allowed and no origin remote exists", () => {
+    const plan = resolveBaseFetchPlan({
+      baseRef: "origin/main",
+      env: {
+        SCHEMA_GUARD_ALLOW_VERCEL_GITHUB_FALLBACK: "1",
+        VERCEL_GIT_PROVIDER: "github",
+        VERCEL_GIT_REPO_OWNER: "darknightdesigner",
+        VERCEL_GIT_REPO_SLUG: "not-a-wrapper",
+      },
+      originRemoteUrl: null,
+    })
+
+    expect(plan).toMatchObject({
+      baseBranch: "main",
+      sourceRef: "refs/heads/main",
+      destinationRef: "refs/remotes/origin/main",
+      target: "https://github.com/darknightdesigner/not-a-wrapper.git",
+      sourceLabel: "Vercel public GitHub repository metadata",
+    })
+  })
+
+  it("does not derive a public GitHub URL from Vercel metadata without opt-in", () => {
+    expect(() =>
+      resolveBaseFetchPlan({
+        baseRef: "origin/main",
+        env: {
+          VERCEL_GIT_PROVIDER: "github",
+          VERCEL_GIT_REPO_OWNER: "private-owner",
+          VERCEL_GIT_REPO_SLUG: "private-repo",
+        },
+        originRemoteUrl: null,
+      })
+    ).toThrow("SCHEMA_GUARD_REPO_URL")
+  })
+
+  it("lets SCHEMA_GUARD_REPO_URL override Vercel and origin fetch sources", () => {
+    const plan = resolveBaseFetchPlan({
+      baseRef: "refs/remotes/schema-guard/main",
+      env: {
+        SCHEMA_GUARD_REPO_URL: "https://example.com/repo.git",
+        VERCEL_GIT_PROVIDER: "github",
+        VERCEL_GIT_REPO_OWNER: "darknightdesigner",
+        VERCEL_GIT_REPO_SLUG: "not-a-wrapper",
+      },
+      originRemoteUrl: "git@github.com:darknightdesigner/not-a-wrapper.git",
+    })
+
+    expect(plan).toMatchObject({
+      sourceRef: "refs/heads/main",
+      destinationRef: "refs/remotes/schema-guard/main",
+      target: "https://example.com/repo.git",
+      sourceLabel: "SCHEMA_GUARD_REPO_URL",
+    })
+  })
+
+  it("requires an explicit repo source when fetch-base has no origin or Vercel metadata", () => {
+    expect(() =>
+      resolveBaseFetchPlan({
+        baseRef: "origin/main",
+        env: {},
+        originRemoteUrl: null,
+      })
+    ).toThrow("SCHEMA_GUARD_REPO_URL")
+  })
+
+  it("requires an explicit repo source for non-GitHub Vercel builds without origin", () => {
+    expect(() =>
+      resolveBaseFetchPlan({
+        baseRef: "origin/main",
+        env: {
+          VERCEL_GIT_PROVIDER: "gitlab",
+          VERCEL_GIT_REPO_OWNER: "private",
+          VERCEL_GIT_REPO_SLUG: "not-a-wrapper",
+        },
+        originRemoteUrl: null,
+      })
+    ).toThrow("SCHEMA_GUARD_REPO_URL")
+  })
+
+  it("selects production aggregate preflight except for Vercel previews", () => {
+    expect(deployPreflightMode({})).toBe("prod")
+    expect(deployPreflightMode({ VERCEL_ENV: "production" })).toBe("prod")
+    expect(deployPreflightMode({ VERCEL_ENV: "preview" })).toBe("dry-run")
+    expect(deployPreflightMode({ VERCEL_ENV: "development" })).toBe("dry-run")
+    expect(
+      deployPreflightMode({
+        VERCEL_ENV: "preview",
+        CONVEX_SCHEMA_PREFLIGHT_MODE: "prod",
+      })
+    ).toBe("prod")
+    expect(() =>
+      deployPreflightMode({ CONVEX_SCHEMA_PREFLIGHT_MODE: "skip" })
+    ).toThrow("CONVEX_SCHEMA_PREFLIGHT_MODE")
+  })
+
+  it("keeps deploy preflight fail-closed on the git base in every mode", () => {
+    expect(preflightArgsForDeployEnv({ VERCEL_ENV: "production" })).toEqual([
+      "scripts/convex-schema-contract-preflight.mjs",
+      "--fetch-base",
+      "--require-diff-base",
+      "--prod",
+    ])
+    expect(preflightArgsForDeployEnv({ VERCEL_ENV: "preview" })).toEqual([
+      "scripts/convex-schema-contract-preflight.mjs",
+      "--fetch-base",
+      "--require-diff-base",
+      "--dry-run",
+    ])
+  })
+
+  it("plans the Convex deploy command without dropping extra CLI args", () => {
+    expect(convexDeployArgs(["--preview-create", "branch-name"])).toEqual([
+      "deploy",
+      "--cmd-url-env-var-name",
+      "NEXT_PUBLIC_CONVEX_URL",
+      "--cmd",
+      "next build",
+      "--yes",
+      "--preview-create",
+      "branch-name",
+    ])
+  })
+
+  it("plans preview deploys as required-base dry runs before Convex deploy", () => {
+    expect(
+      deployPlanForEnv({
+        env: { VERCEL_ENV: "preview" },
+        extraArgs: ["--preview-create", "branch-name"],
+      })
+    ).toEqual({
+      mode: "dry-run",
+      preflightArgs: [
+        "scripts/convex-schema-contract-preflight.mjs",
+        "--fetch-base",
+        "--require-diff-base",
+        "--dry-run",
+      ],
+      deployArgs: [
+        "deploy",
+        "--cmd-url-env-var-name",
+        "NEXT_PUBLIC_CONVEX_URL",
+        "--cmd",
+        "next build",
+        "--yes",
+        "--preview-create",
+        "branch-name",
+      ],
+    })
+  })
+
+  it("runs preflight before Convex deploy using the selected deploy environment", () => {
+    const calls = []
+    const env = { VERCEL_ENV: "preview" }
+
+    runDeploy({
+      env,
+      extraArgs: ["--preview-create", "branch-name"],
+      log: () => {},
+      runCommand: (command, args, commandEnv) => {
+        calls.push({ command, args, env: commandEnv })
+      },
+    })
+
+    expect(calls).toEqual([
+      {
+        command: process.execPath,
+        args: [
+          "scripts/convex-schema-contract-preflight.mjs",
+          "--fetch-base",
+          "--require-diff-base",
+          "--dry-run",
+        ],
+        env,
+      },
+      {
+        command: "convex",
+        args: [
+          "deploy",
+          "--cmd-url-env-var-name",
+          "NEXT_PUBLIC_CONVEX_URL",
+          "--cmd",
+          "next build",
+          "--yes",
+          "--preview-create",
+          "branch-name",
+        ],
+        env,
+      },
+    ])
+  })
+
+  it("infers fetch branches and destinations from base refs", () => {
+    expect(inferBaseBranch("origin/main")).toBe("main")
+    expect(inferBaseBranch("origin/release/2026-05")).toBe("release/2026-05")
+    expect(inferBaseBranch("refs/remotes/upstream/main")).toBe("main")
+    expect(baseRefToFetchDestination("origin/main")).toBe(
+      "refs/remotes/origin/main"
+    )
+    expect(baseRefToFetchDestination("refs/remotes/schema-guard/main")).toBe(
+      "refs/remotes/schema-guard/main"
+    )
+  })
+
   it("loads and validates manifest JSON files", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "convex-contract-"))
     const manifestDir = "convex/migrations"
@@ -197,6 +430,7 @@ describe("Convex schema contraction helpers", () => {
     const query = buildInlineCountQuery(checksFromManifests([contractedManifest()]))
 
     expect(query).toContain("count")
+    expect(query).toContain("q.neq(q.field(check.field), undefined)")
     expect(query).toContain("take(limit + 1)")
     expect(query).not.toContain("return docs")
   })

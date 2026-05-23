@@ -8,6 +8,7 @@ import {
   DEFAULT_SCHEMA_PATH,
   diffSchemaContractions,
   evaluateSchemaContractions,
+  fetchBaseRef,
   fieldKey,
   formatCheck,
   loadMigrationManifests,
@@ -15,9 +16,11 @@ import {
 
 function parseArgs(argv) {
   const options = {
-    baseRef: DEFAULT_BASE_REF,
+    baseRef: process.env.SCHEMA_GUARD_BASE_REF ?? DEFAULT_BASE_REF,
     schemaPath: DEFAULT_SCHEMA_PATH,
     manifestDir: DEFAULT_MANIFEST_DIR,
+    baseBranch: process.env.SCHEMA_GUARD_BASE_BRANCH,
+    repoUrl: process.env.SCHEMA_GUARD_REPO_URL,
   }
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -27,12 +30,20 @@ function parseArgs(argv) {
     if (arg === "--base") {
       options.baseRef = requireValue(arg, next)
       index += 1
+    } else if (arg === "--base-branch") {
+      options.baseBranch = requireValue(arg, next)
+      index += 1
+    } else if (arg === "--repo-url") {
+      options.repoUrl = requireValue(arg, next)
+      index += 1
     } else if (arg === "--schema") {
       options.schemaPath = requireValue(arg, next)
       index += 1
     } else if (arg === "--manifest-dir") {
       options.manifestDir = requireValue(arg, next)
       index += 1
+    } else if (arg === "--fetch-base") {
+      options.fetchBase = true
     } else if (arg === "--help" || arg === "-h") {
       options.help = true
     } else {
@@ -61,7 +72,7 @@ function readBaseSchema(baseRef, schemaPath) {
     const stderr = String(error.stderr ?? "").trim()
     const suffix = stderr ? `\n${stderr}` : ""
     throw new Error(
-      `Could not read ${schemaPath} from ${baseRef}. Run git fetch origin main before this guard.${suffix}`
+      `Could not read ${schemaPath} from ${baseRef}. Run this guard with --fetch-base or set SCHEMA_GUARD_REPO_URL so the base ref can be prepared.${suffix}`
     )
   }
 }
@@ -74,6 +85,9 @@ Convex schema-contraction manifests. This guard never queries production data.
 
 Options:
   --base <ref>           Git ref to compare against (default: ${DEFAULT_BASE_REF})
+  --fetch-base           Fetch the base branch into --base before comparing
+  --base-branch <name>   Branch to fetch for --fetch-base (default: inferred from --base)
+  --repo-url <url>       Repository URL for --fetch-base (or SCHEMA_GUARD_REPO_URL)
   --schema <path>        Schema file path (default: ${DEFAULT_SCHEMA_PATH})
   --manifest-dir <dir>   Manifest directory (default: ${DEFAULT_MANIFEST_DIR})
   -h, --help             Show this help
@@ -102,6 +116,17 @@ function runCli() {
   if (options.help) {
     printHelp()
     return
+  }
+
+  if (options.fetchBase) {
+    const plan = fetchBaseRef({
+      baseRef: options.baseRef,
+      baseBranch: options.baseBranch,
+      repoUrl: options.repoUrl,
+    })
+    console.log(
+      `OK fetched ${plan.sourceRef} into ${plan.destinationRef} from ${plan.sourceLabel}`
+    )
   }
 
   const baseSource = readBaseSchema(options.baseRef, options.schemaPath)

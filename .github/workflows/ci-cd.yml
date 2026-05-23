@@ -28,9 +28,22 @@ jobs:
       - name: Run TypeScript checks
         run: bun run typecheck
 
-      # TODO: Uncomment when tests are added
-      # - name: Run Tests
-      #   run: bun test
+      - name: Run Convex schema deploy contract tests
+        run: bunx vitest run scripts/convex-schema-contract-lib.test.mjs
+
+      - name: Dry-run Convex schema preflight script
+        run: node scripts/convex-schema-contract-preflight.mjs --fetch-base --require-diff-base --dry-run
+
+      - name: Verify schema preflight fails closed without diff base
+        run: |
+          if node scripts/convex-schema-contract-preflight.mjs --base refs/remotes/schema-guard/missing-${{ github.run_id }} --require-diff-base --dry-run; then
+            echo "Expected schema preflight to fail when the required diff base cannot be read"
+            exit 1
+          fi
+
+      # Full suite can be enabled once non-script tests are stable.
+      # - name: Run all tests
+      #   run: bun run test
 
   build:
     name: Build

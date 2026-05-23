@@ -105,6 +105,10 @@ Set these Vercel Preview environment variables:
 - `ENCRYPTION_KEY`
 - AI provider keys needed by the deployment
 - optional analytics and observability keys
+- optional `SCHEMA_GUARD_REPO_URL` when Vercel cannot fetch the base branch
+  from `origin`
+- optional `SCHEMA_GUARD_ALLOW_VERCEL_GITHUB_FALLBACK=1` only for public GitHub
+  repositories that can be fetched without credentials
 
 Use a Convex preview deploy key for `CONVEX_DEPLOY_KEY`.
 
@@ -117,8 +121,22 @@ bun run convex:deploy
 ```
 
 This injects the preview Convex URL into `NEXT_PUBLIC_CONVEX_URL` during the
-Next.js build. The shared deploy script fetches `origin/main`, runs the schema
-contraction preflight with a required diff base, then runs `convex deploy`.
+Next.js build. In Vercel preview/development deploys, the shared deploy script
+fetches the schema diff base, requires it to be readable, and runs a dry-run
+schema/manifest check before `convex deploy`. It does not query production data
+from preview builds, because the Convex preview deployment may not exist until
+`convex deploy` claims or creates it.
+
+Vercel build checkouts may not expose a usable `origin` remote. The schema guard
+first uses an explicit `SCHEMA_GUARD_REPO_URL`, then the checkout's existing
+`origin`, and only falls back to Vercel's public GitHub metadata when no origin
+remote is present and `SCHEMA_GUARD_ALLOW_VERCEL_GITHUB_FALLBACK=1` is set.
+Private forks, renamed repositories, non-GitHub sources, and projects where the
+base ref requires credentials must either make `origin` fetchable or set
+`SCHEMA_GUARD_REPO_URL` in Vercel to a read-capable repository URL. Public
+GitHub repos may opt into the Vercel metadata fallback. Keep credential-bearing
+URLs in private Vercel env settings only; never put them in `NEXT_PUBLIC_*`
+variables.
 
 `NEXT_PUBLIC_WORKOS_REDIRECT_URI` must still match the preview callback URL that
 WorkOS will redirect to. For branch previews, use the Vercel preview callback
@@ -138,6 +156,10 @@ Set these Vercel Production environment variables:
 - `ENCRYPTION_KEY`
 - AI provider keys needed by the deployment
 - optional analytics and observability keys
+- optional `SCHEMA_GUARD_REPO_URL` when the production deploy environment
+  cannot fetch the base branch from `origin`
+- optional `SCHEMA_GUARD_ALLOW_VERCEL_GITHUB_FALLBACK=1` only for public GitHub
+  repositories that can be fetched without credentials
 
 Use a Convex production deploy key for `CONVEX_DEPLOY_KEY`.
 
@@ -163,6 +185,30 @@ removed schema fields have zero legacy documents on the target deployment. It
 prints only table names, field names, and aggregate counts, and blocks deploys
 if the diff base or Convex aggregate counts cannot be verified. See
 `docs/convex-migrations.md` for the expand/migrate/contract workflow.
+
+For private production deployments, confirm that the production environment can
+fetch the base schema before relying on deploy automation. Configure either a
+fetchable `origin` remote or `SCHEMA_GUARD_REPO_URL`; production deploys fail
+closed if neither can provide the configured base ref.
+
+## Schema Guard Repository Access
+
+The schema guard and deploy preflight need read access to the base schema ref.
+For the default `origin/main` base, configure one of these:
+
+- A checkout with a fetchable `origin` remote. This is normally enough for
+  GitHub Actions using `actions/checkout`.
+- `SCHEMA_GUARD_REPO_URL` in private GitHub Actions secrets/variables, Vercel
+  environment variables, or the local shell. Use this for private forks,
+  renamed repositories, mirrors, non-GitHub providers, or credential-required
+  base refs.
+- `SCHEMA_GUARD_ALLOW_VERCEL_GITHUB_FALLBACK=1`, only for public GitHub repos
+  where an unauthenticated Vercel metadata URL is sufficient.
+
+Do not commit credential-bearing repository URLs, place them in `NEXT_PUBLIC_*`
+variables, or paste them into logs. If a token is embedded in
+`SCHEMA_GUARD_REPO_URL`, store it only in the provider's private secret/env
+settings.
 
 ## Troubleshooting
 

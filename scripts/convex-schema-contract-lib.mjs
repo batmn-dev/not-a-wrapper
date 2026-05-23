@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join, relative, resolve } from "node:path"
 import ts from "typescript"
@@ -5,10 +6,12 @@ import ts from "typescript"
 export const DEFAULT_SCHEMA_PATH = "convex/schema.ts"
 export const DEFAULT_MANIFEST_DIR = "convex/migrations"
 export const DEFAULT_BASE_REF = "origin/main"
+export const DEFAULT_BASE_BRANCH = "main"
 
 const VALID_STATUSES = new Set(["expand", "migrate", "contracted"])
 const VALID_KIND = "convex-schema-contraction"
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/
+const GITHUB_REPO_PART = /^[A-Za-z0-9_.-]+$/
 
 function isIdentifierName(node) {
   return ts.isIdentifier(node) || ts.isStringLiteral(node) || ts.isNumericLiteral(node)
@@ -321,6 +324,185 @@ export function mergeChecks(...checkLists) {
   return Array.from(checksByKey.values()).sort(compareFieldCheck)
 }
 
+function envValue(value) {
+  if (typeof value !== "string") return null
+
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function readOriginRemoteUrl() {
+  const result = spawnSync("git", ["remote", "get-url", "origin"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  })
+
+  if (result.status !== 0) return null
+
+  return envValue(result.stdout)
+}
+
+function vercelGitHubRepoUrl(env) {
+  if (envValue(env.VERCEL_GIT_PROVIDER) !== "github") return null
+
+  const owner = envValue(env.VERCEL_GIT_REPO_OWNER)
+  const slug = envValue(env.VERCEL_GIT_REPO_SLUG)
+  if (!owner || !slug) return null
+
+  if (!GITHUB_REPO_PART.test(owner) || !GITHUB_REPO_PART.test(slug)) {
+    throw new Error(
+      "VERCEL_GIT_REPO_OWNER and VERCEL_GIT_REPO_SLUG must be valid GitHub path parts"
+    )
+  }
+
+  return `https://github.com/${owner}/${slug}.git`
+}
+
+function shouldUseVercelGitHubFallback(env) {
+  return envValue(env.SCHEMA_GUARD_ALLOW_VERCEL_GITHUB_FALLBACK) === "1"
+}
+
+function assertFetchableRefPart(value, label) {
+  if (
+    value.startsWith("-") ||
+    value.includes("..") ||
+    value.includes("@{") ||
+    /[\s:\\]/.test(value)
+  ) {
+    throw new Error(`${label} is not a safe git ref value: ${value}`)
+  }
+}
+
+export function inferBaseBranch(baseRef = DEFAULT_BASE_REF) {
+  if (baseRef.startsWith("refs/remotes/")) {
+    const remoteAndBranch = baseRef.slice("refs/remotes/".length)
+    const slashIndex = remoteAndBranch.indexOf("/")
+    if (slashIndex !== -1) {
+      return remoteAndBranch.slice(slashIndex + 1) || DEFAULT_BASE_BRANCH
+    }
+  }
+
+  if (baseRef.startsWith("refs/heads/")) {
+    return baseRef.slice("refs/heads/".length) || DEFAULT_BASE_BRANCH
+  }
+
+  const slashIndex = baseRef.indexOf("/")
+  if (slashIndex !== -1) {
+    return baseRef.slice(slashIndex + 1) || DEFAULT_BASE_BRANCH
+  }
+
+  return baseRef || DEFAULT_BASE_BRANCH
+}
+
+export function baseRefToFetchDestination(baseRef = DEFAULT_BASE_REF) {
+  if (baseRef.startsWith("refs/")) return baseRef
+
+  if (baseRef.includes("/")) {
+    return `refs/remotes/${baseRef}`
+  }
+
+  throw new Error(
+    "--fetch-base requires --base to be a remote-tracking ref like origin/main or a full refs/... ref"
+  )
+}
+
+export function resolveBaseFetchPlan({
+  baseRef = DEFAULT_BASE_REF,
+  baseBranch,
+  repoUrl,
+  env = process.env,
+  originRemoteUrl,
+} = {}) {
+  const resolvedBaseBranch =
+    envValue(baseBranch) ??
+    envValue(env.SCHEMA_GUARD_BASE_BRANCH) ??
+    inferBaseBranch(baseRef)
+  const destinationRef = baseRefToFetchDestination(baseRef)
+
+  assertFetchableRefPart(resolvedBaseBranch, "base branch")
+  assertFetchableRefPart(destinationRef, "base destination ref")
+
+  const explicitRepoUrl = envValue(repoUrl) ?? envValue(env.SCHEMA_GUARD_REPO_URL)
+  if (explicitRepoUrl) {
+    return {
+      baseRef,
+      baseBranch: resolvedBaseBranch,
+      sourceRef: `refs/heads/${resolvedBaseBranch}`,
+      destinationRef,
+      target: explicitRepoUrl,
+      sourceLabel: "SCHEMA_GUARD_REPO_URL",
+    }
+  }
+
+  const detectedOriginUrl =
+    originRemoteUrl === undefined ? readOriginRemoteUrl() : envValue(originRemoteUrl)
+  if (detectedOriginUrl) {
+    return {
+      baseRef,
+      baseBranch: resolvedBaseBranch,
+      sourceRef: `refs/heads/${resolvedBaseBranch}`,
+      destinationRef,
+      target: "origin",
+      sourceLabel: "origin remote",
+    }
+  }
+
+  const vercelRepoUrl = shouldUseVercelGitHubFallback(env)
+    ? vercelGitHubRepoUrl(env)
+    : null
+  if (vercelRepoUrl) {
+    return {
+      baseRef,
+      baseBranch: resolvedBaseBranch,
+      sourceRef: `refs/heads/${resolvedBaseBranch}`,
+      destinationRef,
+      target: vercelRepoUrl,
+      sourceLabel: "Vercel public GitHub repository metadata",
+    }
+  }
+
+  throw new Error(
+    "Could not determine a repository URL for the schema diff base. Set SCHEMA_GUARD_REPO_URL, run in a checkout with an origin remote, or set SCHEMA_GUARD_ALLOW_VERCEL_GITHUB_FALLBACK=1 for a public GitHub repository."
+  )
+}
+
+function redactGitSecrets(value) {
+  return value.replace(/(https?:\/\/)([^/@\s]+)@/g, "$1[redacted]@")
+}
+
+export function fetchBaseRef(options = {}) {
+  const plan = resolveBaseFetchPlan(options)
+  const result = spawnSync(
+    "git",
+    [
+      "fetch",
+      "--no-tags",
+      "--depth=1",
+      plan.target,
+      `+${plan.sourceRef}:${plan.destinationRef}`,
+    ],
+    {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }
+  )
+
+  if (result.error) {
+    throw new Error(`Could not run git fetch: ${result.error.message}`)
+  }
+
+  if (result.status !== 0) {
+    const detail = redactGitSecrets(
+      [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join("\n")
+    )
+    throw new Error(
+      `Could not fetch ${plan.sourceRef} into ${plan.destinationRef} from ${plan.sourceLabel}.${detail ? `\n${detail}` : ""}`
+    )
+  }
+
+  return plan
+}
+
 export function buildInlineCountQuery(checks, { limit = 1000 } = {}) {
   const safeChecks = checks.map((check) => ({
     table: check.table,
@@ -336,7 +518,7 @@ const results = [];
 for (const check of checks) {
   const docs = await ctx.db
     .query(check.table)
-    .filter((q) => q.gte(q.field(check.field), null))
+    .filter((q) => q.neq(q.field(check.field), undefined))
     .take(limit + 1);
   results.push({
     table: check.table,

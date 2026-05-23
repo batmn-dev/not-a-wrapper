@@ -45,6 +45,20 @@ Run the local guard before removing fields:
 bun run convex:schema-guard
 ```
 
+The guard and preflight prepare their git diff base before reading
+`convex/schema.ts` from that ref. By default they fetch `main` into
+`origin/main`. Fetch source order is explicit `SCHEMA_GUARD_REPO_URL`, then the
+checkout's `origin` remote, then Vercel's public GitHub metadata only when no
+origin remote is present and `SCHEMA_GUARD_ALLOW_VERCEL_GITHUB_FALLBACK=1` is
+set. Private forks and non-GitHub clones should make `origin` fetchable or set
+`SCHEMA_GUARD_REPO_URL` in private CI/Vercel settings.
+
+Use `SCHEMA_GUARD_REPO_URL` for private forks, renamed repositories, mirrors,
+non-GitHub providers, and any environment where the base branch requires
+credentials. Enable `SCHEMA_GUARD_ALLOW_VERCEL_GITHUB_FALLBACK=1` only for
+public GitHub repositories that can be fetched without credentials. Never commit
+credential-bearing repository URLs or expose them through `NEXT_PUBLIC_*`.
+
 Run the production preflight before `convex deploy`:
 
 ```bash
@@ -57,6 +71,20 @@ before `convex deploy`:
 ```bash
 bun run convex:deploy
 ```
+
+The shared command runs a required-base dry run for Vercel previews and a
+required-base production aggregate preflight for production deploys. Use
+`CONVEX_SCHEMA_PREFLIGHT_MODE=prod` or
+`CONVEX_SCHEMA_PREFLIGHT_MODE=dry-run` only for explicit environment overrides.
+For local or CI dry-run validation, prefer:
+
+```bash
+bun run convex:schema-preflight:dry-run
+```
+
+Appending `--dry-run` to `bun run convex:schema-preflight` is supported and
+keeps the production command's target/base semantics while skipping the Convex
+query, but the dedicated dry-run script is clearer for validation.
 
 Both scripts print only table names, field names, and aggregate counts. The
 preflight's built-in count query is a full-table scan per field; the limit caps
