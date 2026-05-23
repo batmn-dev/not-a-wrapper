@@ -113,11 +113,12 @@ Vercel provides `VERCEL_BRANCH_URL` and
 preview redirect URIs and CORS origins. The Vercel build command runs:
 
 ```bash
-npx convex deploy --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL --cmd 'next build'
+bun run convex:deploy
 ```
 
 This injects the preview Convex URL into `NEXT_PUBLIC_CONVEX_URL` during the
-Next.js build.
+Next.js build. The shared deploy script fetches `origin/main`, runs the schema
+contraction preflight with a required diff base, then runs `convex deploy`.
 
 `NEXT_PUBLIC_WORKOS_REDIRECT_URI` must still match the preview callback URL that
 WorkOS will redirect to. For branch previews, use the Vercel preview callback
@@ -150,6 +151,18 @@ In WorkOS production, configure:
 
 `NEXT_PUBLIC_CONVEX_URL` should not be manually set in Vercel. It is injected by
 `convex deploy --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL`.
+
+Production `convex deploy` must go through the shared deploy command:
+
+```bash
+bun run convex:deploy
+```
+
+The read-only preflight uses `convex/migrations/` manifests to verify that
+removed schema fields have zero legacy documents on the target deployment. It
+prints only table names, field names, and aggregate counts, and blocks deploys
+if the diff base or Convex aggregate counts cannot be verified. See
+`docs/convex-migrations.md` for the expand/migrate/contract workflow.
 
 ## Troubleshooting
 

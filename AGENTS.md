@@ -82,6 +82,13 @@ if (!identity) throw new Error("Not authenticated")
 // verify ownership before user-scoped mutations
 ```
 
+### Convex Schema Contractions
+
+- Do not remove fields from `convex/schema.ts` until an expand/migrate/contract migration is complete.
+- Add or update a manifest in `convex/migrations/`, verify aggregate legacy-field counts are zero, then run `bun run convex:schema-guard`.
+- Production deploys must go through `bun run convex:deploy`; it runs the schema contraction preflight before `convex deploy` and fails closed if `origin/main` cannot be read.
+- Never disable Convex schema validation as the fix for stale production documents.
+
 ### Optimistic Update Pattern
 
 ```typescript

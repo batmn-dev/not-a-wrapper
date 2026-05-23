@@ -76,6 +76,6 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Deploy to Convex
-        run: bun run build
+        run: bun run convex:deploy
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}

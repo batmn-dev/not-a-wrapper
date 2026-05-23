@@ -101,6 +101,11 @@ Backfill is idempotent and fires the same `user.created` app sync handler. It is
 
 The Convex schema lives in `convex/schema.ts`; generated Convex types are managed by the Convex dev process.
 
+Schema contractions require the expand/migrate/contract workflow in
+`docs/convex-migrations.md`. Do not remove fields from `convex/schema.ts` until
+the matching migration manifest is `contracted` and aggregate target-deployment
+checks are zero.
+
 ## Run Locally
 
 ```bash
@@ -135,20 +140,22 @@ bun run lint
 bun run typecheck
 bun run test
 bun run build:next
+bun run convex:schema-guard
 ```
 
 Use `bun run test`; the configured test runner is Vitest.
 
 `bun run build` deploys Convex before building and injects
-`NEXT_PUBLIC_CONVEX_URL`; use `bun run build:next` for a local Next.js
-production build without deploying Convex.
+`NEXT_PUBLIC_CONVEX_URL`. It runs the schema contraction preflight before
+`convex deploy`; use `bun run build:next` for a local Next.js production build
+without deploying Convex.
 
 ## Production Deployment
 
 Deploy the app through Vercel with:
 
 ```bash
-npx convex deploy --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL --cmd 'next build'
+bun run convex:deploy
 ```
 
 Configure Vercel and Convex env according to `docs/environment.md`.
