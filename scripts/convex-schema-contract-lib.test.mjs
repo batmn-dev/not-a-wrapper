@@ -8,6 +8,7 @@ import {
   buildInlineCountQuery,
   checksFromManifests,
   diffSchemaContractions,
+  envValue,
   evaluateSchemaContractions,
   inferBaseBranch,
   loadMigrationManifests,
@@ -384,6 +385,13 @@ describe("Convex schema contraction helpers", () => {
     expect(baseRefToFetchDestination("refs/remotes/schema-guard/main")).toBe(
       "refs/remotes/schema-guard/main"
     )
+  })
+
+  it("treats empty environment values as unset", () => {
+    expect(envValue(undefined)).toBe(null)
+    expect(envValue("")).toBe(null)
+    expect(envValue("   ")).toBe(null)
+    expect(envValue(" origin/main ")).toBe("origin/main")
   })
 
   it("loads and validates manifest JSON files", async () => {

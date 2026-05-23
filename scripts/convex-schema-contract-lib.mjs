@@ -324,7 +324,7 @@ export function mergeChecks(...checkLists) {
   return Array.from(checksByKey.values()).sort(compareFieldCheck)
 }
 
-function envValue(value) {
+export function envValue(value) {
   if (typeof value !== "string") return null
 
   const trimmed = value.trim()

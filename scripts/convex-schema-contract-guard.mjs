@@ -7,6 +7,7 @@ import {
   DEFAULT_MANIFEST_DIR,
   DEFAULT_SCHEMA_PATH,
   diffSchemaContractions,
+  envValue,
   evaluateSchemaContractions,
   fetchBaseRef,
   fieldKey,
@@ -16,7 +17,7 @@ import {
 
 function parseArgs(argv) {
   const options = {
-    baseRef: process.env.SCHEMA_GUARD_BASE_REF ?? DEFAULT_BASE_REF,
+    baseRef: envValue(process.env.SCHEMA_GUARD_BASE_REF) ?? DEFAULT_BASE_REF,
     schemaPath: DEFAULT_SCHEMA_PATH,
     manifestDir: DEFAULT_MANIFEST_DIR,
     baseBranch: process.env.SCHEMA_GUARD_BASE_BRANCH,
