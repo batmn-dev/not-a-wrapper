@@ -163,6 +163,13 @@ Set these Vercel Production environment variables:
 
 Use a Convex production deploy key for `CONVEX_DEPLOY_KEY`.
 
+GitHub Actions production Convex deploys also need the repository variable
+`VERCEL_PROJECT_PRODUCTION_URL`, because they do not run inside Vercel and do
+not receive Vercel system environment variables automatically. Set it to the
+production host only, without `https://` and without a path. The deploy workflow
+passes it through to `convex deploy` so `convex.json` can configure WorkOS
+AuthKit redirect URIs and CORS origins.
+
 In WorkOS production, configure:
 
 - Redirect URI: `https://<production-domain>/callback`

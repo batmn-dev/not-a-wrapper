@@ -76,6 +76,8 @@ jobs:
     concurrency:
       group: convex-deploy
       cancel-in-progress: false
+    env:
+      VERCEL_PROJECT_PRODUCTION_URL: ${{ vars.VERCEL_PROJECT_PRODUCTION_URL }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -87,6 +89,18 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Validate production deploy configuration
+        run: |
+          if [ -z "${VERCEL_PROJECT_PRODUCTION_URL:-}" ]; then
+            echo "::error title=Missing VERCEL_PROJECT_PRODUCTION_URL::Set the GitHub Actions repository variable VERCEL_PROJECT_PRODUCTION_URL to the production host, without https://."
+            exit 1
+          fi
+
+          if [[ "$VERCEL_PROJECT_PRODUCTION_URL" == http://* || "$VERCEL_PROJECT_PRODUCTION_URL" == https://* || "$VERCEL_PROJECT_PRODUCTION_URL" == */* ]]; then
+            echo "::error title=Invalid VERCEL_PROJECT_PRODUCTION_URL::Use only the production host, for example example.com. convex.json adds https:// and /callback."
+            exit 1
+          fi
 
       - name: Deploy to Convex
         run: bun run convex:deploy
