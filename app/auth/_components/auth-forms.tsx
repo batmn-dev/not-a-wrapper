@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { initialAuthActionState, type AuthActionState } from "../_lib/schemas"
+import { useAuthFormAction } from "./use-auth-form-action"
 import Link from "next/link"
 import { useActionState } from "react"
 
@@ -69,7 +70,7 @@ export function LoginForm({
   const initialState: AuthActionState = notice
     ? { status: noticeStatus, message: notice }
     : initialAuthActionState
-  const [state, formAction, isPending] = useActionState(
+  const [state, formAction, isPending] = useAuthFormAction(
     signInWithPassword,
     initialState
   )
@@ -129,7 +130,7 @@ export function LoginForm({
 }
 
 export function SignUpForm() {
-  const [state, formAction, isPending] = useActionState(
+  const [state, formAction, isPending] = useAuthFormAction(
     signUpWithPassword,
     initialAuthActionState
   )
@@ -291,7 +292,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
 }
 
 export function VerifyEmailForm({ email }: { email?: string }) {
-  const [state, formAction, isPending] = useActionState(
+  const [state, formAction, isPending] = useAuthFormAction(
     verifyEmailCode,
     initialAuthActionState
   )

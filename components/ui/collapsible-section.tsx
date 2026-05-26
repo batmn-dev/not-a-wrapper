@@ -77,7 +77,7 @@ export function CollapsibleSection({
           isSidebarVariant
             ? [
                 "w-full justify-start gap-0.5 px-4 py-1.5",
-                "text-sidebar-foreground/50 hover:text-sidebar-foreground/70",
+                "text-foreground",
               ]
             : [
                 "w-full gap-1 px-2 py-1.5",

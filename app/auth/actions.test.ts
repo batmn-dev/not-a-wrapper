@@ -1,7 +1,16 @@
 import { headers } from "next/headers"
+import { redirect } from "next/navigation"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { signInWithPasswordSession } from "./_lib/workos-password-auth"
-import { signInWithPassword } from "./actions"
+import {
+  signInWithPasswordSession,
+  verifyEmailCodeSession,
+  verifyMagicAuthCodeSession,
+} from "./_lib/workos-password-auth"
+import {
+  signInWithPassword,
+  verifyEmailCode,
+  verifyMagicAuthCode,
+} from "./actions"
 
 vi.mock("next/headers", () => ({
   headers: vi.fn(),
@@ -55,5 +64,67 @@ describe("auth actions", () => {
         userAgent: "vitest",
       }
     )
+  })
+
+  it("returns an authenticated state after password sign-in saves a session", async () => {
+    vi.mocked(headers).mockResolvedValue(
+      new Headers({
+        host: "localhost:3000",
+        "user-agent": "vitest",
+      })
+    )
+    vi.mocked(signInWithPasswordSession).mockResolvedValue({
+      status: "authenticated",
+    })
+
+    const formData = new FormData()
+    formData.set("email", "Person@Example.com")
+    formData.set("password", "password123")
+
+    const state = await signInWithPassword({ status: "idle" }, formData)
+
+    expect(state).toEqual({ status: "authenticated", redirectTo: "/" })
+    expect(redirect).not.toHaveBeenCalled()
+  })
+
+  it("returns an authenticated state after magic code verification saves a session", async () => {
+    vi.mocked(headers).mockResolvedValue(
+      new Headers({
+        host: "localhost:3000",
+        "user-agent": "vitest",
+      })
+    )
+    vi.mocked(verifyMagicAuthCodeSession).mockResolvedValue({
+      status: "authenticated",
+    })
+
+    const formData = new FormData()
+    formData.set("email", "Person@Example.com")
+    formData.set("code", "123456")
+
+    const state = await verifyMagicAuthCode({ status: "idle" }, formData)
+
+    expect(state).toEqual({ status: "authenticated", redirectTo: "/" })
+    expect(redirect).not.toHaveBeenCalled()
+  })
+
+  it("returns an authenticated state after email verification saves a session", async () => {
+    vi.mocked(headers).mockResolvedValue(
+      new Headers({
+        host: "localhost:3000",
+        "user-agent": "vitest",
+      })
+    )
+    vi.mocked(verifyEmailCodeSession).mockResolvedValue({
+      status: "verified",
+    })
+
+    const formData = new FormData()
+    formData.set("code", "123456")
+
+    const state = await verifyEmailCode({ status: "idle" }, formData)
+
+    expect(state).toEqual({ status: "authenticated", redirectTo: "/" })
+    expect(redirect).not.toHaveBeenCalled()
   })
 })

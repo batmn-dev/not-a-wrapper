@@ -71,9 +71,10 @@ export type AuthFieldErrors = Partial<
 >
 
 export type AuthActionState = {
-  status: "idle" | "error" | "success"
+  status: "idle" | "error" | "success" | "authenticated"
   message?: string
   fieldErrors?: AuthFieldErrors
+  redirectTo?: string
 }
 
 export const initialAuthActionState: AuthActionState = {
