@@ -2,7 +2,7 @@
 
 import { useAuth } from "@workos-inc/authkit-nextjs/components"
 import { useRouter } from "next/navigation"
-import { useCallback, useState } from "react"
+import { useActionState } from "react"
 import {
   initialAuthActionState,
   type AuthActionState,
@@ -19,29 +19,19 @@ export function useAuthFormAction(
 ) {
   const router = useRouter()
   const { getAuth } = useAuth()
-  const [state, setState] = useState<AuthActionState>(initialState)
-  const [isPending, setIsPending] = useState(false)
+  const [state, formAction, isPending] = useActionState(
+    async (previousState: AuthActionState, formData: FormData) => {
+      const nextState = await action(previousState, formData)
 
-  const formAction = useCallback(
-    async (formData: FormData) => {
-      setIsPending(true)
-
-      try {
-        const nextState = await action(state, formData)
-
-        if (nextState.status === "authenticated") {
-          await getAuth({ ensureSignedIn: true })
-          router.replace(nextState.redirectTo ?? "/")
-          router.refresh()
-          return
-        }
-
-        setState(nextState)
-      } finally {
-        setIsPending(false)
+      if (nextState.status === "authenticated") {
+        await getAuth({ ensureSignedIn: true })
+        router.replace(nextState.redirectTo ?? "/")
+        router.refresh()
       }
+
+      return nextState
     },
-    [action, getAuth, router, state]
+    initialState
   )
 
   return [state, formAction, isPending] as const
