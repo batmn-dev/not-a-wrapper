@@ -5,6 +5,7 @@ import {
   verifyMagicAuthCode,
 } from "@/app/auth/actions"
 import { initialAuthActionState } from "@/app/auth/_lib/schemas"
+import { useAuthFormAction } from "@/app/auth/_components/use-auth-form-action"
 import { Button } from "@/components/ui/button"
 import {
   InputOTP,
@@ -14,14 +15,15 @@ import {
 import { APP_DOMAIN } from "@/lib/config"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
-import { useActionState } from "react"
+import { useActionState, useCallback, useRef } from "react"
 
 type VerificationFormProps = {
   email: string
 }
 
 export function VerificationForm({ email }: VerificationFormProps) {
-  const [verifyState, verifyAction, isVerifyPending] = useActionState(
+  const verifyFormRef = useRef<HTMLFormElement>(null)
+  const [verifyState, verifyAction, isVerifyPending] = useAuthFormAction(
     verifyMagicAuthCode,
     initialAuthActionState
   )
@@ -30,6 +32,14 @@ export function VerificationForm({ email }: VerificationFormProps) {
     initialAuthActionState
   )
   const passwordHref = `/auth/login?email=${encodeURIComponent(email)}`
+  const handleCodeComplete = useCallback(
+    (code: string) => {
+      if (isVerifyPending || !/^\d{6}$/.test(code)) return
+
+      verifyFormRef.current?.requestSubmit()
+    },
+    [isVerifyPending]
+  )
 
   return (
     <div className="w-full">
@@ -37,7 +47,12 @@ export function VerificationForm({ email }: VerificationFormProps) {
         <AuthStatusMessage state={verifyState} className="mb-5" />
       ) : null}
 
-      <form action={verifyAction} className="space-y-5" noValidate>
+      <form
+        action={verifyAction}
+        className="space-y-5"
+        noValidate
+        ref={verifyFormRef}
+      >
         <input name="email" type="hidden" value={email} />
         <div className="space-y-2">
           <InputOTP
@@ -47,6 +62,7 @@ export function VerificationForm({ email }: VerificationFormProps) {
             inputMode="numeric"
             maxLength={6}
             name="code"
+            onComplete={handleCodeComplete}
             pattern="[0-9]*"
             required
           >

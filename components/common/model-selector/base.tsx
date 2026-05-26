@@ -90,6 +90,14 @@ export function ModelSelector({
     setSearchQuery(e.target.value)
   }
 
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape" || e.key === "ArrowDown" || e.key === "ArrowUp") {
+      return
+    }
+
+    e.stopPropagation()
+  }
+
   const filteredModels = filterAndSortModels(
     models,
     favoriteModels || [],
@@ -236,75 +244,77 @@ export function ModelSelector({
             <div className="relative">
               <Icon
                 icon={RiSearchLine}
-                slotSize={16}
-                className="text-muted-foreground absolute top-1/2 left-2.5 -translate-y-1/2"
+                slotSize={18}
+                className="text-foreground absolute top-1/2 left-2.5 -translate-y-1/2"
               />
               <Input
                 ref={searchInputRef}
                 placeholder="Search models..."
-                className="h-9 rounded-xl border-none bg-muted/60 pl-8 shadow-none focus-visible:ring-0 dark:bg-muted/40"
+                className="h-9 rounded-xl border border-input/60 bg-muted/60 pl-8 shadow-none focus-visible:ring-0 dark:border-input dark:bg-muted/40"
                 value={searchQuery}
                 onChange={handleSearchChange}
                 onClick={(e) => e.stopPropagation()}
                 onFocus={(e) => e.stopPropagation()}
-                onKeyDown={(e) => e.stopPropagation()}
+                onKeyDown={handleSearchKeyDown}
               />
             </div>
           </div>
-          <div className="max-h-[min(var(--model-selector-list-max-height),max(0px,calc(var(--available-height)-var(--model-selector-fixed-height))))] overflow-y-auto pr-0.5">
-            {isLoadingModels ? (
-              <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-                <p className="text-muted-foreground mb-2 text-sm">
-                  Loading models...
-                </p>
-              </div>
-            ) : filteredModels.length > 0 ? (
-              filteredModels.map((model) => {
-                const isLocked = !model.accessible
-                const isSelected = selectedModelId === model.id
-                const provider = PROVIDERS.find(
-                  (provider) => provider.id === model.icon
-                )
+          <div className="relative mt-[2px] rounded-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-3 before:bg-gradient-to-b before:from-popover before:to-transparent before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:z-10 after:h-4 after:bg-gradient-to-t after:from-popover after:to-transparent after:content-['']">
+            <div className="max-h-[min(var(--model-selector-list-max-height),max(0px,calc(var(--available-height)-var(--model-selector-fixed-height))))] scroll-py-2 overflow-x-hidden overflow-y-auto overscroll-contain py-1 pr-1 [scrollbar-color:color-mix(in_oklab,var(--muted-foreground)_35%,transparent)_transparent] [scrollbar-gutter:stable] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-track]:bg-transparent">
+              {isLoadingModels ? (
+                <div className="flex h-full flex-col items-center justify-center p-6 text-center">
+                  <p className="text-muted-foreground mb-2 text-sm">
+                    Loading models...
+                  </p>
+                </div>
+              ) : filteredModels.length > 0 ? (
+                filteredModels.map((model) => {
+                  const isLocked = !model.accessible
+                  const isSelected = selectedModelId === model.id
+                  const provider = PROVIDERS.find(
+                    (provider) => provider.id === model.icon
+                  )
 
-                return (
-                  <DropdownMenuItem
-                    key={model.id}
-                    className={cn(
-                      "flex w-full items-center justify-between gap-2 px-2",
-                      isSelected && "bg-accent"
-                    )}
-                    onClick={() => handleSelect(model.id, isLocked)}
-                  >
-                    <div className="flex min-w-0 items-center gap-2">
-                      {provider?.icon && (
-                        <provider.icon className="size-5 shrink-0" />
+                  return (
+                    <DropdownMenuItem
+                      key={model.id}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-2 px-2",
+                        isSelected && "bg-accent"
                       )}
-                      <span className="truncate text-sm">{model.name}</span>
-                    </div>
-                    {isLocked ? (
-                      <div className="border-input bg-accent text-muted-foreground flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
-                        <Icon icon={RiStarLine} slotSize={8} />
-                        <span>Locked</span>
+                      onClick={() => handleSelect(model.id, isLocked)}
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        {provider?.icon && (
+                          <provider.icon className="size-5 shrink-0" />
+                        )}
+                        <span className="truncate text-sm">{model.name}</span>
                       </div>
-                    ) : null}
-                  </DropdownMenuItem>
-                )
-              })
-            ) : (
-              <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-                <p className="text-muted-foreground mb-1 text-sm">
-                  No results found.
-                </p>
-                <a
-                  href="https://github.com/batmn-dev/not-a-wrapper/issues/new?title=Model%20Request%3A%20"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-muted-foreground text-sm underline"
-                >
-                  Request a new model
-                </a>
-              </div>
-            )}
+                      {isLocked ? (
+                        <div className="border-input bg-accent text-muted-foreground flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
+                          <Icon icon={RiStarLine} slotSize={8} />
+                          <span>Locked</span>
+                        </div>
+                      ) : null}
+                    </DropdownMenuItem>
+                  )
+                })
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center p-6 text-center">
+                  <p className="text-muted-foreground mb-1 text-sm">
+                    No results found.
+                  </p>
+                  <a
+                    href="https://github.com/batmn-dev/not-a-wrapper/issues/new?title=Model%20Request%3A%20"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-muted-foreground text-sm underline"
+                  >
+                    Request a new model
+                  </a>
+                </div>
+              )}
+            </div>
           </div>
         </DropdownMenuContent>
       </DropdownMenu>

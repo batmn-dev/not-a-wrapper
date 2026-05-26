@@ -62,6 +62,10 @@ function authError(message: string): AuthActionState {
   return { status: "error", message }
 }
 
+function authenticated(redirectTo = "/"): AuthActionState {
+  return { status: "authenticated", redirectTo }
+}
+
 export async function signInWithPassword(
   _previousState: AuthActionState,
   formData: FormData
@@ -80,7 +84,7 @@ export async function signInWithPassword(
   )
 
   if (result.status === "authenticated") {
-    redirect("/")
+    return authenticated()
   }
 
   if (result.status === "email-verification-required") {
@@ -108,7 +112,7 @@ export async function signUpWithPassword(
   )
 
   if (result.status === "authenticated") {
-    redirect("/")
+    return authenticated()
   }
 
   if (result.status === "email-verification-required") {
@@ -186,7 +190,7 @@ export async function verifyMagicAuthCode(
   )
 
   if (result.status === "authenticated") {
-    redirect("/")
+    return authenticated()
   }
 
   if (result.status === "invalid-code") {
@@ -217,7 +221,7 @@ export async function verifyEmailCode(
   )
 
   if (result.status === "verified") {
-    redirect("/")
+    return authenticated()
   }
 
   if (result.status === "invalid-code") {
