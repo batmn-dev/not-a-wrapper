@@ -31,7 +31,14 @@ type ToolInvocationProps = {
   metadata?: Record<string, unknown>
   className?: string
   defaultOpen?: boolean
+  onToolApproval?: ToolApprovalHandler
 }
+
+type ToolApprovalHandler = (
+  approvalId: string,
+  approved: boolean,
+  reason?: string
+) => Promise<void> | void
 
 const TRANSITION = {
   type: "spring",
@@ -181,6 +188,7 @@ export function ToolInvocation({
   toolInvocations,
   metadata,
   defaultOpen = false,
+  onToolApproval,
 }: ToolInvocationProps) {
   const [isExpanded, setIsExpanded] = useState(defaultOpen)
   const { byName, byCallId } = useMemo(
@@ -216,6 +224,7 @@ export function ToolInvocation({
         metadataByCallId={byCallId}
         defaultOpen={defaultOpen}
         className="mb-10"
+        onToolApproval={onToolApproval}
       />
     )
   }
@@ -277,6 +286,7 @@ export function ToolInvocation({
                           toolInvocations={toolInvocationsForId}
                           metadataByName={byName}
                           metadataByCallId={byCallId}
+                          onToolApproval={onToolApproval}
                         />
                       </div>
                     )
@@ -297,6 +307,7 @@ type SingleToolViewProps = {
   metadataByCallId: Record<string, ToolInvocationDisplayMetadata>
   defaultOpen?: boolean
   className?: string
+  onToolApproval?: ToolApprovalHandler
 }
 
 function SingleToolView({
@@ -305,6 +316,7 @@ function SingleToolView({
   metadataByCallId,
   defaultOpen = false,
   className,
+  onToolApproval,
 }: SingleToolViewProps) {
   // Group by toolCallId and pick the most informative state
   const groupedTools = toolInvocations.reduce(
@@ -323,13 +335,25 @@ function SingleToolView({
   const toolsToDisplay = Object.values(groupedTools)
     .map((group) => {
       const resultTool = group.find((item) => item.state === "output-available")
+      const approvalTool = group.find(
+        (item) => item.state === "approval-requested"
+      )
+      const approvalResponseTool = group.find(
+        (item) => item.state === "approval-responded"
+      )
       const callTool = group.find((item) => item.state === "input-available")
       const partialCallTool = group.find(
         (item) => item.state === "input-streaming"
       )
 
       // Return the most informative one
-      return resultTool || callTool || partialCallTool
+      return (
+        resultTool ||
+        approvalTool ||
+        approvalResponseTool ||
+        callTool ||
+        partialCallTool
+      )
     })
     .filter(Boolean) as ToolUIPart[]
 
@@ -344,6 +368,7 @@ function SingleToolView({
         metadataByCallId={metadataByCallId}
         defaultOpen={defaultOpen}
         className={className}
+        onToolApproval={onToolApproval}
       />
     )
   }
@@ -359,6 +384,7 @@ function SingleToolView({
             metadataByName={metadataByName}
             metadataByCallId={metadataByCallId}
             defaultOpen={defaultOpen}
+            onToolApproval={onToolApproval}
           />
         ))}
       </div>
@@ -373,12 +399,14 @@ function SingleToolCard({
   metadataByCallId,
   defaultOpen = false,
   className,
+  onToolApproval,
 }: {
   toolData: ToolUIPart
   metadataByName: Record<string, ToolInvocationDisplayMetadata>
   metadataByCallId: Record<string, ToolInvocationDisplayMetadata>
   defaultOpen?: boolean
   className?: string
+  onToolApproval?: ToolApprovalHandler
 }) {
   const [isExpanded, setIsExpanded] = useState(defaultOpen)
   const { state, toolCallId } = toolData
@@ -407,8 +435,16 @@ function SingleToolCard({
   const openWorld = runtimeMetadata?.openWorld
   const args = toolData.input as Record<string, unknown> | undefined
   const isLoading = state === "input-available" || state === "input-streaming"
+  const isAwaitingApproval = state === "approval-requested"
+  const isApprovalResponded = state === "approval-responded"
   const isCompleted = state === "output-available"
   const result = isCompleted ? toolData.output : undefined
+  const approvalId =
+    isAwaitingApproval && "approval" in toolData
+      ? toolData.approval.id
+      : undefined
+  const approvalResponse =
+    isApprovalResponded && "approval" in toolData ? toolData.approval : null
   const isError =
     isCompleted &&
     result != null &&
@@ -617,7 +653,19 @@ function SingleToolCard({
             )}
           </div>
           <AnimatePresence mode="popLayout" initial={false}>
-            {isLoading ? (
+            {isAwaitingApproval ? (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
+                animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+                exit={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
+                transition={{ duration: 0.15 }}
+                key="approval"
+              >
+                <div className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+                  Review
+                </div>
+              </motion.div>
+            ) : isLoading ? (
               <motion.div
                 initial={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
                 animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
@@ -645,6 +693,19 @@ function SingleToolCard({
                 <div className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-xs text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
                   <Icon icon={RiCloseLine} slotSize={12} className="mr-1" />
                   Failed
+                </div>
+              </motion.div>
+            ) : isApprovalResponded && approvalResponse?.approved === false ? (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
+                animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+                exit={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
+                transition={{ duration: 0.15 }}
+                key="denied"
+              >
+                <div className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-xs text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+                  <Icon icon={RiCloseLine} slotSize={12} className="mr-1" />
+                  Denied
                 </div>
               </motion.div>
             ) : (
@@ -691,6 +752,58 @@ function SingleToolCard({
                   </div>
                   <div className="bg-background rounded border p-2 text-sm">
                     {formattedArgs}
+                  </div>
+                </div>
+              )}
+
+              {isAwaitingApproval && approvalId && (
+                <div>
+                  <div className="text-muted-foreground mb-1 text-xs font-medium">
+                    Approval required
+                  </div>
+                  <div className="bg-background rounded border p-2 text-sm">
+                    <div className="text-muted-foreground mb-2">
+                      Review this tool call before it runs.
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center rounded-md border border-green-200 bg-green-50 px-3 text-sm font-medium text-green-700 transition-colors hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400 dark:hover:bg-green-950/50"
+                        disabled={!onToolApproval}
+                        onClick={(event) => {
+                          event.preventDefault()
+                          void onToolApproval?.(approvalId, true)
+                        }}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center rounded-md border border-red-200 bg-red-50 px-3 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50"
+                        disabled={!onToolApproval}
+                        onClick={(event) => {
+                          event.preventDefault()
+                          void onToolApproval?.(
+                            approvalId,
+                            false,
+                            "Denied by user"
+                          )
+                        }}
+                      >
+                        Deny
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {isApprovalResponded && approvalResponse?.approved === false && (
+                <div>
+                  <div className="text-muted-foreground mb-1 text-xs font-medium">
+                    Approval denied
+                  </div>
+                  <div className="bg-background rounded border p-2 text-sm">
+                    {approvalResponse.reason || "Denied by user"}
                   </div>
                 </div>
               )}

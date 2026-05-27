@@ -1,6 +1,39 @@
 import { defineSchema, defineTable } from "convex/server"
 import { v } from "convex/values"
 
+const messageStatus = v.union(
+  v.literal("submitted"),
+  v.literal("streaming"),
+  v.literal("completed"),
+  v.literal("aborted"),
+  v.literal("failed"),
+  v.literal("awaiting_approval")
+)
+
+const generationRunStatus = v.union(
+  v.literal("queued"),
+  v.literal("running"),
+  v.literal("streaming"),
+  v.literal("awaiting_approval"),
+  v.literal("completed"),
+  v.literal("aborted"),
+  v.literal("failed")
+)
+
+const toolSource = v.union(
+  v.literal("builtin"),
+  v.literal("third-party"),
+  v.literal("mcp"),
+  v.literal("platform")
+)
+
+const toolApprovalStatus = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
+  v.literal("denied"),
+  v.literal("expired")
+)
+
 export default defineSchema({
   users: defineTable({
     // Identity
@@ -53,7 +86,8 @@ export default defineSchema({
 
   messages: defineTable({
     chatId: v.id("chats"),
-    orderId: v.optional(v.number()), // For ordering within a chat
+    orderId: v.number(), // For ordering within a chat
+    clientMessageId: v.optional(v.string()), // AI SDK/browser message id for reconciliation
     userId: v.optional(v.id("users")), // For user messages
     role: v.union(
       v.literal("user"),
@@ -61,12 +95,129 @@ export default defineSchema({
       v.literal("system"),
       v.literal("data")
     ),
-    content: v.optional(v.string()),
-    parts: v.optional(v.any()), // AI SDK parts format
-    attachments: v.optional(v.array(v.any())), // Legacy field; v6 uses file parts in `parts`
+    content: v.string(),
+    parts: v.any(), // AI SDK parts format
+    attachments: v.optional(v.array(v.any())), // Deprecated; canonical runtime stores files in `parts`
+    status: messageStatus,
+    requestId: v.optional(v.string()),
+    generationRunId: v.optional(v.id("generationRuns")),
+    model: v.optional(v.string()),
+    provider: v.optional(v.string()),
+    finishReason: v.optional(v.string()),
+    usage: v.optional(
+      v.object({
+        inputTokens: v.optional(v.number()),
+        outputTokens: v.optional(v.number()),
+        totalTokens: v.optional(v.number()),
+      })
+    ),
+    error: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
   })
     .index("by_chat", ["chatId"])
-    .index("by_chat_role", ["chatId", "role"]),
+    .index("by_chat_role", ["chatId", "role"])
+    .index("by_chat_order", ["chatId", "orderId"])
+    .index("by_chat_status", ["chatId", "status"]),
+
+  generationRuns: defineTable({
+    chatId: v.id("chats"),
+    userId: v.optional(v.id("users")),
+    anonymousId: v.optional(v.string()),
+    requestId: v.string(),
+    model: v.string(),
+    provider: v.string(),
+    status: generationRunStatus,
+    chatVersion: v.optional(v.number()),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+    error: v.optional(v.string()),
+    finishReason: v.optional(v.string()),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    totalToolCalls: v.optional(v.number()),
+    failedToolCalls: v.optional(v.number()),
+    activeStreamId: v.optional(v.string()),
+    assistantMessageId: v.optional(v.id("messages")),
+  })
+    .index("by_chat", ["chatId"])
+    .index("by_user", ["userId"])
+    .index("by_status", ["status"])
+    .index("by_chat_updated", ["chatId", "updatedAt"]),
+
+  assistantMessageSnapshots: defineTable({
+    runId: v.id("generationRuns"),
+    chatId: v.id("chats"),
+    messageId: v.id("messages"),
+    order: v.number(),
+    stepOrder: v.number(),
+    sequence: v.number(),
+    format: v.union(v.literal("UIMessageChunk"), v.literal("text_snapshot")),
+    delta: v.optional(v.string()),
+    payload: v.optional(v.any()),
+    textSnapshot: v.optional(v.string()),
+    partsSnapshot: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_run_sequence", ["runId", "sequence"])
+    .index("by_chat_order", ["chatId", "order"]),
+
+  toolInvocations: defineTable({
+    runId: v.id("generationRuns"),
+    chatId: v.id("chats"),
+    messageId: v.id("messages"),
+    toolCallId: v.string(),
+    toolName: v.string(),
+    source: toolSource,
+    input: v.optional(v.any()),
+    inputPreview: v.optional(v.string()),
+    output: v.optional(v.any()),
+    outputPreview: v.optional(v.string()),
+    error: v.optional(v.string()),
+    status: v.union(
+      v.literal("called"),
+      v.literal("pending_approval"),
+      v.literal("approved"),
+      v.literal("denied"),
+      v.literal("completed"),
+      v.literal("failed")
+    ),
+    approvalId: v.optional(v.id("toolApprovalRequests")),
+    approvalRequestId: v.optional(v.string()),
+    stepNumber: v.optional(v.number()),
+    createdAt: v.number(),
+    completedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_run", ["runId"])
+    .index("by_chat", ["chatId"])
+    .index("by_tool_call", ["toolCallId"])
+    .index("by_run_tool_call", ["runId", "toolCallId"]),
+
+  toolApprovalRequests: defineTable({
+    chatId: v.id("chats"),
+    runId: v.id("generationRuns"),
+    assistantMessageId: v.id("messages"),
+    userId: v.id("users"),
+    toolCallId: v.string(),
+    toolName: v.string(),
+    source: toolSource,
+    reason: v.optional(v.string()),
+    riskClass: v.string(),
+    inputPreview: v.optional(v.string()),
+    fullInputRef: v.optional(v.string()),
+    approvalId: v.string(),
+    status: toolApprovalStatus,
+    createdAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+    resolvedByUserId: v.optional(v.id("users")),
+  })
+    .index("by_user_status", ["userId", "status"])
+    .index("by_chat_status", ["chatId", "status"])
+    .index("by_run_status", ["runId", "status"])
+    .index("by_approval", ["approvalId"]),
 
   projects: defineTable({
     userId: v.id("users"),

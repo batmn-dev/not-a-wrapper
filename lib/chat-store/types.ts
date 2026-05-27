@@ -38,8 +38,8 @@ export type Message = {
   chat_id: string
   user_id?: string | null
   role: "user" | "assistant" | "system" | "data"
-  content: string | null
-  parts?: unknown
+  content: string
+  parts: unknown
   created_at?: string | null
 }
 
@@ -82,9 +82,9 @@ export function convexMessageToMessage(convexMessage: ConvexMessage): Message {
     chat_id: convexMessage.chatId,
     user_id: convexMessage.userId ?? null,
     role: convexMessage.role,
-    content: convexMessage.content ?? null,
+    content: convexMessage.content,
     parts: convexMessage.parts,
-    created_at: new Date(convexMessage._creationTime).toISOString(),
+    created_at: new Date(convexMessage.createdAt).toISOString(),
   };
 }
 

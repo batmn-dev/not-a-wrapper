@@ -95,9 +95,10 @@ export function CollapsibleSection({
         )}
         <Icon
           icon={RiArrowRightSLine}
-          slotSize={12}
+          slotSize={isSidebarVariant ? 18 : 12}
           className={cn(
-            "h-3 w-3 shrink-0 duration-150 motion-safe:transition-all",
+            isSidebarVariant ? "size-[18px]" : "size-3",
+            "shrink-0 duration-150 motion-safe:transition-all",
             isOpen
               ? "rotate-90 opacity-0 group-hover/collapsible-section:opacity-100 group-hover/sidebar-expando-section:opacity-100"
               : "opacity-100"

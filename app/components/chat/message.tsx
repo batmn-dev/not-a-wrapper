@@ -23,11 +23,24 @@ type MessageProps = {
   onStop?: () => void
   parts?: MessageType["parts"]
   metadata?: Record<string, unknown>
-  status?: "streaming" | "ready" | "submitted" | "error"
+  status?:
+    | "streaming"
+    | "ready"
+    | "submitted"
+    | "error"
+    | "completed"
+    | "aborted"
+    | "failed"
+    | "awaiting_approval"
   className?: string
   onQuote?: (text: string, messageId: string) => void
   isUserAuthenticated?: boolean
   finishReason?: string
+  onToolApproval?: (
+    approvalId: string,
+    approved: boolean,
+    reason?: string
+  ) => Promise<void> | void
 }
 
 // --- Content-based equality helpers for React.memo ---
@@ -123,6 +136,7 @@ function MessageInner({
   onQuote,
   isUserAuthenticated,
   finishReason,
+  onToolApproval,
 }: MessageProps) {
   const [copied, setCopied] = useState(false)
 
@@ -164,6 +178,7 @@ function MessageInner({
         messageId={id}
         onQuote={onQuote}
         finishReason={finishReason}
+        onToolApproval={onToolApproval}
       >
         {children}
       </MessageAssistant>

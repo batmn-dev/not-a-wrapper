@@ -1,5 +1,31 @@
 import { v } from "convex/values"
-import { mutation, query } from "./_generated/server"
+import { mutation, query, type MutationCtx } from "./_generated/server"
+import type { Id } from "./_generated/dataModel"
+
+function extractTextFromParts(parts: unknown): string {
+  if (!Array.isArray(parts)) return ""
+  let text = ""
+  for (const part of parts) {
+    if (
+      part &&
+      typeof part === "object" &&
+      (part as { type?: unknown }).type === "text" &&
+      typeof (part as { text?: unknown }).text === "string"
+    ) {
+      text += (part as { text: string }).text
+    }
+  }
+  return text
+}
+
+async function getNextOrder(ctx: MutationCtx, chatId: Id<"chats">) {
+  const latest = await ctx.db
+    .query("messages")
+    .withIndex("by_chat_order", (q) => q.eq("chatId", chatId))
+    .order("desc")
+    .first()
+  return latest ? latest.orderId + 1 : 0
+}
 
 /**
  * Get all messages for a chat
@@ -27,11 +53,10 @@ export const getForChat = query({
 
     const messages = await ctx.db
       .query("messages")
-      .withIndex("by_chat", (q) => q.eq("chatId", chatId))
+      .withIndex("by_chat_order", (q) => q.eq("chatId", chatId))
       .collect()
 
-    // Sort by creation time
-    return messages.sort((a, b) => a._creationTime - b._creationTime)
+    return messages
   },
 })
 
@@ -48,11 +73,10 @@ export const getPublicForChat = query({
 
     const messages = await ctx.db
       .query("messages")
-      .withIndex("by_chat", (q) => q.eq("chatId", chatId))
+      .withIndex("by_chat_order", (q) => q.eq("chatId", chatId))
       .collect()
 
-    // Sort by creation time
-    return messages.sort((a, b) => a._creationTime - b._creationTime)
+    return messages.filter((message) => message.status !== "awaiting_approval")
   },
 })
 
@@ -85,14 +109,11 @@ export const getLastMessages = query({
 
     const messages = await ctx.db
       .query("messages")
-      .withIndex("by_chat", (q) => q.eq("chatId", chatId))
-      .collect()
+      .withIndex("by_chat_order", (q) => q.eq("chatId", chatId))
+      .order("desc")
+      .take(limit)
 
-    // Sort by creation time desc and take last N
-    return messages
-      .sort((a, b) => b._creationTime - a._creationTime)
-      .slice(0, limit)
-      .reverse()
+    return messages.reverse()
   },
 })
 
@@ -108,9 +129,9 @@ export const add = mutation({
       v.literal("system"),
       v.literal("data")
     ),
+    clientMessageId: v.optional(v.string()),
     content: v.optional(v.string()),
-    parts: v.optional(v.any()),
-    attachments: v.optional(v.array(v.any())),
+    parts: v.any(),
   },
   handler: async (ctx, args) => {
     // Verify chat exists and user has access
@@ -130,15 +151,21 @@ export const add = mutation({
     }
 
     // Update chat's updatedAt
-    await ctx.db.patch(args.chatId, { updatedAt: Date.now() })
+    const now = Date.now()
+    await ctx.db.patch(args.chatId, { updatedAt: now })
+    const orderId = await getNextOrder(ctx, args.chatId)
 
     return await ctx.db.insert("messages", {
       chatId: args.chatId,
+      orderId,
+      clientMessageId: args.clientMessageId,
       userId: args.role === "user" ? user._id : undefined,
       role: args.role,
-      content: args.content,
+      content: args.content ?? extractTextFromParts(args.parts),
       parts: args.parts,
-      attachments: args.attachments,
+      status: "completed",
+      createdAt: now,
+      updatedAt: now,
     })
   },
 })
@@ -157,9 +184,9 @@ export const addBatch = mutation({
           v.literal("system"),
           v.literal("data")
         ),
+        clientMessageId: v.optional(v.string()),
         content: v.optional(v.string()),
-        parts: v.optional(v.any()),
-        attachments: v.optional(v.array(v.any())),
+        parts: v.any(),
       })
     ),
   },
@@ -180,20 +207,27 @@ export const addBatch = mutation({
     }
 
     // Update chat's updatedAt
-    await ctx.db.patch(chatId, { updatedAt: Date.now() })
+    const now = Date.now()
+    await ctx.db.patch(chatId, { updatedAt: now })
 
     // Insert all messages
     const ids = []
+    let nextOrder = await getNextOrder(ctx, chatId)
     for (const msg of messages) {
       const id = await ctx.db.insert("messages", {
         chatId,
+        orderId: nextOrder,
+        clientMessageId: msg.clientMessageId,
         userId: msg.role === "user" ? user._id : undefined,
         role: msg.role,
-        content: msg.content,
+        content: msg.content ?? extractTextFromParts(msg.parts),
         parts: msg.parts,
-        attachments: msg.attachments,
+        status: "completed",
+        createdAt: now,
+        updatedAt: now,
       })
       ids.push(id)
+      nextOrder += 1
     }
 
     return ids
@@ -230,7 +264,7 @@ export const deleteFromTimestamp = mutation({
       .withIndex("by_chat", (q) => q.eq("chatId", chatId))
       .collect()
 
-    const toDelete = messages.filter((m) => m._creationTime >= timestamp)
+    const toDelete = messages.filter((m) => m.createdAt >= timestamp)
     const remainingMessageCount = messages.length - toDelete.length
     // Mirror client-side version semantics so server-side truncation can safely
     // clean payment state even when sourceMessageTimestamp is unavailable.

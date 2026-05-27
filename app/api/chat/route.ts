@@ -23,9 +23,13 @@ import type { Provider, ToolKeyMode } from "@/lib/user-keys"
 import {
   UIMessage as MessageAISDK,
   ToolSet,
+  consumeStream,
   stepCountIs,
   convertToModelMessages,
+  validateUIMessages,
   type ModelMessage,
+  type StreamTextTransform,
+  type TextStreamPart,
 } from "ai"
 import type { ProviderOptions } from "@ai-sdk/provider-utils"
 import { fetchMutation, fetchQuery } from "convex/nextjs"
@@ -61,6 +65,8 @@ import {
   type ToolPolicyInput,
   type ToolPolicyDecision,
 } from "@/lib/tools/capability-policy"
+import type { ToolSource } from "@/lib/tools/types"
+import { getRuntimeToolApprovalDecision } from "@/lib/tools/runtime-approval"
 import {
   buildFinishToolInvocationStreamMetadata,
   buildStartToolInvocationStreamMetadata,
@@ -85,6 +91,19 @@ import {
   type BraintrustChatMetadata,
   type BraintrustTraceSpan,
 } from "@/lib/observability/braintrust"
+import {
+  countToolParts,
+  createDurableSnapshotTracker,
+  extractApprovalResponses,
+  getFinalAssistantText,
+  getLatestUserMessage,
+  hasApprovalResponse,
+  isDurableConvexChat,
+  sourceForTool,
+  toDurableUiMessages,
+  type DurableUiMessage,
+  type ToolInvocationForPersistence,
+} from "./durable-runtime"
 
 export const maxDuration = 60
 
@@ -97,6 +116,16 @@ type ChatRequest = {
   chatVersion?: number
   userId?: string // Client-provided userId (for anonymous users)
 }
+
+type DurableRunState = {
+  runId: Id<"generationRuns">
+  assistantMessageId: Id<"messages">
+  assistantOrder: number
+  originalMessages: DurableUiMessage[]
+  snapshotTracker: ReturnType<typeof createDurableSnapshotTracker> | null
+}
+
+type RuntimeApprovalDecision = ReturnType<typeof getRuntimeToolApprovalDecision>
 
 function normalizeChatVersion(
   chatVersion: unknown,
@@ -266,6 +295,115 @@ function summarizeHistoryPartTypes(messages: MessageAISDK[]): {
   return { roleCounts, partTypeCounts }
 }
 
+function wrapToolsWithRuntimeApproval(
+  tools: ToolSet,
+  approvalByToolName: ReadonlyMap<string, { needsApproval: boolean }>
+): ToolSet {
+  const wrapped: Record<string, unknown> = {}
+
+  for (const [toolName, descriptor] of Object.entries(tools)) {
+    const original = descriptor as Record<string, unknown>
+    const decision = approvalByToolName.get(toolName)
+    if (!decision?.needsApproval) {
+      wrapped[toolName] = original
+      continue
+    }
+
+    const existingNeedsApproval = original.needsApproval
+    wrapped[toolName] = {
+      ...original,
+      needsApproval: async (input: unknown, options: unknown) => {
+        let existingDecision = false
+        if (typeof existingNeedsApproval === "function") {
+          existingDecision = await (
+            existingNeedsApproval as (
+              input: unknown,
+              options: unknown
+            ) => boolean | PromiseLike<boolean>
+          )(input, options)
+        } else if (typeof existingNeedsApproval === "boolean") {
+          existingDecision = existingNeedsApproval
+        }
+        return existingDecision || decision.needsApproval
+      },
+    }
+  }
+
+  return wrapped as ToolSet
+}
+
+function createRuntimeApprovalPersistenceTransform({
+  chatId,
+  convexToken,
+  durableRunState,
+  runtimeApprovalByToolName,
+  mcpToolServerMap,
+  allToolMetadata,
+  approvalWritePromises,
+  requestId,
+}: {
+  chatId: string
+  convexToken: string
+  durableRunState: DurableRunState
+  runtimeApprovalByToolName: ReadonlyMap<string, RuntimeApprovalDecision>
+  mcpToolServerMap: ReadonlyMap<string, unknown>
+  allToolMetadata: ReadonlyMap<string, { source?: ToolSource }>
+  approvalWritePromises: Array<Promise<unknown>>
+  requestId: string
+}): StreamTextTransform<ToolSet> {
+  return () =>
+    new TransformStream<TextStreamPart<ToolSet>, TextStreamPart<ToolSet>>({
+      transform(chunk, controller) {
+        if (chunk.type === "tool-approval-request") {
+          const toolName = chunk.toolCall.toolName
+          const decision = runtimeApprovalByToolName.get(toolName)
+          const source = sourceForTool(toolName, {
+            mcpToolServerMap,
+            allToolMetadata,
+          })
+          const inputPreview = (() => {
+            try {
+              return JSON.stringify(chunk.toolCall.input).slice(0, 500)
+            } catch {
+              return String(chunk.toolCall.input).slice(0, 500)
+            }
+          })()
+
+          const approvalWrite = fetchMutation(
+            api.chatRuntime.createToolApprovalRequest,
+            {
+              chatId: chatId as Id<"chats">,
+              runId: durableRunState.runId,
+              assistantMessageId: durableRunState.assistantMessageId,
+              toolCallId: chunk.toolCall.toolCallId,
+              toolName,
+              source,
+              reason: decision?.reason,
+              riskClass: decision?.riskClass ?? "unknown",
+              inputPreview,
+              approvalId: chunk.approvalId,
+            },
+            { token: convexToken }
+          ).catch((error: unknown) => {
+            console.warn(
+              JSON.stringify({
+                _tag: "tool_approval_request_write_failed",
+                requestId,
+                chatId,
+                toolCallId: chunk.toolCall.toolCallId,
+                toolName,
+                error: error instanceof Error ? error.message : String(error),
+              })
+            )
+          })
+          approvalWritePromises.push(approvalWrite)
+        }
+
+        controller.enqueue(chunk)
+      },
+    })
+}
+
 function countWarningsByCode(warnings: AdaptationWarning[]): Record<string, number> {
   const counts: Record<string, number> = {}
   for (const warning of warnings) {
@@ -297,6 +435,8 @@ export async function POST(req: Request) {
   let telemetryProvider: string | undefined
   let telemetryIsAuthenticated: boolean | undefined
   let telemetryMessageCount: number | undefined
+  let durableRunState: DurableRunState | null = null
+  let durableConvexToken: string | undefined
   const slowRequestThresholdMs = getSlowRequestThresholdMs()
   const stalledContinuationThresholdMs = getStalledContinuationThresholdMs()
 
@@ -315,6 +455,7 @@ export async function POST(req: Request) {
     const convexToken = isAuthenticated
       ? authSession.accessToken
       : undefined
+    durableConvexToken = convexToken
 
     const {
       messages,
@@ -1051,7 +1192,7 @@ export async function POST(req: Request) {
     }
 
     const searchTools = { ...builtInTools, ...thirdPartyTools }
-    const allTools = { ...searchTools, ...contentTools, ...mcpTools } as ToolSet
+    let allTools = { ...searchTools, ...contentTools, ...mcpTools } as ToolSet
 
     const hasAnyTools = Object.keys(allTools).length > 0
 
@@ -1078,6 +1219,78 @@ export async function POST(req: Request) {
       await flushBraintrust()
     })
 
+    let canonicalMessages: MessageAISDK[] = messages
+    const durableRuntimeEnabled = isDurableConvexChat({
+      isAuthenticated,
+      convexToken,
+      chatId,
+    })
+
+    if (durableRuntimeEnabled && convexToken) {
+      const approvalResponses = extractApprovalResponses(messages)
+      const latestUserMessage = hasApprovalResponse(messages)
+        ? undefined
+        : getLatestUserMessage(messages)
+
+      const prepared = await fetchMutation(
+        api.chatRuntime.prepareGeneration,
+        {
+          chatId: chatId as Id<"chats">,
+          requestId,
+          model,
+          provider,
+          chatVersion: normalizedChatVersion,
+          latestUserMessage: latestUserMessage
+            ? {
+                id: latestUserMessage.id,
+                role: "user" as const,
+                content: getStringField(
+                  getRecord(latestUserMessage as unknown),
+                  "content"
+                ),
+                parts: latestUserMessage.parts,
+              }
+            : undefined,
+          approvalResponses,
+        },
+        { token: convexToken }
+      )
+
+      const durableMessages = toDurableUiMessages(prepared.messages)
+      canonicalMessages = durableMessages as MessageAISDK[]
+      durableRunState = {
+        runId: prepared.runId,
+        assistantMessageId: prepared.assistantMessageId,
+        assistantOrder: prepared.assistantOrder,
+        originalMessages: durableMessages,
+        snapshotTracker: createDurableSnapshotTracker({
+          convexToken,
+          runId: prepared.runId,
+          chatId: chatId as Id<"chats">,
+          messageId: prepared.assistantMessageId,
+          order: prepared.assistantOrder,
+        }),
+      }
+
+      console.log(
+        JSON.stringify({
+          _tag: "durable_chat_runtime_prepared",
+          requestId,
+          chatId,
+          runId: prepared.runId,
+          assistantMessageId: prepared.assistantMessageId,
+          canonicalMessageCount: canonicalMessages.length,
+          approvalResponseCount: approvalResponses.length,
+          hasLatestUserMessage: Boolean(latestUserMessage),
+        })
+      )
+    }
+
+    const validatedMessages = await validateUIMessages({
+      messages: canonicalMessages,
+      tools: allTools as unknown as Parameters<typeof validateUIMessages>[0]["tools"],
+    })
+
     const adaptationContext: AdaptationContext = {
       targetModelId: model,
       hasTools: hasAnyTools,
@@ -1086,7 +1299,7 @@ export async function POST(req: Request) {
 
     const adaptStartTime = Date.now()
     const adapterResult = await adaptHistoryForProvider(
-      messages,
+      validatedMessages,
       provider,
       adaptationContext,
       {
@@ -1198,6 +1411,7 @@ export async function POST(req: Request) {
     let modelMessages: ModelMessage[] = await convertToModelMessages(
       adapterResult.messages,
       {
+        tools: allTools,
         ignoreIncompleteToolCalls: true,
       }
     )
@@ -1327,6 +1541,37 @@ export async function POST(req: Request) {
       nonMcpMetadata: allToolMetadata,
       mcpToolServerMap,
     })
+
+    const runtimeApprovalByToolName = new Map<
+      string,
+      ReturnType<typeof getRuntimeToolApprovalDecision>
+    >()
+    for (const toolName of Object.keys(allTools)) {
+      const mcpInfo = mcpToolServerMap.get(toolName)
+      const source = sourceForTool(toolName, {
+        mcpToolServerMap,
+        allToolMetadata,
+      })
+      const decision = getRuntimeToolApprovalDecision({
+        toolName,
+        source,
+        metadata: mcpInfo
+          ? {
+              readOnly: mcpInfo.readOnly,
+              destructive: mcpInfo.destructive,
+              idempotent: mcpInfo.idempotent,
+              openWorld: mcpInfo.openWorld,
+            }
+          : allToolMetadata.get(toolName),
+        riskHintsTrusted: mcpInfo?.policyHintsTrusted,
+      })
+      runtimeApprovalByToolName.set(toolName, decision)
+    }
+
+    if (durableRunState) {
+      allTools = wrapToolsWithRuntimeApproval(allTools, runtimeApprovalByToolName)
+    }
+
     const enrichedSystemPrompt = effectiveSystemPrompt
 
     const streamStartMs = Date.now()
@@ -1352,6 +1597,14 @@ export async function POST(req: Request) {
     let stalledContinuationCaptured = false
     let abortCaptured = false
     let streamCompleted = false
+    let durableFinalUsage:
+      | { inputTokens?: number; outputTokens?: number; totalTokens?: number }
+      | undefined
+    let durableFinalFinishReason: string | undefined
+    let durableFinalToolCounts:
+      | { totalToolCalls: number; failedToolCalls: number }
+      | undefined
+    const approvalWritePromises: Promise<unknown>[] = []
 
     const clearStalledContinuationTimer = () => {
       if (stalledContinuationTimer !== null) {
@@ -1390,7 +1643,7 @@ export async function POST(req: Request) {
           model,
           provider,
           isAuthenticated,
-          messageCount: messages.length,
+          messageCount: validatedMessages.length,
           chatVersion: normalizedChatVersion,
           elapsedMs: now - streamStartMs,
           firstTokenLatencyMs: firstChunkLatencyMs,
@@ -1464,7 +1717,7 @@ export async function POST(req: Request) {
       model,
       provider,
       isAuthenticated,
-      messageCount: messages.length,
+      messageCount: validatedMessages.length,
       chatVersionBucket: bucketChatVersion(normalizedChatVersion),
       searchEnabled: shouldInjectSearch,
       hasTools: hasAnyTools,
@@ -1676,6 +1929,62 @@ export async function POST(req: Request) {
           )
         }
 
+        if (durableRunState && convexToken) {
+          const invocations: ToolInvocationForPersistence[] = toolCalls.map(
+            (call) => {
+              const result = toolResults.find(
+                (candidate) => candidate.toolCallId === call.toolCallId
+              )
+              const isError = result
+                ? Boolean((result as { isError?: boolean }).isError)
+                : false
+              const approvalDecision = runtimeApprovalByToolName.get(call.toolName)
+              return {
+                toolCallId: call.toolCallId,
+                toolName: call.toolName,
+                source: sourceForTool(call.toolName, {
+                  mcpToolServerMap,
+                  allToolMetadata,
+                }),
+                input: call.input,
+                output: result?.output,
+                error: isError
+                  ? String((result as { output?: unknown })?.output ?? "Tool failed")
+                  : undefined,
+                status: result
+                  ? isError
+                    ? "failed"
+                    : "completed"
+                  : approvalDecision?.needsApproval
+                    ? "pending_approval"
+                    : "called",
+              }
+            }
+          )
+
+          void fetchMutation(
+            api.chatRuntime.recordToolInvocations,
+            {
+              runId: durableRunState.runId,
+              chatId: chatId as Id<"chats">,
+              messageId: durableRunState.assistantMessageId,
+              stepNumber: stepCounter,
+              invocations,
+            },
+            { token: convexToken }
+          ).catch((error: unknown) => {
+            console.warn(
+              JSON.stringify({
+                _tag: "canonical_tool_invocation_write_failed",
+                requestId,
+                chatId,
+                runId: durableRunState?.runId,
+                error: error instanceof Error ? error.message : String(error),
+              })
+            )
+          })
+        }
+
         if (finishReason === "tool-calls") {
           lastToolStepNumber = stepCounter
           lastToolNames = toolCalls.map((call) => call.toolName)
@@ -1687,12 +1996,27 @@ export async function POST(req: Request) {
 
       ...(Object.keys(providerOptions).length > 0 && { providerOptions }),
       ...(Object.keys(requestHeaders).length > 0 && { headers: requestHeaders }),
+      ...(durableRunState && convexToken
+        ? {
+            experimental_transform: createRuntimeApprovalPersistenceTransform({
+              chatId,
+              convexToken,
+              durableRunState,
+              runtimeApprovalByToolName,
+              mcpToolServerMap,
+              allToolMetadata,
+              approvalWritePromises,
+              requestId,
+            }),
+          }
+        : {}),
 
       onChunk: ({ chunk }) => {
         const now = Date.now()
         lastChunkAtMs = now
         lastProgressAtMs = now
         resolvePostToolContinuation()
+        durableRunState?.snapshotTracker?.onChunk(chunk)
         if (firstChunkLatencyMs === null) {
           firstChunkLatencyMs = now - streamStartMs
         }
@@ -1715,6 +2039,27 @@ export async function POST(req: Request) {
         console.error("Streaming error occurred:", err)
         const errorMessage = extractErrorMessage(err)
         const errorType = classifyChatError(err)
+        if (durableRunState && convexToken) {
+          void fetchMutation(
+            api.chatRuntime.markGenerationRunFailed,
+            {
+              runId: durableRunState.runId,
+              messageId: durableRunState.assistantMessageId,
+              error: errorMessage,
+            },
+            { token: convexToken }
+          ).catch((error: unknown) => {
+            console.warn(
+              JSON.stringify({
+                _tag: "durable_run_failed_write_failed",
+                requestId,
+                chatId,
+                runId: durableRunState?.runId,
+                error: error instanceof Error ? error.message : String(error),
+              })
+            )
+          })
+        }
         logBraintrustTraceMetadata(braintrustSpan, {
           ...braintrustMetadata,
           ...getBraintrustErrorMetadata(err),
@@ -1729,8 +2074,8 @@ export async function POST(req: Request) {
               provider,
               model,
               errorMessage,
-              messageCount: messages.length,
-              historyPartTypes: summarizeHistoryPartTypes(messages),
+              messageCount: validatedMessages.length,
+              historyPartTypes: summarizeHistoryPartTypes(validatedMessages),
             })
           )
         }
@@ -1744,7 +2089,7 @@ export async function POST(req: Request) {
               traceId: chatId,
               model,
               provider,
-              input: scrubForAnalytics(messages),
+              input: scrubForAnalytics(validatedMessages),
               output: null,
               latencyMs,
               isError: true,
@@ -1759,10 +2104,28 @@ export async function POST(req: Request) {
         }
       },
 
-      onFinish: ({ text, usage, steps, finishReason }) => {
+      onAbort: async () => {
+        streamCompleted = true
+        resolvePostToolContinuation()
+        if (durableRunState && convexToken) {
+          await durableRunState.snapshotTracker?.flush().catch(() => {})
+          await fetchMutation(
+            api.chatRuntime.markGenerationRunAborted,
+            {
+              runId: durableRunState.runId,
+              messageId: durableRunState.assistantMessageId,
+              reason: "stream aborted",
+            },
+            { token: convexToken }
+          )
+        }
+      },
+
+      onFinish: async ({ text, usage, steps, finishReason }) => {
         streamCompleted = true
         lastProgressAtMs = Date.now()
         resolvePostToolContinuation()
+        await durableRunState?.snapshotTracker?.flush().catch(() => {})
         if (steps) {
           const resolvedByCallId: ToolInvocationMetadataByCallId = {}
           for (const step of steps) {
@@ -1820,8 +2183,19 @@ export async function POST(req: Request) {
               : timeoutToolCalls > 0
                 ? "timeout"
                 : failedToolCalls > 0
-                  ? "failure"
+                ? "failure"
                   : "success"
+
+        durableFinalUsage = {
+          inputTokens: usage?.inputTokens,
+          outputTokens: usage?.outputTokens,
+          totalTokens:
+            typeof usage?.totalTokens === "number"
+              ? usage.totalTokens
+              : undefined,
+        }
+        durableFinalFinishReason = finishReason
+        durableFinalToolCounts = { totalToolCalls, failedToolCalls }
 
         const totalLatencyMs = Date.now() - streamStartMs
         logBraintrustTraceMetadata(braintrustSpan, {
@@ -1939,7 +2313,7 @@ export async function POST(req: Request) {
               traceId: chatId,
               model,
               provider,
-              input: scrubForAnalytics(messages),
+              input: scrubForAnalytics(validatedMessages),
               output: scrubForAnalytics(text),
               inputTokens: usage?.inputTokens,
               outputTokens: usage?.outputTokens,
@@ -2181,9 +2555,27 @@ export async function POST(req: Request) {
       runGeneration
     )
 
+    void result.consumeStream({
+      onError: (error: unknown) => {
+        console.warn(
+          JSON.stringify({
+            _tag: "chat_background_consume_error",
+            requestId,
+            chatId,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        )
+      },
+    })
+
     return result.toUIMessageStreamResponse({
+      originalMessages: durableRunState?.originalMessages ?? validatedMessages,
+      generateMessageId: durableRunState
+        ? () => durableRunState!.assistantMessageId
+        : undefined,
       sendReasoning: true,
       sendSources: true,
+      consumeSseStream: consumeStream,
       messageMetadata: ({ part }) => {
         if (part.type === "start") {
           return buildStartToolInvocationStreamMetadata(toolMetadataByName)
@@ -2195,6 +2587,43 @@ export async function POST(req: Request) {
           })
         }
         return {}
+      },
+      onFinish: async ({ responseMessage, isAborted, finishReason }) => {
+        if (!durableRunState || !convexToken) return
+
+        await Promise.allSettled(approvalWritePromises)
+        await durableRunState.snapshotTracker?.flush().catch(() => {})
+
+        if (isAborted) {
+          await fetchMutation(
+            api.chatRuntime.markGenerationRunAborted,
+            {
+              runId: durableRunState.runId,
+              messageId: durableRunState.assistantMessageId,
+              reason: "ui message stream aborted",
+            },
+            { token: convexToken }
+          )
+          return
+        }
+
+        const toolCounts =
+          durableFinalToolCounts ?? countToolParts(responseMessage)
+        await fetchMutation(
+          api.chatRuntime.markGenerationRunCompleted,
+          {
+            runId: durableRunState.runId,
+            messageId: durableRunState.assistantMessageId,
+            content: getFinalAssistantText(responseMessage),
+            parts: responseMessage.parts,
+            metadata: responseMessage.metadata,
+            finishReason: durableFinalFinishReason ?? finishReason,
+            usage: durableFinalUsage,
+            totalToolCalls: toolCounts.totalToolCalls,
+            failedToolCalls: toolCounts.failedToolCalls,
+          },
+          { token: convexToken }
+        )
       },
       onError: (error: unknown) => {
         console.error("Error forwarded to client:", error)
@@ -2215,7 +2644,7 @@ export async function POST(req: Request) {
             provider,
             errorType,
             isAuthenticated,
-            messageCount: messages.length,
+            messageCount: validatedMessages.length,
             chatVersion: normalizedChatVersion,
           },
         })
@@ -2233,6 +2662,30 @@ export async function POST(req: Request) {
       statusCode?: number
     }
     const errorType = classifyChatError(err)
+    if (durableRunState && durableConvexToken) {
+      await fetchMutation(
+        api.chatRuntime.markGenerationRunFailed,
+        {
+          runId: durableRunState.runId,
+          messageId: durableRunState.assistantMessageId,
+          error: extractErrorMessage(err),
+        },
+        { token: durableConvexToken }
+      ).catch((writeError: unknown) => {
+        console.warn(
+          JSON.stringify({
+            _tag: "durable_run_failed_write_failed",
+            requestId,
+            chatId: telemetryChatId,
+            runId: durableRunState?.runId,
+            error:
+              writeError instanceof Error
+                ? writeError.message
+                : String(writeError),
+          })
+        )
+      })
+    }
 
     Sentry.captureException(err, {
       tags: {

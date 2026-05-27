@@ -115,6 +115,7 @@ export function Chat() {
     handleReload,
     handleInputChange,
     submitEdit,
+    handleToolApproval,
   } = useChatCore({
     initialMessages,
     draftValue,
@@ -162,6 +163,7 @@ export function Chat() {
       onQuote: handleQuotedSelected,
       isUserAuthenticated: isAuthenticated,
       lastFinishReason,
+      onToolApproval: handleToolApproval,
     }),
     [
       messages,
@@ -173,6 +175,7 @@ export function Chat() {
       handleQuotedSelected,
       isAuthenticated,
       lastFinishReason,
+      handleToolApproval,
     ]
   )
 
