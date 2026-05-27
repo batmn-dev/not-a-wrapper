@@ -6,6 +6,7 @@ import {
   DEFAULT_BASE_REF,
   DEFAULT_MANIFEST_DIR,
   DEFAULT_SCHEMA_PATH,
+  contractedManifestSchemaErrors,
   diffSchemaContractions,
   envValue,
   evaluateSchemaContractions,
@@ -103,11 +104,16 @@ export function runGuard({
 }) {
   const removedFields = diffSchemaContractions(baseSource, currentSource, schemaPath)
   const result = evaluateSchemaContractions({ removedFields, manifests })
+  const manifestSchemaErrors = contractedManifestSchemaErrors({
+    currentSource,
+    manifests,
+    schemaPath,
+  })
 
   return {
     removedFields,
     approved: result.approved,
-    errors: result.errors,
+    errors: [...manifestSchemaErrors, ...result.errors],
   }
 }
 

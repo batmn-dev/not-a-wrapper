@@ -7,6 +7,7 @@ import {
   baseRefToFetchDestination,
   buildInlineCountQuery,
   checksFromManifests,
+  contractedManifestSchemaErrors,
   diffSchemaContractions,
   envValue,
   evaluateSchemaContractions,
@@ -55,6 +56,23 @@ import { v } from "convex/values"
 export default defineSchema({
   messages: defineTable({
     chatId: v.id("chats"),
+    content: v.optional(v.string()),
+  }).index("by_chat", ["chatId"]),
+  userPreferences: defineTable({
+    userId: v.id("users"),
+    hiddenModels: v.optional(v.array(v.string())),
+  }),
+})
+`
+
+const reintroducedModelSchema = `
+import { defineSchema, defineTable } from "convex/server"
+import { v } from "convex/values"
+
+export default defineSchema({
+  messages: defineTable({
+    chatId: v.id("chats"),
+    model: v.optional(v.string()),
     content: v.optional(v.string()),
   }).index("by_chat", ["chatId"]),
   userPreferences: defineTable({
@@ -162,6 +180,25 @@ describe("Convex schema contraction helpers", () => {
       "messages.model",
       "userPreferences.multiModelEnabled",
     ])
+  })
+
+  it("fails dry-run when a contracted manifest field is present in the current schema", () => {
+    const errors = contractedManifestSchemaErrors({
+      currentSource: reintroducedModelSchema,
+      manifests: [contractedManifest()],
+    })
+
+    expect(errors).toEqual([
+      "messages.model is listed as contracted in convex/migrations/2026-05-22-multi-chat-field-removal.json, but convex/schema.ts still defines it; update the manifest if the field is live again or remove the schema field after cleanup",
+    ])
+
+    const plan = planPreflight({
+      baseSource: null,
+      currentSource: reintroducedModelSchema,
+      manifests: [contractedManifest()],
+    })
+
+    expect(plan.errors).toEqual(errors)
   })
 
   it("prefers an existing origin remote over Vercel GitHub metadata", () => {
