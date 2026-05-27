@@ -77,7 +77,7 @@ export function CollapsibleSection({
           isSidebarVariant
             ? [
                 "w-full justify-start gap-0.5 px-4 py-1.5",
-                "text-foreground",
+                "text-foreground transition-none",
               ]
             : [
                 "w-full gap-1 px-2 py-1.5",
@@ -95,9 +95,13 @@ export function CollapsibleSection({
         )}
         <Icon
           icon={RiArrowRightSLine}
-          slotSize={12}
+          slotSize={isSidebarVariant ? 16 : 12}
           className={cn(
-            "h-3 w-3 shrink-0 duration-150 motion-safe:transition-all",
+            isSidebarVariant ? "size-4" : "size-3",
+            "shrink-0",
+            isSidebarVariant
+              ? "transition-none"
+              : "duration-150 motion-safe:transition-all",
             isOpen
               ? "rotate-90 opacity-0 group-hover/collapsible-section:opacity-100 group-hover/sidebar-expando-section:opacity-100"
               : "opacity-100"

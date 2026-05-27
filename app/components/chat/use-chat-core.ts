@@ -2,6 +2,7 @@ import { syncRecentMessages } from "@/app/components/chat/syncRecentMessages"
 import { useChatEdit } from "@/app/components/chat/use-chat-edit"
 import { useChatDraft } from "@/app/hooks/use-chat-draft"
 import { toast } from "@/components/ui/toast"
+import { api } from "@/convex/_generated/api"
 import { convertAttachmentsToFiles } from "@/lib/ai/message-conversion"
 import { getOrCreateGuestUserId } from "@/lib/api"
 import { useChats } from "@/lib/chat-store/chats/provider"
@@ -16,13 +17,23 @@ import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import type { UserProfile } from "@/lib/user/types"
 import type { UIMessage } from "@ai-sdk/react"
 import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport } from "ai"
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from "ai"
+import { useMutation } from "convex/react"
 import { useSearchParams } from "next/navigation"
 import { debounce } from "@/lib/utils"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 // Extended UIMessage type for optimistic updates that includes createdAt
 type OptimisticUIMessage = UIMessage & { createdAt?: Date }
+
+function isRouteDurableChat(chatId: string | null, isAuthenticated: boolean) {
+  return Boolean(
+    isAuthenticated &&
+      chatId &&
+      !chatId.startsWith("optimistic-") &&
+      !chatId.startsWith("local-")
+  )
+}
 
 type UseChatCoreProps = {
   initialMessages: UIMessage[]
@@ -69,6 +80,8 @@ export function useChatCore({
 }: UseChatCoreProps) {
   // State management
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const approveToolCall = useMutation(api.chatRuntime.approveToolCall)
+  const denyToolCall = useMutation(api.chatRuntime.denyToolCall)
   // Ref-based guard prevents concurrent sends (state updates are batched and can lag)
   const isSendingRef = useRef(false)
 
@@ -164,9 +177,11 @@ export function useChatCore({
     error,
     stop,
     setMessages,
+    addToolApprovalResponse,
   } = useChat({
     transport,
     messages: initialMessages,
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
 
     onFinish: async ({ message, isAbort, isDisconnect, isError, finishReason }) => {
       // Track finish reason for truncation detection
@@ -178,6 +193,9 @@ export function useChatCore({
         const pendingEdit = pendingEditUserMsgRef.current
         if (pendingEdit) {
           pendingEditUserMsgRef.current = null
+          if (isRouteDurableChat(pendingEdit.chatId, isAuthenticated)) {
+            return
+          }
           try {
             await cacheAndAddMessage(pendingEdit.message, pendingEdit.chatId)
           } catch (error) {
@@ -201,16 +219,24 @@ export function useChatCore({
           : null)
 
       if (effectiveChatId) {
+        const routePersistsMessages = isRouteDurableChat(
+          effectiveChatId,
+          isAuthenticated
+        )
         // Persist the edited user message first (if any) so the user→assistant
         // pair is written in order before ID reconciliation.
         const pendingEdit = pendingEditUserMsgRef.current
         if (pendingEdit) {
           pendingEditUserMsgRef.current = null
-          await cacheAndAddMessage(pendingEdit.message, pendingEdit.chatId)
+          if (!routePersistsMessages) {
+            await cacheAndAddMessage(pendingEdit.message, pendingEdit.chatId)
+          }
         }
 
-        // Await persistence so the DB has the latest messages before ID reconciliation
-        await cacheAndAddMessage(message, effectiveChatId)
+        if (!routePersistsMessages) {
+          // Await persistence so the DB has the latest messages before ID reconciliation
+          await cacheAndAddMessage(message, effectiveChatId)
+        }
       }
 
       try {
@@ -223,6 +249,26 @@ export function useChatCore({
 
     onError: handleError,
   })
+
+  const handleToolApproval = useCallback(
+    async (approvalId: string, approved: boolean, reason?: string) => {
+      try {
+        if (approved) {
+          await approveToolCall({ approvalId, reason })
+        } else {
+          await denyToolCall({ approvalId, reason })
+        }
+        addToolApprovalResponse({ id: approvalId, approved, reason })
+      } catch (error) {
+        console.error("Failed to submit tool approval:", error)
+        toast({
+          title: "Failed to submit tool approval",
+          status: "error",
+        })
+      }
+    },
+    [addToolApprovalResponse, approveToolCall, denyToolCall]
+  )
 
   // Ref to latest stop function to avoid stale closures in effects
   const stopRef = useRef(stop)
@@ -425,7 +471,9 @@ export function useChatCore({
 
         setHasSentFirstMessage(true)
         removeOptimistic()
-        cacheAndAddMessage(optimisticMessage, currentChatId)
+        if (!isRouteDurableChat(currentChatId, isAuthenticated)) {
+          cacheAndAddMessage(optimisticMessage, currentChatId)
+        }
         onSuccess?.(currentChatId)
       } catch {
         removeOptimistic()
@@ -602,5 +650,6 @@ export function useChatCore({
     handleReload,
     handleInputChange,
     submitEdit,
+    handleToolApproval,
   }
 }

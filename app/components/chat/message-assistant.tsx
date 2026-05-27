@@ -41,11 +41,24 @@ type MessageAssistantProps = {
   onStop?: () => void
   parts?: MessageAISDK["parts"]
   metadata?: Record<string, unknown>
-  status?: "streaming" | "ready" | "submitted" | "error"
+  status?:
+    | "streaming"
+    | "ready"
+    | "submitted"
+    | "error"
+    | "completed"
+    | "aborted"
+    | "failed"
+    | "awaiting_approval"
   className?: string
   messageId: string
   onQuote?: (text: string, messageId: string) => void
   finishReason?: string
+  onToolApproval?: (
+    approvalId: string,
+    approved: boolean,
+    reason?: string
+  ) => Promise<void> | void
 }
 
 const STREAMING_INDICATOR_VARIANT: StreamingIndicatorVariant = "caret"
@@ -86,6 +99,7 @@ export function MessageAssistant({
   messageId,
   onQuote,
   finishReason,
+  onToolApproval,
 }: MessageAssistantProps) {
   const { preferences } = useUserPreferences()
   const sources = getSources(parts || [])
@@ -98,6 +112,12 @@ export function MessageAssistant({
   const contentNullOrEmpty = children === null || children === ""
   const isLastStreaming = status === "streaming" && isLast
   const hasContent = !contentNullOrEmpty
+  const loadingStatus: "streaming" | "ready" | "submitted" | "error" =
+    status === "streaming" || status === "submitted" || status === "error"
+      ? status
+      : status === "failed"
+        ? "error"
+        : "ready"
 
   // Unified reasoning phase hook
   const persistedDurationMs =
@@ -112,7 +132,7 @@ export function MessageAssistant({
     isOpaqueReasoning,
   } = useReasoningPhase({
     parts,
-    status: status ?? "ready",
+    status: loadingStatus,
     isLast: isLast ?? false,
     persistedDurationMs,
   })
@@ -144,7 +164,7 @@ export function MessageAssistant({
     showImageGenProgress,
     activeToolNames,
   } = useLoadingState({
-    status: status ?? "ready",
+    status: loadingStatus,
     isLast: isLast ?? false,
     parts,
     contentNullOrEmpty,
@@ -234,6 +254,7 @@ export function MessageAssistant({
             <ToolInvocation
               toolInvocations={toolInvocationParts}
               metadata={metadata}
+              onToolApproval={onToolApproval}
             />
           )}
 
@@ -288,6 +309,24 @@ export function MessageAssistant({
             }
           >
             Response may be incomplete due to output length limits.
+          </SystemMessage>
+        )}
+
+        {status === "awaiting_approval" && (
+          <SystemMessage variant="action" fill>
+            Waiting for approval before running the tool.
+          </SystemMessage>
+        )}
+
+        {status === "aborted" && (
+          <SystemMessage variant="warning" fill>
+            Generation stopped. Partial response preserved.
+          </SystemMessage>
+        )}
+
+        {status === "failed" && (
+          <SystemMessage variant="error" fill>
+            Generation failed. Partial response preserved.
           </SystemMessage>
         )}
 

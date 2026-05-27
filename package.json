@@ -35,6 +35,7 @@
     "@ai-sdk/react": "^3.0.80",
     "@ai-sdk/xai": "3",
     "@base-ui/react": "^1.1.0",
+    "@convex-dev/agent": "0.6.1",
     "@convex-dev/workos-authkit": "^0.2.5",
     "@hookform/resolvers": "^5.2.2",
     "@openrouter/ai-sdk-provider": "2",

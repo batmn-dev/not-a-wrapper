@@ -5,6 +5,29 @@ import { cn } from "@/lib/utils"
 import { UIMessage as MessageType } from "@ai-sdk/react"
 import { Message } from "./message"
 
+type MessageRenderStatus =
+  | "streaming"
+  | "ready"
+  | "submitted"
+  | "error"
+  | "completed"
+  | "aborted"
+  | "failed"
+  | "awaiting_approval"
+
+function isMessageRenderStatus(value: unknown): value is MessageRenderStatus {
+  return (
+    value === "streaming" ||
+    value === "ready" ||
+    value === "submitted" ||
+    value === "error" ||
+    value === "completed" ||
+    value === "aborted" ||
+    value === "failed" ||
+    value === "awaiting_approval"
+  )
+}
+
 // v6 helper: Extract text content from all text parts in order.
 // Tool-enabled responses can interleave multiple assistant text parts across
 // steps; using only the first part makes responses appear truncated.
@@ -43,6 +66,11 @@ type ConversationProps = {
   onQuote?: (text: string, messageId: string) => void
   isUserAuthenticated?: boolean
   lastFinishReason?: string
+  onToolApproval?: (
+    approvalId: string,
+    approved: boolean,
+    reason?: string
+  ) => Promise<void> | void
 }
 
 export function Conversation({
@@ -55,6 +83,7 @@ export function Conversation({
   onQuote,
   isUserAuthenticated,
   lastFinishReason,
+  onToolApproval,
 }: ConversationProps) {
   if (!messages || messages.length === 0)
     return <div className="w-full flex-1"></div>
@@ -71,6 +100,13 @@ export function Conversation({
           index === messages.length - 1 && status !== "submitted"
         const isAssistant = message.role === "assistant"
         const isUser = message.role === "user"
+        const durableStatus = (message as { status?: string }).status
+        const messageStatus: MessageRenderStatus =
+          isMessageRenderStatus(durableStatus) && durableStatus !== "completed"
+            ? durableStatus
+            : isLast
+              ? status
+              : "ready"
 
         return (
           <article
@@ -94,10 +130,11 @@ export function Conversation({
                 onStop={isLast && status === "streaming" ? onStop : undefined}
                 parts={message.parts}
                 metadata={message.metadata as Record<string, unknown> | undefined}
-                status={status}
+                status={messageStatus}
                 onQuote={onQuote}
                 isUserAuthenticated={isUserAuthenticated}
                 finishReason={isLast ? lastFinishReason : undefined}
+                onToolApproval={onToolApproval}
               >
                 {getMessageText(message)}
               </Message>

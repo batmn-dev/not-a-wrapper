@@ -7,6 +7,7 @@ import type { UIMessage } from "ai"
 import { useMutation, useQuery } from "convex/react"
 import { createContext, useCallback, useContext, useMemo, useState } from "react"
 import { getCachedMessages } from "./api"
+import { getMessagePartsForDisplay } from "./message-parts"
 import { writeToIndexedDB } from "../persist"
 import { useChatSession } from "../session/provider"
 
@@ -14,49 +15,21 @@ import { useChatSession } from "../session/provider"
 export type ExtendedUIMessage = UIMessage & {
   createdAt?: Date
   content?: string
+  status?:
+    | "submitted"
+    | "streaming"
+    | "completed"
+    | "aborted"
+    | "failed"
+    | "awaiting_approval"
+  metadata?: unknown
 }
 
-type StoredAttachment = {
-  name: string
-  contentType: string
-  url: string
-}
-
-function normalizeStoredAttachments(
-  attachments?: unknown[] | null
-): StoredAttachment[] | undefined {
-  if (!attachments || !Array.isArray(attachments)) return undefined
-  const normalized = attachments
-    .map((attachment) => {
-      if (!attachment || typeof attachment !== "object") return null
-      const record = attachment as {
-        name?: string
-        contentType?: string
-        url?: string
-      }
-      if (!record.url) return null
-      return {
-        name: record.name || "file",
-        contentType: record.contentType || "application/octet-stream",
-        url: record.url,
-      }
-    })
-    .filter((attachment): attachment is StoredAttachment => Boolean(attachment))
-  return normalized.length > 0 ? normalized : undefined
-}
-
-function getAttachmentsFromParts(
-  parts?: UIMessage["parts"]
-): StoredAttachment[] | undefined {
-  if (!parts?.length) return undefined
-  const fileParts = parts.filter((part) => part.type === "file")
-  if (fileParts.length === 0) return undefined
-  return fileParts.map((part) => ({
-    name: (part as { filename?: string }).filename || "file",
-    contentType:
-      (part as { mediaType?: string }).mediaType || "application/octet-stream",
-    url: (part as { url?: string }).url || "",
-  }))
+function getMessageId(message: {
+  _id: string
+  clientMessageId?: string
+}): string {
+  return message.clientMessageId ?? message._id
 }
 
 type MessagesContextType = {
@@ -106,33 +79,29 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
   const serverMessages: ExtendedUIMessage[] = useMemo(() => {
     if (!convexMessages) return []
     return convexMessages.map((msg): ExtendedUIMessage => {
-      const baseParts =
-        (msg.parts as ExtendedUIMessage["parts"]) ??
-        (msg.content ? [{ type: "text", text: msg.content }] : [])
-      const hasFileParts = baseParts.some((part) => part.type === "file")
-      const storedAttachments = normalizeStoredAttachments(
-        msg.attachments as unknown[] | null
-      )
-      const parts =
-        !hasFileParts && storedAttachments && storedAttachments.length > 0
-          ? [
-              ...baseParts,
-              ...storedAttachments.map((att) => ({
-                type: "file" as const,
-                filename: att.name,
-                mediaType: att.contentType,
-                url: att.url,
-              })),
-            ]
-          : baseParts
-
       return {
-        id: msg._id,
+        id: getMessageId(msg),
         // v5 UIMessage supports user, assistant, system roles
         role: (msg.role === "data" ? "system" : msg.role) as "user" | "assistant" | "system",
-        content: msg.content ?? "",
-        createdAt: new Date(msg._creationTime),
-        parts,
+        content: msg.content,
+        createdAt: new Date(msg.createdAt),
+        parts: getMessagePartsForDisplay({
+          content: msg.content,
+          parts: msg.parts,
+          attachments: msg.attachments as unknown[] | null,
+        }) as ExtendedUIMessage["parts"],
+        status: msg.status,
+        metadata: {
+          ...((msg.metadata as Record<string, unknown> | undefined) ?? {}),
+          durableStatus: msg.status,
+          durableError: msg.error,
+          generationRunId: msg.generationRunId,
+          requestId: msg.requestId,
+          model: msg.model,
+          provider: msg.provider,
+          finishReason: msg.finishReason,
+          usage: msg.usage,
+        },
       }
     })
   }, [convexMessages])
@@ -232,18 +201,17 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     // Guest users will silently skip this (auth required for mutations)
     if (!effectiveChatId.startsWith("optimistic-") && !effectiveChatId.startsWith("local-")) {
       try {
-        // Extract content from parts for storage (v5 compatibility)
         const textContent = messageToCache.parts
-          ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
+          .filter((p): p is { type: "text"; text: string } => p.type === "text")
           .map((p) => p.text)
           .join("") || messageToCache.content || ""
 
         await addMessageMutation({
           chatId: effectiveChatId as Id<"chats">,
+          clientMessageId: messageToCache.id,
           role: messageToCache.role as "user" | "assistant" | "system",
           content: textContent,
           parts: messageToCache.parts,
-          attachments: getAttachmentsFromParts(messageToCache.parts),
         })
       } catch (error) {
         // Silently fail for guests (no auth) - they only get local storage
@@ -266,17 +234,16 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
         await addBatchMutation({
           chatId: chatId as Id<"chats">,
           messages: messagesToSave.map((msg) => {
-            // Extract content from parts for storage (v5 compatibility)
             const textContent = msg.parts
-              ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
+              .filter((p): p is { type: "text"; text: string } => p.type === "text")
               .map((p) => p.text)
               .join("") || msg.content || ""
 
             return {
+              clientMessageId: msg.id,
               role: msg.role as "user" | "assistant" | "system",
               content: textContent,
               parts: msg.parts,
-              attachments: getAttachmentsFromParts(msg.parts),
             }
           }),
         })

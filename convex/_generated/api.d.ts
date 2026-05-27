@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as chatRuntime from "../chatRuntime.js";
 import type * as chats from "../chats.js";
 import type * as feedback from "../feedback.js";
 import type * as files from "../files.js";
@@ -33,6 +34,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  chatRuntime: typeof chatRuntime;
   chats: typeof chats;
   feedback: typeof feedback;
   files: typeof files;
@@ -80,4 +82,5 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   workOSAuthKit: import("@convex-dev/workos-authkit/_generated/component.js").ComponentApi<"workOSAuthKit">;
+  agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
 };
