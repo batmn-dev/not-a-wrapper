@@ -8,6 +8,7 @@ import {
   DEFAULT_SCHEMA_PATH,
   buildInlineCountQuery,
   checksFromManifests,
+  contractedManifestSchemaErrors,
   diffSchemaContractions,
   envValue,
   evaluateSchemaContractions,
@@ -181,13 +182,18 @@ export function planPreflight({
     ? diffSchemaContractions(baseSource, currentSource, schemaPath)
     : []
   const diffEvaluation = evaluateSchemaContractions({ removedFields, manifests })
+  const manifestSchemaErrors = contractedManifestSchemaErrors({
+    currentSource,
+    manifests,
+    schemaPath,
+  })
   const manifestChecks = checksFromManifests(manifests, { statuses: ["contracted"] })
   const checks = mergeChecks(manifestChecks, diffEvaluation.approved)
 
   return {
     removedFields,
     checks,
-    errors: diffEvaluation.errors,
+    errors: [...manifestSchemaErrors, ...diffEvaluation.errors],
   }
 }
 

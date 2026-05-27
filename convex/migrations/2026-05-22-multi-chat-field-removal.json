@@ -2,16 +2,11 @@
   "kind": "convex-schema-contraction",
   "id": "2026-05-22-multi-chat-field-removal",
   "status": "contracted",
-  "description": "Completed contraction for the legacy multi-chat fields removed from the strict Convex schema after aggregate production counts were verified at zero.",
+  "description": "Completed contraction for the legacy multi-chat fields that remain removed from the strict Convex schema after aggregate production counts were verified at zero.",
   "fields": [
     {
       "table": "messages",
       "field": "messageGroupId",
-      "expectedCount": 0
-    },
-    {
-      "table": "messages",
-      "field": "model",
       "expectedCount": 0
     },
     {
@@ -26,6 +21,7 @@
   "notes": {
     "incidentCommit": "7826693",
     "safeRemovalWorkflow": "expand -> migrate -> verify zero aggregate counts -> contract",
-    "documentContentsPolicy": "Only aggregate counts may be printed; never print raw production documents."
+    "documentContentsPolicy": "Only aggregate counts may be printed; never print raw production documents.",
+    "messagesModelReintroduced": "messages.model was reintroduced by durable chat runtime persistence as live message metadata and is no longer part of this contracted legacy-field check."
   }
 }

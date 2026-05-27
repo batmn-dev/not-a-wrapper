@@ -267,6 +267,34 @@ export function checksFromManifests(manifests, { statuses = ["contracted"] } = {
   return Array.from(checksByKey.values()).sort(compareFieldCheck)
 }
 
+export function contractedManifestSchemaErrors({
+  currentSource,
+  manifests,
+  schemaPath = DEFAULT_SCHEMA_PATH,
+}) {
+  const currentTables = parseSchemaFields(currentSource, `${schemaPath}:current`)
+  const conflicts = []
+
+  for (const entry of manifests) {
+    if (entry.manifest.status !== "contracted") continue
+
+    for (const field of entry.manifest.fields) {
+      if (!currentTables.get(field.table)?.has(field.field)) continue
+
+      conflicts.push({
+        table: field.table,
+        field: field.field,
+        path: entry.path,
+      })
+    }
+  }
+
+  return conflicts.sort(compareFieldCheck).map(
+    (conflict) =>
+      `${fieldKey(conflict)} is listed as contracted in ${conflict.path}, but ${schemaPath} still defines it; update the manifest if the field is live again or remove the schema field after cleanup`
+  )
+}
+
 export function evaluateSchemaContractions({ removedFields, manifests }) {
   const manifestFields = new Map()
 
