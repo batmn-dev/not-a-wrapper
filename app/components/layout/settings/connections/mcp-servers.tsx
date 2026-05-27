@@ -23,7 +23,6 @@ import {
   RiPlugLine,
   RiSettings3Line,
 } from "@remixicon/react"
-import { useQuery as useTanstackQuery } from "@tanstack/react-query"
 import { useMutation, useQuery } from "convex/react"
 import { useState } from "react"
 import { McpServerForm } from "./mcp-server-form"
@@ -61,17 +60,6 @@ export function McpServers() {
   const servers = useQuery(api.mcpServers.list) ?? []
   const toggleEnabled = useMutation(api.mcpServers.toggleEnabled)
   const removeServer = useMutation(api.mcpServers.remove)
-
-  const { data: status } = useTanstackQuery({
-    queryKey: ["mcp-status"],
-    queryFn: async () => {
-      const res = await fetch("/api/mcp-servers/status")
-      if (!res.ok) return { enabled: false }
-      return res.json() as Promise<{ enabled: boolean }>
-    },
-  })
-
-  const mcpEnabled = status?.enabled ?? false
 
   // UI state
   const [formOpen, setFormOpen] = useState(false)
@@ -139,26 +127,14 @@ export function McpServers() {
             Connect external tool servers to enhance AI capabilities.
           </p>
         </div>
-        {mcpEnabled && (
-          <Button size="sm" onClick={handleAdd}>
-            <Icon icon={RiAddLine} slotSize={16} className="mr-1" />
-            Add Server
-          </Button>
-        )}
+        <Button size="sm" onClick={handleAdd}>
+          <Icon icon={RiAddLine} slotSize={16} className="mr-1" />
+          Add Server
+        </Button>
       </div>
 
-      {/* Feature flag disabled state */}
-      {!mcpEnabled && (
-        <div className="rounded-md border border-orange-200 bg-orange-50 p-3 dark:border-orange-800 dark:bg-orange-950/20">
-          <p className="text-sm text-orange-800 dark:text-orange-200">
-            MCP integration is currently disabled. Contact your administrator to
-            enable it.
-          </p>
-        </div>
-      )}
-
       {/* Empty state */}
-      {mcpEnabled && servers.length === 0 && (
+      {servers.length === 0 && (
         <div className="py-8 text-center">
           <Icon
             icon={RiPlugLine}
@@ -180,7 +156,7 @@ export function McpServers() {
       )}
 
       {/* Server list */}
-      {mcpEnabled && servers.length > 0 && (
+      {servers.length > 0 && (
         <div className="space-y-3">
           {servers.map((server) => (
             <Card key={server._id}>

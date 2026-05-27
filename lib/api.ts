@@ -1,31 +1,5 @@
 import type { UserProfile } from "@/lib/user/types"
 import { fetchClient } from "./fetch"
-import { API_ROUTE_CREATE_GUEST } from "./routes"
-
-/**
- * Creates a guest user record on the server
- */
-export async function createGuestUser(guestId: string) {
-  try {
-    const res = await fetchClient(API_ROUTE_CREATE_GUEST, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: guestId }),
-    })
-    const responseData = await res.json()
-    if (!res.ok) {
-      throw new Error(
-        responseData.error ||
-          `Failed to create guest user: ${res.status} ${res.statusText}`
-      )
-    }
-
-    return responseData
-  } catch (err) {
-    console.error("Error creating guest user:", err)
-    throw err
-  }
-}
 
 export class UsageLimitError extends Error {
   code: string
@@ -84,14 +58,6 @@ export const getOrCreateGuestUserId = async (
   // Generate a new guest ID
   const newGuestId = `guest_${crypto.randomUUID()}`
   localStorage.setItem("guestUserId", newGuestId)
-
-  // Optionally register the guest on the server
-  try {
-    await createGuestUser(newGuestId)
-  } catch (error) {
-    console.warn("Failed to register guest user on server:", error)
-    // Continue anyway - guest can still use the app
-  }
 
   return newGuestId
 }

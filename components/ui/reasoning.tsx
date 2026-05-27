@@ -171,7 +171,7 @@ function ReasoningLabel({ className }: ReasoningLabelProps) {
   const labelText =
     phase === "thinking" ? (
       <>
-        <TextShimmer duration={2} spread={15} className="text-base font-medium">
+        <TextShimmer duration={2} spread={15} className="text-base font-normal">
           Thinking
         </TextShimmer>
         {durationSeconds !== undefined && durationSeconds > 0 && (
@@ -181,7 +181,7 @@ function ReasoningLabel({ className }: ReasoningLabelProps) {
         )}
       </>
     ) : (
-      <span className="text-muted-foreground font-medium">
+      <span className="text-muted-foreground font-normal">
         {durationSeconds !== undefined
           ? `Thought for ${formatDuration(durationSeconds)}`
           : "Thoughts"}

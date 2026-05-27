@@ -1,6 +1,6 @@
-import useClickOutside from "@/components/motion-primitives/useClickOutside"
 import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
+import useClickOutside from "@/hooks/useClickOutside"
 import { RiDoubleQuotesL } from "@remixicon/react"
 import { RefObject, useLayoutEffect, useRef, useState } from "react"
 

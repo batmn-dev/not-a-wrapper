@@ -17,7 +17,10 @@ export const ChainOfThoughtItem = ({
   className,
   ...props
 }: ChainOfThoughtItemProps) => (
-  <div className={cn("text-muted-foreground text-sm", className)} {...props}>
+  <div
+    className={cn("text-muted-foreground text-sm font-normal", className)}
+    {...props}
+  >
     {children}
   </div>
 )
@@ -38,7 +41,7 @@ export const ChainOfThoughtTrigger = ({
 }: ChainOfThoughtTriggerProps) => (
   <CollapsibleTrigger
     className={cn(
-      "group text-muted-foreground hover:text-foreground flex cursor-pointer items-center justify-start gap-1 text-left text-sm transition-colors",
+      "group text-muted-foreground hover:text-foreground flex cursor-pointer items-center justify-start gap-1 text-left text-sm font-normal transition-colors",
       className
     )}
     {...props}
