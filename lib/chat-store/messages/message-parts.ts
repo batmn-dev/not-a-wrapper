@@ -48,7 +48,9 @@ export function getMessagePartsForDisplay(message: {
   parts?: unknown
   attachments?: unknown[] | null
 }): UIMessage["parts"] {
-  const baseParts: UIMessage["parts"] = Array.isArray(message.parts)
+  const hasStoredParts =
+    Array.isArray(message.parts) && message.parts.length > 0
+  const baseParts: UIMessage["parts"] = hasStoredParts
     ? (message.parts as UIMessage["parts"])
     : message.content
       ? [{ type: "text" as const, text: message.content }]

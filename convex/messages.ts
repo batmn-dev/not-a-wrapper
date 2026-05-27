@@ -18,8 +18,72 @@ function extractTextFromParts(parts: unknown): string {
   return text
 }
 
-function normalizeMessageParts(parts: unknown): unknown {
-  return parts === undefined ? [] : parts
+type StoredAttachment = {
+  name: string
+  contentType: string
+  url: string
+}
+
+function normalizeStoredAttachments(attachments: unknown): StoredAttachment[] {
+  if (!Array.isArray(attachments)) return []
+
+  return attachments
+    .map((attachment) => {
+      if (!attachment || typeof attachment !== "object") return null
+
+      const record = attachment as {
+        name?: unknown
+        contentType?: unknown
+        url?: unknown
+      }
+
+      if (typeof record.url !== "string" || record.url.length === 0) {
+        return null
+      }
+
+      return {
+        name:
+          typeof record.name === "string" && record.name.length > 0
+            ? record.name
+            : "file",
+        contentType:
+          typeof record.contentType === "string" &&
+          record.contentType.length > 0
+            ? record.contentType
+            : "application/octet-stream",
+        url: record.url,
+      }
+    })
+    .filter((attachment): attachment is StoredAttachment => Boolean(attachment))
+}
+
+export function normalizeMessagePartsForStorage(
+  parts: unknown,
+  attachments?: unknown
+): unknown {
+  const baseParts = parts === undefined ? [] : parts
+  if (!Array.isArray(baseParts)) return baseParts
+
+  const storedAttachments = normalizeStoredAttachments(attachments)
+  if (storedAttachments.length === 0) return baseParts
+
+  const hasFileParts = baseParts.some(
+    (part) =>
+      part &&
+      typeof part === "object" &&
+      (part as { type?: unknown }).type === "file"
+  )
+  if (hasFileParts) return baseParts
+
+  return [
+    ...baseParts,
+    ...storedAttachments.map((attachment) => ({
+      type: "file" as const,
+      filename: attachment.name,
+      mediaType: attachment.contentType,
+      url: attachment.url,
+    })),
+  ]
 }
 
 async function getNextOrder(ctx: MutationCtx, chatId: Id<"chats">) {
@@ -159,7 +223,10 @@ export const add = mutation({
     const now = Date.now()
     await ctx.db.patch(args.chatId, { updatedAt: now })
     const orderId = await getNextOrder(ctx, args.chatId)
-    const parts = normalizeMessageParts(args.parts)
+    const parts = normalizeMessagePartsForStorage(
+      args.parts,
+      args.attachments
+    )
 
     return await ctx.db.insert("messages", {
       chatId: args.chatId,
@@ -169,7 +236,6 @@ export const add = mutation({
       role: args.role,
       content: args.content ?? extractTextFromParts(parts),
       parts,
-      attachments: args.attachments,
       status: "completed",
       createdAt: now,
       updatedAt: now,
@@ -222,7 +288,10 @@ export const addBatch = mutation({
     const ids = []
     let nextOrder = await getNextOrder(ctx, chatId)
     for (const msg of messages) {
-      const parts = normalizeMessageParts(msg.parts)
+      const parts = normalizeMessagePartsForStorage(
+        msg.parts,
+        msg.attachments
+      )
       const id = await ctx.db.insert("messages", {
         chatId,
         orderId: nextOrder,
@@ -231,7 +300,6 @@ export const addBatch = mutation({
         role: msg.role,
         content: msg.content ?? extractTextFromParts(parts),
         parts,
-        attachments: msg.attachments,
         status: "completed",
         createdAt: now,
         updatedAt: now,

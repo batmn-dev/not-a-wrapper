@@ -58,6 +58,16 @@ describe("getMessagePartsForDisplay", () => {
     ).toEqual([{ type: "text", text: "hello" }])
   })
 
+  it("falls back to content text when stored parts is empty", () => {
+    expect(
+      getMessagePartsForDisplay({
+        content: "hello",
+        parts: [],
+        attachments: [],
+      })
+    ).toEqual([{ type: "text", text: "hello" }])
+  })
+
   it("ignores malformed legacy attachments", () => {
     expect(
       getMessagePartsForDisplay({
