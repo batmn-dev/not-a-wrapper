@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { Doc, Id } from "./_generated/dataModel"
 import type { MutationCtx } from "./_generated/server"
-import { denyPendingApprovalsForChat } from "./chatRuntime"
+import { applyApprovalResponses, denyPendingApprovalsForChat } from "./chatRuntime"
 
 type TableName =
   | "toolApprovalRequests"
@@ -84,6 +84,206 @@ function createMutationCtx(tables: Record<TableName, StoredDocument[]>) {
 
   return { ctx, patches }
 }
+
+function createOwnerFixture() {
+  const userId = asId<"users">("user_1")
+  const chatId = asId<"chats">("chat_1")
+  const user: Doc<"users"> = {
+    _id: userId,
+    _creationTime: 1,
+    workosUserId: "workos_user_1",
+    email: "user@example.com",
+  }
+  const chat: Doc<"chats"> = {
+    _id: chatId,
+    _creationTime: 1,
+    userId,
+    public: false,
+    pinned: false,
+  }
+
+  return { user, chat, userId, chatId }
+}
+
+function createApprovalContinuationFixture(
+  decisions: Array<{
+    approvalId: string
+    approved: boolean
+    toolCallId: string
+    toolName: string
+  }>
+) {
+  const { user, chat, userId, chatId } = createOwnerFixture()
+  const runId = asId<"generationRuns">("run_1")
+  const messageId = asId<"messages">("message_1")
+  const run: Doc<"generationRuns"> = {
+    _id: runId,
+    _creationTime: 1,
+    chatId,
+    userId,
+    requestId: "request_1",
+    model: "gpt-5",
+    provider: "openai",
+    status: "awaiting_approval",
+    startedAt: 1,
+    updatedAt: 1,
+    activeStreamId: "message_1",
+    assistantMessageId: messageId,
+  }
+  const message: Doc<"messages"> = {
+    _id: messageId,
+    _creationTime: 1,
+    chatId,
+    orderId: 1,
+    role: "assistant",
+    content: "",
+    parts: decisions.map((decision) => ({
+      type: `tool-${decision.toolName}`,
+      toolCallId: decision.toolCallId,
+      state: "approval-requested",
+      input: {},
+      approval: { id: decision.approvalId },
+    })),
+    status: "awaiting_approval",
+    requestId: "request_1",
+    generationRunId: runId,
+    model: "gpt-5",
+    provider: "openai",
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  const requests: Doc<"toolApprovalRequests">[] = decisions.map(
+    (decision, index) => ({
+      _id: asId<"toolApprovalRequests">(`approval_request_${index + 1}`),
+      _creationTime: 1,
+      chatId,
+      runId,
+      assistantMessageId: messageId,
+      userId,
+      toolCallId: decision.toolCallId,
+      toolName: decision.toolName,
+      source: "mcp",
+      riskClass: "write",
+      approvalId: decision.approvalId,
+      status: decision.approved ? "approved" : "denied",
+      createdAt: 1,
+    })
+  )
+  const invocations: Doc<"toolInvocations">[] = decisions.map(
+    (decision, index) => ({
+      _id: asId<"toolInvocations">(`tool_invocation_${index + 1}`),
+      _creationTime: 1,
+      runId,
+      chatId,
+      messageId,
+      toolCallId: decision.toolCallId,
+      toolName: decision.toolName,
+      source: "mcp",
+      input: {},
+      status: "pending_approval",
+      createdAt: 1,
+      updatedAt: 1,
+    })
+  )
+  const tables: Record<TableName, StoredDocument[]> = {
+    toolApprovalRequests: requests,
+    generationRuns: [run],
+    messages: [message],
+    toolInvocations: invocations,
+  }
+  const responses = decisions.map((decision) => ({
+    messageId,
+    approvalId: decision.approvalId,
+    toolCallId: decision.toolCallId,
+    toolName: decision.toolName,
+    approved: decision.approved,
+  }))
+
+  return {
+    owner: { user, chat },
+    run,
+    invocations,
+    tables,
+    responses,
+  }
+}
+
+describe("applyApprovalResponses", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("aborts a run when any approval response for that run is denied", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const fixture = createApprovalContinuationFixture([
+      {
+        approvalId: "approval_denied",
+        approved: false,
+        toolCallId: "call_denied",
+        toolName: "delete_file",
+      },
+      {
+        approvalId: "approval_approved",
+        approved: true,
+        toolCallId: "call_approved",
+        toolName: "read_file",
+      },
+    ])
+    const { ctx, patches } = createMutationCtx(fixture.tables)
+
+    await applyApprovalResponses(ctx, fixture.owner, fixture.responses)
+
+    expect(fixture.run).toMatchObject({
+      status: "aborted",
+      completedAt: 1700000000000,
+      updatedAt: 1700000000000,
+      activeStreamId: undefined,
+    })
+    expect(fixture.invocations.map((invocation) => invocation.status)).toEqual([
+      "denied",
+      "approved",
+    ])
+    expect(patches.filter((patch) => patch.id === fixture.run._id)).toEqual([
+      {
+        id: fixture.run._id,
+        value: {
+          status: "aborted",
+          completedAt: 1700000000000,
+          updatedAt: 1700000000000,
+          activeStreamId: undefined,
+        },
+      },
+    ])
+  })
+
+  it("completes a run when all approval responses for that run are approved", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const fixture = createApprovalContinuationFixture([
+      {
+        approvalId: "approval_1",
+        approved: true,
+        toolCallId: "call_1",
+        toolName: "read_file",
+      },
+      {
+        approvalId: "approval_2",
+        approved: true,
+        toolCallId: "call_2",
+        toolName: "list_files",
+      },
+    ])
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await applyApprovalResponses(ctx, fixture.owner, fixture.responses)
+
+    expect(fixture.run).toMatchObject({
+      status: "completed",
+      completedAt: 1700000000000,
+      updatedAt: 1700000000000,
+      activeStreamId: undefined,
+    })
+  })
+})
 
 describe("denyPendingApprovalsForChat", () => {
   afterEach(() => {

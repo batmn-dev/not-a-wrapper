@@ -65,4 +65,27 @@ describe("runtime tool approval policy", () => {
     expect(decision.needsApproval).toBe(true)
     expect(decision.riskClass).toBe("email")
   })
+
+  it.each([
+    ["deleteUser", "destructive"],
+    ["sendEmail", "email"],
+    ["createPayment", "payment"],
+    ["updateAPIKey", "credential"],
+  ] as const)(
+    "requires approval for camelCase tool name %s",
+    (toolName, riskClass) => {
+      const decision = getRuntimeToolApprovalDecision({
+        toolName,
+        source: "platform",
+        metadata: {
+          readOnly: true,
+          destructive: false,
+        },
+        riskHintsTrusted: true,
+      })
+
+      expect(decision.needsApproval).toBe(true)
+      expect(decision.riskClass).toBe(riskClass)
+    }
+  )
 })

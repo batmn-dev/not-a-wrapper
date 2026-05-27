@@ -7,6 +7,7 @@ import type { UIMessage } from "ai"
 import { useMutation, useQuery } from "convex/react"
 import { createContext, useCallback, useContext, useMemo, useState } from "react"
 import { getCachedMessages } from "./api"
+import { getMessagePartsForDisplay } from "./message-parts"
 import { writeToIndexedDB } from "../persist"
 import { useChatSession } from "../session/provider"
 
@@ -84,7 +85,11 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
         role: (msg.role === "data" ? "system" : msg.role) as "user" | "assistant" | "system",
         content: msg.content,
         createdAt: new Date(msg.createdAt),
-        parts: msg.parts as ExtendedUIMessage["parts"],
+        parts: getMessagePartsForDisplay({
+          content: msg.content,
+          parts: msg.parts,
+          attachments: msg.attachments as unknown[] | null,
+        }) as ExtendedUIMessage["parts"],
         status: msg.status,
         metadata: {
           ...((msg.metadata as Record<string, unknown> | undefined) ?? {}),

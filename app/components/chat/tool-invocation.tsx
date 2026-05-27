@@ -331,12 +331,19 @@ function SingleToolView({
     {} as Record<string, ToolUIPart[]>
   )
 
-  // For each toolCallId, get the most informative state (output-available > input-available > input-streaming)
+  // For each toolCallId, get the most informative state.
+  // An approved response only means the tool may proceed; it is not terminal.
   const toolsToDisplay = Object.values(groupedTools)
     .map((group) => {
       const resultTool = group.find((item) => item.state === "output-available")
       const approvalTool = group.find(
         (item) => item.state === "approval-requested"
+      )
+      const deniedApprovalResponseTool = group.find(
+        (item) =>
+          item.state === "approval-responded" &&
+          "approval" in item &&
+          item.approval.approved === false
       )
       const approvalResponseTool = group.find(
         (item) => item.state === "approval-responded"
@@ -349,10 +356,11 @@ function SingleToolView({
       // Return the most informative one
       return (
         resultTool ||
+        deniedApprovalResponseTool ||
         approvalTool ||
-        approvalResponseTool ||
         callTool ||
-        partialCallTool
+        partialCallTool ||
+        approvalResponseTool
       )
     })
     .filter(Boolean) as ToolUIPart[]

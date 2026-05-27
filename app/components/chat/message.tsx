@@ -102,6 +102,10 @@ function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
   if (prev.finishReason !== next.finishReason) return false
   if (prev.className !== next.className) return false
   if (prev.isUserAuthenticated !== next.isUserAuthenticated) return false
+  if (
+    prev.variant === "assistant" &&
+    prev.onToolApproval !== next.onToolApproval
+  ) return false
 
   // Attachments: compare all rendered fields
   const prevLen = prev.attachments?.length ?? 0

@@ -33,7 +33,7 @@ const PAYMENT_PATTERN =
 const EMAIL_PATTERN =
   /\b(email|mail|message|sms|slack|send|notify|publish|post|tweet)\b/i
 const CREDENTIAL_PATTERN =
-  /\b(secret|token|credential|password|api[_-]?key|auth|oauth|session)\b/i
+  /\b(secret|token|credential|password|api\s*key|auth|oauth|session)\b/i
 const ACCOUNT_PATTERN =
   /\b(account|user|member|permission|role|setting|config|admin)\b/i
 const DESTRUCTIVE_PATTERN =
@@ -41,8 +41,15 @@ const DESTRUCTIVE_PATTERN =
 const WRITE_PATTERN =
   /\b(create|update|write|edit|mutate|insert|upsert|patch|commit|deploy|merge|upload)\b/i
 
+function normalizeToolNameForRiskClassification(toolName: string): string {
+  return toolName
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .replace(/([a-z\d])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+}
+
 function classifyName(toolName: string): RuntimeToolApprovalRisk | null {
-  const normalized = toolName.replace(/[_-]+/g, " ")
+  const normalized = normalizeToolNameForRiskClassification(toolName)
   if (PAYMENT_PATTERN.test(normalized)) return "payment"
   if (CREDENTIAL_PATTERN.test(normalized)) return "credential"
   if (DESTRUCTIVE_PATTERN.test(normalized)) return "destructive"

@@ -102,6 +102,16 @@ const terminalRunStatuses = new Set<Doc<"generationRuns">["status"]>([
   "failed",
 ])
 
+const activeRunStatuses = new Set<Doc<"generationRuns">["status"]>([
+  "queued",
+  "running",
+  "streaming",
+  "awaiting_approval",
+])
+
+const ACTIVE_RUN_SCAN_LIMIT = 50
+const RECOVERABLE_RUN_SCAN_LIMIT = 10
+
 const terminalToolInvocationStatuses = new Set<
   Doc<"toolInvocations">["status"]
 >(["denied", "completed", "failed"])
@@ -366,7 +376,7 @@ export async function denyPendingApprovalsForChat(
   }
 }
 
-async function applyApprovalResponses(
+export async function applyApprovalResponses(
   ctx: MutationCtx,
   owner: AuthenticatedOwner,
   responses: Array<{
@@ -383,6 +393,7 @@ async function applyApprovalResponses(
   const messages = await listMessages(ctx, owner.chat._id)
   let updatedMessage: Doc<"messages"> | null = null
   const now = nowMs()
+  const runDecisions = new Map<Id<"generationRuns">, { denied: boolean }>()
 
   for (const response of responses) {
     const approval = await ctx.db
@@ -400,6 +411,10 @@ async function applyApprovalResponses(
     }
 
     const canonicalDecision = resolveCanonicalApprovalDecision(approval, response)
+    const runDecision = runDecisions.get(approval.runId)
+    runDecisions.set(approval.runId, {
+      denied: (runDecision?.denied ?? false) || !canonicalDecision.approved,
+    })
 
     const message = findMessageByUiId(messages, response.messageId)
     if (!message || message.chatId !== owner.chat._id) {
@@ -433,9 +448,11 @@ async function applyApprovalResponses(
         updatedAt: now,
       })
     }
+  }
 
-    await ctx.db.patch(approval.runId, {
-      status: canonicalDecision.approved ? "completed" : "aborted",
+  for (const [runId, runDecision] of runDecisions) {
+    await ctx.db.patch(runId, {
+      status: runDecision.denied ? "aborted" : "completed",
       completedAt: now,
       updatedAt: now,
       activeStreamId: undefined,
@@ -811,18 +828,13 @@ export const listActiveRunsForChat = query({
   handler: async (ctx, { chatId }) => {
     const chat = await getAuthorizedChatForRead(ctx, chatId)
     if (!chat) return []
-    const activeStatuses = new Set([
-      "queued",
-      "running",
-      "streaming",
-      "awaiting_approval",
-    ])
     const runs = await ctx.db
       .query("generationRuns")
-      .withIndex("by_chat", (q) => q.eq("chatId", chatId))
-      .collect()
+      .withIndex("by_chat_updated", (q) => q.eq("chatId", chatId))
+      .order("desc")
+      .take(ACTIVE_RUN_SCAN_LIMIT)
     return runs
-      .filter((run) => activeStatuses.has(run.status))
+      .filter((run) => activeRunStatuses.has(run.status))
       .sort((a, b) => b.updatedAt - a.updatedAt)
   },
 })
@@ -851,7 +863,7 @@ export const getRecoverableChatState = query({
       .query("generationRuns")
       .withIndex("by_chat_updated", (q) => q.eq("chatId", chatId))
       .order("desc")
-      .take(10)
+      .take(RECOVERABLE_RUN_SCAN_LIMIT)
 
     if (chat.public) {
       return {
@@ -875,11 +887,7 @@ export const getRecoverableChatState = query({
     return {
       chat,
       messages,
-      activeRuns: runs.filter((run) =>
-        ["queued", "running", "streaming", "awaiting_approval"].includes(
-          run.status
-        )
-      ),
+      activeRuns: runs.filter((run) => activeRunStatuses.has(run.status)),
       pendingApprovals: pendingApprovals.filter(
         (approval) => approval.chatId === chatId
       ),

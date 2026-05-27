@@ -18,6 +18,10 @@ function extractTextFromParts(parts: unknown): string {
   return text
 }
 
+function normalizeMessageParts(parts: unknown): unknown {
+  return parts === undefined ? [] : parts
+}
+
 async function getNextOrder(ctx: MutationCtx, chatId: Id<"chats">) {
   const latest = await ctx.db
     .query("messages")
@@ -131,7 +135,8 @@ export const add = mutation({
     ),
     clientMessageId: v.optional(v.string()),
     content: v.optional(v.string()),
-    parts: v.any(),
+    parts: v.optional(v.any()),
+    attachments: v.optional(v.array(v.any())),
   },
   handler: async (ctx, args) => {
     // Verify chat exists and user has access
@@ -154,6 +159,7 @@ export const add = mutation({
     const now = Date.now()
     await ctx.db.patch(args.chatId, { updatedAt: now })
     const orderId = await getNextOrder(ctx, args.chatId)
+    const parts = normalizeMessageParts(args.parts)
 
     return await ctx.db.insert("messages", {
       chatId: args.chatId,
@@ -161,8 +167,9 @@ export const add = mutation({
       clientMessageId: args.clientMessageId,
       userId: args.role === "user" ? user._id : undefined,
       role: args.role,
-      content: args.content ?? extractTextFromParts(args.parts),
-      parts: args.parts,
+      content: args.content ?? extractTextFromParts(parts),
+      parts,
+      attachments: args.attachments,
       status: "completed",
       createdAt: now,
       updatedAt: now,
@@ -186,7 +193,8 @@ export const addBatch = mutation({
         ),
         clientMessageId: v.optional(v.string()),
         content: v.optional(v.string()),
-        parts: v.any(),
+        parts: v.optional(v.any()),
+        attachments: v.optional(v.array(v.any())),
       })
     ),
   },
@@ -214,14 +222,16 @@ export const addBatch = mutation({
     const ids = []
     let nextOrder = await getNextOrder(ctx, chatId)
     for (const msg of messages) {
+      const parts = normalizeMessageParts(msg.parts)
       const id = await ctx.db.insert("messages", {
         chatId,
         orderId: nextOrder,
         clientMessageId: msg.clientMessageId,
         userId: msg.role === "user" ? user._id : undefined,
         role: msg.role,
-        content: msg.content ?? extractTextFromParts(msg.parts),
-        parts: msg.parts,
+        content: msg.content ?? extractTextFromParts(parts),
+        parts,
+        attachments: msg.attachments,
         status: "completed",
         createdAt: now,
         updatedAt: now,
