@@ -1,11 +1,11 @@
 "use client"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
-import useClickOutside from "@/app/hooks/use-click-outside"
 import { Icon } from "@/components/ui/icon"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
+import useClickOutside from "@/hooks/useClickOutside"
 import { cn } from "@/lib/utils"
 import {
   RiCheckLine,

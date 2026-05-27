@@ -21,7 +21,7 @@ import React, {
   useSyncExternalStore,
 } from "react"
 import { createPortal } from "react-dom"
-import useClickOutside from "./useClickOutside"
+import useClickOutside from "@/hooks/useClickOutside"
 
 // Hydration-safe hook using useSyncExternalStore (React 19 pattern)
 const subscribe = () => () => {}

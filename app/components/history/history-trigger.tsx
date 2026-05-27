@@ -1,6 +1,7 @@
 "use client"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
+import { headerActionButtonClassName } from "@/app/components/layout/header-action-button"
 import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 import { RiSearchLine } from "@remixicon/react"
@@ -55,7 +56,7 @@ export function HistoryTrigger({
       <button
         className={cn(
           !hasCustomTriggerClass &&
-            "text-muted-foreground hover:text-foreground hover:bg-muted bg-background pointer-events-auto rounded-full p-1.5",
+            `${headerActionButtonClassName} pointer-events-auto p-1.5`,
           hasSidebar ? "hidden" : "block",
           classNameTrigger
         )}

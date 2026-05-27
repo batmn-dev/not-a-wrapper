@@ -1,6 +1,7 @@
 "use client"
 
 import { ChatActionsMenu } from "@/app/components/layout/chat-actions-menu"
+import { headerActionButtonClassName } from "@/app/components/layout/header-action-button"
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { useKeyShortcut } from "@/app/hooks/use-key-shortcut"
 import { Button } from "@/components/ui/button"
@@ -33,7 +34,7 @@ export function ButtonNewChat() {
           type="button"
           variant="ghost"
           size="icon"
-          className="text-muted-foreground hover:text-foreground hover:bg-muted bg-background p-1.5 transition-colors"
+          className={`${headerActionButtonClassName} p-1.5`}
           aria-label="Chat actions"
         >
           <Icon icon={RiMoreFill} slotSize={20} />

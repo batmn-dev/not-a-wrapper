@@ -70,6 +70,11 @@ components:
     backgroundColor: "var(--composer-bg)"
     shadow: "shadow-composer"
     rounded: 24px
+  header-action:
+    backgroundColor: "{colors.background}"
+    textColor: "{colors.muted}"
+    rounded: "{rounded.lg}"
+    height: 36px
   popover:
     backgroundColor: "var(--popover)"
     textColor: "var(--popover-foreground)"
@@ -122,6 +127,7 @@ Use subtle rounded corners.
 - Inputs and utility controls generally use medium radius.
 - Cards, popovers, dialogs, and larger surfaces can use larger radius.
 - Buttons, icon actions, composer controls, and pills may use full radius.
+- Header action buttons use the model selector radius (`rounded-lg`), not full pill radius.
 - The chat composer is a rounded 24px surface using `--composer-bg` and `shadow-composer`.
 
 Do not mix sharp, highly rounded, and ornamental shapes in one view.
@@ -129,6 +135,7 @@ Do not mix sharp, highly rounded, and ornamental shapes in one view.
 ## Components
 
 - Buttons: use `Button` from `components/ui/button`; common secondary variants are `outline`, `ghost`, text, or icon buttons.
+- Header actions: use `headerActionButtonClassName` from `app/components/layout/header-action-button` for top-bar icon and text controls. Keep avatars circular.
 - Icons: use Remix icons through `Icon` with `slotSize`; line icons are default, filled icons are mainly for active states.
 - Navigation: use the sticky header plus collapsible sidebar pattern. Sidebar rows are compact, rounded, truncated, and use `bg-accent` for hover/active states.
 - Cards: use existing card primitives and `shadow-border-*` surfaces.

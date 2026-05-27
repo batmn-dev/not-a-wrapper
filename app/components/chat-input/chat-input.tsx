@@ -259,7 +259,7 @@ export function ChatInput({
                   {primaryAction.mode === "stop" ? (
                     <StopBulkRoundedIcon size={16} />
                   ) : (
-                    <Icon icon={RiArrowUpLine} slotSize={22} />
+                    <Icon icon={RiArrowUpLine} slotSize={26} glyphSize={30} />
                   )}
                 </Button>
               </PromptInputAction>

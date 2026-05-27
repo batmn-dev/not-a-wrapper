@@ -1,7 +1,6 @@
 const CHAT_ROUTE_PATTERN = "/api/chat"
 const CHAT_CRITICAL_ROUTE_PATTERNS = [
   CHAT_ROUTE_PATTERN,
-  "/api/create-chat",
   "/api/user-preferences/favorite-models",
 ]
 const HEALTHCHECK_ROUTE_PATTERNS = ["/api/health", "/healthz", "/readyz", "/livez"]

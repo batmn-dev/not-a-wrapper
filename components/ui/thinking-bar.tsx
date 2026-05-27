@@ -44,9 +44,9 @@ export function ThinkingBar({
         <button
           type="button"
           onClick={onClick}
-          className="flex items-center gap-1 text-base transition-opacity hover:opacity-80"
+          className="flex items-center gap-1 text-base font-normal transition-opacity hover:opacity-80"
         >
-          <TextShimmer className="font-medium">{text}</TextShimmer>
+          <TextShimmer className="font-normal">{text}</TextShimmer>
           <Icon
             icon={RiArrowRightSLine}
             slotSize={16}
@@ -54,7 +54,7 @@ export function ThinkingBar({
           />
         </button>
       ) : (
-        <TextShimmer className="cursor-default font-medium">{text}</TextShimmer>
+        <TextShimmer className="cursor-default font-normal">{text}</TextShimmer>
       )}
     </div>
   )
