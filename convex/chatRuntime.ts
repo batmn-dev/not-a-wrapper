@@ -69,10 +69,42 @@ const vApprovalResponse = v.object({
   reason: v.optional(v.string()),
 })
 
+type ApprovalResponse = {
+  approved: boolean
+  reason?: string
+}
+
+type StoredApprovalDecision = {
+  status: "pending" | "approved" | "denied" | "expired"
+  reason?: string
+}
+
+type CanonicalApprovalDecision = {
+  status: "approved" | "denied"
+  approved: boolean
+  reason?: string
+}
+
 type AuthenticatedOwner = {
   user: Doc<"users">
   chat: Doc<"chats">
 }
+
+const terminalMessageStatuses = new Set<Doc<"messages">["status"]>([
+  "completed",
+  "aborted",
+  "failed",
+])
+
+const terminalRunStatuses = new Set<Doc<"generationRuns">["status"]>([
+  "completed",
+  "aborted",
+  "failed",
+])
+
+const terminalToolInvocationStatuses = new Set<
+  Doc<"toolInvocations">["status"]
+>(["denied", "completed", "failed"])
 
 function truncatePreview(value: unknown): string | undefined {
   if (value === undefined) return undefined
@@ -209,7 +241,30 @@ function applyApprovalResponseToParts(
   })
 }
 
-async function denyPendingApprovalsForChat(
+export function resolveCanonicalApprovalDecision(
+  approval: StoredApprovalDecision,
+  response: ApprovalResponse
+): CanonicalApprovalDecision {
+  if (approval.status === "pending") {
+    throw new Error("Approval has not been resolved")
+  }
+  if (approval.status === "expired") {
+    throw new Error("Approval has expired")
+  }
+
+  const approved = approval.status === "approved"
+  if (response.approved !== approved) {
+    throw new Error("Approval response does not match stored approval decision")
+  }
+
+  return {
+    status: approval.status,
+    approved,
+    reason: approval.reason,
+  }
+}
+
+export async function denyPendingApprovalsForChat(
   ctx: MutationCtx,
   chatId: Id<"chats">,
   userId: Id<"users">,
@@ -225,12 +280,89 @@ async function denyPendingApprovalsForChat(
 
   for (const request of pending) {
     if (request.userId !== userId) continue
+    const run = await ctx.db.get(request.runId)
+    const assistantMessages = await ctx.db
+      .query("messages")
+      .withIndex("by_chat_role", (q) =>
+        q.eq("chatId", chatId).eq("role", "assistant")
+      )
+      .collect()
+    const associatedMessages = assistantMessages.filter(
+      (message) =>
+        message._id === request.assistantMessageId ||
+        message.generationRunId === request.runId
+    )
+    const invocationCandidates = await ctx.db
+      .query("toolInvocations")
+      .withIndex("by_run_tool_call", (q) =>
+        q.eq("runId", request.runId).eq("toolCallId", request.toolCallId)
+      )
+      .collect()
+    const runInvocations = await ctx.db
+      .query("toolInvocations")
+      .withIndex("by_run", (q) => q.eq("runId", request.runId))
+      .collect()
+    const invocationIds = new Set<Id<"toolInvocations">>()
+    const associatedInvocations = [...invocationCandidates, ...runInvocations]
+      .filter((invocation) => {
+        if (invocationIds.has(invocation._id)) return false
+        if (invocation.chatId !== chatId) return false
+        const isAssociated =
+          invocation.toolCallId === request.toolCallId ||
+          invocation.approvalId === request._id ||
+          invocation.approvalRequestId === request.approvalId
+        if (!isAssociated) return false
+        invocationIds.add(invocation._id)
+        return true
+      })
+
     await ctx.db.patch(request._id, {
       status: "denied",
       resolvedAt: now,
       resolvedByUserId: userId,
       reason,
     })
+
+    for (const message of associatedMessages) {
+      await ctx.db.patch(message._id, {
+        parts: applyApprovalResponseToParts(message.parts, {
+          approvalId: request.approvalId,
+          toolCallId: request.toolCallId,
+          approved: false,
+          reason,
+        }),
+        ...(!terminalMessageStatuses.has(message.status)
+          ? { status: "aborted" as const, error: reason }
+          : {}),
+        updatedAt: now,
+      })
+    }
+
+    for (const invocation of associatedInvocations) {
+      if (terminalToolInvocationStatuses.has(invocation.status)) continue
+      await ctx.db.patch(invocation._id, {
+        status: "denied",
+        approvalId: request._id,
+        approvalRequestId: request.approvalId,
+        completedAt: now,
+        updatedAt: now,
+      })
+    }
+
+    if (
+      run &&
+      run.chatId === chatId &&
+      (run.userId === undefined || run.userId === userId) &&
+      !terminalRunStatuses.has(run.status)
+    ) {
+      await ctx.db.patch(request.runId, {
+        status: "aborted",
+        error: reason,
+        completedAt: now,
+        updatedAt: now,
+        activeStreamId: undefined,
+      })
+    }
   }
 }
 
@@ -267,21 +399,18 @@ async function applyApprovalResponses(
       throw new Error("Approval not found")
     }
 
-    if (approval.status === "pending") {
-      await ctx.db.patch(approval._id, {
-        status: response.approved ? "approved" : "denied",
-        resolvedAt: now,
-        resolvedByUserId: owner.user._id,
-        reason: response.reason ?? approval.reason,
-      })
-    }
+    const canonicalDecision = resolveCanonicalApprovalDecision(approval, response)
 
     const message = findMessageByUiId(messages, response.messageId)
     if (!message || message.chatId !== owner.chat._id) {
       throw new Error("Approval message not found")
     }
 
-    const nextParts = applyApprovalResponseToParts(message.parts, response)
+    const nextParts = applyApprovalResponseToParts(message.parts, {
+      ...response,
+      approved: canonicalDecision.approved,
+      reason: canonicalDecision.reason,
+    })
     await ctx.db.patch(message._id, {
       parts: nextParts,
       status: "streaming",
@@ -298,7 +427,7 @@ async function applyApprovalResponses(
       .unique()
     if (invocation) {
       await ctx.db.patch(invocation._id, {
-        status: response.approved ? "approved" : "denied",
+        status: canonicalDecision.status,
         approvalId: approval._id,
         approvalRequestId: approval.approvalId,
         updatedAt: now,
@@ -306,7 +435,7 @@ async function applyApprovalResponses(
     }
 
     await ctx.db.patch(approval.runId, {
-      status: response.approved ? "completed" : "aborted",
+      status: canonicalDecision.approved ? "completed" : "aborted",
       completedAt: now,
       updatedAt: now,
       activeStreamId: undefined,
@@ -924,7 +1053,9 @@ export const recordToolInvocations = mutation({
         approvalRequestId: invocation.approvalRequestId,
         stepNumber: args.stepNumber,
         completedAt:
-          invocation.status === "completed" || invocation.status === "failed"
+          invocation.status === "completed" ||
+          invocation.status === "failed" ||
+          invocation.status === "denied"
             ? now
             : undefined,
         updatedAt: now,

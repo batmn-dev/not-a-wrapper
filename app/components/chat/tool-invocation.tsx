@@ -24,7 +24,7 @@ import {
 import type { ToolUIPart } from "ai"
 import { getStaticToolName } from "ai"
 import { AnimatePresence, motion } from "framer-motion"
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 
 type ToolInvocationProps = {
   toolInvocations: ToolUIPart[]
@@ -409,6 +409,8 @@ function SingleToolCard({
   onToolApproval?: ToolApprovalHandler
 }) {
   const [isExpanded, setIsExpanded] = useState(defaultOpen)
+  const [isSubmittingApproval, setIsSubmittingApproval] = useState(false)
+  const isSubmittingApprovalRef = useRef(false)
   const { state, toolCallId } = toolData
   const toolName = getStaticToolName(toolData)
   const streamMetadata: ToolInvocationStreamMetadata = {
@@ -488,6 +490,22 @@ function SingleToolCard({
       return { parsedResult: null, parseError: "Failed to parse result" }
     }
   }, [isCompleted, result])
+
+  const submitToolApproval = async (approved: boolean, reason?: string) => {
+    if (!onToolApproval || !approvalId || isSubmittingApprovalRef.current) {
+      return
+    }
+
+    isSubmittingApprovalRef.current = true
+    setIsSubmittingApproval(true)
+
+    try {
+      await onToolApproval(approvalId, approved, reason)
+    } finally {
+      isSubmittingApprovalRef.current = false
+      setIsSubmittingApproval(false)
+    }
+  }
 
   // Format the arguments for display
   const formattedArgs = args
@@ -769,10 +787,10 @@ function SingleToolCard({
                       <button
                         type="button"
                         className="inline-flex h-8 items-center rounded-md border border-green-200 bg-green-50 px-3 text-sm font-medium text-green-700 transition-colors hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400 dark:hover:bg-green-950/50"
-                        disabled={!onToolApproval}
+                        disabled={!onToolApproval || isSubmittingApproval}
                         onClick={(event) => {
                           event.preventDefault()
-                          void onToolApproval?.(approvalId, true)
+                          void submitToolApproval(true)
                         }}
                       >
                         Approve
@@ -780,14 +798,10 @@ function SingleToolCard({
                       <button
                         type="button"
                         className="inline-flex h-8 items-center rounded-md border border-red-200 bg-red-50 px-3 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50"
-                        disabled={!onToolApproval}
+                        disabled={!onToolApproval || isSubmittingApproval}
                         onClick={(event) => {
                           event.preventDefault()
-                          void onToolApproval?.(
-                            approvalId,
-                            false,
-                            "Denied by user"
-                          )
+                          void submitToolApproval(false, "Denied by user")
                         }}
                       >
                         Deny

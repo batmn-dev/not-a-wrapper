@@ -5,6 +5,7 @@ import type {
   TextStreamPart,
   ToolSet,
   ToolUIPart,
+  StreamTextTransform,
 } from "ai"
 import { getStaticToolName, isStaticToolUIPart } from "ai"
 import { api } from "@/convex/_generated/api"
@@ -196,6 +197,11 @@ export function createDurableSnapshotTracker(
     }
     if (writeInFlight) {
       pending = true
+      if (force) {
+        const activeWrite = writeInFlight
+        await activeWrite
+        return persist(true)
+      }
       return
     }
 
@@ -225,10 +231,10 @@ export function createDurableSnapshotTracker(
   const onChunk = (chunk: TextStreamPart<ToolSet>) => {
     if (chunk.type === "text-delta") {
       text += chunk.text
-      void persist(false)
+      void persist(false).catch(() => {})
     } else if (chunk.type === "reasoning-delta") {
       reasoning += chunk.text
-      void persist(false)
+      void persist(false).catch(() => {})
     }
   }
 
@@ -261,6 +267,43 @@ export type ToolInvocationForPersistence = {
   approvalRequestId?: string
 }
 
+type RuntimeApprovalPersistenceDecision = {
+  reason?: string
+  riskClass?: string
+}
+
+type RuntimeApprovalPersistenceRunState = {
+  runId: Id<"generationRuns">
+  assistantMessageId: Id<"messages">
+}
+
+type ToolApprovalRequestPersistenceArgs = {
+  chatId: Id<"chats">
+  runId: Id<"generationRuns">
+  assistantMessageId: Id<"messages">
+  toolCallId: string
+  toolName: string
+  source: ToolSource
+  reason?: string
+  riskClass: string
+  inputPreview?: string
+  approvalId: string
+}
+
+type RuntimeApprovalPersistenceTransformOptions = {
+  chatId: string
+  convexToken: string
+  durableRunState: RuntimeApprovalPersistenceRunState
+  runtimeApprovalByToolName: ReadonlyMap<string, RuntimeApprovalPersistenceDecision>
+  mcpToolServerMap: ReadonlyMap<string, unknown>
+  allToolMetadata: ReadonlyMap<string, { source?: ToolSource }>
+  approvalWritePromises: Array<Promise<unknown>>
+  requestId: string
+  persistApprovalRequest?: (
+    args: ToolApprovalRequestPersistenceArgs
+  ) => Promise<unknown>
+}
+
 export function sourceForTool(
   toolName: string,
   options: {
@@ -270,6 +313,80 @@ export function sourceForTool(
 ): ToolSource {
   if (options.mcpToolServerMap.has(toolName)) return "mcp"
   return options.allToolMetadata.get(toolName)?.source ?? "platform"
+}
+
+export function createRuntimeApprovalPersistenceTransform({
+  chatId,
+  convexToken,
+  durableRunState,
+  runtimeApprovalByToolName,
+  mcpToolServerMap,
+  allToolMetadata,
+  approvalWritePromises,
+  requestId,
+  persistApprovalRequest,
+}: RuntimeApprovalPersistenceTransformOptions): StreamTextTransform<ToolSet> {
+  const persist =
+    persistApprovalRequest ??
+    ((args: ToolApprovalRequestPersistenceArgs) =>
+      fetchMutation(api.chatRuntime.createToolApprovalRequest, args, {
+        token: convexToken,
+      }))
+
+  return () =>
+    new TransformStream<TextStreamPart<ToolSet>, TextStreamPart<ToolSet>>({
+      async transform(chunk, controller) {
+        if (chunk.type === "tool-approval-request") {
+          const toolName = chunk.toolCall.toolName
+          const decision = runtimeApprovalByToolName.get(toolName)
+          const source = sourceForTool(toolName, {
+            mcpToolServerMap,
+            allToolMetadata,
+          })
+          const inputPreview = (() => {
+            try {
+              return JSON.stringify(chunk.toolCall.input).slice(0, 500)
+            } catch {
+              return String(chunk.toolCall.input).slice(0, 500)
+            }
+          })()
+
+          const approvalWrite = (async () =>
+            persist({
+              chatId: chatId as Id<"chats">,
+              runId: durableRunState.runId,
+              assistantMessageId: durableRunState.assistantMessageId,
+              toolCallId: chunk.toolCall.toolCallId,
+              toolName,
+              source,
+              reason: decision?.reason,
+              riskClass: decision?.riskClass ?? "unknown",
+              inputPreview,
+              approvalId: chunk.approvalId,
+            }))()
+
+          approvalWritePromises.push(approvalWrite)
+
+          try {
+            await approvalWrite
+          } catch (error) {
+            console.warn(
+              JSON.stringify({
+                _tag: "tool_approval_request_write_failed",
+                requestId,
+                chatId,
+                toolCallId: chunk.toolCall.toolCallId,
+                toolName,
+                error: error instanceof Error ? error.message : String(error),
+              })
+            )
+            throw error
+          }
+        }
+
+        controller.enqueue(chunk)
+      },
+    })
 }
 
 export function uiMessageChunkToPayload(

@@ -28,8 +28,6 @@ import {
   convertToModelMessages,
   validateUIMessages,
   type ModelMessage,
-  type StreamTextTransform,
-  type TextStreamPart,
 } from "ai"
 import type { ProviderOptions } from "@ai-sdk/provider-utils"
 import { fetchMutation, fetchQuery } from "convex/nextjs"
@@ -94,6 +92,7 @@ import {
 import {
   countToolParts,
   createDurableSnapshotTracker,
+  createRuntimeApprovalPersistenceTransform,
   extractApprovalResponses,
   getFinalAssistantText,
   getLatestUserMessage,
@@ -330,78 +329,6 @@ function wrapToolsWithRuntimeApproval(
   }
 
   return wrapped as ToolSet
-}
-
-function createRuntimeApprovalPersistenceTransform({
-  chatId,
-  convexToken,
-  durableRunState,
-  runtimeApprovalByToolName,
-  mcpToolServerMap,
-  allToolMetadata,
-  approvalWritePromises,
-  requestId,
-}: {
-  chatId: string
-  convexToken: string
-  durableRunState: DurableRunState
-  runtimeApprovalByToolName: ReadonlyMap<string, RuntimeApprovalDecision>
-  mcpToolServerMap: ReadonlyMap<string, unknown>
-  allToolMetadata: ReadonlyMap<string, { source?: ToolSource }>
-  approvalWritePromises: Array<Promise<unknown>>
-  requestId: string
-}): StreamTextTransform<ToolSet> {
-  return () =>
-    new TransformStream<TextStreamPart<ToolSet>, TextStreamPart<ToolSet>>({
-      transform(chunk, controller) {
-        if (chunk.type === "tool-approval-request") {
-          const toolName = chunk.toolCall.toolName
-          const decision = runtimeApprovalByToolName.get(toolName)
-          const source = sourceForTool(toolName, {
-            mcpToolServerMap,
-            allToolMetadata,
-          })
-          const inputPreview = (() => {
-            try {
-              return JSON.stringify(chunk.toolCall.input).slice(0, 500)
-            } catch {
-              return String(chunk.toolCall.input).slice(0, 500)
-            }
-          })()
-
-          const approvalWrite = fetchMutation(
-            api.chatRuntime.createToolApprovalRequest,
-            {
-              chatId: chatId as Id<"chats">,
-              runId: durableRunState.runId,
-              assistantMessageId: durableRunState.assistantMessageId,
-              toolCallId: chunk.toolCall.toolCallId,
-              toolName,
-              source,
-              reason: decision?.reason,
-              riskClass: decision?.riskClass ?? "unknown",
-              inputPreview,
-              approvalId: chunk.approvalId,
-            },
-            { token: convexToken }
-          ).catch((error: unknown) => {
-            console.warn(
-              JSON.stringify({
-                _tag: "tool_approval_request_write_failed",
-                requestId,
-                chatId,
-                toolCallId: chunk.toolCall.toolCallId,
-                toolName,
-                error: error instanceof Error ? error.message : String(error),
-              })
-            )
-          })
-          approvalWritePromises.push(approvalWrite)
-        }
-
-        controller.enqueue(chunk)
-      },
-    })
 }
 
 function countWarningsByCode(warnings: AdaptationWarning[]): Record<string, number> {
@@ -2554,19 +2481,6 @@ export async function POST(req: Request) {
       },
       runGeneration
     )
-
-    void result.consumeStream({
-      onError: (error: unknown) => {
-        console.warn(
-          JSON.stringify({
-            _tag: "chat_background_consume_error",
-            requestId,
-            chatId,
-            error: error instanceof Error ? error.message : String(error),
-          })
-        )
-      },
-    })
 
     return result.toUIMessageStreamResponse({
       originalMessages: durableRunState?.originalMessages ?? validatedMessages,
