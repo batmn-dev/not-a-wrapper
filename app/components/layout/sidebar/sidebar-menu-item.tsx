@@ -5,6 +5,7 @@ import Link from "next/link"
 import {
   forwardRef,
   type ComponentPropsWithoutRef,
+  type MouseEventHandler,
   type ReactNode,
   type Ref,
 } from "react"
@@ -21,8 +22,8 @@ type SidebarMenuItemProps = Omit<
   label: string
   /** Navigation href - renders as Link if provided */
   href?: string
-  /** Click handler - used when no href (e.g., opens modal) */
-  onClick?: ComponentPropsWithoutRef<"button">["onClick"]
+  /** Click handler - used for navigation close behavior or button actions */
+  onClick?: MouseEventHandler<HTMLAnchorElement | HTMLButtonElement>
   /** Trailing content (keyboard shortcuts, badges, etc.) */
   trailing?: ReactNode
   /** Test ID for e2e testing */
@@ -105,6 +106,7 @@ export const SidebarMenuItem = forwardRef<
     <Link
       ref={ref as Ref<HTMLAnchorElement>}
       href={href}
+      onClick={onClick as MouseEventHandler<HTMLAnchorElement> | undefined}
       className={combinedClassName}
       data-testid={testId}
       data-sidebar-item="true"
@@ -119,7 +121,7 @@ export const SidebarMenuItem = forwardRef<
       {...buttonProps}
       ref={ref as Ref<HTMLButtonElement>}
       type="button"
-      onClick={onClick}
+      onClick={onClick as MouseEventHandler<HTMLButtonElement> | undefined}
       className={combinedClassName}
       data-testid={testId}
       data-sidebar-item="true"
