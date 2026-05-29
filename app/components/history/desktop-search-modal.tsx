@@ -83,10 +83,10 @@ export function DesktopSearchModal({
   const filteredChats = useMemo(() => {
     if (!normalizedQuery) return searchableChats
 
-    return searchableChats.filter((chat) =>
+    return chatHistory.filter((chat) =>
       (chat.title || "").toLowerCase().includes(normalizedQuery)
     )
-  }, [normalizedQuery, searchableChats])
+  }, [chatHistory, normalizedQuery, searchableChats])
 
   const pinnedChats = useMemo(
     () => searchableChats.filter((chat) => chat.pinned),
