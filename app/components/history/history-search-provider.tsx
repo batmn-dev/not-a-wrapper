@@ -15,7 +15,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { CommandHistory } from "./command-history"
+import { DesktopSearchModal } from "./desktop-search-modal"
 import { DrawerHistory } from "./drawer-history"
 
 type HistorySearchContextValue = {
@@ -94,15 +94,11 @@ export function HistorySearchProvider({ children }: { children: ReactNode }) {
           isAuthenticated={isAuthenticated}
         />
       ) : (
-        <CommandHistory
+        <DesktopSearchModal
           chatHistory={chats}
-          onSaveEdit={handleSaveEdit}
-          onConfirmDelete={handleConfirmDelete}
+          currentChatId={chatId}
           isOpen={isOpen}
-          setIsOpen={setIsOpen}
           onOpenChange={setIsOpen}
-          hasPopover={false}
-          enableShortcut={false}
           isAuthenticated={isAuthenticated}
         />
       )}

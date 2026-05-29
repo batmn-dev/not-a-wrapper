@@ -115,12 +115,12 @@ export function FeedbackForm({ authUserId, onClose }: FeedbackFormProps) {
               transition={{
                 duration: 0,
               }}
-              className="text-muted-foreground pointer-events-none absolute top-3.5 left-4 text-sm leading-[1.4] select-none"
+              className="text-muted-foreground pointer-events-none absolute top-3.5 left-4 text-base leading-[1.4] select-none"
             >
               What would make Not A Wrapper better for you?
             </motion.span>
             <textarea
-              className="text-foreground h-full w-full resize-none rounded-md bg-transparent px-4 py-3.5 text-sm outline-hidden"
+              className="text-foreground h-full w-full resize-none rounded-md bg-transparent px-4 py-3.5 text-base outline-hidden"
               autoFocus
               onChange={(e) => setFeedback(e.target.value)}
               disabled={status === "submitting"}
