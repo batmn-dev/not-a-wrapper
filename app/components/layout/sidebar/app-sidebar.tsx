@@ -232,7 +232,7 @@ function MobileAppSidebarDrawer() {
         side="left"
         showCloseButton={false}
         className="bg-sidebar text-sidebar-foreground h-full min-w-0 gap-0 overflow-hidden p-0"
-        style={{ width: "min(100vw, 20rem)" }}
+        style={{ width: "100dvw", maxWidth: "none" }}
       >
         <SheetHeader className="sr-only">
           <SheetTitle>Sidebar</SheetTitle>
