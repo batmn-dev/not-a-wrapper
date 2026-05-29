@@ -163,7 +163,7 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
             ref={inputRef}
             value={editTitle}
             onChange={handleInputChange}
-            className="text-primary max-h-full w-full bg-transparent text-sm focus:outline-none"
+            className="text-primary max-h-full w-full bg-transparent text-base focus:outline-none"
             onKeyDown={handleKeyDown}
             autoFocus
           />

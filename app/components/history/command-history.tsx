@@ -101,7 +101,7 @@ function CommandItemEdit({
       <Input
         value={editTitle}
         onChange={(e) => setEditTitle(e.target.value)}
-        className="border-input h-8 flex-1 rounded border bg-transparent px-3 py-1 text-sm"
+        className="border-input h-8 flex-1 rounded border bg-transparent px-3 py-1"
         autoFocus
         onKeyDown={(e) => {
           if (e.key === "Enter") {

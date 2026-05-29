@@ -164,7 +164,7 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
             ref={inputRef}
             value={editTitle}
             onChange={handleInputChange}
-            className="text-primary flex-1 bg-transparent text-sm font-medium focus:outline-none"
+            className="text-primary flex-1 bg-transparent text-base font-medium focus:outline-none"
             onKeyDown={handleKeyDown}
             autoFocus
           />

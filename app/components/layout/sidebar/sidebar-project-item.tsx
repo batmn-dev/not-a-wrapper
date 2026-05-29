@@ -188,7 +188,7 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
             ref={inputRef}
             value={editName}
             onChange={handleInputChange}
-            className="text-primary max-h-full w-full bg-transparent text-sm focus:outline-none"
+            className="text-primary max-h-full w-full bg-transparent text-base focus:outline-none"
             onKeyDown={handleKeyDown}
             autoFocus
           />
