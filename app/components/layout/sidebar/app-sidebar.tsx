@@ -1,7 +1,6 @@
 "use client"
 
 import { AuthModalTrigger } from "@/app/auth/_components/auth-modal"
-import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { useScrollAttributes } from "@/app/hooks/use-scroll-attributes"
 import { NawIcon } from "@/components/icons/naw"
 import { Button } from "@/components/ui/button"
@@ -19,6 +18,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import {
   Sidebar,
   SIDEBAR_CONTAINER_ID,
@@ -61,29 +67,20 @@ import { SidebarMenuItem } from "./sidebar-menu-item"
 import { SidebarProject } from "./sidebar-project"
 
 export function AppSidebar() {
-  const isMobile = useBreakpoint(768)
-  const { setOpenMobile, state, toggleSidebar } = useSidebar()
-  const { isHistoryOpen } = useHistorySearch()
+  const { isMobile } = useSidebar()
+
+  if (isMobile) {
+    return <MobileAppSidebarDrawer />
+  }
+
+  return <DesktopAppSidebar />
+}
+
+function DesktopAppSidebar() {
+  const { state, toggleSidebar } = useSidebar()
+  const sidebarData = useAppSidebarData()
   const isCollapsed = state === "collapsed"
-  const { chats, pinnedChats, isLoading } = useChats()
-  const { user } = useUser()
-  const params = useParams<{ chatId: string }>()
-  const pathname = usePathname()
-  const currentChatId = params.chatId
-  const isLoggedIn = !!user
-  const isNewChatActive = pathname === "/"
-
-  // Single scroll container ref for unified scroll model
-  const scrollRef = useRef<HTMLElement>(null)
   const railPopupOpenRef = useRef(false)
-  // Zero-rerender scroll tracking via data attributes
-  useScrollAttributes(scrollRef)
-
-  const nonPinnedChats = useMemo(
-    () => chats.filter((chat) => !chat.pinned && !chat.project_id),
-    [chats]
-  )
-  const hasChats = chats.length > 0
   const railInteractiveSelector =
     "a,button,input,textarea,select,[role='button'],[data-sidebar-item]"
   const railPopupSelector =
@@ -134,7 +131,7 @@ export function AppSidebar() {
         aria-hidden={!isCollapsed}
         inert={!isCollapsed ? true : undefined}
         onPointerDown={(event) => {
-          if (!isCollapsed || isMobile) return
+          if (!isCollapsed) return
           if (
             railPopupOpenRef.current ||
             document.querySelector(railPopupSelector)
@@ -150,17 +147,7 @@ export function AppSidebar() {
       >
         {/* Header */}
         <div className="flex h-(--sidebar-header-height) w-full items-center justify-center">
-          {isMobile ? (
-            <button
-              type="button"
-              onClick={() => setOpenMobile(false)}
-              className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex size-9 items-center justify-center rounded-md bg-transparent focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-            >
-              <Icon icon={RiCloseLine} slotSize={24} />
-            </button>
-          ) : (
-            <CollapsedHeaderToggle />
-          )}
+          <CollapsedHeaderToggle />
         </div>
 
         {/* Action buttons */}
@@ -171,9 +158,9 @@ export function AppSidebar() {
             label="New chat"
             href="/"
             shortcut="⇧⌘O"
-            isActive={isNewChatActive}
+            isActive={sidebarData.isNewChatActive}
           />
-          {isLoggedIn ? (
+          {sidebarData.isLoggedIn ? (
             <HistoryTrigger
               hasSidebar={false}
               trigger={
@@ -181,15 +168,13 @@ export function AppSidebar() {
                   icon={<Icon icon={RiSearchLine} slotSize={20} />}
                   label="Search"
                   shortcut="⌘K"
-                  isActive={isHistoryOpen}
+                  isActive={sidebarData.isHistoryOpen}
                 />
               }
               hasPopover={false}
             />
           ) : (
-            <SignedOutCollapsedSearchPopover
-              onOpenChange={setRailPopupOpen}
-            />
+            <SignedOutCollapsedSearchPopover onOpenChange={setRailPopupOpen} />
           )}
         </div>
 
@@ -199,7 +184,7 @@ export function AppSidebar() {
         {/* Footer */}
         <div className="mb-1 w-full px-1.5">
           <CollapsedUserAvatar
-            user={user}
+            user={sidebarData.user}
             onSignedOutMenuOpenChange={setRailPopupOpen}
           />
         </div>
@@ -225,215 +210,302 @@ export function AppSidebar() {
         // `inert` prevents focus/interaction when hidden (ChatGPT pattern)
         inert={isCollapsed ? true : undefined}
       >
-        <h2 className="sr-only">Chat history</h2>
-
-        {/* Single unified scroll container (ChatGPT pattern) */}
-        <nav
-          ref={scrollRef}
-          className="group/scrollport relative flex h-full w-full flex-1 flex-col overflow-y-auto"
-          aria-label="Chat history"
-        >
-          {/* === STICKY HEADER === */}
-          <div
-            className={cn(
-              "bg-sidebar sticky top-0 z-30",
-              // Shadow only on SHORT viewports where actions scroll away (ChatGPT pattern)
-              "not-tall:group-data-[scrolled-from-top]/scrollport:shadow-[inset_0_-1px_0_0_var(--sidebar-border)]"
-            )}
-          >
-            <div className="px-2">
-              <div className="flex h-(--sidebar-header-height) items-center justify-between">
-                <Link
-                  href="/"
-                  onClick={isMobile ? () => setOpenMobile(false) : undefined}
-                  className="hover:bg-accent flex h-9 w-9 items-center justify-center rounded-lg"
-                  data-sidebar-item="true"
-                  aria-label="Home"
-                >
-                  <NawIcon className="size-5" />
-                </Link>
-                {isMobile ? (
-                  <button
-                    type="button"
-                    onClick={() => setOpenMobile(false)}
-                    className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex size-9 items-center justify-center rounded-md bg-transparent focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-                  >
-                    <Icon icon={RiCloseLine} slotSize={20} />
-                  </button>
-                ) : (
-                  <Tooltip disableHoverablePopup>
-                    <TooltipTrigger
-                      render={
-                        <SidebarTrigger className="cursor-w-resize rtl:cursor-e-resize" />
-                      }
-                    />
-                    <TooltipContent side="bottom" align="center">
-                      Close sidebar ⇧⌘S
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* === STICKY ACTION BUTTONS === */}
-          {/* Conditionally sticky: pinned on tall viewports, scrolls on short ones (ChatGPT pattern) */}
-          <div
-            className={cn(
-              "bg-sidebar z-20 px-0 pt-(--sidebar-section-first-margin-top)",
-              "tall:sticky tall:top-(--sidebar-header-height)",
-              "not-tall:relative"
-            )}
-          >
-            <div className="flex w-full flex-col items-start gap-0">
-              <SidebarMenuItem
-                icon={<Icon icon={RiAddCircleLine} slotSize={20} />}
-                activeIcon={<Icon icon={RiAddCircleFill} slotSize={20} />}
-                label="New chat"
-                href="/"
-                testId="new-chat-button"
-                isActive={isNewChatActive}
-                trailing={
-                  <KbdGroup>
-                    <Kbd label="Shift">⇧</Kbd>
-                    <Kbd label="Command">⌘</Kbd>
-                    <Kbd>O</Kbd>
-                  </KbdGroup>
-                }
-              />
-              {isLoggedIn ? (
-                <HistoryTrigger
-                  hasSidebar={false}
-                  trigger={
-                    <SidebarMenuItem
-                      icon={<Icon icon={RiSearchLine} slotSize={20} />}
-                      label="Search"
-                      isActive={isHistoryOpen}
-                      trailing={
-                        <KbdGroup>
-                          <Kbd label="Command">⌘</Kbd>
-                          <Kbd>K</Kbd>
-                        </KbdGroup>
-                      }
-                    />
-                  }
-                  hasPopover={false}
-                />
-              ) : (
-                <SignedOutSidebarSearchPopover />
-              )}
-            </div>
-            {/* Solid bg mask below sticky actions — hides scroll seam (ChatGPT pattern) */}
-            <div
-              className={cn(
-                "pointer-events-none absolute inset-x-0 -bottom-1.5 h-1.5",
-                "bg-sidebar",
-                "opacity-0 will-change-[opacity]",
-                "group-data-[scrolled-from-top]/scrollport:opacity-100"
-              )}
-              aria-hidden="true"
-            />
-          </div>
-
-          {/* === SCROLLABLE CONTENT === */}
-          <div className="px-0">
-            {/* Project and chat lists */}
-            <SidebarProject isAuthenticated={isLoggedIn} />
-            {isLoading ? (
-              <div className="h-full" />
-            ) : hasChats ? (
-              <div className="space-y-4">
-                {pinnedChats.length > 0 && (
-                  <SidebarList
-                    key="pinned"
-                    title="Pinned"
-                    items={pinnedChats}
-                    currentChatId={currentChatId}
-                    storageKey="sidebar-section-pinned"
-                  />
-                )}
-                {nonPinnedChats.length > 0 && (
-                  <SidebarList
-                    title="Chats"
-                    items={nonPinnedChats}
-                    currentChatId={currentChatId}
-                    storageKey="sidebar-section-your-chats"
-                  />
-                )}
-              </div>
-            ) : null}
-          </div>
-
-          {/* Grow spacer — pushes footer to bottom when content is short (ChatGPT pattern) */}
-          <div className="grow" />
-
-          {!isLoggedIn && (
-            <div className="bg-sidebar z-20 flex w-full flex-col items-start gap-0 px-0 pb-3">
-              <SidebarMenuItem
-                icon={<Icon icon={RiSparklingLine} slotSize={20} />}
-                label="See plans and pricing"
-              />
-              <SidebarMenuItem
-                icon={<Icon icon={RiSettings3Line} slotSize={20} />}
-                label="Settings"
-              />
-              <SignedOutHelpPopover />
-            </div>
-          )}
-
-          {isLoggedIn && (
-            <div
-              className={cn(
-                "pointer-events-none sticky z-40 flex shrink-0 flex-col justify-end",
-                "opacity-0 group-data-[scrolled-from-end]/scrollport:opacity-100",
-                "motion-safe:transition-opacity motion-safe:duration-150"
-              )}
-              style={{
-                bottom: "calc(3.75rem - 1px)",
-                marginTop: "-4px",
-                height: "4px",
-                maskImage:
-                  "linear-gradient(to top, transparent 25%, white 75%)",
-              }}
-              aria-hidden="true"
-            >
-              <div
-                className="bg-sidebar-border sticky w-full"
-                style={{ bottom: "3.75rem", height: "1px" }}
-              />
-            </div>
-          )}
-
-          {/* === STICKY FOOTER === */}
-          {isLoggedIn ? (
-            <div className="bg-sidebar sticky bottom-0 z-30 px-2 py-1.5 empty:hidden">
-              <UserMenu variant="sidebar" />
-            </div>
-          ) : (
-            <div className="bg-sidebar border-sidebar-border sticky bottom-0 z-30 border-t p-5">
-              <div className="mb-6 text-sm whitespace-normal">
-                <p className="text-sidebar-foreground mb-4 font-semibold">
-                  Get responses tailored to you
-                </p>
-                <p className="text-muted-foreground leading-5 text-pretty">
-                  Log in to save chats, add files, use more models, BYOK, and
-                  more.
-                </p>
-              </div>
-              <div className="-mx-1.5">
-                <AuthModalTrigger
-                  variant="outline"
-                  size="lg"
-                  className="h-11 w-full px-4 text-sm font-medium"
-                >
-                  <span>Log in</span>
-                </AuthModalTrigger>
-              </div>
-            </div>
-          )}
-        </nav>
+        <SidebarExpandedNav data={sidebarData} />
       </div>
     </Sidebar>
+  )
+}
+
+function MobileAppSidebarDrawer() {
+  const { openMobile, setOpenMobile } = useSidebar()
+  const sidebarData = useAppSidebarData()
+  const closeMobileSidebar = React.useCallback(() => {
+    setOpenMobile(false)
+  }, [setOpenMobile])
+
+  return (
+    <Sheet open={openMobile} onOpenChange={setOpenMobile}>
+      <SheetContent
+        id={SIDEBAR_CONTAINER_ID}
+        data-sidebar="sidebar"
+        data-mobile="true"
+        side="left"
+        showCloseButton={false}
+        className="bg-sidebar text-sidebar-foreground h-full min-w-0 gap-0 overflow-hidden p-0"
+        style={{ width: "100dvw", maxWidth: "none" }}
+      >
+        <SheetHeader className="sr-only">
+          <SheetTitle>Sidebar</SheetTitle>
+          <SheetDescription>Displays the mobile sidebar.</SheetDescription>
+        </SheetHeader>
+        <div className="flex h-full w-full min-w-0 flex-col overflow-hidden">
+          <SidebarExpandedNav
+            data={sidebarData}
+            onMobileClose={closeMobileSidebar}
+          />
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function useAppSidebarData() {
+  const { isHistoryOpen } = useHistorySearch()
+  const { chats, pinnedChats, isLoading } = useChats()
+  const { user } = useUser()
+  const params = useParams<{ chatId: string }>()
+  const pathname = usePathname()
+  const currentChatId = params.chatId
+  const isLoggedIn = !!user
+  const isNewChatActive = pathname === "/"
+
+  const nonPinnedChats = useMemo(
+    () => chats.filter((chat) => !chat.pinned && !chat.project_id),
+    [chats]
+  )
+  const hasChats = chats.length > 0
+
+  return {
+    currentChatId,
+    hasChats,
+    isHistoryOpen,
+    isLoading,
+    isLoggedIn,
+    isNewChatActive,
+    nonPinnedChats,
+    pinnedChats,
+    user,
+  }
+}
+
+type AppSidebarData = ReturnType<typeof useAppSidebarData>
+
+function SidebarExpandedNav({
+  data,
+  onMobileClose,
+}: {
+  data: AppSidebarData
+  onMobileClose?: () => void
+}) {
+  const scrollRef = useRef<HTMLElement>(null)
+  // Zero-rerender scroll tracking via data attributes
+  useScrollAttributes(scrollRef)
+
+  return (
+    <>
+      <h2 className="sr-only">Chat history</h2>
+
+      {/* Single unified scroll container (ChatGPT pattern) */}
+      <nav
+        ref={scrollRef}
+        className="group/scrollport relative flex h-full w-full min-w-0 flex-1 flex-col overflow-y-auto"
+        aria-label="Chat history"
+      >
+        {/* === STICKY HEADER === */}
+        <div
+          className={cn(
+            "bg-sidebar sticky top-0 z-30",
+            // Shadow only on SHORT viewports where actions scroll away (ChatGPT pattern)
+            "not-tall:group-data-[scrolled-from-top]/scrollport:shadow-[inset_0_-1px_0_0_var(--sidebar-border)]"
+          )}
+        >
+          <div className="px-2">
+            <div className="flex h-(--sidebar-header-height) items-center justify-between">
+              <Link
+                href="/"
+                onClick={onMobileClose}
+                className="hover:bg-accent flex h-9 w-9 items-center justify-center rounded-lg"
+                data-sidebar-item="true"
+                aria-label="Home"
+              >
+                <NawIcon className="size-5" />
+              </Link>
+              {onMobileClose ? (
+                <button
+                  type="button"
+                  onClick={onMobileClose}
+                  className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex size-9 items-center justify-center rounded-md bg-transparent focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                  aria-label="Close sidebar"
+                >
+                  <Icon icon={RiCloseLine} slotSize={20} />
+                </button>
+              ) : (
+                <Tooltip disableHoverablePopup>
+                  <TooltipTrigger
+                    render={
+                      <SidebarTrigger className="cursor-w-resize rtl:cursor-e-resize" />
+                    }
+                  />
+                  <TooltipContent side="bottom" align="center">
+                    Close sidebar ⇧⌘S
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* === STICKY ACTION BUTTONS === */}
+        {/* Conditionally sticky: pinned on tall viewports, scrolls on short ones (ChatGPT pattern) */}
+        <div
+          className={cn(
+            "bg-sidebar z-20 px-0 pt-(--sidebar-section-first-margin-top)",
+            "tall:sticky tall:top-(--sidebar-header-height)",
+            "not-tall:relative"
+          )}
+        >
+          <div className="flex w-full flex-col items-start gap-0">
+            <SidebarMenuItem
+              icon={<Icon icon={RiAddCircleLine} slotSize={20} />}
+              activeIcon={<Icon icon={RiAddCircleFill} slotSize={20} />}
+              label="New chat"
+              href="/"
+              testId="new-chat-button"
+              isActive={data.isNewChatActive}
+              onClick={onMobileClose}
+              trailing={
+                <KbdGroup>
+                  <Kbd label="Shift">⇧</Kbd>
+                  <Kbd label="Command">⌘</Kbd>
+                  <Kbd>O</Kbd>
+                </KbdGroup>
+              }
+            />
+            {data.isLoggedIn ? (
+              <HistoryTrigger
+                hasSidebar={false}
+                trigger={
+                  <SidebarMenuItem
+                    icon={<Icon icon={RiSearchLine} slotSize={20} />}
+                    label="Search"
+                    isActive={data.isHistoryOpen}
+                    trailing={
+                      <KbdGroup>
+                        <Kbd label="Command">⌘</Kbd>
+                        <Kbd>K</Kbd>
+                      </KbdGroup>
+                    }
+                  />
+                }
+                hasPopover={false}
+              />
+            ) : (
+              <SignedOutSidebarSearchPopover />
+            )}
+          </div>
+          {/* Solid bg mask below sticky actions — hides scroll seam (ChatGPT pattern) */}
+          <div
+            className={cn(
+              "pointer-events-none absolute inset-x-0 -bottom-1.5 h-1.5",
+              "bg-sidebar",
+              "opacity-0 will-change-[opacity]",
+              "group-data-[scrolled-from-top]/scrollport:opacity-100"
+            )}
+            aria-hidden="true"
+          />
+        </div>
+
+        {/* === SCROLLABLE CONTENT === */}
+        <div className="px-0">
+          {/* Project and chat lists */}
+          <SidebarProject isAuthenticated={data.isLoggedIn} />
+          {data.isLoading ? (
+            <div className="h-full" />
+          ) : data.hasChats ? (
+            <div className="space-y-4">
+              {data.pinnedChats.length > 0 && (
+                <SidebarList
+                  key="pinned"
+                  title="Pinned"
+                  items={data.pinnedChats}
+                  currentChatId={data.currentChatId}
+                  storageKey="sidebar-section-pinned"
+                />
+              )}
+              {data.nonPinnedChats.length > 0 && (
+                <SidebarList
+                  title="Chats"
+                  items={data.nonPinnedChats}
+                  currentChatId={data.currentChatId}
+                  storageKey="sidebar-section-your-chats"
+                />
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Grow spacer — pushes footer to bottom when content is short (ChatGPT pattern) */}
+        <div className="grow" />
+
+        {!data.isLoggedIn && (
+          <div className="bg-sidebar z-20 flex w-full flex-col items-start gap-0 px-0 pb-3">
+            <SidebarMenuItem
+              aria-disabled="true"
+              disabled
+              icon={<Icon icon={RiSparklingLine} slotSize={20} />}
+              label="See plans and pricing"
+            />
+            <SidebarMenuItem
+              aria-disabled="true"
+              disabled
+              icon={<Icon icon={RiSettings3Line} slotSize={20} />}
+              label="Settings"
+            />
+            <SignedOutHelpPopover />
+          </div>
+        )}
+
+        {data.isLoggedIn && (
+          <div
+            className={cn(
+              "pointer-events-none sticky z-40 flex shrink-0 flex-col justify-end",
+              "opacity-0 group-data-[scrolled-from-end]/scrollport:opacity-100",
+              "motion-safe:transition-opacity motion-safe:duration-150"
+            )}
+            style={{
+              bottom: "calc(3.75rem - 1px)",
+              marginTop: "-4px",
+              height: "4px",
+              maskImage: "linear-gradient(to top, transparent 25%, white 75%)",
+            }}
+            aria-hidden="true"
+          >
+            <div
+              className="bg-sidebar-border sticky w-full"
+              style={{ bottom: "3.75rem", height: "1px" }}
+            />
+          </div>
+        )}
+
+        {/* === STICKY FOOTER === */}
+        {data.isLoggedIn ? (
+          <div className="bg-sidebar sticky bottom-0 z-30 px-2 py-1.5 empty:hidden">
+            <UserMenu variant="sidebar" />
+          </div>
+        ) : (
+          <div className="bg-sidebar border-sidebar-border sticky bottom-0 z-30 border-t p-5">
+            <div className="mb-6 text-sm whitespace-normal">
+              <p className="text-sidebar-foreground mb-4 font-semibold">
+                Get responses tailored to you
+              </p>
+              <p className="text-muted-foreground leading-5 text-pretty">
+                Log in to save chats, add files, use more models, BYOK, and
+                more.
+              </p>
+            </div>
+            <div className="-mx-1.5">
+              <AuthModalTrigger
+                variant="outline"
+                size="lg"
+                className="h-11 w-full px-4 text-sm font-medium"
+              >
+                <span>Log in</span>
+              </AuthModalTrigger>
+            </div>
+          </div>
+        )}
+      </nav>
+    </>
   )
 }
 
@@ -660,7 +732,7 @@ function SignedOutCollapsedAccountPopover({
             data-sidebar-item="true"
             data-testid="accounts-profile-button"
             className={cn(
-              "menu-item-hoverable mx-auto flex h-10 w-10 items-center justify-center rounded-xl text-primary",
+              "menu-item-hoverable text-primary mx-auto flex h-10 w-10 items-center justify-center rounded-xl",
               "hover:bg-accent focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
               open && "bg-accent"
             )}

@@ -40,7 +40,7 @@ function ScrollButtonInner({
       onClick={() => scrollToBottom()}
       {...props}
     >
-      <Icon icon={RiArrowDownLine} slotSize={20} />
+      <Icon icon={RiArrowDownLine} slotSize={20} glyphSize={22} />
     </Button>
   )
 }

@@ -5,6 +5,7 @@ import Link from "next/link"
 import {
   forwardRef,
   type ComponentPropsWithoutRef,
+  type MouseEventHandler,
   type ReactNode,
   type Ref,
 } from "react"
@@ -21,8 +22,8 @@ type SidebarMenuItemProps = Omit<
   label: string
   /** Navigation href - renders as Link if provided */
   href?: string
-  /** Click handler - used when no href (e.g., opens modal) */
-  onClick?: ComponentPropsWithoutRef<"button">["onClick"]
+  /** Click handler - used for navigation close behavior or button actions */
+  onClick?: MouseEventHandler<HTMLAnchorElement | HTMLButtonElement>
   /** Trailing content (keyboard shortcuts, badges, etc.) */
   trailing?: ReactNode
   /** Test ID for e2e testing */
@@ -41,6 +42,8 @@ const baseClassName = cn(
   "gap-(--sidebar-item-gap) px-2.5 py-1.5 pointer-coarse:py-3",
   // Native buttons default to cursor: default; sidebar rows should feel clickable.
   "cursor-pointer",
+  "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-primary",
+  "aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-transparent aria-disabled:hover:text-primary",
   // Colors (instant hover — no transition)
   "text-primary hover:bg-accent/80 hover:text-foreground",
   // Focus states
@@ -105,6 +108,7 @@ export const SidebarMenuItem = forwardRef<
     <Link
       ref={ref as Ref<HTMLAnchorElement>}
       href={href}
+      onClick={onClick as MouseEventHandler<HTMLAnchorElement> | undefined}
       className={combinedClassName}
       data-testid={testId}
       data-sidebar-item="true"
@@ -119,7 +123,7 @@ export const SidebarMenuItem = forwardRef<
       {...buttonProps}
       ref={ref as Ref<HTMLButtonElement>}
       type="button"
-      onClick={onClick}
+      onClick={onClick as MouseEventHandler<HTMLButtonElement> | undefined}
       className={combinedClassName}
       data-testid={testId}
       data-sidebar-item="true"
