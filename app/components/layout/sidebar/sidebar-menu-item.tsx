@@ -42,6 +42,8 @@ const baseClassName = cn(
   "gap-(--sidebar-item-gap) px-2.5 py-1.5 pointer-coarse:py-3",
   // Native buttons default to cursor: default; sidebar rows should feel clickable.
   "cursor-pointer",
+  "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-primary",
+  "aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-transparent aria-disabled:hover:text-primary",
   // Colors (instant hover — no transition)
   "text-primary hover:bg-accent/80 hover:text-foreground",
   // Focus states

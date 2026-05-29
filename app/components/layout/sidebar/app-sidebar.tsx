@@ -440,10 +440,14 @@ function SidebarExpandedNav({
         {!data.isLoggedIn && (
           <div className="bg-sidebar z-20 flex w-full flex-col items-start gap-0 px-0 pb-3">
             <SidebarMenuItem
+              aria-disabled="true"
+              disabled
               icon={<Icon icon={RiSparklingLine} slotSize={20} />}
               label="See plans and pricing"
             />
             <SidebarMenuItem
+              aria-disabled="true"
+              disabled
               icon={<Icon icon={RiSettings3Line} slotSize={20} />}
               label="Settings"
             />
