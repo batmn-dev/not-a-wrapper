@@ -20,22 +20,36 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
 import { initialAuthActionState, type AuthActionState } from "../_lib/schemas"
 import { useAuthFormAction } from "./use-auth-form-action"
 import Link from "next/link"
 import { useActionState } from "react"
+
+const authFieldClassName = "gap-2"
+const authLabelClassName = "px-5 text-sm font-medium text-muted-foreground"
+const authInputClassName =
+  "h-[52px] rounded-full border border-border px-5 text-base shadow-none placeholder:text-muted-foreground focus-visible:border-foreground focus-visible:ring-1 focus-visible:ring-foreground aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:ring-destructive"
+const authFieldErrorClassName = "px-5"
+const authLinkClassName =
+  "font-medium text-foreground underline-offset-4 hover:underline"
+const authSecondaryLinkClassName =
+  "text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+const authPrimaryButtonClassName =
+  "h-[52px] w-full rounded-full bg-[#0d0d0d] text-base text-white shadow-none hover:bg-[#2f2f2f] dark:bg-white dark:text-black dark:hover:bg-white/90"
 
 function FormMessage({ state }: { state: AuthActionState }) {
   if (!state.message) return null
 
   return (
     <p
-      role="status"
-      className={
+      role={state.status === "success" ? "status" : "alert"}
+      className={cn(
+        "rounded-lg px-3 py-2 text-center text-sm",
         state.status === "success"
-          ? "rounded-md bg-primary/10 px-3 py-2 text-sm text-primary"
-          : "rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
-      }
+          ? "bg-primary/10 text-primary"
+          : "bg-destructive/10 text-destructive"
+      )}
     >
       {state.message}
     </p>
@@ -50,7 +64,11 @@ function SubmitButton({
   isPending: boolean
 }) {
   return (
-    <Button type="submit" className="w-full" size="lg" disabled={isPending}>
+    <Button
+      type="submit"
+      className={authPrimaryButtonClassName}
+      disabled={isPending}
+    >
       {isPending ? "Please wait..." : children}
     </Button>
   )
@@ -76,29 +94,42 @@ export function LoginForm({
   )
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} className="space-y-5" noValidate>
       <FormMessage state={state} />
 
-      <Field data-invalid={!!state.fieldErrors?.email}>
-        <FieldLabel htmlFor="email">Email</FieldLabel>
+      <Field
+        className={authFieldClassName}
+        data-invalid={!!state.fieldErrors?.email}
+      >
+        <FieldLabel className={authLabelClassName} htmlFor="email">
+          Email
+        </FieldLabel>
         <Input
           id="email"
           name="email"
           type="email"
           autoComplete="email"
+          className={authInputClassName}
           defaultValue={initialEmail}
           aria-invalid={!!state.fieldErrors?.email}
           required
         />
-        <FieldError>{state.fieldErrors?.email}</FieldError>
+        <FieldError className={authFieldErrorClassName}>
+          {state.fieldErrors?.email}
+        </FieldError>
       </Field>
 
-      <Field data-invalid={!!state.fieldErrors?.password}>
+      <Field
+        className={authFieldClassName}
+        data-invalid={!!state.fieldErrors?.password}
+      >
         <div className="flex items-center justify-between gap-3">
-          <FieldLabel htmlFor="password">Password</FieldLabel>
+          <FieldLabel className={authLabelClassName} htmlFor="password">
+            Password
+          </FieldLabel>
           <Link
             href="/auth/forgot-password"
-            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            className={authSecondaryLinkClassName}
           >
             Forgot password?
           </Link>
@@ -108,10 +139,13 @@ export function LoginForm({
           name="password"
           type="password"
           autoComplete="current-password"
+          className={authInputClassName}
           aria-invalid={!!state.fieldErrors?.password}
           required
         />
-        <FieldError>{state.fieldErrors?.password}</FieldError>
+        <FieldError className={authFieldErrorClassName}>
+          {state.fieldErrors?.password}
+        </FieldError>
       </Field>
 
       <SubmitButton isPending={isPending}>Log in</SubmitButton>
@@ -120,7 +154,7 @@ export function LoginForm({
         New here?{" "}
         <Link
           href="/auth/sign-up"
-          className="text-foreground underline-offset-4 hover:underline"
+          className={authLinkClassName}
         >
           Create an account
         </Link>
@@ -136,59 +170,93 @@ export function SignUpForm() {
   )
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} className="space-y-5" noValidate>
       <FormMessage state={state} />
 
-      <Field data-invalid={!!state.fieldErrors?.name}>
-        <FieldLabel htmlFor="name">Name</FieldLabel>
+      <Field
+        className={authFieldClassName}
+        data-invalid={!!state.fieldErrors?.name}
+      >
+        <FieldLabel className={authLabelClassName} htmlFor="name">
+          Name
+        </FieldLabel>
         <Input
           id="name"
           name="name"
           type="text"
           autoComplete="name"
+          className={authInputClassName}
           aria-invalid={!!state.fieldErrors?.name}
         />
-        <FieldError>{state.fieldErrors?.name}</FieldError>
+        <FieldError className={authFieldErrorClassName}>
+          {state.fieldErrors?.name}
+        </FieldError>
       </Field>
 
-      <Field data-invalid={!!state.fieldErrors?.email}>
-        <FieldLabel htmlFor="email">Email</FieldLabel>
+      <Field
+        className={authFieldClassName}
+        data-invalid={!!state.fieldErrors?.email}
+      >
+        <FieldLabel className={authLabelClassName} htmlFor="email">
+          Email
+        </FieldLabel>
         <Input
           id="email"
           name="email"
           type="email"
           autoComplete="email"
+          className={authInputClassName}
           aria-invalid={!!state.fieldErrors?.email}
           required
         />
-        <FieldError>{state.fieldErrors?.email}</FieldError>
+        <FieldError className={authFieldErrorClassName}>
+          {state.fieldErrors?.email}
+        </FieldError>
       </Field>
 
-      <Field data-invalid={!!state.fieldErrors?.password}>
-        <FieldLabel htmlFor="password">Password</FieldLabel>
+      <Field
+        className={authFieldClassName}
+        data-invalid={!!state.fieldErrors?.password}
+      >
+        <FieldLabel className={authLabelClassName} htmlFor="password">
+          Password
+        </FieldLabel>
         <Input
           id="password"
           name="password"
           type="password"
           autoComplete="new-password"
+          className={authInputClassName}
           aria-invalid={!!state.fieldErrors?.password}
           required
         />
-        <FieldDescription>Use at least 8 characters.</FieldDescription>
-        <FieldError>{state.fieldErrors?.password}</FieldError>
+        <FieldDescription className="px-5">
+          Use at least 8 characters.
+        </FieldDescription>
+        <FieldError className={authFieldErrorClassName}>
+          {state.fieldErrors?.password}
+        </FieldError>
       </Field>
 
-      <Field data-invalid={!!state.fieldErrors?.confirmPassword}>
-        <FieldLabel htmlFor="confirmPassword">Confirm password</FieldLabel>
+      <Field
+        className={authFieldClassName}
+        data-invalid={!!state.fieldErrors?.confirmPassword}
+      >
+        <FieldLabel className={authLabelClassName} htmlFor="confirmPassword">
+          Confirm password
+        </FieldLabel>
         <Input
           id="confirmPassword"
           name="confirmPassword"
           type="password"
           autoComplete="new-password"
+          className={authInputClassName}
           aria-invalid={!!state.fieldErrors?.confirmPassword}
           required
         />
-        <FieldError>{state.fieldErrors?.confirmPassword}</FieldError>
+        <FieldError className={authFieldErrorClassName}>
+          {state.fieldErrors?.confirmPassword}
+        </FieldError>
       </Field>
 
       <SubmitButton isPending={isPending}>Create account</SubmitButton>
@@ -197,7 +265,7 @@ export function SignUpForm() {
         Already have an account?{" "}
         <Link
           href="/auth/login"
-          className="text-foreground underline-offset-4 hover:underline"
+          className={authLinkClassName}
         >
           Log in
         </Link>
@@ -213,20 +281,28 @@ export function ForgotPasswordForm() {
   )
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} className="space-y-5" noValidate>
       <FormMessage state={state} />
 
-      <Field data-invalid={!!state.fieldErrors?.email}>
-        <FieldLabel htmlFor="email">Email</FieldLabel>
+      <Field
+        className={authFieldClassName}
+        data-invalid={!!state.fieldErrors?.email}
+      >
+        <FieldLabel className={authLabelClassName} htmlFor="email">
+          Email
+        </FieldLabel>
         <Input
           id="email"
           name="email"
           type="email"
           autoComplete="email"
+          className={authInputClassName}
           aria-invalid={!!state.fieldErrors?.email}
           required
         />
-        <FieldError>{state.fieldErrors?.email}</FieldError>
+        <FieldError className={authFieldErrorClassName}>
+          {state.fieldErrors?.email}
+        </FieldError>
       </Field>
 
       <SubmitButton isPending={isPending}>Send reset link</SubmitButton>
@@ -235,7 +311,7 @@ export function ForgotPasswordForm() {
         Remembered it?{" "}
         <Link
           href="/auth/login"
-          className="text-foreground underline-offset-4 hover:underline"
+          className={authLinkClassName}
         >
           Log in
         </Link>
@@ -251,7 +327,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
   )
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} className="space-y-5" noValidate>
       <input type="hidden" name="token" value={token} />
       <FormMessage state={state} />
 
@@ -259,31 +335,49 @@ export function ResetPasswordForm({ token }: { token: string }) {
         <FieldError>{state.fieldErrors.token}</FieldError>
       ) : null}
 
-      <Field data-invalid={!!state.fieldErrors?.password}>
-        <FieldLabel htmlFor="password">New password</FieldLabel>
+      <Field
+        className={authFieldClassName}
+        data-invalid={!!state.fieldErrors?.password}
+      >
+        <FieldLabel className={authLabelClassName} htmlFor="password">
+          New password
+        </FieldLabel>
         <Input
           id="password"
           name="password"
           type="password"
           autoComplete="new-password"
+          className={authInputClassName}
           aria-invalid={!!state.fieldErrors?.password}
           required
         />
-        <FieldDescription>Use at least 8 characters.</FieldDescription>
-        <FieldError>{state.fieldErrors?.password}</FieldError>
+        <FieldDescription className="px-5">
+          Use at least 8 characters.
+        </FieldDescription>
+        <FieldError className={authFieldErrorClassName}>
+          {state.fieldErrors?.password}
+        </FieldError>
       </Field>
 
-      <Field data-invalid={!!state.fieldErrors?.confirmPassword}>
-        <FieldLabel htmlFor="confirmPassword">Confirm password</FieldLabel>
+      <Field
+        className={authFieldClassName}
+        data-invalid={!!state.fieldErrors?.confirmPassword}
+      >
+        <FieldLabel className={authLabelClassName} htmlFor="confirmPassword">
+          Confirm password
+        </FieldLabel>
         <Input
           id="confirmPassword"
           name="confirmPassword"
           type="password"
           autoComplete="new-password"
+          className={authInputClassName}
           aria-invalid={!!state.fieldErrors?.confirmPassword}
           required
         />
-        <FieldError>{state.fieldErrors?.confirmPassword}</FieldError>
+        <FieldError className={authFieldErrorClassName}>
+          {state.fieldErrors?.confirmPassword}
+        </FieldError>
       </Field>
 
       <SubmitButton isPending={isPending}>Reset password</SubmitButton>
@@ -298,7 +392,7 @@ export function VerifyEmailForm({ email }: { email?: string }) {
   )
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} className="space-y-5" noValidate>
       <FormMessage state={state} />
 
       {email ? (
@@ -307,8 +401,13 @@ export function VerifyEmailForm({ email }: { email?: string }) {
         </p>
       ) : null}
 
-      <Field data-invalid={!!state.fieldErrors?.code}>
-        <FieldLabel htmlFor="code">Verification code</FieldLabel>
+      <Field
+        className={authFieldClassName}
+        data-invalid={!!state.fieldErrors?.code}
+      >
+        <FieldLabel className="sr-only" htmlFor="code">
+          Verification code
+        </FieldLabel>
         <InputOTP
           id="code"
           name="code"
@@ -316,16 +415,22 @@ export function VerifyEmailForm({ email }: { email?: string }) {
           inputMode="numeric"
           pattern="[0-9]*"
           aria-invalid={!!state.fieldErrors?.code}
-          containerClassName="justify-center"
+          containerClassName="justify-center gap-2"
           required
         >
-          <InputOTPGroup>
+          <InputOTPGroup className="gap-2">
             {Array.from({ length: 6 }).map((_, index) => (
-              <InputOTPSlot key={index} index={index} />
+              <InputOTPSlot
+                key={index}
+                index={index}
+                className="h-12 w-11 rounded-xl border text-base shadow-none first:rounded-xl last:rounded-xl"
+              />
             ))}
           </InputOTPGroup>
         </InputOTP>
-        <FieldError>{state.fieldErrors?.code}</FieldError>
+        <FieldError className="text-center">
+          {state.fieldErrors?.code}
+        </FieldError>
       </Field>
 
       <SubmitButton isPending={isPending}>Verify email</SubmitButton>
@@ -334,7 +439,7 @@ export function VerifyEmailForm({ email }: { email?: string }) {
         Need a new code?{" "}
         <Link
           href="/auth/login"
-          className="text-foreground underline-offset-4 hover:underline"
+          className={authLinkClassName}
         >
           Sign in again
         </Link>

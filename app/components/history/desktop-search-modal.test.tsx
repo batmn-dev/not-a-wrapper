@@ -16,6 +16,10 @@ vi.mock("next/navigation", () => ({
   }),
 }))
 
+vi.mock("@/app/auth/actions", () => ({
+  requestMagicAuthCode: vi.fn(),
+}))
+
 vi.mock("next/link", () => ({
   default: ({
     href,

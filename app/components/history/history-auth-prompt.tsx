@@ -1,8 +1,7 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
+import { AuthModalTrigger } from "@/app/auth/_components/auth-modal"
 import { cn } from "@/lib/utils"
-import Link from "next/link"
 
 type HistoryAuthPromptProps = {
   className?: string
@@ -25,19 +24,17 @@ export function HistoryAuthPrompt({ className }: HistoryAuthPromptProps) {
         </p>
       </div>
       <div className="mt-5 flex flex-col gap-3">
-        <Button
+        <AuthModalTrigger
           className="h-[58px] w-full rounded-full bg-[#0d0d0d] text-base text-white shadow-none hover:bg-[#2f2f2f] dark:bg-white dark:text-black dark:hover:bg-white/90"
-          render={<Link href="/login" />}
         >
           Log in
-        </Button>
-        <Button
+        </AuthModalTrigger>
+        <AuthModalTrigger
           variant="outline"
           className="h-[58px] w-full rounded-full border border-border bg-background text-base font-medium shadow-none hover:bg-muted/50"
-          render={<Link href="/sign-up" />}
         >
           Create account
-        </Button>
+        </AuthModalTrigger>
       </div>
     </div>
   )

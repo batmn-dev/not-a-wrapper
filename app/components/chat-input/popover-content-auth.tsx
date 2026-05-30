@@ -1,5 +1,6 @@
 "use client"
 
+import { AuthModal } from "@/app/auth/_components/auth-modal"
 import { Button } from "@/components/ui/button"
 import { PopoverContent } from "@/components/ui/popover"
 import { APP_NAME } from "@/lib/config"
@@ -15,60 +16,41 @@ export function PopoverContentAuth({
   align = "start",
   ...props
 }: PopoverContentAuthProps = {}) {
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const handleLogin = () => {
-    try {
-      setIsLoading(true)
-      setError(null)
-      window.location.assign("/login")
-    } catch (err: unknown) {
-      console.error("Error starting sign in:", err)
-      setError(
-        (err as Error).message ||
-          "An unexpected error occurred. Please try again."
-      )
-      setIsLoading(false)
-    }
-  }
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
 
   return (
-    <PopoverContent
-      className={cn("w-[300px] overflow-hidden rounded-2xl p-0", className)}
-      side={side}
-      align={align}
-      {...props}
-    >
-      <Image
-        src="/banner_forest.jpg"
-        alt={`calm paint generate by ${APP_NAME}`}
-        width={300}
-        height={128}
-        className="h-32 w-full object-cover"
-      />
-      {error && (
-        <div className="bg-destructive/10 text-destructive rounded-md p-3 text-sm">
-          {error}
+    <>
+      <PopoverContent
+        className={cn("w-[300px] overflow-hidden rounded-2xl p-0", className)}
+        side={side}
+        align={align}
+        {...props}
+      >
+        <Image
+          src="/banner_forest.jpg"
+          alt={`calm paint generate by ${APP_NAME}`}
+          width={300}
+          height={128}
+          className="h-32 w-full object-cover"
+        />
+        <div className="p-3">
+          <p className="text-primary mb-1 text-base font-medium">
+            Login to try more features for free
+          </p>
+          <p className="text-muted-foreground mb-5 text-base">
+            Add files, use more models, BYOK, and more.
+          </p>
+          <Button
+            variant="secondary"
+            className="w-full text-base"
+            size="lg"
+            onClick={() => setIsAuthModalOpen(true)}
+          >
+            <span>Log in or sign up</span>
+          </Button>
         </div>
-      )}
-      <div className="p-3">
-        <p className="text-primary mb-1 text-base font-medium">
-          Login to try more features for free
-        </p>
-        <p className="text-muted-foreground mb-5 text-base">
-          Add files, use more models, BYOK, and more.
-        </p>
-        <Button
-          variant="secondary"
-          className="w-full text-base"
-          size="lg"
-          onClick={handleLogin}
-          disabled={isLoading}
-        >
-          <span>{isLoading ? "Connecting..." : "Login"}</span>
-        </Button>
-      </div>
-    </PopoverContent>
+      </PopoverContent>
+      <AuthModal open={isAuthModalOpen} onOpenChange={setIsAuthModalOpen} />
+    </>
   )
 }

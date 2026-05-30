@@ -14,7 +14,11 @@ const convex = new ConvexReactClient(convexUrl)
 
 function useAuthFromAuthKit() {
   const { user, loading: isLoading } = useAuth()
-  const { getAccessToken, refresh } = useAccessToken()
+  const {
+    getAccessToken,
+    loading: isAccessTokenLoading,
+    refresh,
+  } = useAccessToken()
   const isAuthenticated = !!user
 
   const fetchAccessToken = useCallback(
@@ -37,7 +41,11 @@ function useAuthFromAuthKit() {
     [getAccessToken, refresh, user]
   )
 
-  return { isLoading, isAuthenticated, fetchAccessToken }
+  return {
+    isLoading: isLoading || (isAuthenticated && isAccessTokenLoading),
+    isAuthenticated,
+    fetchAccessToken,
+  }
 }
 
 export function ConvexClientProvider({ children }: { children: ReactNode }) {

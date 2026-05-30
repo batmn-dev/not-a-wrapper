@@ -9,7 +9,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Icon } from "@/components/ui/icon"
-import { toast } from "@/components/ui/toast"
 import {
   Tooltip,
   TooltipContent,
@@ -17,7 +16,6 @@ import {
 } from "@/components/ui/tooltip"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useMessages } from "@/lib/chat-store/messages/provider"
-import { clearAllIndexedDBStores } from "@/lib/chat-store/persist"
 import { useUser } from "@/lib/user-store/provider"
 import { RiLogoutBoxRLine } from "@remixicon/react"
 import { useAuth } from "@workos-inc/authkit-nextjs/components"
@@ -25,6 +23,7 @@ import { useState } from "react"
 import { AppInfoDialog, AppInfoMenuItem } from "./app-info/app-info-trigger"
 import { FeedbackDialog, FeedbackMenuItem } from "./feedback/feedback-trigger"
 import { SettingsDialog, SettingsMenuItem } from "./settings/settings-trigger"
+import { signOutAndClearLocalState } from "./sign-out"
 
 type UserMenuProps = {
   variant?: "header" | "sidebar" | "sidebar-collapsed"
@@ -46,15 +45,7 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
   const isSidebarCollapsed = variant === "sidebar-collapsed"
 
   const handleSignOut = async () => {
-    try {
-      await resetMessages()
-      await resetChats()
-      await clearAllIndexedDBStores()
-      await signOut({ returnTo: "/" })
-    } catch (e) {
-      console.error("Sign out failed:", e)
-      toast({ title: "Failed to sign out", status: "error" })
-    }
+    await signOutAndClearLocalState({ resetMessages, resetChats, signOut })
   }
 
   // Shared dropdown menu content
