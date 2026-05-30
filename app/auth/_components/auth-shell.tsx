@@ -13,13 +13,16 @@ type AuthShellProps = {
 
 export function AuthShell({ title, description, children }: AuthShellProps) {
   return (
-    <main className="relative flex min-h-svh flex-col bg-background text-foreground">
+    <main
+      id="main"
+      className="bg-background text-foreground relative flex min-h-svh w-full flex-1 flex-col"
+    >
       <header className="absolute top-0 left-0 z-10 flex h-14 items-center px-4">
         <Button
           variant="ghost"
           size="sm"
           render={<Link href="/" />}
-          className="gap-2 rounded-full px-3 text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground hover:text-foreground gap-2 rounded-full px-3"
         >
           <Icon icon={RiArrowLeftLine} slotSize={18} />
           <span>Back</span>
@@ -33,7 +36,7 @@ export function AuthShell({ title, description, children }: AuthShellProps) {
               {title}
             </h1>
             {description ? (
-              <p className="mx-auto max-w-[320px] text-base leading-6 text-muted-foreground">
+              <p className="text-muted-foreground mx-auto max-w-[320px] text-base leading-6">
                 {description}
               </p>
             ) : null}
@@ -41,16 +44,16 @@ export function AuthShell({ title, description, children }: AuthShellProps) {
 
           {children}
 
-          <footer className="mt-12 flex items-center justify-center gap-3 text-sm text-muted-foreground">
+          <footer className="text-muted-foreground mt-12 flex items-center justify-center gap-3 text-sm">
             <a
-              className="underline-offset-4 hover:text-foreground hover:underline"
+              className="hover:text-foreground underline-offset-4 hover:underline"
               href={`${APP_DOMAIN}/terms`}
             >
               Terms of Use
             </a>
             <span aria-hidden="true">|</span>
             <a
-              className="underline-offset-4 hover:text-foreground hover:underline"
+              className="hover:text-foreground underline-offset-4 hover:underline"
               href={`${APP_DOMAIN}/privacy`}
             >
               Privacy Policy
