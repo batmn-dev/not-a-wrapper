@@ -31,14 +31,13 @@ export async function signOutAndClearLocalState({
   signOut,
   returnTo = "/",
 }: SignOutAndClearLocalStateOptions) {
-  try {
-    await resetMessages()
-    await resetChats()
-    await clearAllIndexedDBStores()
-  } catch (error) {
-    console.error("Sign out cleanup failed:", error)
-    toast({ title: "Failed to sign out", status: "error" })
-    return
+  const cleanupTasks = [resetMessages, resetChats, clearAllIndexedDBStores]
+  for (const cleanupTask of cleanupTasks) {
+    try {
+      await cleanupTask()
+    } catch (error) {
+      console.error("Sign out cleanup failed:", error)
+    }
   }
 
   try {

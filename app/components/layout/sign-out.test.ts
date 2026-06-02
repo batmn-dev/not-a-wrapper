@@ -65,17 +65,16 @@ describe("signOutAndClearLocalState", () => {
     })
   })
 
-  it("does not sign out when local cleanup fails", async () => {
+  it("continues sign-out when local cleanup fails", async () => {
     const options = createOptions()
     options.resetMessages.mockRejectedValueOnce(new Error("cleanup failed"))
 
     await signOutAndClearLocalState(options)
 
-    expect(options.signOut).not.toHaveBeenCalled()
-    expect(toast).toHaveBeenCalledWith({
-      title: "Failed to sign out",
-      status: "error",
-    })
+    expect(options.resetChats).toHaveBeenCalledOnce()
+    expect(clearAllIndexedDBStores).toHaveBeenCalledOnce()
+    expect(options.signOut).toHaveBeenCalledWith({ returnTo: "/" })
+    expect(toast).not.toHaveBeenCalled()
   })
 })
 

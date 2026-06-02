@@ -71,7 +71,7 @@ Use this skill when configuring, debugging, or extending reasoning/thinking supp
 type ModelConfig = {
   // ...
   reasoningText?: boolean    // Enables the providerOptions block
-  thinkingMode?: "adaptive"  // Opus 4.6+ dynamic allocation
+  thinkingMode?: "adaptive"  // Opus/Sonnet 4.6 dynamic allocation
                 | "enabled"  // Fixed budget via budgetTokens
                 | undefined  // Inherits from reasoningText (backward compat)
   maxOutput?: number         // Max output tokens (used for budget calculation)
@@ -81,8 +81,8 @@ type ModelConfig = {
 | Field | Purpose | Example Values |
 |-------|---------|---------------|
 | `reasoningText` | Gates the entire providerOptions reasoning block | `true` for reasoning models |
-| `thinkingMode` | Anthropic-specific: controls adaptive vs fixed budget | `"adaptive"` (Opus 4.6), undefined (Sonnet 4.5) |
-| `maxOutput` | Max output tokens, used for budget sizing | `128000` (Opus 4.6), `64000` (Sonnet 4.5) |
+| `thinkingMode` | Anthropic-specific: controls adaptive vs fixed budget | `"adaptive"` (Opus 4.6, Sonnet 4.6), undefined (Haiku 4.5) |
+| `maxOutput` | Max output tokens, used for budget sizing | `128000` (Opus 4.6), `64000` (Sonnet 4.6, Haiku 4.5) |
 
 ## Provider-Specific Configuration
 
@@ -90,7 +90,7 @@ type ModelConfig = {
 
 The Anthropic configuration has the most complexity due to adaptive thinking, model-specific budgets, and a search tool interaction workaround.
 
-**Path 1: Adaptive mode (Opus 4.6+, no search)**
+**Path 1: Adaptive mode (Opus 4.6 and Sonnet 4.6, no search)**
 
 ```typescript
 if (modelConfig.thinkingMode === "adaptive" && !shouldInjectSearch) {
@@ -100,7 +100,7 @@ if (modelConfig.thinkingMode === "adaptive" && !shouldInjectSearch) {
 }
 ```
 
-The model dynamically allocates between thinking and text output. Recommended by Anthropic for Opus 4.6+.
+The model dynamically allocates between thinking and text output. Recommended by Anthropic for Opus 4.6 and Sonnet 4.6.
 
 **Path 2: Search workaround (adaptive model + search active)**
 
@@ -318,7 +318,7 @@ This is an SDK limitation (not an Anthropic API limitation). When the SDK receiv
 **Do**
 - Set `reasoningText: true` in model config for all reasoning-capable models
 - Set `reasoningSummary: "auto"` in providerOptions for OpenAI reasoning models
-- Set `thinkingMode: "adaptive"` for Anthropic models that support it (Opus 4.6+)
+- Set `thinkingMode: "adaptive"` for Anthropic models that support it (Opus 4.6, Sonnet 4.6)
 - Test reasoning with and without search tools enabled (especially Anthropic)
 - Check the `phase` from `useReasoningPhase()` for rendering decisions
 
