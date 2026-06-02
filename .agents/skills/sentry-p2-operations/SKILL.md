@@ -53,7 +53,7 @@ Do all steps before editing files:
    - no unsafe prompt/tool input/output logging
 6. Run targeted context sweep before non-trivial changes:
    - search: `observability|sentry|telemetry|gen_ai|tracesSampler|chat_error_type|chat_tool_outcome`
-   - review relevant matches in `.agents/research/` and `.agents/plans/`
+   - review relevant matches in source, `docs/observability/`, and any user-provided external context
 
 If preflight finds conflicting guidance, pause and reconcile with canonical docs first.
 

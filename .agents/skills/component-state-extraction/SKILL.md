@@ -396,12 +396,12 @@ URL pattern: `site.com/path`
 
 ### Naming Convention
 
-Save to: `.agents/research/<feature>/[site]-[component]-state-reference.md`
+Save extraction artifacts outside this public repo, preferably in the private reference/research repository, unless the user explicitly asks for a repo-local file.
 
 Examples:
-- `chatgpt-composer-state-reference.md`
-- `chatgpt-sidebar-state-reference.md`
-- `claude-chat-button-state-reference.md`
+- `[site]-composer-state-reference.md`
+- `[site]-sidebar-state-reference.md`
+- `[site]-chat-button-state-reference.md`
 
 ---
 

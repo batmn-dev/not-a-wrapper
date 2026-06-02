@@ -17,10 +17,10 @@ Use this skill when configuring, debugging, or extending reasoning/thinking supp
 
 | Provider | providerOptions Key | Config Shape | Models |
 |----------|-------------------|--------------|--------|
-| Anthropic | `anthropic.thinking` | `{ type: "adaptive" }` or `{ type: "enabled", budgetTokens }` | Opus 4.6 (adaptive), Sonnet 4.5, Haiku 3.5 (enabled) |
+| Anthropic | `anthropic.thinking` | `{ type: "adaptive" }` or `{ type: "enabled", budgetTokens }` | Opus 4.6 (adaptive), Sonnet 4.6 (adaptive), Haiku 4.5 (enabled) |
 | Google | `google.thinkingConfig` | `{ includeThoughts: true }` | Gemini 2.5 Pro, Gemini 2.5 Flash |
-| OpenAI | `openai.reasoningEffort` + `openai.reasoningSummary` | `"medium"` + `"auto"` | GPT-5.2, o3, o4-mini |
-| xAI | `xai.reasoningEffort` | `"medium"` | Grok 2 |
+| OpenAI | `openai.reasoningEffort` + `openai.reasoningSummary` | `"medium"` + `"auto"` | GPT-5.4, GPT-5.4 Pro, GPT-5 Mini |
+| xAI | `xai.reasoningEffort` | `"medium"` | Grok 4.1 Fast |
 
 ## Reasoning Data Flow
 

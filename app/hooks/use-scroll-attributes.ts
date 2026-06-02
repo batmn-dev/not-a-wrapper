@@ -9,7 +9,7 @@ import { useEffect } from "react"
  * element based on scroll position. These attributes can be targeted with
  * Tailwind's `group-data-*` variants for CSS-only scroll indicators.
  *
- * Pattern borrowed from ChatGPT's sidebar implementation.
+ * Pattern borrowed from common scrollable sidebar behavior.
  *
  * @example
  * ```tsx

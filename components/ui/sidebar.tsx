@@ -241,7 +241,7 @@ function Sidebar({
       <div
         data-slot="sidebar-gap"
         className={cn(
-          // Slightly snappier timing mirrors ChatGPT's sidebar cadence without changing behavior.
+          // Slightly snappier timing keeps the sidebar responsive without changing behavior.
           "relative w-(--sidebar-width) bg-transparent motion-safe:transition-[width] motion-safe:duration-[220ms] motion-safe:ease-[cubic-bezier(.2,0,0,1)]",
           "group-data-[collapsible=offcanvas]:w-0",
           "group-data-[side=right]:rotate-180",

@@ -5,7 +5,7 @@ description: Verify reference-based UI implementations against extracted measure
 
 # Reference Implementation Verification
 
-**Use this skill when:** Implementing UI features based on reference designs (ChatGPT, competitor apps, design mockups, etc.)
+**Use this skill when:** Implementing UI features based on reference designs, competitor apps, design mockups, or captured measurements.
 
 **Purpose:** Ensure implementation matches extracted reference data through systematic measurement verification
 
@@ -115,7 +115,7 @@ sections.forEach((section, i) => {
 
 **Take comparison screenshots:**
 
-1. **Reference screenshot** (from ChatGPT/competitor)
+1. **Reference screenshot** (from the target reference or competitor)
 2. **Implementation screenshot** (from your app)
 3. **Overlay/side-by-side comparison**
 
@@ -149,7 +149,7 @@ sections.forEach((section, i) => {
 
 ## Example: Header Flex Layout Verification
 
-### Reference Data (Extracted from ChatGPT)
+### Reference Data (Extracted from Target Reference)
 
 ```markdown
 | Section | flex-grow | flex-basis | width (computed) |
@@ -293,7 +293,7 @@ This skill produces:
 # Verification Report: Sticky Header Implementation
 
 **Date:** 2026-02-20
-**Reference:** ChatGPT (chatgpt.com)
+**Reference:** Target reference implementation
 **Implementation:** Not A Wrapper
 
 ## Measurement Results

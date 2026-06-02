@@ -29,7 +29,7 @@ Launch these research threads in parallel:
 | A1: Codebase scan | Existing patterns, related files, dependencies | Read files, grep for patterns |
 | A2: External research | Best practices, library docs, API references | Web search, fetch docs |
 | A3: Constraint analysis | Security, performance, permissions, edge cases | Read `AGENTS.md`, config files |
-| A4: Prior art | Existing plans, related decisions | Read `.agents/plans/`, `.agents/research/` |
+| A4: Prior art | Existing docs, related decisions | Read repo docs, relevant skills, commit history, and user-provided context |
 
 **Parallelization rules:**
 - A1–A4 are independent — run all simultaneously
@@ -158,14 +158,12 @@ Run this validation checklist:
 
 ## Project Conventions
 
-- Plans live in `.agents/plans/` as flat markdown files
-- File names: `kebab-case-description.md`
-- Reference existing plans for format: `@.agents/plans/mcp-integration-plan.md` (gold standard)
+- Return plans directly in chat unless the user explicitly requests a file.
+- If a plan file is requested, use the user-specified path or ask for the destination before writing.
 - Plans reference skills when applicable: `@.agents/skills/convex-function/SKILL.md`
-- Cross-reference research for architectural context: `@.agents/research/`
+- Cross-reference repo docs, code paths, official docs, and user-provided research for architectural context.
 
 ## Additional Resources
 
 - For the full plan template, see [template.md](template.md)
-- For the project's development cycle, see `@.agents/workflows/development-cycle.md`
 - For permissions and constraints, see `@AGENTS.md`

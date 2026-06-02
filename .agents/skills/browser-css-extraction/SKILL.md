@@ -314,7 +314,7 @@ Total: 5 calls for both modes. Resist the temptation to combine steps 3+4.
 ### Mode Toggle Methods
 
 ```javascript
-// ChatGPT (class-based)
+// Class-based theme toggle
 document.documentElement.classList.toggle('dark');
 document.documentElement.classList.toggle('light');
 

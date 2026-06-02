@@ -54,7 +54,7 @@ const baseClassName = cn(
  * Unified sidebar menu item component.
  *
  * Features:
- * - Icon wrapper pattern (ChatGPT style) for consistent alignment
+ * - Icon wrapper pattern for consistent alignment
  * - motion-safe: transitions for reduced motion support
  * - CSS variables for spacing
  */
@@ -81,7 +81,7 @@ export const SidebarMenuItem = forwardRef<
 
   const content = (
     <>
-      {/* Icon wrapper (ChatGPT pattern) for consistent alignment */}
+      {/* Icon wrapper for consistent alignment */}
       <div className="flex shrink-0 items-center justify-center">
         {resolvedIcon}
       </div>
