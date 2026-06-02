@@ -41,7 +41,7 @@ export function Header({ hasSidebar }: { hasSidebar: boolean }) {
     >
       <div className="relative mx-auto flex h-full max-w-full items-center justify-between px-2 pointer-coarse:px-2.5">
         {/* LEFT SECTION - natural width, not flex-1 */}
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {/* Hide logo/text when sidebar is present on desktop (sidebar has its own home link) */}
           {!hasSidebar && (
             <Link
@@ -57,12 +57,12 @@ export function Header({ hasSidebar }: { hasSidebar: boolean }) {
         </div>
 
         {/* CENTER SECTION - flex-1 to fill remaining space */}
-        <div className="pointer-events-auto flex flex-1 items-center">
-          {isLoggedIn && <ModelSelectorHeader />}
+        <div className="pointer-events-auto flex min-w-0 flex-1 items-center">
+          <ModelSelectorHeader />
         </div>
 
         {/* RIGHT SECTION - natural width, not flex-1 */}
-        <div className="pointer-events-auto flex items-center justify-end gap-0">
+        <div className="pointer-events-auto flex shrink-0 items-center justify-end gap-0">
           {!isLoggedIn ? (
             <div className="flex items-center gap-2">
               <AuthModalTrigger variant="outline">Log in</AuthModalTrigger>

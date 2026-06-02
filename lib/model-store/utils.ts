@@ -1,4 +1,4 @@
-import { getDefaultModelForUser } from "@/lib/config"
+import { NON_AUTH_ALLOWED_MODELS, getDefaultModelForUser } from "@/lib/config"
 import { getModelInfo } from "@/lib/models"
 import { resolveModelId } from "@/lib/models/model-id-migration"
 import { ModelConfig } from "@/lib/models/types"
@@ -33,6 +33,25 @@ export function isModelVisibleInSelector(
   model: Pick<ModelConfig, "catalogStatus">
 ): boolean {
   return model.catalogStatus === "visible"
+}
+
+const NON_AUTH_ALLOWED_MODEL_IDS = new Set(
+  NON_AUTH_ALLOWED_MODELS.map((modelId) => resolveModelId(modelId))
+)
+
+export function isModelAllowedForAnonymous(modelId: string): boolean {
+  return NON_AUTH_ALLOWED_MODEL_IDS.has(resolveModelId(modelId))
+}
+
+export function isModelSelectableForAuthState(
+  model: Pick<ModelConfig, "id" | "accessible">,
+  isAuthenticated: boolean
+): boolean {
+  if (!isAuthenticated) {
+    return isModelAllowedForAnonymous(model.id)
+  }
+
+  return model.accessible === true
 }
 
 /**
@@ -99,9 +118,13 @@ export function resolvePreferredModelId({
   currentModelId,
   preferredModelIds = [],
 }: ResolvePreferredModelIdOptions): string {
-  const accessibleVisibleModelIds = new Set(
+  const selectableVisibleModelIds = new Set(
     models
-      .filter((model) => model.accessible && isModelVisibleInSelector(model))
+      .filter(
+        (model) =>
+          isModelSelectableForAuthState(model, isAuthenticated) &&
+          isModelVisibleInSelector(model)
+      )
       .map((model) => model.id)
   )
 
@@ -124,13 +147,20 @@ export function resolvePreferredModelId({
   }
 
   const normalizedCurrentModelId = normalizeRoutableModelId(currentModelId)
-  if (normalizedCurrentModelId) return normalizedCurrentModelId
+  if (normalizedCurrentModelId) {
+    if (
+      isAuthenticated ||
+      isModelAllowedForAnonymous(normalizedCurrentModelId)
+    ) {
+      return normalizedCurrentModelId
+    }
+  }
 
   for (const preferredModelId of preferredModelIds) {
     const normalizedPreferredModelId = normalizeVisibleModelId(preferredModelId)
     if (
       normalizedPreferredModelId &&
-      accessibleVisibleModelIds.has(normalizedPreferredModelId)
+      selectableVisibleModelIds.has(normalizedPreferredModelId)
     ) {
       return normalizedPreferredModelId
     }
@@ -139,17 +169,31 @@ export function resolvePreferredModelId({
   const defaultModelId = normalizeVisibleModelId(
     getDefaultModelForUser(isAuthenticated)
   )
-  if (defaultModelId && accessibleVisibleModelIds.has(defaultModelId)) {
+  if (defaultModelId && selectableVisibleModelIds.has(defaultModelId)) {
     return defaultModelId
   }
 
-  const firstAccessibleVisibleModelId = models.find(
-    (model) => model.accessible && isModelVisibleInSelector(model)
+  const firstSelectableVisibleModelId = models.find(
+    (model) =>
+      isModelSelectableForAuthState(model, isAuthenticated) &&
+      isModelVisibleInSelector(model)
   )?.id
-  if (firstAccessibleVisibleModelId) return firstAccessibleVisibleModelId
+  if (firstSelectableVisibleModelId) return firstSelectableVisibleModelId
 
-  const firstVisibleModelId = models.find(isModelVisibleInSelector)?.id
-  if (firstVisibleModelId) return firstVisibleModelId
+  if (isAuthenticated) {
+    const firstVisibleModelId = models.find(isModelVisibleInSelector)?.id
+    if (firstVisibleModelId) return firstVisibleModelId
+  }
+
+  const defaultRoutableModelId = resolveModelId(
+    getDefaultModelForUser(isAuthenticated)
+  )
+  if (
+    isAuthenticated ||
+    isModelAllowedForAnonymous(defaultRoutableModelId)
+  ) {
+    return defaultRoutableModelId
+  }
 
   if (defaultModelId) return defaultModelId
   return models[0]?.id ?? resolveModelId(getDefaultModelForUser(isAuthenticated))

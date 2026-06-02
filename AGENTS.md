@@ -14,6 +14,11 @@ Deliver correct, maintainable, well-researched, best practice changes.
 - Optimize for maintainability and clarity over short-term speed.
 - If unsure, consult `.agents/research/` and document non-trivial trade-offs.
 
+## Product Pattern Consistency (MUST)
+
+- When extending an existing feature to a new state, audience, or route, identify the current source-of-truth pattern before editing. Match its component ownership, placement logic, visual weight, and interaction model by default.
+- Do not solve local layout or state-specific constraints with one-off styling that makes equivalent functionality feel like a different product. If consistency conflicts with another requirement, state the trade-off before coding and preserve the established product pattern unless instructed otherwise.
+
 ## Correctness-First Escalation (MUST)
 
 - Use risk-based rigor: keep low-risk tasks lightweight, increase rigor for medium/high-risk tasks.

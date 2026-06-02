@@ -3,6 +3,8 @@ import { getDefaultModelForUser } from "@/lib/config"
 import type { ModelConfig } from "@/lib/models/types"
 import {
   filterAndSortModels,
+  isModelAllowedForAnonymous,
+  isModelSelectableForAuthState,
   resolvePreferredModelId,
 } from "./utils"
 
@@ -81,6 +83,34 @@ describe("resolvePreferredModelId", () => {
         preferredModelIds: ["missing-model"],
       })
     ).toBe(getDefaultModelForUser(false))
+  })
+
+  it("does not preserve a locked current model for anonymous users", () => {
+    expect(
+      resolvePreferredModelId({
+        models: VISIBLE_MODELS,
+        isAuthenticated: false,
+        currentModelId: "gpt-5.4",
+        preferredModelIds: ["claude-haiku-4-5-20251001", "gpt-5-mini"],
+      })
+    ).toBe("gpt-5-mini")
+  })
+})
+
+describe("model access by auth state", () => {
+  it("uses the anonymous allowlist rather than the broader free-model access flag", () => {
+    const signedOutSelectable = VISIBLE_MODELS.filter((model) =>
+      isModelSelectableForAuthState(model, false)
+    ).map((model) => model.id)
+
+    expect(signedOutSelectable).toEqual(["gpt-5-mini"])
+    expect(isModelAllowedForAnonymous("gpt-5-mini")).toBe(true)
+    expect(isModelAllowedForAnonymous("mistral-large-2512")).toBe(false)
+  })
+
+  it("uses existing model accessibility for signed-in users", () => {
+    expect(isModelSelectableForAuthState(VISIBLE_MODELS[0]!, true)).toBe(false)
+    expect(isModelSelectableForAuthState(VISIBLE_MODELS[1]!, true)).toBe(true)
   })
 })
 
