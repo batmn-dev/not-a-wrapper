@@ -1,13 +1,13 @@
 # Not A Wrapper
 
-**Not A Wrapper** is an open-source, multi-AI chat platform with a unified interface for 80+ models across 8 providers. Bring your own API keys, connect MCP tools, upload files, and organize conversations into projects — all from a single, clean interface.
+**Not A Wrapper** is an open-source, multi-AI chat platform with a unified interface for 30+ configured models across major providers. Bring your own API keys, connect MCP tools, upload files, and organize conversations into projects — all from a single, clean interface.
 
 Forked from [Zola](https://github.com/ibelick/zola) and rebuilt with Convex, WorkOS AuthKit, and the Vercel AI SDK.
 
 ## Features
 
 ### Core Chat
-- **Multi-provider AI chat** — Stream responses from OpenAI, Anthropic, Google, Mistral, xAI, Perplexity, DeepSeek, and OpenRouter
+- **Multi-provider AI chat** — Stream responses from OpenAI, Anthropic, Google, Mistral, xAI, Perplexity, and OpenRouter-hosted models
 - **Streaming with reasoning** — See model thinking in real-time (Claude, o3, DeepSeek R1, etc.)
 - **File uploads** — Share documents, images, and code for AI analysis (Convex-backed storage)
 - **Guest access** — Try the app without signing up (5 messages/day, limited model selection)
@@ -33,14 +33,13 @@ Forked from [Zola](https://github.com/ibelick/zola) and rebuilt with Convex, Wor
 
 | Provider | Notable Models | Capabilities |
 |----------|---------------|-------------|
-| **OpenAI** | GPT-5.2, GPT-5.1, GPT-5, GPT-4.1, o3, o4-mini | Vision, Tools, Web Search |
-| **Anthropic** | Claude Opus 4.6, Sonnet 4.5, Sonnet 4, Haiku 4.5 | Extended thinking, Vision, Web Search |
-| **Google** | Gemini 2.5 Pro, 2.5 Flash, 3 Pro Preview, Gemma 3 | Vision, Multimodal, Web Search |
-| **Mistral** | Mistral Large, Codestral, Pixtral Large, Ministral | Vision, Code |
-| **xAI** | Grok 4, Grok 4.1 Fast, Grok Code Fast, Grok 2 Vision | Vision, Web Search |
-| **Perplexity** | Sonar Pro, Sonar Deep Research, Sonar Reasoning Pro | Built-in web search |
-| **DeepSeek** | DeepSeek R1, DeepSeek-V3 | Reasoning (via OpenRouter) |
-| **OpenRouter** | 18+ models from all major providers | Aggregator, BYOK |
+| **OpenAI** | GPT-5.4, GPT-5.4 Pro, GPT-5 Mini | Vision, Tools, Web Search |
+| **Anthropic** | Claude Opus 4.6, Sonnet 4.6, Haiku 4.5 | Extended thinking, Vision, Web Search |
+| **Google** | Gemini 2.5 Pro, 2.5 Flash, 2.5 Flash-Lite | Vision, Multimodal, Web Search |
+| **Mistral** | Mistral Large, Mistral Small, Codestral | Vision, Code |
+| **xAI** | Grok 4.1 Fast, Grok Code Fast | Vision, Reasoning |
+| **Perplexity** | Sonar, Sonar Reasoning Pro | Built-in web search |
+| **OpenRouter** | DeepSeek R1, Llama 3.3 8B Instruct | Aggregator, BYOK |
 
 > Models are regularly updated. The full list is configured in `lib/models/`.
 
@@ -104,7 +103,7 @@ convex/                     # Database schema, queries, mutations, file storage
 
 | Feature | Status |
 |---------|--------|
-| Multi-provider chat (8 providers, 80+ models) | Shipped |
+| Multi-provider chat | Shipped |
 | BYOK with AES-256-GCM encryption | Shipped |
 | File uploads with Convex storage | Shipped |
 | Projects & chat organization | Shipped |

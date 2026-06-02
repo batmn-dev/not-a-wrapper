@@ -1,7 +1,7 @@
+import { getWorkosSession } from "@/lib/auth/workos"
 import { redirect } from "next/navigation"
 import { LoginForm } from "../../_components/auth-forms"
 import { AuthShell } from "../../_components/auth-shell"
-import { getWorkosSession } from "@/lib/auth/workos"
 
 type LoginPageProps = {
   searchParams?: Promise<{
@@ -26,7 +26,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const email = typeof params.email === "string" ? params.email : undefined
 
   return (
-    <AuthShell title="Log in to your account">
+    <AuthShell
+      title="Log in to your account"
+      description="Use a provider, or continue with your email and password."
+    >
       <LoginForm
         initialEmail={email}
         notice={notice}

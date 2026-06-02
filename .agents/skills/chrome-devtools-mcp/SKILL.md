@@ -14,7 +14,7 @@ This skill covers two browser inspection tools used together:
 
 | Task | Use `/chrome` | Use `chrome-devtools-mcp` |
 |------|:---:|:---:|
-| Inspect signed-in pages (ChatGPT, competitors) | **Yes** | No (can't sign in — Google OAuth blocked) |
+| Inspect signed-in pages and competitors | **Yes** | No (can't sign in — Google OAuth blocked) |
 | Extract design tokens from authenticated UIs | **Yes** | No |
 | Inspect your own localhost/staging app | Yes | **Yes** |
 | Performance profiling (LCP, CLS, INP) | No | **Yes** |
@@ -51,7 +51,7 @@ claude --chrome
 ### How It Works
 
 `/chrome` connects to your **actual running Chrome browser** via the extension. This means:
-- All your login sessions work (Google, GitHub, ChatGPT, etc.)
+- All your login sessions work (Google, GitHub, authenticated apps, etc.)
 - No bot detection issues — the site sees your real browser
 - Your extensions, cookies, and localStorage are all available
 - You see the exact same page a real user sees
@@ -73,7 +73,7 @@ When `/chrome` is enabled, Claude Code gains access to Chrome DevTools Protocol 
 Step 1: Sign into the target site in your regular Chrome browser
 
 Step 2: Ask Claude to navigate and extract
-  "Navigate to chatgpt.com and extract all design tokens —
+  "Navigate to the target site and extract all design tokens —
    typography, colors, spacing, CSS variables. Save to markdown."
 
 Step 3: Claude uses /chrome tools to:
@@ -82,7 +82,7 @@ Step 3: Claude uses /chrome tools to:
   - evaluate_script → extract CSS custom properties, computed styles, colors
   - take_screenshot → visual reference
 
-Step 4: Results saved to .agents/design/<site>-reference/design-tokens-[site].md
+Step 4: Results saved outside this public repo, preferably in the private reference/research repository
 ```
 
 ### Why Not chrome-devtools-mcp for Signed-In Pages?
@@ -236,7 +236,7 @@ Network presets: `No emulation`, `Offline`, `Slow 3G`, `Fast 3G`, `Slow 4G`, `Fa
    emulate({ colorScheme: "dark" })
    # Re-run steps 3-5
 
-7. Save to .agents/design/<site>-reference/design-tokens-[site].md
+7. Save outside this public repo, preferably in the private reference/research repository
 ```
 
 ### Workflow: Network & Console Debugging
@@ -399,7 +399,7 @@ Navigate to target URL BEFORE starting trace if `reload` or `autoStop` is true.
 
 ## Output Format: Design Token Markdown
 
-When extracting tokens, save in this format to `.agents/design/`:
+When extracting tokens, save outside this public repo using this format:
 
 ```markdown
 # Design Tokens — [Site Name]

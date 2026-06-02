@@ -23,12 +23,38 @@ import {
 } from "react"
 
 const PROVIDER_GOOGLE_MARK_SIZE = 18
+const DEFAULT_AUTH_TITLE = "Log in or sign up"
+const DEFAULT_AUTH_DESCRIPTION =
+  "You'll get smarter responses and can upload files, images, and more."
+
+type AuthModalContentProps = {
+  title?: ReactNode
+  description?: ReactNode
+}
+
+type AuthModalProps = AuthModalContentProps & {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
 
 type AuthModalTriggerProps = {
   children: ReactNode
   className?: string
   size?: ComponentProps<typeof Button>["size"]
   variant?: ComponentProps<typeof Button>["variant"]
+}
+
+export function AuthModal({
+  open,
+  onOpenChange,
+  title,
+  description,
+}: AuthModalProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <AuthModalContent title={title} description={description} />
+    </Dialog>
+  )
 }
 
 export function AuthModalTrigger({
@@ -49,7 +75,10 @@ export function AuthModalTrigger({
   )
 }
 
-function AuthModalContent() {
+function AuthModalContent({
+  title = DEFAULT_AUTH_TITLE,
+  description = DEFAULT_AUTH_DESCRIPTION,
+}: AuthModalContentProps) {
   const [state, formAction, isPending] = useActionState(
     requestMagicAuthCode,
     initialAuthActionState
@@ -88,12 +117,13 @@ function AuthModalContent() {
         <div className="flex flex-col items-stretch gap-5 px-6 pb-10">
           <div className="space-y-5 text-center">
             <DialogTitle className="text-[30px] leading-9 font-normal tracking-normal">
-              Log in or sign up
+              {title}
             </DialogTitle>
-            <DialogDescription className="text-foreground mx-auto max-w-[290px] text-base leading-6">
-              You&apos;ll get smarter responses and can upload files, images,
-              and more.
-            </DialogDescription>
+            {description ? (
+              <DialogDescription className="text-foreground mx-auto max-w-[290px] text-base leading-6">
+                {description}
+              </DialogDescription>
+            ) : null}
           </div>
 
           <form action={formAction} className="flex flex-col gap-4" noValidate>

@@ -12,6 +12,10 @@ if (!convexUrl) {
 
 const convex = new ConvexReactClient(convexUrl)
 
+function isAuthKitRefreshFailure(error: unknown) {
+  return error instanceof Error && error.message === "Failed to refresh access token"
+}
+
 function useAuthFromAuthKit() {
   const { user, loading: isLoading } = useAuth()
   const { getAccessToken, refresh } = useAccessToken()
@@ -19,7 +23,7 @@ function useAuthFromAuthKit() {
 
   const fetchAccessToken = useCallback(
     async ({ forceRefreshToken }: { forceRefreshToken?: boolean } = {}) => {
-      if (!user) return null
+      if (!isAuthenticated) return null
 
       try {
         const token = forceRefreshToken
@@ -27,17 +31,23 @@ function useAuthFromAuthKit() {
           : await getAccessToken()
         return token ?? null
       } catch (error) {
-        console.error(
-          "[ConvexClientProvider] Failed to get access token:",
-          error
-        )
+        if (!isAuthKitRefreshFailure(error)) {
+          console.error(
+            "[ConvexClientProvider] Failed to get access token:",
+            error
+          )
+        }
         return null
       }
     },
-    [getAccessToken, refresh, user]
+    [getAccessToken, isAuthenticated, refresh]
   )
 
-  return { isLoading, isAuthenticated, fetchAccessToken }
+  return {
+    isLoading,
+    isAuthenticated,
+    fetchAccessToken,
+  }
 }
 
 export function ConvexClientProvider({ children }: { children: ReactNode }) {

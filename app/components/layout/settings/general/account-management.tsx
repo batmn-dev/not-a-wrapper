@@ -2,12 +2,11 @@
 
 import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
-import { toast } from "@/components/ui/toast"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useMessages } from "@/lib/chat-store/messages/provider"
-import { clearAllIndexedDBStores } from "@/lib/chat-store/persist"
 import { RiLogoutBoxRLine } from "@remixicon/react"
 import { useAuth } from "@workos-inc/authkit-nextjs/components"
+import { signOutAndClearLocalState } from "../../sign-out"
 
 export function AccountManagement() {
   const { signOut } = useAuth()
@@ -15,15 +14,7 @@ export function AccountManagement() {
   const { resetMessages } = useMessages()
 
   const handleSignOut = async () => {
-    try {
-      await resetMessages()
-      await resetChats()
-      await clearAllIndexedDBStores()
-      await signOut({ returnTo: "/" })
-    } catch (e) {
-      console.error("Sign out failed:", e)
-      toast({ title: "Failed to sign out", status: "error" })
-    }
+    await signOutAndClearLocalState({ resetMessages, resetChats, signOut })
   }
 
   return (

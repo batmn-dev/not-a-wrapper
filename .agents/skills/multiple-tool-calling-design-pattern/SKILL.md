@@ -11,7 +11,7 @@ Use this skill when implementing or extending tool calling in the chat pipeline,
 
 - [ ] Familiar with `app/api/chat/route.ts` (the single tool coordinator)
 - [ ] Familiar with `lib/tools/types.ts` and `lib/tools/provider.ts`
-- [ ] Read `.agents/research/multi-tool-calling-system-design.md` for full research
+- [ ] Review `app/api/chat/route.ts`, `lib/tools/types.ts`, and current AI SDK tool-calling references for the current implementation context
 
 ## The Universal Tool Calling Lifecycle
 
@@ -281,8 +281,6 @@ const shouldInjectCodeExec =
 
 ## Internal References
 
-- Research: `.agents/research/multi-tool-calling-system-design.md`
-- Open WebUI analysis: `.agents/research/open-webui-analysis/02b-tool-infrastructure.md`
 - Route.ts (gold standard): `app/api/chat/route.ts`
 - Tool types: `lib/tools/types.ts`
 - Provider tools: `lib/tools/provider.ts`

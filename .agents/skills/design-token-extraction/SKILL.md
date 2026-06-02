@@ -9,7 +9,7 @@ Structured workflow for extracting CSS custom properties and computed styles fro
 
 ## When to Use
 
-- Updating an existing styles reference file (e.g., `chatgpt-prompt-styles-reference.md`)
+- Updating an existing styles reference file
 - Extracting design tokens from a competitor's authenticated UI
 - Auditing design token changes after a site update
 - Comparing light/dark mode token values
@@ -49,7 +49,7 @@ JSON.stringify({
 
 ### Step 4: Discover Key Elements
 
-Adapt selectors to the target site. Example for ChatGPT:
+Adapt selectors to the target site. Example for a composer-style interface:
 
 ```javascript
 // Discover composer elements and their selectors
@@ -344,7 +344,7 @@ if (!el) { 'No .shadow-short element found'; } else {
 
 To extract both light and dark mode values:
 
-### Option A: Toggle via DOM Class (ChatGPT-style)
+### Option A: Toggle via DOM Class
 
 ```javascript
 // Toggle dark mode
@@ -384,7 +384,7 @@ When updating an existing reference file, follow this workflow:
 ### Step 1: Read the Existing Reference
 
 ```
-Read tool: .agents/design/<path>/reference-file.md
+Read the reference file from the private reference/research repository, or from a user-provided path.
 ```
 
 ### Step 2: Identify Sections to Update

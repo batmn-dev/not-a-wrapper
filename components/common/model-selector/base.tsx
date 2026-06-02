@@ -1,6 +1,6 @@
 "use client"
 
-import { PopoverContentAuth } from "@/app/components/chat-input/popover-content-auth"
+import { AuthModal } from "@/app/auth/_components/auth-modal"
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { useKeyShortcut } from "@/app/hooks/use-key-shortcut"
 import { Button } from "@/components/ui/button"
@@ -19,9 +19,11 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
-import { Popover, PopoverTrigger } from "@/components/ui/popover"
 import { useModel } from "@/lib/model-store/provider"
-import { filterAndSortModels } from "@/lib/model-store/utils"
+import {
+  filterAndSortModels,
+  isModelSelectableForAuthState,
+} from "@/lib/model-store/utils"
 import { getModelInfo } from "@/lib/models"
 import { ModelConfig } from "@/lib/models/types"
 import { PROVIDERS } from "@/lib/providers"
@@ -51,6 +53,7 @@ export function ModelSelector({
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isProDialogOpen, setIsProDialogOpen] = useState(false)
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [selectedProModel, setSelectedProModel] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -73,6 +76,16 @@ export function ModelSelector({
   const handleSelect = (modelId: string, isLocked: boolean) => {
     if (isLocked) {
       setSelectedProModel(modelId)
+      if (!isUserAuthenticated) {
+        if (isMobile) {
+          setIsDrawerOpen(false)
+        } else {
+          setIsDropdownOpen(false)
+        }
+        setIsAuthModalOpen(true)
+        return
+      }
+
       setIsProDialogOpen(true)
       return
     }
@@ -100,13 +113,16 @@ export function ModelSelector({
 
   const filteredModels = filterAndSortModels(
     models,
-    favoriteModels || [],
+    isUserAuthenticated ? favoriteModels || [] : [],
     searchQuery,
-    isModelHidden
+    isUserAuthenticated ? isModelHidden : () => false
   )
 
   const renderModelItem = (model: ModelConfig) => {
-    const isLocked = !model.accessible
+    const isLocked = !isModelSelectableForAuthState(
+      model,
+      isUserAuthenticated
+    )
     const provider = PROVIDERS.find((provider) => provider.id === model.icon)
 
     return (
@@ -137,30 +153,39 @@ export function ModelSelector({
   const trigger = (
     <Button
       variant="ghost"
-      className={cn("justify-between rounded-lg text-lg font-normal", className)}
+      className={cn(
+        "min-w-0 max-w-full shrink justify-between overflow-hidden rounded-lg text-lg font-normal",
+        className
+      )}
       disabled={isLoadingModels}
+      aria-label={`Select model, current model ${currentModel?.name || "unknown"}`}
     >
-      <span>{currentModel?.name || "Select model"}</span>
-      <Icon icon={RiArrowDownSLine} slotSize={16} className="opacity-50" />
+      <span className="min-w-0 truncate">
+        {currentModel?.name || "Select model"}
+      </span>
+      <Icon
+        icon={RiArrowDownSLine}
+        slotSize={16}
+        className="shrink-0 opacity-50"
+      />
     </Button>
   )
-
-  if (!isUserAuthenticated) {
-    return (
-      <Popover>
-        <PopoverTrigger render={trigger} />
-        <PopoverContentAuth />
-      </Popover>
-    )
-  }
 
   if (isMobile) {
     return (
       <>
-        <ProModelDialog
-          isOpen={isProDialogOpen}
-          setIsOpen={setIsProDialogOpen}
-          currentModel={selectedProModel || ""}
+        {isUserAuthenticated ? (
+          <ProModelDialog
+            isOpen={isProDialogOpen}
+            setIsOpen={setIsProDialogOpen}
+            currentModel={selectedProModel || ""}
+          />
+        ) : null}
+        <AuthModal
+          open={isAuthModalOpen}
+          onOpenChange={setIsAuthModalOpen}
+          title="Log in to unlock models"
+          description="Create an account to use more models and connect your own API keys. GPT-5 Mini stays available for signed-out chats."
         />
         <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
           <DrawerTrigger render={trigger} />
@@ -218,10 +243,18 @@ export function ModelSelector({
 
   return (
     <div>
-      <ProModelDialog
-        isOpen={isProDialogOpen}
-        setIsOpen={setIsProDialogOpen}
-        currentModel={selectedProModel || ""}
+      {isUserAuthenticated ? (
+        <ProModelDialog
+          isOpen={isProDialogOpen}
+          setIsOpen={setIsProDialogOpen}
+          currentModel={selectedProModel || ""}
+        />
+      ) : null}
+      <AuthModal
+        open={isAuthModalOpen}
+        onOpenChange={setIsAuthModalOpen}
+        title="Log in to unlock models"
+        description="Create an account to use more models and connect your own API keys. GPT-5 Mini stays available for signed-out chats."
       />
       <DropdownMenu
         open={isDropdownOpen}
@@ -269,7 +302,10 @@ export function ModelSelector({
                 </div>
               ) : filteredModels.length > 0 ? (
                 filteredModels.map((model) => {
-                  const isLocked = !model.accessible
+                  const isLocked = !isModelSelectableForAuthState(
+                    model,
+                    isUserAuthenticated
+                  )
                   const isSelected = selectedModelId === model.id
                   const provider = PROVIDERS.find(
                     (provider) => provider.id === model.icon

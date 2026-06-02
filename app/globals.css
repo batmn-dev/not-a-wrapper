@@ -18,7 +18,7 @@
 @custom-variant pointer-coarse (@media (pointer: coarse));
 @custom-variant pointer-fine (@media (pointer: fine));
 
-/* Viewport height variants for conditional sticky behavior (ChatGPT pattern) */
+/* Viewport height variants for conditional sticky behavior */
 @custom-variant tall (@media (min-height: 40rem));
 @custom-variant not-tall (@media (max-height: 39.99rem));
 

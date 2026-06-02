@@ -106,7 +106,7 @@ function DesktopAppSidebar() {
       )}
     >
       {/* 
-        Dual-layer structure (ChatGPT pattern):
+        Dual-layer structure:
         - Collapsed rail: Always rendered, visible when collapsed
         - Expanded content: Always rendered, visible when expanded
         Both use opacity transitions for smooth crossfade
@@ -192,7 +192,7 @@ function DesktopAppSidebar() {
 
       {/* === EXPANDED CONTENT === */}
       {/*
-        ChatGPT scroll model: Single <nav> with overflow-y-auto.
+        Scroll model: Single <nav> with overflow-y-auto.
         Header, actions, and footer are sticky children inside the scroll container.
         Scroll state tracked via data attributes (zero re-renders) for CSS-only indicators.
       */}
@@ -200,14 +200,14 @@ function DesktopAppSidebar() {
         className={cn(
           "h-full",
           "w-(--sidebar-width) overflow-x-clip text-clip whitespace-nowrap",
-          // Linear crossfade in both directions (ChatGPT pattern)
+          // Linear crossfade in both directions
           "motion-safe:transition-opacity motion-safe:duration-150 motion-safe:ease-linear",
           // Visibility based on state
           isCollapsed
             ? "pointer-events-none opacity-0"
             : "pointer-events-auto opacity-100"
         )}
-        // `inert` prevents focus/interaction when hidden (ChatGPT pattern)
+        // `inert` prevents focus/interaction when hidden
         inert={isCollapsed ? true : undefined}
       >
         <SidebarExpandedNav data={sidebarData} />
@@ -295,7 +295,7 @@ function SidebarExpandedNav({
     <>
       <h2 className="sr-only">Chat history</h2>
 
-      {/* Single unified scroll container (ChatGPT pattern) */}
+      {/* Single unified scroll container */}
       <nav
         ref={scrollRef}
         className="group/scrollport relative flex h-full w-full min-w-0 flex-1 flex-col overflow-y-auto"
@@ -305,7 +305,7 @@ function SidebarExpandedNav({
         <div
           className={cn(
             "bg-sidebar sticky top-0 z-30",
-            // Shadow only on SHORT viewports where actions scroll away (ChatGPT pattern)
+            // Shadow only on SHORT viewports where actions scroll away
             "not-tall:group-data-[scrolled-from-top]/scrollport:shadow-[inset_0_-1px_0_0_var(--sidebar-border)]"
           )}
         >
@@ -346,7 +346,7 @@ function SidebarExpandedNav({
         </div>
 
         {/* === STICKY ACTION BUTTONS === */}
-        {/* Conditionally sticky: pinned on tall viewports, scrolls on short ones (ChatGPT pattern) */}
+        {/* Conditionally sticky: pinned on tall viewports, scrolls on short ones */}
         <div
           className={cn(
             "bg-sidebar z-20 px-0 pt-(--sidebar-section-first-margin-top)",
@@ -393,7 +393,7 @@ function SidebarExpandedNav({
               <SignedOutSidebarSearchPopover />
             )}
           </div>
-          {/* Solid bg mask below sticky actions — hides scroll seam (ChatGPT pattern) */}
+          {/* Solid bg mask below sticky actions — hides scroll seam */}
           <div
             className={cn(
               "pointer-events-none absolute inset-x-0 -bottom-1.5 h-1.5",
@@ -434,7 +434,7 @@ function SidebarExpandedNav({
           ) : null}
         </div>
 
-        {/* Grow spacer — pushes footer to bottom when content is short (ChatGPT pattern) */}
+        {/* Grow spacer — pushes footer to bottom when content is short */}
         <div className="grow" />
 
         {!data.isLoggedIn && (
@@ -551,7 +551,7 @@ function CollapsedHeaderToggle() {
 
 /**
  * Menu item for collapsed rail.
- * Follows ChatGPT's icon wrapper pattern for alignment.
+ * Follows the icon wrapper pattern for alignment.
  */
 function CollapsedMenuItem({
   icon,
@@ -686,7 +686,7 @@ function SignedOutCollapsedSearchPopover({
 
 /**
  * Compact user avatar for collapsed rail.
- * 24px (h-6 w-6) matching ChatGPT's pattern.
+ * 24px (h-6 w-6) matching the sidebar icon pattern.
  */
 function CollapsedUserAvatar({
   user,

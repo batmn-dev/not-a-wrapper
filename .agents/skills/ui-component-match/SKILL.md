@@ -5,7 +5,7 @@ description: Systematically match a UI component implementation to a reference d
 
 # UI Component Match Skill
 
-**Purpose:** Systematically match a UI component implementation to a reference design (e.g., ChatGPT, Linear, Figma) by comparing rendered HTML, extracting measurements, and identifying all differences before making changes.
+**Purpose:** Systematically match a UI component implementation to a reference design (e.g., a competitor app, product mockup, or Figma design) by comparing rendered HTML, extracting measurements, and identifying all differences before making changes.
 
 **Use when:** Implementing or debugging a UI component that needs to match an existing reference implementation.
 
@@ -19,7 +19,7 @@ description: Systematically match a UI component implementation to a reference d
 
 #### Step 0.1: Extract Reference HTML
 - If browser accessible: Use DevTools to copy outerHTML of the reference component
-- If reference files exist: Use `@.agents/design/[reference-name]/` files
+- If reference files exist: use the private reference/research repository or a user-provided path
 - Save to `reference-output.html` for diffing
 
 #### Step 0.2: Extract Our HTML
@@ -47,7 +47,7 @@ Create a comparison table of EVERY element:
 Extract ALL spacing/sizing values from reference files or browser.
 
 #### Step 1.1: Read Reference Documentation
-- Check `.agents/design/[reference]/` for existing measurements
+- Check the private reference/research repository or user-provided files for existing measurements
 - Extract values from CSS reference files
 - Note: Always prefer documented values over live inspection
 
@@ -217,10 +217,10 @@ Create explicit tables for every spacing value. Don't rely on "looks about right
 ## Example Usage
 
 ```markdown
-User: "Make our composer match ChatGPT's layout"
+User: "Make our composer match the reference layout"
 
 Agent:
-1. [Phase 0] Extract HTML from ChatGPT reference files and our app
+1. [Phase 0] Extract HTML from the reference files and our app
 2. [Phase 0] Create side-by-side class comparison → find p-0 override, missing wrapper, etc.
 3. [Phase 1] Extract measurements from reference → create table
 4. [Phase 2] Categorize issues → structural (missing wrapper), override (p-0), spacing (px-8 vs px-16)

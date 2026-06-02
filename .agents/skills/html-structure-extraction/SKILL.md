@@ -346,12 +346,12 @@ URL pattern: `site.com/path/{id}`
 
 ### Naming Convention
 
-Save to: `.agents/design/<site>-reference/<feature>/[site]-[page-type]-html-structure.md`
+Save extraction artifacts outside this public repo, preferably in the private reference/research repository, unless the user explicitly asks for a repo-local file.
 
 Examples:
-- `chatgpt-conversation-html-structure.md`
-- `chatgpt-home-html-structure.md`
-- `claude-chat-html-structure.md`
+- `[site]-conversation-html-structure.md`
+- `[site]-home-html-structure.md`
+- `[site]-chat-html-structure.md`
 
 ---
 

@@ -116,6 +116,10 @@ Avoid using more than two font weights in a single view.
 
 Use a compact Tailwind spacing rhythm. The app shell uses `h-svh`, `--spacing-app-header`, `ScrollRoot`, and a flex chat layout. Chat content centers around `40rem`, expanding to `48rem` on larger containers. Prefer stacks, compact grids, constrained widths, and clear sections.
 
+## Pattern Consistency
+
+Equivalent product controls should feel equivalent across auth states, device sizes, and routes. Prefer shared components or semantic variants over call-site overrides. Local fitting should not change a control's visual identity.
+
 ## Elevation & Depth
 
 Keep depth minimal. Prefer borders, spacing, background contrast, and `shadow-border-*` over heavy shadows. Use stronger shadows mainly for floating UI.

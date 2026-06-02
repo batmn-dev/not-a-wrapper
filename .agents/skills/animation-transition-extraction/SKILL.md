@@ -495,12 +495,12 @@ Used by: `[selector]`
 
 ### Naming Convention
 
-Save to: `.agents/research/<feature>/[site]-[page]-motion-reference.md`
+Save extraction artifacts outside this public repo, preferably in the private reference/research repository, unless the user explicitly asks for a repo-local file.
 
 Examples:
-- `chatgpt-conversation-motion-reference.md`
-- `chatgpt-home-motion-reference.md`
-- `claude-chat-motion-reference.md`
+- `[site]-conversation-motion-reference.md`
+- `[site]-home-motion-reference.md`
+- `[site]-chat-motion-reference.md`
 
 ---
 
