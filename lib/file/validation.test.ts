@@ -12,15 +12,18 @@ vi.mock("file-type", () => ({
 
 function createTestFile({
   size = 1024,
+  type = "",
   headerBuffer = new ArrayBuffer(16),
   slice,
 }: {
   size?: number
+  type?: string
   headerBuffer?: ArrayBuffer
   slice?: File["slice"]
 } = {}): File {
   return {
     size,
+    type,
     slice:
       slice ??
       (() =>
@@ -87,6 +90,59 @@ describe("file validation", () => {
     vi.mocked(fileType.fileTypeFromBuffer).mockResolvedValue(undefined)
 
     await expect(validateFile(createTestFile())).resolves.toEqual({
+      isValid: false,
+      error: "File type not supported or doesn't match its extension",
+    })
+  })
+
+  it.each([
+    ["text/plain", "plain notes\n"],
+    ["text/markdown", "# Notes\n\n- item\n"],
+    ["application/json", '{ "ok": true }\n'],
+    ["text/csv", "name,value\nalice,1\n"],
+  ])(
+    "accepts undetectable %s files when the sampled bytes are text",
+    async (mimeType, contents) => {
+      vi.mocked(fileType.fileTypeFromBuffer).mockResolvedValue(undefined)
+
+      await expect(
+        validateFile(
+          createTestFile({
+            type: mimeType,
+            headerBuffer: new TextEncoder().encode(contents).buffer,
+          })
+        )
+      ).resolves.toEqual({
+        isValid: true,
+      })
+    }
+  )
+
+  it("rejects declared text files when undetected bytes are binary-like", async () => {
+    vi.mocked(fileType.fileTypeFromBuffer).mockResolvedValue(undefined)
+
+    await expect(
+      validateFile(
+        createTestFile({
+          type: "text/plain",
+          headerBuffer: new Uint8Array([0x00, 0x01, 0x02]).buffer,
+        })
+      )
+    ).resolves.toEqual({
+      isValid: false,
+      error: "File type not supported or doesn't match its extension",
+    })
+  })
+
+  it("rejects detected unsupported MIME types even when the file is declared as text", async () => {
+    vi.mocked(fileType.fileTypeFromBuffer).mockResolvedValue({
+      ext: "zip",
+      mime: "application/zip",
+    })
+
+    await expect(
+      validateFile(createTestFile({ type: "text/plain" }))
+    ).resolves.toEqual({
       isValid: false,
       error: "File type not supported or doesn't match its extension",
     })

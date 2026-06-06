@@ -16,6 +16,13 @@ export const ALLOWED_FILE_TYPES = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ]
 
+const TEXT_FILE_TYPES = new Set([
+  "text/plain",
+  "text/markdown",
+  "application/json",
+  "text/csv",
+])
+
 /**
  * MIME type -> file extensions mapping for the HTML file picker accept attribute.
  * Browsers need both MIME types and extensions for reliable filtering.
@@ -50,6 +57,16 @@ export type FileValidationResult = {
   error?: string
 }
 
+function normalizeMimeType(mimeType: string): string {
+  return mimeType.split(";")[0]?.trim().toLowerCase() ?? ""
+}
+
+function isLikelyText(header: Uint8Array): boolean {
+  return header.every(
+    (byte) => byte === 0x09 || byte === 0x0a || byte === 0x0d || byte >= 0x20
+  )
+}
+
 export async function validateFile(file: File): Promise<FileValidationResult> {
   if (file.size > MAX_FILE_SIZE) {
     return {
@@ -61,7 +78,15 @@ export async function validateFile(file: File): Promise<FileValidationResult> {
   const header = new Uint8Array(await file.slice(0, 4100).arrayBuffer())
   const type = await fileType.fileTypeFromBuffer(header)
 
-  if (!type || !ALLOWED_FILE_TYPES.includes(type.mime)) {
+  if (type && ALLOWED_FILE_TYPES.includes(type.mime)) {
+    return { isValid: true }
+  }
+
+  const declaredMimeType = normalizeMimeType(file.type)
+  const canUseTextFallback =
+    !type && TEXT_FILE_TYPES.has(declaredMimeType) && isLikelyText(header)
+
+  if (!canUseTextFallback) {
     return {
       isValid: false,
       error: "File type not supported or doesn't match its extension",
