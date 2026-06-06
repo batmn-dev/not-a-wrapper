@@ -54,13 +54,13 @@ export async function requireOwnedChat(
   ctx: ConvexCtx,
   chatId: Id<"chats">
 ): Promise<AuthenticatedChatOwner> {
-  const chat = await ctx.db.get(chatId)
-  if (!chat) throw new Error("Chat not found")
-
   const identity = await ctx.auth.getUserIdentity()
   if (!identity) throw new Error("Not authenticated")
 
   const user = await getUserByWorkosSubject(ctx, identity.subject)
+  const chat = await ctx.db.get(chatId)
+  if (!chat) throw new Error("Chat not found")
+
   if (!user || chat.userId !== user._id) {
     throw new Error("Not authorized")
   }
@@ -72,13 +72,13 @@ export async function requireOwnedProject(
   ctx: ConvexCtx,
   projectId: Id<"projects">
 ): Promise<{ user: Doc<"users">; project: Doc<"projects"> }> {
-  const project = await ctx.db.get(projectId)
-  if (!project) throw new Error("Project not found")
-
   const identity = await ctx.auth.getUserIdentity()
   if (!identity) throw new Error("Not authenticated")
 
   const user = await getUserByWorkosSubject(ctx, identity.subject)
+  const project = await ctx.db.get(projectId)
+  if (!project) throw new Error("Project not found")
+
   if (!user || project.userId !== user._id) {
     throw new Error("Not authorized")
   }

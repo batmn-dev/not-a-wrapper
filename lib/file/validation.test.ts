@@ -12,14 +12,21 @@ vi.mock("file-type", () => ({
 
 function createTestFile({
   size = 1024,
-  arrayBuffer = vi.fn(async () => new ArrayBuffer(16)),
+  headerBuffer = new ArrayBuffer(16),
+  slice,
 }: {
   size?: number
-  arrayBuffer?: () => Promise<ArrayBuffer>
+  headerBuffer?: ArrayBuffer
+  slice?: File["slice"]
 } = {}): File {
   return {
     size,
-    arrayBuffer,
+    slice:
+      slice ??
+      (() =>
+        ({
+          arrayBuffer: async () => headerBuffer,
+        }) as Blob),
   } as unknown as File
 }
 
@@ -36,18 +43,44 @@ describe("file validation", () => {
   })
 
   it("rejects files larger than the existing 10MB limit before reading bytes", async () => {
-    const arrayBuffer = vi.fn(async () => new ArrayBuffer(16))
+    const slice = vi.fn() as unknown as File["slice"]
     const file = createTestFile({
       size: MAX_FILE_SIZE + 1,
-      arrayBuffer,
+      slice,
     })
 
     await expect(validateFile(file)).resolves.toEqual({
       isValid: false,
       error: "File size exceeds 10MB limit",
     })
-    expect(arrayBuffer).not.toHaveBeenCalled()
+    expect(slice).not.toHaveBeenCalled()
     expect(fileType.fileTypeFromBuffer).not.toHaveBeenCalled()
+  })
+
+  it("sniffs a browser-compatible Uint8Array header slice", async () => {
+    const headerBuffer = new ArrayBuffer(4)
+    new Uint8Array(headerBuffer).set([0x89, 0x50, 0x4e, 0x47])
+    const sliceArrayBuffer = vi.fn(async () => headerBuffer)
+    const slice = vi.fn(
+      () =>
+        ({
+          arrayBuffer: sliceArrayBuffer,
+        }) as unknown as Blob
+    ) as unknown as File["slice"]
+    vi.mocked(fileType.fileTypeFromBuffer).mockResolvedValue({
+      ext: "png",
+      mime: "image/png",
+    })
+
+    await expect(validateFile(createTestFile({ slice }))).resolves.toEqual({
+      isValid: true,
+    })
+
+    expect(slice).toHaveBeenCalledWith(0, 4100)
+    expect(sliceArrayBuffer).toHaveBeenCalledTimes(1)
+    const [header] = vi.mocked(fileType.fileTypeFromBuffer).mock.calls[0] ?? []
+    expect(header).toBeInstanceOf(Uint8Array)
+    expect(header).toHaveLength(4)
   })
 
   it("rejects unsupported or undetectable file types with the existing message", async () => {

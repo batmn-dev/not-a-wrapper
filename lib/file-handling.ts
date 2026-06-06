@@ -103,7 +103,20 @@ export async function processFiles(
   const attachments: Attachment[] = []
 
   for (const file of files) {
-    const validation = await validateFile(file)
+    let validation: FileValidationResult
+    try {
+      validation = await validateFile(file)
+    } catch {
+      options.onValidationError?.({
+        file,
+        validation: {
+          isValid: false,
+          error: "Failed to read file for validation",
+        },
+      })
+      continue
+    }
+
     if (!validation.isValid) {
       options.onValidationError?.({ file, validation })
       continue

@@ -56,11 +56,13 @@ function createCtx({
   users = [],
   chats = [],
   projects = [],
+  onDbGet,
 }: {
   identitySubject?: string
   users?: Doc<"users">[]
   chats?: Doc<"chats">[]
   projects?: Doc<"projects">[]
+  onDbGet?: (id: string) => void
 }) {
   const ctx = {
     auth: {
@@ -68,10 +70,14 @@ function createCtx({
         identitySubject ? { subject: identitySubject } : null,
     },
     db: {
-      get: async (id: string) =>
-        chats.find((chat) => chat._id === id) ??
-        projects.find((project) => project._id === id) ??
-        null,
+      get: async (id: string) => {
+        onDbGet?.(id)
+        return (
+          chats.find((chat) => chat._id === id) ??
+          projects.find((project) => project._id === id) ??
+          null
+        )
+      },
       query: (tableName: "users") => ({
         withIndex: (
           _indexName: string,
@@ -278,6 +284,23 @@ describe("Convex auth helpers", () => {
       }
     )
 
+    it("does not read the chat row before authenticating mutations", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const chat = createChat("chat_1", owner._id)
+      const dbGetCalls: string[] = []
+      const ctx = createCtx({
+        identitySubject: undefined,
+        users: [owner],
+        chats: [chat],
+        onDbGet: (id) => dbGetCalls.push(id),
+      })
+
+      await expect(requireOwnedChat(ctx, chat._id)).rejects.toThrow(
+        "Not authenticated"
+      )
+      expect(dbGetCalls).toEqual([])
+    })
+
     it("returns the user and chat for owned chat mutations", async () => {
       const owner = createUser("user_1", "workos_owner")
       const chat = createChat("chat_1", owner._id)
@@ -344,6 +367,23 @@ describe("Convex auth helpers", () => {
         )
       }
     )
+
+    it("does not read the project row before authenticating mutations", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const project = createProject("project_1", owner._id)
+      const dbGetCalls: string[] = []
+      const ctx = createCtx({
+        identitySubject: undefined,
+        users: [owner],
+        projects: [project],
+        onDbGet: (id) => dbGetCalls.push(id),
+      })
+
+      await expect(requireOwnedProject(ctx, project._id)).rejects.toThrow(
+        "Not authenticated"
+      )
+      expect(dbGetCalls).toEqual([])
+    })
 
     it("returns the user and project for owned project mutations", async () => {
       const owner = createUser("user_1", "workos_owner")

@@ -58,10 +58,8 @@ export async function validateFile(file: File): Promise<FileValidationResult> {
     }
   }
 
-  const buffer = await file.arrayBuffer()
-  const type = await fileType.fileTypeFromBuffer(
-    Buffer.from(buffer.slice(0, 4100))
-  )
+  const header = new Uint8Array(await file.slice(0, 4100).arrayBuffer())
+  const type = await fileType.fileTypeFromBuffer(header)
 
   if (!type || !ALLOWED_FILE_TYPES.includes(type.mime)) {
     return {

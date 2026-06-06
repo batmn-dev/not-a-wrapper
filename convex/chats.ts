@@ -5,6 +5,7 @@ import {
   getCurrentUser,
   requireCurrentUser,
   requireOwnedChat,
+  requireOwnedProject,
 } from "./lib/auth"
 
 /**
@@ -60,6 +61,9 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx)
+    if (args.projectId) {
+      await requireOwnedProject(ctx, args.projectId)
+    }
 
     return await ctx.db.insert("chats", {
       userId: user._id,
