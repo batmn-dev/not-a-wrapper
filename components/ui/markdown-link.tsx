@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils"
+import Image from "next/image"
 
 function getChildText(node: unknown): string {
   if (typeof node === "string") return node
@@ -58,8 +59,7 @@ export function LinkMarkdown({
       )}
     >
       {faviconDomain && (
-        // eslint-disable-next-line @next/next/no-img-element -- Dynamic external favicon, optimization not beneficial
-        <img
+        <Image
           src={`https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(faviconDomain)}`}
           alt="favicon"
           width={14}
