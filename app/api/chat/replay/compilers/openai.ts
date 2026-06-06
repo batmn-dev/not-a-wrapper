@@ -7,7 +7,7 @@ import type {
   ReplayCompileStats,
   ReplayCompiler,
   ReplayCompileWarning,
-} from "./index"
+} from "./types"
 
 type MessagePart = UIMessage["parts"][number]
 type ToolPart = MessagePart & {

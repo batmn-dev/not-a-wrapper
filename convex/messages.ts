@@ -1,6 +1,7 @@
 import { v } from "convex/values"
 import { mutation, query, type MutationCtx } from "./_generated/server"
 import type { Id } from "./_generated/dataModel"
+import { getAuthorizedChatForRead, requireOwnedChat } from "./lib/auth"
 
 function extractTextFromParts(parts: unknown): string {
   if (!Array.isArray(parts)) return ""
@@ -101,23 +102,8 @@ async function getNextOrder(ctx: MutationCtx, chatId: Id<"chats">) {
 export const getForChat = query({
   args: { chatId: v.id("chats") },
   handler: async (ctx, { chatId }) => {
-    // Verify chat access
-    const chat = await ctx.db.get(chatId)
+    const chat = await getAuthorizedChatForRead(ctx, chatId)
     if (!chat) return []
-
-    const identity = await ctx.auth.getUserIdentity()
-
-    // Check ownership or public access
-    if (!chat.public) {
-      if (!identity) return []
-
-      const user = await ctx.db
-        .query("users")
-        .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-        .unique()
-
-      if (!user || chat.userId !== user._id) return []
-    }
 
     const messages = await ctx.db
       .query("messages")
@@ -157,23 +143,8 @@ export const getLastMessages = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, { chatId, limit = 2 }) => {
-    // Verify chat access (same checks as getForChat)
-    const chat = await ctx.db.get(chatId)
+    const chat = await getAuthorizedChatForRead(ctx, chatId)
     if (!chat) return []
-
-    const identity = await ctx.auth.getUserIdentity()
-
-    // Check ownership or public access
-    if (!chat.public) {
-      if (!identity) return []
-
-      const user = await ctx.db
-        .query("users")
-        .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-        .unique()
-
-      if (!user || chat.userId !== user._id) return []
-    }
 
     const messages = await ctx.db
       .query("messages")
@@ -203,21 +174,7 @@ export const add = mutation({
     attachments: v.optional(v.array(v.any())),
   },
   handler: async (ctx, args) => {
-    // Verify chat exists and user has access
-    const chat = await ctx.db.get(args.chatId)
-    if (!chat) throw new Error("Chat not found")
-
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user || chat.userId !== user._id) {
-      throw new Error("Not authorized")
-    }
+    const { user } = await requireOwnedChat(ctx, args.chatId)
 
     // Update chat's updatedAt
     const now = Date.now()
@@ -265,20 +222,7 @@ export const addBatch = mutation({
     ),
   },
   handler: async (ctx, { chatId, messages }) => {
-    const chat = await ctx.db.get(chatId)
-    if (!chat) throw new Error("Chat not found")
-
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user || chat.userId !== user._id) {
-      throw new Error("Not authorized")
-    }
+    const { user } = await requireOwnedChat(ctx, chatId)
 
     // Update chat's updatedAt
     const now = Date.now()

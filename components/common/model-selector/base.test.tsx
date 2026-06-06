@@ -68,24 +68,6 @@ const modelSelectorMocks = {
   ] satisfies ModelConfig[],
 }
 
-vi.mock("@/app/auth/_components/auth-modal", () => ({
-  AuthModal: ({
-    open,
-    title,
-    description,
-  }: {
-    open: boolean
-    title?: React.ReactNode
-    description?: React.ReactNode
-  }) =>
-    open ? (
-      <div role="dialog">
-        <h2>{title}</h2>
-        <p>{description}</p>
-      </div>
-    ) : null,
-}))
-
 vi.mock("@/app/hooks/use-breakpoint", () => ({
   useBreakpoint: () => false,
 }))
@@ -198,14 +180,26 @@ describe("ModelSelector", () => {
     document.body.appendChild(container)
     root = createRoot(container)
 
-    act(() => {
-      root?.render(
-        <ModelSelector
-          selectedModelId="gpt-5-mini"
-          setSelectedModelId={onSelect}
-          isUserAuthenticated={isUserAuthenticated}
-        />
+    function TestSelector() {
+      const [isAuthPromptOpen, setIsAuthPromptOpen] = React.useState(false)
+
+      return (
+        <>
+          <ModelSelector
+            selectedModelId="gpt-5-mini"
+            setSelectedModelId={onSelect}
+            isUserAuthenticated={isUserAuthenticated}
+            onLockedGuestModelSelect={() => setIsAuthPromptOpen(true)}
+          />
+          {isAuthPromptOpen ? (
+            <div role="dialog">Log in to unlock models</div>
+          ) : null}
+        </>
       )
+    }
+
+    act(() => {
+      root?.render(<TestSelector />)
     })
 
     return onSelect
