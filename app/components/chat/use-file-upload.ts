@@ -27,7 +27,24 @@ export const useFileUpload = () => {
     }
 
     try {
-      const processed = await processFiles(files, chatId, convex)
+      const processed = await processFiles(files, chatId, convex, {
+        onValidationError: ({ file, validation }) => {
+          console.warn(`File ${file.name} validation failed:`, validation.error)
+          toast({
+            title: "File validation failed",
+            description: validation.error,
+            status: "error",
+          })
+        },
+        onUploadError: ({ file, error }) => {
+          console.error(`Error processing file ${file.name}:`, error)
+          toast({
+            title: "File upload failed",
+            description: `Failed to upload ${file.name}`,
+            status: "error",
+          })
+        },
+      })
       setFiles([])
       return processed
     } catch {

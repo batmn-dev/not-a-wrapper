@@ -16,7 +16,6 @@
  *   - Keep parsing and rendering on the same remark-based pipeline
  *   - Verify INITIAL_COMPONENTS customizations are not overwritten
  */
-import { LinkMarkdown } from "@/app/components/chat/link-markdown"
 import { remarkUnwrapLinkParens } from "@/lib/markdown/remark-unwrap-link-parens"
 import { cn } from "@/lib/utils"
 import { memo, useId, useMemo } from "react"
@@ -33,6 +32,7 @@ import {
   CodeBlockCode,
   CodeBlockGroup,
 } from "./code-block"
+import { LinkMarkdown } from "./markdown-link"
 
 export type MarkdownProps = {
   children: string

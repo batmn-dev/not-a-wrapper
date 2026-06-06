@@ -1,51 +1,7 @@
-import { toast } from "@/components/ui/toast"
+import { validateFile, type FileValidationResult } from "@/lib/file/validation"
 import type { ConvexReactClient } from "convex/react"
-import * as fileType from "file-type"
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
-
-const ALLOWED_FILE_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "application/pdf",
-  "text/plain",
-  "text/markdown",
-  "application/json",
-  "text/csv",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-]
-
-/**
- * MIME type → file extensions mapping for the HTML file picker accept attribute.
- * Browsers need both MIME types and extensions for reliable filtering.
- */
-const MIME_TO_EXTENSIONS: Record<string, string[]> = {
-  "image/jpeg": [".jpg", ".jpeg"],
-  "image/png": [".png"],
-  "image/gif": [".gif"],
-  "image/webp": [".webp"],
-  "application/pdf": [".pdf"],
-  "text/plain": [".txt"],
-  "text/markdown": [".md"],
-  "application/json": [".json"],
-  "text/csv": [".csv"],
-  "application/vnd.ms-excel": [".xls"],
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
-    ".xlsx",
-  ],
-}
-
-/**
- * Comma-separated accept string for HTML `<input type="file" accept="...">`.
- * Derived from ALLOWED_FILE_TYPES so the file picker stays in sync with validation.
- */
-export const ACCEPTED_FILE_PICKER_TYPES = ALLOWED_FILE_TYPES.flatMap((mime) => [
-  mime,
-  ...(MIME_TO_EXTENSIONS[mime] ?? []),
-]).join(",")
+export { ACCEPTED_FILE_PICKER_TYPES, validateFile } from "@/lib/file/validation"
 
 export type Attachment = {
   name: string
@@ -53,29 +9,19 @@ export type Attachment = {
   url: string
 }
 
-export async function validateFile(
+export type ProcessFileValidationIssue = {
   file: File
-): Promise<{ isValid: boolean; error?: string }> {
-  if (file.size > MAX_FILE_SIZE) {
-    return {
-      isValid: false,
-      error: `File size exceeds ${MAX_FILE_SIZE / (1024 * 1024)}MB limit`,
-    }
-  }
+  validation: FileValidationResult
+}
 
-  const buffer = await file.arrayBuffer()
-  const type = await fileType.fileTypeFromBuffer(
-    Buffer.from(buffer.slice(0, 4100))
-  )
+export type ProcessFileUploadIssue = {
+  file: File
+  error: unknown
+}
 
-  if (!type || !ALLOWED_FILE_TYPES.includes(type.mime)) {
-    return {
-      isValid: false,
-      error: "File type not supported or doesn't match its extension",
-    }
-  }
-
-  return { isValid: true }
+export type ProcessFilesOptions = {
+  onValidationError?: (issue: ProcessFileValidationIssue) => void
+  onUploadError?: (issue: ProcessFileUploadIssue) => void
 }
 
 // ============================================================================
@@ -151,19 +97,28 @@ export function createAttachment(file: File, url: string): Attachment {
 export async function processFiles(
   files: File[],
   chatId: string,
-  convex: ConvexReactClient
+  convex: ConvexReactClient,
+  options: ProcessFilesOptions = {}
 ): Promise<Attachment[]> {
   const attachments: Attachment[] = []
 
   for (const file of files) {
-    const validation = await validateFile(file)
-    if (!validation.isValid) {
-      console.warn(`File ${file.name} validation failed:`, validation.error)
-      toast({
-        title: "File validation failed",
-        description: validation.error,
-        status: "error",
+    let validation: FileValidationResult
+    try {
+      validation = await validateFile(file)
+    } catch {
+      options.onValidationError?.({
+        file,
+        validation: {
+          isValid: false,
+          error: "Failed to read file for validation",
+        },
       })
+      continue
+    }
+
+    if (!validation.isValid) {
+      options.onValidationError?.({ file, validation })
       continue
     }
 
@@ -171,12 +126,7 @@ export async function processFiles(
       const url = await uploadFileToConvex(convex, file, chatId)
       attachments.push(createAttachment(file, url))
     } catch (error) {
-      console.error(`Error processing file ${file.name}:`, error)
-      toast({
-        title: "File upload failed",
-        description: `Failed to upload ${file.name}`,
-        status: "error",
-      })
+      options.onUploadError?.({ file, error })
     }
   }
 

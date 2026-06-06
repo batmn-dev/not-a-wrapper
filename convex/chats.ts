@@ -1,5 +1,12 @@
 import { v } from "convex/values"
 import { mutation, query } from "./_generated/server"
+import {
+  getAuthorizedChatForRead,
+  getCurrentUser,
+  requireCurrentUser,
+  requireOwnedChat,
+  requireOwnedProject,
+} from "./lib/auth"
 
 /**
  * Get all chats for the current user
@@ -7,14 +14,7 @@ import { mutation, query } from "./_generated/server"
 export const getForCurrentUser = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return []
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
+    const user = await getCurrentUser(ctx)
     if (!user) return []
 
     const chats = await ctx.db
@@ -45,24 +45,7 @@ export const getForCurrentUser = query({
 export const getById = query({
   args: { chatId: v.id("chats") },
   handler: async (ctx, { chatId }) => {
-    const chat = await ctx.db.get(chatId)
-    if (!chat) return null
-
-    // Allow public chats without authentication
-    if (chat.public) return chat
-
-    // For private chats, verify ownership
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return null
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user || chat.userId !== user._id) return null
-
-    return chat
+    return await getAuthorizedChatForRead(ctx, chatId)
   },
 })
 
@@ -77,15 +60,10 @@ export const create = mutation({
     projectId: v.optional(v.id("projects")),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) throw new Error("User not found")
+    const user = await requireCurrentUser(ctx)
+    if (args.projectId) {
+      await requireOwnedProject(ctx, args.projectId)
+    }
 
     return await ctx.db.insert("chats", {
       userId: user._id,
@@ -109,21 +87,7 @@ export const updateTitle = mutation({
     title: v.string(),
   },
   handler: async (ctx, { chatId, title }) => {
-    const chat = await ctx.db.get(chatId)
-    if (!chat) throw new Error("Chat not found")
-
-    // Verify ownership
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user || chat.userId !== user._id) {
-      throw new Error("Not authorized")
-    }
+    await requireOwnedChat(ctx, chatId)
 
     await ctx.db.patch(chatId, { title, updatedAt: Date.now() })
   },
@@ -138,20 +102,7 @@ export const updateModel = mutation({
     model: v.string(),
   },
   handler: async (ctx, { chatId, model }) => {
-    const chat = await ctx.db.get(chatId)
-    if (!chat) throw new Error("Chat not found")
-
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user || chat.userId !== user._id) {
-      throw new Error("Not authorized")
-    }
+    await requireOwnedChat(ctx, chatId)
 
     await ctx.db.patch(chatId, { model, updatedAt: Date.now() })
   },
@@ -166,20 +117,7 @@ export const togglePin = mutation({
     pinned: v.boolean(),
   },
   handler: async (ctx, { chatId, pinned }) => {
-    const chat = await ctx.db.get(chatId)
-    if (!chat) throw new Error("Chat not found")
-
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user || chat.userId !== user._id) {
-      throw new Error("Not authorized")
-    }
+    await requireOwnedChat(ctx, chatId)
 
     await ctx.db.patch(chatId, {
       pinned,
@@ -195,20 +133,7 @@ export const togglePin = mutation({
 export const makePublic = mutation({
   args: { chatId: v.id("chats") },
   handler: async (ctx, { chatId }) => {
-    const chat = await ctx.db.get(chatId)
-    if (!chat) throw new Error("Chat not found")
-
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user || chat.userId !== user._id) {
-      throw new Error("Not authorized")
-    }
+    await requireOwnedChat(ctx, chatId)
 
     await ctx.db.patch(chatId, { public: true, updatedAt: Date.now() })
   },
@@ -237,20 +162,7 @@ export const getPublicById = query({
 export const remove = mutation({
   args: { chatId: v.id("chats") },
   handler: async (ctx, { chatId }) => {
-    const chat = await ctx.db.get(chatId)
-    if (!chat) throw new Error("Chat not found")
-
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user || chat.userId !== user._id) {
-      throw new Error("Not authorized")
-    }
+    await requireOwnedChat(ctx, chatId)
 
     // Delete all messages for this chat
     const messages = await ctx.db

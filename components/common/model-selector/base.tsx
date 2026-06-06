@@ -1,6 +1,5 @@
 "use client"
 
-import { AuthModal } from "@/app/auth/_components/auth-modal"
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { useKeyShortcut } from "@/app/hooks/use-key-shortcut"
 import { Button } from "@/components/ui/button"
@@ -38,6 +37,7 @@ type ModelSelectorProps = {
   isUserAuthenticated?: boolean
   selectedModelId: string
   setSelectedModelId: (modelId: string) => void
+  onLockedGuestModelSelect?: (modelId: string) => void
 }
 
 export function ModelSelector({
@@ -45,6 +45,7 @@ export function ModelSelector({
   isUserAuthenticated = true,
   selectedModelId,
   setSelectedModelId,
+  onLockedGuestModelSelect,
 }: ModelSelectorProps) {
   const { models, isLoading: isLoadingModels, favoriteModels } = useModel()
   const { isModelHidden } = useUserPreferences()
@@ -53,7 +54,6 @@ export function ModelSelector({
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isProDialogOpen, setIsProDialogOpen] = useState(false)
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [selectedProModel, setSelectedProModel] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -82,7 +82,7 @@ export function ModelSelector({
         } else {
           setIsDropdownOpen(false)
         }
-        setIsAuthModalOpen(true)
+        onLockedGuestModelSelect?.(modelId)
         return
       }
 
@@ -181,12 +181,6 @@ export function ModelSelector({
             currentModel={selectedProModel || ""}
           />
         ) : null}
-        <AuthModal
-          open={isAuthModalOpen}
-          onOpenChange={setIsAuthModalOpen}
-          title="Log in to unlock models"
-          description="Create an account to use more models and connect your own API keys. GPT-5 Mini stays available for signed-out chats."
-        />
         <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
           <DrawerTrigger render={trigger} />
           <DrawerContent>
@@ -250,12 +244,6 @@ export function ModelSelector({
           currentModel={selectedProModel || ""}
         />
       ) : null}
-      <AuthModal
-        open={isAuthModalOpen}
-        onOpenChange={setIsAuthModalOpen}
-        title="Log in to unlock models"
-        description="Create an account to use more models and connect your own API keys. GPT-5 Mini stays available for signed-out chats."
-      />
       <DropdownMenu
         open={isDropdownOpen}
         onOpenChange={(open) => {

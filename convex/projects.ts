@@ -1,5 +1,10 @@
 import { v } from "convex/values"
 import { internalQuery, mutation, query } from "./_generated/server"
+import {
+  getCurrentUser,
+  requireCurrentUser,
+  requireOwnedProject,
+} from "./lib/auth"
 
 /**
  * Get all projects for the current user
@@ -7,14 +12,7 @@ import { internalQuery, mutation, query } from "./_generated/server"
 export const getForCurrentUser = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return []
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
+    const user = await getCurrentUser(ctx)
     if (!user) return []
 
     return await ctx.db
@@ -33,15 +31,7 @@ export const getById = query({
     const project = await ctx.db.get(projectId)
     if (!project) return null
 
-    // Verify ownership
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return null
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
+    const user = await getCurrentUser(ctx)
     if (!user || project.userId !== user._id) {
       return null
     }
@@ -82,15 +72,7 @@ export const create = mutation({
     name: v.string(),
   },
   handler: async (ctx, { name }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) throw new Error("User not found")
+    const user = await requireCurrentUser(ctx)
 
     return await ctx.db.insert("projects", {
       userId: user._id,
@@ -108,21 +90,7 @@ export const updateName = mutation({
     name: v.string(),
   },
   handler: async (ctx, { projectId, name }) => {
-    const project = await ctx.db.get(projectId)
-    if (!project) throw new Error("Project not found")
-
-    // Verify ownership
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user || project.userId !== user._id) {
-      throw new Error("Not authorized")
-    }
+    await requireOwnedProject(ctx, projectId)
 
     await ctx.db.patch(projectId, { name })
   },
@@ -134,21 +102,7 @@ export const updateName = mutation({
 export const remove = mutation({
   args: { projectId: v.id("projects") },
   handler: async (ctx, { projectId }) => {
-    const project = await ctx.db.get(projectId)
-    if (!project) throw new Error("Project not found")
-
-    // Verify ownership
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user || project.userId !== user._id) {
-      throw new Error("Not authorized")
-    }
+    await requireOwnedProject(ctx, projectId)
 
     // Get all chats for this project
     const chats = await ctx.db

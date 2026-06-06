@@ -2,6 +2,7 @@ import { paginationOptsValidator } from "convex/server"
 import { v } from "convex/values"
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server"
 import type { Doc, Id } from "./_generated/dataModel"
+import { getAuthorizedChatForRead, getCurrentUser } from "./lib/auth"
 
 const MAX_PREVIEW_LENGTH = 500
 
@@ -136,18 +137,6 @@ function nowMs(): number {
   return Date.now()
 }
 
-async function getCurrentUser(ctx: QueryCtx | MutationCtx) {
-  const identity = await ctx.auth.getUserIdentity()
-  if (!identity) return null
-
-  return await ctx.db
-    .query("users")
-    .withIndex("by_workos_user_id", (q) =>
-      q.eq("workosUserId", identity.subject)
-    )
-    .unique()
-}
-
 async function requireChatOwner(
   ctx: QueryCtx | MutationCtx,
   chatId: Id<"chats">
@@ -161,19 +150,6 @@ async function requireChatOwner(
   }
 
   return { user, chat }
-}
-
-async function getAuthorizedChatForRead(
-  ctx: QueryCtx,
-  chatId: Id<"chats">
-): Promise<Doc<"chats"> | null> {
-  const chat = await ctx.db.get(chatId)
-  if (!chat) return null
-  if (chat.public) return chat
-
-  const user = await getCurrentUser(ctx)
-  if (!user || chat.userId !== user._id) return null
-  return chat
 }
 
 async function listMessages(ctx: QueryCtx | MutationCtx, chatId: Id<"chats">) {

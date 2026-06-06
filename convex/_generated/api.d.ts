@@ -13,6 +13,7 @@ import type * as chats from "../chats.js";
 import type * as feedback from "../feedback.js";
 import type * as files from "../files.js";
 import type * as http from "../http.js";
+import type * as lib_auth from "../lib/auth.js";
 import type * as mcpServers from "../mcpServers.js";
 import type * as mcpToolApprovals from "../mcpToolApprovals.js";
 import type * as mcpToolCallLog from "../mcpToolCallLog.js";
@@ -39,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   feedback: typeof feedback;
   files: typeof files;
   http: typeof http;
+  "lib/auth": typeof lib_auth;
   mcpServers: typeof mcpServers;
   mcpToolApprovals: typeof mcpToolApprovals;
   mcpToolCallLog: typeof mcpToolCallLog;
