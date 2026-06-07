@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { getModelInfo } from "@/lib/models"
 import { createLanguageModel } from "./create-language-model"
+import { createProviderLanguageModel } from "./model-factory"
 
 describe("createLanguageModel", () => {
   it("creates AI SDK language models for representative providers", () => {
@@ -61,5 +62,23 @@ describe("createLanguageModel", () => {
     expect(createLanguageModel("deepseek-r1", "test-api-key").modelId).toBe(
       "deepseek/deepseek-r1:free"
     )
+  })
+
+  it("resolves aliases at the provider factory boundary", () => {
+    expect(
+      createProviderLanguageModel("deepseek-r1", "test-api-key").modelId
+    ).toBe("deepseek/deepseek-r1:free")
+    expect(createProviderLanguageModel("o4-mini", "test-api-key").modelId).toBe(
+      "gpt-5-mini"
+    )
+  })
+
+  it("uses strict OpenRouter compatibility for custom OpenRouter providers", () => {
+    const model = createProviderLanguageModel(
+      "openrouter:deepseek/deepseek-r1:free",
+      "test-api-key"
+    ) as unknown as { config?: { compatibility?: string } }
+
+    expect(model.config?.compatibility).toBe("strict")
   })
 })

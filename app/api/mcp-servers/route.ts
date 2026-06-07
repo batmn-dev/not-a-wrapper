@@ -1,5 +1,6 @@
 import {
   createAuthenticatedConvexClient,
+  internalServerError,
   jsonError,
   unauthorizedError,
 } from "@/app/api/_lib/convex"
@@ -70,9 +71,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, serverId })
   } catch (error) {
     console.error("Error in POST /api/mcp-servers:", error)
-    const message =
-      error instanceof Error ? error.message : "Internal server error"
-    return jsonError(message, 500)
+    return internalServerError()
   }
 }
 
@@ -159,8 +158,6 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("Error in PATCH /api/mcp-servers:", error)
-    const message =
-      error instanceof Error ? error.message : "Internal server error"
-    return jsonError(message, 500)
+    return internalServerError()
   }
 }

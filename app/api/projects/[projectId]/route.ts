@@ -1,5 +1,6 @@
 import {
   createAuthenticatedConvexClient,
+  internalServerError,
   jsonError,
   unauthorizedError,
 } from "@/app/api/_lib/convex"
@@ -69,7 +70,7 @@ export async function GET(
     })
   } catch (err: unknown) {
     console.error("Error in project endpoint:", err)
-    return jsonError((err as Error).message || "Internal server error", 500)
+    return internalServerError()
   }
 }
 
@@ -126,7 +127,7 @@ export async function PUT(
       return jsonError("Project not found", 404)
     }
 
-    return jsonError(message, 500)
+    return internalServerError()
   }
 }
 
@@ -171,6 +172,6 @@ export async function DELETE(
       return jsonError("Project not found", 404)
     }
 
-    return jsonError(message, 500)
+    return internalServerError()
   }
 }

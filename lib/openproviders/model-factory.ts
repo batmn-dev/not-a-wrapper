@@ -6,6 +6,7 @@ import { createPerplexity, perplexity } from "@ai-sdk/perplexity"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { createXai, xai } from "@ai-sdk/xai"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
+import { resolveModelId } from "@/lib/models/model-id-migration"
 import { getProviderForModel } from "./provider-map"
 import type {
   AnthropicModel,
@@ -28,64 +29,66 @@ export function createProviderLanguageModel<T extends SupportedModel | string>(
   modelId: T,
   apiKey?: string
 ): LanguageModelV3 {
-  const provider = getProviderForModel(modelId)
+  const resolvedModelId = resolveModelId(modelId)
+  const provider = getProviderForModel(resolvedModelId)
 
   if (provider === "openai") {
     if (apiKey) {
       const openaiProvider = createOpenAI({ apiKey })
-      return openaiProvider(modelId as OpenAIModel)
+      return openaiProvider(resolvedModelId as OpenAIModel)
     }
-    return openai(modelId as OpenAIModel)
+    return openai(resolvedModelId as OpenAIModel)
   }
 
   if (provider === "mistral") {
     if (apiKey) {
       const mistralProvider = createMistral({ apiKey })
-      return mistralProvider(modelId as MistralModel)
+      return mistralProvider(resolvedModelId as MistralModel)
     }
-    return mistral(modelId as MistralModel)
+    return mistral(resolvedModelId as MistralModel)
   }
 
   if (provider === "google") {
     if (apiKey) {
       const googleProvider = createGoogleGenerativeAI({ apiKey })
-      return googleProvider(modelId as GeminiModel)
+      return googleProvider(resolvedModelId as GeminiModel)
     }
-    return google(modelId as GeminiModel)
+    return google(resolvedModelId as GeminiModel)
   }
 
   if (provider === "perplexity") {
     if (apiKey) {
       const perplexityProvider = createPerplexity({ apiKey })
-      return perplexityProvider(modelId as PerplexityModel)
+      return perplexityProvider(resolvedModelId as PerplexityModel)
     }
-    return perplexity(modelId as PerplexityModel)
+    return perplexity(resolvedModelId as PerplexityModel)
   }
 
   if (provider === "anthropic") {
     if (apiKey) {
       const anthropicProvider = createAnthropic({ apiKey })
-      return anthropicProvider(modelId as AnthropicModel)
+      return anthropicProvider(resolvedModelId as AnthropicModel)
     }
-    return anthropic(modelId as AnthropicModel)
+    return anthropic(resolvedModelId as AnthropicModel)
   }
 
   if (provider === "xai") {
     if (apiKey) {
       const xaiProvider = createXai({ apiKey })
-      return xaiProvider(modelId as XaiModel)
+      return xaiProvider(resolvedModelId as XaiModel)
     }
-    return xai(modelId as XaiModel)
+    return xai(resolvedModelId as XaiModel)
   }
 
   if (provider === "openrouter") {
     const openrouterProvider = createOpenRouter({
       apiKey: apiKey || process.env.OPENROUTER_API_KEY,
+      compatibility: "strict",
     })
     return openrouterProvider.chat(
-      toOpenRouterChatModelId(modelId as OpenRouterModel)
+      toOpenRouterChatModelId(resolvedModelId as OpenRouterModel)
     )
   }
 
-  throw new Error(`Unsupported model: ${modelId}`)
+  throw new Error(`Unsupported model: ${resolvedModelId}`)
 }
