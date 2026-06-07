@@ -1,4 +1,3 @@
-import { openproviders } from "@/lib/openproviders"
 import { ModelConfig } from "../types"
 
 const openaiModels: ModelConfig[] = [
@@ -33,7 +32,6 @@ const openaiModels: ModelConfig[] = [
     modelPage: "https://developers.openai.com/api/docs/models/gpt-5.4",
     releasedAt: "2026-03-05",
     icon: "openai",
-    apiSdk: (apiKey?: string) => openproviders("gpt-5.4", undefined, apiKey),
   },
   {
     id: "gpt-5.4-pro",
@@ -67,8 +65,6 @@ const openaiModels: ModelConfig[] = [
     modelPage: "https://developers.openai.com/api/docs/models/gpt-5.4-pro",
     releasedAt: "2026-03-05",
     icon: "openai",
-    apiSdk: (apiKey?: string) =>
-      openproviders("gpt-5.4-pro", undefined, apiKey),
   },
   {
     id: "gpt-5.1",
@@ -102,7 +98,6 @@ const openaiModels: ModelConfig[] = [
     modelPage: "https://platform.openai.com/docs/models/gpt-5.1",
     releasedAt: "2025-11-12",
     icon: "openai",
-    apiSdk: (apiKey?: string) => openproviders("gpt-5.1", undefined, apiKey),
   },
   {
     id: "gpt-5",
@@ -136,7 +131,6 @@ const openaiModels: ModelConfig[] = [
     modelPage: "https://platform.openai.com/docs/models/gpt-5",
     releasedAt: "2025-08-07",
     icon: "openai",
-    apiSdk: (apiKey?: string) => openproviders("gpt-5", undefined, apiKey),
   },
   {
     id: "gpt-5-mini",
@@ -169,8 +163,6 @@ const openaiModels: ModelConfig[] = [
     modelPage: "https://platform.openai.com/docs/models/gpt-5-mini",
     releasedAt: "2025-08-07",
     icon: "openai",
-    apiSdk: (apiKey?: string) =>
-      openproviders("gpt-5-mini", undefined, apiKey),
   },
   {
     id: "gpt-4.1",
@@ -197,7 +189,6 @@ const openaiModels: ModelConfig[] = [
     apiDocs: "https://platform.openai.com/docs/models/gpt-4.1",
     modelPage: "https://platform.openai.com/docs/models/gpt-4.1",
     icon: "openai",
-    apiSdk: (apiKey?: string) => openproviders("gpt-4.1", undefined, apiKey),
   },
   {
     id: "gpt-4o",
@@ -224,7 +215,6 @@ const openaiModels: ModelConfig[] = [
     apiDocs: "https://platform.openai.com/docs/models/gpt-4o",
     modelPage: "https://platform.openai.com/docs/models/gpt-4o",
     icon: "openai",
-    apiSdk: (apiKey?: string) => openproviders("gpt-4o", undefined, apiKey),
   },
   {
     id: "o3",
@@ -253,7 +243,6 @@ const openaiModels: ModelConfig[] = [
     modelPage: "https://platform.openai.com/docs/models/o3",
     releasedAt: "2024-12-20",
     icon: "openai",
-    apiSdk: (apiKey?: string) => openproviders("o3", undefined, apiKey),
   },
 ]
 

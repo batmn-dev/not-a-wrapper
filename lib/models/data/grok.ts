@@ -1,4 +1,3 @@
-import { openproviders } from "@/lib/openproviders"
 import { ModelConfig } from "../types"
 
 const grokModels: ModelConfig[] = [
@@ -31,7 +30,6 @@ const grokModels: ModelConfig[] = [
     apiDocs: "https://docs.x.ai/docs/models",
     releasedAt: "2025-07-09",
     icon: "xai",
-    apiSdk: (apiKey?: string) => openproviders("grok-4-0709", undefined, apiKey),
   },
   {
     id: "grok-4-1-fast-reasoning",
@@ -62,8 +60,6 @@ const grokModels: ModelConfig[] = [
     apiDocs: "https://docs.x.ai/docs/models",
     releasedAt: "2025-11-19",
     icon: "xai",
-    apiSdk: (apiKey?: string) =>
-      openproviders("grok-4-1-fast-reasoning", undefined, apiKey),
   },
   {
     id: "grok-4-1-fast-non-reasoning",
@@ -92,8 +88,6 @@ const grokModels: ModelConfig[] = [
     website: "https://x.ai",
     apiDocs: "https://docs.x.ai/docs/models",
     icon: "xai",
-    apiSdk: (apiKey?: string) =>
-      openproviders("grok-4-1-fast-non-reasoning", undefined, apiKey),
   },
   {
     id: "grok-code-fast-1",
@@ -122,8 +116,6 @@ const grokModels: ModelConfig[] = [
     website: "https://x.ai",
     apiDocs: "https://docs.x.ai/docs/models",
     icon: "xai",
-    apiSdk: (apiKey?: string) =>
-      openproviders("grok-code-fast-1", undefined, apiKey),
   },
 ]
 

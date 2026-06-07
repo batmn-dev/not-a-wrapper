@@ -1,4 +1,3 @@
-import { openproviders } from "@/lib/openproviders"
 import { ModelConfig } from "../types"
 
 const perplexityModels: ModelConfig[] = [
@@ -31,7 +30,6 @@ const perplexityModels: ModelConfig[] = [
     modelPage: "https://docs.perplexity.ai/models/models/sonar",
     releasedAt: "2025-01-27",
     icon: "perplexity",
-    apiSdk: (apiKey?: string) => openproviders("sonar", undefined, apiKey),
   },
   {
     id: "sonar-reasoning-pro",
@@ -62,8 +60,6 @@ const perplexityModels: ModelConfig[] = [
     modelPage: "https://docs.perplexity.ai/models/models/sonar-reasoning-pro",
     releasedAt: "2025-07-25",
     icon: "perplexity",
-    apiSdk: (apiKey?: string) =>
-      openproviders("sonar-reasoning-pro", undefined, apiKey),
   },
   {
     id: "sonar-pro",
@@ -93,7 +89,6 @@ const perplexityModels: ModelConfig[] = [
     modelPage: "https://docs.perplexity.ai/models/models/sonar-pro",
     releasedAt: "2025-03-27",
     icon: "perplexity",
-    apiSdk: (apiKey?: string) => openproviders("sonar-pro", undefined, apiKey),
   },
   {
     id: "sonar-deep-research",
@@ -123,8 +118,6 @@ const perplexityModels: ModelConfig[] = [
     modelPage: "https://docs.perplexity.ai/models/model-cards",
     releasedAt: "2025-03-07",
     icon: "perplexity",
-    apiSdk: (apiKey?: string) =>
-      openproviders("sonar-deep-research", undefined, apiKey),
   },
 ]
 

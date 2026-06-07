@@ -13,6 +13,7 @@ import {
 import { getAllModels } from "@/lib/models"
 import { resolveModelId } from "@/lib/models/model-id-migration"
 import { getProviderForModel } from "@/lib/openproviders/provider-map"
+import { createLanguageModel } from "@/lib/openproviders/create-language-model"
 import {
   captureGeneration,
   flushPostHog,
@@ -490,7 +491,7 @@ export async function POST(req: Request) {
     )
     const modelConfig = allModels.find((m) => m.id === model)
 
-    if (!modelConfig || !modelConfig.apiSdk) {
+    if (!modelConfig) {
       throw new Error(`Model ${model} not found`)
     }
 
@@ -539,7 +540,7 @@ export async function POST(req: Request) {
 
     // enableSearch is no longer passed to the model — it controls tool injection below.
     // All search is now provided via visible, auditable tool calls (Layer 1 or Layer 2).
-    const aiModel = modelConfig.apiSdk(apiKey)
+    const aiModel = createLanguageModel(modelConfig, apiKey)
 
     // -----------------------------------------------------------------------
     // Search Tool Loading (Layer 1 — Built-in Provider Tools)
@@ -550,7 +551,7 @@ export async function POST(req: Request) {
     //   - If not → use Exa fallback (Layer 2, added in Phase 3)
     //
     // This replaces the previous dual mechanism where `enableSearch` was
-    // passed to `modelConfig.apiSdk()` as an opaque provider-level flag.
+    // passed to model creation as an opaque provider-level flag.
     // All search is now visible, auditable tool calls.
     //
     // NOT gated on isAuthenticated. Anonymous users (5 daily messages)

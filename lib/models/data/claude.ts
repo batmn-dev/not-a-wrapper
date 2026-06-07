@@ -1,4 +1,3 @@
-import { openproviders } from "@/lib/openproviders"
 import { ModelConfig } from "../types"
 
 const claudeModels: ModelConfig[] = [
@@ -34,8 +33,6 @@ const claudeModels: ModelConfig[] = [
     modelPage: "https://anthropic.com/news/claude-opus-4-6",
     releasedAt: "2026-02-05",
     icon: "claude",
-    apiSdk: (apiKey?: string) =>
-      openproviders("claude-opus-4-6", undefined, apiKey),
   },
   {
     id: "claude-sonnet-4-6",
@@ -70,8 +67,6 @@ const claudeModels: ModelConfig[] = [
       "https://platform.claude.com/docs/en/about-claude/models/whats-new-claude-4-6",
     releasedAt: "2026-02-05",
     icon: "claude",
-    apiSdk: (apiKey?: string) =>
-      openproviders("claude-sonnet-4-6", undefined, apiKey),
   },
   {
     id: "claude-sonnet-4-5-20250929",
@@ -105,8 +100,6 @@ const claudeModels: ModelConfig[] = [
     apiDocs: "https://docs.anthropic.com",
     releasedAt: "2025-09-29",
     icon: "claude",
-    apiSdk: (apiKey?: string) =>
-      openproviders("claude-sonnet-4-5-20250929", undefined, apiKey),
   },
   {
     id: "claude-haiku-4-5-20251001",
@@ -138,8 +131,6 @@ const claudeModels: ModelConfig[] = [
     apiDocs: "https://docs.anthropic.com",
     releasedAt: "2025-10-01",
     icon: "claude",
-    apiSdk: (apiKey?: string) =>
-      openproviders("claude-haiku-4-5-20251001", undefined, apiKey),
   },
 ]
 
