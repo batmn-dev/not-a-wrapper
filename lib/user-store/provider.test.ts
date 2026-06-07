@@ -176,8 +176,10 @@ describe("UserProvider", () => {
       root?.render(
         React.createElement(
           UserProvider,
-          { initialUser: null },
-          React.createElement(UserSnapshot)
+          {
+            initialUser: null,
+            children: React.createElement(UserSnapshot),
+          }
         )
       )
     })
