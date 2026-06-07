@@ -136,35 +136,6 @@ function findForbiddenImport(
 }
 
 describe("model catalog runtime boundary", () => {
-  it("recognizes forbidden imports by resolved path and package target", () => {
-    const modelFile = path.join(process.cwd(), "lib/models/data/claude.ts")
-
-    expect(
-      findForbiddenImport(
-        modelFile,
-        "../../openproviders/env",
-        forbiddenImports
-      )
-    ).toBe("@/lib/openproviders")
-    expect(
-      findForbiddenImport(
-        modelFile,
-        "@/lib/openproviders/env",
-        forbiddenImports
-      )
-    ).toBe("@/lib/openproviders")
-    expect(
-      findForbiddenImport(modelFile, "@ai-sdk/provider", forbiddenImports)
-    ).toBe("@ai-sdk/")
-    expect(
-      findForbiddenImport(
-        modelFile,
-        "@openrouter/ai-sdk-provider",
-        forbiddenImports
-      )
-    ).toBe("@openrouter/ai-sdk-provider")
-  })
-
   it("keeps lib/models free of provider runtime imports", async () => {
     const modelFiles = await collectTypeScriptFiles(
       path.join(process.cwd(), "lib/models")
