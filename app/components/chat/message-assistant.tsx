@@ -16,6 +16,7 @@ import {
   ReasoningLabel,
 } from "@/components/ui/reasoning"
 import { SystemMessage } from "@/components/ui/system-message"
+import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
 import type { UIMessage as MessageAISDK } from "@ai-sdk/react"
@@ -41,15 +42,7 @@ type MessageAssistantProps = {
   onStop?: () => void
   parts?: MessageAISDK["parts"]
   metadata?: Record<string, unknown>
-  status?:
-    | "streaming"
-    | "ready"
-    | "submitted"
-    | "error"
-    | "completed"
-    | "aborted"
-    | "failed"
-    | "awaiting_approval"
+  status?: DurableMessageStatus | "ready" | "error"
   className?: string
   messageId: string
   onQuote?: (text: string, messageId: string) => void

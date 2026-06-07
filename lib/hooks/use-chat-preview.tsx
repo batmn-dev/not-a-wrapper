@@ -4,6 +4,10 @@ import {
   getMessagesFromDb,
   type ExtendedUIMessage,
 } from "@/lib/chat-store/messages/api"
+import {
+  extractTextFromMessageParts,
+  getMessagePartsForDisplay,
+} from "@/lib/chat-messages/parts"
 import { useCallback, useEffect, useRef, useState } from "react"
 
 type ChatMessage = {
@@ -13,19 +17,8 @@ type ChatMessage = {
   created_at: string
 }
 
-// v5 helper: Extract text content from UIMessage parts array
-function getMessageText(message: ExtendedUIMessage): string {
-  // First check legacy content property
-  if (message.content) {
-    return message.content
-  }
-  // Otherwise extract from parts (combine all text parts)
-  const textParts =
-    message.parts
-      ?.filter((part) => part.type === "text")
-      .map((part) => (part as { text?: string }).text)
-      .filter((text): text is string => Boolean(text)) || []
-  return textParts.join("")
+export function getMessageText(message: ExtendedUIMessage): string {
+  return extractTextFromMessageParts(getMessagePartsForDisplay(message))
 }
 
 type UseChatPreviewReturn = {

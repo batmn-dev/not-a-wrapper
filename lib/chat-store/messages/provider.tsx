@@ -3,11 +3,13 @@
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
+import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
+import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
+import { durableStoredMessageToUiMessage } from "@/lib/chat-messages/ui-message-adapter"
 import type { UIMessage } from "ai"
 import { useMutation, useQuery } from "convex/react"
 import { createContext, useCallback, useContext, useMemo, useState } from "react"
 import { getCachedMessages } from "./api"
-import { getMessagePartsForDisplay } from "./message-parts"
 import { getMessagePersistenceMode } from "../identity"
 import { writeToIndexedDB } from "../persist"
 import { useChatSession } from "../session/provider"
@@ -16,21 +18,8 @@ import { useChatSession } from "../session/provider"
 export type ExtendedUIMessage = UIMessage & {
   createdAt?: Date
   content?: string
-  status?:
-    | "submitted"
-    | "streaming"
-    | "completed"
-    | "aborted"
-    | "failed"
-    | "awaiting_approval"
+  status?: DurableMessageStatus
   metadata?: unknown
-}
-
-function getMessageId(message: {
-  _id: string
-  clientMessageId?: string
-}): string {
-  return message.clientMessageId ?? message._id
 }
 
 type MessagesContextType = {
@@ -82,32 +71,9 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
   // Convert Convex messages to AI SDK format
   const serverMessages: ExtendedUIMessage[] = useMemo(() => {
     if (!convexMessages) return []
-    return convexMessages.map((msg): ExtendedUIMessage => {
-      return {
-        id: getMessageId(msg),
-        // v5 UIMessage supports user, assistant, system roles
-        role: (msg.role === "data" ? "system" : msg.role) as "user" | "assistant" | "system",
-        content: msg.content,
-        createdAt: new Date(msg.createdAt),
-        parts: getMessagePartsForDisplay({
-          content: msg.content,
-          parts: msg.parts,
-          attachments: msg.attachments as unknown[] | null,
-        }) as ExtendedUIMessage["parts"],
-        status: msg.status,
-        metadata: {
-          ...((msg.metadata as Record<string, unknown> | undefined) ?? {}),
-          durableStatus: msg.status,
-          durableError: msg.error,
-          generationRunId: msg.generationRunId,
-          requestId: msg.requestId,
-          model: msg.model,
-          provider: msg.provider,
-          finishReason: msg.finishReason,
-          usage: msg.usage,
-        },
-      }
-    })
+    return convexMessages.map((msg) =>
+      durableStoredMessageToUiMessage(msg)
+    ) as ExtendedUIMessage[]
   }, [convexMessages])
 
   const isLoading = convexMessages === undefined && isValidConvexId
@@ -205,10 +171,10 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     // Guest users will silently skip this (auth required for mutations)
     if (getMessagePersistenceMode(effectiveChatId) === "server") {
       try {
-        const textContent = messageToCache.parts
-          .filter((p): p is { type: "text"; text: string } => p.type === "text")
-          .map((p) => p.text)
-          .join("") || messageToCache.content || ""
+        const textContent =
+          extractTextFromMessageParts(messageToCache.parts) ||
+          messageToCache.content ||
+          ""
 
         await addMessageMutation({
           chatId: effectiveChatId as Id<"chats">,
@@ -238,10 +204,8 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
         await addBatchMutation({
           chatId: chatId as Id<"chats">,
           messages: messagesToSave.map((msg) => {
-            const textContent = msg.parts
-              .filter((p): p is { type: "text"; text: string } => p.type === "text")
-              .map((p) => p.text)
-              .join("") || msg.content || ""
+            const textContent =
+              extractTextFromMessageParts(msg.parts) || msg.content || ""
 
             return {
               clientMessageId: msg.id,
