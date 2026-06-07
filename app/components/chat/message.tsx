@@ -1,6 +1,8 @@
 import { UIMessage as MessageType } from "@ai-sdk/react"
 import { isStaticToolUIPart, getStaticToolName } from "ai"
 import React, { useState } from "react"
+import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
+import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import { MessageAssistant } from "./message-assistant"
 import { MessageUser } from "./message-user"
 
@@ -23,15 +25,7 @@ type MessageProps = {
   onStop?: () => void
   parts?: MessageType["parts"]
   metadata?: Record<string, unknown>
-  status?:
-    | "streaming"
-    | "ready"
-    | "submitted"
-    | "error"
-    | "completed"
-    | "aborted"
-    | "failed"
-    | "awaiting_approval"
+  status?: DurableMessageStatus | "ready" | "error"
   className?: string
   onQuote?: (text: string, messageId: string) => void
   isUserAuthenticated?: boolean
@@ -46,12 +40,7 @@ type MessageProps = {
 // --- Content-based equality helpers for React.memo ---
 
 function getTextContent(parts: MessageType["parts"] | undefined): string {
-  if (!parts) return ""
-  let text = ""
-  for (const part of parts) {
-    if (part.type === "text") text += part.text
-  }
-  return text
+  return extractTextFromMessageParts(parts)
 }
 
 function getReasoningContent(parts: MessageType["parts"] | undefined): string {

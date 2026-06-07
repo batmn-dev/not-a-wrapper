@@ -10,15 +10,12 @@ import type {
 import { getStaticToolName, isStaticToolUIPart } from "ai"
 import { api } from "@/convex/_generated/api"
 import type { Doc, Id } from "@/convex/_generated/dataModel"
+import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
+import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
+import { durableStoredMessageToUiMessage } from "@/lib/chat-messages/ui-message-adapter"
 import type { ToolSource } from "@/lib/tools/types"
 
-export type DurableMessageStatus =
-  | "submitted"
-  | "streaming"
-  | "completed"
-  | "aborted"
-  | "failed"
-  | "awaiting_approval"
+export type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 
 export type DurableUiMessage = UIMessage & {
   content: string
@@ -50,11 +47,7 @@ export function isDurableConvexChat(options: {
 }
 
 export function extractTextFromParts(parts: UIMessage["parts"]) {
-  let text = ""
-  for (const part of parts) {
-    if (part.type === "text") text += part.text
-  }
-  return text
+  return extractTextFromMessageParts(parts)
 }
 
 export function getLatestUserMessage(
@@ -70,26 +63,14 @@ export function getLatestUserMessage(
 export function toDurableUiMessage(
   message: Doc<"messages">
 ): DurableUiMessage {
-  const parts = message.parts as UIMessage["parts"]
-  const metadata =
-    typeof message.metadata === "object" && message.metadata !== null
-      ? (message.metadata as Record<string, unknown>)
-      : {}
+  const uiMessage = durableStoredMessageToUiMessage(message, {
+    partsMode: "stored",
+    metadataMode: "runtime",
+  })
 
   return {
-    id: message.clientMessageId ?? message._id,
-    role:
-      message.role === "data"
-        ? "system"
-        : (message.role as "user" | "assistant" | "system"),
-    content: message.content,
+    ...uiMessage,
     createdAt: new Date(message.createdAt),
-    parts,
-    metadata: {
-      ...metadata,
-      durableStatus: message.status,
-      ...(message.error ? { durableError: message.error } : {}),
-    },
     status: message.status,
   }
 }

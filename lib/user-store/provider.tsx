@@ -9,11 +9,13 @@
 import { api } from "@/convex/_generated/api"
 import { defaultPreferences } from "@/lib/user-preference-store/utils"
 import type { UserProfile } from "@/lib/user/types"
+import { mergeUserProfileWithConvexFields } from "./merge-user-profile"
 import { useAuth } from "@workos-inc/authkit-nextjs/components"
 import type { User as WorkosUser } from "@workos-inc/node"
 import { useConvexAuth, useMutation, useQuery } from "convex/react"
 import {
   createContext,
+  type PropsWithChildren,
   useCallback,
   useContext,
   useEffect,
@@ -45,10 +47,9 @@ function getDisplayName(workosUser: WorkosUser) {
 export function UserProvider({
   children,
   initialUser,
-}: {
-  children: React.ReactNode
+}: PropsWithChildren<{
   initialUser: UserProfile | null
-}) {
+}>) {
   const [user, setUser] = useState<UserProfile | null>(initialUser)
   const [isLoading, setIsLoading] = useState(false)
   const updateProfileMutation = useMutation(api.users.updateProfile)
@@ -129,6 +130,12 @@ export function UserProvider({
       setUser(null)
     }
   }, [workosUser, isAuthLoading])
+
+  useEffect(() => {
+    if (isAuthLoading || !workosUser) return
+    if (convexUser === undefined) return
+    setUser((prevUser) => mergeUserProfileWithConvexFields(prevUser, convexUser))
+  }, [convexUser, isAuthLoading, workosUser])
 
   const updateUser = useCallback(
     async (updates: Partial<UserProfile>) => {

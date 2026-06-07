@@ -1,10 +1,13 @@
 import type { UIMessage } from "ai"
+import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { readFromIndexedDB, writeToIndexedDB } from "../persist"
 
 // Extended UIMessage type for app compatibility (includes optional properties from v4)
 export type ExtendedUIMessage = UIMessage & {
   createdAt?: Date
   content?: string
+  status?: DurableMessageStatus
+  metadata?: unknown
 }
 
 // ============================================================================

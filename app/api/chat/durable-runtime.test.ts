@@ -191,6 +191,7 @@ describe("durable chat runtime helpers", () => {
     } as Parameters<typeof toDurableUiMessage>[0])
 
     expect(message.id).toBe("msg_1")
+    expect(message.createdAt).toEqual(new Date(100))
     expect(message.status).toBe("aborted")
     expect(getFinalAssistantText(message)).toBe("partial output")
     expect(message.metadata?.durableStatus).toBe("aborted")

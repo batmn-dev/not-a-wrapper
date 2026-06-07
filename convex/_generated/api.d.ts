@@ -10,6 +10,8 @@
 
 import type * as chatRuntime from "../chatRuntime.js";
 import type * as chats from "../chats.js";
+import type * as domain_message_contract from "../domain/message_contract.js";
+import type * as domain_message_parts from "../domain/message_parts.js";
 import type * as feedback from "../feedback.js";
 import type * as files from "../files.js";
 import type * as http from "../http.js";
@@ -37,6 +39,8 @@ import type {
 declare const fullApi: ApiFromModules<{
   chatRuntime: typeof chatRuntime;
   chats: typeof chats;
+  "domain/message_contract": typeof domain_message_contract;
+  "domain/message_parts": typeof domain_message_parts;
   feedback: typeof feedback;
   files: typeof files;
   http: typeof http;
