@@ -1,3 +1,5 @@
+export type { Provider } from "@/lib/provider-ids"
+
 export type OpenAIModel =
   | "o1"
   | "o1-2024-12-17"
@@ -134,15 +136,6 @@ export type XaiModel =
 export type OpenRouterModel =
   | "openrouter:deepseek/deepseek-r1:free"
   | "openrouter:meta-llama/llama-3.3-8b-instruct:free"
-
-export type Provider =
-  | "openai"
-  | "mistral"
-  | "perplexity"
-  | "google"
-  | "anthropic"
-  | "xai"
-  | "openrouter"
 
 export type SupportedModel =
   | OpenAIModel

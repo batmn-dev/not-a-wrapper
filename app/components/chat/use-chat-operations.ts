@@ -1,5 +1,6 @@
 import { toast } from "@/components/ui/toast"
 import { checkRateLimits } from "@/lib/api"
+import { GUEST_CHAT_STORAGE_KEY } from "@/lib/chat-store/identity"
 import type { Chats } from "@/lib/chat-store/types"
 import { REMAINING_QUERY_ALERT_THRESHOLD } from "@/lib/config"
 
@@ -64,7 +65,7 @@ export function useChatOperations({
     if (chatId) return chatId
 
     if (!isAuthenticated) {
-      const storedGuestChatId = localStorage.getItem("guestChatId")
+      const storedGuestChatId = localStorage.getItem(GUEST_CHAT_STORAGE_KEY)
       if (storedGuestChatId) return storedGuestChatId
     }
 
@@ -81,7 +82,7 @@ export function useChatOperations({
       if (isAuthenticated) {
         window.history.pushState(null, "", `/c/${newChat.id}`)
       } else {
-        localStorage.setItem("guestChatId", newChat.id)
+        localStorage.setItem(GUEST_CHAT_STORAGE_KEY, newChat.id)
       }
 
       return newChat.id

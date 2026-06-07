@@ -25,7 +25,7 @@ type SearchProvider = (typeof PROVIDERS_WITH_SEARCH)[number]
  *
  * When `apiKey` is undefined, the provider factory falls back to the
  * corresponding environment variable (e.g., `OPENAI_API_KEY`). This is
- * the same behavior as `modelConfig.apiSdk(apiKey, ...)` in route.ts.
+ * the same behavior as `createLanguageModel(modelConfig, apiKey)` in route.ts.
  *
  * Provider instances (createOpenAI, createAnthropic, createGoogleGenerativeAI,
  * createXai) are stateless HTTP client factories — they do not hold connections

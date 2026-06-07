@@ -1,4 +1,3 @@
-import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { ModelConfig } from "../types"
 
 export const openrouterModels: ModelConfig[] = [
@@ -33,10 +32,6 @@ export const openrouterModels: ModelConfig[] = [
     modelPage: "https://deepseek.com",
     releasedAt: "2024-04-01",
     icon: "deepseek",
-    apiSdk: (apiKey?: string) =>
-      createOpenRouter({
-        apiKey: apiKey || process.env.OPENROUTER_API_KEY,
-      }).chat("deepseek/deepseek-r1:free"),
   },
   {
     id: "openrouter:meta-llama/llama-3.3-8b-instruct:free",
@@ -69,9 +64,5 @@ export const openrouterModels: ModelConfig[] = [
     modelPage: "https://www.llama.com/",
     releasedAt: "2025-04-01",
     icon: "meta",
-    apiSdk: (apiKey?: string) =>
-      createOpenRouter({
-        apiKey: apiKey || process.env.OPENROUTER_API_KEY,
-      }).chat("meta-llama/llama-3.3-8b-instruct:free"),
   },
 ]

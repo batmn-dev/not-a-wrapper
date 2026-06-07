@@ -1,4 +1,3 @@
-import { openproviders } from "@/lib/openproviders"
 import { ModelConfig } from "../types"
 
 const mistralModels: ModelConfig[] = [
@@ -31,8 +30,6 @@ const mistralModels: ModelConfig[] = [
     modelPage: "https://mistral.ai/news/codestral/",
     releasedAt: "2025-07-30",
     icon: "mistral",
-    apiSdk: (apiKey?: string) =>
-      openproviders("codestral-2508", undefined, apiKey),
   },
   {
     id: "ministral-3b-2512",
@@ -63,8 +60,6 @@ const mistralModels: ModelConfig[] = [
     modelPage: "https://mistral.ai/news/ministral/",
     releasedAt: "2025-12-02",
     icon: "mistral",
-    apiSdk: (apiKey?: string) =>
-      openproviders("ministral-3b-2512", undefined, apiKey),
   },
   {
     id: "ministral-8b-2512",
@@ -95,8 +90,6 @@ const mistralModels: ModelConfig[] = [
     modelPage: "https://mistral.ai/news/ministral/",
     releasedAt: "2025-12-02",
     icon: "mistral",
-    apiSdk: (apiKey?: string) =>
-      openproviders("ministral-8b-2512", undefined, apiKey),
   },
   {
     id: "mistral-large-2512",
@@ -127,8 +120,6 @@ const mistralModels: ModelConfig[] = [
     modelPage: "https://docs.mistral.ai/models/mistral-large-3-25-12",
     releasedAt: "2025-12-02",
     icon: "mistral",
-    apiSdk: (apiKey?: string) =>
-      openproviders("mistral-large-2512", undefined, apiKey),
   },
   {
     id: "mistral-small-2506",
@@ -159,8 +150,6 @@ const mistralModels: ModelConfig[] = [
     modelPage: "https://docs.mistral.ai/models/mistral-small-3-2-25-06",
     releasedAt: "2025-06-20",
     icon: "mistral",
-    apiSdk: (apiKey?: string) =>
-      openproviders("mistral-small-2506", undefined, apiKey),
   },
   {
     id: "pixtral-12b-2409",
@@ -191,8 +180,6 @@ const mistralModels: ModelConfig[] = [
     modelPage: "https://mistral.ai/news/pixtral-12b/",
     releasedAt: "2024-09-01",
     icon: "mistral",
-    apiSdk: (apiKey?: string) =>
-      openproviders("pixtral-12b-2409", undefined, apiKey),
   },
   {
     id: "pixtral-large-2411",
@@ -223,8 +210,6 @@ const mistralModels: ModelConfig[] = [
     modelPage: "https://docs.mistral.ai/models/pixtral-large-24-11",
     releasedAt: "2024-11-18",
     icon: "mistral",
-    apiSdk: (apiKey?: string) =>
-      openproviders("pixtral-large-2411", undefined, apiKey),
   },
 ]
 

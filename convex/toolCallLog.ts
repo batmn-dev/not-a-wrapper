@@ -1,9 +1,10 @@
 // convex/toolCallLog.ts
 // Renamed from convex/mcpToolCallLog.ts — now logs all tool sources (builtin, third-party, mcp).
 
-import { v } from "convex/values"
 import { paginationOptsValidator } from "convex/server"
+import { v } from "convex/values"
 import { mutation, query } from "./_generated/server"
+import { getCurrentUser, requireCurrentUser } from "./lib/auth"
 
 // =============================================================================
 // Helpers
@@ -73,15 +74,7 @@ export const log = mutation({
     stateMutationKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) throw new Error("User not found")
+    const user = await requireCurrentUser(ctx)
 
     // Verify chat ownership if chatId is provided
     if (args.chatId) {
@@ -136,14 +129,7 @@ export const log = mutation({
 export const listByChat = query({
   args: { chatId: v.id("chats") },
   handler: async (ctx, { chatId }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return []
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
+    const user = await getCurrentUser(ctx)
     if (!user) return []
 
     // Verify chat ownership
@@ -165,16 +151,7 @@ export const listByChat = query({
 export const listByUser = query({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) {
-      return { page: [], isDone: true, continueCursor: "" }
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
+    const user = await getCurrentUser(ctx)
     if (!user) {
       return { page: [], isDone: true, continueCursor: "" }
     }

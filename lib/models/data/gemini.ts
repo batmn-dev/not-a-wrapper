@@ -1,4 +1,3 @@
-import { openproviders } from "@/lib/openproviders"
 import { ModelConfig } from "../types"
 
 const geminiModels: ModelConfig[] = [
@@ -30,8 +29,6 @@ const geminiModels: ModelConfig[] = [
     website: "https://gemini.google.com",
     apiDocs: "https://ai.google.dev/api/docs",
     icon: "gemini",
-    apiSdk: (apiKey?: string) =>
-      openproviders("gemini-2.5-flash-lite", undefined, apiKey),
   },
   {
     id: "gemini-2.5-flash",
@@ -61,8 +58,6 @@ const geminiModels: ModelConfig[] = [
     website: "https://gemini.google.com",
     apiDocs: "https://ai.google.dev/api/docs",
     icon: "gemini",
-    apiSdk: (apiKey?: string) =>
-      openproviders("gemini-2.5-flash", undefined, apiKey),
   },
   {
     id: "gemini-2.5-pro",
@@ -92,8 +87,6 @@ const geminiModels: ModelConfig[] = [
     website: "https://gemini.google.com",
     apiDocs: "https://ai.google.dev/api/docs",
     icon: "gemini",
-    apiSdk: (apiKey?: string) =>
-      openproviders("gemini-2.5-pro", undefined, apiKey),
   },
   {
     id: "gemma-3-27b-it",
@@ -124,8 +117,6 @@ const geminiModels: ModelConfig[] = [
     modelPage: "https://ai.google.dev/gemma",
     releasedAt: "2024-12-01",
     icon: "gemini",
-    apiSdk: (apiKey?: string) =>
-      openproviders("gemma-3-27b-it", undefined, apiKey),
   },
 ]
 

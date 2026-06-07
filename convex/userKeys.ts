@@ -1,5 +1,6 @@
 import { v } from "convex/values"
 import { mutation, query } from "./_generated/server"
+import { getCurrentUser, requireCurrentUser } from "./lib/auth"
 
 /**
  * Get all API keys for current user (encrypted)
@@ -8,14 +9,7 @@ import { mutation, query } from "./_generated/server"
 export const getAll = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return []
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
+    const user = await getCurrentUser(ctx)
     if (!user) return []
 
     return await ctx.db
@@ -33,14 +27,7 @@ export const getAll = query({
 export const getProviderStatus = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return []
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
+    const user = await getCurrentUser(ctx)
     if (!user) return []
 
     const keys = await ctx.db
@@ -59,14 +46,7 @@ export const getProviderStatus = query({
 export const getByProvider = query({
   args: { provider: v.string() },
   handler: async (ctx, { provider }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return null
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
+    const user = await getCurrentUser(ctx)
     if (!user) return null
 
     const keys = await ctx.db
@@ -90,15 +70,7 @@ export const upsert = mutation({
     iv: v.string(),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) throw new Error("User not found")
+    const user = await requireCurrentUser(ctx)
 
     // Check for existing key
     const existing = await ctx.db
@@ -131,15 +103,7 @@ export const upsert = mutation({
 export const remove = mutation({
   args: { provider: v.string() },
   handler: async (ctx, { provider }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) throw new Error("User not found")
+    const user = await requireCurrentUser(ctx)
 
     const keys = await ctx.db
       .query("userKeys")
