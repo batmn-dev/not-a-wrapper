@@ -2,6 +2,12 @@ import { paginationOptsValidator } from "convex/server"
 import { v } from "convex/values"
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server"
 import type { Doc, Id } from "./_generated/dataModel"
+import {
+  isActiveGenerationRunStatus,
+  isTerminalGenerationRunStatus,
+  isTerminalMessageStatus,
+} from "./domain/message_contract"
+import { extractTextFromMessageParts } from "./domain/message_parts"
 import { getAuthorizedChatForRead, getCurrentUser } from "./lib/auth"
 
 const MAX_PREVIEW_LENGTH = 500
@@ -11,25 +17,6 @@ const vMessageRole = v.union(
   v.literal("assistant"),
   v.literal("system"),
   v.literal("data")
-)
-
-const vMessageStatus = v.union(
-  v.literal("submitted"),
-  v.literal("streaming"),
-  v.literal("completed"),
-  v.literal("aborted"),
-  v.literal("failed"),
-  v.literal("awaiting_approval")
-)
-
-const vRunStatus = v.union(
-  v.literal("queued"),
-  v.literal("running"),
-  v.literal("streaming"),
-  v.literal("awaiting_approval"),
-  v.literal("completed"),
-  v.literal("aborted"),
-  v.literal("failed")
 )
 
 const vToolSource = v.union(
@@ -91,25 +78,6 @@ type AuthenticatedOwner = {
   chat: Doc<"chats">
 }
 
-const terminalMessageStatuses = new Set<Doc<"messages">["status"]>([
-  "completed",
-  "aborted",
-  "failed",
-])
-
-const terminalRunStatuses = new Set<Doc<"generationRuns">["status"]>([
-  "completed",
-  "aborted",
-  "failed",
-])
-
-const activeRunStatuses = new Set<Doc<"generationRuns">["status"]>([
-  "queued",
-  "running",
-  "streaming",
-  "awaiting_approval",
-])
-
 const ACTIVE_RUN_SCAN_LIMIT = 50
 const RECOVERABLE_RUN_SCAN_LIMIT = 10
 
@@ -166,22 +134,6 @@ async function getNextOrder(ctx: MutationCtx, chatId: Id<"chats">) {
     .order("desc")
     .first()
   return latest ? latest.orderId + 1 : 0
-}
-
-function extractTextFromParts(parts: unknown): string {
-  if (!Array.isArray(parts)) return ""
-  let text = ""
-  for (const part of parts) {
-    if (
-      part &&
-      typeof part === "object" &&
-      (part as { type?: unknown }).type === "text" &&
-      typeof (part as { text?: unknown }).text === "string"
-    ) {
-      text += (part as { text: string }).text
-    }
-  }
-  return text
 }
 
 function findMessageByUiId(
@@ -317,7 +269,7 @@ export async function denyPendingApprovalsForChat(
           approved: false,
           reason,
         }),
-        ...(!terminalMessageStatuses.has(message.status)
+        ...(!isTerminalMessageStatus(message.status)
           ? { status: "aborted" as const, error: reason }
           : {}),
         updatedAt: now,
@@ -339,7 +291,7 @@ export async function denyPendingApprovalsForChat(
       run &&
       run.chatId === chatId &&
       (run.userId === undefined || run.userId === userId) &&
-      !terminalRunStatuses.has(run.status)
+      !isTerminalGenerationRunStatus(run.status)
     ) {
       await ctx.db.patch(request.runId, {
         status: "aborted",
@@ -501,7 +453,7 @@ export const prepareGeneration = mutation({
       if (!alreadyStored) {
         const content =
           latestUserMessage.content ??
-          extractTextFromParts(latestUserMessage.parts)
+          extractTextFromMessageParts(latestUserMessage.parts)
         const order = await getNextOrder(ctx, args.chatId)
         await ctx.db.insert("messages", {
           chatId: args.chatId,
@@ -634,8 +586,7 @@ export const updateAssistantSnapshot = mutation({
       createdAt: now,
     })
 
-    const terminalStatuses = new Set(["completed", "failed", "aborted"])
-    if (!terminalStatuses.has(message.status)) {
+    if (!isTerminalMessageStatus(message.status)) {
       await ctx.db.patch(args.messageId, {
         content: args.textSnapshot,
         parts: args.partsSnapshot,
@@ -810,7 +761,7 @@ export const listActiveRunsForChat = query({
       .order("desc")
       .take(ACTIVE_RUN_SCAN_LIMIT)
     return runs
-      .filter((run) => activeRunStatuses.has(run.status))
+      .filter((run) => isActiveGenerationRunStatus(run.status))
       .sort((a, b) => b.updatedAt - a.updatedAt)
   },
 })
@@ -863,7 +814,7 @@ export const getRecoverableChatState = query({
     return {
       chat,
       messages,
-      activeRuns: runs.filter((run) => activeRunStatuses.has(run.status)),
+      activeRuns: runs.filter((run) => isActiveGenerationRunStatus(run.status)),
       pendingApprovals: pendingApprovals.filter(
         (approval) => approval.chatId === chatId
       ),

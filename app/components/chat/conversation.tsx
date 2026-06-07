@@ -1,30 +1,25 @@
 import { ScrollRootContent } from "@/components/ui/scroll-root"
 import { Message as MessageContainer } from "@/components/ui/message"
 import { ThinkingBar } from "@/components/ui/thinking-bar"
+import {
+  type DurableMessageStatus,
+  isDurableMessageStatus,
+} from "@/lib/chat-messages/durable-contract"
+import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import { cn } from "@/lib/utils"
 import { UIMessage as MessageType } from "@ai-sdk/react"
 import { Message } from "./message"
 
 type MessageRenderStatus =
-  | "streaming"
+  | DurableMessageStatus
   | "ready"
-  | "submitted"
   | "error"
-  | "completed"
-  | "aborted"
-  | "failed"
-  | "awaiting_approval"
 
 function isMessageRenderStatus(value: unknown): value is MessageRenderStatus {
   return (
-    value === "streaming" ||
     value === "ready" ||
-    value === "submitted" ||
     value === "error" ||
-    value === "completed" ||
-    value === "aborted" ||
-    value === "failed" ||
-    value === "awaiting_approval"
+    isDurableMessageStatus(value)
   )
 }
 
@@ -32,15 +27,7 @@ function isMessageRenderStatus(value: unknown): value is MessageRenderStatus {
 // Tool-enabled responses can interleave multiple assistant text parts across
 // steps; using only the first part makes responses appear truncated.
 function getMessageText(message: MessageType): string {
-  if (!message.parts || message.parts.length === 0) return ""
-
-  let text = ""
-  for (const part of message.parts) {
-    if (part.type === "text" && "text" in part) {
-      text += part.text
-    }
-  }
-  return text
+  return extractTextFromMessageParts(message.parts)
 }
 
 // Extract file attachments from parts array

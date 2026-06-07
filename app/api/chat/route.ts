@@ -48,6 +48,10 @@ import {
 import { adaptHistoryForProvider } from "./adapters"
 import type { AdaptationContext, AdaptationWarning } from "./adapters/types"
 import {
+  getLatestUserMessageTextFilePartReferences,
+  prepareTextFilePartsForModelInput,
+} from "./text-file-parts"
+import {
   loadUserMcpTools,
   type LoadToolsResult,
 } from "@/lib/mcp/load-tools"
@@ -1218,6 +1222,43 @@ export async function POST(req: Request) {
       tools: allTools as unknown as Parameters<typeof validateUIMessages>[0]["tools"],
     })
 
+    const textFileReferences =
+      getLatestUserMessageTextFilePartReferences(validatedMessages)
+    const trustedTextAttachments =
+      durableRuntimeEnabled && convexToken && textFileReferences.length > 0
+        ? await fetchQuery(
+            api.files.getTrustedTextAttachmentsForChat,
+            {
+              chatId: chatId as Id<"chats">,
+              references: textFileReferences,
+            },
+            { token: convexToken }
+          )
+        : []
+
+    const textFileModelInput = await prepareTextFilePartsForModelInput(
+      validatedMessages,
+      {
+        trustedAttachments: trustedTextAttachments,
+        convertOnlyLatestUserMessage: true,
+      }
+    )
+
+    if (textFileModelInput.convertedCount > 0) {
+      console.log(
+        JSON.stringify({
+          _tag: "text_file_model_input_prepared",
+          chatId,
+          provider,
+          model,
+          convertedCount: textFileModelInput.convertedCount,
+          failedCount: textFileModelInput.failedCount,
+          truncatedCount: textFileModelInput.truncatedCount,
+          skippedCount: textFileModelInput.skippedCount,
+        })
+      )
+    }
+
     const adaptationContext: AdaptationContext = {
       targetModelId: model,
       hasTools: hasAnyTools,
@@ -1226,7 +1267,7 @@ export async function POST(req: Request) {
 
     const adaptStartTime = Date.now()
     const adapterResult = await adaptHistoryForProvider(
-      validatedMessages,
+      textFileModelInput.messages,
       provider,
       adaptationContext,
       {

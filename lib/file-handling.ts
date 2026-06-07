@@ -7,6 +7,7 @@ export type Attachment = {
   name: string
   contentType: string
   url: string
+  attachmentId?: string
 }
 
 export type ProcessFileValidationIssue = {
@@ -38,7 +39,7 @@ export async function uploadFileToConvex(
   convex: ConvexReactClient,
   file: File,
   chatId: string
-): Promise<string> {
+): Promise<{ fileUrl: string; attachmentId: string }> {
   // Import dynamically to avoid circular imports
   const { api } = await import("@/convex/_generated/api")
 
@@ -59,7 +60,7 @@ export async function uploadFileToConvex(
   const { storageId } = await response.json()
 
   // 3. Save attachment metadata
-  await convex.mutation(api.files.saveAttachment, {
+  const attachmentId = await convex.mutation(api.files.saveAttachment, {
     chatId: chatId as unknown as typeof api.files.saveAttachment._args.chatId,
     storageId,
     fileName: file.name,
@@ -73,18 +74,23 @@ export async function uploadFileToConvex(
     throw new Error("Failed to get file URL after upload")
   }
 
-  return fileUrl
+  return { fileUrl, attachmentId }
 }
 
 // ============================================================================
 // Common Operations
 // ============================================================================
 
-export function createAttachment(file: File, url: string): Attachment {
+export function createAttachment(
+  file: File,
+  url: string,
+  attachmentId?: string
+): Attachment {
   return {
     name: file.name,
     contentType: file.type,
     url,
+    ...(attachmentId ? { attachmentId } : {}),
   }
 }
 
@@ -123,8 +129,12 @@ export async function processFiles(
     }
 
     try {
-      const url = await uploadFileToConvex(convex, file, chatId)
-      attachments.push(createAttachment(file, url))
+      const { fileUrl, attachmentId } = await uploadFileToConvex(
+        convex,
+        file,
+        chatId
+      )
+      attachments.push(createAttachment(file, fileUrl, attachmentId))
     } catch (error) {
       options.onUploadError?.({ file, error })
     }
@@ -146,7 +156,7 @@ export class FileUploadLimitError extends Error {
  */
 export async function checkFileUploadLimit(
   convex: ConvexReactClient
-): Promise<number> {
+): Promise<number | null> {
   const { api } = await import("@/convex/_generated/api")
   const result = await convex.query(api.files.checkUploadLimit, {})
 

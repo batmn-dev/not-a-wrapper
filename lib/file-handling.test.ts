@@ -21,7 +21,7 @@ function createConvexClient(): ConvexReactClient {
     mutation: vi
       .fn()
       .mockResolvedValueOnce("https://uploads.example/file")
-      .mockResolvedValueOnce(undefined),
+      .mockResolvedValueOnce("attachment-1"),
     query: vi.fn().mockResolvedValue("https://files.example/good.png"),
   } as unknown as ConvexReactClient
 }
@@ -73,6 +73,7 @@ describe("file handling", () => {
         name: "good.png",
         contentType: "image/png",
         url: "https://files.example/good.png",
+        attachmentId: "attachment-1",
       },
     ])
   })

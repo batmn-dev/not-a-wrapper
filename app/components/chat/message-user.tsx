@@ -25,21 +25,62 @@ import {
   RiCheckLine,
   RiEditLine,
   RiFileCopyLine,
+  RiFileLine,
+  RiFileTextLine,
   RiPencilLine,
 } from "@remixicon/react"
 import Image from "next/image"
 import React, { useEffect, useRef, useState } from "react"
-
-const getTextFromDataUrl = (dataUrl: string) => {
-  const base64 = dataUrl.split(",")[1]
-  return base64
-}
 
 // Attachment type for backward compatibility with v4 format
 type MessageAttachment = {
   name: string
   contentType: string
   url: string
+}
+
+function getAttachmentLabel(attachment: MessageAttachment): string {
+  const extension = attachment.name.split(".").pop()
+  if (extension && extension !== attachment.name) return extension.toUpperCase()
+  if (attachment.contentType === "application/pdf") return "PDF"
+  if (attachment.contentType.startsWith("text/")) return "TXT"
+  return "FILE"
+}
+
+function AttachmentFileCard({ attachment }: { attachment: MessageAttachment }) {
+  const isText = attachment.contentType.startsWith("text/")
+  const icon = isText ? RiFileTextLine : RiFileLine
+  const content = (
+    <div className="border-border bg-background text-foreground hover:bg-accent/50 mb-1 flex w-64 max-w-[min(16rem,calc(100vw-3rem))] items-center gap-3 rounded-md border px-3 py-2 text-left transition">
+      <span className="bg-accent text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center rounded-md">
+        <Icon icon={icon} slotSize={20} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">
+          {attachment.name || "Attachment"}
+        </span>
+        <span className="text-muted-foreground block truncate text-xs">
+          {attachment.contentType || getAttachmentLabel(attachment)}
+        </span>
+      </span>
+      <span className="text-muted-foreground shrink-0 text-xs font-medium">
+        {getAttachmentLabel(attachment)}
+      </span>
+    </div>
+  )
+
+  if (!attachment.url) return content
+
+  return (
+    <a
+      href={attachment.url}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={`Open attachment ${attachment.name || "file"}`}
+    >
+      {content}
+    </a>
+  )
 }
 
 export type MessageUserProps = {
@@ -174,11 +215,9 @@ export function MessageUser({
                 <MorphingDialogClose className="text-primary" />
               </MorphingDialogContainer>
             </MorphingDialog>
-          ) : attachment.contentType?.startsWith("text") ? (
-            <div className="text-primary mb-3 h-24 w-40 overflow-hidden rounded-md border p-2 text-xs">
-              {getTextFromDataUrl(attachment.url)}
-            </div>
-          ) : null}
+          ) : (
+            <AttachmentFileCard attachment={attachment} />
+          )}
         </div>
       ))}
       {isEditing ? (
