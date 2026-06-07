@@ -94,6 +94,31 @@ describe("getMessagePartsForDisplay", () => {
     ).toEqual([filePart])
   })
 
+  it("bridges legacy attachments when stored parts contain malformed entries", () => {
+    expect(
+      getMessagePartsForDisplay({
+        content: "",
+        parts: [null, { type: "text", text: "see attached" }],
+        attachments: [
+          {
+            name: "receipt.pdf",
+            contentType: "application/pdf",
+            url: "https://example.com/receipt.pdf",
+          },
+        ],
+      })
+    ).toEqual([
+      null,
+      { type: "text", text: "see attached" },
+      {
+        type: "file",
+        filename: "receipt.pdf",
+        mediaType: "application/pdf",
+        url: "https://example.com/receipt.pdf",
+      },
+    ])
+  })
+
   it("ignores malformed legacy attachments", () => {
     expect(
       getMessagePartsForDisplay({

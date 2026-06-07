@@ -63,10 +63,16 @@ export function getLatestUserMessage(
 export function toDurableUiMessage(
   message: Doc<"messages">
 ): DurableUiMessage {
-  return durableStoredMessageToUiMessage(message, {
+  const uiMessage = durableStoredMessageToUiMessage(message, {
     partsMode: "stored",
     metadataMode: "runtime",
-  }) as DurableUiMessage
+  })
+
+  return {
+    ...uiMessage,
+    createdAt: new Date(message.createdAt),
+    status: message.status,
+  }
 }
 
 export function toDurableUiMessages(

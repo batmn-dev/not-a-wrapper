@@ -6,6 +6,14 @@ type StoredAttachment = {
   url: string
 }
 
+function isFilePart(part: unknown): boolean {
+  return (
+    Boolean(part) &&
+    typeof part === "object" &&
+    (part as { type?: unknown }).type === "file"
+  )
+}
+
 function normalizeStoredAttachments(
   attachments?: unknown[] | null
 ): StoredAttachment[] | undefined {
@@ -77,7 +85,7 @@ export function getMessagePartsForDisplay(message: {
   const storedAttachments = normalizeStoredAttachments(message.attachments)
   if (!storedAttachments) return baseParts
 
-  const hasFileParts = baseParts.some((part) => part.type === "file")
+  const hasFileParts = baseParts.some(isFilePart)
   if (hasFileParts) return baseParts
 
   return [

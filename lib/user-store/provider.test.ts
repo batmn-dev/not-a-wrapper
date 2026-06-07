@@ -51,4 +51,41 @@ describe("mergeUserProfileWithConvexFields", () => {
       system_prompt: "Be concise",
     })
   })
+
+  it("preserves existing profile fields when optional Convex fields are absent", () => {
+    const existingUser: UserProfile = {
+      ...baseUser,
+      display_name: "Existing User",
+      anonymous: true,
+      premium: true,
+      message_count: 8,
+      daily_message_count: 4,
+      daily_reset: "200",
+      daily_pro_message_count: 2,
+      daily_pro_reset: "300",
+      last_active_at: "400",
+      created_at: "50",
+      favorite_models: ["anthropic/claude-sonnet-4"],
+      system_prompt: "Keep answers terse",
+    }
+
+    expect(
+      mergeUserProfileWithConvexFields(existingUser, {
+        _creationTime: 100,
+      })
+    ).toMatchObject({
+      display_name: "Existing User",
+      anonymous: true,
+      premium: true,
+      message_count: 8,
+      daily_message_count: 4,
+      daily_reset: "200",
+      daily_pro_message_count: 2,
+      daily_pro_reset: "300",
+      last_active_at: "400",
+      created_at: "100",
+      favorite_models: ["anthropic/claude-sonnet-4"],
+      system_prompt: "Keep answers terse",
+    })
+  })
 })

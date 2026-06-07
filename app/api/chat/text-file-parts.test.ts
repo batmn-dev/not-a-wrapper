@@ -229,6 +229,88 @@ describe("prepareTextFilePartsForModelInput", () => {
     ])
   })
 
+  it("converts trusted text attachments across earlier and latest user messages by default", async () => {
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL) => {
+      if (String(url) === "https://files.example/old.txt") {
+        return new Response("old content")
+      }
+      return new Response("latest content")
+    })
+    const messages = [
+      {
+        id: "u1",
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            filename: "old.txt",
+            mediaType: "text/plain",
+            attachmentId: "old-attachment",
+            url: "https://files.example/old.txt",
+          },
+        ],
+      },
+      {
+        id: "a1",
+        role: "assistant",
+        parts: [{ type: "text", text: "ok" }],
+      },
+      {
+        id: "u2",
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            filename: "latest.txt",
+            mediaType: "text/plain",
+            attachmentId: "latest-attachment",
+            url: "https://files.example/latest.txt",
+          },
+        ],
+      },
+    ] as UIMessage[]
+
+    const result = await prepareTextFilePartsForModelInput(messages, {
+      fetchImpl,
+      trustedAttachments: [
+        {
+          attachmentId: "old-attachment",
+          url: "https://files.example/old.txt",
+        },
+        {
+          attachmentId: "latest-attachment",
+          url: "https://files.example/latest.txt",
+        },
+      ],
+    })
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      "https://files.example/old.txt",
+      expect.any(Object)
+    )
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      "https://files.example/latest.txt",
+      expect.any(Object)
+    )
+    expect(result.convertedCount).toBe(2)
+    expect(result.skippedCount).toBe(0)
+    expect(result.messages[0].parts).toEqual([
+      {
+        type: "text",
+        text: 'Attached plain text file "old.txt":\n\nold content',
+      },
+    ])
+    expect(result.messages[2].parts).toEqual([
+      {
+        type: "text",
+        text: 'Attached plain text file "latest.txt":\n\nlatest content',
+      },
+    ])
+  })
+
   it("converts only latest user text attachments when requested", async () => {
     const fetchImpl = vi.fn(async () => new Response("latest content"))
     const messages = [

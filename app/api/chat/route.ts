@@ -48,7 +48,7 @@ import {
 import { adaptHistoryForProvider } from "./adapters"
 import type { AdaptationContext, AdaptationWarning } from "./adapters/types"
 import {
-  getLatestUserMessageTextFilePartReferences,
+  getTextFilePartReferences,
   prepareTextFilePartsForModelInput,
 } from "./text-file-parts"
 import {
@@ -1222,8 +1222,7 @@ export async function POST(req: Request) {
       tools: allTools as unknown as Parameters<typeof validateUIMessages>[0]["tools"],
     })
 
-    const textFileReferences =
-      getLatestUserMessageTextFilePartReferences(validatedMessages)
+    const textFileReferences = getTextFilePartReferences(validatedMessages)
     const trustedTextAttachments =
       durableRuntimeEnabled && convexToken && textFileReferences.length > 0
         ? await fetchQuery(
@@ -1240,7 +1239,6 @@ export async function POST(req: Request) {
       validatedMessages,
       {
         trustedAttachments: trustedTextAttachments,
-        convertOnlyLatestUserMessage: true,
       }
     )
 
