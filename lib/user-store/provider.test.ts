@@ -178,8 +178,8 @@ describe("UserProvider", () => {
           UserProvider,
           {
             initialUser: null,
-            children: React.createElement(UserSnapshot),
-          }
+          },
+          React.createElement(UserSnapshot)
         )
       )
     })

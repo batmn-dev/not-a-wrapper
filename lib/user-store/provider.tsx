@@ -15,6 +15,7 @@ import type { User as WorkosUser } from "@workos-inc/node"
 import { useConvexAuth, useMutation, useQuery } from "convex/react"
 import {
   createContext,
+  type PropsWithChildren,
   useCallback,
   useContext,
   useEffect,
@@ -46,10 +47,9 @@ function getDisplayName(workosUser: WorkosUser) {
 export function UserProvider({
   children,
   initialUser,
-}: {
-  children: React.ReactNode
+}: PropsWithChildren<{
   initialUser: UserProfile | null
-}) {
+}>) {
   const [user, setUser] = useState<UserProfile | null>(initialUser)
   const [isLoading, setIsLoading] = useState(false)
   const updateProfileMutation = useMutation(api.users.updateProfile)
