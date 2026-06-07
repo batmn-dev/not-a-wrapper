@@ -45,6 +45,13 @@ describe("durable chat runtime helpers", () => {
     ).toBe(false)
     expect(
       isDurableConvexChat({
+        isAuthenticated: true,
+        convexToken: "token",
+        chatId: "optimistic-123",
+      })
+    ).toBe(false)
+    expect(
+      isDurableConvexChat({
         isAuthenticated: false,
         convexToken: "token",
         chatId: "chat_123",

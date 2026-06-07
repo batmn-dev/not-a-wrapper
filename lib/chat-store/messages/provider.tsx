@@ -8,6 +8,7 @@ import { useMutation, useQuery } from "convex/react"
 import { createContext, useCallback, useContext, useMemo, useState } from "react"
 import { getCachedMessages } from "./api"
 import { getMessagePartsForDisplay } from "./message-parts"
+import { getMessagePersistenceMode } from "../identity"
 import { writeToIndexedDB } from "../persist"
 import { useChatSession } from "../session/provider"
 
@@ -59,9 +60,12 @@ export function useMessages() {
 
 export function MessagesProvider({ children }: { children: React.ReactNode }) {
   const { chatId } = useChatSession()
+  const messagePersistenceMode = chatId
+    ? getMessagePersistenceMode(chatId)
+    : null
 
   // Only query if chatId is a valid Convex ID (not optimistic or local guest chat)
-  const isValidConvexId = Boolean(chatId && !chatId.startsWith("optimistic-") && !chatId.startsWith("local-"))
+  const isValidConvexId = messagePersistenceMode === "server"
 
   // Convex real-time query for messages
   const convexMessages = useQuery(
@@ -199,7 +203,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
 
     // Persist to Convex for authenticated users (valid Convex IDs only)
     // Guest users will silently skip this (auth required for mutations)
-    if (!effectiveChatId.startsWith("optimistic-") && !effectiveChatId.startsWith("local-")) {
+    if (getMessagePersistenceMode(effectiveChatId) === "server") {
       try {
         const textContent = messageToCache.parts
           .filter((p): p is { type: "text"; text: string } => p.type === "text")
@@ -223,7 +227,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
   }, [chatId, updateOptimisticMessages, addMessageMutation])
 
   const saveAllMessages = useCallback(async (newMessages: ExtendedUIMessage[]) => {
-    if (!chatId || chatId.startsWith("optimistic-") || chatId.startsWith("local-")) return
+    if (!chatId || getMessagePersistenceMode(chatId) !== "server") return
 
     try {
       // Find new messages that need to be saved
@@ -261,7 +265,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
   }, [chatId, serverMessages, addBatchMutation, updateOptimisticMessages])
 
   const deleteMessages = useCallback(async () => {
-    if (!chatId || chatId.startsWith("optimistic-") || chatId.startsWith("local-")) return
+    if (!chatId || getMessagePersistenceMode(chatId) !== "server") return
 
     // Clear optimistic messages immediately
     updateOptimisticMessages(() => [])
@@ -283,7 +287,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     timestamp: number,
     minVersion?: number
   ) => {
-    if (!chatId || chatId.startsWith("optimistic-") || chatId.startsWith("local-")) return
+    if (!chatId || getMessagePersistenceMode(chatId) !== "server") return
 
     await deleteFromTimestampMutation({
       chatId: chatId as Id<"chats">,

@@ -10,6 +10,7 @@ import type {
 import { getStaticToolName, isStaticToolUIPart } from "ai"
 import { api } from "@/convex/_generated/api"
 import type { Doc, Id } from "@/convex/_generated/dataModel"
+import { isServerChatId } from "@/lib/chat-store/identity"
 import type { ToolSource } from "@/lib/tools/types"
 
 export type DurableMessageStatus =
@@ -44,8 +45,7 @@ export function isDurableConvexChat(options: {
   return Boolean(
     options.isAuthenticated &&
       options.convexToken &&
-      !options.chatId.startsWith("local-") &&
-      !options.chatId.startsWith("optimistic-")
+      isServerChatId(options.chatId)
   )
 }
 

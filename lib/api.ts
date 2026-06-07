@@ -1,4 +1,8 @@
 import type { UserProfile } from "@/lib/user/types"
+import {
+  createGuestUserId,
+  GUEST_USER_STORAGE_KEY,
+} from "./chat-store/identity"
 import { fetchClient } from "./fetch"
 
 export class UsageLimitError extends Error {
@@ -50,14 +54,14 @@ export const getOrCreateGuestUserId = async (
 
   // Generate a local guest ID if no user is authenticated.
   // This is stored in localStorage and used for local state only
-  const existingGuestId = localStorage.getItem("guestUserId")
+  const existingGuestId = localStorage.getItem(GUEST_USER_STORAGE_KEY)
   if (existingGuestId) {
     return existingGuestId
   }
 
   // Generate a new guest ID
-  const newGuestId = `guest_${crypto.randomUUID()}`
-  localStorage.setItem("guestUserId", newGuestId)
+  const newGuestId = createGuestUserId()
+  localStorage.setItem(GUEST_USER_STORAGE_KEY, newGuestId)
 
   return newGuestId
 }

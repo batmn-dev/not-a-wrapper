@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/message"
 import { useScrollRoot } from "@/components/ui/scroll-root"
 import { toast } from "@/components/ui/toast"
+import { isOptimisticMessageId } from "@/lib/chat-store/identity"
 import { isConvexId } from "@/lib/chat-store/types"
 import { cn } from "@/lib/utils"
 import { UIMessage as MessageType } from "@ai-sdk/react"
@@ -81,7 +82,7 @@ export function MessageUser({
 
     try {
       // Valid IDs: optimistic (pending sync) or Convex IDs (synced)
-      const isValidId = id.startsWith("optimistic-") || isConvexId(id)
+      const isValidId = isOptimisticMessageId(id) || isConvexId(id)
       if (id && !isValidId) {
         // Message ID is in an unexpected format — likely failed to sync
         toast({

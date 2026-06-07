@@ -6,6 +6,11 @@ import { api } from "@/convex/_generated/api"
 import { convertAttachmentsToFiles } from "@/lib/ai/message-conversion"
 import { getOrCreateGuestUserId } from "@/lib/api"
 import { useChats } from "@/lib/chat-store/chats/provider"
+import {
+  createOptimisticMessageId,
+  GUEST_CHAT_STORAGE_KEY,
+  isServerChatId,
+} from "@/lib/chat-store/identity"
 import { MESSAGE_MAX_LENGTH, SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { Attachment } from "@/lib/file-handling"
 import { API_ROUTE_CHAT } from "@/lib/routes"
@@ -27,12 +32,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 type OptimisticUIMessage = UIMessage & { createdAt?: Date }
 
 function isRouteDurableChat(chatId: string | null, isAuthenticated: boolean) {
-  return Boolean(
-    isAuthenticated &&
-      chatId &&
-      !chatId.startsWith("optimistic-") &&
-      !chatId.startsWith("local-")
-  )
+  return Boolean(isAuthenticated && isServerChatId(chatId))
 }
 
 type UseChatCoreProps = {
@@ -215,7 +215,7 @@ export function useChatCore({
         chatId ||
         prevChatIdRef.current ||
         (typeof window !== "undefined"
-          ? localStorage.getItem("guestChatId")
+          ? localStorage.getItem(GUEST_CHAT_STORAGE_KEY)
           : null)
 
       if (effectiveChatId) {
@@ -386,7 +386,7 @@ export function useChatCore({
       isSendingRef.current = true
       setIsSubmitting(true)
 
-      const optimisticId = `optimistic-${crypto.randomUUID()}`
+      const optimisticId = createOptimisticMessageId()
       const optimisticMessage: OptimisticUIMessage = {
         id: optimisticId,
         role: "user",

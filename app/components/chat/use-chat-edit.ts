@@ -1,5 +1,6 @@
 import { toast } from "@/components/ui/toast"
 import { getOrCreateGuestUserId } from "@/lib/api"
+import { createOptimisticEditMessageId } from "@/lib/chat-store/identity"
 import { MESSAGE_MAX_LENGTH, SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import type { UserProfile } from "@/lib/user/types"
 import type { UIMessage } from "@ai-sdk/react"
@@ -112,7 +113,7 @@ export function useChatEdit({
       // Store original messages for potential rollback
       const originalMessages = [...messages]
 
-      const optimisticId = `optimistic-edit-${crypto.randomUUID()}`
+      const optimisticId = createOptimisticEditMessageId()
 
       // Extract file parts from target message for the edited message
       const targetFileParts =

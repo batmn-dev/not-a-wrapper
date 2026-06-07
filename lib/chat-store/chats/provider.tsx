@@ -7,6 +7,11 @@ import { useMutation, useQuery, useConvexAuth } from "convex/react"
 import { createContext, useCallback, useContext, useMemo, useState } from "react"
 import { getDefaultModelForUser, SYSTEM_PROMPT_DEFAULT } from "../../config"
 import { resolveModelId } from "@/lib/models/model-id-migration"
+import {
+  createLocalChatId,
+  createOptimisticChatId,
+  isOptimisticChatId,
+} from "../identity"
 import type { Chats } from "../types"
 
 // Types for optimistic updates
@@ -102,7 +107,10 @@ export function ChatsProvider({
     for (const op of optimisticOps) {
       if (op.type === "add") {
         // Only add if not already in server data (by checking optimistic prefix)
-        if (op.chat.id.startsWith("optimistic-") || !result.find((c) => c.id === op.chat.id)) {
+        if (
+          isOptimisticChatId(op.chat.id) ||
+          !result.find((c) => c.id === op.chat.id)
+        ) {
           result = [op.chat, ...result.filter((c) => c.id !== op.chat.id)]
         }
       } else if (op.type === "update") {
@@ -182,7 +190,7 @@ export function ChatsProvider({
     // For guest users, create a local-only chat (not persisted to Convex)
     // This allows unauthenticated users to send messages without database errors
     if (!isAuthenticated) {
-      const localChatId = `local-${crypto.randomUUID()}`
+      const localChatId = createLocalChatId()
       const localChat: Chats = {
         id: localChatId,
         title: title || "New chat",
@@ -211,7 +219,7 @@ export function ChatsProvider({
       await new Promise((resolve) => setTimeout(resolve, 500))
     }
 
-    const optimisticId = `optimistic-${crypto.randomUUID()}`
+    const optimisticId = createOptimisticChatId()
     const optimisticChat: Chats = {
       id: optimisticId,
       title: title || "New chat",
