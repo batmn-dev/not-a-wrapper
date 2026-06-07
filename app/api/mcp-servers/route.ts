@@ -1,4 +1,8 @@
-import { ConvexHttpClient } from "convex/browser"
+import {
+  createAuthenticatedConvexClient,
+  jsonError,
+  unauthorizedError,
+} from "@/app/api/_lib/convex"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { getAuthenticatedWorkosSession } from "@/lib/auth/workos"
@@ -12,14 +16,6 @@ import { NextResponse } from "next/server"
  * Encrypts auth values server-side before storing in Convex.
  * Follows the same pattern as /api/user-keys/route.ts.
  */
-
-function getConvexClient() {
-  const url = process.env.NEXT_PUBLIC_CONVEX_URL
-  if (!url) {
-    throw new Error("NEXT_PUBLIC_CONVEX_URL is not set")
-  }
-  return new ConvexHttpClient(url)
-}
 
 /**
  * POST /api/mcp-servers — Create a new MCP server
@@ -37,15 +33,12 @@ export async function POST(request: Request) {
     }
 
     if (!name?.trim() || !url?.trim()) {
-      return NextResponse.json(
-        { error: "Name and URL are required" },
-        { status: 400 }
-      )
+      return jsonError("Name and URL are required", 400)
     }
 
     const authSession = await getAuthenticatedWorkosSession()
     if (!authSession) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return unauthorizedError()
     }
 
     // Encrypt auth value if provided
@@ -58,8 +51,7 @@ export async function POST(request: Request) {
       authIv = encrypted.iv
     }
 
-    const convex = getConvexClient()
-    convex.setAuth(authSession.accessToken)
+    const convex = createAuthenticatedConvexClient(authSession.accessToken)
 
     const serverId = await convex.mutation(api.mcpServers.create, {
       name: name.trim(),
@@ -80,7 +72,7 @@ export async function POST(request: Request) {
     console.error("Error in POST /api/mcp-servers:", error)
     const message =
       error instanceof Error ? error.message : "Internal server error"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return jsonError(message, 500)
   }
 }
 
@@ -102,19 +94,15 @@ export async function PATCH(request: Request) {
       }
 
     if (!serverId) {
-      return NextResponse.json(
-        { error: "Server ID is required" },
-        { status: 400 }
-      )
+      return jsonError("Server ID is required", 400)
     }
 
     const authSession = await getAuthenticatedWorkosSession()
     if (!authSession) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return unauthorizedError()
     }
 
-    const convex = getConvexClient()
-    convex.setAuth(authSession.accessToken)
+    const convex = createAuthenticatedConvexClient(authSession.accessToken)
 
     // Build typed update object — only include fields that were provided
     const updates: {
@@ -130,20 +118,14 @@ export async function PATCH(request: Request) {
     if (name !== undefined) {
       const trimmed = name.trim()
       if (!trimmed) {
-        return NextResponse.json(
-          { error: "Name cannot be empty" },
-          { status: 400 }
-        )
+        return jsonError("Name cannot be empty", 400)
       }
       updates.name = trimmed
     }
     if (url !== undefined) {
       const trimmed = url.trim()
       if (!trimmed) {
-        return NextResponse.json(
-          { error: "URL cannot be empty" },
-          { status: 400 }
-        )
+        return jsonError("URL cannot be empty", 400)
       }
       updates.url = trimmed
     }
@@ -179,6 +161,6 @@ export async function PATCH(request: Request) {
     console.error("Error in PATCH /api/mcp-servers:", error)
     const message =
       error instanceof Error ? error.message : "Internal server error"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return jsonError(message, 500)
   }
 }
