@@ -132,9 +132,10 @@ export function UserProvider({
   }, [workosUser, isAuthLoading])
 
   useEffect(() => {
+    if (isAuthLoading || !workosUser) return
     if (convexUser === undefined) return
     setUser((prevUser) => mergeUserProfileWithConvexFields(prevUser, convexUser))
-  }, [convexUser])
+  }, [convexUser, isAuthLoading, workosUser])
 
   const updateUser = useCallback(
     async (updates: Partial<UserProfile>) => {

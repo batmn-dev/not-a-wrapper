@@ -106,14 +106,20 @@ async function getTodayUploadCount(
 ): Promise<number> {
   const startOfDay = new Date()
   startOfDay.setUTCHours(0, 0, 0, 0)
+  const startOfTomorrow = new Date(startOfDay)
+  startOfTomorrow.setUTCDate(startOfDay.getUTCDate() + 1)
 
   const attachments = await ctx.db
     .query("chatAttachments")
-    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .withIndex("by_user", (q) =>
+      q
+        .eq("userId", userId)
+        .gte("_creationTime", startOfDay.getTime())
+        .lt("_creationTime", startOfTomorrow.getTime())
+    )
     .collect()
 
-  return attachments.filter((a) => a._creationTime >= startOfDay.getTime())
-    .length
+  return attachments.length
 }
 
 /**

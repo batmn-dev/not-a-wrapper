@@ -6,6 +6,16 @@ import {
   prepareTextFilePartsForModelInput,
 } from "./text-file-parts"
 
+type AppFileUIPart = Extract<UIMessage["parts"][number], { type: "file" }> & {
+  attachmentId?: string
+}
+
+type AppUIMessage = Omit<UIMessage, "parts"> & {
+  parts: Array<
+    Exclude<UIMessage["parts"][number], { type: "file" }> | AppFileUIPart
+  >
+}
+
 describe("prepareTextFilePartsForModelInput", () => {
   it("converts trusted text/plain file parts into model-safe text content", async () => {
     const fetchImpl = vi.fn(async () => new Response("hello from the file"))
@@ -24,7 +34,7 @@ describe("prepareTextFilePartsForModelInput", () => {
           },
         ],
       },
-    ] as UIMessage[]
+    ] satisfies AppUIMessage[]
 
     const result = await prepareTextFilePartsForModelInput(messages, {
       fetchImpl,
@@ -67,7 +77,7 @@ describe("prepareTextFilePartsForModelInput", () => {
           },
         ],
       },
-    ] as UIMessage[]
+    ] satisfies AppUIMessage[]
 
     const result = await prepareTextFilePartsForModelInput(messages, {
       fetchImpl,
@@ -113,7 +123,7 @@ describe("prepareTextFilePartsForModelInput", () => {
           },
         ],
       },
-    ] as UIMessage[]
+    ] satisfies AppUIMessage[]
 
     const result = await prepareTextFilePartsForModelInput(messages, {
       fetchImpl,
@@ -161,7 +171,7 @@ describe("prepareTextFilePartsForModelInput", () => {
           },
         ],
       },
-    ] as UIMessage[]
+    ] satisfies AppUIMessage[]
 
     const result = await prepareTextFilePartsForModelInput(messages, {
       fetchImpl,
@@ -207,7 +217,7 @@ describe("prepareTextFilePartsForModelInput", () => {
           },
         ],
       },
-    ] as UIMessage[]
+    ] satisfies AppUIMessage[]
 
     const result = await prepareTextFilePartsForModelInput(messages, {
       fetchImpl,
@@ -268,7 +278,7 @@ describe("prepareTextFilePartsForModelInput", () => {
           },
         ],
       },
-    ] as UIMessage[]
+    ] satisfies AppUIMessage[]
 
     const result = await prepareTextFilePartsForModelInput(messages, {
       fetchImpl,
@@ -345,7 +355,7 @@ describe("prepareTextFilePartsForModelInput", () => {
           },
         ],
       },
-    ] as UIMessage[]
+    ] satisfies AppUIMessage[]
 
     const result = await prepareTextFilePartsForModelInput(messages, {
       fetchImpl,
@@ -413,7 +423,7 @@ describe("prepareTextFilePartsForModelInput", () => {
           },
         ],
       },
-    ] as UIMessage[]
+    ] satisfies AppUIMessage[]
 
     const result = await prepareTextFilePartsForModelInput(messages, {
       fetchImpl,
@@ -477,7 +487,7 @@ describe("prepareTextFilePartsForModelInput", () => {
           },
         ],
       },
-    ] as UIMessage[]
+    ] satisfies AppUIMessage[]
 
     const result = await prepareTextFilePartsForModelInput(messages, {
       fetchImpl,
@@ -524,7 +534,7 @@ describe("prepareTextFilePartsForModelInput", () => {
           },
         ],
       },
-    ] as UIMessage[]
+    ] satisfies AppUIMessage[]
 
     const result = await prepareTextFilePartsForModelInput(messages, {
       fetchImpl,
@@ -565,7 +575,7 @@ describe("prepareTextFilePartsForModelInput", () => {
         role: "user",
         parts: [{ type: "text", text: "See files" }, imagePart, pdfPart],
       },
-    ] as UIMessage[]
+    ] satisfies AppUIMessage[]
 
     const result = await prepareTextFilePartsForModelInput(messages, {
       fetchImpl,
@@ -596,7 +606,7 @@ describe("prepareTextFilePartsForModelInput", () => {
           },
         ],
       },
-    ] as UIMessage[]
+    ] satisfies AppUIMessage[]
 
     const result = await prepareTextFilePartsForModelInput(messages, {
       fetchImpl,
@@ -640,7 +650,7 @@ describe("prepareTextFilePartsForModelInput", () => {
           },
         ],
       },
-    ] as UIMessage[]
+    ] satisfies AppUIMessage[]
 
     expect(getTextFilePartReferences(messages)).toEqual([
       {
@@ -678,7 +688,7 @@ describe("prepareTextFilePartsForModelInput", () => {
           },
         ],
       },
-    ] as UIMessage[]
+    ] satisfies AppUIMessage[]
 
     expect(getLatestUserMessageTextFilePartReferences(messages)).toEqual([
       {

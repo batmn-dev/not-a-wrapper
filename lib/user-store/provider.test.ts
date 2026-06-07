@@ -1,6 +1,34 @@
-import { describe, expect, it } from "vitest"
+/** @vitest-environment jsdom */
+
+import React, { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import type { UserProfile } from "@/lib/user/types"
 import { mergeUserProfileWithConvexFields } from "./merge-user-profile"
+import { UserProvider, useUser } from "./provider"
+
+const providerMocks = vi.hoisted(() => ({
+  authLoading: true,
+  convexAuthenticated: true,
+  convexUser: null as Record<string, unknown> | null | undefined,
+  workosUser: null as Record<string, unknown> | null,
+  mutation: vi.fn(),
+}))
+
+vi.mock("@workos-inc/authkit-nextjs/components", () => ({
+  useAuth: () => ({
+    loading: providerMocks.authLoading,
+    user: providerMocks.workosUser,
+  }),
+}))
+
+vi.mock("convex/react", () => ({
+  useConvexAuth: () => ({
+    isAuthenticated: providerMocks.convexAuthenticated,
+  }),
+  useMutation: () => providerMocks.mutation,
+  useQuery: () => providerMocks.convexUser,
+}))
 
 const baseUser: UserProfile = {
   id: "user-1",
@@ -87,5 +115,94 @@ describe("mergeUserProfileWithConvexFields", () => {
       favorite_models: ["anthropic/claude-sonnet-4"],
       system_prompt: "Keep answers terse",
     })
+  })
+})
+
+function UserSnapshot() {
+  const { user } = useUser()
+
+  return React.createElement("div", {
+    "data-created-at": user?.created_at ?? "",
+    "data-display-name": user?.display_name ?? "",
+    "data-premium": String(user?.premium ?? ""),
+    "data-system-prompt": user?.system_prompt ?? "",
+  })
+}
+
+describe("UserProvider", () => {
+  let container: HTMLDivElement | null = null
+  let root: Root | null = null
+
+  beforeAll(() => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean })
+      .IS_REACT_ACT_ENVIRONMENT = true
+  })
+
+  beforeEach(() => {
+    providerMocks.authLoading = true
+    providerMocks.convexAuthenticated = true
+    providerMocks.convexUser = {
+      _creationTime: 100,
+      displayName: "Convex User",
+      premium: true,
+      systemPrompt: "Be concise",
+    }
+    providerMocks.workosUser = null
+    providerMocks.mutation.mockReset()
+  })
+
+  afterEach(() => {
+    const mountedRoot = root
+    if (mountedRoot) {
+      act(() => {
+        mountedRoot.unmount()
+      })
+    }
+
+    container?.remove()
+    container = null
+    root = null
+    vi.clearAllMocks()
+  })
+
+  function renderProvider() {
+    if (!container) {
+      container = document.createElement("div")
+      document.body.appendChild(container)
+      root = createRoot(container)
+    }
+
+    act(() => {
+      root?.render(
+        React.createElement(
+          UserProvider,
+          { initialUser: null },
+          React.createElement(UserSnapshot)
+        )
+      )
+    })
+  }
+
+  it("applies Convex-managed fields after WorkOS hydrates later", () => {
+    renderProvider()
+
+    providerMocks.authLoading = false
+    providerMocks.workosUser = {
+      id: "user-1",
+      email: "user@example.com",
+      firstName: "WorkOS",
+      lastName: "User",
+      profilePictureUrl: null,
+      updatedAt: "2026-06-07T00:00:00.000Z",
+    }
+
+    renderProvider()
+
+    const snapshot = container?.querySelector("div")
+
+    expect(snapshot?.getAttribute("data-display-name")).toBe("Convex User")
+    expect(snapshot?.getAttribute("data-premium")).toBe("true")
+    expect(snapshot?.getAttribute("data-system-prompt")).toBe("Be concise")
+    expect(snapshot?.getAttribute("data-created-at")).toBe("100")
   })
 })
