@@ -70,10 +70,10 @@ import {
 } from "@/lib/tools/capability-policy"
 import type { ToolSource } from "@/lib/tools/types"
 import { getRuntimeToolApprovalDecision } from "@/lib/tools/runtime-approval"
+import { createToolMetadataResolver } from "@/lib/tools/metadata-resolver"
 import {
   buildFinishToolInvocationStreamMetadata,
   buildStartToolInvocationStreamMetadata,
-  buildToolInvocationMetadataByName,
   type ToolInvocationMetadataByCallId,
 } from "@/lib/tools/ui-metadata"
 import {
@@ -103,7 +103,6 @@ import {
   getLatestUserMessage,
   hasApprovalResponse,
   isDurableConvexChat,
-  sourceForTool,
   toDurableUiMessages,
   type DurableUiMessage,
   type ToolInvocationForPersistence,
@@ -1496,41 +1495,41 @@ export async function POST(req: Request) {
       requestHeaders["anthropic-beta"] = ANTHROPIC_BETA_HEADERS.tokenEfficient
     }
 
-    // Collect all tool metadata for prepareStep tool restriction.
-    // Merge built-in + third-party + content + platform metadata (MCP metadata
-    // not available here — MCP tools are conservatively included in the safe list).
-    const allToolMetadata = new Map([
-      ...builtInToolMetadata,
-      ...thirdPartyToolMetadata,
-      ...contentToolMetadata,
-    ])
-    const toolMetadataByName = buildToolInvocationMetadataByName({
-      nonMcpMetadata: allToolMetadata,
+    // Resolve every tool's metadata behind one source-agnostic interface — the
+    // Tool runtime's metadata resolver. It unifies the two prior shapes
+    // (ToolMetadata across built-in/third-party/content + ServerInfo for MCP)
+    // so downstream call sites read one shape instead of hand-joining four maps.
+    // Built post-filter (after the metadata filtering above) so it sees only the
+    // tools that survived policy + naming. MCP risk hints are carried verbatim;
+    // trust is applied at the call sites below, never inside the resolver.
+    const toolMetadataResolver = createToolMetadataResolver({
+      builtIn: builtInToolMetadata,
+      thirdParty: thirdPartyToolMetadata,
+      content: contentToolMetadata,
       mcpToolServerMap,
     })
+    const toolMetadataByName = toolMetadataResolver.toInvocationMetadataByName()
 
     const runtimeApprovalByToolName = new Map<
       string,
       ReturnType<typeof getRuntimeToolApprovalDecision>
     >()
     for (const toolName of Object.keys(allTools)) {
-      const mcpInfo = mcpToolServerMap.get(toolName)
-      const source = sourceForTool(toolName, {
-        mcpToolServerMap,
-        allToolMetadata,
-      })
+      const resolved = toolMetadataResolver.get(toolName)
       const decision = getRuntimeToolApprovalDecision({
         toolName,
-        source,
-        metadata: mcpInfo
+        source: toolMetadataResolver.source(toolName),
+        // Risk hints verbatim — for MCP these are advisory and only become
+        // policy-driving via riskHintsTrusted below.
+        metadata: resolved
           ? {
-              readOnly: mcpInfo.readOnly,
-              destructive: mcpInfo.destructive,
-              idempotent: mcpInfo.idempotent,
-              openWorld: mcpInfo.openWorld,
+              readOnly: resolved.readOnly,
+              destructive: resolved.destructive,
+              idempotent: resolved.idempotent,
+              openWorld: resolved.openWorld,
             }
-          : allToolMetadata.get(toolName),
-        riskHintsTrusted: mcpInfo?.policyHintsTrusted,
+          : undefined,
+        riskHintsTrusted: resolved?.policyHintsTrusted,
       })
       runtimeApprovalByToolName.set(toolName, decision)
     }
@@ -1865,7 +1864,7 @@ export async function POST(req: Request) {
           const success = result
             ? !(result as { isError?: boolean }).isError
             : false
-          const meta = allToolMetadata.get(call.toolName)
+          const meta = toolMetadataResolver.getNonMcp(call.toolName)
           const trace = traceCollector.get(call.toolCallId)
 
           // Structured JSON log — parseable by Vercel log drain and grep.
@@ -1909,10 +1908,7 @@ export async function POST(req: Request) {
               return {
                 toolCallId: call.toolCallId,
                 toolName: call.toolName,
-                source: sourceForTool(call.toolName, {
-                  mcpToolServerMap,
-                  allToolMetadata,
-                }),
+                source: toolMetadataResolver.source(call.toolName),
                 input: call.input,
                 output: result?.output,
                 error: isError
@@ -1970,8 +1966,7 @@ export async function POST(req: Request) {
               convexToken,
               durableRunState,
               runtimeApprovalByToolName,
-              mcpToolServerMap,
-              allToolMetadata,
+              toolMetadataResolver,
               approvalWritePromises,
               requestId,
             }),
@@ -2297,17 +2292,15 @@ export async function POST(req: Request) {
               for (const step of steps) {
                 if (step.toolCalls) {
                   for (const toolCall of step.toolCalls) {
-                    const mcpServerInfo = mcpToolServerMap.get(toolCall.toolName)
-                    const nonMcpMeta = allToolMetadata.get(toolCall.toolName)
+                    const resolved = toolMetadataResolver.get(toolCall.toolName)
+                    const mcpServer = resolved?.mcpServer
 
                     // Determine source and service name
-                    const source = mcpServerInfo ? "mcp" : (nonMcpMeta?.source ?? "unknown")
-                    const serviceName = mcpServerInfo
-                      ? mcpServerInfo.serverName
-                      : (nonMcpMeta?.serviceName ?? "unknown")
-                    const displayName = mcpServerInfo
-                      ? mcpServerInfo.displayName
-                      : (nonMcpMeta?.displayName ?? toolCall.toolName)
+                    const source = resolved?.source ?? "unknown"
+                    const serviceName = resolved?.serviceName ?? "unknown"
+                    const displayName = mcpServer
+                      ? mcpServer.displayName
+                      : (resolved?.displayName ?? toolCall.toolName)
 
                     const toolResult = step.toolResults?.find(
                       (r: { toolCallId: string }) => r.toolCallId === toolCall.toolCallId
@@ -2336,9 +2329,9 @@ export async function POST(req: Request) {
                         budgetDenied: trace?.budgetDenied,
                         requestId,
                         // MCP-specific (optional)
-                        ...(mcpServerInfo && {
-                          serverId: mcpServerInfo.serverId,
-                          serverName: mcpServerInfo.serverName,
+                        ...(mcpServer && {
+                          serverId: mcpServer.serverId,
+                          serverName: mcpServer.serverName,
                         }),
                       },
                     })
@@ -2433,7 +2426,7 @@ export async function POST(req: Request) {
         // Audit log: persist built-in + third-party tool calls (fire-and-forget).
         // Identifies non-MCP tools by checking if the tool name is NOT in mcpToolServerMap.
         if (convexToken && steps) {
-          if (allToolMetadata.size > 0) {
+          if (toolMetadataResolver.sizeNonMcp > 0) {
             let finishStepNumber = 0
 
             for (const step of steps) {
@@ -2442,9 +2435,9 @@ export async function POST(req: Request) {
               if (step.toolCalls) {
                 for (const toolCall of step.toolCalls) {
                   // Skip MCP tools (already logged above)
-                  if (mcpToolServerMap.get(toolCall.toolName)) continue
+                  if (toolMetadataResolver.isMcp(toolCall.toolName)) continue
 
-                  const meta = allToolMetadata.get(toolCall.toolName)
+                  const meta = toolMetadataResolver.getNonMcp(toolCall.toolName)
                   if (!meta) continue // Unknown tool — skip
 
                   const toolResult = step.toolResults?.find(
