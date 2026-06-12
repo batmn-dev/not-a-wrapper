@@ -75,7 +75,11 @@ vi.mock("@/lib/tools/utils", async () => {
 // Imports after mocks
 // =============================================================================
 
-import { prepareToolRuntime, type PrepareToolRuntimeOptions } from "../runtime"
+import {
+  prepareToolRuntime,
+  type PrepareToolRuntimeOptions,
+  type ToolRuntime,
+} from "../runtime"
 import { ToolPolicyError } from "../policy"
 import type { ToolMetadata } from "../types"
 import type { ServerInfo } from "@/lib/mcp/load-tools"
@@ -149,6 +153,19 @@ function baseOptions(
     },
     ...overrides,
   }
+}
+
+/**
+ * Drive the runtime's step gate via `prepareStep`, asserting it exists. Every
+ * scenario that calls this loads tools, so `prepareStep` is always defined here.
+ */
+async function activeToolsForStep(
+  runtime: ToolRuntime,
+  stepNumber: number
+): Promise<string[]> {
+  const { prepareStep } = runtime
+  if (!prepareStep) throw new Error("expected prepareStep to be defined")
+  return (await prepareStep({ stepNumber })).activeTools
 }
 
 beforeEach(() => {
@@ -261,13 +278,29 @@ describe("prepareToolRuntime — Tool layer loading & gating", () => {
 
     const runtime = await prepareToolRuntime(baseOptions())
 
-    const earlyTools = await runtime.stepGate.activeToolsForStep(1)
+    const earlyTools = await activeToolsForStep(runtime, 1)
     expect(earlyTools).toContain("web_search")
     expect(earlyTools).toContain("stateful_tool")
 
     // PREPARE_STEP_THRESHOLD is 3; step 4 is a late step.
-    const lateTools = await runtime.stepGate.activeToolsForStep(4)
+    const lateTools = await activeToolsForStep(runtime, 4)
     expect(lateTools).toEqual(["web_search"])
+  })
+
+  it("prepareStep is undefined when no tools loaded, defined when tools exist", async () => {
+    // enableSearch:false + no Exa content + unauthenticated → empty merged set.
+    const empty = await prepareToolRuntime(baseOptions({ enableSearch: false }))
+    expect(empty.hasTools).toBe(false)
+    expect(empty.prepareStep).toBeUndefined()
+
+    mocks.getProviderTools.mockResolvedValue({
+      tools: { web_search: {} },
+      metadata: new Map([["web_search", meta()]]),
+    })
+    const withTools = await prepareToolRuntime(baseOptions())
+    expect(withTools.hasTools).toBe(true)
+    expect(withTools.prepareStep).toBeDefined()
+    expect(await activeToolsForStep(withTools, 1)).toContain("web_search")
   })
 })
 
@@ -289,24 +322,22 @@ describe("prepareToolRuntime — Tool budget degradation & recovery", () => {
     expect(runtime.toolCounts.builtIn).toBe(1)
 
     // Outage, soft cap not yet consumed → tool allowed via the soft cap.
-    expect(await runtime.stepGate.activeToolsForStep(1)).toContain("web_search")
+    expect(await activeToolsForStep(runtime, 1)).toContain("web_search")
 
     // Consume the soft cap (PREPARE_STEP_THRESHOLD = 3 calls).
-    await runtime.stepGate.accountBuiltInCall("web_search")
-    await runtime.stepGate.accountBuiltInCall("web_search")
-    await runtime.stepGate.accountBuiltInCall("web_search")
+    await runtime.onStepFinish({ toolCalls: [{ toolName: "web_search" }] })
+    await runtime.onStepFinish({ toolCalls: [{ toolName: "web_search" }] })
+    await runtime.onStepFinish({ toolCalls: [{ toolName: "web_search" }] })
 
     // Soft cap exhausted while policy is still unavailable → tool disabled.
-    expect(await runtime.stepGate.activeToolsForStep(1)).not.toContain(
-      "web_search"
-    )
+    expect(await activeToolsForStep(runtime, 1)).not.toContain("web_search")
 
     // Policy service recovers → budgeting resumes and the tool is allowed again.
     store.state.available = true
-    expect(await runtime.stepGate.activeToolsForStep(1)).toContain("web_search")
+    expect(await activeToolsForStep(runtime, 1)).toContain("web_search")
   })
 
-  it("accountBuiltInCall is a no-op for non-built-in tools", async () => {
+  it("onStepFinish is a no-op for non-built-in tools", async () => {
     mocks.getProviderTools.mockResolvedValue({
       tools: { web_search: {} },
       metadata: new Map([["web_search", meta()]]),
@@ -316,9 +347,34 @@ describe("prepareToolRuntime — Tool budget degradation & recovery", () => {
 
     // A name the runtime never classified as built-in must not touch the store.
     await expect(
-      runtime.stepGate.accountBuiltInCall("not_a_tool")
+      runtime.onStepFinish({ toolCalls: [{ toolName: "not_a_tool" }] })
     ).resolves.toBeUndefined()
     expect(mocks.store.checkAndConsume).not.toHaveBeenCalled()
+  })
+
+  it("onStepFinish with an empty toolCalls array is a no-op", async () => {
+    mocks.getProviderTools.mockResolvedValue({
+      tools: { web_search: {} },
+      metadata: new Map([["web_search", meta()]]),
+    })
+
+    const runtime = await prepareToolRuntime(baseOptions())
+
+    // Spy after preparation so the prepare-time policy logs don't count.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const log = vi.spyOn(console, "log").mockImplementation(() => {})
+    try {
+      await expect(
+        runtime.onStepFinish({ toolCalls: [] })
+      ).resolves.toBeUndefined()
+      // No budget probe/consume, and no degraded/recovered/denied logs.
+      expect(mocks.store.checkAndConsume).not.toHaveBeenCalled()
+      expect(warn).not.toHaveBeenCalled()
+      expect(log).not.toHaveBeenCalled()
+    } finally {
+      warn.mockRestore()
+      log.mockRestore()
+    }
   })
 })
 

@@ -494,9 +494,9 @@ export async function POST(req: Request) {
     // for search injection; the runtime gates it against the model's search
     // capability. All search is visible, auditable tool calls.
     //
-    // The route keeps only the stream-lifecycle hooks (prepareStep /
-    // onStepFinish), which call the transitional `stepGate` surface
-    // (removed in commit 3).
+    // The runtime owns the stream-lifecycle hooks: it exposes `prepareStep`
+    // (step gating) and `onStepFinish` (built-in Tool budget accounting), which
+    // the route passes through / composes with its own tracing and persistence.
     // -----------------------------------------------------------------------
     const toolRuntime = await prepareToolRuntime({
       isAuthenticated,
@@ -1104,15 +1104,8 @@ export async function POST(req: Request) {
       // Centralized step gating from the Tool runtime. After
       // PREPARE_STEP_THRESHOLD, only late-step-safe tools remain (currently
       // read_only risk class); built-in Tool budget is probed per step. The
-      // gate body lives behind the runtime's transitional stepGate surface
-      // (removed in commit 3).
-      prepareStep: hasAnyTools
-        ? async ({ stepNumber }) => ({
-            activeTools: await toolRuntime.stepGate.activeToolsForStep(
-              stepNumber
-            ),
-          })
-        : undefined,
+      // runtime owns the gate and resolves to `undefined` when no tools loaded.
+      prepareStep: toolRuntime.prepareStep,
 
       // Per-step structured tracing.
       // Captures tool name, duration, token usage, and success per step.
@@ -1126,11 +1119,9 @@ export async function POST(req: Request) {
         if (toolCalls.length === 0) return
 
         // Post-call built-in (provider-executed) Tool budget accounting. The
-        // body lives behind the runtime's transitional stepGate surface; it is
-        // a no-op for non-built-in tools (removed in commit 3).
-        for (const call of toolCalls) {
-          await toolRuntime.stepGate.accountBuiltInCall(call.toolName)
-        }
+        // runtime owns it; this is a no-op for non-built-in tools. Composed here
+        // as the first tool-related action, before tracing and persistence.
+        await toolRuntime.onStepFinish({ toolCalls })
 
         for (const call of toolCalls) {
           const result = toolResults.find(

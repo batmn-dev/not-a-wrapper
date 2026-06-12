@@ -93,31 +93,6 @@ export type ToolRuntimeToolCounts = {
   total: number
 }
 
-/**
- * TRANSITIONAL surface — removed in commit 3.
- *
- * The stream-lifecycle hooks (`prepareStep` / `onStepFinish`) still live in the
- * route for now; they call these two methods so the budget state machine can
- * move behind the runtime without the route owning the hooks yet. Commit 3 gives
- * the runtime ownership of the hooks and deletes this surface.
- */
-export type ToolRuntimeStepGate = {
-  /**
-   * Body of today's `prepareStep` (route.ts:1752–1791): the policy step gate +
-   * built-in Tool budget probe + the one-time `tool_policy_step_gate` log.
-   * Returns the tools that survive both policy gating and budget probing for
-   * the given step.
-   */
-  activeToolsForStep(stepNumber: number): Promise<string[]>
-  /**
-   * Body of today's `onStepFinish` budget accounting (route.ts:1806–1850):
-   * post-call `enforceToolBudget` for built-in (provider-executed) tools, with
-   * degraded-recovery / degraded soft-cap / fail-closed logging. No-op for
-   * non-built-in tools.
-   */
-  accountBuiltInCall(toolName: string): Promise<void>
-}
-
 export type ToolRuntime = {
   /** Merged ToolSet (filtered, traced, budget-wrapped). */
   readonly tools: ToolSet
@@ -149,8 +124,21 @@ export type ToolRuntime = {
    * cannot be a `prepareToolRuntime` flag).
    */
   applyDurableApprovals(): void
-  /** TRANSITIONAL — removed in commit 3. See {@link ToolRuntimeStepGate}. */
-  readonly stepGate: ToolRuntimeStepGate
+  /**
+   * Step gate for streamText. `undefined` when the runtime has no tools —
+   * pass directly: `prepareStep: runtime.prepareStep`.
+   */
+  readonly prepareStep:
+    | ((options: { stepNumber: number }) => Promise<{ activeTools: string[] }>)
+    | undefined
+  /**
+   * Post-step Tool budget accounting for provider-executed (built-in) tools.
+   * No-op for empty steps and non-built-in tools. The route composes this into
+   * its own onStepFinish: `await runtime.onStepFinish({ toolCalls })`.
+   */
+  onStepFinish(step: {
+    toolCalls: ReadonlyArray<{ toolName: string }>
+  }): Promise<void>
   /** Close all MCP clients. Idempotent; safe to call twice. */
   dispose(): Promise<void>
 }
@@ -815,104 +803,128 @@ async function buildToolRuntime(
   }
 
   // -----------------------------------------------------------------------
-  // Transitional step gate (removed in commit 3).
+  // Stream-lifecycle hooks — alive for the whole stream (see CONTEXT.md).
+  //
+  // The runtime owns step gating and budget accounting: `prepareStep` applies
+  // the Capability policy step gate plus the built-in Tool budget probe (and the
+  // one-time `tool_policy_step_gate` log); `onStepFinish` accounts actual
+  // provider-executed usage. The route composes `onStepFinish` with its own
+  // tracing and persistence.
   // -----------------------------------------------------------------------
   let loggedLateStepPolicy = false
-  const stepGate: ToolRuntimeStepGate = {
-    async activeToolsForStep(stepNumber: number): Promise<string[]> {
-      const isLateStep = stepNumber > PREPARE_STEP_THRESHOLD
-      const policyToolsForStep = getActiveToolsForStep(
-        toolPolicy,
-        stepNumber,
-        PREPARE_STEP_THRESHOLD
+  const activeToolsForStep = async (stepNumber: number): Promise<string[]> => {
+    const isLateStep = stepNumber > PREPARE_STEP_THRESHOLD
+    const policyToolsForStep = getActiveToolsForStep(
+      toolPolicy,
+      stepNumber,
+      PREPARE_STEP_THRESHOLD
+    )
+    const budgetAllowedTools: string[] = []
+    for (const toolName of policyToolsForStep ?? []) {
+      if (!builtInToolNames.has(toolName)) {
+        budgetAllowedTools.push(toolName)
+        continue
+      }
+      if (await isBuiltInToolBudgetAllowed(toolName)) {
+        budgetAllowedTools.push(toolName)
+      }
+    }
+
+    if (isLateStep && !loggedLateStepPolicy) {
+      loggedLateStepPolicy = true
+      console.log(
+        JSON.stringify({
+          _tag: "tool_policy_step_gate",
+          requestId,
+          chatId,
+          userId,
+          model,
+          stepNumber,
+          threshold: PREPARE_STEP_THRESHOLD,
+          earlyToolCount: toolPolicy.earlyToolNames.length,
+          lateToolCount: budgetAllowedTools.length,
+          blockedCount:
+            toolPolicy.earlyToolNames.length - budgetAllowedTools.length,
+        })
       )
-      const budgetAllowedTools: string[] = []
-      for (const toolName of policyToolsForStep ?? []) {
-        if (!builtInToolNames.has(toolName)) {
-          budgetAllowedTools.push(toolName)
-          continue
-        }
-        if (await isBuiltInToolBudgetAllowed(toolName)) {
-          budgetAllowedTools.push(toolName)
-        }
-      }
+    }
 
-      if (isLateStep && !loggedLateStepPolicy) {
-        loggedLateStepPolicy = true
-        console.log(
-          JSON.stringify({
-            _tag: "tool_policy_step_gate",
-            requestId,
-            chatId,
-            userId,
-            model,
-            stepNumber,
-            threshold: PREPARE_STEP_THRESHOLD,
-            earlyToolCount: toolPolicy.earlyToolNames.length,
-            lateToolCount: budgetAllowedTools.length,
-            blockedCount:
-              toolPolicy.earlyToolNames.length - budgetAllowedTools.length,
-          })
-        )
-      }
+    return budgetAllowedTools
+  }
 
-      return budgetAllowedTools
-    },
-
-    async accountBuiltInCall(toolName: string): Promise<void> {
-      if (!builtInToolNames.has(toolName)) return
-      try {
-        await builtInPolicyGuard.enforceToolBudget(toolName)
-        if (degradedBuiltInTools.delete(toolName)) {
-          console.warn(
-            JSON.stringify({
-              _tag: "tool_budget_post_accounting_recovered",
-              requestId,
-              tool: toolName,
-              source: "builtin",
-              keyMode: providerToolKeyMode,
-              action: "resume_policy_enforced_budgeting",
-            })
-          )
-        }
-      } catch (error) {
-        if (isPolicyUnavailableError(error)) {
-          degradedBuiltInTools.add(toolName)
-          const softCap = degradedBuiltInSoftCap.recordCall(toolName)
-          console.warn(
-            JSON.stringify({
-              _tag: "tool_budget_post_accounting_degraded",
-              requestId,
-              tool: toolName,
-              source: "builtin",
-              keyMode: providerToolKeyMode,
-              policyUnavailable: true,
-              usedCalls: softCap.used,
-              remainingCalls: softCap.remaining,
-              maxCalls: softCap.maxCalls,
-              error: error.message,
-              action:
-                softCap.remaining > 0
-                  ? "allow_tool_with_request_local_soft_cap"
-                  : "disable_tool_until_policy_recovers",
-            })
-          )
-          return
-        }
-        exhaustedBuiltInTools.add(toolName)
+  const accountBuiltInCall = async (toolName: string): Promise<void> => {
+    if (!builtInToolNames.has(toolName)) return
+    try {
+      await builtInPolicyGuard.enforceToolBudget(toolName)
+      if (degradedBuiltInTools.delete(toolName)) {
         console.warn(
           JSON.stringify({
-            _tag: "tool_budget_post_accounting_denied",
+            _tag: "tool_budget_post_accounting_recovered",
             requestId,
             tool: toolName,
             source: "builtin",
             keyMode: providerToolKeyMode,
-            error: error instanceof Error ? error.message : String(error),
-            action: "disable_tool_for_remaining_steps",
+            action: "resume_policy_enforced_budgeting",
           })
         )
       }
-    },
+    } catch (error) {
+      if (isPolicyUnavailableError(error)) {
+        degradedBuiltInTools.add(toolName)
+        const softCap = degradedBuiltInSoftCap.recordCall(toolName)
+        console.warn(
+          JSON.stringify({
+            _tag: "tool_budget_post_accounting_degraded",
+            requestId,
+            tool: toolName,
+            source: "builtin",
+            keyMode: providerToolKeyMode,
+            policyUnavailable: true,
+            usedCalls: softCap.used,
+            remainingCalls: softCap.remaining,
+            maxCalls: softCap.maxCalls,
+            error: error.message,
+            action:
+              softCap.remaining > 0
+                ? "allow_tool_with_request_local_soft_cap"
+                : "disable_tool_until_policy_recovers",
+          })
+        )
+        return
+      }
+      exhaustedBuiltInTools.add(toolName)
+      console.warn(
+        JSON.stringify({
+          _tag: "tool_budget_post_accounting_denied",
+          requestId,
+          tool: toolName,
+          source: "builtin",
+          keyMode: providerToolKeyMode,
+          error: error instanceof Error ? error.message : String(error),
+          action: "disable_tool_for_remaining_steps",
+        })
+      )
+    }
+  }
+
+  // `prepareStep` is fixed once here: with no tools the runtime has no step gate,
+  // so the route passes `undefined` straight to streamText.
+  const prepareStep:
+    | ((options: { stepNumber: number }) => Promise<{ activeTools: string[] }>)
+    | undefined =
+    Object.keys(mergedTools).length > 0
+      ? async ({ stepNumber }) => ({
+          activeTools: await activeToolsForStep(stepNumber),
+        })
+      : undefined
+
+  const onStepFinish = async (step: {
+    toolCalls: ReadonlyArray<{ toolName: string }>
+  }): Promise<void> => {
+    if (step.toolCalls.length === 0) return
+    for (const call of step.toolCalls) {
+      await accountBuiltInCall(call.toolName)
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -963,7 +975,8 @@ async function buildToolRuntime(
       return approvalDecisionsByToolName.get(toolName)
     },
     applyDurableApprovals,
-    stepGate,
+    prepareStep,
+    onStepFinish,
     dispose,
   }
 }
