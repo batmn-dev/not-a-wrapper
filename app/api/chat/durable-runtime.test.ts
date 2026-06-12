@@ -126,8 +126,7 @@ describe("durable chat runtime helpers", () => {
       runtimeApprovalByToolName: new Map([
         ["send_email", { reason: "External write", riskClass: "write" }],
       ]),
-      mcpToolServerMap: new Map(),
-      allToolMetadata: new Map([["send_email", { source: "mcp" }]]),
+      toolMetadataResolver: { source: () => "mcp" },
       approvalWritePromises,
       requestId: "request-1",
       persistApprovalRequest: async (args) => {

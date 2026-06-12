@@ -271,13 +271,21 @@ type ToolApprovalRequestPersistenceArgs = {
   approvalId: string
 }
 
+/**
+ * Minimal surface the approval-persistence transform needs from the Tool
+ * runtime's metadata resolver: resolve a tool name to its source. The full
+ * `ToolMetadataResolver` structurally satisfies this.
+ */
+type ToolSourceResolver = {
+  source(toolName: string): ToolSource
+}
+
 type RuntimeApprovalPersistenceTransformOptions = {
   chatId: string
   convexToken: string
   durableRunState: RuntimeApprovalPersistenceRunState
   runtimeApprovalByToolName: ReadonlyMap<string, RuntimeApprovalPersistenceDecision>
-  mcpToolServerMap: ReadonlyMap<string, unknown>
-  allToolMetadata: ReadonlyMap<string, { source?: ToolSource }>
+  toolMetadataResolver: ToolSourceResolver
   approvalWritePromises: Array<Promise<unknown>>
   requestId: string
   persistApprovalRequest?: (
@@ -285,24 +293,12 @@ type RuntimeApprovalPersistenceTransformOptions = {
   ) => Promise<unknown>
 }
 
-export function sourceForTool(
-  toolName: string,
-  options: {
-    mcpToolServerMap: ReadonlyMap<string, unknown>
-    allToolMetadata: ReadonlyMap<string, { source?: ToolSource }>
-  }
-): ToolSource {
-  if (options.mcpToolServerMap.has(toolName)) return "mcp"
-  return options.allToolMetadata.get(toolName)?.source ?? "platform"
-}
-
 export function createRuntimeApprovalPersistenceTransform({
   chatId,
   convexToken,
   durableRunState,
   runtimeApprovalByToolName,
-  mcpToolServerMap,
-  allToolMetadata,
+  toolMetadataResolver,
   approvalWritePromises,
   requestId,
   persistApprovalRequest,
@@ -320,10 +316,7 @@ export function createRuntimeApprovalPersistenceTransform({
         if (chunk.type === "tool-approval-request") {
           const toolName = chunk.toolCall.toolName
           const decision = runtimeApprovalByToolName.get(toolName)
-          const source = sourceForTool(toolName, {
-            mcpToolServerMap,
-            allToolMetadata,
-          })
+          const source = toolMetadataResolver.source(toolName)
           const inputPreview = (() => {
             try {
               return JSON.stringify(chunk.toolCall.input).slice(0, 500)
