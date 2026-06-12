@@ -65,6 +65,14 @@ export type PrepareToolRuntimeOptions = {
     userId: string
     model: string
   }
+  /**
+   * Telemetry hook: reports how many MCP clients opened during preparation.
+   * On failure the runtime object — and its `mcpClientCount` — is never
+   * returned, so this is the only way the route's catch path can report the
+   * pre-refactor `mcpClientCount: mcpClients.length`. Clients are still closed
+   * by the prepare-failure cleanup regardless.
+   */
+  onMcpClientsOpened?: (clientCount: number) => void
 }
 
 /**
@@ -173,6 +181,7 @@ async function buildToolRuntime(
     modelTools,
     enableSearch,
     logContext,
+    onMcpClientsOpened,
   } = options
   const { requestId, chatId, userId, model } = logContext
 
@@ -381,6 +390,7 @@ async function buildToolRuntime(
     mcpTools = mcpResult.tools as ToolSet
     mcpClients.push(...mcpResult.clients)
     mcpToolServerMap = mcpResult.toolServerMap
+    onMcpClientsOpened?.(mcpClients.length)
 
     // PostHog: MCP tool loading observability
     const phClientForMcp = getPostHogClient()

@@ -337,6 +337,37 @@ describe("prepareToolRuntime — Tool budget degradation & recovery", () => {
     expect(await activeToolsForStep(runtime, 1)).toContain("web_search")
   })
 
+  it("built-in budget fails closed on a non-outage store error and stays disabled", async () => {
+    const checkAndConsume = vi.fn<
+      () => Promise<{ allowed: boolean; remaining: number }>
+    >(async () => {
+      throw new Error("unexpected store failure")
+    })
+    mocks.store = { checkAndConsume }
+    mocks.getProviderTools.mockResolvedValue({
+      tools: { web_search: {} },
+      metadata: new Map([["web_search", meta({ readOnly: true })]]),
+    })
+    mocks.getEffectiveToolKeyWithMode.mockResolvedValue({
+      key: undefined,
+      keyMode: undefined,
+    })
+
+    const runtime = await prepareToolRuntime(baseOptions())
+
+    // Non-TOOL_POLICY_UNAVAILABLE error → fail closed, no soft-cap fallback.
+    expect(await activeToolsForStep(runtime, 1)).not.toContain("web_search")
+
+    // Exhausted set short-circuits: the store is not probed again, and the
+    // tool stays disabled even though the store would now succeed.
+    checkAndConsume.mockImplementation(async () => ({
+      allowed: true,
+      remaining: 99,
+    }))
+    expect(await activeToolsForStep(runtime, 2)).not.toContain("web_search")
+    expect(checkAndConsume).toHaveBeenCalledTimes(1)
+  })
+
   it("onStepFinish is a no-op for non-built-in tools", async () => {
     mocks.getProviderTools.mockResolvedValue({
       tools: { web_search: {} },
@@ -495,12 +526,20 @@ describe("prepareToolRuntime — MCP client lifecycle", () => {
       ]),
     })
 
+    const onMcpClientsOpened = vi.fn()
     await expect(
       prepareToolRuntime(
-        baseOptions({ isAuthenticated: true, convexToken: "token" })
+        baseOptions({
+          isAuthenticated: true,
+          convexToken: "token",
+          onMcpClientsOpened,
+        })
       )
     ).rejects.toThrow("tracing wrap failed")
 
     expect(close).toHaveBeenCalledTimes(1)
+    // The telemetry hook still reported the opened-client count, so the
+    // route's catch path can log mcpClientCount as the pre-runtime code did.
+    expect(onMcpClientsOpened).toHaveBeenCalledWith(1)
   })
 })

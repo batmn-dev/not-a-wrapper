@@ -299,6 +299,9 @@ export async function POST(req: Request) {
   // Tool runtime — declared outside try so the catch can dispose() its MCP
   // clients and read mcpClientCount even when the tool block itself threw.
   let runtime: ToolRuntime | null = null
+  // Mirrors the pre-runtime `mcpClients.length` in the catch path: counts MCP
+  // clients opened even when prepareToolRuntime throws before returning.
+  let openedMcpClientCount = 0
   const requestId = crypto.randomUUID()
   let telemetryChatId: string | undefined
   let telemetryModel: string | undefined
@@ -508,6 +511,9 @@ export async function POST(req: Request) {
       modelTools: modelConfig.tools,
       enableSearch,
       logContext: { requestId, chatId, userId, model },
+      onMcpClientsOpened: (clientCount) => {
+        openedMcpClientCount = clientCount
+      },
     })
     runtime = toolRuntime
     // Register MCP cleanup immediately — after() runs even when the response
@@ -1923,7 +1929,7 @@ export async function POST(req: Request) {
         errorType,
         isAuthenticated: telemetryIsAuthenticated,
         messageCount: telemetryMessageCount,
-        mcpClientCount: runtime?.mcpClientCount ?? 0,
+        mcpClientCount: runtime?.mcpClientCount ?? openedMcpClientCount,
       },
     })
 
