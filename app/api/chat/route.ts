@@ -2,12 +2,10 @@ import * as Sentry from "@sentry/nextjs"
 import { after } from "next/server"
 import {
   SYSTEM_PROMPT_DEFAULT,
-  MCP_CONNECTION_TIMEOUT_MS,
   MCP_MAX_STEP_COUNT,
   DEFAULT_MAX_STEP_COUNT,
   ANONYMOUS_MAX_STEP_COUNT,
   ANTHROPIC_BETA_HEADERS,
-  PREPARE_STEP_THRESHOLD,
   HISTORY_REPLAY_COMPILER_V1,
 } from "@/lib/config"
 import { getAllModels } from "@/lib/models"
@@ -23,7 +21,6 @@ import { scrubForAnalytics } from "@/lib/posthog/scrub"
 import type { Provider, ToolKeyMode } from "@/lib/user-keys"
 import {
   UIMessage as MessageAISDK,
-  ToolSet,
   consumeStream,
   stepCountIs,
   convertToModelMessages,
@@ -53,33 +50,14 @@ import {
   prepareTextFilePartsForModelInput,
 } from "./text-file-parts"
 import {
-  loadUserMcpTools,
-  type LoadToolsResult,
-} from "@/lib/mcp/load-tools"
-import {
-  enforceToolNamingGovernance,
-  type ToolLayerMap,
-} from "@/lib/tools/naming"
-import {
-  filterMetadataMapByPolicy,
-  filterToolSetByPolicy,
-  getActiveToolsForStep,
-  resolveCapabilityPolicy,
-  type ToolPolicyInput,
-  type ToolPolicyDecision,
-} from "@/lib/tools/capability-policy"
-import type { ToolSource } from "@/lib/tools/types"
-import { getRuntimeToolApprovalDecision } from "@/lib/tools/runtime-approval"
-import { createToolMetadataResolver } from "@/lib/tools/metadata-resolver"
+  prepareToolRuntime,
+  type ToolRuntime,
+} from "@/lib/tools/runtime"
 import {
   buildFinishToolInvocationStreamMetadata,
   buildStartToolInvocationStreamMetadata,
   type ToolInvocationMetadataByCallId,
 } from "@/lib/tools/ui-metadata"
-import {
-  ToolTraceCollector,
-  wrapMcpTools,
-} from "@/lib/tools/mcp-wrapper"
 import {
   classifyChatError,
   type ChatErrorType,
@@ -127,8 +105,6 @@ type DurableRunState = {
   originalMessages: DurableUiMessage[]
   snapshotTracker: ReturnType<typeof createDurableSnapshotTracker> | null
 }
-
-type RuntimeApprovalDecision = ReturnType<typeof getRuntimeToolApprovalDecision>
 
 function normalizeChatVersion(
   chatVersion: unknown,
@@ -298,43 +274,6 @@ function summarizeHistoryPartTypes(messages: MessageAISDK[]): {
   return { roleCounts, partTypeCounts }
 }
 
-function wrapToolsWithRuntimeApproval(
-  tools: ToolSet,
-  approvalByToolName: ReadonlyMap<string, { needsApproval: boolean }>
-): ToolSet {
-  const wrapped: Record<string, unknown> = {}
-
-  for (const [toolName, descriptor] of Object.entries(tools)) {
-    const original = descriptor as Record<string, unknown>
-    const decision = approvalByToolName.get(toolName)
-    if (!decision?.needsApproval) {
-      wrapped[toolName] = original
-      continue
-    }
-
-    const existingNeedsApproval = original.needsApproval
-    wrapped[toolName] = {
-      ...original,
-      needsApproval: async (input: unknown, options: unknown) => {
-        let existingDecision = false
-        if (typeof existingNeedsApproval === "function") {
-          existingDecision = await (
-            existingNeedsApproval as (
-              input: unknown,
-              options: unknown
-            ) => boolean | PromiseLike<boolean>
-          )(input, options)
-        } else if (typeof existingNeedsApproval === "boolean") {
-          existingDecision = existingNeedsApproval
-        }
-        return existingDecision || decision.needsApproval
-      },
-    }
-  }
-
-  return wrapped as ToolSet
-}
-
 function countWarningsByCode(warnings: AdaptationWarning[]): Record<string, number> {
   const counts: Record<string, number> = {}
   for (const warning of warnings) {
@@ -357,9 +296,9 @@ function summarizeReplayWarningDetails(
 }
 
 export async function POST(req: Request) {
-  // MCP state — declared outside try for cleanup in both after() and catch
-  let mcpClients: LoadToolsResult["clients"] = []
-  let mcpToolServerMap: LoadToolsResult["toolServerMap"] = new Map()
+  // Tool runtime — declared outside try so the catch can dispose() its MCP
+  // clients and read mcpClientCount even when the tool block itself threw.
+  let runtime: ToolRuntime | null = null
   const requestId = crypto.randomUUID()
   let telemetryChatId: string | undefined
   let telemetryModel: string | undefined
@@ -546,586 +485,37 @@ export async function POST(req: Request) {
     const aiModel = createLanguageModel(modelConfig, apiKey)
 
     // -----------------------------------------------------------------------
-    // Search Tool Loading (Layer 1 — Built-in Provider Tools)
+    // Tool runtime (CONTEXT.md; lib/tools/runtime.ts)
     //
-    // The `enableSearch` flag from the client is the MASTER SWITCH for search
-    // tool injection. When true, route.ts injects search tools:
-    //   - If the provider has native search tools → use them (Layer 1)
-    //   - If not → use Exa fallback (Layer 2, added in Phase 3)
+    // Loads the three Tool layers (Layer 1 provider-native, Layer 2 Exa
+    // search/content, Layer 3 MCP), runs both Capability policy phases, enforces
+    // Tool budget, applies naming governance, and prepares runtime-approval
+    // decisions — all behind one interface. enableSearch is the master switch
+    // for search injection; the runtime gates it against the model's search
+    // capability. All search is visible, auditable tool calls.
     //
-    // This replaces the previous dual mechanism where `enableSearch` was
-    // passed to model creation as an opaque provider-level flag.
-    // All search is now visible, auditable tool calls.
-    //
-    // NOT gated on isAuthenticated. Anonymous users (5 daily messages)
-    // get search tools when the platform has provider API keys configured.
-    // When apiKey is undefined (anonymous), the provider factory falls back
-    // to the env var — same behavior as model creation above.
+    // The route keeps only the stream-lifecycle hooks (prepareStep /
+    // onStepFinish), which call the transitional `stepGate` surface
+    // (removed in commit 3).
     // -----------------------------------------------------------------------
-    let builtInTools: ToolSet = {} as ToolSet
-    let builtInToolMetadata = new Map<string, import("@/lib/tools/types").ToolMetadata>()
-
-    const initialCapabilityPolicy = resolveCapabilityPolicy({
-      modelTools: modelConfig.tools,
+    const toolRuntime = await prepareToolRuntime({
       isAuthenticated,
-    })
-    const capabilities = initialCapabilityPolicy.capabilities
-    const shouldInjectSearch = enableSearch && capabilities.search
-    console.log(
-      JSON.stringify({
-        _tag: "tool_capability_policy",
-        requestId,
-        chatId,
-        userId,
-        model,
-        userTier: initialCapabilityPolicy.userTier,
-        capabilities: initialCapabilityPolicy.capabilities,
-        capabilityReasons: initialCapabilityPolicy.capabilityReasons,
-        keyModeReason: initialCapabilityPolicy.keyModeReason,
-      })
-    )
-
-    if (shouldInjectSearch) {
-      const { getProviderTools } = await import("@/lib/tools/provider")
-      const providerResult = await getProviderTools(provider, apiKey)
-      builtInTools = providerResult.tools
-      builtInToolMetadata = providerResult.metadata
-    }
-
-    // -----------------------------------------------------------------------
-    // Exa API Key Resolution (shared by Layer 2 capabilities)
-    //
-    // Resolved once, used by both search fallback and content extraction.
-    // Key resolution: user BYOK key → platform env var → undefined.
-    // The exa-js SDK accepts keys in its constructor, so BYOK keys
-    // are passed directly — no env var manipulation needed.
-    //
-    // NOT gated on isAuthenticated — anonymous users get Exa-powered tools
-    // when the platform has an EXA_API_KEY configured (same as Layer 1).
-    // -----------------------------------------------------------------------
-    let resolvedExaKey: string | undefined
-    let resolvedExaKeyMode: ToolKeyMode | undefined
-    const { getEffectiveToolKeyWithMode } = await import("@/lib/user-keys")
-    const resolvedExa = await getEffectiveToolKeyWithMode("exa", convexToken)
-    resolvedExaKey = resolvedExa.key
-    resolvedExaKeyMode = resolvedExa.keyMode
-
-    const {
-      createOutageTolerantToolBudgetEnforcer,
-      createConvexToolLimitStore,
-      createRequestLocalToolSoftCap,
-      createToolPolicyGuard,
-      isPolicyUnavailableError,
-      probeToolBudget,
-    } = await import("@/lib/tools/policy")
-    const toolLimitStore = createConvexToolLimitStore({
       convexToken,
       anonymousId,
-    })
-    const makePolicyGuard = (keyMode: ToolKeyMode) =>
-      createToolPolicyGuard({ store: toolLimitStore, keyMode })
-
-    const builtInPolicyGuard = makePolicyGuard(providerToolKeyMode)
-    const mcpPolicyGuard = makePolicyGuard("platform")
-    const exaPolicyGuard =
-      resolvedExaKeyMode ? makePolicyGuard(resolvedExaKeyMode) : undefined
-
-    const logOutageTolerantBudgetEvent = (
-      source: "third-party" | "content" | "mcp",
-      event: {
-        type: "recovered" | "degraded_allow" | "degraded_block"
-        toolName: string
-        keyMode: ToolKeyMode
-        retryAfterSeconds?: number
-        snapshot?: {
-          used: number
-          remaining: number
-          maxCalls: number
-        }
-        error?: string
-      }
-    ) => {
-      if (event.type === "recovered") {
-        console.warn(
-          JSON.stringify({
-            _tag: "tool_budget_gate_recovered",
-            requestId,
-            tool: event.toolName,
-            source,
-            keyMode: event.keyMode,
-            action: "resume_policy_enforced_budgeting",
-          })
-        )
-        return
-      }
-
-      console.warn(
-        JSON.stringify({
-          _tag: "tool_budget_gate_degraded",
-          requestId,
-          tool: event.toolName,
-          source,
-          keyMode: event.keyMode,
-          policyUnavailable: true,
-          usedCalls: event.snapshot?.used ?? null,
-          remainingCalls: event.snapshot?.remaining ?? null,
-          maxCalls: event.snapshot?.maxCalls ?? null,
-          retryAfterSeconds: event.retryAfterSeconds ?? null,
-          error: event.error ?? null,
-          action:
-            event.type === "degraded_allow"
-              ? "allow_tool_with_request_local_soft_cap"
-              : "disable_tool_for_remaining_request",
-        })
-      )
-    }
-
-    const thirdPartyBudgetEnforcer =
-      exaPolicyGuard && resolvedExaKeyMode
-        ? createOutageTolerantToolBudgetEnforcer({
-            enforceToolBudget: (toolName) => exaPolicyGuard.enforceToolBudget(toolName),
-            keyMode: resolvedExaKeyMode,
-            maxCallsPerTool: PREPARE_STEP_THRESHOLD,
-            onEvent: (event) => logOutageTolerantBudgetEvent("third-party", event),
-          })
-        : undefined
-
-    const contentBudgetEnforcer =
-      exaPolicyGuard && resolvedExaKeyMode
-        ? createOutageTolerantToolBudgetEnforcer({
-            enforceToolBudget: (toolName) => exaPolicyGuard.enforceToolBudget(toolName),
-            keyMode: resolvedExaKeyMode,
-            maxCallsPerTool: PREPARE_STEP_THRESHOLD,
-            onEvent: (event) => logOutageTolerantBudgetEvent("content", event),
-          })
-        : undefined
-
-    const mcpBudgetEnforcer = createOutageTolerantToolBudgetEnforcer({
-      enforceToolBudget: (toolName) => mcpPolicyGuard.enforceToolBudget(toolName),
-      keyMode: "platform",
-      maxCallsPerTool: PREPARE_STEP_THRESHOLD,
-      onEvent: (event) => logOutageTolerantBudgetEvent("mcp", event),
-    })
-
-    // -----------------------------------------------------------------------
-    // Third-Party Search Fallback (Layer 2 — Search)
-    // Universal search fallback for providers without native search tools.
-    // Only loaded when enableSearch is true AND Layer 1 didn't provide search.
-    //
-    // The coordination model is simple:
-    //   - enableSearch === true: route.ts injects search tools
-    //   - Layer 1 provided search (builtInHasSearch): skip Layer 2 search
-    //   - Layer 1 did NOT provide search: load Layer 2 Exa fallback
-    // -----------------------------------------------------------------------
-    let thirdPartyTools: ToolSet = {} as ToolSet
-    let thirdPartyToolMetadata = new Map<string, import("@/lib/tools/types").ToolMetadata>()
-
-    if (shouldInjectSearch) {
-      const builtInHasSearch = Object.keys(builtInTools).length > 0
-
-      if (!builtInHasSearch) {
-        const { getThirdPartyTools } = await import("@/lib/tools/third-party")
-        const thirdPartyResult = await getThirdPartyTools({
-          skipSearch: false,
-          exaKey: resolvedExaKey,
-        })
-        thirdPartyTools = thirdPartyResult.tools
-        thirdPartyToolMetadata = thirdPartyResult.metadata
-      }
-    }
-
-    // -----------------------------------------------------------------------
-    // Content Extraction Tools (Layer 2 — Content)
-    // Independent capability — NOT gated on shouldInjectSearch or
-    // builtInHasSearch. Gated on capabilities.extract and Exa key.
-    // Available for ALL providers including those with native Layer 1
-    // search (OpenAI, Anthropic, Google, xAI).
-    // -----------------------------------------------------------------------
-    let contentTools: ToolSet = {} as ToolSet
-    let contentToolMetadata = new Map<string, import("@/lib/tools/types").ToolMetadata>()
-
-    if (resolvedExaKey && capabilities.extract) {
-      const { getContentExtractionTools } = await import("@/lib/tools/third-party")
-      const contentResult = await getContentExtractionTools({
-        exaKey: resolvedExaKey,
-        policyGuard: exaPolicyGuard,
-      })
-      contentTools = contentResult.tools
-      contentToolMetadata = contentResult.metadata
-    }
-
-    // -----------------------------------------------------------------------
-    // MCP Tool Loading
-    // Gate on: auth + Convex token + model capability
-    // -----------------------------------------------------------------------
-    let mcpTools: ToolSet = {} as ToolSet
-
-    if (
-      isAuthenticated &&
-      convexToken &&
-      capabilities.mcp
-    ) {
-      const mcpLoadStart = Date.now()
-      const mcpResult = await loadUserMcpTools(convexToken, {
-        timeout: MCP_CONNECTION_TIMEOUT_MS,
-      })
-      mcpTools = mcpResult.tools as ToolSet
-      mcpClients = mcpResult.clients
-      mcpToolServerMap = mcpResult.toolServerMap
-
-      // PostHog: MCP tool loading observability
-      const phClientForMcp = getPostHogClient()
-      if (phClientForMcp) {
-        phClientForMcp.capture({
-          distinctId: userId,
-          event: "mcp_tool_load",
-          properties: {
-            serverCount: mcpResult.clients.length,
-            toolCount: Object.keys(mcpResult.tools).length,
-            failedServers: mcpResult.failedServerCount,
-            loadTimeMs: Date.now() - mcpLoadStart,
-          },
-        })
-      }
-
-      // Register MCP cleanup immediately after loading — before any code that
-      // could throw.  after() runs even when the response errors or the client
-      // disconnects, so this covers both the happy path and streaming failures.
-      after(async () => {
-        await Promise.allSettled(mcpClients.map((c) => c.close()))
-      })
-    }
-
-    const toolPolicyInputs: ToolPolicyInput[] = [
-      ...Object.keys(builtInTools).map((toolName) => {
-        const meta = builtInToolMetadata.get(toolName)
-        return {
-          toolName,
-          source: meta?.source ?? "builtin",
-          capability: "search" as const,
-          readOnly: meta?.readOnly,
-          destructive: meta?.destructive,
-          idempotent: meta?.idempotent,
-          openWorld: meta?.openWorld,
-        }
-      }),
-      ...Object.keys(thirdPartyTools).map((toolName) => {
-        const meta = thirdPartyToolMetadata.get(toolName)
-        return {
-          toolName,
-          source: meta?.source ?? "third-party",
-          capability: "search" as const,
-          readOnly: meta?.readOnly,
-          destructive: meta?.destructive,
-          idempotent: meta?.idempotent,
-          openWorld: meta?.openWorld,
-        }
-      }),
-      ...Object.keys(contentTools).map((toolName) => {
-        const meta = contentToolMetadata.get(toolName)
-        return {
-          toolName,
-          source: meta?.source ?? "third-party",
-          capability: "extract" as const,
-          readOnly: meta?.readOnly,
-          destructive: meta?.destructive,
-          idempotent: meta?.idempotent,
-          openWorld: meta?.openWorld,
-        }
-      }),
-      ...Object.keys(mcpTools).map((toolName) => {
-        const info = mcpToolServerMap.get(toolName)
-        const policyHintsTrusted = info?.policyHintsTrusted === true
-        return {
-          toolName,
-          source: "mcp" as const,
-          capability: "mcp" as const,
-          riskHintsTrusted: policyHintsTrusted,
-          readOnly: policyHintsTrusted ? info?.readOnly : undefined,
-          destructive: policyHintsTrusted ? info?.destructive : undefined,
-          idempotent: policyHintsTrusted ? info?.idempotent : undefined,
-          openWorld: policyHintsTrusted ? info?.openWorld : undefined,
-        }
-      }),
-    ]
-
-    const toolPolicy = resolveCapabilityPolicy({
+      provider,
+      apiKey,
+      providerToolKeyMode,
       modelTools: modelConfig.tools,
-      isAuthenticated,
-      keyMode: resolvedExaKeyMode,
-      tools: toolPolicyInputs,
+      enableSearch,
+      logContext: { requestId, chatId, userId, model },
     })
+    runtime = toolRuntime
+    // Register MCP cleanup immediately — after() runs even when the response
+    // errors or the client disconnects. dispose() is idempotent.
+    after(() => toolRuntime.dispose())
 
-    const summarizeReasonCounts = (
-      decisions: ToolPolicyDecision[],
-      selector: (decision: ToolPolicyDecision) => string
-    ) => {
-      const counts: Record<string, number> = {}
-      for (const decision of decisions) {
-        const reason = selector(decision)
-        counts[reason] = (counts[reason] ?? 0) + 1
-      }
-      return counts
-    }
-
-    console.log(
-      JSON.stringify({
-        _tag: "tool_policy_matrix",
-        requestId,
-        chatId,
-        userId,
-        model,
-        userTier: toolPolicy.userTier,
-        keyMode: toolPolicy.keyMode ?? null,
-        keyModeReason: toolPolicy.keyModeReason,
-        capabilities: toolPolicy.capabilities,
-        capabilityReasons: toolPolicy.capabilityReasons,
-        totalTools: toolPolicy.toolDecisions.length,
-        earlyAllowedCount: toolPolicy.earlyToolNames.length,
-        lateAllowedCount: toolPolicy.lateToolNames.length,
-        earlyReasonCounts: summarizeReasonCounts(
-          toolPolicy.toolDecisions,
-          (decision) => decision.earlyReasonCode
-        ),
-        lateReasonCounts: summarizeReasonCounts(
-          toolPolicy.toolDecisions,
-          (decision) => decision.lateReasonCode
-        ),
-      })
-    )
-
-    builtInTools = filterToolSetByPolicy(builtInTools, toolPolicy)
-    thirdPartyTools = filterToolSetByPolicy(thirdPartyTools, toolPolicy)
-    contentTools = filterToolSetByPolicy(contentTools, toolPolicy)
-    mcpTools = filterToolSetByPolicy(mcpTools, toolPolicy)
-
-    builtInToolMetadata = filterMetadataMapByPolicy(builtInToolMetadata, toolPolicy)
-    thirdPartyToolMetadata = filterMetadataMapByPolicy(
-      thirdPartyToolMetadata,
-      toolPolicy
-    )
-    contentToolMetadata = filterMetadataMapByPolicy(contentToolMetadata, toolPolicy)
-    mcpToolServerMap = filterMetadataMapByPolicy(mcpToolServerMap, toolPolicy)
-
-    // Wrap MCP tools with timeout, timing, truncation, and envelope.
-    // Single wrapper handles all Layer 3 concerns — follows the Exa gold
-    // standard pattern (lib/tools/third-party.ts:82-119).
-    // Replaces the previous wrapToolsWithTruncation(mcpTools) call.
-    const traceCollector = new ToolTraceCollector()
-
-    if (Object.keys(mcpTools).length > 0) {
-      mcpTools = wrapMcpTools(mcpTools, {
-        toolServerMap: mcpToolServerMap,
-        traceCollector,
-        requestId,
-        enforceToolBudget: async (toolName) => {
-          await mcpBudgetEnforcer(toolName)
-        },
-      }) as ToolSet
-    }
-
-    // Wrap non-builtin tools with tracing (Layer 2 + Layer 4).
-    // Records durationMs and resultSizeBytes into traceCollector so
-    // onStepFinish and onFinish can read them for ALL tool types.
-    const { wrapToolsWithTracing } = await import("@/lib/tools/utils")
-    if (Object.keys(thirdPartyTools).length > 0) {
-      thirdPartyTools = wrapToolsWithTracing(
-        thirdPartyTools,
-        traceCollector,
-        requestId,
-        async (toolName) => {
-          if (!thirdPartyBudgetEnforcer) return
-          await thirdPartyBudgetEnforcer(toolName)
-        },
-        thirdPartyToolMetadata
-      )
-    }
-    if (Object.keys(contentTools).length > 0) {
-      contentTools = wrapToolsWithTracing(
-        contentTools,
-        traceCollector,
-        requestId,
-        async (toolName) => {
-          if (!contentBudgetEnforcer) return
-          await contentBudgetEnforcer(toolName)
-        },
-        contentToolMetadata
-      )
-    }
-
-    // Merge all tool layers:
-    //   - Search: Layer 1 (built-in) XOR Layer 2 (Exa fallback) — never both
-    //   - Content: Layer 2 content extraction — independent of search gating
-    //   - MCP: Layer 3 (user-configured servers)
-    // Spread order = conflict resolution priority (last wins):
-    //   1. Search tools (lowest priority)
-    //   2. Content extraction tools (same priority tier as search)
-    //   3. MCP tools (highest priority — user-configured, namespaced)
-    const toolLayers: ToolLayerMap = {
-      "built-in": builtInTools,
-      "third-party-search": thirdPartyTools,
-      "content-extraction": contentTools,
-      mcp: mcpTools,
-    }
-
-    const namingResult = enforceToolNamingGovernance(toolLayers)
-    if (namingResult.invalid.length > 0) {
-      for (const invalid of namingResult.invalid) {
-        console.warn(
-          JSON.stringify({
-            _tag: "tool_name_invalid",
-            requestId,
-            tool: invalid.toolKey,
-            layer: invalid.layer,
-            reason: invalid.reason,
-            action: "drop_invalid_tool",
-          })
-        )
-      }
-    }
-    if (namingResult.collisions.length > 0) {
-      for (const collision of namingResult.collisions) {
-        const droppedLayers = collision.owners.filter(
-          (layer) => layer !== collision.winner
-        )
-        console.warn(
-          JSON.stringify({
-            _tag: "tool_name_collision",
-            requestId,
-            tool: collision.toolKey,
-            layers: collision.owners,
-            winner: collision.winner,
-            droppedLayers,
-            action: "keep_winner_drop_losers",
-          })
-        )
-      }
-    }
-
-    builtInTools = (namingResult.sanitizedLayers["built-in"] ?? {}) as ToolSet
-    thirdPartyTools = (namingResult.sanitizedLayers["third-party-search"] ??
-      {}) as ToolSet
-    contentTools = (namingResult.sanitizedLayers["content-extraction"] ??
-      {}) as ToolSet
-    mcpTools = (namingResult.sanitizedLayers.mcp ?? {}) as ToolSet
-
-    const filterMetadataByTools = <T>(
-      metadata: ReadonlyMap<string, T>,
-      tools: ToolSet
-    ) =>
-      new Map(
-        Array.from(metadata.entries()).filter(([name]) =>
-          Object.prototype.hasOwnProperty.call(tools, name)
-        )
-      )
-
-    builtInToolMetadata = filterMetadataByTools(builtInToolMetadata, builtInTools)
-    thirdPartyToolMetadata = filterMetadataByTools(
-      thirdPartyToolMetadata,
-      thirdPartyTools
-    )
-    contentToolMetadata = filterMetadataByTools(contentToolMetadata, contentTools)
-    mcpToolServerMap = new Map(
-      Array.from(mcpToolServerMap.entries()).filter(([name]) =>
-        Object.prototype.hasOwnProperty.call(mcpTools, name)
-      )
-    )
-
-    const builtInToolNames = new Set(Object.keys(builtInTools))
-    const exhaustedBuiltInTools = new Set<string>()
-    const degradedBuiltInTools = new Set<string>()
-    const degradedBuiltInSoftCap = createRequestLocalToolSoftCap({
-      maxCallsPerTool: PREPARE_STEP_THRESHOLD,
-    })
-
-    // Provider-native (Layer 1) tools are provider-executed and do not expose a
-    // local execute() hook for per-call preflight enforcement. Compensating
-    // control: probe budget during prepareStep (consume:false) and account
-    // actual usage in onStepFinish. This preserves centralized budget policy
-    // semantics, with a bounded request-local soft cap when policy is unavailable.
-    const isBuiltInToolBudgetAllowed = async (toolName: string): Promise<boolean> => {
-      if (!builtInToolNames.has(toolName)) return true
-      if (exhaustedBuiltInTools.has(toolName)) return false
-
-      try {
-        const probe = await probeToolBudget({
-          store: toolLimitStore,
-          keyMode: providerToolKeyMode,
-          toolName,
-        })
-        if (probe.allowed) {
-          if (degradedBuiltInTools.delete(toolName)) {
-            console.warn(
-              JSON.stringify({
-                _tag: "tool_budget_gate_recovered",
-                requestId,
-                tool: toolName,
-                source: "builtin",
-                keyMode: providerToolKeyMode,
-                action: "resume_policy_enforced_budgeting",
-              })
-            )
-          }
-          return true
-        }
-        degradedBuiltInTools.delete(toolName)
-        exhaustedBuiltInTools.add(toolName)
-        console.warn(
-          JSON.stringify({
-            _tag: "tool_budget_gate",
-            requestId,
-            tool: toolName,
-            source: "builtin",
-            keyMode: providerToolKeyMode,
-            retryAfterSeconds: probe.retryAfterSeconds ?? null,
-            action: "disable_tool_for_remaining_steps",
-          })
-        )
-        return false
-      } catch (error) {
-        if (isPolicyUnavailableError(error)) {
-          degradedBuiltInTools.add(toolName)
-          const softCap = degradedBuiltInSoftCap.getSnapshot(toolName)
-          const allowed = softCap.remaining > 0
-          console.warn(
-            JSON.stringify({
-              _tag: "tool_budget_gate_degraded",
-              requestId,
-              tool: toolName,
-              source: "builtin",
-              keyMode: providerToolKeyMode,
-              policyUnavailable: true,
-              usedCalls: softCap.used,
-              remainingCalls: softCap.remaining,
-              maxCalls: softCap.maxCalls,
-              error: error.message,
-              action: allowed
-                ? "allow_tool_with_request_local_soft_cap"
-                : "disable_tool_until_policy_recovers",
-            })
-          )
-          return allowed
-        }
-        exhaustedBuiltInTools.add(toolName)
-        console.warn(
-          JSON.stringify({
-            _tag: "tool_budget_gate_error",
-            requestId,
-            tool: toolName,
-            source: "builtin",
-            keyMode: providerToolKeyMode,
-            error: error instanceof Error ? error.message : String(error),
-            action: "disable_tool_fail_closed",
-          })
-        )
-        return false
-      }
-    }
-
-    const searchTools = { ...builtInTools, ...thirdPartyTools }
-    let allTools = { ...searchTools, ...contentTools, ...mcpTools } as ToolSet
-
-    const hasAnyTools = Object.keys(allTools).length > 0
+    const hasAnyTools = toolRuntime.hasTools
+    const shouldInjectSearch = toolRuntime.policySummary.searchInjected
 
     // Anonymous users get a lower step count to limit tool call cost exposure.
     // Authenticated users get the full MCP_MAX_STEP_COUNT (20).
@@ -1219,7 +609,7 @@ export async function POST(req: Request) {
 
     const validatedMessages = await validateUIMessages({
       messages: canonicalMessages,
-      tools: allTools as unknown as Parameters<typeof validateUIMessages>[0]["tools"],
+      tools: toolRuntime.tools as unknown as Parameters<typeof validateUIMessages>[0]["tools"],
     })
 
     const textFileReferences = getTextFilePartReferences(validatedMessages)
@@ -1377,7 +767,7 @@ export async function POST(req: Request) {
     let modelMessages: ModelMessage[] = await convertToModelMessages(
       adapterResult.messages,
       {
-        tools: allTools,
+        tools: toolRuntime.tools,
         ignoreIncompleteToolCalls: true,
       }
     )
@@ -1495,47 +885,15 @@ export async function POST(req: Request) {
       requestHeaders["anthropic-beta"] = ANTHROPIC_BETA_HEADERS.tokenEfficient
     }
 
-    // Resolve every tool's metadata behind one source-agnostic interface — the
-    // Tool runtime's metadata resolver. It unifies the two prior shapes
-    // (ToolMetadata across built-in/third-party/content + ServerInfo for MCP)
-    // so downstream call sites read one shape instead of hand-joining four maps.
-    // Built post-filter (after the metadata filtering above) so it sees only the
-    // tools that survived policy + naming. MCP risk hints are carried verbatim;
-    // trust is applied at the call sites below, never inside the resolver.
-    const toolMetadataResolver = createToolMetadataResolver({
-      builtIn: builtInToolMetadata,
-      thirdParty: thirdPartyToolMetadata,
-      content: contentToolMetadata,
-      mcpToolServerMap,
-    })
-    const toolMetadataByName = toolMetadataResolver.toInvocationMetadataByName()
+    // Transport-safe by-name display metadata, resolved by the Tool runtime's
+    // metadata resolver (the four per-layer maps never escape the runtime).
+    const toolMetadataByName = toolRuntime.metadata.toInvocationMetadataByName()
 
-    const runtimeApprovalByToolName = new Map<
-      string,
-      ReturnType<typeof getRuntimeToolApprovalDecision>
-    >()
-    for (const toolName of Object.keys(allTools)) {
-      const resolved = toolMetadataResolver.get(toolName)
-      const decision = getRuntimeToolApprovalDecision({
-        toolName,
-        source: toolMetadataResolver.source(toolName),
-        // Risk hints verbatim — for MCP these are advisory and only become
-        // policy-driving via riskHintsTrusted below.
-        metadata: resolved
-          ? {
-              readOnly: resolved.readOnly,
-              destructive: resolved.destructive,
-              idempotent: resolved.idempotent,
-              openWorld: resolved.openWorld,
-            }
-          : undefined,
-        riskHintsTrusted: resolved?.policyHintsTrusted,
-      })
-      runtimeApprovalByToolName.set(toolName, decision)
-    }
-
+    // durableRunState is assigned after the tool block ran (below), so approval
+    // wrapping cannot be a prepareToolRuntime flag. The runtime computed the
+    // decisions eagerly; apply them exactly once here for durable runs.
     if (durableRunState) {
-      allTools = wrapToolsWithRuntimeApproval(allTools, runtimeApprovalByToolName)
+      toolRuntime.applyDurableApprovals()
     }
 
     const enrichedSystemPrompt = effectiveSystemPrompt
@@ -1550,7 +908,6 @@ export async function POST(req: Request) {
     let reasoningStartMs: number | null = null
     let reasoningDurationMs: number | null = null
     let firstChunkLatencyMs: number | null = null
-    let loggedLateStepPolicy = false
     let lastChunkAtMs: number | null = null
     let lastProgressAtMs = streamStartMs
     let observedToolCalls = 0
@@ -1626,7 +983,7 @@ export async function POST(req: Request) {
             postToolContinuationArmedAtMs === null
               ? null
               : now - postToolContinuationArmedAtMs,
-          mcpClientCount: mcpClients.length,
+          mcpClientCount: toolRuntime.mcpClientCount,
         },
       })
     }
@@ -1672,9 +1029,7 @@ export async function POST(req: Request) {
       })
     }
 
-    const mcpServerCount = new Set(
-      Array.from(mcpToolServerMap.values()).map((info) => info.serverId)
-    ).size
+    const mcpServerCount = toolRuntime.mcpServerCount
     const braintrustMetadata: BraintrustChatMetadata = {
       requestId,
       route: "api/chat",
@@ -1688,34 +1043,34 @@ export async function POST(req: Request) {
       searchEnabled: shouldInjectSearch,
       hasTools: hasAnyTools,
       keyMode: providerToolKeyMode,
-      exaKeyMode: resolvedExaKeyMode ?? null,
+      exaKeyMode: toolRuntime.policySummary.keyMode ?? null,
       maxSteps,
       capabilities: {
-        search: toolPolicy.capabilities.search,
-        extract: toolPolicy.capabilities.extract,
-        code: toolPolicy.capabilities.code,
-        mcp: toolPolicy.capabilities.mcp,
-        platform: toolPolicy.capabilities.platform,
+        search: toolRuntime.policySummary.capabilities.search,
+        extract: toolRuntime.policySummary.capabilities.extract,
+        code: toolRuntime.policySummary.capabilities.code,
+        mcp: toolRuntime.policySummary.capabilities.mcp,
+        platform: toolRuntime.policySummary.capabilities.platform,
       },
-      capabilityReasons: toolPolicy.capabilityReasons,
+      capabilityReasons: toolRuntime.policySummary.capabilityReasons,
       toolPolicy: {
-        userTier: toolPolicy.userTier,
-        keyMode: toolPolicy.keyMode ?? null,
-        keyModeReason: toolPolicy.keyModeReason,
-        totalTools: toolPolicy.toolDecisions.length,
-        earlyAllowedCount: toolPolicy.earlyToolNames.length,
-        lateAllowedCount: toolPolicy.lateToolNames.length,
+        userTier: toolRuntime.policySummary.userTier,
+        keyMode: toolRuntime.policySummary.keyMode ?? null,
+        keyModeReason: toolRuntime.policySummary.keyModeReason,
+        totalTools: toolRuntime.policySummary.totalTools,
+        earlyAllowedCount: toolRuntime.policySummary.earlyAllowedCount,
+        lateAllowedCount: toolRuntime.policySummary.lateAllowedCount,
       },
       toolCounts: {
-        builtIn: Object.keys(builtInTools).length,
-        thirdParty: Object.keys(thirdPartyTools).length,
-        content: Object.keys(contentTools).length,
-        mcp: Object.keys(mcpTools).length,
-        total: Object.keys(allTools).length,
+        builtIn: toolRuntime.toolCounts.builtIn,
+        thirdParty: toolRuntime.toolCounts.thirdParty,
+        content: toolRuntime.toolCounts.content,
+        mcp: toolRuntime.toolCounts.mcp,
+        total: toolRuntime.toolCounts.total,
       },
       mcp: {
         serverCount: mcpServerCount,
-        toolCount: Object.keys(mcpTools).length,
+        toolCount: toolRuntime.toolCounts.mcp,
       },
       historyAdaptation: {
         warningCount: adapterResult.warnings.length,
@@ -1728,7 +1083,7 @@ export async function POST(req: Request) {
       model: aiModel,
       system: enrichedSystemPrompt,
       messages: modelMessages,
-      tools: allTools,
+      tools: toolRuntime.tools,
       stopWhen: stepCountIs(maxSteps),
       experimental_telemetry: {
         isEnabled: true,
@@ -1746,49 +1101,17 @@ export async function POST(req: Request) {
         },
       },
 
-      // Centralized step gating from the capability policy resolver.
-      // After PREPARE_STEP_THRESHOLD, only late-step-safe tools remain
-      // (currently read_only risk class). Unknown risk fails closed.
+      // Centralized step gating from the Tool runtime. After
+      // PREPARE_STEP_THRESHOLD, only late-step-safe tools remain (currently
+      // read_only risk class); built-in Tool budget is probed per step. The
+      // gate body lives behind the runtime's transitional stepGate surface
+      // (removed in commit 3).
       prepareStep: hasAnyTools
-        ? async ({ stepNumber }) => {
-            const isLateStep = stepNumber > PREPARE_STEP_THRESHOLD
-            const policyToolsForStep = getActiveToolsForStep(
-              toolPolicy,
-              stepNumber,
-              PREPARE_STEP_THRESHOLD
-            )
-            const budgetAllowedTools: string[] = []
-            for (const toolName of policyToolsForStep ?? []) {
-              if (!builtInToolNames.has(toolName)) {
-                budgetAllowedTools.push(toolName)
-                continue
-              }
-              if (await isBuiltInToolBudgetAllowed(toolName)) {
-                budgetAllowedTools.push(toolName)
-              }
-            }
-
-            if (isLateStep && !loggedLateStepPolicy) {
-              loggedLateStepPolicy = true
-              console.log(
-                JSON.stringify({
-                  _tag: "tool_policy_step_gate",
-                  requestId,
-                  chatId,
-                  userId,
-                  model,
-                  stepNumber,
-                  threshold: PREPARE_STEP_THRESHOLD,
-                  earlyToolCount: toolPolicy.earlyToolNames.length,
-                  lateToolCount: budgetAllowedTools.length,
-                  blockedCount:
-                    toolPolicy.earlyToolNames.length - budgetAllowedTools.length,
-                })
-              )
-            }
-
-            return { activeTools: budgetAllowedTools }
-          }
+        ? async ({ stepNumber }) => ({
+            activeTools: await toolRuntime.stepGate.activeToolsForStep(
+              stepNumber
+            ),
+          })
         : undefined,
 
       // Per-step structured tracing.
@@ -1802,59 +1125,11 @@ export async function POST(req: Request) {
         lastStepFinishReason = finishReason ?? null
         if (toolCalls.length === 0) return
 
+        // Post-call built-in (provider-executed) Tool budget accounting. The
+        // body lives behind the runtime's transitional stepGate surface; it is
+        // a no-op for non-built-in tools (removed in commit 3).
         for (const call of toolCalls) {
-          if (!builtInToolNames.has(call.toolName)) continue
-          try {
-            await builtInPolicyGuard.enforceToolBudget(call.toolName)
-            if (degradedBuiltInTools.delete(call.toolName)) {
-              console.warn(
-                JSON.stringify({
-                  _tag: "tool_budget_post_accounting_recovered",
-                  requestId,
-                  tool: call.toolName,
-                  source: "builtin",
-                  keyMode: providerToolKeyMode,
-                  action: "resume_policy_enforced_budgeting",
-                })
-              )
-            }
-          } catch (error) {
-            if (isPolicyUnavailableError(error)) {
-              degradedBuiltInTools.add(call.toolName)
-              const softCap = degradedBuiltInSoftCap.recordCall(call.toolName)
-              console.warn(
-                JSON.stringify({
-                  _tag: "tool_budget_post_accounting_degraded",
-                  requestId,
-                  tool: call.toolName,
-                  source: "builtin",
-                  keyMode: providerToolKeyMode,
-                  policyUnavailable: true,
-                  usedCalls: softCap.used,
-                  remainingCalls: softCap.remaining,
-                  maxCalls: softCap.maxCalls,
-                  error: error.message,
-                  action:
-                    softCap.remaining > 0
-                      ? "allow_tool_with_request_local_soft_cap"
-                      : "disable_tool_until_policy_recovers",
-                })
-              )
-              continue
-            }
-            exhaustedBuiltInTools.add(call.toolName)
-            console.warn(
-              JSON.stringify({
-                _tag: "tool_budget_post_accounting_denied",
-                requestId,
-                tool: call.toolName,
-                source: "builtin",
-                keyMode: providerToolKeyMode,
-                error: error instanceof Error ? error.message : String(error),
-                action: "disable_tool_for_remaining_steps",
-              })
-            )
-          }
+          await toolRuntime.stepGate.accountBuiltInCall(call.toolName)
         }
 
         for (const call of toolCalls) {
@@ -1864,8 +1139,8 @@ export async function POST(req: Request) {
           const success = result
             ? !(result as { isError?: boolean }).isError
             : false
-          const meta = toolMetadataResolver.getNonMcp(call.toolName)
-          const trace = traceCollector.get(call.toolCallId)
+          const meta = toolRuntime.metadata.getNonMcp(call.toolName)
+          const trace = toolRuntime.traceFor(call.toolCallId)
 
           // Structured JSON log — parseable by Vercel log drain and grep.
           // Uses _tag for machine filtering without affecting human readability.
@@ -1904,11 +1179,11 @@ export async function POST(req: Request) {
               const isError = result
                 ? Boolean((result as { isError?: boolean }).isError)
                 : false
-              const approvalDecision = runtimeApprovalByToolName.get(call.toolName)
+              const approvalDecision = toolRuntime.approvalFor(call.toolName)
               return {
                 toolCallId: call.toolCallId,
                 toolName: call.toolName,
-                source: toolMetadataResolver.source(call.toolName),
+                source: toolRuntime.metadata.source(call.toolName),
                 input: call.input,
                 output: result?.output,
                 error: isError
@@ -1965,8 +1240,8 @@ export async function POST(req: Request) {
               chatId,
               convexToken,
               durableRunState,
-              runtimeApprovalByToolName,
-              toolMetadataResolver,
+              runtimeApprovalByToolName: toolRuntime.approvalDecisionsByToolName,
+              toolMetadataResolver: toolRuntime.metadata,
               approvalWritePromises,
               requestId,
             }),
@@ -2115,7 +1390,7 @@ export async function POST(req: Request) {
         for (const step of steps ?? []) {
           for (const toolCall of step.toolCalls ?? []) {
             totalToolCalls++
-            const trace = traceCollector.get(toolCall.toolCallId)
+            const trace = toolRuntime.traceFor(toolCall.toolCallId)
             const result = step.toolResults?.find(
               (r: { toolCallId: string }) => r.toolCallId === toolCall.toolCallId
             )
@@ -2260,7 +1535,7 @@ export async function POST(req: Request) {
         if (process.env.NODE_ENV !== "production" && provider === "anthropic" && hasAnyTools) {
           console.log(
             `[chat] Anthropic tool usage — inputTokens: ${usage?.inputTokens ?? "?"}, ` +
-            `toolCount: ${Object.keys(allTools).length}, ` +
+            `toolCount: ${Object.keys(toolRuntime.tools).length}, ` +
             `tokenEfficient: ${isTokenEfficient}`
           )
         }
@@ -2292,7 +1567,7 @@ export async function POST(req: Request) {
               for (const step of steps) {
                 if (step.toolCalls) {
                   for (const toolCall of step.toolCalls) {
-                    const resolved = toolMetadataResolver.get(toolCall.toolName)
+                    const resolved = toolRuntime.metadata.get(toolCall.toolName)
                     const mcpServer = resolved?.mcpServer
 
                     // Determine source and service name
@@ -2308,7 +1583,7 @@ export async function POST(req: Request) {
                     const success = toolResult
                       ? !(toolResult as { isError?: boolean }).isError
                       : false
-                    const trace = traceCollector.get(toolCall.toolCallId)
+                    const trace = toolRuntime.traceFor(toolCall.toolCallId)
 
                     phClient.capture({
                       distinctId: userId,
@@ -2352,7 +1627,7 @@ export async function POST(req: Request) {
         // These writes are best-effort — failures are swallowed to avoid breaking
         // the streaming response. Follows the same pattern as updateConnectionStatus
         // in lib/mcp/load-tools.ts.
-        if (convexToken && steps && mcpToolServerMap.size > 0) {
+        if (convexToken && steps && toolRuntime.toolCounts.mcp > 0) {
           let finishStepNumber = 0
 
           for (const step of steps) {
@@ -2360,8 +1635,10 @@ export async function POST(req: Request) {
 
             if (step.toolCalls) {
               for (const toolCall of step.toolCalls) {
-                const serverInfo = mcpToolServerMap.get(toolCall.toolName)
-                if (!serverInfo) continue
+                const mcpServer = toolRuntime.metadata.get(
+                  toolCall.toolName
+                )?.mcpServer
+                if (!mcpServer) continue
 
                 // Find matching tool result for output preview
                 const toolResult = step.toolResults?.find(
@@ -2374,14 +1651,14 @@ export async function POST(req: Request) {
                   : false
 
                 const previewData = toolResult?.output
-                const trace = traceCollector.get(toolCall.toolCallId)
+                const trace = toolRuntime.traceFor(toolCall.toolCallId)
 
                 void fetchMutation(
                   api.toolCallLog.log,
                   {
                     chatId: chatId as Id<"chats">,
-                    serverId: serverInfo.serverId as Id<"mcpServers">,
-                    toolName: serverInfo.displayName,
+                    serverId: mcpServer.serverId as Id<"mcpServers">,
+                    toolName: mcpServer.displayName,
                     toolCallId: toolCall.toolCallId,
                     inputPreview: JSON.stringify(toolCall.input).slice(0, 500),
                     outputPreview: previewData
@@ -2391,7 +1668,7 @@ export async function POST(req: Request) {
                     durationMs: trace?.durationMs,
                     error: trace?.error,
                     source: "mcp",
-                    serviceName: serverInfo.serverName,
+                    serviceName: mcpServer.serverName,
                     // Phase C: Observability enrichment
                     stepNumber: finishStepNumber,
                     inputTokens: step.usage?.inputTokens,
@@ -2412,7 +1689,7 @@ export async function POST(req: Request) {
                     requestId,
                     chatId,
                     toolCallId: toolCall.toolCallId,
-                    toolName: serverInfo.displayName,
+                    toolName: mcpServer.displayName,
                     source: "mcp",
                     stepNumber: finishStepNumber,
                     error: err instanceof Error ? err.message : String(err),
@@ -2424,9 +1701,9 @@ export async function POST(req: Request) {
         }
 
         // Audit log: persist built-in + third-party tool calls (fire-and-forget).
-        // Identifies non-MCP tools by checking if the tool name is NOT in mcpToolServerMap.
+        // Identifies non-MCP tools via the runtime metadata resolver (isMcp).
         if (convexToken && steps) {
-          if (toolMetadataResolver.sizeNonMcp > 0) {
+          if (toolRuntime.metadata.sizeNonMcp > 0) {
             let finishStepNumber = 0
 
             for (const step of steps) {
@@ -2435,9 +1712,9 @@ export async function POST(req: Request) {
               if (step.toolCalls) {
                 for (const toolCall of step.toolCalls) {
                   // Skip MCP tools (already logged above)
-                  if (toolMetadataResolver.isMcp(toolCall.toolName)) continue
+                  if (toolRuntime.metadata.isMcp(toolCall.toolName)) continue
 
-                  const meta = toolMetadataResolver.getNonMcp(toolCall.toolName)
+                  const meta = toolRuntime.metadata.getNonMcp(toolCall.toolName)
                   if (!meta) continue // Unknown tool — skip
 
                   const toolResult = step.toolResults?.find(
@@ -2450,7 +1727,7 @@ export async function POST(req: Request) {
 
                   const previewData = toolResult?.output
 
-                  const trace = traceCollector.get(toolCall.toolCallId)
+                  const trace = toolRuntime.traceFor(toolCall.toolCallId)
 
                   void fetchMutation(
                     api.toolCallLog.log,
@@ -2599,8 +1876,9 @@ export async function POST(req: Request) {
       },
     });
   } catch (err: unknown) {
-    // Clean up any MCP clients that were opened before the error
-    await Promise.allSettled(mcpClients.map((c) => c.close()))
+    // Clean up any MCP clients that were opened before the error. dispose() is
+    // idempotent, so this is safe even if the after() registration also runs.
+    if (runtime) await runtime.dispose()
 
     console.error("Error in /api/chat:", err)
     const error = err as {
@@ -2654,7 +1932,7 @@ export async function POST(req: Request) {
         errorType,
         isAuthenticated: telemetryIsAuthenticated,
         messageCount: telemetryMessageCount,
-        mcpClientCount: mcpClients.length,
+        mcpClientCount: runtime?.mcpClientCount ?? 0,
       },
     })
 
