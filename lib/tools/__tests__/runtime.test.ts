@@ -686,7 +686,7 @@ describe("prepareToolRuntime — Tool outcome recording", () => {
         outcomeSinks: [(outcome) => sink.push(outcome)],
       })
     )
-    const input = { q: "hi", count: 1n } as {
+    const input = { q: "hi", count: BigInt(1) } as {
       q: string
       count: bigint
       self?: unknown
@@ -700,7 +700,7 @@ describe("prepareToolRuntime — Tool outcome recording", () => {
         toolResults: [
           {
             toolCallId: "call_1",
-            output: { answer: "ok", count: 2n, input },
+            output: { answer: "ok", count: BigInt(2), input },
           },
         ],
         finishReason: "tool-calls",
