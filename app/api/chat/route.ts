@@ -5,13 +5,13 @@ import {
   MCP_MAX_STEP_COUNT,
   DEFAULT_MAX_STEP_COUNT,
   ANONYMOUS_MAX_STEP_COUNT,
-  ANTHROPIC_BETA_HEADERS,
   HISTORY_REPLAY_COMPILER_V1,
 } from "@/lib/config"
 import { getAllModels } from "@/lib/models"
 import { resolveModelId } from "@/lib/models/model-id-migration"
 import { getProviderForModel } from "@/lib/openproviders/provider-map"
 import { createLanguageModel } from "@/lib/openproviders/create-language-model"
+import { shapeRequest } from "@/lib/openproviders/request-shaping"
 import {
   captureGeneration,
   flushPostHog,
@@ -27,7 +27,6 @@ import {
   validateUIMessages,
   type ModelMessage,
 } from "ai"
-import type { ProviderOptions } from "@ai-sdk/provider-utils"
 import { fetchMutation, fetchQuery } from "convex/nextjs"
 import { api } from "@/convex/_generated/api"
 import type { Doc, Id } from "@/convex/_generated/dataModel"
@@ -53,6 +52,11 @@ import {
   prepareToolRuntime,
   type ToolRuntime,
 } from "@/lib/tools/runtime"
+import {
+  createPostHogToolCallSink,
+  createToolCallLogSink,
+  createToolTraceLogSink,
+} from "./outcome-sinks"
 import {
   buildFinishToolInvocationStreamMetadata,
   buildStartToolInvocationStreamMetadata,
@@ -146,17 +150,6 @@ function bucketLatencyMs(latencyMs: number): string {
   if (latencyMs <= 8000) return "3s_8s"
   if (latencyMs <= 15000) return "8s_15s"
   return "gt_15s"
-}
-
-function isTimeoutSignal(value: string | undefined): boolean {
-  if (!value) return false
-  const normalized = value.toLowerCase()
-  return (
-    normalized.includes("timeout") ||
-    normalized.includes("timed out") ||
-    normalized.includes("deadline exceeded") ||
-    normalized.includes("aborterror")
-  )
 }
 
 function getSlowRequestThresholdMs(): number {
@@ -498,9 +491,42 @@ export async function POST(req: Request) {
     // capability. All search is visible, auditable tool calls.
     //
     // The runtime owns the stream-lifecycle hooks: it exposes `prepareStep`
-    // (step gating) and `onStepFinish` (built-in Tool budget accounting), which
-    // the route passes through / composes with its own tracing and persistence.
+    // (step gating) and `onStepFinish` (built-in Tool budget accounting plus
+    // Tool outcome recording), which the route passes through / composes with
+    // its durable-run persistence.
     // -----------------------------------------------------------------------
+    // Check if PostHog is configured for LLM analytics
+    const phClient = getPostHogClient()
+
+    // Tool outcome sinks (CONTEXT.md; app/api/chat/outcome-sinks.ts): the
+    // runtime assembles one Tool outcome per call at step finish and dispatches
+    // it to each sink. Trace log always; analytics and audit only when their
+    // destinations exist for this request.
+    const outcomeSinks = [
+      createToolTraceLogSink({ requestId, chatId, userId, model }),
+      ...(phClient
+        ? [
+            createPostHogToolCallSink({
+              phClient,
+              distinctId: userId,
+              chatId,
+              requestId,
+              chatVersion: normalizedChatVersion,
+            }),
+          ]
+        : []),
+      ...(convexToken
+        ? [
+            createToolCallLogSink({
+              convexToken,
+              chatId,
+              requestId,
+              chatVersion: normalizedChatVersion,
+            }),
+          ]
+        : []),
+    ]
+
     const toolRuntime = await prepareToolRuntime({
       isAuthenticated,
       convexToken,
@@ -514,6 +540,7 @@ export async function POST(req: Request) {
       onMcpClientsOpened: (clientCount) => {
         openedMcpClientCount = clientCount
       },
+      outcomeSinks,
     })
     runtime = toolRuntime
     // Register MCP cleanup immediately — after() runs even when the response
@@ -529,8 +556,6 @@ export async function POST(req: Request) {
       ? (isAuthenticated ? MCP_MAX_STEP_COUNT : ANONYMOUS_MAX_STEP_COUNT)
       : DEFAULT_MAX_STEP_COUNT
 
-    // Check if PostHog is configured for LLM analytics
-    const phClient = getPostHogClient()
     const startTime = Date.now()
     const braintrustStreamText = getBraintrustStreamText()
 
@@ -797,99 +822,18 @@ export async function POST(req: Request) {
       modelMessages = toPlainTextModelMessages(adapterResult.messages)
     }
 
-    // Build provider-specific options to enable reasoning/thinking when
-    // the selected model advertises support (reasoningText: true).
-    //
-    // Anthropic thinking configuration is context-aware:
-    //   - Models with thinkingMode: "adaptive" (Opus 4.6+) use Anthropic's
-    //     adaptive allocation — the recommended mode per Anthropic's docs.
-    //     "enabled" with budget_tokens is deprecated on Opus 4.6.
-    //   - Older models use "enabled" with a fixed budgetTokens.
-    //
-    // IMPORTANT: Server-side web search results (encrypted_content) are
-    // counted as INPUT tokens, not output tokens. They do NOT consume from
-    // the max_tokens budget. (Source: Anthropic web search tool docs)
-    //
-    // SDK LIMITATION (ai@6.0.78 / @ai-sdk/anthropic@3.0.41):
-    // When adaptive thinking is used with server-side tools (web search),
-    // the Anthropic API may return stop_reason: "pause_turn" — indicating
-    // the model needs a follow-up request to continue generating text. The
-    // AI SDK maps "pause_turn" to the same unified finishReason as "end_turn"
-    // ("stop") and the step continuation logic does not re-send the
-    // conversation. This results in responses with reasoning + tool results
-    // but zero text content.
-    //
-    // WORKAROUND: When search tools are active, fall back to "enabled"
-    // thinking with a conservative budget. This produces a complete response
-    // in a single API call (no pause_turn). For non-search requests,
-    // adaptive thinking works correctly and is preferred.
-    const providerOptions: ProviderOptions = {}
-
-    if (modelConfig.reasoningText) {
-      if (provider === "anthropic") {
-        if (modelConfig.thinkingMode === "adaptive") {
-          if (shouldInjectSearch) {
-            // Adaptive + server-side web search triggers pause_turn in the
-            // Anthropic API, which the AI SDK does not handle (see above).
-            // Fall back to "enabled" with a budget that leaves ample room
-            // for text output. Search results are input tokens, so they
-            // don't consume from max_tokens — no reduction needed.
-            providerOptions.anthropic = {
-              thinking: { type: "enabled", budgetTokens: 10000 },
-            }
-          } else {
-            // Opus 4.6+ without search — use adaptive thinking as recommended.
-            // The model dynamically allocates between thinking and text, with
-            // interleaved thinking automatically enabled for tool use.
-            providerOptions.anthropic = {
-              thinking: { type: "adaptive" },
-            }
-          }
-        } else {
-          // Older models — fixed budget.
-          let budgetTokens = 10000 // default
-          if (model.includes("opus")) budgetTokens = 16000
-          else if (model.includes("haiku")) budgetTokens = 5000
-          else if (model.includes("sonnet")) budgetTokens = 12000
-
-          providerOptions.anthropic = {
-            thinking: { type: "enabled", budgetTokens },
-          }
-        }
-      } else if (provider === "google") {
-        providerOptions.google = {
-          thinkingConfig: { includeThoughts: true },
-        }
-      } else if (provider === "openai") {
-        providerOptions.openai = {
-          reasoningEffort: "medium",
-          reasoningSummary: "auto",
-        }
-      } else if (provider === "xai") {
-        providerOptions.xai = {
-          reasoningEffort: "medium",
-        }
+    // Request shaping (CONTEXT.md; lib/openproviders/request-shaping.ts):
+    // provider options (thinking/reasoning config, per-model thinking budgets)
+    // and provider beta headers, resolved behind one seam. The module owns the
+    // pause_turn search downgrade and token-efficient beta gating — the route
+    // never branches on provider.
+    const { providerOptions, headers: requestHeaders } = shapeRequest(
+      modelConfig,
+      {
+        searchToolsActive: shouldInjectSearch,
+        hasTools: hasAnyTools,
       }
-    }
-
-    // -----------------------------------------------------------------------
-    // Anthropic Token-Efficient Tool Use
-    //
-    // When Anthropic models have tools injected, enable the token-efficient
-    // beta header to reduce tool definition token consumption. This header
-    // is request-scoped via streamText({ headers }) — only affects Anthropic
-    // requests that actually include tools.
-    //
-    // The header is safe to apply: @ai-sdk/anthropic@3.0.41 comma-merges
-    // user and inferred betas (getBetasFromHeaders + Array.from(betas).join(",")).
-    // -----------------------------------------------------------------------
-    const isTokenEfficient =
-      process.env.ANTHROPIC_TOKEN_EFFICIENT_TOOLS !== "false"
-    const requestHeaders: Record<string, string> = {}
-
-    if (provider === "anthropic" && hasAnyTools && isTokenEfficient) {
-      requestHeaders["anthropic-beta"] = ANTHROPIC_BETA_HEADERS.tokenEfficient
-    }
+    )
 
     // Transport-safe by-name display metadata, resolved by the Tool runtime's
     // metadata resolver (the four per-layer maps never escape the runtime).
@@ -1124,48 +1068,17 @@ export async function POST(req: Request) {
         lastStepFinishReason = finishReason ?? null
         if (toolCalls.length === 0) return
 
-        // Post-call built-in (provider-executed) Tool budget accounting. The
-        // runtime owns it; this is a no-op for non-built-in tools. Composed here
-        // as the first tool-related action, before tracing and persistence.
-        await toolRuntime.onStepFinish({ toolCalls })
-
-        for (const call of toolCalls) {
-          const result = toolResults.find(
-            (r) => r.toolCallId === call.toolCallId
-          )
-          const success = result
-            ? !(result as { isError?: boolean }).isError
-            : false
-          const meta = toolRuntime.metadata.getNonMcp(call.toolName)
-          const trace = toolRuntime.traceFor(call.toolCallId)
-
-          // Structured JSON log — parseable by Vercel log drain and grep.
-          // Uses _tag for machine filtering without affecting human readability.
-          console.log(
-            JSON.stringify({
-              _tag: "tool_trace",
-              requestId,
-              chatId,
-              userId,
-              step: stepCounter,
-              tool: meta?.displayName ?? call.toolName,
-              source: meta?.source ?? "unknown",
-              success,
-              durationMs: trace?.durationMs ?? null,
-              estimatedCostPer1k: meta?.estimatedCostPer1k ?? null,
-              errorCode: trace?.errorCode ?? null,
-              retryAfterSeconds: trace?.retryAfterSeconds ?? null,
-              budgetKeyMode: trace?.budgetKeyMode ?? null,
-              budgetDenied: trace?.budgetDenied ?? null,
-              tokens: {
-                in: usage?.inputTokens ?? null,
-                out: usage?.outputTokens ?? null,
-              },
-              finishReason,
-              model,
-            })
-          )
-        }
+        // Built-in Tool budget accounting plus Tool outcome recording — one
+        // outcome per call, dispatched to the injected sinks (trace log,
+        // analytics, audit). The runtime owns assembly and the request-level
+        // outcome summary; the route only persists durable-run state below.
+        await toolRuntime.onStepFinish({
+          stepNumber: stepCounter,
+          toolCalls,
+          toolResults,
+          usage,
+          finishReason,
+        })
 
         if (durableRunState && convexToken) {
           const invocations: ToolInvocationForPersistence[] = toolCalls.map(
@@ -1379,35 +1292,14 @@ export async function POST(req: Request) {
           reasoningDurationMs = Date.now() - reasoningStartMs
         }
 
-        let totalToolCalls = 0
-        let failedToolCalls = 0
-        let timeoutToolCalls = 0
-        let budgetDeniedToolCalls = 0
-
-        for (const step of steps ?? []) {
-          for (const toolCall of step.toolCalls ?? []) {
-            totalToolCalls++
-            const trace = toolRuntime.traceFor(toolCall.toolCallId)
-            const result = step.toolResults?.find(
-              (r: { toolCallId: string }) => r.toolCallId === toolCall.toolCallId
-            )
-            const failed = result ? Boolean((result as { isError?: boolean }).isError) : true
-            if (failed) failedToolCalls++
-            if (trace?.budgetDenied) budgetDeniedToolCalls++
-            if (
-              isTimeoutSignal(trace?.errorCode) ||
-              isTimeoutSignal(trace?.error) ||
-              isTimeoutSignal(
-                result &&
-                  typeof (result as { output?: unknown }).output === "string"
-                  ? ((result as { output?: unknown }).output as string)
-                  : undefined
-              )
-            ) {
-              timeoutToolCalls++
-            }
-          }
-        }
+        // Request-level Tool outcome aggregate — accumulated by the runtime as
+        // each step's outcomes were recorded.
+        const {
+          totalToolCalls,
+          failedToolCalls,
+          timeoutToolCalls,
+          budgetDeniedToolCalls,
+        } = toolRuntime.outcomeSummary()
 
         const toolOutcome: ToolExecutionOutcome =
           totalToolCalls === 0
@@ -1533,7 +1425,7 @@ export async function POST(req: Request) {
           console.log(
             `[chat] Anthropic tool usage — inputTokens: ${usage?.inputTokens ?? "?"}, ` +
             `toolCount: ${Object.keys(toolRuntime.tools).length}, ` +
-            `tokenEfficient: ${isTokenEfficient}`
+            `tokenEfficient: ${"anthropic-beta" in requestHeaders}`
           )
         }
 
@@ -1557,60 +1449,9 @@ export async function POST(req: Request) {
                 finishReason,
               },
             })
-
-            // PostHog: unified tool call events — one event per tool invocation (all sources)
-            // Replaces the previous MCP-only mcp_tool_call event.
-            if (steps) {
-              for (const step of steps) {
-                if (step.toolCalls) {
-                  for (const toolCall of step.toolCalls) {
-                    const resolved = toolRuntime.metadata.get(toolCall.toolName)
-                    const mcpServer = resolved?.mcpServer
-
-                    // Determine source and service name
-                    const source = resolved?.source ?? "unknown"
-                    const serviceName = resolved?.serviceName ?? "unknown"
-                    const displayName = mcpServer
-                      ? mcpServer.displayName
-                      : (resolved?.displayName ?? toolCall.toolName)
-
-                    const toolResult = step.toolResults?.find(
-                      (r: { toolCallId: string }) => r.toolCallId === toolCall.toolCallId
-                    )
-                    const success = toolResult
-                      ? !(toolResult as { isError?: boolean }).isError
-                      : false
-                    const trace = toolRuntime.traceFor(toolCall.toolCallId)
-
-                    phClient.capture({
-                      distinctId: userId,
-                      event: "tool_call",
-                      properties: {
-                        toolName: displayName,
-                        rawToolName: toolCall.toolName,
-                        source,
-                        serviceName,
-                        success,
-                        chatId,
-                        chatVersion: normalizedChatVersion,
-                        // Phase C: Observability enrichment
-                        durationMs: trace?.durationMs ?? undefined,
-                        errorCode: trace?.errorCode,
-                        retryAfterSeconds: trace?.retryAfterSeconds,
-                        budgetKeyMode: trace?.budgetKeyMode,
-                        budgetDenied: trace?.budgetDenied,
-                        requestId,
-                        // MCP-specific (optional)
-                        ...(mcpServer && {
-                          serverId: mcpServer.serverId,
-                          serverName: mcpServer.serverName,
-                        }),
-                      },
-                    })
-                  }
-                }
-              }
-            }
+            // Per-tool-call PostHog `tool_call` events are emitted at step
+            // finish by the Tool runtime's analytics outcome sink — see
+            // outcome-sinks.ts.
           } catch (captureErr) {
             // Analytics failure should never break the response
             console.error(
@@ -1620,157 +1461,9 @@ export async function POST(req: Request) {
           }
         }
 
-        // Audit log: persist MCP tool calls to toolCallLog (fire-and-forget).
-        // These writes are best-effort — failures are swallowed to avoid breaking
-        // the streaming response. Follows the same pattern as updateConnectionStatus
-        // in lib/mcp/load-tools.ts.
-        if (convexToken && steps && toolRuntime.toolCounts.mcp > 0) {
-          let finishStepNumber = 0
-
-          for (const step of steps) {
-            finishStepNumber++
-
-            if (step.toolCalls) {
-              for (const toolCall of step.toolCalls) {
-                const mcpServer = toolRuntime.metadata.get(
-                  toolCall.toolName
-                )?.mcpServer
-                if (!mcpServer) continue
-
-                // Find matching tool result for output preview
-                const toolResult = step.toolResults?.find(
-                  (r: { toolCallId: string }) =>
-                    r.toolCallId === toolCall.toolCallId
-                )
-
-                const success = toolResult
-                  ? !(toolResult as { isError?: boolean }).isError
-                  : false
-
-                const previewData = toolResult?.output
-                const trace = toolRuntime.traceFor(toolCall.toolCallId)
-
-                void fetchMutation(
-                  api.toolCallLog.log,
-                  {
-                    chatId: chatId as Id<"chats">,
-                    serverId: mcpServer.serverId as Id<"mcpServers">,
-                    toolName: mcpServer.displayName,
-                    toolCallId: toolCall.toolCallId,
-                    inputPreview: JSON.stringify(toolCall.input).slice(0, 500),
-                    outputPreview: previewData
-                      ? JSON.stringify(previewData).slice(0, 500)
-                      : undefined,
-                    success,
-                    durationMs: trace?.durationMs,
-                    error: trace?.error,
-                    source: "mcp",
-                    serviceName: mcpServer.serverName,
-                    // Phase C: Observability enrichment
-                    stepNumber: finishStepNumber,
-                    inputTokens: step.usage?.inputTokens,
-                    outputTokens: step.usage?.outputTokens,
-                    resultSizeBytes: trace?.resultSizeBytes,
-                    requestId,
-                    errorCode: trace?.errorCode,
-                    retryAfterSeconds: trace?.retryAfterSeconds,
-                    budgetKeyMode: trace?.budgetKeyMode,
-                    budgetDenied: trace?.budgetDenied,
-                    chatVersion: normalizedChatVersion,
-                    toolKey: toolCall.toolName,
-                  },
-                  { token: convexToken }
-                ).catch((err: unknown) => {
-                  console.warn(JSON.stringify({
-                    _tag: "tool_call_log_write_failed",
-                    requestId,
-                    chatId,
-                    toolCallId: toolCall.toolCallId,
-                    toolName: mcpServer.displayName,
-                    source: "mcp",
-                    stepNumber: finishStepNumber,
-                    error: err instanceof Error ? err.message : String(err),
-                  }))
-                })
-              }
-            }
-          }
-        }
-
-        // Audit log: persist built-in + third-party tool calls (fire-and-forget).
-        // Identifies non-MCP tools via the runtime metadata resolver (isMcp).
-        if (convexToken && steps) {
-          if (toolRuntime.metadata.sizeNonMcp > 0) {
-            let finishStepNumber = 0
-
-            for (const step of steps) {
-              finishStepNumber++
-
-              if (step.toolCalls) {
-                for (const toolCall of step.toolCalls) {
-                  // Skip MCP tools (already logged above)
-                  if (toolRuntime.metadata.isMcp(toolCall.toolName)) continue
-
-                  const meta = toolRuntime.metadata.getNonMcp(toolCall.toolName)
-                  if (!meta) continue // Unknown tool — skip
-
-                  const toolResult = step.toolResults?.find(
-                    (r: { toolCallId: string }) =>
-                      r.toolCallId === toolCall.toolCallId
-                  )
-                  const success = toolResult
-                    ? !(toolResult as { isError?: boolean }).isError
-                    : false
-
-                  const previewData = toolResult?.output
-
-                  const trace = toolRuntime.traceFor(toolCall.toolCallId)
-
-                  void fetchMutation(
-                    api.toolCallLog.log,
-                    {
-                      chatId: chatId as Id<"chats">,
-                      toolName: meta.displayName,
-                      toolCallId: toolCall.toolCallId,
-                      inputPreview: JSON.stringify(toolCall.input).slice(0, 500),
-                      outputPreview: previewData
-                        ? JSON.stringify(previewData).slice(0, 500)
-                        : undefined,
-                      success,
-                      durationMs: trace?.durationMs,
-                      source: meta.source,
-                      serviceName: meta.serviceName,
-                      // Phase C: Observability enrichment
-                      stepNumber: finishStepNumber,
-                      inputTokens: step.usage?.inputTokens,
-                      outputTokens: step.usage?.outputTokens,
-                      resultSizeBytes: trace?.resultSizeBytes,
-                      requestId,
-                      errorCode: trace?.errorCode,
-                      retryAfterSeconds: trace?.retryAfterSeconds,
-                      budgetKeyMode: trace?.budgetKeyMode,
-                      budgetDenied: trace?.budgetDenied,
-                      chatVersion: normalizedChatVersion,
-                      toolKey: toolCall.toolName,
-                    },
-                    { token: convexToken }
-                  ).catch((err: unknown) => {
-                    console.warn(JSON.stringify({
-                      _tag: "tool_call_log_write_failed",
-                      requestId,
-                      chatId,
-                      toolCallId: toolCall.toolCallId,
-                      toolName: meta.displayName,
-                      source: meta.source,
-                      stepNumber: finishStepNumber,
-                      error: err instanceof Error ? err.message : String(err),
-                    }))
-                  })
-                }
-              }
-            }
-          }
-        }
+        // Tool call audit logging happens at step finish via the Tool
+        // runtime's audit outcome sink (outcome-sinks.ts) — all sources, one
+        // unified path, written even when the stream never reaches onFinish.
       }
     })
 

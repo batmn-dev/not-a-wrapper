@@ -78,6 +78,7 @@ vi.mock("@/lib/tools/utils", async () => {
 import {
   prepareToolRuntime,
   type PrepareToolRuntimeOptions,
+  type ToolOutcome,
   type ToolRuntime,
 } from "../runtime"
 import { ToolPolicyError } from "../policy"
@@ -325,9 +326,18 @@ describe("prepareToolRuntime — Tool budget degradation & recovery", () => {
     expect(await activeToolsForStep(runtime, 1)).toContain("web_search")
 
     // Consume the soft cap (PREPARE_STEP_THRESHOLD = 3 calls).
-    await runtime.onStepFinish({ toolCalls: [{ toolName: "web_search" }] })
-    await runtime.onStepFinish({ toolCalls: [{ toolName: "web_search" }] })
-    await runtime.onStepFinish({ toolCalls: [{ toolName: "web_search" }] })
+    await runtime.onStepFinish({
+      stepNumber: 1,
+      toolCalls: [{ toolCallId: "call_1", toolName: "web_search" }],
+    })
+    await runtime.onStepFinish({
+      stepNumber: 2,
+      toolCalls: [{ toolCallId: "call_2", toolName: "web_search" }],
+    })
+    await runtime.onStepFinish({
+      stepNumber: 3,
+      toolCalls: [{ toolCallId: "call_3", toolName: "web_search" }],
+    })
 
     // Soft cap exhausted while policy is still unavailable → tool disabled.
     expect(await activeToolsForStep(runtime, 1)).not.toContain("web_search")
@@ -378,7 +388,10 @@ describe("prepareToolRuntime — Tool budget degradation & recovery", () => {
 
     // A name the runtime never classified as built-in must not touch the store.
     await expect(
-      runtime.onStepFinish({ toolCalls: [{ toolName: "not_a_tool" }] })
+      runtime.onStepFinish({
+        stepNumber: 1,
+        toolCalls: [{ toolCallId: "call_1", toolName: "not_a_tool" }],
+      })
     ).resolves.toBeUndefined()
     expect(mocks.store.checkAndConsume).not.toHaveBeenCalled()
   })
@@ -396,7 +409,7 @@ describe("prepareToolRuntime — Tool budget degradation & recovery", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {})
     try {
       await expect(
-        runtime.onStepFinish({ toolCalls: [] })
+        runtime.onStepFinish({ stepNumber: 1, toolCalls: [] })
       ).resolves.toBeUndefined()
       // No budget probe/consume, and no degraded/recovered/denied logs.
       expect(mocks.store.checkAndConsume).not.toHaveBeenCalled()
@@ -432,10 +445,8 @@ describe("prepareToolRuntime — naming governance", () => {
     expect(Object.keys(runtime.tools)).toEqual(["shared_tool"])
     expect(runtime.toolCounts.builtIn).toBe(0)
     expect(runtime.toolCounts.mcp).toBe(1)
-    expect(runtime.metadata.isMcp("shared_tool")).toBe(true)
     expect(runtime.metadata.source("shared_tool")).toBe("mcp")
-    // The dropped built-in metadata no longer resolves on the non-MCP view.
-    expect(runtime.metadata.getNonMcp("shared_tool")).toBeUndefined()
+    expect(runtime.metadata.get("shared_tool")?.source).toBe("mcp")
   })
 })
 
@@ -541,5 +552,222 @@ describe("prepareToolRuntime — MCP client lifecycle", () => {
     // The telemetry hook still reported the opened-client count, so the
     // route's catch path can log mcpClientCount as the pre-runtime code did.
     expect(onMcpClientsOpened).toHaveBeenCalledWith(1)
+  })
+})
+
+// =============================================================================
+// Tool outcomes — recorded at step finish, dispatched through injected sinks.
+// The interface is the test surface: outcomes are observed through in-memory
+// sinks (the seam's test adapter) and outcomeSummary(), never via internals.
+// =============================================================================
+
+describe("prepareToolRuntime — Tool outcome recording", () => {
+  it("assembles one outcome per call with unified metadata and dispatches to every sink", async () => {
+    mocks.getProviderTools.mockResolvedValue({
+      tools: { web_search: {} },
+      metadata: new Map([
+        [
+          "web_search",
+          meta({
+            displayName: "Web Search",
+            source: "builtin",
+            serviceName: "OpenAI",
+            estimatedCostPer1k: 25,
+          }),
+        ],
+      ]),
+    })
+
+    const sinkA: ToolOutcome[] = []
+    const sinkB: ToolOutcome[] = []
+    const runtime = await prepareToolRuntime(
+      baseOptions({
+        outcomeSinks: [(o) => sinkA.push(o), (o) => sinkB.push(o)],
+      })
+    )
+
+    await runtime.onStepFinish({
+      stepNumber: 2,
+      toolCalls: [
+        { toolCallId: "call_1", toolName: "web_search", input: { q: "hi" } },
+      ],
+      toolResults: [{ toolCallId: "call_1", output: { answer: "ok" } }],
+      usage: { inputTokens: 10, outputTokens: 5 },
+      finishReason: "tool-calls",
+    })
+
+    expect(sinkA).toHaveLength(1)
+    expect(sinkB).toEqual(sinkA)
+    const outcome = sinkA[0]
+    expect(outcome).toMatchObject({
+      toolCallId: "call_1",
+      toolKey: "web_search",
+      displayName: "Web Search",
+      source: "builtin",
+      serviceName: "OpenAI",
+      success: true,
+      estimatedCostPer1k: 25,
+      stepNumber: 2,
+      finishReason: "tool-calls",
+      inputTokens: 10,
+      outputTokens: 5,
+      timedOut: false,
+    })
+    expect(outcome.inputPreview).toBe(JSON.stringify({ q: "hi" }))
+    expect(outcome.outputPreview).toBe(JSON.stringify({ answer: "ok" }))
+    expect(outcome.mcpServer).toBeUndefined()
+  })
+
+  it("resolves MCP tools to the original server tool name and carries mcpServer", async () => {
+    mocks.loadUserMcpTools.mockResolvedValue({
+      tools: { mcp_github_create_issue: {} },
+      clients: [],
+      toolServerMap: new Map([
+        [
+          "mcp_github_create_issue",
+          serverInfo({
+            displayName: "create_issue",
+            serverName: "GitHub",
+            serverId: "server_42",
+          }),
+        ],
+      ]),
+      failedServerCount: 0,
+    })
+
+    const recorded: ToolOutcome[] = []
+    const runtime = await prepareToolRuntime(
+      baseOptions({
+        isAuthenticated: true,
+        convexToken: "token",
+        outcomeSinks: [(o) => recorded.push(o)],
+      })
+    )
+
+    await runtime.onStepFinish({
+      stepNumber: 1,
+      toolCalls: [
+        { toolCallId: "call_1", toolName: "mcp_github_create_issue", input: {} },
+      ],
+      toolResults: [{ toolCallId: "call_1", output: "created" }],
+    })
+
+    expect(recorded[0]).toMatchObject({
+      toolKey: "mcp_github_create_issue",
+      displayName: "create_issue",
+      source: "mcp",
+      serviceName: "GitHub",
+      mcpServer: {
+        serverId: "server_42",
+        serverName: "GitHub",
+        displayName: "create_issue",
+      },
+      success: true,
+    })
+  })
+
+  it("records unidentifiable tools as source unknown instead of skipping them", async () => {
+    mocks.getProviderTools.mockResolvedValue({
+      tools: { web_search: {} },
+      metadata: new Map([["web_search", meta()]]),
+    })
+
+    const recorded: ToolOutcome[] = []
+    const runtime = await prepareToolRuntime(
+      baseOptions({ outcomeSinks: [(o) => recorded.push(o)] })
+    )
+
+    await runtime.onStepFinish({
+      stepNumber: 1,
+      toolCalls: [{ toolCallId: "call_1", toolName: "mystery_tool", input: {} }],
+      toolResults: [],
+    })
+
+    expect(recorded[0]).toMatchObject({
+      toolKey: "mystery_tool",
+      displayName: "mystery_tool",
+      source: "unknown",
+      serviceName: "unknown",
+      success: false,
+    })
+  })
+
+  it("outcomeSummary accumulates totals, failures, timeouts, and budget denials across steps", async () => {
+    mocks.getProviderTools.mockResolvedValue({
+      tools: { web_search: {} },
+      metadata: new Map([["web_search", meta()]]),
+    })
+
+    const runtime = await prepareToolRuntime(baseOptions())
+    expect(runtime.outcomeSummary()).toEqual({
+      totalToolCalls: 0,
+      failedToolCalls: 0,
+      timeoutToolCalls: 0,
+      budgetDeniedToolCalls: 0,
+    })
+
+    await runtime.onStepFinish({
+      stepNumber: 1,
+      toolCalls: [
+        { toolCallId: "call_1", toolName: "web_search", input: {} },
+        { toolCallId: "call_2", toolName: "web_search", input: {} },
+      ],
+      toolResults: [
+        { toolCallId: "call_1", output: "ok" },
+        // call_2: timeout signal in a string output, and isError set.
+        { toolCallId: "call_2", output: "Request timed out", isError: true } as {
+          toolCallId: string
+          output?: unknown
+        },
+      ],
+    })
+    await runtime.onStepFinish({
+      stepNumber: 2,
+      // No result at all → failed.
+      toolCalls: [{ toolCallId: "call_3", toolName: "web_search", input: {} }],
+      toolResults: [],
+    })
+
+    expect(runtime.outcomeSummary()).toEqual({
+      totalToolCalls: 3,
+      failedToolCalls: 2,
+      timeoutToolCalls: 1,
+      budgetDeniedToolCalls: 0,
+    })
+  })
+
+  it("a throwing sink is contained — other sinks still receive the outcome", async () => {
+    mocks.getProviderTools.mockResolvedValue({
+      tools: { web_search: {} },
+      metadata: new Map([["web_search", meta()]]),
+    })
+
+    const recorded: ToolOutcome[] = []
+    const runtime = await prepareToolRuntime(
+      baseOptions({
+        outcomeSinks: [
+          () => {
+            throw new Error("sink exploded")
+          },
+          (o) => recorded.push(o),
+        ],
+      })
+    )
+
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+    try {
+      await expect(
+        runtime.onStepFinish({
+          stepNumber: 1,
+          toolCalls: [{ toolCallId: "call_1", toolName: "web_search", input: {} }],
+          toolResults: [{ toolCallId: "call_1", output: "ok" }],
+        })
+      ).resolves.toBeUndefined()
+    } finally {
+      error.mockRestore()
+    }
+
+    expect(recorded).toHaveLength(1)
+    expect(runtime.outcomeSummary().totalToolCalls).toBe(1)
   })
 })

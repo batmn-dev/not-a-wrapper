@@ -8,7 +8,7 @@ import { cn, isDev } from "@/lib/utils"
 import {
   RiBox3Line,
   RiBrushLine,
-  RiCloseLine,
+  RiCloseLargeLine,
   RiKeyLine,
   RiPlugLine,
   RiSettings3Line,
@@ -45,7 +45,7 @@ export function SettingsContent({ isDrawer = false }: SettingsContentProps) {
         <div className="border-border mb-2 flex items-center justify-between border-b px-4 pb-2">
           <h2 className="text-lg font-medium text-balance">Settings</h2>
           <DrawerClose render={<Button variant="ghost" size="icon" />}>
-            <Icon icon={RiCloseLine} slotSize={16} />
+            <Icon icon={RiCloseLargeLine} slotSize={16} />
           </DrawerClose>
         </div>
       )}

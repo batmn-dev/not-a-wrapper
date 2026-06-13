@@ -52,7 +52,7 @@ export function FeedbackDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="[&>button:last-child]:bg-background overflow-hidden p-0 sm:max-w-md [&>button:last-child]:top-3.5 [&>button:last-child]:right-3 [&>button:last-child]:rounded-full [&>button:last-child]:p-1">
+      <DialogContent className="overflow-hidden p-0 sm:max-w-md">
         <FeedbackForm authUserId={user?.id} onClose={handleClose} />
       </DialogContent>
     </Dialog>

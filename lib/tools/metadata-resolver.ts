@@ -72,31 +72,15 @@ export type ToolMetadataResolver = {
   /**
    * Unified lookup across all layers. MCP wins name collisions (consulted
    * first), matching the prior `sourceForTool` / approval-loop precedence.
+   * Which layer a tool came from is internal — Tool outcome recording and
+   * approval decisions both resolve through this one lookup.
    */
   get(toolName: string): ResolvedToolMetadata | undefined
-  /**
-   * Non-MCP lookup only — the exact mirror of the prior `allToolMetadata.get`.
-   * Returns `undefined` for MCP tools and unknown tools alike, so sites that
-   * deliberately ignore MCP metadata (tool_trace logging, the non-MCP audit
-   * log) keep identical behavior.
-   */
-  getNonMcp(toolName: string): ResolvedToolMetadata | undefined
-  /** Whether the tool exists in any layer's metadata. */
-  has(toolName: string): boolean
-  /** Whether the tool is an MCP (Layer 3) tool. */
-  isMcp(toolName: string): boolean
   /**
    * Source for the tool. MCP-first, falling back to `"platform"` for unknown
    * tools — the absorbed `sourceForTool` logic.
    */
   source(toolName: string): ToolSource
-  /** Distinct tool names across all layers. */
-  readonly size: number
-  /**
-   * Non-MCP tool count — the exact mirror of the prior `allToolMetadata.size`.
-   * Use for the audit-log guard so its meaning (non-MCP only) is preserved.
-   */
-  readonly sizeNonMcp: number
   /**
    * Transport-safe by-name display metadata. Delegates to the unchanged
    * `buildToolInvocationMetadataByName`, so the persisted/streamed shape stays
@@ -164,29 +148,9 @@ export function createToolMetadataResolver(maps: {
       const meta = nonMcp.get(toolName)
       return meta ? resolveFromToolMetadata(meta) : undefined
     },
-    getNonMcp(toolName) {
-      const meta = nonMcp.get(toolName)
-      return meta ? resolveFromToolMetadata(meta) : undefined
-    },
-    has(toolName) {
-      return mcp.has(toolName) || nonMcp.has(toolName)
-    },
-    isMcp(toolName) {
-      return mcp.has(toolName)
-    },
     source(toolName) {
       if (mcp.has(toolName)) return "mcp"
       return nonMcp.get(toolName)?.source ?? "platform"
-    },
-    get size() {
-      let count = nonMcp.size
-      for (const name of mcp.keys()) {
-        if (!nonMcp.has(name)) count++
-      }
-      return count
-    },
-    get sizeNonMcp() {
-      return nonMcp.size
     },
     toInvocationMetadataByName() {
       return buildToolInvocationMetadataByName({

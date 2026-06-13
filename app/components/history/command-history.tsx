@@ -35,6 +35,7 @@ import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
 import {
   RiCheckLine,
+  RiCloseLargeLine,
   RiCloseLine,
   RiDeleteBinLine,
   RiEditLine,
@@ -677,7 +678,7 @@ export function CommandHistory({
                   />
                 }
               >
-                <Icon icon={RiCloseLine} slotSize={20} />
+                <Icon icon={RiCloseLargeLine} slotSize={20} />
                 <span className="sr-only">Close</span>
               </DialogClose>
             </header>

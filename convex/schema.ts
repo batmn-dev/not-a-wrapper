@@ -344,11 +344,13 @@ export default defineSchema({
     createdAt: v.number(),
     // Tool source discriminator — identifies which layer produced the tool call.
     // REQUIRED (not optional) — clean break, no existing data to migrate.
+    // "unknown" covers calls whose tool name no layer's metadata resolves.
     source: v.union(
       v.literal("builtin"),
       v.literal("third-party"),
       v.literal("mcp"),
-      v.literal("platform")
+      v.literal("platform"),
+      v.literal("unknown")
     ),
     // Service name for display and filtering (e.g., "OpenAI", "Exa", "my-mcp-server")
     serviceName: v.optional(v.string()),

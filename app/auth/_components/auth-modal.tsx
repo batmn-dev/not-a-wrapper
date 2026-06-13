@@ -14,7 +14,7 @@ import {
 import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import { RiAppleFill, RiCloseLine, RiPhoneLine } from "@remixicon/react"
+import { RiAppleFill, RiCloseLargeLine, RiPhoneLine } from "@remixicon/react"
 import {
   useActionState,
   useState,
@@ -108,7 +108,7 @@ function AuthModalContent({
             />
           }
         >
-          <Icon icon={RiCloseLine} slotSize={20} />
+          <Icon icon={RiCloseLargeLine} slotSize={20} />
           <span className="sr-only">Close</span>
         </DialogClose>
       </header>

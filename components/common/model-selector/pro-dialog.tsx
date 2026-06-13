@@ -116,7 +116,7 @@ export function ProModelDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="[&>button:last-child]:bg-background gap-0 overflow-hidden rounded-3xl p-0 sm:max-w-md [&>button:last-child]:rounded-full [&>button:last-child]:p-1">
+      <DialogContent className="gap-0 overflow-hidden rounded-3xl p-0 sm:max-w-md">
         <DialogHeader className="sr-only">
           <DialogTitle>Pro Model Access Required</DialogTitle>
         </DialogHeader>

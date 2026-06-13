@@ -34,12 +34,17 @@ import {
   getRuntimeToolApprovalDecision,
   type RuntimeToolApprovalDecision,
 } from "@/lib/tools/runtime-approval"
-import type { ToolCapabilities, ToolMetadata, ToolTrace } from "@/lib/tools/types"
+import type {
+  ToolCapabilities,
+  ToolMetadata,
+  ToolSource,
+} from "@/lib/tools/types"
 
 /**
  * Tool runtime (see CONTEXT.md): everything a chat request needs to use tools,
  * prepared once per request and alive for the whole stream — the merged tool
- * set, per-tool metadata, step gating, and budget accounting.
+ * set, per-tool metadata, step gating, budget accounting, and Tool outcome
+ * recording.
  *
  * `prepareToolRuntime` is the single seam the chat route calls to load the three
  * Tool layers (Layer 1 provider-native, Layer 2 Exa search/content, Layer 3 MCP),
@@ -48,6 +53,65 @@ import type { ToolCapabilities, ToolMetadata, ToolTrace } from "@/lib/tools/type
  * metadata maps, the budget Sets, the enforcers, and the ToolTraceCollector
  * never escape this module.
  */
+
+/**
+ * Tool outcome (see CONTEXT.md): one record per tool call, assembled by the
+ * runtime when the call's step finishes and pushed through the outcome sinks
+ * injected at preparation. Every call produces an outcome — failures and
+ * unidentifiable tools included — and errors are recorded for all sources.
+ */
+export type ToolOutcome = {
+  toolCallId: string
+  /** Raw tool name — the merged ToolSet key (namespaced for MCP tools). */
+  toolKey: string
+  /**
+   * Human-facing name: the original un-namespaced server tool name for MCP
+   * tools, the metadata display name otherwise, the raw name when unknown.
+   */
+  displayName: string
+  /** Tool source layer; `"unknown"` when no layer's metadata resolves the name. */
+  source: ToolSource | "unknown"
+  serviceName: string
+  /** Present only for MCP (Layer 3) tools. */
+  mcpServer?: {
+    serverId: string
+    serverName: string
+    displayName: string
+  }
+  success: boolean
+  error?: string
+  errorCode?: string
+  retryAfterSeconds?: number
+  budgetKeyMode?: "platform" | "byok"
+  budgetDenied?: boolean
+  durationMs?: number
+  resultSizeBytes?: number
+  estimatedCostPer1k?: number
+  /** JSON previews truncated to 500 chars — never the full payloads. */
+  inputPreview?: string
+  outputPreview?: string
+  stepNumber: number
+  finishReason?: string
+  /** Step-level token usage — per step, not per tool. */
+  inputTokens?: number
+  outputTokens?: number
+  timedOut: boolean
+}
+
+/**
+ * A destination for Tool outcomes. Sinks must not throw — the runtime contains
+ * sink errors, but treats them as bugs (logged, never rethrown). Delivery is
+ * synchronous dispatch; sinks own their async/fire-and-forget behavior.
+ */
+export type ToolOutcomeSink = (outcome: ToolOutcome) => void
+
+/** Request-level aggregate over all Tool outcomes recorded so far. */
+export type ToolOutcomeSummary = {
+  totalToolCalls: number
+  failedToolCalls: number
+  timeoutToolCalls: number
+  budgetDeniedToolCalls: number
+}
 
 export type PrepareToolRuntimeOptions = {
   isAuthenticated: boolean
@@ -73,6 +137,12 @@ export type PrepareToolRuntimeOptions = {
    * by the prepare-failure cleanup regardless.
    */
   onMcpClientsOpened?: (clientCount: number) => void
+  /**
+   * Tool outcome destinations. Each recorded outcome is dispatched to every
+   * sink at step finish. Omit a destination's sink to disable it (e.g. no
+   * audit sink for unauthenticated requests).
+   */
+  outcomeSinks?: ReadonlyArray<ToolOutcomeSink>
 }
 
 /**
@@ -108,8 +178,6 @@ export type ToolRuntime = {
   readonly hasTools: boolean
   /** The source-agnostic metadata resolver (commit 1). */
   readonly metadata: ToolMetadataResolver
-  /** Per-tool-call trace lookup — replaces direct `traceCollector.get`. */
-  traceFor(toolCallId: string): ToolTrace | undefined
   /** Read-only Capability policy summary for telemetry. */
   readonly policySummary: ToolRuntimePolicySummary
   /** Per-layer tool counts for telemetry. */
@@ -140,15 +208,42 @@ export type ToolRuntime = {
     | ((options: { stepNumber: number }) => Promise<{ activeTools: string[] }>)
     | undefined
   /**
-   * Post-step Tool budget accounting for provider-executed (built-in) tools.
-   * No-op for empty steps and non-built-in tools. The route composes this into
-   * its own onStepFinish: `await runtime.onStepFinish({ toolCalls })`.
+   * Post-step Tool budget accounting plus Tool outcome recording. Accounts
+   * provider-executed (built-in) usage, then assembles one Tool outcome per
+   * call and dispatches it to every outcome sink. No-op for empty steps. The
+   * route composes this into its own onStepFinish, passing the step's calls,
+   * results, usage, finish reason, and its 1-indexed step number.
    */
   onStepFinish(step: {
-    toolCalls: ReadonlyArray<{ toolName: string }>
+    stepNumber: number
+    toolCalls: ReadonlyArray<{
+      toolCallId: string
+      toolName: string
+      input?: unknown
+    }>
+    toolResults?: ReadonlyArray<{ toolCallId: string; output?: unknown }>
+    usage?: { inputTokens?: number; outputTokens?: number }
+    finishReason?: string
   }): Promise<void>
+  /** Request-level aggregate over all Tool outcomes recorded so far. */
+  outcomeSummary(): ToolOutcomeSummary
   /** Close all MCP clients. Idempotent; safe to call twice. */
   dispose(): Promise<void>
+}
+
+/**
+ * Timeout classification over an outcome's error signals — absorbed from the
+ * chat route's onFinish aggregate so the summary owns its own rules.
+ */
+function isTimeoutSignal(value: string | undefined): boolean {
+  if (!value) return false
+  const normalized = value.toLowerCase()
+  return (
+    normalized.includes("timeout") ||
+    normalized.includes("timed out") ||
+    normalized.includes("deadline exceeded") ||
+    normalized.includes("aborterror")
+  )
 }
 
 export async function prepareToolRuntime(
@@ -182,6 +277,7 @@ async function buildToolRuntime(
     enableSearch,
     logContext,
     onMcpClientsOpened,
+    outcomeSinks = [],
   } = options
   const { requestId, chatId, userId, model } = logContext
 
@@ -815,11 +911,12 @@ async function buildToolRuntime(
   // -----------------------------------------------------------------------
   // Stream-lifecycle hooks — alive for the whole stream (see CONTEXT.md).
   //
-  // The runtime owns step gating and budget accounting: `prepareStep` applies
-  // the Capability policy step gate plus the built-in Tool budget probe (and the
-  // one-time `tool_policy_step_gate` log); `onStepFinish` accounts actual
-  // provider-executed usage. The route composes `onStepFinish` with its own
-  // tracing and persistence.
+  // The runtime owns step gating, budget accounting, and Tool outcome
+  // recording: `prepareStep` applies the Capability policy step gate plus the
+  // built-in Tool budget probe (and the one-time `tool_policy_step_gate` log);
+  // `onStepFinish` accounts actual provider-executed usage, then records one
+  // Tool outcome per call through the injected sinks. The route composes
+  // `onStepFinish` with its durable-run persistence only.
   // -----------------------------------------------------------------------
   let loggedLateStepPolicy = false
   const activeToolsForStep = async (stepNumber: number): Promise<string[]> => {
@@ -928,12 +1025,112 @@ async function buildToolRuntime(
         })
       : undefined
 
+  // -----------------------------------------------------------------------
+  // Tool outcome recording (see CONTEXT.md). One outcome per call, assembled
+  // at step finish from the call, its result, and its trace, then dispatched
+  // to every injected sink. Outcomes accumulate into the request summary.
+  // -----------------------------------------------------------------------
+  const outcomeTotals: ToolOutcomeSummary = {
+    totalToolCalls: 0,
+    failedToolCalls: 0,
+    timeoutToolCalls: 0,
+    budgetDeniedToolCalls: 0,
+  }
+
+  const assembleToolOutcome = (
+    call: { toolCallId: string; toolName: string; input?: unknown },
+    step: {
+      stepNumber: number
+      toolResults?: ReadonlyArray<{ toolCallId: string; output?: unknown }>
+      usage?: { inputTokens?: number; outputTokens?: number }
+      finishReason?: string
+    }
+  ): ToolOutcome => {
+    const result = step.toolResults?.find(
+      (candidate) => candidate.toolCallId === call.toolCallId
+    )
+    const success = result
+      ? !(result as { isError?: boolean }).isError
+      : false
+    const trace = traceCollector.get(call.toolCallId)
+    const resolved = metadata.get(call.toolName)
+    const mcpServer = resolved?.mcpServer
+    const timedOut =
+      isTimeoutSignal(trace?.errorCode) ||
+      isTimeoutSignal(trace?.error) ||
+      isTimeoutSignal(
+        typeof result?.output === "string" ? result.output : undefined
+      )
+
+    return {
+      toolCallId: call.toolCallId,
+      toolKey: call.toolName,
+      displayName: mcpServer
+        ? mcpServer.displayName
+        : (resolved?.displayName ?? call.toolName),
+      source: resolved?.source ?? "unknown",
+      serviceName: resolved?.serviceName ?? "unknown",
+      mcpServer,
+      success,
+      error: trace?.error,
+      errorCode: trace?.errorCode,
+      retryAfterSeconds: trace?.retryAfterSeconds,
+      budgetKeyMode: trace?.budgetKeyMode,
+      budgetDenied: trace?.budgetDenied,
+      durationMs: trace?.durationMs,
+      resultSizeBytes: trace?.resultSizeBytes,
+      estimatedCostPer1k: resolved?.estimatedCostPer1k,
+      inputPreview:
+        call.input === undefined
+          ? undefined
+          : JSON.stringify(call.input)?.slice(0, 500),
+      outputPreview: result?.output
+        ? JSON.stringify(result.output).slice(0, 500)
+        : undefined,
+      stepNumber: step.stepNumber,
+      finishReason: step.finishReason,
+      inputTokens: step.usage?.inputTokens,
+      outputTokens: step.usage?.outputTokens,
+      timedOut,
+    }
+  }
+
   const onStepFinish = async (step: {
-    toolCalls: ReadonlyArray<{ toolName: string }>
+    stepNumber: number
+    toolCalls: ReadonlyArray<{
+      toolCallId: string
+      toolName: string
+      input?: unknown
+    }>
+    toolResults?: ReadonlyArray<{ toolCallId: string; output?: unknown }>
+    usage?: { inputTokens?: number; outputTokens?: number }
+    finishReason?: string
   }): Promise<void> => {
     if (step.toolCalls.length === 0) return
     for (const call of step.toolCalls) {
       await accountBuiltInCall(call.toolName)
+    }
+    for (const call of step.toolCalls) {
+      const outcome = assembleToolOutcome(call, step)
+      outcomeTotals.totalToolCalls++
+      if (!outcome.success) outcomeTotals.failedToolCalls++
+      if (outcome.timedOut) outcomeTotals.timeoutToolCalls++
+      if (outcome.budgetDenied) outcomeTotals.budgetDeniedToolCalls++
+      for (const sink of outcomeSinks) {
+        try {
+          sink(outcome)
+        } catch (error) {
+          console.error(
+            JSON.stringify({
+              _tag: "tool_outcome_sink_failed",
+              requestId,
+              toolCallId: outcome.toolCallId,
+              tool: outcome.displayName,
+              error: error instanceof Error ? error.message : String(error),
+            })
+          )
+        }
+      }
     }
   }
 
@@ -973,9 +1170,6 @@ async function buildToolRuntime(
       return Object.keys(mergedTools).length > 0
     },
     metadata,
-    traceFor(toolCallId: string) {
-      return traceCollector.get(toolCallId)
-    },
     policySummary,
     toolCounts,
     mcpServerCount,
@@ -987,6 +1181,9 @@ async function buildToolRuntime(
     applyDurableApprovals,
     prepareStep,
     onStepFinish,
+    outcomeSummary() {
+      return { ...outcomeTotals }
+    },
     dispose,
   }
 }

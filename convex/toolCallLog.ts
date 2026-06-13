@@ -46,12 +46,15 @@ export const log = mutation({
     success: v.boolean(),
     durationMs: v.optional(v.number()),
     error: v.optional(v.string()),
-    // REQUIRED — clean break, no backward compat needed
+    // REQUIRED — clean break, no backward compat needed.
+    // "unknown" covers calls whose tool name no layer's metadata resolves —
+    // they are audited rather than silently skipped.
     source: v.union(
       v.literal("builtin"),
       v.literal("third-party"),
       v.literal("mcp"),
-      v.literal("platform")
+      v.literal("platform"),
+      v.literal("unknown")
     ),
     serviceName: v.optional(v.string()),
     // Phase C: Observability enrichment

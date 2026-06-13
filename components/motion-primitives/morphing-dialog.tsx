@@ -2,7 +2,7 @@
 
 import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
-import { RiCloseLine } from "@remixicon/react"
+import { RiCloseLargeLine } from "@remixicon/react"
 import {
   AnimatePresence,
   motion,
@@ -411,7 +411,7 @@ function MorphingDialogClose({
       exit="exit"
       variants={variants}
     >
-      {children || <Icon icon={RiCloseLine} slotSize={24} />}
+      {children || <Icon icon={RiCloseLargeLine} slotSize={24} />}
     </motion.button>
   )
 }
