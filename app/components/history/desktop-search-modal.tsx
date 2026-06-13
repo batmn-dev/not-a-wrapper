@@ -6,7 +6,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import {
   RiAddLine,
   RiChat3Line,
-  RiCloseLine,
+  RiCloseLargeLine,
   RiSearchLine,
 } from "@remixicon/react"
 import Link from "next/link"
@@ -267,7 +267,7 @@ export function DesktopSearchModal({
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                   )}
                 >
-                  <RiCloseLine className="size-5" aria-hidden="true" />
+                  <RiCloseLargeLine className="size-5" aria-hidden="true" />
                 </DialogPrimitive.Close>
               </div>
 
@@ -364,7 +364,7 @@ export function DesktopSearchModal({
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                   )}
                 >
-                  <RiCloseLine className="size-5" aria-hidden="true" />
+                  <RiCloseLargeLine className="size-5" aria-hidden="true" />
                 </DialogPrimitive.Close>
               </header>
               <HistoryAuthPrompt />

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
-import { RiCloseLine } from "@remixicon/react"
+import { RiCloseLargeLine } from "@remixicon/react"
 import * as React from "react"
 
 function Dialog({
@@ -83,7 +83,7 @@ function DialogContent({
               />
             }
           >
-            <Icon icon={RiCloseLine} />
+            <Icon icon={RiCloseLargeLine} />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
         )}

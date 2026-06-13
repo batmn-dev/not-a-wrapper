@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog"
-import { RiCloseLine } from "@remixicon/react"
+import { RiCloseLargeLine } from "@remixicon/react"
 import * as React from "react"
 
 function Sheet({ ...props }: SheetPrimitive.Root.Props) {
@@ -79,7 +79,7 @@ function SheetContent({
               />
             }
           >
-            <Icon icon={RiCloseLine} />
+            <Icon icon={RiCloseLargeLine} />
             <span className="sr-only">Close</span>
           </SheetPrimitive.Close>
         )}

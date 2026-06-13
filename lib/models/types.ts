@@ -43,6 +43,13 @@ type ModelConfig = {
    */
   thinkingMode?: "adaptive" | "enabled"
 
+  /**
+   * Fixed thinking budget in tokens, used when thinkingMode is "enabled"
+   * (or unset). Models without a declared budget fall back to the
+   * Request shaping default (10000).
+   */
+  thinkingBudget?: number
+
   speed?: "Fast" | "Medium" | "Slow"
   intelligence?: "Low" | "Medium" | "High"
 

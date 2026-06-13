@@ -169,9 +169,6 @@ describe("createToolMetadataResolver — unknown tools", () => {
   it("returns undefined consistently and falls back to platform source", () => {
     const resolver = buildResolver()
     expect(resolver.get("nonexistent")).toBeUndefined()
-    expect(resolver.getNonMcp("nonexistent")).toBeUndefined()
-    expect(resolver.has("nonexistent")).toBe(false)
-    expect(resolver.isMcp("nonexistent")).toBe(false)
     // Mirrors the prior sourceForTool fallback for unknown tools.
     expect(resolver.source("nonexistent")).toBe("platform")
   })
@@ -193,10 +190,9 @@ describe("createToolMetadataResolver — precedence (documented effective behavi
     })
 
     expect(resolver.get("dup")?.displayName).toBe("From Content")
-    expect(resolver.getNonMcp("dup")?.displayName).toBe("From Content")
   })
 
-  it("MCP wins over non-MCP for get()/source() (MCP is consulted first), but getNonMcp() still sees the non-MCP entry", () => {
+  it("MCP wins over non-MCP for get()/source() (MCP is consulted first)", () => {
     const resolver = createToolMetadataResolver({
       builtIn: new Map([
         ["collide", { displayName: "Non MCP", source: "builtin", serviceName: "A" }],
@@ -217,36 +213,6 @@ describe("createToolMetadataResolver — precedence (documented effective behavi
 
     expect(resolver.get("collide")?.source).toBe("mcp")
     expect(resolver.source("collide")).toBe("mcp")
-    expect(resolver.isMcp("collide")).toBe(true)
-    // The non-MCP view is unaffected (mirrors the prior allToolMetadata.get).
-    expect(resolver.getNonMcp("collide")?.source).toBe("builtin")
-  })
-})
-
-describe("createToolMetadataResolver — size guards", () => {
-  it("sizeNonMcp mirrors the prior allToolMetadata.size (non-MCP only)", () => {
-    const resolver = buildResolver()
-    expect(resolver.sizeNonMcp).toBe(3)
-    // Distinct names across all layers.
-    expect(resolver.size).toBe(4)
-  })
-
-  it("sizeNonMcp is 0 when only MCP tools exist — the audit guard skips just like allToolMetadata.size > 0 did", () => {
-    const resolver = createToolMetadataResolver({
-      builtIn: new Map(),
-      thirdParty: new Map(),
-      content: new Map(),
-      mcpToolServerMap: new Map([["github_create_issue", mcpTool]]),
-    })
-    expect(resolver.sizeNonMcp).toBe(0)
-    expect(resolver.sizeNonMcp > 0).toBe(false)
-    expect(resolver.size).toBe(1)
-  })
-})
-
-describe("createToolMetadataResolver — getNonMcp ignores MCP tools", () => {
-  it("returns undefined for an MCP tool so tool_trace / non-MCP audit keep their behavior", () => {
-    expect(buildResolver().getNonMcp("github_create_issue")).toBeUndefined()
   })
 })
 
