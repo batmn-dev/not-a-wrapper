@@ -39,6 +39,16 @@ import type {
   ToolMetadata,
   ToolSource,
 } from "@/lib/tools/types"
+import { sanitizeForJson } from "@/lib/tools/utils"
+
+function serializeToolOutcomePreview(value: unknown): string | undefined {
+  if (value === undefined) return undefined
+  try {
+    return JSON.stringify(sanitizeForJson(value)).slice(0, 500)
+  } catch {
+    return String(value).slice(0, 500)
+  }
+}
 
 /**
  * Tool runtime (see CONTEXT.md): everything a chat request needs to use tools,
@@ -1080,13 +1090,8 @@ async function buildToolRuntime(
       durationMs: trace?.durationMs,
       resultSizeBytes: trace?.resultSizeBytes,
       estimatedCostPer1k: resolved?.estimatedCostPer1k,
-      inputPreview:
-        call.input === undefined
-          ? undefined
-          : JSON.stringify(call.input)?.slice(0, 500),
-      outputPreview: result?.output
-        ? JSON.stringify(result.output).slice(0, 500)
-        : undefined,
+      inputPreview: serializeToolOutcomePreview(call.input),
+      outputPreview: serializeToolOutcomePreview(result?.output),
       stepNumber: step.stepNumber,
       finishReason: step.finishReason,
       inputTokens: step.usage?.inputTokens,

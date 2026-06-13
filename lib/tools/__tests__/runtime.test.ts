@@ -618,6 +618,104 @@ describe("prepareToolRuntime — Tool outcome recording", () => {
     expect(outcome.mcpServer).toBeUndefined()
   })
 
+  it("preserves valid falsy output previews", async () => {
+    mocks.getProviderTools.mockResolvedValue({
+      tools: { web_search: {} },
+      metadata: new Map([
+        [
+          "web_search",
+          meta({
+            displayName: "Web Search",
+            source: "builtin",
+            serviceName: "OpenAI",
+          }),
+        ],
+      ]),
+    })
+
+    const sink: ToolOutcome[] = []
+    const runtime = await prepareToolRuntime(
+      baseOptions({
+        outcomeSinks: [(outcome) => sink.push(outcome)],
+      })
+    )
+
+    await runtime.onStepFinish({
+      stepNumber: 2,
+      toolCalls: [
+        { toolCallId: "call_false", toolName: "web_search" },
+        { toolCallId: "call_zero", toolName: "web_search" },
+        { toolCallId: "call_empty", toolName: "web_search" },
+        { toolCallId: "call_null", toolName: "web_search" },
+      ],
+      toolResults: [
+        { toolCallId: "call_false", output: false },
+        { toolCallId: "call_zero", output: 0 },
+        { toolCallId: "call_empty", output: "" },
+        { toolCallId: "call_null", output: null },
+      ],
+      finishReason: "tool-calls",
+    })
+
+    expect(sink.map((outcome) => outcome.outputPreview)).toEqual([
+      "false",
+      "0",
+      '""',
+      "null",
+    ])
+  })
+
+  it("serializes non-JSON-safe outcome previews without breaking onStepFinish", async () => {
+    mocks.getProviderTools.mockResolvedValue({
+      tools: { web_search: {} },
+      metadata: new Map([
+        [
+          "web_search",
+          meta({
+            displayName: "Web Search",
+            source: "builtin",
+            serviceName: "OpenAI",
+          }),
+        ],
+      ]),
+    })
+
+    const sink: ToolOutcome[] = []
+    const runtime = await prepareToolRuntime(
+      baseOptions({
+        outcomeSinks: [(outcome) => sink.push(outcome)],
+      })
+    )
+    const input = { q: "hi", count: 1n } as {
+      q: string
+      count: bigint
+      self?: unknown
+    }
+    input.self = input
+
+    await expect(
+      runtime.onStepFinish({
+        stepNumber: 2,
+        toolCalls: [{ toolCallId: "call_1", toolName: "web_search", input }],
+        toolResults: [
+          {
+            toolCallId: "call_1",
+            output: { answer: "ok", count: 2n, input },
+          },
+        ],
+        finishReason: "tool-calls",
+      })
+    ).resolves.toBeUndefined()
+
+    expect(sink).toHaveLength(1)
+    expect(sink[0].inputPreview).toBe(
+      '{"q":"hi","count":"1","self":"[Circular]"}'
+    )
+    expect(sink[0].outputPreview).toBe(
+      '{"answer":"ok","count":"2","input":{"q":"hi","count":"1","self":"[Circular]"}}'
+    )
+  })
+
   it("resolves MCP tools to the original server tool name and carries mcpServer", async () => {
     mocks.loadUserMcpTools.mockResolvedValue({
       tools: { mcp_github_create_issue: {} },
