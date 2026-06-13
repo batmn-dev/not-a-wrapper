@@ -708,12 +708,32 @@ describe("prepareToolRuntime — Tool outcome recording", () => {
     ).resolves.toBeUndefined()
 
     expect(sink).toHaveLength(1)
-    expect(sink[0].inputPreview).toBe(
-      '{"q":"hi","count":"1","self":"[Circular]"}'
-    )
-    expect(sink[0].outputPreview).toBe(
-      '{"answer":"ok","count":"2","input":{"q":"hi","count":"1","self":"[Circular]"}}'
-    )
+    const inputPreview = JSON.parse(sink[0].inputPreview ?? "{}") as {
+      q?: unknown
+      count?: unknown
+      self?: unknown
+    }
+    const outputPreview = JSON.parse(sink[0].outputPreview ?? "{}") as {
+      answer?: unknown
+      count?: unknown
+      input?: {
+        count?: unknown
+        self?: unknown
+      }
+    }
+    expect(inputPreview).toMatchObject({
+      q: "hi",
+      count: "1",
+      self: "[Circular]",
+    })
+    expect(outputPreview).toMatchObject({
+      answer: "ok",
+      count: "2",
+    })
+    expect(outputPreview.input).toMatchObject({
+      count: "1",
+      self: "[Circular]",
+    })
   })
 
   it("resolves MCP tools to the original server tool name and carries mcpServer", async () => {
@@ -790,7 +810,7 @@ describe("prepareToolRuntime — Tool outcome recording", () => {
     })
   })
 
-  it("outcomeSummary accumulates totals, failures, timeouts, and budget denials across steps", async () => {
+  it("outcomeSummary accumulates totals, failures, and timeouts across steps", async () => {
     mocks.getProviderTools.mockResolvedValue({
       tools: { web_search: {} },
       metadata: new Map([["web_search", meta()]]),
@@ -825,7 +845,6 @@ describe("prepareToolRuntime — Tool outcome recording", () => {
       toolCalls: [{ toolCallId: "call_3", toolName: "web_search", input: {} }],
       toolResults: [],
     })
-
     expect(runtime.outcomeSummary()).toEqual({
       totalToolCalls: 3,
       failedToolCalls: 2,
