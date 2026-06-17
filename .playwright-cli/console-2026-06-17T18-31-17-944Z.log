@@ -1,0 +1,832 @@
+[     204ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[     259ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[     469ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[     810ms] [LOG] [Fast Refresh] done in 444ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[    1083ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3000/api/user-preferences/favorite-models:0
+[  134190ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  134199ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  134404ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3000/api/user-preferences/favorite-models:0
+[  136309ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  136316ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  136532ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3000/api/user-preferences/favorite-models:0
+[  138406ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  138414ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  138562ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  139003ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3000/api/user-preferences/favorite-models:0
+[  139031ms] [LOG] [Fast Refresh] done in 581ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  171804ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  171813ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  171992ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3000/api/user-preferences/favorite-models:0
+[  173566ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  173573ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  173731ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3000/api/user-preferences/favorite-models:0
+[  173731ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  173771ms] [LOG] [Fast Refresh] done in 164ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  175330ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  175338ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  175473ms] [ERROR] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+%s%s https://react.dev/link/hydration-mismatch
+
+  ...
+    <div className="flex h-svh...">
+      <AppSidebar>
+        <DesktopAppSidebar>
+          <Sidebar collapsible="icon" variant="sidebar" className="border-bor...">
+            <div className="group peer..." data-state="expanded" data-collapsible="" data-variant="sidebar" ...>
+              <div>
+              <div id="sidebar-co..." data-slot="sidebar-co..." className="fixed inse...">
+                <div data-sidebar="sidebar" data-slot="sidebar-inner" className="group-data...">
+                  <div className="absolute i..." aria-hidden={true} inert={true} onPointerDown={function onPointerDown}>
+                    <div className="flex h-(--...">
+                      <CollapsedHeaderToggle>
+                        <Tooltip disableHoverablePopup={true}>
+                          <TooltipRoot data-slot="tooltip" disableHoverablePopup={true}>
+                            <TooltipTrigger render={<button>}>
+                              <TooltipTrigger data-slot="tooltip-tr..." render={<button>}>
+                                <button
+                                  type="button"
+                                  onClick={function SidebarProvider.useCallback[toggleSidebar]}
+                                  className="group/toggle hover:bg-accent relative flex h-9 w-9 cursor-e-resize items-..."
+                                  aria-label="Open sidebar"
+                                  aria-expanded={false}
+                                  aria-controls="sidebar-container"
+                                  onPointerDown={function setPointerRef}
+                                  onPointerEnter={function setPointerRef}
+                                  onMouseMove={function onMouseMove}
++                                 id="base-ui-_R_6b5inelalb_"
+-                                 id="base-ui-_R_pcmatqlalb_"
+                                  data-slot="tooltip-trigger"
+                                  ref={function}
+                                >
+                            ...
+                    <div className="mt-(--side...">
+                      ...
+                        <TooltipTrigger render={<LinkComponent>}>
+                          <TooltipTrigger data-slot="tooltip-tr..." render={<LinkComponent>}>
+                            <LinkComponent href="/" className="menu-item-..." data-sidebar-item="true" data-active="true" ...>
+                              <a
+                                className="menu-item-hoverable flex h-9 w-10 items-center justify-center rounded-lg cu..."
+                                data-sidebar-item="true"
+                                data-active="true"
+                                aria-current="page"
+                                onPointerDown={function setPointerRef}
+                                onPointerEnter={function setPointerRef}
+                                onMouseMove={function onMouseMove}
++                               id="base-ui-_R_qj5inelalb_"
+-                               id="base-ui-_R_3acmatqlalb_"
+                                data-slot="tooltip-trigger"
+                                ref={function}
+                                onClick={function onClick}
+                                onMouseEnter={function onMouseEnter}
+                                onTouchStart={function onTouchStart}
+                                href="/"
+                              >
+                        ...
+                      ...
+                        <PopoverRootComponent props={{...}}>
+                          <PopoverTrigger render={<button>}>
+                            <PopoverTrigger data-slot="popover-tr..." className="cursor-poi..." render={<button>}>
+                              <button
+                                type="button"
+                                className="menu-item-hoverable flex h-9 w-10 items-center justify-center rounded-lg cu..."
+                                data-sidebar-item="true"
+                                data-active={undefined}
+                                aria-label="Search"
+                                title="Search ⌘K"
+                                onClick={function onClick}
+                                onMouseDown={function onMouseDown}
+                                onKeyDown={function}
+                                onKeyUp={function onKeyUp}
+                                onPointerDown={function onPointerDown}
+                                tabIndex={0}
+                                disabled={false}
+                                onPointerEnter={function setPointerRef}
+                                onMouseMove={function onMouseMove}
+                                data-base-ui-click-trigger=""
++                               id="base-ui-_R_sj5inelalb_"
+-                               id="base-ui-_R_3icmatqlalb_"
+                                data-slot="popover-trigger"
+                                ref={function}
+                              >
+                          ...
+                    <div>
+                    ...
+                      <FloatingTree externalTree={{nodesRef:{...}, ...}}>
+                        <DropdownMenuTrigger render={<button>}>
+                          <MenuTrigger data-slot="dropdown-m..." className="cursor-poi..." render={<button>}>
+                            <button
+                              type="button"
+                              role="button"
+                              aria-label="Open profile menu"
+                              aria-haspopup="menu"
+                              aria-expanded={false}
+                              data-sidebar-item="true"
+                              data-testid="accounts-profile-button"
+                              className="menu-item-hoverable text-primary mx-auto flex h-10 w-10 items-center justify-..."
+                              onClick={function onClick}
+                              onMouseDown={function onMouseDown}
+                              onKeyDown={function}
+                              onKeyUp={function onKeyUp}
+                              onPointerDown={function onPointerDown}
+                              tabIndex={0}
+                              disabled={false}
+                              onPointerEnter={function setPointerRef}
+                              onMouseMove={function onMouseMove}
++                             id="base-ui-_R_735inelalb_"
+-                             id="base-ui-_R_scmatqlalb_"
+                              data-slot="dropdown-menu-trigger"
+                              ref={function}
+                            >
+                        ...
+                  ...
+                    <nav ref={{current:null}} className="group/scro..." aria-label="Chat history">
+                      ...
+                        <TooltipTrigger render={<SidebarTrigger>}>
+                          <TooltipTrigger data-slot="tooltip-tr..." render={<SidebarTrigger>}>
+                            <SidebarTrigger className="cursor-w-r..." onPointerDown={function setPointerRef} ...>
+                              <Button data-sidebar="trigger" data-slot="tooltip-tr..." variant="ghost" size="icon" ...>
+                                <Button data-slot="tooltip-tr..." data-variant="ghost" data-size="icon" ...>
+                                  <button
+                                    type="button"
+                                    onClick={function onClick}
+                                    onMouseDown={function onMouseDown}
+                                    onKeyDown={function}
+                                    onKeyUp={function onKeyUp}
+                                    onPointerDown={function onPointerDown}
+                                    tabIndex={0}
+                                    disabled={false}
+                                    data-slot="tooltip-trigger"
+                                    data-variant="ghost"
+                                    data-size="icon"
+                                    data-sidebar="trigger"
+                                    aria-expanded={true}
+                                    aria-controls="sidebar-container"
+                                    onPointerEnter={function setPointerRef}
+                                    onMouseMove={function onMouseMove}
++                                   id="base-ui-_R_3hl5inelalb_"
+-                                   id="base-ui-_R_e6kmatqlalb_"
+                                    ref={function}
+                                    className={"group/button inline-flex shrink-0 items-center justify-center bg-clip..."}
+                                  >
+                      ...
+                        <PopoverTrigger render={<ForwardRef(SidebarMenuItem)>}>
+                          <PopoverTrigger data-slot="popover-tr..." className="cursor-poi..." ...>
+                            <SidebarMenuItem icon={<ForwardRef(Icon)>} label="Search" isActive={false} ...>
+                              <button
+                                type="button"
+                                onMouseDown={function onMouseDown}
+                                onKeyDown={function}
+                                onKeyUp={function onKeyUp}
+                                onPointerDown={function onPointerDown}
+                                tabIndex={0}
+                                disabled={false}
+                                onPointerEnter={function setPointerRef}
+                                onMouseMove={function onMouseMove}
+                                data-base-ui-click-trigger=""
++                               id="base-ui-_R_eal5inelalb_"
+-                               id="base-ui-_R_1pakmatqlalb_"
+                                data-slot="popover-trigger"
+                                ref={function}
+                                onClick={function onClick}
+                                className="menu-item-hoverable group/menu-item relative inline-flex w-[calc(100%-var(-..."
+                                data-testid={undefined}
+                                data-sidebar-item="true"
+                                data-active={undefined}
+                              >
+                        ...
+                      <div>
+                      <div>
+                      ...
+                        <PopoverRootComponent props={{...}}>
+                          <PopoverTrigger render={<button>}>
+                            <PopoverTrigger data-slot="popover-tr..." className="cursor-poi..." render={<button>}>
+                              <button
+                                type="button"
+                                className="menu-item-hoverable group/help text-primary hover:bg-accent/80 hover:text-f..."
+                                data-sidebar-item="true"
+                                aria-label="Help"
+                                onClick={function onClick}
+                                onMouseDown={function onMouseDown}
+                                onKeyDown={function}
+                                onKeyUp={function onKeyUp}
+                                onPointerDown={function onPointerDown}
+                                tabIndex={0}
+                                disabled={false}
+                                onPointerEnter={function setPointerRef}
+                                onMouseMove={function onMouseMove}
+                                data-base-ui-click-trigger=""
++                               id="base-ui-_R_3tl5inelalb_"
+-                               id="base-ui-_R_fmkmatqlalb_"
+                                data-slot="popover-trigger"
+                                ref={function}
+                              >
+                          ...
+                      ...
+                        <DialogTrigger render={<Button>}>
+                          <DialogTrigger data-slot="dialog-tri..." className="cursor-poi..." render={<Button>}>
+                            <Button className="h-11 w-ful..." size="lg" variant="outline" type="button" ...>
+                              <Button data-slot="dialog-tri..." data-variant="outline" data-size="lg" ...>
+                                <button
+                                  type="button"
+                                  onClick={function onClick}
+                                  onMouseDown={function onMouseDown}
+                                  onKeyDown={function}
+                                  onKeyUp={function onKeyUp}
+                                  onPointerDown={function onPointerDown}
+                                  tabIndex={0}
+                                  disabled={false}
+                                  data-slot="dialog-trigger"
+                                  data-variant="outline"
+                                  data-size="lg"
+                                  data-base-ui-click-trigger=""
++                                 id="base-ui-_R_3nl5inelalb_"
+-                                 id="base-ui-_R_eukmatqlalb_"
+                                  ref={function}
+                                  className={"group/button inline-flex shrink-0 items-center justify-center rounded-f..."}
+                                >
+                        ...
+      ...
+        <div ref={function useRefCallback.useCallback[result]} className="relative f...">
+          ...
+            <div className="relative m...">
+              <div>
+              ...
+                <MenuRoot data-slot="dropdown-menu" open={false} onOpenChange={function onOpenChange}>
+                  <FloatingTree externalTree={{nodesRef:{...}, ...}}>
+                    <DropdownMenuTrigger render={<Button>}>
+                      <MenuTrigger data-slot="dropdown-m..." className="cursor-poi..." render={<Button>}>
+                        <Button variant="ghost" className="min-w-0 ma..." disabled={true} aria-label="Select mod..." ...>
+                          <Button data-slot="dropdown-m..." data-variant="ghost" data-size="default" ...>
+                            <button
+                              type="button"
+                              data-disabled=""
+                              onClick={function onClick}
+                              onMouseDown={function onMouseDown}
+                              onKeyDown={function}
+                              onKeyUp={function onKeyUp}
+                              onPointerDown={function onPointerDown}
+                              tabIndex={0}
+                              disabled={true}
+                              data-slot="dropdown-menu-trigger"
+                              data-variant="ghost"
+                              data-size="default"
+                              aria-label="Select model, current model GPT-5 Mini"
+                              onPointerEnter={function setPointerRef}
+                              onMouseMove={function onMouseMove}
+                              aria-haspopup="menu"
++                             id="base-ui-_R_ecpinelalb_"
+-                             id="base-ui-_R_1pj6atqlalb_"
+                              ref={function}
+                              className={"group/button inline-flex items-center bg-clip-padding whitespace-nowrap out..."}
+                            >
+                    ...
+              <div className="pointer-ev...">
+                <div className="flex items...">
+                  <AuthModalTrigger variant="outline">
+                    <Dialog>
+                      <DialogRoot data-slot="dialog">
+                        <DialogTrigger render={<Button>}>
+                          <DialogTrigger data-slot="dialog-tri..." className="cursor-poi..." render={<Button>}>
+                            <Button className="cursor-poi..." size={undefined} variant="outline" type="button" ...>
+                              <Button data-slot="dialog-tri..." data-variant="outline" data-size="default" ...>
+                                <button
+                                  type="button"
+                                  onClick={function onClick}
+                                  onMouseDown={function onMouseDown}
+                                  onKeyDown={function}
+                                  onKeyUp={function onKeyUp}
+                                  onPointerDown={function onPointerDown}
+                                  tabIndex={0}
+                                  disabled={false}
+                                  data-slot="dialog-trigger"
+                                  data-variant="outline"
+                                  data-size="default"
+                                  data-base-ui-click-trigger=""
++                                 id="base-ui-_R_3epinelalb_"
+-                                 id="base-ui-_R_dr6atqlalb_"
+                                  ref={function}
+                                  className={"group/button inline-flex shrink-0 items-center justify-center rounded-f..."}
+                                >
++                                 Log in
+                        ...
+                  <AuthModalTrigger className="max-[360px...">
+                    <Dialog>
+                      <DialogRoot data-slot="dialog">
+                        <DialogTrigger render={<Button>}>
+                          <DialogTrigger data-slot="dialog-tri..." className="cursor-poi..." render={<Button>}>
+                            <Button className="max-[360px..." size={undefined} variant={undefined} type="button" ...>
+                              <Button data-slot="dialog-tri..." data-variant="default" data-size="default" ...>
+                                <button
+                                  type="button"
+                                  onClick={function onClick}
+                                  onMouseDown={function onMouseDown}
+                                  onKeyDown={function}
+                                  onKeyUp={function onKeyUp}
+                                  onPointerDown={function onPointerDown}
+                                  tabIndex={0}
+                                  disabled={false}
+                                  data-slot="dialog-trigger"
+                                  data-variant="default"
+                                  data-size="default"
+                                  data-base-ui-click-trigger=""
++                                 id="base-ui-_R_3mpinelalb_"
+-                                 id="base-ui-_R_er6atqlalb_"
+                                  ref={function}
+                                  className={"group/button inline-flex shrink-0 items-center justify-center rounded-f..."}
+                                >
++                                 Sign up
+                        ...
+          ...
+            <div className="shadow-com..." onClick={function onClick}>
+              <FileList>
+              <PromptInputTextarea>
+              <PromptInputActions className="w-full jus...">
+                <div className="flex items...">
+                  ...
+                    <TooltipTrigger render={<PopoverTrigger>}>
+                      <TooltipTrigger data-slot="tooltip-tr..." render={<PopoverTrigger>}>
+                        <PopoverTrigger render={<Button>} onPointerDown={function setPointerRef} ...>
+                          <PopoverTrigger data-slot="tooltip-tr..." className="cursor-poi..." render={<Button>} ...>
+                            <Button size="sm" variant="ghost" className="size-9 rou..." type="button" ...>
+                              <Button data-slot="tooltip-tr..." data-variant="ghost" data-size="sm" ...>
+                                <button
+                                  type="button"
+                                  onClick={function onClick}
+                                  onMouseDown={function onMouseDown}
+                                  onKeyDown={function}
+                                  onKeyUp={function onKeyUp}
+                                  onPointerDown={function onPointerDown}
+                                  tabIndex={0}
+                                  disabled={false}
+                                  data-slot="tooltip-trigger"
+                                  data-variant="ghost"
+                                  data-size="sm"
+                                  aria-label="More options"
+                                  onPointerEnter={function}
+                                  onMouseMove={function}
+                                  data-base-ui-click-trigger=""
++                                 id="base-ui-_R_reqn9inelalb_"
+-                                 id="base-ui-_R_3drat6atqlalb_"
+                                  ref={function}
+                                  className={"group/button inline-flex shrink-0 items-center justify-center bg-clip-p..."}
+                                >
+                  <PromptInputAction tooltip="Send">
+                    <Tooltip>
+                      <TooltipRoot data-slot="tooltip" disableHoverablePopup={true}>
+                        <TooltipTrigger render={<Button>} disabled={false}>
+                          <TooltipTrigger data-slot="tooltip-tr..." render={<Button>} disabled={false}>
+                            <Button size="sm" className="size-9 rou..." disabled={true} type="button" onClick={function} ...>
+                              <Button data-slot="tooltip-tr..." data-variant="default" data-size="sm" ...>
+                                <button
+                                  type="button"
+                                  data-disabled=""
+                                  onClick={function onClick}
+                                  onMouseDown={function onMouseDown}
+                                  onKeyDown={function}
+                                  onKeyUp={function onKeyUp}
+                                  onPointerDown={function onPointerDown}
+                                  tabIndex={0}
+                                  disabled={true}
+                                  data-slot="tooltip-trigger"
+                                  data-variant="default"
+                                  data-size="sm"
+                                  aria-label="Send message"
+                                  onPointerEnter={function setPointerRef}
+                                  onMouseMove={function onMouseMove}
++                                 id="base-ui-_R_3mqn9inelalb_"
+-                                 id="base-ui-_R_erat6atqlalb_"
+                                  ref={function}
+                                  className={"group/button inline-flex shrink-0 cursor-pointer items-center justify-c..."}
+                                >
+                        ...
+ @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1884
+[  175516ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3000/api/user-preferences/favorite-models:0
+[  175634ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  175778ms] [LOG] [Fast Refresh] done in 245ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  212670ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  212680ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  212874ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3000/api/user-preferences/favorite-models:0
+[  214435ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  214442ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  214618ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3000/api/user-preferences/favorite-models:0
+[  216235ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  216243ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  216411ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3000/api/user-preferences/favorite-models:0
+[  251749ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  251757ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  251936ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3000/api/user-preferences/favorite-models:0
+[  253412ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  253418ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  253541ms] [ERROR] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+%s%s https://react.dev/link/hydration-mismatch
+
+  ...
+    <div className="flex h-svh...">
+      <AppSidebar>
+        <DesktopAppSidebar>
+          <Sidebar collapsible="icon" variant="sidebar" className="border-bor...">
+            <div className="group peer..." data-state="expanded" data-collapsible="" data-variant="sidebar" ...>
+              <div>
+              <div id="sidebar-co..." data-slot="sidebar-co..." className="fixed inse...">
+                <div data-sidebar="sidebar" data-slot="sidebar-inner" className="group-data...">
+                  <div className="absolute i..." aria-hidden={true} inert={true} onPointerDown={function onPointerDown}>
+                    <div className="flex h-(--...">
+                      <CollapsedHeaderToggle>
+                        <Tooltip disableHoverablePopup={true}>
+                          <TooltipRoot data-slot="tooltip" disableHoverablePopup={true}>
+                            <TooltipTrigger render={<button>}>
+                              <TooltipTrigger data-slot="tooltip-tr..." render={<button>}>
+                                <button
+                                  type="button"
+                                  onClick={function SidebarProvider.useCallback[toggleSidebar]}
+                                  className="group/toggle hover:bg-accent relative flex h-9 w-9 cursor-e-resize items-..."
+                                  aria-label="Open sidebar"
+                                  aria-expanded={false}
+                                  aria-controls="sidebar-container"
+                                  onPointerDown={function setPointerRef}
+                                  onPointerEnter={function setPointerRef}
+                                  onMouseMove={function onMouseMove}
++                                 id="base-ui-_R_6b5inelalb_"
+-                                 id="base-ui-_R_pcmatqlalb_"
+                                  data-slot="tooltip-trigger"
+                                  ref={function}
+                                >
+                            ...
+                    <div className="mt-(--side...">
+                      ...
+                        <TooltipTrigger render={<LinkComponent>}>
+                          <TooltipTrigger data-slot="tooltip-tr..." render={<LinkComponent>}>
+                            <LinkComponent href="/" className="menu-item-..." data-sidebar-item="true" data-active="true" ...>
+                              <a
+                                className="menu-item-hoverable flex h-9 w-10 items-center justify-center rounded-lg cu..."
+                                data-sidebar-item="true"
+                                data-active="true"
+                                aria-current="page"
+                                onPointerDown={function setPointerRef}
+                                onPointerEnter={function setPointerRef}
+                                onMouseMove={function onMouseMove}
++                               id="base-ui-_R_qj5inelalb_"
+-                               id="base-ui-_R_3acmatqlalb_"
+                                data-slot="tooltip-trigger"
+                                ref={function}
+                                onClick={function onClick}
+                                onMouseEnter={function onMouseEnter}
+                                onTouchStart={function onTouchStart}
+                                href="/"
+                              >
+                        ...
+                      ...
+                        <PopoverRootComponent props={{...}}>
+                          <PopoverTrigger render={<button>}>
+                            <PopoverTrigger data-slot="popover-tr..." className="cursor-poi..." render={<button>}>
+                              <button
+                                type="button"
+                                className="menu-item-hoverable flex h-9 w-10 items-center justify-center rounded-lg cu..."
+                                data-sidebar-item="true"
+                                data-active={undefined}
+                                aria-label="Search"
+                                title="Search ⌘K"
+                                onClick={function onClick}
+                                onMouseDown={function onMouseDown}
+                                onKeyDown={function}
+                                onKeyUp={function onKeyUp}
+                                onPointerDown={function onPointerDown}
+                                tabIndex={0}
+                                disabled={false}
+                                onPointerEnter={function setPointerRef}
+                                onMouseMove={function onMouseMove}
+                                data-base-ui-click-trigger=""
++                               id="base-ui-_R_sj5inelalb_"
+-                               id="base-ui-_R_3icmatqlalb_"
+                                data-slot="popover-trigger"
+                                ref={function}
+                              >
+                          ...
+                    <div>
+                    ...
+                      <FloatingTree externalTree={{nodesRef:{...}, ...}}>
+                        <DropdownMenuTrigger render={<button>}>
+                          <MenuTrigger data-slot="dropdown-m..." className="cursor-poi..." render={<button>}>
+                            <button
+                              type="button"
+                              role="button"
+                              aria-label="Open profile menu"
+                              aria-haspopup="menu"
+                              aria-expanded={false}
+                              data-sidebar-item="true"
+                              data-testid="accounts-profile-button"
+                              className="menu-item-hoverable text-primary mx-auto flex h-10 w-10 items-center justify-..."
+                              onClick={function onClick}
+                              onMouseDown={function onMouseDown}
+                              onKeyDown={function}
+                              onKeyUp={function onKeyUp}
+                              onPointerDown={function onPointerDown}
+                              tabIndex={0}
+                              disabled={false}
+                              onPointerEnter={function setPointerRef}
+                              onMouseMove={function onMouseMove}
++                             id="base-ui-_R_735inelalb_"
+-                             id="base-ui-_R_scmatqlalb_"
+                              data-slot="dropdown-menu-trigger"
+                              ref={function}
+                            >
+                        ...
+                  ...
+                    <nav ref={{current:null}} className="group/scro..." aria-label="Chat history">
+                      ...
+                        <TooltipTrigger render={<SidebarTrigger>}>
+                          <TooltipTrigger data-slot="tooltip-tr..." render={<SidebarTrigger>}>
+                            <SidebarTrigger className="cursor-w-r..." onPointerDown={function setPointerRef} ...>
+                              <Button data-sidebar="trigger" data-slot="tooltip-tr..." variant="ghost" size="icon" ...>
+                                <Button data-slot="tooltip-tr..." data-variant="ghost" data-size="icon" ...>
+                                  <button
+                                    type="button"
+                                    onClick={function onClick}
+                                    onMouseDown={function onMouseDown}
+                                    onKeyDown={function}
+                                    onKeyUp={function onKeyUp}
+                                    onPointerDown={function onPointerDown}
+                                    tabIndex={0}
+                                    disabled={false}
+                                    data-slot="tooltip-trigger"
+                                    data-variant="ghost"
+                                    data-size="icon"
+                                    data-sidebar="trigger"
+                                    aria-expanded={true}
+                                    aria-controls="sidebar-container"
+                                    onPointerEnter={function setPointerRef}
+                                    onMouseMove={function onMouseMove}
++                                   id="base-ui-_R_3hl5inelalb_"
+-                                   id="base-ui-_R_e6kmatqlalb_"
+                                    ref={function}
+                                    className={"group/button inline-flex shrink-0 items-center justify-center bg-clip..."}
+                                  >
+                      ...
+                        <PopoverTrigger render={<ForwardRef(SidebarMenuItem)>}>
+                          <PopoverTrigger data-slot="popover-tr..." className="cursor-poi..." ...>
+                            <SidebarMenuItem icon={<ForwardRef(Icon)>} label="Search" isActive={false} ...>
+                              <button
+                                type="button"
+                                onMouseDown={function onMouseDown}
+                                onKeyDown={function}
+                                onKeyUp={function onKeyUp}
+                                onPointerDown={function onPointerDown}
+                                tabIndex={0}
+                                disabled={false}
+                                onPointerEnter={function setPointerRef}
+                                onMouseMove={function onMouseMove}
+                                data-base-ui-click-trigger=""
++                               id="base-ui-_R_eal5inelalb_"
+-                               id="base-ui-_R_1pakmatqlalb_"
+                                data-slot="popover-trigger"
+                                ref={function}
+                                onClick={function onClick}
+                                className="menu-item-hoverable group/menu-item relative inline-flex w-[calc(100%-var(-..."
+                                data-testid={undefined}
+                                data-sidebar-item="true"
+                                data-active={undefined}
+                              >
+                        ...
+                      <div>
+                      <div>
+                      ...
+                        <PopoverRootComponent props={{...}}>
+                          <PopoverTrigger render={<button>}>
+                            <PopoverTrigger data-slot="popover-tr..." className="cursor-poi..." render={<button>}>
+                              <button
+                                type="button"
+                                className="menu-item-hoverable group/help text-primary hover:bg-accent/80 hover:text-f..."
+                                data-sidebar-item="true"
+                                aria-label="Help"
+                                onClick={function onClick}
+                                onMouseDown={function onMouseDown}
+                                onKeyDown={function}
+                                onKeyUp={function onKeyUp}
+                                onPointerDown={function onPointerDown}
+                                tabIndex={0}
+                                disabled={false}
+                                onPointerEnter={function setPointerRef}
+                                onMouseMove={function onMouseMove}
+                                data-base-ui-click-trigger=""
++                               id="base-ui-_R_3tl5inelalb_"
+-                               id="base-ui-_R_fmkmatqlalb_"
+                                data-slot="popover-trigger"
+                                ref={function}
+                              >
+                          ...
+                      ...
+                        <DialogTrigger render={<Button>}>
+                          <DialogTrigger data-slot="dialog-tri..." className="cursor-poi..." render={<Button>}>
+                            <Button className="h-11 w-ful..." size="lg" variant="outline" type="button" ...>
+                              <Button data-slot="dialog-tri..." data-variant="outline" data-size="lg" ...>
+                                <button
+                                  type="button"
+                                  onClick={function onClick}
+                                  onMouseDown={function onMouseDown}
+                                  onKeyDown={function}
+                                  onKeyUp={function onKeyUp}
+                                  onPointerDown={function onPointerDown}
+                                  tabIndex={0}
+                                  disabled={false}
+                                  data-slot="dialog-trigger"
+                                  data-variant="outline"
+                                  data-size="lg"
+                                  data-base-ui-click-trigger=""
++                                 id="base-ui-_R_3nl5inelalb_"
+-                                 id="base-ui-_R_eukmatqlalb_"
+                                  ref={function}
+                                  className={"group/button inline-flex shrink-0 items-center justify-center rounded-f..."}
+                                >
+                        ...
+      ...
+        <div ref={function useRefCallback.useCallback[result]} className="relative f...">
+          ...
+            <div className="relative m...">
+              <div>
+              ...
+                <MenuRoot data-slot="dropdown-menu" open={false} onOpenChange={function onOpenChange}>
+                  <FloatingTree externalTree={{nodesRef:{...}, ...}}>
+                    <DropdownMenuTrigger render={<Button>}>
+                      <MenuTrigger data-slot="dropdown-m..." className="cursor-poi..." render={<Button>}>
+                        <Button variant="ghost" className="min-w-0 ma..." disabled={true} aria-label="Select mod..." ...>
+                          <Button data-slot="dropdown-m..." data-variant="ghost" data-size="default" ...>
+                            <button
+                              type="button"
+                              data-disabled=""
+                              onClick={function onClick}
+                              onMouseDown={function onMouseDown}
+                              onKeyDown={function}
+                              onKeyUp={function onKeyUp}
+                              onPointerDown={function onPointerDown}
+                              tabIndex={0}
+                              disabled={true}
+                              data-slot="dropdown-menu-trigger"
+                              data-variant="ghost"
+                              data-size="default"
+                              aria-label="Select model, current model GPT-5 Mini"
+                              onPointerEnter={function setPointerRef}
+                              onMouseMove={function onMouseMove}
+                              aria-haspopup="menu"
++                             id="base-ui-_R_ecpinelalb_"
+-                             id="base-ui-_R_1pj6atqlalb_"
+                              ref={function}
+                              className={"group/button inline-flex items-center bg-clip-padding whitespace-nowrap out..."}
+                            >
+                    ...
+              <div className="pointer-ev...">
+                <div className="flex items...">
+                  <AuthModalTrigger variant="outline">
+                    <Dialog>
+                      <DialogRoot data-slot="dialog">
+                        <DialogTrigger render={<Button>}>
+                          <DialogTrigger data-slot="dialog-tri..." className="cursor-poi..." render={<Button>}>
+                            <Button className="cursor-poi..." size={undefined} variant="outline" type="button" ...>
+                              <Button data-slot="dialog-tri..." data-variant="outline" data-size="default" ...>
+                                <button
+                                  type="button"
+                                  onClick={function onClick}
+                                  onMouseDown={function onMouseDown}
+                                  onKeyDown={function}
+                                  onKeyUp={function onKeyUp}
+                                  onPointerDown={function onPointerDown}
+                                  tabIndex={0}
+                                  disabled={false}
+                                  data-slot="dialog-trigger"
+                                  data-variant="outline"
+                                  data-size="default"
+                                  data-base-ui-click-trigger=""
++                                 id="base-ui-_R_3epinelalb_"
+-                                 id="base-ui-_R_dr6atqlalb_"
+                                  ref={function}
+                                  className={"group/button inline-flex shrink-0 items-center justify-center rounded-f..."}
+                                >
++                                 Log in
+                        ...
+                  <AuthModalTrigger className="max-[360px...">
+                    <Dialog>
+                      <DialogRoot data-slot="dialog">
+                        <DialogTrigger render={<Button>}>
+                          <DialogTrigger data-slot="dialog-tri..." className="cursor-poi..." render={<Button>}>
+                            <Button className="max-[360px..." size={undefined} variant={undefined} type="button" ...>
+                              <Button data-slot="dialog-tri..." data-variant="default" data-size="default" ...>
+                                <button
+                                  type="button"
+                                  onClick={function onClick}
+                                  onMouseDown={function onMouseDown}
+                                  onKeyDown={function}
+                                  onKeyUp={function onKeyUp}
+                                  onPointerDown={function onPointerDown}
+                                  tabIndex={0}
+                                  disabled={false}
+                                  data-slot="dialog-trigger"
+                                  data-variant="default"
+                                  data-size="default"
+                                  data-base-ui-click-trigger=""
++                                 id="base-ui-_R_3mpinelalb_"
+-                                 id="base-ui-_R_er6atqlalb_"
+                                  ref={function}
+                                  className={"group/button inline-flex shrink-0 items-center justify-center rounded-f..."}
+                                >
++                                 Sign up
+                        ...
+          ...
+            <div className="shadow-com..." onClick={function onClick}>
+              <FileList>
+              <PromptInputTextarea>
+              <PromptInputActions className="w-full jus...">
+                <div className="flex items...">
+                  ...
+                    <TooltipTrigger render={<PopoverTrigger>}>
+                      <TooltipTrigger data-slot="tooltip-tr..." render={<PopoverTrigger>}>
+                        <PopoverTrigger render={<Button>} onPointerDown={function setPointerRef} ...>
+                          <PopoverTrigger data-slot="tooltip-tr..." className="cursor-poi..." render={<Button>} ...>
+                            <Button size="sm" variant="ghost" className="size-9 rou..." type="button" ...>
+                              <Button data-slot="tooltip-tr..." data-variant="ghost" data-size="sm" ...>
+                                <button
+                                  type="button"
+                                  onClick={function onClick}
+                                  onMouseDown={function onMouseDown}
+                                  onKeyDown={function}
+                                  onKeyUp={function onKeyUp}
+                                  onPointerDown={function onPointerDown}
+                                  tabIndex={0}
+                                  disabled={false}
+                                  data-slot="tooltip-trigger"
+                                  data-variant="ghost"
+                                  data-size="sm"
+                                  aria-label="More options"
+                                  onPointerEnter={function}
+                                  onMouseMove={function}
+                                  data-base-ui-click-trigger=""
++                                 id="base-ui-_R_reqn9inelalb_"
+-                                 id="base-ui-_R_3drat6atqlalb_"
+                                  ref={function}
+                                  className={"group/button inline-flex shrink-0 items-center justify-center bg-clip-p..."}
+                                >
+                  <PromptInputAction tooltip="Send">
+                    <Tooltip>
+                      <TooltipRoot data-slot="tooltip" disableHoverablePopup={true}>
+                        <TooltipTrigger render={<Button>} disabled={false}>
+                          <TooltipTrigger data-slot="tooltip-tr..." render={<Button>} disabled={false}>
+                            <Button size="sm" className="size-9 rou..." disabled={true} type="button" onClick={function} ...>
+                              <Button data-slot="tooltip-tr..." data-variant="default" data-size="sm" ...>
+                                <button
+                                  type="button"
+                                  data-disabled=""
+                                  onClick={function onClick}
+                                  onMouseDown={function onMouseDown}
+                                  onKeyDown={function}
+                                  onKeyUp={function onKeyUp}
+                                  onPointerDown={function onPointerDown}
+                                  tabIndex={0}
+                                  disabled={true}
+                                  data-slot="tooltip-trigger"
+                                  data-variant="default"
+                                  data-size="sm"
+                                  aria-label="Send message"
+                                  onPointerEnter={function setPointerRef}
+                                  onMouseMove={function onMouseMove}
++                                 id="base-ui-_R_3mqn9inelalb_"
+-                                 id="base-ui-_R_erat6atqlalb_"
+                                  ref={function}
+                                  className={"group/button inline-flex shrink-0 cursor-pointer items-center justify-c..."}
+                                >
+                        ...
+ @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1884
+[  253598ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3000/api/user-preferences/favorite-models:0
+[  255110ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  255118ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  255275ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3000/api/user-preferences/favorite-models:0
+[  318095ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  318807ms] [LOG] [Fast Refresh] done in 795ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  322089ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  322361ms] [LOG] [Fast Refresh] done in 347ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  339975ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  340034ms] [LOG] [Fast Refresh] done in 161ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  341226ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  341234ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  341459ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3000/api/user-preferences/favorite-models:0
+[  342304ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  342310ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  342481ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3000/api/user-preferences/favorite-models:0
+[  343405ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  343413ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_7b3a48b7._.js:1054
+[  343575ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3000/api/user-preferences/favorite-models:0

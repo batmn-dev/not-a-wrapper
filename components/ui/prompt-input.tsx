@@ -97,7 +97,7 @@ function PromptInput({
     >
       <div
         className={cn(
-          "shadow-composer cursor-text overflow-clip rounded-[24px] border-0 border-black/5 bg-[var(--composer-bg)] bg-clip-padding contain-inline-size motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out dark:border-white/5",
+          "shadow-composer cursor-text overflow-clip rounded-[28px] border-0 border-black/5 bg-[var(--composer-bg)] bg-clip-padding contain-inline-size motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out dark:border-white/5",
           className
         )}
         onClick={() => {

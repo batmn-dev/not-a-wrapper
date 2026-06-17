@@ -35,6 +35,7 @@ type ChatActionsMenuProps = {
   onRename?: () => void
   onOpenChange?: (open: boolean) => void
   trigger?: React.ReactElement
+  triggerAriaLabel?: string
   contentAlign?: "start" | "center" | "end"
   contentSide?: "top" | "right" | "bottom" | "left"
   showShare?: boolean
@@ -45,6 +46,7 @@ export function ChatActionsMenu({
   onRename,
   onOpenChange,
   trigger,
+  triggerAriaLabel,
   contentAlign = "start",
   contentSide = "bottom",
   showShare,
@@ -97,9 +99,10 @@ export function ChatActionsMenu({
 
   const defaultTrigger = (
     <button
-      className="hover:bg-secondary flex size-7 items-center justify-center rounded-md p-1"
+      type="button"
+      className="hover:bg-secondary focus-visible:ring-ring flex size-7 items-center justify-center rounded-md p-1 focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
       onClick={(e) => e.stopPropagation()}
-      aria-label="Open chat actions"
+      aria-label={triggerAriaLabel ?? "Open chat actions"}
     />
   )
 
@@ -147,11 +150,7 @@ export function ChatActionsMenu({
               togglePinned(chat.id, !chat.pinned)
             }}
           >
-            {chat.pinned ? (
-              <PinOff size={20} />
-            ) : (
-              <Pin size={20} />
-            )}
+            {chat.pinned ? <PinOff size={20} /> : <Pin size={20} />}
             {chat.pinned ? "Unpin" : "Pin"}
           </DropdownMenuItem>
           <DropdownMenuItem
