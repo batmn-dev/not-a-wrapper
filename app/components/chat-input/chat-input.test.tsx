@@ -2,17 +2,25 @@
 
 import React, { act } from "react"
 import { createRoot, Root } from "react-dom/client"
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
-import { ChatInput } from "./chat-input"
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
-beforeAll(() => {
+let ChatInput: (typeof import("./chat-input"))["ChatInput"]
+const promptInputMockCalls: Array<{
+  expanded?: boolean
+  maxHeight?: number | string
+}> = []
+
+beforeAll(async () => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean })
     .IS_REACT_ACT_ENVIRONMENT = true
+  ;({ ChatInput } = await import("./chat-input"))
 })
 
 vi.mock("@/components/common/model-selector/base", () => ({
   ModelSelector: () => null,
 }))
+
+vi.mock("server-only", () => ({}))
 
 vi.mock("./input-drop-zone", () => ({
   InputDropZone: ({ children }: { children: React.ReactNode }) => (
@@ -21,7 +29,18 @@ vi.mock("./input-drop-zone", () => ({
 }))
 
 vi.mock("@/components/ui/prompt-input", () => ({
-  PromptInput: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  PromptInput: ({
+    children,
+    expanded,
+    maxHeight,
+  }: {
+    children: React.ReactNode
+    expanded?: boolean
+    maxHeight?: number | string
+  }) => {
+    promptInputMockCalls.push({ expanded, maxHeight })
+    return <div>{children}</div>
+  },
   PromptInputAction: ({
     children,
   }: {
@@ -31,10 +50,15 @@ vi.mock("@/components/ui/prompt-input", () => ({
   PromptInputActions: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
+  PromptInputFooter: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
   PromptInputTextarea: React.forwardRef<
     HTMLTextAreaElement,
-    React.TextareaHTMLAttributes<HTMLTextAreaElement>
-  >(function PromptInputTextarea(props, ref) {
+    React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
+      containerClassName?: string
+    }
+  >(function PromptInputTextarea({ containerClassName, ...props }, ref) {
     return <textarea ref={ref} {...props} />
   }),
 }))
@@ -54,6 +78,10 @@ vi.mock("./file-list", () => ({
 describe("ChatInput primary action", () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
+
+  beforeEach(() => {
+    promptInputMockCalls.length = 0
+  })
 
   afterEach(() => {
     const rootToUnmount = root
@@ -112,5 +140,98 @@ describe("ChatInput primary action", () => {
 
     expect(stop).toHaveBeenCalledTimes(1)
     expect(onSend).not.toHaveBeenCalled()
+  })
+
+  it("keeps the composer compact for empty input", () => {
+    const mountedContainer = document.createElement("div")
+    document.body.appendChild(mountedContainer)
+    container = mountedContainer
+    const mountedRoot = createRoot(mountedContainer)
+    root = mountedRoot
+
+    act(() => {
+      mountedRoot.render(
+        <ChatInput
+          defaultValue=""
+          onValueChange={() => {}}
+          onSend={() => {}}
+          isSubmitting={false}
+          files={[]}
+          onFileUpload={() => {}}
+          onFileRemove={() => {}}
+          onSuggestion={() => {}}
+          hasSuggestions={false}
+          selectedModel="openai/gpt-4.1-mini"
+          isUserAuthenticated
+          stop={() => {}}
+          status="ready"
+          setEnableSearch={() => {}}
+          enableSearch={false}
+        />
+      )
+    })
+
+    expect(promptInputMockCalls.at(-1)).toMatchObject({
+      expanded: false,
+      maxHeight: "max(30svh, 5rem)",
+    })
+  })
+
+  it("expands the composer for hard newlines and attached files", () => {
+    const mountedContainer = document.createElement("div")
+    document.body.appendChild(mountedContainer)
+    container = mountedContainer
+    const mountedRoot = createRoot(mountedContainer)
+    root = mountedRoot
+
+    act(() => {
+      mountedRoot.render(
+        <ChatInput
+          defaultValue={"line one\nline two"}
+          onValueChange={() => {}}
+          onSend={() => {}}
+          isSubmitting={false}
+          files={[]}
+          onFileUpload={() => {}}
+          onFileRemove={() => {}}
+          onSuggestion={() => {}}
+          hasSuggestions={false}
+          selectedModel="openai/gpt-4.1-mini"
+          isUserAuthenticated
+          stop={() => {}}
+          status="ready"
+          setEnableSearch={() => {}}
+          enableSearch={false}
+        />
+      )
+    })
+
+    expect(promptInputMockCalls.at(-1)?.expanded).toBe(true)
+
+    const file = new File(["hello"], "hello.txt", { type: "text/plain" })
+
+    act(() => {
+      mountedRoot.render(
+        <ChatInput
+          defaultValue=""
+          onValueChange={() => {}}
+          onSend={() => {}}
+          isSubmitting={false}
+          files={[file]}
+          onFileUpload={() => {}}
+          onFileRemove={() => {}}
+          onSuggestion={() => {}}
+          hasSuggestions={false}
+          selectedModel="openai/gpt-4.1-mini"
+          isUserAuthenticated
+          stop={() => {}}
+          status="ready"
+          setEnableSearch={() => {}}
+          enableSearch={false}
+        />
+      )
+    })
+
+    expect(promptInputMockCalls.at(-1)?.expanded).toBe(true)
   })
 })

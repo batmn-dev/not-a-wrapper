@@ -18,7 +18,6 @@ type SidebarItemProps = {
 export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(chat.title || "")
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [prevChatTitle, setPrevChatTitle] = useState(chat.title)
   const inputRef = useRef<HTMLInputElement>(null)
   const { updateTitle } = useChats()
@@ -46,19 +45,13 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
 
   const handleSave = useCallback(async () => {
     setIsEditing(false)
-    setIsMenuOpen(false)
     await updateTitle(chat.id, editTitle)
   }, [chat.id, editTitle, updateTitle])
 
   const handleCancel = useCallback(() => {
     setEditTitle(chat.title || "")
     setIsEditing(false)
-    setIsMenuOpen(false)
   }, [chat.title])
-
-  const handleMenuOpenChange = useCallback((open: boolean) => {
-    setIsMenuOpen(open)
-  }, [])
 
   const handleClickOutside = useCallback(() => {
     if (isEditing) {
@@ -122,9 +115,14 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
   )
 
   // Memoize computed values
+  const isCurrentChat = useMemo(
+    () => chat.id === currentChatId,
+    [chat.id, currentChatId]
+  )
+
   const isActive = useMemo(
-    () => chat.id === currentChatId || isEditing || isMenuOpen,
-    [chat.id, currentChatId, isEditing, isMenuOpen]
+    () => isCurrentChat || isEditing,
+    [isCurrentChat, isEditing]
   )
 
   const displayTitle = useMemo(
@@ -135,20 +133,11 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
   const containerClassName = useMemo(
     () =>
       cn(
-        "menu-item-hoverable hover:bg-accent/80 hover:text-foreground group/chat relative mx-1.5 h-9 w-[calc(100%-var(--spacing)*3)] rounded-lg pointer-coarse:h-auto",
+        "sidebar-row menu-item-hoverable hover:bg-accent/80 hover:text-foreground group/chat relative mx-1.5 flex h-9 w-[calc(100%-var(--spacing)*3)] items-center rounded-lg pointer-coarse:h-auto",
         isActive &&
           "bg-accent hover:bg-accent text-foreground group-data-[collapsible=icon]:bg-transparent"
       ),
     [isActive]
-  )
-
-  const menuClassName = useMemo(
-    () =>
-      cn(
-        "absolute top-0 right-1 flex h-full items-center justify-center opacity-0 group-hover/chat:opacity-100",
-        isMobile && "opacity-100 group-hover/chat:opacity-100"
-      ),
-    [isMobile]
   )
 
   return (
@@ -158,7 +147,7 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
       ref={containerRef}
     >
       {isEditing ? (
-        <div className="flex h-full items-center rounded-lg py-[3px] pr-1 pl-2">
+        <div className="flex h-full w-full items-center rounded-lg py-[3px] pr-1 pl-2">
           <input
             ref={inputRef}
             value={editTitle}
@@ -188,26 +177,26 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
         <>
           <Link
             href={`/c/${chat.id}`}
-            className="block h-full w-full"
+            className="text-primary focus-visible:ring-ring flex h-full min-w-0 grow items-center rounded-lg px-2.5 py-1.5 text-sm focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset pointer-coarse:h-auto pointer-coarse:py-3"
             prefetch
             draggable={false}
             onClick={handleLinkClick}
+            aria-current={isCurrentChat ? "page" : undefined}
+            title={displayTitle}
           >
-            <div
-              className="text-primary relative flex h-full w-full items-center overflow-hidden mask-r-from-80% mask-r-to-85% px-2.5 py-1.5 text-sm pointer-coarse:h-auto pointer-coarse:py-3"
-              title={displayTitle}
-            >
-              <span className="min-w-0 truncate" dir="auto">
-                {displayTitle}
-              </span>
-            </div>
+            <span className="min-w-0 truncate" dir="auto">
+              {displayTitle}
+            </span>
           </Link>
 
-          <div className={menuClassName} key={chat.id}>
+          <div
+            className="sidebar-row-action sidebar-row-trailing flex h-full shrink-0 items-center justify-center pr-1"
+            key={chat.id}
+          >
             <SidebarItemMenu
               chat={chat}
               onStartEditing={handleStartEditing}
-              onMenuOpenChange={handleMenuOpenChange}
+              triggerAriaLabel={`Open chat actions for ${displayTitle}`}
             />
           </div>
         </>

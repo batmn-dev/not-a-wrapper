@@ -1,11 +1,13 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { ModelSelector } from "@/components/common/model-selector/base"
 import { Icon } from "@/components/ui/icon"
 import {
   PromptInput,
   PromptInputAction,
   PromptInputActions,
+  PromptInputFooter,
   PromptInputTextarea,
 } from "@/components/ui/prompt-input"
 import { StopBulkRoundedIcon } from "@/lib/icons"
@@ -30,6 +32,8 @@ type ChatInputProps = {
   onSuggestion: (suggestion: string) => void
   hasSuggestions?: boolean
   selectedModel: string
+  onSelectModel?: (modelId: string) => void
+  onLockedGuestModelSelect?: (modelId: string) => void
   isUserAuthenticated: boolean
   stop: () => void
   status?: "submitted" | "streaming" | "ready" | "error"
@@ -52,6 +56,8 @@ export function ChatInput({
   onSuggestion,
   hasSuggestions,
   selectedModel,
+  onSelectModel,
+  onLockedGuestModelSelect,
   isUserAuthenticated,
   stop,
   status,
@@ -224,35 +230,59 @@ export function ChatInput({
         >
           <PromptInput
             className="relative z-10"
-            maxHeight={200}
+            expanded={files.length > 0 || localValue.includes("\n")}
+            maxHeight="max(30svh, 5rem)"
             value={localValue}
             onValueChange={handleValueChange}
           >
-            <FileList files={files} onFileRemove={onFileRemove} />
+            <div className="[grid-area:header] min-w-0">
+              <FileList files={files} onFileRemove={onFileRemove} />
+            </div>
+            <PromptInputActions
+              className="[grid-area:leading] h-9 justify-start self-center"
+              data-composer-leading="true"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ButtonPlusMenu
+                onFileUpload={onFileUpload}
+                isUserAuthenticated={isUserAuthenticated}
+                isFileUploadAvailable={isFileUploadAvailable}
+                enableSearch={enableSearch}
+                onToggleSearch={setEnableSearch}
+                isSearchDisabled={isSearchDisabled}
+              />
+            </PromptInputActions>
             <PromptInputTextarea
               ref={textareaRef}
-              placeholder="Ask anything..."
+              placeholder="Ask anything"
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
-              className="px-4 pt-4 leading-[1.3]"
+              containerClassName="[grid-area:primary]"
             />
-            <PromptInputActions className="w-full justify-between p-2">
-              <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                <ButtonPlusMenu
-                  onFileUpload={onFileUpload}
+            <PromptInputFooter aria-hidden="true" />
+            <PromptInputActions
+              className="[grid-area:trailing] h-9 min-w-[110px] justify-end gap-1.5 self-center sm:min-w-[154px]"
+              data-composer-trailing="true"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {onSelectModel ? (
+                <ModelSelector
+                  selectedModelId={selectedModel}
+                  setSelectedModelId={onSelectModel}
                   isUserAuthenticated={isUserAuthenticated}
-                  isFileUploadAvailable={isFileUploadAvailable}
-                  enableSearch={enableSearch}
-                  onToggleSearch={setEnableSearch}
-                  isSearchDisabled={isSearchDisabled}
+                  onLockedGuestModelSelect={onLockedGuestModelSelect}
+                  className="h-9 max-w-[68px] rounded-full px-3.5 py-0 text-sm font-normal text-muted-foreground hover:bg-black/5 aria-expanded:bg-black/5 dark:hover:bg-white/10 dark:aria-expanded:bg-white/10"
                 />
-              </div>
+              ) : null}
+              {/* TODO: Add dictation here when the app exposes a local voice input capability. */}
               <PromptInputAction tooltip={primaryAction.tooltip}>
                 <Button
                   size="sm"
-                  className="size-9 rounded-full transition-all duration-300 ease-out"
+                  className="size-9 rounded-full p-0 transition-colors duration-150 ease-out"
                   disabled={primaryAction.disabled}
                   type="button"
+                  id="composer-submit-button"
+                  data-testid="send-button"
                   onClick={handlePrimaryActionClick}
                   aria-label={primaryAction.ariaLabel}
                 >

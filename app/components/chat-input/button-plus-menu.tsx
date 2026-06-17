@@ -15,6 +15,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { ACCEPTED_FILE_PICKER_TYPES } from "@/lib/file-handling"
+import { cn } from "@/lib/utils"
 import {
   RiAddLine,
   RiAttachment2,
@@ -23,6 +24,25 @@ import {
 } from "@remixicon/react"
 import { useRef } from "react"
 import { PopoverContentAuth } from "./popover-content-auth"
+
+const plusTriggerClassName =
+  "size-9 rounded-full p-0 hover:bg-black/5 dark:hover:bg-white/10"
+
+const authenticatedPlusTriggerClassName = cn(
+  plusTriggerClassName,
+  "aria-expanded:bg-black/5 dark:aria-expanded:bg-white/10"
+)
+
+const composerPlusMenuContentClassName =
+  "w-[228px] min-w-[228px] overflow-hidden rounded-[16px] px-0 py-1.5"
+
+const composerPlusMenuStyle = {
+  boxShadow:
+    "rgba(0, 0, 0, 0.08) 0px 8px 12px 0px, rgba(0, 0, 0, 0.62) 0px 0px 1px 0px",
+}
+
+const composerPlusMenuItemClassName =
+  "mx-1.5 h-9 rounded-[10px] px-2.5 py-1.5 text-sm leading-5 hover:bg-black/5 focus:bg-black/5 data-[highlighted]:bg-black/5 dark:hover:bg-white/10 dark:focus:bg-white/10 dark:data-[highlighted]:bg-white/10"
 
 type ButtonPlusMenuProps = {
   onFileUpload: (files: File[]) => void
@@ -61,9 +81,11 @@ export function ButtonPlusMenu({
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="size-9 rounded-full"
+                    className={plusTriggerClassName}
                     type="button"
-                    aria-label="More options"
+                    id="composer-plus-btn"
+                    data-testid="composer-plus-btn"
+                    aria-label="Add files and more"
                   />
                 }
               />
@@ -107,9 +129,11 @@ export function ButtonPlusMenu({
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="size-9 rounded-full"
+                    className={authenticatedPlusTriggerClassName}
                     type="button"
-                    aria-label="More options"
+                    id="composer-plus-btn"
+                    data-testid="composer-plus-btn"
+                    aria-label="Add files and more"
                   />
                 }
               />
@@ -125,18 +149,18 @@ export function ButtonPlusMenu({
           side="top"
           align="start"
           animated={false}
-          className="w-max"
+          className={composerPlusMenuContentClassName}
+          style={composerPlusMenuStyle}
         >
           <Tooltip>
             <TooltipTrigger
               render={
                 <DropdownMenuItem
                   aria-disabled={!isFileUploadAvailable || undefined}
-                  className={
-                    !isFileUploadAvailable
-                      ? "cursor-not-allowed opacity-50"
-                      : ""
-                  }
+                  className={cn(
+                    composerPlusMenuItemClassName,
+                    !isFileUploadAvailable && "cursor-not-allowed opacity-50"
+                  )}
                   onClick={() => {
                     if (!isFileUploadAvailable) return
                     fileInputRef.current?.click()
@@ -161,9 +185,10 @@ export function ButtonPlusMenu({
               render={
                 <DropdownMenuItem
                   closeOnClick={false}
-                  className={
-                    isSearchDisabled ? "cursor-not-allowed opacity-50" : ""
-                  }
+                  className={cn(
+                    composerPlusMenuItemClassName,
+                    isSearchDisabled && "cursor-not-allowed opacity-50"
+                  )}
                   onClick={() => {
                     if (isSearchDisabled) return
                     onToggleSearch(!enableSearch)

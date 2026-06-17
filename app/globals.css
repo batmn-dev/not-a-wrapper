@@ -529,6 +529,47 @@
     background-clip: padding-box;
   }
 
+  .sidebar-row {
+    --sidebar-row-active-background: var(--accent);
+  }
+
+  .sidebar-row-card {
+    --sidebar-row-active-background: color-mix(
+      in oklab,
+      var(--accent) 50%,
+      transparent
+    );
+  }
+
+  .sidebar-row-action {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .sidebar-row:where(:focus-within),
+  .sidebar-row:has([data-popup-open]),
+  .sidebar-row:has([data-pressed]) {
+    background-color: var(--sidebar-row-active-background);
+    color: var(--foreground);
+  }
+
+  .sidebar-row:where(:hover, :focus-within) .sidebar-row-action,
+  .sidebar-row:has([data-popup-open]) .sidebar-row-action,
+  .sidebar-row:has([data-pressed]) .sidebar-row-action {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  @media (pointer: coarse) {
+    .sidebar-row-action {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+  }
+
   /* Content fade: two-layer gradient pseudo behind sticky composer.
      Layer 1 (28px): transparent → background (fade zone matching border-radius).
      Layer 2 (full): transparent for 28px then solid background below. */
@@ -549,7 +590,7 @@
 
   .shadow-composer {
     --tw-shadow:
-      0px 4px 4px 0px rgba(0, 0, 0, 0.04), 0px 0px 1px 0px rgba(0, 0, 0, 0.62);
+      0px 0px 0px 1px rgba(0, 0, 0, 0.04), 0px 2px 8px 0px rgba(0, 0, 0, 0.04);
     --tw-inset-shadow: 0 0 transparent;
     box-shadow:
       var(--tw-inset-shadow, 0 0 transparent),

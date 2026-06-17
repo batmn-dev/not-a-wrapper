@@ -59,7 +59,7 @@ export function Chat() {
   } = useFileUpload()
 
   // Model selection
-  const { selectedModel } = useModel({
+  const { selectedModel, handleModelChange } = useModel({
     currentChat: currentChat || null,
     user,
     updateChatModel,
@@ -192,6 +192,8 @@ export function Chat() {
       hasSuggestions:
         preferences.promptSuggestions && !chatId && messages.length === 0,
       selectedModel,
+      onSelectModel: handleModelChange,
+      onLockedGuestModelSelect: () => setHasDialogAuth(true),
       isUserAuthenticated: isAuthenticated,
       stop,
       status,
@@ -213,6 +215,7 @@ export function Chat() {
       chatId,
       messages.length,
       selectedModel,
+      handleModelChange,
       isAuthenticated,
       stop,
       status,
@@ -276,7 +279,7 @@ export function Chat() {
 
       <div
         className={cn(
-          "relative isolate z-10 flex w-full basis-auto flex-col [--thread-content-margin:1rem] @sm/main:[--thread-content-margin:1.5rem] @lg/main:[--thread-content-margin:4rem] px-[var(--thread-content-margin,1rem)] pb-[env(safe-area-inset-bottom,0px)]",
+          "relative isolate z-10 flex w-full basis-auto flex-col [--thread-content-margin:1rem] px-[var(--thread-content-margin,1rem)] pb-[env(safe-area-inset-bottom,0px)]",
           !showOnboarding &&
             "group/thread-bottom-container content-fade sticky bottom-0"
         )}

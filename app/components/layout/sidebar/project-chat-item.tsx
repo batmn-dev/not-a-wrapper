@@ -20,7 +20,6 @@ type ProjectChatItemProps = {
 export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(chat.title || "")
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [prevChatTitle, setPrevChatTitle] = useState(chat.title)
   const inputRef = useRef<HTMLInputElement>(null)
   const { updateTitle } = useChats()
@@ -48,19 +47,13 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
 
   const handleSave = useCallback(async () => {
     setIsEditing(false)
-    setIsMenuOpen(false)
     await updateTitle(chat.id, editTitle)
   }, [chat.id, editTitle, updateTitle])
 
   const handleCancel = useCallback(() => {
     setEditTitle(chat.title || "")
     setIsEditing(false)
-    setIsMenuOpen(false)
   }, [chat.title])
-
-  const handleMenuOpenChange = useCallback((open: boolean) => {
-    setIsMenuOpen(open)
-  }, [])
 
   const handleClickOutside = useCallback(() => {
     if (isEditing) {
@@ -132,19 +125,10 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
   const containerClassName = useMemo(
     () =>
       cn(
-        "border-border hover:bg-accent/50 group/chat relative rounded-lg border",
-        isEditing || isMenuOpen ? "bg-accent/50" : ""
+        "sidebar-row sidebar-row-card border-border hover:bg-accent/50 group/chat relative flex items-start rounded-lg border",
+        isEditing ? "bg-accent/50" : ""
       ),
-    [isEditing, isMenuOpen]
-  )
-
-  const menuClassName = useMemo(
-    () =>
-      cn(
-        "absolute top-3 right-3 opacity-0 group-hover/chat:opacity-100",
-        isMobile && "opacity-100 group-hover/chat:opacity-100"
-      ),
-    [isMobile]
+    [isEditing]
   )
 
   if (isEditing) {
@@ -154,7 +138,7 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
         onClick={handleContainerClick}
         ref={containerRef}
       >
-        <div className="flex items-center p-3">
+        <div className="flex w-full items-center p-3">
           <Icon
             icon={RiChat3Line}
             slotSize={16}
@@ -197,9 +181,11 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
     >
       <Link
         href={`/c/${chat.id}`}
-        className="block p-3"
+        className="focus-visible:ring-ring block min-w-0 grow rounded-lg p-3 focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
         onClick={handleLinkClick}
         prefetch
+        draggable={false}
+        title={displayTitle}
       >
         <div className="flex items-start justify-between">
           <div className="min-w-0 flex-1">
@@ -217,11 +203,14 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
         </div>
       </Link>
 
-      <div className={menuClassName} key={chat.id}>
+      <div
+        className="sidebar-row-action sidebar-row-trailing flex shrink-0 items-center justify-center pt-3 pr-3"
+        key={chat.id}
+      >
         <SidebarItemMenu
           chat={chat}
           onStartEditing={handleStartEditing}
-          onMenuOpenChange={handleMenuOpenChange}
+          triggerAriaLabel={`Open chat actions for ${displayTitle}`}
         />
       </div>
     </div>
