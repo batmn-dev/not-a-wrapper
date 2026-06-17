@@ -1,0 +1,50 @@
+- generic [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=e3]:
+    - region "Notifications alt+T"
+    - generic [ref=e6]:
+      - banner:
+        - generic:
+          - button "Select model, current model GPT-5 Mini" [disabled] [ref=e9]:
+            - generic [ref=e10]: GPT-5 Mini
+            - generic:
+              - img
+          - generic [ref=e12]:
+            - button "Log in" [ref=e13] [cursor=pointer]
+            - button "Sign up" [ref=e14] [cursor=pointer]
+      - main [ref=e15]:
+        - generic [ref=e16]:
+          - heading "What's on your mind?" [level=1] [ref=e18]
+          - generic [ref=e21]:
+            - generic [ref=e23]:
+              - button "Code" [ref=e24] [cursor=pointer]:
+                - generic:
+                  - img
+                - text: Code
+              - button "Research" [ref=e25] [cursor=pointer]:
+                - generic:
+                  - img
+                - text: Research
+              - button "Analysis" [ref=e26] [cursor=pointer]:
+                - generic:
+                  - img
+                - text: Analysis
+              - button "Creative" [ref=e27] [cursor=pointer]:
+                - generic:
+                  - img
+                - text: Creative
+              - button "Learning" [ref=e28] [cursor=pointer]:
+                - generic:
+                  - img
+                - text: Learning
+            - generic [ref=e30]:
+              - button "More options" [ref=e32] [cursor=pointer]:
+                - generic:
+                  - img
+              - textbox "Ask anything..." [active] [ref=e33]
+              - button "Send message" [disabled] [ref=e35]:
+                - generic:
+                  - img
+  - button "Open Next.js Dev Tools" [ref=e41] [cursor=pointer]:
+    - img [ref=e42]

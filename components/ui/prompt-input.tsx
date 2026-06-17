@@ -36,6 +36,7 @@ type PromptInputContextType = {
   isLoading: boolean
   value: string
   setValue: (value: string) => void
+  setTextareaExpanded: React.Dispatch<React.SetStateAction<boolean>>
   maxHeight: number | string
   onSubmit?: () => void
   disabled?: boolean
@@ -58,6 +59,7 @@ type PromptInputProps = {
   isLoading?: boolean
   value?: string
   onValueChange?: (value: string) => void
+  expanded?: boolean
   maxHeight?: number | string
   onSubmit?: () => void
   disabled?: boolean
@@ -68,6 +70,7 @@ type PromptInputProps = {
 function PromptInput({
   className,
   isLoading = false,
+  expanded = false,
   maxHeight = 240,
   value,
   onValueChange,
@@ -76,7 +79,9 @@ function PromptInput({
   children,
 }: PromptInputProps) {
   const [internalValue, setInternalValue] = useState(value || "")
+  const [textareaExpanded, setTextareaExpanded] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const isExpanded = expanded || textareaExpanded
 
   const handleChange = (newValue: string) => {
     setInternalValue(newValue)
@@ -89,49 +94,198 @@ function PromptInput({
         isLoading,
         value: value ?? internalValue,
         setValue: onValueChange ?? handleChange,
+        setTextareaExpanded,
         maxHeight,
         onSubmit,
         disabled,
         textareaRef,
       }}
     >
-      <div
-        className={cn(
-          "shadow-composer cursor-text overflow-clip rounded-[28px] border-0 border-black/5 bg-[var(--composer-bg)] bg-clip-padding contain-inline-size motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out dark:border-white/5",
-          className
-        )}
-        onClick={() => {
-          textareaRef.current?.focus()
+      <form
+        autoComplete="off"
+        className={cn("group/composer w-full", className)}
+        data-expanded={isExpanded ? "" : undefined}
+        data-type="unified-composer"
+        onSubmit={(event) => {
+          event.preventDefault()
+          onSubmit?.()
         }}
       >
-        {children}
-      </div>
+        <div
+          data-composer-surface="true"
+          data-slot="prompt-input-surface"
+          className="shadow-composer relative grid min-h-[84px] grid-cols-[auto_1fr_auto] grid-rows-[auto_minmax(38px,auto)_36px] [grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] cursor-text overflow-clip rounded-[28px] border-0 border-black/5 bg-[var(--composer-bg)] bg-clip-padding py-[5px] ps-[7px] pe-2 contain-inline-size motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out sm:min-h-[52px] sm:grid-rows-[auto_minmax(42px,auto)_0px] sm:[grid-template-areas:'header_header_header'_'leading_primary_trailing'_'._footer_.'] group-data-[expanded]/composer:grid-rows-[auto_minmax(38px,auto)_36px] group-data-[expanded]/composer:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] sm:group-data-[expanded]/composer:min-h-[102px] sm:group-data-[expanded]/composer:grid-rows-[auto_minmax(56px,auto)_36px] dark:border-white/5"
+          onClick={() => {
+            textareaRef.current?.focus()
+          }}
+        >
+          {children}
+        </div>
+      </form>
     </PromptInputContext.Provider>
+  )
+}
+
+function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
+  if (!ref) return
+  if (typeof ref === "function") {
+    ref(value)
+    return
+  }
+  ;(ref as React.MutableRefObject<T | null>).current = value
+}
+
+function readPixels(value: string) {
+  const parsed = parseFloat(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function getCompactTextareaWidth(textarea: HTMLTextAreaElement) {
+  if (window.matchMedia("(max-width: 639px)").matches) {
+    return textarea.getBoundingClientRect().width
+  }
+
+  const surface = textarea.closest<HTMLElement>('[data-composer-surface="true"]')
+  const scroller = textarea.closest<HTMLElement>(
+    '[data-composer-editor-scroller="true"]'
+  )
+
+  if (!surface || !scroller) {
+    return textarea.getBoundingClientRect().width
+  }
+
+  const surfaceStyle = getComputedStyle(surface)
+  const scrollerStyle = getComputedStyle(scroller)
+  const contentWidth =
+    surface.getBoundingClientRect().width -
+    readPixels(surfaceStyle.paddingLeft) -
+    readPixels(surfaceStyle.paddingRight)
+  const leadingWidth =
+    surface
+      .querySelector<HTMLElement>('[data-composer-leading="true"]')
+      ?.getBoundingClientRect().width ?? 36
+  const trailingWidth =
+    surface
+      .querySelector<HTMLElement>('[data-composer-trailing="true"]')
+      ?.getBoundingClientRect().width ?? 0
+
+  return Math.max(
+    0,
+    contentWidth -
+      leadingWidth -
+      trailingWidth -
+      readPixels(scrollerStyle.paddingLeft) -
+      readPixels(scrollerStyle.paddingRight)
+  )
+}
+
+function measureTextareaScrollHeight(
+  textarea: HTMLTextAreaElement,
+  value: string,
+  width: number
+) {
+  const clone = textarea.cloneNode() as HTMLTextAreaElement
+  clone.removeAttribute("id")
+  clone.removeAttribute("name")
+  clone.tabIndex = -1
+  clone.value = value || " "
+  clone.rows = 1
+  clone.style.position = "absolute"
+  clone.style.visibility = "hidden"
+  clone.style.pointerEvents = "none"
+  clone.style.zIndex = "-1"
+  clone.style.top = "0"
+  clone.style.left = "0"
+  clone.style.height = "auto"
+  clone.style.minHeight = "0"
+  clone.style.maxHeight = "none"
+  clone.style.overflow = "hidden"
+  clone.style.width = `${width}px`
+
+  document.body.appendChild(clone)
+  const scrollHeight = clone.scrollHeight
+  clone.remove()
+  return scrollHeight
+}
+
+function getCollapsedTextareaHeight(textarea: HTMLTextAreaElement) {
+  const styles = getComputedStyle(textarea)
+  return (
+    readPixels(styles.lineHeight) +
+    readPixels(styles.paddingTop) +
+    readPixels(styles.paddingBottom)
   )
 }
 
 export type PromptInputTextareaProps = {
   disableAutosize?: boolean
+  containerClassName?: string
 } & React.ComponentProps<typeof Textarea>
 
 function PromptInputTextarea({
   className,
+  containerClassName,
   onKeyDown,
   disableAutosize = false,
+  style,
+  ref,
   ...props
 }: PromptInputTextareaProps) {
-  const { value, setValue, maxHeight, onSubmit, disabled, textareaRef } =
-    usePromptInput()
+  const {
+    value,
+    setValue,
+    setTextareaExpanded,
+    maxHeight,
+    onSubmit,
+    disabled,
+    textareaRef,
+  } = usePromptInput()
+
+  const applyTextareaLayout = React.useCallback(
+    (textarea: HTMLTextAreaElement | null, nextValue: string) => {
+      if (disableAutosize || !textarea) {
+        setTextareaExpanded(false)
+        return
+      }
+
+      textarea.style.height = "auto"
+
+      const collapsedHeight = getCollapsedTextareaHeight(textarea)
+      const compactWidth = getCompactTextareaWidth(textarea)
+      const compactScrollHeight = measureTextareaScrollHeight(
+        textarea,
+        nextValue,
+        compactWidth
+      )
+      const currentScrollHeight = textarea.scrollHeight
+      const shouldExpand =
+        nextValue.length > 0 &&
+        (nextValue.includes("\n") ||
+          compactScrollHeight > collapsedHeight + 1 ||
+          currentScrollHeight > collapsedHeight + 1)
+
+      textarea.style.height = `${Math.max(collapsedHeight, currentScrollHeight)}px`
+      setTextareaExpanded(shouldExpand)
+    },
+    [disableAutosize, setTextareaExpanded]
+  )
 
   useEffect(() => {
-    if (disableAutosize || !textareaRef.current) return
+    applyTextareaLayout(textareaRef.current, value)
+  }, [applyTextareaLayout, textareaRef, value])
 
-    // Reset height to auto first to properly measure scrollHeight
-    textareaRef.current.style.height = "auto"
+  const setTextareaRefs = React.useCallback(
+    (node: HTMLTextAreaElement | null) => {
+      textareaRef.current = node
+      assignRef(ref, node)
+    },
+    [ref, textareaRef]
+  )
 
-    // Set the height based on content
-    textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
-  }, [value, disableAutosize, textareaRef])
+  const handleChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    applyTextareaLayout(event.currentTarget, event.currentTarget.value)
+    setValue(event.currentTarget.value)
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -145,23 +299,55 @@ function PromptInputTextarea({
     typeof maxHeight === "number" ? `${maxHeight}px` : maxHeight
 
   return (
-    <Textarea
-      ref={textareaRef}
-      autoFocus
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onKeyDown={handleKeyDown}
+    <div
+      data-composer-editor-scroller="true"
+      data-slot="prompt-input-editor-scroller"
       className={cn(
-        "text-primary min-h-[44px] resize-none overflow-y-auto border-none bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 md:text-base dark:bg-transparent",
-        className
+        "flex min-h-[38px] min-w-0 items-center overflow-x-hidden overflow-y-auto px-1.5 [scrollbar-width:thin] group-data-[expanded]/composer:min-h-14 group-data-[expanded]/composer:px-2.5 sm:min-h-[42px] sm:group-data-[expanded]/composer:min-h-14",
+        containerClassName
       )}
-      style={{
-        maxHeight: maxHeightStyle,
-      }}
-      rows={1}
-      disabled={disabled}
+      style={{ maxHeight: maxHeightStyle }}
+    >
+      <Textarea
+        ref={setTextareaRefs}
+        autoFocus
+        value={value}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        className={cn(
+          "text-primary block min-h-[38px] resize-none overflow-y-visible rounded-none border-none bg-transparent px-0 pt-1 pb-2 text-base leading-[26px] shadow-none transition-none focus-visible:ring-0 focus-visible:ring-offset-0 sm:min-h-10 sm:pt-[6px] sm:pb-2 dark:bg-transparent",
+          className
+        )}
+        style={{
+          ...style,
+          lineHeight: "26px",
+          overflowY: "hidden",
+          whiteSpace: "break-spaces",
+        }}
+        rows={1}
+        disabled={disabled}
+        {...props}
+      />
+    </div>
+  )
+}
+
+type PromptInputFooterProps = React.HTMLAttributes<HTMLDivElement>
+
+function PromptInputFooter({
+  children,
+  className,
+  ...props
+}: PromptInputFooterProps) {
+  return (
+    <div
+      data-composer-footer="true"
+      data-slot="prompt-input-footer"
+      className={cn("[grid-area:footer] min-w-0", className)}
       {...props}
-    />
+    >
+      {children}
+    </div>
   )
 }
 
@@ -222,6 +408,7 @@ function PromptInputAction({
 export {
   PromptInput,
   PromptInputTextarea,
+  PromptInputFooter,
   PromptInputActions,
   PromptInputAction,
 }
