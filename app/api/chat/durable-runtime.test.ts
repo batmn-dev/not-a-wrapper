@@ -223,6 +223,24 @@ describe("durable chat runtime helpers", () => {
     )
   })
 
+  it("does not force-write an empty snapshot before the first semantic delta", async () => {
+    vi.mocked(fetchMutation).mockReset()
+
+    const tracker = createDurableSnapshotTracker({
+      convexToken: "token",
+      runId: "run_1" as Id<"generationRuns">,
+      chatId: "chat_1" as Id<"chats">,
+      messageId: "message_1" as Id<"messages">,
+      order: 1,
+    })
+
+    await tracker.flush()
+
+    expect(fetchMutation).not.toHaveBeenCalled()
+    expect(tracker.textSnapshot).toBe("")
+    expect(tracker.partsSnapshot).toEqual([])
+  })
+
   it("waits for an in-flight snapshot write before flushing the final snapshot", async () => {
     const firstWrite = createDeferred<void>()
     vi.mocked(fetchMutation)

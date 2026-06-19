@@ -180,6 +180,8 @@ export function createDurableSnapshotTracker(
   ]
 
   const persist = async (force = false) => {
+    if (!text && !reasoning) return
+
     const now = Date.now()
     const throttleMs = options.throttleMs ?? 750
     if (!force && now - lastWriteAt < throttleMs) {

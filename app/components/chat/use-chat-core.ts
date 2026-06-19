@@ -447,13 +447,6 @@ export function useChatCore({
     [setDraftValue]
   )
 
-  useEffect(
-    () => () => {
-      debouncedSetDraftValue.cancel()
-    },
-    [debouncedSetDraftValue]
-  )
-
   // Submit action
   const submit = useCallback(async () => {
     const currentInput = inputRef.current

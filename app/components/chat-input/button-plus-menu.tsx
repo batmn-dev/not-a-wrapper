@@ -17,7 +17,7 @@ import {
 import { ACCEPTED_FILE_PICKER_TYPES } from "@/lib/file-handling"
 import { cn } from "@/lib/utils"
 import {
-  RiAddLine,
+  RiAddLargeLine,
   RiAttachment2,
   RiCheckLine,
   RiGlobalLine,
@@ -26,7 +26,7 @@ import { useRef } from "react"
 import { PopoverContentAuth } from "./popover-content-auth"
 
 const composerPlusIcon = (
-  <Icon icon={RiAddLine} slotSize={24} glyphInset={0} />
+  <Icon icon={RiAddLargeLine} slotSize={18} glyphInset={0} />
 )
 
 const plusTriggerClassName =

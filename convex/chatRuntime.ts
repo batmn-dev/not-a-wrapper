@@ -150,6 +150,34 @@ async function requireChatOwner(
   return { user, chat }
 }
 
+function isAssistantMessageLinkedToRun(
+  message: Doc<"messages">,
+  run: Doc<"generationRuns">
+): boolean {
+  return (
+    message.generationRunId === run._id ||
+    run.assistantMessageId === message._id ||
+    run.activeStreamId === message._id
+  )
+}
+
+async function requireAssistantMessageForRun(
+  ctx: MutationCtx,
+  run: Doc<"generationRuns">,
+  messageId: Id<"messages">
+): Promise<Doc<"messages">> {
+  const message = await ctx.db.get(messageId)
+  if (
+    !message ||
+    message.chatId !== run.chatId ||
+    message.role !== "assistant" ||
+    !isAssistantMessageLinkedToRun(message, run)
+  ) {
+    throw new Error("Assistant message not found for run")
+  }
+  return message
+}
+
 async function listMessages(ctx: QueryCtx | MutationCtx, chatId: Id<"chats">) {
   return await ctx.db
     .query("messages")
@@ -741,6 +769,7 @@ export async function applyApprovalResponses(
   if (responses.length === 0) return null
 
   const messages = await listMessages(ctx, owner.chat._id)
+  const messageById = new Map(messages.map((message) => [message._id, message]))
   let updatedMessage: Doc<"messages"> | null = null
   const now = nowMs()
   const runDecisions = new Map<Id<"generationRuns">, { denied: boolean }>()
@@ -774,7 +803,8 @@ export async function applyApprovalResponses(
       throw new Error("Approval message not found")
     }
 
-    const nextParts = applyApprovalResponseToParts(message.parts, {
+    const currentMessage = messageById.get(message._id) ?? message
+    const nextParts = applyApprovalResponseToParts(currentMessage.parts, {
       ...response,
       approved: canonicalDecision.approved,
       reason: canonicalDecision.reason,
@@ -785,7 +815,13 @@ export async function applyApprovalResponses(
       updatedAt: now,
     })
     const refreshed = await ctx.db.get(message._id)
-    updatedMessage = refreshed ?? message
+    updatedMessage = refreshed ?? {
+      ...currentMessage,
+      parts: nextParts,
+      status: "streaming",
+      updatedAt: now,
+    }
+    messageById.set(message._id, updatedMessage)
 
     const invocation = await ctx.db
       .query("toolInvocations")
@@ -1110,24 +1146,36 @@ export const markGenerationRunAwaitingApproval = mutation({
     runId: v.id("generationRuns"),
     messageId: v.optional(v.id("messages")),
   },
-  handler: async (ctx, args) => {
-    const run = await ctx.db.get(args.runId)
-    if (!run) throw new Error("Run not found")
-    await requireChatOwner(ctx, run.chatId)
-    const now = nowMs()
-    await ctx.db.patch(args.runId, {
+  handler: async (ctx, args) =>
+    markGenerationRunAwaitingApprovalForChat(ctx, args),
+})
+
+export async function markGenerationRunAwaitingApprovalForChat(
+  ctx: MutationCtx,
+  args: {
+    runId: Id<"generationRuns">
+    messageId?: Id<"messages">
+  }
+) {
+  const run = await ctx.db.get(args.runId)
+  if (!run) throw new Error("Run not found")
+  await requireChatOwner(ctx, run.chatId)
+  const messageId = args.messageId ?? run.assistantMessageId
+  if (messageId) {
+    await requireAssistantMessageForRun(ctx, run, messageId)
+  }
+  const now = nowMs()
+  await ctx.db.patch(args.runId, {
+    status: "awaiting_approval",
+    updatedAt: now,
+  })
+  if (messageId) {
+    await ctx.db.patch(messageId, {
       status: "awaiting_approval",
       updatedAt: now,
     })
-    const messageId = args.messageId ?? run.assistantMessageId
-    if (messageId) {
-      await ctx.db.patch(messageId, {
-        status: "awaiting_approval",
-        updatedAt: now,
-      })
-    }
-  },
-})
+  }
+}
 
 export const markGenerationRunCompleted = mutation({
   args: {
@@ -1141,42 +1189,62 @@ export const markGenerationRunCompleted = mutation({
     totalToolCalls: v.optional(v.number()),
     failedToolCalls: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
-    const run = await ctx.db.get(args.runId)
-    if (!run) throw new Error("Run not found")
-    await requireChatOwner(ctx, run.chatId)
-    const now = nowMs()
-    const hasPendingApprovals = await ctx.db
-      .query("toolApprovalRequests")
-      .withIndex("by_run_status", (q) =>
-        q.eq("runId", args.runId).eq("status", "pending")
-      )
-      .first()
-    const status = hasPendingApprovals ? "awaiting_approval" : "completed"
-
-    await ctx.db.patch(args.messageId, {
-      content: args.content,
-      parts: args.parts,
-      metadata: args.metadata,
-      status,
-      finishReason: args.finishReason,
-      usage: args.usage,
-      updatedAt: now,
-    })
-    await ctx.db.patch(args.runId, {
-      status,
-      completedAt: status === "completed" ? now : undefined,
-      updatedAt: now,
-      finishReason: args.finishReason,
-      inputTokens: args.usage?.inputTokens,
-      outputTokens: args.usage?.outputTokens,
-      totalToolCalls: args.totalToolCalls,
-      failedToolCalls: args.failedToolCalls,
-      activeStreamId: undefined,
-    })
-    await ctx.db.patch(run.chatId, { updatedAt: now })
-  },
+  handler: async (ctx, args) => markGenerationRunCompletedForChat(ctx, args),
 })
+
+export async function markGenerationRunCompletedForChat(
+  ctx: MutationCtx,
+  args: {
+    runId: Id<"generationRuns">
+    messageId: Id<"messages">
+    content: string
+    parts: unknown
+    metadata?: unknown
+    finishReason?: string
+    usage?: {
+      inputTokens?: number
+      outputTokens?: number
+      totalTokens?: number
+    }
+    totalToolCalls?: number
+    failedToolCalls?: number
+  }
+) {
+  const run = await ctx.db.get(args.runId)
+  if (!run) throw new Error("Run not found")
+  await requireChatOwner(ctx, run.chatId)
+  await requireAssistantMessageForRun(ctx, run, args.messageId)
+  const now = nowMs()
+  const hasPendingApprovals = await ctx.db
+    .query("toolApprovalRequests")
+    .withIndex("by_run_status", (q) =>
+      q.eq("runId", args.runId).eq("status", "pending")
+    )
+    .first()
+  const status = hasPendingApprovals ? "awaiting_approval" : "completed"
+
+  await ctx.db.patch(args.messageId, {
+    content: args.content,
+    parts: args.parts,
+    metadata: args.metadata,
+    status,
+    finishReason: args.finishReason,
+    usage: args.usage,
+    updatedAt: now,
+  })
+  await ctx.db.patch(args.runId, {
+    status,
+    completedAt: status === "completed" ? now : undefined,
+    updatedAt: now,
+    finishReason: args.finishReason,
+    inputTokens: args.usage?.inputTokens,
+    outputTokens: args.usage?.outputTokens,
+    totalToolCalls: args.totalToolCalls,
+    failedToolCalls: args.failedToolCalls,
+    activeStreamId: undefined,
+  })
+  await ctx.db.patch(run.chatId, { updatedAt: now })
+}
 
 export const markGenerationRunFailed = mutation({
   args: {
@@ -1362,46 +1430,72 @@ export const createToolApprovalRequest = mutation({
     inputPreview: v.optional(v.string()),
     approvalId: v.string(),
   },
-  handler: async (ctx, args) => {
-    const { user } = await requireChatOwner(ctx, args.chatId)
-    const run = await ctx.db.get(args.runId)
-    if (!run || run.chatId !== args.chatId) throw new Error("Run not found")
-
-    const existing = await ctx.db
-      .query("toolApprovalRequests")
-      .withIndex("by_approval", (q) => q.eq("approvalId", args.approvalId))
-      .unique()
-    if (existing) return existing._id
-
-    const now = nowMs()
-    const approvalRequestId = await ctx.db.insert("toolApprovalRequests", {
-      chatId: args.chatId,
-      runId: args.runId,
-      assistantMessageId: args.assistantMessageId,
-      userId: user._id,
-      toolCallId: args.toolCallId,
-      toolName: args.toolName,
-      source: args.source,
-      reason: args.reason,
-      riskClass: args.riskClass,
-      inputPreview: truncatePreview(args.inputPreview),
-      approvalId: args.approvalId,
-      status: "pending",
-      createdAt: now,
-    })
-
-    await ctx.db.patch(args.runId, {
-      status: "awaiting_approval",
-      updatedAt: now,
-    })
-    await ctx.db.patch(args.assistantMessageId, {
-      status: "awaiting_approval",
-      updatedAt: now,
-    })
-
-    return approvalRequestId
-  },
+  handler: async (ctx, args) => createToolApprovalRequestForChat(ctx, args),
 })
+
+export async function createToolApprovalRequestForChat(
+  ctx: MutationCtx,
+  args: {
+    chatId: Id<"chats">
+    runId: Id<"generationRuns">
+    assistantMessageId: Id<"messages">
+    toolCallId: string
+    toolName: string
+    source: Doc<"toolApprovalRequests">["source"]
+    reason?: string
+    riskClass: string
+    inputPreview?: string
+    approvalId: string
+  }
+) {
+  const { user } = await requireChatOwner(ctx, args.chatId)
+  const run = await ctx.db.get(args.runId)
+  if (!run || run.chatId !== args.chatId) throw new Error("Run not found")
+  await requireAssistantMessageForRun(ctx, run, args.assistantMessageId)
+
+  const existing = await ctx.db
+    .query("toolApprovalRequests")
+    .withIndex("by_approval", (q) => q.eq("approvalId", args.approvalId))
+    .unique()
+  if (existing) {
+    if (
+      existing.chatId !== args.chatId ||
+      existing.runId !== args.runId ||
+      existing.assistantMessageId !== args.assistantMessageId
+    ) {
+      throw new Error("Approval request does not belong to this run")
+    }
+    return existing._id
+  }
+
+  const now = nowMs()
+  const approvalRequestId = await ctx.db.insert("toolApprovalRequests", {
+    chatId: args.chatId,
+    runId: args.runId,
+    assistantMessageId: args.assistantMessageId,
+    userId: user._id,
+    toolCallId: args.toolCallId,
+    toolName: args.toolName,
+    source: args.source,
+    reason: args.reason,
+    riskClass: args.riskClass,
+    inputPreview: truncatePreview(args.inputPreview),
+    approvalId: args.approvalId,
+    status: "pending",
+    createdAt: now,
+  })
+
+  await ctx.db.patch(args.runId, {
+    status: "awaiting_approval",
+    updatedAt: now,
+  })
+  await ctx.db.patch(args.assistantMessageId, {
+    status: "awaiting_approval",
+    updatedAt: now,
+  })
+
+  return approvalRequestId
+}
 
 export const approveToolCall = mutation({
   args: {
@@ -1478,62 +1572,94 @@ export const recordToolInvocations = mutation({
       })
     ),
   },
-  handler: async (ctx, args) => {
-    await requireChatOwner(ctx, args.chatId)
-    const run = await ctx.db.get(args.runId)
-    if (!run || run.chatId !== args.chatId) throw new Error("Run not found")
-    const now = nowMs()
-
-    for (const invocation of args.invocations) {
-      const existing = await ctx.db
-        .query("toolInvocations")
-        .withIndex("by_run_tool_call", (q) =>
-          q.eq("runId", args.runId).eq("toolCallId", invocation.toolCallId)
-        )
-        .unique()
-
-      const approval = invocation.approvalRequestId
-        ? await ctx.db
-            .query("toolApprovalRequests")
-            .withIndex("by_approval", (q) =>
-              q.eq("approvalId", invocation.approvalRequestId!)
-            )
-            .unique()
-        : null
-
-      const patch = {
-        messageId: args.messageId,
-        toolName: invocation.toolName,
-        source: invocation.source,
-        input: invocation.input,
-        inputPreview: truncatePreview(invocation.input),
-        output: invocation.output,
-        outputPreview: truncatePreview(invocation.output),
-        error: invocation.error ? truncatePreview(invocation.error) : undefined,
-        status: invocation.status,
-        approvalId: approval?._id,
-        approvalRequestId: invocation.approvalRequestId,
-        stepNumber: args.stepNumber,
-        completedAt:
-          invocation.status === "completed" ||
-          invocation.status === "failed" ||
-          invocation.status === "denied"
-            ? now
-            : undefined,
-        updatedAt: now,
-      }
-
-      if (existing) {
-        await ctx.db.patch(existing._id, patch)
-      } else {
-        await ctx.db.insert("toolInvocations", {
-          runId: args.runId,
-          chatId: args.chatId,
-          toolCallId: invocation.toolCallId,
-          createdAt: now,
-          ...patch,
-        })
-      }
-    }
-  },
+  handler: async (ctx, args) => recordToolInvocationsForChat(ctx, args),
 })
+
+export async function recordToolInvocationsForChat(
+  ctx: MutationCtx,
+  args: {
+    runId: Id<"generationRuns">
+    chatId: Id<"chats">
+    messageId: Id<"messages">
+    stepNumber?: number
+    invocations: Array<{
+      toolCallId: string
+      toolName: string
+      source: Doc<"toolInvocations">["source"]
+      input?: unknown
+      output?: unknown
+      error?: string
+      status: Doc<"toolInvocations">["status"]
+      approvalRequestId?: string
+    }>
+  }
+) {
+  await requireChatOwner(ctx, args.chatId)
+  const run = await ctx.db.get(args.runId)
+  if (!run || run.chatId !== args.chatId) throw new Error("Run not found")
+  await requireAssistantMessageForRun(ctx, run, args.messageId)
+  const now = nowMs()
+
+  for (const invocation of args.invocations) {
+    const existing = await ctx.db
+      .query("toolInvocations")
+      .withIndex("by_run_tool_call", (q) =>
+        q.eq("runId", args.runId).eq("toolCallId", invocation.toolCallId)
+      )
+      .unique()
+
+    const approval = invocation.approvalRequestId
+      ? await ctx.db
+          .query("toolApprovalRequests")
+          .withIndex("by_approval", (q) =>
+            q.eq("approvalId", invocation.approvalRequestId!)
+          )
+          .unique()
+      : null
+    if (approval) {
+      if (
+        approval.chatId !== args.chatId ||
+        approval.runId !== args.runId ||
+        approval.assistantMessageId !== args.messageId
+      ) {
+        throw new Error("Approval request does not belong to this run")
+      }
+    } else if (invocation.approvalRequestId) {
+      throw new Error("Approval request not found for run")
+    }
+
+    const patch = {
+      messageId: args.messageId,
+      toolName: invocation.toolName,
+      source: invocation.source,
+      input: invocation.input,
+      inputPreview: truncatePreview(invocation.input),
+      output: invocation.output,
+      outputPreview: truncatePreview(invocation.output),
+      error: invocation.error ? truncatePreview(invocation.error) : undefined,
+      status: invocation.status,
+      approvalId: approval?._id,
+      approvalRequestId: invocation.approvalRequestId,
+      stepNumber: args.stepNumber,
+      completedAt:
+        invocation.status === "completed" ||
+        invocation.status === "failed" ||
+        invocation.status === "denied"
+          ? now
+          : undefined,
+      updatedAt: now,
+    }
+
+    if (existing) {
+      await ctx.db.patch(existing._id, patch)
+    } else {
+      await ctx.db.insert("toolInvocations", {
+        runId: args.runId,
+        chatId: args.chatId,
+        toolCallId: invocation.toolCallId,
+        createdAt: now,
+        ...patch,
+      })
+    }
+  }
+}

@@ -3,10 +3,14 @@ import type { Doc, Id } from "./_generated/dataModel"
 import type { MutationCtx } from "./_generated/server"
 import {
   applyApprovalResponses,
+  createToolApprovalRequestForChat,
   denyPendingApprovalsForChat,
   markGenerationRunAbortedForChat,
+  markGenerationRunAwaitingApprovalForChat,
+  markGenerationRunCompletedForChat,
   markGenerationRunFailedForChat,
   prepareGenerationForChat,
+  recordToolInvocationsForChat,
 } from "./chatRuntime"
 
 type TableName =
@@ -18,17 +22,18 @@ type TableName =
   | "users"
   | "chats"
 
-type StoredDocument =
-  | Doc<"toolApprovalRequests">
-  | Doc<"generationRuns">
-  | Doc<"messages">
-  | Doc<"assistantMessageSnapshots">
-  | Doc<"toolInvocations">
-  | Doc<"users">
-  | Doc<"chats">
+type TableDocuments = {
+  [Table in TableName]: Doc<Table>[]
+}
+
+type StoredDocument = TableDocuments[TableName][number]
 
 type QueryBuilder = {
   eq: (fieldName: string, value: unknown) => QueryBuilder
+}
+
+type MutationCtxOptions = {
+  cloneReads?: boolean
 }
 
 function asId<Table extends TableName | "users" | "chats">(
@@ -37,18 +42,26 @@ function asId<Table extends TableName | "users" | "chats">(
   return value as Id<Table>
 }
 
+function cloneStoredDocument<Document extends StoredDocument>(
+  document: Document
+): Document {
+  return structuredClone(document) as Document
+}
+
 function createMutationCtx(
-  tablesInput: Partial<Record<TableName, StoredDocument[]>>
+  tablesInput: Partial<TableDocuments>,
+  options: MutationCtxOptions = {}
 ) {
-  const tables: Record<TableName, StoredDocument[]> = {
-    toolApprovalRequests: [],
-    generationRuns: [],
-    messages: [],
-    assistantMessageSnapshots: [],
-    toolInvocations: [],
-    users: [],
-    chats: [],
-    ...tablesInput,
+  const tables: TableDocuments = {
+    toolApprovalRequests: [...(tablesInput.toolApprovalRequests ?? [])],
+    generationRuns: [...(tablesInput.generationRuns ?? [])],
+    messages: [...(tablesInput.messages ?? [])],
+    assistantMessageSnapshots: [
+      ...(tablesInput.assistantMessageSnapshots ?? []),
+    ],
+    toolInvocations: [...(tablesInput.toolInvocations ?? [])],
+    users: [...(tablesInput.users ?? [])],
+    chats: [...(tablesInput.chats ?? [])],
   }
   const patches: Array<{
     id: string
@@ -69,9 +82,18 @@ function createMutationCtx(
     return null
   }
 
+  function readDocument<Document extends StoredDocument>(
+    document: Document
+  ): Document {
+    return options.cloneReads ? cloneStoredDocument(document) : document
+  }
+
   const ctx = {
     db: {
-      get: async (id: string) => findDocument(id),
+      get: async (id: string) => {
+        const document = findDocument(id)
+        return document ? readDocument(document) : null
+      },
       query: (tableName: TableName) => ({
         withIndex: (
           _indexName: string,
@@ -95,10 +117,11 @@ function createMutationCtx(
           })
 
           const resultApi = {
-            collect: async () => results,
+            collect: async () =>
+              results.map((document) => readDocument(document)),
             unique: async () => {
               expect(results.length).toBeLessThanOrEqual(1)
-              return results[0] ?? null
+              return results[0] ? readDocument(results[0]) : null
             },
             order: (direction: "asc" | "desc") => {
               results = [...results].sort((a, b) => {
@@ -109,8 +132,9 @@ function createMutationCtx(
               })
               return resultApi
             },
-            first: async () => results[0] ?? null,
-            take: async (limit: number) => results.slice(0, limit),
+            first: async () => (results[0] ? readDocument(results[0]) : null),
+            take: async (limit: number) =>
+              results.slice(0, limit).map((document) => readDocument(document)),
           }
           return resultApi
         },
@@ -124,7 +148,8 @@ function createMutationCtx(
           _creationTime: Date.now(),
           ...value,
         } as StoredDocument
-        tables[tableName].push(document)
+        const tableDocuments = tables[tableName] as StoredDocument[]
+        tableDocuments.push(document)
         inserts.push({ tableName, id, value })
         return id
       },
@@ -276,6 +301,52 @@ function createGenerationRun({
     updatedAt,
     activeStreamId: assistantMessageId,
     assistantMessageId,
+  }
+}
+
+function createGenerationRunLinkageFixture() {
+  const { user, chat, userId, chatId } = createOwnerFixture()
+  const runId = asId<"generationRuns">("run_1")
+  const otherRunId = asId<"generationRuns">("run_2")
+  const messageId = asId<"messages">("message_1")
+  const otherMessageId = asId<"messages">("message_2")
+  const run = createGenerationRun({
+    id: runId,
+    chatId,
+    userId,
+    assistantMessageId: messageId,
+  })
+  const message = createAssistantRuntimeMessage({
+    id: messageId,
+    chatId,
+    runId,
+    orderId: 1,
+  })
+  const otherMessage = createAssistantRuntimeMessage({
+    id: otherMessageId,
+    chatId,
+    runId: otherRunId,
+    orderId: 2,
+  })
+
+  return {
+    user,
+    chat,
+    userId,
+    chatId,
+    runId,
+    otherRunId,
+    messageId,
+    otherMessageId,
+    run,
+    message,
+    otherMessage,
+    tables: {
+      users: [user],
+      chats: [chat],
+      generationRuns: [run],
+      messages: [message, otherMessage],
+    },
   }
 }
 
@@ -1546,6 +1617,130 @@ describe("prepareGenerationForChat", () => {
   })
 })
 
+describe("generation run linkage validation", () => {
+  it("rejects awaiting-approval updates for assistant messages outside the run", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    const { ctx, patches } = createMutationCtx(fixture.tables)
+
+    await expect(
+      markGenerationRunAwaitingApprovalForChat(ctx, {
+        runId: fixture.runId,
+        messageId: fixture.otherMessageId,
+      })
+    ).rejects.toThrow("Assistant message not found for run")
+
+    expect(patches).toEqual([])
+    expect(fixture.run.status).toBe("streaming")
+    expect(fixture.otherMessage.status).toBe("streaming")
+  })
+
+  it("rejects completion updates for assistant messages outside the run", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    const { ctx, patches } = createMutationCtx(fixture.tables)
+
+    await expect(
+      markGenerationRunCompletedForChat(ctx, {
+        runId: fixture.runId,
+        messageId: fixture.otherMessageId,
+        content: "done",
+        parts: [{ type: "text", text: "done" }],
+      })
+    ).rejects.toThrow("Assistant message not found for run")
+
+    expect(patches).toEqual([])
+    expect(fixture.run.status).toBe("streaming")
+    expect(fixture.otherMessage.content).toBe("")
+  })
+
+  it("rejects approval requests for assistant messages outside the run", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    const { ctx, inserts, patches } = createMutationCtx(fixture.tables)
+
+    await expect(
+      createToolApprovalRequestForChat(ctx, {
+        chatId: fixture.chatId,
+        runId: fixture.runId,
+        assistantMessageId: fixture.otherMessageId,
+        toolCallId: "call_1",
+        toolName: "send_email",
+        source: "mcp",
+        riskClass: "destructive",
+        approvalId: "approval_1",
+      })
+    ).rejects.toThrow("Assistant message not found for run")
+
+    expect(inserts).toEqual([])
+    expect(patches).toEqual([])
+  })
+
+  it("rejects tool invocations for assistant messages outside the run", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    const { ctx, inserts, patches } = createMutationCtx(fixture.tables)
+
+    await expect(
+      recordToolInvocationsForChat(ctx, {
+        chatId: fixture.chatId,
+        runId: fixture.runId,
+        messageId: fixture.otherMessageId,
+        invocations: [
+          {
+            toolCallId: "call_1",
+            toolName: "send_email",
+            source: "mcp",
+            status: "called",
+          },
+        ],
+      })
+    ).rejects.toThrow("Assistant message not found for run")
+
+    expect(inserts).toEqual([])
+    expect(patches).toEqual([])
+  })
+
+  it("rejects tool invocations linked to another run's approval request", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    const approval: Doc<"toolApprovalRequests"> = {
+      _id: asId<"toolApprovalRequests">("approval_request_1"),
+      _creationTime: 1,
+      chatId: fixture.chatId,
+      runId: fixture.otherRunId,
+      assistantMessageId: fixture.otherMessageId,
+      userId: fixture.userId,
+      toolCallId: "call_1",
+      toolName: "send_email",
+      source: "mcp",
+      riskClass: "destructive",
+      approvalId: "approval_1",
+      status: "pending",
+      createdAt: 1,
+    }
+    const { ctx, inserts, patches } = createMutationCtx({
+      ...fixture.tables,
+      toolApprovalRequests: [approval],
+    })
+
+    await expect(
+      recordToolInvocationsForChat(ctx, {
+        chatId: fixture.chatId,
+        runId: fixture.runId,
+        messageId: fixture.messageId,
+        invocations: [
+          {
+            toolCallId: "call_1",
+            toolName: "send_email",
+            source: "mcp",
+            status: "pending_approval",
+            approvalRequestId: "approval_1",
+          },
+        ],
+      })
+    ).rejects.toThrow("Approval request does not belong to this run")
+
+    expect(inserts).toEqual([])
+    expect(patches).toEqual([])
+  })
+})
+
 describe("applyApprovalResponses", () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -1620,6 +1815,50 @@ describe("applyApprovalResponses", () => {
       updatedAt: 1700000000000,
       activeStreamId: undefined,
     })
+  })
+
+  it("preserves earlier approval responses when multiple responses patch one message", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const fixture = createApprovalContinuationFixture([
+      {
+        approvalId: "approval_denied",
+        approved: false,
+        toolCallId: "call_denied",
+        toolName: "delete_file",
+      },
+      {
+        approvalId: "approval_approved",
+        approved: true,
+        toolCallId: "call_approved",
+        toolName: "read_file",
+      },
+    ])
+    const { ctx } = createMutationCtx(fixture.tables, { cloneReads: true })
+
+    await applyApprovalResponses(ctx, fixture.owner, fixture.responses)
+
+    expect(fixture.tables.messages[0]?.parts).toEqual([
+      {
+        type: "tool-delete_file",
+        toolCallId: "call_denied",
+        state: "approval-responded",
+        input: {},
+        approval: {
+          id: "approval_denied",
+          approved: false,
+        },
+      },
+      {
+        type: "tool-read_file",
+        toolCallId: "call_approved",
+        state: "approval-responded",
+        input: {},
+        approval: {
+          id: "approval_approved",
+          approved: true,
+        },
+      },
+    ])
   })
 })
 
