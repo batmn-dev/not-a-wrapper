@@ -303,7 +303,7 @@ function PromptInputTextarea({
       data-composer-editor-scroller="true"
       data-slot="prompt-input-editor-scroller"
       className={cn(
-        "flex min-h-[38px] min-w-0 items-center overflow-x-hidden overflow-y-auto px-1.5 [scrollbar-width:thin] group-data-[expanded]/composer:min-h-14 group-data-[expanded]/composer:px-2.5 sm:min-h-[42px] sm:group-data-[expanded]/composer:min-h-14",
+        "flex min-h-[38px] min-w-0 items-center overflow-x-hidden overflow-y-auto px-1.5 [scrollbar-width:thin] group-data-[expanded]/composer:min-h-14 group-data-[expanded]/composer:px-2.5 sm:-my-2.5 sm:min-h-14 sm:group-data-[expanded]/composer:my-0 sm:group-data-[expanded]/composer:min-h-14",
         containerClassName
       )}
       style={{ maxHeight: maxHeightStyle }}

@@ -25,8 +25,12 @@ import {
 import { useRef } from "react"
 import { PopoverContentAuth } from "./popover-content-auth"
 
+const composerPlusIcon = (
+  <Icon icon={RiAddLine} slotSize={21} glyphInset={0} />
+)
+
 const plusTriggerClassName =
-  "size-9 rounded-full p-0 hover:bg-black/5 dark:hover:bg-white/10"
+  "composer-btn size-9 min-w-9 rounded-full p-0 hover:bg-black/5 dark:hover:bg-white/10"
 
 const authenticatedPlusTriggerClassName = cn(
   plusTriggerClassName,
@@ -79,7 +83,7 @@ export function ButtonPlusMenu({
               <PopoverTrigger
                 render={
                   <Button
-                    size="sm"
+                    size="icon"
                     variant="ghost"
                     className={plusTriggerClassName}
                     type="button"
@@ -91,7 +95,7 @@ export function ButtonPlusMenu({
               />
             }
           >
-            <Icon icon={RiAddLine} slotSize={22} />
+            {composerPlusIcon}
           </TooltipTrigger>
           <TooltipContent side="bottom" hideArrow>
             More options
@@ -127,7 +131,7 @@ export function ButtonPlusMenu({
               <DropdownMenuTrigger
                 render={
                   <Button
-                    size="sm"
+                    size="icon"
                     variant="ghost"
                     className={authenticatedPlusTriggerClassName}
                     type="button"
@@ -139,7 +143,7 @@ export function ButtonPlusMenu({
               />
             }
           >
-            <Icon icon={RiAddLine} slotSize={22} />
+            {composerPlusIcon}
           </TooltipTrigger>
           <TooltipContent side="bottom" hideArrow>
             More options

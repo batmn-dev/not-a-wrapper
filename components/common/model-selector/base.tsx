@@ -38,6 +38,8 @@ type ModelSelectorProps = {
   selectedModelId: string
   setSelectedModelId: (modelId: string) => void
   onLockedGuestModelSelect?: (modelId: string) => void
+  /** Composer pill matches ChatGPT reference: content width, max-w-40 label, asymmetric padding. */
+  variant?: "default" | "composer"
 }
 
 export function ModelSelector({
@@ -46,7 +48,9 @@ export function ModelSelector({
   selectedModelId,
   setSelectedModelId,
   onLockedGuestModelSelect,
+  variant = "default",
 }: ModelSelectorProps) {
+  const isComposerVariant = variant === "composer"
   const { models, isLoading: isLoadingModels, favoriteModels } = useModel()
   const { isModelHidden } = useUserPreferences()
   const isMobile = useBreakpoint(768)
@@ -154,19 +158,26 @@ export function ModelSelector({
     <Button
       variant="ghost"
       className={cn(
-        "min-w-0 max-w-full shrink justify-between overflow-hidden rounded-lg text-lg font-normal",
+        "min-w-0 shrink overflow-hidden font-normal",
+        isComposerVariant
+          ? "h-9 max-w-none justify-start gap-1.5 rounded-full py-0 ps-3.5 cant-hover:ps-4 pe-3 text-sm text-muted-foreground active:scale-100 pointer-fine:hover:bg-black/5 active:bg-black/5 aria-expanded:bg-black/5 dark:pointer-fine:hover:bg-white/10 dark:active:bg-white/10 dark:aria-expanded:bg-white/10"
+          : "max-w-full justify-between rounded-lg text-lg",
         className
       )}
       disabled={isLoadingModels}
       aria-label={`Select model, current model ${currentModel?.name || "unknown"}`}
     >
-      <span className="min-w-0 truncate">
+      <span className={cn("min-w-0 truncate", isComposerVariant && "max-w-40")}>
         {currentModel?.name || "Select model"}
       </span>
       <Icon
         icon={RiArrowDownSLine}
-        slotSize={16}
-        className="shrink-0 opacity-50"
+        slotSize={isComposerVariant ? 14 : 16}
+        glyphSize={isComposerVariant ? 14 : undefined}
+        className={cn(
+          "shrink-0",
+          isComposerVariant ? "-me-0.5 text-muted-foreground" : "opacity-50"
+        )}
       />
     </Button>
   )
@@ -256,10 +267,10 @@ export function ModelSelector({
         <DropdownMenuTrigger render={trigger} />
         <DropdownMenuContent
           className="[--model-selector-fixed-height:3rem] [--model-selector-list-max-height:18rem] w-[300px] overflow-hidden"
-          align="start"
+          align={isComposerVariant ? "end" : "start"}
           sideOffset={4}
           animated={false}
-          side="top"
+          side={isComposerVariant ? "bottom" : "top"}
         >
           <div className="shrink-0">
             <div className="relative">
