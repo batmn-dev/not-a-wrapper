@@ -1,45 +1,43 @@
-import { syncRecentMessages } from "@/app/components/chat/syncRecentMessages"
+import {
+  createChatTurnController,
+  type ChatTurnMessage,
+} from "@/app/components/chat/chat-turn"
 import { useChatEdit } from "@/app/components/chat/use-chat-edit"
 import { useChatDraft } from "@/app/hooks/use-chat-draft"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
-import { convertAttachmentsToFiles } from "@/lib/ai/message-conversion"
 import { getOrCreateGuestUserId } from "@/lib/api"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import {
   createOptimisticMessageId,
   GUEST_CHAT_STORAGE_KEY,
-  isServerChatId,
 } from "@/lib/chat-store/identity"
-import { MESSAGE_MAX_LENGTH, SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
+import { createChatTurnStore } from "@/lib/chat-store/turns/chat-turn-service"
+import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { Attachment } from "@/lib/file-handling"
 import { API_ROUTE_CHAT } from "@/lib/routes"
-import {
-  persistWebSearchToggle,
-  resolveWebSearchEnabled,
-} from "@/lib/user-preference-store/web-search"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
+import { resolveWebSearchEnabled } from "@/lib/user-preference-store/web-search"
 import type { UserProfile } from "@/lib/user/types"
+import { debounce } from "@/lib/utils"
 import type { UIMessage } from "@ai-sdk/react"
 import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from "ai"
+import {
+  DefaultChatTransport,
+  lastAssistantMessageIsCompleteWithApprovalResponses,
+} from "ai"
 import { useMutation } from "convex/react"
 import { useSearchParams } from "next/navigation"
-import { debounce } from "@/lib/utils"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-
-// Extended UIMessage type for optimistic updates that includes createdAt
-type OptimisticUIMessage = UIMessage & { createdAt?: Date }
-
-function isRouteDurableChat(chatId: string | null, isAuthenticated: boolean) {
-  return Boolean(isAuthenticated && isServerChatId(chatId))
-}
 
 type UseChatCoreProps = {
   initialMessages: UIMessage[]
   draftValue: string
   /** Cache message locally and persist to Convex. Pass overrideChatId to handle stale closures during chat creation. */
-  cacheAndAddMessage: (message: UIMessage, overrideChatId?: string) => void
+  cacheAndAddMessage: (
+    message: UIMessage,
+    overrideChatId?: string
+  ) => void | Promise<void>
   chatId: string | null
   user: UserProfile | null
   files: File[]
@@ -82,41 +80,97 @@ export function useChatCore({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const approveToolCall = useMutation(api.chatRuntime.approveToolCall)
   const denyToolCall = useMutation(api.chatRuntime.denyToolCall)
-  // Ref-based guard prevents concurrent sends (state updates are batched and can lag)
-  const isSendingRef = useRef(false)
+  // Mutable guard prevents concurrent sends (state updates are batched and can lag).
+  const [isSendingStore] = useState(() => {
+    let isSending = false
+
+    return {
+      get: () => isSending,
+      set: (value: boolean) => {
+        isSending = value
+      },
+    }
+  })
 
   // Deferred edit persistence: stores the edited user message so onFinish can
   // persist it AFTER the stream completes, avoiding provider state mutations
   // during the same React batch as sendMessage/setMessages.
-  const pendingEditUserMsgRef = useRef<{
-    message: UIMessage & { createdAt?: Date }
-    chatId: string
-  } | null>(null)
+  const [pendingEditStore] = useState(() => {
+    let pendingEdit: {
+      message: ChatTurnMessage
+      chatId: string
+    } | null = null
 
-  const setPendingEditUserMessage = useCallback(
-    (message: UIMessage, chatId: string) => {
-      pendingEditUserMsgRef.current = { message, chatId }
-    },
-    []
-  )
+    return {
+      stage: (message: ChatTurnMessage, currentChatId: string) => {
+        pendingEdit = {
+          message,
+          chatId: currentChatId,
+        }
+      },
+      get: () => pendingEdit,
+      clear: () => {
+        pendingEdit = null
+      },
+    }
+  })
+
   const [hasDialogAuth, setHasDialogAuth] = useState(false)
   const { preferences, setWebSearchEnabled } = useUserPreferences()
-  const [enableSearch, setEnableSearchState] = useState(() =>
-    resolveWebSearchEnabled(preferences.webSearchEnabled)
-  )
+  const enableSearch = resolveWebSearchEnabled(preferences.webSearchEnabled)
 
   // Track the finish reason of the last assistant message.
   // Used to show a truncation indicator when finishReason is "length".
-  const [lastFinishReason, setLastFinishReason] = useState<string | undefined>()
+  const [lastFinishReasonState, setLastFinishReasonState] = useState<{
+    chatId: string | null
+    finishReason: string | undefined
+  }>(() => ({
+    chatId,
+    finishReason: undefined,
+  }))
+  const lastFinishReason =
+    lastFinishReasonState.chatId === chatId
+      ? lastFinishReasonState.finishReason
+      : undefined
 
   // State for tracking first message sent (prevents redirect after sending)
-  const [hasSentFirstMessage, setHasSentFirstMessage] = useState(false)
-  const prevChatIdRef = useRef<string | null>(chatId)
+  const [sentFirstMessageChatId, setSentFirstMessageChatId] = useState<
+    string | null
+  >(null)
+  const [previousChatIdStore] = useState(() => {
+    let previousChatId: string | null = chatId
+
+    return {
+      get: () => previousChatId,
+      set: (nextChatId: string | null) => {
+        previousChatId = nextChatId
+      },
+    }
+  })
+  const hasSentFirstMessage =
+    chatId !== null && sentFirstMessageChatId === chatId
+  const setHasSentFirstMessage = useCallback(
+    (hasSent: boolean) => {
+      setSentFirstMessageChatId(
+        hasSent ? (chatId ?? previousChatIdStore.get()) : null
+      )
+    },
+    [chatId, previousChatIdStore]
+  )
   const hydratedChatIdRef = useRef<string | null>(null)
   const isAuthenticated = useMemo(() => !!user?.id, [user?.id])
   const systemPrompt = useMemo(
     () => user?.system_prompt || SYSTEM_PROMPT_DEFAULT,
     [user?.system_prompt]
+  )
+  const setLastFinishReason = useCallback(
+    (finishReason: string | undefined) => {
+      setLastFinishReasonState({
+        chatId: chatId ?? previousChatIdStore.get(),
+        finishReason,
+      })
+    },
+    [chatId, previousChatIdStore]
   )
 
   // Search params handling
@@ -183,71 +237,113 @@ export function useChatCore({
     messages: initialMessages,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
 
-    onFinish: async ({ message, isAbort, isDisconnect, isError, finishReason }) => {
-      // Track finish reason for truncation detection
-      setLastFinishReason(finishReason)
-
-      // If a stream aborts/errors, still try to persist any pending edited user
-      // message so edit truncation is not lost from persistence.
-      if (isAbort || isDisconnect || isError) {
-        const pendingEdit = pendingEditUserMsgRef.current
-        if (pendingEdit) {
-          pendingEditUserMsgRef.current = null
-          if (isRouteDurableChat(pendingEdit.chatId, isAuthenticated)) {
-            return
-          }
-          try {
-            await cacheAndAddMessage(pendingEdit.message, pendingEdit.chatId)
-          } catch (error) {
-            // Re-stage for a future retry rather than dropping the edit.
-            pendingEditUserMsgRef.current = pendingEdit
-            console.error(
-              "Failed to persist pending edited message on abort/error:",
-              error
-            )
-          }
-        }
-        return
-      }
-
-      // Use effectiveChatId to handle stale closures during chat creation
-      const effectiveChatId =
-        chatId ||
-        prevChatIdRef.current ||
-        (typeof window !== "undefined"
-          ? localStorage.getItem(GUEST_CHAT_STORAGE_KEY)
-          : null)
-
-      if (effectiveChatId) {
-        const routePersistsMessages = isRouteDurableChat(
-          effectiveChatId,
-          isAuthenticated
-        )
-        // Persist the edited user message first (if any) so the user→assistant
-        // pair is written in order before ID reconciliation.
-        const pendingEdit = pendingEditUserMsgRef.current
-        if (pendingEdit) {
-          pendingEditUserMsgRef.current = null
-          if (!routePersistsMessages) {
-            await cacheAndAddMessage(pendingEdit.message, pendingEdit.chatId)
-          }
-        }
-
-        if (!routePersistsMessages) {
-          // Await persistence so the DB has the latest messages before ID reconciliation
-          await cacheAndAddMessage(message, effectiveChatId)
-        }
-      }
-
-      try {
-        if (!effectiveChatId) return
-        await syncRecentMessages(effectiveChatId, setMessages, 2)
-      } catch (error) {
-        console.error("Message ID reconciliation failed: ", error)
-      }
+    onFinish: async ({
+      message,
+      isAbort,
+      isDisconnect,
+      isError,
+      finishReason,
+    }) => {
+      await chatTurn.finishChatTurn({
+        message,
+        isAbort,
+        isDisconnect,
+        isError,
+        finishReason,
+        chatId,
+        previousChatId: previousChatIdStore.get(),
+      })
     },
 
     onError: handleError,
+  })
+
+  const getIsSending = useCallback(
+    () => isSendingStore.get(),
+    [isSendingStore]
+  )
+
+  const setIsSending = useCallback(
+    (value: boolean) => {
+      isSendingStore.set(value)
+    },
+    [isSendingStore]
+  )
+
+  const stagePendingEdit = useCallback(
+    (message: ChatTurnMessage, currentChatId: string) => {
+      pendingEditStore.stage(message, currentChatId)
+    },
+    [pendingEditStore]
+  )
+
+  const getPendingEdit = useCallback(
+    () => pendingEditStore.get(),
+    [pendingEditStore]
+  )
+
+  const clearPendingEdit = useCallback(() => {
+    pendingEditStore.clear()
+  }, [pendingEditStore])
+
+  const setPreviousChatId = useCallback(
+    (currentChatId: string) => {
+      previousChatIdStore.set(currentChatId)
+    },
+    [previousChatIdStore]
+  )
+
+  const turnStore = useMemo(
+    () =>
+      createChatTurnStore({
+        isAuthenticated: () => isAuthenticated,
+        updateMessages: (updater) => setMessages(updater),
+        cacheAndAddMessage,
+        deleteMessagesFromTimestamp,
+        updateTitle,
+        pendingEdit: {
+          stage: stagePendingEdit,
+          get: getPendingEdit,
+          clear: clearPendingEdit,
+        },
+        getStoredGuestChatId: () =>
+          typeof window !== "undefined"
+            ? localStorage.getItem(GUEST_CHAT_STORAGE_KEY)
+            : null,
+        reportError: (message, error) => console.error(message, error),
+      }),
+    [
+      isAuthenticated,
+      setMessages,
+      cacheAndAddMessage,
+      deleteMessagesFromTimestamp,
+      updateTitle,
+      stagePendingEdit,
+      getPendingEdit,
+      clearPendingEdit,
+    ]
+  )
+
+  const chatTurn = createChatTurnController({
+    createOptimisticMessageId,
+    getIsSending,
+    setIsSending,
+    setIsSubmitting,
+    setHasSentFirstMessage,
+    setMessages: (action) => setMessages(action),
+    turnStore,
+    resolveUserId: () => getOrCreateGuestUserId(user),
+    checkLimitsAndNotify,
+    ensureChatExists,
+    setPreviousChatId,
+    cleanupOptimisticAttachments,
+    handleFileUploads,
+    sendMessage,
+    regenerate,
+    toastError: (title) => toast({ title, status: "error" }),
+    bumpChat,
+    setLastFinishReason,
+    reportError: (message, error) => console.error(message, error),
   })
 
   const handleToolApproval = useCallback(
@@ -272,7 +368,10 @@ export function useChatCore({
 
   // Ref to latest stop function to avoid stale closures in effects
   const stopRef = useRef(stop)
-  stopRef.current = stop
+
+  useEffect(() => {
+    stopRef.current = stop
+  }, [stop])
 
   // Generation guard: prevent stuck "streaming" UI when a stream drops silently
   useEffect(() => {
@@ -293,8 +392,8 @@ export function useChatCore({
   // IMPORTANT: This effect MUST run before the hydration effect below so that
   // chat-to-chat navigation correctly stops the old stream before setting new messages.
   useEffect(() => {
-    const prevChatId = prevChatIdRef.current
-    prevChatIdRef.current = chatId
+    const prevChatId = previousChatIdStore.get()
+    previousChatIdStore.set(chatId)
 
     // Only act when chatId actually changed
     if (prevChatId === chatId) return
@@ -304,15 +403,11 @@ export function useChatCore({
       stopRef.current()
     }
 
-    // Clear stale finish reason so truncation indicators don't carry over
-    setLastFinishReason(undefined)
-
     // When navigating to home, clear messages and reset tracking state
     if (chatId === null) {
       setMessages([])
-      setHasSentFirstMessage(false)
     }
-  }, [chatId, setMessages])
+  }, [chatId, previousChatIdStore, setMessages])
 
   useEffect(() => {
     if (!chatId) return
@@ -336,165 +431,20 @@ export function useChatCore({
     }
   }, [prompt, setInputValue])
 
-  useEffect(() => {
-    setEnableSearchState(resolveWebSearchEnabled(preferences.webSearchEnabled))
-  }, [preferences.webSearchEnabled])
-
   const setEnableSearch = useCallback(
     (enabled: boolean) => {
-      persistWebSearchToggle(enabled, setEnableSearchState, setWebSearchEnabled)
+      setWebSearchEnabled(enabled)
     },
     [setWebSearchEnabled]
   )
 
   // Debounced draft persistence — avoids writing to localStorage on every keystroke.
-  // Declared before executeSend/submit so submit's onSuccess can call .cancel().
+  // Declared before submit so submit's onSuccess can call .cancel().
   const { setDraftValue } = useChatDraft(chatId)
-  const setDraftValueRef = useRef(setDraftValue)
-  setDraftValueRef.current = setDraftValue
 
   const debouncedSetDraftValue = useMemo(
-    () => debounce((value: string) => setDraftValueRef.current(value), 500),
-    []
-  )
-
-  // Shared send logic — used by both submit and handleSuggestion to avoid
-  // duplicating optimistic-message creation, validation, and error rollback.
-  const executeSend = useCallback(
-    async ({
-      text,
-      submittedFiles = [],
-      optimisticAttachments = [],
-      bodyExtras = {},
-      onSuccess,
-      errorMessage = "Failed to send message",
-    }: {
-      text: string
-      submittedFiles?: File[]
-      optimisticAttachments?: Array<{
-        name: string
-        contentType: string
-        url: string
-      }>
-      bodyExtras?: Record<string, unknown>
-      onSuccess?: (chatId: string) => void
-      errorMessage?: string
-    }) => {
-      // Synchronous ref guard: prevents duplicate sends from rapid clicks/key repeats
-      // (React state updates are batched and may not reflect in time)
-      if (isSendingRef.current) return
-      isSendingRef.current = true
-      setIsSubmitting(true)
-
-      const optimisticId = createOptimisticMessageId()
-      const optimisticMessage: OptimisticUIMessage = {
-        id: optimisticId,
-        role: "user",
-        createdAt: new Date(),
-        parts: [
-          { type: "text", text },
-          ...optimisticAttachments.map((att) => ({
-            type: "file" as const,
-            filename: att.name,
-            mediaType: att.contentType,
-            url: att.url,
-          })),
-        ],
-      }
-
-      setMessages((prev) => [...prev, optimisticMessage])
-
-      const getFileUrlsFromParts = () =>
-        optimisticMessage.parts
-          ?.filter((p) => p.type === "file")
-          .map((p) => ({ url: (p as { url?: string }).url })) || []
-
-      const removeOptimistic = () => {
-        setMessages((prev) => prev.filter((msg) => msg.id !== optimisticId))
-        cleanupOptimisticAttachments(getFileUrlsFromParts())
-      }
-
-      try {
-        const uid = await getOrCreateGuestUserId(user)
-        if (!uid) return
-
-        const allowed = await checkLimitsAndNotify(uid)
-        if (!allowed) {
-          removeOptimistic()
-          return
-        }
-
-        const currentChatId = await ensureChatExists(uid, text)
-        if (!currentChatId) {
-          removeOptimistic()
-          return
-        }
-
-        prevChatIdRef.current = currentChatId
-
-        if (text.length > MESSAGE_MAX_LENGTH) {
-          toast({
-            title: `The message you submitted was too long, please submit something shorter. (Max ${MESSAGE_MAX_LENGTH} characters)`,
-            status: "error",
-          })
-          removeOptimistic()
-          return
-        }
-
-        let attachments: Attachment[] | null = []
-        if (submittedFiles.length > 0) {
-          attachments = await handleFileUploads(currentChatId)
-          if (attachments === null) {
-            removeOptimistic()
-            return
-          }
-        }
-
-        sendMessage(
-          {
-            text,
-            files: attachments?.length
-              ? convertAttachmentsToFiles(attachments)
-              : undefined,
-          },
-          {
-            body: {
-              chatId: currentChatId,
-              userId: uid,
-              model: selectedModel,
-              isAuthenticated,
-              systemPrompt: SYSTEM_PROMPT_DEFAULT,
-              ...bodyExtras,
-            },
-          }
-        )
-
-        setHasSentFirstMessage(true)
-        removeOptimistic()
-        if (!isRouteDurableChat(currentChatId, isAuthenticated)) {
-          cacheAndAddMessage(optimisticMessage, currentChatId)
-        }
-        onSuccess?.(currentChatId)
-      } catch {
-        removeOptimistic()
-        toast({ title: errorMessage, status: "error" })
-      } finally {
-        isSendingRef.current = false
-        setIsSubmitting(false)
-      }
-    },
-    [
-      user,
-      setMessages,
-      cleanupOptimisticAttachments,
-      checkLimitsAndNotify,
-      ensureChatExists,
-      handleFileUploads,
-      sendMessage,
-      selectedModel,
-      isAuthenticated,
-      cacheAndAddMessage,
-    ]
+    () => debounce((value: string) => setDraftValue(value), 500),
+    [setDraftValue]
   )
 
   // Submit action
@@ -507,8 +457,10 @@ export function useChatCore({
     setInputValue("")
     setFiles([])
 
-    await executeSend({
+    await chatTurn.runSendTurn({
       text: currentInput,
+      selectedModel,
+      isAuthenticated,
       submittedFiles,
       optimisticAttachments,
       bodyExtras: {
@@ -529,7 +481,9 @@ export function useChatCore({
     createOptimisticAttachments,
     setInputValue,
     setFiles,
-    executeSend,
+    chatTurn,
+    selectedModel,
+    isAuthenticated,
     systemPrompt,
     enableSearch,
     debouncedSetDraftValue,
@@ -539,60 +493,49 @@ export function useChatCore({
   ])
 
   const { submitEdit } = useChatEdit({
+    chatTurn,
     chatId,
     messages,
-    user,
-    checkLimitsAndNotify,
-    ensureChatExists,
     selectedModel,
     isAuthenticated,
     systemPrompt,
     enableSearch,
-    sendMessage,
-    setMessages,
-    setPendingEditUserMessage,
-    bumpChat,
-    updateTitle,
     isSubmitting,
     status,
-    deleteMessagesFromTimestamp,
-    prevChatIdRef,
   })
 
   // Handle suggestion
   const handleSuggestion = useCallback(
     async (suggestion: string) => {
-      await executeSend({
+      await chatTurn.runSuggestionTurn({
         text: suggestion,
-        bodyExtras: {
-          chatVersion: messages.length + 1, // current messages + 1 for the new message being sent
-        },
-        errorMessage: "Failed to send suggestion",
+        selectedModel,
+        isAuthenticated,
+        chatVersion: messages.length + 1, // current messages + 1 for the new message being sent
       })
     },
-    [executeSend, messages.length]
+    [chatTurn, selectedModel, isAuthenticated, messages.length]
   )
 
   // Handle reload (v6: renamed to regenerate)
-  const handleReload = useCallback(async () => {
-    const uid = await getOrCreateGuestUserId(user)
-    if (!uid) {
-      return
-    }
-
-    const options = {
-      body: {
-        chatId,
-        userId: uid,
-        model: selectedModel,
-        isAuthenticated,
-        systemPrompt: systemPrompt || SYSTEM_PROMPT_DEFAULT,
-        chatVersion: messages.length, // same count since we're regenerating, not adding
-      },
-    }
-
-    regenerate(options)
-  }, [user, chatId, selectedModel, isAuthenticated, systemPrompt, regenerate, messages.length])
+  const handleReload = useCallback(async (messageId: string) => {
+    await chatTurn.runRegenerationTurn({
+      chatId,
+      messages,
+      targetAssistantMessageId: messageId,
+      selectedModel,
+      isAuthenticated,
+      systemPrompt,
+      chatVersion: messages.length, // same count since we're regenerating, not adding
+    })
+  }, [
+    chatTurn,
+    chatId,
+    selectedModel,
+    isAuthenticated,
+    systemPrompt,
+    messages,
+  ])
 
   // Flush pending draft on tab close; also flush on unmount (navigation)
   useEffect(() => {

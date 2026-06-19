@@ -38,7 +38,7 @@ type MessageAssistantProps = {
   isLast?: boolean
   copied?: boolean
   copyToClipboard?: () => void
-  onReload?: () => void
+  onReload?: (messageId: string) => void
   onStop?: () => void
   parts?: MessageAISDK["parts"]
   metadata?: Record<string, unknown>
@@ -298,7 +298,12 @@ export function MessageAssistant({
             variant="warning"
             fill
             cta={
-              onReload ? { label: "Regenerate", onClick: onReload } : undefined
+              onReload
+                ? {
+                    label: "Regenerate",
+                    onClick: () => onReload(messageId),
+                  }
+                : undefined
             }
           >
             Response may be incomplete due to output length limits.
@@ -388,7 +393,7 @@ export function MessageAssistant({
                     <button
                       className="hover:bg-accent/60 text-muted-foreground hover:text-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent transition pointer-coarse:h-10 pointer-coarse:w-10"
                       aria-label="Regenerate"
-                      onClick={onReload}
+                      onClick={() => onReload?.(messageId)}
                       type="button"
                     >
                       <Icon icon={RiRefreshLine} slotSize={20} />

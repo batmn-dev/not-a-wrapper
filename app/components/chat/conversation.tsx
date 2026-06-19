@@ -8,6 +8,7 @@ import {
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import { cn } from "@/lib/utils"
 import { UIMessage as MessageType } from "@ai-sdk/react"
+import type { EditTurnResult } from "./chat-turn"
 import { Message } from "./message"
 
 type MessageRenderStatus =
@@ -47,8 +48,11 @@ type ConversationProps = {
   messages: MessageType[]
   status?: "streaming" | "ready" | "submitted" | "error"
   onDelete: (id: string) => void
-  onEdit: (id: string, newText: string) => void
-  onReload: () => void
+  onEdit: (
+    id: string,
+    newText: string
+  ) => Promise<EditTurnResult | void> | EditTurnResult | void
+  onReload: (messageId: string) => void
   onStop?: () => void
   onQuote?: (text: string, messageId: string) => void
   isUserAuthenticated?: boolean

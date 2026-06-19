@@ -17,7 +17,7 @@ export function LayoutApp({ children }: { children: React.ReactNode }) {
         <div className="@container/main relative flex min-w-0 flex-1 flex-col">
           <ScrollRoot className="min-w-0 scroll-pt-[var(--spacing-app-header)] [scrollbar-gutter:stable] @sm/main:[scrollbar-gutter:stable_both-edges] pointer-coarse:[scrollbar-width:none] print:overflow-visible">
             <Header hasSidebar={hasSidebar} />
-            <main id="main" className="flex min-h-[calc(100%-var(--spacing-app-header))] flex-col">
+            <main id="main" className="flex min-h-0 flex-1 flex-col">
               {children}
             </main>
           </ScrollRoot>

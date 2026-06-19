@@ -369,23 +369,25 @@ export function ProjectView({ projectId }: ProjectViewProps) {
   ])
 
   // Handle reload (regenerate)
-  const handleReload = useCallback(async () => {
+  const handleReload = useCallback(async (messageId: string) => {
     if (!user?.id) {
       return
     }
 
     const options = {
       body: {
-        chatId: null,
+        chatId: currentChatId,
         userId: user.id,
         model: selectedModel,
         isAuthenticated: true,
         systemPrompt: SYSTEM_PROMPT_DEFAULT,
+        chatVersion: messages.length,
       },
+      messageId,
     }
 
     regenerate(options)
-  }, [user, selectedModel, regenerate])
+  }, [user, currentChatId, selectedModel, messages.length, regenerate])
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {

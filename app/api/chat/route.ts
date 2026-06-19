@@ -85,6 +85,7 @@ import {
   getLatestUserMessage,
   hasApprovalResponse,
   isDurableConvexChat,
+  sanitizeModelHistoryMessages,
   toDurableUiMessages,
   type DurableUiMessage,
   type ToolInvocationForPersistence,
@@ -100,6 +101,28 @@ type ChatRequest = {
   enableSearch: boolean
   chatVersion?: number
   userId?: string // Client-provided userId (for anonymous users)
+  edit?: ChatEditRequest
+  regeneration?: ChatRegenerationRequest
+}
+
+type ChatEditRequest = {
+  editedMessageId: string
+  editCutoffTimestamp: number
+  expectedChatVersion: number
+  replacementMessage: {
+    id: string
+    role: "user"
+    content: string
+    parts: MessageAISDK["parts"]
+  }
+  title?: string
+}
+
+type ChatRegenerationRequest = {
+  targetAssistantMessageId: string
+  targetAssistantCreatedAt: number
+  expectedChatVersion: number
+  precedingUserMessageId: string
 }
 
 type DurableRunState = {
@@ -331,6 +354,8 @@ export async function POST(req: Request) {
       enableSearch,
       chatVersion,
       userId: clientUserId,
+      edit,
+      regeneration,
     } = (await req.json()) as ChatRequest
     const model = resolveModelId(requestedModel)
     telemetryChatId = chatId
@@ -374,6 +399,13 @@ export async function POST(req: Request) {
 
     const normalizedChatVersion = normalizeChatVersion(chatVersion, messages)
     const latestUserMessageTimestamp = getLatestUserMessageTimestamp(messages)
+
+    if (edit && regeneration) {
+      throw Object.assign(
+        new Error("Regeneration cannot be combined with edit generation"),
+        { statusCode: 400, code: "INVALID_REQUEST" }
+      )
+    }
 
     // For anonymous users, require a guest ID for usage tracking
     // The client must provide a stable guest ID (format: "guest_<uuid>") from localStorage
@@ -580,9 +612,17 @@ export async function POST(req: Request) {
 
     if (durableRuntimeEnabled && convexToken) {
       const approvalResponses = extractApprovalResponses(messages)
-      const latestUserMessage = hasApprovalResponse(messages)
-        ? undefined
-        : getLatestUserMessage(messages)
+      if (regeneration && approvalResponses.length > 0) {
+        throw Object.assign(
+          new Error("Regeneration cannot continue pending approvals"),
+          { statusCode: 400, code: "INVALID_REQUEST" }
+        )
+      }
+
+      const latestUserMessage =
+        edit || regeneration || hasApprovalResponse(messages)
+          ? undefined
+          : getLatestUserMessage(messages)
 
       const prepared = await fetchMutation(
         api.chatRuntime.prepareGeneration,
@@ -603,12 +643,16 @@ export async function POST(req: Request) {
                 parts: latestUserMessage.parts,
               }
             : undefined,
+          edit,
+          regeneration,
           approvalResponses,
         },
         { token: convexToken }
       )
 
-      const durableMessages = toDurableUiMessages(prepared.messages)
+      const durableMessages = sanitizeModelHistoryMessages(
+        toDurableUiMessages(prepared.messages)
+      ) as DurableUiMessage[]
       canonicalMessages = durableMessages as MessageAISDK[]
       durableRunState = {
         runId: prepared.runId,
@@ -634,9 +678,15 @@ export async function POST(req: Request) {
           canonicalMessageCount: canonicalMessages.length,
           approvalResponseCount: approvalResponses.length,
           hasLatestUserMessage: Boolean(latestUserMessage),
+          hasRegeneration: Boolean(regeneration),
+          targetAssistantMessageId: regeneration?.targetAssistantMessageId,
         })
       )
     }
+
+    canonicalMessages = sanitizeModelHistoryMessages(
+      canonicalMessages
+    ) as MessageAISDK[]
 
     const validatedMessages = await validateUIMessages({
       messages: canonicalMessages,

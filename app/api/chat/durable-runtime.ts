@@ -1,20 +1,26 @@
-import { fetchMutation } from "convex/nextjs"
-import type {
-  UIMessage,
-  UIMessageChunk,
-  TextStreamPart,
-  ToolSet,
-  ToolUIPart,
-  StreamTextTransform,
-} from "ai"
-import { getStaticToolName, isStaticToolUIPart } from "ai"
 import { api } from "@/convex/_generated/api"
 import type { Doc, Id } from "@/convex/_generated/dataModel"
-import { isServerChatId } from "@/lib/chat-store/identity"
+import { sanitizeModelHistoryMessages as sanitizeSemanticModelHistoryMessages } from "@/convex/domain/message_visibility"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import { durableStoredMessageToUiMessage } from "@/lib/chat-messages/ui-message-adapter"
+import { isServerChatId } from "@/lib/chat-store/identity"
 import type { ToolSource } from "@/lib/tools/types"
+import type {
+  StreamTextTransform,
+  TextStreamPart,
+  ToolSet,
+  ToolUIPart,
+  UIMessage,
+  UIMessageChunk,
+} from "ai"
+import { getStaticToolName, isStaticToolUIPart } from "ai"
+import { fetchMutation } from "convex/nextjs"
+
+export {
+  hasSemanticAssistantParts,
+  isModelHistoryMessage,
+} from "@/convex/domain/message_visibility"
 
 export type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 
@@ -41,8 +47,8 @@ export function isDurableConvexChat(options: {
 }): boolean {
   return Boolean(
     options.isAuthenticated &&
-      options.convexToken &&
-      isServerChatId(options.chatId)
+    options.convexToken &&
+    isServerChatId(options.chatId)
   )
 }
 
@@ -60,9 +66,7 @@ export function getLatestUserMessage(
   return undefined
 }
 
-export function toDurableUiMessage(
-  message: Doc<"messages">
-): DurableUiMessage {
+export function toDurableUiMessage(message: Doc<"messages">): DurableUiMessage {
   const uiMessage = durableStoredMessageToUiMessage(message, {
     partsMode: "stored",
     metadataMode: "runtime",
@@ -79,6 +83,12 @@ export function toDurableUiMessages(
   messages: Doc<"messages">[]
 ): DurableUiMessage[] {
   return messages.map(toDurableUiMessage)
+}
+
+export function sanitizeModelHistoryMessages(
+  messages: UIMessage[]
+): UIMessage[] {
+  return sanitizeSemanticModelHistoryMessages(messages) as UIMessage[]
 }
 
 function isApprovalRespondedToolPart(
@@ -170,6 +180,8 @@ export function createDurableSnapshotTracker(
   ]
 
   const persist = async (force = false) => {
+    if (!text && !reasoning) return
+
     const now = Date.now()
     const throttleMs = options.throttleMs ?? 750
     if (!force && now - lastWriteAt < throttleMs) {
@@ -284,7 +296,10 @@ type RuntimeApprovalPersistenceTransformOptions = {
   chatId: string
   convexToken: string
   durableRunState: RuntimeApprovalPersistenceRunState
-  runtimeApprovalByToolName: ReadonlyMap<string, RuntimeApprovalPersistenceDecision>
+  runtimeApprovalByToolName: ReadonlyMap<
+    string,
+    RuntimeApprovalPersistenceDecision
+  >
   toolMetadataResolver: ToolSourceResolver
   approvalWritePromises: Array<Promise<unknown>>
   requestId: string

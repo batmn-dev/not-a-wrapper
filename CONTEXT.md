@@ -4,6 +4,12 @@ Domain language for the multi-AI chat app: one chat surface, many model provider
 
 ## Language
 
+### Chat
+
+**Chat turn**:
+One user action that changes a conversation and may produce an assistant response, including a new message, a suggestion send, a regeneration, or an edit that truncates later messages before continuing.
+_Avoid_: submission, send flow, message lifecycle
+
 ### Tools
 
 **Tool runtime**:

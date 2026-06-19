@@ -261,38 +261,42 @@ export function ChatInput({
             />
             <PromptInputFooter aria-hidden="true" />
             <PromptInputActions
-              className="[grid-area:trailing] h-9 min-w-[110px] justify-end gap-1.5 self-center sm:min-w-[154px]"
+              className="[grid-area:trailing] h-9 gap-1 cant-hover:gap-1.5 self-center"
               data-composer-trailing="true"
               onClick={(e) => e.stopPropagation()}
             >
               {onSelectModel ? (
-                <ModelSelector
-                  selectedModelId={selectedModel}
-                  setSelectedModelId={onSelectModel}
-                  isUserAuthenticated={isUserAuthenticated}
-                  onLockedGuestModelSelect={onLockedGuestModelSelect}
-                  className="h-9 max-w-[68px] rounded-full px-3.5 py-0 text-sm font-normal text-muted-foreground hover:bg-black/5 aria-expanded:bg-black/5 dark:hover:bg-white/10 dark:aria-expanded:bg-white/10"
-                />
+                <div className="relative ms-1 flex items-center gap-1.5 cant-hover:gap-1.5 cant-hover:px-1.5">
+                  <ModelSelector
+                    variant="composer"
+                    selectedModelId={selectedModel}
+                    setSelectedModelId={onSelectModel}
+                    isUserAuthenticated={isUserAuthenticated}
+                    onLockedGuestModelSelect={onLockedGuestModelSelect}
+                  />
+                </div>
               ) : null}
-              {/* TODO: Add dictation here when the app exposes a local voice input capability. */}
-              <PromptInputAction tooltip={primaryAction.tooltip}>
-                <Button
-                  size="sm"
-                  className="size-9 rounded-full p-0 transition-colors duration-150 ease-out"
-                  disabled={primaryAction.disabled}
-                  type="button"
-                  id="composer-submit-button"
-                  data-testid="send-button"
-                  onClick={handlePrimaryActionClick}
-                  aria-label={primaryAction.ariaLabel}
-                >
-                  {primaryAction.mode === "stop" ? (
-                    <StopBulkRoundedIcon size={16} />
-                  ) : (
-                    <Icon icon={RiArrowUpLine} slotSize={22} />
-                  )}
-                </Button>
-              </PromptInputAction>
+              <div className="ms-auto flex items-center gap-2 cant-hover:gap-1.5">
+                {/* TODO: Add dictation here when the app exposes a local voice input capability. */}
+                <PromptInputAction tooltip={primaryAction.tooltip}>
+                  <Button
+                    size="sm"
+                    className="size-9 rounded-full p-0 transition-colors duration-150 ease-out"
+                    disabled={primaryAction.disabled}
+                    type="button"
+                    id="composer-submit-button"
+                    data-testid="send-button"
+                    onClick={handlePrimaryActionClick}
+                    aria-label={primaryAction.ariaLabel}
+                  >
+                    {primaryAction.mode === "stop" ? (
+                      <StopBulkRoundedIcon size={16} />
+                    ) : (
+                      <Icon icon={RiArrowUpLine} slotSize={22} />
+                    )}
+                  </Button>
+                </PromptInputAction>
+              </div>
             </PromptInputActions>
           </PromptInput>
         </div>

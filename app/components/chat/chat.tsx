@@ -251,60 +251,75 @@ export function Chat() {
   const showOnboarding = !chatId && messages.length === 0
 
   return (
-    <div
-      className={cn(
-        "relative flex min-h-0 flex-1 flex-col items-center",
-        showOnboarding && "justify-end md:justify-center"
-      )}
-    >
+    <div id="thread" className="group/thread flex min-h-full flex-1 flex-col">
       <DialogAuth open={hasDialogAuth} setOpen={setHasDialogAuth} />
 
-      <AnimatePresence initial={false} mode="popLayout">
-        {showOnboarding ? (
-          <motion.div
-            key="onboarding"
-            className="flex flex-col items-center"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <h1 className="mb-6 text-3xl font-medium tracking-tight text-balance">
-              What&apos;s on your mind?
-            </h1>
-          </motion.div>
-        ) : (
-          <Conversation key="conversation" {...conversationProps} />
-        )}
-      </AnimatePresence>
-
       <div
-        className={cn(
-          "relative isolate z-10 flex w-full basis-auto flex-col [--thread-content-margin:1rem] px-[var(--thread-content-margin,1rem)] pb-[env(safe-area-inset-bottom,0px)]",
-          !showOnboarding &&
-            "group/thread-bottom-container content-fade sticky bottom-0"
-        )}
+        role="presentation"
+        className="composer-parent flex flex-1 flex-col focus-visible:outline-0"
       >
-        {!showOnboarding && (
-          <div className="relative h-0">
-            <div className="pointer-events-none absolute inset-x-0 bottom-[calc(100%+1.5rem)] z-30 flex justify-center">
-              <div className="pointer-events-auto">
-                <ScrollButton />
+        <AnimatePresence initial={false} mode="popLayout">
+          {showOnboarding ? (
+            <motion.div
+              key="onboarding"
+              className="relative flex basis-auto shrink flex-col justify-end max-sm:grow max-sm:justify-center sm:min-h-[calc(42svh-var(--spacing-app-header))]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <div
+                className="flex justify-center"
+                data-splash-headline-option="WHATS_ON_YOUR_MIND"
+              >
+                <div className="hidden text-center sm:mb-[22px] sm:block">
+                  <h1 className="inline-flex min-h-[42px] items-baseline text-balance px-1 text-2xl leading-9 font-normal">
+                    What&apos;s on your mind?
+                  </h1>
+                </div>
+                <div className="flex h-full w-full shrink flex-col items-center justify-center px-4 text-center sm:hidden">
+                  <h1 className="inline-flex min-h-[42px] items-baseline text-balance px-1 text-2xl leading-9 font-normal">
+                    What&apos;s on your mind?
+                  </h1>
+                </div>
+              </div>
+            </motion.div>
+          ) : (
+            <Conversation key="conversation" {...conversationProps} />
+          )}
+        </AnimatePresence>
+
+        <div
+          id="thread-bottom-container"
+          className={cn(
+            "group/thread-bottom-container sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col [--thread-content-margin:1rem] @sm/main:[--thread-content-margin:1.5rem] @lg/main:[--thread-content-margin:4rem] px-[var(--thread-content-margin,1rem)] pb-[env(safe-area-inset-bottom,0px)]",
+            showOnboarding ? "sm:grow" : "content-fade"
+          )}
+        >
+          {!showOnboarding && (
+            <div className="relative h-0">
+              <div className="pointer-events-none absolute inset-x-0 bottom-[calc(100%+1.5rem)] z-30 flex justify-center">
+                <div className="pointer-events-auto">
+                  <ScrollButton />
+                </div>
               </div>
             </div>
+          )}
+          <div
+            id="thread-bottom"
+            className="mx-auto w-full [--thread-content-max-width:40rem] @[64rem]/main:[--thread-content-max-width:48rem] max-w-[var(--thread-content-max-width,40rem)]"
+          >
+            <ChatInput defaultValue={initialInputValue} {...chatInputProps} />
           </div>
-        )}
-        <div className="mx-auto w-full [--thread-content-max-width:40rem] @[64rem]/main:[--thread-content-max-width:48rem] max-w-[var(--thread-content-max-width,40rem)]">
-          <ChatInput defaultValue={initialInputValue} {...chatInputProps} />
+          {!showOnboarding && (
+            <div className="-mt-4 text-muted-foreground relative w-full overflow-hidden text-center text-xs md:px-[60px]">
+              <div className="flex min-h-8 w-full items-center justify-center p-2 select-none">
+                <div className="pointer-events-auto">
+                  <div>Not A Wrapper can make mistakes. Check important info.</div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-        {!showOnboarding && (
-          <div className="-mt-4 text-muted-foreground relative w-full overflow-hidden text-center text-xs md:px-[60px]">
-            <div className="flex min-h-8 w-full items-center justify-center p-2 select-none">
-              <div className="pointer-events-auto">
-                <div>Not A Wrapper can make mistakes. Check important info.</div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )

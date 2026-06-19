@@ -1,0 +1,540 @@
+import { convertAttachmentsToFiles } from "@/lib/ai/message-conversion"
+import {
+  createOptimisticEditMessageId,
+  createOptimisticMessageId,
+} from "@/lib/chat-store/identity"
+import {
+  buildEditIntent,
+  buildChatTurnRequestBody,
+  prepareEditTurnPlan,
+  prepareRegenerationTurnPlan,
+  routePersistsChatMessages,
+  type ChatTurnMessage,
+  type ChatTurnStore,
+  type SendFilePart,
+} from "@/lib/chat-store/turns/chat-turn-service"
+import { MESSAGE_MAX_LENGTH } from "@/lib/config"
+
+export type { ChatTurnMessage } from "@/lib/chat-store/turns/chat-turn-service"
+
+type SetMessagesAction =
+  | ChatTurnMessage[]
+  | ((messages: ChatTurnMessage[]) => ChatTurnMessage[])
+
+type OptimisticAttachment = {
+  name: string
+  contentType: string
+  url: string
+}
+
+type UploadedAttachment = {
+  name: string
+  contentType: string
+  url: string
+  attachmentId?: string
+}
+
+type SendMessageOptions = { body?: Record<string, unknown> }
+type RegenerateMessageOptions = SendMessageOptions & { messageId?: string }
+
+type SendMessage = (
+  message: {
+    text: string
+    files?: SendFilePart[]
+  },
+  options?: SendMessageOptions
+) => void
+
+export type ChatTurnAdapters = {
+  createOptimisticMessageId?: () => string
+  createOptimisticEditMessageId?: () => string
+  getIsSending: () => boolean
+  setIsSending: (isSending: boolean) => void
+  setIsSubmitting: (isSubmitting: boolean) => void
+  setHasSentFirstMessage: (hasSent: boolean) => void
+  setMessages: (action: SetMessagesAction) => void
+  turnStore: ChatTurnStore
+  resolveUserId: () => Promise<string | null>
+  checkLimitsAndNotify: (userId: string) => Promise<boolean>
+  ensureChatExists: (userId: string, input: string) => Promise<string | null>
+  setPreviousChatId: (chatId: string) => void
+  cleanupOptimisticAttachments: (attachments?: Array<{ url?: string }>) => void
+  handleFileUploads: (chatId: string) => Promise<UploadedAttachment[] | null>
+  sendMessage: SendMessage
+  regenerate: (options?: RegenerateMessageOptions) => void | Promise<void>
+  toastError: (title: string) => void
+  bumpChat: (chatId: string) => void
+  setLastFinishReason: (finishReason: string | undefined) => void
+  reportError: (message: string, error: unknown) => void
+}
+
+export type SendTurnArgs = {
+  text: string
+  selectedModel: string
+  isAuthenticated: boolean
+  submittedFiles?: File[]
+  optimisticAttachments?: OptimisticAttachment[]
+  bodyExtras?: Record<string, unknown>
+  onSuccess?: (chatId: string) => void
+  errorMessage?: string
+}
+
+export type SuggestionTurnArgs = {
+  text: string
+  selectedModel: string
+  isAuthenticated: boolean
+  chatVersion: number
+}
+
+export type EditTurnArgs = {
+  chatId: string | null
+  messages: ChatTurnMessage[]
+  messageId: string
+  newContent: string
+  selectedModel: string
+  isAuthenticated: boolean
+  systemPrompt: string
+  enableSearch: boolean
+  isSubmitting: boolean
+  status: string
+}
+
+export type EditTurnFailureReason =
+  | "generation-active"
+  | "empty-content"
+  | "missing-chat"
+  | "message-not-found"
+  | "missing-message-timestamp"
+  | "message-too-long"
+  | "auth-required"
+  | "limit-denied"
+  | "chat-create-failed"
+  | "plan-rejected"
+  | "dispatch-failed"
+
+export type EditTurnResult =
+  | { ok: true }
+  | {
+      ok: false
+      reason: EditTurnFailureReason
+      message: string
+    }
+
+export type RegenerationTurnArgs = {
+  chatId: string | null
+  messages: ChatTurnMessage[]
+  targetAssistantMessageId: string
+  selectedModel: string
+  isAuthenticated: boolean
+  systemPrompt: string
+  chatVersion: number
+}
+
+export type FinishChatTurnArgs = {
+  message: ChatTurnMessage
+  isAbort: boolean
+  isDisconnect: boolean
+  isError: boolean
+  finishReason?: string
+  chatId: string | null
+  previousChatId: string | null
+}
+
+export function isRouteDurableChat(
+  chatId: string | null,
+  isAuthenticated: boolean
+) {
+  return routePersistsChatMessages(chatId, isAuthenticated)
+}
+
+export function createChatTurnController(adapters: ChatTurnAdapters) {
+  return {
+    runSendTurn: (args: SendTurnArgs) => runSendTurn(adapters, args),
+    runSuggestionTurn: (args: SuggestionTurnArgs) =>
+      runSuggestionTurn(adapters, args),
+    runEditTurn: (args: EditTurnArgs) => runEditTurn(adapters, args),
+    runRegenerationTurn: (args: RegenerationTurnArgs) =>
+      runRegenerationTurn(adapters, args),
+    finishChatTurn: (args: FinishChatTurnArgs) =>
+      finishChatTurn(adapters, args),
+  }
+}
+
+export type ChatTurnController = ReturnType<typeof createChatTurnController>
+
+export async function runSendTurn(
+  adapters: ChatTurnAdapters,
+  {
+    text,
+    selectedModel,
+    isAuthenticated,
+    submittedFiles = [],
+    optimisticAttachments = [],
+    bodyExtras = {},
+    onSuccess,
+    errorMessage = "Failed to send message",
+  }: SendTurnArgs
+) {
+  if (adapters.getIsSending()) return
+  adapters.setIsSending(true)
+  adapters.setIsSubmitting(true)
+
+  const optimisticId = (
+    adapters.createOptimisticMessageId ?? createOptimisticMessageId
+  )()
+  const optimisticMessage: ChatTurnMessage = {
+    id: optimisticId,
+    role: "user",
+    createdAt: new Date(),
+    parts: [
+      { type: "text", text },
+      ...optimisticAttachments.map((attachment) => ({
+        type: "file" as const,
+        filename: attachment.name,
+        mediaType: attachment.contentType,
+        url: attachment.url,
+      })),
+    ],
+  }
+
+  adapters.setMessages((prev) => [...prev, optimisticMessage])
+
+  const getFileUrlsFromParts = () =>
+    optimisticMessage.parts
+      ?.filter((part) => part.type === "file")
+      .map((part) => ({ url: (part as { url?: string }).url })) || []
+
+  const removeOptimistic = () => {
+    adapters.setMessages((prev) =>
+      prev.filter((message) => message.id !== optimisticId)
+    )
+    adapters.cleanupOptimisticAttachments(getFileUrlsFromParts())
+  }
+
+  try {
+    const userId = await adapters.resolveUserId()
+    if (!userId) return
+
+    const allowed = await adapters.checkLimitsAndNotify(userId)
+    if (!allowed) {
+      removeOptimistic()
+      return
+    }
+
+    const currentChatId = await adapters.ensureChatExists(userId, text)
+    if (!currentChatId) {
+      removeOptimistic()
+      return
+    }
+
+    adapters.setPreviousChatId(currentChatId)
+
+    if (text.length > MESSAGE_MAX_LENGTH) {
+      adapters.toastError(
+        `The message you submitted was too long, please submit something shorter. (Max ${MESSAGE_MAX_LENGTH} characters)`
+      )
+      removeOptimistic()
+      return
+    }
+
+    let attachments: UploadedAttachment[] | null = []
+    if (submittedFiles.length > 0) {
+      attachments = await adapters.handleFileUploads(currentChatId)
+      if (attachments === null) {
+        removeOptimistic()
+        return
+      }
+    }
+
+    adapters.sendMessage(
+      {
+        text,
+        files: attachments?.length
+          ? convertAttachmentsToFiles(attachments)
+          : undefined,
+      },
+      {
+        body: buildChatTurnRequestBody({
+          chatId: currentChatId,
+          userId,
+          selectedModel,
+          isAuthenticated,
+          bodyExtras,
+        }),
+      }
+    )
+
+    adapters.setHasSentFirstMessage(true)
+    removeOptimistic()
+    void adapters.turnStore.persistTurnMessage(optimisticMessage, currentChatId)
+    onSuccess?.(currentChatId)
+  } catch {
+    removeOptimistic()
+    adapters.toastError(errorMessage)
+  } finally {
+    adapters.setIsSending(false)
+    adapters.setIsSubmitting(false)
+  }
+}
+
+export async function runSuggestionTurn(
+  adapters: ChatTurnAdapters,
+  args: SuggestionTurnArgs
+) {
+  await runSendTurn(adapters, {
+    text: args.text,
+    selectedModel: args.selectedModel,
+    isAuthenticated: args.isAuthenticated,
+    bodyExtras: {
+      chatVersion: args.chatVersion,
+    },
+    errorMessage: "Failed to send suggestion",
+  })
+}
+
+export async function runEditTurn(
+  adapters: ChatTurnAdapters,
+  {
+    chatId,
+    messages,
+    messageId,
+    newContent,
+    selectedModel,
+    isAuthenticated,
+    systemPrompt,
+    enableSearch,
+    isSubmitting,
+    status,
+  }: EditTurnArgs
+): Promise<EditTurnResult> {
+  const reject = (
+    reason: EditTurnFailureReason,
+    message: string
+  ): EditTurnResult => ({
+    ok: false,
+    reason,
+    message,
+  })
+
+  if (isSubmitting || status === "submitted" || status === "streaming") {
+    const message = "Please wait until the current message finishes sending."
+    adapters.toastError(message)
+    return reject("generation-active", message)
+  }
+
+  if (!newContent.trim()) {
+    return reject("empty-content", "Please enter a message.")
+  }
+
+  if (!chatId) {
+    const message = "Missing chat."
+    adapters.toastError(message)
+    return reject("missing-chat", message)
+  }
+
+  const editPlan = prepareEditTurnPlan({
+    messages,
+    messageId,
+    newContent,
+    createOptimisticEditMessageId: () =>
+      (
+        adapters.createOptimisticEditMessageId ?? createOptimisticEditMessageId
+      )(),
+  })
+
+  if (!editPlan.ok && editPlan.reason === "message-not-found") {
+    const message = "Message not found"
+    adapters.toastError(message)
+    return reject("message-not-found", message)
+  }
+
+  if (!editPlan.ok && editPlan.reason === "missing-message-timestamp") {
+    const message = "Unable to locate message timestamp."
+    adapters.reportError(message, undefined)
+    return reject("missing-message-timestamp", message)
+  }
+
+  if (newContent.length > MESSAGE_MAX_LENGTH) {
+    const message =
+      `The message you submitted was too long, please submit something shorter. (Max ${MESSAGE_MAX_LENGTH} characters)`
+    adapters.toastError(message)
+    return reject("message-too-long", message)
+  }
+
+  if (!editPlan.ok) {
+    return reject("plan-rejected", "Unable to prepare edit.")
+  }
+
+  let editPersistence:
+    | Awaited<ReturnType<ChatTurnStore["prepareEditPersistence"]>>
+    | null = null
+
+  try {
+    adapters.setMessages([
+      ...editPlan.trimmedMessages,
+      editPlan.optimisticEditedMessage,
+    ])
+
+    const userId = await adapters.resolveUserId()
+    if (!userId) {
+      adapters.setMessages(editPlan.originalMessages)
+      const message = "Please sign in and try again."
+      adapters.toastError(message)
+      return reject("auth-required", message)
+    }
+
+    const allowed = await adapters.checkLimitsAndNotify(userId)
+    if (!allowed) {
+      adapters.setMessages(editPlan.originalMessages)
+      return reject("limit-denied", "Message limit reached.")
+    }
+
+    const currentChatId = await adapters.ensureChatExists(userId, newContent)
+    if (!currentChatId) {
+      adapters.setMessages(editPlan.originalMessages)
+      return reject("chat-create-failed", "Unable to open chat.")
+    }
+
+    adapters.setPreviousChatId(currentChatId)
+
+    editPersistence = await adapters.turnStore.prepareEditPersistence({
+      sourceChatId: chatId,
+      targetChatId: currentChatId,
+      plan: editPlan,
+    })
+
+    adapters.setMessages(editPlan.trimmedMessages)
+
+    adapters.sendMessage(
+      {
+        text: newContent,
+        files: editPlan.sendFiles.length > 0 ? editPlan.sendFiles : undefined,
+      },
+      {
+        body: buildChatTurnRequestBody({
+          chatId: currentChatId,
+          userId,
+          selectedModel,
+          isAuthenticated,
+          systemPrompt,
+          enableSearch,
+          chatVersion: editPlan.chatVersion,
+          edit: editPersistence.routePersists
+            ? buildEditIntent(messageId, editPlan)
+            : undefined,
+        }),
+      }
+    )
+
+    await editPersistence.accept()
+
+    adapters.setMessages((prev) =>
+      prev.filter(
+        (message) => message.id !== editPlan.optimisticEditedMessage.id
+      )
+    )
+    adapters.turnStore.stagePendingEdit(
+      editPlan.optimisticEditedMessage,
+      currentChatId
+    )
+    adapters.bumpChat(currentChatId)
+    return { ok: true }
+  } catch (error) {
+    adapters.reportError("Edit failed:", error)
+    try {
+      await editPersistence?.rollback()
+    } catch (rollbackError) {
+      adapters.reportError("Failed to restore edit transaction:", rollbackError)
+    }
+    adapters.setMessages(editPlan.originalMessages)
+    const message = "Failed to apply edit"
+    adapters.toastError(message)
+    return reject("dispatch-failed", message)
+  }
+}
+
+export async function runRegenerationTurn(
+  adapters: ChatTurnAdapters,
+  {
+    chatId,
+    messages,
+    targetAssistantMessageId,
+    selectedModel,
+    isAuthenticated,
+    systemPrompt,
+    chatVersion,
+  }: RegenerationTurnArgs
+) {
+  if (!chatId) {
+    adapters.toastError("Missing chat.")
+    return
+  }
+
+  const regenerationPlan = prepareRegenerationTurnPlan(
+    messages,
+    targetAssistantMessageId
+  )
+
+  if (!regenerationPlan.ok) {
+    if (regenerationPlan.reason === "message-not-found") {
+      adapters.toastError("Message not found")
+      return
+    }
+
+    adapters.reportError(
+      `Unable to prepare regeneration: ${regenerationPlan.reason}`,
+      undefined
+    )
+    return
+  }
+
+  const userId = await adapters.resolveUserId()
+  if (!userId) return
+
+  adapters.turnStore.stageRegeneration({
+    chatId,
+    plan: regenerationPlan,
+  })
+
+  try {
+    await adapters.regenerate({
+      messageId: regenerationPlan.regeneration.targetAssistantMessageId,
+      body: buildChatTurnRequestBody({
+        chatId,
+        userId,
+        selectedModel,
+        isAuthenticated,
+        systemPrompt,
+        chatVersion,
+        regeneration: regenerationPlan.regeneration,
+      }),
+    })
+  } catch (error) {
+    adapters.turnStore.rollbackActiveLocalRegeneration()
+    adapters.reportError("Regeneration failed:", error)
+    adapters.toastError("Failed to regenerate response")
+  }
+}
+
+export async function finishChatTurn(
+  adapters: ChatTurnAdapters,
+  {
+    message,
+    isAbort,
+    isDisconnect,
+    isError,
+    finishReason,
+    chatId,
+    previousChatId,
+  }: FinishChatTurnArgs
+) {
+  adapters.setLastFinishReason(finishReason)
+  await adapters.turnStore.finishTurn({
+    message,
+    isAbort,
+    isDisconnect,
+    isError,
+    chatId,
+    previousChatId,
+  })
+}

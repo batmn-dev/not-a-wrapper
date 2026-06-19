@@ -3,6 +3,7 @@ import { isStaticToolUIPart, getStaticToolName } from "ai"
 import React, { useState } from "react"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
+import type { EditTurnResult } from "./chat-turn"
 import { MessageAssistant } from "./message-assistant"
 import { MessageUser } from "./message-user"
 
@@ -20,8 +21,11 @@ type MessageProps = {
   attachments?: MessageAttachment[]
   isLast?: boolean
   onDelete: (id: string) => void
-  onEdit: (id: string, newText: string) => Promise<void> | void
-  onReload: () => void
+  onEdit: (
+    id: string,
+    newText: string
+  ) => Promise<EditTurnResult | void> | EditTurnResult | void
+  onReload: (messageId: string) => void
   onStop?: () => void
   parts?: MessageType["parts"]
   metadata?: Record<string, unknown>

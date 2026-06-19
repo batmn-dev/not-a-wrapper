@@ -17,11 +17,7 @@ import {
   MessageContent,
 } from "@/components/ui/message"
 import { useScrollRoot } from "@/components/ui/scroll-root"
-import { toast } from "@/components/ui/toast"
-import { isOptimisticMessageId } from "@/lib/chat-store/identity"
-import { isConvexId } from "@/lib/chat-store/types"
 import { cn } from "@/lib/utils"
-import { UIMessage as MessageType } from "@ai-sdk/react"
 import {
   RiCheckLine,
   RiEditLine,
@@ -32,6 +28,7 @@ import {
 } from "@remixicon/react"
 import Image from "next/image"
 import React, { useEffect, useRef, useState } from "react"
+import type { EditTurnResult } from "./chat-turn"
 
 // Attachment type for backward compatibility with v4 format
 type MessageAttachment = {
@@ -91,8 +88,11 @@ export type MessageUserProps = {
   copyToClipboard: () => void
   id: string
   className?: string
-  onReload?: () => void
-  onEdit?: (id: string, newText: string) => void
+  onReload?: (messageId: string) => void
+  onEdit?: (
+    id: string,
+    newText: string
+  ) => Promise<EditTurnResult | void> | EditTurnResult | void
   isUserAuthenticated?: boolean
 }
 
@@ -108,6 +108,8 @@ export function MessageUser({
 }: MessageUserProps) {
   const [editInput, setEditInput] = useState(children)
   const [isEditing, setIsEditing] = useState(false)
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const savedScrollTopRef = useRef<number | null>(null)
@@ -116,28 +118,31 @@ export function MessageUser({
   const handleEditCancel = () => {
     setIsEditing(false)
     setEditInput(children)
+    setEditError(null)
+    setIsSavingEdit(false)
   }
 
   const handleSave = async () => {
+    if (isSavingEdit) return
     if (!editInput.trim()) return
+    if (!onEdit) {
+      setEditError("Editing is not available for this message.")
+      return
+    }
 
+    setIsSavingEdit(true)
+    setEditError(null)
     try {
-      // Valid IDs: optimistic (pending sync) or Convex IDs (synced)
-      const isValidId = isOptimisticMessageId(id) || isConvexId(id)
-      if (id && !isValidId) {
-        // Message ID is in an unexpected format — likely failed to sync
-        toast({
-          title: "Oops, something went wrong",
-          description: "Please refresh your browser and try again.",
-          status: "error",
-        })
+      const result = await onEdit(id, editInput)
+      if (result && !result.ok) {
+        setEditError(result.message || "The edit was not submitted.")
         return
       }
-      onEdit?.(id, editInput)
-    } catch {
-      setEditInput(children) // Reset on failure
-    } finally {
       setIsEditing(false)
+    } catch {
+      setEditError("Failed to submit the edit. Please try again.")
+    } finally {
+      setIsSavingEdit(false)
     }
   }
 
@@ -145,6 +150,7 @@ export function MessageUser({
     savedScrollTopRef.current = scrollRef.current?.scrollTop ?? null
     setIsEditing(true)
     setEditInput(children)
+    setEditError(null)
   }
 
   // Auto-resize textarea on content change
@@ -236,7 +242,10 @@ export function MessageUser({
             ref={textareaRef}
             className="w-full resize-none bg-transparent outline-none"
             value={editInput}
-            onChange={(e) => setEditInput(e.target.value)}
+            onChange={(e) => {
+              setEditInput(e.target.value)
+              if (editError) setEditError(null)
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()
@@ -250,12 +259,27 @@ export function MessageUser({
               maxHeight: "50vh",
               overflowY: "auto",
             }}
+            disabled={isSavingEdit}
           />
+          {editError && (
+            <p className="text-destructive text-sm" role="alert">
+              {editError}
+            </p>
+          )}
           <div className="flex justify-end gap-2">
-            <Button size="sm" variant="ghost" onClick={handleEditCancel}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleEditCancel}
+              disabled={isSavingEdit}
+            >
               Cancel
             </Button>
-            <Button size="sm" onClick={handleSave} disabled={!editInput.trim()}>
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={isSavingEdit || !editInput.trim()}
+            >
               Send
             </Button>
           </div>
