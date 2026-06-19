@@ -1,20 +1,26 @@
-import { fetchMutation } from "convex/nextjs"
-import type {
-  UIMessage,
-  UIMessageChunk,
-  TextStreamPart,
-  ToolSet,
-  ToolUIPart,
-  StreamTextTransform,
-} from "ai"
-import { getStaticToolName, isStaticToolUIPart } from "ai"
 import { api } from "@/convex/_generated/api"
 import type { Doc, Id } from "@/convex/_generated/dataModel"
-import { isServerChatId } from "@/lib/chat-store/identity"
+import { sanitizeModelHistoryMessages as sanitizeSemanticModelHistoryMessages } from "@/convex/domain/message_visibility"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import { durableStoredMessageToUiMessage } from "@/lib/chat-messages/ui-message-adapter"
+import { isServerChatId } from "@/lib/chat-store/identity"
 import type { ToolSource } from "@/lib/tools/types"
+import type {
+  StreamTextTransform,
+  TextStreamPart,
+  ToolSet,
+  ToolUIPart,
+  UIMessage,
+  UIMessageChunk,
+} from "ai"
+import { getStaticToolName, isStaticToolUIPart } from "ai"
+import { fetchMutation } from "convex/nextjs"
+
+export {
+  hasSemanticAssistantParts,
+  isModelHistoryMessage,
+} from "@/convex/domain/message_visibility"
 
 export type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 
@@ -41,8 +47,8 @@ export function isDurableConvexChat(options: {
 }): boolean {
   return Boolean(
     options.isAuthenticated &&
-      options.convexToken &&
-      isServerChatId(options.chatId)
+    options.convexToken &&
+    isServerChatId(options.chatId)
   )
 }
 
@@ -60,9 +66,7 @@ export function getLatestUserMessage(
   return undefined
 }
 
-export function toDurableUiMessage(
-  message: Doc<"messages">
-): DurableUiMessage {
+export function toDurableUiMessage(message: Doc<"messages">): DurableUiMessage {
   const uiMessage = durableStoredMessageToUiMessage(message, {
     partsMode: "stored",
     metadataMode: "runtime",
@@ -81,51 +85,10 @@ export function toDurableUiMessages(
   return messages.map(toDurableUiMessage)
 }
 
-function isSemanticUiMessagePart(part: unknown): boolean {
-  if (!part || typeof part !== "object") return false
-
-  const record = part as { type?: unknown; text?: unknown }
-  if (typeof record.type !== "string" || record.type.length === 0) {
-    return false
-  }
-
-  if (record.type === "step-start") return false
-
-  if (record.type === "text" || record.type === "reasoning") {
-    return typeof record.text === "string" && record.text.length > 0
-  }
-
-  return true
-}
-
-export function hasSemanticAssistantParts(message: UIMessage): boolean {
-  if (message.role !== "assistant") return false
-  return Boolean(message.parts?.some(isSemanticUiMessagePart))
-}
-
-function normalizeSemanticParts(message: UIMessage): UIMessage {
-  if (message.parts?.some(isSemanticUiMessagePart)) return message
-
-  const content = (message as { content?: unknown }).content
-  if (typeof content !== "string" || content.length === 0) return message
-
-  return {
-    ...message,
-    parts: [{ type: "text", text: content }],
-  }
-}
-
-export function isModelHistoryMessage(message: UIMessage): boolean {
-  if (message.role !== "assistant") return true
-  return hasSemanticAssistantParts(message)
-}
-
 export function sanitizeModelHistoryMessages(
   messages: UIMessage[]
 ): UIMessage[] {
-  return messages
-    .map(normalizeSemanticParts)
-    .filter(isModelHistoryMessage)
+  return sanitizeSemanticModelHistoryMessages(messages) as UIMessage[]
 }
 
 function isApprovalRespondedToolPart(
@@ -331,7 +294,10 @@ type RuntimeApprovalPersistenceTransformOptions = {
   chatId: string
   convexToken: string
   durableRunState: RuntimeApprovalPersistenceRunState
-  runtimeApprovalByToolName: ReadonlyMap<string, RuntimeApprovalPersistenceDecision>
+  runtimeApprovalByToolName: ReadonlyMap<
+    string,
+    RuntimeApprovalPersistenceDecision
+  >
   toolMetadataResolver: ToolSourceResolver
   approvalWritePromises: Array<Promise<unknown>>
   requestId: string

@@ -9,18 +9,23 @@ import {
   prepareGenerationForChat,
 } from "./chatRuntime"
 
-type TableDocuments = {
-  toolApprovalRequests: Doc<"toolApprovalRequests">[]
-  generationRuns: Doc<"generationRuns">[]
-  messages: Doc<"messages">[]
-  assistantMessageSnapshots: Doc<"assistantMessageSnapshots">[]
-  toolInvocations: Doc<"toolInvocations">[]
-  users: Doc<"users">[]
-  chats: Doc<"chats">[]
-}
+type TableName =
+  | "toolApprovalRequests"
+  | "generationRuns"
+  | "messages"
+  | "assistantMessageSnapshots"
+  | "toolInvocations"
+  | "users"
+  | "chats"
 
-type TableName = keyof TableDocuments
-type StoredDocument = TableDocuments[TableName][number]
+type StoredDocument =
+  | Doc<"toolApprovalRequests">
+  | Doc<"generationRuns">
+  | Doc<"messages">
+  | Doc<"assistantMessageSnapshots">
+  | Doc<"toolInvocations">
+  | Doc<"users">
+  | Doc<"chats">
 
 type QueryBuilder = {
   eq: (fieldName: string, value: unknown) => QueryBuilder
@@ -32,8 +37,10 @@ function asId<Table extends TableName | "users" | "chats">(
   return value as Id<Table>
 }
 
-function createMutationCtx(tablesInput: Partial<TableDocuments>) {
-  const tables: TableDocuments = {
+function createMutationCtx(
+  tablesInput: Partial<Record<TableName, StoredDocument[]>>
+) {
+  const tables: Record<TableName, StoredDocument[]> = {
     toolApprovalRequests: [],
     generationRuns: [],
     messages: [],
@@ -79,15 +86,13 @@ function createMutationCtx(tablesInput: Partial<TableDocuments>) {
           }
           buildQuery(query)
 
-          let results = (tables[tableName] as StoredDocument[]).filter(
-            (document) => {
-              const record = document as unknown as Record<string, unknown>
-              for (const [fieldName, value] of filters) {
-                if (record[fieldName] !== value) return false
-              }
-              return true
+          let results = tables[tableName].filter((document) => {
+            const record = document as unknown as Record<string, unknown>
+            for (const [fieldName, value] of filters) {
+              if (record[fieldName] !== value) return false
             }
-          )
+            return true
+          })
 
           const resultApi = {
             collect: async () => results,
@@ -119,7 +124,7 @@ function createMutationCtx(tablesInput: Partial<TableDocuments>) {
           _creationTime: Date.now(),
           ...value,
         } as StoredDocument
-        ;(tables[tableName] as StoredDocument[]).push(document)
+        tables[tableName].push(document)
         inserts.push({ tableName, id, value })
         return id
       },

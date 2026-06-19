@@ -430,7 +430,7 @@ describe("chat turn controller", () => {
     ]
     setMessagesState(originalMessages)
 
-    await controller.runEditTurn({
+    const result = await controller.runEditTurn({
       chatId: "server-chat",
       messages: originalMessages,
       messageId: "user-1",
@@ -443,6 +443,7 @@ describe("chat turn controller", () => {
       status: "ready",
     })
 
+    expect(result).toEqual({ ok: true })
     expect(storeAdapters.writeMessages).not.toHaveBeenCalled()
     expect(storeAdapters.deleteMessagesFromTimestamp).not.toHaveBeenCalled()
     expect(adapters.sendMessage).toHaveBeenCalledWith(
@@ -476,11 +477,90 @@ describe("chat turn controller", () => {
     expect(storeAdapters.pendingEdit.stage).toHaveBeenCalled()
   })
 
-  it("regenerates with the existing request body and no optimistic user message", async () => {
+  it("accepts AI SDK client message IDs in durable edit intents", async () => {
+    const {
+      adapters,
+      controller,
+      setMessagesState,
+      setRoutePersistsMessages,
+    } = createHarness()
+    setRoutePersistsMessages(true)
+    const targetCreatedAt = new Date("2026-01-02T00:00:00.000Z")
+    const clientMessageId = "msg-client-123"
+    const originalMessages = [
+      userMessage(clientMessageId, "old text", targetCreatedAt),
+      assistantMessage("assistant-1", "old answer"),
+    ]
+    setMessagesState(originalMessages)
+
+    const result = await controller.runEditTurn({
+      chatId: "server-chat",
+      messages: originalMessages,
+      messageId: clientMessageId,
+      newContent: "new text",
+      selectedModel: "model-1",
+      isAuthenticated: true,
+      systemPrompt: "custom system",
+      enableSearch: false,
+      isSubmitting: false,
+      status: "ready",
+    })
+
+    expect(result).toEqual({ ok: true })
+    expect(adapters.sendMessage).toHaveBeenCalledWith(
+      { text: "new text", files: undefined },
+      {
+        body: expect.objectContaining({
+          edit: expect.objectContaining({
+            editedMessageId: clientMessageId,
+            editCutoffTimestamp: targetCreatedAt.getTime(),
+          }),
+        }),
+      }
+    )
+  })
+
+  it("blocks edit while generation is active without closing the draft lifecycle", async () => {
     const { adapters, controller } = createHarness()
+    const result = await controller.runEditTurn({
+      chatId: "server-chat",
+      messages: [userMessage("user-1", "old text")],
+      messageId: "user-1",
+      newContent: "new text",
+      selectedModel: "model-1",
+      isAuthenticated: true,
+      systemPrompt: "custom system",
+      enableSearch: false,
+      isSubmitting: false,
+      status: "streaming",
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "generation-active",
+      message: "Please wait until the current message finishes sending.",
+    })
+    expect(adapters.sendMessage).not.toHaveBeenCalled()
+    expect(adapters.setMessages).not.toHaveBeenCalled()
+    expect(adapters.toastError).toHaveBeenCalledWith(
+      "Please wait until the current message finishes sending."
+    )
+  })
+
+  it("regenerates with a target message id and explicit intent", async () => {
+    const { adapters, controller, setMessagesState, storeAdapters } =
+      createHarness()
+    const targetCreatedAt = new Date("2026-01-02T00:00:00.000Z")
+    const messages = [
+      userMessage("user-1", "prompt"),
+      assistantMessage("assistant-1", "old answer", targetCreatedAt),
+    ]
+    setMessagesState(messages)
 
     await controller.runRegenerationTurn({
       chatId: "chat-1",
+      messages,
+      targetAssistantMessageId: "assistant-1",
       selectedModel: "model-1",
       isAuthenticated: true,
       systemPrompt: "custom system",
@@ -488,6 +568,7 @@ describe("chat turn controller", () => {
     })
 
     expect(adapters.regenerate).toHaveBeenCalledWith({
+      messageId: "assistant-1",
       body: {
         chatId: "chat-1",
         userId: "user-1",
@@ -495,10 +576,167 @@ describe("chat turn controller", () => {
         isAuthenticated: true,
         systemPrompt: "custom system",
         chatVersion: 2,
+        regeneration: {
+          targetAssistantMessageId: "assistant-1",
+          targetAssistantCreatedAt: targetCreatedAt.getTime(),
+          expectedChatVersion: 2,
+          precedingUserMessageId: "user-1",
+        },
       },
     })
     expect(adapters.setMessages).not.toHaveBeenCalled()
     expect(adapters.cleanupOptimisticAttachments).not.toHaveBeenCalled()
+    expect(storeAdapters.writeMessages).not.toHaveBeenCalled()
+  })
+
+  it("stages durable regeneration without local cache mutation", async () => {
+    const {
+      adapters,
+      controller,
+      setMessagesState,
+      setRoutePersistsMessages,
+      storeAdapters,
+    } = createHarness()
+    setRoutePersistsMessages(true)
+    const targetCreatedAt = new Date("2026-01-02T00:00:00.000Z")
+    const messages = [
+      userMessage("user-1", "prompt"),
+      assistantMessage("assistant-1", "old answer", targetCreatedAt),
+    ]
+    setMessagesState(messages)
+
+    await controller.runRegenerationTurn({
+      chatId: "server-chat",
+      messages,
+      targetAssistantMessageId: "assistant-1",
+      selectedModel: "model-1",
+      isAuthenticated: true,
+      systemPrompt: "custom system",
+      chatVersion: 2,
+    })
+
+    expect(storeAdapters.writeMessages).not.toHaveBeenCalled()
+    expect(storeAdapters.cacheAndAddMessage).not.toHaveBeenCalled()
+    expect(adapters.regenerate).toHaveBeenCalledWith({
+      messageId: "assistant-1",
+      body: expect.objectContaining({
+        chatId: "server-chat",
+        regeneration: {
+          targetAssistantMessageId: "assistant-1",
+          targetAssistantCreatedAt: targetCreatedAt.getTime(),
+          expectedChatVersion: 2,
+          precedingUserMessageId: "user-1",
+        },
+      }),
+    })
+  })
+
+  it("replaces local regeneration cache history instead of appending a duplicate assistant", async () => {
+    const { controller, setCachedMessages, setMessagesState, storeAdapters } =
+      createHarness()
+    const targetCreatedAt = new Date("2026-01-02T00:00:00.000Z")
+    const originalMessages = [
+      userMessage("user-1", "prompt"),
+      assistantMessage("assistant-1", "old answer", targetCreatedAt),
+    ]
+    const regeneratedAssistant = assistantMessage(
+      "assistant-1",
+      "new answer",
+      targetCreatedAt
+    )
+    setMessagesState(originalMessages)
+    setCachedMessages(originalMessages)
+
+    await controller.runRegenerationTurn({
+      chatId: "local-chat",
+      messages: originalMessages,
+      targetAssistantMessageId: "assistant-1",
+      selectedModel: "model-1",
+      isAuthenticated: false,
+      systemPrompt: "custom system",
+      chatVersion: 2,
+    })
+
+    await controller.finishChatTurn({
+      message: regeneratedAssistant,
+      isAbort: false,
+      isDisconnect: false,
+      isError: false,
+      finishReason: "stop",
+      chatId: "local-chat",
+      previousChatId: null,
+    })
+
+    expect(storeAdapters.writeMessages).toHaveBeenCalledWith("local-chat", [
+      originalMessages[0],
+      regeneratedAssistant,
+    ])
+    expect(storeAdapters.cacheAndAddMessage).not.toHaveBeenCalledWith(
+      regeneratedAssistant,
+      "local-chat"
+    )
+  })
+
+  it("restores local regeneration visibility on empty abort and preserves valid partial aborts", async () => {
+    const originalMessages = [
+      userMessage("user-1", "prompt"),
+      assistantMessage("assistant-1", "old answer"),
+    ]
+    const emptyAbort = createHarness()
+    emptyAbort.setMessagesState(originalMessages)
+
+    await emptyAbort.controller.runRegenerationTurn({
+      chatId: "local-chat",
+      messages: originalMessages,
+      targetAssistantMessageId: "assistant-1",
+      selectedModel: "model-1",
+      isAuthenticated: false,
+      systemPrompt: "custom system",
+      chatVersion: 2,
+    })
+    await emptyAbort.controller.finishChatTurn({
+      message: {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [],
+      },
+      isAbort: true,
+      isDisconnect: false,
+      isError: false,
+      finishReason: "stop",
+      chatId: "local-chat",
+      previousChatId: null,
+    })
+
+    expect(emptyAbort.getMessages()).toEqual(originalMessages)
+    expect(emptyAbort.storeAdapters.writeMessages).not.toHaveBeenCalled()
+
+    const partialAbort = createHarness()
+    partialAbort.setMessagesState(originalMessages)
+    const partialAssistant = assistantMessage("assistant-1", "partial new")
+    await partialAbort.controller.runRegenerationTurn({
+      chatId: "local-chat",
+      messages: originalMessages,
+      targetAssistantMessageId: "assistant-1",
+      selectedModel: "model-1",
+      isAuthenticated: false,
+      systemPrompt: "custom system",
+      chatVersion: 2,
+    })
+    await partialAbort.controller.finishChatTurn({
+      message: partialAssistant,
+      isAbort: true,
+      isDisconnect: false,
+      isError: false,
+      finishReason: "stop",
+      chatId: "local-chat",
+      previousChatId: null,
+    })
+
+    expect(partialAbort.storeAdapters.writeMessages).toHaveBeenCalledWith(
+      "local-chat",
+      [originalMessages[0], partialAssistant]
+    )
   })
 
   it("reconciles finish persistence for local, durable, and pending edit turns", async () => {

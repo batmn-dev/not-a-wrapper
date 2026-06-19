@@ -1,6 +1,7 @@
 import type {
   ChatTurnController,
   ChatTurnMessage,
+  EditTurnResult,
 } from "@/app/components/chat/chat-turn"
 import { useCallback } from "react"
 
@@ -28,8 +29,8 @@ export function useChatEdit({
   status,
 }: UseChatEditProps) {
   const submitEdit = useCallback(
-    async (messageId: string, newContent: string) => {
-      await chatTurn.runEditTurn({
+    async (messageId: string, newContent: string): Promise<EditTurnResult> => {
+      return await chatTurn.runEditTurn({
         chatId,
         messages,
         messageId,

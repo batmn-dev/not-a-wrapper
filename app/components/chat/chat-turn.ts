@@ -7,6 +7,7 @@ import {
   buildEditIntent,
   buildChatTurnRequestBody,
   prepareEditTurnPlan,
+  prepareRegenerationTurnPlan,
   routePersistsChatMessages,
   type ChatTurnMessage,
   type ChatTurnStore,
@@ -34,6 +35,7 @@ type UploadedAttachment = {
 }
 
 type SendMessageOptions = { body?: Record<string, unknown> }
+type RegenerateMessageOptions = SendMessageOptions & { messageId?: string }
 
 type SendMessage = (
   message: {
@@ -59,7 +61,7 @@ export type ChatTurnAdapters = {
   cleanupOptimisticAttachments: (attachments?: Array<{ url?: string }>) => void
   handleFileUploads: (chatId: string) => Promise<UploadedAttachment[] | null>
   sendMessage: SendMessage
-  regenerate: (options?: SendMessageOptions) => void
+  regenerate: (options?: RegenerateMessageOptions) => void | Promise<void>
   toastError: (title: string) => void
   bumpChat: (chatId: string) => void
   setLastFinishReason: (finishReason: string | undefined) => void
@@ -97,8 +99,31 @@ export type EditTurnArgs = {
   status: string
 }
 
+export type EditTurnFailureReason =
+  | "generation-active"
+  | "empty-content"
+  | "missing-chat"
+  | "message-not-found"
+  | "missing-message-timestamp"
+  | "message-too-long"
+  | "auth-required"
+  | "limit-denied"
+  | "chat-create-failed"
+  | "plan-rejected"
+  | "dispatch-failed"
+
+export type EditTurnResult =
+  | { ok: true }
+  | {
+      ok: false
+      reason: EditTurnFailureReason
+      message: string
+    }
+
 export type RegenerationTurnArgs = {
   chatId: string | null
+  messages: ChatTurnMessage[]
+  targetAssistantMessageId: string
   selectedModel: string
   isAuthenticated: boolean
   systemPrompt: string
@@ -281,19 +306,30 @@ export async function runEditTurn(
     isSubmitting,
     status,
   }: EditTurnArgs
-) {
+): Promise<EditTurnResult> {
+  const reject = (
+    reason: EditTurnFailureReason,
+    message: string
+  ): EditTurnResult => ({
+    ok: false,
+    reason,
+    message,
+  })
+
   if (isSubmitting || status === "submitted" || status === "streaming") {
-    adapters.toastError(
-      "Please wait until the current message finishes sending."
-    )
-    return
+    const message = "Please wait until the current message finishes sending."
+    adapters.toastError(message)
+    return reject("generation-active", message)
   }
 
-  if (!newContent.trim()) return
+  if (!newContent.trim()) {
+    return reject("empty-content", "Please enter a message.")
+  }
 
   if (!chatId) {
-    adapters.toastError("Missing chat.")
-    return
+    const message = "Missing chat."
+    adapters.toastError(message)
+    return reject("missing-chat", message)
   }
 
   const editPlan = prepareEditTurnPlan({
@@ -307,23 +343,27 @@ export async function runEditTurn(
   })
 
   if (!editPlan.ok && editPlan.reason === "message-not-found") {
-    adapters.toastError("Message not found")
-    return
+    const message = "Message not found"
+    adapters.toastError(message)
+    return reject("message-not-found", message)
   }
 
   if (!editPlan.ok && editPlan.reason === "missing-message-timestamp") {
-    adapters.reportError("Unable to locate message timestamp.", undefined)
-    return
+    const message = "Unable to locate message timestamp."
+    adapters.reportError(message, undefined)
+    return reject("missing-message-timestamp", message)
   }
 
   if (newContent.length > MESSAGE_MAX_LENGTH) {
-    adapters.toastError(
+    const message =
       `The message you submitted was too long, please submit something shorter. (Max ${MESSAGE_MAX_LENGTH} characters)`
-    )
-    return
+    adapters.toastError(message)
+    return reject("message-too-long", message)
   }
 
-  if (!editPlan.ok) return
+  if (!editPlan.ok) {
+    return reject("plan-rejected", "Unable to prepare edit.")
+  }
 
   let editPersistence:
     | Awaited<ReturnType<ChatTurnStore["prepareEditPersistence"]>>
@@ -338,20 +378,21 @@ export async function runEditTurn(
     const userId = await adapters.resolveUserId()
     if (!userId) {
       adapters.setMessages(editPlan.originalMessages)
-      adapters.toastError("Please sign in and try again.")
-      return
+      const message = "Please sign in and try again."
+      adapters.toastError(message)
+      return reject("auth-required", message)
     }
 
     const allowed = await adapters.checkLimitsAndNotify(userId)
     if (!allowed) {
       adapters.setMessages(editPlan.originalMessages)
-      return
+      return reject("limit-denied", "Message limit reached.")
     }
 
     const currentChatId = await adapters.ensureChatExists(userId, newContent)
     if (!currentChatId) {
       adapters.setMessages(editPlan.originalMessages)
-      return
+      return reject("chat-create-failed", "Unable to open chat.")
     }
 
     adapters.setPreviousChatId(currentChatId)
@@ -397,6 +438,7 @@ export async function runEditTurn(
       currentChatId
     )
     adapters.bumpChat(currentChatId)
+    return { ok: true }
   } catch (error) {
     adapters.reportError("Edit failed:", error)
     try {
@@ -405,7 +447,9 @@ export async function runEditTurn(
       adapters.reportError("Failed to restore edit transaction:", rollbackError)
     }
     adapters.setMessages(editPlan.originalMessages)
-    adapters.toastError("Failed to apply edit")
+    const message = "Failed to apply edit"
+    adapters.toastError(message)
+    return reject("dispatch-failed", message)
   }
 }
 
@@ -413,25 +457,63 @@ export async function runRegenerationTurn(
   adapters: ChatTurnAdapters,
   {
     chatId,
+    messages,
+    targetAssistantMessageId,
     selectedModel,
     isAuthenticated,
     systemPrompt,
     chatVersion,
   }: RegenerationTurnArgs
 ) {
+  if (!chatId) {
+    adapters.toastError("Missing chat.")
+    return
+  }
+
+  const regenerationPlan = prepareRegenerationTurnPlan(
+    messages,
+    targetAssistantMessageId
+  )
+
+  if (!regenerationPlan.ok) {
+    if (regenerationPlan.reason === "message-not-found") {
+      adapters.toastError("Message not found")
+      return
+    }
+
+    adapters.reportError(
+      `Unable to prepare regeneration: ${regenerationPlan.reason}`,
+      undefined
+    )
+    return
+  }
+
   const userId = await adapters.resolveUserId()
   if (!userId) return
 
-  adapters.regenerate({
-    body: buildChatTurnRequestBody({
-      chatId,
-      userId,
-      selectedModel,
-      isAuthenticated,
-      systemPrompt,
-      chatVersion,
-    }),
+  adapters.turnStore.stageRegeneration({
+    chatId,
+    plan: regenerationPlan,
   })
+
+  try {
+    await adapters.regenerate({
+      messageId: regenerationPlan.regeneration.targetAssistantMessageId,
+      body: buildChatTurnRequestBody({
+        chatId,
+        userId,
+        selectedModel,
+        isAuthenticated,
+        systemPrompt,
+        chatVersion,
+        regeneration: regenerationPlan.regeneration,
+      }),
+    })
+  } catch (error) {
+    adapters.turnStore.rollbackActiveLocalRegeneration()
+    adapters.reportError("Regeneration failed:", error)
+    adapters.toastError("Failed to regenerate response")
+  }
 }
 
 export async function finishChatTurn(

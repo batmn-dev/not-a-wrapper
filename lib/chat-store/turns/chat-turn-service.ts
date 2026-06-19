@@ -1,3 +1,8 @@
+import {
+  hasSemanticAssistantParts as hasSharedSemanticAssistantParts,
+  isEmptyAssistantMessage as isSharedEmptyAssistantMessage,
+  sanitizeVisibleChatMessages,
+} from "@/convex/domain/message_visibility"
 import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import type { UIMessage } from "ai"
 import { getMessagePersistenceMode } from "../identity"
@@ -39,6 +44,13 @@ export type ChatTurnEditIntent = {
   title?: string
 }
 
+export type ChatTurnRegenerationIntent = {
+  targetAssistantMessageId: string
+  targetAssistantCreatedAt: number
+  expectedChatVersion: number
+  precedingUserMessageId: string
+}
+
 export type ChatTurnRequestBody = {
   chatId: string | null
   userId: string
@@ -48,6 +60,7 @@ export type ChatTurnRequestBody = {
   enableSearch?: boolean
   chatVersion?: number
   edit?: ChatTurnEditIntent
+  regeneration?: ChatTurnRegenerationIntent
   [key: string]: unknown
 }
 
@@ -60,6 +73,7 @@ type BuildChatTurnRequestBodyArgs = {
   enableSearch?: boolean
   chatVersion?: number
   edit?: ChatTurnEditIntent
+  regeneration?: ChatTurnRegenerationIntent
   bodyExtras?: Record<string, unknown>
 }
 
@@ -72,6 +86,7 @@ export function buildChatTurnRequestBody({
   enableSearch,
   chatVersion,
   edit,
+  regeneration,
   bodyExtras = {},
 }: BuildChatTurnRequestBodyArgs): ChatTurnRequestBody {
   return {
@@ -83,6 +98,7 @@ export function buildChatTurnRequestBody({
     ...(enableSearch !== undefined ? { enableSearch } : {}),
     ...(chatVersion !== undefined ? { chatVersion } : {}),
     ...(edit ? { edit } : {}),
+    ...(regeneration ? { regeneration } : {}),
     ...bodyExtras,
   }
 }
@@ -142,18 +158,19 @@ export function prepareEditTurnPlan({
   newContent,
   createOptimisticEditMessageId,
 }: PrepareEditTurnPlanArgs): EditTurnPlan {
-  const editIndex = messages.findIndex(
+  const visibleMessages = sanitizeVisibleChatMessages(messages)
+  const editIndex = visibleMessages.findIndex(
     (message) => String(message.id) === String(messageId)
   )
   if (editIndex === -1) return { ok: false, reason: "message-not-found" }
 
-  const target = messages[editIndex]
+  const target = visibleMessages[editIndex]
   const cutoffTimestamp = target?.createdAt?.getTime()
   if (!target || !cutoffTimestamp) {
     return { ok: false, reason: "missing-message-timestamp" }
   }
 
-  const trimmedMessages = messages.slice(0, editIndex)
+  const trimmedMessages = visibleMessages.slice(0, editIndex)
   const targetFileParts =
     target.parts?.filter((part) => part.type === "file") || []
   const optimisticEditedMessage: ChatTurnMessage = {
@@ -165,13 +182,13 @@ export function prepareEditTurnPlan({
 
   return {
     ok: true,
-    originalMessages: [...messages],
+    originalMessages: [...visibleMessages],
     trimmedMessages,
     optimisticEditedMessage,
     sendFiles: messageFilePartsToSendFiles(targetFileParts),
     cutoffTimestamp,
     chatVersion: trimmedMessages.length + 1,
-    expectedChatVersion: messages.length,
+    expectedChatVersion: visibleMessages.length,
     shouldUpdateTitle: editIndex === 0 && target.role === "user",
     title: newContent,
   }
@@ -192,6 +209,98 @@ export function buildEditIntent(
       parts: plan.optimisticEditedMessage.parts,
     },
     ...(plan.shouldUpdateTitle ? { title: plan.title } : {}),
+  }
+}
+
+export type RegenerationTurnPlan =
+  | {
+      ok: true
+      originalMessages: ChatTurnMessage[]
+      retainedMessages: ChatTurnMessage[]
+      regeneration: ChatTurnRegenerationIntent
+    }
+  | {
+      ok: false
+      reason:
+        | "message-not-found"
+        | "invalid-target-role"
+        | "missing-message-timestamp"
+        | "missing-preceding-user"
+        | "unsupported-target"
+    }
+
+function getMessageCreatedAtMs(message: ChatTurnMessage): number | undefined {
+  const createdAt = (message as { createdAt?: unknown }).createdAt
+  if (createdAt instanceof Date) return createdAt.getTime()
+  if (typeof createdAt === "number" && Number.isFinite(createdAt)) {
+    return createdAt
+  }
+  if (typeof createdAt === "string") {
+    const parsed = Date.parse(createdAt)
+    return Number.isNaN(parsed) ? undefined : parsed
+  }
+  return undefined
+}
+
+export function prepareRegenerationTurnPlan(
+  messages: ChatTurnMessage[],
+  targetAssistantMessageId: string
+): RegenerationTurnPlan {
+  const visibleMessages = sanitizeVisibleChatMessages(messages)
+  const targetIndex = visibleMessages.findIndex(
+    (message) => String(message.id) === String(targetAssistantMessageId)
+  )
+  if (targetIndex === -1) return { ok: false, reason: "message-not-found" }
+
+  const target = visibleMessages[targetIndex]
+  if (!target || target.role !== "assistant") {
+    return { ok: false, reason: "invalid-target-role" }
+  }
+
+  let lastAssistantIndex = -1
+  for (let index = visibleMessages.length - 1; index >= 0; index--) {
+    if (visibleMessages[index]?.role === "assistant") {
+      lastAssistantIndex = index
+      break
+    }
+  }
+
+  if (
+    targetIndex !== lastAssistantIndex ||
+    targetIndex !== visibleMessages.length - 1
+  ) {
+    return { ok: false, reason: "unsupported-target" }
+  }
+
+  const targetAssistantCreatedAt = getMessageCreatedAtMs(target)
+  if (targetAssistantCreatedAt === undefined) {
+    return { ok: false, reason: "missing-message-timestamp" }
+  }
+
+  let precedingUser: ChatTurnMessage | undefined
+  let precedingUserIndex = -1
+  for (let index = targetIndex - 1; index >= 0; index--) {
+    const candidate = visibleMessages[index]
+    if (candidate?.role !== "user") continue
+    precedingUser = candidate
+    precedingUserIndex = index
+    break
+  }
+
+  if (!precedingUser) {
+    return { ok: false, reason: "missing-preceding-user" }
+  }
+
+  return {
+    ok: true,
+    originalMessages: [...visibleMessages],
+    retainedMessages: visibleMessages.slice(0, precedingUserIndex + 1),
+    regeneration: {
+      targetAssistantMessageId: String(target.id),
+      targetAssistantCreatedAt,
+      expectedChatVersion: visibleMessages.length,
+      precedingUserMessageId: String(precedingUser.id),
+    },
   }
 }
 
@@ -245,33 +354,12 @@ export function reconcileRecentMessageIds(
   return changed ? updated : currentMessages
 }
 
-function isSemanticPart(part: unknown): boolean {
-  if (!part || typeof part !== "object") return false
-
-  const record = part as { type?: unknown; text?: unknown }
-  if (typeof record.type !== "string" || record.type.length === 0) {
-    return false
-  }
-
-  if (record.type === "step-start") return false
-
-  if (record.type === "text" || record.type === "reasoning") {
-    return typeof record.text === "string" && record.text.length > 0
-  }
-
-  return true
-}
-
 export function hasSemanticAssistantParts(message: ChatTurnMessage): boolean {
-  if (message.role !== "assistant") return false
-  if (message.parts?.some(isSemanticPart)) return true
-
-  const content = (message as { content?: unknown }).content
-  return typeof content === "string" && content.length > 0
+  return hasSharedSemanticAssistantParts(message)
 }
 
 export function isEmptyAssistantMessage(message: ChatTurnMessage): boolean {
-  return message.role === "assistant" && !hasSemanticAssistantParts(message)
+  return isSharedEmptyAssistantMessage(message)
 }
 
 type SyncRecentMessagesArgs = {
@@ -347,6 +435,11 @@ export type ApplyEditTruncationArgs = {
   plan: Extract<EditTurnPlan, { ok: true }>
 }
 
+export type StageRegenerationArgs = {
+  chatId: string
+  plan: Extract<RegenerationTurnPlan, { ok: true }>
+}
+
 export type PreparedEditPersistence = {
   routePersists: boolean
   accept: () => Promise<void>
@@ -363,13 +456,16 @@ export type FinishChatTurnPersistenceArgs = {
 }
 
 export function createChatTurnStore(adapters: ChatTurnStoreAdapters) {
-  let activeLocalEdit:
-    | {
-        chatId: string
-        cachedSnapshot: ChatTurnMessage[]
-        visibleSnapshot: ChatTurnMessage[]
-      }
-    | null = null
+  let activeLocalEdit: {
+    chatId: string
+    cachedSnapshot: ChatTurnMessage[]
+    visibleSnapshot: ChatTurnMessage[]
+  } | null = null
+  let activeLocalRegeneration: {
+    chatId: string
+    retainedMessages: ChatTurnMessage[]
+    visibleSnapshot: ChatTurnMessage[]
+  } | null = null
 
   const routePersistsMessages = (chatId: string | null) =>
     routePersistsChatMessages(chatId, adapters.isAuthenticated())
@@ -447,6 +543,55 @@ export function createChatTurnStore(adapters: ChatTurnStoreAdapters) {
     return true
   }
 
+  const stageRegeneration = ({ chatId, plan }: StageRegenerationArgs) => {
+    if (routePersistsMessages(chatId)) return false
+
+    activeLocalRegeneration = {
+      chatId,
+      retainedMessages: plan.retainedMessages,
+      visibleSnapshot: plan.originalMessages,
+    }
+    return true
+  }
+
+  const rollbackActiveLocalRegeneration = () => {
+    if (!activeLocalRegeneration) return false
+
+    const transaction = activeLocalRegeneration
+    activeLocalRegeneration = null
+    adapters.updateMessages(() => transaction.visibleSnapshot)
+    return true
+  }
+
+  const finishActiveLocalRegeneration = async (
+    message: ChatTurnMessage,
+    isTerminalError: boolean
+  ) => {
+    if (!activeLocalRegeneration) return false
+
+    const transaction = activeLocalRegeneration
+    activeLocalRegeneration = null
+
+    if (isTerminalError && isEmptyAssistantMessage(message)) {
+      adapters.updateMessages(() => transaction.visibleSnapshot)
+      return true
+    }
+
+    const nextMessages = [...transaction.retainedMessages, message]
+    try {
+      await (adapters.writeMessages ?? cacheMessages)(
+        transaction.chatId,
+        nextMessages
+      )
+    } catch (error) {
+      adapters.reportError(
+        "Failed to persist regenerated assistant message:",
+        error
+      )
+    }
+    return true
+  }
+
   const removeEmptyAssistantMessages = async (
     chatId: string,
     targetMessage?: ChatTurnMessage
@@ -493,6 +638,15 @@ export function createChatTurnStore(adapters: ChatTurnStoreAdapters) {
     const routePersists = effectiveChatId
       ? routePersistsMessages(effectiveChatId)
       : false
+
+    if (
+      await finishActiveLocalRegeneration(
+        message,
+        isAbort || isDisconnect || isError
+      )
+    ) {
+      return
+    }
 
     if (isAbort || isDisconnect || isError) {
       if (await rollbackActiveLocalEdit()) return
@@ -595,6 +749,8 @@ export function createChatTurnStore(adapters: ChatTurnStoreAdapters) {
     routePersistsMessages,
     persistTurnMessage,
     prepareEditPersistence,
+    stageRegeneration,
+    rollbackActiveLocalRegeneration,
     finishTurn,
     stagePendingEdit: adapters.pendingEdit.stage,
   }

@@ -102,6 +102,7 @@ type ChatRequest = {
   chatVersion?: number
   userId?: string // Client-provided userId (for anonymous users)
   edit?: ChatEditRequest
+  regeneration?: ChatRegenerationRequest
 }
 
 type ChatEditRequest = {
@@ -115,6 +116,13 @@ type ChatEditRequest = {
     parts: MessageAISDK["parts"]
   }
   title?: string
+}
+
+type ChatRegenerationRequest = {
+  targetAssistantMessageId: string
+  targetAssistantCreatedAt: number
+  expectedChatVersion: number
+  precedingUserMessageId: string
 }
 
 type DurableRunState = {
@@ -347,6 +355,7 @@ export async function POST(req: Request) {
       chatVersion,
       userId: clientUserId,
       edit,
+      regeneration,
     } = (await req.json()) as ChatRequest
     const model = resolveModelId(requestedModel)
     telemetryChatId = chatId
@@ -390,6 +399,13 @@ export async function POST(req: Request) {
 
     const normalizedChatVersion = normalizeChatVersion(chatVersion, messages)
     const latestUserMessageTimestamp = getLatestUserMessageTimestamp(messages)
+
+    if (edit && regeneration) {
+      throw Object.assign(
+        new Error("Regeneration cannot be combined with edit generation"),
+        { statusCode: 400, code: "INVALID_REQUEST" }
+      )
+    }
 
     // For anonymous users, require a guest ID for usage tracking
     // The client must provide a stable guest ID (format: "guest_<uuid>") from localStorage
@@ -596,9 +612,15 @@ export async function POST(req: Request) {
 
     if (durableRuntimeEnabled && convexToken) {
       const approvalResponses = extractApprovalResponses(messages)
-      const latestUserMessage = edit
-        ? undefined
-        : hasApprovalResponse(messages)
+      if (regeneration && approvalResponses.length > 0) {
+        throw Object.assign(
+          new Error("Regeneration cannot continue pending approvals"),
+          { statusCode: 400, code: "INVALID_REQUEST" }
+        )
+      }
+
+      const latestUserMessage =
+        edit || regeneration || hasApprovalResponse(messages)
           ? undefined
           : getLatestUserMessage(messages)
 
@@ -622,6 +644,7 @@ export async function POST(req: Request) {
               }
             : undefined,
           edit,
+          regeneration,
           approvalResponses,
         },
         { token: convexToken }
@@ -655,6 +678,8 @@ export async function POST(req: Request) {
           canonicalMessageCount: canonicalMessages.length,
           approvalResponseCount: approvalResponses.length,
           hasLatestUserMessage: Boolean(latestUserMessage),
+          hasRegeneration: Boolean(regeneration),
+          targetAssistantMessageId: regeneration?.targetAssistantMessageId,
         })
       )
     }

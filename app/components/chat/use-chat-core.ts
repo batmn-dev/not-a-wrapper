@@ -442,9 +442,11 @@ export function useChatCore({
   )
 
   // Handle reload (v6: renamed to regenerate)
-  const handleReload = useCallback(async () => {
+  const handleReload = useCallback(async (messageId: string) => {
     await chatTurn.runRegenerationTurn({
       chatId,
+      messages,
+      targetAssistantMessageId: messageId,
       selectedModel,
       isAuthenticated,
       systemPrompt,
@@ -456,7 +458,7 @@ export function useChatCore({
     selectedModel,
     isAuthenticated,
     systemPrompt,
-    messages.length,
+    messages,
   ])
 
   // Flush pending draft on tab close; also flush on unmount (navigation)

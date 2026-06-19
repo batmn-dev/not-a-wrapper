@@ -26,7 +26,7 @@ import { useRef } from "react"
 import { PopoverContentAuth } from "./popover-content-auth"
 
 const composerPlusIcon = (
-  <Icon icon={RiAddLine} slotSize={21} glyphInset={0} />
+  <Icon icon={RiAddLine} slotSize={24} glyphInset={0} />
 )
 
 const plusTriggerClassName =
