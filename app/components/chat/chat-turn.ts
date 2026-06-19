@@ -2,12 +2,19 @@ import { convertAttachmentsToFiles } from "@/lib/ai/message-conversion"
 import {
   createOptimisticEditMessageId,
   createOptimisticMessageId,
-  isServerChatId,
 } from "@/lib/chat-store/identity"
-import { MESSAGE_MAX_LENGTH, SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
-import type { UIMessage } from "@ai-sdk/react"
+import {
+  buildEditIntent,
+  buildChatTurnRequestBody,
+  prepareEditTurnPlan,
+  routePersistsChatMessages,
+  type ChatTurnMessage,
+  type ChatTurnStore,
+  type SendFilePart,
+} from "@/lib/chat-store/turns/chat-turn-service"
+import { MESSAGE_MAX_LENGTH } from "@/lib/config"
 
-export type ChatTurnMessage = UIMessage & { createdAt?: Date }
+export type { ChatTurnMessage } from "@/lib/chat-store/turns/chat-turn-service"
 
 type SetMessagesAction =
   | ChatTurnMessage[]
@@ -26,14 +33,6 @@ type UploadedAttachment = {
   attachmentId?: string
 }
 
-type SendFilePart = {
-  type: "file"
-  filename: string
-  mediaType: string
-  url: string
-  attachmentId?: string
-}
-
 type SendMessageOptions = { body?: Record<string, unknown> }
 
 type SendMessage = (
@@ -44,11 +43,6 @@ type SendMessage = (
   options?: SendMessageOptions
 ) => void
 
-type PendingEdit = {
-  message: ChatTurnMessage
-  chatId: string
-}
-
 export type ChatTurnAdapters = {
   createOptimisticMessageId?: () => string
   createOptimisticEditMessageId?: () => string
@@ -57,6 +51,7 @@ export type ChatTurnAdapters = {
   setIsSubmitting: (isSubmitting: boolean) => void
   setHasSentFirstMessage: (hasSent: boolean) => void
   setMessages: (action: SetMessagesAction) => void
+  turnStore: ChatTurnStore
   resolveUserId: () => Promise<string | null>
   checkLimitsAndNotify: (userId: string) => Promise<boolean>
   ensureChatExists: (userId: string, input: string) => Promise<string | null>
@@ -65,28 +60,9 @@ export type ChatTurnAdapters = {
   handleFileUploads: (chatId: string) => Promise<UploadedAttachment[] | null>
   sendMessage: SendMessage
   regenerate: (options?: SendMessageOptions) => void
-  routePersistsMessages: (chatId: string) => boolean
-  cacheAndAddMessage: (
-    message: ChatTurnMessage,
-    overrideChatId?: string
-  ) => void | Promise<void>
   toastError: (title: string) => void
-  writeTrimmedMessages: (
-    chatId: string,
-    messages: ChatTurnMessage[]
-  ) => void | Promise<void>
-  deleteMessagesFromTimestamp: (
-    timestamp: number,
-    minVersion?: number
-  ) => Promise<void>
-  updateTitle: (chatId: string, title: string) => void | Promise<void>
-  stagePendingEdit: (message: ChatTurnMessage, chatId: string) => void
-  getPendingEdit: () => PendingEdit | null
-  clearPendingEdit: () => void
   bumpChat: (chatId: string) => void
   setLastFinishReason: (finishReason: string | undefined) => void
-  getStoredGuestChatId: () => string | null
-  reconcileRecentMessages: (chatId: string, count: number) => Promise<void>
   reportError: (message: string, error: unknown) => void
 }
 
@@ -143,7 +119,7 @@ export function isRouteDurableChat(
   chatId: string | null,
   isAuthenticated: boolean
 ) {
-  return Boolean(isAuthenticated && isServerChatId(chatId))
+  return routePersistsChatMessages(chatId, isAuthenticated)
 }
 
 export function createChatTurnController(adapters: ChatTurnAdapters) {
@@ -253,22 +229,19 @@ export async function runSendTurn(
           : undefined,
       },
       {
-        body: {
+        body: buildChatTurnRequestBody({
           chatId: currentChatId,
           userId,
-          model: selectedModel,
+          selectedModel,
           isAuthenticated,
-          systemPrompt: SYSTEM_PROMPT_DEFAULT,
-          ...bodyExtras,
-        },
+          bodyExtras,
+        }),
       }
     )
 
     adapters.setHasSentFirstMessage(true)
     removeOptimistic()
-    if (!adapters.routePersistsMessages(currentChatId)) {
-      adapters.cacheAndAddMessage(optimisticMessage, currentChatId)
-    }
+    void adapters.turnStore.persistTurnMessage(optimisticMessage, currentChatId)
     onSuccess?.(currentChatId)
   } catch {
     removeOptimistic()
@@ -310,7 +283,9 @@ export async function runEditTurn(
   }: EditTurnArgs
 ) {
   if (isSubmitting || status === "submitted" || status === "streaming") {
-    adapters.toastError("Please wait until the current message finishes sending.")
+    adapters.toastError(
+      "Please wait until the current message finishes sending."
+    )
     return
   }
 
@@ -321,17 +296,22 @@ export async function runEditTurn(
     return
   }
 
-  const editIndex = messages.findIndex(
-    (message) => String(message.id) === String(messageId)
-  )
-  if (editIndex === -1) {
+  const editPlan = prepareEditTurnPlan({
+    messages,
+    messageId,
+    newContent,
+    createOptimisticEditMessageId: () =>
+      (
+        adapters.createOptimisticEditMessageId ?? createOptimisticEditMessageId
+      )(),
+  })
+
+  if (!editPlan.ok && editPlan.reason === "message-not-found") {
     adapters.toastError("Message not found")
     return
   }
 
-  const target = messages[editIndex]
-  const cutoffTimestamp = target?.createdAt?.getTime()
-  if (!cutoffTimestamp) {
+  if (!editPlan.ok && editPlan.reason === "missing-message-timestamp") {
     adapters.reportError("Unable to locate message timestamp.", undefined)
     return
   }
@@ -343,96 +323,88 @@ export async function runEditTurn(
     return
   }
 
-  const originalMessages = [...messages]
-  const optimisticId = (
-    adapters.createOptimisticEditMessageId ?? createOptimisticEditMessageId
-  )()
-  const targetFileParts =
-    target.parts?.filter((part) => part.type === "file") || []
-  const optimisticEditedMessage: ChatTurnMessage = {
-    id: optimisticId,
-    role: "user",
-    createdAt: new Date(),
-    parts: [{ type: "text", text: newContent }, ...targetFileParts],
-  }
+  if (!editPlan.ok) return
+
+  let editPersistence:
+    | Awaited<ReturnType<ChatTurnStore["prepareEditPersistence"]>>
+    | null = null
 
   try {
-    const trimmedMessages = messages.slice(0, editIndex)
-    adapters.setMessages([...trimmedMessages, optimisticEditedMessage])
+    adapters.setMessages([
+      ...editPlan.trimmedMessages,
+      editPlan.optimisticEditedMessage,
+    ])
 
     const userId = await adapters.resolveUserId()
     if (!userId) {
-      adapters.setMessages(originalMessages)
+      adapters.setMessages(editPlan.originalMessages)
       adapters.toastError("Please sign in and try again.")
       return
     }
 
     const allowed = await adapters.checkLimitsAndNotify(userId)
     if (!allowed) {
-      adapters.setMessages(originalMessages)
+      adapters.setMessages(editPlan.originalMessages)
       return
     }
 
     const currentChatId = await adapters.ensureChatExists(userId, newContent)
     if (!currentChatId) {
-      adapters.setMessages(originalMessages)
+      adapters.setMessages(editPlan.originalMessages)
       return
     }
 
     adapters.setPreviousChatId(currentChatId)
 
-    try {
-      await adapters.writeTrimmedMessages(chatId, trimmedMessages)
-    } catch {}
+    editPersistence = await adapters.turnStore.prepareEditPersistence({
+      sourceChatId: chatId,
+      targetChatId: currentChatId,
+      plan: editPlan,
+    })
 
-    await adapters.deleteMessagesFromTimestamp(
-      cutoffTimestamp,
-      trimmedMessages.length + 1
-    )
-
-    if (editIndex === 0 && target.role === "user") {
-      try {
-        await adapters.updateTitle(currentChatId, newContent)
-      } catch {}
-    }
-
-    adapters.setMessages(trimmedMessages)
-
-    const targetFiles = targetFileParts.map((part) => ({
-      type: "file" as const,
-      filename: (part as { filename?: string }).filename || "file",
-      mediaType:
-        (part as { mediaType?: string }).mediaType ||
-        "application/octet-stream",
-      url: (part as { url?: string }).url || "",
-    }))
+    adapters.setMessages(editPlan.trimmedMessages)
 
     adapters.sendMessage(
       {
         text: newContent,
-        files: targetFiles.length > 0 ? targetFiles : undefined,
+        files: editPlan.sendFiles.length > 0 ? editPlan.sendFiles : undefined,
       },
       {
-        body: {
+        body: buildChatTurnRequestBody({
           chatId: currentChatId,
           userId,
-          model: selectedModel,
+          selectedModel,
           isAuthenticated,
-          systemPrompt: systemPrompt || SYSTEM_PROMPT_DEFAULT,
+          systemPrompt,
           enableSearch,
-          chatVersion: trimmedMessages.length + 1,
-        },
+          chatVersion: editPlan.chatVersion,
+          edit: editPersistence.routePersists
+            ? buildEditIntent(messageId, editPlan)
+            : undefined,
+        }),
       }
     )
 
+    await editPersistence.accept()
+
     adapters.setMessages((prev) =>
-      prev.filter((message) => message.id !== optimisticId)
+      prev.filter(
+        (message) => message.id !== editPlan.optimisticEditedMessage.id
+      )
     )
-    adapters.stagePendingEdit(optimisticEditedMessage, currentChatId)
+    adapters.turnStore.stagePendingEdit(
+      editPlan.optimisticEditedMessage,
+      currentChatId
+    )
     adapters.bumpChat(currentChatId)
   } catch (error) {
     adapters.reportError("Edit failed:", error)
-    adapters.setMessages(originalMessages)
+    try {
+      await editPersistence?.rollback()
+    } catch (rollbackError) {
+      adapters.reportError("Failed to restore edit transaction:", rollbackError)
+    }
+    adapters.setMessages(editPlan.originalMessages)
     adapters.toastError("Failed to apply edit")
   }
 }
@@ -451,14 +423,14 @@ export async function runRegenerationTurn(
   if (!userId) return
 
   adapters.regenerate({
-    body: {
+    body: buildChatTurnRequestBody({
       chatId,
       userId,
-      model: selectedModel,
+      selectedModel,
       isAuthenticated,
-      systemPrompt: systemPrompt || SYSTEM_PROMPT_DEFAULT,
+      systemPrompt,
       chatVersion,
-    },
+    }),
   })
 }
 
@@ -475,50 +447,12 @@ export async function finishChatTurn(
   }: FinishChatTurnArgs
 ) {
   adapters.setLastFinishReason(finishReason)
-
-  if (isAbort || isDisconnect || isError) {
-    const pendingEdit = adapters.getPendingEdit()
-    if (pendingEdit) {
-      adapters.clearPendingEdit()
-      if (adapters.routePersistsMessages(pendingEdit.chatId)) {
-        return
-      }
-      try {
-        await adapters.cacheAndAddMessage(pendingEdit.message, pendingEdit.chatId)
-      } catch (error) {
-        adapters.stagePendingEdit(pendingEdit.message, pendingEdit.chatId)
-        adapters.reportError(
-          "Failed to persist pending edited message on abort/error:",
-          error
-        )
-      }
-    }
-    return
-  }
-
-  const effectiveChatId =
-    chatId || previousChatId || adapters.getStoredGuestChatId()
-
-  if (effectiveChatId) {
-    const routePersistsMessages = adapters.routePersistsMessages(effectiveChatId)
-    const pendingEdit = adapters.getPendingEdit()
-
-    if (pendingEdit) {
-      adapters.clearPendingEdit()
-      if (!routePersistsMessages) {
-        await adapters.cacheAndAddMessage(pendingEdit.message, pendingEdit.chatId)
-      }
-    }
-
-    if (!routePersistsMessages) {
-      await adapters.cacheAndAddMessage(message, effectiveChatId)
-    }
-  }
-
-  try {
-    if (!effectiveChatId) return
-    await adapters.reconcileRecentMessages(effectiveChatId, 2)
-  } catch (error) {
-    adapters.reportError("Message ID reconciliation failed: ", error)
-  }
+  await adapters.turnStore.finishTurn({
+    message,
+    isAbort,
+    isDisconnect,
+    isError,
+    chatId,
+    previousChatId,
+  })
 }

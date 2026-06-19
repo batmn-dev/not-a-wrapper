@@ -85,6 +85,7 @@ import {
   getLatestUserMessage,
   hasApprovalResponse,
   isDurableConvexChat,
+  sanitizeModelHistoryMessages,
   toDurableUiMessages,
   type DurableUiMessage,
   type ToolInvocationForPersistence,
@@ -100,6 +101,20 @@ type ChatRequest = {
   enableSearch: boolean
   chatVersion?: number
   userId?: string // Client-provided userId (for anonymous users)
+  edit?: ChatEditRequest
+}
+
+type ChatEditRequest = {
+  editedMessageId: string
+  editCutoffTimestamp: number
+  expectedChatVersion: number
+  replacementMessage: {
+    id: string
+    role: "user"
+    content: string
+    parts: MessageAISDK["parts"]
+  }
+  title?: string
 }
 
 type DurableRunState = {
@@ -331,6 +346,7 @@ export async function POST(req: Request) {
       enableSearch,
       chatVersion,
       userId: clientUserId,
+      edit,
     } = (await req.json()) as ChatRequest
     const model = resolveModelId(requestedModel)
     telemetryChatId = chatId
@@ -580,9 +596,11 @@ export async function POST(req: Request) {
 
     if (durableRuntimeEnabled && convexToken) {
       const approvalResponses = extractApprovalResponses(messages)
-      const latestUserMessage = hasApprovalResponse(messages)
+      const latestUserMessage = edit
         ? undefined
-        : getLatestUserMessage(messages)
+        : hasApprovalResponse(messages)
+          ? undefined
+          : getLatestUserMessage(messages)
 
       const prepared = await fetchMutation(
         api.chatRuntime.prepareGeneration,
@@ -603,12 +621,15 @@ export async function POST(req: Request) {
                 parts: latestUserMessage.parts,
               }
             : undefined,
+          edit,
           approvalResponses,
         },
         { token: convexToken }
       )
 
-      const durableMessages = toDurableUiMessages(prepared.messages)
+      const durableMessages = sanitizeModelHistoryMessages(
+        toDurableUiMessages(prepared.messages)
+      ) as DurableUiMessage[]
       canonicalMessages = durableMessages as MessageAISDK[]
       durableRunState = {
         runId: prepared.runId,
@@ -637,6 +658,10 @@ export async function POST(req: Request) {
         })
       )
     }
+
+    canonicalMessages = sanitizeModelHistoryMessages(
+      canonicalMessages
+    ) as MessageAISDK[]
 
     const validatedMessages = await validateUIMessages({
       messages: canonicalMessages,

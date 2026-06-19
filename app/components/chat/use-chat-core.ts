@@ -1,8 +1,4 @@
-import { syncRecentMessages } from "@/app/components/chat/syncRecentMessages"
-import {
-  createChatTurnController,
-  isRouteDurableChat,
-} from "@/app/components/chat/chat-turn"
+import { createChatTurnController } from "@/app/components/chat/chat-turn"
 import { useChatEdit } from "@/app/components/chat/use-chat-edit"
 import { useChatDraft } from "@/app/hooks/use-chat-draft"
 import { toast } from "@/components/ui/toast"
@@ -13,21 +9,25 @@ import {
   createOptimisticMessageId,
   GUEST_CHAT_STORAGE_KEY,
 } from "@/lib/chat-store/identity"
+import { createChatTurnStore } from "@/lib/chat-store/turns/chat-turn-service"
 import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { Attachment } from "@/lib/file-handling"
 import { API_ROUTE_CHAT } from "@/lib/routes"
+import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import {
   persistWebSearchToggle,
   resolveWebSearchEnabled,
 } from "@/lib/user-preference-store/web-search"
-import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import type { UserProfile } from "@/lib/user/types"
+import { debounce } from "@/lib/utils"
 import type { UIMessage } from "@ai-sdk/react"
 import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from "ai"
+import {
+  DefaultChatTransport,
+  lastAssistantMessageIsCompleteWithApprovalResponses,
+} from "ai"
 import { useMutation } from "convex/react"
 import { useSearchParams } from "next/navigation"
-import { debounce } from "@/lib/utils"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 type UseChatCoreProps = {
@@ -175,7 +175,13 @@ export function useChatCore({
     messages: initialMessages,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
 
-    onFinish: async ({ message, isAbort, isDisconnect, isError, finishReason }) => {
+    onFinish: async ({
+      message,
+      isAbort,
+      isDisconnect,
+      isError,
+      finishReason,
+    }) => {
       await chatTurn.finishChatTurn({
         message,
         isAbort,
@@ -201,6 +207,30 @@ export function useChatCore({
         setIsSubmitting,
         setHasSentFirstMessage,
         setMessages: (action) => setMessages(action),
+        turnStore: createChatTurnStore({
+          isAuthenticated: () => isAuthenticated,
+          updateMessages: (updater) => setMessages(updater),
+          cacheAndAddMessage,
+          deleteMessagesFromTimestamp,
+          updateTitle,
+          pendingEdit: {
+            stage: (message, currentChatId) => {
+              pendingEditUserMsgRef.current = {
+                message,
+                chatId: currentChatId,
+              }
+            },
+            get: () => pendingEditUserMsgRef.current,
+            clear: () => {
+              pendingEditUserMsgRef.current = null
+            },
+          },
+          getStoredGuestChatId: () =>
+            typeof window !== "undefined"
+              ? localStorage.getItem(GUEST_CHAT_STORAGE_KEY)
+              : null,
+          reportError: (message, error) => console.error(message, error),
+        }),
         resolveUserId: () => getOrCreateGuestUserId(user),
         checkLimitsAndNotify,
         ensureChatExists,
@@ -211,34 +241,9 @@ export function useChatCore({
         handleFileUploads,
         sendMessage,
         regenerate,
-        routePersistsMessages: (currentChatId) =>
-          isRouteDurableChat(currentChatId, isAuthenticated),
-        cacheAndAddMessage,
         toastError: (title) => toast({ title, status: "error" }),
-        writeTrimmedMessages: async (currentChatId, nextMessages) => {
-          const { writeToIndexedDB } = await import("@/lib/chat-store/persist")
-          await writeToIndexedDB("messages", {
-            id: currentChatId,
-            messages: nextMessages,
-          })
-        },
-        deleteMessagesFromTimestamp,
-        updateTitle,
-        stagePendingEdit: (message, currentChatId) => {
-          pendingEditUserMsgRef.current = { message, chatId: currentChatId }
-        },
-        getPendingEdit: () => pendingEditUserMsgRef.current,
-        clearPendingEdit: () => {
-          pendingEditUserMsgRef.current = null
-        },
         bumpChat,
         setLastFinishReason,
-        getStoredGuestChatId: () =>
-          typeof window !== "undefined"
-            ? localStorage.getItem(GUEST_CHAT_STORAGE_KEY)
-            : null,
-        reconcileRecentMessages: (currentChatId, count) =>
-          syncRecentMessages(currentChatId, setMessages, count),
         reportError: (message, error) => console.error(message, error),
       }),
     [
@@ -445,7 +450,14 @@ export function useChatCore({
       systemPrompt,
       chatVersion: messages.length, // same count since we're regenerating, not adding
     })
-  }, [chatTurn, chatId, selectedModel, isAuthenticated, systemPrompt, messages.length])
+  }, [
+    chatTurn,
+    chatId,
+    selectedModel,
+    isAuthenticated,
+    systemPrompt,
+    messages.length,
+  ])
 
   // Flush pending draft on tab close; also flush on unmount (navigation)
   useEffect(() => {

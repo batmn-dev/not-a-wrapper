@@ -81,6 +81,53 @@ export function toDurableUiMessages(
   return messages.map(toDurableUiMessage)
 }
 
+function isSemanticUiMessagePart(part: unknown): boolean {
+  if (!part || typeof part !== "object") return false
+
+  const record = part as { type?: unknown; text?: unknown }
+  if (typeof record.type !== "string" || record.type.length === 0) {
+    return false
+  }
+
+  if (record.type === "step-start") return false
+
+  if (record.type === "text" || record.type === "reasoning") {
+    return typeof record.text === "string" && record.text.length > 0
+  }
+
+  return true
+}
+
+export function hasSemanticAssistantParts(message: UIMessage): boolean {
+  if (message.role !== "assistant") return false
+  return Boolean(message.parts?.some(isSemanticUiMessagePart))
+}
+
+function normalizeSemanticParts(message: UIMessage): UIMessage {
+  if (message.parts?.some(isSemanticUiMessagePart)) return message
+
+  const content = (message as { content?: unknown }).content
+  if (typeof content !== "string" || content.length === 0) return message
+
+  return {
+    ...message,
+    parts: [{ type: "text", text: content }],
+  }
+}
+
+export function isModelHistoryMessage(message: UIMessage): boolean {
+  if (message.role !== "assistant") return true
+  return hasSemanticAssistantParts(message)
+}
+
+export function sanitizeModelHistoryMessages(
+  messages: UIMessage[]
+): UIMessage[] {
+  return messages
+    .map(normalizeSemanticParts)
+    .filter(isModelHistoryMessage)
+}
+
 function isApprovalRespondedToolPart(
   part: UIMessage["parts"][number]
 ): part is ToolUIPart & {

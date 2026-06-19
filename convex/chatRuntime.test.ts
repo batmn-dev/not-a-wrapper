@@ -1,19 +1,28 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { Doc, Id } from "./_generated/dataModel"
 import type { MutationCtx } from "./_generated/server"
-import { applyApprovalResponses, denyPendingApprovalsForChat } from "./chatRuntime"
+import {
+  applyApprovalResponses,
+  denyPendingApprovalsForChat,
+  markGenerationRunAbortedForChat,
+  prepareGenerationForChat,
+} from "./chatRuntime"
 
 type TableName =
   | "toolApprovalRequests"
   | "generationRuns"
   | "messages"
   | "toolInvocations"
+  | "users"
+  | "chats"
 
 type StoredDocument =
   | Doc<"toolApprovalRequests">
   | Doc<"generationRuns">
   | Doc<"messages">
   | Doc<"toolInvocations">
+  | Doc<"users">
+  | Doc<"chats">
 
 type QueryBuilder = {
   eq: (fieldName: string, value: unknown) => QueryBuilder
@@ -25,8 +34,23 @@ function asId<Table extends TableName | "users" | "chats">(
   return value as Id<Table>
 }
 
-function createMutationCtx(tables: Record<TableName, StoredDocument[]>) {
+function createMutationCtx(tablesInput: Partial<Record<TableName, StoredDocument[]>>) {
+  const tables: Record<TableName, StoredDocument[]> = {
+    toolApprovalRequests: [],
+    generationRuns: [],
+    messages: [],
+    toolInvocations: [],
+    users: [],
+    chats: [],
+    ...tablesInput,
+  }
   const patches: Array<{
+    id: string
+    value: Record<string, unknown>
+  }> = []
+  const deletes: string[] = []
+  const inserts: Array<{
+    tableName: TableName
     id: string
     value: Record<string, unknown>
   }> = []
@@ -56,7 +80,7 @@ function createMutationCtx(tables: Record<TableName, StoredDocument[]>) {
           }
           buildQuery(query)
 
-          const results = tables[tableName].filter((document) => {
+          let results = tables[tableName].filter((document) => {
             const record = document as unknown as Record<string, unknown>
             for (const [fieldName, value] of filters) {
               if (record[fieldName] !== value) return false
@@ -64,25 +88,63 @@ function createMutationCtx(tables: Record<TableName, StoredDocument[]>) {
             return true
           })
 
-          return {
+          const resultApi = {
             collect: async () => results,
             unique: async () => {
               expect(results.length).toBeLessThanOrEqual(1)
               return results[0] ?? null
             },
+            order: (direction: "asc" | "desc") => {
+              results = [...results].sort((a, b) => {
+                const left = (a as unknown as { orderId?: number }).orderId ?? 0
+                const right = (b as unknown as { orderId?: number }).orderId ?? 0
+                return direction === "desc" ? right - left : left - right
+              })
+              return resultApi
+            },
+            first: async () => results[0] ?? null,
+            take: async (limit: number) => results.slice(0, limit),
           }
+          return resultApi
         },
       }),
+      insert: async (tableName: TableName, value: Record<string, unknown>) => {
+        const id = asId<TableName>(`${tableName}_${tables[tableName].length + 1}`)
+        const document = {
+          _id: id,
+          _creationTime: Date.now(),
+          ...value,
+        } as StoredDocument
+        tables[tableName].push(document)
+        inserts.push({ tableName, id, value })
+        return id
+      },
       patch: async (id: string, value: Record<string, unknown>) => {
         patches.push({ id, value })
         const document = findDocument(id)
         expect(document).not.toBeNull()
         Object.assign(document as unknown as Record<string, unknown>, value)
       },
+      delete: async (id: string) => {
+        deletes.push(id)
+        for (const tableDocuments of Object.values(tables)) {
+          const index = tableDocuments.findIndex(
+            (candidate) => candidate._id === id
+          )
+          if (index !== -1) {
+            tableDocuments.splice(index, 1)
+            return
+          }
+        }
+        throw new Error(`Document not found: ${id}`)
+      },
+    },
+    auth: {
+      getUserIdentity: async () => ({ subject: "workos_user_1" }),
     },
   } as unknown as MutationCtx
 
-  return { ctx, patches }
+  return { ctx, patches, deletes, inserts, tables }
 }
 
 function createOwnerFixture() {
@@ -103,6 +165,109 @@ function createOwnerFixture() {
   }
 
   return { user, chat, userId, chatId }
+}
+
+function createStoredMessage({
+  id,
+  chatId,
+  userId,
+  orderId,
+  clientMessageId,
+  role,
+  content,
+  createdAt,
+}: {
+  id: string
+  chatId: Id<"chats">
+  userId?: Id<"users">
+  orderId: number
+  clientMessageId?: string
+  role: "user" | "assistant"
+  content: string
+  createdAt: number
+}): Doc<"messages"> {
+  return {
+    _id: asId<"messages">(id),
+    _creationTime: createdAt,
+    chatId,
+    orderId,
+    clientMessageId,
+    userId: role === "user" ? userId : undefined,
+    role,
+    content,
+    parts: [{ type: "text", text: content }],
+    status: "completed",
+    createdAt,
+    updatedAt: createdAt,
+  }
+}
+
+function createAssistantRuntimeMessage({
+  id,
+  chatId,
+  runId,
+  orderId,
+  content = "",
+  parts = [],
+  status = "streaming",
+  createdAt = 1001,
+}: {
+  id: string
+  chatId: Id<"chats">
+  runId?: Id<"generationRuns">
+  orderId: number
+  content?: string
+  parts?: unknown
+  status?: Doc<"messages">["status"]
+  createdAt?: number
+}): Doc<"messages"> {
+  return {
+    _id: asId<"messages">(id),
+    _creationTime: createdAt,
+    chatId,
+    orderId,
+    role: "assistant",
+    content,
+    parts,
+    status,
+    requestId: runId ? "request_1" : undefined,
+    generationRunId: runId,
+    model: "gpt-5",
+    provider: "openai",
+    createdAt,
+    updatedAt: createdAt,
+  }
+}
+
+function createGenerationRun({
+  id,
+  chatId,
+  userId,
+  assistantMessageId,
+  status = "streaming",
+  updatedAt = 1001,
+}: {
+  id: string
+  chatId: Id<"chats">
+  userId: Id<"users">
+  assistantMessageId?: Id<"messages">
+  status?: Doc<"generationRuns">["status"]
+  updatedAt?: number
+}): Doc<"generationRuns"> {
+  return {
+    _id: asId<"generationRuns">(id),
+    _creationTime: updatedAt,
+    chatId,
+    userId,
+    requestId: "request_1",
+    model: "gpt-5",
+    provider: "openai",
+    status,
+    startedAt: updatedAt,
+    updatedAt,
+    activeStreamId: assistantMessageId,
+    assistantMessageId,
+  }
 }
 
 function createApprovalContinuationFixture(
@@ -185,7 +350,7 @@ function createApprovalContinuationFixture(
       updatedAt: 1,
     })
   )
-  const tables: Record<TableName, StoredDocument[]> = {
+  const tables = {
     toolApprovalRequests: requests,
     generationRuns: [run],
     messages: [message],
@@ -207,6 +372,418 @@ function createApprovalContinuationFixture(
     responses,
   }
 }
+
+describe("prepareGenerationForChat", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("applies durable edit intent and creates the run in the same mutation path", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const messages: Doc<"messages">[] = [
+      createStoredMessage({
+        id: "message_user_1",
+        chatId,
+        userId,
+        orderId: 0,
+        clientMessageId: "user-1",
+        role: "user",
+        content: "old text",
+        createdAt: 1000,
+      }),
+      createStoredMessage({
+        id: "message_assistant_1",
+        chatId,
+        orderId: 1,
+        role: "assistant",
+        content: "old answer",
+        createdAt: 1001,
+      }),
+      createStoredMessage({
+        id: "message_user_2",
+        chatId,
+        userId,
+        orderId: 2,
+        clientMessageId: "user-2",
+        role: "user",
+        content: "later text",
+        createdAt: 1002,
+      }),
+      createStoredMessage({
+        id: "message_assistant_2",
+        chatId,
+        orderId: 3,
+        role: "assistant",
+        content: "later answer",
+        createdAt: 1003,
+      }),
+    ]
+    const { ctx, deletes, tables } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages,
+    })
+
+    const result = await prepareGenerationForChat(ctx, {
+      chatId,
+      requestId: "request_edit",
+      model: "gpt-5",
+      provider: "openai",
+      chatVersion: 1,
+      edit: {
+        editedMessageId: "user-1",
+        editCutoffTimestamp: 1000,
+        expectedChatVersion: 4,
+        replacementMessage: {
+          id: "replacement-user",
+          role: "user",
+          content: "new text",
+          parts: [{ type: "text", text: "new text" }],
+        },
+        title: "new text",
+      },
+    })
+
+    expect(deletes).toEqual([
+      "message_user_1",
+      "message_assistant_1",
+      "message_user_2",
+      "message_assistant_2",
+    ])
+    expect(tables.messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ])
+    expect(tables.messages[0]).toMatchObject({
+      orderId: 0,
+      clientMessageId: "replacement-user",
+      content: "new text",
+      status: "completed",
+    })
+    expect(tables.generationRuns[0]).toMatchObject({
+      chatId,
+      requestId: "request_edit",
+      status: "streaming",
+      chatVersion: 1,
+      assistantMessageId: result.assistantMessageId,
+    })
+    expect(chat).toMatchObject({
+      title: "new text",
+      updatedAt: 1700000000000,
+    })
+    expect(result.messages.map((message) => message.clientMessageId)).toEqual([
+      "replacement-user",
+    ])
+  })
+
+  it("does not double-insert duplicate replacement client message IDs", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const messages: Doc<"messages">[] = [
+      createStoredMessage({
+        id: "message_user_1",
+        chatId,
+        userId,
+        orderId: 0,
+        clientMessageId: "user-1",
+        role: "user",
+        content: "old text",
+        createdAt: 1000,
+      }),
+      createStoredMessage({
+        id: "message_replacement",
+        chatId,
+        userId,
+        orderId: 1,
+        clientMessageId: "replacement-user",
+        role: "user",
+        content: "new text",
+        createdAt: 1001,
+      }),
+      createStoredMessage({
+        id: "message_later",
+        chatId,
+        orderId: 2,
+        role: "assistant",
+        content: "later answer",
+        createdAt: 1002,
+      }),
+    ]
+    const { ctx, tables } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages,
+    })
+
+    await prepareGenerationForChat(ctx, {
+      chatId,
+      requestId: "request_edit",
+      model: "gpt-5",
+      provider: "openai",
+      edit: {
+        editedMessageId: "user-1",
+        editCutoffTimestamp: 1000,
+        expectedChatVersion: 3,
+        replacementMessage: {
+          id: "replacement-user",
+          role: "user",
+          content: "new text",
+          parts: [{ type: "text", text: "new text" }],
+        },
+      },
+    })
+
+    expect(
+      tables.messages.filter(
+        (message) => message.clientMessageId === "replacement-user"
+      )
+    ).toHaveLength(1)
+  })
+
+  it("checks ownership before applying durable edit intent", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const otherUserId = asId<"users">("user_2")
+    chat.userId = otherUserId
+    const messages: Doc<"messages">[] = [
+      createStoredMessage({
+        id: "message_user_1",
+        chatId,
+        userId,
+        orderId: 0,
+        clientMessageId: "user-1",
+        role: "user",
+        content: "old text",
+        createdAt: 1000,
+      }),
+    ]
+    const { ctx, deletes, tables } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages,
+    })
+
+    await expect(
+      prepareGenerationForChat(ctx, {
+        chatId,
+        requestId: "request_edit",
+        model: "gpt-5",
+        provider: "openai",
+        edit: {
+          editedMessageId: "user-1",
+          editCutoffTimestamp: 1000,
+          expectedChatVersion: 1,
+          replacementMessage: {
+            id: "replacement-user",
+            role: "user",
+            content: "new text",
+            parts: [{ type: "text", text: "new text" }],
+          },
+        },
+      })
+    ).rejects.toThrow("Not authorized")
+
+    expect(deletes).toEqual([])
+    expect(tables.generationRuns).toEqual([])
+    expect(tables.messages).toEqual(messages)
+  })
+
+  it("deletes an empty assistant placeholder when a run aborts before the first chunk", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const runId = asId<"generationRuns">("run_1")
+    const assistantMessageId = asId<"messages">("message_empty_assistant")
+    const userMessage = createStoredMessage({
+      id: "message_user_1",
+      chatId,
+      userId,
+      orderId: 0,
+      clientMessageId: "user-1",
+      role: "user",
+      content: "write something long",
+      createdAt: 1000,
+    })
+    const assistantMessage = createAssistantRuntimeMessage({
+      id: assistantMessageId,
+      chatId,
+      runId,
+      orderId: 1,
+      parts: [],
+      content: "",
+      status: "streaming",
+    })
+    const run = createGenerationRun({
+      id: runId,
+      chatId,
+      userId,
+      assistantMessageId,
+    })
+    const { ctx, deletes, tables } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages: [userMessage, assistantMessage],
+      generationRuns: [run],
+    })
+
+    await markGenerationRunAbortedForChat(ctx, {
+      runId,
+      messageId: assistantMessageId,
+      reason: "stream aborted",
+    })
+
+    expect(deletes).toEqual(["message_empty_assistant"])
+    expect(tables.messages.map((message) => message._id)).toEqual([
+      "message_user_1",
+    ])
+    expect(run).toMatchObject({
+      status: "aborted",
+      error: "stream aborted",
+      completedAt: 1700000000000,
+      activeStreamId: undefined,
+      assistantMessageId: undefined,
+    })
+  })
+
+  it("sanitizes a prior streaming empty placeholder before preparing the next generation", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const runId = asId<"generationRuns">("run_1")
+    const assistantMessageId = asId<"messages">("message_empty_assistant")
+    const messages: Doc<"messages">[] = [
+      createStoredMessage({
+        id: "message_user_1",
+        chatId,
+        userId,
+        orderId: 0,
+        clientMessageId: "user-1",
+        role: "user",
+        content: "first prompt",
+        createdAt: 1000,
+      }),
+      createAssistantRuntimeMessage({
+        id: assistantMessageId,
+        chatId,
+        runId,
+        orderId: 1,
+        parts: [],
+        content: "",
+        status: "streaming",
+      }),
+    ]
+    const run = createGenerationRun({
+      id: runId,
+      chatId,
+      userId,
+      assistantMessageId,
+    })
+    const { ctx, deletes, tables } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages,
+      generationRuns: [run],
+    })
+
+    const result = await prepareGenerationForChat(ctx, {
+      chatId,
+      requestId: "request_2",
+      model: "gpt-5",
+      provider: "openai",
+      latestUserMessage: {
+        id: "user-2",
+        role: "user",
+        content: "next prompt",
+        parts: [{ type: "text", text: "next prompt" }],
+      },
+    })
+
+    expect(deletes).toEqual(["message_empty_assistant"])
+    expect(run).toMatchObject({
+      status: "aborted",
+      activeStreamId: undefined,
+      assistantMessageId: undefined,
+    })
+    expect(result.messages.map((message) => message.role)).toEqual([
+      "user",
+      "user",
+    ])
+    expect(
+      result.messages.some(
+        (message) => message.role === "assistant" && message.parts.length === 0
+      )
+    ).toBe(false)
+    expect(tables.messages.map((message) => message.role)).toEqual([
+      "user",
+      "user",
+      "assistant",
+    ])
+  })
+
+  it("preserves a partial stopped assistant message in model history", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const runId = asId<"generationRuns">("run_1")
+    const assistantMessageId = asId<"messages">("message_partial_assistant")
+    const partialAssistant = createAssistantRuntimeMessage({
+      id: assistantMessageId,
+      chatId,
+      runId,
+      orderId: 1,
+      content: "partial answer",
+      parts: [{ type: "text", text: "partial answer" }],
+      status: "streaming",
+    })
+    const run = createGenerationRun({
+      id: runId,
+      chatId,
+      userId,
+      assistantMessageId,
+    })
+    const { ctx, deletes } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages: [
+        createStoredMessage({
+          id: "message_user_1",
+          chatId,
+          userId,
+          orderId: 0,
+          clientMessageId: "user-1",
+          role: "user",
+          content: "first prompt",
+          createdAt: 1000,
+        }),
+        partialAssistant,
+      ],
+      generationRuns: [run],
+    })
+
+    const result = await prepareGenerationForChat(ctx, {
+      chatId,
+      requestId: "request_2",
+      model: "gpt-5",
+      provider: "openai",
+      latestUserMessage: {
+        id: "user-2",
+        role: "user",
+        content: "next prompt",
+        parts: [{ type: "text", text: "next prompt" }],
+      },
+    })
+
+    expect(deletes).toEqual([])
+    expect(partialAssistant).toMatchObject({
+      status: "aborted",
+      content: "partial answer",
+      parts: [{ type: "text", text: "partial answer" }],
+    })
+    expect(result.messages.map((message) => message._id)).toEqual([
+      "message_user_1",
+      "message_partial_assistant",
+      "messages_3",
+    ])
+  })
+})
 
 describe("applyApprovalResponses", () => {
   afterEach(() => {
@@ -383,7 +960,7 @@ describe("denyPendingApprovalsForChat", () => {
       toolCallId: "call_unrelated",
       status: "called",
     }
-    const tables: Record<TableName, StoredDocument[]> = {
+    const tables = {
       toolApprovalRequests: [request, otherUserRequest],
       generationRuns: [run],
       messages: [message],

@@ -5,6 +5,7 @@ import {
   extractTextFromMessageParts,
   normalizeMessagePartsForStorage,
 } from "./domain/message_parts"
+import { isVisibleChatMessage } from "./domain/message_visibility"
 import { getAuthorizedChatForRead, requireOwnedChat } from "./lib/auth"
 
 export { normalizeMessagePartsForStorage } from "./domain/message_parts"
@@ -32,7 +33,7 @@ export const getForChat = query({
       .withIndex("by_chat_order", (q) => q.eq("chatId", chatId))
       .collect()
 
-    return messages
+    return messages.filter(isVisibleChatMessage)
   },
 })
 
@@ -52,7 +53,10 @@ export const getPublicForChat = query({
       .withIndex("by_chat_order", (q) => q.eq("chatId", chatId))
       .collect()
 
-    return messages.filter((message) => message.status !== "awaiting_approval")
+    return messages.filter(
+      (message) =>
+        isVisibleChatMessage(message) && message.status !== "awaiting_approval"
+    )
   },
 })
 
@@ -71,10 +75,9 @@ export const getLastMessages = query({
     const messages = await ctx.db
       .query("messages")
       .withIndex("by_chat_order", (q) => q.eq("chatId", chatId))
-      .order("desc")
-      .take(limit)
+      .collect()
 
-    return messages.reverse()
+    return messages.filter(isVisibleChatMessage).slice(-limit)
   },
 })
 

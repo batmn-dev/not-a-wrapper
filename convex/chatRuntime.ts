@@ -8,6 +8,11 @@ import {
   isTerminalMessageStatus,
 } from "./domain/message_contract"
 import { extractTextFromMessageParts } from "./domain/message_parts"
+import {
+  hasSemanticAssistantParts,
+  isModelHistoryMessage,
+  isVisibleChatMessage,
+} from "./domain/message_visibility"
 import { getAuthorizedChatForRead, getCurrentUser } from "./lib/auth"
 
 const MAX_PREVIEW_LENGTH = 500
@@ -46,6 +51,19 @@ const vStoredMessage = v.object({
   role: vMessageRole,
   content: v.optional(v.string()),
   parts: v.any(),
+})
+
+const vEditIntent = v.object({
+  editedMessageId: v.string(),
+  editCutoffTimestamp: v.number(),
+  expectedChatVersion: v.number(),
+  replacementMessage: v.object({
+    id: v.string(),
+    role: v.literal("user"),
+    content: v.string(),
+    parts: v.any(),
+  }),
+  title: v.optional(v.string()),
 })
 
 const vApprovalResponse = v.object({
@@ -143,6 +161,253 @@ function findMessageByUiId(
   return messages.find(
     (message) => message._id === messageId || message.clientMessageId === messageId
   )
+}
+
+type TerminalGenerationOutcome = {
+  status: "aborted" | "failed"
+  error?: string
+}
+
+function isSupersedableGenerationRunStatus(status: unknown): boolean {
+  return status === "queued" || status === "running" || status === "streaming"
+}
+
+function isSupersedableMessageStatus(status: unknown): boolean {
+  return status === "submitted" || status === "streaming"
+}
+
+async function applyTerminalAssistantOutcome(
+  ctx: MutationCtx,
+  run: Doc<"generationRuns">,
+  messageId: Id<"messages"> | undefined,
+  outcome: TerminalGenerationOutcome,
+  now: number
+): Promise<Id<"messages"> | undefined> {
+  const resolvedMessageId =
+    messageId ??
+    run.assistantMessageId ??
+    (run.activeStreamId as Id<"messages"> | undefined)
+  if (!resolvedMessageId) return run.assistantMessageId
+
+  const message = await ctx.db.get(resolvedMessageId)
+  if (
+    !message ||
+    message.chatId !== run.chatId ||
+    message.role !== "assistant"
+  ) {
+    return run.assistantMessageId
+  }
+
+  if (!hasSemanticAssistantParts(message)) {
+    await ctx.db.delete(message._id)
+    return run.assistantMessageId === message._id ? undefined : run.assistantMessageId
+  }
+
+  await ctx.db.patch(message._id, {
+    status: outcome.status,
+    error: outcome.error,
+    updatedAt: now,
+  })
+  return message._id
+}
+
+async function closeSupersededGenerationsForChat(
+  ctx: MutationCtx,
+  chatId: Id<"chats">,
+  userId: Id<"users">,
+  now: number
+) {
+  const runs = await ctx.db
+    .query("generationRuns")
+    .withIndex("by_chat_updated", (q) => q.eq("chatId", chatId))
+    .order("desc")
+    .take(ACTIVE_RUN_SCAN_LIMIT)
+
+  const supersededRunIds = new Set<Id<"generationRuns">>()
+  const supersededMessageIds = new Set<Id<"messages">>()
+  const reason = "superseded by a new generation"
+
+  for (const run of runs) {
+    if (!isSupersedableGenerationRunStatus(run.status)) continue
+    if (run.userId !== undefined && run.userId !== userId) continue
+
+    supersededRunIds.add(run._id)
+    const assistantMessageId = await applyTerminalAssistantOutcome(
+      ctx,
+      run,
+      undefined,
+      { status: "aborted", error: reason },
+      now
+    )
+    if (assistantMessageId) supersededMessageIds.add(assistantMessageId)
+
+    await ctx.db.patch(run._id, {
+      status: "aborted",
+      error: reason,
+      completedAt: now,
+      updatedAt: now,
+      activeStreamId: undefined,
+      assistantMessageId,
+    })
+  }
+
+  const assistantMessages = await ctx.db
+    .query("messages")
+    .withIndex("by_chat_role", (q) =>
+      q.eq("chatId", chatId).eq("role", "assistant")
+    )
+    .collect()
+
+  for (const message of assistantMessages) {
+    if (supersededMessageIds.has(message._id)) continue
+    if (!isSupersedableMessageStatus(message.status)) continue
+
+    if (!hasSemanticAssistantParts(message)) {
+      await ctx.db.delete(message._id)
+      continue
+    }
+
+    await ctx.db.patch(message._id, {
+      status: "aborted",
+      error: reason,
+      updatedAt: now,
+    })
+
+    if (message.generationRunId && !supersededRunIds.has(message.generationRunId)) {
+      const run = await ctx.db.get(message.generationRunId)
+      if (
+        run &&
+        run.chatId === chatId &&
+        isSupersedableGenerationRunStatus(run.status)
+      ) {
+        await ctx.db.patch(run._id, {
+          status: "aborted",
+          error: reason,
+          completedAt: now,
+          updatedAt: now,
+          activeStreamId: undefined,
+          assistantMessageId: message._id,
+        })
+      }
+    }
+  }
+}
+
+type StoredUserMessage = {
+  id: string
+  role: "user"
+  content?: string
+  parts: unknown
+}
+
+type GenerationEditIntent = {
+  editedMessageId: string
+  editCutoffTimestamp: number
+  expectedChatVersion: number
+  replacementMessage: StoredUserMessage & { content: string }
+  title?: string
+}
+
+async function insertUserMessageForGeneration(
+  ctx: MutationCtx,
+  owner: AuthenticatedOwner,
+  args: {
+    chatId: Id<"chats">
+    requestId: string
+    model: string
+    provider: string
+  },
+  latestUserMessage: StoredUserMessage,
+  now: number
+) {
+  const content =
+    latestUserMessage.content ??
+    extractTextFromMessageParts(latestUserMessage.parts)
+  const order = await getNextOrder(ctx, args.chatId)
+
+  await ctx.db.insert("messages", {
+    chatId: args.chatId,
+    orderId: order,
+    clientMessageId: latestUserMessage.id,
+    userId: owner.user._id,
+    role: "user",
+    content,
+    parts: latestUserMessage.parts,
+    status: "completed",
+    requestId: args.requestId,
+    model: args.model,
+    provider: args.provider,
+    createdAt: now,
+    updatedAt: now,
+  })
+}
+
+export async function applyEditIntentForGeneration(
+  ctx: MutationCtx,
+  owner: AuthenticatedOwner,
+  args: {
+    chatId: Id<"chats">
+    requestId: string
+    model: string
+    provider: string
+    edit: GenerationEditIntent
+  },
+  now: number
+) {
+  const currentMessages = await listMessages(ctx, args.chatId)
+  if (currentMessages.length !== args.edit.expectedChatVersion) {
+    throw new Error("Chat changed since edit started")
+  }
+
+  const editedMessage = findMessageByUiId(
+    currentMessages,
+    args.edit.editedMessageId
+  )
+  const replacementMessage = currentMessages.find(
+    (message) => message.clientMessageId === args.edit.replacementMessage.id
+  )
+
+  if (!editedMessage && !replacementMessage) {
+    throw new Error("Edited message not found")
+  }
+
+  if (
+    editedMessage &&
+    editedMessage.createdAt !== args.edit.editCutoffTimestamp
+  ) {
+    throw new Error("Edited message version changed")
+  }
+
+  const cutoffOrder =
+    editedMessage?.orderId ?? replacementMessage?.orderId ?? Number.MAX_SAFE_INTEGER
+  const replacementMessageId = replacementMessage?._id
+
+  for (const message of currentMessages) {
+    if (message.orderId < cutoffOrder) continue
+    if (replacementMessageId && message._id === replacementMessageId) continue
+    await ctx.db.delete(message._id)
+  }
+
+  const storedReplacement = (await listMessages(ctx, args.chatId)).some(
+    (message) => message.clientMessageId === args.edit.replacementMessage.id
+  )
+
+  if (!storedReplacement) {
+    await insertUserMessageForGeneration(
+      ctx,
+      owner,
+      args,
+      args.edit.replacementMessage,
+      now
+    )
+  }
+
+  if (args.edit.title) {
+    await ctx.db.patch(args.chatId, {
+      title: args.edit.title,
+      updatedAt: now,
+    })
+  }
 }
 
 function applyApprovalResponseToParts(
@@ -414,6 +679,165 @@ export const createGenerationRun = mutation({
   },
 })
 
+type GenerationApprovalResponse = {
+  messageId: string
+  approvalId: string
+  toolCallId: string
+  toolName: string
+  approved: boolean
+  reason?: string
+}
+
+type PrepareGenerationForChatArgs = {
+  chatId: Id<"chats">
+  requestId: string
+  model: string
+  provider: string
+  chatVersion?: number
+  latestUserMessage?: {
+    id: string
+    role: "user" | "assistant" | "system" | "data"
+    content?: string
+    parts: unknown
+  }
+  edit?: GenerationEditIntent
+  approvalResponses?: GenerationApprovalResponse[]
+}
+
+export async function prepareGenerationForChat(
+  ctx: MutationCtx,
+  args: PrepareGenerationForChatArgs
+) {
+  const owner = await requireChatOwner(ctx, args.chatId)
+  const now = nowMs()
+  const approvalResponses = args.approvalResponses ?? []
+
+  if (args.edit && approvalResponses.length > 0) {
+    throw new Error("Edit generation cannot continue pending approvals")
+  }
+
+  await closeSupersededGenerationsForChat(
+    ctx,
+    args.chatId,
+    owner.user._id,
+    now
+  )
+
+  const continuationMessage = await applyApprovalResponses(
+    ctx,
+    owner,
+    approvalResponses
+  )
+
+  const latestUserMessage = args.edit
+    ? args.edit.replacementMessage
+    : args.latestUserMessage
+
+  if (latestUserMessage) {
+    await denyPendingApprovalsForChat(
+      ctx,
+      args.chatId,
+      owner.user._id,
+      "auto-denied: new generation started"
+    )
+
+    if (args.edit) {
+      await applyEditIntentForGeneration(
+        ctx,
+        owner,
+        {
+          chatId: args.chatId,
+          requestId: args.requestId,
+          model: args.model,
+          provider: args.provider,
+          edit: args.edit,
+        },
+        now
+      )
+    } else {
+      const currentMessages = await listMessages(ctx, args.chatId)
+      const alreadyStored = currentMessages.some(
+        (message) => message.clientMessageId === latestUserMessage.id
+      )
+
+      if (!alreadyStored) {
+        await insertUserMessageForGeneration(
+          ctx,
+          owner,
+          args,
+          latestUserMessage as StoredUserMessage,
+          now
+        )
+      }
+    }
+  }
+
+  const runId = await ctx.db.insert("generationRuns", {
+    chatId: args.chatId,
+    userId: owner.user._id,
+    requestId: args.requestId,
+    model: args.model,
+    provider: args.provider,
+    status: "running",
+    chatVersion: args.chatVersion,
+    startedAt: now,
+    updatedAt: now,
+  })
+
+  let assistantMessageId: Id<"messages">
+  let assistantOrder: number
+  let includeAssistantInModelHistory = false
+
+  if (continuationMessage) {
+    assistantMessageId = continuationMessage._id
+    assistantOrder = continuationMessage.orderId
+    includeAssistantInModelHistory = true
+    await ctx.db.patch(assistantMessageId, {
+      generationRunId: runId,
+      requestId: args.requestId,
+      status: "streaming",
+      updatedAt: now,
+    })
+  } else {
+    assistantOrder = await getNextOrder(ctx, args.chatId)
+    assistantMessageId = await ctx.db.insert("messages", {
+      chatId: args.chatId,
+      orderId: assistantOrder,
+      role: "assistant",
+      content: "",
+      parts: [],
+      status: "streaming",
+      requestId: args.requestId,
+      generationRunId: runId,
+      model: args.model,
+      provider: args.provider,
+      createdAt: now,
+      updatedAt: now,
+    })
+  }
+
+  await ctx.db.patch(runId, {
+    status: "streaming",
+    assistantMessageId,
+    activeStreamId: assistantMessageId,
+    updatedAt: now,
+  })
+  await ctx.db.patch(args.chatId, { updatedAt: now })
+
+  const modelHistory = (await listMessages(ctx, args.chatId)).filter(
+    (message) =>
+      (includeAssistantInModelHistory || message._id !== assistantMessageId) &&
+      isModelHistoryMessage(message)
+  )
+
+  return {
+    runId,
+    assistantMessageId,
+    assistantOrder,
+    messages: modelHistory,
+  }
+}
+
 export const prepareGeneration = mutation({
   args: {
     chatId: v.id("chats"),
@@ -422,120 +846,10 @@ export const prepareGeneration = mutation({
     provider: v.string(),
     chatVersion: v.optional(v.number()),
     latestUserMessage: v.optional(vStoredMessage),
+    edit: v.optional(vEditIntent),
     approvalResponses: v.optional(v.array(vApprovalResponse)),
   },
-  handler: async (ctx, args) => {
-    const owner = await requireChatOwner(ctx, args.chatId)
-    const now = nowMs()
-    const approvalResponses = args.approvalResponses ?? []
-
-    const continuationMessage = await applyApprovalResponses(
-      ctx,
-      owner,
-      approvalResponses
-    )
-
-    if (args.latestUserMessage) {
-      const latestUserMessage = args.latestUserMessage
-      await denyPendingApprovalsForChat(
-        ctx,
-        args.chatId,
-        owner.user._id,
-        "auto-denied: new generation started"
-      )
-
-      const currentMessages = await listMessages(ctx, args.chatId)
-      const alreadyStored =
-        currentMessages.some(
-          (message) => message.clientMessageId === latestUserMessage.id
-        )
-
-      if (!alreadyStored) {
-        const content =
-          latestUserMessage.content ??
-          extractTextFromMessageParts(latestUserMessage.parts)
-        const order = await getNextOrder(ctx, args.chatId)
-        await ctx.db.insert("messages", {
-          chatId: args.chatId,
-          orderId: order,
-          clientMessageId: latestUserMessage.id,
-          userId: owner.user._id,
-          role: "user",
-          content,
-          parts: latestUserMessage.parts,
-          status: "completed",
-          requestId: args.requestId,
-          model: args.model,
-          provider: args.provider,
-          createdAt: now,
-          updatedAt: now,
-        })
-      }
-    }
-
-    const runId = await ctx.db.insert("generationRuns", {
-      chatId: args.chatId,
-      userId: owner.user._id,
-      requestId: args.requestId,
-      model: args.model,
-      provider: args.provider,
-      status: "running",
-      chatVersion: args.chatVersion,
-      startedAt: now,
-      updatedAt: now,
-    })
-
-    let assistantMessageId: Id<"messages">
-    let assistantOrder: number
-    let includeAssistantInModelHistory = false
-
-    if (continuationMessage) {
-      assistantMessageId = continuationMessage._id
-      assistantOrder = continuationMessage.orderId
-      includeAssistantInModelHistory = true
-      await ctx.db.patch(assistantMessageId, {
-        generationRunId: runId,
-        requestId: args.requestId,
-        status: "streaming",
-        updatedAt: now,
-      })
-    } else {
-      assistantOrder = await getNextOrder(ctx, args.chatId)
-      assistantMessageId = await ctx.db.insert("messages", {
-        chatId: args.chatId,
-        orderId: assistantOrder,
-        role: "assistant",
-        content: "",
-        parts: [],
-        status: "streaming",
-        requestId: args.requestId,
-        generationRunId: runId,
-        model: args.model,
-        provider: args.provider,
-        createdAt: now,
-        updatedAt: now,
-      })
-    }
-
-    await ctx.db.patch(runId, {
-      status: "streaming",
-      assistantMessageId,
-      activeStreamId: assistantMessageId,
-      updatedAt: now,
-    })
-    await ctx.db.patch(args.chatId, { updatedAt: now })
-
-    const modelHistory = (await listMessages(ctx, args.chatId)).filter(
-      (message) => includeAssistantInModelHistory || message._id !== assistantMessageId
-    )
-
-    return {
-      runId,
-      assistantMessageId,
-      assistantOrder,
-      messages: modelHistory,
-    }
-  },
+  handler: async (ctx, args) => prepareGenerationForChat(ctx, args),
 })
 
 export const markGenerationRunRunning = mutation({
@@ -682,28 +996,37 @@ export const markGenerationRunFailed = mutation({
     messageId: v.optional(v.id("messages")),
     error: v.string(),
   },
-  handler: async (ctx, args) => {
-    const run = await ctx.db.get(args.runId)
-    if (!run) throw new Error("Run not found")
-    await requireChatOwner(ctx, run.chatId)
-    const now = nowMs()
-    await ctx.db.patch(args.runId, {
-      status: "failed",
-      error: args.error,
-      completedAt: now,
-      updatedAt: now,
-      activeStreamId: undefined,
-    })
-    const messageId = args.messageId ?? run.assistantMessageId
-    if (messageId) {
-      await ctx.db.patch(messageId, {
-        status: "failed",
-        error: args.error,
-        updatedAt: now,
-      })
-    }
-  },
+  handler: async (ctx, args) => markGenerationRunFailedForChat(ctx, args),
 })
+
+export async function markGenerationRunFailedForChat(
+  ctx: MutationCtx,
+  args: {
+    runId: Id<"generationRuns">
+    messageId?: Id<"messages">
+    error: string
+  }
+) {
+  const run = await ctx.db.get(args.runId)
+  if (!run) throw new Error("Run not found")
+  await requireChatOwner(ctx, run.chatId)
+  const now = nowMs()
+  const assistantMessageId = await applyTerminalAssistantOutcome(
+    ctx,
+    run,
+    args.messageId,
+    { status: "failed", error: args.error },
+    now
+  )
+  await ctx.db.patch(args.runId, {
+    status: "failed",
+    error: args.error,
+    completedAt: now,
+    updatedAt: now,
+    activeStreamId: undefined,
+    assistantMessageId,
+  })
+}
 
 export const markGenerationRunAborted = mutation({
   args: {
@@ -711,28 +1034,37 @@ export const markGenerationRunAborted = mutation({
     messageId: v.optional(v.id("messages")),
     reason: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
-    const run = await ctx.db.get(args.runId)
-    if (!run) throw new Error("Run not found")
-    await requireChatOwner(ctx, run.chatId)
-    const now = nowMs()
-    await ctx.db.patch(args.runId, {
-      status: "aborted",
-      error: args.reason,
-      completedAt: now,
-      updatedAt: now,
-      activeStreamId: undefined,
-    })
-    const messageId = args.messageId ?? run.assistantMessageId
-    if (messageId) {
-      await ctx.db.patch(messageId, {
-        status: "aborted",
-        error: args.reason,
-        updatedAt: now,
-      })
-    }
-  },
+  handler: async (ctx, args) => markGenerationRunAbortedForChat(ctx, args),
 })
+
+export async function markGenerationRunAbortedForChat(
+  ctx: MutationCtx,
+  args: {
+    runId: Id<"generationRuns">
+    messageId?: Id<"messages">
+    reason?: string
+  }
+) {
+  const run = await ctx.db.get(args.runId)
+  if (!run) throw new Error("Run not found")
+  await requireChatOwner(ctx, run.chatId)
+  const now = nowMs()
+  const assistantMessageId = await applyTerminalAssistantOutcome(
+    ctx,
+    run,
+    args.messageId,
+    { status: "aborted", error: args.reason },
+    now
+  )
+  await ctx.db.patch(args.runId, {
+    status: "aborted",
+    error: args.reason,
+    completedAt: now,
+    updatedAt: now,
+    activeStreamId: undefined,
+    assistantMessageId,
+  })
+}
 
 export const listMessagesForChatPaginated = query({
   args: {
@@ -743,10 +1075,15 @@ export const listMessagesForChatPaginated = query({
     const chat = await getAuthorizedChatForRead(ctx, args.chatId)
     if (!chat) return { page: [], isDone: true, continueCursor: "" }
 
-    return await ctx.db
+    const page = await ctx.db
       .query("messages")
       .withIndex("by_chat_order", (q) => q.eq("chatId", args.chatId))
       .paginate(args.paginationOpts)
+
+    return {
+      ...page,
+      page: page.page.filter(isVisibleChatMessage),
+    }
   },
 })
 
@@ -785,7 +1122,9 @@ export const getRecoverableChatState = query({
     const chat = await getAuthorizedChatForRead(ctx, chatId)
     if (!chat) return null
 
-    const messages = await listMessages(ctx, chatId)
+    const messages = (await listMessages(ctx, chatId)).filter(
+      isVisibleChatMessage
+    )
     const runs = await ctx.db
       .query("generationRuns")
       .withIndex("by_chat_updated", (q) => q.eq("chatId", chatId))

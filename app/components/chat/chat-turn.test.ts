@@ -1,9 +1,10 @@
+import { createChatTurnStore } from "@/lib/chat-store/turns/chat-turn-service"
 import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
+  createChatTurnController,
   type ChatTurnAdapters,
   type ChatTurnMessage,
-  createChatTurnController,
 } from "./chat-turn"
 
 function userMessage(
@@ -35,10 +36,59 @@ function assistantMessage(
 
 function createHarness() {
   let messages: ChatTurnMessage[] = []
+  let cachedMessages: ChatTurnMessage[] = []
   let isSending = false
   let pendingEdit: { message: ChatTurnMessage; chatId: string } | null = null
+  let routePersistsMessages = false
   const events: string[] = []
   const snapshots: string[][] = []
+
+  const storeAdapters = {
+    isAuthenticated: vi.fn(() => routePersistsMessages),
+    updateMessages: vi.fn(
+      (updater: (prev: ChatTurnMessage[]) => ChatTurnMessage[]) => {
+        events.push("updateMessages")
+        messages = updater(messages)
+        snapshots.push(messages.map((message) => String(message.id)))
+      }
+    ),
+    cacheAndAddMessage: vi.fn(() => {
+      events.push("cacheAndAddMessage")
+    }),
+    deleteMessagesFromTimestamp: vi.fn(async () => {
+      events.push("deleteMessagesFromTimestamp")
+    }),
+    updateTitle: vi.fn(async () => {
+      events.push("updateTitle")
+    }),
+    pendingEdit: {
+      stage: vi.fn((message: ChatTurnMessage, chatId: string) => {
+        pendingEdit = { message, chatId }
+        events.push("stagePendingEdit")
+      }),
+      get: vi.fn(() => pendingEdit),
+      clear: vi.fn(() => {
+        pendingEdit = null
+        events.push("clearPendingEdit")
+      }),
+    },
+    getStoredGuestChatId: vi.fn(() => null),
+    readMessages: vi.fn(async () => cachedMessages),
+    writeMessages: vi.fn(async (_chatId: string, nextMessages: ChatTurnMessage[]) => {
+      cachedMessages = nextMessages
+      events.push("writeTrimmedMessages")
+    }),
+    getRecentMessages: vi.fn(async () => {
+      events.push("reconcileRecentMessages")
+      return []
+    }),
+    writeCachedMessages: vi.fn(async () => {
+      events.push("writeCachedMessages")
+    }),
+    reportError: vi.fn((message: string) => {
+      events.push(`reportError:${message}`)
+    }),
+  }
 
   const adapters: ChatTurnAdapters = {
     createOptimisticMessageId: vi.fn(() => "optimistic-message"),
@@ -56,8 +106,7 @@ function createHarness() {
     }),
     setMessages: vi.fn((action) => {
       events.push("setMessages")
-      messages =
-        typeof action === "function" ? action(messages) : [...action]
+      messages = typeof action === "function" ? action(messages) : [...action]
       snapshots.push(messages.map((message) => String(message.id)))
     }),
     resolveUserId: vi.fn(async () => {
@@ -88,33 +137,8 @@ function createHarness() {
     regenerate: vi.fn(() => {
       events.push("regenerate")
     }),
-    routePersistsMessages: vi.fn((chatId) => {
-      events.push(`routePersistsMessages:${chatId}`)
-      return false
-    }),
-    cacheAndAddMessage: vi.fn(() => {
-      events.push("cacheAndAddMessage")
-    }),
     toastError: vi.fn((title) => {
       events.push(`toastError:${title}`)
-    }),
-    writeTrimmedMessages: vi.fn(async () => {
-      events.push("writeTrimmedMessages")
-    }),
-    deleteMessagesFromTimestamp: vi.fn(async () => {
-      events.push("deleteMessagesFromTimestamp")
-    }),
-    updateTitle: vi.fn(async () => {
-      events.push("updateTitle")
-    }),
-    stagePendingEdit: vi.fn((message, chatId) => {
-      pendingEdit = { message, chatId }
-      events.push("stagePendingEdit")
-    }),
-    getPendingEdit: vi.fn(() => pendingEdit),
-    clearPendingEdit: vi.fn(() => {
-      pendingEdit = null
-      events.push("clearPendingEdit")
     }),
     bumpChat: vi.fn(() => {
       events.push("bumpChat")
@@ -122,17 +146,15 @@ function createHarness() {
     setLastFinishReason: vi.fn((finishReason) => {
       events.push(`setLastFinishReason:${finishReason}`)
     }),
-    getStoredGuestChatId: vi.fn(() => null),
-    reconcileRecentMessages: vi.fn(async () => {
-      events.push("reconcileRecentMessages")
-    }),
     reportError: vi.fn((message) => {
       events.push(`reportError:${message}`)
     }),
+    turnStore: createChatTurnStore(storeAdapters),
   }
 
   return {
     adapters,
+    storeAdapters,
     controller: createChatTurnController(adapters),
     events,
     snapshots,
@@ -140,7 +162,14 @@ function createHarness() {
     setMessagesState: (nextMessages: ChatTurnMessage[]) => {
       messages = nextMessages
     },
+    setCachedMessages: (nextMessages: ChatTurnMessage[]) => {
+      cachedMessages = nextMessages
+    },
     getPendingEdit: () => pendingEdit,
+    setRoutePersistsMessages: (next: boolean) => {
+      routePersistsMessages = next
+    },
+    stagePendingEdit: storeAdapters.pendingEdit.stage,
   }
 }
 
@@ -186,11 +215,11 @@ describe("chat turn controller", () => {
       }
     )
     expect(local.getMessages()).toEqual([])
-    expect(local.adapters.cacheAndAddMessage).toHaveBeenCalledTimes(1)
+    expect(local.storeAdapters.cacheAndAddMessage).toHaveBeenCalledTimes(1)
     expect(onSuccess).toHaveBeenCalledWith("chat-1")
 
     const durable = createHarness()
-    durable.adapters.routePersistsMessages = vi.fn(() => true)
+    durable.setRoutePersistsMessages(true)
 
     await durable.controller.runSendTurn({
       text: "Hello",
@@ -199,7 +228,7 @@ describe("chat turn controller", () => {
     })
 
     expect(durable.adapters.sendMessage).toHaveBeenCalledTimes(1)
-    expect(durable.adapters.cacheAndAddMessage).not.toHaveBeenCalled()
+    expect(durable.storeAdapters.cacheAndAddMessage).not.toHaveBeenCalled()
   })
 
   it("removes optimistic state and cleans optimistic attachment URLs when send is limit-denied", async () => {
@@ -258,8 +287,14 @@ describe("chat turn controller", () => {
   })
 
   it("runs edit resend after validation, preserving target file parts and staging the pending edit", async () => {
-    const { adapters, controller, events, setMessagesState, snapshots } =
-      createHarness()
+    const {
+      adapters,
+      controller,
+      events,
+      setMessagesState,
+      snapshots,
+      storeAdapters,
+    } = createHarness()
     const targetCreatedAt = new Date("2026-01-02T00:00:00.000Z")
     const targetFile = {
       type: "file" as const,
@@ -290,20 +325,17 @@ describe("chat turn controller", () => {
 
     expect(snapshots[0]).toEqual(["optimistic-edit-message"])
     expect(events.indexOf("ensureChatExists")).toBeLessThan(
+      events.indexOf("sendMessage")
+    )
+    expect(events.indexOf("sendMessage")).toBeLessThan(
       events.indexOf("writeTrimmedMessages")
     )
-    expect(events.indexOf("writeTrimmedMessages")).toBeLessThan(
-      events.indexOf("deleteMessagesFromTimestamp")
-    )
-    expect(adapters.writeTrimmedMessages).toHaveBeenCalledWith(
+    expect(storeAdapters.writeMessages).toHaveBeenCalledWith(
       "chat-existing",
       []
     )
-    expect(adapters.deleteMessagesFromTimestamp).toHaveBeenCalledWith(
-      targetCreatedAt.getTime(),
-      1
-    )
-    expect(adapters.updateTitle).toHaveBeenCalledWith("chat-1", "new text")
+    expect(storeAdapters.deleteMessagesFromTimestamp).not.toHaveBeenCalled()
+    expect(storeAdapters.updateTitle).toHaveBeenCalledWith("chat-1", "new text")
     expect(adapters.sendMessage).toHaveBeenCalledWith(
       {
         text: "new text",
@@ -324,7 +356,7 @@ describe("chat turn controller", () => {
     expect(events.indexOf("sendMessage")).toBeLessThan(
       events.indexOf("stagePendingEdit")
     )
-    expect(adapters.stagePendingEdit).toHaveBeenCalledWith(
+    expect(storeAdapters.pendingEdit.stage).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "optimistic-edit-message",
         role: "user",
@@ -334,16 +366,25 @@ describe("chat turn controller", () => {
     expect(adapters.bumpChat).toHaveBeenCalledWith("chat-1")
   })
 
-  it("rolls back edit state and does not stage a pending edit when edit resend fails", async () => {
-    const { adapters, controller, getMessages, setMessagesState } =
-      createHarness()
+  it("restores visible and cached local messages when edit resend dispatch throws", async () => {
+    const {
+      adapters,
+      controller,
+      getMessages,
+      setCachedMessages,
+      setMessagesState,
+      storeAdapters,
+    } = createHarness()
     const originalMessages = [
       userMessage("user-1", "old text"),
       assistantMessage("assistant-1", "old answer"),
+      userMessage("user-2", "later text"),
+      assistantMessage("assistant-2", "later answer"),
     ]
     setMessagesState(originalMessages)
-    adapters.deleteMessagesFromTimestamp = vi.fn(async () => {
-      throw new Error("delete failed")
+    setCachedMessages(originalMessages)
+    adapters.sendMessage = vi.fn(() => {
+      throw new Error("send failed")
     })
 
     await controller.runEditTurn({
@@ -360,9 +401,79 @@ describe("chat turn controller", () => {
     })
 
     expect(getMessages()).toEqual(originalMessages)
-    expect(adapters.sendMessage).not.toHaveBeenCalled()
-    expect(adapters.stagePendingEdit).not.toHaveBeenCalled()
+    expect(adapters.sendMessage).toHaveBeenCalled()
+    expect(storeAdapters.writeMessages).toHaveBeenCalledTimes(1)
+    expect(storeAdapters.writeMessages).toHaveBeenCalledWith(
+      "chat-existing",
+      originalMessages
+    )
+    expect(storeAdapters.deleteMessagesFromTimestamp).not.toHaveBeenCalled()
+    expect(storeAdapters.pendingEdit.stage).not.toHaveBeenCalled()
     expect(adapters.toastError).toHaveBeenCalledWith("Failed to apply edit")
+  })
+
+  it("sends durable edit intent without client-side truncation before dispatch", async () => {
+    const {
+      adapters,
+      controller,
+      setMessagesState,
+      setRoutePersistsMessages,
+      storeAdapters,
+    } = createHarness()
+    setRoutePersistsMessages(true)
+    const targetCreatedAt = new Date("2026-01-02T00:00:00.000Z")
+    const originalMessages = [
+      userMessage("user-1", "old text", targetCreatedAt),
+      assistantMessage("assistant-1", "old answer"),
+      userMessage("user-2", "later text"),
+      assistantMessage("assistant-2", "later answer"),
+    ]
+    setMessagesState(originalMessages)
+
+    await controller.runEditTurn({
+      chatId: "server-chat",
+      messages: originalMessages,
+      messageId: "user-1",
+      newContent: "new text",
+      selectedModel: "model-1",
+      isAuthenticated: true,
+      systemPrompt: "custom system",
+      enableSearch: true,
+      isSubmitting: false,
+      status: "ready",
+    })
+
+    expect(storeAdapters.writeMessages).not.toHaveBeenCalled()
+    expect(storeAdapters.deleteMessagesFromTimestamp).not.toHaveBeenCalled()
+    expect(adapters.sendMessage).toHaveBeenCalledWith(
+      {
+        text: "new text",
+        files: undefined,
+      },
+      {
+        body: expect.objectContaining({
+          chatId: "chat-1",
+          userId: "user-1",
+          model: "model-1",
+          isAuthenticated: true,
+          systemPrompt: "custom system",
+          enableSearch: true,
+          chatVersion: 1,
+          edit: {
+            editedMessageId: "user-1",
+            editCutoffTimestamp: targetCreatedAt.getTime(),
+            expectedChatVersion: 4,
+            replacementMessage: expect.objectContaining({
+              id: "optimistic-edit-message",
+              role: "user",
+              content: "new text",
+            }),
+            title: "new text",
+          },
+        }),
+      }
+    )
+    expect(storeAdapters.pendingEdit.stage).toHaveBeenCalled()
   })
 
   it("regenerates with the existing request body and no optimistic user message", async () => {
@@ -405,17 +516,17 @@ describe("chat turn controller", () => {
     })
 
     expect(local.adapters.setLastFinishReason).toHaveBeenCalledWith("stop")
-    expect(local.adapters.cacheAndAddMessage).toHaveBeenCalledWith(
+    expect(local.storeAdapters.cacheAndAddMessage).toHaveBeenCalledWith(
       assistant,
       "local-chat"
     )
-    expect(local.adapters.reconcileRecentMessages).toHaveBeenCalledWith(
+    expect(local.storeAdapters.getRecentMessages).toHaveBeenCalledWith(
       "local-chat",
       2
     )
 
     const durable = createHarness()
-    durable.adapters.routePersistsMessages = vi.fn(() => true)
+    durable.setRoutePersistsMessages(true)
 
     await durable.controller.finishChatTurn({
       message: assistant,
@@ -427,14 +538,14 @@ describe("chat turn controller", () => {
       previousChatId: null,
     })
 
-    expect(durable.adapters.cacheAndAddMessage).not.toHaveBeenCalled()
-    expect(durable.adapters.reconcileRecentMessages).toHaveBeenCalledWith(
+    expect(durable.storeAdapters.cacheAndAddMessage).not.toHaveBeenCalled()
+    expect(durable.storeAdapters.getRecentMessages).toHaveBeenCalledWith(
       "server-chat",
       2
     )
 
     const pendingLocal = createHarness()
-    pendingLocal.adapters.stagePendingEdit(
+    pendingLocal.stagePendingEdit(
       userMessage("edited-user", "edited"),
       "local-chat"
     )
@@ -449,15 +560,15 @@ describe("chat turn controller", () => {
       previousChatId: null,
     })
 
-    expect(pendingLocal.adapters.cacheAndAddMessage).toHaveBeenCalledWith(
+    expect(pendingLocal.storeAdapters.cacheAndAddMessage).toHaveBeenCalledWith(
       expect.objectContaining({ id: "edited-user" }),
       "local-chat"
     )
-    expect(pendingLocal.adapters.reconcileRecentMessages).not.toHaveBeenCalled()
+    expect(pendingLocal.storeAdapters.getRecentMessages).not.toHaveBeenCalled()
 
     const pendingDurable = createHarness()
-    pendingDurable.adapters.routePersistsMessages = vi.fn(() => true)
-    pendingDurable.adapters.stagePendingEdit(
+    pendingDurable.setRoutePersistsMessages(true)
+    pendingDurable.stagePendingEdit(
       userMessage("edited-user", "edited"),
       "server-chat"
     )
@@ -472,7 +583,11 @@ describe("chat turn controller", () => {
       previousChatId: null,
     })
 
-    expect(pendingDurable.adapters.cacheAndAddMessage).not.toHaveBeenCalled()
-    expect(pendingDurable.adapters.reconcileRecentMessages).not.toHaveBeenCalled()
+    expect(
+      pendingDurable.storeAdapters.cacheAndAddMessage
+    ).not.toHaveBeenCalled()
+    expect(
+      pendingDurable.storeAdapters.getRecentMessages
+    ).toHaveBeenCalledWith("server-chat", 2)
   })
 })
