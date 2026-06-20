@@ -44,6 +44,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Convex source lives only at /convex.
+/components/ui/convex/
+
 # env files (all variations)
 .env
 .env.*
