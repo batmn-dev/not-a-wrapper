@@ -5,13 +5,13 @@ import { Conversation } from "@/app/components/chat/conversation"
 import { useModel } from "@/app/components/chat/use-model"
 import { useChatDraft } from "@/app/hooks/use-chat-draft"
 import { useGlobalPromptFocus } from "@/app/hooks/use-global-prompt-focus"
+import { ScrollButton } from "@/components/ui/scroll-button"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useMessages } from "@/lib/chat-store/messages/provider"
 import { useChatSession } from "@/lib/chat-store/session/provider"
 import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { useUser } from "@/lib/user-store/provider"
-import { ScrollButton } from "@/components/ui/scroll-button"
 import { cn } from "@/lib/utils"
 import { AnimatePresence, motion } from "motion/react"
 import dynamic from "next/dynamic"
@@ -42,7 +42,12 @@ export function Chat() {
     [chatId, getChatById]
   )
 
-  const { messages: initialMessages, cacheAndAddMessage, deleteMessagesFromTimestamp } = useMessages()
+  const {
+    messages: initialMessages,
+    cacheAndAddMessage,
+    deleteMessagesFromTimestamp,
+    selectMessageBranch,
+  } = useMessages()
   const { user } = useUser()
   const { preferences } = useUserPreferences()
   const { draftValue, clearDraft } = useChatDraft(chatId)
@@ -73,6 +78,12 @@ export function Chat() {
     () => user?.system_prompt || SYSTEM_PROMPT_DEFAULT,
     [user?.system_prompt]
   )
+  const navigateToChat = useCallback(
+    (nextChatId: string) => {
+      window.history.pushState(null, "", `/c/${nextChatId}`)
+    },
+    []
+  )
 
   // New state for quoted text
   const [quotedText, setQuotedText] = useState<{
@@ -87,15 +98,15 @@ export function Chat() {
   )
 
   // Chat operations (pure async utilities) - created first
-  const { checkLimitsAndNotify, ensureChatExists } =
-    useChatOperations({
-      isAuthenticated,
-      chatId,
-      selectedModel,
-      systemPrompt,
-      createNewChat,
-      setHasDialogAuth,
-    })
+  const { checkLimitsAndNotify, ensureChatExists } = useChatOperations({
+    isAuthenticated,
+    chatId,
+    selectedModel,
+    systemPrompt,
+    createNewChat,
+    navigateToChat,
+    setHasDialogAuth,
+  })
 
   // Core chat functionality (initialization + state + actions)
   const {
@@ -161,6 +172,7 @@ export function Chat() {
       onReload: handleReload,
       onStop: stop,
       onQuote: handleQuotedSelected,
+      onSelectBranch: selectMessageBranch,
       isUserAuthenticated: isAuthenticated,
       lastFinishReason,
       onToolApproval: handleToolApproval,
@@ -173,6 +185,7 @@ export function Chat() {
       handleReload,
       stop,
       handleQuotedSelected,
+      selectMessageBranch,
       isAuthenticated,
       lastFinishReason,
       handleToolApproval,
@@ -246,7 +259,16 @@ export function Chat() {
       hasRedirectedRef.current = true
       router.replace("/")
     }
-  }, [chatId, isChatsLoading, currentChat, isSubmitting, status, messages.length, hasSentFirstMessage, router])
+  }, [
+    chatId,
+    isChatsLoading,
+    currentChat,
+    isSubmitting,
+    status,
+    messages.length,
+    hasSentFirstMessage,
+    router,
+  ])
 
   const showOnboarding = !chatId && messages.length === 0
 
@@ -262,7 +284,7 @@ export function Chat() {
           {showOnboarding ? (
             <motion.div
               key="onboarding"
-              className="relative flex basis-auto shrink flex-col justify-end max-sm:grow max-sm:justify-center sm:min-h-[calc(42svh-var(--spacing-app-header))]"
+              className="relative flex shrink basis-auto flex-col justify-end max-sm:grow max-sm:justify-center sm:min-h-[calc(42svh-var(--spacing-app-header))]"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -272,12 +294,12 @@ export function Chat() {
                 data-splash-headline-option="WHATS_ON_YOUR_MIND"
               >
                 <div className="hidden text-center sm:mb-[22px] sm:block">
-                  <h1 className="inline-flex min-h-[42px] items-baseline text-balance px-1 text-2xl leading-9 font-normal">
+                  <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
                     What&apos;s on your mind?
                   </h1>
                 </div>
                 <div className="flex h-full w-full shrink flex-col items-center justify-center px-4 text-center sm:hidden">
-                  <h1 className="inline-flex min-h-[42px] items-baseline text-balance px-1 text-2xl leading-9 font-normal">
+                  <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
                     What&apos;s on your mind?
                   </h1>
                 </div>
@@ -291,7 +313,7 @@ export function Chat() {
         <div
           id="thread-bottom-container"
           className={cn(
-            "group/thread-bottom-container sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col [--thread-content-margin:1rem] @sm/main:[--thread-content-margin:1.5rem] @lg/main:[--thread-content-margin:4rem] px-[var(--thread-content-margin,1rem)] pb-[env(safe-area-inset-bottom,0px)]",
+            "group/thread-bottom-container sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col px-[var(--thread-content-margin,1rem)] pb-[env(safe-area-inset-bottom,0px)] [--thread-content-margin:1rem] @sm/main:[--thread-content-margin:1.5rem] @lg/main:[--thread-content-margin:4rem]",
             showOnboarding ? "sm:grow" : "content-fade"
           )}
         >
@@ -306,15 +328,17 @@ export function Chat() {
           )}
           <div
             id="thread-bottom"
-            className="mx-auto w-full [--thread-content-max-width:40rem] @[64rem]/main:[--thread-content-max-width:48rem] max-w-[var(--thread-content-max-width,40rem)]"
+            className="mx-auto w-full max-w-[var(--thread-content-max-width,40rem)] [--thread-content-max-width:40rem] @[64rem]/main:[--thread-content-max-width:48rem]"
           >
             <ChatInput defaultValue={initialInputValue} {...chatInputProps} />
           </div>
           {!showOnboarding && (
-            <div className="-mt-4 text-muted-foreground relative w-full overflow-hidden text-center text-xs md:px-[60px]">
+            <div className="text-muted-foreground relative -mt-4 w-full overflow-hidden text-center text-xs md:px-[60px]">
               <div className="flex min-h-8 w-full items-center justify-center p-2 select-none">
                 <div className="pointer-events-auto">
-                  <div>Not A Wrapper can make mistakes. Check important info.</div>
+                  <div>
+                    Not A Wrapper can make mistakes. Check important info.
+                  </div>
                 </div>
               </div>
             </div>

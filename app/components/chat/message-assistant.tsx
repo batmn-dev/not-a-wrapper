@@ -25,6 +25,10 @@ import type { ToolUIPart } from "ai"
 import { getStaticToolName, isStaticToolUIPart } from "ai"
 import { useCallback, useRef, useState } from "react"
 import { getSources } from "./get-sources"
+import {
+  getMessageBranch,
+  MessageBranchControls,
+} from "./message-branch-controls"
 import { QuoteButton } from "./quote-button"
 import { SearchImages } from "./search-images"
 import { SourcesList } from "./sources-list"
@@ -40,6 +44,7 @@ type MessageAssistantProps = {
   copyToClipboard?: () => void
   onReload?: (messageId: string) => void
   onStop?: () => void
+  onSelectBranch?: (messageId: string) => void
   parts?: MessageAISDK["parts"]
   metadata?: Record<string, unknown>
   status?: DurableMessageStatus | "ready" | "error"
@@ -85,6 +90,7 @@ export function MessageAssistant({
   copyToClipboard,
   onReload,
   onStop,
+  onSelectBranch,
   parts,
   metadata,
   status,
@@ -96,6 +102,7 @@ export function MessageAssistant({
 }: MessageAssistantProps) {
   const { preferences } = useUserPreferences()
   const sources = getSources(parts || [])
+  const branch = getMessageBranch(metadata)
 
   // v6: Filter tool parts using official helper
   const toolInvocationParts = parts?.filter((part): part is ToolUIPart =>
@@ -371,6 +378,10 @@ export function MessageAssistant({
                       ]
                 )}
               >
+                <MessageBranchControls
+                  branch={branch}
+                  onSelectBranch={onSelectBranch}
+                />
                 <MessageAction
                   tooltip={copied ? "Copied!" : "Copy text"}
                   side="bottom"

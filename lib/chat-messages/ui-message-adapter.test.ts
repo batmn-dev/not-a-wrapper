@@ -21,6 +21,7 @@ describe("durableStoredMessageToUiMessage", () => {
       parts: [{ type: "text", text: "hello" }],
       status: "completed",
       metadata: {
+        serverMessageId: "convex_message_1",
         durableStatus: "completed",
       },
     })
@@ -125,6 +126,7 @@ describe("durableStoredMessageToUiMessage", () => {
       }).metadata
     ).toEqual({
       custom: "value",
+      serverMessageId: "message_4",
       durableStatus: "failed",
       durableError: "provider failed",
       generationRunId: "run_1",
@@ -163,6 +165,7 @@ describe("durableStoredMessageToUiMessage", () => {
       content: "from parts",
       parts: [{ type: "text", text: "from parts" }],
       metadata: {
+        serverMessageId: "message_6",
         durableStatus: "unknown",
       },
     })

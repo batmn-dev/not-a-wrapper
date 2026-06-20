@@ -98,6 +98,9 @@ export default defineSchema({
     content: v.string(),
     parts: v.any(), // AI SDK parts format
     attachments: v.optional(v.array(v.any())), // Deprecated; canonical runtime stores files in `parts`
+    parentMessageId: v.optional(v.id("messages")),
+    branchIndex: v.optional(v.number()),
+    selected: v.optional(v.boolean()),
     status: messageStatus,
     requestId: v.optional(v.string()),
     generationRunId: v.optional(v.id("generationRuns")),
@@ -119,6 +122,7 @@ export default defineSchema({
     .index("by_chat", ["chatId"])
     .index("by_chat_role", ["chatId", "role"])
     .index("by_chat_order", ["chatId", "orderId"])
+    .index("by_chat_parent", ["chatId", "parentMessageId"])
     .index("by_chat_status", ["chatId", "status"]),
 
   generationRuns: defineTable({

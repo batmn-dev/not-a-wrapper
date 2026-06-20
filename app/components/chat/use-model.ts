@@ -1,8 +1,8 @@
 import { toast } from "@/components/ui/toast"
 import { Chats } from "@/lib/chat-store/types"
-import { resolveModelId } from "@/lib/models/model-id-migration"
-import { resolvePreferredModelId } from "@/lib/model-store/utils"
 import { useModel as useModelProvider } from "@/lib/model-store/provider"
+import { resolvePreferredModelId } from "@/lib/model-store/utils"
+import { resolveModelId } from "@/lib/models/model-id-migration"
 import type { UserProfile } from "@/lib/user/types"
 import { useCallback, useState } from "react"
 
@@ -29,8 +29,13 @@ export function useModel({
   chatId,
 }: UseModelProps) {
   // Get favorite models and last-used model from ModelProvider
-  const { models, favoriteModels, lastUsedModel, modelPrefsHydrated, setLastUsedModel } =
-    useModelProvider()
+  const {
+    models,
+    favoriteModels,
+    lastUsedModel,
+    modelPrefsHydrated,
+    setLastUsedModel,
+  } = useModelProvider()
 
   // Calculate the effective model based on priority: chat model > accessible
   // last used > accessible favorite > tier default.
@@ -84,8 +89,8 @@ export function useModel({
         return
       }
 
-      // For authenticated users with a chat, persist the change
-      if (chatId && updateChatModel && user?.id) {
+      // For an active chat, let the chat provider choose local cache vs Convex.
+      if (chatId && updateChatModel) {
         // Optimistically update the state
         setLocalSelectedModel(newModel)
 

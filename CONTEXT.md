@@ -13,8 +13,16 @@ _Avoid_: server copy, UI Convex mirror, `components/ui/convex`
 ### Chat
 
 **Chat turn**:
-One user action that changes a conversation and may produce an assistant response, including a new message, a suggestion send, a regeneration, or an edit that truncates later messages before continuing.
+One user action that changes a conversation and may produce an assistant response, including a new message, a suggestion send, a regeneration, or an edit that creates a selected branch before continuing.
 _Avoid_: submission, send flow, message lifecycle
+
+**Message branch**:
+A sibling message alternative under the same parent message, created by durable edits and regenerations so prior turns remain addressable instead of being overwritten or deleted.
+_Avoid_: fork (too broad), version (too overloaded)
+
+**Selected path**:
+The backend-derived linear path through a chat's message branches used for rendering and model history. Hidden sibling branches stay stored but are not sent to the model until selected.
+_Avoid_: visible messages, active transcript
 
 ### Tools
 

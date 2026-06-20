@@ -244,8 +244,26 @@ export function useChatCore({
       isError,
       finishReason,
     }) => {
+      const messageWithCreatedAt = message as ChatTurnMessage
+      const finishedMessageCreatedAt =
+        messageWithCreatedAt.createdAt ?? new Date()
+      const finishedMessage: ChatTurnMessage = {
+        ...message,
+        createdAt: finishedMessageCreatedAt,
+      }
+
+      setMessages((prev) =>
+        prev.map((currentMessage) => {
+          const currentWithCreatedAt = currentMessage as ChatTurnMessage
+          return currentMessage.id === finishedMessage.id &&
+            !currentWithCreatedAt.createdAt
+            ? { ...currentMessage, createdAt: finishedMessageCreatedAt }
+            : currentMessage
+        })
+      )
+
       await chatTurn.finishChatTurn({
-        message,
+        message: finishedMessage,
         isAbort,
         isDisconnect,
         isError,
@@ -258,10 +276,19 @@ export function useChatCore({
     onError: handleError,
   })
 
-  const getIsSending = useCallback(
-    () => isSendingStore.get(),
-    [isSendingStore]
+  const setMessagesRef = useRef(setMessages)
+  useEffect(() => {
+    setMessagesRef.current = setMessages
+  }, [setMessages])
+
+  const updateMessages = useCallback(
+    (action: Parameters<typeof setMessages>[0]) => {
+      setMessagesRef.current(action)
+    },
+    []
   )
+
+  const getIsSending = useCallback(() => isSendingStore.get(), [isSendingStore])
 
   const setIsSending = useCallback(
     (value: boolean) => {
@@ -297,7 +324,7 @@ export function useChatCore({
     () =>
       createChatTurnStore({
         isAuthenticated: () => isAuthenticated,
-        updateMessages: (updater) => setMessages(updater),
+        updateMessages,
         cacheAndAddMessage,
         deleteMessagesFromTimestamp,
         updateTitle,
@@ -314,7 +341,7 @@ export function useChatCore({
       }),
     [
       isAuthenticated,
-      setMessages,
+      updateMessages,
       cacheAndAddMessage,
       deleteMessagesFromTimestamp,
       updateTitle,
@@ -461,6 +488,7 @@ export function useChatCore({
       text: currentInput,
       selectedModel,
       isAuthenticated,
+      messages,
       submittedFiles,
       optimisticAttachments,
       bodyExtras: {
@@ -488,7 +516,7 @@ export function useChatCore({
     enableSearch,
     debouncedSetDraftValue,
     clearDraft,
-    messages.length,
+    messages,
     bumpChat,
   ])
 
@@ -511,31 +539,28 @@ export function useChatCore({
         text: suggestion,
         selectedModel,
         isAuthenticated,
+        messages,
         chatVersion: messages.length + 1, // current messages + 1 for the new message being sent
       })
     },
-    [chatTurn, selectedModel, isAuthenticated, messages.length]
+    [chatTurn, selectedModel, isAuthenticated, messages]
   )
 
   // Handle reload (v6: renamed to regenerate)
-  const handleReload = useCallback(async (messageId: string) => {
-    await chatTurn.runRegenerationTurn({
-      chatId,
-      messages,
-      targetAssistantMessageId: messageId,
-      selectedModel,
-      isAuthenticated,
-      systemPrompt,
-      chatVersion: messages.length, // same count since we're regenerating, not adding
-    })
-  }, [
-    chatTurn,
-    chatId,
-    selectedModel,
-    isAuthenticated,
-    systemPrompt,
-    messages,
-  ])
+  const handleReload = useCallback(
+    async (messageId: string) => {
+      await chatTurn.runRegenerationTurn({
+        chatId,
+        messages,
+        targetAssistantMessageId: messageId,
+        selectedModel,
+        isAuthenticated,
+        systemPrompt,
+        chatVersion: messages.length, // same count since we're regenerating, not adding
+      })
+    },
+    [chatTurn, chatId, selectedModel, isAuthenticated, systemPrompt, messages]
+  )
 
   // Flush pending draft on tab close; also flush on unmount (navigation)
   useEffect(() => {

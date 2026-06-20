@@ -211,6 +211,7 @@ describe("chat turn controller", () => {
           systemPrompt: "custom system",
           enableSearch: true,
           chatVersion: 1,
+          expectedVisibleMessageCount: 0,
         },
       }
     )
@@ -255,6 +256,37 @@ describe("chat turn controller", () => {
     ])
   })
 
+  it("sends normal turns with the rendered selected-path server tail", async () => {
+    const { adapters, controller } = createHarness()
+    const visibleMessages = [
+      {
+        ...userMessage("client-user-1", "prompt"),
+        metadata: { serverMessageId: "message_user_1" },
+      },
+      {
+        ...assistantMessage("client-assistant-1", "answer"),
+        metadata: { serverMessageId: "message_assistant_1" },
+      },
+    ]
+
+    await controller.runSendTurn({
+      text: "next prompt",
+      selectedModel: "model-1",
+      isAuthenticated: true,
+      messages: visibleMessages,
+    })
+
+    expect(adapters.sendMessage).toHaveBeenCalledWith(
+      { text: "next prompt", files: undefined },
+      {
+        body: expect.objectContaining({
+          expectedVisibleMessageCount: 2,
+          tailMessageId: "message_assistant_1",
+        }),
+      }
+    )
+  })
+
   it("runs suggestions through send behavior with the suggestion error message and chatVersion", async () => {
     const { adapters, controller } = createHarness()
     adapters.sendMessage = vi.fn(() => {
@@ -278,6 +310,7 @@ describe("chat turn controller", () => {
           isAuthenticated: false,
           systemPrompt: SYSTEM_PROMPT_DEFAULT,
           chatVersion: 4,
+          expectedVisibleMessageCount: 0,
         },
       }
     )

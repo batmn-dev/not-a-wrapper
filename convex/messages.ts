@@ -1,10 +1,23 @@
 import { v } from "convex/values"
-import { mutation, query, type MutationCtx } from "./_generated/server"
-import type { Id } from "./_generated/dataModel"
+import {
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server"
+import type { Doc, Id } from "./_generated/dataModel"
 import {
   extractTextFromMessageParts,
   normalizeMessagePartsForStorage,
 } from "./domain/message_parts"
+import {
+  getBranchInfoForMessage,
+  getSelectedPathMessages,
+} from "./domain/message_branches"
+import {
+  normalizeSelectedBranchPathForMutation,
+  selectMessageSiblingForMutation,
+} from "./domain/message_branch_writes"
 import { isVisibleChatMessage } from "./domain/message_visibility"
 import { getAuthorizedChatForRead, requireOwnedChat } from "./lib/auth"
 
@@ -19,22 +32,89 @@ async function getNextOrder(ctx: MutationCtx, chatId: Id<"chats">) {
   return latest ? latest.orderId + 1 : 0
 }
 
+function withBranchMetadata(
+  allMessages: Doc<"messages">[],
+  selectedMessages: Doc<"messages">[]
+) {
+  return selectedMessages.map((message) => {
+    const branch = getBranchInfoForMessage(allMessages, message)
+    if (!branch) return message
+
+    const metadata =
+      message.metadata &&
+      typeof message.metadata === "object" &&
+      !Array.isArray(message.metadata)
+        ? message.metadata
+        : {}
+
+    return {
+      ...message,
+      metadata: {
+        ...metadata,
+        branch,
+      },
+    }
+  })
+}
+
+function getVisibleSelectedMessages(messages: Doc<"messages">[]) {
+  return withBranchMetadata(
+    messages,
+    getSelectedPathMessages(messages).filter(isVisibleChatMessage)
+  )
+}
+
+async function listMessagesByChatOrder(
+  ctx: QueryCtx | MutationCtx,
+  chatId: Id<"chats">
+) {
+  return await ctx.db
+    .query("messages")
+    .withIndex("by_chat_order", (q) => q.eq("chatId", chatId))
+    .collect()
+}
+
+export async function getForChatHandler(
+  ctx: QueryCtx,
+  { chatId }: { chatId: Id<"chats"> }
+) {
+  const chat = await getAuthorizedChatForRead(ctx, chatId)
+  if (!chat) return []
+
+  const messages = await listMessagesByChatOrder(ctx, chatId)
+  return getVisibleSelectedMessages(messages)
+}
+
+export async function getPublicForChatHandler(
+  ctx: QueryCtx,
+  { chatId }: { chatId: Id<"chats"> }
+) {
+  const chat = await ctx.db.get(chatId)
+  if (!chat || !chat.public) return []
+
+  const messages = await listMessagesByChatOrder(ctx, chatId)
+  return getVisibleSelectedMessages(messages).filter(
+    (message) => message.status !== "awaiting_approval"
+  )
+}
+
+export async function getLastMessagesHandler(
+  ctx: QueryCtx,
+  { chatId, limit = 2 }: { chatId: Id<"chats">; limit?: number }
+) {
+  const chat = await getAuthorizedChatForRead(ctx, chatId)
+  if (!chat) return []
+
+  const messages = await listMessagesByChatOrder(ctx, chatId)
+  return getVisibleSelectedMessages(messages).slice(-limit)
+}
+
 /**
  * Get all messages for a chat
  */
 export const getForChat = query({
   args: { chatId: v.id("chats") },
-  handler: async (ctx, { chatId }) => {
-    const chat = await getAuthorizedChatForRead(ctx, chatId)
-    if (!chat) return []
-
-    const messages = await ctx.db
-      .query("messages")
-      .withIndex("by_chat_order", (q) => q.eq("chatId", chatId))
-      .collect()
-
-    return messages.filter(isVisibleChatMessage)
-  },
+  handler: getForChatHandler,
 })
 
 /**
@@ -43,21 +123,7 @@ export const getForChat = query({
  */
 export const getPublicForChat = query({
   args: { chatId: v.id("chats") },
-  handler: async (ctx, { chatId }) => {
-    // Verify chat exists and is public
-    const chat = await ctx.db.get(chatId)
-    if (!chat || !chat.public) return []
-
-    const messages = await ctx.db
-      .query("messages")
-      .withIndex("by_chat_order", (q) => q.eq("chatId", chatId))
-      .collect()
-
-    return messages.filter(
-      (message) =>
-        isVisibleChatMessage(message) && message.status !== "awaiting_approval"
-    )
-  },
+  handler: getPublicForChatHandler,
 })
 
 /**
@@ -68,17 +134,54 @@ export const getLastMessages = query({
     chatId: v.id("chats"),
     limit: v.optional(v.number()),
   },
-  handler: async (ctx, { chatId, limit = 2 }) => {
-    const chat = await getAuthorizedChatForRead(ctx, chatId)
-    if (!chat) return []
+  handler: getLastMessagesHandler,
+})
 
-    const messages = await ctx.db
-      .query("messages")
-      .withIndex("by_chat_order", (q) => q.eq("chatId", chatId))
-      .collect()
+/**
+ * Select one sibling branch for rendering.
+ */
+export async function selectBranchForChat(
+  ctx: MutationCtx,
+  {
+    chatId,
+    messageId,
+  }: {
+    chatId: Id<"chats">
+    messageId: Id<"messages">
+  }
+) {
+  await requireOwnedChat(ctx, chatId)
 
-    return messages.filter(isVisibleChatMessage).slice(-limit)
+  const targetMessage = await ctx.db.get(messageId)
+  if (!targetMessage || targetMessage.chatId !== chatId) {
+    throw new Error("Message not found")
+  }
+
+  let messages = await ctx.db
+    .query("messages")
+    .withIndex("by_chat_order", (q) => q.eq("chatId", chatId))
+    .collect()
+  const now = Date.now()
+
+  messages = await normalizeSelectedBranchPathForMutation(ctx, messages, now)
+  messages = await selectMessageSiblingForMutation(
+    ctx,
+    messages,
+    targetMessage,
+    now
+  )
+  await normalizeSelectedBranchPathForMutation(ctx, messages, now)
+
+  await ctx.db.patch(chatId, { updatedAt: now })
+  return targetMessage._id
+}
+
+export const selectBranch = mutation({
+  args: {
+    chatId: v.id("chats"),
+    messageId: v.id("messages"),
   },
+  handler: selectBranchForChat,
 })
 
 /**

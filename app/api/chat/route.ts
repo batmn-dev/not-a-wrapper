@@ -100,6 +100,8 @@ type ChatRequest = {
   systemPrompt: string
   enableSearch: boolean
   chatVersion?: number
+  expectedVisibleMessageCount?: number
+  tailMessageId?: string
   userId?: string // Client-provided userId (for anonymous users)
   edit?: ChatEditRequest
   regeneration?: ChatRegenerationRequest
@@ -353,6 +355,8 @@ export async function POST(req: Request) {
       systemPrompt,
       enableSearch,
       chatVersion,
+      expectedVisibleMessageCount,
+      tailMessageId,
       userId: clientUserId,
       edit,
       regeneration,
@@ -632,6 +636,8 @@ export async function POST(req: Request) {
           model,
           provider,
           chatVersion: normalizedChatVersion,
+          expectedVisibleMessageCount,
+          tailMessageId,
           latestUserMessage: latestUserMessage
             ? {
                 id: latestUserMessage.id,
