@@ -47,10 +47,7 @@ type MessagesContextType = {
   ) => Promise<void>
   resetMessages: () => Promise<void>
   deleteMessages: () => Promise<void>
-  deleteMessagesFromTimestamp: (
-    timestamp: number,
-    minVersion?: number
-  ) => Promise<void>
+  deleteMessagesFromTimestamp: (timestamp: number) => Promise<void>
   selectMessageBranch: (messageId: string) => Promise<void>
 }
 
@@ -317,7 +314,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
   }, [updateOptimisticMessages])
 
   const deleteMessagesFromTimestamp = useCallback(
-    async (timestamp: number, minVersion?: number) => {
+    async (timestamp: number) => {
       if (!chatId || getMessagePersistenceMode(chatId) !== "server") return
 
       await deleteFromTimestampMutation({

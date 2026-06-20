@@ -52,10 +52,7 @@ type UseChatCoreProps = {
   selectedModel: string
   clearDraft: () => void
   bumpChat: (chatId: string) => void
-  deleteMessagesFromTimestamp: (
-    timestamp: number,
-    minVersion?: number
-  ) => Promise<void>
+  deleteMessagesFromTimestamp: (timestamp: number) => Promise<void>
 }
 
 export function useChatCore({
@@ -176,6 +173,7 @@ export function useChatCore({
   // Search params handling
   const searchParams = useSearchParams()
   const prompt = searchParams.get("prompt")
+  const shouldAutoSubmitPrompt = searchParams.get("autoSubmit") === "1"
 
   // Ref-based input management — avoids cascading re-renders on every keystroke.
   // ChatInput owns the display state; this ref is the source of truth for submit/handlers.
@@ -453,10 +451,10 @@ export function useChatCore({
 
   // Handle search params — hydrate input from ?prompt= on mount or navigation
   useEffect(() => {
-    if (prompt && typeof window !== "undefined") {
+    if (prompt && !shouldAutoSubmitPrompt && typeof window !== "undefined") {
       requestAnimationFrame(() => setInputValue(prompt))
     }
-  }, [prompt, setInputValue])
+  }, [prompt, shouldAutoSubmitPrompt, setInputValue])
 
   const setEnableSearch = useCallback(
     (enabled: boolean) => {
@@ -519,6 +517,35 @@ export function useChatCore({
     messages,
     bumpChat,
   ])
+
+  const autoSubmittedPromptRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (
+      !chatId ||
+      !prompt ||
+      !shouldAutoSubmitPrompt ||
+      typeof window === "undefined"
+    ) {
+      return
+    }
+
+    const autoSubmitKey = `${chatId}:${prompt}`
+    if (autoSubmittedPromptRef.current === autoSubmitKey) return
+    autoSubmittedPromptRef.current = autoSubmitKey
+
+    setInputValue(prompt)
+
+    const nextUrl = new URL(window.location.href)
+    nextUrl.searchParams.delete("prompt")
+    nextUrl.searchParams.delete("autoSubmit")
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`
+    )
+
+    void submit()
+  }, [chatId, prompt, shouldAutoSubmitPrompt, setInputValue, submit])
 
   const { submitEdit } = useChatEdit({
     chatTurn,

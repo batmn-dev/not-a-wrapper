@@ -174,7 +174,7 @@ export type MessageBranchPatch = {
   selected?: boolean
 }
 
-function getNextMissingBranchIndex(
+export function getNextMissingBranchIndex(
   messages: ChatMessage[],
   target: ChatMessage
 ) {

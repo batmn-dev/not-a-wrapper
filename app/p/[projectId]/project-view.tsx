@@ -42,12 +42,8 @@ export function ProjectView({ projectId }: ProjectViewProps) {
   )
   const { user } = useUser()
   const { chats: allChats, createNewChat } = useChats()
-  const {
-    files,
-    setFiles,
-    handleFileUpload,
-    handleFileRemove,
-  } = useFileUpload()
+  const { files, setFiles, handleFileUpload, handleFileRemove } =
+    useFileUpload()
 
   const { data: project } = useQuery<Project>({
     queryKey: ["project", projectId],
@@ -129,7 +125,11 @@ export function ProjectView({ projectId }: ProjectViewProps) {
 
       setInput("")
       setFiles([])
-      router.push(`/c/${newChat.id}?prompt=${encodeURIComponent(currentInput)}`)
+      const chatParams = new URLSearchParams({
+        prompt: currentInput,
+        autoSubmit: "1",
+      })
+      router.push(`/c/${newChat.id}?${chatParams.toString()}`)
     } catch (error) {
       let errorMessage = "Something went wrong."
       if (error instanceof Error && error.message) {

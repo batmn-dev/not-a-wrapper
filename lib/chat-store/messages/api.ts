@@ -148,6 +148,8 @@ export async function hydrateCachedMessages(chatId: string): Promise<void> {
 
   const promise = getCachedMessages(chatId)
     .then((messages) => {
+      if (hydratedCachedMessages.has(chatId)) return
+
       cachedMessagesSnapshots.set(chatId, messages)
       hydratedCachedMessages.add(chatId)
       emitCachedMessagesChange(chatId)

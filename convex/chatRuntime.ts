@@ -8,6 +8,17 @@ import {
   type QueryCtx,
 } from "./_generated/server"
 import {
+  clearSiblingSelectionForMutation,
+  getNextBranchIndexForMutation,
+  normalizeSelectedBranchPathForMutation,
+  selectMessageSiblingForMutation,
+} from "./domain/message_branch_writes"
+import {
+  getEffectiveParentId,
+  getSelectedPathMessages,
+  getSiblingMessages,
+} from "./domain/message_branches"
+import {
   isActiveGenerationRunStatus,
   isTerminalGenerationRunStatus,
   isTerminalMessageStatus,
@@ -18,17 +29,6 @@ import {
   isModelHistoryMessage,
   isVisibleChatMessage,
 } from "./domain/message_visibility"
-import {
-  getEffectiveParentId,
-  getSelectedPathMessages,
-  getSiblingMessages,
-} from "./domain/message_branches"
-import {
-  clearSiblingSelectionForMutation,
-  getNextBranchIndexForMutation,
-  normalizeSelectedBranchPathForMutation,
-  selectMessageSiblingForMutation,
-} from "./domain/message_branch_writes"
 import { getAuthorizedChatForRead, getCurrentUser } from "./lib/auth"
 
 const MAX_PREVIEW_LENGTH = 500
@@ -250,9 +250,20 @@ function validateSelectedPathToken(
   const tailMessage = selectedMessages[selectedMessages.length - 1]
   const actualTailMessageId = tailMessage?._id
 
-  if (actualTailMessageId !== token.tailMessageId) {
+  if (
+    token.tailMessageId !== undefined &&
+    actualTailMessageId !== token.tailMessageId
+  ) {
     throw new Error("Stale chat state: selected path changed")
   }
+}
+
+async function validateSelectedPathTokenForChat(
+  ctx: MutationCtx,
+  chatId: Id<"chats">,
+  token: SelectedPathToken
+) {
+  validateSelectedPathToken(await listMessages(ctx, chatId), token)
 }
 
 async function selectFallbackSiblingBeforeDelete(
@@ -264,8 +275,11 @@ async function selectFallbackSiblingBeforeDelete(
 
   const messages = await listMessages(ctx, message.chatId)
   const parentMessageId = getEffectiveParentId(messages, message)
-  const siblings = getSiblingMessages(messages, parentMessageId, message.role)
-    .filter((sibling) => sibling._id !== message._id)
+  const siblings = getSiblingMessages(
+    messages,
+    parentMessageId,
+    message.role
+  ).filter((sibling) => sibling._id !== message._id)
   const fallbackSibling = siblings[siblings.length - 1]
   if (!fallbackSibling) return
 
@@ -516,11 +530,17 @@ async function selectOrInsertLatestUserMessageForGeneration(
   validateSelectedPathToken(currentMessages, selectedPathToken)
   const alreadyStored = currentMessages.find(
     (message) =>
-      message.role === "user" && message.clientMessageId === latestUserMessage.id
+      message.role === "user" &&
+      message.clientMessageId === latestUserMessage.id
   )
 
   if (alreadyStored) {
-    await selectMessageSiblingForMutation(ctx, currentMessages, alreadyStored, now)
+    await selectMessageSiblingForMutation(
+      ctx,
+      currentMessages,
+      alreadyStored,
+      now
+    )
     return alreadyStored._id
   }
 
@@ -1095,6 +1115,19 @@ export async function prepareGenerationForChat(
     throw new Error("Generation cannot continue pending approvals")
   }
 
+  const latestUserMessage = args.edit
+    ? args.edit.replacementMessage
+    : args.regeneration
+      ? undefined
+      : args.latestUserMessage
+
+  if (latestUserMessage && !args.edit) {
+    await validateSelectedPathTokenForChat(ctx, args.chatId, {
+      expectedVisibleMessageCount: args.expectedVisibleMessageCount,
+      tailMessageId: args.tailMessageId,
+    })
+  }
+
   await closeSupersededGenerationsForChat(ctx, args.chatId, owner.user._id, now)
 
   const continuationMessage = await applyApprovalResponses(
@@ -1102,12 +1135,6 @@ export async function prepareGenerationForChat(
     owner,
     approvalResponses
   )
-
-  const latestUserMessage = args.edit
-    ? args.edit.replacementMessage
-    : args.regeneration
-      ? undefined
-      : args.latestUserMessage
 
   if (latestUserMessage) {
     await denyPendingApprovalsForChat(

@@ -1,0 +1,270 @@
+/** @vitest-environment jsdom */
+
+import type { UIMessage } from "@ai-sdk/react"
+import React, { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
+
+let useChatCore: (typeof import("./use-chat-core"))["useChatCore"]
+
+const chatCoreMocks = vi.hoisted(() => ({
+  addToolApprovalResponse: vi.fn(),
+  bumpChat: vi.fn(),
+  clearDraft: vi.fn(),
+  convexMutation: vi.fn(),
+  regenerate: vi.fn(),
+  sendMessage: vi.fn(),
+  setFiles: vi.fn(),
+  setMessages: vi.fn(),
+  setWebSearchEnabled: vi.fn(),
+  stop: vi.fn(),
+  updateTitle: vi.fn(),
+}))
+
+vi.mock("@/convex/_generated/api", () => ({
+  api: {
+    chatRuntime: {
+      approveToolCall: "approveToolCall",
+      denyToolCall: "denyToolCall",
+    },
+  },
+}))
+
+vi.mock("convex/react", () => ({
+  useMutation: () => chatCoreMocks.convexMutation,
+}))
+
+vi.mock("@ai-sdk/react", () => ({
+  useChat: () => ({
+    messages: [],
+    sendMessage: chatCoreMocks.sendMessage,
+    regenerate: chatCoreMocks.regenerate,
+    status: "ready",
+    error: undefined,
+    stop: chatCoreMocks.stop,
+    setMessages: chatCoreMocks.setMessages,
+    addToolApprovalResponse: chatCoreMocks.addToolApprovalResponse,
+  }),
+}))
+
+vi.mock("ai", () => ({
+  DefaultChatTransport: vi.fn(function DefaultChatTransport() {}),
+  lastAssistantMessageIsCompleteWithApprovalResponses: vi.fn(() => false),
+}))
+
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(window.location.search),
+}))
+
+vi.mock("@/app/hooks/use-chat-draft", () => ({
+  useChatDraft: () => ({
+    setDraftValue: vi.fn(),
+  }),
+}))
+
+vi.mock("@/components/ui/toast", () => ({
+  toast: vi.fn(),
+}))
+
+vi.mock("@/lib/api", () => ({
+  getOrCreateGuestUserId: vi.fn(async (user: { id?: string } | null) =>
+    user?.id ? user.id : "guest_1"
+  ),
+}))
+
+vi.mock("@/lib/chat-store/chats/provider", () => ({
+  useChats: () => ({
+    updateTitle: chatCoreMocks.updateTitle,
+  }),
+}))
+
+vi.mock("@/lib/user-preference-store/provider", () => ({
+  useUserPreferences: () => ({
+    preferences: {
+      webSearchEnabled: false,
+    },
+    setWebSearchEnabled: chatCoreMocks.setWebSearchEnabled,
+  }),
+}))
+
+const authenticatedUser = {
+  id: "user-1",
+  email: "user@example.com",
+  display_name: "User",
+  profile_image: null,
+  anonymous: false,
+  premium: true,
+  message_count: 0,
+  daily_message_count: 0,
+  daily_reset: null,
+  daily_pro_message_count: 0,
+  daily_pro_reset: null,
+  last_active_at: null,
+  created_at: null,
+  favorite_models: null,
+  system_prompt: "system prompt",
+}
+
+async function flushAsyncWork() {
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
+
+describe("useChatCore prompt query handling", () => {
+  let container: HTMLDivElement | null = null
+  let root: Root | null = null
+
+  beforeAll(() => {
+    ;(
+      globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true
+    ;(
+      globalThis as { requestAnimationFrame?: typeof requestAnimationFrame }
+    ).requestAnimationFrame = (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 0)
+    const objectStoreNames = Object.assign(["chats", "messages", "sync"], {
+      contains: (name: string) => ["chats", "messages", "sync"].includes(name),
+    })
+    const db = {
+      version: 2,
+      objectStoreNames,
+      close: vi.fn(),
+      createObjectStore: vi.fn(),
+    }
+    ;(globalThis as { indexedDB?: IDBFactory }).indexedDB = {
+      open: vi.fn(() => {
+        const request = {
+          result: db,
+          error: null,
+        } as unknown as IDBOpenDBRequest
+        window.setTimeout(() => request.onsuccess?.(new Event("success")), 0)
+        return request
+      }),
+      deleteDatabase: vi.fn(() => {
+        const request = { result: undefined } as unknown as IDBOpenDBRequest
+        window.setTimeout(() => request.onsuccess?.(new Event("success")), 0)
+        return request
+      }),
+    } as unknown as IDBFactory
+  })
+
+  beforeAll(async () => {
+    ;({ useChatCore } = await import("./use-chat-core"))
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    const mountedRoot = root
+    if (mountedRoot) {
+      act(() => {
+        mountedRoot.unmount()
+      })
+    }
+    container?.remove()
+    container = null
+    root = null
+  })
+
+  function renderCore({
+    search,
+    ensureChatExists = vi.fn(async () => "chat-project"),
+    checkLimitsAndNotify = vi.fn(async () => true),
+  }: {
+    search: string
+    ensureChatExists?: (uid: string, input: string) => Promise<string | null>
+    checkLimitsAndNotify?: (uid: string) => Promise<boolean>
+  }) {
+    window.history.replaceState(null, "", `/c/chat-project${search}`)
+
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+
+    function Harness() {
+      useChatCore({
+        initialMessages: [] as UIMessage[],
+        draftValue: "",
+        cacheAndAddMessage: vi.fn(),
+        chatId: "chat-project",
+        user: authenticatedUser,
+        files: [],
+        createOptimisticAttachments: vi.fn(() => []),
+        setFiles: chatCoreMocks.setFiles,
+        checkLimitsAndNotify,
+        cleanupOptimisticAttachments: vi.fn(),
+        ensureChatExists,
+        handleFileUploads: vi.fn(async () => []),
+        selectedModel: "openai/gpt-4.1-mini",
+        clearDraft: chatCoreMocks.clearDraft,
+        bumpChat: chatCoreMocks.bumpChat,
+        deleteMessagesFromTimestamp: vi.fn(),
+      })
+      return null
+    }
+
+    act(() => {
+      root?.render(
+        <React.StrictMode>
+          <Harness />
+        </React.StrictMode>
+      )
+    })
+
+    return { checkLimitsAndNotify, ensureChatExists }
+  }
+
+  it("keeps prompt-only links as composer hydration without dispatching", async () => {
+    renderCore({ search: "?prompt=Project%20question" })
+    await flushAsyncWork()
+
+    expect(chatCoreMocks.sendMessage).not.toHaveBeenCalled()
+    expect(window.location.search).toBe("?prompt=Project%20question")
+  })
+
+  it("auto-submits a transferred project prompt once through the chat turn", async () => {
+    const ensureChatExists = vi.fn(async () => "chat-project")
+
+    renderCore({
+      search: "?prompt=Project%20question&autoSubmit=1",
+      ensureChatExists,
+    })
+    await flushAsyncWork()
+
+    expect(ensureChatExists).toHaveBeenCalledWith("user-1", "Project question")
+    expect(chatCoreMocks.sendMessage).toHaveBeenCalledTimes(1)
+    expect(chatCoreMocks.sendMessage).toHaveBeenCalledWith(
+      {
+        text: "Project question",
+        files: undefined,
+      },
+      {
+        body: expect.objectContaining({
+          chatId: "chat-project",
+          userId: "user-1",
+          model: "openai/gpt-4.1-mini",
+          isAuthenticated: true,
+          systemPrompt: "system prompt",
+          enableSearch: false,
+          chatVersion: 1,
+          expectedVisibleMessageCount: 0,
+        }),
+      }
+    )
+    expect(window.location.pathname).toBe("/c/chat-project")
+    expect(window.location.search).toBe("")
+  })
+})

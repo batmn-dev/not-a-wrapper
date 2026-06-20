@@ -3,6 +3,7 @@ import type { MutationCtx } from "../_generated/server"
 import {
   getEffectiveParentId,
   getNextBranchIndex,
+  getNextMissingBranchIndex,
   getSelectedPathBranchNormalizationPatches,
   getSiblingMessages,
   type MessageBranchPatch,
@@ -82,7 +83,7 @@ export async function clearSiblingSelectionForMutation(
 ): Promise<ChatMessage[]> {
   let updatedMessages = messages
   const siblings = getSiblingMessages(messages, parentMessageId, role)
-  for (const [index, sibling] of siblings.entries()) {
+  for (const sibling of siblings) {
     const patch: Partial<ChatMessage> = {
       selected: false,
       updatedAt: now,
@@ -91,7 +92,7 @@ export async function clearSiblingSelectionForMutation(
       patch.parentMessageId = parentMessageId
     }
     if (sibling.branchIndex === undefined) {
-      patch.branchIndex = index
+      patch.branchIndex = getNextMissingBranchIndex(updatedMessages, sibling)
     }
     updatedMessages = await patchMessageBranch(
       ctx,
@@ -112,7 +113,7 @@ export async function selectMessageSiblingForMutation(
   const parentMessageId = getEffectiveParentId(messages, message)
   let updatedMessages = messages
   const siblings = getSiblingMessages(messages, parentMessageId, message.role)
-  for (const [index, sibling] of siblings.entries()) {
+  for (const sibling of siblings) {
     const patch: Partial<ChatMessage> = {
       selected: sibling._id === message._id,
       updatedAt: now,
@@ -121,7 +122,7 @@ export async function selectMessageSiblingForMutation(
       patch.parentMessageId = parentMessageId
     }
     if (sibling.branchIndex === undefined) {
-      patch.branchIndex = index
+      patch.branchIndex = getNextMissingBranchIndex(updatedMessages, sibling)
     }
     updatedMessages = await patchMessageBranch(
       ctx,
