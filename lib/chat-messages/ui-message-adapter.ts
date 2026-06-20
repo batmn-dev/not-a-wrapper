@@ -80,6 +80,7 @@ export function durableStoredMessageToUiMessage(
     ...metadataRecord(message.metadata),
   }
 
+  metadata.serverMessageId = message._id
   setIfDefined(metadata, "durableStatus", message.status)
   if (options.metadataMode === "runtime") {
     if (message.error) metadata.durableError = message.error

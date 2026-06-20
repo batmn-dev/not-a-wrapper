@@ -8,6 +8,17 @@ import {
   type QueryCtx,
 } from "./_generated/server"
 import {
+  clearSiblingSelectionForMutation,
+  getNextBranchIndexForMutation,
+  normalizeSelectedBranchPathForMutation,
+  selectMessageSiblingForMutation,
+} from "./domain/message_branch_writes"
+import {
+  getEffectiveParentId,
+  getSelectedPathMessages,
+  getSiblingMessages,
+} from "./domain/message_branches"
+import {
   isActiveGenerationRunStatus,
   isTerminalGenerationRunStatus,
   isTerminalMessageStatus,
@@ -214,6 +225,67 @@ function findMessageIndexByUiId(
   )
 }
 
+function getVisibleSelectedMessages(messages: Doc<"messages">[]) {
+  return getSelectedPathMessages(messages).filter(isVisibleChatMessage)
+}
+
+function getLastSelectedMessage(messages: Doc<"messages">[]) {
+  const selectedMessages = getSelectedPathMessages(messages)
+  return selectedMessages[selectedMessages.length - 1]
+}
+
+function validateSelectedPathToken(
+  messages: Doc<"messages">[],
+  token: SelectedPathToken
+) {
+  if (token.expectedVisibleMessageCount === undefined) {
+    throw new Error("Selected path token required")
+  }
+
+  const selectedMessages = getVisibleSelectedMessages(messages)
+  if (selectedMessages.length !== token.expectedVisibleMessageCount) {
+    throw new Error("Stale chat state: selected path changed")
+  }
+
+  const tailMessage = selectedMessages[selectedMessages.length - 1]
+  const actualTailMessageId = tailMessage?._id
+
+  if (
+    token.tailMessageId !== undefined &&
+    actualTailMessageId !== token.tailMessageId
+  ) {
+    throw new Error("Stale chat state: selected path changed")
+  }
+}
+
+async function validateSelectedPathTokenForChat(
+  ctx: MutationCtx,
+  chatId: Id<"chats">,
+  token: SelectedPathToken
+) {
+  validateSelectedPathToken(await listMessages(ctx, chatId), token)
+}
+
+async function selectFallbackSiblingBeforeDelete(
+  ctx: MutationCtx,
+  message: Doc<"messages">,
+  now: number
+) {
+  if (message.selected !== true) return
+
+  const messages = await listMessages(ctx, message.chatId)
+  const parentMessageId = getEffectiveParentId(messages, message)
+  const siblings = getSiblingMessages(
+    messages,
+    parentMessageId,
+    message.role
+  ).filter((sibling) => sibling._id !== message._id)
+  const fallbackSibling = siblings[siblings.length - 1]
+  if (!fallbackSibling) return
+
+  await selectMessageSiblingForMutation(ctx, messages, fallbackSibling, now)
+}
+
 type TerminalGenerationOutcome = {
   status: "aborted" | "failed"
   error?: string
@@ -267,6 +339,7 @@ async function applyTerminalAssistantOutcome(
   }
 
   if (!hasSemanticAssistantParts(message)) {
+    await selectFallbackSiblingBeforeDelete(ctx, message, now)
     await ctx.db.delete(message._id)
     return run.assistantMessageId === message._id
       ? undefined
@@ -331,6 +404,7 @@ async function closeSupersededGenerationsForChat(
   for (const message of assistantMessages) {
     if (supersededMessageIds.has(message._id)) continue
     if (!hasSemanticAssistantParts(message)) {
+      await selectFallbackSiblingBeforeDelete(ctx, message, now)
       await ctx.db.delete(message._id)
       continue
     }
@@ -388,6 +462,11 @@ type GenerationRegenerationIntent = {
   precedingUserMessageId: string
 }
 
+type SelectedPathToken = {
+  expectedVisibleMessageCount?: number
+  tailMessageId?: string
+}
+
 async function insertUserMessageForGeneration(
   ctx: MutationCtx,
   owner: AuthenticatedOwner,
@@ -398,14 +477,19 @@ async function insertUserMessageForGeneration(
     provider: string
   },
   latestUserMessage: StoredUserMessage,
-  now: number
-) {
+  now: number,
+  branch: {
+    parentMessageId: Id<"messages"> | undefined
+    branchIndex: number
+    selected: boolean
+  }
+): Promise<Id<"messages">> {
   const content =
     latestUserMessage.content ??
     extractTextFromMessageParts(latestUserMessage.parts)
   const order = await getNextOrder(ctx, args.chatId)
 
-  await ctx.db.insert("messages", {
+  return await ctx.db.insert("messages", {
     chatId: args.chatId,
     orderId: order,
     clientMessageId: latestUserMessage.id,
@@ -413,6 +497,9 @@ async function insertUserMessageForGeneration(
     role: "user",
     content,
     parts: latestUserMessage.parts,
+    parentMessageId: branch.parentMessageId,
+    branchIndex: branch.branchIndex,
+    selected: branch.selected,
     status: "completed",
     requestId: args.requestId,
     model: args.model,
@@ -420,6 +507,68 @@ async function insertUserMessageForGeneration(
     createdAt: now,
     updatedAt: now,
   })
+}
+
+async function selectOrInsertLatestUserMessageForGeneration(
+  ctx: MutationCtx,
+  owner: AuthenticatedOwner,
+  args: {
+    chatId: Id<"chats">
+    requestId: string
+    model: string
+    provider: string
+  },
+  latestUserMessage: StoredUserMessage,
+  now: number,
+  selectedPathToken: SelectedPathToken
+) {
+  let currentMessages = await normalizeSelectedBranchPathForMutation(
+    ctx,
+    await listMessages(ctx, args.chatId),
+    now
+  )
+  validateSelectedPathToken(currentMessages, selectedPathToken)
+  const alreadyStored = currentMessages.find(
+    (message) =>
+      message.role === "user" &&
+      message.clientMessageId === latestUserMessage.id
+  )
+
+  if (alreadyStored) {
+    await selectMessageSiblingForMutation(
+      ctx,
+      currentMessages,
+      alreadyStored,
+      now
+    )
+    return alreadyStored._id
+  }
+
+  const parentMessageId = getLastSelectedMessage(currentMessages)?._id
+  currentMessages = await clearSiblingSelectionForMutation(
+    ctx,
+    currentMessages,
+    parentMessageId,
+    "user",
+    now
+  )
+
+  return await insertUserMessageForGeneration(
+    ctx,
+    owner,
+    args,
+    latestUserMessage,
+    now,
+    {
+      parentMessageId,
+      branchIndex: getNextBranchIndexForMutation(
+        currentMessages,
+        parentMessageId,
+        "user"
+      ),
+      selected: true,
+    }
+  )
 }
 
 export async function applyRegenerationIntentForGeneration(
@@ -435,18 +584,23 @@ export async function applyRegenerationIntentForGeneration(
   },
   now: number
 ) {
-  const currentMessages = await listMessages(ctx, args.chatId)
-  if (currentMessages.length !== args.regeneration.expectedChatVersion) {
+  let currentMessages = await normalizeSelectedBranchPathForMutation(
+    ctx,
+    await listMessages(ctx, args.chatId),
+    now
+  )
+  const selectedMessages = getVisibleSelectedMessages(currentMessages)
+  if (selectedMessages.length !== args.regeneration.expectedChatVersion) {
     throw new Error("Chat changed since regeneration started")
   }
 
   const targetIndex = findMessageIndexByUiId(
-    currentMessages,
+    selectedMessages,
     args.regeneration.targetAssistantMessageId
   )
   if (targetIndex === -1) throw new Error("Regeneration target not found")
 
-  const targetMessage = currentMessages[targetIndex]
+  const targetMessage = selectedMessages[targetIndex]
   if (!targetMessage || targetMessage.role !== "assistant") {
     throw new Error("Regeneration target must be an assistant message")
   }
@@ -456,8 +610,8 @@ export async function applyRegenerationIntentForGeneration(
   }
 
   let lastAssistantIndex = -1
-  for (let index = currentMessages.length - 1; index >= 0; index--) {
-    if (currentMessages[index]?.role === "assistant") {
+  for (let index = selectedMessages.length - 1; index >= 0; index--) {
+    if (selectedMessages[index]?.role === "assistant") {
       lastAssistantIndex = index
       break
     }
@@ -465,14 +619,14 @@ export async function applyRegenerationIntentForGeneration(
 
   if (
     targetIndex !== lastAssistantIndex ||
-    targetIndex !== currentMessages.length - 1
+    targetIndex !== selectedMessages.length - 1
   ) {
     throw new Error("Only the latest assistant message can be regenerated")
   }
 
   let pairedUserIndex = -1
   for (let index = targetIndex - 1; index >= 0; index--) {
-    if (currentMessages[index]?.role === "user") {
+    if (selectedMessages[index]?.role === "user") {
       pairedUserIndex = index
       break
     }
@@ -482,10 +636,10 @@ export async function applyRegenerationIntentForGeneration(
   }
 
   const requestedPrecedingUser = findMessageByUiId(
-    currentMessages,
+    selectedMessages,
     args.regeneration.precedingUserMessageId
   )
-  const pairedUser = currentMessages[pairedUserIndex]
+  const pairedUser = selectedMessages[pairedUserIndex]
   if (
     !requestedPrecedingUser ||
     !pairedUser ||
@@ -502,22 +656,41 @@ export async function applyRegenerationIntentForGeneration(
     "auto-denied: new generation started"
   )
 
-  await ctx.db.patch(targetMessage._id, {
-    generationRunId: args.runId,
-    requestId: args.requestId,
+  const parentMessageId = getEffectiveParentId(currentMessages, targetMessage)
+  currentMessages = await clearSiblingSelectionForMutation(
+    ctx,
+    currentMessages,
+    parentMessageId,
+    "assistant",
+    now
+  )
+  const assistantOrder = await getNextOrder(ctx, args.chatId)
+  const assistantMessageId = await ctx.db.insert("messages", {
+    chatId: args.chatId,
+    orderId: assistantOrder,
+    role: "assistant",
+    content: "",
+    parts: [],
+    parentMessageId,
+    branchIndex: getNextBranchIndexForMutation(
+      currentMessages,
+      parentMessageId,
+      "assistant"
+    ),
+    selected: true,
     status: "streaming",
+    requestId: args.requestId,
+    generationRunId: args.runId,
     model: args.model,
     provider: args.provider,
-    error: undefined,
-    finishReason: undefined,
-    usage: undefined,
+    createdAt: now,
     updatedAt: now,
   })
 
   return {
-    assistantMessageId: targetMessage._id,
-    assistantOrder: targetMessage.orderId,
-    messages: currentMessages
+    assistantMessageId,
+    assistantOrder,
+    messages: selectedMessages
       .slice(0, pairedUserIndex + 1)
       .filter(isModelHistoryMessage),
   }
@@ -535,21 +708,32 @@ export async function applyEditIntentForGeneration(
   },
   now: number
 ) {
-  const currentMessages = await listMessages(ctx, args.chatId)
-  if (currentMessages.length !== args.edit.expectedChatVersion) {
+  let currentMessages = await normalizeSelectedBranchPathForMutation(
+    ctx,
+    await listMessages(ctx, args.chatId),
+    now
+  )
+  const selectedMessages = getVisibleSelectedMessages(currentMessages)
+  if (selectedMessages.length !== args.edit.expectedChatVersion) {
     throw new Error("Chat changed since edit started")
   }
 
   const editedMessage = findMessageByUiId(
-    currentMessages,
+    selectedMessages,
     args.edit.editedMessageId
   )
   const replacementMessage = currentMessages.find(
-    (message) => message.clientMessageId === args.edit.replacementMessage.id
+    (message) =>
+      message.role === "user" &&
+      message.clientMessageId === args.edit.replacementMessage.id
   )
 
   if (!editedMessage && !replacementMessage) {
     throw new Error("Edited message not found")
+  }
+
+  if (editedMessage && editedMessage.role !== "user") {
+    throw new Error("Edited message must be a user message")
   }
 
   if (
@@ -559,29 +743,37 @@ export async function applyEditIntentForGeneration(
     throw new Error("Edited message version changed")
   }
 
-  const cutoffOrder =
-    editedMessage?.orderId ??
-    replacementMessage?.orderId ??
-    Number.MAX_SAFE_INTEGER
-  const replacementMessageId = replacementMessage?._id
-
-  for (const message of currentMessages) {
-    if (message.orderId < cutoffOrder) continue
-    if (replacementMessageId && message._id === replacementMessageId) continue
-    await ctx.db.delete(message._id)
-  }
-
-  const storedReplacement = (await listMessages(ctx, args.chatId)).some(
-    (message) => message.clientMessageId === args.edit.replacementMessage.id
-  )
-
-  if (!storedReplacement) {
+  if (replacementMessage) {
+    await selectMessageSiblingForMutation(
+      ctx,
+      currentMessages,
+      replacementMessage,
+      now
+    )
+  } else if (editedMessage) {
+    const parentMessageId = getEffectiveParentId(currentMessages, editedMessage)
+    currentMessages = await clearSiblingSelectionForMutation(
+      ctx,
+      currentMessages,
+      parentMessageId,
+      "user",
+      now
+    )
     await insertUserMessageForGeneration(
       ctx,
       owner,
       args,
       args.edit.replacementMessage,
-      now
+      now,
+      {
+        parentMessageId,
+        branchIndex: getNextBranchIndexForMutation(
+          currentMessages,
+          parentMessageId,
+          "user"
+        ),
+        selected: true,
+      }
     )
   }
 
@@ -890,6 +1082,8 @@ type PrepareGenerationForChatArgs = {
   model: string
   provider: string
   chatVersion?: number
+  expectedVisibleMessageCount?: number
+  tailMessageId?: string
   latestUserMessage?: {
     id: string
     role: "user" | "assistant" | "system" | "data"
@@ -921,6 +1115,19 @@ export async function prepareGenerationForChat(
     throw new Error("Generation cannot continue pending approvals")
   }
 
+  const latestUserMessage = args.edit
+    ? args.edit.replacementMessage
+    : args.regeneration
+      ? undefined
+      : args.latestUserMessage
+
+  if (latestUserMessage && !args.edit) {
+    await validateSelectedPathTokenForChat(ctx, args.chatId, {
+      expectedVisibleMessageCount: args.expectedVisibleMessageCount,
+      tailMessageId: args.tailMessageId,
+    })
+  }
+
   await closeSupersededGenerationsForChat(ctx, args.chatId, owner.user._id, now)
 
   const continuationMessage = await applyApprovalResponses(
@@ -928,12 +1135,6 @@ export async function prepareGenerationForChat(
     owner,
     approvalResponses
   )
-
-  const latestUserMessage = args.edit
-    ? args.edit.replacementMessage
-    : args.regeneration
-      ? undefined
-      : args.latestUserMessage
 
   if (latestUserMessage) {
     await denyPendingApprovalsForChat(
@@ -957,20 +1158,17 @@ export async function prepareGenerationForChat(
         now
       )
     } else {
-      const currentMessages = await listMessages(ctx, args.chatId)
-      const alreadyStored = currentMessages.some(
-        (message) => message.clientMessageId === latestUserMessage.id
+      await selectOrInsertLatestUserMessageForGeneration(
+        ctx,
+        owner,
+        args,
+        latestUserMessage as StoredUserMessage,
+        now,
+        {
+          expectedVisibleMessageCount: args.expectedVisibleMessageCount,
+          tailMessageId: args.tailMessageId,
+        }
       )
-
-      if (!alreadyStored) {
-        await insertUserMessageForGeneration(
-          ctx,
-          owner,
-          args,
-          latestUserMessage as StoredUserMessage,
-          now
-        )
-      }
     }
   }
 
@@ -1019,6 +1217,19 @@ export async function prepareGenerationForChat(
       updatedAt: now,
     })
   } else {
+    let currentMessages = await normalizeSelectedBranchPathForMutation(
+      ctx,
+      await listMessages(ctx, args.chatId),
+      now
+    )
+    const parentMessageId = getLastSelectedMessage(currentMessages)?._id
+    currentMessages = await clearSiblingSelectionForMutation(
+      ctx,
+      currentMessages,
+      parentMessageId,
+      "assistant",
+      now
+    )
     assistantOrder = await getNextOrder(ctx, args.chatId)
     assistantMessageId = await ctx.db.insert("messages", {
       chatId: args.chatId,
@@ -1026,6 +1237,13 @@ export async function prepareGenerationForChat(
       role: "assistant",
       content: "",
       parts: [],
+      parentMessageId,
+      branchIndex: getNextBranchIndexForMutation(
+        currentMessages,
+        parentMessageId,
+        "assistant"
+      ),
+      selected: true,
       status: "streaming",
       requestId: args.requestId,
       generationRunId: runId,
@@ -1046,7 +1264,7 @@ export async function prepareGenerationForChat(
 
   const modelHistory =
     preparedModelHistory ??
-    (await listMessages(ctx, args.chatId)).filter(
+    getSelectedPathMessages(await listMessages(ctx, args.chatId)).filter(
       (message) =>
         (includeAssistantInModelHistory ||
           message._id !== assistantMessageId) &&
@@ -1068,6 +1286,8 @@ export const prepareGeneration = mutation({
     model: v.string(),
     provider: v.string(),
     chatVersion: v.optional(v.number()),
+    expectedVisibleMessageCount: v.optional(v.number()),
+    tailMessageId: v.optional(v.string()),
     latestUserMessage: v.optional(vStoredMessage),
     edit: v.optional(vEditIntent),
     regeneration: v.optional(vRegenerationIntent),

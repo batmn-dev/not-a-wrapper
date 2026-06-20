@@ -6,6 +6,7 @@ import {
 import {
   buildEditIntent,
   buildChatTurnRequestBody,
+  buildSelectedPathToken,
   prepareEditTurnPlan,
   prepareRegenerationTurnPlan,
   routePersistsChatMessages,
@@ -72,6 +73,7 @@ export type SendTurnArgs = {
   text: string
   selectedModel: string
   isAuthenticated: boolean
+  messages?: ChatTurnMessage[]
   submittedFiles?: File[]
   optimisticAttachments?: OptimisticAttachment[]
   bodyExtras?: Record<string, unknown>
@@ -83,6 +85,7 @@ export type SuggestionTurnArgs = {
   text: string
   selectedModel: string
   isAuthenticated: boolean
+  messages?: ChatTurnMessage[]
   chatVersion: number
 }
 
@@ -168,6 +171,7 @@ export async function runSendTurn(
     text,
     selectedModel,
     isAuthenticated,
+    messages = [],
     submittedFiles = [],
     optimisticAttachments = [],
     bodyExtras = {},
@@ -259,6 +263,7 @@ export async function runSendTurn(
           userId,
           selectedModel,
           isAuthenticated,
+          selectedPathToken: buildSelectedPathToken(messages),
           bodyExtras,
         }),
       }
@@ -285,6 +290,7 @@ export async function runSuggestionTurn(
     text: args.text,
     selectedModel: args.selectedModel,
     isAuthenticated: args.isAuthenticated,
+    messages: args.messages,
     bodyExtras: {
       chatVersion: args.chatVersion,
     },

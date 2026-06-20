@@ -27,6 +27,7 @@ type MessageProps = {
   ) => Promise<EditTurnResult | void> | EditTurnResult | void
   onReload: (messageId: string) => void
   onStop?: () => void
+  onSelectBranch?: (messageId: string) => void
   parts?: MessageType["parts"]
   metadata?: Record<string, unknown>
   status?: DurableMessageStatus | "ready" | "error"
@@ -99,6 +100,7 @@ function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
     prev.variant === "assistant" &&
     prev.onToolApproval !== next.onToolApproval
   ) return false
+  if (prev.onSelectBranch !== next.onSelectBranch) return false
 
   // Attachments: compare all rendered fields
   const prevLen = prev.attachments?.length ?? 0
@@ -126,6 +128,7 @@ function MessageInner({
   onEdit,
   onReload,
   onStop,
+  onSelectBranch,
   parts,
   metadata,
   status,
@@ -154,6 +157,8 @@ function MessageInner({
         attachments={attachments}
         className={className}
         isUserAuthenticated={isUserAuthenticated}
+        metadata={metadata}
+        onSelectBranch={onSelectBranch}
       >
         {children}
       </MessageUser>
@@ -167,6 +172,7 @@ function MessageInner({
         copyToClipboard={copyToClipboard}
         onReload={onReload}
         onStop={onStop}
+        onSelectBranch={onSelectBranch}
         isLast={isLast}
         parts={parts}
         metadata={metadata}

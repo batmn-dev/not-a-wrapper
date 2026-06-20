@@ -55,6 +55,7 @@ type ConversationProps = {
   onReload: (messageId: string) => void
   onStop?: () => void
   onQuote?: (text: string, messageId: string) => void
+  onSelectBranch?: (messageId: string) => void
   isUserAuthenticated?: boolean
   lastFinishReason?: string
   onToolApproval?: (
@@ -72,6 +73,7 @@ export function Conversation({
   onReload,
   onStop,
   onQuote,
+  onSelectBranch,
   isUserAuthenticated,
   lastFinishReason,
   onToolApproval,
@@ -119,6 +121,7 @@ export function Conversation({
                 onEdit={onEdit}
                 onReload={onReload}
                 onStop={isLast && status === "streaming" ? onStop : undefined}
+                onSelectBranch={onSelectBranch}
                 parts={message.parts}
                 metadata={message.metadata as Record<string, unknown> | undefined}
                 status={messageStatus}

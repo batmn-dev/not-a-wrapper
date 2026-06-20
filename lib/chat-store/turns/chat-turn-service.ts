@@ -51,6 +51,11 @@ export type ChatTurnRegenerationIntent = {
   precedingUserMessageId: string
 }
 
+export type ChatTurnSelectedPathToken = {
+  expectedVisibleMessageCount: number
+  tailMessageId?: string
+}
+
 export type ChatTurnRequestBody = {
   chatId: string | null
   userId: string
@@ -59,6 +64,8 @@ export type ChatTurnRequestBody = {
   systemPrompt: string
   enableSearch?: boolean
   chatVersion?: number
+  expectedVisibleMessageCount?: number
+  tailMessageId?: string
   edit?: ChatTurnEditIntent
   regeneration?: ChatTurnRegenerationIntent
   [key: string]: unknown
@@ -72,6 +79,7 @@ type BuildChatTurnRequestBodyArgs = {
   systemPrompt?: string
   enableSearch?: boolean
   chatVersion?: number
+  selectedPathToken?: ChatTurnSelectedPathToken
   edit?: ChatTurnEditIntent
   regeneration?: ChatTurnRegenerationIntent
   bodyExtras?: Record<string, unknown>
@@ -85,6 +93,7 @@ export function buildChatTurnRequestBody({
   systemPrompt,
   enableSearch,
   chatVersion,
+  selectedPathToken,
   edit,
   regeneration,
   bodyExtras = {},
@@ -97,9 +106,44 @@ export function buildChatTurnRequestBody({
     systemPrompt: systemPrompt || SYSTEM_PROMPT_DEFAULT,
     ...(enableSearch !== undefined ? { enableSearch } : {}),
     ...(chatVersion !== undefined ? { chatVersion } : {}),
+    ...(selectedPathToken
+      ? {
+          expectedVisibleMessageCount:
+            selectedPathToken.expectedVisibleMessageCount,
+          ...(selectedPathToken.tailMessageId
+            ? { tailMessageId: selectedPathToken.tailMessageId }
+            : {}),
+        }
+      : {}),
     ...(edit ? { edit } : {}),
     ...(regeneration ? { regeneration } : {}),
     ...bodyExtras,
+  }
+}
+
+function getServerMessageId(message: ChatTurnMessage): string | undefined {
+  const metadata = message.metadata
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return undefined
+  }
+  const candidate = (metadata as Record<string, unknown>).serverMessageId
+  return typeof candidate === "string" && candidate.length > 0
+    ? candidate
+    : undefined
+}
+
+export function buildSelectedPathToken(
+  messages: ChatTurnMessage[]
+): ChatTurnSelectedPathToken {
+  const visibleMessages = sanitizeVisibleChatMessages(messages)
+  const tailMessage = visibleMessages[visibleMessages.length - 1]
+  const tailMessageId = tailMessage
+    ? getServerMessageId(tailMessage)
+    : undefined
+
+  return {
+    expectedVisibleMessageCount: visibleMessages.length,
+    ...(tailMessageId ? { tailMessageId } : {}),
   }
 }
 
@@ -402,10 +446,7 @@ export type ChatTurnStoreAdapters = {
     message: ChatTurnMessage,
     overrideChatId?: string
   ) => void | Promise<void>
-  deleteMessagesFromTimestamp: (
-    timestamp: number,
-    minVersion?: number
-  ) => Promise<void>
+  deleteMessagesFromTimestamp: (timestamp: number) => Promise<void>
   updateTitle: (chatId: string, title: string) => void | Promise<void>
   pendingEdit: {
     get: () => PendingEdit | null

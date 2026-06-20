@@ -16,6 +16,7 @@ type UseChatOperationsProps = {
     isAuthenticated?: boolean,
     systemPrompt?: string
   ) => Promise<Chats | undefined>
+  navigateToChat?: (chatId: string) => void
   setHasDialogAuth: (value: boolean) => void
 }
 
@@ -25,6 +26,7 @@ export function useChatOperations({
   selectedModel,
   systemPrompt,
   createNewChat,
+  navigateToChat,
   setHasDialogAuth,
 }: UseChatOperationsProps) {
   const checkLimitsAndNotify = async (uid: string): Promise<boolean> => {
@@ -64,11 +66,6 @@ export function useChatOperations({
   const ensureChatExists = async (userId: string, input: string) => {
     if (chatId) return chatId
 
-    if (!isAuthenticated) {
-      const storedGuestChatId = localStorage.getItem(GUEST_CHAT_STORAGE_KEY)
-      if (storedGuestChatId) return storedGuestChatId
-    }
-
     try {
       const newChat = await createNewChat(
         userId,
@@ -79,11 +76,10 @@ export function useChatOperations({
       )
 
       if (!newChat) return null
-      if (isAuthenticated) {
-        window.history.pushState(null, "", `/c/${newChat.id}`)
-      } else {
+      if (!isAuthenticated) {
         localStorage.setItem(GUEST_CHAT_STORAGE_KEY, newChat.id)
       }
+      navigateToChat?.(newChat.id)
 
       return newChat.id
     } catch (err: unknown) {

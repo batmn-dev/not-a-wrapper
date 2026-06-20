@@ -52,10 +52,7 @@ type UseChatCoreProps = {
   selectedModel: string
   clearDraft: () => void
   bumpChat: (chatId: string) => void
-  deleteMessagesFromTimestamp: (
-    timestamp: number,
-    minVersion?: number
-  ) => Promise<void>
+  deleteMessagesFromTimestamp: (timestamp: number) => Promise<void>
 }
 
 export function useChatCore({
@@ -176,6 +173,7 @@ export function useChatCore({
   // Search params handling
   const searchParams = useSearchParams()
   const prompt = searchParams.get("prompt")
+  const shouldAutoSubmitPrompt = searchParams.get("autoSubmit") === "1"
 
   // Ref-based input management — avoids cascading re-renders on every keystroke.
   // ChatInput owns the display state; this ref is the source of truth for submit/handlers.
@@ -244,8 +242,26 @@ export function useChatCore({
       isError,
       finishReason,
     }) => {
+      const messageWithCreatedAt = message as ChatTurnMessage
+      const finishedMessageCreatedAt =
+        messageWithCreatedAt.createdAt ?? new Date()
+      const finishedMessage: ChatTurnMessage = {
+        ...message,
+        createdAt: finishedMessageCreatedAt,
+      }
+
+      setMessages((prev) =>
+        prev.map((currentMessage) => {
+          const currentWithCreatedAt = currentMessage as ChatTurnMessage
+          return currentMessage.id === finishedMessage.id &&
+            !currentWithCreatedAt.createdAt
+            ? { ...currentMessage, createdAt: finishedMessageCreatedAt }
+            : currentMessage
+        })
+      )
+
       await chatTurn.finishChatTurn({
-        message,
+        message: finishedMessage,
         isAbort,
         isDisconnect,
         isError,
@@ -258,10 +274,19 @@ export function useChatCore({
     onError: handleError,
   })
 
-  const getIsSending = useCallback(
-    () => isSendingStore.get(),
-    [isSendingStore]
+  const setMessagesRef = useRef(setMessages)
+  useEffect(() => {
+    setMessagesRef.current = setMessages
+  }, [setMessages])
+
+  const updateMessages = useCallback(
+    (action: Parameters<typeof setMessages>[0]) => {
+      setMessagesRef.current(action)
+    },
+    []
   )
+
+  const getIsSending = useCallback(() => isSendingStore.get(), [isSendingStore])
 
   const setIsSending = useCallback(
     (value: boolean) => {
@@ -297,7 +322,7 @@ export function useChatCore({
     () =>
       createChatTurnStore({
         isAuthenticated: () => isAuthenticated,
-        updateMessages: (updater) => setMessages(updater),
+        updateMessages,
         cacheAndAddMessage,
         deleteMessagesFromTimestamp,
         updateTitle,
@@ -314,7 +339,7 @@ export function useChatCore({
       }),
     [
       isAuthenticated,
-      setMessages,
+      updateMessages,
       cacheAndAddMessage,
       deleteMessagesFromTimestamp,
       updateTitle,
@@ -426,10 +451,10 @@ export function useChatCore({
 
   // Handle search params — hydrate input from ?prompt= on mount or navigation
   useEffect(() => {
-    if (prompt && typeof window !== "undefined") {
+    if (prompt && !shouldAutoSubmitPrompt && typeof window !== "undefined") {
       requestAnimationFrame(() => setInputValue(prompt))
     }
-  }, [prompt, setInputValue])
+  }, [prompt, shouldAutoSubmitPrompt, setInputValue])
 
   const setEnableSearch = useCallback(
     (enabled: boolean) => {
@@ -461,6 +486,7 @@ export function useChatCore({
       text: currentInput,
       selectedModel,
       isAuthenticated,
+      messages,
       submittedFiles,
       optimisticAttachments,
       bodyExtras: {
@@ -488,9 +514,38 @@ export function useChatCore({
     enableSearch,
     debouncedSetDraftValue,
     clearDraft,
-    messages.length,
+    messages,
     bumpChat,
   ])
+
+  const autoSubmittedPromptRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (
+      !chatId ||
+      !prompt ||
+      !shouldAutoSubmitPrompt ||
+      typeof window === "undefined"
+    ) {
+      return
+    }
+
+    const autoSubmitKey = `${chatId}:${prompt}`
+    if (autoSubmittedPromptRef.current === autoSubmitKey) return
+    autoSubmittedPromptRef.current = autoSubmitKey
+
+    setInputValue(prompt)
+
+    const nextUrl = new URL(window.location.href)
+    nextUrl.searchParams.delete("prompt")
+    nextUrl.searchParams.delete("autoSubmit")
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`
+    )
+
+    void submit()
+  }, [chatId, prompt, shouldAutoSubmitPrompt, setInputValue, submit])
 
   const { submitEdit } = useChatEdit({
     chatTurn,
@@ -511,31 +566,28 @@ export function useChatCore({
         text: suggestion,
         selectedModel,
         isAuthenticated,
+        messages,
         chatVersion: messages.length + 1, // current messages + 1 for the new message being sent
       })
     },
-    [chatTurn, selectedModel, isAuthenticated, messages.length]
+    [chatTurn, selectedModel, isAuthenticated, messages]
   )
 
   // Handle reload (v6: renamed to regenerate)
-  const handleReload = useCallback(async (messageId: string) => {
-    await chatTurn.runRegenerationTurn({
-      chatId,
-      messages,
-      targetAssistantMessageId: messageId,
-      selectedModel,
-      isAuthenticated,
-      systemPrompt,
-      chatVersion: messages.length, // same count since we're regenerating, not adding
-    })
-  }, [
-    chatTurn,
-    chatId,
-    selectedModel,
-    isAuthenticated,
-    systemPrompt,
-    messages,
-  ])
+  const handleReload = useCallback(
+    async (messageId: string) => {
+      await chatTurn.runRegenerationTurn({
+        chatId,
+        messages,
+        targetAssistantMessageId: messageId,
+        selectedModel,
+        isAuthenticated,
+        systemPrompt,
+        chatVersion: messages.length, // same count since we're regenerating, not adding
+      })
+    },
+    [chatTurn, chatId, selectedModel, isAuthenticated, systemPrompt, messages]
+  )
 
   // Flush pending draft on tab close; also flush on unmount (navigation)
   useEffect(() => {

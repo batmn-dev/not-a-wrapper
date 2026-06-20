@@ -8,11 +8,23 @@ import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import { durableStoredMessageToUiMessage } from "@/lib/chat-messages/ui-message-adapter"
 import type { UIMessage } from "ai"
 import { useMutation, useQuery } from "convex/react"
-import { createContext, useCallback, useContext, useMemo, useState } from "react"
-import { getCachedMessages } from "./api"
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react"
 import { getMessagePersistenceMode } from "../identity"
-import { writeToIndexedDB } from "../persist"
 import { useChatSession } from "../session/provider"
+import {
+  cacheMessages,
+  getCachedMessages,
+  getCachedMessagesServerSnapshot,
+  getCachedMessagesSnapshot,
+  subscribeCachedMessages,
+} from "./api"
 
 // Extended UIMessage type for app compatibility (includes optional properties from v4)
 export type ExtendedUIMessage = UIMessage & {
@@ -29,13 +41,14 @@ type MessagesContextType = {
   refresh: () => Promise<void>
   saveAllMessages: (messages: ExtendedUIMessage[]) => Promise<void>
   /** Cache message locally and persist to Convex. Pass overrideChatId to handle stale closures during chat creation. */
-  cacheAndAddMessage: (message: ExtendedUIMessage, overrideChatId?: string) => Promise<void>
+  cacheAndAddMessage: (
+    message: ExtendedUIMessage,
+    overrideChatId?: string
+  ) => Promise<void>
   resetMessages: () => Promise<void>
   deleteMessages: () => Promise<void>
-  deleteMessagesFromTimestamp: (
-    timestamp: number,
-    minVersion?: number
-  ) => Promise<void>
+  deleteMessagesFromTimestamp: (timestamp: number) => Promise<void>
+  selectMessageBranch: (messageId: string) => Promise<void>
 }
 
 const MessagesContext = createContext<MessagesContextType | null>(null)
@@ -66,7 +79,10 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
   const addMessageMutation = useMutation(api.messages.add)
   const addBatchMutation = useMutation(api.messages.addBatch)
   const clearMessagesMutation = useMutation(api.messages.clearForChat)
-  const deleteFromTimestampMutation = useMutation(api.messages.deleteFromTimestamp)
+  const deleteFromTimestampMutation = useMutation(
+    api.messages.deleteFromTimestamp
+  )
+  const selectBranchMutation = useMutation(api.messages.selectBranch)
 
   // Convert Convex messages to AI SDK format
   const serverMessages: ExtendedUIMessage[] = useMemo(() => {
@@ -78,8 +94,26 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
 
   const isLoading = convexMessages === undefined && isValidConvexId
 
+  const subscribeToCachedMessages = useCallback(
+    (listener: () => void) => {
+      if (!chatId || messagePersistenceMode !== "localOnly") return () => {}
+      return subscribeCachedMessages(chatId, listener)
+    },
+    [chatId, messagePersistenceMode]
+  )
+  const localMessages = useSyncExternalStore(
+    subscribeToCachedMessages,
+    () =>
+      getCachedMessagesSnapshot(
+        messagePersistenceMode === "localOnly" ? chatId : null
+      ),
+    getCachedMessagesServerSnapshot
+  )
+
   // Track optimistic messages per chat (keyed by chatId for natural isolation)
-  const [optimisticMessagesMap, setOptimisticMessagesMap] = useState<Map<string, ExtendedUIMessage[]>>(new Map())
+  const [optimisticMessagesMap, setOptimisticMessagesMap] = useState<
+    Map<string, ExtendedUIMessage[]>
+  >(new Map())
 
   // Get optimistic messages for current chat (memoized to prevent unnecessary re-renders)
   const optimisticMessages = useMemo(
@@ -92,14 +126,17 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     // If chatId is null, return empty
     if (chatId === null) return []
 
-    // Merge server messages with optimistic messages for this chat
+    const storedMessages =
+      messagePersistenceMode === "localOnly" ? localMessages : serverMessages
+
+    // Merge stored messages with optimistic messages for this chat
     // Deduplicate by ID to prevent duplicate-key React errors when optimistic
-    // messages overlap with server messages or with each other (e.g. rapid submissions)
+    // messages overlap with stored messages or with each other (e.g. rapid submissions)
     const seenIds = new Set<string>()
     const result: ExtendedUIMessage[] = []
 
-    // Server messages take priority
-    for (const m of serverMessages) {
+    // Stored messages take priority
+    for (const m of storedMessages) {
       if (!seenIds.has(m.id)) {
         seenIds.add(m.id)
         result.push(m)
@@ -115,128 +152,157 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     }
 
     return result
-  }, [serverMessages, optimisticMessages, chatId])
+  }, [
+    localMessages,
+    messagePersistenceMode,
+    serverMessages,
+    optimisticMessages,
+    chatId,
+  ])
 
   // Helper to update optimistic messages for current chat
-  const updateOptimisticMessages = useCallback((updater: (prev: ExtendedUIMessage[]) => ExtendedUIMessage[]) => {
-    if (!chatId) return
-    setOptimisticMessagesMap((prevMap) => {
-      const newMap = new Map(prevMap)
-      const current = newMap.get(chatId) ?? []
-      newMap.set(chatId, updater(current))
-      return newMap
-    })
-  }, [chatId])
+  const updateOptimisticMessages = useCallback(
+    (updater: (prev: ExtendedUIMessage[]) => ExtendedUIMessage[]) => {
+      if (!chatId) return
+      setOptimisticMessagesMap((prevMap) => {
+        const newMap = new Map(prevMap)
+        const current = newMap.get(chatId) ?? []
+        newMap.set(chatId, updater(current))
+        return newMap
+      })
+    },
+    [chatId]
+  )
 
   const refresh = useCallback(async () => {
     // With Convex, data is real-time, so refresh is a no-op
   }, [])
 
-  const cacheAndAddMessage = useCallback(async (message: ExtendedUIMessage, overrideChatId?: string) => {
-    // Use overrideChatId to handle stale closures during chat creation flow
-    const effectiveChatId = overrideChatId || chatId
-    if (!effectiveChatId) return
+  const cacheAndAddMessage = useCallback(
+    async (message: ExtendedUIMessage, overrideChatId?: string) => {
+      // Use overrideChatId to handle stale closures during chat creation flow
+      const effectiveChatId = overrideChatId || chatId
+      if (!effectiveChatId) return
 
-    // Ensure createdAt exists for correct cache sort order (AI SDK v6
-    // UIMessages don't include createdAt; without it the message sorts to
-    // epoch-0 and getLastMessagesFromDb can't find it for reconciliation).
-    const messageToCache: ExtendedUIMessage = message.createdAt
-      ? message
-      : { ...message, createdAt: new Date() }
+      // Ensure createdAt exists for correct cache sort order (AI SDK v6
+      // UIMessages don't include createdAt; without it the message sorts to
+      // epoch-0 and getLastMessagesFromDb can't find it for reconciliation).
+      const messageToCache: ExtendedUIMessage = message.createdAt
+        ? message
+        : { ...message, createdAt: new Date() }
 
-    // Optimistic update - add to pending messages (use effectiveChatId for map key)
-    if (effectiveChatId === chatId) {
-      // Only update optimistic state if we're in the same chat context
-      // Guard against duplicate IDs from rapid submissions or re-renders
-      updateOptimisticMessages((prev) =>
-        prev.some((m) => m.id === messageToCache.id) ? prev : [...prev, messageToCache]
-      )
-    }
+      // Optimistic update - add to pending messages (use effectiveChatId for map key)
+      if (effectiveChatId === chatId) {
+        // Only update optimistic state if we're in the same chat context
+        // Guard against duplicate IDs from rapid submissions or re-renders
+        updateOptimisticMessages((prev) =>
+          prev.some((m) => m.id === messageToCache.id)
+            ? prev
+            : [...prev, messageToCache]
+        )
+      }
 
-    // Read the current IndexedDB cache and append — avoids overwriting data
-    // from a prior cacheAndAddMessage call in the same async chain.  The old
-    // approach ([...serverMessages, ...optimisticMessages, message]) used stale
-    // closure values, causing the second call to drop the first call's message.
-    const cached = await getCachedMessages(effectiveChatId)
-    const allMessages = [...cached, messageToCache]
-    const seenIds = new Set<string>()
-    const updated = allMessages.filter((m) => {
-      if (seenIds.has(m.id)) return false
-      seenIds.add(m.id)
-      return true
-    })
-    await writeToIndexedDB("messages", { id: effectiveChatId, messages: updated })
+      // Read the current IndexedDB cache and append — avoids overwriting data
+      // from a prior cacheAndAddMessage call in the same async chain.  The old
+      // approach ([...serverMessages, ...optimisticMessages, message]) used stale
+      // closure values, causing the second call to drop the first call's message.
+      const cached = await getCachedMessages(effectiveChatId)
+      const allMessages = [...cached, messageToCache]
+      const seenIds = new Set<string>()
+      const updated = allMessages.filter((m) => {
+        if (seenIds.has(m.id)) return false
+        seenIds.add(m.id)
+        return true
+      })
+      await cacheMessages(effectiveChatId, updated)
 
-    // Persist to Convex for authenticated users (valid Convex IDs only)
-    // Guest users will silently skip this (auth required for mutations)
-    if (getMessagePersistenceMode(effectiveChatId) === "server") {
+      // Persist to Convex for authenticated users (valid Convex IDs only)
+      // Guest users will silently skip this (auth required for mutations)
+      if (getMessagePersistenceMode(effectiveChatId) === "server") {
+        try {
+          const textContent =
+            extractTextFromMessageParts(messageToCache.parts) ||
+            messageToCache.content ||
+            ""
+
+          await addMessageMutation({
+            chatId: effectiveChatId as Id<"chats">,
+            clientMessageId: messageToCache.id,
+            role: messageToCache.role as "user" | "assistant" | "system",
+            content: textContent,
+            parts: messageToCache.parts,
+          })
+        } catch (error) {
+          // Silently fail for guests (no auth) - they only get local storage
+          // For authenticated users, log the error but don't block the UI
+          // The optimistic update keeps the UI responsive
+          console.debug("Message persistence skipped:", error)
+        }
+      }
+    },
+    [chatId, updateOptimisticMessages, addMessageMutation]
+  )
+
+  const saveAllMessages = useCallback(
+    async (newMessages: ExtendedUIMessage[]) => {
+      if (!chatId) return
+
+      if (getMessagePersistenceMode(chatId) === "localOnly") {
+        await cacheMessages(chatId, newMessages)
+        return
+      }
+
       try {
-        const textContent =
-          extractTextFromMessageParts(messageToCache.parts) ||
-          messageToCache.content ||
-          ""
+        // Find new messages that need to be saved
+        const existingIds = new Set(serverMessages.map((m) => m.id))
+        const messagesToSave = newMessages.filter((m) => !existingIds.has(m.id))
 
-        await addMessageMutation({
-          chatId: effectiveChatId as Id<"chats">,
-          clientMessageId: messageToCache.id,
-          role: messageToCache.role as "user" | "assistant" | "system",
-          content: textContent,
-          parts: messageToCache.parts,
-        })
+        if (messagesToSave.length > 0) {
+          await addBatchMutation({
+            chatId: chatId as Id<"chats">,
+            messages: messagesToSave.map((msg) => {
+              const textContent =
+                extractTextFromMessageParts(msg.parts) || msg.content || ""
+
+              return {
+                clientMessageId: msg.id,
+                role: msg.role as "user" | "assistant" | "system",
+                content: textContent,
+                parts: msg.parts,
+              }
+            }),
+          })
+        }
+
+        // Update optimistic messages to match what was saved
+        updateOptimisticMessages(() =>
+          newMessages.filter((m) => !existingIds.has(m.id))
+        )
+
+        // Also cache locally
+        await cacheMessages(chatId, newMessages)
       } catch (error) {
-        // Silently fail for guests (no auth) - they only get local storage
-        // For authenticated users, log the error but don't block the UI
-        // The optimistic update keeps the UI responsive
-        console.debug("Message persistence skipped:", error)
+        console.error("Failed to save messages:", error)
+        toast({ title: "Failed to save messages", status: "error" })
       }
-    }
-  }, [chatId, updateOptimisticMessages, addMessageMutation])
-
-  const saveAllMessages = useCallback(async (newMessages: ExtendedUIMessage[]) => {
-    if (!chatId || getMessagePersistenceMode(chatId) !== "server") return
-
-    try {
-      // Find new messages that need to be saved
-      const existingIds = new Set(serverMessages.map((m) => m.id))
-      const messagesToSave = newMessages.filter((m) => !existingIds.has(m.id))
-
-      if (messagesToSave.length > 0) {
-        await addBatchMutation({
-          chatId: chatId as Id<"chats">,
-          messages: messagesToSave.map((msg) => {
-            const textContent =
-              extractTextFromMessageParts(msg.parts) || msg.content || ""
-
-            return {
-              clientMessageId: msg.id,
-              role: msg.role as "user" | "assistant" | "system",
-              content: textContent,
-              parts: msg.parts,
-            }
-          }),
-        })
-      }
-
-      // Update optimistic messages to match what was saved
-      updateOptimisticMessages(() => newMessages.filter((m) => !existingIds.has(m.id)))
-
-      // Also cache locally
-      await writeToIndexedDB("messages", { id: chatId, messages: newMessages })
-    } catch (error) {
-      console.error("Failed to save messages:", error)
-      toast({ title: "Failed to save messages", status: "error" })
-    }
-  }, [chatId, serverMessages, addBatchMutation, updateOptimisticMessages])
+    },
+    [chatId, serverMessages, addBatchMutation, updateOptimisticMessages]
+  )
 
   const deleteMessages = useCallback(async () => {
-    if (!chatId || getMessagePersistenceMode(chatId) !== "server") return
+    if (!chatId) return
 
     // Clear optimistic messages immediately
     updateOptimisticMessages(() => [])
 
+    if (getMessagePersistenceMode(chatId) === "localOnly") {
+      await cacheMessages(chatId, [])
+      return
+    }
+
     try {
       await clearMessagesMutation({ chatId: chatId as Id<"chats"> })
-      await writeToIndexedDB("messages", { id: chatId, messages: [] })
+      await cacheMessages(chatId, [])
     } catch (error) {
       console.error("Failed to delete messages:", error)
       toast({ title: "Failed to delete messages", status: "error" })
@@ -247,37 +313,60 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     updateOptimisticMessages(() => [])
   }, [updateOptimisticMessages])
 
-  const deleteMessagesFromTimestamp = useCallback(async (
-    timestamp: number,
-    minVersion?: number
-  ) => {
-    if (!chatId || getMessagePersistenceMode(chatId) !== "server") return
+  const deleteMessagesFromTimestamp = useCallback(
+    async (timestamp: number) => {
+      if (!chatId || getMessagePersistenceMode(chatId) !== "server") return
 
-    await deleteFromTimestampMutation({
-      chatId: chatId as Id<"chats">,
-      timestamp,
-    })
+      await deleteFromTimestampMutation({
+        chatId: chatId as Id<"chats">,
+        timestamp,
+      })
 
-    // Local state is already trimmed by useChatCore, Convex will reactively update
-    // Errors propagate to submitEdit which handles rollback and user notification
-  }, [chatId, deleteFromTimestampMutation])
+      // Local state is already trimmed by useChatCore, Convex will reactively update
+      // Errors propagate to submitEdit which handles rollback and user notification
+    },
+    [chatId, deleteFromTimestampMutation]
+  )
+
+  const selectMessageBranch = useCallback(
+    async (messageId: string) => {
+      if (!chatId || getMessagePersistenceMode(chatId) !== "server") return
+
+      try {
+        await selectBranchMutation({
+          chatId: chatId as Id<"chats">,
+          messageId: messageId as Id<"messages">,
+        })
+        updateOptimisticMessages(() => [])
+      } catch (error) {
+        console.error("Failed to select message branch:", error)
+        toast({ title: "Failed to switch branch", status: "error" })
+      }
+    },
+    [chatId, selectBranchMutation, updateOptimisticMessages]
+  )
 
   // setMessages for backward compatibility - updates optimistic messages
-  const setMessages = useCallback((action: React.SetStateAction<ExtendedUIMessage[]>) => {
-    if (typeof action === "function") {
-      updateOptimisticMessages((prev) => {
-        const allMessages = [...serverMessages, ...prev]
-        const newMessages = action(allMessages)
-        // Keep only messages not in server data
+  const setMessages = useCallback(
+    (action: React.SetStateAction<ExtendedUIMessage[]>) => {
+      if (typeof action === "function") {
+        updateOptimisticMessages((prev) => {
+          const allMessages = [...serverMessages, ...prev]
+          const newMessages = action(allMessages)
+          // Keep only messages not in server data
+          const serverIds = new Set(serverMessages.map((m) => m.id))
+          return newMessages.filter((m) => !serverIds.has(m.id))
+        })
+      } else {
+        // Direct set - keep only messages not in server data
         const serverIds = new Set(serverMessages.map((m) => m.id))
-        return newMessages.filter((m) => !serverIds.has(m.id))
-      })
-    } else {
-      // Direct set - keep only messages not in server data
-      const serverIds = new Set(serverMessages.map((m) => m.id))
-      updateOptimisticMessages(() => action.filter((m) => !serverIds.has(m.id)))
-    }
-  }, [serverMessages, updateOptimisticMessages])
+        updateOptimisticMessages(() =>
+          action.filter((m) => !serverIds.has(m.id))
+        )
+      }
+    },
+    [serverMessages, updateOptimisticMessages]
+  )
 
   return (
     <MessagesContext.Provider
@@ -291,6 +380,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
         resetMessages,
         deleteMessages,
         deleteMessagesFromTimestamp,
+        selectMessageBranch,
       }}
     >
       {children}

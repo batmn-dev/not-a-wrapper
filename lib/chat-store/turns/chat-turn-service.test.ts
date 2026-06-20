@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   buildEditIntent,
   buildChatTurnRequestBody,
+  buildSelectedPathToken,
   createChatTurnStore,
   prepareEditTurnPlan,
   prepareRegenerationTurnPlan,
@@ -671,6 +672,10 @@ describe("chat turn service", () => {
         systemPrompt: "custom system",
         enableSearch: false,
         chatVersion: 2,
+        selectedPathToken: {
+          expectedVisibleMessageCount: 2,
+          tailMessageId: "message_assistant_1",
+        },
       })
     ).toEqual({
       chatId: "chat-1",
@@ -680,6 +685,8 @@ describe("chat turn service", () => {
       systemPrompt: "custom system",
       enableSearch: false,
       chatVersion: 2,
+      expectedVisibleMessageCount: 2,
+      tailMessageId: "message_assistant_1",
     })
 
     expect(
@@ -717,6 +724,28 @@ describe("chat turn service", () => {
       systemPrompt: SYSTEM_PROMPT_DEFAULT,
       chatVersion: 2,
       regeneration,
+    })
+  })
+
+  it("builds selected-path tokens from visible durable server message ids", () => {
+    expect(
+      buildSelectedPathToken([
+        {
+          ...userMessage("client-user-1", "prompt"),
+          metadata: { serverMessageId: "message_user_1" },
+        },
+        {
+          ...assistantMessage("client-assistant-1", "answer"),
+          metadata: { serverMessageId: "message_assistant_1" },
+        },
+      ])
+    ).toEqual({
+      expectedVisibleMessageCount: 2,
+      tailMessageId: "message_assistant_1",
+    })
+
+    expect(buildSelectedPathToken([])).toEqual({
+      expectedVisibleMessageCount: 0,
     })
   })
 
