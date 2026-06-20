@@ -4,6 +4,12 @@ Domain language for the multi-AI chat app: one chat surface, many model provider
 
 ## Language
 
+### Backend
+
+**Convex module**:
+The single server-side Convex source tree at `convex/`, including schema, functions, migrations, generated bindings, and Convex-domain tests. UI and component folders may import the root module's generated API, but must not contain copied Convex source trees.
+_Avoid_: server copy, UI Convex mirror, `components/ui/convex`
+
 ### Chat
 
 **Chat turn**:
