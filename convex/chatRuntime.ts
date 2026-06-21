@@ -609,21 +609,11 @@ export async function applyRegenerationIntentForGeneration(
     throw new Error("Regeneration target version changed")
   }
 
-  let lastAssistantIndex = -1
-  for (let index = selectedMessages.length - 1; index >= 0; index--) {
-    if (selectedMessages[index]?.role === "assistant") {
-      lastAssistantIndex = index
-      break
-    }
-  }
-
-  if (
-    targetIndex !== lastAssistantIndex ||
-    targetIndex !== selectedMessages.length - 1
-  ) {
-    throw new Error("Only the latest assistant message can be regenerated")
-  }
-
+  // Regeneration may target any assistant on the selected path, not just the
+  // tail. A mid-conversation regen forks at the target's parent: the branch
+  // writes below insert a new selected sibling and deselect the old subtree,
+  // and the client renders the fork via the selected-path projection seam.
+  // See CONTEXT.md "Chat turn" (edit/regenerate may target any prior message).
   let pairedUserIndex = -1
   for (let index = targetIndex - 1; index >= 0; index--) {
     if (selectedMessages[index]?.role === "user") {

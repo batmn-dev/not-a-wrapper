@@ -3,15 +3,12 @@ import {
   isEmptyAssistantMessage as isSharedEmptyAssistantMessage,
   sanitizeVisibleChatMessages,
 } from "@/convex/domain/message_visibility"
+import { readServerMessageId } from "@/lib/chat-messages/branch"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import type { UIMessage } from "ai"
 import { getMessagePersistenceMode } from "../identity"
-import {
-  cacheMessages,
-  getCachedMessages,
-  getLastMessagesFromDb,
-} from "../messages/api"
+import { cacheMessages, getCachedMessages } from "../messages/api"
 
 export type ChatTurnMessage = UIMessage & {
   createdAt?: Date
@@ -125,24 +122,13 @@ export function buildChatTurnRequestBody({
   }
 }
 
-function getServerMessageId(message: ChatTurnMessage): string | undefined {
-  const metadata = message.metadata
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
-    return undefined
-  }
-  const candidate = (metadata as Record<string, unknown>).serverMessageId
-  return typeof candidate === "string" && candidate.length > 0
-    ? candidate
-    : undefined
-}
-
 export function buildSelectedPathToken(
   messages: ChatTurnMessage[]
 ): ChatTurnSelectedPathToken {
   const visibleMessages = sanitizeVisibleChatMessages(messages)
   const tailMessage = visibleMessages[visibleMessages.length - 1]
   const tailMessageId = tailMessage
-    ? getServerMessageId(tailMessage)
+    ? readServerMessageId(tailMessage.metadata)
     : undefined
 
   return {
@@ -274,7 +260,6 @@ export type RegenerationTurnPlan =
         | "invalid-target-role"
         | "missing-message-timestamp"
         | "missing-preceding-user"
-        | "unsupported-target"
     }
 
 function getMessageCreatedAtMs(message: ChatTurnMessage): number | undefined {
@@ -305,21 +290,10 @@ export function prepareRegenerationTurnPlan(
     return { ok: false, reason: "invalid-target-role" }
   }
 
-  let lastAssistantIndex = -1
-  for (let index = visibleMessages.length - 1; index >= 0; index--) {
-    if (visibleMessages[index]?.role === "assistant") {
-      lastAssistantIndex = index
-      break
-    }
-  }
-
-  if (
-    targetIndex !== lastAssistantIndex ||
-    targetIndex !== visibleMessages.length - 1
-  ) {
-    return { ok: false, reason: "unsupported-target" }
-  }
-
+  // No tail restriction: any assistant on the visible path may be regenerated.
+  // A non-tail target forks the thread at the preceding user message — the
+  // backend creates a selected sibling and the projection seam renders the
+  // fork, surfacing the old continuation via branch nav on the user message.
   const targetAssistantCreatedAt = getMessageCreatedAtMs(target)
   if (targetAssistantCreatedAt === undefined) {
     return { ok: false, reason: "missing-message-timestamp" }
@@ -352,95 +326,12 @@ export function prepareRegenerationTurnPlan(
   }
 }
 
-export function reconcileRecentMessageIds(
-  currentMessages: ChatTurnMessage[],
-  recentMessages: ChatTurnMessage[]
-): ChatTurnMessage[] {
-  if (currentMessages.length === 0 || recentMessages.length === 0) {
-    return currentMessages
-  }
-
-  const updated = [...currentMessages]
-  let changed = false
-  const existingIds = new Set(updated.map((message) => String(message.id)))
-  const updatedIndices = new Set<number>()
-
-  for (let dbIndex = recentMessages.length - 1; dbIndex >= 0; dbIndex--) {
-    const dbMessage = recentMessages[dbIndex]
-    if (!dbMessage) continue
-
-    const dbId = String(dbMessage.id)
-    const dbRole = dbMessage.role
-
-    for (let localIndex = updated.length - 1; localIndex >= 0; localIndex--) {
-      if (updatedIndices.has(localIndex)) continue
-
-      const localMessage = updated[localIndex]
-      if (!localMessage || localMessage.role !== dbRole) continue
-
-      if (String(localMessage.id) === dbId) {
-        updatedIndices.add(localIndex)
-        break
-      }
-
-      if (!existingIds.has(dbId)) {
-        existingIds.delete(String(localMessage.id))
-        existingIds.add(dbId)
-        updated[localIndex] = {
-          ...localMessage,
-          id: dbId,
-          createdAt: dbMessage.createdAt,
-        }
-        changed = true
-      }
-
-      updatedIndices.add(localIndex)
-      break
-    }
-  }
-
-  return changed ? updated : currentMessages
-}
-
 export function hasSemanticAssistantParts(message: ChatTurnMessage): boolean {
   return hasSharedSemanticAssistantParts(message)
 }
 
 export function isEmptyAssistantMessage(message: ChatTurnMessage): boolean {
   return isSharedEmptyAssistantMessage(message)
-}
-
-type SyncRecentMessagesArgs = {
-  chatId: string
-  count?: number
-  updateMessages: SetChatTurnMessages
-  getRecentMessages?: (
-    chatId: string,
-    count: number
-  ) => Promise<ChatTurnMessage[]>
-  writeCachedMessages?: (
-    chatId: string,
-    messages: ChatTurnMessage[]
-  ) => void | Promise<void>
-}
-
-export async function syncRecentMessagesFromStore({
-  chatId,
-  count = 2,
-  updateMessages,
-  getRecentMessages = getLastMessagesFromDb,
-  writeCachedMessages = cacheMessages,
-}: SyncRecentMessagesArgs): Promise<void> {
-  const recentMessages = await getRecentMessages(chatId, count)
-  if (!recentMessages || recentMessages.length === 0) return
-
-  updateMessages((prev) => {
-    const reconciled = reconcileRecentMessageIds(prev, recentMessages)
-    if (reconciled !== prev) {
-      void writeCachedMessages(chatId, reconciled)
-    }
-    return reconciled
-  })
 }
 
 export type ChatTurnStoreAdapters = {
@@ -463,14 +354,6 @@ export type ChatTurnStoreAdapters = {
     chatId: string,
     messages: ChatTurnMessage[]
   ) => void | Promise<void>
-  getRecentMessages?: (
-    chatId: string,
-    count: number
-  ) => Promise<ChatTurnMessage[]>
-  writeCachedMessages?: (
-    chatId: string,
-    messages: ChatTurnMessage[]
-  ) => void | Promise<void>
   reportError: (message: string, error: unknown) => void
 }
 
@@ -490,16 +373,6 @@ export function createChatTurnStore(adapters: ChatTurnStoreAdapters) {
   const persistTurnMessage = (message: ChatTurnMessage, chatId: string) => {
     if (routePersistsMessages(chatId)) return
     return adapters.cacheAndAddMessage(message, chatId)
-  }
-
-  const reconcileRecentMessages = async (chatId: string, count = 2) => {
-    await syncRecentMessagesFromStore({
-      chatId,
-      count,
-      updateMessages: adapters.updateMessages,
-      getRecentMessages: adapters.getRecentMessages,
-      writeCachedMessages: adapters.writeCachedMessages,
-    })
   }
 
   const removeEmptyAssistantMessages = async (
@@ -591,13 +464,6 @@ export function createChatTurnStore(adapters: ChatTurnStoreAdapters) {
         }
       }
 
-      if (routePersists) {
-        try {
-          await reconcileRecentMessages(effectiveChatId, 2)
-        } catch (error) {
-          adapters.reportError("Message ID reconciliation failed: ", error)
-        }
-      }
       return
     }
 
@@ -630,13 +496,6 @@ export function createChatTurnStore(adapters: ChatTurnStoreAdapters) {
           return
         }
       }
-    }
-
-    try {
-      if (!effectiveChatId) return
-      await reconcileRecentMessages(effectiveChatId, 2)
-    } catch (error) {
-      adapters.reportError("Message ID reconciliation failed: ", error)
     }
   }
 

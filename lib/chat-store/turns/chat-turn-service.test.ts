@@ -7,7 +7,6 @@ import {
   createChatTurnStore,
   prepareEditTurnPlan,
   prepareRegenerationTurnPlan,
-  reconcileRecentMessageIds,
   type ChatTurnMessage,
 } from "./chat-turn-service"
 
@@ -39,11 +38,9 @@ function assistantMessage(
 
 function createStoreHarness({
   isAuthenticated = false,
-  recentMessages = [],
   cachedMessages = [],
 }: {
   isAuthenticated?: boolean
-  recentMessages?: ChatTurnMessage[]
   cachedMessages?: ChatTurnMessage[]
 } = {}) {
   let messages: ChatTurnMessage[] = []
@@ -71,8 +68,6 @@ function createStoreHarness({
     getStoredGuestChatId: vi.fn(() => null),
     readMessages: vi.fn(async () => cachedMessages),
     writeMessages: vi.fn(async () => {}),
-    getRecentMessages: vi.fn(async () => recentMessages),
-    writeCachedMessages: vi.fn(async () => {}),
     reportError: vi.fn(() => {}),
   }
 
@@ -92,14 +87,12 @@ describe("chat turn service", () => {
     vi.clearAllMocks()
   })
 
-  it("persists local-only assistant finishes and reconciles recent IDs", async () => {
+  it("persists local-only assistant finishes without rewriting live ids", async () => {
+    // Identity adoption is owned solely by the branch projection seam
+    // (lib/chat-store/turns/selected-path.ts). finishTurn persists; it no
+    // longer patches the live array's ids.
     const assistant = assistantMessage("optimistic-assistant", "answer")
-    const harness = createStoreHarness({
-      recentMessages: [
-        userMessage("server-user", "question"),
-        assistantMessage("server-assistant", "answer"),
-      ],
-    })
+    const harness = createStoreHarness()
     harness.setMessages([userMessage("optimistic-user", "question"), assistant])
 
     await harness.store.finishTurn({
@@ -115,26 +108,15 @@ describe("chat turn service", () => {
       assistant,
       "local-chat"
     )
-    expect(harness.adapters.getRecentMessages).toHaveBeenCalledWith(
-      "local-chat",
-      2
-    )
     expect(harness.getMessages().map((message) => message.id)).toEqual([
-      "server-user",
-      "server-assistant",
+      "optimistic-user",
+      "optimistic-assistant",
     ])
-    expect(harness.adapters.writeCachedMessages).toHaveBeenCalledWith(
-      "local-chat",
-      harness.getMessages()
-    )
   })
 
-  it("skips local assistant persistence for durable route-persisted finishes but still reconciles", async () => {
+  it("skips local assistant persistence for durable route-persisted finishes", async () => {
     const assistant = assistantMessage("optimistic-assistant", "answer")
-    const harness = createStoreHarness({
-      isAuthenticated: true,
-      recentMessages: [assistantMessage("server-assistant", "answer")],
-    })
+    const harness = createStoreHarness({ isAuthenticated: true })
     harness.setMessages([assistant])
 
     await harness.store.finishTurn({
@@ -146,13 +128,11 @@ describe("chat turn service", () => {
       previousChatId: null,
     })
 
+    // The durable route persists server-side; the client neither caches nor
+    // rewrites ids — the reactive selected path + projection seam converge it.
     expect(harness.adapters.cacheAndAddMessage).not.toHaveBeenCalled()
-    expect(harness.adapters.getRecentMessages).toHaveBeenCalledWith(
-      "server-chat",
-      2
-    )
     expect(harness.getMessages().map((message) => message.id)).toEqual([
-      "server-assistant",
+      "optimistic-assistant",
     ])
   })
 
@@ -175,7 +155,6 @@ describe("chat turn service", () => {
       "local-chat"
     )
     expect(local.getPendingEdit()).toBeNull()
-    expect(local.adapters.getRecentMessages).not.toHaveBeenCalled()
 
     const durable = createStoreHarness({ isAuthenticated: true })
     durable.adapters.pendingEdit.stage(editedMessage, "server-chat")
@@ -191,10 +170,6 @@ describe("chat turn service", () => {
 
     expect(durable.adapters.cacheAndAddMessage).not.toHaveBeenCalled()
     expect(durable.getPendingEdit()).toBeNull()
-    expect(durable.adapters.getRecentMessages).toHaveBeenCalledWith(
-      "server-chat",
-      2
-    )
   })
 
   it("removes empty local assistant messages after abort before the first chunk", async () => {
@@ -223,7 +198,6 @@ describe("chat turn service", () => {
       user,
     ])
     expect(harness.adapters.cacheAndAddMessage).not.toHaveBeenCalled()
-    expect(harness.adapters.getRecentMessages).not.toHaveBeenCalled()
   })
 
   it("preserves partial local assistant messages after abort", async () => {
@@ -253,16 +227,13 @@ describe("chat turn service", () => {
     ])
   })
 
-  it("reconciles durable aborts instead of returning before cleanup", async () => {
+  it("cleans up empty assistant on durable abort instead of returning early", async () => {
     const emptyAssistant: ChatTurnMessage = {
       id: "empty-assistant",
       role: "assistant",
       parts: [],
     }
-    const harness = createStoreHarness({
-      isAuthenticated: true,
-      recentMessages: [userMessage("server-user", "prompt")],
-    })
+    const harness = createStoreHarness({ isAuthenticated: true })
     harness.setMessages([
       userMessage("optimistic-user", "prompt"),
       emptyAssistant,
@@ -278,12 +249,10 @@ describe("chat turn service", () => {
     })
 
     expect(harness.adapters.cacheAndAddMessage).not.toHaveBeenCalled()
-    expect(harness.adapters.getRecentMessages).toHaveBeenCalledWith(
-      "server-chat",
-      2
-    )
+    // The empty assistant is removed; identity of the remaining message is left
+    // to the reactive selected path + projection seam, not patched here.
     expect(harness.getMessages().map((message) => message.id)).toEqual([
-      "server-user",
+      "optimistic-user",
     ])
   })
 
@@ -458,18 +427,29 @@ describe("chat turn service", () => {
         "assistant-1"
       )
     ).toEqual({ ok: false, reason: "missing-preceding-user" })
+  })
 
-    expect(
-      prepareRegenerationTurnPlan(
-        [
-          userMessage("user-1", "first"),
-          assistantMessage("assistant-1", "first answer"),
-          userMessage("user-2", "second"),
-          assistantMessage("assistant-2", "second answer"),
-        ],
-        "assistant-1"
-      )
-    ).toEqual({ ok: false, reason: "unsupported-target" })
+  it("accepts a non-tail assistant regeneration target", () => {
+    const plan = prepareRegenerationTurnPlan(
+      [
+        userMessage("user-1", "first"),
+        assistantMessage("assistant-1", "first answer"),
+        userMessage("user-2", "second"),
+        assistantMessage("assistant-2", "second answer"),
+      ],
+      "assistant-1"
+    )
+
+    expect(plan.ok).toBe(true)
+    if (!plan.ok) return
+    expect(plan.retainedMessages.map((message) => message.id)).toEqual([
+      "user-1",
+    ])
+    expect(plan.regeneration).toMatchObject({
+      targetAssistantMessageId: "assistant-1",
+      precedingUserMessageId: "user-1",
+      expectedChatVersion: 4,
+    })
   })
 
   it("builds consistent request bodies for send, edit, and regeneration turns", () => {
@@ -582,24 +562,25 @@ describe("chat turn service", () => {
     })
   })
 
-  it("reconciles recent IDs without duplicating overlapping cached IDs", () => {
-    const currentMessages = [
-      userMessage("server-user", "old question"),
-      userMessage("optimistic-user", "question"),
-      assistantMessage("optimistic-assistant", "answer"),
-    ]
-    const reconciled = reconcileRecentMessageIds(currentMessages, [
-      userMessage("server-user", "question"),
-      assistantMessage("server-assistant", "answer"),
-    ])
+  it("reads the selected-path token tail through the typed serverMessageId accessor", () => {
+    // Guards the readServerMessageId contract the token now depends on:
+    // an empty or non-string serverMessageId must yield no tail anchor.
+    expect(
+      buildSelectedPathToken([
+        {
+          ...assistantMessage("client-assistant-1", "answer"),
+          metadata: { serverMessageId: "" },
+        },
+      ])
+    ).toEqual({ expectedVisibleMessageCount: 1 })
 
-    expect(reconciled.map((message) => message.id)).toEqual([
-      "server-user",
-      "optimistic-user",
-      "server-assistant",
-    ])
-    expect(new Set(reconciled.map((message) => message.id)).size).toBe(
-      reconciled.length
-    )
+    expect(
+      buildSelectedPathToken([
+        {
+          ...assistantMessage("client-assistant-1", "answer"),
+          metadata: { serverMessageId: 123 as unknown as string },
+        },
+      ])
+    ).toEqual({ expectedVisibleMessageCount: 1 })
   })
 })

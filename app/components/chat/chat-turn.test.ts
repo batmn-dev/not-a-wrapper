@@ -78,13 +78,6 @@ function createHarness() {
       cachedMessages = nextMessages
       events.push("writeTrimmedMessages")
     }),
-    getRecentMessages: vi.fn(async () => {
-      events.push("reconcileRecentMessages")
-      return []
-    }),
-    writeCachedMessages: vi.fn(async () => {
-      events.push("writeCachedMessages")
-    }),
     reportError: vi.fn((message: string) => {
       events.push(`reportError:${message}`)
     }),
@@ -703,7 +696,10 @@ describe("chat turn controller", () => {
     )
   })
 
-  it("reconciles finish persistence for local, durable, and pending edit turns", async () => {
+  it("persists finish for local, durable, and pending edit turns", async () => {
+    // Identity adoption is owned by the branch projection seam; finishChatTurn
+    // persists (or skips, when the route persists) and records the finish
+    // reason, but does not patch live message ids.
     const local = createHarness()
     const assistant = assistantMessage("assistant-new", "answer")
 
@@ -722,10 +718,6 @@ describe("chat turn controller", () => {
       assistant,
       "local-chat"
     )
-    expect(local.storeAdapters.getRecentMessages).toHaveBeenCalledWith(
-      "local-chat",
-      2
-    )
 
     const durable = createHarness()
     durable.setRoutePersistsMessages(true)
@@ -741,10 +733,6 @@ describe("chat turn controller", () => {
     })
 
     expect(durable.storeAdapters.cacheAndAddMessage).not.toHaveBeenCalled()
-    expect(durable.storeAdapters.getRecentMessages).toHaveBeenCalledWith(
-      "server-chat",
-      2
-    )
 
     const pendingLocal = createHarness()
     pendingLocal.stagePendingEdit(
@@ -766,7 +754,6 @@ describe("chat turn controller", () => {
       expect.objectContaining({ id: "edited-user" }),
       "local-chat"
     )
-    expect(pendingLocal.storeAdapters.getRecentMessages).not.toHaveBeenCalled()
 
     const pendingDurable = createHarness()
     pendingDurable.setRoutePersistsMessages(true)
@@ -788,8 +775,5 @@ describe("chat turn controller", () => {
     expect(
       pendingDurable.storeAdapters.cacheAndAddMessage
     ).not.toHaveBeenCalled()
-    expect(
-      pendingDurable.storeAdapters.getRecentMessages
-    ).toHaveBeenCalledWith("server-chat", 2)
   })
 })

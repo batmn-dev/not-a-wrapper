@@ -67,9 +67,21 @@ it. Concretely:
   it from a server path. This is what makes the divergence discriminator sound:
   a streamed message (server id as `id`, not yet metadata-anchored) is matched by
   id and never looks "missing" during normal convergence.
-- The legacy `reconcileRecentMessages(chatId, 2)` in `finishTurn` is now
-  subsumed by the projection seam (which reconciles the full path). It is kept
-  for now as belt-and-suspenders and should be removed in a follow-up once the
-  projection is live-verified.
+- The legacy `reconcileRecentMessages(chatId, 2)` in `finishTurn` has been
+  **removed** (2026-06-21 follow-up). The projection seam reconciles the full
+  selected path by identity, and the tail-2 reconciler was in any case inert in
+  the current cache architecture: server-persisted chats never populate the
+  IndexedDB cache it read (`persistTurnMessage`/`finishTurn` gate caching on
+  `!routePersists`), and guest chats cache the same client ids the live array
+  already holds, so its id rewrite never fired. The only behavior it uniquely
+  performed — rewriting a live message's top-level id to the server `_id` before
+  the reactive round-trip — was not load-bearing (the server resolves by `_id`
+  OR `clientMessageId`, and the selected-path token's tail anchor reads
+  `metadata.serverMessageId`, which the projection adopts). Branch projection is
+  now the sole owner of client identity adoption. Live-verified 2026-06-21 in a
+  running durable chat: send, deep edit (>2 turns back), non-tail regeneration,
+  and branch switch all render correctly with no message vanish/blank during the
+  persistence-lag window — satisfying the original "once the projection is
+  live-verified" gate.
 - If the product later wants a visible branch tree, the full tree would need to
   reach the client; that is explicitly out of scope here.

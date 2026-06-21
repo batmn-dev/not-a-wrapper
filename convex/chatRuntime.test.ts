@@ -1337,6 +1337,96 @@ describe("prepareGenerationForChat", () => {
     )
   })
 
+  it("applies durable regeneration intent to a mid-conversation assistant", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const messages: Doc<"messages">[] = [
+      createStoredMessage({
+        id: "message_user_1",
+        chatId,
+        userId,
+        orderId: 0,
+        clientMessageId: "user-1",
+        role: "user",
+        content: "first text",
+        createdAt: 1000,
+      }),
+      createStoredMessage({
+        id: "message_assistant_1",
+        chatId,
+        orderId: 1,
+        role: "assistant",
+        content: "old first answer",
+        createdAt: 1001,
+      }),
+      createStoredMessage({
+        id: "message_user_2",
+        chatId,
+        userId,
+        orderId: 2,
+        clientMessageId: "user-2",
+        role: "user",
+        content: "second text",
+        createdAt: 1002,
+      }),
+      createStoredMessage({
+        id: "message_assistant_2",
+        chatId,
+        orderId: 3,
+        role: "assistant",
+        content: "second answer",
+        createdAt: 1003,
+      }),
+    ]
+    const { ctx, inserts, tables } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages,
+    })
+
+    const result = await prepareGenerationForChat(ctx, {
+      chatId,
+      requestId: "request_regen",
+      model: "gpt-5",
+      provider: "openai",
+      chatVersion: 4,
+      regeneration: {
+        targetAssistantMessageId: "message_assistant_1",
+        targetAssistantCreatedAt: 1001,
+        expectedChatVersion: 4,
+        precedingUserMessageId: "user-1",
+      },
+    })
+
+    // Forks under the preceding user message; the old assistant is deselected.
+    expect(
+      inserts.filter((insert) => insert.tableName === "messages")
+    ).toContainEqual(expect.objectContaining({ id: result.assistantMessageId }))
+    expect(tables.messages).toHaveLength(5)
+    expect(messages[1]).toMatchObject({
+      content: "old first answer",
+      selected: false,
+    })
+    expect(tables.messages[4]).toMatchObject({
+      _id: result.assistantMessageId,
+      parentMessageId: "message_user_1",
+      branchIndex: 1,
+      selected: true,
+      status: "streaming",
+      requestId: "request_regen",
+      generationRunId: result.runId,
+    })
+    // The old continuation (user_2 → assistant_2) is retained as a deselected
+    // sibling branch, not deleted.
+    expect(tables.messages.map((message) => message._id)).toEqual(
+      expect.arrayContaining(["message_user_2", "message_assistant_2"])
+    )
+    // Model prefix is everything up to and including the preceding user message.
+    expect(result.messages.map((message) => message._id)).toEqual([
+      "message_user_1",
+    ])
+  })
+
   it("keeps coherent history after regenerate then send another message", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1700000000000)
     const { user, chat, userId, chatId } = createOwnerFixture()
@@ -1701,14 +1791,16 @@ describe("prepareGenerationForChat", () => {
       },
       "Regeneration target must be an assistant message"
     )
+    // The version guard still rejects a stale mid-conversation target (the
+    // tail restriction is lifted, but optimistic concurrency is not).
     await expectRegenerationRejected(
       {
         targetAssistantMessageId: "message_assistant_1",
-        targetAssistantCreatedAt: 1001,
+        targetAssistantCreatedAt: 9999,
         expectedChatVersion: 4,
         precedingUserMessageId: "user-1",
       },
-      "Only the latest assistant message can be regenerated"
+      "Regeneration target version changed"
     )
     await expectRegenerationRejected(
       {

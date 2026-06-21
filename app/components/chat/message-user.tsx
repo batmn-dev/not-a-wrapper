@@ -15,6 +15,7 @@ import {
   MessageActions,
   Message as MessageContainer,
   MessageContent,
+  messageFooterRevealClassName,
 } from "@/components/ui/message"
 import { useScrollRoot } from "@/components/ui/scroll-root"
 import type { MessageBranchInfo } from "@/lib/chat-messages/branch"
@@ -301,10 +302,14 @@ export function MessageUser({
           {children}
         </MessageContent>
       )}
-      <MessageActions className="invisible flex gap-0 opacity-0 transition-opacity group-hover/turn-messages:visible group-hover/turn-messages:opacity-100 pointer-coarse:visible pointer-coarse:opacity-100">
+      {/* Hover/focus reveal shared with the assistant footer so both surfaces
+          behave identically (see messageFooterRevealClassName). */}
+      <MessageActions
+        className={cn("flex gap-0", messageFooterRevealClassName)}
+      >
         <MessageAction tooltip={copied ? "Copied!" : "Copy text"} side="bottom">
           <button
-            className="hover:bg-accent/60 text-muted-foreground hover:text-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent transition pointer-coarse:h-10 pointer-coarse:w-10"
+            className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
             aria-label="Copy text"
             onClick={copyToClipboard}
             type="button"
@@ -323,7 +328,7 @@ export function MessageUser({
             delay={0}
           >
             <button
-              className="hover:bg-accent/60 text-muted-foreground hover:text-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent transition pointer-coarse:h-10 pointer-coarse:w-10"
+              className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
               aria-label={isEditing ? "Cancel edit" : "Edit message"}
               onClick={isEditing ? handleEditCancel : handleEditStart}
               type="button"

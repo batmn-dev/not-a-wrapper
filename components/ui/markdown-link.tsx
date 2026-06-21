@@ -54,7 +54,7 @@ export function LinkMarkdown({
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        "bg-muted text-muted-foreground hover:bg-muted-foreground/30 hover:text-primary inline-flex h-5 max-w-48 items-center gap-1 overflow-hidden rounded-full py-0 pr-2 pl-0.5 text-xs leading-none text-ellipsis whitespace-nowrap no-underline transition-colors duration-150",
+        "bg-muted text-muted-foreground hover:bg-muted-foreground/30 hover:text-primary inline-flex h-5 max-w-48 items-center gap-1 overflow-hidden rounded-full py-0 pr-2 pl-0.5 text-xs leading-none text-ellipsis whitespace-nowrap no-underline",
         className
       )}
     >

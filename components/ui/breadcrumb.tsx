@@ -40,7 +40,7 @@ function BreadcrumbLink({
   ...props
 }: useRender.ComponentProps<"a">) {
   const defaultProps: useRender.ElementProps<"a"> = {
-    className: cn("hover:text-foreground transition-colors", className),
+    className: cn("hover:text-foreground", className),
   }
 
   return useRender({

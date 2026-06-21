@@ -200,7 +200,7 @@ function ReasoningLabel({ className }: ReasoningLabelProps) {
     <button
       type="button"
       className={cn(
-        "flex cursor-pointer items-center gap-1.5 text-base transition-colors",
+        "flex cursor-pointer items-center gap-1.5 text-base",
         className
       )}
       onClick={() => onOpenChange(!isOpen)}

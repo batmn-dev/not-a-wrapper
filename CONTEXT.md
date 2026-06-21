@@ -25,8 +25,12 @@ The backend-derived linear path through a chat's message branches used for rende
 _Avoid_: visible messages, active transcript
 
 **Branch projection**:
-The single client seam that installs the backend's selected path into the AI SDK's flat `useChat` array while a chat is idle: it adopts server ids and branch state onto matching live messages, preserves in-flight optimistic sends, and swaps wholesale when the path diverged (a branch switch, or restoring messages a rejected edit/regeneration sliced out). The client renders the server's selected path; it does not re-derive it. See `docs/adr/0001-client-renders-server-selected-path.md`.
+The single client seam that installs the backend's selected path into the AI SDK's flat `useChat` array while a chat is idle: it adopts server ids and branch state onto matching live messages, preserves in-flight optimistic sends, and swaps wholesale when the path diverged (a branch switch, or restoring messages a rejected edit/regeneration sliced out). It is the sole owner of client identity adoption — matching by message identity across the full selected path (not a positional tail patch) and reading server ids through one typed accessor (`readServerMessageId` in `lib/chat-messages/branch.ts`). The client renders the server's selected path; it does not re-derive it. See `docs/adr/0001-client-renders-server-selected-path.md`.
 _Avoid_: reconcile (too narrow — that's only the id-adoption half), rehydrate, sync
+
+**Selected path token**:
+The forward (client→server) staleness guard for a chat turn — a `{ expectedVisibleMessageCount, tailMessageId? }` descriptor the client derives from the rendered selected path and sends with a new-message turn; the backend validates it before mutating and rejects a turn raced against a changed selected path. It is the counterpart to the branch projection (the backward, server→client half) and is unrelated to it despite the shared name; edits and regenerations carry their own count guard (`expectedChatVersion`) instead of the token.
+_Avoid_: conflating with branch projection (that's the backward half), version (overloaded)
 
 ### Tools
 

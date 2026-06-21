@@ -195,14 +195,6 @@ export async function getMessagesFromDb(
   return await getCachedMessages(chatId)
 }
 
-export async function getLastMessagesFromDb(
-  chatId: string,
-  limit: number = 2
-): Promise<ExtendedUIMessage[]> {
-  const cached = await getCachedMessages(chatId)
-  return cached.slice(-limit)
-}
-
 export async function addMessage(
   chatId: string,
   message: ExtendedUIMessage

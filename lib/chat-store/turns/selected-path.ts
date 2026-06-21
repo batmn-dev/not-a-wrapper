@@ -22,6 +22,7 @@
 
 import {
   getMessageBranchInfo,
+  readServerMessageId,
   type MessageBranchInfo,
 } from "@/lib/chat-messages/branch"
 import type { ChatTurnMessage } from "./chat-turn-service"
@@ -39,12 +40,6 @@ const serverOwnedMetadataKeys = [
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
-}
-
-function readServerMessageId(metadata: unknown): string | undefined {
-  if (!isRecord(metadata)) return undefined
-  const value = metadata.serverMessageId
-  return typeof value === "string" && value.length > 0 ? value : undefined
 }
 
 function createdAtMs(value: unknown): number | undefined {

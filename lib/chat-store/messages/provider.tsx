@@ -189,7 +189,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
 
       // Ensure createdAt exists for correct cache sort order (AI SDK v6
       // UIMessages don't include createdAt; without it the message sorts to
-      // epoch-0 and getLastMessagesFromDb can't find it for reconciliation).
+      // epoch-0 in the IndexedDB cache).
       const messageToCache: ExtendedUIMessage = message.createdAt
         ? message
         : { ...message, createdAt: new Date() }

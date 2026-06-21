@@ -109,6 +109,21 @@ export function getMessageBranchInfo(
 }
 
 /**
+ * Read the server message id the durable adapter stamps onto a message's
+ * metadata (`metadata.serverMessageId`). This is how the branch projection seam
+ * anchors a live optimistic message to its persisted identity. Accepts the raw
+ * metadata value. Returns `undefined` for an absent / empty / non-string value.
+ *
+ * The single typed reader for this field: callers must not reach for
+ * `metadata as Record<string, unknown>` independently.
+ */
+export function readServerMessageId(metadata: unknown): string | undefined {
+  if (!isRecord(metadata)) return undefined
+  const value = metadata.serverMessageId
+  return typeof value === "string" && value.length > 0 ? value : undefined
+}
+
+/**
  * Whether a branch descriptor has more than one sibling and is therefore worth
  * rendering navigation controls for.
  */
