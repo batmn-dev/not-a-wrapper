@@ -55,7 +55,7 @@ describe("MessageBranchControls", () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
 
-  afterEach(() => {
+  function cleanupRender() {
     const rootToUnmount = root
     if (rootToUnmount) {
       act(() => rootToUnmount.unmount())
@@ -63,12 +63,16 @@ describe("MessageBranchControls", () => {
     container?.remove()
     root = null
     container = null
-  })
+  }
+
+  afterEach(cleanupRender)
 
   function render(
     branch: MessageBranchInfo | undefined,
     onSelectBranch?: (messageId: string) => void
   ) {
+    cleanupRender()
+
     const mounted = document.createElement("div")
     document.body.appendChild(mounted)
     container = mounted
