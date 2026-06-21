@@ -3,6 +3,7 @@ import {
   isEmptyAssistantMessage as isSharedEmptyAssistantMessage,
   sanitizeVisibleChatMessages,
 } from "@/convex/domain/message_visibility"
+import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import type { UIMessage } from "ai"
 import { getMessagePersistenceMode } from "../identity"
@@ -12,7 +13,10 @@ import {
   getLastMessagesFromDb,
 } from "../messages/api"
 
-export type ChatTurnMessage = UIMessage & { createdAt?: Date }
+export type ChatTurnMessage = UIMessage & {
+  createdAt?: Date
+  status?: DurableMessageStatus
+}
 
 export type SetChatTurnMessages = (
   updater: (messages: ChatTurnMessage[]) => ChatTurnMessage[]

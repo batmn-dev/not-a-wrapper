@@ -125,6 +125,53 @@ describe("reconcileSelectedPath", () => {
     expect(result[0].createdAt).toEqual(new Date("2026-01-01T00:00:01.000Z"))
   })
 
+  it("adopts server lifecycle state onto an identity-matched message", () => {
+    const live = [
+      {
+        id: "a1",
+        role: "assistant" as const,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        parts: [{ type: "text" as const, text: "needs approval" }],
+        metadata: {
+          serverMessageId: "s2",
+          durableStatus: "completed",
+          durableError: "stale error",
+        },
+      },
+    ]
+    const server = [
+      {
+        id: "a1",
+        role: "assistant" as const,
+        status: "awaiting_approval" as const,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        parts: [{ type: "text" as const, text: "needs approval" }],
+        metadata: {
+          serverMessageId: "s2",
+          durableStatus: "awaiting_approval",
+          generationRunId: "run_1",
+          requestId: "request_1",
+          model: "gpt-5",
+          provider: "openai",
+        },
+      },
+    ]
+
+    const result = reconcileSelectedPath(live, server)
+    expect(result[0].status).toBe("awaiting_approval")
+    expect(result[0].metadata).toMatchObject({
+      serverMessageId: "s2",
+      durableStatus: "awaiting_approval",
+      generationRunId: "run_1",
+      requestId: "request_1",
+      model: "gpt-5",
+      provider: "openai",
+    })
+    expect(
+      (result[0].metadata as Record<string, unknown>).durableError
+    ).toBeUndefined()
+  })
+
   it("clears a stale branch descriptor when the server no longer has siblings", () => {
     const staleBranch: MessageBranchInfo = {
       messageId: "s2",

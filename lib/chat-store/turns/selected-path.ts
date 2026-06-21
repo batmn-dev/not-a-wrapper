@@ -20,8 +20,22 @@
  * It operates purely on arrays so it can be unit-tested without React.
  */
 
-import { getMessageBranchInfo, type MessageBranchInfo } from "@/lib/chat-messages/branch"
+import {
+  getMessageBranchInfo,
+  type MessageBranchInfo,
+} from "@/lib/chat-messages/branch"
 import type { ChatTurnMessage } from "./chat-turn-service"
+
+const serverOwnedMetadataKeys = [
+  "durableStatus",
+  "durableError",
+  "generationRunId",
+  "requestId",
+  "model",
+  "provider",
+  "finishReason",
+  "usage",
+] as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
@@ -62,9 +76,9 @@ function branchEquals(
 }
 
 /**
- * Merge the server message's identity fields (`serverMessageId`, `branch`) into
- * the live message's metadata. Returns the original metadata reference when
- * nothing changes so callers can detect no-ops.
+ * Merge the server message's identity, branch, and lifecycle metadata into the
+ * live message. Returns the original metadata reference when nothing changes so
+ * callers can detect no-ops.
  */
 function adoptServerMetadata(
   localMetadata: unknown,
@@ -82,15 +96,40 @@ function adoptServerMetadata(
   // stale descriptor when the message no longer has siblings.
   const branchChanged = !branchEquals(localBranch, serverBranch)
 
-  if (!messageIdChanged && !branchChanged) return localMetadata
+  const localMetadataRecord = isRecord(localMetadata) ? localMetadata : undefined
+  const serverMetadataRecord = isRecord(serverMetadata) ? serverMetadata : undefined
+  const serverOwnedMetadataChanged = serverOwnedMetadataKeys.some((key) => {
+    const localHasKey = localMetadataRecord
+      ? Object.prototype.hasOwnProperty.call(localMetadataRecord, key)
+      : false
+    const serverHasKey = serverMetadataRecord
+      ? Object.prototype.hasOwnProperty.call(serverMetadataRecord, key)
+      : false
+    if (localHasKey !== serverHasKey) return true
+    if (!serverHasKey || !localMetadataRecord || !serverMetadataRecord) {
+      return false
+    }
+    return !Object.is(localMetadataRecord[key], serverMetadataRecord[key])
+  })
 
-  const next: Record<string, unknown> = isRecord(localMetadata)
-    ? { ...localMetadata }
+  if (!messageIdChanged && !branchChanged && !serverOwnedMetadataChanged) {
+    return localMetadata
+  }
+
+  const next: Record<string, unknown> = localMetadataRecord
+    ? { ...localMetadataRecord }
     : {}
 
   if (serverMessageId !== undefined) next.serverMessageId = serverMessageId
   if (serverBranch !== undefined) next.branch = serverBranch
   else if ("branch" in next) delete next.branch
+  for (const key of serverOwnedMetadataKeys) {
+    if (serverMetadataRecord && key in serverMetadataRecord) {
+      next[key] = serverMetadataRecord[key]
+    } else {
+      delete next[key]
+    }
+  }
 
   return next
 }
@@ -147,14 +186,18 @@ export function reconcileSelectedPath(
     const createdAtChanged =
       serverCreatedAt instanceof Date &&
       createdAtMs(localMessage.createdAt) !== serverCreatedAt.getTime()
+    const statusChanged = localMessage.status !== match.status
 
-    if (!metadataChanged && !createdAtChanged) return localMessage
+    if (!metadataChanged && !createdAtChanged && !statusChanged) {
+      return localMessage
+    }
 
     changed = true
     return {
       ...localMessage,
       ...(metadataChanged ? { metadata: mergedMetadata } : {}),
       ...(createdAtChanged ? { createdAt: serverCreatedAt } : {}),
+      ...(statusChanged ? { status: match.status } : {}),
     }
   })
 
