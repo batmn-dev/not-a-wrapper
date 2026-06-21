@@ -341,7 +341,6 @@ export type ChatTurnStoreAdapters = {
     message: ChatTurnMessage,
     overrideChatId?: string
   ) => void | Promise<void>
-  deleteMessagesFromTimestamp: (timestamp: number) => Promise<void>
   updateTitle: (chatId: string, title: string) => void | Promise<void>
   pendingEdit: {
     get: () => PendingEdit | null

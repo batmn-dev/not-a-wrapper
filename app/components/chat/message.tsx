@@ -29,7 +29,7 @@ type MessageProps = {
     id: string,
     newText: string
   ) => Promise<EditTurnResult | void> | EditTurnResult | void
-  onReload: (messageId: string) => void
+  onReload?: (messageId: string) => void
   onStop?: () => void
   onSelectBranch?: (messageId: string) => void
   /** Branch descriptor to render for this message's turn (anchored on the user

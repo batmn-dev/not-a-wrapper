@@ -54,7 +54,6 @@ type UseChatCoreProps = {
   selectedModel: string
   clearDraft: () => void
   bumpChat: (chatId: string) => void
-  deleteMessagesFromTimestamp: (timestamp: number) => Promise<void>
 }
 
 export function useChatCore({
@@ -73,7 +72,6 @@ export function useChatCore({
   selectedModel,
   clearDraft,
   bumpChat,
-  deleteMessagesFromTimestamp,
 }: UseChatCoreProps) {
   // State management
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -342,7 +340,6 @@ export function useChatCore({
         isAuthenticated: () => isAuthenticated,
         updateMessages,
         cacheAndAddMessage,
-        deleteMessagesFromTimestamp,
         updateTitle,
         pendingEdit: {
           stage: stagePendingEdit,
@@ -359,7 +356,6 @@ export function useChatCore({
       isAuthenticated,
       updateMessages,
       cacheAndAddMessage,
-      deleteMessagesFromTimestamp,
       updateTitle,
       stagePendingEdit,
       getPendingEdit,
@@ -634,9 +630,20 @@ export function useChatCore({
         isAuthenticated,
         systemPrompt,
         chatVersion: messages.length, // same count since we're regenerating, not adding
+        isSubmitting: getIsSubmitting(),
+        status: getStatus(),
       })
     },
-    [chatTurn, chatId, selectedModel, isAuthenticated, systemPrompt, messages]
+    [
+      chatTurn,
+      chatId,
+      selectedModel,
+      isAuthenticated,
+      systemPrompt,
+      messages,
+      getIsSubmitting,
+      getStatus,
+    ]
   )
 
   // Flush pending draft on tab close; also flush on unmount (navigation)

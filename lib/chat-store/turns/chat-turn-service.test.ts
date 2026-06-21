@@ -54,7 +54,6 @@ function createStoreHarness({
       }
     ),
     cacheAndAddMessage: vi.fn(async () => {}),
-    deleteMessagesFromTimestamp: vi.fn(async () => {}),
     updateTitle: vi.fn(async () => {}),
     pendingEdit: {
       get: vi.fn(() => pendingEdit),

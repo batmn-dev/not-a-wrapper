@@ -51,6 +51,7 @@ function getMessageAttachments(
 type ConversationProps = {
   messages: MessageType[]
   status?: "streaming" | "ready" | "submitted" | "error"
+  isSubmitting?: boolean
   onDelete: (id: string) => void
   onEdit: (
     id: string,
@@ -72,6 +73,7 @@ type ConversationProps = {
 export function Conversation({
   messages,
   status = "ready",
+  isSubmitting = false,
   onDelete,
   onEdit,
   onReload,
@@ -84,6 +86,9 @@ export function Conversation({
 }: ConversationProps) {
   if (!messages || messages.length === 0)
     return <div className="w-full flex-1"></div>
+
+  const isGenerationActive =
+    isSubmitting || status === "submitted" || status === "streaming"
 
   return (
     <ScrollRootContent className="relative flex w-full flex-1 flex-col items-center pt-4 [--composer-overlap-px:28px] [--thread-bottom-offset:calc(var(--spacing-input-area)+2rem+env(safe-area-inset-bottom,0px))] pb-[var(--thread-bottom-offset)] -mb-[var(--composer-overlap-px)]">
@@ -130,7 +135,7 @@ export function Conversation({
                 isLast={isLast}
                 onDelete={onDelete}
                 onEdit={onEdit}
-                onReload={onReload}
+                onReload={isGenerationActive ? undefined : onReload}
                 onStop={isLast && status === "streaming" ? onStop : undefined}
                 onSelectBranch={onSelectBranch}
                 branch={turnBranch}

@@ -55,9 +55,6 @@ function createHarness() {
     cacheAndAddMessage: vi.fn(() => {
       events.push("cacheAndAddMessage")
     }),
-    deleteMessagesFromTimestamp: vi.fn(async () => {
-      events.push("deleteMessagesFromTimestamp")
-    }),
     updateTitle: vi.fn(async () => {
       events.push("updateTitle")
     }),
@@ -354,7 +351,6 @@ describe("chat turn controller", () => {
       events.indexOf("sendMessage")
     )
     expect(storeAdapters.writeMessages).not.toHaveBeenCalled()
-    expect(storeAdapters.deleteMessagesFromTimestamp).not.toHaveBeenCalled()
     expect(adapters.sendMessage).toHaveBeenCalledWith(
       {
         text: "new text",
@@ -419,7 +415,6 @@ describe("chat turn controller", () => {
     expect(getMessages()).toEqual(originalMessages)
     expect(adapters.sendMessage).toHaveBeenCalled()
     expect(storeAdapters.writeMessages).not.toHaveBeenCalled()
-    expect(storeAdapters.deleteMessagesFromTimestamp).not.toHaveBeenCalled()
     expect(storeAdapters.pendingEdit.stage).not.toHaveBeenCalled()
     expect(adapters.toastError).toHaveBeenCalledWith("Failed to apply edit")
   })
@@ -457,7 +452,6 @@ describe("chat turn controller", () => {
 
     expect(result).toEqual({ ok: true })
     expect(storeAdapters.writeMessages).not.toHaveBeenCalled()
-    expect(storeAdapters.deleteMessagesFromTimestamp).not.toHaveBeenCalled()
     expect(adapters.sendMessage).toHaveBeenCalledWith(
       {
         text: "new text",
@@ -602,6 +596,8 @@ describe("chat turn controller", () => {
       isAuthenticated: true,
       systemPrompt: "custom system",
       chatVersion: 2,
+      isSubmitting: false,
+      status: "ready",
     })
 
     expect(adapters.regenerate).toHaveBeenCalledWith({
@@ -650,6 +646,8 @@ describe("chat turn controller", () => {
       isAuthenticated: true,
       systemPrompt: "custom system",
       chatVersion: 2,
+      isSubmitting: false,
+      status: "ready",
     })
 
     expect(storeAdapters.writeMessages).not.toHaveBeenCalled()
@@ -666,6 +664,34 @@ describe("chat turn controller", () => {
         },
       }),
     })
+  })
+
+  it("refuses regeneration while another generation is active", async () => {
+    const { adapters, controller, setMessagesState } = createHarness()
+    const messages = [
+      userMessage("user-1", "prompt"),
+      assistantMessage("assistant-1", "old answer"),
+      userMessage("user-2", "next prompt"),
+    ]
+    setMessagesState(messages)
+
+    await controller.runRegenerationTurn({
+      chatId: "chat-1",
+      messages,
+      targetAssistantMessageId: "assistant-1",
+      selectedModel: "model-1",
+      isAuthenticated: true,
+      systemPrompt: "custom system",
+      chatVersion: 3,
+      isSubmitting: false,
+      status: "streaming",
+    })
+
+    expect(adapters.regenerate).not.toHaveBeenCalled()
+    expect(adapters.resolveUserId).not.toHaveBeenCalled()
+    expect(adapters.toastError).toHaveBeenCalledWith(
+      "Please wait until the current message finishes sending."
+    )
   })
 
   it("refuses regeneration on a non-durable chat", async () => {
@@ -685,6 +711,8 @@ describe("chat turn controller", () => {
       isAuthenticated: false,
       systemPrompt: "custom system",
       chatVersion: 2,
+      isSubmitting: false,
+      status: "ready",
     })
 
     expect(adapters.regenerate).not.toHaveBeenCalled()
