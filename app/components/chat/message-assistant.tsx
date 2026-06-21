@@ -9,6 +9,7 @@ import {
   MessageAction,
   MessageActions,
   MessageContent,
+  messageFooterRevealClassName,
 } from "@/components/ui/message"
 import {
   Reasoning,
@@ -359,22 +360,8 @@ export function MessageAssistant({
                         "motion-safe:[animation:mask-reveal_1.5s_ease_forwards]",
                         "motion-reduce:[mask-image:none]",
                       ]
-                    : [
-                        "pointer-events-none",
-                        "[mask-image:linear-gradient(to_right,black_33%,transparent_66%)]",
-                        "[mask-size:300%_100%]",
-                        "[mask-position:100%_0%]",
-                        "motion-safe:transition-[mask-position]",
-                        "duration-[1.5s]",
-                        "group-hover/turn-messages:pointer-events-auto",
-                        "group-hover/turn-messages:[mask-position:0_0]",
-                        "group-focus-within/turn-messages:pointer-events-auto",
-                        "group-focus-within/turn-messages:[mask-position:0_0]",
-                        "has-[[data-state=open]]:pointer-events-auto",
-                        "has-[[data-state=open]]:[mask-position:0_0]",
-                        "pointer-coarse:pointer-events-auto",
-                        "pointer-coarse:[mask-image:none]",
-                      ]
+                    : // Shared hover reveal — identical to the user footer.
+                      messageFooterRevealClassName
                 )}
               >
                 {/* Branch nav lives on the user message (the turn anchor); see
@@ -385,7 +372,7 @@ export function MessageAssistant({
                   side="bottom"
                 >
                   <button
-                    className="hover:bg-accent/60 text-muted-foreground hover:text-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent transition pointer-coarse:h-10 pointer-coarse:w-10"
+                    className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
                     aria-label="Copy text"
                     onClick={copyToClipboard}
                     type="button"
@@ -397,10 +384,10 @@ export function MessageAssistant({
                     )}
                   </button>
                 </MessageAction>
-                {isLast && canRegenerate ? (
+                {canRegenerate ? (
                   <MessageAction tooltip="Regenerate" side="bottom" delay={0}>
                     <button
-                      className="hover:bg-accent/60 text-muted-foreground hover:text-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent transition pointer-coarse:h-10 pointer-coarse:w-10"
+                      className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
                       aria-label="Regenerate"
                       onClick={() => onReload?.(messageId)}
                       type="button"

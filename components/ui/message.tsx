@@ -111,6 +111,30 @@ const MessageActions = ({
   </div>
 )
 
+/**
+ * Shared reveal styling for message footer action rows (assistant + user) so
+ * the hover effect is identical across both surfaces. Compose it into a
+ * footer's className alongside that surface's own layout classes.
+ *
+ * The controls stay mounted and hit-testable — `pointer-events-auto` so the
+ * cursor resolves to `pointer` the instant it's over a button — and fade in
+ * via a quick 0.2s mask-position slide when the turn is hovered, focused, or
+ * has an open menu. Touch devices (no hover) drop the mask and show the
+ * controls outright; reduced-motion users get the reveal without the slide.
+ */
+const messageFooterRevealClassName = cn(
+  "pointer-events-auto",
+  "[mask-image:linear-gradient(to_right,black_33%,transparent_66%)]",
+  "[mask-size:300%_100%]",
+  "[mask-position:100%_0%]",
+  "motion-safe:transition-[mask-position]",
+  "duration-[0.2s]",
+  "group-hover/turn-messages:[mask-position:0_0]",
+  "group-focus-within/turn-messages:[mask-position:0_0]",
+  "has-[[data-state=open]]:[mask-position:0_0]",
+  "pointer-coarse:[mask-image:none]"
+)
+
 export type MessageActionProps = {
   className?: string
   tooltip: React.ReactNode
@@ -131,7 +155,7 @@ const MessageAction = ({
     props: mergeProps<"button">(
       {
         className:
-          "cursor-pointer disabled:cursor-not-allowed aria-disabled:cursor-not-allowed data-disabled:cursor-not-allowed",
+          "cursor-pointer hover:bg-accent/60 hover:text-foreground disabled:cursor-not-allowed aria-disabled:cursor-not-allowed data-disabled:cursor-not-allowed",
         type: "button",
       },
       {}
@@ -148,4 +172,11 @@ const MessageAction = ({
   )
 }
 
-export { Message, MessageAvatar, MessageContent, MessageActions, MessageAction }
+export {
+  Message,
+  MessageAvatar,
+  MessageContent,
+  MessageActions,
+  MessageAction,
+  messageFooterRevealClassName,
+}

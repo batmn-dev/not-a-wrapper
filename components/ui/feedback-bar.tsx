@@ -34,7 +34,7 @@ export function FeedbackBar({
         <div className="flex items-center justify-center gap-0.5 px-3 py-0">
           <button
             type="button"
-            className="text-muted-foreground hover:text-foreground flex size-8 items-center justify-center rounded-md transition-colors"
+            className="text-muted-foreground hover:text-foreground flex size-8 items-center justify-center rounded-md"
             aria-label="Helpful"
             onClick={onHelpful}
           >
@@ -42,7 +42,7 @@ export function FeedbackBar({
           </button>
           <button
             type="button"
-            className="text-muted-foreground hover:text-foreground flex size-8 items-center justify-center rounded-md transition-colors"
+            className="text-muted-foreground hover:text-foreground flex size-8 items-center justify-center rounded-md"
             aria-label="Not helpful"
             onClick={onNotHelpful}
           >

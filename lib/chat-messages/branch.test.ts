@@ -3,9 +3,31 @@ import {
   getMessageBranchInfo,
   isNavigableBranch,
   parseMessageBranchInfo,
+  readServerMessageId,
   resolveTurnBranch,
   type MessageBranchInfo,
 } from "./branch"
+
+describe("readServerMessageId", () => {
+  it("reads a non-empty serverMessageId off a metadata record", () => {
+    expect(readServerMessageId({ serverMessageId: "message_1" })).toBe(
+      "message_1"
+    )
+  })
+
+  it("rejects empty, non-string, missing, and non-record values", () => {
+    expect(readServerMessageId({ serverMessageId: "" })).toBeUndefined()
+    expect(
+      readServerMessageId({ serverMessageId: 123 as unknown })
+    ).toBeUndefined()
+    expect(readServerMessageId({})).toBeUndefined()
+    expect(readServerMessageId(undefined)).toBeUndefined()
+    expect(readServerMessageId(null)).toBeUndefined()
+    expect(
+      readServerMessageId([{ serverMessageId: "x" }] as unknown)
+    ).toBeUndefined()
+  })
+})
 
 describe("parseMessageBranchInfo", () => {
   it("parses a well-formed branch descriptor", () => {
