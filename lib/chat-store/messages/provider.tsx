@@ -27,6 +27,9 @@ import {
 } from "./api"
 
 // Extended UIMessage type for app compatibility (includes optional properties from v4)
+// `metadata` stays `unknown` to match the AI SDK's `UIMessage` (so values and
+// callbacks flow freely between the two); branch state is read as first-class
+// typed data via `getMessageBranchInfo` / `ChatMessageMetadata` at the leaves.
 export type ExtendedUIMessage = UIMessage & {
   createdAt?: Date
   content?: string
@@ -332,18 +335,22 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     async (messageId: string) => {
       if (!chatId || getMessagePersistenceMode(chatId) !== "server") return
 
+      // Do NOT wipe optimistic state here. Clearing it blanked the thread until
+      // the Convex query round-tripped. The selected path is owned by the
+      // backend: the `selectBranch` mutation flips `selected`, the reactive
+      // query pushes the new selected path, and the selected-path projection
+      // seam (use-chat-core) swaps the live turn array to it — no blank.
       try {
         await selectBranchMutation({
           chatId: chatId as Id<"chats">,
           messageId: messageId as Id<"messages">,
         })
-        updateOptimisticMessages(() => [])
       } catch (error) {
         console.error("Failed to select message branch:", error)
         toast({ title: "Failed to switch branch", status: "error" })
       }
     },
-    [chatId, selectBranchMutation, updateOptimisticMessages]
+    [chatId, selectBranchMutation]
   )
 
   // setMessages for backward compatibility - updates optimistic messages

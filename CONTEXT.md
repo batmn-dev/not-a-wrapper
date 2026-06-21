@@ -24,6 +24,10 @@ _Avoid_: fork (too broad), version (too overloaded)
 The backend-derived linear path through a chat's message branches used for rendering and model history. Hidden sibling branches stay stored but are not sent to the model until selected.
 _Avoid_: visible messages, active transcript
 
+**Branch projection**:
+The single client seam that installs the backend's selected path into the AI SDK's flat `useChat` array while a chat is idle: it adopts server ids and branch state onto matching live messages, preserves in-flight optimistic sends, and swaps wholesale when the path diverged (a branch switch, or restoring messages a rejected edit/regeneration sliced out). The client renders the server's selected path; it does not re-derive it. See `docs/adr/0001-client-renders-server-selected-path.md`.
+_Avoid_: reconcile (too narrow — that's only the id-adoption half), rehydrate, sync
+
 ### Tools
 
 **Tool runtime**:

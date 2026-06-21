@@ -27,6 +27,8 @@ const chatCoreMocks = vi.hoisted(() => ({
   setWebSearchEnabled: vi.fn(),
   stop: vi.fn(),
   updateTitle: vi.fn(),
+  // Controllable useChat state for the selected-path projection effect tests.
+  useChatState: { messages: [] as unknown[], status: "ready" as string },
 }))
 
 vi.mock("@/convex/_generated/api", () => ({
@@ -44,10 +46,10 @@ vi.mock("convex/react", () => ({
 
 vi.mock("@ai-sdk/react", () => ({
   useChat: () => ({
-    messages: [],
+    messages: chatCoreMocks.useChatState.messages,
     sendMessage: chatCoreMocks.sendMessage,
     regenerate: chatCoreMocks.regenerate,
-    status: "ready",
+    status: chatCoreMocks.useChatState.status,
     error: undefined,
     stop: chatCoreMocks.stop,
     setMessages: chatCoreMocks.setMessages,
@@ -266,5 +268,89 @@ describe("useChatCore prompt query handling", () => {
     )
     expect(window.location.pathname).toBe("/c/chat-project")
     expect(window.location.search).toBe("")
+  })
+})
+
+describe("useChatCore selected-path projection", () => {
+  let container: HTMLDivElement | null = null
+  let root: Root | null = null
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    chatCoreMocks.useChatState.messages = []
+    chatCoreMocks.useChatState.status = "ready"
+  })
+
+  afterEach(() => {
+    const mountedRoot = root
+    if (mountedRoot) act(() => mountedRoot.unmount())
+    container?.remove()
+    container = null
+    root = null
+  })
+
+  function Harness({ initialMessages }: { initialMessages: UIMessage[] }) {
+    useChatCore({
+      initialMessages,
+      draftValue: "",
+      cacheAndAddMessage: vi.fn(),
+      chatId: "chat_projection",
+      user: authenticatedUser,
+      files: [],
+      createOptimisticAttachments: vi.fn(() => []),
+      setFiles: chatCoreMocks.setFiles,
+      checkLimitsAndNotify: vi.fn(async () => true),
+      cleanupOptimisticAttachments: vi.fn(),
+      ensureChatExists: vi.fn(async () => "chat_projection"),
+      handleFileUploads: vi.fn(async () => []),
+      selectedModel: "openai/gpt-4.1-mini",
+      clearDraft: chatCoreMocks.clearDraft,
+      bumpChat: chatCoreMocks.bumpChat,
+      deleteMessagesFromTimestamp: vi.fn(),
+    })
+    return null
+  }
+
+  function render(initialMessages: UIMessage[]) {
+    act(() => {
+      root?.render(<Harness initialMessages={initialMessages} />)
+    })
+  }
+
+  const serverPath = [
+    {
+      id: "s1",
+      role: "user" as const,
+      parts: [{ type: "text" as const, text: "hi" }],
+      metadata: { serverMessageId: "s1" },
+    },
+  ] as unknown as UIMessage[]
+
+  function mount() {
+    window.history.replaceState(null, "", "/c/chat_projection")
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+  }
+
+  it("projects the reactive server selected path into useChat when idle", () => {
+    mount()
+    render([]) // hydrates the empty chat
+    chatCoreMocks.setMessages.mockClear()
+
+    render(serverPath) // a reactive server update while idle
+
+    expect(chatCoreMocks.setMessages).toHaveBeenCalledWith(serverPath)
+  })
+
+  it("does not project while a generation is streaming", () => {
+    mount()
+    render([])
+    chatCoreMocks.useChatState.status = "streaming"
+    chatCoreMocks.setMessages.mockClear()
+
+    render(serverPath) // server update arrives mid-stream
+
+    expect(chatCoreMocks.setMessages).not.toHaveBeenCalled()
   })
 })

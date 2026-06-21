@@ -383,6 +383,11 @@ export async function runEditTurn(
   }
 
   try {
+    // Optimistic frame only — a visual affordance while the request is in
+    // flight. The rendered truth is the backend selected path, installed by the
+    // selected-path projection seam once the turn settles (use-chat-core). On a
+    // server rejection (e.g. the expectedChatVersion guard) that same seam
+    // re-projects the last good path, so sliced-out messages do not vanish.
     adapters.setMessages([
       ...editPlan.trimmedMessages,
       editPlan.optimisticEditedMessage,

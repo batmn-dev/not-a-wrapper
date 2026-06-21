@@ -2,50 +2,26 @@
 
 import { Icon } from "@/components/ui/icon"
 import { MessageAction } from "@/components/ui/message"
+import {
+  getMessageBranchInfo,
+  isNavigableBranch,
+  type ChatMessageMetadata,
+  type MessageBranchInfo,
+} from "@/lib/chat-messages/branch"
 import { cn } from "@/lib/utils"
 import { RiArrowLeftSLine, RiArrowRightSLine } from "@remixicon/react"
 
-export type MessageBranchMetadata = {
-  messageId: string
-  currentIndex: number
-  total: number
-  siblings: Array<{
-    messageId: string
-    clientMessageId?: string
-  }>
-}
-
-function isBranchMetadata(value: unknown): value is MessageBranchMetadata {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false
-  const record = value as Record<string, unknown>
-  return (
-    typeof record.messageId === "string" &&
-    typeof record.currentIndex === "number" &&
-    typeof record.total === "number" &&
-    Array.isArray(record.siblings) &&
-    record.siblings.every((sibling) => {
-      return (
-        sibling &&
-        typeof sibling === "object" &&
-        !Array.isArray(sibling) &&
-        typeof (sibling as Record<string, unknown>).messageId === "string"
-      )
-    })
-  )
-}
-
+/**
+ * Resolve the typed branch descriptor for a message's metadata, returning it
+ * only when there is more than one sibling to navigate between. Branch state is
+ * first-class (see `lib/chat-messages/branch.ts`); this reads it without
+ * casting metadata to `Record<string, unknown>`.
+ */
 export function getMessageBranch(
-  metadata: Record<string, unknown> | undefined
-) {
-  const branch = metadata?.branch
-  if (!isBranchMetadata(branch)) return undefined
-  if (branch.total < 2 || branch.siblings.length !== branch.total) {
-    return undefined
-  }
-  if (branch.currentIndex < 0 || branch.currentIndex >= branch.total) {
-    return undefined
-  }
-  return branch
+  metadata: ChatMessageMetadata | undefined
+): MessageBranchInfo | undefined {
+  const branch = getMessageBranchInfo({ metadata })
+  return isNavigableBranch(branch) ? branch : undefined
 }
 
 export function MessageBranchControls({
@@ -53,7 +29,7 @@ export function MessageBranchControls({
   onSelectBranch,
   className,
 }: {
-  branch: MessageBranchMetadata | undefined
+  branch: MessageBranchInfo | undefined
   onSelectBranch?: (messageId: string) => void
   className?: string
 }) {

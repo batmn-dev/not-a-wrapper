@@ -1,5 +1,9 @@
 import type { UIMessage } from "ai"
 import {
+  type ChatMessageMetadata,
+  parseMessageBranchInfo,
+} from "./branch"
+import {
   type DurableMessageStatus,
   isDurableMessageStatus,
 } from "./durable-contract"
@@ -29,7 +33,7 @@ export type DurableAdaptedUiMessage = UIMessage & {
   content: string
   createdAt?: Date
   status?: DurableMessageStatus
-  metadata?: Record<string, unknown>
+  metadata?: ChatMessageMetadata
 }
 
 type DurableStoredMessageToUiMessageOptions = {
@@ -92,6 +96,14 @@ export function durableStoredMessageToUiMessage(
     setIfDefined(metadata, "provider", message.provider)
     setIfDefined(metadata, "finishReason", message.finishReason)
     setIfDefined(metadata, "usage", message.usage)
+  }
+
+  // Normalize the transient server-attached branch descriptor into the typed
+  // client shape so renderers read it as first-class state, not via casts.
+  if ("branch" in metadata) {
+    const branch = parseMessageBranchInfo(metadata.branch)
+    if (branch) metadata.branch = branch
+    else delete metadata.branch
   }
 
   return {

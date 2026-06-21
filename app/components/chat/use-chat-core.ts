@@ -10,9 +10,11 @@ import { getOrCreateGuestUserId } from "@/lib/api"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import {
   createOptimisticMessageId,
+  getMessagePersistenceMode,
   GUEST_CHAT_STORAGE_KEY,
 } from "@/lib/chat-store/identity"
 import { createChatTurnStore } from "@/lib/chat-store/turns/chat-turn-service"
+import { projectSelectedPath } from "@/lib/chat-store/turns/selected-path"
 import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { Attachment } from "@/lib/file-handling"
 import { API_ROUTE_CHAT } from "@/lib/routes"
@@ -279,6 +281,22 @@ export function useChatCore({
     setMessagesRef.current = setMessages
   }, [setMessages])
 
+  // Latest live turn array, read by the selected-path projection effect without
+  // making it re-run on every streaming delta; and live generation state, read
+  // by the edit guard at call time so a stale `submitEdit` closure can't refuse
+  // an edit with an outdated status. Synced post-render (refs are not touched
+  // during render).
+  const messagesRef = useRef(messages)
+  const statusRef = useRef(status)
+  const isSubmittingRef = useRef(isSubmitting)
+  useEffect(() => {
+    messagesRef.current = messages
+    statusRef.current = status
+    isSubmittingRef.current = isSubmitting
+  })
+  const getStatus = useCallback(() => statusRef.current, [])
+  const getIsSubmitting = useCallback(() => isSubmittingRef.current, [])
+
   const updateMessages = useCallback(
     (action: Parameters<typeof setMessages>[0]) => {
       setMessagesRef.current(action)
@@ -434,20 +452,52 @@ export function useChatCore({
     }
   }, [chatId, previousChatIdStore, setMessages])
 
+  // Hydrate on chat entry, then keep the live turn array projected onto the
+  // backend-derived selected path. `initialMessages` is the reactive selected
+  // path from the messages provider; for durable chats it is the source of
+  // truth for ancestry and branch state. The single projection seam
+  // (`projectSelectedPath`) installs it: adopting server ids + branch metadata,
+  // preserving in-flight sends, and swapping wholesale on a branch switch.
   useEffect(() => {
     if (!chatId) return
+
+    // Route through the ref, never the raw `setMessages` dep. The AI SDK's
+    // `setMessages` is not referentially stable, so depending on it would re-run
+    // this effect every render — and a project-then-set cycle becomes an
+    // infinite render loop. The ref is the same seam the rest of this hook uses.
+    const applyMessages = setMessagesRef.current
 
     const isNewChat = hydratedChatIdRef.current !== chatId
     if (isNewChat) {
       hydratedChatIdRef.current = chatId
-      setMessages(initialMessages)
+      applyMessages(initialMessages)
       return
     }
 
-    if (initialMessages.length > 0) {
-      setMessages((prev) => (prev.length === 0 ? initialMessages : prev))
+    const isServerPersisted = getMessagePersistenceMode(chatId) === "server"
+    if (!isServerPersisted) {
+      // Guest/local chats have no server selected path to project.
+      if (initialMessages.length > 0) {
+        applyMessages((prev) => (prev.length === 0 ? initialMessages : prev))
+      }
+      return
     }
-  }, [chatId, initialMessages, setMessages])
+
+    // The AI SDK owns the array mid-stream; project once it settles. "error"
+    // is included so a server-rejected edit/regenerate (e.g. the
+    // expectedChatVersion guard) re-projects the last good selected path
+    // instead of leaving the sliced-out messages vanished until reload.
+    if (status !== "ready" && status !== "error") return
+    if (initialMessages.length === 0) return
+
+    const next = projectSelectedPath(
+      messagesRef.current as ChatTurnMessage[],
+      initialMessages as ChatTurnMessage[]
+    )
+    if (next !== messagesRef.current) {
+      applyMessages(next)
+    }
+  }, [chatId, initialMessages, status])
 
   // Handle search params — hydrate input from ?prompt= on mount or navigation
   useEffect(() => {
@@ -555,8 +605,8 @@ export function useChatCore({
     isAuthenticated,
     systemPrompt,
     enableSearch,
-    isSubmitting,
-    status,
+    getStatus,
+    getIsSubmitting,
   })
 
   // Handle suggestion
