@@ -1,6 +1,10 @@
 import { UIMessage as MessageType } from "@ai-sdk/react"
 import { isStaticToolUIPart, getStaticToolName } from "ai"
 import React, { useState } from "react"
+import type {
+  ChatMessageMetadata,
+  MessageBranchInfo,
+} from "@/lib/chat-messages/branch"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import type { EditTurnResult } from "./chat-turn"
@@ -28,12 +32,15 @@ type MessageProps = {
   onReload: (messageId: string) => void
   onStop?: () => void
   onSelectBranch?: (messageId: string) => void
+  /** Branch descriptor to render for this message's turn (anchored on the user
+   * message in conversation.tsx). Undefined for assistant messages. */
+  branch?: MessageBranchInfo
   parts?: MessageType["parts"]
-  metadata?: Record<string, unknown>
+  metadata?: ChatMessageMetadata
   status?: DurableMessageStatus | "ready" | "error"
   className?: string
   onQuote?: (text: string, messageId: string) => void
-  isUserAuthenticated?: boolean
+  isDurableChat?: boolean
   finishReason?: string
   onToolApproval?: (
     approvalId: string,
@@ -68,6 +75,27 @@ function getToolSignature(parts: MessageType["parts"] | undefined): string {
   return sig
 }
 
+function branchesEqual(
+  prev: MessageBranchInfo | undefined,
+  next: MessageBranchInfo | undefined
+): boolean {
+  if (prev === next) return true
+  if (!prev || !next) return false
+  if (
+    prev.messageId !== next.messageId ||
+    prev.currentIndex !== next.currentIndex ||
+    prev.total !== next.total ||
+    prev.siblings.length !== next.siblings.length
+  ) {
+    return false
+  }
+  // The control reads sibling ids to pick its prev/next targets, so a change in
+  // them must invalidate the memo even when the counters are unchanged.
+  return prev.siblings.every(
+    (sibling, index) => sibling.messageId === next.siblings[index]?.messageId
+  )
+}
+
 function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
   if (prev.variant !== next.variant) return false
   if (prev.id !== next.id) return false
@@ -95,12 +123,13 @@ function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
   if (prev.metadata !== next.metadata) return false
   if (prev.finishReason !== next.finishReason) return false
   if (prev.className !== next.className) return false
-  if (prev.isUserAuthenticated !== next.isUserAuthenticated) return false
+  if (prev.isDurableChat !== next.isDurableChat) return false
   if (
     prev.variant === "assistant" &&
     prev.onToolApproval !== next.onToolApproval
   ) return false
   if (prev.onSelectBranch !== next.onSelectBranch) return false
+  if (!branchesEqual(prev.branch, next.branch)) return false
 
   // Attachments: compare all rendered fields
   const prevLen = prev.attachments?.length ?? 0
@@ -129,12 +158,13 @@ function MessageInner({
   onReload,
   onStop,
   onSelectBranch,
+  branch,
   parts,
   metadata,
   status,
   className,
   onQuote,
-  isUserAuthenticated,
+  isDurableChat,
   finishReason,
   onToolApproval,
 }: MessageProps) {
@@ -156,8 +186,8 @@ function MessageInner({
         id={id}
         attachments={attachments}
         className={className}
-        isUserAuthenticated={isUserAuthenticated}
-        metadata={metadata}
+        isDurableChat={isDurableChat}
+        branch={branch}
         onSelectBranch={onSelectBranch}
       >
         {children}
@@ -172,7 +202,6 @@ function MessageInner({
         copyToClipboard={copyToClipboard}
         onReload={onReload}
         onStop={onStop}
-        onSelectBranch={onSelectBranch}
         isLast={isLast}
         parts={parts}
         metadata={metadata}
@@ -180,6 +209,7 @@ function MessageInner({
         className={className}
         messageId={id}
         onQuote={onQuote}
+        isDurableChat={isDurableChat}
         finishReason={finishReason}
         onToolApproval={onToolApproval}
       >

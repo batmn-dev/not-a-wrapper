@@ -17,6 +17,7 @@ import { AnimatePresence, motion } from "motion/react"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { isRouteDurableChat } from "./chat-turn"
 import { useChatCore } from "./use-chat-core"
 import { useChatOperations } from "./use-chat-operations"
 import { useFileUpload } from "./use-file-upload"
@@ -74,6 +75,13 @@ export function Chat() {
   // State to pass between hooks
   const [hasDialogAuth, setHasDialogAuth] = useState(false)
   const isAuthenticated = useMemo(() => !!user?.id, [user?.id])
+  // Edit and regeneration are server-owned Chat turns, available only on a
+  // durable chat. Drives whether the message tree shows those controls so the
+  // UI agrees with the turn-controller precondition. See CONTEXT.md "Chat turn".
+  const isDurableChat = useMemo(
+    () => isRouteDurableChat(chatId, isAuthenticated),
+    [chatId, isAuthenticated]
+  )
   const systemPrompt = useMemo(
     () => user?.system_prompt || SYSTEM_PROMPT_DEFAULT,
     [user?.system_prompt]
@@ -173,7 +181,7 @@ export function Chat() {
       onStop: stop,
       onQuote: handleQuotedSelected,
       onSelectBranch: selectMessageBranch,
-      isUserAuthenticated: isAuthenticated,
+      isDurableChat,
       lastFinishReason,
       onToolApproval: handleToolApproval,
     }),
@@ -186,7 +194,7 @@ export function Chat() {
       stop,
       handleQuotedSelected,
       selectMessageBranch,
-      isAuthenticated,
+      isDurableChat,
       lastFinishReason,
       handleToolApproval,
     ]

@@ -17,6 +17,7 @@ import {
   MessageContent,
 } from "@/components/ui/message"
 import { useScrollRoot } from "@/components/ui/scroll-root"
+import type { MessageBranchInfo } from "@/lib/chat-messages/branch"
 import { cn } from "@/lib/utils"
 import {
   RiCheckLine,
@@ -29,10 +30,7 @@ import {
 import Image from "next/image"
 import React, { useEffect, useRef, useState } from "react"
 import type { EditTurnResult } from "./chat-turn"
-import {
-  getMessageBranch,
-  MessageBranchControls,
-} from "./message-branch-controls"
+import { MessageBranchControls } from "./message-branch-controls"
 
 // Attachment type for backward compatibility with v4 format
 type MessageAttachment = {
@@ -93,13 +91,13 @@ export type MessageUserProps = {
   id: string
   className?: string
   onReload?: (messageId: string) => void
-  metadata?: Record<string, unknown>
+  branch?: MessageBranchInfo
   onSelectBranch?: (messageId: string) => void
   onEdit?: (
     id: string,
     newText: string
   ) => Promise<EditTurnResult | void> | EditTurnResult | void
-  isUserAuthenticated?: boolean
+  isDurableChat?: boolean
 }
 
 export function MessageUser({
@@ -109,10 +107,10 @@ export function MessageUser({
   copyToClipboard,
   id,
   className,
-  metadata,
+  branch,
   onSelectBranch,
   onEdit,
-  isUserAuthenticated,
+  isDurableChat,
 }: MessageUserProps) {
   const [editInput, setEditInput] = useState(children)
   const [isEditing, setIsEditing] = useState(false)
@@ -122,7 +120,6 @@ export function MessageUser({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const savedScrollTopRef = useRef<number | null>(null)
   const { stopScroll, scrollRef } = useScrollRoot()
-  const branch = getMessageBranch(metadata)
 
   const handleEditCancel = () => {
     setIsEditing(false)
@@ -305,10 +302,6 @@ export function MessageUser({
         </MessageContent>
       )}
       <MessageActions className="invisible flex gap-0 opacity-0 transition-opacity group-hover/turn-messages:visible group-hover/turn-messages:opacity-100 pointer-coarse:visible pointer-coarse:opacity-100">
-        <MessageBranchControls
-          branch={branch}
-          onSelectBranch={onSelectBranch}
-        />
         <MessageAction tooltip={copied ? "Copied!" : "Copy text"} side="bottom">
           <button
             className="hover:bg-accent/60 text-muted-foreground hover:text-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent transition pointer-coarse:h-10 pointer-coarse:w-10"
@@ -323,7 +316,7 @@ export function MessageUser({
             )}
           </button>
         </MessageAction>
-        {isUserAuthenticated && (
+        {isDurableChat && (
           <MessageAction
             tooltip={isEditing ? "Cancel edit" : "Edit message"}
             side="bottom"
@@ -343,6 +336,13 @@ export function MessageUser({
             </button>
           </MessageAction>
         )}
+        {/* Branch nav trails the copy/edit actions on user messages, matching
+            ChatGPT (the right-aligned user toolbar reads copy · edit · < n/m >).
+            On assistant messages it leads instead — see message-assistant.tsx. */}
+        <MessageBranchControls
+          branch={branch}
+          onSelectBranch={onSelectBranch}
+        />
       </MessageActions>
     </MessageContainer>
   )

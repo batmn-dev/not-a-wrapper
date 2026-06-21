@@ -138,6 +138,48 @@ describe("durableStoredMessageToUiMessage", () => {
     })
   })
 
+  it("normalizes a well-formed server branch descriptor onto metadata", () => {
+    expect(
+      durableStoredMessageToUiMessage({
+        _id: "message_branch",
+        role: "assistant",
+        content: "answer",
+        parts: [{ type: "text", text: "answer" }],
+        status: "completed",
+        metadata: {
+          branch: {
+            messageId: "message_branch",
+            currentIndex: 1,
+            total: 2,
+            siblings: [
+              { messageId: "message_branch_a" },
+              { messageId: "message_branch" },
+            ],
+          },
+        },
+      }).metadata
+    ).toMatchObject({
+      serverMessageId: "message_branch",
+      branch: {
+        messageId: "message_branch",
+        currentIndex: 1,
+        total: 2,
+      },
+    })
+  })
+
+  it("drops a malformed branch descriptor instead of forwarding it", () => {
+    const metadata = durableStoredMessageToUiMessage({
+      _id: "message_bad_branch",
+      role: "assistant",
+      content: "answer",
+      parts: [{ type: "text", text: "answer" }],
+      status: "completed",
+      metadata: { branch: { messageId: "", total: "two" } },
+    }).metadata
+    expect(metadata?.branch).toBeUndefined()
+  })
+
   it("keeps legacy data role renderable as a system UI message", () => {
     expect(
       durableStoredMessageToUiMessage({

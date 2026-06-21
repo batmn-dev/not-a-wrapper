@@ -1,0 +1,136 @@
+/** @vitest-environment jsdom */
+
+import type { MessageBranchInfo } from "@/lib/chat-messages/branch"
+import React, { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
+import { getMessageBranch, MessageBranchControls } from "./message-branch-controls"
+
+vi.mock("@/components/ui/message", () => ({
+  MessageAction: ({ children }: { children: React.ReactNode }) => children,
+}))
+
+vi.mock("@/components/ui/icon", () => ({
+  Icon: () => null,
+}))
+
+beforeAll(() => {
+  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean })
+    .IS_REACT_ACT_ENVIRONMENT = true
+})
+
+describe("getMessageBranch gate", () => {
+  // The parser itself is covered in lib/chat-messages/branch.test.ts; this only
+  // pins the controls' navigability gate, including the C2 relaxation that
+  // dropped the brittle `siblings.length === total` requirement.
+  it("renders for >=2 siblings even when the sibling list is partial", () => {
+    expect(
+      getMessageBranch({
+        branch: {
+          messageId: "m1",
+          currentIndex: 1,
+          total: 2,
+          siblings: [{ messageId: "m1" }],
+        },
+      })
+    ).toMatchObject({ total: 2 })
+  })
+
+  it("hides for a single-sibling or missing branch", () => {
+    expect(
+      getMessageBranch({
+        branch: {
+          messageId: "m1",
+          currentIndex: 0,
+          total: 1,
+          siblings: [{ messageId: "m1" }],
+        },
+      })
+    ).toBeUndefined()
+    expect(getMessageBranch(undefined)).toBeUndefined()
+  })
+})
+
+describe("MessageBranchControls", () => {
+  let container: HTMLDivElement | null = null
+  let root: Root | null = null
+
+  function cleanupRender() {
+    const rootToUnmount = root
+    if (rootToUnmount) {
+      act(() => rootToUnmount.unmount())
+    }
+    container?.remove()
+    root = null
+    container = null
+  }
+
+  afterEach(cleanupRender)
+
+  function render(
+    branch: MessageBranchInfo | undefined,
+    onSelectBranch?: (messageId: string) => void
+  ) {
+    cleanupRender()
+
+    const mounted = document.createElement("div")
+    document.body.appendChild(mounted)
+    container = mounted
+    root = createRoot(mounted)
+    act(() => {
+      root?.render(
+        <MessageBranchControls
+          branch={branch}
+          onSelectBranch={onSelectBranch}
+        />
+      )
+    })
+  }
+
+  const branch: MessageBranchInfo = {
+    messageId: "m2",
+    currentIndex: 1,
+    total: 3,
+    siblings: [
+      { messageId: "m1" },
+      { messageId: "m2" },
+      { messageId: "m3" },
+    ],
+  }
+
+  it("shows the current position and navigates to siblings", () => {
+    const onSelectBranch = vi.fn()
+    render(branch, onSelectBranch)
+
+    expect(container?.textContent).toContain("2 / 3")
+
+    const [prev, next] = Array.from(
+      container?.querySelectorAll("button") ?? []
+    ) as HTMLButtonElement[]
+
+    act(() => prev.click())
+    expect(onSelectBranch).toHaveBeenLastCalledWith("m1")
+
+    act(() => next.click())
+    expect(onSelectBranch).toHaveBeenLastCalledWith("m3")
+  })
+
+  it("disables previous at the first sibling and next at the last", () => {
+    render(
+      { ...branch, currentIndex: 0 },
+      vi.fn()
+    )
+    const buttons = Array.from(
+      container?.querySelectorAll("button") ?? []
+    ) as HTMLButtonElement[]
+    expect(buttons[0].disabled).toBe(true)
+    expect(buttons[1].disabled).toBe(false)
+  })
+
+  it("renders nothing without a branch or handler", () => {
+    render(undefined, vi.fn())
+    expect(container?.querySelector("button")).toBeNull()
+    render(branch, undefined)
+    expect(container?.querySelector("button")).toBeNull()
+  })
+})

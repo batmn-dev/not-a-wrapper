@@ -2,6 +2,10 @@ import { ScrollRootContent } from "@/components/ui/scroll-root"
 import { Message as MessageContainer } from "@/components/ui/message"
 import { ThinkingBar } from "@/components/ui/thinking-bar"
 import {
+  type ChatMessageMetadata,
+  resolveTurnBranch,
+} from "@/lib/chat-messages/branch"
+import {
   type DurableMessageStatus,
   isDurableMessageStatus,
 } from "@/lib/chat-messages/durable-contract"
@@ -56,7 +60,7 @@ type ConversationProps = {
   onStop?: () => void
   onQuote?: (text: string, messageId: string) => void
   onSelectBranch?: (messageId: string) => void
-  isUserAuthenticated?: boolean
+  isDurableChat?: boolean
   lastFinishReason?: string
   onToolApproval?: (
     approvalId: string,
@@ -74,7 +78,7 @@ export function Conversation({
   onStop,
   onQuote,
   onSelectBranch,
-  isUserAuthenticated,
+  isDurableChat,
   lastFinishReason,
   onToolApproval,
 }: ConversationProps) {
@@ -93,6 +97,13 @@ export function Conversation({
           index === messages.length - 1 && status !== "submitted"
         const isAssistant = message.role === "assistant"
         const isUser = message.role === "user"
+
+        // Branch nav always anchors on the user message (the turn): show the
+        // user's own edit branch, or — when the prompt itself wasn't edited —
+        // the response's regenerate branch. Assistant messages never render the
+        // control; selecting a response sibling still works because the branch
+        // descriptor carries the assistant sibling ids.
+        const turnBranch = resolveTurnBranch(message, messages[index + 1])
         const durableStatus = (message as { status?: string }).status
         const messageStatus: MessageRenderStatus =
           isMessageRenderStatus(durableStatus) && durableStatus !== "completed"
@@ -122,11 +133,12 @@ export function Conversation({
                 onReload={onReload}
                 onStop={isLast && status === "streaming" ? onStop : undefined}
                 onSelectBranch={onSelectBranch}
+                branch={turnBranch}
                 parts={message.parts}
-                metadata={message.metadata as Record<string, unknown> | undefined}
+                metadata={message.metadata as ChatMessageMetadata | undefined}
                 status={messageStatus}
                 onQuote={onQuote}
-                isUserAuthenticated={isUserAuthenticated}
+                isDurableChat={isDurableChat}
                 finishReason={isLast ? lastFinishReason : undefined}
                 onToolApproval={onToolApproval}
               >

@@ -13,8 +13,15 @@ type UseChatEditProps = {
   isAuthenticated: boolean
   systemPrompt: string
   enableSearch: boolean
-  isSubmitting: boolean
-  status: string
+  /**
+   * Live readers for the generation-active guard. Reading `status` /
+   * `isSubmitting` from refs at call time (instead of closing over their values)
+   * prevents an edit from being wrongly refused with "Please wait until the
+   * current message finishes sending." when a stale `submitEdit` closure —
+   * held by a memoized message — still sees an old "streaming" status.
+   */
+  getStatus: () => string
+  getIsSubmitting: () => boolean
 }
 
 export function useChatEdit({
@@ -25,8 +32,8 @@ export function useChatEdit({
   isAuthenticated,
   systemPrompt,
   enableSearch,
-  isSubmitting,
-  status,
+  getStatus,
+  getIsSubmitting,
 }: UseChatEditProps) {
   const submitEdit = useCallback(
     async (messageId: string, newContent: string): Promise<EditTurnResult> => {
@@ -39,8 +46,8 @@ export function useChatEdit({
         isAuthenticated,
         systemPrompt,
         enableSearch,
-        isSubmitting,
-        status,
+        isSubmitting: getIsSubmitting(),
+        status: getStatus(),
       })
     },
     [
@@ -51,8 +58,8 @@ export function useChatEdit({
       isAuthenticated,
       systemPrompt,
       enableSearch,
-      isSubmitting,
-      status,
+      getStatus,
+      getIsSubmitting,
     ]
   )
 

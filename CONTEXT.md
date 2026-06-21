@@ -13,7 +13,7 @@ _Avoid_: server copy, UI Convex mirror, `components/ui/convex`
 ### Chat
 
 **Chat turn**:
-One user action that changes a conversation and may produce an assistant response, including a new message, a suggestion send, a regeneration, or an edit that creates a selected branch before continuing.
+One user action that changes a conversation and may produce an assistant response: a new message, a suggestion send, a regeneration, or an edit. Edit and regeneration are server-owned variants — the backend creates a message branch and derives the new selected path — and may target any prior message, so they require a durable (authenticated, server-persisted) chat. Guest/local chats are send-only.
 _Avoid_: submission, send flow, message lifecycle
 
 **Message branch**:
@@ -23,6 +23,10 @@ _Avoid_: fork (too broad), version (too overloaded)
 **Selected path**:
 The backend-derived linear path through a chat's message branches used for rendering and model history. Hidden sibling branches stay stored but are not sent to the model until selected.
 _Avoid_: visible messages, active transcript
+
+**Branch projection**:
+The single client seam that installs the backend's selected path into the AI SDK's flat `useChat` array while a chat is idle: it adopts server ids and branch state onto matching live messages, preserves in-flight optimistic sends, and swaps wholesale when the path diverged (a branch switch, or restoring messages a rejected edit/regeneration sliced out). The client renders the server's selected path; it does not re-derive it. See `docs/adr/0001-client-renders-server-selected-path.md`.
+_Avoid_: reconcile (too narrow — that's only the id-adoption half), rehydrate, sync
 
 ### Tools
 

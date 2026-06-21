@@ -16,6 +16,7 @@ import {
   ReasoningLabel,
 } from "@/components/ui/reasoning"
 import { SystemMessage } from "@/components/ui/system-message"
+import type { ChatMessageMetadata } from "@/lib/chat-messages/branch"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
@@ -25,10 +26,6 @@ import type { ToolUIPart } from "ai"
 import { getStaticToolName, isStaticToolUIPart } from "ai"
 import { useCallback, useRef, useState } from "react"
 import { getSources } from "./get-sources"
-import {
-  getMessageBranch,
-  MessageBranchControls,
-} from "./message-branch-controls"
 import { QuoteButton } from "./quote-button"
 import { SearchImages } from "./search-images"
 import { SourcesList } from "./sources-list"
@@ -44,13 +41,13 @@ type MessageAssistantProps = {
   copyToClipboard?: () => void
   onReload?: (messageId: string) => void
   onStop?: () => void
-  onSelectBranch?: (messageId: string) => void
   parts?: MessageAISDK["parts"]
-  metadata?: Record<string, unknown>
+  metadata?: ChatMessageMetadata
   status?: DurableMessageStatus | "ready" | "error"
   className?: string
   messageId: string
   onQuote?: (text: string, messageId: string) => void
+  isDurableChat?: boolean
   finishReason?: string
   onToolApproval?: (
     approvalId: string,
@@ -90,19 +87,21 @@ export function MessageAssistant({
   copyToClipboard,
   onReload,
   onStop,
-  onSelectBranch,
   parts,
   metadata,
   status,
   className,
   messageId,
   onQuote,
+  isDurableChat,
   finishReason,
   onToolApproval,
 }: MessageAssistantProps) {
   const { preferences } = useUserPreferences()
   const sources = getSources(parts || [])
-  const branch = getMessageBranch(metadata)
+  // Regeneration is a server-owned Chat turn, available only on a durable
+  // chat. Matches the turn-controller precondition. See CONTEXT.md "Chat turn".
+  const canRegenerate = Boolean(onReload) && Boolean(isDurableChat)
 
   // v6: Filter tool parts using official helper
   const toolInvocationParts = parts?.filter((part): part is ToolUIPart =>
@@ -305,10 +304,10 @@ export function MessageAssistant({
             variant="warning"
             fill
             cta={
-              onReload
+              canRegenerate
                 ? {
                     label: "Regenerate",
-                    onClick: () => onReload(messageId),
+                    onClick: () => onReload?.(messageId),
                   }
                 : undefined
             }
@@ -378,10 +377,9 @@ export function MessageAssistant({
                       ]
                 )}
               >
-                <MessageBranchControls
-                  branch={branch}
-                  onSelectBranch={onSelectBranch}
-                />
+                {/* Branch nav lives on the user message (the turn anchor); see
+                    conversation.tsx + message-user.tsx. Assistant messages
+                    intentionally render no branch control. */}
                 <MessageAction
                   tooltip={copied ? "Copied!" : "Copy text"}
                   side="bottom"
@@ -399,7 +397,7 @@ export function MessageAssistant({
                     )}
                   </button>
                 </MessageAction>
-                {isLast ? (
+                {isLast && canRegenerate ? (
                   <MessageAction tooltip="Regenerate" side="bottom" delay={0}>
                     <button
                       className="hover:bg-accent/60 text-muted-foreground hover:text-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent transition pointer-coarse:h-10 pointer-coarse:w-10"
