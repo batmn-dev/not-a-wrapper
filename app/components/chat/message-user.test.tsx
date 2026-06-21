@@ -108,7 +108,7 @@ describe("MessageUser edits", () => {
           copied={false}
           copyToClipboard={() => {}}
           id="msg-client-123"
-          isUserAuthenticated={true}
+          isDurableChat={true}
           {...props}
         >
           Original text
@@ -160,6 +160,15 @@ describe("MessageUser edits", () => {
 
     expect(onEdit).toHaveBeenCalledWith("msg-client-123", "Edited text")
     expect(container?.querySelector("textarea")).toBeNull()
+  })
+
+  it("hides the edit control on a non-durable chat", () => {
+    renderEditableMessage({ onEdit: vi.fn(), isDurableChat: false })
+
+    const editButton = container?.querySelector(
+      'button[aria-label="Edit message"]'
+    )
+    expect(editButton).toBeNull()
   })
 
   it("keeps edit mode open when onEdit returns a failed result", async () => {

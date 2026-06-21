@@ -56,7 +56,7 @@ type ConversationProps = {
   onStop?: () => void
   onQuote?: (text: string, messageId: string) => void
   onSelectBranch?: (messageId: string) => void
-  isUserAuthenticated?: boolean
+  isDurableChat?: boolean
   lastFinishReason?: string
   onToolApproval?: (
     approvalId: string,
@@ -74,7 +74,7 @@ export function Conversation({
   onStop,
   onQuote,
   onSelectBranch,
-  isUserAuthenticated,
+  isDurableChat,
   lastFinishReason,
   onToolApproval,
 }: ConversationProps) {
@@ -126,7 +126,7 @@ export function Conversation({
                 metadata={message.metadata as Record<string, unknown> | undefined}
                 status={messageStatus}
                 onQuote={onQuote}
-                isUserAuthenticated={isUserAuthenticated}
+                isDurableChat={isDurableChat}
                 finishReason={isLast ? lastFinishReason : undefined}
                 onToolApproval={onToolApproval}
               >

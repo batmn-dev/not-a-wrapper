@@ -470,23 +470,6 @@ export type ChatTurnStoreAdapters = {
   reportError: (message: string, error: unknown) => void
 }
 
-export type ApplyEditTruncationArgs = {
-  sourceChatId: string
-  targetChatId: string
-  plan: Extract<EditTurnPlan, { ok: true }>
-}
-
-export type StageRegenerationArgs = {
-  chatId: string
-  plan: Extract<RegenerationTurnPlan, { ok: true }>
-}
-
-export type PreparedEditPersistence = {
-  routePersists: boolean
-  accept: () => Promise<void>
-  rollback: () => Promise<void>
-}
-
 export type FinishChatTurnPersistenceArgs = {
   message: ChatTurnMessage
   isAbort: boolean
@@ -497,17 +480,6 @@ export type FinishChatTurnPersistenceArgs = {
 }
 
 export function createChatTurnStore(adapters: ChatTurnStoreAdapters) {
-  let activeLocalEdit: {
-    chatId: string
-    cachedSnapshot: ChatTurnMessage[]
-    visibleSnapshot: ChatTurnMessage[]
-  } | null = null
-  let activeLocalRegeneration: {
-    chatId: string
-    retainedMessages: ChatTurnMessage[]
-    visibleSnapshot: ChatTurnMessage[]
-  } | null = null
-
   const routePersistsMessages = (chatId: string | null) =>
     routePersistsChatMessages(chatId, adapters.isAuthenticated())
 
@@ -524,113 +496,6 @@ export function createChatTurnStore(adapters: ChatTurnStoreAdapters) {
       getRecentMessages: adapters.getRecentMessages,
       writeCachedMessages: adapters.writeCachedMessages,
     })
-  }
-
-  const prepareEditPersistence = async ({
-    sourceChatId,
-    targetChatId,
-    plan,
-  }: ApplyEditTruncationArgs): Promise<PreparedEditPersistence> => {
-    if (routePersistsMessages(targetChatId)) {
-      return {
-        routePersists: true,
-        accept: async () => {},
-        rollback: async () => {},
-      }
-    }
-
-    const readMessages = adapters.readMessages ?? getCachedMessages
-    const writeMessages = adapters.writeMessages ?? cacheMessages
-    const cachedSnapshot = await readMessages(sourceChatId)
-
-    const rollback = async () => {
-      activeLocalEdit = null
-      adapters.pendingEdit.clear()
-      adapters.updateMessages(() => plan.originalMessages)
-      await writeMessages(sourceChatId, cachedSnapshot)
-    }
-
-    return {
-      routePersists: false,
-      accept: async () => {
-        await writeMessages(sourceChatId, plan.trimmedMessages)
-        activeLocalEdit = {
-          chatId: sourceChatId,
-          cachedSnapshot,
-          visibleSnapshot: plan.originalMessages,
-        }
-
-        if (plan.shouldUpdateTitle) {
-          try {
-            await adapters.updateTitle(targetChatId, plan.title)
-          } catch {}
-        }
-      },
-      rollback,
-    }
-  }
-
-  const rollbackActiveLocalEdit = async () => {
-    if (!activeLocalEdit) return false
-
-    const transaction = activeLocalEdit
-    activeLocalEdit = null
-    adapters.pendingEdit.clear()
-    adapters.updateMessages(() => transaction.visibleSnapshot)
-    await (adapters.writeMessages ?? cacheMessages)(
-      transaction.chatId,
-      transaction.cachedSnapshot
-    )
-    return true
-  }
-
-  const stageRegeneration = ({ chatId, plan }: StageRegenerationArgs) => {
-    if (routePersistsMessages(chatId)) return false
-
-    activeLocalRegeneration = {
-      chatId,
-      retainedMessages: plan.retainedMessages,
-      visibleSnapshot: plan.originalMessages,
-    }
-    return true
-  }
-
-  const rollbackActiveLocalRegeneration = () => {
-    if (!activeLocalRegeneration) return false
-
-    const transaction = activeLocalRegeneration
-    activeLocalRegeneration = null
-    adapters.updateMessages(() => transaction.visibleSnapshot)
-    return true
-  }
-
-  const finishActiveLocalRegeneration = async (
-    message: ChatTurnMessage,
-    isTerminalError: boolean
-  ) => {
-    if (!activeLocalRegeneration) return false
-
-    const transaction = activeLocalRegeneration
-    activeLocalRegeneration = null
-
-    if (isTerminalError && isEmptyAssistantMessage(message)) {
-      adapters.updateMessages(() => transaction.visibleSnapshot)
-      return true
-    }
-
-    const nextMessages = [...transaction.retainedMessages, message]
-    try {
-      await (adapters.writeMessages ?? cacheMessages)(
-        transaction.chatId,
-        nextMessages
-      )
-    } catch (error) {
-      adapters.reportError(
-        "Failed to persist regenerated assistant message:",
-        error
-      )
-    }
-    return true
   }
 
   const removeEmptyAssistantMessages = async (
@@ -680,18 +545,7 @@ export function createChatTurnStore(adapters: ChatTurnStoreAdapters) {
       ? routePersistsMessages(effectiveChatId)
       : false
 
-    if (
-      await finishActiveLocalRegeneration(
-        message,
-        isAbort || isDisconnect || isError
-      )
-    ) {
-      return
-    }
-
     if (isAbort || isDisconnect || isError) {
-      if (await rollbackActiveLocalEdit()) return
-
       const pendingEdit = adapters.pendingEdit.get()
       if (pendingEdit) {
         adapters.pendingEdit.clear()
@@ -755,7 +609,6 @@ export function createChatTurnStore(adapters: ChatTurnStoreAdapters) {
               pendingEdit.chatId
             )
           } catch (error) {
-            await rollbackActiveLocalEdit()
             adapters.reportError(
               "Failed to persist pending edited message:",
               error
@@ -769,14 +622,11 @@ export function createChatTurnStore(adapters: ChatTurnStoreAdapters) {
         try {
           await adapters.cacheAndAddMessage(message, effectiveChatId)
         } catch (error) {
-          await rollbackActiveLocalEdit()
           adapters.reportError("Failed to persist assistant message:", error)
           return
         }
       }
     }
-
-    activeLocalEdit = null
 
     try {
       if (!effectiveChatId) return
@@ -789,9 +639,6 @@ export function createChatTurnStore(adapters: ChatTurnStoreAdapters) {
   return {
     routePersistsMessages,
     persistTurnMessage,
-    prepareEditPersistence,
-    stageRegeneration,
-    rollbackActiveLocalRegeneration,
     finishTurn,
     stagePendingEdit: adapters.pendingEdit.stage,
   }

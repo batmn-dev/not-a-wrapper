@@ -51,6 +51,7 @@ type MessageAssistantProps = {
   className?: string
   messageId: string
   onQuote?: (text: string, messageId: string) => void
+  isDurableChat?: boolean
   finishReason?: string
   onToolApproval?: (
     approvalId: string,
@@ -97,12 +98,16 @@ export function MessageAssistant({
   className,
   messageId,
   onQuote,
+  isDurableChat,
   finishReason,
   onToolApproval,
 }: MessageAssistantProps) {
   const { preferences } = useUserPreferences()
   const sources = getSources(parts || [])
   const branch = getMessageBranch(metadata)
+  // Regeneration is a server-owned Chat turn, available only on a durable
+  // chat. Matches the turn-controller precondition. See CONTEXT.md "Chat turn".
+  const canRegenerate = Boolean(onReload) && Boolean(isDurableChat)
 
   // v6: Filter tool parts using official helper
   const toolInvocationParts = parts?.filter((part): part is ToolUIPart =>
@@ -305,10 +310,10 @@ export function MessageAssistant({
             variant="warning"
             fill
             cta={
-              onReload
+              canRegenerate
                 ? {
                     label: "Regenerate",
-                    onClick: () => onReload(messageId),
+                    onClick: () => onReload?.(messageId),
                   }
                 : undefined
             }
@@ -399,7 +404,7 @@ export function MessageAssistant({
                     )}
                   </button>
                 </MessageAction>
-                {isLast ? (
+                {isLast && canRegenerate ? (
                   <MessageAction tooltip="Regenerate" side="bottom" delay={0}>
                     <button
                       className="hover:bg-accent/60 text-muted-foreground hover:text-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent transition pointer-coarse:h-10 pointer-coarse:w-10"

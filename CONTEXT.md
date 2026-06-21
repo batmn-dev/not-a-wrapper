@@ -13,7 +13,7 @@ _Avoid_: server copy, UI Convex mirror, `components/ui/convex`
 ### Chat
 
 **Chat turn**:
-One user action that changes a conversation and may produce an assistant response, including a new message, a suggestion send, a regeneration, or an edit that creates a selected branch before continuing.
+One user action that changes a conversation and may produce an assistant response: a new message, a suggestion send, a regeneration, or an edit. Edit and regeneration are server-owned variants — the backend creates a message branch and derives the new selected path — and may target any prior message, so they require a durable (authenticated, server-persisted) chat. Guest/local chats are send-only.
 _Avoid_: submission, send flow, message lifecycle
 
 **Message branch**:

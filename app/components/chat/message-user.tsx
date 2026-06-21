@@ -99,7 +99,7 @@ export type MessageUserProps = {
     id: string,
     newText: string
   ) => Promise<EditTurnResult | void> | EditTurnResult | void
-  isUserAuthenticated?: boolean
+  isDurableChat?: boolean
 }
 
 export function MessageUser({
@@ -112,7 +112,7 @@ export function MessageUser({
   metadata,
   onSelectBranch,
   onEdit,
-  isUserAuthenticated,
+  isDurableChat,
 }: MessageUserProps) {
   const [editInput, setEditInput] = useState(children)
   const [isEditing, setIsEditing] = useState(false)
@@ -323,7 +323,7 @@ export function MessageUser({
             )}
           </button>
         </MessageAction>
-        {isUserAuthenticated && (
+        {isDurableChat && (
           <MessageAction
             tooltip={isEditing ? "Cancel edit" : "Edit message"}
             side="bottom"

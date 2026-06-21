@@ -287,150 +287,6 @@ describe("chat turn service", () => {
     ])
   })
 
-  it("prepares local edit transactions without committing until dispatch is accepted", async () => {
-    const originalMessages = [
-      userMessage("user-1", "old"),
-      assistantMessage("assistant-1", "answer"),
-      userMessage("user-2", "later"),
-      assistantMessage("assistant-2", "later answer"),
-    ]
-    const harness = createStoreHarness({ cachedMessages: originalMessages })
-    const editPlan = prepareEditTurnPlan({
-      messages: originalMessages,
-      messageId: "user-1",
-      newContent: "new",
-      createOptimisticEditMessageId: () => "optimistic-edit",
-    })
-    expect(editPlan.ok).toBe(true)
-    if (!editPlan.ok) return
-
-    const transaction = await harness.store.prepareEditPersistence({
-      sourceChatId: "local-chat",
-      targetChatId: "local-chat",
-      plan: editPlan,
-    })
-
-    expect(transaction.routePersists).toBe(false)
-    expect(harness.adapters.readMessages).toHaveBeenCalledWith("local-chat")
-    expect(harness.adapters.writeMessages).not.toHaveBeenCalled()
-
-    await transaction.accept()
-
-    expect(harness.adapters.writeMessages).toHaveBeenCalledWith(
-      "local-chat",
-      []
-    )
-  })
-
-  it("restores local edit transaction snapshots on rollback", async () => {
-    const originalMessages = [
-      userMessage("user-1", "old"),
-      assistantMessage("assistant-1", "answer"),
-      userMessage("user-2", "later"),
-      assistantMessage("assistant-2", "later answer"),
-    ]
-    const harness = createStoreHarness({ cachedMessages: originalMessages })
-    harness.setMessages([userMessage("optimistic-edit", "new")])
-    const editPlan = prepareEditTurnPlan({
-      messages: originalMessages,
-      messageId: "user-1",
-      newContent: "new",
-      createOptimisticEditMessageId: () => "optimistic-edit",
-    })
-    expect(editPlan.ok).toBe(true)
-    if (!editPlan.ok) return
-
-    const transaction = await harness.store.prepareEditPersistence({
-      sourceChatId: "local-chat",
-      targetChatId: "local-chat",
-      plan: editPlan,
-    })
-
-    await transaction.rollback()
-
-    expect(harness.getMessages()).toEqual(originalMessages)
-    expect(harness.adapters.writeMessages).toHaveBeenCalledWith(
-      "local-chat",
-      originalMessages
-    )
-    expect(harness.getPendingEdit()).toBeNull()
-  })
-
-  it("rolls back active local edit transactions when the replacement stream fails", async () => {
-    const originalMessages = [
-      userMessage("user-1", "old"),
-      assistantMessage("assistant-1", "answer"),
-      userMessage("user-2", "later"),
-      assistantMessage("assistant-2", "later answer"),
-    ]
-    const harness = createStoreHarness({ cachedMessages: originalMessages })
-    const editPlan = prepareEditTurnPlan({
-      messages: originalMessages,
-      messageId: "user-1",
-      newContent: "new",
-      createOptimisticEditMessageId: () => "optimistic-edit",
-    })
-    expect(editPlan.ok).toBe(true)
-    if (!editPlan.ok) return
-
-    const transaction = await harness.store.prepareEditPersistence({
-      sourceChatId: "local-chat",
-      targetChatId: "local-chat",
-      plan: editPlan,
-    })
-    await transaction.accept()
-    harness.adapters.pendingEdit.stage(
-      editPlan.optimisticEditedMessage,
-      "local-chat"
-    )
-    harness.setMessages([editPlan.optimisticEditedMessage])
-
-    await harness.store.finishTurn({
-      message: assistantMessage("assistant-new", "failed"),
-      isAbort: false,
-      isDisconnect: false,
-      isError: true,
-      chatId: "local-chat",
-      previousChatId: null,
-    })
-
-    expect(harness.getMessages()).toEqual(originalMessages)
-    expect(harness.adapters.writeMessages).toHaveBeenLastCalledWith(
-      "local-chat",
-      originalMessages
-    )
-    expect(harness.adapters.cacheAndAddMessage).not.toHaveBeenCalled()
-    expect(harness.getPendingEdit()).toBeNull()
-  })
-
-  it("does not call client-side deletion for durable edit preparation", async () => {
-    const harness = createStoreHarness({ isAuthenticated: true })
-    const targetCreatedAt = new Date("2026-01-02T00:00:00.000Z")
-    const editPlan = prepareEditTurnPlan({
-      messages: [
-        userMessage("user-1", "old", targetCreatedAt),
-        assistantMessage("assistant-1", "answer"),
-      ],
-      messageId: "user-1",
-      newContent: "new",
-      createOptimisticEditMessageId: () => "optimistic-edit",
-    })
-    expect(editPlan.ok).toBe(true)
-    if (!editPlan.ok) return
-
-    const transaction = await harness.store.prepareEditPersistence({
-      sourceChatId: "server-chat",
-      targetChatId: "server-chat",
-      plan: editPlan,
-    })
-    await transaction.accept()
-
-    expect(transaction.routePersists).toBe(true)
-    expect(harness.adapters.deleteMessagesFromTimestamp).not.toHaveBeenCalled()
-    expect(harness.adapters.writeMessages).not.toHaveBeenCalled()
-    expect(harness.adapters.updateTitle).not.toHaveBeenCalled()
-  })
-
   it("prepares regeneration intent for the targeted latest assistant", () => {
     const targetCreatedAt = new Date("2026-01-02T00:00:00.000Z")
     const messages = [
@@ -457,7 +313,7 @@ describe("chat turn service", () => {
     ])
   })
 
-  it("prepares regeneration after a stopped turn without retaining stale empty placeholders", async () => {
+  it("prepares regeneration after a stopped turn without retaining stale empty placeholders", () => {
     const targetCreatedAt = new Date("2026-01-02T00:00:00.000Z")
     const emptyAssistant: ChatTurnMessage = {
       id: "empty-assistant",
@@ -480,7 +336,6 @@ describe("chat turn service", () => {
       userMessage("user-2", "second"),
       targetAssistant,
     ]
-    const harness = createStoreHarness({ cachedMessages: messages })
     const plan = prepareRegenerationTurnPlan(messages, "assistant-2")
 
     expect(plan.ok).toBe(true)
@@ -497,28 +352,6 @@ describe("chat turn service", () => {
       "user-2",
     ])
     expect(plan.regeneration.expectedChatVersion).toBe(4)
-
-    harness.store.stageRegeneration({ chatId: "local-chat", plan })
-    const regeneratedAssistant = assistantMessage(
-      "assistant-2",
-      "new second answer",
-      targetCreatedAt
-    )
-    await harness.store.finishTurn({
-      message: regeneratedAssistant,
-      isAbort: false,
-      isDisconnect: false,
-      isError: false,
-      chatId: "local-chat",
-      previousChatId: null,
-    })
-
-    expect(harness.adapters.writeMessages).toHaveBeenCalledWith("local-chat", [
-      messages[0],
-      partialAssistant,
-      messages[3],
-      regeneratedAssistant,
-    ])
   })
 
   it("prepares edit truncation after stopped or regenerated turns without stale empty placeholders", () => {

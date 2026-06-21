@@ -33,7 +33,7 @@ type MessageProps = {
   status?: DurableMessageStatus | "ready" | "error"
   className?: string
   onQuote?: (text: string, messageId: string) => void
-  isUserAuthenticated?: boolean
+  isDurableChat?: boolean
   finishReason?: string
   onToolApproval?: (
     approvalId: string,
@@ -95,7 +95,7 @@ function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
   if (prev.metadata !== next.metadata) return false
   if (prev.finishReason !== next.finishReason) return false
   if (prev.className !== next.className) return false
-  if (prev.isUserAuthenticated !== next.isUserAuthenticated) return false
+  if (prev.isDurableChat !== next.isDurableChat) return false
   if (
     prev.variant === "assistant" &&
     prev.onToolApproval !== next.onToolApproval
@@ -134,7 +134,7 @@ function MessageInner({
   status,
   className,
   onQuote,
-  isUserAuthenticated,
+  isDurableChat,
   finishReason,
   onToolApproval,
 }: MessageProps) {
@@ -156,7 +156,7 @@ function MessageInner({
         id={id}
         attachments={attachments}
         className={className}
-        isUserAuthenticated={isUserAuthenticated}
+        isDurableChat={isDurableChat}
         metadata={metadata}
         onSelectBranch={onSelectBranch}
       >
@@ -180,6 +180,7 @@ function MessageInner({
         className={className}
         messageId={id}
         onQuote={onQuote}
+        isDurableChat={isDurableChat}
         finishReason={finishReason}
         onToolApproval={onToolApproval}
       >

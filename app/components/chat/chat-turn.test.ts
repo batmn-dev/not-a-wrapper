@@ -360,22 +360,15 @@ describe("chat turn controller", () => {
     expect(events.indexOf("ensureChatExists")).toBeLessThan(
       events.indexOf("sendMessage")
     )
-    expect(events.indexOf("sendMessage")).toBeLessThan(
-      events.indexOf("writeTrimmedMessages")
-    )
-    expect(storeAdapters.writeMessages).toHaveBeenCalledWith(
-      "chat-existing",
-      []
-    )
+    expect(storeAdapters.writeMessages).not.toHaveBeenCalled()
     expect(storeAdapters.deleteMessagesFromTimestamp).not.toHaveBeenCalled()
-    expect(storeAdapters.updateTitle).toHaveBeenCalledWith("chat-1", "new text")
     expect(adapters.sendMessage).toHaveBeenCalledWith(
       {
         text: "new text",
         files: [targetFile],
       },
       {
-        body: {
+        body: expect.objectContaining({
           chatId: "chat-1",
           userId: "user-1",
           model: "model-1",
@@ -383,7 +376,11 @@ describe("chat turn controller", () => {
           systemPrompt: "custom system",
           enableSearch: true,
           chatVersion: 1,
-        },
+          edit: expect.objectContaining({
+            editedMessageId: "user-1",
+            title: "new text",
+          }),
+        }),
       }
     )
     expect(events.indexOf("sendMessage")).toBeLessThan(
@@ -399,15 +396,9 @@ describe("chat turn controller", () => {
     expect(adapters.bumpChat).toHaveBeenCalledWith("chat-1")
   })
 
-  it("restores visible and cached local messages when edit resend dispatch throws", async () => {
-    const {
-      adapters,
-      controller,
-      getMessages,
-      setCachedMessages,
-      setMessagesState,
-      storeAdapters,
-    } = createHarness()
+  it("restores visible messages when edit resend dispatch throws", async () => {
+    const { adapters, controller, getMessages, setMessagesState, storeAdapters } =
+      createHarness()
     const originalMessages = [
       userMessage("user-1", "old text"),
       assistantMessage("assistant-1", "old answer"),
@@ -415,7 +406,6 @@ describe("chat turn controller", () => {
       assistantMessage("assistant-2", "later answer"),
     ]
     setMessagesState(originalMessages)
-    setCachedMessages(originalMessages)
     adapters.sendMessage = vi.fn(() => {
       throw new Error("send failed")
     })
@@ -435,11 +425,7 @@ describe("chat turn controller", () => {
 
     expect(getMessages()).toEqual(originalMessages)
     expect(adapters.sendMessage).toHaveBeenCalled()
-    expect(storeAdapters.writeMessages).toHaveBeenCalledTimes(1)
-    expect(storeAdapters.writeMessages).toHaveBeenCalledWith(
-      "chat-existing",
-      originalMessages
-    )
+    expect(storeAdapters.writeMessages).not.toHaveBeenCalled()
     expect(storeAdapters.deleteMessagesFromTimestamp).not.toHaveBeenCalled()
     expect(storeAdapters.pendingEdit.stage).not.toHaveBeenCalled()
     expect(adapters.toastError).toHaveBeenCalledWith("Failed to apply edit")
@@ -580,6 +566,31 @@ describe("chat turn controller", () => {
     )
   })
 
+  it("refuses edit on a non-durable chat", async () => {
+    const { adapters, controller } = createHarness()
+    const result = await controller.runEditTurn({
+      chatId: "local-chat",
+      messages: [userMessage("user-1", "old text")],
+      messageId: "user-1",
+      newContent: "new text",
+      selectedModel: "model-1",
+      isAuthenticated: false,
+      systemPrompt: "custom system",
+      enableSearch: false,
+      isSubmitting: false,
+      status: "ready",
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "not-durable",
+      message:
+        "Editing is available once the chat is saved. Sign in to edit messages.",
+    })
+    expect(adapters.sendMessage).not.toHaveBeenCalled()
+    expect(adapters.setMessages).not.toHaveBeenCalled()
+  })
+
   it("regenerates with a target message id and explicit intent", async () => {
     const { adapters, controller, setMessagesState, storeAdapters } =
       createHarness()
@@ -664,111 +675,31 @@ describe("chat turn controller", () => {
     })
   })
 
-  it("replaces local regeneration cache history instead of appending a duplicate assistant", async () => {
-    const { controller, setCachedMessages, setMessagesState, storeAdapters } =
+  it("refuses regeneration on a non-durable chat", async () => {
+    const { adapters, controller, setMessagesState, storeAdapters } =
       createHarness()
-    const targetCreatedAt = new Date("2026-01-02T00:00:00.000Z")
-    const originalMessages = [
-      userMessage("user-1", "prompt"),
-      assistantMessage("assistant-1", "old answer", targetCreatedAt),
-    ]
-    const regeneratedAssistant = assistantMessage(
-      "assistant-1",
-      "new answer",
-      targetCreatedAt
-    )
-    setMessagesState(originalMessages)
-    setCachedMessages(originalMessages)
-
-    await controller.runRegenerationTurn({
-      chatId: "local-chat",
-      messages: originalMessages,
-      targetAssistantMessageId: "assistant-1",
-      selectedModel: "model-1",
-      isAuthenticated: false,
-      systemPrompt: "custom system",
-      chatVersion: 2,
-    })
-
-    await controller.finishChatTurn({
-      message: regeneratedAssistant,
-      isAbort: false,
-      isDisconnect: false,
-      isError: false,
-      finishReason: "stop",
-      chatId: "local-chat",
-      previousChatId: null,
-    })
-
-    expect(storeAdapters.writeMessages).toHaveBeenCalledWith("local-chat", [
-      originalMessages[0],
-      regeneratedAssistant,
-    ])
-    expect(storeAdapters.cacheAndAddMessage).not.toHaveBeenCalledWith(
-      regeneratedAssistant,
-      "local-chat"
-    )
-  })
-
-  it("restores local regeneration visibility on empty abort and preserves valid partial aborts", async () => {
-    const originalMessages = [
+    const messages = [
       userMessage("user-1", "prompt"),
       assistantMessage("assistant-1", "old answer"),
     ]
-    const emptyAbort = createHarness()
-    emptyAbort.setMessagesState(originalMessages)
+    setMessagesState(messages)
 
-    await emptyAbort.controller.runRegenerationTurn({
+    await controller.runRegenerationTurn({
       chatId: "local-chat",
-      messages: originalMessages,
+      messages,
       targetAssistantMessageId: "assistant-1",
       selectedModel: "model-1",
       isAuthenticated: false,
       systemPrompt: "custom system",
       chatVersion: 2,
     })
-    await emptyAbort.controller.finishChatTurn({
-      message: {
-        id: "assistant-1",
-        role: "assistant",
-        parts: [],
-      },
-      isAbort: true,
-      isDisconnect: false,
-      isError: false,
-      finishReason: "stop",
-      chatId: "local-chat",
-      previousChatId: null,
-    })
 
-    expect(emptyAbort.getMessages()).toEqual(originalMessages)
-    expect(emptyAbort.storeAdapters.writeMessages).not.toHaveBeenCalled()
-
-    const partialAbort = createHarness()
-    partialAbort.setMessagesState(originalMessages)
-    const partialAssistant = assistantMessage("assistant-1", "partial new")
-    await partialAbort.controller.runRegenerationTurn({
-      chatId: "local-chat",
-      messages: originalMessages,
-      targetAssistantMessageId: "assistant-1",
-      selectedModel: "model-1",
-      isAuthenticated: false,
-      systemPrompt: "custom system",
-      chatVersion: 2,
-    })
-    await partialAbort.controller.finishChatTurn({
-      message: partialAssistant,
-      isAbort: true,
-      isDisconnect: false,
-      isError: false,
-      finishReason: "stop",
-      chatId: "local-chat",
-      previousChatId: null,
-    })
-
-    expect(partialAbort.storeAdapters.writeMessages).toHaveBeenCalledWith(
-      "local-chat",
-      [originalMessages[0], partialAssistant]
+    expect(adapters.regenerate).not.toHaveBeenCalled()
+    expect(adapters.setMessages).not.toHaveBeenCalled()
+    expect(storeAdapters.writeMessages).not.toHaveBeenCalled()
+    expect(storeAdapters.cacheAndAddMessage).not.toHaveBeenCalled()
+    expect(adapters.toastError).toHaveBeenCalledWith(
+      "Regenerating is available once the chat is saved."
     )
   })
 

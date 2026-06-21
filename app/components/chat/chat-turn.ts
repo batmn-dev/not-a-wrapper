@@ -106,6 +106,7 @@ export type EditTurnFailureReason =
   | "generation-active"
   | "empty-content"
   | "missing-chat"
+  | "not-durable"
   | "message-not-found"
   | "missing-message-timestamp"
   | "message-too-long"
@@ -338,6 +339,16 @@ export async function runEditTurn(
     return reject("missing-chat", message)
   }
 
+  // Edit is a server-owned Chat turn: the backend creates the message branch
+  // and derives the selected path. It is only available on a durable chat;
+  // guest/local chats are send-only. See CONTEXT.md "Chat turn".
+  if (!isRouteDurableChat(chatId, isAuthenticated)) {
+    const message =
+      "Editing is available once the chat is saved. Sign in to edit messages."
+    adapters.toastError(message)
+    return reject("not-durable", message)
+  }
+
   const editPlan = prepareEditTurnPlan({
     messages,
     messageId,
@@ -371,10 +382,6 @@ export async function runEditTurn(
     return reject("plan-rejected", "Unable to prepare edit.")
   }
 
-  let editPersistence:
-    | Awaited<ReturnType<ChatTurnStore["prepareEditPersistence"]>>
-    | null = null
-
   try {
     adapters.setMessages([
       ...editPlan.trimmedMessages,
@@ -403,12 +410,6 @@ export async function runEditTurn(
 
     adapters.setPreviousChatId(currentChatId)
 
-    editPersistence = await adapters.turnStore.prepareEditPersistence({
-      sourceChatId: chatId,
-      targetChatId: currentChatId,
-      plan: editPlan,
-    })
-
     adapters.setMessages(editPlan.trimmedMessages)
 
     adapters.sendMessage(
@@ -425,14 +426,10 @@ export async function runEditTurn(
           systemPrompt,
           enableSearch,
           chatVersion: editPlan.chatVersion,
-          edit: editPersistence.routePersists
-            ? buildEditIntent(messageId, editPlan)
-            : undefined,
+          edit: buildEditIntent(messageId, editPlan),
         }),
       }
     )
-
-    await editPersistence.accept()
 
     adapters.setMessages((prev) =>
       prev.filter(
@@ -447,11 +444,6 @@ export async function runEditTurn(
     return { ok: true }
   } catch (error) {
     adapters.reportError("Edit failed:", error)
-    try {
-      await editPersistence?.rollback()
-    } catch (rollbackError) {
-      adapters.reportError("Failed to restore edit transaction:", rollbackError)
-    }
     adapters.setMessages(editPlan.originalMessages)
     const message = "Failed to apply edit"
     adapters.toastError(message)
@@ -476,6 +468,13 @@ export async function runRegenerationTurn(
     return
   }
 
+  // Regeneration is a server-owned Chat turn, available only on a durable
+  // chat; guest/local chats are send-only. See CONTEXT.md "Chat turn".
+  if (!isRouteDurableChat(chatId, isAuthenticated)) {
+    adapters.toastError("Regenerating is available once the chat is saved.")
+    return
+  }
+
   const regenerationPlan = prepareRegenerationTurnPlan(
     messages,
     targetAssistantMessageId
@@ -497,11 +496,6 @@ export async function runRegenerationTurn(
   const userId = await adapters.resolveUserId()
   if (!userId) return
 
-  adapters.turnStore.stageRegeneration({
-    chatId,
-    plan: regenerationPlan,
-  })
-
   try {
     await adapters.regenerate({
       messageId: regenerationPlan.regeneration.targetAssistantMessageId,
@@ -516,7 +510,6 @@ export async function runRegenerationTurn(
       }),
     })
   } catch (error) {
-    adapters.turnStore.rollbackActiveLocalRegeneration()
     adapters.reportError("Regeneration failed:", error)
     adapters.toastError("Failed to regenerate response")
   }
