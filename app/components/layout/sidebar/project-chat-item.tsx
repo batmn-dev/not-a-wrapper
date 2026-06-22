@@ -22,9 +22,16 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
   const { setOpenMobile } = useSidebar()
   const isMobile = useBreakpoint(768)
 
-  const rename = useInlineRename(chat.title || "", (next) =>
-    updateTitle(chat.id, next)
-  )
+  const {
+    isEditing,
+    start,
+    inputRef,
+    containerRef,
+    inputProps,
+    onContainerClick,
+    onSaveClick,
+    onCancelClick,
+  } = useInlineRename(chat.title || "", (next) => updateTitle(chat.id, next))
 
   const handleLinkClick = useCallback(
     (e: React.MouseEvent) => {
@@ -44,17 +51,17 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
     () =>
       cn(
         "sidebar-row sidebar-row-card border-border hover:bg-accent/50 group/chat relative flex items-start rounded-lg border",
-        rename.isEditing ? "bg-accent/50" : ""
+        isEditing ? "bg-accent/50" : ""
       ),
-    [rename.isEditing]
+    [isEditing]
   )
 
-  if (rename.isEditing) {
+  if (isEditing) {
     return (
       <div
         className={containerClassName}
-        onClick={rename.onContainerClick}
-        ref={rename.containerRef}
+        onClick={onContainerClick}
+        ref={containerRef}
       >
         <div className="flex w-full items-center p-3">
           <Icon
@@ -63,20 +70,20 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
             className="text-muted-foreground mr-3 flex-shrink-0"
           />
           <input
-            ref={rename.inputRef}
-            {...rename.inputProps}
+            ref={inputRef}
+            {...inputProps}
             className="text-primary flex-1 bg-transparent text-base font-medium focus:outline-none"
           />
           <div className="ml-2 flex gap-1">
             <button
-              onClick={rename.onSaveClick}
+              onClick={onSaveClick}
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-6 items-center justify-center rounded-lg p-1"
               type="button"
             >
               <Icon icon={RiCheckLine} slotSize={12} />
             </button>
             <button
-              onClick={rename.onCancelClick}
+              onClick={onCancelClick}
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-6 items-center justify-center rounded-lg p-1"
               type="button"
             >
@@ -91,8 +98,8 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
   return (
     <div
       className={containerClassName}
-      onClick={rename.onContainerClick}
-      ref={rename.containerRef}
+      onClick={onContainerClick}
+      ref={containerRef}
     >
       <Link
         href={`/c/${chat.id}`}
@@ -124,7 +131,7 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
       >
         <SidebarItemMenu
           chat={chat}
-          onStartEditing={rename.start}
+          onStartEditing={start}
           triggerAriaLabel={`Open chat actions for ${displayTitle}`}
         />
       </div>

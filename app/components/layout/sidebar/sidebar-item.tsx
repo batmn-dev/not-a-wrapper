@@ -20,9 +20,16 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
   const { setOpenMobile } = useSidebar()
   const isMobile = useBreakpoint(768)
 
-  const rename = useInlineRename(chat.title || "", (next) =>
-    updateTitle(chat.id, next)
-  )
+  const {
+    isEditing,
+    start,
+    inputRef,
+    containerRef,
+    inputProps,
+    onContainerClick,
+    onSaveClick,
+    onCancelClick,
+  } = useInlineRename(chat.title || "", (next) => updateTitle(chat.id, next))
 
   const handleLinkClick = useCallback(
     (e: React.MouseEvent) => {
@@ -39,8 +46,8 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
   )
 
   const isActive = useMemo(
-    () => isCurrentChat || rename.isEditing,
-    [isCurrentChat, rename.isEditing]
+    () => isCurrentChat || isEditing,
+    [isCurrentChat, isEditing]
   )
 
   const displayTitle = useMemo(
@@ -61,26 +68,26 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
   return (
     <div
       className={containerClassName}
-      onClick={rename.onContainerClick}
-      ref={rename.containerRef}
+      onClick={onContainerClick}
+      ref={containerRef}
     >
-      {rename.isEditing ? (
+      {isEditing ? (
         <div className="flex h-full w-full items-center rounded-lg py-[3px] pr-1 pl-2">
           <input
-            ref={rename.inputRef}
-            {...rename.inputProps}
+            ref={inputRef}
+            {...inputProps}
             className="text-primary max-h-full w-full bg-transparent text-base focus:outline-none"
           />
           <div className="flex gap-0.5">
             <button
-              onClick={rename.onSaveClick}
+              onClick={onSaveClick}
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 items-center justify-center rounded-lg p-1"
               type="button"
             >
               <Icon icon={RiCheckLine} slotSize={16} />
             </button>
             <button
-              onClick={rename.onCancelClick}
+              onClick={onCancelClick}
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 items-center justify-center rounded-lg p-1"
               type="button"
             >
@@ -110,7 +117,7 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
           >
             <SidebarItemMenu
               chat={chat}
-              onStartEditing={rename.start}
+              onStartEditing={start}
               triggerAriaLabel={`Open chat actions for ${displayTitle}`}
             />
           </div>

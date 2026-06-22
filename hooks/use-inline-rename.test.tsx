@@ -12,15 +12,23 @@ type HarnessProps = {
 }
 
 function Harness({ value, onSave, onEditEnd }: HarnessProps) {
-  const r = useInlineRename(value, onSave, onEditEnd ? { onEditEnd } : undefined)
+  const {
+    isEditing,
+    draft,
+    inputRef,
+    containerRef,
+    start,
+    inputProps,
+    onContainerClick,
+  } = useInlineRename(value, onSave, onEditEnd ? { onEditEnd } : undefined)
 
   return (
-    <div ref={r.containerRef} onClick={r.onContainerClick}>
-      {r.isEditing ? (
-        <input data-testid="input" ref={r.inputRef} {...r.inputProps} />
+    <div ref={containerRef} onClick={onContainerClick}>
+      {isEditing ? (
+        <input data-testid="input" ref={inputRef} {...inputProps} />
       ) : (
-        <button data-testid="start" onClick={r.start}>
-          {r.draft}
+        <button data-testid="start" onClick={start}>
+          {draft}
         </button>
       )}
     </div>

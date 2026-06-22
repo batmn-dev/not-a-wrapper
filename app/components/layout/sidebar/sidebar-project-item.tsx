@@ -34,7 +34,16 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
   const pathname = usePathname()
   const updateProjectName = useMutation(api.projects.updateName)
 
-  const rename = useInlineRename(
+  const {
+    isEditing,
+    start,
+    inputRef,
+    containerRef,
+    inputProps,
+    onContainerClick,
+    onSaveClick,
+    onCancelClick,
+  } = useInlineRename(
     project.name || "",
     async (next) => {
       try {
@@ -60,9 +69,9 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
   const isActive = useMemo(
     () =>
       pathname.startsWith(`/p/${project._id}`) ||
-      rename.isEditing ||
+      isEditing ||
       isMenuOpen,
-    [pathname, project._id, rename.isEditing, isMenuOpen]
+    [pathname, project._id, isEditing, isMenuOpen]
   )
 
   const displayName = useMemo(
@@ -92,10 +101,10 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
   return (
     <div
       className={containerClassName}
-      onClick={rename.onContainerClick}
-      ref={rename.containerRef}
+      onClick={onContainerClick}
+      ref={containerRef}
     >
-      {rename.isEditing ? (
+      {isEditing ? (
         <div className="flex h-full items-center rounded-lg py-[3px] pr-1 pl-2">
           <Icon
             icon={RiFolderFill}
@@ -103,20 +112,20 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
             className="text-primary mr-2 flex-shrink-0"
           />
           <input
-            ref={rename.inputRef}
-            {...rename.inputProps}
+            ref={inputRef}
+            {...inputProps}
             className="text-primary max-h-full w-full bg-transparent text-base focus:outline-none"
           />
           <div className="flex gap-0.5">
             <button
-              onClick={rename.onSaveClick}
+              onClick={onSaveClick}
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-lg p-1"
               type="button"
             >
               <Icon icon={RiCheckLine} slotSize={16} />
             </button>
             <button
-              onClick={rename.onCancelClick}
+              onClick={onCancelClick}
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-lg p-1"
               type="button"
             >
@@ -147,7 +156,7 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
           <div className={menuClassName} key={project._id}>
             <SidebarProjectMenu
               project={project}
-              onStartEditing={rename.start}
+              onStartEditing={start}
               onMenuOpenChange={handleMenuOpenChange}
             />
           </div>
