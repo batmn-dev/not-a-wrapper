@@ -124,6 +124,7 @@ function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
   if (prev.finishReason !== next.finishReason) return false
   if (prev.className !== next.className) return false
   if (prev.isDurableChat !== next.isDurableChat) return false
+  if (Boolean(prev.onReload) !== Boolean(next.onReload)) return false
   if (
     prev.variant === "assistant" &&
     prev.onToolApproval !== next.onToolApproval
