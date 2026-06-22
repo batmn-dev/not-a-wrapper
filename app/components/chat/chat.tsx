@@ -46,7 +46,6 @@ export function Chat() {
   const {
     messages: initialMessages,
     cacheAndAddMessage,
-    deleteMessagesFromTimestamp,
     selectMessageBranch,
   } = useMessages()
   const { user } = useUser()
@@ -151,7 +150,6 @@ export function Chat() {
     selectedModel,
     clearDraft,
     bumpChat,
-    deleteMessagesFromTimestamp,
   })
 
   // Local delete handler — filters a message from the local array
@@ -175,6 +173,7 @@ export function Chat() {
     () => ({
       messages,
       status,
+      isSubmitting,
       onDelete: handleDelete,
       onEdit: submitEdit,
       onReload: handleReload,
@@ -188,6 +187,7 @@ export function Chat() {
     [
       messages,
       status,
+      isSubmitting,
       handleDelete,
       submitEdit,
       handleReload,

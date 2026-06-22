@@ -8,22 +8,36 @@ import { Message } from "./message"
 vi.mock("./message-assistant", () => ({
   MessageAssistant: ({
     children,
+    messageId,
+    onReload,
     onToolApproval,
   }: {
     children: React.ReactNode
+    messageId: string
+    onReload?: (messageId: string) => void
     onToolApproval?: (
       approvalId: string,
       approved: boolean,
       reason?: string
     ) => Promise<void> | void
   }) => (
-    <button
-      data-testid="approval"
-      type="button"
-      onClick={() => onToolApproval?.("approval-1", true)}
-    >
-      {children}
-    </button>
+    <div>
+      <button
+        data-testid="approval"
+        type="button"
+        onClick={() => onToolApproval?.("approval-1", true)}
+      >
+        {children}
+      </button>
+      <button
+        data-can-reload={Boolean(onReload)}
+        data-testid="reload"
+        type="button"
+        onClick={() => onReload?.(messageId)}
+      >
+        reload
+      </button>
+    </div>
   ),
 }))
 
@@ -54,13 +68,17 @@ describe("Message memoization", () => {
     container = null
   })
 
-  function renderMessage(
-    onToolApproval: (
+  function renderMessage({
+    onToolApproval = vi.fn(),
+    onReload,
+  }: {
+    onToolApproval?: (
       approvalId: string,
       approved: boolean,
       reason?: string
     ) => Promise<void> | void
-  ) {
+    onReload?: (messageId: string) => void
+  } = {}) {
     if (!container) {
       container = document.createElement("div")
       document.body.appendChild(container)
@@ -74,7 +92,7 @@ describe("Message memoization", () => {
           variant="assistant"
           onDelete={() => {}}
           onEdit={() => {}}
-          onReload={() => {}}
+          onReload={onReload}
           onToolApproval={onToolApproval}
         >
           Approve this tool
@@ -87,8 +105,8 @@ describe("Message memoization", () => {
     const firstApprovalHandler = vi.fn()
     const secondApprovalHandler = vi.fn()
 
-    renderMessage(firstApprovalHandler)
-    renderMessage(secondApprovalHandler)
+    renderMessage({ onToolApproval: firstApprovalHandler })
+    renderMessage({ onToolApproval: secondApprovalHandler })
 
     const button = container?.querySelector(
       '[data-testid="approval"]'
@@ -102,5 +120,40 @@ describe("Message memoization", () => {
 
     expect(firstApprovalHandler).not.toHaveBeenCalled()
     expect(secondApprovalHandler).toHaveBeenCalledWith("approval-1", true)
+  })
+
+  it("updates assistant reload availability when only the callback presence changes", () => {
+    const firstReloadHandler = vi.fn()
+    const secondReloadHandler = vi.fn()
+
+    renderMessage({ onReload: firstReloadHandler })
+    renderMessage({ onReload: undefined })
+
+    const reloadButton = container?.querySelector(
+      '[data-testid="reload"]'
+    ) as HTMLButtonElement | null
+
+    expect(reloadButton).toBeTruthy()
+    expect(reloadButton?.dataset.canReload).toBe("false")
+
+    act(() => {
+      reloadButton?.click()
+    })
+
+    expect(firstReloadHandler).not.toHaveBeenCalled()
+
+    renderMessage({ onReload: secondReloadHandler })
+
+    const updatedReloadButton = container?.querySelector(
+      '[data-testid="reload"]'
+    ) as HTMLButtonElement | null
+
+    expect(updatedReloadButton?.dataset.canReload).toBe("true")
+
+    act(() => {
+      updatedReloadButton?.click()
+    })
+
+    expect(secondReloadHandler).toHaveBeenCalledWith("assistant-1")
   })
 })

@@ -1,13 +1,13 @@
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { Icon } from "@/components/ui/icon"
 import { useSidebar } from "@/components/ui/sidebar"
-import useClickOutside from "@/hooks/useClickOutside"
+import { useInlineRename } from "@/hooks/use-inline-rename"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { Chat } from "@/lib/chat-store/types"
 import { cn } from "@/lib/utils"
 import { RiCheckLine, RiCloseLine } from "@remixicon/react"
 import Link from "next/link"
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useMemo } from "react"
 import { SidebarItemMenu } from "./sidebar-item-menu"
 
 type SidebarItemProps = {
@@ -16,95 +16,20 @@ type SidebarItemProps = {
 }
 
 export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
-  const [isEditing, setIsEditing] = useState(false)
-  const [editTitle, setEditTitle] = useState(chat.title || "")
-  const [prevChatTitle, setPrevChatTitle] = useState(chat.title)
-  const inputRef = useRef<HTMLInputElement>(null)
   const { updateTitle } = useChats()
   const { setOpenMobile } = useSidebar()
   const isMobile = useBreakpoint(768)
-  const containerRef = useRef<HTMLDivElement | null>(null)
 
-  // React 19 pattern: sync during render instead of useEffect
-  if (!isEditing && chat.title !== prevChatTitle) {
-    setPrevChatTitle(chat.title)
-    setEditTitle(chat.title || "")
-  }
-
-  const handleStartEditing = useCallback(() => {
-    setIsEditing(true)
-    setEditTitle(chat.title || "")
-
-    requestAnimationFrame(() => {
-      if (inputRef.current) {
-        inputRef.current.focus()
-        inputRef.current.select()
-      }
-    })
-  }, [chat.title])
-
-  const handleSave = useCallback(async () => {
-    setIsEditing(false)
-    await updateTitle(chat.id, editTitle)
-  }, [chat.id, editTitle, updateTitle])
-
-  const handleCancel = useCallback(() => {
-    setEditTitle(chat.title || "")
-    setIsEditing(false)
-  }, [chat.title])
-
-  const handleClickOutside = useCallback(() => {
-    if (isEditing) {
-      handleSave()
-    }
-  }, [isEditing, handleSave])
-
-  useClickOutside(containerRef, handleClickOutside)
-
-  const handleInputChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      setEditTitle(e.target.value)
-    },
-    []
-  )
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter") {
-        e.preventDefault()
-        handleSave()
-      } else if (e.key === "Escape") {
-        e.preventDefault()
-        handleCancel()
-      }
-    },
-    [handleSave, handleCancel]
-  )
-
-  const handleContainerClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (isEditing) {
-        e.stopPropagation()
-      }
-    },
-    [isEditing]
-  )
-
-  const handleSaveClick = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation()
-      handleSave()
-    },
-    [handleSave]
-  )
-
-  const handleCancelClick = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation()
-      handleCancel()
-    },
-    [handleCancel]
-  )
+  const {
+    isEditing,
+    start,
+    inputRef,
+    containerRef,
+    inputProps,
+    onContainerClick,
+    onSaveClick,
+    onCancelClick,
+  } = useInlineRename(chat.title || "", (next) => updateTitle(chat.id, next))
 
   const handleLinkClick = useCallback(
     (e: React.MouseEvent) => {
@@ -143,29 +68,26 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
   return (
     <div
       className={containerClassName}
-      onClick={handleContainerClick}
+      onClick={onContainerClick}
       ref={containerRef}
     >
       {isEditing ? (
         <div className="flex h-full w-full items-center rounded-lg py-[3px] pr-1 pl-2">
           <input
             ref={inputRef}
-            value={editTitle}
-            onChange={handleInputChange}
+            {...inputProps}
             className="text-primary max-h-full w-full bg-transparent text-base focus:outline-none"
-            onKeyDown={handleKeyDown}
-            autoFocus
           />
           <div className="flex gap-0.5">
             <button
-              onClick={handleSaveClick}
+              onClick={onSaveClick}
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 items-center justify-center rounded-lg p-1"
               type="button"
             >
               <Icon icon={RiCheckLine} slotSize={16} />
             </button>
             <button
-              onClick={handleCancelClick}
+              onClick={onCancelClick}
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 items-center justify-center rounded-lg p-1"
               type="button"
             >
@@ -195,7 +117,7 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
           >
             <SidebarItemMenu
               chat={chat}
-              onStartEditing={handleStartEditing}
+              onStartEditing={start}
               triggerAriaLabel={`Open chat actions for ${displayTitle}`}
             />
           </div>

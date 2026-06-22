@@ -22,7 +22,7 @@ import {
   type ReactNode,
 } from "react"
 import { HistoryAuthPrompt } from "./history-auth-prompt"
-import { groupChatsByDate } from "./utils"
+import { buildChatHistoryView, type ChatGroup } from "./utils"
 
 type DesktopSearchModalProps = {
   chatHistory: Chats[]
@@ -44,11 +44,6 @@ type FlatRow =
       href: string
       chat: Chats
     }
-
-type ChatGroup = {
-  name: string
-  chats: Chats[]
-}
 
 const listboxId = "desktop-search-modal-listbox"
 
@@ -73,52 +68,34 @@ export function DesktopSearchModal({
   const [query, setQuery] = useState("")
   const [activeIndex, setActiveIndex] = useState(0)
 
-  const searchableChats = useMemo(
-    () => chatHistory.filter((chat) => !chat.project_id),
-    [chatHistory]
-  )
-
-  const normalizedQuery = query.trim().toLowerCase()
-
-  const filteredChats = useMemo(() => {
-    if (!normalizedQuery) return searchableChats
-
-    return chatHistory.filter((chat) =>
-      (chat.title || "").toLowerCase().includes(normalizedQuery)
-    )
-  }, [chatHistory, normalizedQuery, searchableChats])
-
-  const pinnedChats = useMemo(
-    () => searchableChats.filter((chat) => chat.pinned),
-    [searchableChats]
-  )
-
-  const groupedChats = useMemo(
-    () => groupChatsByDate(searchableChats, normalizedQuery) ?? [],
-    [searchableChats, normalizedQuery]
+  // Single shared derivation: project chats are hidden while browsing but
+  // reachable by search (see buildChatHistoryView).
+  const view = useMemo(
+    () => buildChatHistoryView(chatHistory, query),
+    [chatHistory, query]
   )
 
   const visibleGroups = useMemo<ChatGroup[]>(() => {
-    if (normalizedQuery) {
-      return filteredChats.length
-        ? [{ name: "Search results", chats: filteredChats }]
+    if (view.isSearching) {
+      return view.results.length
+        ? [{ name: "Search results", chats: view.results }]
         : []
     }
 
     const groups: ChatGroup[] = []
 
-    if (pinnedChats.length > 0) {
-      groups.push({ name: "Pinned", chats: pinnedChats })
+    if (view.pinned.length > 0) {
+      groups.push({ name: "Pinned", chats: view.pinned })
     }
 
-    groups.push(...groupedChats)
+    groups.push(...view.groups)
     return groups
-  }, [filteredChats, groupedChats, normalizedQuery, pinnedChats])
+  }, [view])
 
   const flatRows = useMemo<FlatRow[]>(() => {
     const rows: FlatRow[] = []
 
-    if (!normalizedQuery) {
+    if (!view.isSearching) {
       rows.push({ type: "new-chat", key: "new-chat", href: "/" })
     }
 
@@ -134,7 +111,7 @@ export function DesktopSearchModal({
     }
 
     return rows
-  }, [normalizedQuery, visibleGroups])
+  }, [view.isSearching, visibleGroups])
 
   const clampedActiveIndex =
     flatRows.length === 0 ? 0 : Math.min(activeIndex, flatRows.length - 1)
@@ -281,7 +258,7 @@ export function DesktopSearchModal({
                   aria-label="Chats"
                   className="mx-2"
                 >
-                  {!normalizedQuery && (
+                  {!view.isSearching && (
                     <SearchRow
                       id={getRowId(0)}
                       index={0}

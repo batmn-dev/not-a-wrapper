@@ -50,7 +50,6 @@ type MessagesContextType = {
   ) => Promise<void>
   resetMessages: () => Promise<void>
   deleteMessages: () => Promise<void>
-  deleteMessagesFromTimestamp: (timestamp: number) => Promise<void>
   selectMessageBranch: (messageId: string) => Promise<void>
 }
 
@@ -82,9 +81,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
   const addMessageMutation = useMutation(api.messages.add)
   const addBatchMutation = useMutation(api.messages.addBatch)
   const clearMessagesMutation = useMutation(api.messages.clearForChat)
-  const deleteFromTimestampMutation = useMutation(
-    api.messages.deleteFromTimestamp
-  )
   const selectBranchMutation = useMutation(api.messages.selectBranch)
 
   // Convert Convex messages to AI SDK format
@@ -316,21 +312,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     updateOptimisticMessages(() => [])
   }, [updateOptimisticMessages])
 
-  const deleteMessagesFromTimestamp = useCallback(
-    async (timestamp: number) => {
-      if (!chatId || getMessagePersistenceMode(chatId) !== "server") return
-
-      await deleteFromTimestampMutation({
-        chatId: chatId as Id<"chats">,
-        timestamp,
-      })
-
-      // Local state is already trimmed by useChatCore, Convex will reactively update
-      // Errors propagate to submitEdit which handles rollback and user notification
-    },
-    [chatId, deleteFromTimestampMutation]
-  )
-
   const selectMessageBranch = useCallback(
     async (messageId: string) => {
       if (!chatId || getMessagePersistenceMode(chatId) !== "server") return
@@ -386,7 +367,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
         cacheAndAddMessage,
         resetMessages,
         deleteMessages,
-        deleteMessagesFromTimestamp,
         selectMessageBranch,
       }}
     >

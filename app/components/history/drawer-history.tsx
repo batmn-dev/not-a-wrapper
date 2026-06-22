@@ -22,7 +22,7 @@ import Link from "next/link"
 import { useParams } from "next/navigation"
 import React, { useCallback, useMemo, useState } from "react"
 import { HistoryAuthPrompt } from "./history-auth-prompt"
-import { formatDate, groupChatsByDate } from "./utils"
+import { buildChatHistoryView, formatDate } from "./utils"
 
 type DrawerHistoryProps = {
   chatHistory: Chats[]
@@ -43,7 +43,7 @@ export function DrawerHistory({
   setIsOpen,
   isAuthenticated,
 }: DrawerHistoryProps) {
-  const { pinnedChats, togglePinned } = useChats()
+  const { togglePinned } = useChats()
   const [searchQuery, setSearchQuery] = useState("")
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState("")
@@ -97,19 +97,9 @@ export function DrawerHistory({
     setDeletingId(null)
   }, [])
 
-  // Memoize filtered chats to avoid recalculating on every render
-  const filteredChat = useMemo(() => {
-    const query = searchQuery.toLowerCase()
-    return query
-      ? chatHistory.filter((chat) =>
-          (chat.title || "").toLowerCase().includes(query)
-        )
-      : chatHistory
-  }, [chatHistory, searchQuery])
-
-  // Group chats by time periods - memoized to avoid recalculation
-  const groupedChats = useMemo(
-    () => groupChatsByDate(chatHistory, searchQuery),
+  // Single shared derivation: search results, pinned, and date groups.
+  const view = useMemo(
+    () => buildChatHistoryView(chatHistory, searchQuery),
     [chatHistory, searchQuery]
   )
 
@@ -321,29 +311,33 @@ export function DrawerHistory({
 
               <ScrollArea className="flex-1 overflow-auto">
                 <div className="flex flex-col space-y-6 px-4 pt-4 pb-8">
-                  {filteredChat.length === 0 ? (
+                  {(
+                    view.isSearching
+                      ? view.results.length === 0
+                      : view.pinned.length === 0 && view.groups.length === 0
+                  ) ? (
                     <div className="text-muted-foreground py-4 text-center text-sm">
                       No chat history found.
                     </div>
-                  ) : searchQuery ? (
+                  ) : view.isSearching ? (
                     // When searching, display a flat list without grouping
                     <div className="space-y-2">
-                      {filteredChat.map((chat) => renderChatItem(chat))}
+                      {view.results.map((chat) => renderChatItem(chat))}
                     </div>
                   ) : (
                     <>
-                      {pinnedChats.length > 0 && (
+                      {view.pinned.length > 0 && (
                         <div className="space-y-0.5">
                           <h3 className="text-muted-foreground flex items-center gap-1 pl-2 text-sm font-medium">
                             <Pin size={12} className="size-3" />
                             Pinned
                           </h3>
                           <div className="space-y-2">
-                            {pinnedChats.map((chat) => renderChatItem(chat))}
+                            {view.pinned.map((chat) => renderChatItem(chat))}
                           </div>
                         </div>
                       )}
-                      {groupedChats?.map((group) => (
+                      {view.groups.map((group) => (
                         <div key={group.name} className="space-y-0.5">
                           <h3 className="text-muted-foreground pl-2 text-sm font-medium">
                             {group.name}

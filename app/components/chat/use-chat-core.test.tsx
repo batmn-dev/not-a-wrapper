@@ -213,7 +213,6 @@ describe("useChatCore prompt query handling", () => {
         selectedModel: "openai/gpt-4.1-mini",
         clearDraft: chatCoreMocks.clearDraft,
         bumpChat: chatCoreMocks.bumpChat,
-        deleteMessagesFromTimestamp: vi.fn(),
       })
       return null
     }
@@ -306,7 +305,6 @@ describe("useChatCore selected-path projection", () => {
       selectedModel: "openai/gpt-4.1-mini",
       clearDraft: chatCoreMocks.clearDraft,
       bumpChat: chatCoreMocks.bumpChat,
-      deleteMessagesFromTimestamp: vi.fn(),
     })
     return null
   }

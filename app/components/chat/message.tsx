@@ -29,7 +29,7 @@ type MessageProps = {
     id: string,
     newText: string
   ) => Promise<EditTurnResult | void> | EditTurnResult | void
-  onReload: (messageId: string) => void
+  onReload?: (messageId: string) => void
   onStop?: () => void
   onSelectBranch?: (messageId: string) => void
   /** Branch descriptor to render for this message's turn (anchored on the user
@@ -124,6 +124,7 @@ function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
   if (prev.finishReason !== next.finishReason) return false
   if (prev.className !== next.className) return false
   if (prev.isDurableChat !== next.isDurableChat) return false
+  if (Boolean(prev.onReload) !== Boolean(next.onReload)) return false
   if (
     prev.variant === "assistant" &&
     prev.onToolApproval !== next.onToolApproval

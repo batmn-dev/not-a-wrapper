@@ -132,6 +132,8 @@ export type RegenerationTurnArgs = {
   isAuthenticated: boolean
   systemPrompt: string
   chatVersion: number
+  isSubmitting: boolean
+  status: string
 }
 
 export type FinishChatTurnArgs = {
@@ -165,6 +167,16 @@ export function createChatTurnController(adapters: ChatTurnAdapters) {
 }
 
 export type ChatTurnController = ReturnType<typeof createChatTurnController>
+
+function isGenerationActive({
+  isSubmitting,
+  status,
+}: {
+  isSubmitting: boolean
+  status: string
+}) {
+  return isSubmitting || status === "submitted" || status === "streaming"
+}
 
 export async function runSendTurn(
   adapters: ChatTurnAdapters,
@@ -323,7 +335,7 @@ export async function runEditTurn(
     message,
   })
 
-  if (isSubmitting || status === "submitted" || status === "streaming") {
+  if (isGenerationActive({ isSubmitting, status })) {
     const message = "Please wait until the current message finishes sending."
     adapters.toastError(message)
     return reject("generation-active", message)
@@ -466,8 +478,15 @@ export async function runRegenerationTurn(
     isAuthenticated,
     systemPrompt,
     chatVersion,
+    isSubmitting,
+    status,
   }: RegenerationTurnArgs
 ) {
+  if (isGenerationActive({ isSubmitting, status })) {
+    adapters.toastError("Please wait until the current message finishes sending.")
+    return
+  }
+
   if (!chatId) {
     adapters.toastError("Missing chat.")
     return

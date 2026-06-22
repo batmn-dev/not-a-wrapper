@@ -285,50 +285,6 @@ export const addBatch = mutation({
 })
 
 /**
- * Delete messages from a specific timestamp (for edit functionality)
- */
-export const deleteFromTimestamp = mutation({
-  args: {
-    chatId: v.id("chats"),
-    timestamp: v.number(),
-  },
-  handler: async (ctx, { chatId, timestamp }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    // Verify chat exists and user owns it
-    const chat = await ctx.db.get(chatId)
-    if (!chat) throw new Error("Chat not found")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user || chat.userId !== user._id) {
-      throw new Error("Not authorized")
-    }
-
-    const messages = await ctx.db
-      .query("messages")
-      .withIndex("by_chat", (q) => q.eq("chatId", chatId))
-      .collect()
-
-    const toDelete = messages.filter((m) => m.createdAt >= timestamp)
-    const remainingMessageCount = messages.length - toDelete.length
-    // Mirror client-side version semantics so server-side truncation can safely
-    // clean payment state even when sourceMessageTimestamp is unavailable.
-    const truncationMinVersion = remainingMessageCount + 1
-
-    for (const msg of toDelete) {
-      await ctx.db.delete(msg._id)
-    }
-
-    return toDelete.length
-  },
-})
-
-/**
  * Clear all messages for a chat
  */
 export const clearForChat = mutation({
