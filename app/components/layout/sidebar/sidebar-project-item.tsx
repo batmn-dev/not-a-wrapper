@@ -5,7 +5,7 @@ import { Icon } from "@/components/ui/icon"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
-import useClickOutside from "@/hooks/useClickOutside"
+import { useInlineRename } from "@/hooks/use-inline-rename"
 import { cn } from "@/lib/utils"
 import {
   RiCheckLine,
@@ -16,7 +16,7 @@ import {
 import { useMutation } from "convex/react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { SidebarProjectMenu } from "./sidebar-project-menu"
 
 type Project = {
@@ -29,113 +29,28 @@ type SidebarProjectItemProps = {
 }
 
 export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
-  const [isEditing, setIsEditing] = useState(false)
-  const [editName, setEditName] = useState(project.name || "")
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [prevProjectName, setPrevProjectName] = useState(project.name)
-  const inputRef = useRef<HTMLInputElement>(null)
   const isMobile = useBreakpoint(768)
-  const containerRef = useRef<HTMLDivElement | null>(null)
   const pathname = usePathname()
   const updateProjectName = useMutation(api.projects.updateName)
 
-  // React 19 pattern: sync during render instead of useEffect
-  if (!isEditing && project.name !== prevProjectName) {
-    setPrevProjectName(project.name)
-    setEditName(project.name || "")
-  }
-
-  const handleStartEditing = useCallback(() => {
-    setIsEditing(true)
-    setEditName(project.name || "")
-
-    requestAnimationFrame(() => {
-      if (inputRef.current) {
-        inputRef.current.focus()
-        inputRef.current.select()
-      }
-    })
-  }, [project.name])
-
-  const handleSave = useCallback(async () => {
-    if (editName.trim() !== project.name) {
+  const rename = useInlineRename(
+    project.name || "",
+    async (next) => {
       try {
-        await updateProjectName({
-          projectId: project._id,
-          name: editName.trim(),
-        })
+        await updateProjectName({ projectId: project._id, name: next })
       } catch (error) {
         toast({ title: "Failed to rename project", status: "error" })
         console.error("Failed to rename project:", error)
-        // Still close edit state to avoid stuck UI
+        // Still close edit state to avoid stuck UI (handled by the hook)
       }
-    }
-    setIsEditing(false)
-    setIsMenuOpen(false)
-  }, [project._id, project.name, editName, updateProjectName])
-
-  const handleCancel = useCallback(() => {
-    setEditName(project.name || "")
-    setIsEditing(false)
-    setIsMenuOpen(false)
-  }, [project.name])
+    },
+    { onEditEnd: () => setIsMenuOpen(false) }
+  )
 
   const handleMenuOpenChange = useCallback((open: boolean) => {
     setIsMenuOpen(open)
   }, [])
-
-  const handleClickOutside = useCallback(() => {
-    if (isEditing) {
-      handleSave()
-    }
-  }, [isEditing, handleSave])
-
-  useClickOutside(containerRef, handleClickOutside)
-
-  const handleInputChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      setEditName(e.target.value)
-    },
-    []
-  )
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter") {
-        e.preventDefault()
-        handleSave()
-      } else if (e.key === "Escape") {
-        e.preventDefault()
-        handleCancel()
-      }
-    },
-    [handleSave, handleCancel]
-  )
-
-  const handleContainerClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (isEditing) {
-        e.stopPropagation()
-      }
-    },
-    [isEditing]
-  )
-
-  const handleSaveClick = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation()
-      handleSave()
-    },
-    [handleSave]
-  )
-
-  const handleCancelClick = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation()
-      handleCancel()
-    },
-    [handleCancel]
-  )
 
   const handleLinkClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
@@ -143,8 +58,11 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
 
   // Memoize computed values
   const isActive = useMemo(
-    () => pathname.startsWith(`/p/${project._id}`) || isEditing || isMenuOpen,
-    [pathname, project._id, isEditing, isMenuOpen]
+    () =>
+      pathname.startsWith(`/p/${project._id}`) ||
+      rename.isEditing ||
+      isMenuOpen,
+    [pathname, project._id, rename.isEditing, isMenuOpen]
   )
 
   const displayName = useMemo(
@@ -174,10 +92,10 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
   return (
     <div
       className={containerClassName}
-      onClick={handleContainerClick}
-      ref={containerRef}
+      onClick={rename.onContainerClick}
+      ref={rename.containerRef}
     >
-      {isEditing ? (
+      {rename.isEditing ? (
         <div className="flex h-full items-center rounded-lg py-[3px] pr-1 pl-2">
           <Icon
             icon={RiFolderFill}
@@ -185,23 +103,20 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
             className="text-primary mr-2 flex-shrink-0"
           />
           <input
-            ref={inputRef}
-            value={editName}
-            onChange={handleInputChange}
+            ref={rename.inputRef}
+            {...rename.inputProps}
             className="text-primary max-h-full w-full bg-transparent text-base focus:outline-none"
-            onKeyDown={handleKeyDown}
-            autoFocus
           />
           <div className="flex gap-0.5">
             <button
-              onClick={handleSaveClick}
+              onClick={rename.onSaveClick}
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-lg p-1"
               type="button"
             >
               <Icon icon={RiCheckLine} slotSize={16} />
             </button>
             <button
-              onClick={handleCancelClick}
+              onClick={rename.onCancelClick}
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-lg p-1"
               type="button"
             >
@@ -232,7 +147,7 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
           <div className={menuClassName} key={project._id}>
             <SidebarProjectMenu
               project={project}
-              onStartEditing={handleStartEditing}
+              onStartEditing={rename.start}
               onMenuOpenChange={handleMenuOpenChange}
             />
           </div>

@@ -1,7 +1,7 @@
 import { fetchQuery } from "convex/nextjs"
 import { api } from "@/convex/_generated/api"
 import { decryptKey } from "./encryption"
-import { env } from "./openproviders/env"
+import { getProviderStrategy } from "./openproviders/provider-strategy"
 import { Provider } from "./openproviders/types"
 
 export type { Provider } from "./openproviders/types"
@@ -80,18 +80,10 @@ export async function getEffectiveApiKey(
     }
   }
 
-  // Fall back to environment keys
-  const envKeyMap: Record<Provider, string | undefined> = {
-    openai: env.OPENAI_API_KEY,
-    mistral: env.MISTRAL_API_KEY,
-    perplexity: env.PERPLEXITY_API_KEY,
-    google: env.GOOGLE_GENERATIVE_AI_API_KEY,
-    anthropic: env.ANTHROPIC_API_KEY,
-    xai: env.XAI_API_KEY,
-    openrouter: env.OPENROUTER_API_KEY,
-  }
-
-  return envKeyMap[provider] || null
+  // Fall back to the provider's platform env key. The env-var NAME is a static
+  // provider-SDK fact owned by the provider strategy (the same fact the model
+  // factory and the 401 preflight used to each restate); resolution stays here.
+  return process.env[getProviderStrategy(provider).envVarName] || null
 }
 
 /**

@@ -1,94 +1,22 @@
-import { anthropic, createAnthropic } from "@ai-sdk/anthropic"
-import { createGoogleGenerativeAI, google } from "@ai-sdk/google"
-import { createMistral, mistral } from "@ai-sdk/mistral"
-import { createOpenAI, openai } from "@ai-sdk/openai"
-import { createPerplexity, perplexity } from "@ai-sdk/perplexity"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
-import { createXai, xai } from "@ai-sdk/xai"
-import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { resolveModelId } from "@/lib/models/model-id-migration"
 import { getProviderForModel } from "./provider-map"
-import type {
-  AnthropicModel,
-  GeminiModel,
-  MistralModel,
-  OpenAIModel,
-  OpenRouterModel,
-  PerplexityModel,
-  SupportedModel,
-  XaiModel,
-} from "./types"
+import { getProviderStrategy } from "./provider-strategy"
+import type { SupportedModel } from "./types"
 
-function toOpenRouterChatModelId(modelId: string): string {
-  return modelId.startsWith("openrouter:")
-    ? modelId.slice("openrouter:".length)
-    : modelId
-}
-
+/**
+ * Build the AI SDK language model for any supported model id.
+ *
+ * Provider-specific construction (SDK factory, BYOK-vs-default credentials,
+ * OpenRouter's quirks) lives behind the provider strategy; this function only
+ * resolves the id, routes it to a provider, and asks that provider's strategy
+ * for the model. `getProviderForModel` throws on an unknown provider.
+ */
 export function createProviderLanguageModel<T extends SupportedModel | string>(
   modelId: T,
   apiKey?: string
 ): LanguageModelV3 {
   const resolvedModelId = resolveModelId(modelId)
   const provider = getProviderForModel(resolvedModelId)
-
-  if (provider === "openai") {
-    if (apiKey) {
-      const openaiProvider = createOpenAI({ apiKey })
-      return openaiProvider(resolvedModelId as OpenAIModel)
-    }
-    return openai(resolvedModelId as OpenAIModel)
-  }
-
-  if (provider === "mistral") {
-    if (apiKey) {
-      const mistralProvider = createMistral({ apiKey })
-      return mistralProvider(resolvedModelId as MistralModel)
-    }
-    return mistral(resolvedModelId as MistralModel)
-  }
-
-  if (provider === "google") {
-    if (apiKey) {
-      const googleProvider = createGoogleGenerativeAI({ apiKey })
-      return googleProvider(resolvedModelId as GeminiModel)
-    }
-    return google(resolvedModelId as GeminiModel)
-  }
-
-  if (provider === "perplexity") {
-    if (apiKey) {
-      const perplexityProvider = createPerplexity({ apiKey })
-      return perplexityProvider(resolvedModelId as PerplexityModel)
-    }
-    return perplexity(resolvedModelId as PerplexityModel)
-  }
-
-  if (provider === "anthropic") {
-    if (apiKey) {
-      const anthropicProvider = createAnthropic({ apiKey })
-      return anthropicProvider(resolvedModelId as AnthropicModel)
-    }
-    return anthropic(resolvedModelId as AnthropicModel)
-  }
-
-  if (provider === "xai") {
-    if (apiKey) {
-      const xaiProvider = createXai({ apiKey })
-      return xaiProvider(resolvedModelId as XaiModel)
-    }
-    return xai(resolvedModelId as XaiModel)
-  }
-
-  if (provider === "openrouter") {
-    const openrouterProvider = createOpenRouter({
-      apiKey: apiKey || process.env.OPENROUTER_API_KEY,
-      compatibility: "strict",
-    })
-    return openrouterProvider.chat(
-      toOpenRouterChatModelId(resolvedModelId as OpenRouterModel)
-    )
-  }
-
-  throw new Error(`Unsupported model: ${resolvedModelId}`)
+  return getProviderStrategy(provider).instance(apiKey).languageModel(resolvedModelId)
 }

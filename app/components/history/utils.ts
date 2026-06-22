@@ -5,6 +5,63 @@ type TimeGroup = {
   chats: Chats[]
 }
 
+export type ChatGroup = {
+  name: string
+  chats: Chats[]
+}
+
+export type ChatHistoryView = {
+  /** True when a (trimmed, non-empty) query is active. */
+  isSearching: boolean
+  /** Title-matched chats across the full set (only when searching). */
+  results: Chats[]
+  /** Pinned, non-project chats, newest pin first (only when browsing). */
+  pinned: Chats[]
+  /** Date-bucketed chats, project + pinned excluded (only when browsing). */
+  groups: ChatGroup[]
+}
+
+/**
+ * Single home for the chat-history list rule shared by every history surface:
+ *
+ * - **Browsing** (no query): hide project chats and pinned chats from the date
+ *   groups, surface pinned (non-project) chats separately newest-first.
+ * - **Searching** (query present): match titles across the *full* set, so
+ *   project chats are reachable by search even though they're hidden from
+ *   browsing.
+ *
+ * Surfaces render their own chrome (drawer rows, keyboard-nav listbox) over
+ * this one derivation instead of each re-deriving it.
+ */
+export function buildChatHistoryView(
+  chats: Chats[],
+  query: string
+): ChatHistoryView {
+  const normalized = query.trim().toLowerCase()
+  const isSearching = normalized.length > 0
+
+  if (isSearching) {
+    const results = chats.filter((chat) =>
+      (chat.title || "").toLowerCase().includes(normalized)
+    )
+    return { isSearching: true, results, pinned: [], groups: [] }
+  }
+
+  const pinned = chats
+    .filter((chat) => chat.pinned && !chat.project_id)
+    .slice()
+    .sort((a, b) => {
+      const at = a.pinned_at ? +new Date(a.pinned_at) : 0
+      const bt = b.pinned_at ? +new Date(b.pinned_at) : 0
+      return bt - at
+    })
+
+  // groupChatsByDate already excludes project + pinned chats internally.
+  const groups = groupChatsByDate(chats, "") ?? []
+
+  return { isSearching: false, results: [], pinned, groups }
+}
+
 // Group chats by time periods
 export function groupChatsByDate(
   chats: Chats[],
