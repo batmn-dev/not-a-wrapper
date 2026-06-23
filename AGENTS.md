@@ -6,6 +6,31 @@ Open-source multi-AI chat app with a unified model interface across providers.
 
 Deliver correct, maintainable, well-researched, best practice changes.
 
+## Pre-Launch: The Database Is Disposable (MUST)
+
+This project has **no users and no production data**. The development database is
+disposable. Do not spend effort protecting data that does not exist.
+
+- Change `convex/schema.ts` directly: add, remove, rename, retype, or narrow
+  fields as the design needs. **No** expand/migrate/contract, **no** migration
+  manifests, **no** field-removal ceremony.
+- If existing dev data conflicts with a schema change, wipe it (Convex dashboard
+  or a one-off `bunx convex run`/clear) and move on. Losing dev data is not a risk.
+- Schema and data-model changes are **not** high-risk and require **no** approval
+  gate while pre-launch.
+- The expand/migrate/contract workflow (`docs/convex-migrations.md`), the
+  migration manifests (`convex/migrations/`), and the schema-guard / deploy
+  preflight tooling are **dormant** until launch. Do not re-introduce them for a
+  schema change.
+
+Scope: **the database only.** This does NOT relax working-tree/file hygiene (do
+not delete user-owned or untracked files — see "Dirty Worktree And Generated
+Files"), secret handling (never log secrets; treat BYOK keys as
+encrypted-at-rest), or auth correctness.
+
+When the app gains real users, revert this section and re-activate the migration
+discipline.
+
 ## Implementation Philosophy (SHOULD)
 
 - Prefer well-researched, industry-standard solutions over quick fixes.
@@ -23,7 +48,7 @@ Deliver correct, maintainable, well-researched, best practice changes.
 
 - Use risk-based rigor: keep low-risk tasks lightweight, increase rigor for medium/high-risk tasks.
 - Medium/high-risk changes require a brief approach decision before coding (options, trade-offs, chosen approach).
-- High-risk triggers include: auth, schema/data model, API contracts, persistence, concurrency, migrations, billing/payments, and security-critical paths.
+- High-risk triggers include: auth, API contracts, concurrency, billing/payments, and security-critical paths. (Database schema, data model, and migrations are NOT high-risk pre-launch — see "Pre-Launch: The Database Is Disposable".)
 - Introducing a new dependency or architectural pattern requires explicit justification and at least one alternative considered.
 - Validation depth must scale with risk; do not treat successful compilation as sufficient evidence of correctness.
 - For medium/high-risk changes, follow the decision process in this section and document the chosen approach before coding.
@@ -63,7 +88,6 @@ Deliver correct, maintainable, well-researched, best practice changes.
 - Adding dependencies (`bun add ...`)
 - Modifying `package.json`, `tsconfig*`, `next.config.*`
 - Editing auth-critical paths (`app/auth/`, `middleware.ts`)
-- Changing DB schema (`convex/schema.ts`)
 - Changing CI/CD (`.github/workflows/`)
 - Deleting files
 
@@ -89,11 +113,10 @@ if (!identity) throw new Error("Not authenticated")
 
 ### Convex Schema Contractions
 
-- Do not remove fields from `convex/schema.ts` until an expand/migrate/contract migration is complete.
-- Add or update a manifest in `convex/migrations/`, verify aggregate legacy-field counts are zero, then run `bun run convex:schema-guard`.
-- Production deploys must go through `bun run convex:deploy`; it runs the schema contraction preflight before `convex deploy` and fails closed if the configured base schema cannot be read.
-- Vercel previews use the same deploy command but run required-base dry-run validation before Convex creates or reuses the preview deployment.
-- Never disable Convex schema validation as the fix for stale production documents.
+**Dormant pre-launch.** The database is disposable — change `convex/schema.ts`
+directly and wipe dev data if it conflicts. See "Pre-Launch: The Database Is
+Disposable". Re-activate the expand/migrate/contract workflow, manifests, and
+schema-guard/preflight only when the app has real users.
 
 ### Optimistic Update Pattern
 
