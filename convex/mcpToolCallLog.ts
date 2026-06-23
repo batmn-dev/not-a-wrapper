@@ -1,6 +1,14 @@
+// DEAD CODE: legacy duplicate of convex/toolCallLog.ts. No client/server
+// references (the chat route's outcome sinks call api.toolCallLog.log). Kept
+// only until removal is approved; migrated to the auth seam so it doesn't trip
+// the raw-getUserIdentity guard in the meantime.
+
 import { v } from "convex/values"
 import { paginationOptsValidator } from "convex/server"
-import { mutation, query } from "./_generated/server"
+import {
+  authenticatedMutation,
+  maybeAuthQuery,
+} from "./lib/authedFunctions"
 
 // =============================================================================
 // Helpers
@@ -30,7 +38,7 @@ function truncatePreview(text: string | undefined): string | undefined {
  * Truncates inputPreview and outputPreview to 500 chars.
  * userId is set from auth context — never from client input.
  */
-export const log = mutation({
+export const log = authenticatedMutation({
   args: {
     chatId: v.optional(v.id("chats")),
     serverId: v.id("mcpServers"),
@@ -43,26 +51,16 @@ export const log = mutation({
     error: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) throw new Error("User not found")
-
     // Verify chat ownership if chatId is provided
     if (args.chatId) {
       const chat = await ctx.db.get(args.chatId)
-      if (!chat || chat.userId !== user._id) {
+      if (!chat || chat.userId !== ctx.user._id) {
         throw new Error("Chat not found")
       }
     }
 
     return await ctx.db.insert("toolCallLog", {
-      userId: user._id,
+      userId: ctx.user._id,
       chatId: args.chatId,
       serverId: args.serverId,
       toolName: args.toolName,
@@ -86,17 +84,10 @@ export const log = mutation({
  * Get the audit trail for a specific conversation.
  * Returns all tool call log entries for the given chat, ordered by creation time.
  */
-export const listByChat = query({
+export const listByChat = maybeAuthQuery({
   args: { chatId: v.id("chats") },
   handler: async (ctx, { chatId }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return []
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
+    const user = ctx.user
     if (!user) return []
 
     // Verify chat ownership
@@ -115,19 +106,10 @@ export const listByChat = query({
  * Get the user's tool call history (paginated).
  * Returns most recent entries first.
  */
-export const listByUser = query({
+export const listByUser = maybeAuthQuery({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) {
-      return { page: [], isDone: true, continueCursor: "" }
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
+    const user = ctx.user
     if (!user) {
       return { page: [], isDone: true, continueCursor: "" }
     }

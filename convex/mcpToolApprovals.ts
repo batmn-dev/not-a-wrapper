@@ -1,25 +1,23 @@
 import { v } from "convex/values"
-import { mutation, query, internalMutation } from "./_generated/server"
+import { internalMutation } from "./_generated/server"
+import {
+  authenticatedMutation,
+  maybeAuthQuery,
+  ownedMcpServerMutation,
+} from "./lib/authedFunctions"
 
 // =============================================================================
 // Queries
 // =============================================================================
 
 /**
- * List all tool approvals for a specific MCP server.
- * Verifies the user owns the server.
+ * List all tool approvals for a specific MCP server the caller owns. Returns []
+ * when unauthenticated or the server is not owned.
  */
-export const listByServer = query({
+export const listByServer = maybeAuthQuery({
   args: { serverId: v.id("mcpServers") },
   handler: async (ctx, { serverId }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return []
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
+    const user = ctx.user
     if (!user) return []
 
     // Verify server ownership
@@ -38,17 +36,10 @@ export const listByServer = query({
 /**
  * List all tool approvals across all servers for the authenticated user.
  */
-export const listByUser = query({
+export const listByUser = maybeAuthQuery({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return []
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
+    const user = ctx.user
     if (!user) return []
 
     return await ctx.db
@@ -66,37 +57,20 @@ export const listByUser = query({
  * Upsert a tool approval. Uses by_user_server_tool index to avoid duplicates.
  * If an approval for this tool already exists, updates it. Otherwise creates a new one.
  */
-export const upsertApproval = mutation({
+export const upsertApproval = ownedMcpServerMutation({
   args: {
-    serverId: v.id("mcpServers"),
     toolName: v.string(),
     approved: v.boolean(),
   },
-  handler: async (ctx, { serverId, toolName, approved }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) throw new Error("User not found")
-
-    // Verify server ownership
-    const server = await ctx.db.get(serverId)
-    if (!server || server.userId !== user._id) {
-      throw new Error("Server not found")
-    }
+  handler: async (ctx, { toolName, approved }) => {
+    const userId = ctx.user._id
+    const serverId = ctx.server._id
 
     // Check for existing approval
     const existing = await ctx.db
       .query("mcpToolApprovals")
       .withIndex("by_user_server_tool", (q) =>
-        q
-          .eq("userId", user._id)
-          .eq("serverId", serverId)
-          .eq("toolName", toolName)
+        q.eq("userId", userId).eq("serverId", serverId).eq("toolName", toolName)
       )
       .unique()
 
@@ -109,7 +83,7 @@ export const upsertApproval = mutation({
     }
 
     return await ctx.db.insert("mcpToolApprovals", {
-      userId: user._id,
+      userId,
       serverId,
       toolName,
       approved,
@@ -125,28 +99,13 @@ export const upsertApproval = mutation({
  * auto-approved. The trust boundary is server-level — the user chose to add
  * the URL. Users can individually disable tools after discovery.
  */
-export const bulkApprove = mutation({
+export const bulkApprove = ownedMcpServerMutation({
   args: {
-    serverId: v.id("mcpServers"),
     toolNames: v.array(v.string()),
   },
-  handler: async (ctx, { serverId, toolNames }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) throw new Error("User not found")
-
-    // Verify server ownership
-    const server = await ctx.db.get(serverId)
-    if (!server || server.userId !== user._id) {
-      throw new Error("Server not found")
-    }
-
+  handler: async (ctx, { toolNames }) => {
+    const userId = ctx.user._id
+    const serverId = ctx.server._id
     const now = Date.now()
 
     for (const toolName of toolNames) {
@@ -154,16 +113,13 @@ export const bulkApprove = mutation({
       const existing = await ctx.db
         .query("mcpToolApprovals")
         .withIndex("by_user_server_tool", (q) =>
-          q
-            .eq("userId", user._id)
-            .eq("serverId", serverId)
-            .eq("toolName", toolName)
+          q.eq("userId", userId).eq("serverId", serverId).eq("toolName", toolName)
         )
         .unique()
 
       if (!existing) {
         await ctx.db.insert("mcpToolApprovals", {
-          userId: user._id,
+          userId,
           serverId,
           toolName,
           approved: true,
@@ -175,23 +131,15 @@ export const bulkApprove = mutation({
 })
 
 /**
- * Toggle individual tool approved status.
+ * Toggle individual tool approved status. Approval ownership is a per-row check
+ * on the approval, so this stays an authenticatedMutation with an inline owner
+ * check rather than a server-scoped builder.
  */
-export const toggleApproval = mutation({
+export const toggleApproval = authenticatedMutation({
   args: { approvalId: v.id("mcpToolApprovals") },
   handler: async (ctx, { approvalId }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) throw new Error("User not found")
-
     const approval = await ctx.db.get(approvalId)
-    if (!approval || approval.userId !== user._id) {
+    if (!approval || approval.userId !== ctx.user._id) {
       throw new Error("Approval not found")
     }
 

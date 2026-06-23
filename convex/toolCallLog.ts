@@ -3,8 +3,10 @@
 
 import { paginationOptsValidator } from "convex/server"
 import { v } from "convex/values"
-import { mutation, query } from "./_generated/server"
-import { getCurrentUser, requireCurrentUser } from "./lib/auth"
+import {
+  authenticatedMutation,
+  maybeAuthQuery,
+} from "./lib/authedFunctions"
 
 // =============================================================================
 // Helpers
@@ -35,7 +37,7 @@ function truncatePreview(text: string | undefined): string | undefined {
  * serverId is optional — only provided for MCP tool calls.
  * userId is set from auth context — never from client input.
  */
-export const log = mutation({
+export const log = authenticatedMutation({
   args: {
     chatId: v.optional(v.id("chats")),
     serverId: v.optional(v.id("mcpServers")), // Only for MCP tools
@@ -77,18 +79,16 @@ export const log = mutation({
     stateMutationKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireCurrentUser(ctx)
-
     // Verify chat ownership if chatId is provided
     if (args.chatId) {
       const chat = await ctx.db.get(args.chatId)
-      if (!chat || chat.userId !== user._id) {
+      if (!chat || chat.userId !== ctx.user._id) {
         throw new Error("Chat not found")
       }
     }
 
     return await ctx.db.insert("toolCallLog", {
-      userId: user._id,
+      userId: ctx.user._id,
       chatId: args.chatId,
       serverId: args.serverId,
       toolName: args.toolName,
@@ -129,10 +129,10 @@ export const log = mutation({
  * Get the audit trail for a specific conversation.
  * Returns all tool call log entries for the given chat, ordered by creation time.
  */
-export const listByChat = query({
+export const listByChat = maybeAuthQuery({
   args: { chatId: v.id("chats") },
   handler: async (ctx, { chatId }) => {
-    const user = await getCurrentUser(ctx)
+    const user = ctx.user
     if (!user) return []
 
     // Verify chat ownership
@@ -151,10 +151,10 @@ export const listByChat = query({
  * Get the user's tool call history (paginated).
  * Returns most recent entries first.
  */
-export const listByUser = query({
+export const listByUser = maybeAuthQuery({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
-    const user = await getCurrentUser(ctx)
+    const user = ctx.user
     if (!user) {
       return { page: [], isDone: true, continueCursor: "" }
     }
