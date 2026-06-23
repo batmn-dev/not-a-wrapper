@@ -1,15 +1,17 @@
 import { v } from "convex/values"
-import { mutation, query } from "./_generated/server"
-import { getCurrentUser, requireCurrentUser } from "./lib/auth"
+import {
+  authenticatedMutation,
+  maybeAuthQuery,
+} from "./lib/authedFunctions"
 
 /**
  * Get all API keys for current user (encrypted)
  * NOTE: Use getProviderStatus instead when you only need to check which providers have keys
  */
-export const getAll = query({
+export const getAll = maybeAuthQuery({
   args: {},
   handler: async (ctx) => {
-    const user = await getCurrentUser(ctx)
+    const user = ctx.user
     if (!user) return []
 
     return await ctx.db
@@ -24,10 +26,10 @@ export const getAll = query({
  * Returns only provider identifiers - does NOT expose encrypted key material
  * Use this for client-side presence checks instead of getAll
  */
-export const getProviderStatus = query({
+export const getProviderStatus = maybeAuthQuery({
   args: {},
   handler: async (ctx) => {
-    const user = await getCurrentUser(ctx)
+    const user = ctx.user
     if (!user) return []
 
     const keys = await ctx.db
@@ -43,10 +45,10 @@ export const getProviderStatus = query({
 /**
  * Get API key for a specific provider
  */
-export const getByProvider = query({
+export const getByProvider = maybeAuthQuery({
   args: { provider: v.string() },
   handler: async (ctx, { provider }) => {
-    const user = await getCurrentUser(ctx)
+    const user = ctx.user
     if (!user) return null
 
     const keys = await ctx.db
@@ -63,20 +65,18 @@ export const getByProvider = query({
 /**
  * Upsert API key (encrypted key stored)
  */
-export const upsert = mutation({
+export const upsert = authenticatedMutation({
   args: {
     provider: v.string(),
     encryptedKey: v.string(),
     iv: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireCurrentUser(ctx)
-
     // Check for existing key
     const existing = await ctx.db
       .query("userKeys")
       .withIndex("by_user_provider", (q) =>
-        q.eq("userId", user._id).eq("provider", args.provider)
+        q.eq("userId", ctx.user._id).eq("provider", args.provider)
       )
       .collect()
 
@@ -89,7 +89,7 @@ export const upsert = mutation({
     }
 
     return await ctx.db.insert("userKeys", {
-      userId: user._id,
+      userId: ctx.user._id,
       provider: args.provider,
       encryptedKey: args.encryptedKey,
       iv: args.iv,
@@ -100,15 +100,13 @@ export const upsert = mutation({
 /**
  * Delete API key for a provider
  */
-export const remove = mutation({
+export const remove = authenticatedMutation({
   args: { provider: v.string() },
   handler: async (ctx, { provider }) => {
-    const user = await requireCurrentUser(ctx)
-
     const keys = await ctx.db
       .query("userKeys")
       .withIndex("by_user_provider", (q) =>
-        q.eq("userId", user._id).eq("provider", provider)
+        q.eq("userId", ctx.user._id).eq("provider", provider)
       )
       .collect()
 

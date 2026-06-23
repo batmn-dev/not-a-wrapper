@@ -1,30 +1,17 @@
+import { internalQuery } from "./_generated/server"
 import { v } from "convex/values"
-import { mutation, internalQuery } from "./_generated/server"
+import { authenticatedMutation } from "./lib/authedFunctions"
 
 /**
  * Submit feedback from authenticated user
  */
-export const submit = mutation({
+export const submit = authenticatedMutation({
   args: {
     message: v.string(),
   },
   handler: async (ctx, { message }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) {
-      throw new Error("Must be authenticated to submit feedback")
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) {
-      throw new Error("User not found")
-    }
-
     return await ctx.db.insert("feedback", {
-      userId: user._id,
+      userId: ctx.user._id,
       message,
     })
   },

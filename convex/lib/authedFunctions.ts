@@ -31,6 +31,7 @@ import { mutation, query } from "../_generated/server"
 import {
   getAuthorizedChatForRead,
   getCurrentUser,
+  getOptionalAuth,
   requireCurrentUser,
   requireOwnedChat,
   requireOwnedMcpServer,
@@ -70,6 +71,26 @@ export const maybeAuthQuery = customQuery(
 export const maybeAuthMutation = customMutation(
   mutation,
   customCtx(async (ctx) => ({ user: await getCurrentUser(ctx) }))
+)
+
+/**
+ * A query for optional-auth / anonymous read paths. Injects both
+ * `ctx.identity` (raw, nullable) and `ctx.user` (nullable), so the handler can
+ * distinguish a guest from an unsynced user. Never throws.
+ */
+export const optionalAuthQuery = customQuery(
+  query,
+  customCtx(async (ctx) => await getOptionalAuth(ctx))
+)
+
+/**
+ * A mutation for optional-auth / anonymous write paths (usage counters, rate
+ * limits). Injects `ctx.identity` and `ctx.user`, both nullable. Never throws on
+ * a missing caller.
+ */
+export const optionalAuthMutation = customMutation(
+  mutation,
+  customCtx(async (ctx) => await getOptionalAuth(ctx))
 )
 
 /**

@@ -1,5 +1,5 @@
 import { v } from "convex/values"
-import { mutation } from "./_generated/server"
+import { optionalAuthMutation } from "./lib/authedFunctions"
 
 const MAX_SCOPE_ITEMS = 25
 
@@ -23,7 +23,7 @@ function formatDomainLimitCode(toolName: string): `${string}_DOMAIN_LIMIT_EXCEED
   return `${normalizedToolName || "TOOL"}_DOMAIN_LIMIT_EXCEEDED`
 }
 
-export const checkAndConsume = mutation({
+export const checkAndConsume = optionalAuthMutation({
   args: {
     limitType: v.union(v.literal("domain"), v.literal("budget")),
     toolName: v.string(),
@@ -65,7 +65,7 @@ export const checkAndConsume = mutation({
       throw new Error("Invalid limit configuration")
     }
 
-    const identity = await ctx.auth.getUserIdentity()
+    const identity = ctx.identity
     let actorKey: string
     if (identity) {
       actorKey = `user:${identity.subject}`

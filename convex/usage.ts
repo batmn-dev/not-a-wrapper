@@ -1,5 +1,8 @@
 import { v } from "convex/values"
-import { mutation, query } from "./_generated/server"
+import {
+  optionalAuthMutation,
+  optionalAuthQuery,
+} from "./lib/authedFunctions"
 
 // Import limits - these should match lib/config.ts
 const NON_AUTH_DAILY_MESSAGE_LIMIT = 5
@@ -21,17 +24,16 @@ function getStartOfDayMs(): number {
  * For unauthenticated users, pass an anonymousId (generated client-side and
  * persisted in localStorage) to track their usage across requests.
  */
-export const checkUsage = query({
+export const checkUsage = optionalAuthQuery({
   args: {
     isProModel: v.boolean(),
     anonymousId: v.optional(v.string()),
   },
   handler: async (ctx, { isProModel, anonymousId }) => {
-    const identity = await ctx.auth.getUserIdentity()
     const startOfDayMs = getStartOfDayMs()
 
     // Handle unauthenticated users
-    if (!identity) {
+    if (!ctx.identity) {
       // If no anonymousId provided, we can't track usage - deny by default for safety
       if (!anonymousId) {
         return {
@@ -75,10 +77,7 @@ export const checkUsage = query({
     }
 
     // Handle authenticated users
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
+    const user = ctx.user
 
     if (!user) {
       return {
@@ -129,17 +128,16 @@ export const checkUsage = query({
  * For unauthenticated users, pass an anonymousId (generated client-side and
  * persisted in localStorage) to track their usage across requests.
  */
-export const incrementUsage = mutation({
+export const incrementUsage = optionalAuthMutation({
   args: {
     isProModel: v.boolean(),
     anonymousId: v.optional(v.string()),
   },
   handler: async (ctx, { isProModel, anonymousId }) => {
-    const identity = await ctx.auth.getUserIdentity()
     const startOfDayMs = getStartOfDayMs()
 
     // Handle unauthenticated users
-    if (!identity) {
+    if (!ctx.identity) {
       // If no anonymousId provided, we can't track usage
       if (!anonymousId) {
         throw new Error("Anonymous ID required for usage tracking")
@@ -171,10 +169,7 @@ export const incrementUsage = mutation({
     }
 
     // Handle authenticated users
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
+    const user = ctx.user
 
     if (!user) return
 
