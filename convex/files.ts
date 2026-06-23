@@ -1,7 +1,13 @@
 import { v } from "convex/values"
-import { mutation, query } from "./_generated/server"
 import type { MutationCtx, QueryCtx } from "./_generated/server"
 import type { Id } from "./_generated/dataModel"
+import {
+  authenticatedMutation,
+  authenticatedQuery,
+  maybeAuthQuery,
+  ownedChatMutation,
+  ownedChatQuery,
+} from "./lib/authedFunctions"
 
 const DAILY_FILE_UPLOAD_LIMIT = 5
 const PREMIUM_FILE_UPLOAD_LIMIT = null
@@ -126,20 +132,10 @@ async function getTodayUploadCount(
  * Generate an upload URL for file storage
  * Enforces daily upload limit server-side
  */
-export const generateUploadUrl = mutation({
+export const generateUploadUrl = authenticatedMutation({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    // Get user from database
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) throw new Error("User not found")
-
+    const user = ctx.user
     // Enforce daily upload limit server-side. Premium users are unlimited, so
     // avoid scanning their daily attachments.
     if (getFileUploadLimit(user) !== null) {
@@ -157,11 +153,23 @@ export const generateUploadUrl = mutation({
 })
 
 /**
- * Get a public URL for a stored file
+ * Get the URL for a stored file the caller owns.
+ *
+ * Requires authentication and verifies the caller owns a chatAttachment backed
+ * by this storage id before returning the URL — otherwise any authenticated (or
+ * previously, any unauthenticated) caller could read any file by guessing a
+ * storage id.
  */
-export const getUrl = query({
+export const getUrl = authenticatedQuery({
   args: { storageId: v.id("_storage") },
   handler: async (ctx, { storageId }) => {
+    const owned = await ctx.db
+      .query("chatAttachments")
+      .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
+      .filter((q) => q.eq(q.field("storageId"), storageId))
+      .first()
+    if (!owned) return null
+
     return await ctx.storage.getUrl(storageId)
   },
 })
@@ -169,31 +177,15 @@ export const getUrl = query({
 /**
  * Save file metadata after upload
  */
-export const saveAttachment = mutation({
+export const saveAttachment = ownedChatMutation({
   args: {
-    chatId: v.id("chats"),
     storageId: v.id("_storage"),
     fileName: v.optional(v.string()),
     fileType: v.optional(v.string()),
     fileSize: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) throw new Error("User not found")
-
-    // Verify chat ownership before attaching file
-    const chat = await ctx.db.get(args.chatId)
-    if (!chat) throw new Error("Chat not found")
-    if (chat.userId !== user._id) {
-      throw new Error("Not authorized to attach files to this chat")
-    }
+    const user = ctx.user
 
     // Re-check daily upload limit to prevent bypass via pre-fetched upload URLs.
     if (getFileUploadLimit(user) !== null) {
@@ -215,7 +207,7 @@ export const saveAttachment = mutation({
     if (!fileUrl) throw new Error("Failed to get file URL")
 
     return await ctx.db.insert("chatAttachments", {
-      chatId: args.chatId,
+      chatId: ctx.chat._id,
       userId: user._id,
       storageId: args.storageId,
       fileUrl,
@@ -226,9 +218,8 @@ export const saveAttachment = mutation({
   },
 })
 
-export const getTrustedTextAttachmentsForChat = query({
+export const getTrustedTextAttachmentsForChat = ownedChatQuery({
   args: {
-    chatId: v.id("chats"),
     references: v.array(
       v.object({
         attachmentId: v.optional(v.string()),
@@ -236,24 +227,8 @@ export const getTrustedTextAttachmentsForChat = query({
       })
     ),
   },
-  handler: async (ctx, { chatId, references }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) =>
-        q.eq("workosUserId", identity.subject)
-      )
-      .unique()
-
-    if (!user) throw new Error("User not found")
-
-    const chat = await ctx.db.get(chatId)
-    if (!chat || chat.userId !== user._id) {
-      throw new Error("Not authorized")
-    }
-
+  handler: async (ctx, { references }) => {
+    const chatId = ctx.chat._id
     const attachments = await ctx.db
       .query("chatAttachments")
       .withIndex("by_chat", (q) => q.eq("chatId", chatId))
@@ -263,7 +238,7 @@ export const getTrustedTextAttachmentsForChat = query({
       attachments,
       references,
       chatId,
-      userId: user._id,
+      userId: ctx.user._id,
     })
 
     const result: TrustedTextAttachmentForModelInput[] = []
@@ -288,19 +263,10 @@ export const getTrustedTextAttachmentsForChat = query({
 /**
  * Check daily file upload limit
  */
-export const checkUploadLimit = query({
+export const checkUploadLimit = maybeAuthQuery({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) {
-      return { count: 0, limit: DAILY_FILE_UPLOAD_LIMIT, canUpload: true }
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
+    const user = ctx.user
     if (!user) {
       return { count: 0, limit: DAILY_FILE_UPLOAD_LIMIT, canUpload: true }
     }
@@ -315,24 +281,16 @@ export const checkUploadLimit = query({
 })
 
 /**
- * Delete a file
+ * Delete a file. Ownership is a per-row check on the attachment, not a builder
+ * resource, so this stays an authenticatedMutation with an inline owner check.
  */
-export const deleteFile = mutation({
+export const deleteFile = authenticatedMutation({
   args: { attachmentId: v.id("chatAttachments") },
   handler: async (ctx, { attachmentId }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
     const attachment = await ctx.db.get(attachmentId)
     if (!attachment) throw new Error("Attachment not found")
 
-    // Verify ownership
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user || attachment.userId !== user._id) {
+    if (attachment.userId !== ctx.user._id) {
       throw new Error("Not authorized")
     }
 

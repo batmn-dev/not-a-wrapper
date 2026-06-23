@@ -112,6 +112,24 @@ export const readableChatQuery = customQuery(
 )
 
 /**
+ * A read restricted to the chat's owner (no public exception) — throws
+ * "Not authenticated" / "Chat not found" / "Not authorized". Injects
+ * owner-verified `ctx.chat` and `ctx.user`. Consumes a `chatId` arg and passes
+ * it through. Use `readableChatQuery` instead when public chats should be
+ * viewable.
+ */
+export const ownedChatQuery = customQuery(
+  query,
+  customCtxAndArgs({
+    args: { chatId: v.id("chats") },
+    input: async (ctx, { chatId }) => {
+      const { user, chat } = await requireOwnedChat(ctx, chatId)
+      return { ctx: { user, chat }, args: { chatId } }
+    },
+  })
+)
+
+/**
  * A mutation on a chat the caller owns. Injects owner-verified `ctx.chat` and
  * `ctx.user`; throws "Not authenticated" / "Chat not found" / "Not authorized".
  * Consumes a `chatId` arg and passes it through.
