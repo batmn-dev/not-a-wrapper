@@ -8,6 +8,14 @@ export const DEFAULT_MANIFEST_DIR = "convex/migrations"
 export const DEFAULT_BASE_REF = "origin/main"
 export const DEFAULT_BASE_BRANCH = "main"
 
+// Pre-launch: this project has no users and no production data, so the schema
+// contraction discipline (manifests, guard, preflight) is dormant. While this is
+// true the guard and deploy preflight no-op, so editing convex/schema.ts —
+// including removing fields — never blocks a build or CI. Flip to false and
+// restore the manifest workflow when the app has real users.
+// See AGENTS.md -> "Pre-Launch: The Database Is Disposable".
+export const PRELAUNCH_DISPOSABLE_DB = true
+
 const VALID_STATUSES = new Set(["expand", "migrate", "contracted"])
 const VALID_KIND = "convex-schema-contraction"
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/

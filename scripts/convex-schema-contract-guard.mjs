@@ -6,6 +6,7 @@ import {
   DEFAULT_BASE_REF,
   DEFAULT_MANIFEST_DIR,
   DEFAULT_SCHEMA_PATH,
+  PRELAUNCH_DISPOSABLE_DB,
   contractedManifestSchemaErrors,
   diffSchemaContractions,
   envValue,
@@ -118,6 +119,13 @@ export function runGuard({
 }
 
 function runCli() {
+  if (PRELAUNCH_DISPOSABLE_DB) {
+    console.log(
+      "Convex schema contraction guard: dormant pre-launch (disposable DB) — skipping. See AGENTS.md."
+    )
+    return
+  }
+
   const options = parseArgs(process.argv.slice(2))
 
   if (options.help) {
