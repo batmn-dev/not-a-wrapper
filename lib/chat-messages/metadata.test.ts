@@ -77,6 +77,29 @@ describe("stampServerFields", () => {
     expect("model" in result).toBe(false)
   })
 
+  it("clears stale server-owned keys before applying the selected projection", () => {
+    const base = {
+      durableStatus: "complete",
+      generationRunId: "old_run",
+      model: "old_model",
+      provider: "old_provider",
+      reasoningDurationMs: 1234,
+    }
+
+    expect(stampServerFields(base, { _id: "s" }, "extended")).toEqual({
+      serverMessageId: "s",
+      reasoningDurationMs: 1234,
+    })
+
+    expect(
+      stampServerFields(base, { _id: "s", status: "pending" }, "runtime")
+    ).toEqual({
+      serverMessageId: "s",
+      durableStatus: "pending",
+      reasoningDurationMs: 1234,
+    })
+  })
+
   it("normalizes a valid branch descriptor and drops an invalid one", () => {
     expect(getBranch({ metadata: stampServerFields({ branch }, { _id: "s" }, "extended") }))
       .toEqual(branch)

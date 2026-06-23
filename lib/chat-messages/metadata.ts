@@ -129,6 +129,12 @@ function normalizeBranchInPlace(metadata: Record<string, unknown>): void {
   else delete metadata.branch
 }
 
+function clearServerOwnedMetadata(metadata: Record<string, unknown>): void {
+  for (const key of SERVER_OWNED_METADATA_KEYS) {
+    delete metadata[key]
+  }
+}
+
 /**
  * Project a stored message's durable fields onto its metadata — the durable
  * adapter's write. Owns the field→key mapping, the mode gate, the server
@@ -143,6 +149,7 @@ export function stampServerFields(
   mode: MetadataMode
 ): Record<string, unknown> {
   const metadata = baseRecord(baseMetadata)
+  clearServerOwnedMetadata(metadata)
   metadata.serverMessageId = source._id
 
   const keys =
