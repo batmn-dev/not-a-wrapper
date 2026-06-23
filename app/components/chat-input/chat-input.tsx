@@ -290,7 +290,7 @@ export function ChatInput({
                     aria-label={primaryAction.ariaLabel}
                   >
                     {primaryAction.mode === "stop" ? (
-                      <StopBulkRoundedIcon slotSize={24} glyphSize={24} />
+                      <StopBulkRoundedIcon slotSize={22} glyphSize={22} />
                     ) : (
                       <Icon icon={RiArrowUpLine} slotSize={22} />
                     )}

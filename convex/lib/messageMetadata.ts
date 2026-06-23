@@ -12,10 +12,9 @@ import { type Infer, v } from "convex/values"
  * it is both the mutation-args validator (rejects malformed writes at the
  * boundary) and the input of {@link projectPersistedMessageMetadata}.
  *
- * The storage column stays `v.any()`: the repo's expand/migrate/contract tooling
- * guards field *removals*, not validator *narrowings*, so narrowing the column
- * would be an unguarded deploy footgun on legacy rows. Owning the write path
- * here gives the same guarantee for everything written from now on.
+ * The storage column is narrowed to `vToolInvocationStreamMetadata` in
+ * `convex/schema.ts`, and this projector keeps writes aligned to that owned
+ * shape by dropping unknown/invalid keys before persistence.
  */
 const vToolInvocationDisplayMetadata = v.object({
   displayName: v.string(),
@@ -57,6 +56,7 @@ type DisplayMetadata = Infer<typeof vToolInvocationDisplayMetadata>
 
 const TOOL_SOURCES = new Set(["builtin", "third-party", "mcp", "platform"])
 const TOOL_ICONS = new Set(["search", "code", "image", "extract", "wrench"])
+const POISON_METADATA_KEYS = new Set(["__proto__", "constructor", "prototype"])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
@@ -106,8 +106,9 @@ function projectDisplayRecord(
   raw: unknown
 ): Record<string, DisplayMetadata> | undefined {
   if (!isRecord(raw)) return undefined
-  const out: Record<string, DisplayMetadata> = {}
+  const out = Object.create(null) as Record<string, DisplayMetadata>
   for (const [key, value] of Object.entries(raw)) {
+    if (POISON_METADATA_KEYS.has(key)) continue
     const display = projectDisplayMetadata(value)
     if (display) out[key] = display
   }

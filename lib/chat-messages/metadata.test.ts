@@ -13,11 +13,20 @@ import type { ToolInvocationStreamMetadata } from "@/lib/tools/ui-metadata"
 
 // Drift guard across the persistence boundary: the Convex persisted-metadata
 // validator and the client stream-metadata type must stay structurally
-// identical. These assignments fail compilation the moment either side gains,
-// loses, or retypes a key. (Lives here, not in convex/, because Convex's own
-// tsc lacks the "@/" alias.)
+// identical. The key-set assertion catches optional-key drift, while the
+// assignments catch value-type drift. (Lives here, not in convex/, because
+// Convex's own tsc lacks the "@/" alias.)
+type Assert<T extends true> = T
+type MetadataKeyDrift =
+  | Exclude<keyof PersistedMessageMetadata, keyof ToolInvocationStreamMetadata>
+  | Exclude<keyof ToolInvocationStreamMetadata, keyof PersistedMessageMetadata>
+
+const _metadataKeysMatch: Assert<
+  [MetadataKeyDrift] extends [never] ? true : false
+> = true
 const _toPersisted: PersistedMessageMetadata = {} as ToolInvocationStreamMetadata
 const _toClient: ToolInvocationStreamMetadata = {} as PersistedMessageMetadata
+void _metadataKeysMatch
 void _toPersisted
 void _toClient
 
@@ -127,6 +136,33 @@ describe("adoptServerOwned", () => {
     // allocate a new object — the projection relies on referential stability.
     const result = adoptServerOwned(already, serverMetadata)
     expect(result).toBe(already)
+  })
+
+  it("keeps fresh but structurally equal owned metadata idempotent", () => {
+    const local = stampServerFields(
+      {
+        branch,
+        durableError: { message: "boom" },
+        usage: { totalTokens: 10 },
+      },
+      {
+        ...fullSource,
+        error: { message: "boom" },
+        usage: { totalTokens: 10 },
+      },
+      "extended"
+    )
+    const server = stampServerFields(
+      { branch },
+      {
+        ...fullSource,
+        error: { message: "boom" },
+        usage: { totalTokens: 10 },
+      },
+      "extended"
+    )
+
+    expect(adoptServerOwned(local, server)).toBe(local)
   })
 })
 

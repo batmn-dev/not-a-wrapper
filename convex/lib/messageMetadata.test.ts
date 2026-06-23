@@ -72,4 +72,45 @@ describe("projectPersistedMessageMetadata", () => {
     })
     expect(result).toBeUndefined()
   })
+
+  it("drops poison display keys without mutating the projected record prototype", () => {
+    const result = projectPersistedMessageMetadata({
+      toolMetadataByName: JSON.parse(
+        `{
+          "__proto__": {
+            "displayName": "Web Search",
+            "source": "builtin",
+            "serviceName": "openai"
+          },
+          "constructor": {
+            "displayName": "Web Search",
+            "source": "builtin",
+            "serviceName": "openai"
+          },
+          "prototype": {
+            "displayName": "Web Search",
+            "source": "builtin",
+            "serviceName": "openai"
+          },
+          "good": {
+            "displayName": "Web Search",
+            "source": "builtin",
+            "serviceName": "openai",
+            "icon": "search",
+            "estimatedCostPer1k": 5,
+            "readOnly": true
+          }
+        }`
+      ),
+    })
+
+    const record = result?.toolMetadataByName
+    expect(record).toBeDefined()
+    if (!record) throw new Error("expected projected metadata record")
+    expect(Object.getPrototypeOf(record)).toBeNull()
+    expect(record).toEqual({ good: display })
+    expect("__proto__" in record).toBe(false)
+    expect("constructor" in record).toBe(false)
+    expect("prototype" in record).toBe(false)
+  })
 })
