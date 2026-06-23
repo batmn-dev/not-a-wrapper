@@ -31,15 +31,20 @@ jobs:
       - name: Run Convex schema deploy contract tests
         run: bunx vitest run scripts/convex-schema-contract-lib.test.mjs
 
-      - name: Dry-run Convex schema preflight script
-        run: node scripts/convex-schema-contract-preflight.mjs --fetch-base --require-diff-base --dry-run
-
-      - name: Verify schema preflight fails closed without diff base
-        run: |
-          if node scripts/convex-schema-contract-preflight.mjs --base refs/remotes/schema-guard/missing-${{ github.run_id }} --require-diff-base --dry-run; then
-            echo "Expected schema preflight to fail when the required diff base cannot be read"
-            exit 1
-          fi
+      # The schema preflight/guard fail-closed CI checks are dormant pre-launch:
+      # the database is disposable (PRELAUNCH_DISPOSABLE_DB in
+      # scripts/convex-schema-contract-lib.mjs), so the preflight no-ops and the
+      # fail-closed assertions below no longer apply. Re-enable them at launch
+      # alongside the migration discipline. See AGENTS.md → "Pre-Launch: The
+      # Database Is Disposable".
+      # - name: Dry-run Convex schema preflight script
+      #   run: node scripts/convex-schema-contract-preflight.mjs --fetch-base --require-diff-base --dry-run
+      # - name: Verify schema preflight fails closed without diff base
+      #   run: |
+      #     if node scripts/convex-schema-contract-preflight.mjs --base refs/remotes/schema-guard/missing-${{ github.run_id }} --require-diff-base --dry-run; then
+      #       echo "Expected schema preflight to fail when the required diff base cannot be read"
+      #       exit 1
+      #     fi
 
       # Full suite can be enabled once non-script tests are stable.
       # - name: Run all tests
