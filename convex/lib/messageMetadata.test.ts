@@ -1,17 +1,9 @@
 import { describe, expect, it } from "vitest"
-import type { ToolInvocationStreamMetadata } from "@/lib/tools/ui-metadata"
-import {
-  type PersistedMessageMetadata,
-  projectPersistedMessageMetadata,
-} from "./messageMetadata"
+import { projectPersistedMessageMetadata } from "./messageMetadata"
 
-// Type-level drift guard: the persisted-metadata validator and the client
-// stream-metadata type must stay structurally identical. These assignments fail
-// compilation the moment either side gains, loses, or retypes a key.
-const _toPersisted: PersistedMessageMetadata = {} as ToolInvocationStreamMetadata
-const _toClient: ToolInvocationStreamMetadata = {} as PersistedMessageMetadata
-void _toPersisted
-void _toClient
+// The validator <-> client-type drift guard lives in a root test
+// (lib/chat-messages/metadata.test.ts) so Convex's own tsc, which typechecks the
+// convex/ tree without the "@/" path alias, does not choke on the client import.
 
 const display = {
   displayName: "Web Search",

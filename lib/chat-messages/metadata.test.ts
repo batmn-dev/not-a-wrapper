@@ -8,6 +8,18 @@ import {
   type DurableMetadataSource,
 } from "./metadata"
 import type { MessageBranchInfo } from "./branch"
+import type { PersistedMessageMetadata } from "@/convex/lib/messageMetadata"
+import type { ToolInvocationStreamMetadata } from "@/lib/tools/ui-metadata"
+
+// Drift guard across the persistence boundary: the Convex persisted-metadata
+// validator and the client stream-metadata type must stay structurally
+// identical. These assignments fail compilation the moment either side gains,
+// loses, or retypes a key. (Lives here, not in convex/, because Convex's own
+// tsc lacks the "@/" alias.)
+const _toPersisted: PersistedMessageMetadata = {} as ToolInvocationStreamMetadata
+const _toClient: ToolInvocationStreamMetadata = {} as PersistedMessageMetadata
+void _toPersisted
+void _toClient
 
 const branch: MessageBranchInfo = {
   messageId: "m1",

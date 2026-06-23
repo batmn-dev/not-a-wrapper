@@ -59,15 +59,16 @@ and writing message metadata:
   disagree.
 - The persisted blob is owned for every new write: only the named key-set is
   stored, and the AI SDK can no longer slip un-namespaced keys into the column.
-- The storage column (`messages.metadata`) intentionally stays
-  `v.optional(v.any())`. The repo's expand/migrate/contract tooling
-  (`convex:schema-guard` / `convex:schema-preflight`) detects field *removals*,
-  not validator *narrowings*; narrowing the column to the named validator would
-  be an unguarded deploy footgun on legacy rows (Convex strict objects reject
-  unknown keys, and the preflight would not catch non-conforming documents).
-  Owning the write path gives the same guarantee for all new writes without the
-  unverifiable data migration. If the column is narrowed later, it needs a
-  bespoke cleanup + verifier, not the removal-oriented manifest flow.
+- The storage column (`messages.metadata`) is narrowed to the same named
+  validator, so the stored shape is provably the owned key-set rather than an
+  opaque `v.any()`. This was safe because there is no production data; the
+  narrowed schema pushed cleanly to the dev deployment. Note this is a validator
+  *narrowing*, which the repo's expand/migrate/contract tooling
+  (`convex:schema-guard` / `convex:schema-preflight`) does **not** guard — that
+  tooling detects field *removals* only. A future narrowing against a populated
+  deployment would need a bespoke cleanup + verifier (Convex strict objects
+  reject unknown keys, and the preflight would not catch non-conforming rows),
+  not the removal-oriented manifest flow.
 
 ## Note on ADR-0001
 

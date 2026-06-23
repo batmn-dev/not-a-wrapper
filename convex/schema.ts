@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server"
 import { v } from "convex/values"
+import { vToolInvocationStreamMetadata } from "./lib/messageMetadata"
 
 const messageStatus = v.union(
   v.literal("submitted"),
@@ -115,7 +116,7 @@ export default defineSchema({
       })
     ),
     error: v.optional(v.string()),
-    metadata: v.optional(v.any()),
+    metadata: v.optional(vToolInvocationStreamMetadata),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
