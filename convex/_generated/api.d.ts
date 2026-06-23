@@ -19,6 +19,7 @@ import type * as feedback from "../feedback.js";
 import type * as files from "../files.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_messageMetadata from "../lib/messageMetadata.js";
 import type * as mcpServers from "../mcpServers.js";
 import type * as mcpToolApprovals from "../mcpToolApprovals.js";
 import type * as mcpToolCallLog from "../mcpToolCallLog.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   files: typeof files;
   http: typeof http;
   "lib/auth": typeof lib_auth;
+  "lib/messageMetadata": typeof lib_messageMetadata;
   mcpServers: typeof mcpServers;
   mcpToolApprovals: typeof mcpToolApprovals;
   mcpToolCallLog: typeof mcpToolCallLog;
