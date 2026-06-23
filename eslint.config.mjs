@@ -55,6 +55,26 @@ const eslintConfig = [
       "@typescript-eslint/consistent-type-definitions": ["error", "type"],
     },
   },
+  {
+    // Authenticated handler seam (ADR-0003): Convex handlers must go through the
+    // builders in convex/lib/authedFunctions.ts (which inject ctx.user / ctx.chat
+    // / ctx.identity) instead of calling ctx.auth.getUserIdentity() inline. This
+    // keeps auth structural and un-bypassable. The auth helpers themselves live
+    // in convex/lib/ and are exempt below.
+    files: ["convex/**/*.ts"],
+    ignores: ["convex/lib/**", "convex/**/*.test.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "CallExpression[callee.property.name='getUserIdentity'][callee.object.property.name='auth']",
+          message:
+            "Do not call ctx.auth.getUserIdentity() directly. Use the builders in convex/lib/authedFunctions.ts (authenticatedQuery/Mutation, ownedChatMutation, maybeAuth*, optionalAuth*, identity*) so auth is structural. See ADR-0003.",
+        },
+      ],
+    },
+  },
 ]
 
 export default eslintConfig
