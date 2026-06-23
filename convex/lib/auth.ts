@@ -85,3 +85,21 @@ export async function requireOwnedProject(
 
   return { user, project }
 }
+
+export async function requireOwnedMcpServer(
+  ctx: ConvexCtx,
+  serverId: Id<"mcpServers">
+): Promise<{ user: Doc<"users">; server: Doc<"mcpServers"> }> {
+  const identity = await ctx.auth.getUserIdentity()
+  if (!identity) throw new Error("Not authenticated")
+
+  const user = await getUserByWorkosSubject(ctx, identity.subject)
+  const server = await ctx.db.get(serverId)
+  if (!server) throw new Error("MCP server not found")
+
+  if (!user || server.userId !== user._id) {
+    throw new Error("Not authorized")
+  }
+
+  return { user, server }
+}

@@ -1,20 +1,20 @@
 import { v } from "convex/values"
-import { mutation, query } from "./_generated/server"
+import { query } from "./_generated/server"
+import { requireOwnedProject } from "./lib/auth"
 import {
-  getAuthorizedChatForRead,
-  getCurrentUser,
-  requireCurrentUser,
-  requireOwnedChat,
-  requireOwnedProject,
-} from "./lib/auth"
+  authenticatedMutation,
+  maybeAuthQuery,
+  ownedChatMutation,
+  readableChatQuery,
+} from "./lib/authedFunctions"
 
 /**
  * Get all chats for the current user
  */
-export const getForCurrentUser = query({
+export const getForCurrentUser = maybeAuthQuery({
   args: {},
   handler: async (ctx) => {
-    const user = await getCurrentUser(ctx)
+    const user = ctx.user
     if (!user) return []
 
     const chats = await ctx.db
@@ -37,22 +37,18 @@ export const getForCurrentUser = query({
 })
 
 /**
- * Get a single chat by ID
- * Returns the chat if:
- * - The chat is public (no auth required), OR
- * - The user is authenticated and owns the chat
+ * Get a single chat by ID. Returns the chat if it is public (no auth required)
+ * or the authenticated caller owns it; otherwise null.
  */
-export const getById = query({
-  args: { chatId: v.id("chats") },
-  handler: async (ctx, { chatId }) => {
-    return await getAuthorizedChatForRead(ctx, chatId)
-  },
+export const getById = readableChatQuery({
+  args: {},
+  handler: async (ctx) => ctx.chat,
 })
 
 /**
  * Create a new chat
  */
-export const create = mutation({
+export const create = authenticatedMutation({
   args: {
     title: v.optional(v.string()),
     model: v.optional(v.string()),
@@ -60,13 +56,12 @@ export const create = mutation({
     projectId: v.optional(v.id("projects")),
   },
   handler: async (ctx, args) => {
-    const user = await requireCurrentUser(ctx)
     if (args.projectId) {
       await requireOwnedProject(ctx, args.projectId)
     }
 
     return await ctx.db.insert("chats", {
-      userId: user._id,
+      userId: ctx.user._id,
       title: args.title ?? "New chat",
       model: args.model,
       systemPrompt: args.systemPrompt,
@@ -81,45 +76,30 @@ export const create = mutation({
 /**
  * Update chat title
  */
-export const updateTitle = mutation({
-  args: {
-    chatId: v.id("chats"),
-    title: v.string(),
-  },
-  handler: async (ctx, { chatId, title }) => {
-    await requireOwnedChat(ctx, chatId)
-
-    await ctx.db.patch(chatId, { title, updatedAt: Date.now() })
+export const updateTitle = ownedChatMutation({
+  args: { title: v.string() },
+  handler: async (ctx, { title }) => {
+    await ctx.db.patch(ctx.chat._id, { title, updatedAt: Date.now() })
   },
 })
 
 /**
  * Update chat model
  */
-export const updateModel = mutation({
-  args: {
-    chatId: v.id("chats"),
-    model: v.string(),
-  },
-  handler: async (ctx, { chatId, model }) => {
-    await requireOwnedChat(ctx, chatId)
-
-    await ctx.db.patch(chatId, { model, updatedAt: Date.now() })
+export const updateModel = ownedChatMutation({
+  args: { model: v.string() },
+  handler: async (ctx, { model }) => {
+    await ctx.db.patch(ctx.chat._id, { model, updatedAt: Date.now() })
   },
 })
 
 /**
  * Toggle chat pin status
  */
-export const togglePin = mutation({
-  args: {
-    chatId: v.id("chats"),
-    pinned: v.boolean(),
-  },
-  handler: async (ctx, { chatId, pinned }) => {
-    await requireOwnedChat(ctx, chatId)
-
-    await ctx.db.patch(chatId, {
+export const togglePin = ownedChatMutation({
+  args: { pinned: v.boolean() },
+  handler: async (ctx, { pinned }) => {
+    await ctx.db.patch(ctx.chat._id, {
       pinned,
       pinnedAt: pinned ? Date.now() : undefined,
       updatedAt: Date.now(),
@@ -130,18 +110,16 @@ export const togglePin = mutation({
 /**
  * Make a chat public (shareable via link)
  */
-export const makePublic = mutation({
-  args: { chatId: v.id("chats") },
-  handler: async (ctx, { chatId }) => {
-    await requireOwnedChat(ctx, chatId)
-
-    await ctx.db.patch(chatId, { public: true, updatedAt: Date.now() })
+export const makePublic = ownedChatMutation({
+  args: {},
+  handler: async (ctx) => {
+    await ctx.db.patch(ctx.chat._id, { public: true, updatedAt: Date.now() })
   },
 })
 
 /**
- * Get a public chat by ID (no authentication required)
- * For public share pages
+ * Get a public chat by ID (no authentication required). Pure-public read with
+ * no user concept — deliberately outside the authenticated-handler seam.
  */
 export const getPublicById = query({
   args: { chatId: v.id("chats") },
@@ -159,11 +137,10 @@ export const getPublicById = query({
 /**
  * Delete a chat and its messages
  */
-export const remove = mutation({
-  args: { chatId: v.id("chats") },
-  handler: async (ctx, { chatId }) => {
-    await requireOwnedChat(ctx, chatId)
-
+export const remove = ownedChatMutation({
+  args: {},
+  handler: async (ctx) => {
+    const chatId = ctx.chat._id
     // Delete all messages for this chat
     const messages = await ctx.db
       .query("messages")
