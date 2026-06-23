@@ -1,18 +1,21 @@
 import { v } from "convex/values"
-import { mutation, query } from "./_generated/server"
+import {
+  authenticatedMutation,
+  identityMutation,
+  identityQuery,
+  maybeAuthMutation,
+  maybeAuthQuery,
+} from "./lib/authedFunctions"
 import { upsertAppUserFromWorkOS } from "./userSync"
 
 /**
- * Get the authenticated caller by WorkOS user ID.
+ * Get the authenticated caller by WorkOS user ID. Self-identity-match: the
+ * caller may only read their own record.
  */
-export const getByWorkosUserId = query({
+export const getByWorkosUserId = identityQuery({
   args: { workosUserId: v.string() },
   handler: async (ctx, { workosUserId }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) {
-      throw new Error("Not authenticated")
-    }
-    if (identity.subject !== workosUserId) {
+    if (ctx.identity.subject !== workosUserId) {
       throw new Error("Cannot read a different user")
     }
 
@@ -26,25 +29,17 @@ export const getByWorkosUserId = query({
 /**
  * Get current authenticated user
  */
-export const getCurrent = query({
+export const getCurrent = maybeAuthQuery({
   args: {},
-  handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return null
-
-    return await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) =>
-        q.eq("workosUserId", identity.subject)
-      )
-      .unique()
-  },
+  handler: async (ctx) => ctx.user,
 })
 
 /**
- * Create or update user from the authenticated WorkOS session.
+ * Create or update user from the authenticated WorkOS session. Self-identity-
+ * match on a bootstrap path: the user row may not exist yet, so this resolves
+ * the identity rather than an existing user.
  */
-export const createOrUpdate = mutation({
+export const createOrUpdate = identityMutation({
   args: {
     workosUserId: v.string(),
     email: v.string(),
@@ -55,11 +50,7 @@ export const createOrUpdate = mutation({
     workosUpdatedAt: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) {
-      throw new Error("Not authenticated")
-    }
-    if (identity.subject !== args.workosUserId) {
+    if (ctx.identity.subject !== args.workosUserId) {
       throw new Error("Cannot sync a different user")
     }
 
@@ -79,21 +70,11 @@ export const createOrUpdate = mutation({
 /**
  * Update user's last active timestamp
  */
-export const updateLastActive = mutation({
+export const updateLastActive = maybeAuthMutation({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) =>
-        q.eq("workosUserId", identity.subject)
-      )
-      .unique()
-
-    if (user) {
-      await ctx.db.patch(user._id, { lastActiveAt: Date.now() })
+    if (ctx.user) {
+      await ctx.db.patch(ctx.user._id, { lastActiveAt: Date.now() })
     }
   },
 })
@@ -101,28 +82,12 @@ export const updateLastActive = mutation({
 /**
  * Update user's favorite models
  */
-export const updateFavoriteModels = mutation({
+export const updateFavoriteModels = authenticatedMutation({
   args: {
     favoriteModels: v.array(v.string()),
   },
   handler: async (ctx, { favoriteModels }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) {
-      throw new Error("Not authenticated")
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) =>
-        q.eq("workosUserId", identity.subject)
-      )
-      .unique()
-
-    if (!user) {
-      throw new Error("User not found")
-    }
-
-    await ctx.db.patch(user._id, { favoriteModels })
+    await ctx.db.patch(ctx.user._id, { favoriteModels })
     return favoriteModels
   },
 })
@@ -131,28 +96,12 @@ export const updateFavoriteModels = mutation({
  * Update user profile fields
  * Supports updating: systemPrompt, displayName
  */
-export const updateProfile = mutation({
+export const updateProfile = authenticatedMutation({
   args: {
     systemPrompt: v.optional(v.string()),
     displayName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) {
-      throw new Error("Not authenticated")
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) =>
-        q.eq("workosUserId", identity.subject)
-      )
-      .unique()
-
-    if (!user) {
-      throw new Error("User not found")
-    }
-
     // Build update object with only provided fields
     const updates: Record<string, string | undefined> = {}
     if (args.systemPrompt !== undefined) {
@@ -163,7 +112,7 @@ export const updateProfile = mutation({
     }
 
     if (Object.keys(updates).length > 0) {
-      await ctx.db.patch(user._id, updates)
+      await ctx.db.patch(ctx.user._id, updates)
     }
 
     return { success: true }

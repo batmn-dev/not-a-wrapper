@@ -33,6 +33,7 @@ import {
   getCurrentUser,
   getOptionalAuth,
   requireCurrentUser,
+  requireIdentity,
   requireOwnedChat,
   requireOwnedMcpServer,
   requireOwnedProject,
@@ -51,6 +52,26 @@ export const authenticatedQuery = customQuery(
 export const authenticatedMutation = customMutation(
   mutation,
   customCtx(async (ctx) => ({ user: await requireCurrentUser(ctx) }))
+)
+
+/**
+ * A query that requires a signed-in identity but not a resolved user row.
+ * Injects `ctx.identity` — for self-identity-match handlers that compare
+ * `identity.subject` to a client argument.
+ */
+export const identityQuery = customQuery(
+  query,
+  customCtx(async (ctx) => ({ identity: await requireIdentity(ctx) }))
+)
+
+/**
+ * A mutation that requires a signed-in identity but not a resolved user row.
+ * Injects `ctx.identity` — for self-identity-match handlers and the create-user
+ * bootstrap path where the user row may not exist yet.
+ */
+export const identityMutation = customMutation(
+  mutation,
+  customCtx(async (ctx) => ({ identity: await requireIdentity(ctx) }))
 )
 
 /**

@@ -41,6 +41,18 @@ export async function getOptionalAuth(ctx: ConvexCtx): Promise<{
   return { identity, user }
 }
 
+/**
+ * Require a signed-in caller's raw identity (throws if absent) without resolving
+ * the user row. For self-identity-match handlers that compare `identity.subject`
+ * to a client argument, and the create-user bootstrap path where the row may not
+ * exist yet.
+ */
+export async function requireIdentity(ctx: ConvexCtx) {
+  const identity = await ctx.auth.getUserIdentity()
+  if (!identity) throw new Error("Not authenticated")
+  return identity
+}
+
 export async function requireCurrentUser(
   ctx: ConvexCtx
 ): Promise<Doc<"users">> {
