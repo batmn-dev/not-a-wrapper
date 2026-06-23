@@ -6,6 +6,7 @@ import {
   getCurrentUser,
   requireCurrentUser,
   requireOwnedChat,
+  requireOwnedMcpServer,
   requireOwnedProject,
 } from "./auth"
 
@@ -13,7 +14,7 @@ type QueryBuilder = {
   eq: (fieldName: string, value: unknown) => QueryBuilder
 }
 
-function asId<Table extends "users" | "chats" | "projects">(
+function asId<Table extends "users" | "chats" | "projects" | "mcpServers">(
   value: string
 ): Id<Table> {
   return value as Id<Table>
@@ -51,17 +52,32 @@ function createProject(id: string, userId: Id<"users">): Doc<"projects"> {
   }
 }
 
+function createMcpServer(id: string, userId: Id<"users">): Doc<"mcpServers"> {
+  return {
+    _id: asId<"mcpServers">(id),
+    _creationTime: 1,
+    userId,
+    name: `Server ${id}`,
+    url: "https://example.com/mcp",
+    transport: "http",
+    enabled: true,
+    createdAt: 1,
+  }
+}
+
 function createCtx({
   identitySubject,
   users = [],
   chats = [],
   projects = [],
+  mcpServers = [],
   onDbGet,
 }: {
   identitySubject?: string
   users?: Doc<"users">[]
   chats?: Doc<"chats">[]
   projects?: Doc<"projects">[]
+  mcpServers?: Doc<"mcpServers">[]
   onDbGet?: (id: string) => void
 }) {
   const ctx = {
@@ -75,6 +91,7 @@ function createCtx({
         return (
           chats.find((chat) => chat._id === id) ??
           projects.find((project) => project._id === id) ??
+          mcpServers.find((server) => server._id === id) ??
           null
         )
       },
@@ -397,6 +414,61 @@ describe("Convex auth helpers", () => {
       await expect(requireOwnedProject(ctx, project._id)).resolves.toEqual({
         user: owner,
         project,
+      })
+    })
+  })
+
+  describe("owned MCP server requirement", () => {
+    it("rejects unauthenticated server mutations", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const server = createMcpServer("server_1", owner._id)
+      const ctx = createCtx({ users: [owner], mcpServers: [server] })
+
+      await expect(requireOwnedMcpServer(ctx, server._id)).rejects.toThrow(
+        "Not authenticated"
+      )
+    })
+
+    it("reports a missing server distinctly from an authorization failure", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const ctx = createCtx({
+        identitySubject: owner.workosUserId,
+        users: [owner],
+        mcpServers: [],
+      })
+
+      await expect(
+        requireOwnedMcpServer(ctx, asId<"mcpServers">("server_missing"))
+      ).rejects.toThrow("MCP server not found")
+    })
+
+    it("rejects wrong-owner server mutations with Not authorized", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const otherUser = createUser("user_2", "workos_other")
+      const server = createMcpServer("server_1", owner._id)
+      const ctx = createCtx({
+        identitySubject: otherUser.workosUserId,
+        users: [owner, otherUser],
+        mcpServers: [server],
+      })
+
+      await expect(requireOwnedMcpServer(ctx, server._id)).rejects.toThrow(
+        "Not authorized"
+      )
+    })
+
+    it("returns the user and server for an owned server", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const server = createMcpServer("server_1", owner._id)
+      const ctx = createCtx({
+        identitySubject: owner.workosUserId,
+        users: [owner],
+        mcpServers: [server],
+      })
+
+      await expect(requireOwnedMcpServer(ctx, server._id)).resolves.toEqual({
+        user: owner,
+        server,
       })
     })
   })

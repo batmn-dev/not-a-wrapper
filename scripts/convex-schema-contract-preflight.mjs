@@ -6,6 +6,7 @@ import {
   DEFAULT_BASE_REF,
   DEFAULT_MANIFEST_DIR,
   DEFAULT_SCHEMA_PATH,
+  PRELAUNCH_DISPOSABLE_DB,
   buildInlineCountQuery,
   checksFromManifests,
   contractedManifestSchemaErrors,
@@ -288,6 +289,13 @@ function printChecks(checks) {
 }
 
 function runCli() {
+  if (PRELAUNCH_DISPOSABLE_DB) {
+    console.log(
+      "Convex schema contraction preflight: dormant pre-launch (disposable DB) — skipping. See AGENTS.md."
+    )
+    return
+  }
+
   const options = parseArgs(process.argv.slice(2))
 
   if (options.help) {

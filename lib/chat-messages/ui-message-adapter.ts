@@ -1,8 +1,6 @@
 import type { UIMessage } from "ai"
-import {
-  type ChatMessageMetadata,
-  parseMessageBranchInfo,
-} from "./branch"
+import { type ChatMessageMetadata } from "./branch"
+import { stampServerFields } from "./metadata"
 import {
   type DurableMessageStatus,
   isDurableMessageStatus,
@@ -49,21 +47,6 @@ function toUiRole(role: unknown): UIMessage["role"] {
   return "system"
 }
 
-function metadataRecord(metadata: unknown): Record<string, unknown> {
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
-    return {}
-  }
-  return metadata as Record<string, unknown>
-}
-
-function setIfDefined(
-  target: Record<string, unknown>,
-  key: string,
-  value: unknown
-) {
-  if (value !== undefined) target[key] = value
-}
-
 export function durableStoredMessageToUiMessage(
   message: DurableStoredMessageLike,
   options: DurableStoredMessageToUiMessageOptions = {}
@@ -80,31 +63,13 @@ export function durableStoredMessageToUiMessage(
     typeof message.content === "string"
       ? message.content
       : extractTextFromMessageParts(parts)
-  const metadata = {
-    ...metadataRecord(message.metadata),
-  }
-
-  metadata.serverMessageId = message._id
-  setIfDefined(metadata, "durableStatus", message.status)
-  if (options.metadataMode === "runtime") {
-    if (message.error) metadata.durableError = message.error
-  } else {
-    setIfDefined(metadata, "durableError", message.error)
-    setIfDefined(metadata, "generationRunId", message.generationRunId)
-    setIfDefined(metadata, "requestId", message.requestId)
-    setIfDefined(metadata, "model", message.model)
-    setIfDefined(metadata, "provider", message.provider)
-    setIfDefined(metadata, "finishReason", message.finishReason)
-    setIfDefined(metadata, "usage", message.usage)
-  }
-
-  // Normalize the transient server-attached branch descriptor into the typed
-  // client shape so renderers read it as first-class state, not via casts.
-  if ("branch" in metadata) {
-    const branch = parseMessageBranchInfo(metadata.branch)
-    if (branch) metadata.branch = branch
-    else delete metadata.branch
-  }
+  // The metadata module owns the field→key projection, the extended/runtime
+  // gate, the server message id stamp, and branch normalization.
+  const metadata = stampServerFields(
+    message.metadata,
+    message,
+    options.metadataMode === "runtime" ? "runtime" : "extended"
+  )
 
   return {
     id: message.clientMessageId ?? message._id,

@@ -1,18 +1,18 @@
 import { v } from "convex/values"
-import { internalQuery, mutation, query } from "./_generated/server"
+import { internalQuery } from "./_generated/server"
 import {
-  getCurrentUser,
-  requireCurrentUser,
-  requireOwnedProject,
-} from "./lib/auth"
+  authenticatedMutation,
+  maybeAuthQuery,
+  ownedProjectMutation,
+} from "./lib/authedFunctions"
 
 /**
  * Get all projects for the current user
  */
-export const getForCurrentUser = query({
+export const getForCurrentUser = maybeAuthQuery({
   args: {},
   handler: async (ctx) => {
-    const user = await getCurrentUser(ctx)
+    const user = ctx.user
     if (!user) return []
 
     return await ctx.db
@@ -23,19 +23,15 @@ export const getForCurrentUser = query({
 })
 
 /**
- * Get a single project by ID with ownership verification
+ * Get a single project by ID. Returns the project only when the authenticated
+ * caller owns it; otherwise null (no public-project concept).
  */
-export const getById = query({
+export const getById = maybeAuthQuery({
   args: { projectId: v.id("projects") },
   handler: async (ctx, { projectId }) => {
     const project = await ctx.db.get(projectId)
     if (!project) return null
-
-    const user = await getCurrentUser(ctx)
-    if (!user || project.userId !== user._id) {
-      return null
-    }
-
+    if (!ctx.user || project.userId !== ctx.user._id) return null
     return project
   },
 })
@@ -67,15 +63,13 @@ export const getByIdWithOwner = internalQuery({
 /**
  * Create a new project
  */
-export const create = mutation({
+export const create = authenticatedMutation({
   args: {
     name: v.string(),
   },
   handler: async (ctx, { name }) => {
-    const user = await requireCurrentUser(ctx)
-
     return await ctx.db.insert("projects", {
-      userId: user._id,
+      userId: ctx.user._id,
       name,
     })
   },
@@ -84,26 +78,20 @@ export const create = mutation({
 /**
  * Update a project name
  */
-export const updateName = mutation({
-  args: {
-    projectId: v.id("projects"),
-    name: v.string(),
-  },
-  handler: async (ctx, { projectId, name }) => {
-    await requireOwnedProject(ctx, projectId)
-
-    await ctx.db.patch(projectId, { name })
+export const updateName = ownedProjectMutation({
+  args: { name: v.string() },
+  handler: async (ctx, { name }) => {
+    await ctx.db.patch(ctx.project._id, { name })
   },
 })
 
 /**
  * Delete a project and its associated chats
  */
-export const remove = mutation({
-  args: { projectId: v.id("projects") },
-  handler: async (ctx, { projectId }) => {
-    await requireOwnedProject(ctx, projectId)
-
+export const remove = ownedProjectMutation({
+  args: {},
+  handler: async (ctx) => {
+    const projectId = ctx.project._id
     // Get all chats for this project
     const chats = await ctx.db
       .query("chats")

@@ -10,6 +10,10 @@ Domain language for the multi-AI chat app: one chat surface, many model provider
 The single server-side Convex source tree at `convex/`, including schema, functions, migrations, generated bindings, and Convex-domain tests. UI and component folders may import the root module's generated API, but must not contain copied Convex source trees.
 _Avoid_: server copy, UI Convex mirror, `components/ui/convex`
 
+**Authenticated handler**:
+A Convex `query`/`mutation` defined through an auth-injecting builder (`authenticatedQuery`, `ownedChatMutation`, `ownedProjectMutation`, `ownedMcpServerMutation`, …) instead of calling `ctx.auth.getUserIdentity()` inline. The builder resolves the caller's user — and, for owned-resource variants, fetches and ownership-checks the resource — before the handler body runs, injecting `ctx.user` (and `ctx.chat`/`ctx.project`/…) and enforcing one error contract (Not authenticated → not found → Not authorized). It makes auth structural, not a call you must remember. Internal functions and the HTTP chat-route token path stay outside the seam; public-only reads (share links) and anonymous/optional-auth paths use their own non-throwing builders. Self-identity-match handlers (`identity.subject === arg`) are a distinct shape, not an owned-resource one.
+_Avoid_: auth helper (the older bypassable `lib/auth.ts` form), middleware, guard
+
 ### Chat
 
 **Chat turn**:
@@ -27,6 +31,10 @@ _Avoid_: visible messages, active transcript
 **Branch projection**:
 The single client seam that installs the backend's selected path into the AI SDK's flat `useChat` array while a chat is idle: it adopts server ids and branch state onto matching live messages, preserves in-flight optimistic sends, and swaps wholesale when the path diverged (a branch switch, or restoring messages a rejected edit/regeneration sliced out). It is the sole owner of client identity adoption — matching by message identity across the full selected path (not a positional tail patch) and reading server ids through one typed accessor (`readServerMessageId` in `lib/chat-messages/branch.ts`). The client renders the server's selected path; it does not re-derive it. See `docs/adr/0001-client-renders-server-selected-path.md`.
 _Avoid_: reconcile (too narrow — that's only the id-adoption half), rehydrate, sync
+
+**Message metadata module**:
+The single client module (`lib/chat-messages/metadata.ts`) that owns message `metadata`: one private set of server-owned keys, the `isRecord` guard, and the typed readers/writers (`getServerMessageId`, `getBranch`, `stampServerFields`, `adoptServerOwned`) every caller goes through instead of casting `metadata as Record<string, unknown>` and hand-poking keys. The durable adapter and the branch projection call its writers; renderers call its readers. The streamed assistant-metadata blob is projected through a named validator (`vToolInvocationStreamMetadata`, `convex/lib/messageMetadata.ts`) at the persist boundary so only the owned key-set is written and malformed writes are rejected; the storage column (`messages.metadata`) is narrowed to that same validator so the stored shape is provably the owned key-set, not an opaque `v.any()`. Branch stays a transient, droppable descriptor; the writers preserve reference identity on no-op (the projection's idempotence contract) and pass client-transient keys (e.g. `reasoningDurationMs`) through untouched.
+_Avoid_: metadata bag, ad-hoc cast, `metadata as Record`
 
 **Selected path token**:
 The forward (client→server) staleness guard for a chat turn — a `{ expectedVisibleMessageCount, tailMessageId? }` descriptor the client derives from the rendered selected path and sends with a new-message turn; the backend validates it before mutating and rejects a turn raced against a changed selected path. It is the counterpart to the branch projection (the backward, server→client half) and is unrelated to it despite the shared name; edits and regenerations carry their own count guard (`expectedChatVersion`) instead of the token.

@@ -24,6 +24,35 @@ export async function getCurrentUser(
   return await getUserByWorkosSubject(ctx, identity.subject)
 }
 
+/**
+ * Resolve both the raw identity and the synced user row, each nullable. For
+ * optional-auth / anonymous paths that must distinguish "no identity" (a guest)
+ * from "identity present but user not synced yet" (deny), a distinction a plain
+ * user-or-null lookup collapses.
+ */
+export async function getOptionalAuth(ctx: ConvexCtx): Promise<{
+  identity: Awaited<ReturnType<ConvexCtx["auth"]["getUserIdentity"]>>
+  user: Doc<"users"> | null
+}> {
+  const identity = await ctx.auth.getUserIdentity()
+  const user = identity
+    ? await getUserByWorkosSubject(ctx, identity.subject)
+    : null
+  return { identity, user }
+}
+
+/**
+ * Require a signed-in caller's raw identity (throws if absent) without resolving
+ * the user row. For self-identity-match handlers that compare `identity.subject`
+ * to a client argument, and the create-user bootstrap path where the row may not
+ * exist yet.
+ */
+export async function requireIdentity(ctx: ConvexCtx) {
+  const identity = await ctx.auth.getUserIdentity()
+  if (!identity) throw new Error("Not authenticated")
+  return identity
+}
+
 export async function requireCurrentUser(
   ctx: ConvexCtx
 ): Promise<Doc<"users">> {
@@ -84,4 +113,22 @@ export async function requireOwnedProject(
   }
 
   return { user, project }
+}
+
+export async function requireOwnedMcpServer(
+  ctx: ConvexCtx,
+  serverId: Id<"mcpServers">
+): Promise<{ user: Doc<"users">; server: Doc<"mcpServers"> }> {
+  const identity = await ctx.auth.getUserIdentity()
+  if (!identity) throw new Error("Not authenticated")
+
+  const user = await getUserByWorkosSubject(ctx, identity.subject)
+  const server = await ctx.db.get(serverId)
+  if (!server) throw new Error("MCP server not found")
+
+  if (!user || server.userId !== user._id) {
+    throw new Error("Not authorized")
+  }
+
+  return { user, server }
 }

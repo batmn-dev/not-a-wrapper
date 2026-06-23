@@ -1,5 +1,10 @@
 import { v } from "convex/values"
-import { mutation, query, internalMutation } from "./_generated/server"
+import { internalMutation } from "./_generated/server"
+import {
+  authenticatedMutation,
+  maybeAuthQuery,
+  ownedMcpServerMutation,
+} from "./lib/authedFunctions"
 
 // Mirror of lib/config.ts MAX_MCP_SERVERS_PER_USER — keep in sync
 const MAX_MCP_SERVERS_PER_USER = 10
@@ -124,17 +129,10 @@ function validateServerUrl(url: string): string | null {
 /**
  * List all MCP servers for the authenticated user.
  */
-export const list = query({
+export const list = maybeAuthQuery({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return []
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
+    const user = ctx.user
     if (!user) return []
 
     return await ctx.db
@@ -145,23 +143,16 @@ export const list = query({
 })
 
 /**
- * Get a single MCP server by ID. Verifies ownership.
+ * Get a single MCP server by ID. Returns it only when the caller owns it;
+ * otherwise null.
  */
-export const get = query({
+export const get = maybeAuthQuery({
   args: { serverId: v.id("mcpServers") },
   handler: async (ctx, { serverId }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return null
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) return null
+    if (!ctx.user) return null
 
     const server = await ctx.db.get(serverId)
-    if (!server || server.userId !== user._id) return null
+    if (!server || server.userId !== ctx.user._id) return null
 
     return server
   },
@@ -178,7 +169,7 @@ export const get = query({
  * - Enforces MAX_MCP_SERVERS_PER_USER limit
  * - Stores pre-encrypted auth values (caller encrypts via lib/encryption.ts)
  */
-export const create = mutation({
+export const create = authenticatedMutation({
   args: {
     name: v.string(),
     url: v.string(),
@@ -191,15 +182,7 @@ export const create = mutation({
     headerName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) throw new Error("User not found")
+    const user = ctx.user
 
     // SSRF validation
     const urlError = validateServerUrl(args.url)
@@ -253,9 +236,8 @@ export const create = mutation({
  * - Re-validates URL if changed
  * - Accepts partial updates (only provided fields are changed)
  */
-export const update = mutation({
+export const update = ownedMcpServerMutation({
   args: {
-    serverId: v.id("mcpServers"),
     name: v.optional(v.string()),
     url: v.optional(v.string()),
     transport: v.optional(v.union(v.literal("http"), v.literal("sse"))),
@@ -266,21 +248,9 @@ export const update = mutation({
     authIv: v.optional(v.string()),
     headerName: v.optional(v.string()),
   },
-  handler: async (ctx, { serverId, ...updates }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) throw new Error("User not found")
-
-    const server = await ctx.db.get(serverId)
-    if (!server || server.userId !== user._id) {
-      throw new Error("Server not found")
-    }
+  handler: async (ctx, updates) => {
+    const server = ctx.server
+    const serverId = server._id
 
     // SSRF validation if URL is being changed
     if (updates.url) {
@@ -334,23 +304,10 @@ export const update = mutation({
  * Delete an MCP server and cascade delete its tool approvals.
  * Tool call logs are preserved as audit trail (serverId becomes a dangling ref).
  */
-export const remove = mutation({
-  args: { serverId: v.id("mcpServers") },
-  handler: async (ctx, { serverId }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) throw new Error("User not found")
-
-    const server = await ctx.db.get(serverId)
-    if (!server || server.userId !== user._id) {
-      throw new Error("Server not found")
-    }
+export const remove = ownedMcpServerMutation({
+  args: {},
+  handler: async (ctx) => {
+    const serverId = ctx.server._id
 
     // Cascade delete: remove all tool approvals for this server
     const approvals = await ctx.db
@@ -370,25 +327,10 @@ export const remove = mutation({
 /**
  * Quick enable/disable toggle for an MCP server.
  */
-export const toggleEnabled = mutation({
-  args: { serverId: v.id("mcpServers") },
-  handler: async (ctx, { serverId }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) throw new Error("User not found")
-
-    const server = await ctx.db.get(serverId)
-    if (!server || server.userId !== user._id) {
-      throw new Error("Server not found")
-    }
-
-    await ctx.db.patch(serverId, { enabled: !server.enabled })
+export const toggleEnabled = ownedMcpServerMutation({
+  args: {},
+  handler: async (ctx) => {
+    await ctx.db.patch(ctx.server._id, { enabled: !ctx.server.enabled })
   },
 })
 
@@ -396,28 +338,12 @@ export const toggleEnabled = mutation({
  * Update connection status (lastConnectedAt, lastError).
  * Called from the API route after attempting to connect to a server.
  */
-export const updateConnectionStatus = mutation({
+export const updateConnectionStatus = ownedMcpServerMutation({
   args: {
-    serverId: v.id("mcpServers"),
     lastConnectedAt: v.optional(v.number()),
     lastError: v.optional(v.string()),
   },
-  handler: async (ctx, { serverId, lastConnectedAt, lastError }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) throw new Error("User not found")
-
-    const server = await ctx.db.get(serverId)
-    if (!server || server.userId !== user._id) {
-      throw new Error("Server not found")
-    }
-
+  handler: async (ctx, { lastConnectedAt, lastError }) => {
     const patch: Record<string, unknown> = {}
     if (lastConnectedAt !== undefined) patch.lastConnectedAt = lastConnectedAt
     if (lastError !== undefined) patch.lastError = lastError
@@ -427,7 +353,7 @@ export const updateConnectionStatus = mutation({
       patch.lastError = undefined
     }
 
-    await ctx.db.patch(serverId, patch)
+    await ctx.db.patch(ctx.server._id, patch)
   },
 })
 

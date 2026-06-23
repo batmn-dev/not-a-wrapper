@@ -25,11 +25,19 @@ import {
 } from "./domain/message_contract"
 import { extractTextFromMessageParts } from "./domain/message_parts"
 import {
+  type PersistedMessageMetadata,
+  vToolInvocationStreamMetadata,
+} from "./lib/messageMetadata"
+import {
   hasSemanticAssistantParts,
   isModelHistoryMessage,
   isVisibleChatMessage,
 } from "./domain/message_visibility"
-import { getAuthorizedChatForRead, getCurrentUser } from "./lib/auth"
+import {
+  getAuthorizedChatForRead,
+  getCurrentUser,
+  requireOwnedChat,
+} from "./lib/auth"
 
 const MAX_PREVIEW_LENGTH = 500
 
@@ -146,19 +154,15 @@ function nowMs(): number {
   return Date.now()
 }
 
+// The run-scoped owner check delegates to the shared requireOwnedChat so there
+// is a single owned-chat implementation. Most call sites here pass a chat id
+// derived from a fetched generation run (run.chatId), which is why this is a
+// helper rather than an ownedChatMutation builder.
 async function requireChatOwner(
   ctx: QueryCtx | MutationCtx,
   chatId: Id<"chats">
 ): Promise<AuthenticatedOwner> {
-  const user = await getCurrentUser(ctx)
-  if (!user) throw new Error("Not authenticated")
-
-  const chat = await ctx.db.get(chatId)
-  if (!chat || chat.userId !== user._id) {
-    throw new Error("Not authorized")
-  }
-
-  return { user, chat }
+  return await requireOwnedChat(ctx, chatId)
 }
 
 function isAssistantMessageLinkedToRun(
@@ -1393,7 +1397,7 @@ export const markGenerationRunCompleted = mutation({
     messageId: v.id("messages"),
     content: v.string(),
     parts: v.any(),
-    metadata: v.optional(v.any()),
+    metadata: v.optional(vToolInvocationStreamMetadata),
     finishReason: v.optional(v.string()),
     usage: v.optional(vUsage),
     totalToolCalls: v.optional(v.number()),
@@ -1409,7 +1413,7 @@ export async function markGenerationRunCompletedForChat(
     messageId: Id<"messages">
     content: string
     parts: unknown
-    metadata?: unknown
+    metadata?: PersistedMessageMetadata
     finishReason?: string
     usage?: {
       inputTokens?: number

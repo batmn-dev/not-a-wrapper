@@ -1,20 +1,16 @@
 import { v } from "convex/values"
-import { mutation, query } from "./_generated/server"
+import {
+  authenticatedMutation,
+  maybeAuthQuery,
+} from "./lib/authedFunctions"
 
 /**
  * Get preferences for current user
  */
-export const get = query({
+export const get = maybeAuthQuery({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return null
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
+    const user = ctx.user
     if (!user) return null
 
     return await ctx.db
@@ -27,7 +23,7 @@ export const get = query({
 /**
  * Update preferences
  */
-export const update = mutation({
+export const update = authenticatedMutation({
   args: {
     layout: v.optional(v.string()),
     promptSuggestions: v.optional(v.boolean()),
@@ -37,19 +33,9 @@ export const update = mutation({
     hiddenModels: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user) throw new Error("User not found")
-
     const existing = await ctx.db
       .query("userPreferences")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
       .unique()
 
     if (existing) {
@@ -58,7 +44,7 @@ export const update = mutation({
     }
 
     return await ctx.db.insert("userPreferences", {
-      userId: user._id,
+      userId: ctx.user._id,
       ...args,
     })
   },

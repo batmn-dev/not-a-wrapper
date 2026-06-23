@@ -30,6 +30,7 @@ import {
 import { fetchMutation, fetchQuery } from "convex/nextjs"
 import { api } from "@/convex/_generated/api"
 import type { Doc, Id } from "@/convex/_generated/dataModel"
+import { projectPersistedMessageMetadata } from "@/convex/lib/messageMetadata"
 import { getWorkosSession } from "@/lib/auth/workos"
 import {
   checkServerSideUsage,
@@ -1586,7 +1587,7 @@ export async function POST(req: Request) {
             messageId: durableRunState.assistantMessageId,
             content: getFinalAssistantText(responseMessage),
             parts: responseMessage.parts,
-            metadata: responseMessage.metadata,
+            metadata: projectPersistedMessageMetadata(responseMessage.metadata),
             finishReason: durableFinalFinishReason ?? finishReason,
             usage: durableFinalUsage,
             totalToolCalls: toolCounts.totalToolCalls,

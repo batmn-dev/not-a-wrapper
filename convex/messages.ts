@@ -20,6 +20,7 @@ import {
 } from "./domain/message_branch_writes"
 import { isVisibleChatMessage } from "./domain/message_visibility"
 import { getAuthorizedChatForRead, requireOwnedChat } from "./lib/auth"
+import { ownedChatMutation } from "./lib/authedFunctions"
 
 export { normalizeMessagePartsForStorage } from "./domain/message_parts"
 
@@ -187,9 +188,8 @@ export const selectBranch = mutation({
 /**
  * Add a single message
  */
-export const add = mutation({
+export const add = ownedChatMutation({
   args: {
-    chatId: v.id("chats"),
     role: v.union(
       v.literal("user"),
       v.literal("assistant"),
@@ -202,19 +202,20 @@ export const add = mutation({
     attachments: v.optional(v.array(v.any())),
   },
   handler: async (ctx, args) => {
-    const { user } = await requireOwnedChat(ctx, args.chatId)
+    const user = ctx.user
+    const chatId = ctx.chat._id
 
     // Update chat's updatedAt
     const now = Date.now()
-    await ctx.db.patch(args.chatId, { updatedAt: now })
-    const orderId = await getNextOrder(ctx, args.chatId)
+    await ctx.db.patch(chatId, { updatedAt: now })
+    const orderId = await getNextOrder(ctx, chatId)
     const parts = normalizeMessagePartsForStorage(
       args.parts,
       args.attachments
     )
 
     return await ctx.db.insert("messages", {
-      chatId: args.chatId,
+      chatId,
       orderId,
       clientMessageId: args.clientMessageId,
       userId: args.role === "user" ? user._id : undefined,
@@ -231,9 +232,8 @@ export const add = mutation({
 /**
  * Add multiple messages at once
  */
-export const addBatch = mutation({
+export const addBatch = ownedChatMutation({
   args: {
-    chatId: v.id("chats"),
     messages: v.array(
       v.object({
         role: v.union(
@@ -249,8 +249,9 @@ export const addBatch = mutation({
       })
     ),
   },
-  handler: async (ctx, { chatId, messages }) => {
-    const { user } = await requireOwnedChat(ctx, chatId)
+  handler: async (ctx, { messages }) => {
+    const user = ctx.user
+    const chatId = ctx.chat._id
 
     // Update chat's updatedAt
     const now = Date.now()
@@ -287,27 +288,12 @@ export const addBatch = mutation({
 /**
  * Clear all messages for a chat
  */
-export const clearForChat = mutation({
-  args: { chatId: v.id("chats") },
-  handler: async (ctx, { chatId }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error("Not authenticated")
-
-    const chat = await ctx.db.get(chatId)
-    if (!chat) throw new Error("Chat not found")
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", identity.subject))
-      .unique()
-
-    if (!user || chat.userId !== user._id) {
-      throw new Error("Not authorized")
-    }
-
+export const clearForChat = ownedChatMutation({
+  args: {},
+  handler: async (ctx) => {
     const messages = await ctx.db
       .query("messages")
-      .withIndex("by_chat", (q) => q.eq("chatId", chatId))
+      .withIndex("by_chat", (q) => q.eq("chatId", ctx.chat._id))
       .collect()
 
     for (const msg of messages) {
