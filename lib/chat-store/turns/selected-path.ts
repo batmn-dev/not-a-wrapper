@@ -21,112 +21,13 @@
  */
 
 import {
-  getMessageBranchInfo,
-  readServerMessageId,
-  type MessageBranchInfo,
-} from "@/lib/chat-messages/branch"
+  adoptServerOwned,
+  getServerMessageId,
+} from "@/lib/chat-messages/metadata"
 import type { ChatTurnMessage } from "./chat-turn-service"
-
-const serverOwnedMetadataKeys = [
-  "durableStatus",
-  "durableError",
-  "generationRunId",
-  "requestId",
-  "model",
-  "provider",
-  "finishReason",
-  "usage",
-] as const
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
-}
 
 function createdAtMs(value: unknown): number | undefined {
   return value instanceof Date ? value.getTime() : undefined
-}
-
-function branchEquals(
-  a: MessageBranchInfo | undefined,
-  b: MessageBranchInfo | undefined
-): boolean {
-  if (a === b) return true
-  if (!a || !b) return false
-  if (
-    a.messageId !== b.messageId ||
-    a.currentIndex !== b.currentIndex ||
-    a.total !== b.total ||
-    a.siblings.length !== b.siblings.length
-  ) {
-    return false
-  }
-  return a.siblings.every((sibling, index) => {
-    const other = b.siblings[index]
-    return (
-      other !== undefined &&
-      sibling.messageId === other.messageId &&
-      sibling.clientMessageId === other.clientMessageId
-    )
-  })
-}
-
-/**
- * Merge the server message's identity, branch, and lifecycle metadata into the
- * live message. Returns the original metadata reference when nothing changes so
- * callers can detect no-ops.
- */
-function adoptServerMetadata(
-  localMetadata: unknown,
-  serverMetadata: unknown
-): unknown {
-  const serverMessageId = readServerMessageId(serverMetadata)
-  const serverBranch = getMessageBranchInfo({ metadata: serverMetadata })
-
-  const localMessageId = readServerMessageId(localMetadata)
-  const localBranch = getMessageBranchInfo({ metadata: localMetadata })
-
-  const messageIdChanged =
-    serverMessageId !== undefined && serverMessageId !== localMessageId
-  // The server is the source of truth for branch state: adopt it, and clear a
-  // stale descriptor when the message no longer has siblings.
-  const branchChanged = !branchEquals(localBranch, serverBranch)
-
-  const localMetadataRecord = isRecord(localMetadata) ? localMetadata : undefined
-  const serverMetadataRecord = isRecord(serverMetadata) ? serverMetadata : undefined
-  const serverOwnedMetadataChanged = serverOwnedMetadataKeys.some((key) => {
-    const localHasKey = localMetadataRecord
-      ? Object.prototype.hasOwnProperty.call(localMetadataRecord, key)
-      : false
-    const serverHasKey = serverMetadataRecord
-      ? Object.prototype.hasOwnProperty.call(serverMetadataRecord, key)
-      : false
-    if (localHasKey !== serverHasKey) return true
-    if (!serverHasKey || !localMetadataRecord || !serverMetadataRecord) {
-      return false
-    }
-    return !Object.is(localMetadataRecord[key], serverMetadataRecord[key])
-  })
-
-  if (!messageIdChanged && !branchChanged && !serverOwnedMetadataChanged) {
-    return localMetadata
-  }
-
-  const next: Record<string, unknown> = localMetadataRecord
-    ? { ...localMetadataRecord }
-    : {}
-
-  if (serverMessageId !== undefined) next.serverMessageId = serverMessageId
-  if (serverBranch !== undefined) next.branch = serverBranch
-  else if ("branch" in next) delete next.branch
-  for (const key of serverOwnedMetadataKeys) {
-    if (serverMetadataRecord && key in serverMetadataRecord) {
-      next[key] = serverMetadataRecord[key]
-    } else {
-      delete next[key]
-    }
-  }
-
-  return next
 }
 
 /**
@@ -167,7 +68,7 @@ export function reconcileSelectedPath(
     }
     if (!match || match.role !== localMessage.role) return localMessage
 
-    const mergedMetadata = adoptServerMetadata(
+    const mergedMetadata = adoptServerOwned(
       localMessage.metadata,
       match.metadata
     )
@@ -210,7 +111,7 @@ function identityKeys(message: ChatTurnMessage): string[] {
   const keys: string[] = []
   const id = String(message.id)
   if (id.length > 0) keys.push(id)
-  const serverMessageId = readServerMessageId(message.metadata)
+  const serverMessageId = getServerMessageId(message.metadata)
   if (serverMessageId !== undefined && serverMessageId !== id) {
     keys.push(serverMessageId)
   }
@@ -251,7 +152,7 @@ export function isSelectedPathDivergent(
   const liveKeys = collectKeys(live)
 
   const removed = live.some((message) => {
-    if (readServerMessageId(message.metadata) === undefined) return false
+    if (getServerMessageId(message.metadata) === undefined) return false
     return identityKeys(message).every((key) => !serverKeys.has(key))
   })
   if (removed) return true

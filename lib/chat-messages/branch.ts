@@ -39,7 +39,12 @@ export type ChatMessageMetadata = {
   [key: string]: unknown
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+/**
+ * Generic guard for a plain object. Lives here (the lower module) because the
+ * descriptor parsers below need it; the metadata module re-exports it as the
+ * canonical metadata guard so callers do not reimplement it.
+ */
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
 }
 
