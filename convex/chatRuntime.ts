@@ -25,6 +25,10 @@ import {
 } from "./domain/message_contract"
 import { extractTextFromMessageParts } from "./domain/message_parts"
 import {
+  type PersistedMessageMetadata,
+  vToolInvocationStreamMetadata,
+} from "./lib/messageMetadata"
+import {
   hasSemanticAssistantParts,
   isModelHistoryMessage,
   isVisibleChatMessage,
@@ -1393,7 +1397,7 @@ export const markGenerationRunCompleted = mutation({
     messageId: v.id("messages"),
     content: v.string(),
     parts: v.any(),
-    metadata: v.optional(v.any()),
+    metadata: v.optional(vToolInvocationStreamMetadata),
     finishReason: v.optional(v.string()),
     usage: v.optional(vUsage),
     totalToolCalls: v.optional(v.number()),
@@ -1409,7 +1413,7 @@ export async function markGenerationRunCompletedForChat(
     messageId: Id<"messages">
     content: string
     parts: unknown
-    metadata?: unknown
+    metadata?: PersistedMessageMetadata
     finishReason?: string
     usage?: {
       inputTokens?: number
