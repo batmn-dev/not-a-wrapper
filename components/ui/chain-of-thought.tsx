@@ -7,8 +7,29 @@ import {
 } from "@/components/ui/collapsible"
 import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
-import { RiArrowDownSLine, RiCheckboxBlankCircleFill } from "@remixicon/react"
+import {
+  RiArrowDownSLine,
+  RiCheckboxBlankCircleFill,
+  RiCheckLine,
+  RiGlobeLine,
+} from "@remixicon/react"
 import React from "react"
+
+const LEADING_MARKERS = {
+  bullet: {
+    icon: RiCheckboxBlankCircleFill,
+    slotSize: 8,
+    className: "fill-current",
+  },
+  globe: {
+    icon: RiGlobeLine,
+    slotSize: 16,
+    className: "text-muted-foreground",
+  },
+  done: { icon: RiCheckLine, slotSize: 16, className: "text-foreground" },
+} as const
+
+export type ChainOfThoughtLeading = keyof typeof LEADING_MARKERS
 
 export type ChainOfThoughtItemProps = React.ComponentProps<"div">
 
@@ -30,6 +51,12 @@ export type ChainOfThoughtTriggerProps = React.ComponentProps<
 > & {
   leftIcon?: React.ReactNode
   swapIconOnHover?: boolean
+  /**
+   * Leading marker shown when no `leftIcon` is provided. `bullet` (default)
+   * preserves the original dot exactly; `globe`/`done` add the reference
+   * timeline variants. Additive — existing call sites render the same dot.
+   */
+  leading?: ChainOfThoughtLeading
 }
 
 export const ChainOfThoughtTrigger = ({
@@ -37,6 +64,7 @@ export const ChainOfThoughtTrigger = ({
   className,
   leftIcon,
   swapIconOnHover = true,
+  leading = "bullet",
   ...props
 }: ChainOfThoughtTriggerProps) => (
   <CollapsibleTrigger
@@ -68,9 +96,9 @@ export const ChainOfThoughtTrigger = ({
       ) : (
         <span className="relative inline-flex size-4 items-center justify-center">
           <Icon
-            icon={RiCheckboxBlankCircleFill}
-            slotSize={8}
-            className="fill-current"
+            icon={LEADING_MARKERS[leading].icon}
+            slotSize={LEADING_MARKERS[leading].slotSize}
+            className={LEADING_MARKERS[leading].className}
           />
         </span>
       )}

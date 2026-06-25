@@ -160,16 +160,51 @@ function ReasoningTrigger({
 
 export type ReasoningLabelProps = {
   className?: string
+  /**
+   * Optional leading title rendered as a `title · duration` cluster (the
+   * reference "Activity · 5m 42s" panel header). Omitted at the inline call
+   * site, so existing output is unchanged. Dormant until the Activity panel.
+   */
+  title?: string
 }
 
-function ReasoningLabel({ className }: ReasoningLabelProps) {
+function ReasoningLabel({ className, title }: ReasoningLabelProps) {
   const { isOpen, onOpenChange, phase, durationSeconds, opaque } =
     useReasoningContext()
 
   if (phase === "idle") return null
 
+  const durationText =
+    durationSeconds !== undefined && durationSeconds > 0
+      ? formatDuration(durationSeconds)
+      : undefined
+
   const labelText =
-    phase === "thinking" ? (
+    title !== undefined ? (
+      <>
+        <span className="text-muted-foreground font-normal">{title}</span>
+        {durationText && (
+          <>
+            <span aria-hidden className="text-muted-foreground/70 font-normal">
+              ·
+            </span>
+            {phase === "thinking" ? (
+              <TextShimmer
+                duration={2}
+                spread={15}
+                className="text-muted-foreground/70 text-base font-normal whitespace-nowrap"
+              >
+                {durationText}
+              </TextShimmer>
+            ) : (
+              <span className="text-muted-foreground/70 font-normal whitespace-nowrap">
+                {durationText}
+              </span>
+            )}
+          </>
+        )}
+      </>
+    ) : phase === "thinking" ? (
       <>
         <TextShimmer duration={2} spread={15} className="text-base font-normal">
           Thinking

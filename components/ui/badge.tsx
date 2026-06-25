@@ -16,10 +16,20 @@ const badgeVariants = cva(
           "border-transparent bg-destructive text-white [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
         outline:
           "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
+        // Reference "source chip": subtle surface that hover-inverts to the
+        // primary color (used by the Activity panel SourceChip in Step B).
+        source:
+          "border-transparent bg-secondary text-muted-foreground transition-colors duration-150 hover:bg-primary hover:text-primary-foreground",
+      },
+      size: {
+        default: "",
+        sm: "h-5",
+        md: "h-[25px]",
       },
     },
     defaultVariants: {
       variant: "default",
+      size: "default",
     },
   }
 )
@@ -27,18 +37,19 @@ const badgeVariants = cva(
 function Badge({
   className,
   variant,
+  size,
   render,
   ...props
 }: useRender.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
   const defaultProps: useRender.ElementProps<"span"> = {
-    className: cn(badgeVariants({ variant }), className),
+    className: cn(badgeVariants({ variant, size }), className),
   }
 
   return useRender({
     defaultTagName: "span",
     render,
     props: mergeProps<"span">(defaultProps, props),
-    state: { slot: "badge", variant },
+    state: { slot: "badge", variant, size },
   })
 }
 

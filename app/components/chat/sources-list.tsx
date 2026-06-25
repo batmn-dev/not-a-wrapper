@@ -1,13 +1,13 @@
 "use client"
 
+import { Favicon } from "@/components/ui/favicon"
 import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 import { RiArrowDownSLine, RiLink } from "@remixicon/react"
 import type { SourceUrlUIPart } from "ai"
 import { AnimatePresence, motion } from "motion/react"
-import Image from "next/image"
 import { useState } from "react"
-import { addUTM, formatUrl, getFavicon } from "./utils"
+import { addUTM, formatUrl } from "./utils"
 
 type SourcesListProps = {
   sources: SourceUrlUIPart[]
@@ -22,11 +22,6 @@ const TRANSITION = {
 
 export function SourcesList({ sources, className }: SourcesListProps) {
   const [isExpanded, setIsExpanded] = useState(false)
-  const [failedFavicons, setFailedFavicons] = useState<Set<string>>(new Set())
-
-  const handleFaviconError = (url: string) => {
-    setFailedFavicons((prev) => new Set(prev).add(url))
-  }
 
   return (
     <div className={cn("my-4", className)}>
@@ -39,28 +34,15 @@ export function SourcesList({ sources, className }: SourcesListProps) {
           <div className="flex flex-1 flex-row items-center gap-2 text-left text-sm">
             Sources
             <div className="flex -space-x-1">
-              {sources?.map((source, index) => {
-                const faviconUrl = getFavicon(source.url)
-                const showFallback =
-                  !faviconUrl || failedFavicons.has(source.url)
-
-                return showFallback ? (
-                  <div
-                    key={`${source.url}-${index}`}
-                    className="bg-muted border-background h-4 w-4 rounded-full border"
-                  />
-                ) : (
-                  <Image
-                    key={`${source.url}-${index}`}
-                    src={faviconUrl}
-                    alt={`Favicon for ${source.title}`}
-                    width={16}
-                    height={16}
-                    className="border-background h-4 w-4 rounded-sm border"
-                    onError={() => handleFaviconError(source.url)}
-                  />
-                )
-              })}
+              {sources?.map((source, index) => (
+                <Favicon
+                  key={`${source.url}-${index}`}
+                  url={source.url}
+                  alt={`Favicon for ${source.title}`}
+                  shape="rounded"
+                  className="border-background size-4 border"
+                />
+              ))}
               {sources.length > 3 && (
                 <span className="text-muted-foreground ml-1 text-xs">
                   +{sources.length - 3}
@@ -88,49 +70,37 @@ export function SourcesList({ sources, className }: SourcesListProps) {
               className="overflow-hidden"
             >
               <ul className="space-y-2 px-3 pt-3 pb-3">
-                {sources.map((source) => {
-                  const faviconUrl = getFavicon(source.url)
-                  const showFallback =
-                    !faviconUrl || failedFavicons.has(source.url)
-
-                  return (
-                    <li
-                      key={source.sourceId}
-                      className="flex items-center text-sm"
-                    >
-                      <div className="min-w-0 flex-1 overflow-hidden">
-                        <a
-                          href={addUTM(source.url)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary group line-clamp-1 flex items-center gap-1 hover:underline"
-                        >
-                          {showFallback ? (
-                            <div className="bg-muted h-4 w-4 flex-shrink-0 rounded-full" />
-                          ) : (
-                            <Image
-                              src={faviconUrl}
-                              alt={`Favicon for ${source.title}`}
-                              width={16}
-                              height={16}
-                              className="h-4 w-4 flex-shrink-0 rounded-sm"
-                              onError={() => handleFaviconError(source.url)}
-                            />
-                          )}
-                          <span className="truncate">{source.title}</span>
-                          <Icon
-                            icon={RiLink}
-                            slotSize={12}
-                            className="flex-shrink-0 opacity-70 transition-opacity group-hover:opacity-100"
-                          />
-                        </a>
-                        <div className="text-muted-foreground line-clamp-1 text-xs">
-                          {formatUrl(source.url)}
-                        </div>
+                {sources.map((source) => (
+                  <li
+                    key={source.sourceId}
+                    className="flex items-center text-sm"
+                  >
+                    <div className="min-w-0 flex-1 overflow-hidden">
+                      <a
+                        href={addUTM(source.url)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary group line-clamp-1 flex items-center gap-1 hover:underline"
+                      >
+                        <Favicon
+                          url={source.url}
+                          alt={`Favicon for ${source.title}`}
+                          shape="rounded"
+                          className="size-4 flex-shrink-0"
+                        />
+                        <span className="truncate">{source.title}</span>
+                        <Icon
+                          icon={RiLink}
+                          slotSize={12}
+                          className="flex-shrink-0 opacity-70 transition-opacity group-hover:opacity-100"
+                        />
+                      </a>
+                      <div className="text-muted-foreground line-clamp-1 text-xs">
+                        {formatUrl(source.url)}
                       </div>
-                    </li>
-                  )
-                })}
+                    </div>
+                  </li>
+                ))}
               </ul>
             </motion.div>
           )}
