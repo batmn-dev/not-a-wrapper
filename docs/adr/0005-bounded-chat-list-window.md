@@ -7,7 +7,7 @@
 
 ## Context
 
-ADR-0004 closed the *subscription-lifecycle* channel of the four dominant Convex
+ADR-0004 closed the _subscription-lifecycle_ channel of the four dominant Convex
 queries but explicitly left `chats.getForCurrentUser` — the sidebar list — out of
 scope, because its cost is **read-set breadth**, not lifecycle:
 
@@ -23,8 +23,8 @@ trimmed — bounding it would silently shrink those surfaces to whatever happene
 be in the window.
 
 A Tier-1 measurement (`docs/measurements/chat-list-invalidations.md`) confirmed
-the write fix halved invalidation *frequency* but left the O(all-chats)
-*per-invalidation* re-read intact — the dominant term for users with history.
+the write fix halved invalidation _frequency_ but left the O(all-chats)
+_per-invalidation_ re-read intact — the dominant term for users with history.
 
 ## Decision
 
@@ -41,26 +41,28 @@ removed; the chat already re-orders at turn start. `chats.updatedAt` now means
 - **Chat list window** — the sidebar reads a paginated recency window of
   **non-pinned, non-project** chats (`chats.getRecentWindowForCurrentUser` over a
   composite `by_user_pinned_project_updated` index, via `usePerUserPaginatedQuery`)
-  plus a small live pinned read (`chats.getPinnedForCurrentUser` over
-  `by_user_pinned`). Excluding pinned/project at the index level keeps every page
-  full of chats the sidebar actually renders, so pinned/project chats never
-  consume a window slot. A chat write now invalidates only the window, not the
-  whole collection. (Browse-all in the history drawer uses a separate all-chats
-  paginated read, `chats.listForCurrentUserPaginated` over `by_user_updated`.)
+  plus a small live pinned **non-project** read (`chats.getPinnedForCurrentUser`
+  over the same composite index prefix). Excluding pinned/project at the index
+  level keeps every page full of chats the sidebar actually renders, so
+  pinned/project chats never consume a window slot or pinned subscription. A chat
+  write now invalidates only the window, not the whole collection. (Browse-all in
+  the history drawer uses a separate non-project paginated read,
+  `chats.listForCurrentUserPaginated` over `by_user_project_updated`, because
+  project chats are hidden while browsing.)
 - **History search** is a server query (`chats.searchByTitle` over a `by_title`
   search index, title-only), subscribed only while the search UI is open, behind
   a `SearchProvider` interface so the UI holds `query → results`, never the full
   array.
-- **Browse-all** is its own paginated read over `by_user_updated`, loaded only
-  while the history drawer is open.
+- **Browse-all** is its own non-project paginated read over
+  `by_user_project_updated`, loaded only while the history drawer is open.
 - **Per-chat access** is `useChat(chatId)`: the in-window chat synchronously, else
   a targeted `chats.getById` read — which also closed a latent deep-link gap (a
   deep-link to an out-of-window chat used to redirect home).
 - **Project chats** come from a dedicated owner-checked `getProjectChatsForCurrentUser`
   over `by_project`, so a project shows all its chats.
 
-`updatedAt` was narrowed to required and the `by_user_updated` index added so the
-window never sorts null keys to the tail; safe because the DB is disposable
+`updatedAt` was narrowed to required and the recency indexes added so paginated
+reads never sort null keys to the tail; safe because the DB is disposable
 pre-launch (`PRELAUNCH_DISPOSABLE_DB`, ADR-0002 caveat).
 
 The paginated reads go through a new `usePerUserPaginatedQuery` seam gated on

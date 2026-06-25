@@ -57,10 +57,11 @@ import {
 } from "@remixicon/react"
 import Link from "next/link"
 import { useParams, usePathname } from "next/navigation"
-import React, { useEffect, useMemo, useRef } from "react"
+import React, { useMemo, useRef } from "react"
 import { PopoverContentAuth } from "../../chat-input/popover-content-auth"
 import { useHistorySearch } from "../../history/history-search-provider"
 import { HistoryTrigger } from "../../history/history-trigger"
+import { useInfiniteScroll } from "../../history/use-history-view"
 import { UserMenu } from "../user-menu"
 import { SidebarList } from "./sidebar-list"
 import { SidebarMenuItem } from "./sidebar-menu-item"
@@ -296,19 +297,7 @@ function SidebarExpandedNav({
   // Bounded sidebar (ENABLE_PAGINATED_SIDEBAR): load more window pages as the
   // user nears the bottom. No-op when the flag is off (canLoadMore is false).
   const { canLoadMore, loadMore } = data
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el || !canLoadMore) return
-
-    const onScroll = () => {
-      if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) {
-        loadMore()
-      }
-    }
-
-    el.addEventListener("scroll", onScroll, { passive: true })
-    return () => el.removeEventListener("scroll", onScroll)
-  }, [canLoadMore, loadMore])
+  useInfiniteScroll(scrollRef, canLoadMore, loadMore)
 
   return (
     <>

@@ -87,7 +87,10 @@ const eslintConfig = [
       "lib/**/*.{ts,tsx}",
       "components/**/*.{ts,tsx}",
     ],
-    ignores: ["lib/convex/**", "**/*.test.{ts,tsx}"],
+    ignores: [
+      "lib/convex/use-per-user-query.ts",
+      "**/*.test.{ts,tsx}",
+    ],
     rules: {
       "no-restricted-syntax": [
         "error",

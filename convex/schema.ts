@@ -79,14 +79,19 @@ export default defineSchema({
     public: v.boolean(),
     pinned: v.boolean(),
     pinnedAt: v.optional(v.number()), // Unix timestamp
-    // Required so the by_user_updated index never sorts null keys to the tail
-    // (which would hide chats from the bounded sidebar window). chats.create has
+    // Required so recency indexes never sort null keys to the tail (which would
+    // hide chats from paginated history/sidebar windows). chats.create has
     // always set this; backfill: scripts/backfill-chat-updated-at.mjs.
     updatedAt: v.number(), // Unix timestamp — last activity (turn start)
   })
     .index("by_user", ["userId"])
     .index("by_user_pinned", ["userId", "pinned"])
     .index("by_user_updated", ["userId", "updatedAt"])
+    // The history drawer's browse mode: pinned + non-pinned non-project chats
+    // newest-first. Project chats are hidden from browse mode and must not
+    // consume pagination slots; title search and project pages reach them
+    // through their own reads.
+    .index("by_user_project_updated", ["userId", "projectId", "updatedAt"])
     // The sidebar recency window: non-pinned, non-project chats newest-first.
     // Excluding pinned + project at the index level keeps every page full of
     // chats the "Chats" section actually shows, so pinned/project chats never

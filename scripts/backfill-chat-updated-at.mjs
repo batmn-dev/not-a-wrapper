@@ -31,4 +31,9 @@ if (result.error) {
   process.exit(1)
 }
 
-process.exit(result.status ?? 0)
+if (result.signal || result.status === null) {
+  console.error("chats:backfillUpdatedAt was interrupted")
+  process.exit(1)
+}
+
+process.exit(result.status)

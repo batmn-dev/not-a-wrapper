@@ -63,8 +63,8 @@ export function usePerUserQuery<Query extends QueryRef>(
     data,
     isAuthReady: isAuthenticated,
     isLoading:
-      isAuthLoading ||
-      (isAuthenticated && !callerSkipped && data === undefined),
+      !callerSkipped &&
+      (isAuthLoading || (isAuthenticated && data === undefined)),
   }
 }
 
@@ -78,9 +78,7 @@ export function usePerUserQuery<Query extends QueryRef>(
  * importing `usePaginatedQuery` from `convex/react` outside this module, just as
  * it does `useQuery`. See ADR-0004.
  */
-export function usePerUserPaginatedQuery<
-  Query extends PaginatedQueryReference,
->(
+export function usePerUserPaginatedQuery<Query extends PaginatedQueryReference>(
   query: Query,
   args: PaginatedQueryArgs<Query> | "skip",
   options: { initialNumItems: number }

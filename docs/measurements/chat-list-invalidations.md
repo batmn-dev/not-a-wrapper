@@ -33,15 +33,15 @@ deliberately untouched.
 
 Per-turn `chats.updatedAt` write accounting (code-derived, durable HTTP chat route):
 
-| Lifecycle event | Mutation (site) | Writes `chats.updatedAt`? | Before | After |
-| --- | --- | --- | --- | --- |
-| New-message turn start | `prepareGeneration` (`chatRuntime.ts:1257`) | yes | ✓ | ✓ kept |
-| User-message insert | `insertUserMessageForGeneration` (`chatRuntime.ts:474-513`) | no (message row only) | — | — |
-| Assistant placeholder insert | `prepareGenerationForChat` | no (message row only) | — | — |
-| Run completion | `markGenerationRunCompleted` (`chatRuntime.ts:1460`) | **was yes** | ✓ | **✗ removed** |
-| **New-message / regeneration turn total** | | | **2** | **1** |
-| Title-edit turn (adds the title bump) | `+ chatRuntime.ts:775` | yes | 3 | 2 |
-| Branch select (separate user action) | `selectBranch` (`messages.ts:176`) | yes | 1 | 1 (unchanged) |
+| Lifecycle event                           | Mutation (site)                                             | Writes `chats.updatedAt`? | Before | After         |
+| ----------------------------------------- | ----------------------------------------------------------- | ------------------------- | ------ | ------------- |
+| New-message turn start                    | `prepareGeneration` (`chatRuntime.ts:1257`)                 | yes                       | ✓      | ✓ kept        |
+| User-message insert                       | `insertUserMessageForGeneration` (`chatRuntime.ts:474-513`) | no (message row only)     | —      | —             |
+| Assistant placeholder insert              | `prepareGenerationForChat`                                  | no (message row only)     | —      | —             |
+| Run completion                            | `markGenerationRunCompleted` (`chatRuntime.ts:1460`)        | **was yes**               | ✓      | **✗ removed** |
+| **New-message / regeneration turn total** |                                                             |                           | **2**  | **1**         |
+| Title-edit turn (adds the title bump)     | `+ chatRuntime.ts:775`                                      | yes                       | 3      | 2             |
+| Branch select (separate user action)      | `selectBranch` (`messages.ts:176`)                          | yes                       | 1      | 1 (unchanged) |
 
 **Result (proven):** every durable generation turn now writes the chat row once
 instead of twice. New-message and regeneration turns drop from **2 → 1**
@@ -70,8 +70,8 @@ Two independent dimensions drive that cost:
    **Tier 1 does not touch this.** Each surviving invalidation still re-reads the
    entire collection.
 
-So the prediction is: Tier 1 cuts the *number* of `chats` invalidation re-runs
-per turn by ~half, but leaves the *per-invalidation* read-set breadth fully
+So the prediction is: Tier 1 cuts the _number_ of `chats` invalidation re-runs
+per turn by ~half, but leaves the _per-invalidation_ read-set breadth fully
 intact. For a user with a large history, the dominant term is breadth, not
 frequency — which is precisely what Tier 2 (commit 8, paginated window) bounds.
 
@@ -82,23 +82,25 @@ frequency — which is precisely what Tier 2 (commit 8, paginated window) bounds
 > repo and are **not** filled in here. Capture after commit 1 deploys.
 
 Procedure:
+
 1. Deploy commit 1 to the target deployment.
 2. In the Convex dashboard → Functions, over a fixed window, record the call
    counts below. Drive a known number of durable turns (send N messages) so the
    per-turn figure is derivable.
 
-| Field | Value | Notes |
-| --- | --- | --- |
-| Capture date | _pending_ | |
-| Sample: messages sent (N) | _pending_ | durable turns only |
-| Sample: window duration | _pending_ | |
-| `chats.getForCurrentUser` — initial-subscribe calls | _pending_ | one per mount/auth-ready |
-| `chats.getForCurrentUser` — invalidation re-runs | _pending_ | the figure Tier 1 targets |
-| Invalidation re-runs **per turn** | _pending_ | expect ≈ 1 (Section A) |
-| Control: `users.getCurrent` calls | _pending_ | ADR-0004 baseline ≈ 3.7K |
-| `userKeys.getProviderStatus` — guest-caller count | _pending_ | expect **0** post ADR-0004 |
+| Field                                               | Value     | Notes                      |
+| --------------------------------------------------- | --------- | -------------------------- |
+| Capture date                                        | _pending_ |                            |
+| Sample: messages sent (N)                           | _pending_ | durable turns only         |
+| Sample: window duration                             | _pending_ |                            |
+| `chats.getForCurrentUser` — initial-subscribe calls | _pending_ | one per mount/auth-ready   |
+| `chats.getForCurrentUser` — invalidation re-runs    | _pending_ | the figure Tier 1 targets  |
+| Invalidation re-runs **per turn**                   | _pending_ | expect ≈ 1 (Section A)     |
+| Control: `users.getCurrent` calls                   | _pending_ | ADR-0004 baseline ≈ 3.7K   |
+| `userKeys.getProviderStatus` — guest-caller count   | _pending_ | expect **0** post ADR-0004 |
 
 Sanity checks:
+
 - Per-turn invalidation should land at ≈ 1 (Section A). A figure near 2 means a
   bump path was missed or re-added.
 - `userKeys.getProviderStatus` guest-caller count should be 0 (ADR-0004 gated it
@@ -111,6 +113,7 @@ Sanity checks:
 confirming the residual is material.**
 
 Reasoning:
+
 - Tier 1 is necessary but **not sufficient**. It halves invalidation frequency
   but leaves the O(all-chats) per-invalidation read-set — the mechanism ADR-0004
   identified as the dominant cost — completely unchanged. The win that ADR-0004's
@@ -122,6 +125,7 @@ Reasoning:
   That is the "residual cost is material" condition in the plan's gate.
 
 Decision rule for the human, once Section C is filled in:
+
 - **GO** if post-Tier-1 `chats.getForCurrentUser` invalidation re-runs remain a
   large multiple of the control (`users.getCurrent`), i.e. the read-set breadth
   still dominates — the expected case.
@@ -141,7 +145,8 @@ the flag off, behavior is identical to today. The rollout flips it on.
 
 ### Rollout runbook (operator, deploy-time)
 
-1. Ensure the schema is deployed: `by_user_updated` and `by_title` indexes exist,
+1. Ensure the schema is deployed: `by_user_pinned_project_updated`,
+   `by_user_project_updated`, `by_user_updated`, and `by_title` indexes exist;
    `updatedAt` is required. If the required-`updatedAt` push is rejected for
    legacy rows, run `node scripts/backfill-chat-updated-at.mjs` first (it is
    idempotent; `chats.create` has always set `updatedAt`, so this is normally a
@@ -161,14 +166,14 @@ the flag off, behavior is identical to today. The rollout flips it on.
 > Same constraint as Section C: requires the deployed environment + dashboard +
 > traffic. Not fabricated here.
 
-| Field | Value | Notes |
-| --- | --- | --- |
-| Capture date | _pending_ | |
-| `chats.getForCurrentUser` calls | _pending_ | expect → 0 once flag on (path skipped) |
-| `chats.listForCurrentUserPaginated` — invalidation re-runs | _pending_ | O(window), not O(all chats) |
-| `chats.getPinnedForCurrentUser` calls | _pending_ | small, pinned only |
-| Per-turn sidebar invalidation cost | _pending_ | window re-read, not whole collection |
-| Writes to an **old** (out-of-window) chat invalidate the sidebar? | _pending_ | expect **no** |
+| Field                                                             | Value     | Notes                                  |
+| ----------------------------------------------------------------- | --------- | -------------------------------------- |
+| Capture date                                                      | _pending_ |                                        |
+| `chats.getForCurrentUser` calls                                   | _pending_ | expect → 0 once flag on (path skipped) |
+| `chats.getRecentWindowForCurrentUser` — invalidation re-runs      | _pending_ | O(window), not O(all chats)            |
+| `chats.getPinnedForCurrentUser` calls                             | _pending_ | small, non-project pinned only         |
+| Per-turn sidebar invalidation cost                                | _pending_ | recent window + pinned read            |
+| Writes to an **old** (out-of-window) chat invalidate the sidebar? | _pending_ | expect **no**                          |
 
 Expected: the sidebar's per-invalidation read drops from O(all-chats) to
 O(window); writes to chats outside the window no longer invalidate the sidebar

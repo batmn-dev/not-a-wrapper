@@ -75,7 +75,11 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
   // Convex real-time query for messages. getForChat requires an owned chat, so
   // the Per-user subscription seam also gates it on Convex auth readiness —
   // avoiding a throw if the subscription opens before the JWT is synced.
-  const { data: convexMessages } = usePerUserQuery(
+  const {
+    data: convexMessages,
+    isAuthReady: canSubscribeToMessages,
+    isLoading: isMessagesLoading,
+  } = usePerUserQuery(
     api.messages.getForChat,
     isValidConvexId ? { chatId: chatId as Id<"chats"> } : "skip"
   )
@@ -88,13 +92,13 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
 
   // Convert Convex messages to AI SDK format
   const serverMessages: ExtendedUIMessage[] = useMemo(() => {
-    if (!convexMessages) return []
+    if (!canSubscribeToMessages || !convexMessages) return []
     return convexMessages.map((msg) =>
       durableStoredMessageToUiMessage(msg)
     ) as ExtendedUIMessage[]
-  }, [convexMessages])
+  }, [canSubscribeToMessages, convexMessages])
 
-  const isLoading = convexMessages === undefined && isValidConvexId
+  const isLoading = isValidConvexId && isMessagesLoading
 
   const subscribeToCachedMessages = useCallback(
     (listener: () => void) => {

@@ -43,39 +43,39 @@ each risky step.
 
 ## Verified facts (current state)
 
-| Fact | Evidence |
-| --- | --- |
-| User-message insert does **not** bump `chats.updatedAt` | `convex/chatRuntime.ts:474-513` writes the message's own `updatedAt` only |
-| Turn-start bump (keep) | `convex/chatRuntime.ts:1257` `patch(args.chatId, { updatedAt })` |
-| Completion bump (remove) | `convex/chatRuntime.ts:1460` `patch(run.chatId, { updatedAt })` |
-| `messages.add`/`addBatch` are live mutations (leave alone) | `lib/chat-store/messages/provider.tsx:84-85` |
-| History search matches **title only** | `app/components/history/utils.ts:45` |
-| Full-list consumers (break under bounding) | sidebar `app-sidebar.tsx:262`; search/browse `history-search-provider.tsx:36` + `drawer-history.tsx:102`; project `project-view.tsx:59`; `getChatById` callers `chat.tsx:42`, `button-new-chat.tsx:19`, `model-selector-header.tsx:26` |
-| `chats.getById` already exists (owner-checked) | `convex/chats.ts` |
-| `by_project` index already exists | `convex/schema.ts:86` |
-| No production data; schema narrowing pushes cleanly | ADR-0002; `PRELAUNCH_DISPOSABLE_DB=true` |
+| Fact                                                       | Evidence                                                                                                                                                                                                                               |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| User-message insert does **not** bump `chats.updatedAt`    | `convex/chatRuntime.ts:474-513` writes the message's own `updatedAt` only                                                                                                                                                              |
+| Turn-start bump (keep)                                     | `convex/chatRuntime.ts:1257` `patch(args.chatId, { updatedAt })`                                                                                                                                                                       |
+| Completion bump (remove)                                   | `convex/chatRuntime.ts:1460` `patch(run.chatId, { updatedAt })`                                                                                                                                                                        |
+| `messages.add`/`addBatch` are live mutations (leave alone) | `lib/chat-store/messages/provider.tsx:84-85`                                                                                                                                                                                           |
+| History search matches **title only**                      | `app/components/history/utils.ts:45`                                                                                                                                                                                                   |
+| Full-list consumers (break under bounding)                 | sidebar `app-sidebar.tsx:262`; search/browse `history-search-provider.tsx:36` + `drawer-history.tsx:102`; project `project-view.tsx:59`; `getChatById` callers `chat.tsx:42`, `button-new-chat.tsx:19`, `model-selector-header.tsx:26` |
+| `chats.getById` already exists (owner-checked)             | `convex/chats.ts`                                                                                                                                                                                                                      |
+| `by_project` index already exists                          | `convex/schema.ts:86`                                                                                                                                                                                                                  |
+| No production data; schema narrowing pushes cleanly        | ADR-0002; `PRELAUNCH_DISPOSABLE_DB=true`                                                                                                                                                                                               |
 
 ## Commit overview
 
-| # | Tier | Commit | Risk | Gate before next |
-| --- | --- | --- | --- | --- |
-| 1 | 1 | Remove the run-complete `chats.updatedAt` bump | low | verify 2→1 bump/turn |
-| 2 | gate | Record the Tier-1 measurement; decide on Tier 2 | none | **STOP** — measurement |
-| 3 | 2 | Server title search + `SearchProvider` interface | med | search finds out-of-window chats |
-| 4 | 2 | Repoint history drawer (search + browse) onto its own reads | med | full history reachable off `useChats()` |
-| 5 | 2 | `by_user_updated` index + `updatedAt` required + backfill | med | index has no null keys |
-| 6 | 2 | `useChat(chatId)` hook; migrate `getChatById` call sites | med | deep-link to old chat resolves |
-| 7 | 2 | Dedicated project-chats query; migrate project view | low–med | old project chats visible |
-| 8 | 2 | Paginate sidebar + pinned split (behind flag) | high | flag-off == today; flag-on verified |
-| 9 | 2 | Flip flag on staging→prod; record post-fix measurement | med | dashboard confirms drop |
+| #   | Tier | Commit                                                      | Risk    | Gate before next                        |
+| --- | ---- | ----------------------------------------------------------- | ------- | --------------------------------------- |
+| 1   | 1    | Remove the run-complete `chats.updatedAt` bump              | low     | verify 2→1 bump/turn                    |
+| 2   | gate | Record the Tier-1 measurement; decide on Tier 2             | none    | **STOP** — measurement                  |
+| 3   | 2    | Server title search + `SearchProvider` interface            | med     | search finds out-of-window chats        |
+| 4   | 2    | Repoint history drawer (search + browse) onto its own reads | med     | full history reachable off `useChats()` |
+| 5   | 2    | `by_user_updated` index + `updatedAt` required + backfill   | med     | index has no null keys                  |
+| 6   | 2    | `useChat(chatId)` hook; migrate `getChatById` call sites    | med     | deep-link to old chat resolves          |
+| 7   | 2    | Dedicated project-chats query; migrate project view         | low–med | old project chats visible               |
+| 8   | 2    | Paginate sidebar + pinned split (behind flag)               | high    | flag-off == today; flag-on verified     |
+| 9   | 2    | Flip flag on staging→prod; record post-fix measurement      | med     | dashboard confirms drop                 |
 
 > Ordering is load-bearing. Commits 3–7 are **prerequisites** that each remove one
 > full-list dependency; commit 8 is the only one that bounds the list, and it must
 > not land before 3–7 or a surface silently shrinks to the window.
 >
 > **Execution-order correction (applied during implementation):** commit 4's
-> paginated browse read is a `usePaginatedQuery` over `by_user_updated`, an index
-> not created until commit 5. So **commit 5 is executed before commit 4** — order
+> paginated browse read is a `usePaginatedQuery` over a recency index first
+> created in commit 5. So **commit 5 is executed before commit 4** — order
 > `3 → 5 → 4 → 6 → 7 → 8 → 9`. Both remain prerequisites that land before the
 > sidebar is bounded (commit 8), so the load-bearing invariant holds; only the
 > two adjacent prerequisites swap. Commit numbers below are kept as identities.
@@ -101,6 +101,7 @@ start time," which is correct for ordering (the client also bumps optimistically
 via `bumpChat`).
 
 **Files / change.**
+
 - `convex/chatRuntime.ts:1460` — delete the single line
   `await ctx.db.patch(run.chatId, { updatedAt: now })` in the
   `markGenerationRunCompleted` path. **Keep `1257`.** Do **not** touch
@@ -108,6 +109,7 @@ via `bumpChat`).
   edit bump at `chatRuntime.ts:775`.
 
 **Verification.**
+
 - `bun run typecheck && bun run lint && bun run test`
 - Lean test: in `convex/chatRuntime.test.ts`, capture the chat's `updatedAt`
   before `markGenerationRunCompleted*`, assert it is **unchanged** after (and that
@@ -120,6 +122,7 @@ via `bumpChat`).
   invalidations per turn drop from ~2 → ~1.
 
 **Quality review (before commit 2).**
+
 - No consumer reads `updatedAt` as completion time (sidebar relative timestamps,
   if any, now read send time — acceptable, documented).
 - Regenerate / edit / branch-select still re-order as expected (they retain their
@@ -137,6 +140,7 @@ measure-before-building discipline as ADR-0004.
 **Files / change.** Docs-only:
 `docs/measurements/chat-list-invalidations.md` recording, after commit 1 is
 deployed:
+
 - date, sample (messages sent, duration);
 - `chats.getForCurrentUser` call count split into **initial-subscribe vs
   invalidation re-runs**;
@@ -166,6 +170,7 @@ complete, shippable unit).
 table, behind an interface so the UI stops holding "the full array."
 
 **Files / change.**
+
 - `convex/schema.ts` — add a `searchIndex("by_title", { searchField: "title", filterFields: ["userId"] })` to the `chats` table (search is title-only, verified).
 - `convex/chats.ts` — `searchByTitle` (`maybeAuthQuery`): `withSearchIndex` filtered to `ctx.user._id`, returns matches; empty/short query returns `[]`.
 - `app/components/history/search-provider-interface.ts` (new) — a `SearchProvider`
@@ -173,6 +178,7 @@ table, behind an interface so the UI stops holding "the full array."
   `searchByTitle` **only while the search UI is open** (`usePerUserQuery(..., open ? { term } : "skip")`), debounced.
 
 **Verification.**
+
 - `bun run typecheck && bun run lint && bun run test`
 - Manual: search returns chats by title via the server; the subscription is
   **absent** when the search UI is closed (Convex dashboard / `"skip"`).
@@ -180,6 +186,7 @@ table, behind an interface so the UI stops holding "the full array."
   outside the future recent window). This is the precondition for commit 8.
 
 **Quality review (before commit 4).**
+
 - Subscription lifecycle: opens on search-open, drops on close (lean test mocking
   the open/closed arg → asserts `"skip"` when closed).
 - Search scope confirmed title-only; if product later wants message-content
@@ -192,19 +199,21 @@ table, behind an interface so the UI stops holding "the full array."
 ### Commit 4 — Repoint the history drawer (search **and** browse-all) onto its own reads
 
 > Executed **after** commit 5 (see the execution-order correction above): the
-> paginated browse read depends on the `by_user_updated` index, which commit 5
-> lands first.
+> paginated browse read depends on a recency index, which commit 5 lands first.
 
 **Goal.** Remove the history surface's dependency on `useChats().chats`. The
 drawer has two modes and **both** read the full list today.
 
 **Files / change.**
+
 - `app/components/history/history-search-provider.tsx:36` — stop passing
   `useChats().chats` as the corpus.
 - Search mode → `SearchProvider.results` (commit 3).
 - Browse mode (empty query, date-grouped) → its own **paginated browse read**
-  (`usePaginatedQuery` over `by_user_updated`, loaded only while the drawer is
-  open, load-more on scroll). `buildChatHistoryView`
+  (`usePaginatedQuery` over `by_user_project_updated`, loaded only while the
+  drawer is open, load-more on scroll). The read excludes project chats at the
+  index level because browse mode does not render them; title search and project
+  pages still reach project chats through their own reads. `buildChatHistoryView`
   (`app/components/history/utils.ts`) keeps grouping; only its input source
   changes.
 - `drawer-history.tsx` / `desktop-search-modal.tsx` consume from the provider.
@@ -212,6 +221,7 @@ drawer has two modes and **both** read the full list today.
   (id-keyed overlay), not the sidebar's.
 
 **Verification.**
+
 - Manual: open history → browse shows full history grouped by date (scroll loads
   more); search finds old chats; edit-title / delete in the drawer reflect
   immediately.
@@ -219,6 +229,7 @@ drawer has two modes and **both** read the full list today.
   grouping input shape changed (it should not; keep tests lean).
 
 **Quality review (before commit 5).**
+
 - The history drawer no longer references `useChats().chats`. Grep to confirm.
 - Browse + search both reach chats that will be outside the recent window.
 
@@ -229,14 +240,16 @@ drawer has two modes and **both** read the full list today.
 ### Commit 5 — `by_user_updated` index, `updatedAt` required, backfill
 
 > Executed **before** commit 4 (see the execution-order correction above): commit
-> 4's paginated browse read consumes the `by_user_updated` index added here.
+> 4's paginated browse read consumes a recency index added here.
 
 **Goal.** An index that orders the sidebar by recency with no null keys.
 
 **Files / change.**
-- `convex/schema.ts` — add `.index("by_user_updated", ["userId", "updatedAt"])`;
+
+- `convex/schema.ts` — add `.index("by_user_updated", ["userId", "updatedAt"])`
+  and `.index("by_user_project_updated", ["userId", "projectId", "updatedAt"])`;
   change `updatedAt: v.optional(v.number())` → `v.number()` (required) so the
-  index never sorts null keys to the tail (which would hide chats).
+  recency indexes never sort null keys to the tail (which would hide chats).
 - Audit every chat write sets `updatedAt`: `create` (sets it), `updateTitle`,
   `updateModel`, `togglePin`, `makePublic`, `chatRuntime:1257`. All do.
 - `scripts/backfill-chat-updated-at.mjs` (or a Convex migration) —
@@ -244,11 +257,13 @@ drawer has two modes and **both** read the full list today.
   uses the index.
 
 **Verification.**
+
 - `bunx convex dev` schema push succeeds (narrowing is clean — no prod data, ADR-0002).
-- Test: create a chat → `updatedAt` set; the `by_user_updated` query returns no
-  null-keyed rows.
+- Test: create a chat → `updatedAt` set; recency queries return no null-keyed
+  rows.
 
 **Quality review (before commit 6).**
+
 - ADR-0002 caveat noted: the expand/migrate/contract guard catches field
   **removals** only, not this narrowing — safe now because the DB is disposable
   (`PRELAUNCH_DISPOSABLE_DB=true`). If that changes, this step needs a backfill +
@@ -264,6 +279,7 @@ drawer has two modes and **both** read the full list today.
 (fixes a latent deep-link gap too).
 
 **Files / change.**
+
 - `lib/chat-store/chats/use-chat.ts` (new) — `useChat(chatId)`: returns the
   in-window chat synchronously from `useChats().getChatById` if present, else
   falls back to `usePerUserQuery(api.chats.getById, { chatId })`. Exposes
@@ -273,6 +289,7 @@ drawer has two modes and **both** read the full list today.
   for out-of-window chats.
 
 **Verification.**
+
 - Manual: deep-link `/c/<oldChatId>` (a chat not in the recent window) → header,
   new-chat button, and model selector all resolve it; an in-window chat resolves
   with no loading flash.
@@ -280,6 +297,7 @@ drawer has two modes and **both** read the full list today.
   `api.chats.getById` for an id not in the list (mock the query).
 
 **Quality review (before commit 7).**
+
 - All three call sites tolerate `chat === undefined` during the fallback load.
 - No remaining synchronous `getChatById` assumptions in those files.
 
@@ -292,6 +310,7 @@ drawer has two modes and **both** read the full list today.
 **Goal.** A project shows **all** its chats, not just those in the recent window.
 
 **Files / change.**
+
 - `convex/chats.ts` — `getProjectChatsForCurrentUser(projectId)`
   (owner-checked via `ownedProjectQuery` or equivalent) over the existing
   `by_project` index.
@@ -300,10 +319,12 @@ drawer has two modes and **both** read the full list today.
   query.
 
 **Verification.**
+
 - Manual: a project with chats older than the recent window shows every one.
 - `bun run typecheck && lint && test`.
 
 **Quality review (before commit 8).**
+
 - Project view no longer reads `useChats().chats`. Grep to confirm.
 
 **Risk:** low–medium. **Rollback:** revert to the client-side filter.
@@ -316,9 +337,11 @@ drawer has two modes and **both** read the full list today.
 3–7 moved every full-history consumer onto its own read.**
 
 **Files / change.**
+
 - `convex/chats.ts` — paginated recent read over `by_user_updated`
   (`paginationOpts`, `order("desc")`), excluding pinned; a separate
-  `getPinnedForCurrentUser` over `by_user_pinned` (small, live).
+  `getPinnedForCurrentUser` over the sidebar composite index prefix
+  (small, live, non-project pinned only).
 - `lib/chat-store/chats/provider.tsx`:
   - Recent window via `usePaginatedQuery`; pinned via the separate read.
   - `nonPinnedChats = window.filter(c => !c.pinned && !c.project_id)`; pinned
@@ -340,6 +363,7 @@ drawer has two modes and **both** read the full list today.
   the flag is on, so the sidebar can never be bounded without search-swap present.
 
 **Verification.**
+
 - Flag **off:** app behaves exactly as today. `bun run typecheck && lint && test`.
 - Flag **on** (staging): sidebar shows pinned + recent window; scroll loads more;
   send a message → chat re-orders correctly; optimistic create / delete / pin work
@@ -350,6 +374,7 @@ drawer has two modes and **both** read the full list today.
   page.
 
 **Quality review (before commit 9).**
+
 - Pagination composes with the optimistic overlay without dropping in-window ops.
 - No surface reads `useChats().chats` expecting the full list (grep: sidebar,
   history, project, getById callers all migrated).
@@ -364,6 +389,7 @@ revert the commit if needed.
 **Goal.** Turn the bounded sidebar on safely and prove the win.
 
 **Files / change.**
+
 - Flip `ENABLE_PAGINATED_SIDEBAR` true on staging, soak, then production.
 - Append to `docs/measurements/chat-list-invalidations.md`: post-Tier-2
   `chats.*` call counts (expect O(window) per invalidation; writes to old chats no

@@ -44,6 +44,8 @@ const persistMocks = vi.hoisted(() => {
 })
 
 const convexMocks = vi.hoisted(() => ({
+  isAuthenticated: true,
+  isAuthLoading: false,
   queryValue: undefined as unknown,
   mutationFn: vi.fn(),
   useQuery: vi.fn(),
@@ -60,8 +62,11 @@ vi.mock("../persist", () => ({
 
 vi.mock("convex/react", () => ({
   // usePerUserQuery (the Per-user subscription seam) reads useConvexAuth to gate
-  // the subscription; a server-backed chat implies an authenticated caller.
-  useConvexAuth: () => ({ isAuthenticated: true, isLoading: false }),
+  // the subscription before exposing query loading/data to provider call sites.
+  useConvexAuth: () => ({
+    isAuthenticated: convexMocks.isAuthenticated,
+    isLoading: convexMocks.isAuthLoading,
+  }),
   useMutation: () => convexMocks.mutationFn,
   useQuery: (...args: unknown[]) => {
     convexMocks.useQuery(...args)
@@ -118,6 +123,8 @@ describe("MessagesProvider local chat hydration", () => {
     }
     persistMocks.readFromIndexedDB.mockClear()
     persistMocks.writeToIndexedDB.mockClear()
+    convexMocks.isAuthenticated = true
+    convexMocks.isAuthLoading = false
     convexMocks.queryValue = undefined
     convexMocks.mutationFn.mockReset()
     convexMocks.useQuery.mockClear()
@@ -183,6 +190,22 @@ describe("MessagesProvider local chat hydration", () => {
       "assistant-1",
     ])
     expect(capture.current?.messages[1]?.createdAt).toBeInstanceOf(Date)
+    expect(convexMocks.useQuery).toHaveBeenCalledWith(expect.anything(), "skip")
+  })
+
+  it("does not keep an unauthenticated server chat loading after the auth gate settles", async () => {
+    convexMocks.isAuthenticated = false
+    convexMocks.isAuthLoading = false
+    sessionMocks.chatId = "server-thread"
+    const capture: { current: ReturnType<typeof useMessages> | null } = {
+      current: null,
+    }
+
+    renderProvider(capture)
+    await flushPromises()
+
+    expect(capture.current?.isLoading).toBe(false)
+    expect(capture.current?.messages).toEqual([])
     expect(convexMocks.useQuery).toHaveBeenCalledWith(expect.anything(), "skip")
   })
 

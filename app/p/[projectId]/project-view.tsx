@@ -67,9 +67,11 @@ export function ProjectView({ projectId }: ProjectViewProps) {
     { projectId: projectId as Id<"projects"> }
   )
   const chats = useMemo(
-    () => (projectChats ?? []).map(convexChatToChat),
+    () => projectChats?.map(convexChatToChat),
     [projectChats]
   )
+  const hasProjectChats = (chats?.length ?? 0) > 0
+  const shouldShowEmptyState = chats !== undefined && chats.length === 0
   const isAuthenticated = useMemo(() => !!user?.id, [user?.id])
 
   const setEnableSearch = useCallback(
@@ -213,7 +215,7 @@ export function ProjectView({ projectId }: ProjectViewProps) {
     <div
       className={cn(
         "relative flex h-full w-full flex-col items-center overflow-x-hidden overflow-y-auto",
-        chats.length === 0 ? "justify-center pt-0" : "justify-start pt-32"
+        hasProjectChats ? "justify-start pt-32" : "justify-center pt-0"
       )}
     >
       <motion.div
@@ -254,7 +256,7 @@ export function ProjectView({ projectId }: ProjectViewProps) {
         <ChatInput {...chatInputProps} />
       </motion.div>
 
-      {chats.length > 0 ? (
+      {chats !== undefined && chats.length > 0 ? (
         <div className="mx-auto w-full max-w-3xl px-4 pt-6 pb-20">
           <h2 className="text-muted-foreground mb-3 text-sm font-medium">
             Recent chats
@@ -269,13 +271,13 @@ export function ProjectView({ projectId }: ProjectViewProps) {
             ))}
           </div>
         </div>
-      ) : (
+      ) : shouldShowEmptyState ? (
         <div className="mx-auto w-full max-w-3xl px-4 pt-6 pb-20">
           <h2 className="text-muted-foreground mb-3 text-sm font-medium">
             No chats yet
           </h2>
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

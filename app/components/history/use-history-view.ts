@@ -27,9 +27,9 @@ export type HistoryView = {
 /**
  * The history surface's own reads, replacing its dependency on
  * `useChats().chats`. Search mode uses the server title search
- * (`useTitleSearchProvider`); browse mode uses the paginated `by_user_updated`
- * read — both subscribed only while the drawer is open, so the history surface
- * reaches the full history without holding the live full list.
+ * (`useTitleSearchProvider`); browse mode uses the paginated non-project
+ * recency read — both subscribed only while the drawer is open, so the history
+ * surface reaches the browseable history without holding the live full list.
  *
  * See docs/sidebar-chat-list-streaming-plan.md commit 4.
  */
@@ -39,7 +39,7 @@ export function useHistoryView(open: boolean): HistoryView {
 
   const browse = usePerUserPaginatedQuery(
     api.chats.listForCurrentUserPaginated,
-    open ? {} : "skip",
+    open && !isSearching ? {} : "skip",
     { initialNumItems: BROWSE_PAGE_SIZE }
   )
 
@@ -75,10 +75,10 @@ export function useHistoryView(open: boolean): HistoryView {
 }
 
 /**
- * Call `onLoadMore` when the scroll container nears its bottom. Container-
- * agnostic: pass the viewport ref (drawer ScrollArea viewport, modal overflow
- * div). `onLoadMore` should be referentially stable (the effect re-binds when it
- * or `canLoadMore` changes).
+ * Call `onLoadMore` when the scroll container nears its bottom, including an
+ * eager check for underfilled first pages. Container-agnostic: pass the viewport
+ * ref (drawer ScrollArea viewport, modal overflow div). `onLoadMore` should be
+ * referentially stable (the effect re-binds when it or `canLoadMore` changes).
  */
 export function useInfiniteScroll(
   viewportRef: RefObject<HTMLElement | null>,
@@ -89,13 +89,66 @@ export function useInfiniteScroll(
     const viewport = viewportRef.current
     if (!viewport || !canLoadMore) return
 
-    const handleScroll = () => {
-      const remaining =
-        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
-      if (remaining < LOAD_MORE_THRESHOLD_PX) onLoadMore()
+    let lastLoadSnapshot: string | null = null
+
+    const loadMoreOnceForCurrentSnapshot = () => {
+      const snapshot = [
+        viewport.scrollHeight,
+        viewport.scrollTop,
+        viewport.clientHeight,
+      ].join(":")
+      if (snapshot === lastLoadSnapshot) return
+
+      lastLoadSnapshot = snapshot
+      onLoadMore()
     }
 
-    viewport.addEventListener("scroll", handleScroll, { passive: true })
-    return () => viewport.removeEventListener("scroll", handleScroll)
+    const maybeLoadMoreOnScroll = () => {
+      const remaining =
+        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
+      if (remaining >= LOAD_MORE_THRESHOLD_PX) return
+
+      loadMoreOnceForCurrentSnapshot()
+    }
+
+    const maybeLoadMoreIfUnderfilled = () => {
+      if (viewport.scrollHeight > viewport.clientHeight) return
+
+      loadMoreOnceForCurrentSnapshot()
+    }
+
+    const observeContent = (resizeObserver: ResizeObserver) => {
+      resizeObserver.observe(viewport)
+      for (const child of Array.from(viewport.children)) {
+        resizeObserver.observe(child)
+      }
+    }
+
+    maybeLoadMoreIfUnderfilled()
+
+    viewport.addEventListener("scroll", maybeLoadMoreOnScroll, {
+      passive: true,
+    })
+
+    const resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(maybeLoadMoreIfUnderfilled)
+    if (resizeObserver) observeContent(resizeObserver)
+
+    const mutationObserver =
+      typeof MutationObserver === "undefined"
+        ? null
+        : new MutationObserver(() => {
+            if (resizeObserver) observeContent(resizeObserver)
+            maybeLoadMoreIfUnderfilled()
+          })
+    mutationObserver?.observe(viewport, { childList: true })
+
+    return () => {
+      viewport.removeEventListener("scroll", maybeLoadMoreOnScroll)
+      resizeObserver?.disconnect()
+      mutationObserver?.disconnect()
+    }
   }, [viewportRef, canLoadMore, onLoadMore])
 }

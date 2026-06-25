@@ -28,9 +28,12 @@ type McpToolApprovalsProps = {
  * connection or the first chat request that discovers tools.
  */
 export function McpToolApprovals({ serverId }: McpToolApprovalsProps) {
-  const { data } = usePerUserQuery(api.mcpToolApprovals.listByServer, {
-    serverId,
-  })
+  const { data, isLoading } = usePerUserQuery(
+    api.mcpToolApprovals.listByServer,
+    {
+      serverId,
+    }
+  )
   const approvals = data ?? []
   const toggleApproval = useMutation(api.mcpToolApprovals.toggleApproval)
 
@@ -41,6 +44,10 @@ export function McpToolApprovals({ serverId }: McpToolApprovalsProps) {
       console.error("Failed to update tool approval:", error)
       toast({ title: "Failed to update tool approval", status: "error" })
     }
+  }
+
+  if (isLoading) {
+    return null
   }
 
   if (approvals.length === 0) {
