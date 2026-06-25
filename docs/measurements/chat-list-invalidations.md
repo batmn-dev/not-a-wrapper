@@ -131,3 +131,45 @@ Decision rule for the human, once Section C is filled in:
   (the high-risk sidebar swap in commit 8).
 
 Tier 2 must not begin until a human reviews the Section C capture and approves.
+
+---
+
+## E. Tier 2 — rollout + post-fix measurement (commit 9)
+
+Tier 2 shipped behind `ENABLE_PAGINATED_SIDEBAR` (commits 3–8, ADR-0005). With
+the flag off, behavior is identical to today. The rollout flips it on.
+
+### Rollout runbook (operator, deploy-time)
+
+1. Ensure the schema is deployed: `by_user_updated` and `by_title` indexes exist,
+   `updatedAt` is required. If the required-`updatedAt` push is rejected for
+   legacy rows, run `node scripts/backfill-chat-updated-at.mjs` first (it is
+   idempotent; `chats.create` has always set `updatedAt`, so this is normally a
+   no-op).
+2. Set `NEXT_PUBLIC_ENABLE_PAGINATED_SIDEBAR=true` on **staging**. Verify:
+   sidebar shows pinned + recent window; scroll loads more; send a message →
+   the chat re-orders once; optimistic create / delete / pin work for in-window
+   chats; history search, browse-all, project view, and deep-links still reach
+   chats outside the window.
+3. Soak on staging, then set the same env var on **production**.
+4. Capture the post-fix numbers (Section F) and confirm the drop.
+5. Follow-up ticket: remove `ENABLE_PAGINATED_SIDEBAR` and the legacy
+   `getForCurrentUser` sidebar path once stable.
+
+### F. Post-fix dashboard capture (pending — operator, post-rollout)
+
+> Same constraint as Section C: requires the deployed environment + dashboard +
+> traffic. Not fabricated here.
+
+| Field | Value | Notes |
+| --- | --- | --- |
+| Capture date | _pending_ | |
+| `chats.getForCurrentUser` calls | _pending_ | expect → 0 once flag on (path skipped) |
+| `chats.listForCurrentUserPaginated` — invalidation re-runs | _pending_ | O(window), not O(all chats) |
+| `chats.getPinnedForCurrentUser` calls | _pending_ | small, pinned only |
+| Per-turn sidebar invalidation cost | _pending_ | window re-read, not whole collection |
+| Writes to an **old** (out-of-window) chat invalidate the sidebar? | _pending_ | expect **no** |
+
+Expected: the sidebar's per-invalidation read drops from O(all-chats) to
+O(window); writes to chats outside the window no longer invalidate the sidebar
+subscription at all. Record the before (Section A/B) → after delta here.

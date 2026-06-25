@@ -46,6 +46,14 @@ _Avoid_: metadata bag, ad-hoc cast, `metadata as Record`
 The forward (client→server) staleness guard for a chat turn — a `{ expectedVisibleMessageCount, tailMessageId? }` descriptor the client derives from the rendered selected path and sends with a new-message turn; the backend validates it before mutating and rejects a turn raced against a changed selected path. It is the counterpart to the branch projection (the backward, server→client half) and is unrelated to it despite the shared name; edits and regenerations carry their own count guard (`expectedChatVersion`) instead of the token.
 _Avoid_: conflating with branch projection (that's the backward half), version (overloaded)
 
+**Chat list window**:
+The bounded, recency-ordered slice of a user's chats the **sidebar** subscribes to — a `usePaginatedQuery` over `by_user_updated` plus a small live pinned read (`by_user_pinned`), behind `ENABLE_PAGINATED_SIDEBAR` (ADR-0005). It is deliberately NOT the full chat list: a chat write invalidates only the window, not the whole `by_user` collection. The client `useChats()` store narrows to this window; the id-keyed optimistic overlay applies to it, so an op on a chat outside the window is a no-op in the sidebar (the surface that shows that chat reflects it via its own read). `isLoading` from the store means "first window page ready," not "all chats loaded." Per-chat access outside the window goes through `useChat(chatId)` (a targeted `chats.getById` fallback), and `chats.updatedAt` is the single activity field the window orders by — one bump per durable turn, at turn start.
+_Avoid_: the full chat list, `getForCurrentUser` as the sidebar source (that is the pre-ADR-0005 unbounded read), recent chats (ambiguous)
+
+**History search**:
+Full-history reach that does NOT go through the **chat list window** — the surfaces that must see chats outside the bounded sidebar, each on its own on-demand read: title search (`chats.searchByTitle` over a `by_title` search index, subscribed only while the search UI is open, behind a `SearchProvider` that exposes `query → results`), browse-all (a paginated `by_user_updated` read in the history drawer), the project view (`getProjectChatsForCurrentUser` over `by_project`), and deep-links (`useChat` → `chats.getById`). Search is title-only by design; message-content search would be a separate index on `messages`. These reads are what make bounding the sidebar safe — they each own full-history access rather than borrowing the sidebar's list.
+_Avoid_: searching the sidebar window (it is bounded; search must hit its own server read), the full array (the search provider exposes results, never the corpus)
+
 ### Tools
 
 **Tool runtime**:
