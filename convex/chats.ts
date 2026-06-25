@@ -8,6 +8,10 @@ import {
   readableChatQuery,
 } from "./lib/authedFunctions"
 
+// Upper bound on title-search results. The history search UI renders a flat
+// list, so a bounded read is plenty and keeps the search subscription cheap.
+const CHAT_SEARCH_RESULT_LIMIT = 50
+
 /**
  * Get all chats for the current user
  */
@@ -33,6 +37,36 @@ export const getForCurrentUser = maybeAuthQuery({
       const bTime = b.updatedAt ?? b._creationTime
       return bTime - aTime
     })
+  },
+})
+
+/**
+ * Title-only full-history search for the current user. Returns chats whose
+ * title matches `term`, scoped to the caller via the search index's `userId`
+ * filter field (so the search never ships another user's chats). A blank/empty
+ * term returns [] without touching the table. Bounded to
+ * CHAT_SEARCH_RESULT_LIMIT.
+ *
+ * This is the read that lets history search reach chats outside the bounded
+ * sidebar window — see docs/sidebar-chat-list-streaming-plan.md commit 3. Scope
+ * is title-only by design; message-content search would be a separate index on
+ * `messages` and is out of scope.
+ */
+export const searchByTitle = maybeAuthQuery({
+  args: { term: v.string() },
+  handler: async (ctx, { term }) => {
+    const user = ctx.user
+    if (!user) return []
+
+    const trimmed = term.trim()
+    if (trimmed.length === 0) return []
+
+    return await ctx.db
+      .query("chats")
+      .withSearchIndex("by_title", (q) =>
+        q.search("title", trimmed).eq("userId", user._id)
+      )
+      .take(CHAT_SEARCH_RESULT_LIMIT)
   },
 })
 

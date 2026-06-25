@@ -83,7 +83,14 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_pinned", ["userId", "pinned"])
-    .index("by_project", ["projectId"]),
+    .index("by_project", ["projectId"])
+    // Title-only full-history search, scoped per user via the userId filter
+    // field. Lets history search reach chats outside the bounded sidebar window
+    // (docs/sidebar-chat-list-streaming-plan.md commit 3).
+    .searchIndex("by_title", {
+      searchField: "title",
+      filterFields: ["userId"],
+    }),
 
   messages: defineTable({
     chatId: v.id("chats"),
