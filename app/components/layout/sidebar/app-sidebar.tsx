@@ -57,7 +57,7 @@ import {
 } from "@remixicon/react"
 import Link from "next/link"
 import { useParams, usePathname } from "next/navigation"
-import React, { useMemo, useRef } from "react"
+import React, { useEffect, useMemo, useRef } from "react"
 import { PopoverContentAuth } from "../../chat-input/popover-content-auth"
 import { useHistorySearch } from "../../history/history-search-provider"
 import { HistoryTrigger } from "../../history/history-trigger"
@@ -251,7 +251,7 @@ function MobileAppSidebarDrawer() {
 
 function useAppSidebarData() {
   const { isHistoryOpen } = useHistorySearch()
-  const { chats, pinnedChats, isLoading } = useChats()
+  const { chats, pinnedChats, isLoading, loadMore, canLoadMore } = useChats()
   const { user } = useUser()
   const params = useParams<{ chatId: string }>()
   const pathname = usePathname()
@@ -275,6 +275,8 @@ function useAppSidebarData() {
     nonPinnedChats,
     pinnedChats,
     user,
+    loadMore,
+    canLoadMore,
   }
 }
 
@@ -290,6 +292,23 @@ function SidebarExpandedNav({
   const scrollRef = useRef<HTMLElement>(null)
   // Zero-rerender scroll tracking via data attributes
   useScrollAttributes(scrollRef)
+
+  // Bounded sidebar (ENABLE_PAGINATED_SIDEBAR): load more window pages as the
+  // user nears the bottom. No-op when the flag is off (canLoadMore is false).
+  const { canLoadMore, loadMore } = data
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || !canLoadMore) return
+
+    const onScroll = () => {
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) {
+        loadMore()
+      }
+    }
+
+    el.addEventListener("scroll", onScroll, { passive: true })
+    return () => el.removeEventListener("scroll", onScroll)
+  }, [canLoadMore, loadMore])
 
   return (
     <>

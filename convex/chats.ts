@@ -43,6 +43,27 @@ export const getForCurrentUser = maybeAuthQuery({
 })
 
 /**
+ * The current user's pinned chats over the `by_user_pinned` index — a small,
+ * live read rendered as its own sidebar section alongside the paginated recency
+ * window (commit 8). Kept separate so pinned chats stay visible even when they
+ * fall outside the bounded window.
+ */
+export const getPinnedForCurrentUser = maybeAuthQuery({
+  args: {},
+  handler: async (ctx) => {
+    const user = ctx.user
+    if (!user) return []
+
+    return await ctx.db
+      .query("chats")
+      .withIndex("by_user_pinned", (q) =>
+        q.eq("userId", user._id).eq("pinned", true)
+      )
+      .collect()
+  },
+})
+
+/**
  * Recency-ordered paginated read of the current user's chats over the
  * `by_user_updated` index. Powers the history drawer's browse-all mode and (with
  * the pinned split) the bounded sidebar window — see
