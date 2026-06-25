@@ -72,6 +72,22 @@ each risky step.
 > Ordering is load-bearing. Commits 3–7 are **prerequisites** that each remove one
 > full-list dependency; commit 8 is the only one that bounds the list, and it must
 > not land before 3–7 or a surface silently shrinks to the window.
+>
+> **Execution-order correction (applied during implementation):** commit 4's
+> paginated browse read is a `usePaginatedQuery` over `by_user_updated`, an index
+> not created until commit 5. So **commit 5 is executed before commit 4** — order
+> `3 → 5 → 4 → 6 → 7 → 8 → 9`. Both remain prerequisites that land before the
+> sidebar is bounded (commit 8), so the load-bearing invariant holds; only the
+> two adjacent prerequisites swap. Commit numbers below are kept as identities.
+>
+> **Per-user paginated seam (applied during implementation):** ADR-0004's
+> `usePerUserQuery` wraps `useQuery` only, and the eslint ban does not cover
+> `usePaginatedQuery`. To keep the subscribe gate structural for the new paginated
+> reads (commits 4 and 8), a `usePerUserPaginatedQuery` wrapper is added to
+> `lib/convex/use-per-user-query.ts` (gated on `isConvexAuthenticated`, returns
+> `"skip"` until the JWT syncs) and the eslint `no-restricted-syntax` rule is
+> extended to also ban raw `usePaginatedQuery`. This implements ADR-0004 for
+> pagination rather than relitigating it.
 
 ---
 
@@ -175,6 +191,10 @@ table, behind an interface so the UI stops holding "the full array."
 
 ### Commit 4 — Repoint the history drawer (search **and** browse-all) onto its own reads
 
+> Executed **after** commit 5 (see the execution-order correction above): the
+> paginated browse read depends on the `by_user_updated` index, which commit 5
+> lands first.
+
 **Goal.** Remove the history surface's dependency on `useChats().chats`. The
 drawer has two modes and **both** read the full list today.
 
@@ -207,6 +227,9 @@ drawer has two modes and **both** read the full list today.
 ---
 
 ### Commit 5 — `by_user_updated` index, `updatedAt` required, backfill
+
+> Executed **before** commit 4 (see the execution-order correction above): commit
+> 4's paginated browse read consumes the `by_user_updated` index added here.
 
 **Goal.** An index that orders the sidebar by recency with no null keys.
 
