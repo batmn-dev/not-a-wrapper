@@ -22,10 +22,11 @@ import {
   type ReactNode,
 } from "react"
 import { HistoryAuthPrompt } from "./history-auth-prompt"
-import { buildChatHistoryView, type ChatGroup } from "./utils"
+import { useInfiniteScroll, type HistoryView } from "./use-history-view"
+import { type ChatGroup } from "./utils"
 
 type DesktopSearchModalProps = {
-  chatHistory: Chats[]
+  history: HistoryView
   currentChatId?: string | null
   isOpen: boolean
   onOpenChange: (open: boolean) => void
@@ -56,7 +57,7 @@ function getChatTitle(chat: Chats) {
 }
 
 export function DesktopSearchModal({
-  chatHistory,
+  history,
   currentChatId,
   isOpen,
   onOpenChange,
@@ -65,15 +66,14 @@ export function DesktopSearchModal({
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const [query, setQuery] = useState("")
+  const scrollRef = useRef<HTMLDivElement>(null)
   const [activeIndex, setActiveIndex] = useState(0)
 
-  // Single shared derivation: project chats are hidden while browsing but
-  // reachable by search (see buildChatHistoryView).
-  const view = useMemo(
-    () => buildChatHistoryView(chatHistory, query),
-    [chatHistory, query]
-  )
+  // Search results + browse groups come from the history surface's own reads
+  // (server search + paginated browse), not useChats().chats.
+  const { query, setQuery, view, loadMore, canLoadMore } = history
+
+  useInfiniteScroll(scrollRef, canLoadMore, loadMore)
 
   const visibleGroups = useMemo<ChatGroup[]>(() => {
     if (view.isSearching) {
@@ -119,8 +119,8 @@ export function DesktopSearchModal({
 
   const handleOpenChange = useCallback(
     (open: boolean) => {
+      // The provider clears the search term on close; reset local nav state.
       if (!open) {
-        setQuery("")
         setActiveIndex(0)
       }
 
@@ -250,7 +250,10 @@ export function DesktopSearchModal({
 
               <hr className="border-border" />
 
-              <div className="my-2 min-h-0 grow overflow-y-auto">
+              <div
+                ref={scrollRef}
+                className="my-2 min-h-0 grow overflow-y-auto"
+              >
                 <div
                   ref={listRef}
                   id={listboxId}

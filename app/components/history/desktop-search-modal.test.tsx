@@ -5,6 +5,8 @@ import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { DesktopSearchModal } from "./desktop-search-modal"
+import type { HistoryView } from "./use-history-view"
+import { buildChatHistoryView, type ChatHistoryView } from "./utils"
 
 const navigationMocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -81,7 +83,18 @@ describe("DesktopSearchModal", () => {
     navigationMocks.push.mockReset()
   })
 
-  function renderModal(chatHistory: Chats[]) {
+  function makeHistory(view: ChatHistoryView, query = ""): HistoryView {
+    return {
+      query,
+      setQuery: () => {},
+      view,
+      isLoading: false,
+      loadMore: () => {},
+      canLoadMore: false,
+    }
+  }
+
+  function renderModal(history: HistoryView) {
     container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
@@ -89,7 +102,7 @@ describe("DesktopSearchModal", () => {
     act(() => {
       root?.render(
         <DesktopSearchModal
-          chatHistory={chatHistory}
+          history={history}
           currentChatId={null}
           isOpen
           onOpenChange={() => {}}
@@ -99,36 +112,43 @@ describe("DesktopSearchModal", () => {
     })
   }
 
-  it("keeps project chats out of default browsing while preserving them in search", async () => {
-    renderModal([
-      makeChat({ id: "regular-chat", title: "Regular planning" }),
-      makeChat({
-        id: "project-chat",
-        title: "Project roadmap",
-        project_id: "project-1",
-      }),
-    ])
+  // The search-vs-browse logic now lives in buildChatHistoryView (covered in
+  // utils.test.ts) and the server title search; the modal just renders the view
+  // its history bundle hands it. These assert it renders both modes faithfully.
+  it("renders the browse view, omitting project chats hidden by grouping", () => {
+    const browseView = buildChatHistoryView(
+      [
+        makeChat({ id: "regular-chat", title: "Regular planning" }),
+        makeChat({
+          id: "project-chat",
+          title: "Project roadmap",
+          project_id: "project-1",
+        }),
+      ],
+      ""
+    )
+
+    renderModal(makeHistory(browseView))
 
     expect(document.body.textContent).toContain("Regular planning")
     expect(document.body.textContent).not.toContain("Project roadmap")
+  })
 
-    const input = document.body.querySelector(
-      'input[aria-label="Search chats"]'
-    ) as HTMLInputElement | null
-
-    if (!input) {
-      throw new Error("Search input was not mounted")
+  it("renders server search results, including project chats", () => {
+    const searchView: ChatHistoryView = {
+      isSearching: true,
+      results: [
+        makeChat({
+          id: "project-chat",
+          title: "Project roadmap",
+          project_id: "project-1",
+        }),
+      ],
+      pinned: [],
+      groups: [],
     }
 
-    await act(async () => {
-      const setInputValue = Object.getOwnPropertyDescriptor(
-        HTMLInputElement.prototype,
-        "value"
-      )?.set
-
-      setInputValue?.call(input, "roadmap")
-      input.dispatchEvent(new Event("input", { bubbles: true }))
-    })
+    renderModal(makeHistory(searchView, "roadmap"))
 
     expect(document.body.textContent).toContain("Project roadmap")
     expect(document.body.textContent).not.toContain("No chat history found.")

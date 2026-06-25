@@ -23,8 +23,12 @@
 
 import {
   useConvexAuth,
+  usePaginatedQuery,
   useQuery,
   type OptionalRestArgsOrSkip,
+  type PaginatedQueryArgs,
+  type PaginatedQueryReference,
+  type UsePaginatedQueryReturnType,
 } from "convex/react"
 import type { FunctionReference, FunctionReturnType } from "convex/server"
 
@@ -62,6 +66,29 @@ export function usePerUserQuery<Query extends QueryRef>(
       isAuthLoading ||
       (isAuthenticated && !callerSkipped && data === undefined),
   }
+}
+
+/**
+ * Subscribe to a per-user *paginated* Convex query, gated on Convex auth
+ * readiness — the `usePaginatedQuery` counterpart to `usePerUserQuery`. Returns
+ * `"skip"` to Convex (no subscription, no pages) until the caller is
+ * authenticated, so signed-out and mid-auth-sync callers never open a paginated
+ * subscription. Callers may still pass `"skip"` themselves (e.g. the drawer is
+ * closed); the gate is the conjunction. A `no-restricted-syntax` lint rule bans
+ * importing `usePaginatedQuery` from `convex/react` outside this module, just as
+ * it does `useQuery`. See ADR-0004.
+ */
+export function usePerUserPaginatedQuery<
+  Query extends PaginatedQueryReference,
+>(
+  query: Query,
+  args: PaginatedQueryArgs<Query> | "skip",
+  options: { initialNumItems: number }
+): UsePaginatedQueryReturnType<Query> {
+  const { isAuthenticated } = useConvexAuth()
+  const gatedArgs =
+    isAuthenticated && args !== "skip" ? args : ("skip" as const)
+  return usePaginatedQuery(query, gatedArgs, options)
 }
 
 /**

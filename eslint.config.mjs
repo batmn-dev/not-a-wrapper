@@ -97,6 +97,12 @@ const eslintConfig = [
           message:
             "Do not import useQuery from convex/react directly. Use usePerUserQuery (or usePublicQuery for share-link reads) from @/lib/convex/use-per-user-query, which owns the isConvexAuthenticated subscribe gate. See ADR-0004.",
         },
+        {
+          selector:
+            "ImportDeclaration[source.value='convex/react'] > ImportSpecifier[imported.name='usePaginatedQuery']",
+          message:
+            "Do not import usePaginatedQuery from convex/react directly. Use usePerUserPaginatedQuery from @/lib/convex/use-per-user-query, which owns the isConvexAuthenticated subscribe gate. See ADR-0004.",
+        },
       ],
     },
   },

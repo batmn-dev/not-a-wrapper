@@ -17,6 +17,7 @@ import {
 } from "react"
 import { DesktopSearchModal } from "./desktop-search-modal"
 import { DrawerHistory } from "./drawer-history"
+import { useHistoryView } from "./use-history-view"
 
 type HistorySearchContextValue = {
   openHistory: () => void
@@ -33,11 +34,16 @@ export function HistorySearchProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false)
   const isMobile = useBreakpoint(768)
   const router = useRouter()
-  const { chats, updateTitle, deleteChat } = useChats()
+  const { updateTitle, deleteChat } = useChats()
   const { deleteMessages } = useMessages()
   const { chatId } = useChatSession()
   const { user } = useUser()
   const isAuthenticated = !!user
+
+  // The history surface reads its own data (server search + paginated browse),
+  // not useChats().chats, so it reaches the full history once the sidebar is
+  // bounded. See docs/sidebar-chat-list-streaming-plan.md commit 4.
+  const history = useHistoryView(isOpen)
 
   const openHistory = useCallback(() => setIsOpen(true), [])
   const closeHistory = useCallback(() => setIsOpen(false), [])
@@ -86,7 +92,7 @@ export function HistorySearchProvider({ children }: { children: ReactNode }) {
       {children}
       {isMobile ? (
         <DrawerHistory
-          chatHistory={chats}
+          history={history}
           onSaveEdit={handleSaveEdit}
           onConfirmDelete={handleConfirmDelete}
           isOpen={isOpen}
@@ -95,7 +101,7 @@ export function HistorySearchProvider({ children }: { children: ReactNode }) {
         />
       ) : (
         <DesktopSearchModal
-          chatHistory={chats}
+          history={history}
           currentChatId={chatId}
           isOpen={isOpen}
           onOpenChange={setIsOpen}

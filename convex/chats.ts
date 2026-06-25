@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server"
 import { v } from "convex/values"
 import { internalMutation, query } from "./_generated/server"
 import { requireOwnedProject } from "./lib/auth"
@@ -37,6 +38,30 @@ export const getForCurrentUser = maybeAuthQuery({
       const bTime = b.updatedAt ?? b._creationTime
       return bTime - aTime
     })
+  },
+})
+
+/**
+ * Recency-ordered paginated read of the current user's chats over the
+ * `by_user_updated` index. Powers the history drawer's browse-all mode and (with
+ * the pinned split) the bounded sidebar window — see
+ * docs/sidebar-chat-list-streaming-plan.md commits 4 and 8. Returns all the
+ * caller's chats (pinned/project filtering is a client-side view concern,
+ * `buildChatHistoryView`); a signed-out caller gets an empty, done page.
+ */
+export const listForCurrentUserPaginated = maybeAuthQuery({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { paginationOpts }) => {
+    const user = ctx.user
+    if (!user) {
+      return { page: [], isDone: true, continueCursor: "" }
+    }
+
+    return await ctx.db
+      .query("chats")
+      .withIndex("by_user_updated", (q) => q.eq("userId", user._id))
+      .order("desc")
+      .paginate(paginationOpts)
   },
 })
 

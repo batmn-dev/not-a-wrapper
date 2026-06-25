@@ -20,12 +20,13 @@ import {
 } from "@remixicon/react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
-import React, { useCallback, useMemo, useState } from "react"
+import React, { useCallback, useRef, useState } from "react"
 import { HistoryAuthPrompt } from "./history-auth-prompt"
-import { buildChatHistoryView, formatDate } from "./utils"
+import { useInfiniteScroll, type HistoryView } from "./use-history-view"
+import { formatDate } from "./utils"
 
 type DrawerHistoryProps = {
-  chatHistory: Chats[]
+  history: HistoryView
   onSaveEdit: (id: string, newTitle: string) => Promise<void>
   onConfirmDelete: (id: string) => Promise<void>
   trigger?: React.ReactElement
@@ -35,7 +36,7 @@ type DrawerHistoryProps = {
 }
 
 export function DrawerHistory({
-  chatHistory,
+  history,
   onSaveEdit,
   onConfirmDelete,
   trigger,
@@ -44,17 +45,21 @@ export function DrawerHistory({
   isAuthenticated,
 }: DrawerHistoryProps) {
   const { togglePinned } = useChats()
-  const [searchQuery, setSearchQuery] = useState("")
+  const { query, setQuery, view, loadMore, canLoadMore } = history
+  const viewportRef = useRef<HTMLDivElement>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState("")
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const params = useParams<{ chatId: string }>()
 
+  // Browse mode loads more pages as the user scrolls (search returns a single
+  // bounded page). The provider clears the search term when the drawer closes.
+  useInfiniteScroll(viewportRef, canLoadMore, loadMore)
+
   const handleOpenChange = useCallback(
     (open: boolean) => {
       setIsOpen(open)
       if (!open) {
-        setSearchQuery("")
         setEditingId(null)
         setEditTitle("")
         setDeletingId(null)
@@ -96,12 +101,6 @@ export function DrawerHistory({
   const handleCancelDelete = useCallback(() => {
     setDeletingId(null)
   }, [])
-
-  // Single shared derivation: search results, pinned, and date groups.
-  const view = useMemo(
-    () => buildChatHistoryView(chatHistory, searchQuery),
-    [chatHistory, searchQuery]
-  )
 
   // Render chat item
   const renderChatItem = useCallback(
@@ -298,8 +297,8 @@ export function DrawerHistory({
                   <Input
                     placeholder="Search..."
                     className="rounded-lg py-1.5 pl-8 text-base"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
                   />
                   <Icon
                     icon={RiSearchLine}
@@ -309,7 +308,10 @@ export function DrawerHistory({
                 </div>
               </div>
 
-              <ScrollArea className="flex-1 overflow-auto">
+              <ScrollArea
+                className="flex-1 overflow-auto"
+                viewportRef={viewportRef}
+              >
                 <div className="flex flex-col space-y-6 px-4 pt-4 pb-8">
                   {(
                     view.isSearching
