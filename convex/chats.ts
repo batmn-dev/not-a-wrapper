@@ -1,5 +1,5 @@
 import { v } from "convex/values"
-import { query } from "./_generated/server"
+import { internalMutation, query } from "./_generated/server"
 import { requireOwnedProject } from "./lib/auth"
 import {
   authenticatedMutation,
@@ -165,6 +165,35 @@ export const getPublicById = query({
     if (!chat.public) return null
 
     return chat
+  },
+})
+
+/**
+ * Defensive backfill for the `updatedAt` optional→required narrowing
+ * (docs/sidebar-chat-list-streaming-plan.md commit 5). Sets
+ * `updatedAt = _creationTime` for any chat missing it, so the `by_user_updated`
+ * index has no null keys. Idempotent.
+ *
+ * `chats.create` has always set `updatedAt`, so in practice no live row lacks it
+ * and the required-schema push succeeds directly. This exists only as a fallback
+ * if a deployment somehow holds legacy rows: run it (via
+ * `scripts/backfill-chat-updated-at.mjs`) while `updatedAt` is still optional,
+ * before pushing the required schema. The localized cast reads the possibly-
+ * undefined runtime value the narrowed type otherwise hides.
+ */
+export const backfillUpdatedAt = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const chats = await ctx.db.query("chats").collect()
+    let patched = 0
+    for (const chat of chats) {
+      const current = (chat as { updatedAt?: number }).updatedAt
+      if (current === undefined) {
+        await ctx.db.patch(chat._id, { updatedAt: chat._creationTime })
+        patched++
+      }
+    }
+    return { total: chats.length, patched }
   },
 })
 

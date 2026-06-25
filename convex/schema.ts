@@ -79,10 +79,14 @@ export default defineSchema({
     public: v.boolean(),
     pinned: v.boolean(),
     pinnedAt: v.optional(v.number()), // Unix timestamp
-    updatedAt: v.optional(v.number()), // Unix timestamp for manual tracking
+    // Required so the by_user_updated index never sorts null keys to the tail
+    // (which would hide chats from the bounded sidebar window). chats.create has
+    // always set this; backfill: scripts/backfill-chat-updated-at.mjs.
+    updatedAt: v.number(), // Unix timestamp — last activity (turn start)
   })
     .index("by_user", ["userId"])
     .index("by_user_pinned", ["userId", "pinned"])
+    .index("by_user_updated", ["userId", "updatedAt"])
     .index("by_project", ["projectId"])
     // Title-only full-history search, scoped per user via the userId filter
     // field. Lets history search reach chats outside the bounded sidebar window

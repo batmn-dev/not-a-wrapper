@@ -163,6 +163,7 @@ function createOwnerFixture({ publicChat = false } = {}) {
     userId,
     public: publicChat,
     pinned: false,
+    updatedAt: 1,
   }
 
   return { user, chat, userId, chatId }

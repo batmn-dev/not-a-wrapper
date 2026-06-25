@@ -196,6 +196,7 @@ function createOwnerFixture() {
     userId,
     public: false,
     pinned: false,
+    updatedAt: 1,
   }
 
   return { user, chat, userId, chatId }
@@ -2275,9 +2276,10 @@ describe("generation run linkage validation", () => {
       parts: [{ type: "text", text: "done" }],
     })
 
-    // No write to the chat row on the completion path (one bump per turn).
+    // No write to the chat row on the completion path (one bump per turn): its
+    // updatedAt is left exactly as it was at turn start.
     expect(patches.filter((patch) => patch.id === fixture.chatId)).toEqual([])
-    expect(fixture.chat.updatedAt).toBeUndefined()
+    expect(fixture.chat.updatedAt).toBe(1)
 
     // The run and assistant-message patches still fire.
     expect(fixture.run.status).toBe("completed")
