@@ -15,8 +15,8 @@ import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "@/components/ui/toast"
-import { api } from "@/convex/_generated/api"
 import { fetchClient } from "@/lib/fetch"
+import { useModel } from "@/lib/model-store/provider"
 import { cn } from "@/lib/utils"
 import {
   RiDeleteBinLine,
@@ -27,7 +27,6 @@ import {
   RiWrenchLine,
 } from "@remixicon/react"
 import { useMutation } from "@tanstack/react-query"
-import { useQuery } from "convex/react"
 import { useMemo, useState } from "react"
 
 type ToolProvider = {
@@ -98,8 +97,9 @@ function getStatusBadge(status: KeyStatus) {
 }
 
 export function ToolKeys() {
-  // Reactive Convex query — returns all provider IDs that have stored keys
-  const storedProviders = useQuery(api.userKeys.getProviderStatus)
+  // Provider-key presence comes from the single ModelProvider subscription
+  // (Per-user subscription seam) rather than a second useQuery here.
+  const { userKeyStatus } = useModel()
 
   const [selectedProvider, setSelectedProvider] = useState<string>("exa")
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({})
@@ -114,11 +114,11 @@ export function ToolKeys() {
   const keyStatuses = useMemo(() => {
     const statuses: Record<string, KeyStatus> = {}
     for (const provider of TOOL_PROVIDERS) {
-      const hasUserKey = storedProviders?.includes(provider.id) ?? false
+      const hasUserKey = userKeyStatus[provider.id] === true
       statuses[provider.id] = hasUserKey ? "user-key" : "none"
     }
     return statuses
-  }, [storedProviders])
+  }, [userKeyStatus])
 
   const hasUserKey = (providerId: string) =>
     keyStatuses[providerId] === "user-key"

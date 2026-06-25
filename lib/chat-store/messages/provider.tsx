@@ -7,7 +7,8 @@ import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import { durableStoredMessageToUiMessage } from "@/lib/chat-messages/ui-message-adapter"
 import type { UIMessage } from "ai"
-import { useMutation, useQuery } from "convex/react"
+import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
+import { useMutation } from "convex/react"
 import {
   createContext,
   useCallback,
@@ -71,8 +72,10 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
   // Only query if chatId is a valid Convex ID (not optimistic or local guest chat)
   const isValidConvexId = messagePersistenceMode === "server"
 
-  // Convex real-time query for messages
-  const convexMessages = useQuery(
+  // Convex real-time query for messages. getForChat requires an owned chat, so
+  // the Per-user subscription seam also gates it on Convex auth readiness —
+  // avoiding a throw if the subscription opens before the JWT is synced.
+  const { data: convexMessages } = usePerUserQuery(
     api.messages.getForChat,
     isValidConvexId ? { chatId: chatId as Id<"chats"> } : "skip"
   )

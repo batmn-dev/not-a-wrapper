@@ -1,7 +1,8 @@
 "use client"
 
 import { api } from "@/convex/_generated/api"
-import { useMutation as useConvexMutation, useQuery as useConvexQuery } from "convex/react"
+import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
+import { useMutation as useConvexMutation } from "convex/react"
 import {
   createContext,
   ReactNode,
@@ -118,13 +119,14 @@ export function UserPreferencesProvider({
   userId?: string
   initialPreferences?: UserPreferences
 }) {
+  // `isAuthenticated` (WorkOS presence) selects the localStorage-vs-server
+  // branch below. The live subscription itself is gated on Convex auth readiness
+  // by the Per-user subscription seam, not on WorkOS presence — so it never
+  // executes a wrong-empty read during the auth-sync window.
   const isAuthenticated = !!userId
 
   // Convex real-time query for authenticated users
-  const convexPreferences = useConvexQuery(
-    api.userPreferences.get,
-    isAuthenticated ? {} : "skip"
-  )
+  const { data: convexPreferences } = usePerUserQuery(api.userPreferences.get)
 
   // Convex mutation for updating preferences
   const updatePreferencesMutation = useConvexMutation(api.userPreferences.update)

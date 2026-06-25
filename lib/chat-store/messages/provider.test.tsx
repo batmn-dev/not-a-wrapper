@@ -59,6 +59,9 @@ vi.mock("../persist", () => ({
 }))
 
 vi.mock("convex/react", () => ({
+  // usePerUserQuery (the Per-user subscription seam) reads useConvexAuth to gate
+  // the subscription; a server-backed chat implies an authenticated caller.
+  useConvexAuth: () => ({ isAuthenticated: true, isLoading: false }),
   useMutation: () => convexMocks.mutationFn,
   useQuery: (...args: unknown[]) => {
     convexMocks.useQuery(...args)

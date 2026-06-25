@@ -14,6 +14,12 @@ _Avoid_: server copy, UI Convex mirror, `components/ui/convex`
 A Convex `query`/`mutation` defined through an auth-injecting builder (`authenticatedQuery`, `ownedChatMutation`, `ownedProjectMutation`, `ownedMcpServerMutation`, …) instead of calling `ctx.auth.getUserIdentity()` inline. The builder resolves the caller's user — and, for owned-resource variants, fetches and ownership-checks the resource — before the handler body runs, injecting `ctx.user` (and `ctx.chat`/`ctx.project`/…) and enforcing one error contract (Not authenticated → not found → Not authorized). It makes auth structural, not a call you must remember. Internal functions and the HTTP chat-route token path stay outside the seam; public-only reads (share links) and anonymous/optional-auth paths use their own non-throwing builders. Self-identity-match handlers (`identity.subject === arg`) are a distinct shape, not an owned-resource one.
 _Avoid_: auth helper (the older bypassable `lib/auth.ts` form), middleware, guard
 
+### Client
+
+**Per-user subscription**:
+The single client seam — a `usePerUserQuery` hook — every per-user Convex live read goes through. It owns the one correct subscribe gate, `isConvexAuthenticated` (the Convex JWT is synced), not WorkOS session presence (`!!user` / `!!userId`), and returns `"skip"` until it is true, so a signed-out or mid-auth-sync caller never opens a subscription or executes a wrong-empty read against a not-yet-resolved identity. It is the client counterpart to the **Authenticated handler**: the subscribe gate becomes structural instead of an `isAuthenticated ? {} : "skip"` ternary each call site re-derives with a different predicate (and which `userKeys.getProviderStatus` forgot entirely). Public/share-link reads go through a sibling `usePublicQuery` passthrough, and a `no-restricted-imports` rule bans raw `useQuery` from `convex/react`, so every call site declares per-user vs public — the same `maybeAuthQuery`-vs-`query` choice the backend makes. The hook returns auth-readiness alongside the data so providers stop re-deriving `data === undefined && authState` loading logic by hand.
+_Avoid_: skip gate, auth ternary, guarded query
+
 ### Chat
 
 **Chat turn**:

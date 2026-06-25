@@ -23,7 +23,8 @@ import {
   RiPlugLine,
   RiSettings3Line,
 } from "@remixicon/react"
-import { useMutation, useQuery } from "convex/react"
+import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
+import { useMutation } from "convex/react"
 import { useState } from "react"
 import { McpServerForm } from "./mcp-server-form"
 import { McpToolApprovals } from "./mcp-tool-approvals"
@@ -57,7 +58,8 @@ function maskUrl(url: string): string {
 // ---------------------------------------------------------------------------
 
 export function McpServers() {
-  const servers = useQuery(api.mcpServers.list) ?? []
+  const { data } = usePerUserQuery(api.mcpServers.list)
+  const servers = data ?? []
   const toggleEnabled = useMutation(api.mcpServers.toggleEnabled)
   const removeServer = useMutation(api.mcpServers.remove)
 

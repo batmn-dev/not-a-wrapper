@@ -5,7 +5,8 @@ import { Switch } from "@/components/ui/switch"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
-import { useMutation, useQuery } from "convex/react"
+import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
+import { useMutation } from "convex/react"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,8 +28,10 @@ type McpToolApprovalsProps = {
  * connection or the first chat request that discovers tools.
  */
 export function McpToolApprovals({ serverId }: McpToolApprovalsProps) {
-  const approvals =
-    useQuery(api.mcpToolApprovals.listByServer, { serverId }) ?? []
+  const { data } = usePerUserQuery(api.mcpToolApprovals.listByServer, {
+    serverId,
+  })
+  const approvals = data ?? []
   const toggleApproval = useMutation(api.mcpToolApprovals.toggleApproval)
 
   const handleToggle = async (approvalId: Id<"mcpToolApprovals">) => {

@@ -2,8 +2,8 @@
 
 import { Icon } from "@/components/ui/icon"
 import { api } from "@/convex/_generated/api"
+import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
 import { RiFolderAddFill, RiFolderAddLine } from "@remixicon/react"
-import { useQuery } from "convex/react"
 import { useState } from "react"
 import { DialogCreateProject } from "./dialog-create-project"
 import { SidebarMenuItem } from "./sidebar-menu-item"
@@ -15,10 +15,9 @@ type SidebarProjectProps = {
 
 export function SidebarProject({ isAuthenticated }: SidebarProjectProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const projects = useQuery(
-    api.projects.getForCurrentUser,
-    isAuthenticated ? {} : "skip"
-  )
+  // Subscription gated on Convex auth readiness by the Per-user subscription
+  // seam; the `isAuthenticated` prop (WorkOS) only hides the section for guests.
+  const { data: projects } = usePerUserQuery(api.projects.getForCurrentUser)
   const isLoading = projects === undefined
 
   if (!isAuthenticated) return null

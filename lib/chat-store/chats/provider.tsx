@@ -4,7 +4,8 @@ import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { resolveModelId } from "@/lib/models/model-id-migration"
-import { useConvexAuth, useMutation, useQuery } from "convex/react"
+import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
+import { useConvexAuth, useMutation } from "convex/react"
 import {
   createContext,
   useCallback,
@@ -87,11 +88,8 @@ export function ChatsProvider({
     isLoading: isConvexAuthLoading,
   } = useConvexAuth()
 
-  // Convex real-time query for chats
-  const convexChats = useQuery(
-    api.chats.getForCurrentUser,
-    isConvexAuthenticated ? {} : "skip"
-  )
+  // Convex real-time query for chats (Per-user subscription seam owns the gate)
+  const { data: convexChats } = usePerUserQuery(api.chats.getForCurrentUser)
 
   // Convex mutations
   const createChatMutation = useMutation(api.chats.create)
