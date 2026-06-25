@@ -65,11 +65,10 @@ export const getPinnedForCurrentUser = maybeAuthQuery({
 
 /**
  * Recency-ordered paginated read of the current user's chats over the
- * `by_user_updated` index. Powers the history drawer's browse-all mode and (with
- * the pinned split) the bounded sidebar window — see
- * docs/sidebar-chat-list-streaming-plan.md commits 4 and 8. Returns all the
- * caller's chats (pinned/project filtering is a client-side view concern,
- * `buildChatHistoryView`); a signed-out caller gets an empty, done page.
+ * `by_user_updated` index, returning ALL chats (pinned + project + plain).
+ * Powers the history drawer's browse-all mode, where `buildChatHistoryView`
+ * does its own pinned/project view filtering. A signed-out caller gets an empty,
+ * done page. See docs/sidebar-chat-list-streaming-plan.md commit 4.
  */
 export const listForCurrentUserPaginated = maybeAuthQuery({
   args: { paginationOpts: paginationOptsValidator },
@@ -82,6 +81,33 @@ export const listForCurrentUserPaginated = maybeAuthQuery({
     return await ctx.db
       .query("chats")
       .withIndex("by_user_updated", (q) => q.eq("userId", user._id))
+      .order("desc")
+      .paginate(paginationOpts)
+  },
+})
+
+/**
+ * The bounded sidebar "Chats" window: the current user's non-pinned, non-project
+ * chats newest-first. Pinned/project exclusion is done at the index level
+ * (`by_user_pinned_project_updated`), not client-side, so each page is full of
+ * chats the sidebar actually renders — pinned/project chats never consume a
+ * window slot. Pinned chats are read separately (`getPinnedForCurrentUser`);
+ * project chats live in the project view (`getProjectChatsForCurrentUser`). See
+ * docs/sidebar-chat-list-streaming-plan.md commit 8.
+ */
+export const getRecentWindowForCurrentUser = maybeAuthQuery({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { paginationOpts }) => {
+    const user = ctx.user
+    if (!user) {
+      return { page: [], isDone: true, continueCursor: "" }
+    }
+
+    return await ctx.db
+      .query("chats")
+      .withIndex("by_user_pinned_project_updated", (q) =>
+        q.eq("userId", user._id).eq("pinned", false).eq("projectId", undefined)
+      )
       .order("desc")
       .paginate(paginationOpts)
   },

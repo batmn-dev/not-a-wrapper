@@ -118,7 +118,7 @@ export function ChatsProvider({
     ENABLE_PAGINATED_SIDEBAR ? "skip" : {}
   )
   const recentWindow = usePerUserPaginatedQuery(
-    api.chats.listForCurrentUserPaginated,
+    api.chats.getRecentWindowForCurrentUser,
     ENABLE_PAGINATED_SIDEBAR ? {} : "skip",
     { initialNumItems: SIDEBAR_WINDOW_PAGE_SIZE }
   )

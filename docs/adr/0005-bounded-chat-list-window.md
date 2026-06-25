@@ -38,11 +38,15 @@ removed; the chat already re-orders at turn start. `chats.updatedAt` now means
 
 **2. Bound the read; split full-history access onto dedicated reads.**
 
-- **Chat list window** — the sidebar reads a paginated recency window
-  (`chats.listForCurrentUserPaginated` over a new `by_user_updated` index, via
-  `usePerUserPaginatedQuery`) plus a small live pinned read
-  (`chats.getPinnedForCurrentUser` over `by_user_pinned`). A chat write now
-  invalidates only the window, not the whole collection.
+- **Chat list window** — the sidebar reads a paginated recency window of
+  **non-pinned, non-project** chats (`chats.getRecentWindowForCurrentUser` over a
+  composite `by_user_pinned_project_updated` index, via `usePerUserPaginatedQuery`)
+  plus a small live pinned read (`chats.getPinnedForCurrentUser` over
+  `by_user_pinned`). Excluding pinned/project at the index level keeps every page
+  full of chats the sidebar actually renders, so pinned/project chats never
+  consume a window slot. A chat write now invalidates only the window, not the
+  whole collection. (Browse-all in the history drawer uses a separate all-chats
+  paginated read, `chats.listForCurrentUserPaginated` over `by_user_updated`.)
 - **History search** is a server query (`chats.searchByTitle` over a `by_title`
   search index, title-only), subscribed only while the search UI is open, behind
   a `SearchProvider` interface so the UI holds `query → results`, never the full

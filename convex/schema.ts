@@ -87,6 +87,16 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_pinned", ["userId", "pinned"])
     .index("by_user_updated", ["userId", "updatedAt"])
+    // The sidebar recency window: non-pinned, non-project chats newest-first.
+    // Excluding pinned + project at the index level keeps every page full of
+    // chats the "Chats" section actually shows, so pinned/project chats never
+    // consume window slots (docs/sidebar-chat-list-streaming-plan.md commit 8).
+    .index("by_user_pinned_project_updated", [
+      "userId",
+      "pinned",
+      "projectId",
+      "updatedAt",
+    ])
     .index("by_project", ["projectId"])
     // Title-only full-history search, scoped per user via the userId filter
     // field. Lets history search reach chats outside the bounded sidebar window
