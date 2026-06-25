@@ -438,6 +438,13 @@ fallback.
 
 3. **`app/components/chat/message.tsx`** — memo contract flip (GA §7 R3, GA memoRecipe):
    - DELETE the reasoning projection at :111 and the now-orphaned `getReasoningContent` helper at :58-65.
+   - Add the additive optional `activeTurnId?: string` to `MessageProps` (:21-50), forward it to
+     `MessageAssistant`, and compare it in `areMessagesEqual` before the streaming/content gates:
+     ```ts
+     if (prev.activeTurnId !== next.activeTurnId) return false
+     ```
+     A branch switch or active-turn handoff must re-render the assistant panel state even when message body content is
+     unchanged.
    - NARROW the streaming short-circuit at :107 to content-gated:
      ```ts
      if (next.status === "streaming" && next.isLast) {
@@ -448,7 +455,6 @@ fallback.
      ```
    - KEEP `getTextContent` (:54-56), `getToolSignature` (:67-76), the `prev.isLast !== next.isLast` gate (:121),
      the status gate (:122). Sources are NOT in the memo today — leave them out.
-   - Add the additive optional `activeTurnId?: string` to `MessageProps` (:21-50) and forward to MessageAssistant.
 
 4. **Thread `activeTurnId` (additive, backward-compatible).** conversation.tsx derives it from the projected path
    tail (§4 snippet) and passes down `Message → MessageAssistant → useActivityPanel`. When undefined, fall back to
@@ -461,8 +467,10 @@ fallback.
 - `app/components/chat/message.test.tsx` (extend) — render-count suite (skeleton a; GA §7 R3): mock
   `./message-assistant` with a `vi.fn()` body spy. Test 1: adding reasoning + `source-url` parts with identical
   text during `streaming+isLast` does NOT re-render the body (fails today on :107/:111, passes after). Test 2: a real
-  text delta DOES. Test 3: a tool state transition (`submitted→output-available`) DOES. Plus an explicit assertion
-  that no in-body element reads tool output/args without a state change (R3 residual on getToolSignature :67-76).
+  text delta DOES. Test 3: a tool state transition (`submitted→output-available`) DOES. Test 4: changing only
+  `activeTurnId` DOES re-render/forward the new value so branch switches and active-turn handoffs cannot leave stale
+  panel state. Plus an explicit assertion that no in-body element reads tool output/args without a state change (R3
+  residual on getToolSignature :67-76).
 - `app/components/chat/use-reasoning-phase.test.tsx` *(new)* — fake-timer suite (skeleton b; GA §7 R1): (a) freeze at
   5s on cleanup (:99-102); (b) persisted fallback when `isLast && complete && tickedSeconds===0` (:115-116);
   (c) historical `!isLast` fallback (:120-121); (d) in-place mutation: same `parts` array ref with a mutated

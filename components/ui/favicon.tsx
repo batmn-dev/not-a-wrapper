@@ -10,10 +10,13 @@ import { cva, type VariantProps } from "class-variance-authority"
  */
 function resolveFaviconSrc(input: string | null | undefined): string | null {
   if (!input) return null
-  let hostname = input
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(input)) {
+  const value = input.trim()
+  if (!value) return null
+
+  let hostname = value
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) {
     try {
-      const url = new URL(input)
+      const url = new URL(value)
       if (!["http:", "https:"].includes(url.protocol)) return null
       hostname = url.hostname
     } catch {
@@ -21,7 +24,7 @@ function resolveFaviconSrc(input: string | null | undefined): string | null {
     }
   }
   if (!hostname) return null
-  return `https://www.google.com/s2/favicons?domain=${hostname}&sz=64`
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=64`
 }
 
 const faviconVariants = cva("shrink-0", {
