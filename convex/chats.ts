@@ -6,6 +6,7 @@ import {
   authenticatedMutation,
   maybeAuthQuery,
   ownedChatMutation,
+  ownedProjectQuery,
   readableChatQuery,
 } from "./lib/authedFunctions"
 
@@ -62,6 +63,28 @@ export const listForCurrentUserPaginated = maybeAuthQuery({
       .withIndex("by_user_updated", (q) => q.eq("userId", user._id))
       .order("desc")
       .paginate(paginationOpts)
+  },
+})
+
+/**
+ * All chats in a project the caller owns, newest activity first, over the
+ * `by_project` index. Lets a project view show its full chat history rather than
+ * only those chats that happen to be in the bounded sidebar window — see
+ * docs/sidebar-chat-list-streaming-plan.md commit 7. Ownership is enforced by
+ * the ownedProjectQuery builder (ctx.project).
+ */
+export const getProjectChatsForCurrentUser = ownedProjectQuery({
+  args: {},
+  handler: async (ctx) => {
+    const chats = await ctx.db
+      .query("chats")
+      .withIndex("by_project", (q) => q.eq("projectId", ctx.project._id))
+      .collect()
+
+    return chats.sort(
+      (a, b) =>
+        (b.updatedAt ?? b._creationTime) - (a.updatedAt ?? a._creationTime)
+    )
   },
 })
 

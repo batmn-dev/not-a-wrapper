@@ -7,6 +7,10 @@ import { ProjectChatItem } from "@/app/components/layout/sidebar/project-chat-it
 import { Icon } from "@/components/ui/icon"
 import { toast } from "@/components/ui/toast"
 import { useChats } from "@/lib/chat-store/chats/provider"
+import { convexChatToChat } from "@/lib/chat-store/types"
+import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
+import { api } from "@/convex/_generated/api"
+import type { Id } from "@/convex/_generated/dataModel"
 import { MESSAGE_MAX_LENGTH, SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import {
@@ -41,7 +45,7 @@ export function ProjectView({ projectId }: ProjectViewProps) {
     resolveWebSearchEnabled(preferences.webSearchEnabled)
   )
   const { user } = useUser()
-  const { chats: allChats, createNewChat } = useChats()
+  const { createNewChat } = useChats()
   const { files, setFiles, handleFileUpload, handleFileRemove } =
     useFileUpload()
 
@@ -56,9 +60,15 @@ export function ProjectView({ projectId }: ProjectViewProps) {
     },
   })
 
+  // The project shows ALL its chats via a dedicated owner-checked read, not the
+  // bounded sidebar window. See docs/sidebar-chat-list-streaming-plan.md commit 7.
+  const { data: projectChats } = usePerUserQuery(
+    api.chats.getProjectChatsForCurrentUser,
+    { projectId: projectId as Id<"projects"> }
+  )
   const chats = useMemo(
-    () => allChats.filter((chat) => chat.project_id === projectId),
-    [allChats, projectId]
+    () => (projectChats ?? []).map(convexChatToChat),
+    [projectChats]
   )
   const isAuthenticated = useMemo(() => !!user?.id, [user?.id])
 
