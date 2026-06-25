@@ -2260,6 +2260,31 @@ describe("generation run linkage validation", () => {
     expect(fixture.otherMessage.content).toBe("")
   })
 
+  it("does not re-bump the chat's updatedAt when a run completes", async () => {
+    // Per docs/sidebar-chat-list-streaming-plan.md commit 1: a durable turn must
+    // bump chats.updatedAt exactly once, at turn start (chatRuntime.ts:1257). The
+    // chat has already re-ordered to the top of the sidebar by completion time, so
+    // the run-complete path must NOT bump it again.
+    const fixture = createGenerationRunLinkageFixture()
+    const { ctx, patches } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunCompletedForChat(ctx, {
+      runId: fixture.runId,
+      messageId: fixture.messageId,
+      content: "done",
+      parts: [{ type: "text", text: "done" }],
+    })
+
+    // No write to the chat row on the completion path (one bump per turn).
+    expect(patches.filter((patch) => patch.id === fixture.chatId)).toEqual([])
+    expect(fixture.chat.updatedAt).toBeUndefined()
+
+    // The run and assistant-message patches still fire.
+    expect(fixture.run.status).toBe("completed")
+    expect(fixture.message.status).toBe("completed")
+    expect(fixture.message.content).toBe("done")
+  })
+
   it("rejects approval requests for assistant messages outside the run", async () => {
     const fixture = createGenerationRunLinkageFixture()
     const { ctx, inserts, patches } = createMutationCtx(fixture.tables)
