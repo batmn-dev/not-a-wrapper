@@ -31,10 +31,9 @@ type SearchArgs = { term: string } | "skip"
 /**
  * Resolve the args passed to the `searchByTitle` subscription. Returns `"skip"`
  * whenever the search UI is closed or the term is blank, so the subscription is
- * absent except while actively searching. Pure and exported so the subscription
- * lifecycle can be tested without rendering.
+ * absent except while actively searching.
  */
-export function resolveSearchArgs(open: boolean, term: string): SearchArgs {
+function resolveSearchArgs(open: boolean, term: string): SearchArgs {
   const trimmed = term.trim()
   if (!open || trimmed.length === 0) return "skip"
   return { term: trimmed }

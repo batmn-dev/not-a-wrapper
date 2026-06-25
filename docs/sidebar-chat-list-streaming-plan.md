@@ -389,9 +389,16 @@ search/browse/project/deep-link.
   view, and deep-links all still reach full history; sending a message re-orders
   the sidebar once and does not re-read the whole collection.
 - `docs/measurements/chat-list-invalidations.md` shows the before/after drop.
-- Tests added only for risky logic (write-once bump, pinned/non-pinned partition,
-  optimistic-in-window, `useChat` fallback, search subscription lifecycle) —
-  per the lean-tests preference.
+- Tests kept to only the two genuinely subtle, regression-prone behaviors: the
+  **write-once `chats.updatedAt` bump** (`convex/chatRuntime.test.ts`) and the
+  **optimistic overlay's out-of-window no-op** over the bounded window
+  (`lib/chat-store/chats/sidebar-window.test.ts`). The other behaviors the
+  per-commit notes above mention testing (search-arg gating, `useChat` fallback,
+  pinned/non-pinned partition, `isLoading` first-page) are simple branching whose
+  correctness is evident from the code and, for the browse/search split, already
+  covered by the pre-existing `app/components/history/utils.test.ts`; dedicated
+  tests for them were dropped as low-value during implementation (lean-tests
+  preference — concentrate coverage on risky logic).
 
 ## Open risks / notes
 

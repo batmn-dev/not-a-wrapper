@@ -17,9 +17,9 @@ export type UseChatResult = {
  * Resolve the args for the `chats.getById` fallback read. Returns `"skip"`
  * whenever the chat is already in the live sidebar window (served
  * synchronously), there is no chat id, or the id is a guest/local id with no
- * server record. Pure and exported for testing the fallback decision.
+ * server record.
  */
-export function resolveGetByIdArgs(
+function resolveGetByIdArgs(
   chatId: string | null | undefined,
   inWindow: Chats | undefined
 ): { chatId: Id<"chats"> } | "skip" {
@@ -29,10 +29,9 @@ export function resolveGetByIdArgs(
 
 /**
  * The chat to surface: the in-window chat takes precedence (synchronous, already
- * subscribed); otherwise the server fallback, mapped to the UI type. Pure and
- * exported for testing.
+ * subscribed); otherwise the server fallback, mapped to the UI type.
  */
-export function pickChat(
+function pickChat(
   inWindow: Chats | undefined,
   serverChat: Doc<"chats"> | null | undefined
 ): Chats | undefined {
