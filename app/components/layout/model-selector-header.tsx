@@ -3,6 +3,7 @@
 import { AuthModal } from "@/app/auth/_components/auth-modal"
 import { ModelSelector } from "@/components/common/model-selector/base"
 import { useChats } from "@/lib/chat-store/chats/provider"
+import { useChat } from "@/lib/chat-store/chats/use-chat"
 import { useChatSession } from "@/lib/chat-store/session/provider"
 import { resolvePreferredModelId } from "@/lib/model-store/utils"
 import { useModel } from "@/lib/model-store/provider"
@@ -21,12 +22,10 @@ export function ModelSelectorHeader() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
 
   const { chatId } = useChatSession()
-  const { getChatById, updateChatModel } = useChats()
+  const { updateChatModel } = useChats()
 
-  const currentChat = useMemo(
-    () => (chatId ? getChatById(chatId) : null),
-    [chatId, getChatById]
-  )
+  // Resolves out-of-window chats via the chats.getById fallback (useChat).
+  const { chat: currentChat } = useChat(chatId)
 
   const isAuthenticated = !!user?.id
 
