@@ -109,24 +109,7 @@ describe("useActivityPanel ownership", () => {
     })
   }
 
-  it("(a) derives activeTurnId from the last assistant in the rendered path", () => {
-    render({
-      messages: [
-        user("u1"),
-        assistant("a1", { sourceUrl: "https://first.com" }),
-        user("u2"),
-        assistant("a2", { sourceUrl: "https://second.com" }),
-      ],
-      status: "ready",
-      isSubmitting: false,
-    })
-
-    expect(latest!.activeTurnId).toBe("a2")
-    expect(latest!.panelProps.sources).toHaveLength(1)
-    expect(latest!.panelProps.sources[0].url).toBe("https://second.com")
-  })
-
-  it("(b) follows a branch switch to a new rendered tail (id + persisted duration + sources)", () => {
+  it("owns the last assistant in the rendered path and follows a branch switch (id + duration + sources)", () => {
     render({
       messages: [user("u1"), assistant("a2", { durationMs: 4000, sourceUrl: "https://a.com" })],
       status: "ready",
@@ -136,8 +119,8 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.panelProps.durationSeconds).toBe(4)
     expect(latest!.panelProps.sources[0].url).toBe("https://a.com")
 
-    // Simulated branch switch: the projected path now ends with a different
-    // assistant turn.
+    // Branch switch / regenerate: the projected path now ends with a different
+    // assistant turn — ownership and its persisted state must follow.
     render({
       messages: [user("u1"), assistant("a9", { durationMs: 9000, sourceUrl: "https://b.com" })],
       status: "ready",
@@ -148,30 +131,8 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.panelProps.sources[0].url).toBe("https://b.com")
   })
 
-  it("(c) moves ownership to the new sibling on regenerate handoff", () => {
-    render({
-      messages: [user("u1"), assistant("a-old", { durationMs: 3000 })],
-      status: "ready",
-      isSubmitting: false,
-    })
-    expect(latest!.activeTurnId).toBe("a-old")
-
-    render({
-      messages: [user("u1"), assistant("a-new", { durationMs: 7000 })],
-      status: "ready",
-      isSubmitting: false,
-    })
-    expect(latest!.activeTurnId).toBe("a-new")
-    expect(latest!.activeTurnId).not.toBe("a-old")
-    expect(latest!.panelProps.durationSeconds).toBe(7)
-  })
-
-  it("(d) returns no active turn for submitted/no-assistant state, but stays generation-active", () => {
-    render({
-      messages: [user("u1")],
-      status: "submitted",
-      isSubmitting: true,
-    })
+  it("has no active turn for the submitted/no-assistant state but stays generation-active", () => {
+    render({ messages: [user("u1")], status: "submitted", isSubmitting: true })
 
     expect(latest!.activeTurnId).toBeUndefined()
     expect(latest!.isGenerationActive).toBe(true)

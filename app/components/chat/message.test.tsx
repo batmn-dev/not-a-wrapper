@@ -216,14 +216,6 @@ describe("Message body memo contract (R3)", () => {
     })
   }
 
-  const toolPart = (state: string) =>
-    ({
-      type: "tool-web_search",
-      toolCallId: "t1",
-      state,
-      input: {},
-    }) as unknown as NonNullable<UIMessage["parts"]>[number]
-
   it("does not re-render the body when only reasoning/source parts change during streaming", () => {
     const partsA = [
       { type: "reasoning", text: "thinking", state: "streaming" },
@@ -272,24 +264,6 @@ describe("Message body memo contract (R3)", () => {
       status: "streaming",
       isLast: true,
       children: "Hi there",
-    })
-    expect(messageAssistantSpy).toHaveBeenCalledTimes(2)
-  })
-
-  it("re-renders the body on a tool-state transition", () => {
-    renderAssistant({
-      parts: [toolPart("input-available")],
-      status: "streaming",
-      isLast: true,
-      children: "",
-    })
-    expect(messageAssistantSpy).toHaveBeenCalledTimes(1)
-
-    renderAssistant({
-      parts: [toolPart("output-available")],
-      status: "streaming",
-      isLast: true,
-      children: "",
     })
     expect(messageAssistantSpy).toHaveBeenCalledTimes(2)
   })

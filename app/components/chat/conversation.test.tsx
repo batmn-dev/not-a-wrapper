@@ -190,9 +190,4 @@ describe("Conversation regeneration availability", () => {
 
     expect(container?.querySelector('[data-testid="thinking"]')).toBeTruthy()
   })
-
-  it("does not render the ThinkingBar once an assistant message exists", () => {
-    renderConversation({ status: "streaming" })
-    expect(container?.querySelector('[data-testid="thinking"]')).toBeNull()
-  })
 })

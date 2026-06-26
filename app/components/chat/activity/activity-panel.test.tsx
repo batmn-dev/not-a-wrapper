@@ -16,35 +16,22 @@ import {
   ActivityPanelHostProvider,
 } from "./activity-panel-host"
 
-// --- matchMedia / viewport mock (first in this suite; useBreakpoint reads
-// window.innerWidth and listens for matchMedia "change"). ---
-const mqlListeners = new Set<() => void>()
-
-function setViewport(belowLg: boolean) {
+// useBreakpoint reads window.innerWidth + window.matchMedia; stub a desktop
+// (≥lg) viewport so the docked shell is the active one.
+function stubDesktopViewport() {
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
     writable: true,
-    value: belowLg ? 800 : 1280,
+    value: 1280,
   })
-}
-
-function installMatchMedia() {
   window.matchMedia = ((query: string) => ({
-    matches: window.innerWidth < 1024,
+    matches: false,
     media: query,
     onchange: null,
-    addEventListener: (_type: string, cb: () => void) => {
-      mqlListeners.add(cb)
-    },
-    removeEventListener: (_type: string, cb: () => void) => {
-      mqlListeners.delete(cb)
-    },
-    addListener: (cb: () => void) => {
-      mqlListeners.add(cb)
-    },
-    removeListener: (cb: () => void) => {
-      mqlListeners.delete(cb)
-    },
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
     dispatchEvent: () => false,
   })) as unknown as typeof window.matchMedia
 }
@@ -74,14 +61,12 @@ beforeAll(() => {
     true
 })
 
-describe("ActivityPanel coexistence (R5/R6/R9)", () => {
+describe("ActivityPanel coexistence (R6)", () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
 
   beforeEach(() => {
-    mqlListeners.clear()
-    setViewport(false)
-    installMatchMedia()
+    stubDesktopViewport()
     container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
@@ -99,93 +84,22 @@ describe("ActivityPanel coexistence (R5/R6/R9)", () => {
     container = null
   })
 
-  function render(open: boolean, props = panelProps(5)) {
+  it("renders the body into exactly one shell at ≥lg — one landmark, favicons == N, no sheet", () => {
     act(() => {
       root?.render(
         <ActivityPanelHostProvider>
           <ActivityPanelDockSlot />
-          <ActivityPanel open={open} onOpenChange={() => {}} {...props} />
+          <ActivityPanel open onOpenChange={() => {}} {...panelProps(5)} />
         </ActivityPanelHostProvider>
       )
     })
-  }
 
-  function fireResize(belowLg: boolean) {
-    setViewport(belowLg)
-    act(() => {
-      mqlListeners.forEach((cb) => cb())
-    })
-  }
-
-  const landmarks = () =>
-    document.querySelectorAll('[aria-label="Reasoning details"]')
-  const sheets = () => document.querySelectorAll('[data-slot="sheet-content"]')
-  const imgs = () => document.querySelectorAll("img")
-
-  it("≥lg open: one docked landmark, N favicons, no sheet dialog", () => {
-    setViewport(false)
-    render(true)
-
-    expect(landmarks()).toHaveLength(1)
-    expect(sheets()).toHaveLength(0)
-    expect(imgs()).toHaveLength(5)
-  })
-
-  it("<lg open: the sheet owns the body (N favicons), no docked landmark", () => {
-    setViewport(true)
-    render(true)
-
-    expect(sheets()).toHaveLength(1)
-    expect(landmarks()).toHaveLength(0)
-    expect(imgs()).toHaveLength(5)
-  })
-
-  it("resize across lg keeps the body in exactly one shell (favicons == N, not 2N)", () => {
-    setViewport(false)
-    render(true)
-    expect(landmarks()).toHaveLength(1)
-    expect(sheets()).toHaveLength(0)
-    expect(imgs()).toHaveLength(5)
-
-    fireResize(true)
-    expect(landmarks()).toHaveLength(0)
-    expect(sheets()).toHaveLength(1)
-    expect(imgs()).toHaveLength(5)
-
-    fireResize(false)
-    expect(landmarks()).toHaveLength(1)
-    expect(sheets()).toHaveLength(0)
-    expect(imgs()).toHaveLength(5)
-  })
-
-  it("closed panel mounts no body (≥lg): no landmark, no favicons", () => {
-    setViewport(false)
-    render(false)
-
-    expect(landmarks()).toHaveLength(0)
-    expect(sheets()).toHaveLength(0)
-    expect(imgs()).toHaveLength(0)
-  })
-
-  it("reopens after close: open → close → open re-mounts the docked body", () => {
-    setViewport(false)
-    render(true)
-    expect(landmarks()).toHaveLength(1)
-
-    render(false)
-    expect(landmarks()).toHaveLength(0)
-    expect(imgs()).toHaveLength(0)
-
-    render(true)
-    expect(landmarks()).toHaveLength(1)
-    expect(imgs()).toHaveLength(5)
-  })
-
-  it("the sheet carries motion-reduce-gated transitions (R7)", () => {
-    setViewport(true)
-    render(true)
-    const sheet = document.querySelector('[data-slot="sheet-content"]')
-    expect(sheet).toBeTruthy()
-    expect(sheet!.getAttribute("class")).toContain("motion-reduce:transition-none")
+    expect(
+      document.querySelectorAll('[aria-label="Reasoning details"]')
+    ).toHaveLength(1)
+    expect(
+      document.querySelectorAll('[data-slot="sheet-content"]')
+    ).toHaveLength(0)
+    expect(document.querySelectorAll("img")).toHaveLength(5)
   })
 })

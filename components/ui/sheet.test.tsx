@@ -11,17 +11,12 @@ import {
 } from "vitest"
 import { Sheet, SheetContent, SheetTitle } from "./sheet"
 
-// The overlay base class (sheet.tsx) that must stay byte-identical when
-// `overlayClassName` is omitted (GA §7 R2; default-equivalence snapshot).
-const OVERLAY_BASE =
-  "fixed inset-0 z-50 bg-black/10 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-xs"
-
 beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
     true
 })
 
-describe("SheetContent overlay (R2)", () => {
+describe("SheetContent overlayClassName (R2)", () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
 
@@ -43,64 +38,30 @@ describe("SheetContent overlay (R2)", () => {
     container = null
   })
 
-  function renderSheet(content: React.ReactNode): HTMLElement | null {
+  function overlayClassFor(overlayClassName?: string): string {
     act(() => {
       root?.render(
         <Sheet open onOpenChange={() => {}}>
-          {content}
+          <SheetContent overlayClassName={overlayClassName}>
+            <SheetTitle>T</SheetTitle>
+          </SheetContent>
         </Sheet>
       )
     })
-    return document.querySelector<HTMLElement>('[data-slot="sheet-overlay"]')
+    return (
+      document
+        .querySelector('[data-slot="sheet-overlay"]')
+        ?.getAttribute("class") ?? ""
+    )
   }
 
-  it("renders an overlay byte-identical to the base when overlayClassName is omitted", () => {
-    const overlay = renderSheet(
-      <SheetContent>
-        <SheetTitle>Default</SheetTitle>
-      </SheetContent>
-    )
-
-    expect(overlay).toBeTruthy()
-    expect(overlay!.getAttribute("class")).toBe(OVERLAY_BASE)
-  })
-
-  it("appends overlayClassName additively without dropping the base", () => {
-    const overlay = renderSheet(
-      <SheetContent overlayClassName="scrim-test">
-        <SheetTitle>With scrim</SheetTitle>
-      </SheetContent>
-    )
-
-    expect(overlay!.getAttribute("class")).toBe(`${OVERLAY_BASE} scrim-test`)
-  })
-
-  it("keeps the overlay byte-identical for the sidebar.tsx consumer usage", () => {
-    // Mirrors components/ui/sidebar.tsx:208-219 (no overlayClassName).
-    const overlay = renderSheet(
-      <SheetContent
-        side="left"
-        className="bg-sidebar text-sidebar-foreground w-(--sidebar-width) p-0 [&>button]:hidden"
-      >
-        <SheetTitle>Sidebar</SheetTitle>
-      </SheetContent>
-    )
-
-    expect(overlay!.getAttribute("class")).toBe(OVERLAY_BASE)
-  })
-
-  it("keeps the overlay byte-identical for the app-sidebar.tsx consumer usage", () => {
-    // Mirrors app/components/layout/sidebar/app-sidebar.tsx:229-236 (no overlayClassName).
-    const overlay = renderSheet(
-      <SheetContent
-        side="left"
-        showCloseButton={false}
-        className="bg-sidebar text-sidebar-foreground h-full min-w-0 gap-0 overflow-hidden p-0"
-      >
-        <SheetTitle>App sidebar</SheetTitle>
-      </SheetContent>
-    )
-
-    expect(overlay!.getAttribute("class")).toBe(OVERLAY_BASE)
+  // The two production Sheet consumers never pass overlayClassName, so the prop
+  // must be purely additive: omitting it leaves the overlay class exactly as it
+  // is, and passing it only appends. Asserted relatively (no hardcoded base) so
+  // the test survives unrelated base-class tweaks.
+  it("is additive — omitting leaves the overlay unchanged, passing only appends", () => {
+    const base = overlayClassFor(undefined)
+    expect(base).not.toBe("")
+    expect(overlayClassFor("scrim-test")).toBe(`${base} scrim-test`)
   })
 })

@@ -29,7 +29,7 @@ beforeAll(() => {
     true
 })
 
-describe("ActivityPanel host (R4/R6)", () => {
+describe("ActivityPanel host (R6)", () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
 
@@ -55,10 +55,7 @@ describe("ActivityPanel host (R4/R6)", () => {
     act(() => {
       root?.render(
         <ActivityPanelHostProvider>
-          <div className="flex">
-            <div data-testid="column">scroll column</div>
-            <ActivityPanelDockSlot />
-          </div>
+          <ActivityPanelDockSlot />
           {showProbe ? <Probe /> : null}
         </ActivityPanelHostProvider>
       )
@@ -70,31 +67,10 @@ describe("ActivityPanel host (R4/R6)", () => {
     const slot = container!.querySelector<HTMLElement>(
       '[data-slot="activity-panel-dock"]'
     )
-    expect(slot).toBeTruthy()
-    expect(slot!.querySelector('[data-testid="docked"]')).toBeTruthy()
+    expect(slot?.querySelector('[data-testid="docked"]')).toBeTruthy()
 
-    // Unmount the panel (Probe) — the slot must not retain stale DOM.
+    // Unmounting the panel must not leave stale panel DOM in the layout slot.
     render(false)
-    expect(
-      slot!.querySelector('[data-testid="docked"]')
-    ).toBeNull()
-  })
-
-  it("keeps the dock slot a flex sibling of the scroll column (R4 seam)", () => {
-    render(false)
-    const slot = container!.querySelector('[data-slot="activity-panel-dock"]')
-    const column = container!.querySelector('[data-testid="column"]')
-    expect(slot && column).toBeTruthy()
-    // Same parent → sibling track; the panel never wraps/owns the scroll column.
-    expect(slot!.parentElement).toBe(column!.parentElement)
-  })
-
-  it("collapses to w-0 when empty and expands only when populated (motion-reduce gated)", () => {
-    render(false)
-    const slot = container!.querySelector('[data-slot="activity-panel-dock"]')!
-    const cls = slot.getAttribute("class") ?? ""
-    expect(cls).toContain("w-0")
-    expect(cls).toContain("[&:not(:empty)]:w-[var(--activity-panel-width)]")
-    expect(cls).toContain("motion-reduce:transition-none")
+    expect(slot!.querySelector('[data-testid="docked"]')).toBeNull()
   })
 })

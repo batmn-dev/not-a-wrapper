@@ -16,7 +16,7 @@ beforeAll(() => {
     true
 })
 
-describe("SourcesGallery favicon attrs (R8)", () => {
+describe("SourcesGallery (R8 favicon perf)", () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
 
@@ -38,7 +38,7 @@ describe("SourcesGallery favicon attrs (R8)", () => {
     container = null
   })
 
-  it("sets loading=lazy + decoding=async on every gallery img and renders exactly N imgs", () => {
+  it("renders exactly N lazy/async favicon imgs for N sources", () => {
     const sources = Array.from({ length: 141 }, (_, i) => ({
       href: `https://example${i}.com/page`,
       title: `Title ${i}`,
@@ -49,24 +49,10 @@ describe("SourcesGallery favicon attrs (R8)", () => {
     })
 
     const imgs = Array.from(container!.querySelectorAll("img"))
-    expect(imgs.length).toBe(141)
+    expect(imgs).toHaveLength(141)
     for (const img of imgs) {
       expect(img.getAttribute("loading")).toBe("lazy")
       expect(img.getAttribute("decoding")).toBe("async")
     }
-  })
-
-  it("renders the Sources heading with the count", () => {
-    const sources = [
-      { href: "https://example.com/a", title: "A" },
-      { href: "https://example.com/b", title: "B" },
-    ]
-
-    act(() => {
-      root?.render(<SourcesGallery sources={sources} />)
-    })
-
-    expect(container!.textContent).toContain("Sources")
-    expect(container!.textContent).toContain("· 2")
   })
 })

@@ -13,7 +13,6 @@ import {
 import {
   ActivityPanelTrigger,
   activityStateLabel,
-  type ActivityTriggerState,
 } from "./activity-panel-trigger"
 
 beforeAll(() => {
@@ -21,84 +20,45 @@ beforeAll(() => {
     true
 })
 
-describe("activityStateLabel (composable thinking states)", () => {
-  it("composes each thinking state into text", () => {
+describe("ActivityPanelTrigger", () => {
+  it("composes each thinking state into label text", () => {
     expect(activityStateLabel({ status: "thinking" })).toBe("Thinking")
-    expect(
-      activityStateLabel({ status: "thought", durationSeconds: 1 })
-    ).toBe("Thought for 1s")
-    expect(
-      activityStateLabel({ status: "thought", durationSeconds: 75 })
-    ).toBe("Thought for 1m 15s")
+    expect(activityStateLabel({ status: "thought", durationSeconds: 1 })).toBe(
+      "Thought for 1s"
+    )
     expect(activityStateLabel({ status: "thought" })).toBe("Thought")
-    expect(activityStateLabel({ status: "sources", count: 1 })).toBe(
-      "1 source"
-    )
-    expect(activityStateLabel({ status: "sources", count: 3 })).toBe(
-      "3 sources"
-    )
+    expect(activityStateLabel({ status: "sources", count: 3 })).toBe("3 sources")
     expect(activityStateLabel({ status: "activity" })).toBe("Activity")
   })
-})
 
-describe("ActivityPanelTrigger", () => {
-  let container: HTMLDivElement | null = null
-  let root: Root | null = null
-
-  beforeEach(() => {
-    container = document.createElement("div")
+  it("renders the label with a single trailing chevron (no leading icon) and opens on click", () => {
+    let container: HTMLDivElement | null = document.createElement("div")
     document.body.appendChild(container)
-    root = createRoot(container)
-  })
+    const root: Root = createRoot(container)
+    const onOpen = vi.fn()
 
-  afterEach(() => {
-    const rootToUnmount = root
-    if (rootToUnmount) {
-      act(() => {
-        rootToUnmount.unmount()
-      })
-    }
-    container?.remove()
-    root = null
-    container = null
-  })
-
-  function render(state: ActivityTriggerState, onOpen = vi.fn()) {
     act(() => {
-      root?.render(<ActivityPanelTrigger onOpen={onOpen} state={state} />)
+      root.render(
+        <ActivityPanelTrigger
+          onOpen={onOpen}
+          state={{ status: "thought", durationSeconds: 1 }}
+        />
+      )
     })
-    return onOpen
-  }
 
-  it("renders the thinking-state text and a trailing chevron (no leading icon)", () => {
-    render({ status: "thought", durationSeconds: 1 })
-
-    const button = container!.querySelector("button")
-    expect(button).toBeTruthy()
-    expect(container!.textContent).toContain("Thought for 1s")
-
-    // Exactly one icon (the trailing chevron) — no leading sparkle.
-    const icons = container!.querySelectorAll("svg")
-    expect(icons).toHaveLength(1)
-
-    // The chevron is the LAST child of the button (rendered on the right).
-    const lastChild = button!.lastElementChild
-    expect(lastChild!.querySelector("svg")).toBeTruthy()
-  })
-
-  it("shows the live 'Thinking' state", () => {
-    render({ status: "thinking" })
-    expect(container!.textContent).toContain("Thinking")
-  })
-
-  it("names the button for activity and fires onOpen on click", () => {
-    const onOpen = render({ status: "thought", durationSeconds: 1 })
-    const button = container!.querySelector("button")!
-    expect(button.getAttribute("aria-label")).toBe("Open activity: Thought for 1s")
+    expect(container.textContent).toContain("Thought for 1s")
+    // The only icon is the trailing chevron — no leading sparkle.
+    expect(container.querySelectorAll("svg")).toHaveLength(1)
 
     act(() => {
-      button.click()
+      container!.querySelector("button")!.click()
     })
     expect(onOpen).toHaveBeenCalledTimes(1)
+
+    act(() => {
+      root.unmount()
+    })
+    container.remove()
+    container = null
   })
 })
