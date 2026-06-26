@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
 import type { TextStreamPart, ToolSet, UIMessage } from "ai"
 import { fetchMutation } from "convex/nextjs"
 import { describe, expect, it, vi } from "vitest"
@@ -203,24 +201,37 @@ describe("durable chat runtime helpers", () => {
     expect(message.metadata?.durableStatus).toBe("aborted")
   })
 
-  it("validates UI messages before converting them to model messages", () => {
-    const routeSource = readFileSync(
-      join(process.cwd(), "app/api/chat/route.ts"),
-      "utf8"
-    )
+  it("uses an injected persister for snapshot writes", async () => {
+    vi.mocked(fetchMutation).mockReset()
+    const injectedFetchMutation = vi.fn().mockResolvedValue(undefined)
 
-    const validateCallIndex = routeSource.indexOf(
-      "const validatedMessages = await validateUIMessages"
-    )
-    const convertCallIndex = routeSource.indexOf(
-      "let modelMessages: ModelMessage[] = await convertToModelMessages"
-    )
+    const tracker = createDurableSnapshotTracker({
+      convexToken: "token",
+      runId: "run_1" as Id<"generationRuns">,
+      chatId: "chat_1" as Id<"chats">,
+      messageId: "message_1" as Id<"messages">,
+      order: 1,
+      fetchMutation: injectedFetchMutation as unknown as typeof fetchMutation,
+    })
 
-    expect(validateCallIndex).toBeGreaterThan(-1)
-    expect(convertCallIndex).toBeGreaterThan(-1)
-    expect(validateCallIndex).toBeLessThan(
-      convertCallIndex
+    tracker.onChunk({ type: "text-delta", text: "A" } as never)
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    expect(injectedFetchMutation).toHaveBeenCalledTimes(1)
+    expect(injectedFetchMutation).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        runId: "run_1",
+        chatId: "chat_1",
+        messageId: "message_1",
+        order: 1,
+        sequence: 1,
+        textSnapshot: "A",
+        partsSnapshot: [{ type: "text", text: "A" }],
+      }),
+      { token: "token" }
     )
+    expect(fetchMutation).not.toHaveBeenCalled()
   })
 
   it("does not force-write an empty snapshot before the first semantic delta", async () => {
