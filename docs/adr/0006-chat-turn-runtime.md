@@ -27,8 +27,11 @@ naïve `run(turn) → stream` shape:
    losing the status codes (clients get a 500 or a 200-with-error-stream).
 
 2. **`streamText()` returns a result handle synchronously while generation runs
-   in the background** (`route.ts:1088`, wrapped at `1527`). The seam can only
-   fall at that handle — never at a finished value or a fully-built `Response`.
+   in the background** (in `app/api/chat/chat-turn-runtime.ts`,
+   `toResponse(signal)` uses the local `runGeneration` closure to call
+   `streamText`, then wraps the returned handle with
+   `toUIMessageStreamResponse`). The seam can only fall at that handle — never
+   at a finished value or a fully-built `Response`.
 
 The fragile, untested heart is the **cross-callback handoff**:
 `durableFinalUsage` / `durableFinalFinishReason` / `durableFinalToolCounts` are
@@ -123,8 +126,10 @@ gate), the 400/401 validation short-circuits, and returning the `Response`.
   assertion in `durable-runtime.test.ts:206` is deleted once `prepare()` gives
   the ordering a real unit test.
 - **Deferred, not in this cut:** the OpenAI plaintext-fallback
-  (`route.ts:863` hard-codes `provider === "openai"`) moves behind the runtime
-  as-is for now; pushing it behind an adapter post-convert hook is a separate
+  (in `app/api/chat/chat-turn-runtime.ts`, `prepare()` checks
+  `resolvedProvider === "openai"` after `convertToModelMessages`) moves behind
+  the runtime as-is for now; pushing it behind an adapter post-convert hook is a
+  separate
   refactor (detection runs on post-convert `ModelMessage[]`, rebuild on
   pre-convert `UIMessage[]` — both forms must move together).
 - **Must verify during implementation (flagged risks):** (a) the Braintrust span

@@ -1,0 +1,102 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+vi.mock("@sentry/nextjs", () => ({
+  setTag: vi.fn(),
+  setContext: vi.fn(),
+  setConversationId: undefined,
+  captureException: vi.fn(),
+  startSpan: vi.fn((_opts: unknown, cb: () => unknown) => cb()),
+}))
+
+vi.mock("@/lib/models/model-id-migration", () => ({
+  resolveModelId: vi.fn((model: string) => model),
+}))
+
+vi.mock("@/lib/auth/workos", () => ({
+  getWorkosSession: vi.fn(),
+}))
+
+vi.mock("@/lib/observability/chat-error-taxonomy", () => ({
+  classifyChatError: vi.fn(() => "unknown"),
+}))
+
+vi.mock("./api", () => ({
+  checkServerSideUsage: vi.fn(),
+  incrementServerSideUsage: vi.fn(),
+  validateAndTrackUsage: vi.fn(),
+}))
+
+vi.mock("./chat-turn-runtime", () => ({
+  createChatTurnRuntime: vi.fn(),
+  getToolDimensionForError: vi.fn(() => "none"),
+}))
+
+import { getWorkosSession } from "@/lib/auth/workos"
+import { createChatTurnRuntime } from "./chat-turn-runtime"
+import { POST } from "./route"
+
+const consoleErrorSpy = vi
+  .spyOn(console, "error")
+  .mockImplementation(() => {})
+const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
+
+function makeRequest(): Request {
+  return new Request("http://test.local/api/chat", {
+    method: "POST",
+    body: JSON.stringify({
+      messages: [
+        { id: "u1", role: "user", parts: [{ type: "text", text: "hello" }] },
+      ],
+      chatId: "chat-1",
+      model: "test-model",
+    }),
+  })
+}
+
+describe("/api/chat route", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getWorkosSession).mockResolvedValue({
+      user: { id: "user-1" },
+      accessToken: "convex-token",
+    } as Awaited<ReturnType<typeof getWorkosSession>>)
+  })
+
+  afterEach(() => {
+    consoleErrorSpy.mockClear()
+    consoleWarnSpy.mockClear()
+  })
+
+  it("returns the original fallback response when turn.fail throws", async () => {
+    const originalError = Object.assign(new Error("provider failed"), {
+      code: "PROVIDER_FAILED",
+      statusCode: 502,
+    })
+    const failError = new Error("cleanup failed")
+    const fail = vi.fn(async () => {
+      throw failError
+    })
+    vi.mocked(createChatTurnRuntime).mockReturnValue({
+      prepare: vi.fn(async () => {
+        throw originalError
+      }),
+      toResponse: vi.fn(),
+      fail,
+    })
+
+    const response = await POST(makeRequest())
+
+    await expect(response.json()).resolves.toEqual({
+      error: "provider failed",
+      code: "PROVIDER_FAILED",
+    })
+    expect(response.status).toBe(502)
+    expect(fail).toHaveBeenCalledWith(originalError)
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("\"_tag\":\"chat_turn_fail_failed\"")
+    )
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("\"error\":\"cleanup failed\"")
+    )
+  })
+})

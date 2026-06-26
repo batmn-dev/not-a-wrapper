@@ -192,7 +192,21 @@ export async function POST(req: Request) {
     if (turn) {
       // Post-runtime error: the turn owns MCP cleanup, the durable-run failure
       // write, and the rich Sentry capture.
-      await turn.fail(err)
+      try {
+        await turn.fail(err)
+      } catch (failError) {
+        console.warn(
+          JSON.stringify({
+            _tag: "chat_turn_fail_failed",
+            requestId,
+            chatId: telemetryChatId,
+            error:
+              failError instanceof Error
+                ? failError.message
+                : String(failError),
+          })
+        )
+      }
     } else {
       // Pre-runtime error (parse / validation / usage admission). No durable
       // failure write is needed here precisely because durable state (the

@@ -1135,6 +1135,7 @@ export function createChatTurnRuntime(args: {
         messages: modelMessages,
         tools: tool.tools,
         stopWhen: stepCountIs(maxSteps),
+        abortSignal: signal,
         experimental_telemetry: {
           isEnabled: true,
           functionId: "api.chat.streamText",

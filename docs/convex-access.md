@@ -13,22 +13,27 @@ default — is a different database and will look empty or wrong.
 
 ## Deployment map
 
-The project standardizes on Convex's **default per-developer dev deployment,
-"Development (Cloud)"** — the one `convex dev` provisions and reconnects to (it
-re-creates itself if you delete it). Do **not** run on a custom-named dev
-deployment: every tool that defaults to "Development (Cloud)" (notably the MCP)
-then reads a different, empty database than your app, which is exactly the trap
-that wasted a debugging session.
+The canonical dev deployment is **whatever `CONVEX_DEPLOYMENT` /
+`NEXT_PUBLIC_CONVEX_URL` point to in `.env.local`** — that is the only database
+the app reads and writes. Make every tool agree with it:
+
+- The **CLI** and **`convex dev`** read `.env.local` automatically.
+- The **MCP does _not_ reliably follow `.env.local`.** Pin it explicitly with
+  `--deployment <slug>` in its config (the `convex` server entry in
+  `~/.claude.json`), matching the `*.convex.cloud` slug in
+  `NEXT_PUBLIC_CONVEX_URL`. Without an explicit `--deployment` it resolves a
+  deployment of kind `"unspecified"` and reads a different, often empty backend
+  — exactly the trap that wasted a debugging session.
 
 | Role | How to identify | Notes |
 | --- | --- | --- |
-| **Local dev (canonical)** | "Development (Cloud)" — its Convex id matches `NEXT_PUBLIC_CONVEX_URL` / `CONVEX_DEPLOYMENT` in `.env.local` | What the app, `convex dev`, the CLI, and the MCP should all use |
+| **Local dev (canonical)** | the Convex id in `NEXT_PUBLIC_CONVEX_URL` / `CONVEX_DEPLOYMENT` | App, `convex dev`, CLI, and MCP must all point here |
 | Production | "Production" (`tidy-clam-680`) | Read-only via tooling; never write from an agent |
 | Previews | per-branch, ephemeral (Vercel) | per-branch only |
 
 Identify the canonical dev deployment by matching the Convex id in
-`NEXT_PUBLIC_CONVEX_URL` — **never** by a friendly label. A deployment's
-dashboard label can be a custom string while its real id is the
+`NEXT_PUBLIC_CONVEX_URL` — **never** by a friendly dashboard label. A
+deployment's label can be a custom string while its real id is the
 `*.convex.cloud` slug.
 
 ## How to read data — in order of reliability

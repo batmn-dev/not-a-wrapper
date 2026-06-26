@@ -529,6 +529,20 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
 })
 
 describe("createChatTurnRuntime — abort telemetry", () => {
+  it("passes the request abort signal into streamText", async () => {
+    const harness = makeStreamHarness()
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(harness, makeFetchMutation()),
+    })
+
+    await runtime.prepare()
+    const signal = notAbortedSignal()
+    runtime.toResponse(signal)
+
+    expect(harness.captured.streamOpts.abortSignal).toBe(signal)
+  })
+
   it("captures chat_client_abort exactly once when the request is already aborted", async () => {
     const harness = makeStreamHarness()
     const runtime = createChatTurnRuntime({
