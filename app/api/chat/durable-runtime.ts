@@ -162,11 +162,18 @@ type DurableSnapshotTrackerOptions = {
   messageId: Id<"messages">
   order: number
   throttleMs?: number
+  /**
+   * Injected snapshot persister — defaults to the module `fetchMutation` so the
+   * Chat turn runtime can thread its own injected `deps.fetchMutation` through,
+   * making snapshot writes mockable without module-level mocking.
+   */
+  fetchMutation?: typeof fetchMutation
 }
 
 export function createDurableSnapshotTracker(
   options: DurableSnapshotTrackerOptions
 ) {
+  const persistSnapshot = options.fetchMutation ?? fetchMutation
   let text = ""
   let reasoning = ""
   let sequence = 0

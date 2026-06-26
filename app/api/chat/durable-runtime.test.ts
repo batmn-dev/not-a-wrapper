@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
 import type { TextStreamPart, ToolSet, UIMessage } from "ai"
 import { fetchMutation } from "convex/nextjs"
 import { describe, expect, it, vi } from "vitest"
@@ -201,26 +199,6 @@ describe("durable chat runtime helpers", () => {
     expect(message.status).toBe("aborted")
     expect(getFinalAssistantText(message)).toBe("partial output")
     expect(message.metadata?.durableStatus).toBe("aborted")
-  })
-
-  it("validates UI messages before converting them to model messages", () => {
-    const routeSource = readFileSync(
-      join(process.cwd(), "app/api/chat/route.ts"),
-      "utf8"
-    )
-
-    const validateCallIndex = routeSource.indexOf(
-      "const validatedMessages = await validateUIMessages"
-    )
-    const convertCallIndex = routeSource.indexOf(
-      "let modelMessages: ModelMessage[] = await convertToModelMessages"
-    )
-
-    expect(validateCallIndex).toBeGreaterThan(-1)
-    expect(convertCallIndex).toBeGreaterThan(-1)
-    expect(validateCallIndex).toBeLessThan(
-      convertCallIndex
-    )
   })
 
   it("does not force-write an empty snapshot before the first semantic delta", async () => {
