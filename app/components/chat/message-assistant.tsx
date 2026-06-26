@@ -22,7 +22,10 @@ import { RiCheckLine, RiFileCopyLine, RiRefreshLine } from "@remixicon/react"
 import type { ToolUIPart } from "ai"
 import { getStaticToolName, isStaticToolUIPart } from "ai"
 import { useCallback, useRef, useState } from "react"
-import { ActivityPanelTrigger } from "./activity/activity-panel-trigger"
+import {
+  ActivityPanelTrigger,
+  type ActivityTriggerState,
+} from "./activity/activity-panel-trigger"
 import { getSources } from "./get-sources"
 import { QuoteButton } from "./quote-button"
 import { SearchImages } from "./search-images"
@@ -147,12 +150,21 @@ export function MessageAssistant({
   const showActivityTrigger =
     Boolean(onOpenActivityPanel) &&
     isActiveTurn &&
-    (hasReasoning || hasSources)
-  const activitySummary = isReasoningStreaming
-    ? "Thinking"
-    : hasSources
-      ? `${sources.length} source${sources.length === 1 ? "" : "s"}`
-      : "Activity"
+    (isReasoningStreaming || hasReasoning || hasSources)
+  const reasoningDurationSeconds =
+    typeof metadata?.reasoningDurationMs === "number"
+      ? Math.round(metadata.reasoningDurationMs / 1000)
+      : undefined
+  // Compose the trigger's thinking state: live "Thinking" while reasoning
+  // streams, then "Thought for {duration}" once it completes, else a source
+  // count or the generic label.
+  const activityState: ActivityTriggerState = isReasoningStreaming
+    ? { status: "thinking" }
+    : hasReasoning
+      ? { status: "thought", durationSeconds: reasoningDurationSeconds }
+      : hasSources
+        ? { status: "sources", count: sources.length }
+        : { status: "activity" }
 
   // Type for image search results
   type ImageResult = { title: string; imageUrl: string; sourceUrl: string }
@@ -254,7 +266,7 @@ export function MessageAssistant({
         {showActivityTrigger && (
           <ActivityPanelTrigger
             onOpen={() => onOpenActivityPanel?.()}
-            summary={activitySummary}
+            state={activityState}
           />
         )}
 
