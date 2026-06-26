@@ -158,3 +158,81 @@ export function SourceContent({
     </HoverCardContent>
   )
 }
+
+export type SourcesGalleryItemProps = {
+  /** Anchor href; opened in a new tab. */
+  href: string
+  /** Primary, two-line-clamped title. */
+  title: string
+  /** Row-1 site text; falls back to `new URL(href).hostname`. */
+  siteName?: string
+  /** Two-line-clamped snippet; the slot is rendered even when empty. */
+  description?: string
+  /** Favicon ORIGIN; falls back to `new URL(href).origin`. */
+  faviconDomain?: string
+}
+
+/**
+ * SourcesGalleryItem — a single full-bleed source row for the Activity panel
+ * sources gallery. Unlike `Source`/`SourceTrigger`/`SourceContent` (a HoverCard
+ * citation pill), this is a plain anchor with an internal favicon, site name,
+ * semibold title, and a reserved description slot. Favicon is requested at
+ * `sz=32` against the page ORIGIN and rendered in a fixed 16px box to avoid
+ * layout shift across a large gallery.
+ */
+export function SourcesGalleryItem({
+  href,
+  title,
+  siteName,
+  description,
+  faviconDomain,
+}: SourcesGalleryItemProps) {
+  let hostname = ""
+  try {
+    hostname = new URL(href).hostname
+  } catch {
+    hostname = href.split("/").pop() || href
+  }
+
+  let origin = faviconDomain
+  if (!origin) {
+    try {
+      origin = new URL(href).origin
+    } catch {
+      origin = href
+    }
+  }
+
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener"
+      className="flex flex-col gap-0.5 rounded-xl px-3 py-2.5 hover:bg-accent"
+    >
+      <div className="flex items-center gap-1.5">
+        {/* eslint-disable-next-line @next/next/no-img-element -- Dynamic external favicon, optimization not beneficial */}
+        <img
+          src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(
+            origin
+          )}&sz=32`}
+          alt=""
+          width={16}
+          height={16}
+          loading="lazy"
+          decoding="async"
+          className="bg-card size-4 shrink-0 rounded-full object-cover motion-safe:transition-opacity"
+        />
+        <span className="text-muted-foreground truncate text-sm">
+          {siteName ?? hostname}
+        </span>
+      </div>
+      <div className="line-clamp-2 text-sm font-semibold break-words">
+        {title}
+      </div>
+      <div className="text-muted-foreground line-clamp-2 text-sm leading-snug">
+        {description}
+      </div>
+    </a>
+  )
+}

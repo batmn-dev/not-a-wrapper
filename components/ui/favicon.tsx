@@ -49,6 +49,10 @@ export type FaviconProps = {
   url: string | null | undefined
   alt?: string
   className?: string
+  /** Native `<img loading>` hint, forwarded through `AvatarImage`. */
+  loading?: "lazy" | "eager"
+  /** Native `<img decoding>` hint, forwarded through `AvatarImage`. */
+  decoding?: "async" | "sync" | "auto"
 } & VariantProps<typeof faviconVariants>
 
 /**
@@ -64,6 +68,8 @@ export function Favicon({
   shape,
   overlap,
   className,
+  loading,
+  decoding,
 }: FaviconProps) {
   const src = resolveFaviconSrc(url)
   const radius = shape === "rounded" ? "rounded-sm" : "rounded-full"
@@ -72,7 +78,15 @@ export function Favicon({
     <Avatar
       className={cn("size-4", faviconVariants({ shape, overlap }), className)}
     >
-      {src ? <AvatarImage src={src} alt={alt} className={radius} /> : null}
+      {src ? (
+        <AvatarImage
+          src={src}
+          alt={alt}
+          loading={loading}
+          decoding={decoding}
+          className={radius}
+        />
+      ) : null}
       <AvatarFallback className={radius} />
     </Avatar>
   )

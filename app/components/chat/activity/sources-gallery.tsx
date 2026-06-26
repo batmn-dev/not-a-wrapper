@@ -1,0 +1,42 @@
+import {
+  SourcesGalleryItem,
+  type SourcesGalleryItemProps,
+} from "@/components/ui/source"
+import { cn } from "@/lib/utils"
+import { PanelSectionHeading } from "./panel-section-heading"
+
+export type SourcesGalleryProps = {
+  sources: SourcesGalleryItemProps[]
+  /** Heading count; defaults to `sources.length`. */
+  count?: number
+  className?: string
+}
+
+/**
+ * SourcesGallery — the app-level "Sources · N" gallery for the Activity panel.
+ * Lives app-side (not in `components/ui`) because it depends on the app-level
+ * `PanelSectionHeading`, preserving the `components/ui` → app dependency
+ * boundary (plan §5 commit 1, GA §6.1). Renders ONE `ul` of full-bleed
+ * `SourcesGalleryItem` anchors. No `groups` until real grouped source data
+ * exists; rows are NOT routed through the `Source` HoverCard trio.
+ */
+export function SourcesGallery({
+  sources,
+  count = sources.length,
+  className,
+}: SourcesGalleryProps) {
+  if (sources.length === 0) return null
+
+  return (
+    <div className={cn("space-y-2", className)}>
+      <PanelSectionHeading title="Sources" trailing={<>· {count}</>} />
+      <ul className="flex flex-col">
+        {sources.map((source, index) => (
+          <li key={index}>
+            <SourcesGalleryItem {...source} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
