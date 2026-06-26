@@ -12,7 +12,8 @@ import type { UserProfile } from "@/lib/user/types"
 import { mergeUserProfileWithConvexFields } from "./merge-user-profile"
 import { useAuth } from "@workos-inc/authkit-nextjs/components"
 import type { User as WorkosUser } from "@workos-inc/node"
-import { useConvexAuth, useMutation, useQuery } from "convex/react"
+import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
+import { useConvexAuth, useMutation } from "convex/react"
 import {
   createContext,
   type PropsWithChildren,
@@ -57,10 +58,7 @@ export function UserProvider({
   const { user: workosUser, loading: isAuthLoading } = useAuth()
   const { isAuthenticated: isConvexAuthenticated } = useConvexAuth()
 
-  const convexUser = useQuery(
-    api.users.getCurrent,
-    isConvexAuthenticated ? {} : "skip"
-  )
+  const { data: convexUser } = usePerUserQuery(api.users.getCurrent)
 
   const syncAttemptedRef = useRef<string | null>(null)
 

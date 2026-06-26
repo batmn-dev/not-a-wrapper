@@ -3,6 +3,7 @@
 import { AuthModal } from "@/app/auth/_components/auth-modal"
 import { ModelSelector } from "@/components/common/model-selector/base"
 import { useChats } from "@/lib/chat-store/chats/provider"
+import { useChat } from "@/lib/chat-store/chats/use-chat"
 import { useChatSession } from "@/lib/chat-store/session/provider"
 import { resolvePreferredModelId } from "@/lib/model-store/utils"
 import { useModel } from "@/lib/model-store/provider"
@@ -21,31 +22,36 @@ export function ModelSelectorHeader() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
 
   const { chatId } = useChatSession()
-  const { getChatById, updateChatModel } = useChats()
+  const { updateChatModel } = useChats()
 
-  const currentChat = useMemo(
-    () => (chatId ? getChatById(chatId) : null),
-    [chatId, getChatById]
-  )
+  // Resolves out-of-window chats via the chats.getById fallback (useChat).
+  const { chat: currentChat, isLoading: isChatLoading } = useChat(chatId)
+  const isResolvingCurrentChat = !!chatId && isChatLoading
 
   const isAuthenticated = !!user?.id
 
-  const effectiveModel = useMemo(
-    () =>
-      resolvePreferredModelId({
-        models,
-        isAuthenticated,
-        currentModelId: currentChat?.model,
-        preferredModelIds: [
-          lastUsedModel,
-          favoriteModels[0],
-        ],
-      }),
-    [currentChat?.model, favoriteModels, isAuthenticated, lastUsedModel, models]
-  )
+  const effectiveModel = useMemo(() => {
+    if (isResolvingCurrentChat) return null
+
+    return resolvePreferredModelId({
+      models,
+      isAuthenticated,
+      currentModelId: currentChat?.model,
+      preferredModelIds: [lastUsedModel, favoriteModels[0]],
+    })
+  }, [
+    currentChat?.model,
+    favoriteModels,
+    isAuthenticated,
+    isResolvingCurrentChat,
+    lastUsedModel,
+    models,
+  ])
 
   const handleSingleModelChange = useCallback(
     (modelId: string) => {
+      if (isResolvingCurrentChat) return
+
       setLastUsedModel(modelId)
 
       if (chatId && user?.id) {
@@ -54,7 +60,7 @@ export function ModelSelectorHeader() {
         )
       }
     },
-    [setLastUsedModel, chatId, user?.id, updateChatModel]
+    [isResolvingCurrentChat, setLastUsedModel, chatId, user?.id, updateChatModel]
   )
 
   return (
@@ -63,6 +69,7 @@ export function ModelSelectorHeader() {
         selectedModelId={effectiveModel}
         setSelectedModelId={handleSingleModelChange}
         isUserAuthenticated={isAuthenticated}
+        disabled={isResolvingCurrentChat}
         onLockedGuestModelSelect={() => setIsAuthModalOpen(true)}
       />
       <AuthModal

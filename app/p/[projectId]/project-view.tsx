@@ -7,6 +7,10 @@ import { ProjectChatItem } from "@/app/components/layout/sidebar/project-chat-it
 import { Icon } from "@/components/ui/icon"
 import { toast } from "@/components/ui/toast"
 import { useChats } from "@/lib/chat-store/chats/provider"
+import { convexChatToChat } from "@/lib/chat-store/types"
+import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
+import { api } from "@/convex/_generated/api"
+import type { Id } from "@/convex/_generated/dataModel"
 import { MESSAGE_MAX_LENGTH, SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import {
@@ -41,7 +45,7 @@ export function ProjectView({ projectId }: ProjectViewProps) {
     resolveWebSearchEnabled(preferences.webSearchEnabled)
   )
   const { user } = useUser()
-  const { chats: allChats, createNewChat } = useChats()
+  const { createNewChat } = useChats()
   const { files, setFiles, handleFileUpload, handleFileRemove } =
     useFileUpload()
 
@@ -56,10 +60,18 @@ export function ProjectView({ projectId }: ProjectViewProps) {
     },
   })
 
-  const chats = useMemo(
-    () => allChats.filter((chat) => chat.project_id === projectId),
-    [allChats, projectId]
+  // The project shows ALL its chats via a dedicated owner-checked read, not the
+  // bounded sidebar window. See docs/sidebar-chat-list-streaming-plan.md commit 7.
+  const { data: projectChats } = usePerUserQuery(
+    api.chats.getProjectChatsForCurrentUser,
+    { projectId: projectId as Id<"projects"> }
   )
+  const chats = useMemo(
+    () => projectChats?.map(convexChatToChat),
+    [projectChats]
+  )
+  const hasProjectChats = (chats?.length ?? 0) > 0
+  const shouldShowEmptyState = chats !== undefined && chats.length === 0
   const isAuthenticated = useMemo(() => !!user?.id, [user?.id])
 
   const setEnableSearch = useCallback(
@@ -203,7 +215,7 @@ export function ProjectView({ projectId }: ProjectViewProps) {
     <div
       className={cn(
         "relative flex h-full w-full flex-col items-center overflow-x-hidden overflow-y-auto",
-        chats.length === 0 ? "justify-center pt-0" : "justify-start pt-32"
+        hasProjectChats ? "justify-start pt-32" : "justify-center pt-0"
       )}
     >
       <motion.div
@@ -244,7 +256,7 @@ export function ProjectView({ projectId }: ProjectViewProps) {
         <ChatInput {...chatInputProps} />
       </motion.div>
 
-      {chats.length > 0 ? (
+      {chats !== undefined && chats.length > 0 ? (
         <div className="mx-auto w-full max-w-3xl px-4 pt-6 pb-20">
           <h2 className="text-muted-foreground mb-3 text-sm font-medium">
             Recent chats
@@ -259,13 +271,13 @@ export function ProjectView({ projectId }: ProjectViewProps) {
             ))}
           </div>
         </div>
-      ) : (
+      ) : shouldShowEmptyState ? (
         <div className="mx-auto w-full max-w-3xl px-4 pt-6 pb-20">
           <h2 className="text-muted-foreground mb-3 text-sm font-medium">
             No chats yet
           </h2>
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

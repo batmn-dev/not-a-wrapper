@@ -5,7 +5,7 @@ import { fetchClient } from "@/lib/fetch"
 import { getModelInfo } from "@/lib/models"
 import { resolveModelId, resolveModelIds } from "@/lib/models/model-id-migration"
 import { ModelConfig } from "@/lib/models/types"
-import { useQuery } from "convex/react"
+import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
 import {
   createContext,
   useCallback,
@@ -87,9 +87,9 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, [])
 
-  // Fetch provider status from Convex (reactive query)
+  // Fetch provider status from Convex (reactive query, gated on Convex auth).
   // Uses getProviderStatus which returns only provider identifiers, not encrypted key material
-  const providers = useQuery(api.userKeys.getProviderStatus)
+  const { data: providers } = usePerUserQuery(api.userKeys.getProviderStatus)
 
   // Transform provider array into status object
   const userKeyStatus = useMemo<UserKeyStatus>(() => {

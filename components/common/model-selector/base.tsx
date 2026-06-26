@@ -35,9 +35,10 @@ import { ProModelDialog } from "./pro-dialog"
 type ModelSelectorProps = {
   className?: string
   isUserAuthenticated?: boolean
-  selectedModelId: string
+  selectedModelId: string | null
   setSelectedModelId: (modelId: string) => void
   onLockedGuestModelSelect?: (modelId: string) => void
+  disabled?: boolean
   /** Composer pill matches ChatGPT reference: content width, max-w-40 label, asymmetric padding. */
   variant?: "default" | "composer"
 }
@@ -48,6 +49,7 @@ export function ModelSelector({
   selectedModelId,
   setSelectedModelId,
   onLockedGuestModelSelect,
+  disabled = false,
   variant = "default",
 }: ModelSelectorProps) {
   const isComposerVariant = variant === "composer"
@@ -62,13 +64,16 @@ export function ModelSelector({
   const [searchQuery, setSearchQuery] = useState("")
   const searchInputRef = useRef<HTMLInputElement>(null)
 
-  const currentModel =
-    models.find((model) => model.id === selectedModelId) ??
-    getModelInfo(selectedModelId)
+  const currentModel = selectedModelId
+    ? (models.find((model) => model.id === selectedModelId) ??
+        getModelInfo(selectedModelId))
+    : null
 
   useKeyShortcut(
     (e) => (e.key === "p" || e.key === "P") && e.metaKey && e.shiftKey,
     () => {
+      if (disabled) return
+
       if (isMobile) {
         setIsDrawerOpen((prev) => !prev)
       } else {
@@ -78,6 +83,8 @@ export function ModelSelector({
   )
 
   const handleSelect = (modelId: string, isLocked: boolean) => {
+    if (disabled) return
+
     if (isLocked) {
       setSelectedProModel(modelId)
       if (!isUserAuthenticated) {
@@ -164,7 +171,7 @@ export function ModelSelector({
           : "max-w-full justify-between rounded-lg text-lg",
         className
       )}
-      disabled={isLoadingModels}
+      disabled={disabled || isLoadingModels}
       aria-label={`Select model, current model ${currentModel?.name || "unknown"}`}
     >
       <span className={cn("min-w-0 truncate", isComposerVariant && "max-w-40")}>
@@ -192,7 +199,13 @@ export function ModelSelector({
             currentModel={selectedProModel || ""}
           />
         ) : null}
-        <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+        <Drawer
+          open={isDrawerOpen}
+          onOpenChange={(open) => {
+            if (disabled && open) return
+            setIsDrawerOpen(open)
+          }}
+        >
           <DrawerTrigger render={trigger} />
           <DrawerContent>
             <DrawerHeader>
@@ -258,6 +271,7 @@ export function ModelSelector({
       <DropdownMenu
         open={isDropdownOpen}
         onOpenChange={(open) => {
+          if (disabled && open) return
           setIsDropdownOpen(open)
           if (!open) {
             setSearchQuery("")

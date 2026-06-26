@@ -172,9 +172,11 @@ describe("ModelSelector", () => {
   function renderSelector({
     isUserAuthenticated,
     onSelect = vi.fn(),
+    disabled = false,
   }: {
     isUserAuthenticated: boolean
     onSelect?: (modelId: string) => void
+    disabled?: boolean
   }) {
     container = document.createElement("div")
     document.body.appendChild(container)
@@ -190,6 +192,7 @@ describe("ModelSelector", () => {
             setSelectedModelId={onSelect}
             isUserAuthenticated={isUserAuthenticated}
             onLockedGuestModelSelect={() => setIsAuthPromptOpen(true)}
+            disabled={disabled}
           />
           {isAuthPromptOpen ? (
             <div role="dialog">Log in to unlock models</div>
@@ -246,6 +249,25 @@ describe("ModelSelector", () => {
     expect(
       document.body.querySelector('[data-testid="pro-model-dialog"]')
     ).toBeNull()
+  })
+
+  it("disables the trigger and ignores option clicks when disabled", () => {
+    const onSelect = renderSelector({
+      isUserAuthenticated: false,
+      disabled: true,
+    })
+
+    expect(
+      document.body.querySelector<HTMLButtonElement>(
+        '[data-testid="model-trigger"]'
+      )?.disabled
+    ).toBe(true)
+
+    act(() => {
+      getModelOption("GPT-5 Mini").click()
+    })
+
+    expect(onSelect).not.toHaveBeenCalled()
   })
 
   it("preserves signed-in favorite and hidden-model filtering", () => {

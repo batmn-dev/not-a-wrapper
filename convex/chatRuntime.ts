@@ -1457,7 +1457,6 @@ export async function markGenerationRunCompletedForChat(
     failedToolCalls: args.failedToolCalls,
     activeStreamId: undefined,
   })
-  await ctx.db.patch(run.chatId, { updatedAt: now })
 }
 
 export const markGenerationRunFailed = mutation({

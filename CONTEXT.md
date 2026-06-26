@@ -14,6 +14,12 @@ _Avoid_: server copy, UI Convex mirror, `components/ui/convex`
 A Convex `query`/`mutation` defined through an auth-injecting builder (`authenticatedQuery`, `ownedChatMutation`, `ownedProjectMutation`, `ownedMcpServerMutation`, …) instead of calling `ctx.auth.getUserIdentity()` inline. The builder resolves the caller's user — and, for owned-resource variants, fetches and ownership-checks the resource — before the handler body runs, injecting `ctx.user` (and `ctx.chat`/`ctx.project`/…) and enforcing one error contract (Not authenticated → not found → Not authorized). It makes auth structural, not a call you must remember. Internal functions and the HTTP chat-route token path stay outside the seam; public-only reads (share links) and anonymous/optional-auth paths use their own non-throwing builders. Self-identity-match handlers (`identity.subject === arg`) are a distinct shape, not an owned-resource one.
 _Avoid_: auth helper (the older bypassable `lib/auth.ts` form), middleware, guard
 
+### Client
+
+**Per-user subscription**:
+The single client seam — a `usePerUserQuery` hook — every per-user Convex live read goes through. It owns the one correct subscribe gate, `isConvexAuthenticated` (the Convex JWT is synced), not WorkOS session presence (`!!user` / `!!userId`), and returns `"skip"` until it is true, so a signed-out or mid-auth-sync caller never opens a subscription or executes a wrong-empty read against a not-yet-resolved identity. It is the client counterpart to the **Authenticated handler**: the subscribe gate becomes structural instead of an `isAuthenticated ? {} : "skip"` ternary each call site re-derives with a different predicate (and which `userKeys.getProviderStatus` forgot entirely). Public/share-link reads go through a sibling `usePublicQuery` passthrough, and a `no-restricted-imports` rule bans raw `useQuery` from `convex/react`, so every call site declares per-user vs public — the same `maybeAuthQuery`-vs-`query` choice the backend makes. The hook returns auth-readiness alongside the data so providers stop re-deriving `data === undefined && authState` loading logic by hand.
+_Avoid_: skip gate, auth ternary, guarded query
+
 ### Chat
 
 **Chat turn**:
@@ -39,6 +45,14 @@ _Avoid_: metadata bag, ad-hoc cast, `metadata as Record`
 **Selected path token**:
 The forward (client→server) staleness guard for a chat turn — a `{ expectedVisibleMessageCount, tailMessageId? }` descriptor the client derives from the rendered selected path and sends with a new-message turn; the backend validates it before mutating and rejects a turn raced against a changed selected path. It is the counterpart to the branch projection (the backward, server→client half) and is unrelated to it despite the shared name; edits and regenerations carry their own count guard (`expectedChatVersion`) instead of the token.
 _Avoid_: conflating with branch projection (that's the backward half), version (overloaded)
+
+**Chat list window**:
+The bounded, recency-ordered slice of a user's chats the **sidebar** subscribes to — a `usePaginatedQuery` of **non-pinned, non-project** chats over the composite `by_user_pinned_project_updated` index (`getRecentWindowForCurrentUser`), plus a small live pinned read (`by_user_pinned`), behind `ENABLE_PAGINATED_SIDEBAR` (ADR-0005). Pinned/project chats are excluded at the index level so they never consume a window slot. It is deliberately NOT the full chat list: a chat write invalidates only the window, not the whole `by_user` collection. The client `useChats()` store narrows to this window; the id-keyed optimistic overlay applies to it, so an op on a chat outside the window is a no-op in the sidebar (the surface that shows that chat reflects it via its own read). `isLoading` from the store means "first window page ready," not "all chats loaded." Per-chat access outside the window goes through `useChat(chatId)` (a targeted `chats.getById` fallback), and `chats.updatedAt` is the single activity field the window orders by — one bump per durable turn, at turn start.
+_Avoid_: the full chat list, `getForCurrentUser` as the sidebar source (that is the pre-ADR-0005 unbounded read), recent chats (ambiguous)
+
+**History search**:
+Full-history reach that does NOT go through the **chat list window** — the surfaces that must see chats outside the bounded sidebar, each on its own on-demand read: title search (`chats.searchByTitle` over a `by_title` search index, subscribed only while the search UI is open, behind a `SearchProvider` that exposes `query → results`), browse-all (a paginated non-project `by_user_project_updated` read in the history drawer, because project chats are hidden while browsing), the project view (`getProjectChatsForCurrentUser` over `by_project`), and deep-links (`useChat` → `chats.getById`). Search is title-only by design and still reaches project chats; message-content search would be a separate index on `messages`. These reads are what make bounding the sidebar safe — they each own full-history access rather than borrowing the sidebar's list.
+_Avoid_: searching the sidebar window (it is bounded; search must hit its own server read), the full array (the search provider exposes results, never the corpus)
 
 ### Tools
 

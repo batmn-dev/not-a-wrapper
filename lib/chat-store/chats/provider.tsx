@@ -4,7 +4,12 @@ import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { resolveModelId } from "@/lib/models/model-id-migration"
-import { useConvexAuth, useMutation, useQuery } from "convex/react"
+import {
+  usePerUserPaginatedQuery,
+  usePerUserQuery,
+} from "@/lib/convex/use-per-user-query"
+import { ENABLE_PAGINATED_SIDEBAR } from "@/lib/flags"
+import { useConvexAuth, useMutation } from "convex/react"
 import {
   createContext,
   useCallback,
@@ -18,7 +23,6 @@ import {
   createLocalChatId,
   createOptimisticChatId,
   isLocalChatId,
-  isOptimisticChatId,
 } from "../identity"
 import { clearMessagesCache } from "../messages/api"
 import type { Chats } from "../types"
@@ -33,17 +37,35 @@ import {
   resetCachedChatsSnapshot,
   subscribeCachedChats,
 } from "./api"
+import {
+  applyOptimisticOps,
+  dedupeById,
+  deriveSidebarLoading,
+  mapConvexChat,
+  partitionSidebarChats,
+  type OptimisticOperation,
+} from "./sidebar-window"
 
-// Types for optimistic updates
-type OptimisticAdd = { type: "add"; chat: Chats }
-type OptimisticUpdate = { type: "update"; id: string; changes: Partial<Chats> }
-type OptimisticDelete = { type: "delete"; id: string }
-type OptimisticOperation = OptimisticAdd | OptimisticUpdate | OptimisticDelete
+// The bounded sidebar (ENABLE_PAGINATED_SIDEBAR) can only safely drop the full
+// list because full-history search exists (commit 3) to reach out-of-window
+// chats. Referencing api.chats.searchByTitle here makes removing it a compile
+// error, so the sidebar can never be bounded without the search swap present.
+if (ENABLE_PAGINATED_SIDEBAR && !api.chats.searchByTitle) {
+  throw new Error(
+    "ENABLE_PAGINATED_SIDEBAR requires chats.searchByTitle (history search)."
+  )
+}
+
+const SIDEBAR_WINDOW_PAGE_SIZE = 25
 
 type ChatsContextType = {
   chats: Chats[]
   refresh: () => Promise<void>
   isLoading: boolean
+  /** Load the next page of the bounded sidebar window (no-op when the flag is off). */
+  loadMore: () => void
+  /** True when more sidebar window pages can be loaded. */
+  canLoadMore: boolean
   updateTitle: (id: string, title: string) => Promise<void>
   deleteChat: (
     id: string,
@@ -87,10 +109,22 @@ export function ChatsProvider({
     isLoading: isConvexAuthLoading,
   } = useConvexAuth()
 
-  // Convex real-time query for chats
-  const convexChats = useQuery(
+  // Sidebar reads. Both code paths' hooks are always called (rules of hooks);
+  // the inactive path passes "skip" so it never subscribes. Flag OFF: the full
+  // list. Flag ON: a bounded recency window + a small live pinned read, so a
+  // chat write no longer re-reads the whole collection.
+  const { data: convexChats } = usePerUserQuery(
     api.chats.getForCurrentUser,
-    isConvexAuthenticated ? {} : "skip"
+    ENABLE_PAGINATED_SIDEBAR ? "skip" : {}
+  )
+  const recentWindow = usePerUserPaginatedQuery(
+    api.chats.getRecentWindowForCurrentUser,
+    ENABLE_PAGINATED_SIDEBAR ? {} : "skip",
+    { initialNumItems: SIDEBAR_WINDOW_PAGE_SIZE }
+  )
+  const { data: pinnedServerChats } = usePerUserQuery(
+    api.chats.getPinnedForCurrentUser,
+    ENABLE_PAGINATED_SIDEBAR ? {} : "skip"
   )
 
   // Convex mutations
@@ -100,27 +134,20 @@ export function ChatsProvider({
   const togglePinMutation = useMutation(api.chats.togglePin)
   const deleteChatMutation = useMutation(api.chats.remove)
 
-  // Convert Convex chats to unified format
+  // Convert Convex chats to unified format. Flag ON: the union of the recency
+  // window and the (full) pinned read, deduped — so pinned chats stay present
+  // even when they fall outside the window, and the optimistic overlay + sidebar
+  // partition both operate over the bounded set. Flag OFF: the full list.
   const serverChats: Chats[] = useMemo(() => {
+    if (ENABLE_PAGINATED_SIDEBAR) {
+      return dedupeById([
+        ...recentWindow.results.map(mapConvexChat),
+        ...(pinnedServerChats ?? []).map(mapConvexChat),
+      ])
+    }
     if (!convexChats) return []
-    return convexChats.map(
-      (chat): Chats => ({
-        id: chat._id,
-        user_id: chat.userId,
-        title: chat.title ?? null,
-        model: chat.model ? resolveModelId(chat.model) : null,
-        system_prompt: chat.systemPrompt ?? null,
-        project_id: chat.projectId ?? null,
-        public: chat.public,
-        pinned: chat.pinned,
-        pinned_at: chat.pinnedAt ? new Date(chat.pinnedAt).toISOString() : null,
-        created_at: new Date(chat._creationTime).toISOString(),
-        updated_at: chat.updatedAt
-          ? new Date(chat.updatedAt).toISOString()
-          : null,
-      })
-    )
-  }, [convexChats])
+    return convexChats.map(mapConvexChat)
+  }, [convexChats, recentWindow.results, pinnedServerChats])
 
   const cachedLocalChats = useSyncExternalStore(
     subscribeCachedChats,
@@ -135,43 +162,28 @@ export function ChatsProvider({
   const shouldUseLocalChats =
     !userId && !isConvexAuthenticated && !isConvexAuthLoading
 
-  const isLoading =
-    isConvexAuthLoading ||
-    (isConvexAuthenticated && convexChats === undefined) ||
-    (shouldUseLocalChats && !cachedChatsHydrated)
+  const isLoading = deriveSidebarLoading({
+    isConvexAuthLoading,
+    isConvexAuthenticated,
+    paginated: ENABLE_PAGINATED_SIDEBAR,
+    fullListPending: convexChats === undefined,
+    // Paginated path: ready once the first window page AND pinned read arrive.
+    firstPagePending:
+      recentWindow.status === "LoadingFirstPage" ||
+      pinnedServerChats === undefined,
+    shouldUseLocalChats,
+    cachedChatsHydrated,
+  })
 
   // Track optimistic operations (adds, updates, deletes)
   const [optimisticOps, setOptimisticOps] = useState<OptimisticOperation[]>([])
 
-  // Derive displayed chats from server data + optimistic operations
+  // Derive displayed chats from server data + the id-keyed optimistic overlay.
+  // When the sidebar is bounded, serverChats is the window+pinned union, so ops
+  // targeting out-of-window chats are no-ops here by design (see applyOptimisticOps).
   const chats = useMemo(() => {
     const localChats = shouldUseLocalChats ? cachedLocalChats : []
-    let result = [...localChats, ...serverChats]
-
-    for (const op of optimisticOps) {
-      if (op.type === "add") {
-        // Only add if not already in server data (by checking optimistic prefix)
-        if (
-          isOptimisticChatId(op.chat.id) ||
-          !result.find((c) => c.id === op.chat.id)
-        ) {
-          result = [op.chat, ...result.filter((c) => c.id !== op.chat.id)]
-        }
-      } else if (op.type === "update") {
-        result = result.map((c) =>
-          c.id === op.id ? { ...c, ...op.changes } : c
-        )
-      } else if (op.type === "delete") {
-        result = result.filter((c) => c.id !== op.id)
-      }
-    }
-
-    // Sort by updated_at
-    return result.sort(
-      (a, b) =>
-        +new Date(b.updated_at || b.created_at || "") -
-        +new Date(a.updated_at || a.created_at || "")
-    )
+    return applyOptimisticOps([...localChats, ...serverChats], optimisticOps)
   }, [cachedLocalChats, serverChats, optimisticOps, shouldUseLocalChats])
 
   // Helper to remove an optimistic operation
@@ -480,17 +492,18 @@ export function ChatsProvider({
   )
 
   const pinnedChats = useMemo(
-    () =>
-      chats
-        .filter((c) => c.pinned && !c.project_id)
-        .slice()
-        .sort((a, b) => {
-          const at = a.pinned_at ? +new Date(a.pinned_at) : 0
-          const bt = b.pinned_at ? +new Date(b.pinned_at) : 0
-          return bt - at
-        }),
+    () => partitionSidebarChats(chats).pinned,
     [chats]
   )
+
+  // Load-more for the bounded sidebar window. No-op when the flag is off.
+  const loadMore = useCallback(() => {
+    if (ENABLE_PAGINATED_SIDEBAR) {
+      recentWindow.loadMore(SIDEBAR_WINDOW_PAGE_SIZE)
+    }
+  }, [recentWindow])
+  const canLoadMore =
+    ENABLE_PAGINATED_SIDEBAR && recentWindow.status === "CanLoadMore"
 
   // setChats is kept for backward compatibility but now manages optimistic ops
   const setChats = useCallback((action: React.SetStateAction<Chats[]>) => {
@@ -520,6 +533,8 @@ export function ChatsProvider({
         isLoading,
         togglePinned,
         pinnedChats,
+        loadMore,
+        canLoadMore,
       }}
     >
       {children}

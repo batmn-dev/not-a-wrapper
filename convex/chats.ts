@@ -1,12 +1,19 @@
+import { paginationOptsValidator, type PaginationOptions } from "convex/server"
 import { v } from "convex/values"
-import { query } from "./_generated/server"
+import type { Doc } from "./_generated/dataModel"
+import { internalMutation, query, type QueryCtx } from "./_generated/server"
 import { requireOwnedProject } from "./lib/auth"
 import {
   authenticatedMutation,
   maybeAuthQuery,
   ownedChatMutation,
+  ownedProjectQuery,
   readableChatQuery,
 } from "./lib/authedFunctions"
+
+// Upper bound on title-search results. The history search UI renders a flat
+// list, so a bounded read is plenty and keeps the search subscription cheap.
+const CHAT_SEARCH_RESULT_LIMIT = 50
 
 /**
  * Get all chats for the current user
@@ -33,6 +40,148 @@ export const getForCurrentUser = maybeAuthQuery({
       const bTime = b.updatedAt ?? b._creationTime
       return bTime - aTime
     })
+  },
+})
+
+/**
+ * The current user's pinned, non-project chats over the composite sidebar
+ * index — a small, live read rendered as its own sidebar section alongside the
+ * paginated recency window (commit 8). Kept separate so pinned chats stay
+ * visible even when they fall outside the bounded window, while project chats
+ * stay owned by the project view.
+ */
+type MaybeUserChatQueryCtx = Pick<QueryCtx, "db"> & {
+  user: Doc<"users"> | null
+}
+
+export async function getPinnedForCurrentUserHandler(
+  ctx: MaybeUserChatQueryCtx
+) {
+  const user = ctx.user
+  if (!user) return []
+
+  return await ctx.db
+    .query("chats")
+    .withIndex("by_user_pinned_project_updated", (q) =>
+      q.eq("userId", user._id).eq("pinned", true).eq("projectId", undefined)
+    )
+    .collect()
+}
+
+export const getPinnedForCurrentUser = maybeAuthQuery({
+  args: {},
+  handler: async (ctx) => getPinnedForCurrentUserHandler(ctx),
+})
+
+/**
+ * Recency-ordered paginated read of the current user's non-project chats over
+ * the `by_user_project_updated` index, returning pinned + plain chats. Powers
+ * the history drawer's browse-all mode, where project chats are hidden before
+ * rendering. Filtering project chats at the index level keeps every page full
+ * of rows the drawer can display; title search and project pages reach project
+ * chats through their own reads. A signed-out caller gets an empty, done page.
+ * See docs/sidebar-chat-list-streaming-plan.md commit 4.
+ */
+export async function listForCurrentUserPaginatedHandler(
+  ctx: MaybeUserChatQueryCtx,
+  paginationOpts: PaginationOptions
+) {
+  const user = ctx.user
+  if (!user) {
+    return { page: [], isDone: true, continueCursor: "" }
+  }
+
+  return await ctx.db
+    .query("chats")
+    .withIndex("by_user_project_updated", (q) =>
+      q.eq("userId", user._id).eq("projectId", undefined)
+    )
+    .order("desc")
+    .paginate(paginationOpts)
+}
+
+export const listForCurrentUserPaginated = maybeAuthQuery({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { paginationOpts }) =>
+    listForCurrentUserPaginatedHandler(ctx, paginationOpts),
+})
+
+/**
+ * The bounded sidebar "Chats" window: the current user's non-pinned, non-project
+ * chats newest-first. Pinned/project exclusion is done at the index level
+ * (`by_user_pinned_project_updated`), not client-side, so each page is full of
+ * chats the sidebar actually renders — pinned/project chats never consume a
+ * window slot. Pinned chats are read separately (`getPinnedForCurrentUser`);
+ * project chats live in the project view (`getProjectChatsForCurrentUser`). See
+ * docs/sidebar-chat-list-streaming-plan.md commit 8.
+ */
+export const getRecentWindowForCurrentUser = maybeAuthQuery({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { paginationOpts }) => {
+    const user = ctx.user
+    if (!user) {
+      return { page: [], isDone: true, continueCursor: "" }
+    }
+
+    return await ctx.db
+      .query("chats")
+      .withIndex("by_user_pinned_project_updated", (q) =>
+        q.eq("userId", user._id).eq("pinned", false).eq("projectId", undefined)
+      )
+      .order("desc")
+      .paginate(paginationOpts)
+  },
+})
+
+/**
+ * All chats in a project the caller owns, newest activity first, over the
+ * `by_project` index. Lets a project view show its full chat history rather than
+ * only those chats that happen to be in the bounded sidebar window — see
+ * docs/sidebar-chat-list-streaming-plan.md commit 7. Ownership is enforced by
+ * the ownedProjectQuery builder (ctx.project).
+ */
+export const getProjectChatsForCurrentUser = ownedProjectQuery({
+  args: {},
+  handler: async (ctx) => {
+    const chats = await ctx.db
+      .query("chats")
+      .withIndex("by_project", (q) => q.eq("projectId", ctx.project._id))
+      .collect()
+
+    return chats.sort(
+      (a, b) =>
+        (b.updatedAt ?? b._creationTime) - (a.updatedAt ?? a._creationTime)
+    )
+  },
+})
+
+/**
+ * Title-only full-history search for the current user. Returns chats whose
+ * title matches `term`, scoped to the caller via the search index's `userId`
+ * filter field (so the search never ships another user's chats). A blank/empty
+ * term returns [] without touching the table. Bounded to
+ * CHAT_SEARCH_RESULT_LIMIT.
+ *
+ * This is the read that lets history search reach chats outside the bounded
+ * sidebar window — see docs/sidebar-chat-list-streaming-plan.md commit 3. Scope
+ * is title-only by design; message-content search would be a separate index on
+ * `messages` and is out of scope.
+ */
+export const searchByTitle = maybeAuthQuery({
+  args: { term: v.string() },
+  handler: async (ctx, { term }) => {
+    const user = ctx.user
+    if (!user) return []
+
+    const trimmed = term.trim()
+    if (trimmed.length === 0) return []
+
+    return await ctx.db
+      .query("chats")
+      .withSearchIndex("by_title", (q) =>
+        q.search("title", trimmed).eq("userId", user._id)
+      )
+      .take(CHAT_SEARCH_RESULT_LIMIT)
   },
 })
 
@@ -131,6 +280,35 @@ export const getPublicById = query({
     if (!chat.public) return null
 
     return chat
+  },
+})
+
+/**
+ * Defensive backfill for the `updatedAt` optional→required narrowing
+ * (docs/sidebar-chat-list-streaming-plan.md commit 5). Sets
+ * `updatedAt = _creationTime` for any chat missing it, so recency indexes have
+ * no null keys. Idempotent.
+ *
+ * `chats.create` has always set `updatedAt`, so in practice no live row lacks it
+ * and the required-schema push succeeds directly. This exists only as a fallback
+ * if a deployment somehow holds legacy rows: run it (via
+ * `scripts/backfill-chat-updated-at.mjs`) while `updatedAt` is still optional,
+ * before pushing the required schema. The localized cast reads the possibly-
+ * undefined runtime value the narrowed type otherwise hides.
+ */
+export const backfillUpdatedAt = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const chats = await ctx.db.query("chats").collect()
+    let patched = 0
+    for (const chat of chats) {
+      const current = (chat as { updatedAt?: number }).updatedAt
+      if (current === undefined) {
+        await ctx.db.patch(chat._id, { updatedAt: chat._creationTime })
+        patched++
+      }
+    }
+    return { total: chats.length, patched }
   },
 })
 

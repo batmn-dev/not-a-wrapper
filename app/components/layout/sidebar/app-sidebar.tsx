@@ -61,6 +61,7 @@ import React, { useMemo, useRef } from "react"
 import { PopoverContentAuth } from "../../chat-input/popover-content-auth"
 import { useHistorySearch } from "../../history/history-search-provider"
 import { HistoryTrigger } from "../../history/history-trigger"
+import { useInfiniteScroll } from "../../history/use-history-view"
 import { UserMenu } from "../user-menu"
 import { SidebarList } from "./sidebar-list"
 import { SidebarMenuItem } from "./sidebar-menu-item"
@@ -251,7 +252,7 @@ function MobileAppSidebarDrawer() {
 
 function useAppSidebarData() {
   const { isHistoryOpen } = useHistorySearch()
-  const { chats, pinnedChats, isLoading } = useChats()
+  const { chats, pinnedChats, isLoading, loadMore, canLoadMore } = useChats()
   const { user } = useUser()
   const params = useParams<{ chatId: string }>()
   const pathname = usePathname()
@@ -275,6 +276,8 @@ function useAppSidebarData() {
     nonPinnedChats,
     pinnedChats,
     user,
+    loadMore,
+    canLoadMore,
   }
 }
 
@@ -290,6 +293,11 @@ function SidebarExpandedNav({
   const scrollRef = useRef<HTMLElement>(null)
   // Zero-rerender scroll tracking via data attributes
   useScrollAttributes(scrollRef)
+
+  // Bounded sidebar (ENABLE_PAGINATED_SIDEBAR): load more window pages as the
+  // user nears the bottom. No-op when the flag is off (canLoadMore is false).
+  const { canLoadMore, loadMore } = data
+  useInfiniteScroll(scrollRef, canLoadMore, loadMore)
 
   return (
     <>

@@ -79,11 +79,37 @@ export default defineSchema({
     public: v.boolean(),
     pinned: v.boolean(),
     pinnedAt: v.optional(v.number()), // Unix timestamp
-    updatedAt: v.optional(v.number()), // Unix timestamp for manual tracking
+    // Required so recency indexes never sort null keys to the tail (which would
+    // hide chats from paginated history/sidebar windows). chats.create has
+    // always set this; backfill: scripts/backfill-chat-updated-at.mjs.
+    updatedAt: v.number(), // Unix timestamp — last activity (turn start)
   })
     .index("by_user", ["userId"])
     .index("by_user_pinned", ["userId", "pinned"])
-    .index("by_project", ["projectId"]),
+    .index("by_user_updated", ["userId", "updatedAt"])
+    // The history drawer's browse mode: pinned + non-pinned non-project chats
+    // newest-first. Project chats are hidden from browse mode and must not
+    // consume pagination slots; title search and project pages reach them
+    // through their own reads.
+    .index("by_user_project_updated", ["userId", "projectId", "updatedAt"])
+    // The sidebar recency window: non-pinned, non-project chats newest-first.
+    // Excluding pinned + project at the index level keeps every page full of
+    // chats the "Chats" section actually shows, so pinned/project chats never
+    // consume window slots (docs/sidebar-chat-list-streaming-plan.md commit 8).
+    .index("by_user_pinned_project_updated", [
+      "userId",
+      "pinned",
+      "projectId",
+      "updatedAt",
+    ])
+    .index("by_project", ["projectId"])
+    // Title-only full-history search, scoped per user via the userId filter
+    // field. Lets history search reach chats outside the bounded sidebar window
+    // (docs/sidebar-chat-list-streaming-plan.md commit 3).
+    .searchIndex("by_title", {
+      searchField: "title",
+      filterFields: ["userId"],
+    }),
 
   messages: defineTable({
     chatId: v.id("chats"),

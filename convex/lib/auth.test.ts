@@ -40,6 +40,7 @@ function createChat(
     userId,
     public: isPublic,
     pinned: false,
+    updatedAt: 1,
   }
 }
 

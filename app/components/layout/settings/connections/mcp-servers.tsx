@@ -17,13 +17,14 @@ import { Icon } from "@/components/ui/icon"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
+import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
 import {
   RiAddLine,
   RiDeleteBinLine,
   RiPlugLine,
   RiSettings3Line,
 } from "@remixicon/react"
-import { useMutation, useQuery } from "convex/react"
+import { useMutation } from "convex/react"
 import { useState } from "react"
 import { McpServerForm } from "./mcp-server-form"
 import { McpToolApprovals } from "./mcp-tool-approvals"
@@ -57,7 +58,8 @@ function maskUrl(url: string): string {
 // ---------------------------------------------------------------------------
 
 export function McpServers() {
-  const servers = useQuery(api.mcpServers.list) ?? []
+  const { data, isLoading } = usePerUserQuery(api.mcpServers.list)
+  const servers = data ?? []
   const toggleEnabled = useMutation(api.mcpServers.toggleEnabled)
   const removeServer = useMutation(api.mcpServers.remove)
 
@@ -133,8 +135,15 @@ export function McpServers() {
         </Button>
       </div>
 
+      {/* Loading state */}
+      {isLoading && (
+        <div className="py-8 text-center">
+          <div className="text-muted-foreground">Loading connections...</div>
+        </div>
+      )}
+
       {/* Empty state */}
-      {servers.length === 0 && (
+      {!isLoading && servers.length === 0 && (
         <div className="py-8 text-center">
           <Icon
             icon={RiPlugLine}

@@ -75,6 +75,40 @@ const eslintConfig = [
       ],
     },
   },
+  {
+    // Per-user subscription seam (ADR-0004): client per-user Convex live reads
+    // must go through usePerUserQuery (or the explicit usePublicQuery passthrough
+    // for share-link reads) in lib/convex/, which owns the isConvexAuthenticated
+    // subscribe gate. Importing useQuery from convex/react directly bypasses the
+    // gate — which is how userKeys.getProviderStatus ended up ungated and running
+    // for guests. The hook module in lib/convex/ is the one exempt place.
+    files: [
+      "app/**/*.{ts,tsx}",
+      "lib/**/*.{ts,tsx}",
+      "components/**/*.{ts,tsx}",
+    ],
+    ignores: [
+      "lib/convex/use-per-user-query.ts",
+      "**/*.test.{ts,tsx}",
+    ],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "ImportDeclaration[source.value='convex/react'] > ImportSpecifier[imported.name='useQuery']",
+          message:
+            "Do not import useQuery from convex/react directly. Use usePerUserQuery (or usePublicQuery for share-link reads) from @/lib/convex/use-per-user-query, which owns the isConvexAuthenticated subscribe gate. See ADR-0004.",
+        },
+        {
+          selector:
+            "ImportDeclaration[source.value='convex/react'] > ImportSpecifier[imported.name='usePaginatedQuery']",
+          message:
+            "Do not import usePaginatedQuery from convex/react directly. Use usePerUserPaginatedQuery from @/lib/convex/use-per-user-query, which owns the isConvexAuthenticated subscribe gate. See ADR-0004.",
+        },
+      ],
+    },
+  },
 ]
 
 export default eslintConfig

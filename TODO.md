@@ -11,3 +11,4 @@ A list of tasks we should eventually implement when the time is right
 - Connectors: integrate external apps and data sources the agent can use during conversations.
 - Admin controls: user management, feature access, token usage, and potential billing controls.
 - Design system for new UI: build reusable components and document components and design patterns for agents to follow.
+- Better in-progress conversation view: investigate and replicate a richer streaming/thinking state. Leaving a chat tab while the model is thinking and returning shows an empty thinking state — no progress indicator, no sign of where the model currently is. Persist and surface in-progress status so returning to the tab shows live progress.

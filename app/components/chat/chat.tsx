@@ -7,6 +7,7 @@ import { useChatDraft } from "@/app/hooks/use-chat-draft"
 import { useGlobalPromptFocus } from "@/app/hooks/use-global-prompt-focus"
 import { ScrollButton } from "@/components/ui/scroll-button"
 import { useChats } from "@/lib/chat-store/chats/provider"
+import { useChat } from "@/lib/chat-store/chats/use-chat"
 import { useMessages } from "@/lib/chat-store/messages/provider"
 import { useChatSession } from "@/lib/chat-store/session/provider"
 import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
@@ -32,16 +33,15 @@ export function Chat() {
   const { chatId } = useChatSession()
   const {
     createNewChat,
-    getChatById,
     updateChatModel,
     bumpChat,
     isLoading: isChatsLoading,
   } = useChats()
 
-  const currentChat = useMemo(
-    () => (chatId ? getChatById(chatId) : null),
-    [chatId, getChatById]
-  )
+  // Resolve the current chat even when it is outside the bounded sidebar window
+  // (deep-links to old chats). In-window chats resolve synchronously; out-of-
+  // window chats load via the chats.getById fallback (isChatLoading).
+  const { chat: currentChat, isLoading: isChatLoading } = useChat(chatId)
 
   const {
     messages: initialMessages,
@@ -257,6 +257,7 @@ export function Chat() {
     if (
       chatId &&
       !isChatsLoading &&
+      !isChatLoading && // wait for the out-of-window getById fallback to resolve
       !currentChat &&
       !isSubmitting &&
       status === "ready" &&
@@ -270,6 +271,7 @@ export function Chat() {
   }, [
     chatId,
     isChatsLoading,
+    isChatLoading,
     currentChat,
     isSubmitting,
     status,

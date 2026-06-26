@@ -78,6 +78,14 @@ vi.mock("convex/react", () => ({
     convexMocks.useQuery(...args)
     return convexMocks.queryValue
   },
+  // ENABLE_PAGINATED_SIDEBAR is off in tests; the paginated sidebar hook is still
+  // called (with "skip"), so it must exist. Guest tests don't exercise it.
+  usePaginatedQuery: () => ({
+    results: [],
+    status: "Exhausted" as const,
+    isLoading: false,
+    loadMore: () => {},
+  }),
 }))
 
 vi.mock("@/components/ui/toast", () => ({

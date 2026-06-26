@@ -6,7 +6,7 @@ import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { useKeyShortcut } from "@/app/hooks/use-key-shortcut"
 import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
-import { useChats } from "@/lib/chat-store/chats/provider"
+import { useChat } from "@/lib/chat-store/chats/use-chat"
 import { useChatSession } from "@/lib/chat-store/session/provider"
 import { RiMoreFill } from "@remixicon/react"
 import { usePathname, useRouter } from "next/navigation"
@@ -15,8 +15,7 @@ export function ButtonNewChat() {
   const pathname = usePathname()
   const router = useRouter()
   const { chatId } = useChatSession()
-  const { getChatById } = useChats()
-  const chat = chatId ? getChatById(chatId) : undefined
+  const { chat } = useChat(chatId)
   const isMobile = useBreakpoint(768)
 
   useKeyShortcut(
