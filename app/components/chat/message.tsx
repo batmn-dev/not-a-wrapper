@@ -28,6 +28,9 @@ type MessageProps = {
    * Threaded so a branch switch / active-turn handoff re-renders affected rows
    * even when their body content is unchanged. */
   activeTurnId?: string
+  /** Opens (or reopens) the Chat-owned Activity panel; forwarded to the
+   * assistant trigger. */
+  onOpenActivityPanel?: () => void
   onDelete: (id: string) => void
   onEdit: (
     id: string,
@@ -162,6 +165,7 @@ function MessageInner({
   attachments,
   isLast,
   activeTurnId,
+  onOpenActivityPanel,
   onEdit,
   onReload,
   onStop,
@@ -212,6 +216,7 @@ function MessageInner({
         onStop={onStop}
         isLast={isLast}
         activeTurnId={activeTurnId}
+        onOpenActivityPanel={onOpenActivityPanel}
         parts={parts}
         metadata={metadata}
         status={status}

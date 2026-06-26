@@ -56,6 +56,8 @@ type ConversationProps = {
    * forwarded to each Message so branch switches / handoffs re-render affected
    * rows. Derived once by Chat via useActivityPanel. */
   activeTurnId?: string
+  /** Opens (or reopens) the Chat-owned Activity panel. */
+  onOpenActivityPanel?: () => void
   onDelete: (id: string) => void
   onEdit: (
     id: string,
@@ -79,6 +81,7 @@ export function Conversation({
   status = "ready",
   isSubmitting = false,
   activeTurnId,
+  onOpenActivityPanel,
   onDelete,
   onEdit,
   onReload,
@@ -139,6 +142,7 @@ export function Conversation({
                 attachments={getMessageAttachments(message)}
                 isLast={isLast}
                 activeTurnId={activeTurnId}
+                onOpenActivityPanel={onOpenActivityPanel}
                 onDelete={onDelete}
                 onEdit={onEdit}
                 onReload={isGenerationActive ? undefined : onReload}

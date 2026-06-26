@@ -167,6 +167,20 @@ describe("ActivityPanel coexistence (R5/R6/R9)", () => {
     expect(imgs()).toHaveLength(0)
   })
 
+  it("reopens after close: open → close → open re-mounts the docked body", () => {
+    setViewport(false)
+    render(true)
+    expect(landmarks()).toHaveLength(1)
+
+    render(false)
+    expect(landmarks()).toHaveLength(0)
+    expect(imgs()).toHaveLength(0)
+
+    render(true)
+    expect(landmarks()).toHaveLength(1)
+    expect(imgs()).toHaveLength(5)
+  })
+
   it("the sheet carries motion-reduce-gated transitions (R7)", () => {
     setViewport(true)
     render(true)

@@ -11,13 +11,9 @@ import {
   MessageContent,
   messageFooterRevealClassName,
 } from "@/components/ui/message"
-import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningLabel,
-} from "@/components/ui/reasoning"
 import { SystemMessage } from "@/components/ui/system-message"
 import type { ChatMessageMetadata } from "@/lib/chat-messages/branch"
+import { getServerMessageId } from "@/lib/chat-messages/metadata"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
@@ -26,21 +22,22 @@ import { RiCheckLine, RiFileCopyLine, RiRefreshLine } from "@remixicon/react"
 import type { ToolUIPart } from "ai"
 import { getStaticToolName, isStaticToolUIPart } from "ai"
 import { useCallback, useRef, useState } from "react"
+import { ActivityPanelTrigger } from "./activity/activity-panel-trigger"
 import { getSources } from "./get-sources"
 import { QuoteButton } from "./quote-button"
 import { SearchImages } from "./search-images"
-import { SourcesList } from "./sources-list"
 import { ToolInvocation } from "./tool-invocation"
 import { useLoadingState } from "./use-loading-state"
-import { useReasoningPhase } from "./use-reasoning-phase"
 import { useAssistantMessageSelection } from "./useAssistantMessageSelection"
 
 type MessageAssistantProps = {
   children: string
   isLast?: boolean
-  /** Id of the panel-active assistant turn. Threaded in commit 3 for the memo
-   * contract; consumed in commit 5 to gate the Activity trigger affordance. */
+  /** Id of the panel-active assistant turn; gates the Activity trigger so it
+   * renders only for the turn the panel currently owns. */
   activeTurnId?: string
+  /** Opens (or reopens) the Chat-owned Activity panel. */
+  onOpenActivityPanel?: () => void
   copied?: boolean
   copyToClipboard?: () => void
   onReload?: (messageId: string) => void
@@ -87,6 +84,8 @@ function formatToolProgressLabel(toolName: string): string {
 export function MessageAssistant({
   children,
   isLast,
+  activeTurnId,
+  onOpenActivityPanel,
   copied,
   copyToClipboard,
   onReload,
@@ -122,23 +121,38 @@ export function MessageAssistant({
         ? "error"
         : "ready"
 
-  // Unified reasoning phase hook
-  const persistedDurationMs =
-    typeof metadata?.reasoningDurationMs === "number"
-      ? metadata.reasoningDurationMs
-      : undefined
-  const {
-    phase: reasoningPhase,
-    reasoningText,
-    durationSeconds,
-    isReasoningStreaming,
-    isOpaqueReasoning,
-  } = useReasoningPhase({
-    parts,
-    status: loadingStatus,
-    isLast: isLast ?? false,
-    persistedDurationMs,
-  })
+  // Reasoning + sources now live in the Chat-owned Activity panel. This message
+  // only decides whether to surface the reopen trigger for the panel-active turn
+  // (the live reasoning timer + duration are owned by use-activity-panel.ts).
+  const isActiveTurn =
+    activeTurnId !== undefined &&
+    (messageId === activeTurnId ||
+      getServerMessageId(metadata) === activeTurnId)
+  const hasReasoning = Boolean(
+    parts?.some(
+      (part) =>
+        part.type === "reasoning" &&
+        typeof (part as { text?: string }).text === "string" &&
+        ((part as { text?: string }).text ?? "").trim().length > 0
+    )
+  )
+  const isReasoningStreaming = Boolean(
+    parts?.some(
+      (part) =>
+        part.type === "reasoning" &&
+        (part as { state?: string }).state === "streaming"
+    )
+  )
+  const hasSources = sources.length > 0
+  const showActivityTrigger =
+    Boolean(onOpenActivityPanel) &&
+    isActiveTurn &&
+    (hasReasoning || hasSources)
+  const activitySummary = isReasoningStreaming
+    ? "Thinking"
+    : hasSources
+      ? `${sources.length} source${sources.length === 1 ? "" : "s"}`
+      : "Activity"
 
   // Type for image search results
   type ImageResult = { title: string; imageUrl: string; sourceUrl: string }
@@ -237,18 +251,11 @@ export function MessageAssistant({
         // Inner data-message-id for quote selection — closest() finds this before the outer article
         data-message-id={messageId}
       >
-        {reasoningPhase !== "idle" && (
-          <Reasoning
-            isStreaming={isReasoningStreaming}
-            phase={reasoningPhase}
-            durationSeconds={durationSeconds}
-            opaque={isOpaqueReasoning}
-          >
-            <ReasoningLabel />
-            {!isOpaqueReasoning && (
-              <ReasoningContent markdown>{reasoningText}</ReasoningContent>
-            )}
-          </Reasoning>
+        {showActivityTrigger && (
+          <ActivityPanelTrigger
+            onOpen={() => onOpenActivityPanel?.()}
+            summary={activitySummary}
+          />
         )}
 
         {toolInvocationParts &&
@@ -300,8 +307,6 @@ export function MessageAssistant({
             {children}
           </MessageContent>
         )}
-
-        {sources && sources.length > 0 && <SourcesList sources={sources} />}
 
         {finishReason === "length" && status !== "streaming" && (
           <SystemMessage

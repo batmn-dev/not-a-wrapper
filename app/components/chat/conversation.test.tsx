@@ -162,4 +162,37 @@ describe("Conversation regeneration availability", () => {
 
     expect(onReload).toHaveBeenCalledWith("assistant-1")
   })
+
+  it("renders the ThinkingBar for the submitted pre-stream state (user tail, no assistant yet)", () => {
+    cleanupRender()
+    const mounted = document.createElement("div")
+    document.body.appendChild(mounted)
+    container = mounted
+    root = createRoot(mounted)
+
+    const userTail = [
+      { id: "user-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+    ] satisfies UIMessage[]
+
+    act(() => {
+      root?.render(
+        <Conversation
+          messages={userTail}
+          status="submitted"
+          isSubmitting
+          onDelete={vi.fn()}
+          onEdit={vi.fn()}
+          onReload={vi.fn()}
+          isDurableChat
+        />
+      )
+    })
+
+    expect(container?.querySelector('[data-testid="thinking"]')).toBeTruthy()
+  })
+
+  it("does not render the ThinkingBar once an assistant message exists", () => {
+    renderConversation({ status: "streaming" })
+    expect(container?.querySelector('[data-testid="thinking"]')).toBeNull()
+  })
 })

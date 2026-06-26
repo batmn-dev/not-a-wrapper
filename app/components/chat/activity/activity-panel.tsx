@@ -1,9 +1,9 @@
 "use client"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
+import { Markdown } from "@/components/ui/markdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { formatDuration } from "@/components/ui/reasoning"
-import { getStaticToolName } from "ai"
 import type { SourceUrlUIPart, ToolUIPart } from "ai"
 import { createPortal } from "react-dom"
 import {
@@ -32,23 +32,17 @@ export type ActivityPanelProps = {
   isOpaqueReasoning: boolean
 }
 
-function toolLabel(step: ToolUIPart): string {
-  return getStaticToolName(step)
-    .replace(/_/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-}
-
 /**
- * The shared panel body — reasoning timeline + tool steps + sources gallery.
- * Rendered into the ACTIVE shell only (favicons load once; `<img>` count == N,
- * not 2N — GA §7 R6).
+ * The shared panel body — the model's reasoning (rendered as markdown inside a
+ * timeline step) plus the sources gallery. Tool invocations stay inline in the
+ * assistant message (ToolInvocation), so the panel does not re-render tool steps
+ * (plan §5 commit 5 scope). Rendered into the ACTIVE shell only, so favicons
+ * load once (`<img>` count == N, not 2N — GA §7 R6).
  */
 function PanelBody({
-  steps,
   sources,
   reasoningText,
 }: {
-  steps: ToolUIPart[]
   sources: SourceUrlUIPart[]
   reasoningText: string
 }) {
@@ -57,25 +51,15 @@ function PanelBody({
     title: source.title ?? source.url,
   }))
   const hasReasoning = reasoningText.trim().length > 0
-  const hasSteps = steps.length > 0
 
   return (
     <div className="space-y-4">
-      {hasReasoning || hasSteps ? (
+      {hasReasoning ? (
         <ActivityTimeline>
-          {hasReasoning ? (
-            <ActivityStep leading="done" body="description">
-              <StepTitle>Reasoning</StepTitle>
-              <div className="text-muted-foreground text-sm whitespace-pre-wrap">
-                {reasoningText}
-              </div>
-            </ActivityStep>
-          ) : null}
-          {steps.map((step, index) => (
-            <ActivityStep key={index} leading="globe">
-              <StepTitle>{toolLabel(step)}</StepTitle>
-            </ActivityStep>
-          ))}
+          <ActivityStep leading="done" body="description">
+            <StepTitle>Reasoning</StepTitle>
+            <Markdown>{reasoningText}</Markdown>
+          </ActivityStep>
         </ActivityTimeline>
       ) : null}
       {gallerySources.length > 0 ? (
@@ -98,21 +82,15 @@ export function ActivityPanel({
   open,
   onOpenChange,
   title = "Activity",
-  phase: _phase,
   durationSeconds,
-  steps,
   sources,
   reasoningText,
-  isReasoningStreaming: _isReasoningStreaming,
-  isOpaqueReasoning: _isOpaqueReasoning,
 }: ActivityPanelProps) {
   const isBelowLg = useBreakpoint(LG_BREAKPOINT)
   const slotElement = useActivityPanelDockSlot()
   const close = () => onOpenChange(false)
 
-  const body = (
-    <PanelBody steps={steps} sources={sources} reasoningText={reasoningText} />
-  )
+  const body = <PanelBody sources={sources} reasoningText={reasoningText} />
 
   // The Sheet's SheetTitle is its accessible name, so carry the duration in it.
   const sheetTitle =

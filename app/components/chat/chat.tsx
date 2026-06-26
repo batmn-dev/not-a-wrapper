@@ -165,8 +165,9 @@ export function Chat() {
     isSubmitting,
   })
 
-  // Chat owns the panel open state; the reopen trigger lands in commit 5.
+  // Chat owns the panel open state; the assistant trigger reopens it.
   const [activityPanelOpen, setActivityPanelOpen] = useState(false)
+  const openActivityPanel = useCallback(() => setActivityPanelOpen(true), [])
 
   // Local delete handler — filters a message from the local array
   const handleDelete = useCallback(
@@ -191,6 +192,7 @@ export function Chat() {
       status,
       isSubmitting,
       activeTurnId,
+      onOpenActivityPanel: openActivityPanel,
       onDelete: handleDelete,
       onEdit: submitEdit,
       onReload: handleReload,
@@ -206,6 +208,7 @@ export function Chat() {
       status,
       isSubmitting,
       activeTurnId,
+      openActivityPanel,
       handleDelete,
       submitEdit,
       handleReload,
