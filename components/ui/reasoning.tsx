@@ -296,4 +296,13 @@ function ReasoningContent({
   )
 }
 
-export { Reasoning, ReasoningTrigger, ReasoningContent, ReasoningLabel }
+export {
+  Reasoning,
+  ReasoningTrigger,
+  ReasoningContent,
+  ReasoningLabel,
+  // Exported additively for the Activity panel header (plan §5 commit 4). The
+  // panel reuses ONLY this formatter, not the Reasoning/ReasoningLabel shell —
+  // those own inline disclosure + auto-open state the header must not inherit.
+  formatDuration,
+}

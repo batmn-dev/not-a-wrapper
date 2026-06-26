@@ -18,6 +18,7 @@ import { AnimatePresence, motion } from "motion/react"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { ActivityPanel } from "./activity/activity-panel"
 import { useActivityPanel } from "./use-activity-panel"
 import { isRouteDurableChat } from "./chat-turn"
 import { useChatCore } from "./use-chat-core"
@@ -158,11 +159,14 @@ export function Chat() {
   // tail. `panelProps` / `isGenerationActive` are consumed when the panel is
   // rendered (commits 4-5); commit 3 only threads `activeTurnId` for the memo
   // contract while the inline body still renders.
-  const { activeTurnId } = useActivityPanel({
+  const { activeTurnId, panelProps } = useActivityPanel({
     messages,
     status,
     isSubmitting,
   })
+
+  // Chat owns the panel open state; the reopen trigger lands in commit 5.
+  const [activityPanelOpen, setActivityPanelOpen] = useState(false)
 
   // Local delete handler — filters a message from the local array
   const handleDelete = useCallback(
@@ -299,6 +303,12 @@ export function Chat() {
   return (
     <div id="thread" className="group/thread flex min-h-full flex-1 flex-col">
       <DialogAuth open={hasDialogAuth} setOpen={setHasDialogAuth} />
+
+      <ActivityPanel
+        open={activityPanelOpen}
+        onOpenChange={setActivityPanelOpen}
+        {...panelProps}
+      />
 
       <div
         role="presentation"
