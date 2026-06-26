@@ -194,7 +194,7 @@ function sameRef(a: unknown, b: unknown): boolean {
   }
 }
 
-function makeFetchMutation() {
+function makeFetchMutation(options: { rejectAborted?: Error } = {}) {
   return vi.fn(async (ref: unknown) => {
     if (sameRef(ref, api.chatRuntime.prepareGeneration)) {
       return {
@@ -203,6 +203,12 @@ function makeFetchMutation() {
         assistantOrder: 1,
         messages: [],
       }
+    }
+    if (
+      options.rejectAborted &&
+      sameRef(ref, api.chatRuntime.markGenerationRunAborted)
+    ) {
+      throw options.rejectAborted
     }
     return undefined
   })
@@ -279,7 +285,7 @@ describe("createChatTurnRuntime — prepare()", () => {
     })
   })
 
-  it("throws a plain (non-status-coded) error when the model is unknown", async () => {
+  it("throws a 400 INVALID_REQUEST error when the model is unknown", async () => {
     vi.mocked(getAllModels).mockResolvedValue([] as unknown as Awaited<
       ReturnType<typeof getAllModels>
     >)
@@ -294,7 +300,10 @@ describe("createChatTurnRuntime — prepare()", () => {
     )
     expect(error).toBeInstanceOf(Error)
     expect((error as Error).message).toContain("not found")
-    expect((error as { statusCode?: number }).statusCode).toBeUndefined()
+    expect(error).toMatchObject({
+      statusCode: 400,
+      code: "INVALID_REQUEST",
+    })
   })
 
   it("validates UI messages before converting them to model messages", async () => {
@@ -414,6 +423,108 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     expect(
       findCall(fetchMutation, api.chatRuntime.markGenerationRunCompleted)
     ).toBeUndefined()
+  })
+
+  it("does not reject response finalization when the abort write fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const harness = makeStreamHarness()
+      const fetchMutation = makeFetchMutation({
+        rejectAborted: new Error("convex unavailable"),
+      })
+      const runtime = createChatTurnRuntime({
+        input: makeInput(),
+        deps: makeDeps(harness, fetchMutation),
+      })
+
+      await runtime.prepare()
+      runtime.toResponse(notAbortedSignal())
+
+      await expect(
+        harness.captured.responseOpts.onFinish({
+          responseMessage: {
+            id: "msg1",
+            role: "assistant",
+            parts: [],
+            metadata: {},
+          },
+          isAborted: true,
+          finishReason: "stop",
+        })
+      ).resolves.toBeUndefined()
+
+      const aborted = findCall(
+        fetchMutation,
+        api.chatRuntime.markGenerationRunAborted
+      )
+      expect(aborted?.[1]).toMatchObject({
+        runId: "run1",
+        messageId: "msg1",
+        reason: "ui message stream aborted",
+      })
+      expect(
+        findCall(fetchMutation, api.chatRuntime.markGenerationRunCompleted)
+      ).toBeUndefined()
+
+      const logLine = warn.mock.calls
+        .map(([message]) => String(message))
+        .find((message) => message.includes("durable_run_abort_write_failed"))
+      expect(logLine).toBeDefined()
+      expect(JSON.parse(logLine ?? "{}")).toMatchObject({
+        _tag: "durable_run_abort_write_failed",
+        requestId: "req-1",
+        chatId: SERVER_CHAT_ID,
+        runId: "run1",
+        error: "convex unavailable",
+      })
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("does not reject stream abort cleanup when the abort write fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const harness = makeStreamHarness()
+      const fetchMutation = makeFetchMutation({
+        rejectAborted: new Error("convex unavailable"),
+      })
+      const runtime = createChatTurnRuntime({
+        input: makeInput(),
+        deps: makeDeps(harness, fetchMutation),
+      })
+
+      await runtime.prepare()
+      runtime.toResponse(notAbortedSignal())
+
+      await expect(
+        harness.captured.streamOpts.onAbort()
+      ).resolves.toBeUndefined()
+
+      const aborted = findCall(
+        fetchMutation,
+        api.chatRuntime.markGenerationRunAborted
+      )
+      expect(aborted?.[1]).toMatchObject({
+        runId: "run1",
+        messageId: "msg1",
+        reason: "stream aborted",
+      })
+
+      const logLine = warn.mock.calls
+        .map(([message]) => String(message))
+        .find((message) => message.includes("durable_run_abort_write_failed"))
+      expect(logLine).toBeDefined()
+      expect(JSON.parse(logLine ?? "{}")).toMatchObject({
+        _tag: "durable_run_abort_write_failed",
+        requestId: "req-1",
+        chatId: SERVER_CHAT_ID,
+        runId: "run1",
+        error: "convex unavailable",
+      })
+    } finally {
+      warn.mockRestore()
+    }
   })
 })
 

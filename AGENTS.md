@@ -140,6 +140,12 @@ Load only when needed:
 - `.agents/skills/`
 - `.agents/troubleshooting/`
 - `README.md` and `INSTALL.md`
+- `docs/convex-access.md` — **read before querying Convex** (MCP/CLI/dashboard).
+  The app's data lives only in the deployment `NEXT_PUBLIC_CONVEX_URL` /
+  `CONVEX_DEPLOYMENT` point to; the Convex MCP can silently resolve to a
+  different, empty backend. If a read returns `0 users`/`0 chats` for an app in
+  active use, the tool is pointed at the wrong deployment — verify against the
+  dashboard, don't trust it.
 
 ## Output Preferences (SHOULD)
 

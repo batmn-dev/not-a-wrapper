@@ -4,6 +4,9 @@ This app uses WorkOS AuthKit for identity, Convex for app data and auth token
 validation, and Vercel for preview and production hosting. Keep secrets out of
 `NEXT_PUBLIC_*` variables.
 
+> To **read or query** Convex data (deployment map, dashboard/CLI/MCP, and the
+> MCP "wrong empty backend" gotcha), see `docs/convex-access.md`.
+
 ## Local Setup
 
 ```bash

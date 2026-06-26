@@ -208,7 +208,7 @@ export function createDurableSnapshotTracker(
     lastWriteAt = now
     pending = false
     const currentSequence = ++sequence
-    writeInFlight = fetchMutation(
+    writeInFlight = persistSnapshot(
       api.chatRuntime.updateAssistantSnapshot,
       {
         runId: options.runId,

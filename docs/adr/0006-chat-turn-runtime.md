@@ -49,7 +49,7 @@ whole stream. `route.ts` becomes a thin HTTP adapter — parse → prepare → r
 The interface is **two-phase**, following the codebase's factory pattern
 (`prepareToolRuntime`, `create*`):
 
-```
+```ts
 createChatTurnRuntime({ input, deps? })   // input: the validated, admitted turn
                                           //   (messages, chatId, model, auth, …)
                                           // deps (injected, defaulted): streamText,

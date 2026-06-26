@@ -425,7 +425,10 @@ export function createChatTurnRuntime(args: {
     const modelConfig = allModels.find((m) => m.id === model)
 
     if (!modelConfig) {
-      throw new Error(`Model ${model} not found`)
+      throw Object.assign(new Error(`Model ${model} not found`), {
+        statusCode: 400,
+        code: "INVALID_REQUEST",
+      })
     }
 
     const effectiveSystemPrompt = systemPrompt || SYSTEM_PROMPT_DEFAULT
@@ -1099,6 +1102,32 @@ export function createChatTurnRuntime(args: {
 
     const streamText = deps.streamText
 
+    const markRunAborted = async (reason: string) => {
+      if (!durable || !convexToken) return
+
+      try {
+        await deps.fetchMutation(
+          api.chatRuntime.markGenerationRunAborted,
+          {
+            runId: durable.runId,
+            messageId: durable.assistantMessageId,
+            reason,
+          },
+          { token: convexToken }
+        )
+      } catch (error) {
+        console.warn(
+          JSON.stringify({
+            _tag: "durable_run_abort_write_failed",
+            requestId,
+            chatId,
+            runId: durable.runId,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        )
+      }
+    }
+
     const runGeneration = (braintrustSpan: BraintrustTraceSpan) =>
       streamText({
         model: aiModel,
@@ -1340,15 +1369,7 @@ export function createChatTurnRuntime(args: {
           resolvePostToolContinuation()
           if (durable && convexToken) {
             await durable.snapshotTracker?.flush().catch(() => {})
-            await deps.fetchMutation(
-              api.chatRuntime.markGenerationRunAborted,
-              {
-                runId: durable.runId,
-                messageId: durable.assistantMessageId,
-                reason: "stream aborted",
-              },
-              { token: convexToken }
-            )
+            await markRunAborted("stream aborted")
           }
         },
 
@@ -1595,15 +1616,7 @@ export function createChatTurnRuntime(args: {
         await durable.snapshotTracker?.flush().catch(() => {})
 
         if (isAborted) {
-          await deps.fetchMutation(
-            api.chatRuntime.markGenerationRunAborted,
-            {
-              runId: durable.runId,
-              messageId: durable.assistantMessageId,
-              reason: "ui message stream aborted",
-            },
-            { token: convexToken }
-          )
+          await markRunAborted("ui message stream aborted")
           return
         }
 
