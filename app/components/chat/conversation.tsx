@@ -52,6 +52,10 @@ type ConversationProps = {
   messages: MessageType[]
   status?: "streaming" | "ready" | "submitted" | "error"
   isSubmitting?: boolean
+  /** Id of the panel-active assistant turn (the rendered selected-path tail),
+   * forwarded to each Message so branch switches / handoffs re-render affected
+   * rows. Derived once by Chat via useActivityPanel. */
+  activeTurnId?: string
   onDelete: (id: string) => void
   onEdit: (
     id: string,
@@ -74,6 +78,7 @@ export function Conversation({
   messages,
   status = "ready",
   isSubmitting = false,
+  activeTurnId,
   onDelete,
   onEdit,
   onReload,
@@ -133,6 +138,7 @@ export function Conversation({
                 variant={message.role}
                 attachments={getMessageAttachments(message)}
                 isLast={isLast}
+                activeTurnId={activeTurnId}
                 onDelete={onDelete}
                 onEdit={onEdit}
                 onReload={isGenerationActive ? undefined : onReload}

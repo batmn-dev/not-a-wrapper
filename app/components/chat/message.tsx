@@ -24,6 +24,10 @@ type MessageProps = {
   id: string
   attachments?: MessageAttachment[]
   isLast?: boolean
+  /** Id of the panel-active assistant turn (the rendered selected-path tail).
+   * Threaded so a branch switch / active-turn handoff re-renders affected rows
+   * even when their body content is unchanged. */
+  activeTurnId?: string
   onDelete: (id: string) => void
   onEdit: (
     id: string,
@@ -53,15 +57,6 @@ type MessageProps = {
 
 function getTextContent(parts: MessageType["parts"] | undefined): string {
   return extractTextFromMessageParts(parts)
-}
-
-function getReasoningContent(parts: MessageType["parts"] | undefined): string {
-  if (!parts) return ""
-  let text = ""
-  for (const part of parts) {
-    if (part.type === "reasoning") text += part.text
-  }
-  return text
 }
 
 function getToolSignature(parts: MessageType["parts"] | undefined): string {
@@ -100,15 +95,26 @@ function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
   if (prev.variant !== next.variant) return false
   if (prev.id !== next.id) return false
 
-  // Streaming messages mutate deeply (reasoning/text deltas). Skip
-  // content-level diffing while the message is actively being built —
-  // the structuredClone in the AI SDK creates new objects, but React
-  // Compiler memoization can retain stale references for nested parts.
-  if (next.status === "streaming" && next.isLast) return false
+  // A branch switch or active-turn handoff must re-render the assistant row so
+  // its panel/trigger affordances follow the newly selected turn — even when the
+  // body content is unchanged (GA §6.7E, §7 R3).
+  if (prev.activeTurnId !== next.activeTurnId) return false
+
+  // While the last message actively streams, skip re-render unless the rendered
+  // body changed. Reasoning + source deltas no longer churn the body — the
+  // Activity panel owns and updates that state — so only text and tool-state
+  // projections gate a body re-render here. The string projections re-read the
+  // current part contents on each call, so they stay mutation-safe even though
+  // the AI SDK mutates parts in place (GA §7 R3). This narrows the previous
+  // blanket `return false`, which re-rendered on every streaming delta.
+  if (next.status === "streaming" && next.isLast) {
+    if (getTextContent(prev.parts) !== getTextContent(next.parts)) return false
+    if (getToolSignature(prev.parts) !== getToolSignature(next.parts)) return false
+    // Reasoning-only deltas fall through to the remaining structural gates.
+  }
 
   // Content comparisons via parts
   if (getTextContent(prev.parts) !== getTextContent(next.parts)) return false
-  if (getReasoningContent(prev.parts) !== getReasoningContent(next.parts)) return false
   if (getToolSignature(prev.parts) !== getToolSignature(next.parts)) return false
 
   // Fallback: if parts are both empty/undefined, compare children directly
@@ -155,6 +161,7 @@ function MessageInner({
   id,
   attachments,
   isLast,
+  activeTurnId,
   onEdit,
   onReload,
   onStop,
@@ -204,6 +211,7 @@ function MessageInner({
         onReload={onReload}
         onStop={onStop}
         isLast={isLast}
+        activeTurnId={activeTurnId}
         parts={parts}
         metadata={metadata}
         status={status}

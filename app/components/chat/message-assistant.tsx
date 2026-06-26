@@ -38,6 +38,9 @@ import { useAssistantMessageSelection } from "./useAssistantMessageSelection"
 type MessageAssistantProps = {
   children: string
   isLast?: boolean
+  /** Id of the panel-active assistant turn. Threaded in commit 3 for the memo
+   * contract; consumed in commit 5 to gate the Activity trigger affordance. */
+  activeTurnId?: string
   copied?: boolean
   copyToClipboard?: () => void
   onReload?: (messageId: string) => void

@@ -72,9 +72,21 @@ export function useReasoningPhase({
   const [tickedSeconds, setTickedSeconds] = useState(0)
   const [prevPhase, setPrevPhase] = useState(phase)
 
+  // Mirror the live tick count in a ref (synced in an effect, never during
+  // render) so the timer effect can resume from the accumulated elapsed time
+  // without listing `tickedSeconds` as a dependency — which would restart the
+  // interval every second (R1).
+  const tickedSecondsRef = useRef(tickedSeconds)
+  useEffect(() => {
+    tickedSecondsRef.current = tickedSeconds
+  }, [tickedSeconds])
+
   const shouldRunTimer = isLast && phase === "thinking"
 
-  // React 19 render-sync: reset timer state when entering thinking phase
+  // React 19 render-sync: reset timer state when entering thinking phase. This
+  // fires only on a genuine phase transition into "thinking" (idle/complete →
+  // thinking), e.g. a fresh turn or regenerate handoff — never during an
+  // isLast bounce where the phase stays "thinking".
   if (phase !== prevPhase) {
     setPrevPhase(phase)
     if (phase === "thinking" && isLast) {
@@ -82,11 +94,17 @@ export function useReasoningPhase({
     }
   }
 
-  // Tick every second while thinking
+  // Tick every second while thinking.
   useEffect(() => {
     if (!shouldRunTimer) return
 
-    const start = Date.now()
+    // R1: anchor the wall clock to the already-accumulated elapsed time so a
+    // same-id `isLast` true→false→true bounce (e.g. regenerate handoff, while
+    // the phase stays "thinking") RESUMES the timer instead of restarting it
+    // from 0 — `tickedSeconds` must never regress mid-stream. On a genuine
+    // fresh "thinking" entry the render-sync reset above has already zeroed
+    // `tickedSeconds`, so `start` collapses to `Date.now()` (unchanged).
+    const start = Date.now() - tickedSecondsRef.current * 1000
     startTimestampRef.current = start
 
     const interval = setInterval(() => {

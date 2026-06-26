@@ -18,6 +18,7 @@ import { AnimatePresence, motion } from "motion/react"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useActivityPanel } from "./use-activity-panel"
 import { isRouteDurableChat } from "./chat-turn"
 import { useChatCore } from "./use-chat-core"
 import { useChatOperations } from "./use-chat-operations"
@@ -152,6 +153,17 @@ export function Chat() {
     bumpChat,
   })
 
+  // Single, chat-owned Activity panel selector. Derives the active turn from
+  // the already-projected `messages` and runs the reasoning hook once for that
+  // tail. `panelProps` / `isGenerationActive` are consumed when the panel is
+  // rendered (commits 4-5); commit 3 only threads `activeTurnId` for the memo
+  // contract while the inline body still renders.
+  const { activeTurnId } = useActivityPanel({
+    messages,
+    status,
+    isSubmitting,
+  })
+
   // Local delete handler — filters a message from the local array
   const handleDelete = useCallback(
     (id: string) => {
@@ -174,6 +186,7 @@ export function Chat() {
       messages,
       status,
       isSubmitting,
+      activeTurnId,
       onDelete: handleDelete,
       onEdit: submitEdit,
       onReload: handleReload,
@@ -188,6 +201,7 @@ export function Chat() {
       messages,
       status,
       isSubmitting,
+      activeTurnId,
       handleDelete,
       submitEdit,
       handleReload,
