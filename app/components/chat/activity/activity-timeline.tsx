@@ -77,7 +77,9 @@ export function StepLeadingIndicator({
   return (
     <span
       className={cn(
-        "relative inline-flex size-4 shrink-0 items-center justify-center",
+        // 20px-tall × 16px-wide marker slot (reference: h-5 box in a w-4 rail),
+        // so the glyph centers against the step title's first line.
+        "relative inline-flex h-5 w-4 shrink-0 items-center justify-center",
         className
       )}
     >
@@ -133,7 +135,7 @@ export const ActivityStep = ({
   body = "description",
 }: ActivityStepProps) => (
   <div
-    className="group relative grid grid-cols-[min-content_minmax(0,1fr)] gap-x-3"
+    className="group relative grid grid-cols-[min-content_minmax(0,1fr)] gap-x-2"
     data-last={isLast}
     style={{ zIndex: index + 1 }}
   >

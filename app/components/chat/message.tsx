@@ -62,15 +62,37 @@ function getTextContent(parts: MessageType["parts"] | undefined): string {
   return extractTextFromMessageParts(parts)
 }
 
+function serializeToolRenderValue(value: unknown): string {
+  if (typeof value === "undefined") return "undefined"
+
+  try {
+    return JSON.stringify(value) ?? String(value)
+  } catch {
+    return String(value)
+  }
+}
+
+function getToolRenderValueSignature(
+  part: MessageType["parts"][number],
+  key: "input" | "output"
+): string {
+  return key in part ? serializeToolRenderValue(part[key]) : ""
+}
+
 function getToolSignature(parts: MessageType["parts"] | undefined): string {
   if (!parts) return ""
-  let sig = ""
+  const signatures: Array<[string, string, string, string]> = []
   for (const part of parts) {
     if (isStaticToolUIPart(part)) {
-      sig += getStaticToolName(part) + ":" + part.state + ";"
+      signatures.push([
+        getStaticToolName(part),
+        part.state,
+        getToolRenderValueSignature(part, "input"),
+        getToolRenderValueSignature(part, "output"),
+      ])
     }
   }
-  return sig
+  return JSON.stringify(signatures)
 }
 
 function branchesEqual(
@@ -105,7 +127,7 @@ function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
 
   // While the last message actively streams, skip re-render unless the rendered
   // body changed. Reasoning + source deltas no longer churn the body — the
-  // Activity panel owns and updates that state — so only text and tool-state
+  // Activity panel owns and updates that state — so only text and rendered tool
   // projections gate a body re-render here. The string projections re-read the
   // current part contents on each call, so they stay mutation-safe even though
   // the AI SDK mutates parts in place (GA §7 R3). This narrows the previous

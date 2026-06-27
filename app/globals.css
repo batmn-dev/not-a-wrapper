@@ -54,7 +54,7 @@
   --spacing-panel-header: 56px;
   --animate-collapsible-down: collapsible-down 200ms ease-out;
   --animate-collapsible-up: collapsible-up 200ms ease-out;
-  --animate-show: show 200ms ease-out;
+  --animate-show: show 150ms ease-in;
 
   @keyframes show {
     from {

@@ -268,6 +268,72 @@ describe("Message body memo contract (R3)", () => {
     expect(messageAssistantSpy).toHaveBeenCalledTimes(2)
   })
 
+  it("re-renders the body when streaming tool input changes without a state transition", () => {
+    renderAssistant({
+      parts: [
+        {
+          type: "tool-search",
+          toolCallId: "tool-call-1",
+          state: "input-streaming",
+          input: { query: "new" },
+        },
+      ] as unknown as UIMessage["parts"],
+      status: "streaming",
+      isLast: true,
+      children: "",
+    })
+    expect(messageAssistantSpy).toHaveBeenCalledTimes(1)
+
+    renderAssistant({
+      parts: [
+        {
+          type: "tool-search",
+          toolCallId: "tool-call-1",
+          state: "input-streaming",
+          input: { query: "new york weather" },
+        },
+      ] as unknown as UIMessage["parts"],
+      status: "streaming",
+      isLast: true,
+      children: "",
+    })
+    expect(messageAssistantSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it("re-renders the body when rendered tool output changes without a state transition", () => {
+    renderAssistant({
+      parts: [
+        {
+          type: "tool-search",
+          toolCallId: "tool-call-1",
+          state: "output-available",
+          input: { query: "new york weather" },
+          output: { summary: "Cloudy" },
+        },
+      ] as unknown as UIMessage["parts"],
+      status: "streaming",
+      isLast: true,
+      children: "",
+    })
+    expect(messageAssistantSpy).toHaveBeenCalledTimes(1)
+
+    renderAssistant({
+      parts: [
+        {
+          type: "tool-search",
+          toolCallId: "tool-call-1",
+          state: "output-available",
+          input: { query: "new york weather" },
+          output: { summary: "Cloudy", temperature: "72 F" },
+        },
+      ] as unknown as UIMessage["parts"],
+      status: "streaming",
+      isLast: true,
+      children: "",
+    })
+    expect(messageAssistantSpy).toHaveBeenCalledTimes(2)
+  })
+
   it("re-renders and forwards the new activeTurnId on handoff", () => {
     const parts = [
       { type: "text", text: "Answer" },

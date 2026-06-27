@@ -102,4 +102,23 @@ describe("ActivityPanel coexistence (R6)", () => {
     ).toHaveLength(0)
     expect(document.querySelectorAll("img")).toHaveLength(5)
   })
+
+  it("renders an opaque reasoning step when reasoning text is hidden", () => {
+    act(() => {
+      root?.render(
+        <ActivityPanelHostProvider>
+          <ActivityPanelDockSlot />
+          <ActivityPanel
+            open
+            onOpenChange={() => {}}
+            {...panelProps(0)}
+            isOpaqueReasoning
+          />
+        </ActivityPanelHostProvider>
+      )
+    })
+
+    expect(document.body.textContent).toContain("Reasoning")
+    expect(document.body.textContent).toContain("Activity")
+  })
 })

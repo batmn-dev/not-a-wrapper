@@ -3,7 +3,6 @@
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { Markdown } from "@/components/ui/markdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { formatDuration } from "@/components/ui/reasoning"
 import type { SourceUrlUIPart, ToolUIPart } from "ai"
 import { createPortal } from "react-dom"
 import {
@@ -42,28 +41,34 @@ export type ActivityPanelProps = {
 function PanelBody({
   sources,
   reasoningText,
+  isOpaqueReasoning,
 }: {
   sources: SourceUrlUIPart[]
   reasoningText: string
+  isOpaqueReasoning: boolean
 }) {
   const gallerySources = sources.map((source) => ({
     href: source.url,
     title: source.title ?? source.url,
   }))
-  const hasReasoning = reasoningText.trim().length > 0
+  const hasVisibleReasoning = reasoningText.trim().length > 0
+  const hasReasoning = hasVisibleReasoning || isOpaqueReasoning
 
   return (
     <div className="space-y-4">
       {hasReasoning ? (
-        <ActivityTimeline>
+        <ActivityTimeline className="animate-show motion-reduce:animate-none">
           <ActivityStep leading="done" body="description">
             <StepTitle>Reasoning</StepTitle>
-            <Markdown>{reasoningText}</Markdown>
+            {hasVisibleReasoning ? <Markdown>{reasoningText}</Markdown> : null}
           </ActivityStep>
         </ActivityTimeline>
       ) : null}
       {gallerySources.length > 0 ? (
-        <SourcesGallery sources={gallerySources} />
+        <SourcesGallery
+          sources={gallerySources}
+          className="animate-show motion-reduce:animate-none"
+        />
       ) : null}
     </div>
   )
@@ -85,18 +90,19 @@ export function ActivityPanel({
   durationSeconds,
   sources,
   reasoningText,
+  isOpaqueReasoning,
 }: ActivityPanelProps) {
   const isBelowLg = useBreakpoint(LG_BREAKPOINT)
   const slotElement = useActivityPanelDockSlot()
   const close = () => onOpenChange(false)
 
-  const body = <PanelBody sources={sources} reasoningText={reasoningText} />
-
-  // The Sheet's SheetTitle is its accessible name, so carry the duration in it.
-  const sheetTitle =
-    durationSeconds !== undefined
-      ? `${title} · ${formatDuration(durationSeconds)}`
-      : title
+  const body = (
+    <PanelBody
+      sources={sources}
+      reasoningText={reasoningText}
+      isOpaqueReasoning={isOpaqueReasoning}
+    />
+  )
 
   // Exactly one shell is active. Mutually exclusive on the lg boundary, so the
   // body element below is mounted in at most one place.
@@ -121,7 +127,8 @@ export function ActivityPanel({
         <ContentSheetShell
           open={open}
           onOpenChange={onOpenChange}
-          title={sheetTitle}
+          title={title}
+          durationSeconds={durationSeconds}
         >
           <ScrollArea className="min-h-0 flex-1">
             <div className="px-6 pb-4">{body}</div>

@@ -25,21 +25,28 @@ export function TitleDurationCluster({
   className,
 }: TitleDurationClusterProps) {
   return (
-    <div className={cn("flex min-w-0 items-baseline gap-1.5", className)}>
-      <span className="text-muted-foreground truncate text-base font-normal">
-        {title}
-      </span>
+    // Root is a <span> (not <div>) so the cluster is valid phrasing content
+    // inside the sheet's <h2> SheetTitle as well as the flyout's flex row.
+    // Weight is left to inherit — body 400 on the flyout, font-medium 500 from
+    // SheetTitle on the sheet — reproducing the reference's header weight delta.
+    <span
+      className={cn(
+        "flex min-w-0 items-baseline gap-2.5 text-lg",
+        className
+      )}
+    >
+      <span className="text-muted-foreground truncate">{title}</span>
       {durationSeconds !== undefined ? (
         <>
           <span aria-hidden className="text-muted-foreground/70">
             ·
           </span>
-          <span className="text-muted-foreground/70 text-sm whitespace-nowrap">
+          <span className="text-muted-foreground/70 whitespace-nowrap">
             {formatDuration(durationSeconds)}
           </span>
         </>
       ) : null}
-    </div>
+    </span>
   )
 }
 
@@ -65,7 +72,7 @@ export function PanelHeader({
   return (
     <div
       className={cn(
-        "flex h-[var(--spacing-panel-header)] shrink-0 items-center justify-between gap-2 px-4",
+        "flex h-[var(--spacing-panel-header)] shrink-0 items-center justify-between gap-2 border-b border-border px-4",
         className
       )}
     >

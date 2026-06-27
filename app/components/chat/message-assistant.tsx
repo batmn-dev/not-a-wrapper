@@ -131,13 +131,8 @@ export function MessageAssistant({
     activeTurnId !== undefined &&
     (messageId === activeTurnId ||
       getServerMessageId(metadata) === activeTurnId)
-  const hasReasoning = Boolean(
-    parts?.some(
-      (part) =>
-        part.type === "reasoning" &&
-        typeof (part as { text?: string }).text === "string" &&
-        ((part as { text?: string }).text ?? "").trim().length > 0
-    )
+  const hasReasoningPart = Boolean(
+    parts?.some((part) => part.type === "reasoning")
   )
   const isReasoningStreaming = Boolean(
     parts?.some(
@@ -150,7 +145,7 @@ export function MessageAssistant({
   const showActivityTrigger =
     Boolean(onOpenActivityPanel) &&
     isActiveTurn &&
-    (isReasoningStreaming || hasReasoning || hasSources)
+    (isReasoningStreaming || hasReasoningPart || hasSources)
   const reasoningDurationSeconds =
     typeof metadata?.reasoningDurationMs === "number"
       ? Math.round(metadata.reasoningDurationMs / 1000)
@@ -160,7 +155,7 @@ export function MessageAssistant({
   // count or the generic label.
   const activityState: ActivityTriggerState = isReasoningStreaming
     ? { status: "thinking" }
-    : hasReasoning
+    : hasReasoningPart
       ? { status: "thought", durationSeconds: reasoningDurationSeconds }
       : hasSources
         ? { status: "sources", count: sources.length }

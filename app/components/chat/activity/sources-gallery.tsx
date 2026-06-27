@@ -29,7 +29,11 @@ export function SourcesGallery({
 
   return (
     <div className={cn("space-y-2", className)}>
-      <PanelSectionHeading title="Sources" trailing={<>· {count}</>} />
+      <PanelSectionHeading
+        title="Sources"
+        trailing={<>· {count}</>}
+        className="justify-start gap-1 px-3"
+      />
       <ul className="flex flex-col">
         {sources.map((source, index) => (
           <li key={index}>
