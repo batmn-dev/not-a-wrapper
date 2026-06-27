@@ -5,16 +5,12 @@ import { Markdown } from "@/components/ui/markdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { SourceUrlUIPart, ToolUIPart } from "ai"
 import { createPortal } from "react-dom"
-import {
-  ActivityStep,
-  ActivityTimeline,
-  StepTitle,
-} from "./activity-timeline"
+import type { ReasoningPhase } from "../use-reasoning-phase"
 import { useActivityPanelDockSlot } from "./activity-panel-host"
+import { ActivityStep, ActivityTimeline, StepTitle } from "./activity-timeline"
 import { ContentSheetShell } from "./content-sheet-shell"
 import { DockedFlyoutShell } from "./docked-flyout-shell"
 import { SourcesGallery } from "./sources-gallery"
-import type { ReasoningPhase } from "../use-reasoning-phase"
 
 const LG_BREAKPOINT = 1024
 
@@ -57,7 +53,7 @@ function PanelBody({
   return (
     <div className="space-y-4">
       {hasReasoning ? (
-        <ActivityTimeline className="animate-show motion-reduce:animate-none">
+        <ActivityTimeline className="animate-show px-3 motion-reduce:animate-none">
           <ActivityStep leading="done" body="description">
             <StepTitle>Reasoning</StepTitle>
             {hasVisibleReasoning ? <Markdown>{reasoningText}</Markdown> : null}
@@ -130,7 +126,11 @@ export function ActivityPanel({
           title={title}
           durationSeconds={durationSeconds}
         >
-          <ScrollArea className="min-h-0 flex-1">
+          <ScrollArea
+            role="region"
+            aria-label="Activity details"
+            className="min-h-0 flex-1"
+          >
             <div className="px-6 pb-4">{body}</div>
           </ScrollArea>
         </ContentSheetShell>

@@ -34,10 +34,7 @@ export function ActivityPanelHostProvider({
   const [slotElement, setSlotElement] = useState<HTMLElement | null>(null)
   // `setSlotElement` (a useState setter) is stable; memoize the value object so
   // consumers only re-render when the element actually changes.
-  const value = useMemo(
-    () => ({ slotElement, setSlotElement }),
-    [slotElement]
-  )
+  const value = useMemo(() => ({ slotElement, setSlotElement }), [slotElement])
 
   return (
     <DockSlotContext.Provider value={value}>
@@ -76,7 +73,7 @@ export function ActivityPanelDockSlot({ className }: { className?: string }) {
       ref={ref}
       data-slot="activity-panel-dock"
       className={cn(
-        "w-0 shrink-0 overflow-hidden transition-[width] duration-200 ease-out motion-reduce:transition-none",
+        "w-0 shrink-0 overflow-hidden transition-[width] duration-300 ease-out motion-reduce:transition-none",
         "[&:not(:empty)]:border-border [&:not(:empty)]:w-[var(--activity-panel-width)] [&:not(:empty)]:border-s",
         className
       )}

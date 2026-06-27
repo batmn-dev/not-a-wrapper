@@ -79,7 +79,7 @@ export function ActivityPanelTrigger({
       <Icon
         icon={RiArrowRightSLine}
         slotSize={16}
-        className="text-muted-foreground/70 transition-transform group-hover/activity:translate-x-0.5"
+        className="text-muted-foreground/70 transition-transform group-hover/activity:translate-x-0.5 motion-reduce:transition-none"
       />
     </button>
   )

@@ -33,7 +33,7 @@ export function TitleDurationCluster({
     // SheetTitle on the sheet — reproducing the reference's header weight delta.
     <span
       className={cn(
-        "flex min-w-0 items-baseline gap-2.5 text-lg",
+        "flex min-w-0 items-center gap-2.5 text-lg",
         className
       )}
     >
@@ -65,7 +65,7 @@ export type PanelHeaderProps = {
 /**
  * PanelHeader — the docked flyout's header bar: a title/duration cluster plus a
  * close button, pinned to `--spacing-panel-header` (56px). The close button is
- * the shipped `Button(ghost, icon-sm)` with a Remix close glyph tinted by
+ * the shipped `Button(ghost, icon)` with a Remix close glyph tinted by
  * `currentColor` — no new file, no sprite hash (GA §4 row 22).
  */
 export function PanelHeader({
@@ -89,11 +89,12 @@ export function PanelHeader({
       />
       <Button
         variant="ghost"
-        size="icon-sm"
+        size="icon"
+        className="-me-2.5 rounded-md"
         aria-label="Close"
         onClick={onClose}
       >
-        <Icon icon={RiCloseLine} slotSize={16} />
+        <Icon icon={RiCloseLine} slotSize={20} />
       </Button>
     </div>
   )

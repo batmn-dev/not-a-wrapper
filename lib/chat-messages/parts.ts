@@ -1,4 +1,9 @@
-import type { UIMessage } from "ai"
+import {
+  getStaticToolName,
+  isStaticToolUIPart,
+  type ToolUIPart,
+  type UIMessage,
+} from "ai"
 
 type StoredAttachment = {
   name: string
@@ -67,6 +72,47 @@ export function extractTextFromMessageParts(parts: unknown): string {
   }
 
   return text
+}
+
+function serializeToolRenderValue(value: unknown): string {
+  if (typeof value === "undefined") return "undefined"
+
+  try {
+    return JSON.stringify(value) ?? String(value)
+  } catch {
+    return String(value)
+  }
+}
+
+function getToolRenderValueSignature(
+  part: ToolUIPart,
+  key: "input" | "output"
+): string {
+  if (key === "input") return serializeToolRenderValue(part.input)
+  if (part.state === "output-available") {
+    return serializeToolRenderValue(part.output)
+  }
+  return ""
+}
+
+export function getToolRenderSignature(
+  parts: UIMessage["parts"] | undefined
+): string {
+  if (!parts) return ""
+
+  const signatures: Array<[string, string, string, string]> = []
+  for (const part of parts) {
+    if (isStaticToolUIPart(part)) {
+      signatures.push([
+        getStaticToolName(part),
+        part.state,
+        getToolRenderValueSignature(part, "input"),
+        getToolRenderValueSignature(part, "output"),
+      ])
+    }
+  }
+
+  return JSON.stringify(signatures)
 }
 
 export function getMessagePartsForDisplay(message: {

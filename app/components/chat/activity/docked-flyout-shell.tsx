@@ -49,8 +49,8 @@ export function DockedFlyoutShell({
       />
       <ScrollArea viewportRef={viewportRef} className="min-h-0 flex-1">
         <div className="px-2 py-3">{children}</div>
-        {/* Trailing scroll spacer so the last row clears the viewport edge. */}
-        <div aria-hidden className="h-8" />
+        {/* Desktop reference uses scroll margin instead of visible tail padding. */}
+        <div aria-hidden className="scroll-mb-4" />
       </ScrollArea>
     </section>
   )

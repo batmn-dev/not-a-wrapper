@@ -1,7 +1,15 @@
 "use client"
 
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
+import { Button } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
+import { RiCloseLine } from "@remixicon/react"
 import type { ReactNode } from "react"
 import { TitleDurationCluster } from "./panel-header"
 
@@ -56,33 +64,59 @@ export function ContentSheetShell({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
+        showCloseButton={false}
         overlayClassName={OVERLAY_CLASSNAME}
         className={cn(
           // Mobile: bottom sheet, rounded top / squared bottom, close hidden
-          // (the handle + backdrop are the dismiss affordances).
-          "max-h-[85svh] rounded-t-2xl [&>button]:max-sm:hidden",
-          // Tablet (sm): centered card via fixed-inset auto-margins.
-          "sm:inset-0 sm:m-auto sm:h-fit sm:max-h-[85svh] sm:max-w-md sm:rounded-2xl sm:shadow-border-lg",
+          // (the handle + backdrop are the dismiss affordances). `max-sm:shadow-none`
+          // suppresses the Sheet primitive's unconditional `shadow-border-lg`
+          // (sheet.tsx) below `sm` — the reference mobile sheet is flush against a
+          // flat scrim with NO elevation; `sm:shadow-border-xl` (below) restores
+          // the closest existing floating shadow token on the tablet card. Both
+          // write `--tw-shadow` at equal specificity and the `max-sm` variant sorts
+          // later, so no `!` is needed (compile-verified).
+          // Max height matches the reference sheet/card: full height minus a 6px
+          // (or safe-area) top gap, so long reasoning + a large gallery use the
+          // available height instead of capping at 85% and leaving dead scrim.
+          "grid h-fit max-h-[calc(100%_-_max(env(safe-area-inset-top),6px))] grid-rows-[min-content_minmax(0,1fr)] gap-0 overflow-hidden rounded-t-[16px] pb-4 max-sm:shadow-none",
+          // Tablet (sm): centered card without top/bottom inset stretch.
+          "sm:shadow-border-xl sm:top-1/2 sm:right-auto! sm:bottom-auto! sm:left-1/2! sm:h-fit sm:max-h-[calc(100%_-_max(env(safe-area-inset-top),6px))] sm:w-[28rem] sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[16px]",
           // Enter/exit timing (GA §6.2): edge slide, ~250ms in / 200ms out,
           // committed curve; all gated by motion-reduce (new repo pattern).
-          "ease-[cubic-bezier(0.32,0.72,0,1)] data-starting-style:duration-[250ms] data-ending-style:duration-200 motion-reduce:transition-none",
+          "ease-[cubic-bezier(0.32,0.72,0,1)] data-ending-style:duration-200 data-starting-style:duration-[250ms] motion-reduce:transition-none",
           className
         )}
       >
         {/* Mobile-only drag handle; decorative (the Sheet handles dismissal). */}
         <div
           aria-hidden
-          className="bg-muted mx-auto mt-4 h-1 w-12 shrink-0 rounded-full sm:hidden"
+          className="bg-muted mx-auto mt-1.5 h-1 w-12 shrink-0 rounded-full sm:hidden"
         />
-        {/* The cluster IS the dialog's accessible name; the `·` span is
-            aria-hidden, so the name reads "Activity 5m 42s". */}
-        <SheetTitle className="px-6 pt-2 sm:pt-4">
-          <TitleDurationCluster
-            title={title}
-            durationSeconds={durationSeconds}
-          />
-        </SheetTitle>
-        {children}
+        <section className="flex max-h-[calc(100svh_-_max(env(safe-area-inset-top),6px)_-_16px)] min-h-0 min-w-0 flex-col overflow-hidden">
+          {/* The cluster IS the dialog's accessible name; the `·` span is
+              aria-hidden, so the name reads "Activity 5m 42s". */}
+          <header className="grid min-h-[var(--spacing-panel-header)] grid-cols-[minmax(0,1fr)_min-content] items-center gap-3 ps-6 pe-4 pt-4 pb-2 select-none">
+            <SheetTitle className="m-0 min-w-0 overflow-hidden text-lg leading-7">
+              <TitleDurationCluster
+                title={title}
+                durationSeconds={durationSeconds}
+              />
+            </SheetTitle>
+            <SheetClose
+              aria-label="Close"
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-md p-1 max-sm:hidden"
+                />
+              }
+            >
+              <Icon icon={RiCloseLine} slotSize={20} />
+            </SheetClose>
+          </header>
+          {children}
+        </section>
       </SheetContent>
     </Sheet>
   )

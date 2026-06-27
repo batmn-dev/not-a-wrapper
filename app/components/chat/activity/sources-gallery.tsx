@@ -28,7 +28,7 @@ export function SourcesGallery({
   if (sources.length === 0) return null
 
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("space-y-3", className)}>
       <PanelSectionHeading
         title="Sources"
         trailing={<>· {count}</>}

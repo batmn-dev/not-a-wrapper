@@ -1,17 +1,26 @@
 /** @vitest-environment jsdom */
 
+import { getToolRenderSignature } from "@/lib/chat-messages/parts"
 import type { UIMessage } from "@ai-sdk/react"
 import React, { act } from "react"
 import { createRoot, Root } from "react-dom/client"
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
 import { Message } from "./message"
 
 // Render spy + last-received props, so memo-equality tests can observe whether
 // the assistant body re-rendered and what props it received.
 const messageAssistantSpy = vi.hoisted(() => vi.fn())
-const lastAssistantProps = vi.hoisted(
-  () => ({ current: {} as Record<string, unknown> })
-)
+const lastAssistantProps = vi.hoisted(() => ({
+  current: {} as Record<string, unknown>,
+}))
 
 vi.mock("./message-assistant", () => ({
   MessageAssistant: (props: {
@@ -57,8 +66,9 @@ vi.mock("./message-user", () => ({
 }))
 
 beforeAll(() => {
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean })
-    .IS_REACT_ACT_ENVIRONMENT = true
+  ;(
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true
 })
 
 describe("Message memoization", () => {
@@ -207,6 +217,7 @@ describe("Message body memo contract (R3)", () => {
           activeTurnId={props.activeTurnId}
           status={props.status}
           parts={props.parts}
+          toolRenderSignature={getToolRenderSignature(props.parts)}
           onDelete={() => {}}
           onEdit={() => {}}
         >
@@ -332,6 +343,61 @@ describe("Message body memo contract (R3)", () => {
       children: "",
     })
     expect(messageAssistantSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it("re-renders the body when rendered tool input/output mutate in place", () => {
+    const parts = [
+      {
+        type: "tool-search",
+        toolCallId: "tool-call-1",
+        state: "input-streaming",
+        input: { query: "new" },
+      },
+    ] as unknown as UIMessage["parts"]
+    const mutable = parts as unknown as Array<{
+      state: "input-streaming" | "output-available"
+      input: { query: string }
+      output?: { summary: string; temperature?: string }
+    }>
+
+    renderAssistant({
+      parts,
+      status: "streaming",
+      isLast: true,
+      children: "",
+    })
+    expect(messageAssistantSpy).toHaveBeenCalledTimes(1)
+
+    mutable[0].input.query = "new york weather"
+    renderAssistant({
+      parts,
+      status: "streaming",
+      isLast: true,
+      children: "",
+    })
+    expect(messageAssistantSpy).toHaveBeenCalledTimes(2)
+
+    const output: { summary: string; temperature?: string } = {
+      summary: "Cloudy",
+    }
+    mutable[0].state = "output-available"
+    mutable[0].output = output
+    renderAssistant({
+      parts,
+      status: "streaming",
+      isLast: true,
+      children: "",
+    })
+    expect(messageAssistantSpy).toHaveBeenCalledTimes(3)
+
+    output.temperature = "72 F"
+    renderAssistant({
+      parts,
+      status: "streaming",
+      isLast: true,
+      children: "",
+    })
+    expect(messageAssistantSpy).toHaveBeenCalledTimes(4)
   })
 
   it("re-renders and forwards the new activeTurnId on handoff", () => {

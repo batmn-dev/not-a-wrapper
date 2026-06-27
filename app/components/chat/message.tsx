@@ -1,12 +1,14 @@
-import { UIMessage as MessageType } from "@ai-sdk/react"
-import { isStaticToolUIPart, getStaticToolName } from "ai"
-import React, { useState } from "react"
 import type {
   ChatMessageMetadata,
   MessageBranchInfo,
 } from "@/lib/chat-messages/branch"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
-import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
+import {
+  extractTextFromMessageParts,
+  getToolRenderSignature,
+} from "@/lib/chat-messages/parts"
+import { UIMessage as MessageType } from "@ai-sdk/react"
+import React, { useState } from "react"
 import type { EditTurnResult } from "./chat-turn"
 import { MessageAssistant } from "./message-assistant"
 import { MessageUser } from "./message-user"
@@ -43,6 +45,10 @@ type MessageProps = {
    * message in conversation.tsx). Undefined for assistant messages. */
   branch?: MessageBranchInfo
   parts?: MessageType["parts"]
+  /** Immutable snapshot of rendered tool input/output for memo comparison.
+   * Conversation computes this during render so in-place part mutations do not
+   * make the previous and next memo props point at the same mutated object. */
+  toolRenderSignature?: string
   metadata?: ChatMessageMetadata
   status?: DurableMessageStatus | "ready" | "error"
   className?: string
@@ -62,37 +68,11 @@ function getTextContent(parts: MessageType["parts"] | undefined): string {
   return extractTextFromMessageParts(parts)
 }
 
-function serializeToolRenderValue(value: unknown): string {
-  if (typeof value === "undefined") return "undefined"
-
-  try {
-    return JSON.stringify(value) ?? String(value)
-  } catch {
-    return String(value)
-  }
-}
-
-function getToolRenderValueSignature(
-  part: MessageType["parts"][number],
-  key: "input" | "output"
-): string {
-  return key in part ? serializeToolRenderValue(part[key]) : ""
-}
-
-function getToolSignature(parts: MessageType["parts"] | undefined): string {
-  if (!parts) return ""
-  const signatures: Array<[string, string, string, string]> = []
-  for (const part of parts) {
-    if (isStaticToolUIPart(part)) {
-      signatures.push([
-        getStaticToolName(part),
-        part.state,
-        getToolRenderValueSignature(part, "input"),
-        getToolRenderValueSignature(part, "output"),
-      ])
-    }
-  }
-  return JSON.stringify(signatures)
+function getComparableToolSignature({
+  parts,
+  toolRenderSignature,
+}: Pick<MessageProps, "parts" | "toolRenderSignature">): string {
+  return toolRenderSignature ?? getToolRenderSignature(parts)
 }
 
 function branchesEqual(
@@ -128,19 +108,23 @@ function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
   // While the last message actively streams, skip re-render unless the rendered
   // body changed. Reasoning + source deltas no longer churn the body — the
   // Activity panel owns and updates that state — so only text and rendered tool
-  // projections gate a body re-render here. The string projections re-read the
-  // current part contents on each call, so they stay mutation-safe even though
-  // the AI SDK mutates parts in place (GA §7 R3). This narrows the previous
-  // blanket `return false`, which re-rendered on every streaming delta.
+  // projections gate a body re-render here. Conversation provides tool
+  // projections as an immutable string so in-place AI SDK part mutations do not
+  // make previous and next memo props compare against the same mutated object.
+  // This narrows the previous blanket `return false`, which re-rendered on
+  // every streaming delta.
   if (next.status === "streaming" && next.isLast) {
     if (getTextContent(prev.parts) !== getTextContent(next.parts)) return false
-    if (getToolSignature(prev.parts) !== getToolSignature(next.parts)) return false
+    if (getComparableToolSignature(prev) !== getComparableToolSignature(next)) {
+      return false
+    }
     // Reasoning-only deltas fall through to the remaining structural gates.
   }
 
   // Content comparisons via parts
   if (getTextContent(prev.parts) !== getTextContent(next.parts)) return false
-  if (getToolSignature(prev.parts) !== getToolSignature(next.parts)) return false
+  if (getComparableToolSignature(prev) !== getComparableToolSignature(next))
+    return false
 
   // Fallback: if parts are both empty/undefined, compare children directly
   if (!prev.parts?.length && !next.parts?.length) {
@@ -159,7 +143,8 @@ function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
   if (
     prev.variant === "assistant" &&
     prev.onToolApproval !== next.onToolApproval
-  ) return false
+  )
+    return false
   if (prev.onSelectBranch !== next.onSelectBranch) return false
   if (!branchesEqual(prev.branch, next.branch)) return false
 
@@ -171,7 +156,12 @@ function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
     for (let i = 0; i < prevLen; i++) {
       const p = prev.attachments[i]
       const n = next.attachments[i]
-      if (p.url !== n.url || p.name !== n.name || p.contentType !== n.contentType) return false
+      if (
+        p.url !== n.url ||
+        p.name !== n.name ||
+        p.contentType !== n.contentType
+      )
+        return false
     }
   }
 

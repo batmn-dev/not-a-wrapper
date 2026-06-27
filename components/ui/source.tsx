@@ -217,7 +217,7 @@ export function SourcesGalleryItem({
       rel={safeHref ? "noopener noreferrer" : undefined}
       className="flex flex-col gap-0.5 rounded-xl px-3 py-2.5 hover:bg-accent"
     >
-      <div className="flex items-center gap-1.5">
+      <div className="flex h-6 items-center gap-2 text-xs">
         {/* eslint-disable-next-line @next/next/no-img-element -- Dynamic external favicon, optimization not beneficial */}
         <img
           src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(
@@ -230,7 +230,7 @@ export function SourcesGalleryItem({
           decoding="async"
           className="bg-card size-4 shrink-0 rounded-full object-cover motion-safe:transition-opacity"
         />
-        <span className="text-muted-foreground truncate text-sm">
+        <span className="text-muted-foreground truncate">
           {siteName ?? hostname}
         </span>
       </div>

@@ -2,17 +2,18 @@
 
 import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
-import { cva, type VariantProps } from "class-variance-authority"
 import {
   RiCheckboxBlankCircleFill,
   RiCheckLine,
   RiGlobeLine,
 } from "@remixicon/react"
+import { cva, type VariantProps } from "class-variance-authority"
 import React from "react"
 
 /**
  * Leading markers for an Activity step. Mirrors `LEADING_MARKERS` in
- * `components/ui/chain-of-thought.tsx:18-30` (bullet dot 8px, globe/done 16px)
+ * `components/ui/chain-of-thought.tsx:18-30` (scoped down to the reference's
+ * bullet dot 6px and globe/done glyphs 15px)
  * WITHOUT editing that shared primitive (plan §5 commit 1, GA §D4). Glyphs
  * render through `Icon` (`currentColor`), tinted by semantic text tokens — the
  * sprite-id hashes from the reference are intentionally ignored (GA §4 rows
@@ -21,15 +22,22 @@ import React from "react"
 const STEP_MARKERS = {
   bullet: {
     icon: RiCheckboxBlankCircleFill,
-    slotSize: 8,
+    slotSize: 6,
+    glyphSize: 6,
     className: "fill-current",
   },
   globe: {
     icon: RiGlobeLine,
-    slotSize: 16,
+    slotSize: 15,
+    glyphSize: 15,
     className: "text-muted-foreground",
   },
-  done: { icon: RiCheckLine, slotSize: 16, className: "text-foreground" },
+  done: {
+    icon: RiCheckLine,
+    slotSize: 15,
+    glyphSize: 15,
+    className: "text-foreground",
+  },
 } as const
 
 export type ActivityStepLeading = keyof typeof STEP_MARKERS
@@ -86,6 +94,7 @@ export function StepLeadingIndicator({
       <Icon
         icon={marker.icon}
         slotSize={marker.slotSize}
+        glyphSize={marker.glyphSize}
         className={marker.className}
       />
     </span>
@@ -120,11 +129,10 @@ export type ActivityStepProps = {
  * ActivityStep — a single non-collapsible timeline step: a marker + a
  * continuous rail in the leading column, and the title/body content in the
  * trailing column. Mirrors `ChainOfThoughtStep` (`chain-of-thought.tsx:174-192`)
- * — `group` wrapper, `data-last`, `bg-primary/20 w-px` rail hidden via
+ * — `group` wrapper, `data-last`, `bg-border w-px` rail hidden via
  * `group-data-[last=true]:hidden` — but uses a full-height rail (no fixed `h-4`)
- * because the body is always visible and multi-line. The rail keeps
- * `bg-primary/20` for pixel parity with the existing chain-of-thought rail
- * rather than `border-border` (plan §5 commit 1; GA §6.6).
+ * because the body is always visible and multi-line. The rail keeps the page
+ * hairline token strategy; no stronger border tier exists for the panel.
  */
 export const ActivityStep = ({
   children,
@@ -141,7 +149,7 @@ export const ActivityStep = ({
   >
     <div className="relative flex flex-col items-center">
       <StepLeadingIndicator leading={leading ?? "bullet"} />
-      <div className="bg-primary/20 mt-1 w-px flex-1 group-data-[last=true]:hidden" />
+      <div className="bg-border mt-1 w-px flex-1 group-data-[last=true]:hidden" />
     </div>
     <div className={cn(stepVariants({ leading, body }), className)}>
       {children}
@@ -161,7 +169,10 @@ export type ActivityTimelineProps = {
  * "Animations"). Mirrors the `cloneElement` mapper at
  * `chain-of-thought.tsx:148-166`.
  */
-export function ActivityTimeline({ children, className }: ActivityTimelineProps) {
+export function ActivityTimeline({
+  children,
+  className,
+}: ActivityTimelineProps) {
   const childrenArray = React.Children.toArray(children)
 
   return (
@@ -169,13 +180,10 @@ export function ActivityTimeline({ children, className }: ActivityTimelineProps)
       {childrenArray.map((child, index) => (
         <React.Fragment key={index}>
           {React.isValidElement(child) &&
-            React.cloneElement(
-              child as React.ReactElement<ActivityStepProps>,
-              {
-                isLast: index === childrenArray.length - 1,
-                index,
-              }
-            )}
+            React.cloneElement(child as React.ReactElement<ActivityStepProps>, {
+              isLast: index === childrenArray.length - 1,
+              index,
+            })}
         </React.Fragment>
       ))}
     </div>
