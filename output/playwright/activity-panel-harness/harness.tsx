@@ -2,6 +2,7 @@ import React from "react"
 import { createPortal } from "react-dom"
 import { createRoot } from "react-dom/client"
 import { ScrollArea } from "/Users/andresgonzalez/Github/Projects/not-a-wrapper/components/ui/scroll-area"
+import { ActivityPanelTrigger } from "/Users/andresgonzalez/Github/Projects/not-a-wrapper/app/components/chat/activity/activity-panel-trigger"
 import {
   ActivityStep,
   ActivityTimeline,
@@ -106,9 +107,10 @@ function ConversationColumn() {
             state over many physical qubits and detecting errors without
             measuring the encoded information directly.
           </p>
-          <button className="activity-trigger" type="button">
-            Activity
-          </button>
+          <ActivityPanelTrigger
+            state={{ status: "thought", durationSeconds: 342 }}
+            onOpen={() => window.dispatchEvent(new CustomEvent("audit-open"))}
+          />
         </article>
       </main>
       <div className="composer">Ask anything</div>

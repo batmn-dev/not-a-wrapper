@@ -102,6 +102,8 @@ The deltas below are framed as what must change to match the ChatGPT reference s
 
 ## 4. Token map
 
+> **Historical mapping note (2026-06-27 cleanup).** This table records the original ChatGPT-reference-to-project token mapping used to plan the work. It is retained for provenance, not as the canonical ChatGPT CSS reference. For current reference values, load `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/css/conversation-with-activity-panel.md` and `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/research/activity-panel-component-inventory.md`; for final project decisions, prefer §6 below and `docs/activity-panel-implementation-plan.md`. Rows that mention compromises such as reusing `--spacing-app-header` or approximating `16px` radius were planning options and may be superseded by later implementation decisions.
+
 All reference colors are sRGB hex/alpha literals (ChatGPT's `--token-*` system); the target app is OKLCH-based shadcn/Tailwind-v4 with two-tier indirection (`app/globals.css`). Mappings are by **semantic role**, not byte-equality. NEVER hardcode a hex where a semantic token exists; flagged rows need a decision.
 
 | # | referenceToken | referenceValue | targetToken | targetValueOrNote | status | confidence |
