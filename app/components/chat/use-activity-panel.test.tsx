@@ -11,6 +11,7 @@ import {
   it,
 } from "vitest"
 import {
+  PENDING_ACTIVITY_TURN_ID,
   useActivityPanel,
   type UseActivityPanelResult,
 } from "./use-activity-panel"
@@ -131,10 +132,17 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.panelProps.sources[0].url).toBe("https://b.com")
   })
 
-  it("has no active turn for the submitted/no-assistant state but stays generation-active", () => {
-    render({ messages: [user("u1")], status: "submitted", isSubmitting: true })
+  it("owns the pending assistant turn for submitted user-tail state", () => {
+    render({
+      messages: [user("u1"), assistant("a1"), user("u2")],
+      status: "submitted",
+      isSubmitting: true,
+    })
 
-    expect(latest!.activeTurnId).toBeUndefined()
+    expect(latest!.activeTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.isGenerationActive).toBe(true)
+    expect(latest!.panelProps.phase).toBe("thinking")
+    expect(latest!.panelProps.isReasoningStreaming).toBe(true)
+    expect(latest!.panelProps.isOpaqueReasoning).toBe(true)
   })
 })

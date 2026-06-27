@@ -7,6 +7,8 @@ source_of_truth: docs/activity-panel-gap-analysis.md (decisions §6.1–6.7, res
 
 # Activity Panel — Implementation Plan
 
+> **Historical implementation-plan note (2026-06-27 cleanup).** This runbook is retained as planning provenance and execution context. For current visual-polish specifics after the activity-panel pass, prefer `polish-acitivity-panel-and-page.md`, especially its "CSS Reference Cleanup", "Current Render Evidence", and completed-work sections. Any older radius/shadow/token approximations in this plan, such as `rounded-2xl` or broad token-map compromises, should not override the cleaned ChatGPT references or the current polish document.
+
 This is the execution-ready runbook for the responsive ChatGPT-style **Activity** panel. It operationalizes
 `docs/activity-panel-gap-analysis.md` (the gap analysis; cited below as **GA §**). Every concrete instruction
 cites both the GA section AND the target `file:line`. When the GA and this plan disagree, the GA wins — flag it.

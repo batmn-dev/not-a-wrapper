@@ -58,6 +58,7 @@ export type PanelHeaderProps = {
   title: string
   durationSeconds?: number
   titleId?: string
+  controlsId?: string
   onClose: () => void
   className?: string
 }
@@ -72,6 +73,7 @@ export function PanelHeader({
   title,
   durationSeconds,
   titleId,
+  controlsId,
   onClose,
   className,
 }: PanelHeaderProps) {
@@ -92,6 +94,8 @@ export function PanelHeader({
         size="icon"
         className="-me-2.5 rounded-md"
         aria-label="Close"
+        aria-controls={controlsId}
+        aria-expanded={true}
         onClick={onClose}
       >
         <Icon icon={RiCloseLine} slotSize={20} />

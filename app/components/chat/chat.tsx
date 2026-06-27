@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils"
 import { AnimatePresence, motion } from "motion/react"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { ActivityPanel } from "./activity/activity-panel"
 import { useActivityPanel } from "./use-activity-panel"
 import { isRouteDurableChat } from "./chat-turn"
@@ -165,9 +165,13 @@ export function Chat() {
     isSubmitting,
   })
 
-  // Chat owns the panel open state; the assistant trigger reopens it.
+  // Chat owns the panel open state; the assistant trigger toggles it.
+  const activityPanelId = useId()
   const [activityPanelOpen, setActivityPanelOpen] = useState(false)
-  const openActivityPanel = useCallback(() => setActivityPanelOpen(true), [])
+  const handleActivityPanelOpenChange = useCallback(
+    (open: boolean) => setActivityPanelOpen(open),
+    []
+  )
 
   // Local delete handler — filters a message from the local array
   const handleDelete = useCallback(
@@ -192,7 +196,9 @@ export function Chat() {
       status,
       isSubmitting,
       activeTurnId,
-      onOpenActivityPanel: openActivityPanel,
+      activityPanelOpen,
+      activityPanelId,
+      onActivityPanelOpenChange: handleActivityPanelOpenChange,
       onDelete: handleDelete,
       onEdit: submitEdit,
       onReload: handleReload,
@@ -208,7 +214,9 @@ export function Chat() {
       status,
       isSubmitting,
       activeTurnId,
-      openActivityPanel,
+      activityPanelOpen,
+      activityPanelId,
+      handleActivityPanelOpenChange,
       handleDelete,
       submitEdit,
       handleReload,
@@ -308,8 +316,9 @@ export function Chat() {
       <DialogAuth open={hasDialogAuth} setOpen={setHasDialogAuth} />
 
       <ActivityPanel
+        panelId={activityPanelId}
         open={activityPanelOpen}
-        onOpenChange={setActivityPanelOpen}
+        onOpenChange={handleActivityPanelOpenChange}
         {...panelProps}
       />
 

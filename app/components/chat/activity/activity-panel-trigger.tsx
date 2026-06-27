@@ -32,8 +32,12 @@ export function activityStateLabel(state: ActivityTriggerState): string {
 }
 
 export type ActivityPanelTriggerProps = {
-  /** Opens (or reopens) the Chat-owned Activity panel. */
-  onOpen: () => void
+  /** Whether the Chat-owned Activity panel is currently expanded. */
+  open: boolean
+  /** Opens or closes the Chat-owned Activity panel. */
+  onOpenChange: (open: boolean) => void
+  /** Stable id of the controlled panel surface, when mounted. */
+  controlsId?: string
   /** The current thinking state; the trigger composes the label from it. */
   state: ActivityTriggerState
   className?: string
@@ -43,12 +47,14 @@ export type ActivityPanelTriggerProps = {
  * ActivityPanelTrigger — the explicit, focusable reopen affordance for the
  * Activity panel (plan §5 commit 5). Renders a composable thinking-state label
  * ("Thinking" / "Thought for 1s" / "N sources") with a trailing chevron — no
- * leading icon — and opens the panel on click. It renders NO reasoning/source
+ * leading icon — and toggles the panel on click. It renders NO reasoning/source
  * content; the overlay primitives (Sheet / docked section) restore focus here
  * on close. The "thinking" state shimmers (motion-reduce gated).
  */
 export function ActivityPanelTrigger({
-  onOpen,
+  open,
+  onOpenChange,
+  controlsId,
   state,
   className,
 }: ActivityPanelTriggerProps) {
@@ -58,10 +64,12 @@ export function ActivityPanelTrigger({
   return (
     <button
       type="button"
-      onClick={onOpen}
-      aria-label={`Open activity: ${label}`}
+      onClick={() => onOpenChange(!open)}
+      aria-label={`${open ? "Close" : "Open"} activity: ${label}`}
+      aria-expanded={open}
+      aria-controls={controlsId}
       className={cn(
-        "group/activity text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 rounded-full text-sm transition-colors",
+        "group/activity text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-0.5 rounded-full text-start text-base leading-6 font-normal transition-colors",
         className
       )}
     >
@@ -69,7 +77,7 @@ export function ActivityPanelTrigger({
         <TextShimmer
           duration={2}
           spread={15}
-          className="text-sm motion-reduce:animate-none"
+          className="text-base leading-6 font-normal motion-reduce:animate-none"
         >
           {label}
         </TextShimmer>
@@ -78,7 +86,7 @@ export function ActivityPanelTrigger({
       )}
       <Icon
         icon={RiArrowRightSLine}
-        slotSize={16}
+        slotSize={20}
         className="text-muted-foreground/70 transition-transform group-hover/activity:translate-x-0.5 motion-reduce:transition-none"
       />
     </button>

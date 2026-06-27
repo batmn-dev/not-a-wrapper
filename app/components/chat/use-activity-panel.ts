@@ -10,6 +10,8 @@ import { useReasoningPhase, type ReasoningPhase } from "./use-reasoning-phase"
 
 type ChatStatus = "streaming" | "ready" | "submitted" | "error"
 
+export const PENDING_ACTIVITY_TURN_ID = "__pending_activity_turn__"
+
 export type ActivityPanelProps = {
   phase: ReasoningPhase["phase"]
   steps: ToolUIPart[]
@@ -47,12 +49,20 @@ export function useActivityPanel({
   status: ChatStatus
   isSubmitting: boolean
 }): UseActivityPanelResult {
+  const hasPendingAssistantTurn =
+    status === "submitted" && messages[messages.length - 1]?.role === "user"
+
   // Scan from the end for the last assistant message (the selected-path tail).
+  // During submit preflight, the next assistant turn has no server/client id yet,
+  // so the panel is owned by the pending placeholder instead of the previous
+  // assistant response.
   let tail: UIMessage | undefined
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === "assistant") {
-      tail = messages[i]
-      break
+  if (!hasPendingAssistantTurn) {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") {
+        tail = messages[i]
+        break
+      }
     }
   }
 
@@ -60,7 +70,9 @@ export function useActivityPanel({
   // (message.tsx / message-assistant.tsx) when the optimistic id hasn't anchored
   // yet (mirrors selected-path.ts identity keys).
   const tailMetadata = tail?.metadata as ChatMessageMetadata | undefined
-  const activeTurnId = tail?.id ?? getServerMessageId(tailMetadata)
+  const activeTurnId = hasPendingAssistantTurn
+    ? PENDING_ACTIVITY_TURN_ID
+    : (tail?.id ?? getServerMessageId(tailMetadata))
 
   const persistedDurationMs =
     typeof tailMetadata?.reasoningDurationMs === "number"
@@ -91,17 +103,29 @@ export function useActivityPanel({
   const isGenerationActive =
     isSubmitting || status === "submitted" || status === "streaming"
 
+  const panelProps: ActivityPanelProps = hasPendingAssistantTurn
+    ? {
+        phase: "thinking",
+        steps: [],
+        sources: [],
+        durationSeconds: undefined,
+        reasoningText: "",
+        isReasoningStreaming: true,
+        isOpaqueReasoning: true,
+      }
+    : {
+        phase,
+        steps,
+        sources,
+        durationSeconds,
+        reasoningText,
+        isReasoningStreaming,
+        isOpaqueReasoning,
+      }
+
   return {
     activeTurnId,
     isGenerationActive,
-    panelProps: {
-      phase,
-      steps,
-      sources,
-      durationSeconds,
-      reasoningText,
-      isReasoningStreaming,
-      isOpaqueReasoning,
-    },
+    panelProps,
   }
 }

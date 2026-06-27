@@ -10,11 +10,13 @@ import { useActivityPanelDockSlot } from "./activity-panel-host"
 import { ActivityStep, ActivityTimeline, StepTitle } from "./activity-timeline"
 import { ContentSheetShell } from "./content-sheet-shell"
 import { DockedFlyoutShell } from "./docked-flyout-shell"
+import { PanelSectionHeading } from "./panel-section-heading"
 import { SourcesGallery } from "./sources-gallery"
 
 const LG_BREAKPOINT = 1024
 
 export type ActivityPanelProps = {
+  panelId?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   title?: string
@@ -53,12 +55,17 @@ function PanelBody({
   return (
     <div className="space-y-4">
       {hasReasoning ? (
-        <ActivityTimeline className="animate-show px-3 motion-reduce:animate-none">
-          <ActivityStep leading="done" body="description">
-            <StepTitle>Reasoning</StepTitle>
-            {hasVisibleReasoning ? <Markdown>{reasoningText}</Markdown> : null}
-          </ActivityStep>
-        </ActivityTimeline>
+        <div className="animate-show px-3 pt-2 pb-2 motion-reduce:animate-none">
+          <PanelSectionHeading title="Pro thinking" />
+          <ActivityTimeline className="mt-3 flex flex-col">
+            <ActivityStep leading="done" body="description">
+              <StepTitle>Reasoning</StepTitle>
+              {hasVisibleReasoning ? (
+                <Markdown>{reasoningText}</Markdown>
+              ) : null}
+            </ActivityStep>
+          </ActivityTimeline>
+        </div>
       ) : null}
       {gallerySources.length > 0 ? (
         <SourcesGallery
@@ -80,6 +87,7 @@ function PanelBody({
  * The shared body renders into the active shell only, so favicons load once.
  */
 export function ActivityPanel({
+  panelId,
   open,
   onOpenChange,
   title = "Activity",
@@ -110,6 +118,7 @@ export function ActivityPanel({
       {dockedActive && slotElement
         ? createPortal(
             <DockedFlyoutShell
+              id={panelId}
               title={title}
               durationSeconds={durationSeconds}
               onClose={close}
@@ -121,6 +130,7 @@ export function ActivityPanel({
         : null}
       {sheetActive ? (
         <ContentSheetShell
+          panelId={panelId}
           open={open}
           onOpenChange={onOpenChange}
           title={title}

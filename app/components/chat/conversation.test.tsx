@@ -22,15 +22,21 @@ vi.mock("@/components/ui/thinking-bar", () => ({
 vi.mock("./message", () => ({
   Message: ({
     id,
+    activeTurnId,
     onReload,
+    status,
     children,
   }: {
     id: string
+    activeTurnId?: string
     onReload?: (messageId: string) => void
+    status?: string
     children: React.ReactNode
   }) => (
     <button
+      data-active-turn-id={activeTurnId}
       data-can-reload={Boolean(onReload)}
+      data-status={status}
       data-testid={`message-${id}`}
       onClick={() => onReload?.(id)}
       type="button"
@@ -41,6 +47,7 @@ vi.mock("./message", () => ({
 }))
 
 import { Conversation } from "./conversation"
+import { PENDING_ACTIVITY_TURN_ID } from "./use-activity-panel"
 
 beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean })
@@ -163,7 +170,7 @@ describe("Conversation regeneration availability", () => {
     expect(onReload).toHaveBeenCalledWith("assistant-1")
   })
 
-  it("renders the ThinkingBar for the submitted pre-stream state (user tail, no assistant yet)", () => {
+  it("routes the submitted pre-stream state through the activity assistant row", () => {
     cleanupRender()
     const mounted = document.createElement("div")
     document.body.appendChild(mounted)
@@ -180,6 +187,7 @@ describe("Conversation regeneration availability", () => {
           messages={userTail}
           status="submitted"
           isSubmitting
+          activeTurnId={PENDING_ACTIVITY_TURN_ID}
           onDelete={vi.fn()}
           onEdit={vi.fn()}
           onReload={vi.fn()}
@@ -188,6 +196,13 @@ describe("Conversation regeneration availability", () => {
       )
     })
 
-    expect(container?.querySelector('[data-testid="thinking"]')).toBeTruthy()
+    const pendingMessage = container?.querySelector(
+      `[data-testid="message-${PENDING_ACTIVITY_TURN_ID}"]`
+    ) as HTMLButtonElement | null
+
+    expect(container?.querySelector('[data-testid="thinking"]')).toBeNull()
+    expect(pendingMessage).toBeTruthy()
+    expect(pendingMessage?.dataset.status).toBe("submitted")
+    expect(pendingMessage?.dataset.activeTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
   })
 })

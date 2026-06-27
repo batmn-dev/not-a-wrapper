@@ -47,7 +47,7 @@ export function SourceChip({ href, label, className }: SourceChipProps) {
         url={safeHref ?? href}
         loading="lazy"
         decoding="async"
-        className="size-3.5"
+        className="size-3"
       />
       <span className="truncate">{label ?? hostnameOf(href)}</span>
     </Badge>
@@ -90,7 +90,7 @@ export function OverflowChip({
               overlap
               loading="lazy"
               decoding="async"
-              className="size-3.5 group-hover/overflow:ring-foreground"
+              className="size-3 group-hover/overflow:ring-foreground"
             />
           ))}
         </span>
@@ -131,7 +131,7 @@ export function SourceChipGroup({
   const overflow = sources.slice(limit)
 
   return (
-    <div className={cn("flex flex-wrap gap-1.5", className)}>
+    <div className={cn("flex flex-wrap gap-1", className)}>
       {visible.map((source, index) => (
         <SourceChip key={index} href={source.href} label={source.label} />
       ))}

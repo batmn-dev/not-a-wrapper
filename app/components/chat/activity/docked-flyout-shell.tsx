@@ -6,6 +6,7 @@ import { useId, type ReactNode, type RefObject } from "react"
 import { PanelHeader } from "./panel-header"
 
 export type DockedFlyoutShellProps = {
+  id?: string
   title: string
   durationSeconds?: number
   onClose: () => void
@@ -24,6 +25,7 @@ export type DockedFlyoutShellProps = {
  * PanelHeader) and a ScrollArea body with a trailing scroll spacer.
  */
 export function DockedFlyoutShell({
+  id,
   title,
   durationSeconds,
   onClose,
@@ -35,6 +37,7 @@ export function DockedFlyoutShell({
 
   return (
     <section
+      id={id}
       aria-labelledby={titleId}
       className={cn(
         "bg-card text-foreground flex h-full w-full flex-col",
@@ -45,6 +48,7 @@ export function DockedFlyoutShell({
         title={title}
         durationSeconds={durationSeconds}
         titleId={titleId}
+        controlsId={id}
         onClose={onClose}
       />
       <ScrollArea viewportRef={viewportRef} className="min-h-0 flex-1">

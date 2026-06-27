@@ -1,6 +1,4 @@
-import { Message as MessageContainer } from "@/components/ui/message"
 import { ScrollRootContent } from "@/components/ui/scroll-root"
-import { ThinkingBar } from "@/components/ui/thinking-bar"
 import {
   resolveTurnBranch,
   type ChatMessageMetadata,
@@ -17,6 +15,7 @@ import { cn } from "@/lib/utils"
 import { UIMessage as MessageType } from "@ai-sdk/react"
 import type { EditTurnResult } from "./chat-turn"
 import { Message } from "./message"
+import { PENDING_ACTIVITY_TURN_ID } from "./use-activity-panel"
 
 type MessageRenderStatus = DurableMessageStatus | "ready" | "error"
 
@@ -53,8 +52,12 @@ type ConversationProps = {
    * forwarded to each Message so branch switches / handoffs re-render affected
    * rows. Derived once by Chat via useActivityPanel. */
   activeTurnId?: string
-  /** Opens (or reopens) the Chat-owned Activity panel. */
-  onOpenActivityPanel?: () => void
+  /** Whether the Chat-owned Activity panel is currently expanded. */
+  activityPanelOpen?: boolean
+  /** Stable id of the Chat-owned Activity panel surface. */
+  activityPanelId?: string
+  /** Opens or closes the Chat-owned Activity panel. */
+  onActivityPanelOpenChange?: (open: boolean) => void
   onDelete: (id: string) => void
   onEdit: (
     id: string,
@@ -78,7 +81,9 @@ export function Conversation({
   status = "ready",
   isSubmitting = false,
   activeTurnId,
-  onOpenActivityPanel,
+  activityPanelOpen,
+  activityPanelId,
+  onActivityPanelOpenChange,
   onDelete,
   onEdit,
   onReload,
@@ -94,6 +99,9 @@ export function Conversation({
 
   const isGenerationActive =
     isSubmitting || status === "submitted" || status === "streaming"
+  const hasPendingAssistantTurn =
+    status === "submitted" && messages[messages.length - 1]?.role === "user"
+  const pendingActivityTurnId = activeTurnId ?? PENDING_ACTIVITY_TURN_ID
 
   return (
     <ScrollRootContent className="relative -mb-[var(--composer-overlap-px)] flex w-full flex-1 flex-col items-center pt-4 pb-[var(--thread-bottom-offset)] [--composer-overlap-px:28px] [--thread-bottom-offset:calc(var(--spacing-input-area)+2rem+env(safe-area-inset-bottom,0px))]">
@@ -139,7 +147,11 @@ export function Conversation({
                 attachments={getMessageAttachments(message)}
                 isLast={isLast}
                 activeTurnId={activeTurnId}
-                onOpenActivityPanel={onOpenActivityPanel}
+                activityPanelOpen={isAssistant ? activityPanelOpen : undefined}
+                activityPanelId={isAssistant ? activityPanelId : undefined}
+                onActivityPanelOpenChange={
+                  isAssistant ? onActivityPanelOpenChange : undefined
+                }
                 onDelete={onDelete}
                 onEdit={onEdit}
                 onReload={isGenerationActive ? undefined : onReload}
@@ -161,22 +173,36 @@ export function Conversation({
           </article>
         )
       })}
-      {status === "submitted" &&
-        messages.length > 0 &&
-        messages[messages.length - 1].role === "user" && (
-          <div
-            className="mx-auto w-full scroll-mt-[calc(var(--spacing-app-header)+min(200px,max(70px,20svh)))] px-[var(--thread-content-margin,1rem)] pb-10 text-base [--thread-content-margin:1rem] @sm/main:[--thread-content-margin:1.5rem] @lg/main:[--thread-content-margin:4rem]"
-            data-turn="assistant"
-          >
-            <div className="group/turn-messages relative mx-auto flex w-full max-w-[var(--thread-content-max-width,40rem)] min-w-0 flex-1 flex-col [--thread-content-max-width:40rem] @[64rem]/main:[--thread-content-max-width:48rem]">
-              <MessageContainer className="flex w-full flex-1 items-start gap-4">
-                <div className="relative flex min-w-full flex-col gap-2">
-                  <ThinkingBar text="Thinking" onStop={onStop} />
-                </div>
-              </MessageContainer>
-            </div>
+      {hasPendingAssistantTurn && (
+        <div
+          className="mx-auto w-full scroll-mt-[calc(var(--spacing-app-header)+min(200px,max(70px,20svh)))] px-[var(--thread-content-margin,1rem)] pb-10 text-base [--thread-content-margin:1rem] @sm/main:[--thread-content-margin:1.5rem] @lg/main:[--thread-content-margin:4rem]"
+          data-turn="assistant"
+        >
+          <div className="group/turn-messages relative mx-auto flex w-full max-w-[var(--thread-content-max-width,40rem)] min-w-0 flex-1 flex-col [--thread-content-max-width:40rem] @[64rem]/main:[--thread-content-max-width:48rem]">
+            <Message
+              id={PENDING_ACTIVITY_TURN_ID}
+              variant="assistant"
+              isLast
+              activeTurnId={pendingActivityTurnId}
+              activityPanelOpen={activityPanelOpen}
+              activityPanelId={activityPanelId}
+              onActivityPanelOpenChange={onActivityPanelOpenChange}
+              onDelete={onDelete}
+              onEdit={onEdit}
+              onReload={undefined}
+              onStop={onStop}
+              onSelectBranch={onSelectBranch}
+              parts={[]}
+              status="submitted"
+              onQuote={onQuote}
+              isDurableChat={isDurableChat}
+              onToolApproval={onToolApproval}
+            >
+              {""}
+            </Message>
           </div>
-        )}
+        </div>
+      )}
       <div
         aria-hidden="true"
         data-edge="bottom"

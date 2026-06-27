@@ -31,16 +31,18 @@ describe("ActivityPanelTrigger", () => {
     expect(activityStateLabel({ status: "activity" })).toBe("Activity")
   })
 
-  it("renders the label with a single trailing chevron (no leading icon) and opens on click", () => {
+  it("renders the label with a single trailing chevron and toggles on click", () => {
     let container: HTMLDivElement | null = document.createElement("div")
     document.body.appendChild(container)
     const root: Root = createRoot(container)
-    const onOpen = vi.fn()
+    const onOpenChange = vi.fn()
 
     act(() => {
       root.render(
         <ActivityPanelTrigger
-          onOpen={onOpen}
+          open={false}
+          onOpenChange={onOpenChange}
+          controlsId="activity-panel"
           state={{ status: "thought", durationSeconds: 1 }}
         />
       )
@@ -49,11 +51,39 @@ describe("ActivityPanelTrigger", () => {
     expect(container.textContent).toContain("Thought for 1s")
     // The only icon is the trailing chevron — no leading sparkle.
     expect(container.querySelectorAll("svg")).toHaveLength(1)
+    expect(container.querySelector("button")?.getAttribute("aria-expanded")).toBe(
+      "false"
+    )
+    expect(container.querySelector("button")?.getAttribute("aria-controls")).toBe(
+      "activity-panel"
+    )
 
     act(() => {
       container!.querySelector("button")!.click()
     })
-    expect(onOpen).toHaveBeenCalledTimes(1)
+    expect(onOpenChange).toHaveBeenCalledWith(true)
+
+    act(() => {
+      root.render(
+        <ActivityPanelTrigger
+          open
+          onOpenChange={onOpenChange}
+          controlsId="activity-panel"
+          state={{ status: "thought", durationSeconds: 1 }}
+        />
+      )
+    })
+    expect(
+      container.querySelector("button")?.getAttribute("aria-label")
+    ).toBe("Close activity: Thought for 1s")
+    expect(container.querySelector("button")?.getAttribute("aria-expanded")).toBe(
+      "true"
+    )
+
+    act(() => {
+      container!.querySelector("button")!.click()
+    })
+    expect(onOpenChange).toHaveBeenLastCalledWith(false)
 
     act(() => {
       root.unmount()

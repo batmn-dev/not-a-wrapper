@@ -32,6 +32,7 @@ const OVERLAY_CLASSNAME =
   "bg-[var(--overlay-scrim-mobile)] max-sm:backdrop-blur-[0px]! max-sm:transition-none sm:bg-[var(--overlay-scrim-tablet)] sm:backdrop-blur-[1px]! sm:transition-opacity sm:duration-[250ms] sm:data-starting-style:opacity-0 motion-reduce:transition-none!"
 
 export type ContentSheetShellProps = {
+  panelId?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   title: string
@@ -53,6 +54,7 @@ export type ContentSheetShellProps = {
  * the backdrop only, never retinted onto the surface.
  */
 export function ContentSheetShell({
+  panelId,
   open,
   onOpenChange,
   title,
@@ -63,6 +65,7 @@ export function ContentSheetShell({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
+        id={panelId}
         side="bottom"
         showCloseButton={false}
         overlayClassName={OVERLAY_CLASSNAME}
@@ -104,6 +107,8 @@ export function ContentSheetShell({
             </SheetTitle>
             <SheetClose
               aria-label="Close"
+              aria-controls={panelId}
+              aria-expanded={open}
               render={
                 <Button
                   variant="ghost"

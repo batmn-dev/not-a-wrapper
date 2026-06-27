@@ -39,8 +39,12 @@ type MessageAssistantProps = {
   /** Id of the panel-active assistant turn; gates the Activity trigger so it
    * renders only for the turn the panel currently owns. */
   activeTurnId?: string
-  /** Opens (or reopens) the Chat-owned Activity panel. */
-  onOpenActivityPanel?: () => void
+  /** Whether the Chat-owned Activity panel is currently expanded. */
+  activityPanelOpen?: boolean
+  /** Stable id of the Chat-owned Activity panel surface. */
+  activityPanelId?: string
+  /** Opens or closes the Chat-owned Activity panel. */
+  onActivityPanelOpenChange?: (open: boolean) => void
   copied?: boolean
   copyToClipboard?: () => void
   onReload?: (messageId: string) => void
@@ -88,7 +92,9 @@ export function MessageAssistant({
   children,
   isLast,
   activeTurnId,
-  onOpenActivityPanel,
+  activityPanelOpen = false,
+  activityPanelId,
+  onActivityPanelOpenChange,
   copied,
   copyToClipboard,
   onReload,
@@ -116,6 +122,7 @@ export function MessageAssistant({
 
   const contentNullOrEmpty = children === null || children === ""
   const isLastStreaming = status === "streaming" && isLast
+  const isSubmittedPending = status === "submitted" && isLast
   const hasContent = !contentNullOrEmpty
   const loadingStatus: "streaming" | "ready" | "submitted" | "error" =
     status === "streaming" || status === "submitted" || status === "error"
@@ -143,9 +150,12 @@ export function MessageAssistant({
   )
   const hasSources = sources.length > 0
   const showActivityTrigger =
-    Boolean(onOpenActivityPanel) &&
+    Boolean(onActivityPanelOpenChange) &&
     isActiveTurn &&
-    (isReasoningStreaming || hasReasoningPart || hasSources)
+    (isSubmittedPending ||
+      isReasoningStreaming ||
+      hasReasoningPart ||
+      hasSources)
   const reasoningDurationSeconds =
     typeof metadata?.reasoningDurationMs === "number"
       ? Math.round(metadata.reasoningDurationMs / 1000)
@@ -153,13 +163,14 @@ export function MessageAssistant({
   // Compose the trigger's thinking state: live "Thinking" while reasoning
   // streams, then "Thought for {duration}" once it completes, else a source
   // count or the generic label.
-  const activityState: ActivityTriggerState = isReasoningStreaming
-    ? { status: "thinking" }
-    : hasReasoningPart
-      ? { status: "thought", durationSeconds: reasoningDurationSeconds }
-      : hasSources
-        ? { status: "sources", count: sources.length }
-        : { status: "activity" }
+  const activityState: ActivityTriggerState =
+    isSubmittedPending || isReasoningStreaming
+      ? { status: "thinking" }
+      : hasReasoningPart
+        ? { status: "thought", durationSeconds: reasoningDurationSeconds }
+        : hasSources
+          ? { status: "sources", count: sources.length }
+          : { status: "activity" }
 
   // Type for image search results
   type ImageResult = { title: string; imageUrl: string; sourceUrl: string }
@@ -258,13 +269,6 @@ export function MessageAssistant({
         // Inner data-message-id for quote selection — closest() finds this before the outer article
         data-message-id={messageId}
       >
-        {showActivityTrigger && (
-          <ActivityPanelTrigger
-            onOpen={() => onOpenActivityPanel?.()}
-            state={activityState}
-          />
-        )}
-
         {toolInvocationParts &&
           toolInvocationParts.length > 0 &&
           preferences.showToolInvocations && (
@@ -301,6 +305,19 @@ export function MessageAssistant({
             showCaret
             streamingIndicatorVariant={STREAMING_INDICATOR_VARIANT}
           />
+        )}
+
+        {showActivityTrigger && (
+          <div className="flex items-center justify-between">
+            <div className="flex min-w-0 items-center">
+              <ActivityPanelTrigger
+                open={activityPanelOpen}
+                onOpenChange={(open) => onActivityPanelOpenChange?.(open)}
+                controlsId={activityPanelId}
+                state={activityState}
+              />
+            </div>
+          </div>
         )}
 
         {contentNullOrEmpty ? null : (
