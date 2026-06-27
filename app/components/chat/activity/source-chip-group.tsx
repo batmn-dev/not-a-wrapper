@@ -2,11 +2,15 @@
 
 import { Badge } from "@/components/ui/badge"
 import { Favicon } from "@/components/ui/favicon"
+import { toSafeWebHref } from "@/lib/url-safety"
 import { cn } from "@/lib/utils"
 
 function hostnameOf(href: string): string {
+  const safeHref = toSafeWebHref(href)
+  if (!safeHref) return href
+
   try {
-    return new URL(href).hostname.replace(/^www\./, "")
+    return new URL(safeHref).hostname.replace(/^www\./, "")
   } catch {
     return href
   }
@@ -26,14 +30,25 @@ export type SourceChipProps = {
  * Leading favicon is lazy/async per R8 (GA §D8, §C13, §4 rows 10-14).
  */
 export function SourceChip({ href, label, className }: SourceChipProps) {
+  const safeHref = toSafeWebHref(href)
+
   return (
     <Badge
       variant="source"
       size="md"
       className={cn("max-w-full px-3", className)}
-      render={<a href={href} target="_blank" rel="noopener noreferrer" />}
+      render={
+        safeHref ? (
+          <a href={safeHref} target="_blank" rel="noopener noreferrer" />
+        ) : undefined
+      }
     >
-      <Favicon url={href} loading="lazy" decoding="async" className="size-3.5" />
+      <Favicon
+        url={safeHref ?? href}
+        loading="lazy"
+        decoding="async"
+        className="size-3.5"
+      />
       <span className="truncate">{label ?? hostnameOf(href)}</span>
     </Badge>
   )

@@ -55,4 +55,20 @@ describe("SourcesGallery (R8 favicon perf)", () => {
       expect(img.getAttribute("decoding")).toBe("async")
     }
   })
+
+  it("does not assign unsafe schemes to source row anchors", () => {
+    act(() => {
+      root?.render(
+        <SourcesGallery
+          sources={[{ href: "javascript:alert(1)", title: "Unsafe source" }]}
+        />
+      )
+    })
+
+    const link = container!.querySelector("a")
+    expect(link).not.toBeNull()
+    expect(link?.hasAttribute("href")).toBe(false)
+    expect(link?.getAttribute("target")).toBeNull()
+    expect(link?.getAttribute("rel")).toBeNull()
+  })
 })

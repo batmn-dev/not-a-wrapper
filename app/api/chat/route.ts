@@ -1,7 +1,10 @@
 import * as Sentry from "@sentry/nextjs"
 import { resolveModelId } from "@/lib/models/model-id-migration"
 import { getWorkosSession } from "@/lib/auth/workos"
-import { classifyChatError } from "@/lib/observability/chat-error-taxonomy"
+import {
+  classifyChatError,
+  getToolDimensionForError,
+} from "@/lib/observability/chat-error-taxonomy"
 import {
   checkServerSideUsage,
   incrementServerSideUsage,
@@ -10,7 +13,6 @@ import {
 import { createErrorResponse } from "./utils"
 import {
   createChatTurnRuntime,
-  getToolDimensionForError,
   type ChatRequest,
   type ChatTurnRuntime,
 } from "./chat-turn-runtime"

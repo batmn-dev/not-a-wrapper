@@ -9,6 +9,7 @@ import { RiCloseLine } from "@remixicon/react"
 export type TitleDurationClusterProps = {
   title: string
   durationSeconds?: number
+  titleId?: string
   className?: string
 }
 
@@ -22,6 +23,7 @@ export type TitleDurationClusterProps = {
 export function TitleDurationCluster({
   title,
   durationSeconds,
+  titleId,
   className,
 }: TitleDurationClusterProps) {
   return (
@@ -35,7 +37,9 @@ export function TitleDurationCluster({
         className
       )}
     >
-      <span className="text-muted-foreground truncate">{title}</span>
+      <span id={titleId} className="text-muted-foreground truncate">
+        {title}
+      </span>
       {durationSeconds !== undefined ? (
         <>
           <span aria-hidden className="text-muted-foreground/70">
@@ -53,6 +57,7 @@ export function TitleDurationCluster({
 export type PanelHeaderProps = {
   title: string
   durationSeconds?: number
+  titleId?: string
   onClose: () => void
   className?: string
 }
@@ -66,6 +71,7 @@ export type PanelHeaderProps = {
 export function PanelHeader({
   title,
   durationSeconds,
+  titleId,
   onClose,
   className,
 }: PanelHeaderProps) {
@@ -76,7 +82,11 @@ export function PanelHeader({
         className
       )}
     >
-      <TitleDurationCluster title={title} durationSeconds={durationSeconds} />
+      <TitleDurationCluster
+        title={title}
+        durationSeconds={durationSeconds}
+        titleId={titleId}
+      />
       <Button
         variant="ghost"
         size="icon-sm"

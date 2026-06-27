@@ -17,9 +17,14 @@ vi.mock("@/lib/auth/workos", () => ({
   getWorkosSession: vi.fn(),
 }))
 
-vi.mock("@/lib/observability/chat-error-taxonomy", () => ({
-  classifyChatError: vi.fn(() => "unknown"),
-}))
+vi.mock("@/lib/observability/chat-error-taxonomy", async (importActual) => {
+  const actual =
+    await importActual<typeof import("@/lib/observability/chat-error-taxonomy")>()
+  return {
+    ...actual,
+    classifyChatError: vi.fn(() => "unknown"),
+  }
+})
 
 vi.mock("./api", () => ({
   checkServerSideUsage: vi.fn(),
@@ -29,10 +34,10 @@ vi.mock("./api", () => ({
 
 vi.mock("./chat-turn-runtime", () => ({
   createChatTurnRuntime: vi.fn(),
-  getToolDimensionForError: vi.fn(() => "none"),
 }))
 
 import { getWorkosSession } from "@/lib/auth/workos"
+import { getToolDimensionForError } from "@/lib/observability/chat-error-taxonomy"
 import { createChatTurnRuntime } from "./chat-turn-runtime"
 import { POST } from "./route"
 
@@ -105,7 +110,7 @@ describe("/api/chat route", () => {
         chat_model: "test-model",
         chat_is_authenticated: "true",
         chat_error_type: "unknown",
-        chat_error_has_tool_signal: "none",
+        chat_error_has_tool_signal: getToolDimensionForError("unknown"),
         chat_failure_stage: "turn_fail",
       },
       extra: {

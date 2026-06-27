@@ -94,9 +94,15 @@ describe("ActivityPanel coexistence (R6)", () => {
       )
     })
 
-    expect(
-      document.querySelectorAll('[aria-label="Reasoning details"]')
-    ).toHaveLength(1)
+    const regions = document.querySelectorAll("section[aria-labelledby]")
+    expect(regions).toHaveLength(1)
+
+    const titleId = regions[0]?.getAttribute("aria-labelledby")
+    expect(titleId).toBeTruthy()
+    expect(document.getElementById(titleId ?? "")?.textContent).toBe(
+      "Activity"
+    )
+    expect(regions[0]?.getAttribute("aria-label")).toBeNull()
     expect(
       document.querySelectorAll('[data-slot="sheet-content"]')
     ).toHaveLength(0)

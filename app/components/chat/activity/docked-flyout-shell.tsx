@@ -2,7 +2,7 @@
 
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import type { ReactNode, RefObject } from "react"
+import { useId, type ReactNode, type RefObject } from "react"
 import { PanelHeader } from "./panel-header"
 
 export type DockedFlyoutShellProps = {
@@ -17,11 +17,11 @@ export type DockedFlyoutShellProps = {
 
 /**
  * DockedFlyoutShell — the ≥lg in-flow panel (plan §5 commit 4, GA §A2, §7 R9).
- * A landmark `<section aria-label>`, NOT a dialog: no backdrop, no focus trap,
- * no scroll-lock, ESC inert. It pushes the conversation (width lives on the
- * layout dock slot) and is opaque (`bg-card`) so nothing bleeds through. Reuses
- * the shipped `Button(ghost, icon-sm)` close (via PanelHeader) and a ScrollArea
- * body with a trailing scroll spacer.
+ * A landmark `<section>` labelled by the visible panel title, NOT a dialog: no
+ * backdrop, no focus trap, no scroll-lock, ESC inert. It pushes the conversation
+ * (width lives on the layout dock slot) and is opaque (`bg-card`) so nothing
+ * bleeds through. Reuses the shipped `Button(ghost, icon-sm)` close (via
+ * PanelHeader) and a ScrollArea body with a trailing scroll spacer.
  */
 export function DockedFlyoutShell({
   title,
@@ -31,9 +31,11 @@ export function DockedFlyoutShell({
   viewportRef,
   className,
 }: DockedFlyoutShellProps) {
+  const titleId = useId()
+
   return (
     <section
-      aria-label="Reasoning details"
+      aria-labelledby={titleId}
       className={cn(
         "bg-card text-foreground flex h-full w-full flex-col",
         className
@@ -42,6 +44,7 @@ export function DockedFlyoutShell({
       <PanelHeader
         title={title}
         durationSeconds={durationSeconds}
+        titleId={titleId}
         onClose={onClose}
       />
       <ScrollArea viewportRef={viewportRef} className="min-h-0 flex-1">

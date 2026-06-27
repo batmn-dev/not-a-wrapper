@@ -59,7 +59,7 @@ import {
 } from "@/lib/tools/ui-metadata"
 import {
   classifyChatError,
-  type ChatErrorType,
+  getToolDimensionForError,
 } from "@/lib/observability/chat-error-taxonomy"
 import {
   flushBraintrust,
@@ -238,14 +238,6 @@ function bucketChatVersion(chatVersion: number): string {
   if (chatVersion <= 5) return "2-5"
   if (chatVersion <= 20) return "6-20"
   return "21+"
-}
-
-export function getToolDimensionForError(
-  errorType: ChatErrorType
-): "yes" | "no" {
-  return errorType === "tool_timeout" || errorType === "tool_execution"
-    ? "yes"
-    : "no"
 }
 
 function bucketLatencyMs(latencyMs: number): string {
