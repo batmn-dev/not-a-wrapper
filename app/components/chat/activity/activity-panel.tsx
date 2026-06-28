@@ -12,9 +12,32 @@ import { ContentSheetShell } from "./content-sheet-shell"
 import { DockedFlyoutShell } from "./docked-flyout-shell"
 import { PanelSectionHeading } from "./panel-section-heading"
 import { SourcesGallery } from "./sources-gallery"
+import { useDockedPanelCollapse } from "./use-docked-panel-collapse"
 
+// `lg` (1024px / 64rem) — the docked↔sheet boundary. NOTE: this is a VIEWPORT
+// media query (useBreakpoint → matchMedia on innerWidth); it must stay in
+// lockstep BY HAND with the `@[64rem]/main` CONTAINER thresholds that drive the
+// thread tiers (see THREAD_MAXWIDTH_VARS in ./thread-bounds). They are different
+// query axes (viewport vs the @container/main width), so a shared constant would
+// imply a false equivalence — the coupling is intentionally prose-only.
 const LG_BREAKPOINT = 1024
 
+/**
+ * ActivityPanel props.
+ *
+ * NOTE — intentional scaffolding (do not "clean up" as dead): `phase`, `steps`,
+ * and `isReasoningStreaming` are mirrored from the ChatGPT activity panel and
+ * carried through `panelProps` for an upcoming pass that renders a live,
+ * multi-step reasoning timeline. The component does not read them yet. See
+ * TODO.md ("Chat side panel"). Reference grounding (reference-ui/ChatGPT):
+ *   • `steps` + the timeline globe/bullet/done markers — SUPPORTED (the capture
+ *     shows 40 distinct steps with per-type markers and chip/description bodies).
+ *   • `isReasoningStreaming` — PARTIAL (the `animate-show` enter + a reserved
+ *     empty chip-row slot are real; live token-by-token typing was not captured).
+ *   • `phase` ("thinking" | "complete") — NOT-FOUND in the captures (settled
+ *     end-state only); speculative — re-verify against a live "still thinking"
+ *     capture before wiring.
+ */
 export type ActivityPanelProps = {
   panelId?: string
   open: boolean
@@ -61,7 +84,9 @@ function PanelBody({
             <ActivityStep leading="done" body="description">
               <StepTitle>Reasoning</StepTitle>
               {hasVisibleReasoning ? (
-                <Markdown>{reasoningText}</Markdown>
+                <Markdown className="text-muted-foreground text-sm leading-5">
+                  {reasoningText}
+                </Markdown>
               ) : null}
             </ActivityStep>
           </ActivityTimeline>
@@ -108,17 +133,29 @@ export function ActivityPanel({
     />
   )
 
-  // Exactly one shell is active. Mutually exclusive on the lg boundary, so the
-  // body element below is mounted in at most one place.
-  const dockedActive = open && !isBelowLg
+  // The docked flyout owns >=lg; the Sheet owns <lg. They stay mutually exclusive
+  // on the lg boundary, so the body element below is mounted in at most one place
+  // (favicons load once — GA §7 R6).
+  const dockedExpanded = open && !isBelowLg
   const sheetActive = isBelowLg
+
+  // The deferred-unmount / close-collapse lifecycle lives in this hook so the
+  // component stays focused on shell composition. It owns the imperative slot
+  // `data-expanded` attribute and keeps the shell mounted (populated) through
+  // the close until the slot's width `transitionend` (motion-reduce / sub-lg
+  // short-circuit to immediate unmount).
+  const { dockedPresent } = useDockedPanelCollapse({
+    slotElement,
+    dockedExpanded,
+    isBelowLg,
+  })
 
   return (
     <>
-      {dockedActive && slotElement
+      {dockedPresent && slotElement
         ? createPortal(
             <DockedFlyoutShell
-              id={panelId}
+              panelId={panelId}
               title={title}
               durationSeconds={durationSeconds}
               onClose={close}

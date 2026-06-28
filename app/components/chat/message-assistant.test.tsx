@@ -13,9 +13,15 @@ vi.mock("@/lib/user-preference-store/provider", () => ({
   }),
 }))
 
-beforeAll(() => {
+beforeAll(async () => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
     true
+  // MessageContent loads Markdown via next/dynamic; preload it so the dynamic
+  // import resolves before the render flush. Otherwise the markdown chunk lands
+  // after the test's microtask and the rendered answer content is missing — a
+  // fragility previously masked by an incidental static import of markdown
+  // through reasoning.tsx (decoupled when formatDuration moved to lib).
+  await import("@/components/ui/markdown")
 })
 
 describe("MessageAssistant activity trigger", () => {
@@ -51,9 +57,11 @@ describe("MessageAssistant activity trigger", () => {
         <MessageAssistant
           messageId="assistant-1"
           activeTurnId="assistant-1"
-          activityPanelOpen={false}
-          activityPanelId="activity-panel"
-          onActivityPanelOpenChange={onActivityPanelOpenChange}
+          activityPanel={{
+            open: false,
+            onOpenChange: onActivityPanelOpenChange,
+            panelId: "activity-panel",
+          }}
           parts={parts}
           metadata={{ reasoningDurationMs: 2000 }}
           status="ready"
@@ -86,9 +94,11 @@ describe("MessageAssistant activity trigger", () => {
         <MessageAssistant
           messageId="pending-assistant"
           activeTurnId="pending-assistant"
-          activityPanelOpen={false}
-          activityPanelId="activity-panel"
-          onActivityPanelOpenChange={onActivityPanelOpenChange}
+          activityPanel={{
+            open: false,
+            onOpenChange: onActivityPanelOpenChange,
+            panelId: "activity-panel",
+          }}
           parts={[]}
           status="submitted"
           isLast
@@ -123,9 +133,11 @@ describe("MessageAssistant activity trigger", () => {
         <MessageAssistant
           messageId="assistant-1"
           activeTurnId="assistant-1"
-          activityPanelOpen={false}
-          activityPanelId="activity-panel"
-          onActivityPanelOpenChange={() => {}}
+          activityPanel={{
+            open: false,
+            onOpenChange: () => {},
+            panelId: "activity-panel",
+          }}
           copied={false}
           copyToClipboard={() => {}}
           parts={parts}

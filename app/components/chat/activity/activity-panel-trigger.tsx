@@ -1,7 +1,7 @@
 "use client"
 
 import { Icon } from "@/components/ui/icon"
-import { formatDuration } from "@/components/ui/reasoning"
+import { formatDuration } from "@/lib/format-duration"
 import { TextShimmer } from "@/components/ui/text-shimmer"
 import { cn } from "@/lib/utils"
 import { RiArrowRightSLine } from "@remixicon/react"
@@ -84,9 +84,11 @@ export function ActivityPanelTrigger({
       ) : (
         <span className="truncate">{label}</span>
       )}
+      {/* Reference disclosure chevron is icon-xs (12px box), not a 20px slot —
+          the svg's width/height="20" attrs are overridden by .icon-xs. */}
       <Icon
         icon={RiArrowRightSLine}
-        slotSize={20}
+        slotSize={12}
         className="text-muted-foreground/70 transition-transform group-hover/activity:translate-x-0.5 motion-reduce:transition-none"
       />
     </button>

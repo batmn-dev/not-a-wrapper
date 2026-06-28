@@ -20,7 +20,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
-import { toSafeWebHref } from "@/lib/url-safety"
+import { parseSafeExternalUrl } from "@/lib/url-safety"
 import { cn } from "@/lib/utils"
 import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
@@ -36,17 +36,6 @@ function useSourceContext() {
   const ctx = useContext(SourceContext)
   if (!ctx) throw new Error("Source.* must be used inside <Source>")
   return ctx
-}
-
-function parseSafeExternalUrl(href: string): URL | null {
-  const safeHref = toSafeWebHref(href)
-  if (!safeHref) return null
-
-  try {
-    return new URL(safeHref)
-  } catch {
-    return null
-  }
 }
 
 function getFallbackSourceLabel(href: string): string {

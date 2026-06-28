@@ -2,9 +2,40 @@
 
 import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
-import { formatDuration } from "@/components/ui/reasoning"
+import { formatDuration } from "@/lib/format-duration"
 import { cn } from "@/lib/utils"
 import { RiCloseLine } from "@remixicon/react"
+import type { ComponentProps } from "react"
+
+const CLOSE_HOVER_TINT =
+  "hover:bg-foreground/[0.07] dark:hover:bg-foreground/[0.07]"
+
+/**
+ * PanelCloseButton — the shared ghost-icon close affordance for both panel
+ * shells. Owns the Remix close glyph + the translucent hover tint (≈ reference
+ * `--surface-hover` #00000012; the ghost variant's opaque `bg-muted` is nearly
+ * invisible over the panel surface). The tint is appended AFTER `className` so
+ * each shell's layout/visibility delta keeps its exact class order. Use directly
+ * with `onClick` (docked header) or as a `SheetClose render` target (sheet) —
+ * composed over the unchanged Sheet primitive, never mutating it.
+ */
+export function PanelCloseButton({
+  className,
+  children = <Icon icon={RiCloseLine} slotSize={20} />,
+  ...props
+}: ComponentProps<typeof Button>) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label="Close"
+      className={cn(className, CLOSE_HOVER_TINT)}
+      {...props}
+    >
+      {children}
+    </Button>
+  )
+}
 
 export type TitleDurationClusterProps = {
   title: string
@@ -58,7 +89,7 @@ export type PanelHeaderProps = {
   title: string
   durationSeconds?: number
   titleId?: string
-  controlsId?: string
+  panelId?: string
   onClose: () => void
   className?: string
 }
@@ -73,7 +104,7 @@ export function PanelHeader({
   title,
   durationSeconds,
   titleId,
-  controlsId,
+  panelId,
   onClose,
   className,
 }: PanelHeaderProps) {
@@ -89,17 +120,12 @@ export function PanelHeader({
         durationSeconds={durationSeconds}
         titleId={titleId}
       />
-      <Button
-        variant="ghost"
-        size="icon"
+      <PanelCloseButton
         className="-me-2.5 rounded-md"
-        aria-label="Close"
-        aria-controls={controlsId}
+        aria-controls={panelId}
         aria-expanded={true}
         onClick={onClose}
-      >
-        <Icon icon={RiCloseLine} slotSize={20} />
-      </Button>
+      />
     </div>
   )
 }

@@ -17,7 +17,7 @@ const badgeVariants = cva(
         outline:
           "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
         // Reference "source chip": subtle surface that hover-inverts to the
-        // primary color (used by the Activity panel SourceChip in Step B).
+        // primary color (reserved for the Activity panel source chips; see TODO.md).
         source:
           "border-transparent bg-secondary text-muted-foreground transition-colors duration-150 hover:bg-primary hover:text-primary-foreground",
       },

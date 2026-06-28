@@ -19,6 +19,7 @@ import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { ActivityPanel } from "./activity/activity-panel"
+import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
 import { useActivityPanel } from "./use-activity-panel"
 import { isRouteDurableChat } from "./chat-turn"
 import { useChatCore } from "./use-chat-core"
@@ -156,9 +157,8 @@ export function Chat() {
 
   // Single, chat-owned Activity panel selector. Derives the active turn from
   // the already-projected `messages` and runs the reasoning hook once for that
-  // tail. `panelProps` / `isGenerationActive` are consumed when the panel is
-  // rendered (commits 4-5); commit 3 only threads `activeTurnId` for the memo
-  // contract while the inline body still renders.
+  // tail. `panelProps` is spread into <ActivityPanel>; `activeTurnId` is threaded
+  // to each Message for the memo re-render-on-handoff contract.
   const { activeTurnId, panelProps } = useActivityPanel({
     messages,
     status,
@@ -171,6 +171,17 @@ export function Chat() {
   const handleActivityPanelOpenChange = useCallback(
     (open: boolean) => setActivityPanelOpen(open),
     []
+  )
+
+  // One read-only controls object forwarded to the assistant trigger (replaces
+  // three individually drilled props). Chat keeps ownership of the state.
+  const activityPanel = useMemo(
+    () => ({
+      open: activityPanelOpen,
+      onOpenChange: handleActivityPanelOpenChange,
+      panelId: activityPanelId,
+    }),
+    [activityPanelOpen, handleActivityPanelOpenChange, activityPanelId]
   )
 
   // Local delete handler — filters a message from the local array
@@ -196,9 +207,7 @@ export function Chat() {
       status,
       isSubmitting,
       activeTurnId,
-      activityPanelOpen,
-      activityPanelId,
-      onActivityPanelOpenChange: handleActivityPanelOpenChange,
+      activityPanel,
       onDelete: handleDelete,
       onEdit: submitEdit,
       onReload: handleReload,
@@ -214,9 +223,7 @@ export function Chat() {
       status,
       isSubmitting,
       activeTurnId,
-      activityPanelOpen,
-      activityPanelId,
-      handleActivityPanelOpenChange,
+      activityPanel,
       handleDelete,
       submitEdit,
       handleReload,
@@ -359,7 +366,7 @@ export function Chat() {
         <div
           id="thread-bottom-container"
           className={cn(
-            "group/thread-bottom-container sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col px-[var(--thread-content-margin,1rem)] pb-[env(safe-area-inset-bottom,0px)] [--thread-content-margin:1rem] @sm/main:[--thread-content-margin:1.5rem] @lg/main:[--thread-content-margin:4rem]",
+            `group/thread-bottom-container sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col px-[var(--thread-content-margin,1rem)] pb-[env(safe-area-inset-bottom,0px)] ${THREAD_GUTTER_VARS}`,
             showOnboarding ? "sm:grow" : "content-fade"
           )}
         >
@@ -374,7 +381,7 @@ export function Chat() {
           )}
           <div
             id="thread-bottom"
-            className="mx-auto w-full max-w-[var(--thread-content-max-width,40rem)] [--thread-content-max-width:40rem] @[64rem]/main:[--thread-content-max-width:48rem]"
+            className={`mx-auto w-full max-w-[var(--thread-content-max-width,40rem)] ${THREAD_MAXWIDTH_VARS}`}
           >
             <ChatInput defaultValue={initialInputValue} {...chatInputProps} />
           </div>

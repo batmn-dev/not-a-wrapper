@@ -13,9 +13,15 @@ import {
 } from "@/lib/chat-messages/parts"
 import { cn } from "@/lib/utils"
 import { UIMessage as MessageType } from "@ai-sdk/react"
+import type { ReactNode } from "react"
 import type { EditTurnResult } from "./chat-turn"
 import { Message } from "./message"
-import { PENDING_ACTIVITY_TURN_ID } from "./use-activity-panel"
+import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
+import {
+  isGenerationActive,
+  PENDING_ACTIVITY_TURN_ID,
+  type ActivityPanelControls,
+} from "./use-activity-panel"
 
 type MessageRenderStatus = DurableMessageStatus | "ready" | "error"
 
@@ -44,6 +50,35 @@ function getMessageAttachments(
   }))
 }
 
+/**
+ * TurnRow — the shared turn wrapper for both the mapped message rows and the
+ * pending-assistant placeholder: the thread-gutter container (`as` = article or
+ * div) around the byte-identical `group/turn-messages` max-width column. The
+ * outer `className` is composed per-branch (the two intentionally differ) and
+ * applied verbatim; the inner column is owned here.
+ */
+function TurnRow({
+  as: As = "article",
+  className,
+  dataTurn,
+  children,
+}: {
+  as?: "article" | "div"
+  className: string
+  dataTurn: string
+  children: ReactNode
+}) {
+  return (
+    <As className={className} data-turn={dataTurn}>
+      <div
+        className={`group/turn-messages relative mx-auto flex w-full max-w-[var(--thread-content-max-width,40rem)] min-w-0 flex-1 flex-col ${THREAD_MAXWIDTH_VARS}`}
+      >
+        {children}
+      </div>
+    </As>
+  )
+}
+
 type ConversationProps = {
   messages: MessageType[]
   status?: "streaming" | "ready" | "submitted" | "error"
@@ -52,12 +87,8 @@ type ConversationProps = {
    * forwarded to each Message so branch switches / handoffs re-render affected
    * rows. Derived once by Chat via useActivityPanel. */
   activeTurnId?: string
-  /** Whether the Chat-owned Activity panel is currently expanded. */
-  activityPanelOpen?: boolean
-  /** Stable id of the Chat-owned Activity panel surface. */
-  activityPanelId?: string
-  /** Opens or closes the Chat-owned Activity panel. */
-  onActivityPanelOpenChange?: (open: boolean) => void
+  /** Chat-owned Activity-panel controls, forwarded to the assistant trigger. */
+  activityPanel?: ActivityPanelControls
   onDelete: (id: string) => void
   onEdit: (
     id: string,
@@ -81,9 +112,7 @@ export function Conversation({
   status = "ready",
   isSubmitting = false,
   activeTurnId,
-  activityPanelOpen,
-  activityPanelId,
-  onActivityPanelOpenChange,
+  activityPanel,
   onDelete,
   onEdit,
   onReload,
@@ -97,8 +126,7 @@ export function Conversation({
   if (!messages || messages.length === 0)
     return <div className="w-full flex-1"></div>
 
-  const isGenerationActive =
-    isSubmitting || status === "submitted" || status === "streaming"
+  const generationActive = isGenerationActive(status, isSubmitting)
   const hasPendingAssistantTurn =
     status === "submitted" && messages[messages.length - 1]?.role === "user"
   const pendingActivityTurnId = activeTurnId ?? PENDING_ACTIVITY_TURN_ID
@@ -130,78 +158,69 @@ export function Conversation({
               : "ready"
 
         return (
-          <article
+          <TurnRow
             key={message.id}
             className={cn(
-              "mx-auto w-full px-[var(--thread-content-margin,1rem)] text-base [--thread-content-margin:1rem] @sm/main:[--thread-content-margin:1.5rem] @lg/main:[--thread-content-margin:4rem]",
+              `mx-auto w-full px-[var(--thread-content-margin,1rem)] text-base ${THREAD_GUTTER_VARS}`,
               isUser && "scroll-mt-[var(--spacing-app-header)] pt-3",
               isAssistant &&
                 "scroll-mt-[calc(var(--spacing-app-header)+min(200px,max(70px,20svh)))] pb-10"
             )}
-            data-turn={message.role}
+            dataTurn={message.role}
           >
-            <div className="group/turn-messages relative mx-auto flex w-full max-w-[var(--thread-content-max-width,40rem)] min-w-0 flex-1 flex-col [--thread-content-max-width:40rem] @[64rem]/main:[--thread-content-max-width:48rem]">
-              <Message
-                id={message.id}
-                variant={message.role}
-                attachments={getMessageAttachments(message)}
-                isLast={isLast}
-                activeTurnId={activeTurnId}
-                activityPanelOpen={isAssistant ? activityPanelOpen : undefined}
-                activityPanelId={isAssistant ? activityPanelId : undefined}
-                onActivityPanelOpenChange={
-                  isAssistant ? onActivityPanelOpenChange : undefined
-                }
-                onDelete={onDelete}
-                onEdit={onEdit}
-                onReload={isGenerationActive ? undefined : onReload}
-                onStop={isLast && status === "streaming" ? onStop : undefined}
-                onSelectBranch={onSelectBranch}
-                branch={turnBranch}
-                parts={message.parts}
-                toolRenderSignature={getToolRenderSignature(message.parts)}
-                metadata={message.metadata as ChatMessageMetadata | undefined}
-                status={messageStatus}
-                onQuote={onQuote}
-                isDurableChat={isDurableChat}
-                finishReason={isLast ? lastFinishReason : undefined}
-                onToolApproval={onToolApproval}
-              >
-                {getMessageText(message)}
-              </Message>
-            </div>
-          </article>
+            <Message
+              id={message.id}
+              variant={message.role}
+              attachments={getMessageAttachments(message)}
+              isLast={isLast}
+              activeTurnId={activeTurnId}
+              activityPanel={isAssistant ? activityPanel : undefined}
+              onDelete={onDelete}
+              onEdit={onEdit}
+              onReload={generationActive ? undefined : onReload}
+              onStop={isLast && status === "streaming" ? onStop : undefined}
+              onSelectBranch={onSelectBranch}
+              branch={turnBranch}
+              parts={message.parts}
+              toolRenderSignature={getToolRenderSignature(message.parts)}
+              metadata={message.metadata as ChatMessageMetadata | undefined}
+              status={messageStatus}
+              onQuote={onQuote}
+              isDurableChat={isDurableChat}
+              finishReason={isLast ? lastFinishReason : undefined}
+              onToolApproval={onToolApproval}
+            >
+              {getMessageText(message)}
+            </Message>
+          </TurnRow>
         )
       })}
       {hasPendingAssistantTurn && (
-        <div
-          className="mx-auto w-full scroll-mt-[calc(var(--spacing-app-header)+min(200px,max(70px,20svh)))] px-[var(--thread-content-margin,1rem)] pb-10 text-base [--thread-content-margin:1rem] @sm/main:[--thread-content-margin:1.5rem] @lg/main:[--thread-content-margin:4rem]"
-          data-turn="assistant"
+        <TurnRow
+          as="div"
+          className={`mx-auto w-full scroll-mt-[calc(var(--spacing-app-header)+min(200px,max(70px,20svh)))] px-[var(--thread-content-margin,1rem)] pb-10 text-base ${THREAD_GUTTER_VARS}`}
+          dataTurn="assistant"
         >
-          <div className="group/turn-messages relative mx-auto flex w-full max-w-[var(--thread-content-max-width,40rem)] min-w-0 flex-1 flex-col [--thread-content-max-width:40rem] @[64rem]/main:[--thread-content-max-width:48rem]">
-            <Message
-              id={PENDING_ACTIVITY_TURN_ID}
-              variant="assistant"
-              isLast
-              activeTurnId={pendingActivityTurnId}
-              activityPanelOpen={activityPanelOpen}
-              activityPanelId={activityPanelId}
-              onActivityPanelOpenChange={onActivityPanelOpenChange}
-              onDelete={onDelete}
-              onEdit={onEdit}
-              onReload={undefined}
-              onStop={onStop}
-              onSelectBranch={onSelectBranch}
-              parts={[]}
-              status="submitted"
-              onQuote={onQuote}
-              isDurableChat={isDurableChat}
-              onToolApproval={onToolApproval}
-            >
-              {""}
-            </Message>
-          </div>
-        </div>
+          <Message
+            id={PENDING_ACTIVITY_TURN_ID}
+            variant="assistant"
+            isLast
+            activeTurnId={pendingActivityTurnId}
+            activityPanel={activityPanel}
+            onDelete={onDelete}
+            onEdit={onEdit}
+            onReload={undefined}
+            onStop={onStop}
+            onSelectBranch={onSelectBranch}
+            parts={[]}
+            status="submitted"
+            onQuote={onQuote}
+            isDurableChat={isDurableChat}
+            onToolApproval={onToolApproval}
+          >
+            {""}
+          </Message>
+        </TurnRow>
       )}
       <div
         aria-hidden="true"

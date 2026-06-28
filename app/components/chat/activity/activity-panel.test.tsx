@@ -109,6 +109,43 @@ describe("ActivityPanel coexistence (R6)", () => {
     expect(document.querySelectorAll("img")).toHaveLength(5)
   })
 
+  it("collapses the slot on close but keeps the shell mounted until the width transition ends", () => {
+    function Harness({ open }: { open: boolean }) {
+      return (
+        <ActivityPanelHostProvider>
+          <ActivityPanelDockSlot />
+          <ActivityPanel open={open} onOpenChange={() => {}} {...panelProps(2)} />
+        </ActivityPanelHostProvider>
+      )
+    }
+
+    act(() => {
+      root?.render(<Harness open />)
+    })
+    const slot = document.querySelector<HTMLElement>(
+      '[data-slot="activity-panel-dock"]'
+    )
+    // Open: slot is expanded and the docked shell is mounted.
+    expect(slot?.hasAttribute("data-expanded")).toBe(true)
+    expect(document.querySelectorAll("section[aria-labelledby]")).toHaveLength(1)
+
+    // Close: the slot collapses (drops data-expanded) but the shell stays mounted
+    // so it slides shut populated instead of vanishing in one frame.
+    act(() => {
+      root?.render(<Harness open={false} />)
+    })
+    expect(slot?.hasAttribute("data-expanded")).toBe(false)
+    expect(document.querySelectorAll("section[aria-labelledby]")).toHaveLength(1)
+
+    // The width transition finishing is what unmounts the shell.
+    act(() => {
+      slot?.dispatchEvent(
+        Object.assign(new Event("transitionend"), { propertyName: "width" })
+      )
+    })
+    expect(document.querySelectorAll("section[aria-labelledby]")).toHaveLength(0)
+  })
+
   it("renders an opaque reasoning step when reasoning text is hidden", () => {
     act(() => {
       root?.render(

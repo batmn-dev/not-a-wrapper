@@ -12,6 +12,7 @@ import React, { useState } from "react"
 import type { EditTurnResult } from "./chat-turn"
 import { MessageAssistant } from "./message-assistant"
 import { MessageUser } from "./message-user"
+import type { ActivityPanelControls } from "./use-activity-panel"
 
 // Attachment type for file parts
 type MessageAttachment = {
@@ -30,13 +31,8 @@ type MessageProps = {
    * Threaded so a branch switch / active-turn handoff re-renders affected rows
    * even when their body content is unchanged. */
   activeTurnId?: string
-  /** Whether the Chat-owned Activity panel is currently expanded. */
-  activityPanelOpen?: boolean
-  /** Stable id of the Chat-owned Activity panel surface. */
-  activityPanelId?: string
-  /** Opens or closes the Chat-owned Activity panel; forwarded to the assistant
-   * trigger. */
-  onActivityPanelOpenChange?: (open: boolean) => void
+  /** Chat-owned Activity-panel controls, forwarded to the assistant trigger. */
+  activityPanel?: ActivityPanelControls
   onDelete: (id: string) => void
   onEdit: (
     id: string,
@@ -108,8 +104,10 @@ function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
   // its panel/trigger affordances follow the newly selected turn — even when the
   // body content is unchanged (GA §6.7E, §7 R3).
   if (prev.activeTurnId !== next.activeTurnId) return false
-  if (prev.activityPanelOpen !== next.activityPanelOpen) return false
-  if (prev.activityPanelId !== next.activityPanelId) return false
+  // Compare the bundle's inner fields, not its identity: Chat recreates the
+  // object each render, but only open/panelId changes should re-render the row.
+  if (prev.activityPanel?.open !== next.activityPanel?.open) return false
+  if (prev.activityPanel?.panelId !== next.activityPanel?.panelId) return false
 
   // While the last message actively streams, skip re-render unless the rendered
   // body changed. Reasoning + source deltas no longer churn the body — the
@@ -183,9 +181,7 @@ function MessageInner({
   attachments,
   isLast,
   activeTurnId,
-  activityPanelOpen,
-  activityPanelId,
-  onActivityPanelOpenChange,
+  activityPanel,
   onEdit,
   onReload,
   onStop,
@@ -236,9 +232,7 @@ function MessageInner({
         onStop={onStop}
         isLast={isLast}
         activeTurnId={activeTurnId}
-        activityPanelOpen={activityPanelOpen}
-        activityPanelId={activityPanelId}
-        onActivityPanelOpenChange={onActivityPanelOpenChange}
+        activityPanel={activityPanel}
         parts={parts}
         metadata={metadata}
         status={status}

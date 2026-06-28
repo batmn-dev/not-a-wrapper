@@ -35,8 +35,8 @@ export function SourcesGallery({
         className="justify-start gap-1 px-3"
       />
       <ul className="flex flex-col">
-        {sources.map((source, index) => (
-          <li key={index}>
+        {sources.map((source) => (
+          <li key={source.href}>
             <SourcesGalleryItem {...source} />
           </li>
         ))}

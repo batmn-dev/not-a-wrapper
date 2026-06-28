@@ -28,6 +28,7 @@ import {
 } from "./activity/activity-panel-trigger"
 import { getSources } from "./get-sources"
 import { QuoteButton } from "./quote-button"
+import type { ActivityPanelControls } from "./use-activity-panel"
 import { SearchImages } from "./search-images"
 import { ToolInvocation } from "./tool-invocation"
 import { useLoadingState } from "./use-loading-state"
@@ -39,12 +40,8 @@ type MessageAssistantProps = {
   /** Id of the panel-active assistant turn; gates the Activity trigger so it
    * renders only for the turn the panel currently owns. */
   activeTurnId?: string
-  /** Whether the Chat-owned Activity panel is currently expanded. */
-  activityPanelOpen?: boolean
-  /** Stable id of the Chat-owned Activity panel surface. */
-  activityPanelId?: string
-  /** Opens or closes the Chat-owned Activity panel. */
-  onActivityPanelOpenChange?: (open: boolean) => void
+  /** Chat-owned Activity-panel controls; gates + drives the reopen trigger. */
+  activityPanel?: ActivityPanelControls
   copied?: boolean
   copyToClipboard?: () => void
   onReload?: (messageId: string) => void
@@ -92,9 +89,7 @@ export function MessageAssistant({
   children,
   isLast,
   activeTurnId,
-  activityPanelOpen = false,
-  activityPanelId,
-  onActivityPanelOpenChange,
+  activityPanel,
   copied,
   copyToClipboard,
   onReload,
@@ -150,7 +145,7 @@ export function MessageAssistant({
   )
   const hasSources = sources.length > 0
   const showActivityTrigger =
-    Boolean(onActivityPanelOpenChange) &&
+    Boolean(activityPanel?.onOpenChange) &&
     isActiveTurn &&
     (isSubmittedPending ||
       isReasoningStreaming ||
@@ -307,13 +302,13 @@ export function MessageAssistant({
           />
         )}
 
-        {showActivityTrigger && (
+        {showActivityTrigger && activityPanel && (
           <div className="flex items-center justify-between">
             <div className="flex min-w-0 items-center">
               <ActivityPanelTrigger
-                open={activityPanelOpen}
-                onOpenChange={(open) => onActivityPanelOpenChange?.(open)}
-                controlsId={activityPanelId}
+                open={activityPanel.open}
+                onOpenChange={activityPanel.onOpenChange}
+                controlsId={activityPanel.panelId}
                 state={activityState}
               />
             </div>

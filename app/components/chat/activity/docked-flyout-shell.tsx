@@ -6,12 +6,18 @@ import { useId, type ReactNode, type RefObject } from "react"
 import { PanelHeader } from "./panel-header"
 
 export type DockedFlyoutShellProps = {
-  id?: string
+  panelId?: string
   title: string
   durationSeconds?: number
   onClose: () => void
   children: ReactNode
-  /** Forwarded to the scroll viewport for auto-scroll on stream. */
+  /**
+   * Forwarded to the scroll viewport for auto-scroll on stream. Intentional
+   * scaffolding — `ActivityPanel` does not pass it yet (kept, not dead). Ref
+   * grounding: PARTIAL — the scroll container + trailing `scroll-mb-4` spacer
+   * exist, but live scroll-to-bottom-on-stream is not observable in the static
+   * capture. See TODO.md ("Chat side panel").
+   */
   viewportRef?: RefObject<HTMLDivElement | null>
   className?: string
 }
@@ -23,9 +29,16 @@ export type DockedFlyoutShellProps = {
  * (width lives on the layout dock slot) and is opaque (`bg-card`) so nothing
  * bleeds through. Reuses the shipped `Button(ghost, icon-sm)` close (via
  * PanelHeader) and a ScrollArea body with a trailing scroll spacer.
+ *
+ * The shell is pinned to a FIXED `--activity-panel-width` (it does NOT fill the
+ * animating slot): the slot's `overflow-hidden` clips it while the slot width
+ * animates `0 <-> --activity-panel-width`, so the content slides/clips and never
+ * re-wraps mid-animation (matches the reference's fixed-width clipped flyout).
+ * The start seam (`border-s`) lives here too, so it slides with the content
+ * instead of popping on the slot.
  */
 export function DockedFlyoutShell({
-  id,
+  panelId,
   title,
   durationSeconds,
   onClose,
@@ -37,10 +50,10 @@ export function DockedFlyoutShell({
 
   return (
     <section
-      id={id}
+      id={panelId}
       aria-labelledby={titleId}
       className={cn(
-        "bg-card text-foreground flex h-full w-full flex-col",
+        "bg-card text-foreground border-border flex h-full w-[var(--activity-panel-width)] flex-col border-s",
         className
       )}
     >
@@ -48,7 +61,7 @@ export function DockedFlyoutShell({
         title={title}
         durationSeconds={durationSeconds}
         titleId={titleId}
-        controlsId={id}
+        panelId={panelId}
         onClose={onClose}
       />
       <ScrollArea viewportRef={viewportRef} className="min-h-0 flex-1">

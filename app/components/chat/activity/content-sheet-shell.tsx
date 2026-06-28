@@ -1,6 +1,5 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
 import {
   Sheet,
@@ -11,7 +10,7 @@ import {
 import { cn } from "@/lib/utils"
 import { RiCloseLine } from "@remixicon/react"
 import type { ReactNode } from "react"
-import { TitleDurationCluster } from "./panel-header"
+import { PanelCloseButton, TitleDurationCluster } from "./panel-header"
 
 /**
  * Breakpoint scrim (GA §C3, §6.2, §7 R7): mobile black/30, NO blur, instant;
@@ -28,8 +27,14 @@ import { TitleDurationCluster } from "./panel-header"
  * sorts AFTER the plain motion-reduce rule at equal specificity and would
  * otherwise win under prefers-reduced-motion at >=640px.
  */
-const OVERLAY_CLASSNAME =
-  "bg-[var(--overlay-scrim-mobile)] max-sm:backdrop-blur-[0px]! max-sm:transition-none sm:bg-[var(--overlay-scrim-tablet)] sm:backdrop-blur-[1px]! sm:transition-opacity sm:duration-[250ms] sm:data-starting-style:opacity-0 motion-reduce:transition-none!"
+const OVERLAY_CLASSNAME = cn(
+  // Mobile: flat scrim, no blur, instant (force the primitive's blur off).
+  "bg-[var(--overlay-scrim-mobile)] max-sm:backdrop-blur-[0px]! max-sm:transition-none",
+  // Tablet (sm): tinted scrim + 1px blur + 250ms opacity fade.
+  "sm:bg-[var(--overlay-scrim-tablet)] sm:backdrop-blur-[1px]! sm:transition-opacity sm:duration-[250ms] sm:data-starting-style:opacity-0",
+  // Suppress the tablet fade under reduced motion (needs `!`; see note above).
+  "motion-reduce:transition-none!"
+)
 
 export type ContentSheetShellProps = {
   panelId?: string
@@ -109,13 +114,7 @@ export function ContentSheetShell({
               aria-label="Close"
               aria-controls={panelId}
               aria-expanded={open}
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-md p-1 max-sm:hidden"
-                />
-              }
+              render={<PanelCloseButton className="rounded-md p-1 max-sm:hidden" />}
             >
               <Icon icon={RiCloseLine} slotSize={20} />
             </SheetClose>

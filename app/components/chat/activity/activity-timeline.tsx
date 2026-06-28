@@ -24,7 +24,8 @@ const STEP_MARKERS = {
     icon: RiCheckboxBlankCircleFill,
     slotSize: 6,
     glyphSize: 6,
-    className: "fill-current",
+    // Reference bullet dot is a muted tertiary-icon gray, not full foreground.
+    className: "text-muted-foreground fill-current",
   },
   globe: {
     icon: RiGlobeLine,
@@ -36,7 +37,9 @@ const STEP_MARKERS = {
     icon: RiCheckLine,
     slotSize: 15,
     glyphSize: 15,
-    className: "text-foreground",
+    // Reference terminal/"done" glyph inherits the row's secondary text tone
+    // (#5d5d5d), not full-strength foreground.
+    className: "text-muted-foreground",
   },
 } as const
 
@@ -49,6 +52,13 @@ export type ActivityStepLeading = keyof typeof STEP_MARKERS
  * `leading` axis is style-neutral here because the marker glyph is resolved via
  * `STEP_MARKERS`, but the axis is preserved for the documented API + the
  * reference variant matrix (globe⇒chips, bullet/done⇒description).
+ *
+ * NOTE — intentional scaffolding (do not trim as unused): production today
+ * renders only `leading="done" body="description"` (the single Reasoning step).
+ * The `globe`/`bullet` markers and the `chips` body are kept for the upcoming
+ * multi-step timeline and are SUPPORTED by the ChatGPT reference — the capture
+ * shows 40 steps using all three markers, with chip bodies on globe (browse)
+ * steps. See TODO.md ("Chat side panel").
  */
 const stepVariants = cva("min-w-0 pb-5 group-data-[last=true]:pb-0", {
   variants: {
@@ -112,7 +122,9 @@ export type StepTitleProps = {
  */
 export function StepTitle({ children, className }: StepTitleProps) {
   return (
-    <div className={cn("text-foreground text-sm", className)}>{children}</div>
+    <div className={cn("text-foreground text-sm leading-[21px]", className)}>
+      {children}
+    </div>
   )
 }
 
@@ -149,7 +161,8 @@ export const ActivityStep = ({
   >
     <div className="relative flex flex-col items-center">
       <StepLeadingIndicator leading={leading ?? "bullet"} />
-      <div className="bg-border mt-1 w-px flex-1 group-data-[last=true]:hidden" />
+      {/* Connector sits flush under the marker box (reference has no top gap). */}
+      <div className="bg-border w-px flex-1 group-data-[last=true]:hidden" />
     </div>
     <div className={cn(stepVariants({ leading, body }), className)}>
       {children}

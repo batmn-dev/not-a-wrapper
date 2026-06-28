@@ -12,6 +12,27 @@ type ChatStatus = "streaming" | "ready" | "submitted" | "error"
 
 export const PENDING_ACTIVITY_TURN_ID = "__pending_activity_turn__"
 
+/**
+ * The Chat-owned Activity-panel controls, forwarded as ONE object from Chat
+ * through Conversation → Message → MessageAssistant to the assistant trigger
+ * (replacing three individually-drilled props). Chat retains ownership of the
+ * state; this is read-only plumbing. Inner names match the trigger primitive.
+ */
+export type ActivityPanelControls = {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  /** Stable id of the panel surface; emitted as the trigger's `aria-controls`. */
+  panelId?: string
+}
+
+/**
+ * Data the selector hands to `<ActivityPanel>` via `panelProps`.
+ *
+ * NOTE — `phase`, `steps`, and `isReasoningStreaming` are intentional
+ * ChatGPT-replication scaffolding for an upcoming live-timeline pass; the panel
+ * does not consume them yet (kept deliberately, not dead). See the annotated
+ * `ActivityPanelProps` in `activity/activity-panel.tsx` and TODO.md.
+ */
 export type ActivityPanelProps = {
   phase: ReasoningPhase["phase"]
   steps: ToolUIPart[]
@@ -28,6 +49,18 @@ export type UseActivityPanelResult = {
   /** True while a generation is in flight (covers the pre-stream submitted state). */
   isGenerationActive: boolean
   panelProps: ActivityPanelProps
+}
+
+/**
+ * True while a generation is in flight (covers the pre-stream submitted state).
+ * Shared by `useActivityPanel` and `Conversation` so the gate can't drift. (A
+ * third, private copy lives in `chat-turn.ts`, out of this module's scope.)
+ */
+export function isGenerationActive(
+  status: ChatStatus,
+  isSubmitting: boolean
+): boolean {
+  return isSubmitting || status === "submitted" || status === "streaming"
 }
 
 /**
@@ -100,9 +133,6 @@ export function useActivityPanel({
       isStaticToolUIPart(part)
     ) ?? []
 
-  const isGenerationActive =
-    isSubmitting || status === "submitted" || status === "streaming"
-
   const panelProps: ActivityPanelProps = hasPendingAssistantTurn
     ? {
         phase: "thinking",
@@ -125,7 +155,7 @@ export function useActivityPanel({
 
   return {
     activeTurnId,
-    isGenerationActive,
+    isGenerationActive: isGenerationActive(status, isSubmitting),
     panelProps,
   }
 }
