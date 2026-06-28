@@ -155,33 +155,48 @@ export function Chat() {
     bumpChat,
   })
 
-  // Single, chat-owned Activity panel selector. Derives the active turn from
-  // the already-projected `messages` and runs the reasoning hook once for that
-  // tail. `panelProps` is spread into <ActivityPanel>; `activeTurnId` is threaded
-  // to each Message for the memo re-render-on-handoff contract.
-  const { activeTurnId, panelProps } = useActivityPanel({
+  // Chat owns the explicit Activity selection separately from the generation
+  // default. The selector uses the explicit selection when valid; otherwise the
+  // panel can follow the latest/pending generation turn.
+  const [selectedActivityTurnId, setSelectedActivityTurnId] = useState<
+    string | undefined
+  >()
+  const { panelActivityTurnId, panelProps } = useActivityPanel({
     messages,
     status,
     isSubmitting,
+    selectedActivityTurnId,
   })
 
   // Chat owns the panel open state; the assistant trigger toggles it.
   const activityPanelId = useId()
   const [activityPanelOpen, setActivityPanelOpen] = useState(false)
-  const handleActivityPanelOpenChange = useCallback(
-    (open: boolean) => setActivityPanelOpen(open),
-    []
-  )
+  const handleActivityPanelOpenChange = useCallback((open: boolean) => {
+    setActivityPanelOpen(open)
+    if (!open) setSelectedActivityTurnId(undefined)
+  }, [])
+  const handleOpenActivityTurn = useCallback((turnId: string) => {
+    setSelectedActivityTurnId(turnId)
+    setActivityPanelOpen(true)
+  }, [])
 
-  // One read-only controls object forwarded to the assistant trigger (replaces
-  // three individually drilled props). Chat keeps ownership of the state.
+  // One controls object is forwarded to assistant triggers. Chat keeps
+  // ownership of both the selected turn and the responsive panel surface.
   const activityPanel = useMemo(
     () => ({
       open: activityPanelOpen,
       onOpenChange: handleActivityPanelOpenChange,
+      panelTurnId: panelActivityTurnId,
+      onOpenTurn: handleOpenActivityTurn,
       panelId: activityPanelId,
     }),
-    [activityPanelOpen, handleActivityPanelOpenChange, activityPanelId]
+    [
+      activityPanelOpen,
+      handleActivityPanelOpenChange,
+      panelActivityTurnId,
+      handleOpenActivityTurn,
+      activityPanelId,
+    ]
   )
 
   // Local delete handler — filters a message from the local array
@@ -206,7 +221,7 @@ export function Chat() {
       messages,
       status,
       isSubmitting,
-      activeTurnId,
+      activityPanelTurnId: panelActivityTurnId,
       activityPanel,
       onDelete: handleDelete,
       onEdit: submitEdit,
@@ -222,7 +237,7 @@ export function Chat() {
       messages,
       status,
       isSubmitting,
-      activeTurnId,
+      panelActivityTurnId,
       activityPanel,
       handleDelete,
       submitEdit,

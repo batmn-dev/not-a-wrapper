@@ -32,7 +32,7 @@ vi.mock("./message-assistant", () => ({
       approved: boolean,
       reason?: string
     ) => Promise<void> | void
-    activeTurnId?: string
+    activityPanelTurnId?: string
   }) => {
     messageAssistantSpy()
     lastAssistantProps.current = props
@@ -205,7 +205,7 @@ describe("Message body memo contract (R3)", () => {
     parts?: UIMessage["parts"]
     status?: "streaming" | "ready" | "submitted" | "error"
     isLast?: boolean
-    activeTurnId?: string
+    activityPanelTurnId?: string
     children?: string
   }) {
     act(() => {
@@ -214,7 +214,7 @@ describe("Message body memo contract (R3)", () => {
           id="assistant-1"
           variant="assistant"
           isLast={props.isLast}
-          activeTurnId={props.activeTurnId}
+          activityPanelTurnId={props.activityPanelTurnId}
           status={props.status}
           parts={props.parts}
           toolRenderSignature={getToolRenderSignature(props.parts)}
@@ -400,7 +400,7 @@ describe("Message body memo contract (R3)", () => {
     expect(messageAssistantSpy).toHaveBeenCalledTimes(4)
   })
 
-  it("re-renders and forwards the new activeTurnId on handoff", () => {
+  it("re-renders and forwards the new activityPanelTurnId on handoff", () => {
     const parts = [
       { type: "text", text: "Answer" },
     ] as unknown as UIMessage["parts"]
@@ -409,20 +409,20 @@ describe("Message body memo contract (R3)", () => {
       parts,
       status: "ready",
       isLast: true,
-      activeTurnId: "turn-1",
+      activityPanelTurnId: "turn-1",
       children: "Answer",
     })
     expect(messageAssistantSpy).toHaveBeenCalledTimes(1)
-    expect(lastAssistantProps.current.activeTurnId).toBe("turn-1")
+    expect(lastAssistantProps.current.activityPanelTurnId).toBe("turn-1")
 
     renderAssistant({
       parts,
       status: "ready",
       isLast: true,
-      activeTurnId: "turn-2",
+      activityPanelTurnId: "turn-2",
       children: "Answer",
     })
     expect(messageAssistantSpy).toHaveBeenCalledTimes(2)
-    expect(lastAssistantProps.current.activeTurnId).toBe("turn-2")
+    expect(lastAssistantProps.current.activityPanelTurnId).toBe("turn-2")
   })
 })

@@ -37,9 +37,8 @@ import { useAssistantMessageSelection } from "./useAssistantMessageSelection"
 type MessageAssistantProps = {
   children: string
   isLast?: boolean
-  /** Id of the panel-active assistant turn; gates the Activity trigger so it
-   * renders only for the turn the panel currently owns. */
-  activeTurnId?: string
+  /** Id currently projected into the single Chat-owned Activity panel surface. */
+  activityPanelTurnId?: string
   /** Chat-owned Activity-panel controls; gates + drives the reopen trigger. */
   activityPanel?: ActivityPanelControls
   copied?: boolean
@@ -88,7 +87,7 @@ function formatToolProgressLabel(toolName: string): string {
 export function MessageAssistant({
   children,
   isLast,
-  activeTurnId,
+  activityPanelTurnId,
   activityPanel,
   copied,
   copyToClipboard,
@@ -126,13 +125,14 @@ export function MessageAssistant({
         ? "error"
         : "ready"
 
-  // Reasoning + sources now live in the Chat-owned Activity panel. This message
-  // only decides whether to surface the reopen trigger for the panel-active turn
-  // (the live reasoning timer + duration are owned by use-activity-panel.ts).
-  const isActiveTurn =
-    activeTurnId !== undefined &&
-    (messageId === activeTurnId ||
-      getServerMessageId(metadata) === activeTurnId)
+  // Reasoning + sources live in the Chat-owned Activity panel. Each assistant
+  // row with activity keeps its own trigger; only the row currently projected
+  // into the panel reports aria-expanded=true.
+  const serverMessageId = getServerMessageId(metadata)
+  const isPanelTurn =
+    activityPanelTurnId !== undefined &&
+    (messageId === activityPanelTurnId ||
+      serverMessageId === activityPanelTurnId)
   const hasReasoningPart = Boolean(
     parts?.some((part) => part.type === "reasoning")
   )
@@ -146,8 +146,7 @@ export function MessageAssistant({
   const hasSources = sources.length > 0
   const hasToolActivity = Boolean(toolInvocationParts?.length)
   const showActivityTrigger =
-    Boolean(activityPanel?.onOpenChange) &&
-    isActiveTurn &&
+    Boolean(activityPanel?.onOpenTurn) &&
     (isSubmittedPending ||
       isReasoningStreaming ||
       hasReasoningPart ||
@@ -214,6 +213,17 @@ export function MessageAssistant({
       clearSelection()
     }
   }, [selectionInfo, onQuote, clearSelection])
+  const handleActivityTriggerOpenChange = useCallback(
+    (open: boolean) => {
+      if (!activityPanel) return
+      if (open) {
+        activityPanel.onOpenTurn(messageId)
+      } else {
+        activityPanel.onOpenChange(false)
+      }
+    },
+    [activityPanel, messageId]
+  )
 
   const [contentCaretPhase, setContentCaretPhase] = useState<
     "hidden" | "visible" | "fading"
@@ -308,8 +318,8 @@ export function MessageAssistant({
           <div className="flex items-center justify-between">
             <div className="flex min-w-0 items-center">
               <ActivityPanelTrigger
-                open={activityPanel.open}
-                onOpenChange={activityPanel.onOpenChange}
+                open={activityPanel.open && isPanelTurn}
+                onOpenChange={handleActivityTriggerOpenChange}
                 controlsId={activityPanel.panelId}
                 state={activityState}
               />

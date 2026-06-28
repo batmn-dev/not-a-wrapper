@@ -15,12 +15,16 @@ export const PENDING_ACTIVITY_TURN_ID = "__pending_activity_turn__"
 /**
  * The Chat-owned Activity-panel controls, forwarded as ONE object from Chat
  * through Conversation → Message → MessageAssistant to the assistant trigger
- * (replacing three individually-drilled props). Chat retains ownership of the
- * state; this is read-only plumbing. Inner names match the trigger primitive.
+ * Chat retains ownership of panel open/selection state; assistant rows only
+ * request a turn selection or close the shared surface.
  */
 export type ActivityPanelControls = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Id of the turn currently shown by the single Activity panel surface. */
+  panelTurnId?: string
+  /** Selects a turn and opens the single Chat-owned Activity panel surface. */
+  onOpenTurn: (turnId: string) => void
   /** Stable id of the panel surface; emitted as the trigger's `aria-controls`. */
   panelId?: string
 }
@@ -44,11 +48,21 @@ export type ActivityPanelProps = {
 }
 
 export type UseActivityPanelResult = {
-  /** The owning turn id — the last assistant message in the rendered path. */
-  activeTurnId: string | undefined
+  /** The generation-following turn id: pending placeholder or last assistant. */
+  defaultActivityTurnId: string | undefined
+  /** The turn whose content is currently projected into the panel. */
+  panelActivityTurnId: string | undefined
   /** True while a generation is in flight (covers the pre-stream submitted state). */
   isGenerationActive: boolean
   panelProps: ActivityPanelProps
+}
+
+export type ActivityPanelTarget = {
+  defaultActivityTurnId: string | undefined
+  panelActivityTurnId: string | undefined
+  panelMessage: UIMessage | undefined
+  isGenerationActive: boolean
+  isPendingActivityTurn: boolean
 }
 
 /**
@@ -63,58 +77,136 @@ export function isGenerationActive(
   return isSubmitting || status === "submitted" || status === "streaming"
 }
 
+function getActivityTurnId(message: UIMessage | undefined): string | undefined {
+  if (!message) return undefined
+
+  const metadata = message.metadata as ChatMessageMetadata | undefined
+  return message.id ?? getServerMessageId(metadata)
+}
+
+function matchesActivityTurn(
+  message: UIMessage | undefined,
+  turnId: string | undefined
+): boolean {
+  if (!message || turnId === undefined) return false
+
+  const metadata = message.metadata as ChatMessageMetadata | undefined
+  return message.id === turnId || getServerMessageId(metadata) === turnId
+}
+
+function findAssistantTurn(
+  messages: UIMessage[],
+  turnId: string | undefined
+): UIMessage | undefined {
+  if (turnId === undefined) return undefined
+
+  return messages.find(
+    (message) =>
+      message.role === "assistant" && matchesActivityTurn(message, turnId)
+  )
+}
+
+function findLastAssistantTurn(messages: UIMessage[]): UIMessage | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "assistant") return messages[i]
+  }
+
+  return undefined
+}
+
+export function selectActivityPanelTarget({
+  messages,
+  status,
+  isSubmitting,
+  selectedActivityTurnId,
+}: {
+  messages: UIMessage[]
+  status: ChatStatus
+  isSubmitting: boolean
+  selectedActivityTurnId?: string
+}): ActivityPanelTarget {
+  const generationActive = isGenerationActive(status, isSubmitting)
+  const hasPendingAssistantTurn =
+    generationActive && messages[messages.length - 1]?.role === "user"
+
+  // During submit preflight, the next assistant turn has no server/client id
+  // yet, so the generation-following default is the pending placeholder.
+  const defaultMessage = hasPendingAssistantTurn
+    ? undefined
+    : findLastAssistantTurn(messages)
+  const defaultActivityTurnId = hasPendingAssistantTurn
+    ? PENDING_ACTIVITY_TURN_ID
+    : getActivityTurnId(defaultMessage)
+
+  const selectedPendingTurn =
+    hasPendingAssistantTurn &&
+    selectedActivityTurnId === PENDING_ACTIVITY_TURN_ID
+  const selectedMessage = selectedPendingTurn
+    ? undefined
+    : findAssistantTurn(messages, selectedActivityTurnId)
+
+  const panelActivityTurnId = selectedPendingTurn
+    ? PENDING_ACTIVITY_TURN_ID
+    : (getActivityTurnId(selectedMessage) ?? defaultActivityTurnId)
+
+  return {
+    defaultActivityTurnId,
+    panelActivityTurnId,
+    panelMessage: selectedMessage ?? defaultMessage,
+    isGenerationActive: generationActive,
+    isPendingActivityTurn: panelActivityTurnId === PENDING_ACTIVITY_TURN_ID,
+  }
+}
+
 /**
  * useActivityPanel — the single, chat-owned selector for the Activity panel
  * (plan §4, GA §6.7). Called ONCE by `Chat` after `useChatCore` returns the
  * already-projected selected path; it does NOT recompute `projectSelectedPath`.
  *
- * Ownership keys off the last assistant message in that rendered array
- * (`activeTurnId`), not per-message positional `isLast`. The reasoning hook runs
- * once for that tail, so its `isLast` now means "panel-active turn". Individual
- * `MessageAssistant` instances never call this hook.
+ * The default target follows the latest generation/pending assistant. An
+ * explicit selected turn, when still present in the rendered path, overrides
+ * that default so historical Activity panel content stays addressable while new
+ * messages stream. Individual `MessageAssistant` instances never call this hook.
  */
 export function useActivityPanel({
   messages,
   status,
   isSubmitting,
+  selectedActivityTurnId,
 }: {
   messages: UIMessage[]
   status: ChatStatus
   isSubmitting: boolean
+  selectedActivityTurnId?: string
 }): UseActivityPanelResult {
-  const generationActive = isGenerationActive(status, isSubmitting)
-  const hasPendingAssistantTurn =
-    generationActive && messages[messages.length - 1]?.role === "user"
+  const {
+    defaultActivityTurnId,
+    panelActivityTurnId,
+    panelMessage,
+    isGenerationActive: generationActive,
+    isPendingActivityTurn,
+  } = selectActivityPanelTarget({
+    messages,
+    status,
+    isSubmitting,
+    selectedActivityTurnId,
+  })
 
-  // Scan from the end for the last assistant message (the selected-path tail).
-  // During submit preflight, the next assistant turn has no server/client id yet,
-  // so the panel is owned by the pending placeholder instead of the previous
-  // assistant response.
-  let tail: UIMessage | undefined
-  if (!hasPendingAssistantTurn) {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "assistant") {
-        tail = messages[i]
-        break
-      }
-    }
-  }
-
-  // Prefer the optimistic id; the server id is the cross-key used downstream
-  // (message.tsx / message-assistant.tsx) when the optimistic id hasn't anchored
-  // yet (mirrors selected-path.ts identity keys).
-  const tailMetadata = tail?.metadata as ChatMessageMetadata | undefined
-  const activeTurnId = hasPendingAssistantTurn
-    ? PENDING_ACTIVITY_TURN_ID
-    : (tail?.id ?? getServerMessageId(tailMetadata))
+  const panelMetadata = panelMessage?.metadata as
+    | ChatMessageMetadata
+    | undefined
 
   const persistedDurationMs =
-    typeof tailMetadata?.reasoningDurationMs === "number"
-      ? tailMetadata.reasoningDurationMs
+    typeof panelMetadata?.reasoningDurationMs === "number"
+      ? panelMetadata.reasoningDurationMs
       : undefined
 
-  // The reasoning hook runs once for the selected tail. `isLast` is now the
-  // panel-active-turn gate (the live timer runs only while the tail is thinking).
+  // The reasoning hook runs once for the panel target. The live timer only runs
+  // for the default generation turn; historical selections remain stable while a
+  // newer generation streams elsewhere in the thread.
+  const isPanelDefaultTurn =
+    panelActivityTurnId !== undefined &&
+    panelActivityTurnId === defaultActivityTurnId
   const {
     phase,
     reasoningText,
@@ -122,19 +214,19 @@ export function useActivityPanel({
     isReasoningStreaming,
     isOpaqueReasoning,
   } = useReasoningPhase({
-    parts: tail?.parts,
+    parts: panelMessage?.parts,
     status,
-    isLast: Boolean(tail),
+    isLast: Boolean(panelMessage) && isPanelDefaultTurn,
     persistedDurationMs,
   })
 
-  const sources = getSources(tail?.parts ?? [])
+  const sources = getSources(panelMessage?.parts ?? [])
   const steps =
-    tail?.parts?.filter((part): part is ToolUIPart =>
+    panelMessage?.parts?.filter((part): part is ToolUIPart =>
       isStaticToolUIPart(part)
     ) ?? []
 
-  const panelProps: ActivityPanelProps = hasPendingAssistantTurn
+  const panelProps: ActivityPanelProps = isPendingActivityTurn
     ? {
         phase: "thinking",
         steps: [],
@@ -155,7 +247,8 @@ export function useActivityPanel({
       }
 
   return {
-    activeTurnId,
+    defaultActivityTurnId,
+    panelActivityTurnId,
     isGenerationActive: generationActive,
     panelProps,
   }

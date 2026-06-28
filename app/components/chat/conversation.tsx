@@ -83,10 +83,8 @@ type ConversationProps = {
   messages: MessageType[]
   status?: "streaming" | "ready" | "submitted" | "error"
   isSubmitting?: boolean
-  /** Id of the panel-active assistant turn (the rendered selected-path tail),
-   * forwarded to each Message so branch switches / handoffs re-render affected
-   * rows. Derived once by Chat via useActivityPanel. */
-  activeTurnId?: string
+  /** Id currently projected into the single Chat-owned Activity panel surface. */
+  activityPanelTurnId?: string
   /** Chat-owned Activity-panel controls, forwarded to the assistant trigger. */
   activityPanel?: ActivityPanelControls
   onDelete: (id: string) => void
@@ -111,7 +109,7 @@ export function Conversation({
   messages,
   status = "ready",
   isSubmitting = false,
-  activeTurnId,
+  activityPanelTurnId,
   activityPanel,
   onDelete,
   onEdit,
@@ -129,7 +127,7 @@ export function Conversation({
   const generationActive = isGenerationActive(status, isSubmitting)
   const hasPendingAssistantTurn =
     generationActive && messages[messages.length - 1]?.role === "user"
-  const pendingActivityTurnId = activeTurnId ?? PENDING_ACTIVITY_TURN_ID
+  const pendingActivityTurnId = activityPanelTurnId ?? PENDING_ACTIVITY_TURN_ID
 
   return (
     <ScrollRootContent className="relative -mb-[var(--composer-overlap-px)] flex w-full flex-1 flex-col items-center pt-4 pb-[var(--thread-bottom-offset)] [--composer-overlap-px:28px] [--thread-bottom-offset:calc(var(--spacing-input-area)+2rem+env(safe-area-inset-bottom,0px))]">
@@ -176,7 +174,7 @@ export function Conversation({
               variant={message.role}
               attachments={getMessageAttachments(message)}
               isLast={isLast}
-              activeTurnId={activeTurnId}
+              activityPanelTurnId={activityPanelTurnId}
               activityPanel={isAssistant ? activityPanel : undefined}
               onDelete={onDelete}
               onEdit={onEdit}
@@ -208,7 +206,7 @@ export function Conversation({
             id={PENDING_ACTIVITY_TURN_ID}
             variant="assistant"
             isLast
-            activeTurnId={pendingActivityTurnId}
+            activityPanelTurnId={pendingActivityTurnId}
             activityPanel={activityPanel}
             onDelete={onDelete}
             onEdit={onEdit}

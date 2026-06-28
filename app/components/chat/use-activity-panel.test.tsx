@@ -22,6 +22,7 @@ function Harness(props: {
   messages: UIMessage[]
   status: Status
   isSubmitting: boolean
+  selectedActivityTurnId?: string
   onResult: (result: UseActivityPanelResult) => void
 }) {
   const { onResult, ...params } = props
@@ -34,7 +35,7 @@ function Harness(props: {
 
 function assistant(
   id: string,
-  opts: { durationMs?: number; sourceUrl?: string } = {}
+  opts: { durationMs?: number; sourceUrl?: string; serverMessageId?: string } = {}
 ): UIMessage {
   const parts: unknown[] = [{ type: "reasoning", text: "r", state: "done" }]
   if (opts.sourceUrl) {
@@ -50,8 +51,11 @@ function assistant(
     role: "assistant",
     parts,
     metadata:
-      opts.durationMs !== undefined
-        ? { reasoningDurationMs: opts.durationMs }
+      opts.durationMs !== undefined || opts.serverMessageId !== undefined
+        ? {
+            reasoningDurationMs: opts.durationMs,
+            serverMessageId: opts.serverMessageId,
+          }
         : undefined,
   } as unknown as UIMessage
 }
@@ -97,6 +101,7 @@ describe("useActivityPanel ownership", () => {
     messages: UIMessage[]
     status: Status
     isSubmitting: boolean
+    selectedActivityTurnId?: string
   }) {
     act(() => {
       root?.render(
@@ -116,7 +121,8 @@ describe("useActivityPanel ownership", () => {
       status: "ready",
       isSubmitting: false,
     })
-    expect(latest!.activeTurnId).toBe("a2")
+    expect(latest!.defaultActivityTurnId).toBe("a2")
+    expect(latest!.panelActivityTurnId).toBe("a2")
     expect(latest!.panelProps.durationSeconds).toBe(4)
     expect(latest!.panelProps.sources[0].url).toBe("https://a.com")
 
@@ -127,9 +133,53 @@ describe("useActivityPanel ownership", () => {
       status: "ready",
       isSubmitting: false,
     })
-    expect(latest!.activeTurnId).toBe("a9")
+    expect(latest!.defaultActivityTurnId).toBe("a9")
+    expect(latest!.panelActivityTurnId).toBe("a9")
     expect(latest!.panelProps.durationSeconds).toBe(9)
     expect(latest!.panelProps.sources[0].url).toBe("https://b.com")
+  })
+
+  it("projects an explicit historical assistant turn instead of the pending default", () => {
+    render({
+      messages: [
+        user("u1"),
+        assistant("a1", { durationMs: 4000, sourceUrl: "https://a.com" }),
+        user("u2"),
+      ],
+      status: "submitted",
+      isSubmitting: true,
+      selectedActivityTurnId: "a1",
+    })
+
+    expect(latest!.defaultActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
+    expect(latest!.panelActivityTurnId).toBe("a1")
+    expect(latest!.isGenerationActive).toBe(true)
+    expect(latest!.panelProps.phase).toBe("complete")
+    expect(latest!.panelProps.durationSeconds).toBe(4)
+    expect(latest!.panelProps.sources[0].url).toBe("https://a.com")
+  })
+
+  it("matches an explicit selected turn by server id and normalizes to the rendered message id", () => {
+    render({
+      messages: [
+        user("u1"),
+        assistant("client-a1", {
+          durationMs: 3000,
+          serverMessageId: "server-a1",
+          sourceUrl: "https://server-id.example",
+        }),
+      ],
+      status: "ready",
+      isSubmitting: false,
+      selectedActivityTurnId: "server-a1",
+    })
+
+    expect(latest!.defaultActivityTurnId).toBe("client-a1")
+    expect(latest!.panelActivityTurnId).toBe("client-a1")
+    expect(latest!.panelProps.durationSeconds).toBe(3)
+    expect(latest!.panelProps.sources[0].url).toBe(
+      "https://server-id.example"
+    )
   })
 
   it("owns the pending assistant turn for submitted user-tail state", () => {
@@ -139,7 +189,8 @@ describe("useActivityPanel ownership", () => {
       isSubmitting: true,
     })
 
-    expect(latest!.activeTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
+    expect(latest!.defaultActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
+    expect(latest!.panelActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.isGenerationActive).toBe(true)
     expect(latest!.panelProps.phase).toBe("thinking")
     expect(latest!.panelProps.isReasoningStreaming).toBe(true)
@@ -153,7 +204,8 @@ describe("useActivityPanel ownership", () => {
       isSubmitting: true,
     })
 
-    expect(latest!.activeTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
+    expect(latest!.defaultActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
+    expect(latest!.panelActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.isGenerationActive).toBe(true)
     expect(latest!.panelProps.phase).toBe("thinking")
     expect(latest!.panelProps.isReasoningStreaming).toBe(true)
