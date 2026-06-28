@@ -2,16 +2,10 @@
 import type { UIMessage } from "@ai-sdk/react"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-} from "vitest"
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import {
   PENDING_ACTIVITY_TURN_ID,
+  selectExplicitActivityTurnOnOpen,
   useActivityPanel,
   type UseActivityPanelResult,
 } from "./use-activity-panel"
@@ -35,7 +29,11 @@ function Harness(props: {
 
 function assistant(
   id: string,
-  opts: { durationMs?: number; sourceUrl?: string; serverMessageId?: string } = {}
+  opts: {
+    durationMs?: number
+    sourceUrl?: string
+    serverMessageId?: string
+  } = {}
 ): UIMessage {
   const parts: unknown[] = [{ type: "reasoning", text: "r", state: "done" }]
   if (opts.sourceUrl) {
@@ -69,8 +67,9 @@ function user(id: string): UIMessage {
 }
 
 beforeAll(() => {
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-    true
+  ;(
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true
 })
 
 describe("useActivityPanel ownership", () => {
@@ -117,7 +116,10 @@ describe("useActivityPanel ownership", () => {
 
   it("owns the last assistant in the rendered path and follows a branch switch (id + duration + sources)", () => {
     render({
-      messages: [user("u1"), assistant("a2", { durationMs: 4000, sourceUrl: "https://a.com" })],
+      messages: [
+        user("u1"),
+        assistant("a2", { durationMs: 4000, sourceUrl: "https://a.com" }),
+      ],
       status: "ready",
       isSubmitting: false,
     })
@@ -129,7 +131,10 @@ describe("useActivityPanel ownership", () => {
     // Branch switch / regenerate: the projected path now ends with a different
     // assistant turn — ownership and its persisted state must follow.
     render({
-      messages: [user("u1"), assistant("a9", { durationMs: 9000, sourceUrl: "https://b.com" })],
+      messages: [
+        user("u1"),
+        assistant("a9", { durationMs: 9000, sourceUrl: "https://b.com" }),
+      ],
       status: "ready",
       isSubmitting: false,
     })
@@ -159,6 +164,76 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.panelProps.sources[0].url).toBe("https://a.com")
   })
 
+  it("keeps a default-opened panel following the next pending generation", () => {
+    render({
+      messages: [
+        user("u1"),
+        assistant("a1", { durationMs: 4000, sourceUrl: "https://a.com" }),
+      ],
+      status: "ready",
+      isSubmitting: false,
+    })
+
+    const selectedActivityTurnId = selectExplicitActivityTurnOnOpen({
+      requestedTurnId: "a1",
+      defaultActivityTurnId: latest!.defaultActivityTurnId,
+    })
+    expect(selectedActivityTurnId).toBeUndefined()
+
+    render({
+      messages: [
+        user("u1"),
+        assistant("a1", { durationMs: 4000, sourceUrl: "https://a.com" }),
+        user("u2"),
+      ],
+      status: "submitted",
+      isSubmitting: true,
+      selectedActivityTurnId,
+    })
+
+    expect(latest!.defaultActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
+    expect(latest!.panelActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
+    expect(latest!.panelProps.phase).toBe("thinking")
+  })
+
+  it("keeps a historical-opened panel pinned while the next generation is pending", () => {
+    render({
+      messages: [
+        user("u1"),
+        assistant("a1", { durationMs: 4000, sourceUrl: "https://a.com" }),
+        user("u2"),
+        assistant("a2", { durationMs: 9000, sourceUrl: "https://b.com" }),
+      ],
+      status: "ready",
+      isSubmitting: false,
+    })
+
+    const selectedActivityTurnId = selectExplicitActivityTurnOnOpen({
+      requestedTurnId: "a1",
+      defaultActivityTurnId: latest!.defaultActivityTurnId,
+    })
+    expect(selectedActivityTurnId).toBe("a1")
+
+    render({
+      messages: [
+        user("u1"),
+        assistant("a1", { durationMs: 4000, sourceUrl: "https://a.com" }),
+        user("u2"),
+        assistant("a2", { durationMs: 9000, sourceUrl: "https://b.com" }),
+        user("u3"),
+      ],
+      status: "submitted",
+      isSubmitting: true,
+      selectedActivityTurnId,
+    })
+
+    expect(latest!.defaultActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
+    expect(latest!.panelActivityTurnId).toBe("a1")
+    expect(latest!.panelProps.phase).toBe("complete")
+    expect(latest!.panelProps.durationSeconds).toBe(4)
+    expect(latest!.panelProps.sources[0].url).toBe("https://a.com")
+  })
+
   it("matches an explicit selected turn by server id and normalizes to the rendered message id", () => {
     render({
       messages: [
@@ -177,9 +252,7 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.defaultActivityTurnId).toBe("client-a1")
     expect(latest!.panelActivityTurnId).toBe("client-a1")
     expect(latest!.panelProps.durationSeconds).toBe(3)
-    expect(latest!.panelProps.sources[0].url).toBe(
-      "https://server-id.example"
-    )
+    expect(latest!.panelProps.sources[0].url).toBe("https://server-id.example")
   })
 
   it("owns the pending assistant turn for submitted user-tail state", () => {

@@ -65,6 +65,16 @@ export type ActivityPanelTarget = {
   isPendingActivityTurn: boolean
 }
 
+export function selectExplicitActivityTurnOnOpen({
+  requestedTurnId,
+  defaultActivityTurnId,
+}: {
+  requestedTurnId: string
+  defaultActivityTurnId: string | undefined
+}): string | undefined {
+  return requestedTurnId === defaultActivityTurnId ? undefined : requestedTurnId
+}
+
 /**
  * True while a generation is in flight (covers the pre-stream submitted state).
  * Shared by `useActivityPanel` and `Conversation` so the gate can't drift. (A

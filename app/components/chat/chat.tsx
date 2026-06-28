@@ -19,9 +19,12 @@ import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { ActivityPanel } from "./activity/activity-panel"
-import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
-import { useActivityPanel } from "./use-activity-panel"
 import { isRouteDurableChat } from "./chat-turn"
+import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
+import {
+  selectExplicitActivityTurnOnOpen,
+  useActivityPanel,
+} from "./use-activity-panel"
 import { useChatCore } from "./use-chat-core"
 import { useChatOperations } from "./use-chat-operations"
 import { useFileUpload } from "./use-file-upload"
@@ -161,12 +164,13 @@ export function Chat() {
   const [selectedActivityTurnId, setSelectedActivityTurnId] = useState<
     string | undefined
   >()
-  const { panelActivityTurnId, panelProps } = useActivityPanel({
-    messages,
-    status,
-    isSubmitting,
-    selectedActivityTurnId,
-  })
+  const { defaultActivityTurnId, panelActivityTurnId, panelProps } =
+    useActivityPanel({
+      messages,
+      status,
+      isSubmitting,
+      selectedActivityTurnId,
+    })
 
   // Chat owns the panel open state; the assistant trigger toggles it.
   const activityPanelId = useId()
@@ -175,10 +179,18 @@ export function Chat() {
     setActivityPanelOpen(open)
     if (!open) setSelectedActivityTurnId(undefined)
   }, [])
-  const handleOpenActivityTurn = useCallback((turnId: string) => {
-    setSelectedActivityTurnId(turnId)
-    setActivityPanelOpen(true)
-  }, [])
+  const handleOpenActivityTurn = useCallback(
+    (turnId: string) => {
+      setSelectedActivityTurnId(
+        selectExplicitActivityTurnOnOpen({
+          requestedTurnId: turnId,
+          defaultActivityTurnId,
+        })
+      )
+      setActivityPanelOpen(true)
+    },
+    [defaultActivityTurnId]
+  )
 
   // One controls object is forwarded to assistant triggers. Chat keeps
   // ownership of both the selected turn and the responsive panel surface.
