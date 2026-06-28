@@ -112,8 +112,6 @@ export function ContentSheetShell({
             </SheetTitle>
             <SheetClose
               aria-label="Close"
-              aria-controls={panelId}
-              aria-expanded={open}
               render={<PanelCloseButton className="rounded-md p-1 max-sm:hidden" />}
             >
               <Icon icon={RiCloseLine} slotSize={20} />

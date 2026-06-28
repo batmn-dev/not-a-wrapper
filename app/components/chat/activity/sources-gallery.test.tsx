@@ -8,6 +8,7 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest"
 import { SourcesGallery } from "./sources-gallery"
 
@@ -40,6 +41,7 @@ describe("SourcesGallery (R8 favicon perf)", () => {
 
   it("renders exactly N lazy/async favicon imgs for N sources", () => {
     const sources = Array.from({ length: 141 }, (_, i) => ({
+      sourceId: `source-${i}`,
       href: `https://example${i}.com/page`,
       title: `Title ${i}`,
     }))
@@ -60,7 +62,13 @@ describe("SourcesGallery (R8 favicon perf)", () => {
     act(() => {
       root?.render(
         <SourcesGallery
-          sources={[{ href: "javascript:alert(1)", title: "Unsafe source" }]}
+          sources={[
+            {
+              sourceId: "unsafe-source",
+              href: "javascript:alert(1)",
+              title: "Unsafe source",
+            },
+          ]}
         />
       )
     })
@@ -70,5 +78,36 @@ describe("SourcesGallery (R8 favicon perf)", () => {
     expect(link?.hasAttribute("href")).toBe(false)
     expect(link?.getAttribute("target")).toBeNull()
     expect(link?.getAttribute("rel")).toBeNull()
+  })
+
+  it("keys duplicate source URLs by source identity", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    try {
+      act(() => {
+        root?.render(
+          <SourcesGallery
+            sources={[
+              {
+                sourceId: "source-a",
+                href: "https://example.com/reused",
+                title: "First citation title",
+              },
+              {
+                sourceId: "source-b",
+                href: "https://example.com/reused",
+                title: "Second citation title",
+              },
+            ]}
+          />
+        )
+      })
+
+      expect(container?.textContent).toContain("First citation title")
+      expect(container?.textContent).toContain("Second citation title")
+      expect(consoleError).not.toHaveBeenCalled()
+    } finally {
+      consoleError.mockRestore()
+    }
   })
 })

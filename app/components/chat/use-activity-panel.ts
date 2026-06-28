@@ -82,8 +82,9 @@ export function useActivityPanel({
   status: ChatStatus
   isSubmitting: boolean
 }): UseActivityPanelResult {
+  const generationActive = isGenerationActive(status, isSubmitting)
   const hasPendingAssistantTurn =
-    status === "submitted" && messages[messages.length - 1]?.role === "user"
+    generationActive && messages[messages.length - 1]?.role === "user"
 
   // Scan from the end for the last assistant message (the selected-path tail).
   // During submit preflight, the next assistant turn has no server/client id yet,
@@ -155,7 +156,7 @@ export function useActivityPanel({
 
   return {
     activeTurnId,
-    isGenerationActive: isGenerationActive(status, isSubmitting),
+    isGenerationActive: generationActive,
     panelProps,
   }
 }

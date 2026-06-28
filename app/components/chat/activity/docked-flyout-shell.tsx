@@ -9,6 +9,7 @@ export type DockedFlyoutShellProps = {
   panelId?: string
   title: string
   durationSeconds?: number
+  active: boolean
   onClose: () => void
   children: ReactNode
   /**
@@ -41,6 +42,7 @@ export function DockedFlyoutShell({
   panelId,
   title,
   durationSeconds,
+  active,
   onClose,
   children,
   viewportRef,
@@ -52,6 +54,8 @@ export function DockedFlyoutShell({
     <section
       id={panelId}
       aria-labelledby={titleId}
+      aria-hidden={active ? undefined : true}
+      inert={active ? undefined : true}
       className={cn(
         "bg-card text-foreground border-border flex h-full w-[var(--activity-panel-width)] flex-col border-s",
         className

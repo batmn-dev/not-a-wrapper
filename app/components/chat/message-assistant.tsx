@@ -144,13 +144,15 @@ export function MessageAssistant({
     )
   )
   const hasSources = sources.length > 0
+  const hasToolActivity = Boolean(toolInvocationParts?.length)
   const showActivityTrigger =
     Boolean(activityPanel?.onOpenChange) &&
     isActiveTurn &&
     (isSubmittedPending ||
       isReasoningStreaming ||
       hasReasoningPart ||
-      hasSources)
+      hasSources ||
+      hasToolActivity)
   const reasoningDurationSeconds =
     typeof metadata?.reasoningDurationMs === "number"
       ? Math.round(metadata.reasoningDurationMs / 1000)

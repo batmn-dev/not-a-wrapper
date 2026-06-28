@@ -128,7 +128,7 @@ export function Conversation({
 
   const generationActive = isGenerationActive(status, isSubmitting)
   const hasPendingAssistantTurn =
-    status === "submitted" && messages[messages.length - 1]?.role === "user"
+    generationActive && messages[messages.length - 1]?.role === "user"
   const pendingActivityTurnId = activeTurnId ?? PENDING_ACTIVITY_TURN_ID
 
   return (
@@ -139,7 +139,10 @@ export function Conversation({
         className="pointer-events-none absolute top-0 h-px w-px"
       />
       {messages?.map((message, index) => {
-        const isLast = index === messages.length - 1 && status !== "submitted"
+        const isLast =
+          index === messages.length - 1 &&
+          !hasPendingAssistantTurn &&
+          status !== "submitted"
         const isAssistant = message.role === "assistant"
         const isUser = message.role === "user"
 

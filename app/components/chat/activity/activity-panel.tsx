@@ -69,6 +69,7 @@ function PanelBody({
   isOpaqueReasoning: boolean
 }) {
   const gallerySources = sources.map((source) => ({
+    sourceId: source.sourceId,
     href: source.url,
     title: source.title ?? source.url,
   }))
@@ -158,6 +159,7 @@ export function ActivityPanel({
               panelId={panelId}
               title={title}
               durationSeconds={durationSeconds}
+              active={dockedExpanded}
               onClose={close}
             >
               {body}

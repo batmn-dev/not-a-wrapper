@@ -9,6 +9,7 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest"
 import { ActivityPanel } from "./activity-panel"
 import {
@@ -127,7 +128,12 @@ describe("ActivityPanel coexistence (R6)", () => {
     )
     // Open: slot is expanded and the docked shell is mounted.
     expect(slot?.hasAttribute("data-expanded")).toBe(true)
-    expect(document.querySelectorAll("section[aria-labelledby]")).toHaveLength(1)
+    const openShell = document.querySelector<HTMLElement>(
+      "section[aria-labelledby]"
+    )
+    expect(openShell).toBeTruthy()
+    expect(openShell?.getAttribute("aria-hidden")).toBeNull()
+    expect(openShell?.hasAttribute("inert")).toBe(false)
 
     // Close: the slot collapses (drops data-expanded) but the shell stays mounted
     // so it slides shut populated instead of vanishing in one frame.
@@ -135,7 +141,12 @@ describe("ActivityPanel coexistence (R6)", () => {
       root?.render(<Harness open={false} />)
     })
     expect(slot?.hasAttribute("data-expanded")).toBe(false)
-    expect(document.querySelectorAll("section[aria-labelledby]")).toHaveLength(1)
+    const closingShell = document.querySelector<HTMLElement>(
+      "section[aria-labelledby]"
+    )
+    expect(closingShell).toBeTruthy()
+    expect(closingShell?.getAttribute("aria-hidden")).toBe("true")
+    expect(closingShell?.hasAttribute("inert")).toBe(true)
 
     // The width transition finishing is what unmounts the shell.
     act(() => {
@@ -164,5 +175,45 @@ describe("ActivityPanel coexistence (R6)", () => {
     expect(document.body.textContent).toContain("Pro thinking")
     expect(document.body.textContent).toContain("Reasoning")
     expect(document.body.textContent).toContain("Activity")
+  })
+
+  it("preserves source identity for duplicate URLs", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+    const sources = [
+      {
+        type: "source-url",
+        sourceId: "source-a",
+        url: "https://example.com/reused",
+        title: "First citation title",
+      },
+      {
+        type: "source-url",
+        sourceId: "source-b",
+        url: "https://example.com/reused",
+        title: "Second citation title",
+      },
+    ] as unknown as SourceUrlUIPart[]
+
+    try {
+      act(() => {
+        root?.render(
+          <ActivityPanelHostProvider>
+            <ActivityPanelDockSlot />
+            <ActivityPanel
+              open
+              onOpenChange={() => {}}
+              {...panelProps(0)}
+              sources={sources}
+            />
+          </ActivityPanelHostProvider>
+        )
+      })
+
+      expect(document.body.textContent).toContain("First citation title")
+      expect(document.body.textContent).toContain("Second citation title")
+      expect(consoleError).not.toHaveBeenCalled()
+    } finally {
+      consoleError.mockRestore()
+    }
   })
 })

@@ -145,4 +145,18 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.panelProps.isReasoningStreaming).toBe(true)
     expect(latest!.panelProps.isOpaqueReasoning).toBe(true)
   })
+
+  it("owns the pending assistant turn during submit preflight before status flips", () => {
+    render({
+      messages: [user("u1"), assistant("a1"), user("u2")],
+      status: "ready",
+      isSubmitting: true,
+    })
+
+    expect(latest!.activeTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
+    expect(latest!.isGenerationActive).toBe(true)
+    expect(latest!.panelProps.phase).toBe("thinking")
+    expect(latest!.panelProps.isReasoningStreaming).toBe(true)
+    expect(latest!.panelProps.isOpaqueReasoning).toBe(true)
+  })
 })

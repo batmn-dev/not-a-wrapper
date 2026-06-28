@@ -123,6 +123,52 @@ describe("MessageAssistant activity trigger", () => {
     expect(onActivityPanelOpenChange).toHaveBeenCalledWith(true)
   })
 
+  it("renders the activity trigger for tool-only turns", () => {
+    const onActivityPanelOpenChange = vi.fn()
+    const parts = [
+      {
+        type: "tool-search",
+        toolCallId: "tool-call-1",
+        state: "output-available",
+        input: { query: "weather" },
+        output: { summary: "Cloudy" },
+      },
+    ] as unknown as UIMessage["parts"]
+
+    act(() => {
+      root?.render(
+        <MessageAssistant
+          messageId="tool-only-assistant"
+          activeTurnId="tool-only-assistant"
+          activityPanel={{
+            open: false,
+            onOpenChange: onActivityPanelOpenChange,
+            panelId: "activity-panel",
+          }}
+          parts={parts}
+          status="ready"
+        >
+          {""}
+        </MessageAssistant>
+      )
+    })
+
+    const trigger = container?.querySelector(
+      'button[aria-label="Open activity: Activity"]'
+    ) as HTMLButtonElement | null
+
+    expect(trigger).toBeTruthy()
+    expect(container?.textContent).toContain("Activity")
+    expect(trigger?.getAttribute("aria-expanded")).toBe("false")
+    expect(trigger?.getAttribute("aria-controls")).toBe("activity-panel")
+
+    act(() => {
+      trigger?.click()
+    })
+
+    expect(onActivityPanelOpenChange).toHaveBeenCalledWith(true)
+  })
+
   it("renders the activity trigger before content and footer actions", async () => {
     const parts = [
       { type: "reasoning", text: "", state: "done" },

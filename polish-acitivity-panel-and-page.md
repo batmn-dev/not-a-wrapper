@@ -271,19 +271,22 @@ Reference:
 
 Our Current Value:
 
-- `app/components/chat/activity/activity-panel-trigger.tsx:87-91` renders the
-  trailing chevron with `<Icon slotSize={20}>`. `Icon` sets the slot box to
-  `20px` and the glyph to `calc(slot - --icon-glyph-inset)`, so the visible
-  chevron is larger than the reference `~12px` glyph.
+- `app/components/chat/activity/activity-panel-trigger.tsx:87-93` renders the
+  trailing chevron with `<Icon slotSize={12}>`. `Icon` sets the slot box to
+  `12px` and the glyph to `calc(slot - --icon-glyph-inset)`, so the visible
+  chevron is `~10px` inside the reference-sized `12px` box.
 
 Delta:
 
-- Trigger chevron slot `20px` (glyph `< 20px`) vs reference `icon-xs` `~12px`.
+- Code delta is closed: the trigger chevron slot is `12px`, matching the
+  reference `icon-xs` `12px` box. Remaining uncertainty is visual evidence only:
+  the exact rendered svg width was not captured in computed-style data.
 
 Why It Matters:
 
-- A `20px` chevron next to `16px` text reads heavier than ChatGPT's subtle
-  `icon-xs` disclosure caret.
+- This mattered because an oversized chevron next to `16px` text read heavier
+  than ChatGPT's subtle `icon-xs` disclosure caret. The current implementation
+  has applied the smaller slot and still needs an eyeball check before shipping.
 
 Applied fix:
 

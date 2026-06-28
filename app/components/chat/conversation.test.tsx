@@ -205,4 +205,40 @@ describe("Conversation regeneration availability", () => {
     expect(pendingMessage?.dataset.status).toBe("submitted")
     expect(pendingMessage?.dataset.activeTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
   })
+
+  it("routes submit preflight through the activity assistant row before status flips", () => {
+    cleanupRender()
+    const mounted = document.createElement("div")
+    document.body.appendChild(mounted)
+    container = mounted
+    root = createRoot(mounted)
+
+    const userTail = [
+      { id: "user-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+    ] satisfies UIMessage[]
+
+    act(() => {
+      root?.render(
+        <Conversation
+          messages={userTail}
+          status="ready"
+          isSubmitting
+          activeTurnId={PENDING_ACTIVITY_TURN_ID}
+          onDelete={vi.fn()}
+          onEdit={vi.fn()}
+          onReload={vi.fn()}
+          isDurableChat
+        />
+      )
+    })
+
+    const pendingMessage = container?.querySelector(
+      `[data-testid="message-${PENDING_ACTIVITY_TURN_ID}"]`
+    ) as HTMLButtonElement | null
+
+    expect(container?.querySelector('[data-testid="thinking"]')).toBeNull()
+    expect(pendingMessage).toBeTruthy()
+    expect(pendingMessage?.dataset.status).toBe("submitted")
+    expect(pendingMessage?.dataset.activeTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
+  })
 })

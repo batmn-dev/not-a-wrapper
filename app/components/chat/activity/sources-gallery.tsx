@@ -5,8 +5,13 @@ import {
 import { cn } from "@/lib/utils"
 import { PanelSectionHeading } from "./panel-section-heading"
 
+export type SourcesGallerySource = SourcesGalleryItemProps & {
+  /** Stable source identity from AI SDK source-url parts. */
+  sourceId: string
+}
+
 export type SourcesGalleryProps = {
-  sources: SourcesGalleryItemProps[]
+  sources: SourcesGallerySource[]
   /** Heading count; defaults to `sources.length`. */
   count?: number
   className?: string
@@ -35,8 +40,8 @@ export function SourcesGallery({
         className="justify-start gap-1 px-3"
       />
       <ul className="flex flex-col">
-        {sources.map((source) => (
-          <li key={source.href}>
+        {sources.map(({ sourceId, ...source }) => (
+          <li key={sourceId}>
             <SourcesGalleryItem {...source} />
           </li>
         ))}
