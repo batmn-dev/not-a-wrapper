@@ -48,6 +48,7 @@ describe("MessageAssistant activity trigger", () => {
 
   it("keeps the activity trigger for completed opaque reasoning", () => {
     const onActivityPanelOpenChange = vi.fn()
+    const onOpenTurn = vi.fn()
     const parts = [
       { type: "reasoning", text: "", state: "done" },
     ] as unknown as UIMessage["parts"]
@@ -56,10 +57,11 @@ describe("MessageAssistant activity trigger", () => {
       root?.render(
         <MessageAssistant
           messageId="assistant-1"
-          activeTurnId="assistant-1"
+          activityPanelTurnId="assistant-1"
           activityPanel={{
             open: false,
             onOpenChange: onActivityPanelOpenChange,
+            onOpenTurn,
             panelId: "activity-panel",
           }}
           parts={parts}
@@ -83,20 +85,23 @@ describe("MessageAssistant activity trigger", () => {
       trigger?.click()
     })
 
-    expect(onActivityPanelOpenChange).toHaveBeenCalledWith(true)
+    expect(onOpenTurn).toHaveBeenCalledWith("assistant-1")
+    expect(onActivityPanelOpenChange).not.toHaveBeenCalled()
   })
 
   it("renders the activity trigger for submitted pre-stream state without duplicate loading UI", () => {
     const onActivityPanelOpenChange = vi.fn()
+    const onOpenTurn = vi.fn()
 
     act(() => {
       root?.render(
         <MessageAssistant
           messageId="pending-assistant"
-          activeTurnId="pending-assistant"
+          activityPanelTurnId="pending-assistant"
           activityPanel={{
             open: false,
             onOpenChange: onActivityPanelOpenChange,
+            onOpenTurn,
             panelId: "activity-panel",
           }}
           parts={[]}
@@ -120,11 +125,13 @@ describe("MessageAssistant activity trigger", () => {
       trigger?.click()
     })
 
-    expect(onActivityPanelOpenChange).toHaveBeenCalledWith(true)
+    expect(onOpenTurn).toHaveBeenCalledWith("pending-assistant")
+    expect(onActivityPanelOpenChange).not.toHaveBeenCalled()
   })
 
   it("renders the activity trigger for tool-only turns", () => {
     const onActivityPanelOpenChange = vi.fn()
+    const onOpenTurn = vi.fn()
     const parts = [
       {
         type: "tool-search",
@@ -139,10 +146,11 @@ describe("MessageAssistant activity trigger", () => {
       root?.render(
         <MessageAssistant
           messageId="tool-only-assistant"
-          activeTurnId="tool-only-assistant"
+          activityPanelTurnId="tool-only-assistant"
           activityPanel={{
             open: false,
             onOpenChange: onActivityPanelOpenChange,
+            onOpenTurn,
             panelId: "activity-panel",
           }}
           parts={parts}
@@ -166,7 +174,172 @@ describe("MessageAssistant activity trigger", () => {
       trigger?.click()
     })
 
-    expect(onActivityPanelOpenChange).toHaveBeenCalledWith(true)
+    expect(onOpenTurn).toHaveBeenCalledWith("tool-only-assistant")
+    expect(onActivityPanelOpenChange).not.toHaveBeenCalled()
+  })
+
+  it("keeps historical reasoning triggers visible when another turn owns the panel", () => {
+    const onOpenTurn = vi.fn()
+    const parts = [
+      { type: "reasoning", text: "historical reasoning", state: "done" },
+    ] as unknown as UIMessage["parts"]
+
+    act(() => {
+      root?.render(
+        <MessageAssistant
+          messageId="assistant-1"
+          activityPanelTurnId="pending-assistant"
+          activityPanel={{
+            open: true,
+            onOpenChange: vi.fn(),
+            onOpenTurn,
+            panelId: "activity-panel",
+          }}
+          parts={parts}
+          metadata={{ reasoningDurationMs: 2000 }}
+          status="ready"
+        >
+          {"First answer"}
+        </MessageAssistant>
+      )
+    })
+
+    const trigger = container?.querySelector(
+      'button[aria-label="Open activity: Thought for 2s"]'
+    ) as HTMLButtonElement | null
+
+    expect(trigger).toBeTruthy()
+    expect(trigger?.getAttribute("aria-expanded")).toBe("false")
+  })
+
+  it("renders one trigger per completed reasoning turn and only expands the selected turn", () => {
+    const parts = [
+      { type: "reasoning", text: "reasoning", state: "done" },
+    ] as unknown as UIMessage["parts"]
+
+    act(() => {
+      root?.render(
+        <>
+          <MessageAssistant
+            messageId="assistant-1"
+            activityPanelTurnId="assistant-2"
+            activityPanel={{
+              open: true,
+              onOpenChange: vi.fn(),
+              onOpenTurn: vi.fn(),
+              panelId: "activity-panel",
+            }}
+            parts={parts}
+            metadata={{ reasoningDurationMs: 1000 }}
+            status="ready"
+          >
+            {"First answer"}
+          </MessageAssistant>
+          <MessageAssistant
+            messageId="assistant-2"
+            activityPanelTurnId="assistant-2"
+            activityPanel={{
+              open: true,
+              onOpenChange: vi.fn(),
+              onOpenTurn: vi.fn(),
+              panelId: "activity-panel",
+            }}
+            parts={parts}
+            metadata={{ reasoningDurationMs: 2000 }}
+            status="ready"
+          >
+            {"Second answer"}
+          </MessageAssistant>
+        </>
+      )
+    })
+
+    const triggers = Array.from(
+      container?.querySelectorAll<HTMLButtonElement>(
+        'button[aria-controls="activity-panel"]'
+      ) ?? []
+    )
+
+    expect(triggers).toHaveLength(2)
+    expect(triggers[0]?.getAttribute("aria-expanded")).toBe("false")
+    expect(triggers[1]?.getAttribute("aria-expanded")).toBe("true")
+    expect(container?.textContent).toContain("Thought for 1s")
+    expect(container?.textContent).toContain("Thought for 2s")
+  })
+
+  it("retargets the open panel when a different trigger is clicked", () => {
+    const onActivityPanelOpenChange = vi.fn()
+    const onOpenTurn = vi.fn()
+    const parts = [
+      { type: "reasoning", text: "reasoning", state: "done" },
+    ] as unknown as UIMessage["parts"]
+
+    act(() => {
+      root?.render(
+        <MessageAssistant
+          messageId="assistant-2"
+          activityPanelTurnId="assistant-1"
+          activityPanel={{
+            open: true,
+            onOpenChange: onActivityPanelOpenChange,
+            onOpenTurn,
+            panelId: "activity-panel",
+          }}
+          parts={parts}
+          metadata={{ reasoningDurationMs: 2000 }}
+          status="ready"
+        >
+          {"Second answer"}
+        </MessageAssistant>
+      )
+    })
+
+    const trigger = container?.querySelector(
+      'button[aria-label="Open activity: Thought for 2s"]'
+    ) as HTMLButtonElement | null
+
+    act(() => {
+      trigger?.click()
+    })
+
+    expect(onOpenTurn).toHaveBeenCalledWith("assistant-2")
+    expect(onActivityPanelOpenChange).not.toHaveBeenCalled()
+  })
+
+  it("matches the expanded trigger by server message id", () => {
+    const parts = [
+      { type: "reasoning", text: "reasoning", state: "done" },
+    ] as unknown as UIMessage["parts"]
+
+    act(() => {
+      root?.render(
+        <MessageAssistant
+          messageId="client-assistant"
+          activityPanelTurnId="server-assistant"
+          activityPanel={{
+            open: true,
+            onOpenChange: vi.fn(),
+            onOpenTurn: vi.fn(),
+            panelId: "activity-panel",
+          }}
+          parts={parts}
+          metadata={{
+            reasoningDurationMs: 2000,
+            serverMessageId: "server-assistant",
+          }}
+          status="ready"
+        >
+          {"Answer"}
+        </MessageAssistant>
+      )
+    })
+
+    const trigger = container?.querySelector(
+      'button[aria-label="Close activity: Thought for 2s"]'
+    ) as HTMLButtonElement | null
+
+    expect(trigger).toBeTruthy()
+    expect(trigger?.getAttribute("aria-expanded")).toBe("true")
   })
 
   it("renders the activity trigger before content and footer actions", async () => {
@@ -178,10 +351,11 @@ describe("MessageAssistant activity trigger", () => {
       root?.render(
         <MessageAssistant
           messageId="assistant-1"
-          activeTurnId="assistant-1"
+          activityPanelTurnId="assistant-1"
           activityPanel={{
             open: false,
             onOpenChange: () => {},
+            onOpenTurn: () => {},
             panelId: "activity-panel",
           }}
           copied={false}

@@ -22,19 +22,19 @@ vi.mock("@/components/ui/thinking-bar", () => ({
 vi.mock("./message", () => ({
   Message: ({
     id,
-    activeTurnId,
+    activityPanelTurnId,
     onReload,
     status,
     children,
   }: {
     id: string
-    activeTurnId?: string
+    activityPanelTurnId?: string
     onReload?: (messageId: string) => void
     status?: string
     children: React.ReactNode
   }) => (
     <button
-      data-active-turn-id={activeTurnId}
+      data-activity-panel-turn-id={activityPanelTurnId}
       data-can-reload={Boolean(onReload)}
       data-status={status}
       data-testid={`message-${id}`}
@@ -187,7 +187,7 @@ describe("Conversation regeneration availability", () => {
           messages={userTail}
           status="submitted"
           isSubmitting
-          activeTurnId={PENDING_ACTIVITY_TURN_ID}
+          activityPanelTurnId={PENDING_ACTIVITY_TURN_ID}
           onDelete={vi.fn()}
           onEdit={vi.fn()}
           onReload={vi.fn()}
@@ -203,7 +203,9 @@ describe("Conversation regeneration availability", () => {
     expect(container?.querySelector('[data-testid="thinking"]')).toBeNull()
     expect(pendingMessage).toBeTruthy()
     expect(pendingMessage?.dataset.status).toBe("submitted")
-    expect(pendingMessage?.dataset.activeTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
+    expect(pendingMessage?.dataset.activityPanelTurnId).toBe(
+      PENDING_ACTIVITY_TURN_ID
+    )
   })
 
   it("routes submit preflight through the activity assistant row before status flips", () => {
@@ -223,7 +225,7 @@ describe("Conversation regeneration availability", () => {
           messages={userTail}
           status="ready"
           isSubmitting
-          activeTurnId={PENDING_ACTIVITY_TURN_ID}
+          activityPanelTurnId={PENDING_ACTIVITY_TURN_ID}
           onDelete={vi.fn()}
           onEdit={vi.fn()}
           onReload={vi.fn()}
@@ -239,6 +241,8 @@ describe("Conversation regeneration availability", () => {
     expect(container?.querySelector('[data-testid="thinking"]')).toBeNull()
     expect(pendingMessage).toBeTruthy()
     expect(pendingMessage?.dataset.status).toBe("submitted")
-    expect(pendingMessage?.dataset.activeTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
+    expect(pendingMessage?.dataset.activityPanelTurnId).toBe(
+      PENDING_ACTIVITY_TURN_ID
+    )
   })
 })

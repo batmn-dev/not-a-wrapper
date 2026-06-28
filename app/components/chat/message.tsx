@@ -27,10 +27,8 @@ type MessageProps = {
   id: string
   attachments?: MessageAttachment[]
   isLast?: boolean
-  /** Id of the panel-active assistant turn (the rendered selected-path tail).
-   * Threaded so a branch switch / active-turn handoff re-renders affected rows
-   * even when their body content is unchanged. */
-  activeTurnId?: string
+  /** Id currently projected into the single Chat-owned Activity panel surface. */
+  activityPanelTurnId?: string
   /** Chat-owned Activity-panel controls, forwarded to the assistant trigger. */
   activityPanel?: ActivityPanelControls
   onDelete: (id: string) => void
@@ -100,10 +98,10 @@ function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
   if (prev.variant !== next.variant) return false
   if (prev.id !== next.id) return false
 
-  // A branch switch or active-turn handoff must re-render the assistant row so
-  // its panel/trigger affordances follow the newly selected turn — even when the
+  // A branch switch or panel-target handoff must re-render the assistant row so
+  // aria-expanded follows the selected/default Activity turn — even when the
   // body content is unchanged (GA §6.7E, §7 R3).
-  if (prev.activeTurnId !== next.activeTurnId) return false
+  if (prev.activityPanelTurnId !== next.activityPanelTurnId) return false
   // Compare the bundle's inner fields, not its identity: Chat recreates the
   // object each render, but only open/panelId changes should re-render the row.
   if (prev.activityPanel?.open !== next.activityPanel?.open) return false
@@ -180,7 +178,7 @@ function MessageInner({
   id,
   attachments,
   isLast,
-  activeTurnId,
+  activityPanelTurnId,
   activityPanel,
   onEdit,
   onReload,
@@ -231,7 +229,7 @@ function MessageInner({
         onReload={onReload}
         onStop={onStop}
         isLast={isLast}
-        activeTurnId={activeTurnId}
+        activityPanelTurnId={activityPanelTurnId}
         activityPanel={activityPanel}
         parts={parts}
         metadata={metadata}
