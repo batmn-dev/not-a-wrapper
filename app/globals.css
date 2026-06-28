@@ -50,8 +50,22 @@
   --font-mono: var(--font-geist-mono);
   --spacing-app-header: 52px;
   --spacing-input-area: 134px;
+  --activity-panel-width: 25rem;
+  --spacing-panel-header: 56px;
   --animate-collapsible-down: collapsible-down 200ms ease-out;
   --animate-collapsible-up: collapsible-up 200ms ease-out;
+  --animate-show: show 150ms ease-in;
+
+  @keyframes show {
+    from {
+      opacity: 0;
+      transform: translateX(0.5rem);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
 
   @keyframes loading-dots {
     0%,
@@ -423,6 +437,10 @@
   --composer-bg: var(--background);
   --sharp-edge-top-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
   --sharp-edge-top-shadow-placeholder: 0 1px 0 transparent;
+
+  /* Activity panel overlay scrim — mobile black/30, tablet gray/50 */
+  --overlay-scrim-mobile: oklch(0 0 0 / 0.3);
+  --overlay-scrim-tablet: oklch(0.92 0.004 286 / 0.5);
 }
 
 .dark {
@@ -508,6 +526,10 @@
   --composer-bg: oklch(27.5% 0 0);
   --sharp-edge-top-shadow: 0 1px 0 rgba(255, 255, 255, 0.05);
   --sharp-edge-top-shadow-placeholder: 0 1px 0 transparent;
+
+  /* Activity panel overlay scrim — mobile black/30, tablet black/50 */
+  --overlay-scrim-mobile: oklch(0 0 0 / 0.3);
+  --overlay-scrim-tablet: oklch(0 0 0 / 0.5);
 }
 
 @layer base {

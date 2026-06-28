@@ -1,7 +1,10 @@
 import * as Sentry from "@sentry/nextjs"
 import { resolveModelId } from "@/lib/models/model-id-migration"
 import { getWorkosSession } from "@/lib/auth/workos"
-import { classifyChatError } from "@/lib/observability/chat-error-taxonomy"
+import {
+  classifyChatError,
+  getToolDimensionForError,
+} from "@/lib/observability/chat-error-taxonomy"
 import {
   checkServerSideUsage,
   incrementServerSideUsage,
@@ -10,7 +13,6 @@ import {
 import { createErrorResponse } from "./utils"
 import {
   createChatTurnRuntime,
-  getToolDimensionForError,
   type ChatRequest,
   type ChatTurnRuntime,
 } from "./chat-turn-runtime"
@@ -25,6 +27,10 @@ function setChatConversationCorrelation(chatId: string): void {
     sentryWithConversationApi.setConversationId(chatId)
   }
   Sentry.setContext("chat_conversation", { id: chatId })
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 // Thin HTTP adapter over the Chat turn runtime (CONTEXT.md;
@@ -195,17 +201,38 @@ export async function POST(req: Request) {
       try {
         await turn.fail(err)
       } catch (failError) {
+        const originalErrorType = classifyChatError(err)
         console.warn(
           JSON.stringify({
             _tag: "chat_turn_fail_failed",
             requestId,
             chatId: telemetryChatId,
-            error:
-              failError instanceof Error
-                ? failError.message
-                : String(failError),
+            error: getErrorMessage(failError),
           })
         )
+        Sentry.captureException(failError, {
+          tags: {
+            route: "api/chat",
+            ...(telemetryModel ? { chat_model: telemetryModel } : {}),
+            chat_is_authenticated:
+              telemetryIsAuthenticated === undefined
+                ? "unknown"
+                : String(telemetryIsAuthenticated),
+            chat_error_type: originalErrorType,
+            chat_error_has_tool_signal:
+              getToolDimensionForError(originalErrorType),
+            chat_failure_stage: "turn_fail",
+          },
+          extra: {
+            requestId,
+            chatId: telemetryChatId,
+            model: telemetryModel,
+            errorType: originalErrorType,
+            isAuthenticated: telemetryIsAuthenticated,
+            messageCount: telemetryMessageCount,
+            originalError: getErrorMessage(err),
+          },
+        })
       }
     } else {
       // Pre-runtime error (parse / validation / usage admission). No durable

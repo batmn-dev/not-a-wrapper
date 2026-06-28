@@ -11,13 +11,9 @@ import {
   MessageContent,
   messageFooterRevealClassName,
 } from "@/components/ui/message"
-import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningLabel,
-} from "@/components/ui/reasoning"
 import { SystemMessage } from "@/components/ui/system-message"
 import type { ChatMessageMetadata } from "@/lib/chat-messages/branch"
+import { getServerMessageId } from "@/lib/chat-messages/metadata"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
@@ -26,18 +22,26 @@ import { RiCheckLine, RiFileCopyLine, RiRefreshLine } from "@remixicon/react"
 import type { ToolUIPart } from "ai"
 import { getStaticToolName, isStaticToolUIPart } from "ai"
 import { useCallback, useRef, useState } from "react"
+import {
+  ActivityPanelTrigger,
+  type ActivityTriggerState,
+} from "./activity/activity-panel-trigger"
 import { getSources } from "./get-sources"
 import { QuoteButton } from "./quote-button"
+import type { ActivityPanelControls } from "./use-activity-panel"
 import { SearchImages } from "./search-images"
-import { SourcesList } from "./sources-list"
 import { ToolInvocation } from "./tool-invocation"
 import { useLoadingState } from "./use-loading-state"
-import { useReasoningPhase } from "./use-reasoning-phase"
 import { useAssistantMessageSelection } from "./useAssistantMessageSelection"
 
 type MessageAssistantProps = {
   children: string
   isLast?: boolean
+  /** Id of the panel-active assistant turn; gates the Activity trigger so it
+   * renders only for the turn the panel currently owns. */
+  activeTurnId?: string
+  /** Chat-owned Activity-panel controls; gates + drives the reopen trigger. */
+  activityPanel?: ActivityPanelControls
   copied?: boolean
   copyToClipboard?: () => void
   onReload?: (messageId: string) => void
@@ -84,6 +88,8 @@ function formatToolProgressLabel(toolName: string): string {
 export function MessageAssistant({
   children,
   isLast,
+  activeTurnId,
+  activityPanel,
   copied,
   copyToClipboard,
   onReload,
@@ -111,6 +117,7 @@ export function MessageAssistant({
 
   const contentNullOrEmpty = children === null || children === ""
   const isLastStreaming = status === "streaming" && isLast
+  const isSubmittedPending = status === "submitted" && isLast
   const hasContent = !contentNullOrEmpty
   const loadingStatus: "streaming" | "ready" | "submitted" | "error" =
     status === "streaming" || status === "submitted" || status === "error"
@@ -119,23 +126,48 @@ export function MessageAssistant({
         ? "error"
         : "ready"
 
-  // Unified reasoning phase hook
-  const persistedDurationMs =
+  // Reasoning + sources now live in the Chat-owned Activity panel. This message
+  // only decides whether to surface the reopen trigger for the panel-active turn
+  // (the live reasoning timer + duration are owned by use-activity-panel.ts).
+  const isActiveTurn =
+    activeTurnId !== undefined &&
+    (messageId === activeTurnId ||
+      getServerMessageId(metadata) === activeTurnId)
+  const hasReasoningPart = Boolean(
+    parts?.some((part) => part.type === "reasoning")
+  )
+  const isReasoningStreaming = Boolean(
+    parts?.some(
+      (part) =>
+        part.type === "reasoning" &&
+        (part as { state?: string }).state === "streaming"
+    )
+  )
+  const hasSources = sources.length > 0
+  const hasToolActivity = Boolean(toolInvocationParts?.length)
+  const showActivityTrigger =
+    Boolean(activityPanel?.onOpenChange) &&
+    isActiveTurn &&
+    (isSubmittedPending ||
+      isReasoningStreaming ||
+      hasReasoningPart ||
+      hasSources ||
+      hasToolActivity)
+  const reasoningDurationSeconds =
     typeof metadata?.reasoningDurationMs === "number"
-      ? metadata.reasoningDurationMs
+      ? Math.round(metadata.reasoningDurationMs / 1000)
       : undefined
-  const {
-    phase: reasoningPhase,
-    reasoningText,
-    durationSeconds,
-    isReasoningStreaming,
-    isOpaqueReasoning,
-  } = useReasoningPhase({
-    parts,
-    status: loadingStatus,
-    isLast: isLast ?? false,
-    persistedDurationMs,
-  })
+  // Compose the trigger's thinking state: live "Thinking" while reasoning
+  // streams, then "Thought for {duration}" once it completes, else a source
+  // count or the generic label.
+  const activityState: ActivityTriggerState =
+    isSubmittedPending || isReasoningStreaming
+      ? { status: "thinking" }
+      : hasReasoningPart
+        ? { status: "thought", durationSeconds: reasoningDurationSeconds }
+        : hasSources
+          ? { status: "sources", count: sources.length }
+          : { status: "activity" }
 
   // Type for image search results
   type ImageResult = { title: string; imageUrl: string; sourceUrl: string }
@@ -234,20 +266,6 @@ export function MessageAssistant({
         // Inner data-message-id for quote selection — closest() finds this before the outer article
         data-message-id={messageId}
       >
-        {reasoningPhase !== "idle" && (
-          <Reasoning
-            isStreaming={isReasoningStreaming}
-            phase={reasoningPhase}
-            durationSeconds={durationSeconds}
-            opaque={isOpaqueReasoning}
-          >
-            <ReasoningLabel />
-            {!isOpaqueReasoning && (
-              <ReasoningContent markdown>{reasoningText}</ReasoningContent>
-            )}
-          </Reasoning>
-        )}
-
         {toolInvocationParts &&
           toolInvocationParts.length > 0 &&
           preferences.showToolInvocations && (
@@ -286,6 +304,19 @@ export function MessageAssistant({
           />
         )}
 
+        {showActivityTrigger && activityPanel && (
+          <div className="flex items-center justify-between">
+            <div className="flex min-w-0 items-center">
+              <ActivityPanelTrigger
+                open={activityPanel.open}
+                onOpenChange={activityPanel.onOpenChange}
+                controlsId={activityPanel.panelId}
+                state={activityState}
+              />
+            </div>
+          </div>
+        )}
+
         {contentNullOrEmpty ? null : (
           <MessageContent
             className={cn(
@@ -297,8 +328,6 @@ export function MessageAssistant({
             {children}
           </MessageContent>
         )}
-
-        {sources && sources.length > 0 && <SourcesList sources={sources} />}
 
         {finishReason === "length" && status !== "streaming" && (
           <SystemMessage

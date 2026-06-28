@@ -25,6 +25,7 @@
 
 import { Icon } from "@/components/ui/icon"
 import { TextShimmer } from "@/components/ui/text-shimmer"
+import { formatDuration } from "@/lib/format-duration"
 import { cn } from "@/lib/utils"
 import { RiArrowDownSLine } from "@remixicon/react"
 import React, { createContext, useContext, useState } from "react"
@@ -50,13 +51,6 @@ function useReasoningContext() {
     )
   }
   return context
-}
-
-function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`
-  const mins = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${mins}m ${secs}s`
 }
 
 export type ReasoningProps = {
@@ -296,4 +290,13 @@ function ReasoningContent({
   )
 }
 
-export { Reasoning, ReasoningTrigger, ReasoningContent, ReasoningLabel }
+export {
+  Reasoning,
+  ReasoningTrigger,
+  ReasoningContent,
+  ReasoningLabel,
+  // Re-exported for back-compat; the canonical home is `@/lib/format-duration`.
+  // The Activity panel header/trigger reuse ONLY this formatter, not the
+  // Reasoning/ReasoningLabel shell (those own disclosure + auto-open state).
+  formatDuration,
+}

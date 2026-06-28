@@ -8,6 +8,14 @@ export type ChatErrorType =
   | "internal"
   | "unknown"
 
+export function getToolDimensionForError(
+  errorType: ChatErrorType
+): "yes" | "no" {
+  return errorType === "tool_timeout" || errorType === "tool_execution"
+    ? "yes"
+    : "no"
+}
+
 type ErrorLike = {
   code?: unknown
   statusCode?: unknown

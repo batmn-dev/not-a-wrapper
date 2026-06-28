@@ -12,6 +12,10 @@
 
 # testing
 /coverage
+/test-results/
+
+# local QA / screenshot harness output
+/output/playwright/
 
 # next.js
 /.next/
