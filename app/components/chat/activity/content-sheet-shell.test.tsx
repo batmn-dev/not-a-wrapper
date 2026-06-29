@@ -1,19 +1,13 @@
 /** @vitest-environment jsdom */
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-} from "vitest"
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { ContentSheetShell } from "./content-sheet-shell"
 
 beforeAll(() => {
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-    true
+  ;(
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true
 })
 
 describe("ContentSheetShell", () => {
@@ -55,9 +49,25 @@ describe("ContentSheetShell", () => {
     const closeButton = document.querySelector<HTMLButtonElement>(
       'button[data-slot="sheet-close"]'
     )
+    const dialog = document.querySelector<HTMLElement>(
+      '[role="dialog"][aria-modal="true"]'
+    )
 
+    expect(dialog).toBeTruthy()
+    expect(dialog?.getAttribute("aria-labelledby")).toBeTruthy()
     expect(closeButton?.getAttribute("aria-label")).toBe("Close")
     expect(closeButton?.getAttribute("aria-expanded")).toBeNull()
     expect(closeButton?.getAttribute("aria-controls")).toBeNull()
+    expect(closeButton?.getAttribute("data-testid")).toBe("close-button")
+    expect(
+      document.querySelector(
+        '[data-testid="chat-screen-cot-mobile-sheet-title-focus-target"]'
+      )?.textContent
+    ).toBe("Activity")
+    expect(
+      document.querySelector(
+        '[data-testid="chat-screen-cot-mobile-sheet-handle"]'
+      )
+    ).toBeTruthy()
   })
 })

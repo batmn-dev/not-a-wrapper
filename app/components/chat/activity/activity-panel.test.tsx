@@ -106,6 +106,15 @@ describe("ActivityPanel coexistence (R6)", () => {
     expect(
       document.querySelectorAll('[data-slot="sheet-content"]')
     ).toHaveLength(0)
+    expect(
+      document.querySelectorAll('[data-testid="stage-thread-flyout"]')
+    ).toHaveLength(1)
+    expect(
+      document.querySelectorAll('[data-testid="screen-threadFlyOut"]')
+    ).toHaveLength(1)
+    expect(
+      document.querySelectorAll('[data-testid="close-button"]')
+    ).toHaveLength(1)
     expect(document.querySelectorAll("img")).toHaveLength(5)
   })
 
@@ -129,8 +138,11 @@ describe("ActivityPanel coexistence (R6)", () => {
     const slot = document.querySelector<HTMLElement>(
       '[data-slot="activity-panel-dock"]'
     )
-    // Open: slot is expanded and the docked shell is mounted.
-    expect(slot?.hasAttribute("data-expanded")).toBe(true)
+    // Open: the portaled stage wrapper is expanded and the docked shell is mounted.
+    let stage = slot?.querySelector<HTMLElement>(
+      '[data-testid="stage-thread-flyout"]'
+    )
+    expect(stage?.getAttribute("data-state")).toBe("open")
     const openShell = document.querySelector<HTMLElement>(
       "section[aria-labelledby]"
     )
@@ -138,12 +150,15 @@ describe("ActivityPanel coexistence (R6)", () => {
     expect(openShell?.getAttribute("aria-hidden")).toBeNull()
     expect(openShell?.hasAttribute("inert")).toBe(false)
 
-    // Close: the slot collapses (drops data-expanded) but the shell stays mounted
-    // so it slides shut populated instead of vanishing in one frame.
+    // Close: the portaled stage wrapper collapses but the shell stays mounted so
+    // it slides shut populated instead of vanishing in one frame.
     act(() => {
       root?.render(<Harness open={false} />)
     })
-    expect(slot?.hasAttribute("data-expanded")).toBe(false)
+    stage = slot?.querySelector<HTMLElement>(
+      '[data-testid="stage-thread-flyout"]'
+    )
+    expect(stage?.getAttribute("data-state")).toBe("closed")
     const closingShell = document.querySelector<HTMLElement>(
       "section[aria-labelledby]"
     )
@@ -153,13 +168,56 @@ describe("ActivityPanel coexistence (R6)", () => {
 
     // The width transition finishing is what unmounts the shell.
     act(() => {
-      slot?.dispatchEvent(
-        Object.assign(new Event("transitionend"), { propertyName: "width" })
+      stage?.dispatchEvent(
+        Object.assign(new Event("transitionend", { bubbles: true }), {
+          propertyName: "width",
+        })
       )
     })
     expect(document.querySelectorAll("section[aria-labelledby]")).toHaveLength(
       0
     )
+  })
+
+  it("falls back if the docked close transition end is skipped", () => {
+    vi.useFakeTimers()
+    function Harness({ open }: { open: boolean }) {
+      return (
+        <ActivityPanelHostProvider>
+          <ActivityPanelDockSlot />
+          <ActivityPanel
+            open={open}
+            onOpenChange={() => {}}
+            {...panelProps(2)}
+          />
+        </ActivityPanelHostProvider>
+      )
+    }
+
+    try {
+      act(() => {
+        root?.render(<Harness open />)
+      })
+      expect(
+        document.querySelectorAll('[data-testid="stage-thread-flyout"]')
+      ).toHaveLength(1)
+
+      act(() => {
+        root?.render(<Harness open={false} />)
+      })
+      expect(
+        document.querySelectorAll('[data-testid="stage-thread-flyout"]')
+      ).toHaveLength(1)
+
+      act(() => {
+        vi.advanceTimersByTime(700)
+      })
+      expect(
+        document.querySelectorAll('[data-testid="stage-thread-flyout"]')
+      ).toHaveLength(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("renders an opaque reasoning step when reasoning text is hidden", () => {

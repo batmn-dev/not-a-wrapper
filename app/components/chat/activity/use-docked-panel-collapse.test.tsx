@@ -1,8 +1,19 @@
 /** @vitest-environment jsdom */
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
-import { useDockedPanelCollapse } from "./use-docked-panel-collapse"
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
+import {
+  DOCKED_PANEL_CLOSE_FALLBACK_MS,
+  useDockedPanelCollapse,
+} from "./use-docked-panel-collapse"
 
 // `usePrefersReducedMotion` snapshots `matchMedia` at mount, so stub it before
 // the first render of each case.
@@ -20,17 +31,32 @@ function stubReducedMotion(reduce: boolean) {
 }
 
 function Harness(props: {
-  slotElement: HTMLElement | null
   dockedExpanded: boolean
   isBelowLg: boolean
-  onResult: (present: boolean) => void
+  onResult: (result: {
+    dockedPresent: boolean
+    dockedState: "open" | "closed"
+  }) => void
 }) {
   const { onResult, ...params } = props
-  const { dockedPresent } = useDockedPanelCollapse(params)
-  React.useEffect(() => {
-    onResult(dockedPresent)
+  const {
+    dockedPresent,
+    dockedState,
+    onDockedStageRef,
+    onDockedTransitionEnd,
+  } = useDockedPanelCollapse(params)
+  onResult({
+    dockedPresent,
+    dockedState,
   })
-  return null
+  return dockedPresent ? (
+    <div
+      ref={onDockedStageRef}
+      data-testid="stage-thread-flyout"
+      data-state={dockedState}
+      onTransitionEnd={onDockedTransitionEnd}
+    />
+  ) : null
 }
 
 beforeAll(() => {
@@ -41,15 +67,16 @@ beforeAll(() => {
 
 describe("useDockedPanelCollapse", () => {
   let container: HTMLDivElement | null = null
-  let slot: HTMLDivElement | null = null
   let root: Root | null = null
-  let present = false
+  let latest: {
+    dockedPresent: boolean
+    dockedState: "open" | "closed"
+  } | null = null
 
   beforeEach(() => {
-    present = false
+    latest = null
     container = document.createElement("div")
-    slot = document.createElement("div")
-    document.body.append(container, slot)
+    document.body.append(container)
     root = createRoot(container)
   })
 
@@ -57,21 +84,19 @@ describe("useDockedPanelCollapse", () => {
     const r = root
     if (r) act(() => r.unmount())
     container?.remove()
-    slot?.remove()
     root = null
     container = null
-    slot = null
+    latest = null
   })
 
   function render(dockedExpanded: boolean, isBelowLg = false) {
     act(() => {
       root?.render(
         <Harness
-          slotElement={slot}
           dockedExpanded={dockedExpanded}
           isBelowLg={isBelowLg}
-          onResult={(p) => {
-            present = p
+          onResult={(result) => {
+            latest = result
           }}
         />
       )
@@ -79,25 +104,68 @@ describe("useDockedPanelCollapse", () => {
   }
 
   // With motion allowed the shell stays mounted (populated) through the close
-  // until the slot's WIDTH transitionend, then unmounts — and the slot's
-  // imperative `data-expanded` tracks the open state.
+  // until the portaled wrapper's WIDTH transitionend, then unmounts. The layout
+  // slot stays passive; the wrapper carries `data-state`.
   it("defers unmount until the slot width transition ends", () => {
     stubReducedMotion(false)
 
     render(true)
-    expect(present).toBe(true)
-    expect(slot!.hasAttribute("data-expanded")).toBe(true)
+    expect(latest?.dockedPresent).toBe(true)
+    expect(latest?.dockedState).toBe("open")
+    expect(
+      container
+        ?.querySelector('[data-testid="stage-thread-flyout"]')
+        ?.getAttribute("data-state")
+    ).toBe("open")
 
     render(false)
-    expect(present).toBe(true) // still mounted, collapsing
-    expect(slot!.hasAttribute("data-expanded")).toBe(false)
+    expect(latest?.dockedPresent).toBe(true) // still mounted, collapsing
+    const stage = container?.querySelector<HTMLElement>(
+      '[data-testid="stage-thread-flyout"]'
+    )
+    expect(stage?.getAttribute("data-state")).toBe("closed")
 
     act(() => {
-      slot!.dispatchEvent(
-        Object.assign(new Event("transitionend"), { propertyName: "width" })
+      stage!.dispatchEvent(
+        Object.assign(new Event("transitionend", { bubbles: true }), {
+          propertyName: "width",
+        })
       )
     })
-    expect(present).toBe(false)
+    expect(latest?.dockedPresent).toBe(false)
+  })
+
+  // If the browser drops transitionend (interrupted resize/CSS change/already-0
+  // width), the closing shell must not stay mounted forever.
+  it("falls back when the slot width transition end is skipped", () => {
+    vi.useFakeTimers()
+    try {
+      stubReducedMotion(false)
+
+      render(true)
+      expect(latest?.dockedPresent).toBe(true)
+
+      render(false)
+      expect(latest?.dockedPresent).toBe(true)
+      expect(
+        container?.querySelector('[data-testid="stage-thread-flyout"]')
+      ).toBeTruthy()
+
+      act(() => {
+        vi.advanceTimersByTime(DOCKED_PANEL_CLOSE_FALLBACK_MS - 1)
+      })
+      expect(latest?.dockedPresent).toBe(true)
+
+      act(() => {
+        vi.advanceTimersByTime(1)
+      })
+      expect(latest?.dockedPresent).toBe(false)
+      expect(
+        container?.querySelector('[data-testid="stage-thread-flyout"]')
+      ).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   // Reduced motion has no width transition (and so no transitionend); the close
@@ -106,9 +174,9 @@ describe("useDockedPanelCollapse", () => {
     stubReducedMotion(true)
 
     render(true)
-    expect(present).toBe(true)
+    expect(latest?.dockedPresent).toBe(true)
 
     render(false)
-    expect(present).toBe(false)
+    expect(latest?.dockedPresent).toBe(false)
   })
 })

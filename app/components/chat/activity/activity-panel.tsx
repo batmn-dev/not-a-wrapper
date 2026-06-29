@@ -3,6 +3,7 @@
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { Markdown } from "@/components/ui/markdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { cn } from "@/lib/utils"
 import type { SourceUrlUIPart, ToolUIPart } from "ai"
 import { createPortal } from "react-dom"
 import type { ReasoningPhase } from "../use-reasoning-phase"
@@ -79,7 +80,7 @@ function PanelBody({
   return (
     <div className="space-y-4">
       {hasReasoning ? (
-        <div className="animate-show px-3 pt-2 pb-2 motion-reduce:animate-none">
+        <div className="px-3 pt-2 pb-2">
           <PanelSectionHeading title="Pro thinking" />
           <ActivityTimeline className="mt-3 flex flex-col">
             <ActivityStep leading="done" body="description">
@@ -94,10 +95,7 @@ function PanelBody({
         </div>
       ) : null}
       {gallerySources.length > 0 ? (
-        <SourcesGallery
-          sources={gallerySources}
-          className="animate-show motion-reduce:animate-none"
-        />
+        <SourcesGallery sources={gallerySources} />
       ) : null}
     </div>
   )
@@ -141,29 +139,43 @@ export function ActivityPanel({
   const sheetActive = isBelowLg
 
   // The deferred-unmount / close-collapse lifecycle lives in this hook so the
-  // component stays focused on shell composition. It owns the imperative slot
-  // `data-expanded` attribute and keeps the shell mounted (populated) through
-  // the close until the slot's width `transitionend` (motion-reduce / sub-lg
-  // short-circuit to immediate unmount).
-  const { dockedPresent } = useDockedPanelCollapse({
-    slotElement,
+  // component stays focused on shell composition. The portaled wrapper owns the
+  // width transition and stays mounted (populated) until its `transitionend`.
+  const {
+    dockedPresent,
+    dockedState,
+    onDockedStageRef,
+    onDockedTransitionEnd,
+  } = useDockedPanelCollapse({
     dockedExpanded,
     isBelowLg,
+    hasDockSlot: slotElement !== null,
   })
 
   return (
     <>
       {dockedPresent && slotElement
         ? createPortal(
-            <DockedFlyoutShell
-              panelId={panelId}
-              title={title}
-              durationSeconds={durationSeconds}
-              active={dockedExpanded}
-              onClose={close}
+            <div
+              ref={onDockedStageRef}
+              data-testid="stage-thread-flyout"
+              data-state={dockedState}
+              onTransitionEnd={onDockedTransitionEnd}
+              className={cn(
+                "h-full w-0 shrink-0 overflow-hidden transition-[width] duration-[520ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+                "data-[state=open]:w-[var(--activity-panel-width)]"
+              )}
             >
-              {body}
-            </DockedFlyoutShell>,
+              <DockedFlyoutShell
+                panelId={panelId}
+                title={title}
+                durationSeconds={durationSeconds}
+                active={dockedExpanded}
+                onClose={close}
+              >
+                {body}
+              </DockedFlyoutShell>
+            </div>,
             slotElement
           )
         : null}

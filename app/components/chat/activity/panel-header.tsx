@@ -121,6 +121,7 @@ export function PanelHeader({
         titleId={titleId}
       />
       <PanelCloseButton
+        data-testid="close-button"
         className="-me-2.5 rounded-md"
         aria-controls={panelId}
         aria-expanded={true}

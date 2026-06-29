@@ -155,7 +155,7 @@ export const ActivityStep = ({
   body = "description",
 }: ActivityStepProps) => (
   <div
-    className="group relative grid grid-cols-[min-content_minmax(0,1fr)] gap-x-2"
+    className="group relative grid animate-[show_150ms_ease-in] grid-cols-[min-content_minmax(0,1fr)] gap-x-2 motion-reduce:animate-none"
     data-last={isLast}
     style={{ zIndex: index + 1 }}
   >

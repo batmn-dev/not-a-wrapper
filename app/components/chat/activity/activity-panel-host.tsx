@@ -49,16 +49,10 @@ export function useActivityPanelDockSlot(): HTMLElement | null {
 }
 
 /**
- * The layout-level dock slot. Its width is driven by the panel's OPEN state, not
- * by content presence: `ActivityPanel` toggles `data-expanded` on this element
- * (imperatively, so no provider/Chat re-render), collapsing `w-0` <->
- * `--activity-panel-width` with an animated, motion-reduce-gated push. The docked
- * shell stays portaled in through the close collapse (`ActivityPanel` defers its
- * unmount until this width transition ends), so the panel slides shut populated
- * instead of vanishing in one frame. `overflow-hidden` clips the fixed-width
- * shell, so its content never re-wraps as the slot animates. The start seam lives
- * on the shell (`DockedFlyoutShell`), so it slides in/out with the content rather
- * than popping; a closed/empty slot leaves no stray seam.
+ * The layout-level dock slot. It is only the portal target; the portaled
+ * flyout wrapper owns the animated width. That keeps the layout track
+ * declarative and avoids imperative `data-expanded` writes to the slot while
+ * preserving the same in-flow conversation push.
  */
 export function ActivityPanelDockSlot({ className }: { className?: string }) {
   const ctx = useContext(DockSlotContext)
@@ -77,11 +71,7 @@ export function ActivityPanelDockSlot({ className }: { className?: string }) {
     <div
       ref={ref}
       data-slot="activity-panel-dock"
-      className={cn(
-        "w-0 shrink-0 overflow-hidden transition-[width] duration-300 ease-out motion-reduce:transition-none",
-        "data-[expanded]:w-[var(--activity-panel-width)]",
-        className
-      )}
+      className={cn("shrink-0 overflow-hidden", className)}
     />
   )
 }

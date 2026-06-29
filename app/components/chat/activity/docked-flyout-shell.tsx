@@ -55,6 +55,7 @@ export function DockedFlyoutShell({
   return (
     <section
       id={panelId}
+      data-testid="screen-threadFlyOut"
       aria-labelledby={titleId}
       aria-hidden={active ? undefined : true}
       inert={active ? undefined : true}
