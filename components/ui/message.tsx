@@ -29,15 +29,25 @@ const Markdown = dynamic(() => import("./markdown").then((mod) => mod.Markdown))
 export type MessageProps = {
   children: React.ReactNode
   className?: string
+  as?: "article" | "div"
   'data-turn'?: 'user' | 'assistant'
   'data-message-id'?: string
+  'data-message-author-role'?: 'user' | 'assistant'
 } & React.HTMLProps<HTMLElement>
 
-const Message = ({ children, className, ...props }: MessageProps) => (
-  <article className={cn("flex gap-3", className)} {...props}>
-    {children}
-  </article>
-)
+const Message = ({
+  children,
+  className,
+  as = "article",
+  ...props
+}: MessageProps) => {
+  const Tag = as as React.ElementType
+  return (
+    <Tag className={cn("flex gap-3", className)} {...props}>
+      {children}
+    </Tag>
+  )
+}
 
 export type MessageAvatarProps = {
   src: string

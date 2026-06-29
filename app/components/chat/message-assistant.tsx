@@ -260,9 +260,11 @@ export function MessageAssistant({
 
   return (
     <Message
-      className={cn("flex w-full flex-1 items-start gap-4", className)}
+      as="div"
+      className={cn("flex w-full flex-col gap-2", className)}
       data-turn="assistant"
       data-message-id={messageId}
+      data-message-author-role="assistant"
       data-scroll-anchor={isLast ? "true" : "false"}
       tabIndex={-1}
     >
@@ -411,7 +413,7 @@ export function MessageAssistant({
                   side="bottom"
                 >
                   <button
-                    className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
+                    className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-md bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
                     aria-label="Copy text"
                     onClick={copyToClipboard}
                     type="button"
@@ -426,7 +428,7 @@ export function MessageAssistant({
                 {canRegenerate ? (
                   <MessageAction tooltip="Regenerate" side="bottom" delay={0}>
                     <button
-                      className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
+                      className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-md bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
                       aria-label="Regenerate"
                       onClick={() => onReload?.(messageId)}
                       type="button"

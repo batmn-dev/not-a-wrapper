@@ -28,6 +28,7 @@ import {
   useState,
 } from "react"
 import { ActivityPanel } from "./activity/activity-panel"
+import { ChatStatusAnnouncer } from "./chat-announcer"
 import { isRouteDurableChat } from "./chat-turn"
 import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
 import {
@@ -366,6 +367,7 @@ export function Chat() {
 
   return (
     <div id="thread" className="group/thread flex min-h-full flex-1 flex-col">
+      <ChatStatusAnnouncer status={status} isSubmitting={isSubmitting} />
       <DialogAuth open={hasDialogAuth} setOpen={setHasDialogAuth} />
 
       <ActivityPanel

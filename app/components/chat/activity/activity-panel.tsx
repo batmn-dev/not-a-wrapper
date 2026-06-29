@@ -17,12 +17,12 @@ import { useDockedPanelCollapse } from "./use-docked-panel-collapse"
 // `lg` (1024px / 64rem) — the docked↔sheet boundary. This is a VIEWPORT media
 // query (useBreakpoint → matchMedia on innerWidth) that gates whether the panel
 // mounts as the docked flyout (≥lg) or the sheet (<lg), matching ChatGPT's
-// `max-lg:w-0!`. It is deliberately DECOUPLED from the thread's cap tier
-// (`@lg/main` = 32rem CONTAINER; see THREAD_MAXWIDTH_VARS in ./thread-bounds):
-// like ChatGPT, we gate the sheet at 64rem VIEWPORT but flip the 48rem cap at
-// 32rem CONTAINER. Holding the cap tier well below this boundary keeps the panel
-// open/close reflow continuous — an earlier build coupled both to 1024px and the
-// close tail popped the column 48rem→40rem in its final frame.
+// `max-lg:w-0!`. It coincides numerically with the thread's cap tier
+// (`@[64rem]/main`; see THREAD_MAXWIDTH_VARS in ./thread-bounds) but is a
+// DIFFERENT query axis — VIEWPORT width here vs the `@container/main` width
+// there. They no longer interact during the panel animation: `layout-app` scopes
+// `@container/main` to span the dock slot, so opening the panel can't drive the
+// container across the cap tier (the close reflows continuously, no re-cap).
 const LG_BREAKPOINT = 1024
 
 /**

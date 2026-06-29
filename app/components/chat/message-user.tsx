@@ -183,13 +183,13 @@ export function MessageUser({
     })
   }, [isEditing, stopScroll, scrollRef])
 
-  const isMultiline = children.includes("\n")
-
   return (
     <MessageContainer
-      className={cn("flex w-full flex-col items-end gap-0.5", className)}
+      as="div"
+      className={cn("flex min-h-8 w-full flex-col items-end gap-1", className)}
       data-turn="user"
       data-message-id={id}
+      data-message-author-role="user"
       data-scroll-anchor="false"
       tabIndex={-1}
     >
@@ -236,7 +236,7 @@ export function MessageUser({
       ))}
       {isEditing ? (
         <div
-          className="bg-accent relative flex w-full max-w-xl min-w-[180px] flex-col gap-2 rounded-[18px] px-4 py-2"
+          className="bg-accent relative flex w-full max-w-xl min-w-[180px] flex-col gap-2 rounded-[18px] px-4 py-2.5"
           // TODO: contentRef.current is null here — MessageContent unmounts
           // when isEditing flips, so offsetWidth always reads null. Consider
           // capturing the width into a ref inside handleEditStart (before
@@ -293,10 +293,7 @@ export function MessageUser({
         </div>
       ) : (
         <MessageContent
-          className={cn(
-            "bg-accent relative max-w-[var(--user-chat-width,70%)] rounded-[18px] px-4 whitespace-pre-wrap",
-            isMultiline ? "py-3" : "py-1.5"
-          )}
+          className="bg-accent relative max-w-[var(--user-chat-width,70%)] rounded-[18px] px-4 py-2.5 leading-6 whitespace-pre-wrap"
           ref={contentRef}
         >
           {children}
@@ -309,7 +306,7 @@ export function MessageUser({
       >
         <MessageAction tooltip={copied ? "Copied!" : "Copy text"} side="bottom">
           <button
-            className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
+            className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-md bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
             aria-label="Copy text"
             onClick={copyToClipboard}
             type="button"
@@ -328,7 +325,7 @@ export function MessageUser({
             delay={0}
           >
             <button
-              className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
+              className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-md bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
               aria-label={isEditing ? "Cancel edit" : "Edit message"}
               onClick={isEditing ? handleEditCancel : handleEditStart}
               type="button"

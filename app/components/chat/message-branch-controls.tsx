@@ -49,7 +49,7 @@ export function MessageBranchControls({
     >
       <MessageAction tooltip="Previous branch" side="bottom" delay={0}>
         <button
-          className="disabled:text-muted-foreground/40 flex h-8 w-8 items-center justify-center rounded-lg bg-transparent disabled:pointer-events-none pointer-coarse:h-10 pointer-coarse:w-10"
+          className="disabled:text-muted-foreground/40 flex h-8 w-8 items-center justify-center rounded-md bg-transparent disabled:pointer-events-none pointer-coarse:h-10 pointer-coarse:w-10"
           aria-label="Previous branch"
           disabled={!previousSibling}
           onClick={() => {
@@ -65,7 +65,7 @@ export function MessageBranchControls({
       </span>
       <MessageAction tooltip="Next branch" side="bottom" delay={0}>
         <button
-          className="disabled:text-muted-foreground/40 flex h-8 w-8 items-center justify-center rounded-lg bg-transparent disabled:pointer-events-none pointer-coarse:h-10 pointer-coarse:w-10"
+          className="disabled:text-muted-foreground/40 flex h-8 w-8 items-center justify-center rounded-md bg-transparent disabled:pointer-events-none pointer-coarse:h-10 pointer-coarse:w-10"
           aria-label="Next branch"
           disabled={!nextSibling}
           onClick={() => {
