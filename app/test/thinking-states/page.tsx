@@ -315,6 +315,7 @@ function UserBubble({ children }: { children: string }) {
   return (
     <ArticleWrapper role="user">
       <Message
+        as="div"
         className="flex min-h-8 w-full flex-col items-end gap-1"
         data-turn="user"
         data-scroll-anchor="false"
@@ -343,6 +344,7 @@ function AssistantShell({
   return (
     <ArticleWrapper role="assistant">
       <Message
+        as="div"
         className="flex w-full flex-col gap-2"
         data-turn="assistant"
         data-message-id={msgId}
