@@ -3,7 +3,6 @@
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { Markdown } from "@/components/ui/markdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { cn } from "@/lib/utils"
 import type { SourceUrlUIPart, ToolUIPart } from "ai"
 import { createPortal } from "react-dom"
 import type { ReasoningPhase } from "../use-reasoning-phase"
@@ -15,12 +14,15 @@ import { PanelSectionHeading } from "./panel-section-heading"
 import { SourcesGallery } from "./sources-gallery"
 import { useDockedPanelCollapse } from "./use-docked-panel-collapse"
 
-// `lg` (1024px / 64rem) — the docked↔sheet boundary. NOTE: this is a VIEWPORT
-// media query (useBreakpoint → matchMedia on innerWidth); it must stay in
-// lockstep BY HAND with the `@[64rem]/main` CONTAINER thresholds that drive the
-// thread tiers (see THREAD_MAXWIDTH_VARS in ./thread-bounds). They are different
-// query axes (viewport vs the @container/main width), so a shared constant would
-// imply a false equivalence — the coupling is intentionally prose-only.
+// `lg` (1024px / 64rem) — the docked↔sheet boundary. This is a VIEWPORT media
+// query (useBreakpoint → matchMedia on innerWidth) that gates whether the panel
+// mounts as the docked flyout (≥lg) or the sheet (<lg), matching ChatGPT's
+// `max-lg:w-0!`. It is deliberately DECOUPLED from the thread's cap tier
+// (`@lg/main` = 32rem CONTAINER; see THREAD_MAXWIDTH_VARS in ./thread-bounds):
+// like ChatGPT, we gate the sheet at 64rem VIEWPORT but flip the 48rem cap at
+// 32rem CONTAINER. Holding the cap tier well below this boundary keeps the panel
+// open/close reflow continuous — an earlier build coupled both to 1024px and the
+// close tail popped the column 48rem→40rem in its final frame.
 const LG_BREAKPOINT = 1024
 
 /**
@@ -139,17 +141,12 @@ export function ActivityPanel({
   const sheetActive = isBelowLg
 
   // The deferred-unmount / close-collapse lifecycle lives in this hook so the
-  // component stays focused on shell composition. The portaled wrapper owns the
+  // component stays focused on shell composition. The layout slot owns the
   // width transition and stays mounted (populated) until its `transitionend`.
-  const {
-    dockedPresent,
-    dockedState,
-    onDockedStageRef,
-    onDockedTransitionEnd,
-  } = useDockedPanelCollapse({
+  const { dockedPresent, onDockedContentRef } = useDockedPanelCollapse({
+    slotElement,
     dockedExpanded,
     isBelowLg,
-    hasDockSlot: slotElement !== null,
   })
 
   return (
@@ -157,14 +154,8 @@ export function ActivityPanel({
       {dockedPresent && slotElement
         ? createPortal(
             <div
-              ref={onDockedStageRef}
-              data-testid="stage-thread-flyout"
-              data-state={dockedState}
-              onTransitionEnd={onDockedTransitionEnd}
-              className={cn(
-                "h-full w-0 shrink-0 overflow-hidden transition-[width] duration-[520ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
-                "data-[state=open]:w-[var(--activity-panel-width)]"
-              )}
+              ref={onDockedContentRef}
+              className="absolute h-full w-[var(--activity-panel-width)]"
             >
               <DockedFlyoutShell
                 panelId={panelId}

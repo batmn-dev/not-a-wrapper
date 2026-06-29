@@ -138,8 +138,8 @@ describe("ActivityPanel coexistence (R6)", () => {
     const slot = document.querySelector<HTMLElement>(
       '[data-slot="activity-panel-dock"]'
     )
-    // Open: the portaled stage wrapper is expanded and the docked shell is mounted.
-    let stage = slot?.querySelector<HTMLElement>(
+    // Open: the persistent layout stage is expanded and the docked shell is mounted.
+    const stage = document.querySelector<HTMLElement>(
       '[data-testid="stage-thread-flyout"]'
     )
     expect(stage?.getAttribute("data-state")).toBe("open")
@@ -150,14 +150,11 @@ describe("ActivityPanel coexistence (R6)", () => {
     expect(openShell?.getAttribute("aria-hidden")).toBeNull()
     expect(openShell?.hasAttribute("inert")).toBe(false)
 
-    // Close: the portaled stage wrapper collapses but the shell stays mounted so
+    // Close: the layout stage collapses but the shell stays mounted so
     // it slides shut populated instead of vanishing in one frame.
     act(() => {
       root?.render(<Harness open={false} />)
     })
-    stage = slot?.querySelector<HTMLElement>(
-      '[data-testid="stage-thread-flyout"]'
-    )
     expect(stage?.getAttribute("data-state")).toBe("closed")
     const closingShell = document.querySelector<HTMLElement>(
       "section[aria-labelledby]"
@@ -199,22 +196,25 @@ describe("ActivityPanel coexistence (R6)", () => {
         root?.render(<Harness open />)
       })
       expect(
-        document.querySelectorAll('[data-testid="stage-thread-flyout"]')
+        document.querySelectorAll('[data-testid="screen-threadFlyOut"]')
       ).toHaveLength(1)
 
       act(() => {
         root?.render(<Harness open={false} />)
       })
       expect(
-        document.querySelectorAll('[data-testid="stage-thread-flyout"]')
+        document.querySelectorAll('[data-testid="screen-threadFlyOut"]')
       ).toHaveLength(1)
 
       act(() => {
         vi.advanceTimersByTime(700)
       })
       expect(
-        document.querySelectorAll('[data-testid="stage-thread-flyout"]')
+        document.querySelectorAll('[data-testid="screen-threadFlyOut"]')
       ).toHaveLength(0)
+      expect(
+        document.querySelector('[data-testid="stage-thread-flyout"]')
+      ).toBeTruthy()
     } finally {
       vi.useRealTimers()
     }

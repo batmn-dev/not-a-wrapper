@@ -31,31 +31,20 @@ function stubReducedMotion(reduce: boolean) {
 }
 
 function Harness(props: {
+  slotElement: HTMLElement | null
   dockedExpanded: boolean
   isBelowLg: boolean
   onResult: (result: {
     dockedPresent: boolean
-    dockedState: "open" | "closed"
   }) => void
 }) {
   const { onResult, ...params } = props
-  const {
-    dockedPresent,
-    dockedState,
-    onDockedStageRef,
-    onDockedTransitionEnd,
-  } = useDockedPanelCollapse(params)
+  const { dockedPresent, onDockedContentRef } = useDockedPanelCollapse(params)
   onResult({
     dockedPresent,
-    dockedState,
   })
   return dockedPresent ? (
-    <div
-      ref={onDockedStageRef}
-      data-testid="stage-thread-flyout"
-      data-state={dockedState}
-      onTransitionEnd={onDockedTransitionEnd}
-    />
+    <div ref={onDockedContentRef} data-testid="docked-content" />
   ) : null
 }
 
@@ -67,16 +56,18 @@ beforeAll(() => {
 
 describe("useDockedPanelCollapse", () => {
   let container: HTMLDivElement | null = null
+  let slot: HTMLDivElement | null = null
   let root: Root | null = null
   let latest: {
     dockedPresent: boolean
-    dockedState: "open" | "closed"
   } | null = null
 
   beforeEach(() => {
     latest = null
     container = document.createElement("div")
-    document.body.append(container)
+    slot = document.createElement("div")
+    slot.dataset.state = "closed"
+    document.body.append(container, slot)
     root = createRoot(container)
   })
 
@@ -84,8 +75,10 @@ describe("useDockedPanelCollapse", () => {
     const r = root
     if (r) act(() => r.unmount())
     container?.remove()
+    slot?.remove()
     root = null
     container = null
+    slot = null
     latest = null
   })
 
@@ -93,6 +86,7 @@ describe("useDockedPanelCollapse", () => {
     act(() => {
       root?.render(
         <Harness
+          slotElement={slot}
           dockedExpanded={dockedExpanded}
           isBelowLg={isBelowLg}
           onResult={(result) => {
@@ -104,29 +98,26 @@ describe("useDockedPanelCollapse", () => {
   }
 
   // With motion allowed the shell stays mounted (populated) through the close
-  // until the portaled wrapper's WIDTH transitionend, then unmounts. The layout
-  // slot stays passive; the wrapper carries `data-state`.
+  // until the layout slot's WIDTH transitionend, then unmounts. The persistent
+  // slot carries the expanded/state attributes.
   it("defers unmount until the slot width transition ends", () => {
     stubReducedMotion(false)
 
     render(true)
     expect(latest?.dockedPresent).toBe(true)
-    expect(latest?.dockedState).toBe("open")
-    expect(
-      container
-        ?.querySelector('[data-testid="stage-thread-flyout"]')
-        ?.getAttribute("data-state")
-    ).toBe("open")
+    expect(slot?.hasAttribute("data-expanded")).toBe(true)
+    expect(slot?.getAttribute("data-state")).toBe("open")
 
     render(false)
     expect(latest?.dockedPresent).toBe(true) // still mounted, collapsing
-    const stage = container?.querySelector<HTMLElement>(
-      '[data-testid="stage-thread-flyout"]'
-    )
-    expect(stage?.getAttribute("data-state")).toBe("closed")
+    expect(slot?.hasAttribute("data-expanded")).toBe(false)
+    expect(slot?.getAttribute("data-state")).toBe("closed")
+    expect(
+      container?.querySelector('[data-testid="docked-content"]')
+    ).toBeTruthy()
 
     act(() => {
-      stage!.dispatchEvent(
+      slot!.dispatchEvent(
         Object.assign(new Event("transitionend", { bubbles: true }), {
           propertyName: "width",
         })
@@ -148,7 +139,7 @@ describe("useDockedPanelCollapse", () => {
       render(false)
       expect(latest?.dockedPresent).toBe(true)
       expect(
-        container?.querySelector('[data-testid="stage-thread-flyout"]')
+        container?.querySelector('[data-testid="docked-content"]')
       ).toBeTruthy()
 
       act(() => {
@@ -161,7 +152,7 @@ describe("useDockedPanelCollapse", () => {
       })
       expect(latest?.dockedPresent).toBe(false)
       expect(
-        container?.querySelector('[data-testid="stage-thread-flyout"]')
+        container?.querySelector('[data-testid="docked-content"]')
       ).toBeNull()
     } finally {
       vi.useRealTimers()

@@ -49,10 +49,11 @@ export function useActivityPanelDockSlot(): HTMLElement | null {
 }
 
 /**
- * The layout-level dock slot. It is only the portal target; the portaled
- * flyout wrapper owns the animated width. That keeps the layout track
- * declarative and avoids imperative `data-expanded` writes to the slot while
- * preserving the same in-flow conversation push.
+ * The layout-level dock slot. It is the persistent in-flow width carrier for
+ * the desktop flyout: `ActivityPanel` toggles `data-expanded` on this element
+ * from a callback ref, so the already-mounted flex track animates `w-0` <->
+ * `--activity-panel-width` from the first frame. Portaled content is fixed
+ * width and clipped inside this slot, matching the reference stage/screen split.
  */
 export function ActivityPanelDockSlot({ className }: { className?: string }) {
   const ctx = useContext(DockSlotContext)
@@ -71,7 +72,21 @@ export function ActivityPanelDockSlot({ className }: { className?: string }) {
     <div
       ref={ref}
       data-slot="activity-panel-dock"
-      className={cn("shrink-0 overflow-hidden", className)}
+      data-testid="stage-thread-flyout"
+      data-state="closed"
+      className={cn(
+        // Width is the ONLY animated dimension (the conversation + composer reflow
+        // into the freed/used width). Timing is measured from the live reference
+        // (research/activity-panel-open-close-animation.md): ChatGPT springs the
+        // stage width ~480ms open / ~515ms close with a strong decelerate; the
+        // closest single CSS curve is easeOutQuint @ ~500ms. `max-lg:transition-none`
+        // keeps the lg-boundary snap instant; `motion-reduce` disables it (the hook
+        // also unmounts immediately under reduced motion, so no transitionend is
+        // awaited).
+        "relative w-0 shrink-0 overflow-hidden transition-[width] duration-[500ms] ease-[cubic-bezier(0.22,1,0.36,1)] max-lg:w-0! max-lg:transition-none motion-reduce:transition-none",
+        "data-[expanded]:w-[var(--activity-panel-width)]",
+        className
+      )}
     />
   )
 }

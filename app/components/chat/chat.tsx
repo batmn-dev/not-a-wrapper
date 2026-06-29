@@ -6,6 +6,7 @@ import { useModel } from "@/app/components/chat/use-model"
 import { useChatDraft } from "@/app/hooks/use-chat-draft"
 import { useGlobalPromptFocus } from "@/app/hooks/use-global-prompt-focus"
 import { ScrollButton } from "@/components/ui/scroll-button"
+import { ScrollRootContext } from "@/components/ui/scroll-root"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useChat } from "@/lib/chat-store/chats/use-chat"
 import { useMessages } from "@/lib/chat-store/messages/provider"
@@ -17,7 +18,15 @@ import { cn } from "@/lib/utils"
 import { AnimatePresence, motion } from "motion/react"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { ActivityPanel } from "./activity/activity-panel"
 import { isRouteDurableChat } from "./chat-turn"
 import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
@@ -175,12 +184,22 @@ export function Chat() {
   // Chat owns the panel open state; the assistant trigger toggles it.
   const activityPanelId = useId()
   const [activityPanelOpen, setActivityPanelOpen] = useState(false)
+  // Opening the docked panel narrows the thread column, which reflows the
+  // conversation taller. `use-stick-to-bottom` would read that positive resize
+  // as "follow new content" and animate to the bottom — but clicking the
+  // thinking trigger must leave the scroll position untouched. Releasing the
+  // lock (same lever the user-message edit uses) makes the resize a no-op, so
+  // native scroll anchoring holds the view in place. Read defensively: Chat may
+  // mount outside a ScrollRoot in tests.
+  const scrollRoot = useContext(ScrollRootContext)
+  const stopScroll = scrollRoot?.stopScroll
   const handleActivityPanelOpenChange = useCallback((open: boolean) => {
     setActivityPanelOpen(open)
     if (!open) setSelectedActivityTurnId(undefined)
   }, [])
   const handleOpenActivityTurn = useCallback(
     (turnId: string) => {
+      stopScroll?.()
       setSelectedActivityTurnId(
         selectExplicitActivityTurnOnOpen({
           requestedTurnId: turnId,
@@ -189,7 +208,7 @@ export function Chat() {
       )
       setActivityPanelOpen(true)
     },
-    [defaultActivityTurnId]
+    [defaultActivityTurnId, stopScroll]
   )
 
   // One controls object is forwarded to assistant triggers. Chat keeps
