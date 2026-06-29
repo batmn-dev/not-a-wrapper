@@ -58,8 +58,9 @@ function panelProps(sourceCount: number) {
 }
 
 beforeAll(() => {
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-    true
+  ;(
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true
 })
 
 describe("ActivityPanel coexistence (R6)", () => {
@@ -100,9 +101,7 @@ describe("ActivityPanel coexistence (R6)", () => {
 
     const titleId = regions[0]?.getAttribute("aria-labelledby")
     expect(titleId).toBeTruthy()
-    expect(document.getElementById(titleId ?? "")?.textContent).toBe(
-      "Activity"
-    )
+    expect(document.getElementById(titleId ?? "")?.textContent).toBe("Activity")
     expect(regions[0]?.getAttribute("aria-label")).toBeNull()
     expect(
       document.querySelectorAll('[data-slot="sheet-content"]')
@@ -115,7 +114,11 @@ describe("ActivityPanel coexistence (R6)", () => {
       return (
         <ActivityPanelHostProvider>
           <ActivityPanelDockSlot />
-          <ActivityPanel open={open} onOpenChange={() => {}} {...panelProps(2)} />
+          <ActivityPanel
+            open={open}
+            onOpenChange={() => {}}
+            {...panelProps(2)}
+          />
         </ActivityPanelHostProvider>
       )
     }
@@ -154,7 +157,9 @@ describe("ActivityPanel coexistence (R6)", () => {
         Object.assign(new Event("transitionend"), { propertyName: "width" })
       )
     })
-    expect(document.querySelectorAll("section[aria-labelledby]")).toHaveLength(0)
+    expect(document.querySelectorAll("section[aria-labelledby]")).toHaveLength(
+      0
+    )
   })
 
   it("renders an opaque reasoning step when reasoning text is hidden", () => {
@@ -175,6 +180,31 @@ describe("ActivityPanel coexistence (R6)", () => {
     expect(document.body.textContent).toContain("Pro thinking")
     expect(document.body.textContent).toContain("Reasoning")
     expect(document.body.textContent).toContain("Activity")
+  })
+
+  it("renders docked header and panel sharp-edge seams immediately", () => {
+    act(() => {
+      root?.render(
+        <ActivityPanelHostProvider>
+          <ActivityPanelDockSlot />
+          <ActivityPanel open onOpenChange={() => {}} {...panelProps(0)} />
+        </ActivityPanelHostProvider>
+      )
+    })
+
+    const header = document.querySelector<HTMLElement>(
+      "section[aria-labelledby] > div"
+    )
+    expect(header?.className).toContain("h-app-header")
+    expect(header?.className).toContain("sharp-edge-top-shadow")
+    expect(header?.className).toContain("sharp-edge-left-shadow")
+    expect(header?.hasAttribute("data-scrolled")).toBe(false)
+
+    const shell = document.querySelector<HTMLElement>(
+      "section[aria-labelledby]"
+    )
+    expect(shell?.className).toContain("sharp-edge-left-shadow")
+    expect(shell?.className).not.toContain("border-s")
   })
 
   it("preserves source identity for duplicate URLs", () => {

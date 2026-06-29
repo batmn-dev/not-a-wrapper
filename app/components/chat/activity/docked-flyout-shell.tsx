@@ -2,7 +2,7 @@
 
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import { useId, type ReactNode, type RefObject } from "react"
+import { useId, useRef, type ReactNode, type RefObject } from "react"
 import { PanelHeader } from "./panel-header"
 
 export type DockedFlyoutShellProps = {
@@ -35,8 +35,8 @@ export type DockedFlyoutShellProps = {
  * animating slot): the slot's `overflow-hidden` clips it while the slot width
  * animates `0 <-> --activity-panel-width`, so the content slides/clips and never
  * re-wraps mid-animation (matches the reference's fixed-width clipped flyout).
- * The start seam (`border-s`) lives here too, so it slides with the content
- * instead of popping on the slot.
+ * The start seam is a sharp-edge shadow instead of a physical border, so it
+ * matches the conversation header edge without changing the panel box metrics.
  */
 export function DockedFlyoutShell({
   panelId,
@@ -49,6 +49,8 @@ export function DockedFlyoutShell({
   className,
 }: DockedFlyoutShellProps) {
   const titleId = useId()
+  const internalViewportRef = useRef<HTMLDivElement>(null)
+  const scrollViewportRef = viewportRef ?? internalViewportRef
 
   return (
     <section
@@ -57,7 +59,7 @@ export function DockedFlyoutShell({
       aria-hidden={active ? undefined : true}
       inert={active ? undefined : true}
       className={cn(
-        "bg-card text-foreground border-border flex h-full w-[var(--activity-panel-width)] flex-col border-s",
+        "bg-card text-foreground flex h-full w-[var(--activity-panel-width)] flex-col [box-shadow:var(--sharp-edge-left-shadow)]",
         className
       )}
     >
@@ -68,7 +70,7 @@ export function DockedFlyoutShell({
         panelId={panelId}
         onClose={onClose}
       />
-      <ScrollArea viewportRef={viewportRef} className="min-h-0 flex-1">
+      <ScrollArea viewportRef={scrollViewportRef} className="min-h-0 flex-1">
         <div className="px-2 py-3">{children}</div>
         {/* Desktop reference uses scroll margin instead of visible tail padding. */}
         <div aria-hidden className="scroll-mb-4" />
