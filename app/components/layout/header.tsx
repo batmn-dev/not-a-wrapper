@@ -36,7 +36,8 @@ export function Header({ hasSidebar }: { hasSidebar: boolean }) {
 
   return (
     <header
-      className="h-app-header bg-background pointer-events-none sticky top-0 z-20 shrink-0 [box-shadow:var(--sharp-edge-top-shadow-placeholder)] data-[scrolled]:[box-shadow:var(--sharp-edge-top-shadow)] @7xl/main:bg-transparent @7xl/main:[box-shadow:none]!"
+      className="h-app-header bg-background pointer-events-none sticky top-0 z-20 shrink-0 [box-shadow:var(--sharp-edge-top-shadow-placeholder)] data-[scrolled]:[box-shadow:var(--sharp-edge-top-shadow)] data-[fixed-header=less-than-xl]:@7xl/main:bg-transparent data-[fixed-header=less-than-xl]:@7xl/main:[box-shadow:none]! data-[fixed-header=less-than-xxl]:@[96rem]/main:bg-transparent data-[fixed-header=less-than-xxl]:@[96rem]/main:[box-shadow:none]!"
+      data-fixed-header="less-than-xl"
       data-scrolled={isScrolled || undefined}
     >
       <div className="relative mx-auto flex h-full max-w-full items-center justify-between px-2 pointer-coarse:px-2.5">

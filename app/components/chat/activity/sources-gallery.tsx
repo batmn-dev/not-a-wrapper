@@ -41,7 +41,10 @@ export function SourcesGallery({
       />
       <ul className="flex flex-col">
         {sources.map(({ sourceId, ...source }) => (
-          <li key={sourceId}>
+          <li
+            key={sourceId}
+            className="animate-[show_150ms_ease-in] motion-reduce:animate-none"
+          >
             <SourcesGalleryItem {...source} />
           </li>
         ))}

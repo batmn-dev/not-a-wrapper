@@ -49,16 +49,11 @@ export function useActivityPanelDockSlot(): HTMLElement | null {
 }
 
 /**
- * The layout-level dock slot. Its width is driven by the panel's OPEN state, not
- * by content presence: `ActivityPanel` toggles `data-expanded` on this element
- * (imperatively, so no provider/Chat re-render), collapsing `w-0` <->
- * `--activity-panel-width` with an animated, motion-reduce-gated push. The docked
- * shell stays portaled in through the close collapse (`ActivityPanel` defers its
- * unmount until this width transition ends), so the panel slides shut populated
- * instead of vanishing in one frame. `overflow-hidden` clips the fixed-width
- * shell, so its content never re-wraps as the slot animates. The start seam lives
- * on the shell (`DockedFlyoutShell`), so it slides in/out with the content rather
- * than popping; a closed/empty slot leaves no stray seam.
+ * The layout-level dock slot. It is the persistent in-flow width carrier for
+ * the desktop flyout: `ActivityPanel` toggles `data-expanded` on this element
+ * from a callback ref, so the already-mounted flex track animates `w-0` <->
+ * `--activity-panel-width` from the first frame. Portaled content is fixed
+ * width and clipped inside this slot, matching the reference stage/screen split.
  */
 export function ActivityPanelDockSlot({ className }: { className?: string }) {
   const ctx = useContext(DockSlotContext)
@@ -77,8 +72,22 @@ export function ActivityPanelDockSlot({ className }: { className?: string }) {
     <div
       ref={ref}
       data-slot="activity-panel-dock"
+      data-testid="stage-thread-flyout"
+      data-state="closed"
       className={cn(
-        "w-0 shrink-0 overflow-hidden transition-[width] duration-300 ease-out motion-reduce:transition-none",
+        // Width is the ONLY animated dimension (the conversation + composer reflow
+        // into the freed/used width). Timing is measured from the live reference
+        // (research/activity-panel-open-close-animation.md): ChatGPT springs the
+        // stage width ~480ms open / ~515ms close. A single ease-out cubic (we used
+        // easeOutQuint) front-loads ~90% of the slide into the first ~150ms, so the
+        // panel *reads* as a ~150ms snap even at 500ms. ChatGPT's spring starts from
+        // rest and spreads the motion across the full duration, so it reads smooth.
+        // We replicate that with a `linear()` easing sampled from a critically-damped
+        // (no-overshoot) spring — gentle ease-in from rest, strong decelerate, ~520ms.
+        // `max-lg:transition-none` keeps the lg-boundary snap instant; `motion-reduce`
+        // disables it (the hook also unmounts immediately under reduced motion, so no
+        // transitionend is awaited).
+        "relative w-0 shrink-0 overflow-hidden transition-[width] duration-[520ms] ease-[linear(0,0.0377,0.1243,0.2318,0.3434,0.4497,0.5459,0.6299,0.7017,0.7619,0.8117,0.8523,0.8853,0.9118,0.9329,0.9497,0.963,0.9735,0.9817,0.9881,0.9931,0.997,1)] max-lg:w-0! max-lg:transition-none motion-reduce:transition-none",
         "data-[expanded]:w-[var(--activity-panel-width)]",
         className
       )}

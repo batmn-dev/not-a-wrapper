@@ -58,8 +58,9 @@ function panelProps(sourceCount: number) {
 }
 
 beforeAll(() => {
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-    true
+  ;(
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true
 })
 
 describe("ActivityPanel coexistence (R6)", () => {
@@ -100,13 +101,20 @@ describe("ActivityPanel coexistence (R6)", () => {
 
     const titleId = regions[0]?.getAttribute("aria-labelledby")
     expect(titleId).toBeTruthy()
-    expect(document.getElementById(titleId ?? "")?.textContent).toBe(
-      "Activity"
-    )
+    expect(document.getElementById(titleId ?? "")?.textContent).toBe("Activity")
     expect(regions[0]?.getAttribute("aria-label")).toBeNull()
     expect(
       document.querySelectorAll('[data-slot="sheet-content"]')
     ).toHaveLength(0)
+    expect(
+      document.querySelectorAll('[data-testid="stage-thread-flyout"]')
+    ).toHaveLength(1)
+    expect(
+      document.querySelectorAll('[data-testid="screen-threadFlyOut"]')
+    ).toHaveLength(1)
+    expect(
+      document.querySelectorAll('[data-testid="close-button"]')
+    ).toHaveLength(1)
     expect(document.querySelectorAll("img")).toHaveLength(5)
   })
 
@@ -115,7 +123,11 @@ describe("ActivityPanel coexistence (R6)", () => {
       return (
         <ActivityPanelHostProvider>
           <ActivityPanelDockSlot />
-          <ActivityPanel open={open} onOpenChange={() => {}} {...panelProps(2)} />
+          <ActivityPanel
+            open={open}
+            onOpenChange={() => {}}
+            {...panelProps(2)}
+          />
         </ActivityPanelHostProvider>
       )
     }
@@ -126,8 +138,11 @@ describe("ActivityPanel coexistence (R6)", () => {
     const slot = document.querySelector<HTMLElement>(
       '[data-slot="activity-panel-dock"]'
     )
-    // Open: slot is expanded and the docked shell is mounted.
-    expect(slot?.hasAttribute("data-expanded")).toBe(true)
+    // Open: the persistent layout stage is expanded and the docked shell is mounted.
+    const stage = document.querySelector<HTMLElement>(
+      '[data-testid="stage-thread-flyout"]'
+    )
+    expect(stage?.getAttribute("data-state")).toBe("open")
     const openShell = document.querySelector<HTMLElement>(
       "section[aria-labelledby]"
     )
@@ -135,12 +150,12 @@ describe("ActivityPanel coexistence (R6)", () => {
     expect(openShell?.getAttribute("aria-hidden")).toBeNull()
     expect(openShell?.hasAttribute("inert")).toBe(false)
 
-    // Close: the slot collapses (drops data-expanded) but the shell stays mounted
-    // so it slides shut populated instead of vanishing in one frame.
+    // Close: the layout stage collapses but the shell stays mounted so
+    // it slides shut populated instead of vanishing in one frame.
     act(() => {
       root?.render(<Harness open={false} />)
     })
-    expect(slot?.hasAttribute("data-expanded")).toBe(false)
+    expect(stage?.getAttribute("data-state")).toBe("closed")
     const closingShell = document.querySelector<HTMLElement>(
       "section[aria-labelledby]"
     )
@@ -150,11 +165,59 @@ describe("ActivityPanel coexistence (R6)", () => {
 
     // The width transition finishing is what unmounts the shell.
     act(() => {
-      slot?.dispatchEvent(
-        Object.assign(new Event("transitionend"), { propertyName: "width" })
+      stage?.dispatchEvent(
+        Object.assign(new Event("transitionend", { bubbles: true }), {
+          propertyName: "width",
+        })
       )
     })
-    expect(document.querySelectorAll("section[aria-labelledby]")).toHaveLength(0)
+    expect(document.querySelectorAll("section[aria-labelledby]")).toHaveLength(
+      0
+    )
+  })
+
+  it("falls back if the docked close transition end is skipped", () => {
+    vi.useFakeTimers()
+    function Harness({ open }: { open: boolean }) {
+      return (
+        <ActivityPanelHostProvider>
+          <ActivityPanelDockSlot />
+          <ActivityPanel
+            open={open}
+            onOpenChange={() => {}}
+            {...panelProps(2)}
+          />
+        </ActivityPanelHostProvider>
+      )
+    }
+
+    try {
+      act(() => {
+        root?.render(<Harness open />)
+      })
+      expect(
+        document.querySelectorAll('[data-testid="screen-threadFlyOut"]')
+      ).toHaveLength(1)
+
+      act(() => {
+        root?.render(<Harness open={false} />)
+      })
+      expect(
+        document.querySelectorAll('[data-testid="screen-threadFlyOut"]')
+      ).toHaveLength(1)
+
+      act(() => {
+        vi.advanceTimersByTime(700)
+      })
+      expect(
+        document.querySelectorAll('[data-testid="screen-threadFlyOut"]')
+      ).toHaveLength(0)
+      expect(
+        document.querySelector('[data-testid="stage-thread-flyout"]')
+      ).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("renders an opaque reasoning step when reasoning text is hidden", () => {
@@ -175,6 +238,31 @@ describe("ActivityPanel coexistence (R6)", () => {
     expect(document.body.textContent).toContain("Pro thinking")
     expect(document.body.textContent).toContain("Reasoning")
     expect(document.body.textContent).toContain("Activity")
+  })
+
+  it("renders docked header and panel sharp-edge seams immediately", () => {
+    act(() => {
+      root?.render(
+        <ActivityPanelHostProvider>
+          <ActivityPanelDockSlot />
+          <ActivityPanel open onOpenChange={() => {}} {...panelProps(0)} />
+        </ActivityPanelHostProvider>
+      )
+    })
+
+    const header = document.querySelector<HTMLElement>(
+      "section[aria-labelledby] > div"
+    )
+    expect(header?.className).toContain("h-app-header")
+    expect(header?.className).toContain("sharp-edge-top-shadow")
+    expect(header?.className).toContain("sharp-edge-left-shadow")
+    expect(header?.hasAttribute("data-scrolled")).toBe(false)
+
+    const shell = document.querySelector<HTMLElement>(
+      "section[aria-labelledby]"
+    )
+    expect(shell?.className).toContain("sharp-edge-left-shadow")
+    expect(shell?.className).not.toContain("border-s")
   })
 
   it("preserves source identity for duplicate URLs", () => {

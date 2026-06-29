@@ -27,7 +27,7 @@ import * as React from "react"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
-const SIDEBAR_WIDTH = "16rem"
+const SIDEBAR_WIDTH = "16.25rem"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3.25rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "s"
@@ -294,7 +294,7 @@ function SidebarTrigger({
       aria-expanded={open}
       aria-controls={SIDEBAR_CONTAINER_ID}
       className={cn(
-        "size-9 rounded-lg",
+        "size-9 rounded-md",
         // Resize cursor indicates expandability
         state === "collapsed"
           ? "cursor-e-resize rtl:cursor-w-resize"

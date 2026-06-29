@@ -13,8 +13,9 @@ import {
 import { SourcesGallery } from "./sources-gallery"
 
 beforeAll(() => {
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-    true
+  ;(
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true
 })
 
 describe("SourcesGallery (R8 favicon perf)", () => {
@@ -52,6 +53,9 @@ describe("SourcesGallery (R8 favicon perf)", () => {
 
     const imgs = Array.from(container!.querySelectorAll("img"))
     expect(imgs).toHaveLength(141)
+    expect(container!.querySelector("li")?.className).toContain(
+      "animate-[show_150ms_ease-in]"
+    )
     for (const img of imgs) {
       expect(img.getAttribute("loading")).toBe("lazy")
       expect(img.getAttribute("decoding")).toBe("async")

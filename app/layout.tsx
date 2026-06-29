@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
+import {
+  ChatAnnouncerOutlet,
+  ChatAnnouncerProvider,
+} from "@/app/components/chat/chat-announcer"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -28,9 +32,9 @@ const geistMono = Geist_Mono({
 })
 
 export const viewport: Viewport = {
-  width: 'device-width',
+  width: "device-width",
   initialScale: 1,
-  viewportFit: 'cover',
+  viewportFit: "cover",
 }
 
 export const metadata: Metadata = {
@@ -59,45 +63,48 @@ export default async function RootLayout({
         />
       ) : null}
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased isolate`}
+        className={`${geistSans.variable} ${geistMono.variable} isolate antialiased`}
       >
         <a
           href="#main"
-          className="fixed inset-x-0 top-0 z-[100] mx-auto mt-4 w-fit rounded-2xl bg-background px-4 py-2 text-sm font-medium text-foreground shadow-lg ring-1 ring-border focus:outline-none not-focus:sr-only"
+          className="bg-background text-foreground ring-border fixed inset-x-0 top-0 z-[100] mx-auto mt-4 w-fit rounded-2xl px-4 py-2 text-sm font-medium shadow-lg ring-1 not-focus:sr-only focus:outline-none"
         >
           Skip to content
         </a>
-        <Providers initialAuth={initialAuth}>
-          <TanstackQueryProvider>
-            <LayoutClient />
-            <UserProvider initialUser={userProfile}>
-              <ModelProvider>
-                <ChatsProvider userId={userProfile?.id}>
-                  <ChatSessionProvider>
-                    <UserPreferencesProvider
-                      userId={userProfile?.id}
-                      initialPreferences={userProfile?.preferences}
-                    >
-                      <TooltipProvider delay={200}>
-                        <ThemeProvider
-                          attribute="class"
-                          defaultTheme="system"
-                          enableSystem
-                          disableTransitionOnChange
-                        >
-                          <SidebarProvider defaultOpen>
-                            <Toaster position="top-center" />
-                            {children}
-                          </SidebarProvider>
-                        </ThemeProvider>
-                      </TooltipProvider>
-                    </UserPreferencesProvider>
-                  </ChatSessionProvider>
-                </ChatsProvider>
-              </ModelProvider>
-            </UserProvider>
-          </TanstackQueryProvider>
-        </Providers>
+        <ChatAnnouncerProvider>
+          <ChatAnnouncerOutlet />
+          <Providers initialAuth={initialAuth}>
+            <TanstackQueryProvider>
+              <LayoutClient />
+              <UserProvider initialUser={userProfile}>
+                <ModelProvider>
+                  <ChatsProvider userId={userProfile?.id}>
+                    <ChatSessionProvider>
+                      <UserPreferencesProvider
+                        userId={userProfile?.id}
+                        initialPreferences={userProfile?.preferences}
+                      >
+                        <TooltipProvider delay={200}>
+                          <ThemeProvider
+                            attribute="class"
+                            defaultTheme="system"
+                            enableSystem
+                            disableTransitionOnChange
+                          >
+                            <SidebarProvider defaultOpen>
+                              <Toaster position="top-center" />
+                              {children}
+                            </SidebarProvider>
+                          </ThemeProvider>
+                        </TooltipProvider>
+                      </UserPreferencesProvider>
+                    </ChatSessionProvider>
+                  </ChatsProvider>
+                </ModelProvider>
+              </UserProvider>
+            </TanstackQueryProvider>
+          </Providers>
+        </ChatAnnouncerProvider>
       </body>
     </html>
   )

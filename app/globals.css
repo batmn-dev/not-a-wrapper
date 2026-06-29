@@ -49,7 +49,10 @@
 @theme {
   --font-mono: var(--font-geist-mono);
   --spacing-app-header: 52px;
-  --spacing-input-area: 134px;
+  /* Resting composer-stack footprint (input ~68px + disclaimer ~32px), matching
+     ChatGPT's flat 100px thread bottom reservation (pb-25). The carrier reserves
+     this as pb and the sticky composer overlaps the bottom 28px (--composer-overlap-px). */
+  --spacing-input-area: 100px;
   --activity-panel-width: 25rem;
   --spacing-panel-header: 56px;
   --animate-collapsible-down: collapsible-down 200ms ease-out;
@@ -59,11 +62,9 @@
   @keyframes show {
     from {
       opacity: 0;
-      transform: translateX(0.5rem);
     }
     to {
       opacity: 1;
-      transform: translateX(0);
     }
   }
 
@@ -334,7 +335,7 @@
 
 :root {
   /* Sidebar dimensions */
-  --sidebar-width: 16rem;
+  --sidebar-width: 16.25rem;
   --sidebar-rail-width: 3.25rem;
   --sidebar-header-height: 3.25rem;
 
@@ -437,6 +438,9 @@
   --composer-bg: var(--background);
   --sharp-edge-top-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
   --sharp-edge-top-shadow-placeholder: 0 1px 0 transparent;
+  --sharp-edge-left-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.05);
+  --activity-sheet-shadow:
+    0 8px 12px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.62);
 
   /* Activity panel overlay scrim — mobile black/30, tablet gray/50 */
   --overlay-scrim-mobile: oklch(0 0 0 / 0.3);
@@ -526,6 +530,9 @@
   --composer-bg: oklch(27.5% 0 0);
   --sharp-edge-top-shadow: 0 1px 0 rgba(255, 255, 255, 0.05);
   --sharp-edge-top-shadow-placeholder: 0 1px 0 transparent;
+  --sharp-edge-left-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.05);
+  --activity-sheet-shadow:
+    0 8px 12px rgba(0, 0, 0, 0.18), 0 0 1px rgba(255, 255, 255, 0.24);
 
   /* Activity panel overlay scrim — mobile black/30, tablet black/50 */
   --overlay-scrim-mobile: oklch(0 0 0 / 0.3);

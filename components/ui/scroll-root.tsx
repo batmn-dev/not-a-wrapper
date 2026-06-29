@@ -61,6 +61,7 @@ function ScrollRoot({ children, className, ...props }: ScrollRootProps) {
     <ScrollRootContext.Provider value={contextValue}>
       <div
         ref={scrollRef}
+        data-scroll-root=""
         className={cn(
           "relative flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-clip",
           className

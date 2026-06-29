@@ -61,15 +61,17 @@ function TurnRow({
   as: As = "article",
   className,
   dataTurn,
+  dataTurnId,
   children,
 }: {
   as?: "article" | "div"
   className: string
   dataTurn: string
+  dataTurnId?: string
   children: ReactNode
 }) {
   return (
-    <As className={className} data-turn={dataTurn}>
+    <As className={className} data-turn={dataTurn} data-turn-id={dataTurnId}>
       <div
         className={`group/turn-messages relative mx-auto flex w-full max-w-[var(--thread-content-max-width,40rem)] min-w-0 flex-1 flex-col ${THREAD_MAXWIDTH_VARS}`}
       >
@@ -130,7 +132,7 @@ export function Conversation({
   const pendingActivityTurnId = activityPanelTurnId ?? PENDING_ACTIVITY_TURN_ID
 
   return (
-    <ScrollRootContent className="relative -mb-[var(--composer-overlap-px)] flex w-full flex-1 flex-col items-center pt-4 pb-[var(--thread-bottom-offset)] [--composer-overlap-px:28px] [--thread-bottom-offset:calc(var(--spacing-input-area)+2rem+env(safe-area-inset-bottom,0px))]">
+    <ScrollRootContent className="relative -mb-[var(--composer-overlap-px)] flex w-full flex-1 flex-col items-center pt-4 pb-[var(--thread-bottom-offset)] [--composer-overlap-px:28px] [--thread-bottom-offset:calc(var(--spacing-input-area)+env(safe-area-inset-bottom,0px))]">
       <div
         aria-hidden="true"
         data-edge="top"
@@ -163,11 +165,13 @@ export function Conversation({
             key={message.id}
             className={cn(
               `mx-auto w-full px-[var(--thread-content-margin,1rem)] text-base ${THREAD_GUTTER_VARS}`,
-              isUser && "scroll-mt-[var(--spacing-app-header)] pt-3",
+              isUser &&
+                "scroll-mt-[var(--sticky-padding-top,var(--spacing-app-header))] pt-3",
               isAssistant &&
-                "scroll-mt-[calc(var(--spacing-app-header)+min(200px,max(70px,20svh)))] pb-10"
+                "scroll-mt-[calc(var(--sticky-padding-top,var(--spacing-app-header))+min(200px,max(70px,20svh)))] pb-10"
             )}
             dataTurn={message.role}
+            dataTurnId={message.id}
           >
             <Message
               id={message.id}
@@ -199,8 +203,9 @@ export function Conversation({
       {hasPendingAssistantTurn && (
         <TurnRow
           as="div"
-          className={`mx-auto w-full scroll-mt-[calc(var(--spacing-app-header)+min(200px,max(70px,20svh)))] px-[var(--thread-content-margin,1rem)] pb-10 text-base ${THREAD_GUTTER_VARS}`}
+          className={`mx-auto w-full scroll-mt-[calc(var(--sticky-padding-top,var(--spacing-app-header))+min(200px,max(70px,20svh)))] px-[var(--thread-content-margin,1rem)] pb-10 text-base ${THREAD_GUTTER_VARS}`}
           dataTurn="assistant"
+          dataTurnId={PENDING_ACTIVITY_TURN_ID}
         >
           <Message
             id={PENDING_ACTIVITY_TURN_ID}

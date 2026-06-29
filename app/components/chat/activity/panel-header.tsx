@@ -63,10 +63,7 @@ export function TitleDurationCluster({
     // Weight is left to inherit — body 400 on the flyout, font-medium 500 from
     // SheetTitle on the sheet — reproducing the reference's header weight delta.
     <span
-      className={cn(
-        "flex min-w-0 items-center gap-2.5 text-lg",
-        className
-      )}
+      className={cn("flex min-w-0 items-center gap-2.5 text-lg", className)}
     >
       <span id={titleId} className="text-muted-foreground truncate">
         {title}
@@ -96,8 +93,11 @@ export type PanelHeaderProps = {
 
 /**
  * PanelHeader — the docked flyout's header bar: a title/duration cluster plus a
- * close button, pinned to `--spacing-panel-header` (56px). The close button is
- * the shipped `Button(ghost, icon)` with a Remix close glyph tinted by
+ * close button, aligned to the app conversation header's height and sharp-edge
+ * shadow treatment. Its bottom edge is always visible, and it carries the left
+ * sharp-edge shadow too because its opaque background would otherwise cover the
+ * shell seam. The close button is the shipped `Button(ghost, icon)` with a
+ * Remix close glyph tinted by
  * `currentColor` — no new file, no sprite hash (GA §4 row 22).
  */
 export function PanelHeader({
@@ -111,7 +111,7 @@ export function PanelHeader({
   return (
     <div
       className={cn(
-        "flex h-[var(--spacing-panel-header)] shrink-0 items-center justify-between gap-2 border-b border-border px-4",
+        "bg-card h-app-header flex shrink-0 items-center justify-between gap-2 px-4 [box-shadow:var(--sharp-edge-top-shadow),var(--sharp-edge-left-shadow)]",
         className
       )}
     >
@@ -121,6 +121,7 @@ export function PanelHeader({
         titleId={titleId}
       />
       <PanelCloseButton
+        data-testid="close-button"
         className="-me-2.5 rounded-md"
         aria-controls={panelId}
         aria-expanded={true}

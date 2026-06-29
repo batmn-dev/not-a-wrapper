@@ -312,21 +312,18 @@ function ArticleWrapper({
 }
 
 function UserBubble({ children }: { children: string }) {
-  const isMultiline = children.includes("\n")
   return (
     <ArticleWrapper role="user">
       <Message
-        className="flex w-full flex-col items-end gap-0.5"
+        as="div"
+        className="flex min-h-8 w-full flex-col items-end gap-1"
         data-turn="user"
         data-scroll-anchor="false"
         tabIndex={-1}
       >
         <h5 className="sr-only">You said:</h5>
         <MessageContent
-          className={cn(
-            "bg-accent prose relative max-w-[var(--user-chat-width,70%)] rounded-[18px] px-4",
-            isMultiline ? "py-3" : "py-1.5"
-          )}
+          className="bg-accent prose relative max-w-[var(--user-chat-width,70%)] rounded-[18px] px-4 py-2.5 leading-6"
           markdown={false}
         >
           {children}
@@ -347,7 +344,8 @@ function AssistantShell({
   return (
     <ArticleWrapper role="assistant">
       <Message
-        className="flex w-full flex-1 items-start gap-4"
+        as="div"
+        className="flex w-full flex-col gap-2"
         data-turn="assistant"
         data-message-id={msgId}
         data-scroll-anchor={isLast ? "true" : "false"}
@@ -426,7 +424,7 @@ export default function ThinkingStatesTestPage() {
       <LayoutApp>
         <div className="relative flex min-h-0 flex-1 flex-col items-center">
           {/* ━━━ Conversation ━━━ */}
-          <ScrollRootContent className="relative -mb-[var(--composer-overlap-px)] flex w-full flex-1 flex-col items-center pt-4 pb-[var(--thread-bottom-offset)] [--composer-overlap-px:28px] [--thread-bottom-offset:calc(var(--spacing-input-area)+2rem+env(safe-area-inset-bottom,0px))]">
+          <ScrollRootContent className="relative -mb-[var(--composer-overlap-px)] flex w-full flex-1 flex-col items-center pt-4 pb-[var(--thread-bottom-offset)] [--composer-overlap-px:28px] [--thread-bottom-offset:calc(var(--spacing-input-area)+env(safe-area-inset-bottom,0px))]">
             {/* ─── User message ─── */}
             <UserBubble>This is a test chat thread</UserBubble>
 

@@ -71,6 +71,7 @@ export function ContentSheetShell({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         id={panelId}
+        aria-modal="true"
         side="bottom"
         showCloseButton={false}
         overlayClassName={OVERLAY_CLASSNAME}
@@ -79,24 +80,24 @@ export function ContentSheetShell({
           // (the handle + backdrop are the dismiss affordances). `max-sm:shadow-none`
           // suppresses the Sheet primitive's unconditional `shadow-border-lg`
           // (sheet.tsx) below `sm` — the reference mobile sheet is flush against a
-          // flat scrim with NO elevation; `sm:shadow-border-xl` (below) restores
-          // the closest existing floating shadow token on the tablet card. Both
-          // write `--tw-shadow` at equal specificity and the `max-sm` variant sorts
-          // later, so no `!` is needed (compile-verified).
+          // flat scrim with NO elevation. Tablet uses the scoped measured shadow
+          // token below instead of the generic Sheet elevation.
           // Max height matches the reference sheet/card: full height minus a 6px
           // (or safe-area) top gap, so long reasoning + a large gallery use the
           // available height instead of capping at 85% and leaving dead scrim.
-          "grid h-fit max-h-[calc(100%_-_max(env(safe-area-inset-top),6px))] grid-rows-[min-content_minmax(0,1fr)] gap-0 overflow-hidden rounded-t-[16px] pb-4 max-sm:shadow-none",
+          "grid h-fit max-h-[calc(100%_-_max(env(safe-area-inset-top),6px))] grid-rows-[min-content_minmax(0,1fr)] gap-0 overflow-hidden rounded-t-[16px] pb-4 max-sm:right-auto! max-sm:left-1/2! max-sm:w-[min(100vw,28rem)] max-sm:-translate-x-1/2 max-sm:shadow-none",
           // Tablet (sm): centered card without top/bottom inset stretch.
-          "sm:shadow-border-xl sm:top-1/2 sm:right-auto! sm:bottom-auto! sm:left-1/2! sm:h-fit sm:max-h-[calc(100%_-_max(env(safe-area-inset-top),6px))] sm:w-[28rem] sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[16px]",
-          // Enter/exit timing (GA §6.2): edge slide, ~250ms in / 200ms out,
-          // committed curve; all gated by motion-reduce (new repo pattern).
-          "ease-[cubic-bezier(0.32,0.72,0,1)] data-ending-style:duration-200 data-starting-style:duration-[250ms] motion-reduce:transition-none",
+          "sm:top-1/2 sm:right-auto! sm:bottom-auto! sm:left-1/2! sm:h-fit sm:max-h-[calc(100%_-_max(env(safe-area-inset-top),6px))] sm:w-[28rem] sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[16px] sm:[box-shadow:var(--activity-sheet-shadow)]",
+          // Enter/exit timing from the live panel pass: mobile/sheet opens in
+          // roughly 335-390ms and closes slower (~480ms). Tablet backdrop keeps
+          // its separate 250ms opacity fade above.
+          "duration-[360ms] ease-[cubic-bezier(0.32,0.72,0,1)] data-ending-style:duration-[480ms] data-starting-style:duration-[360ms] motion-reduce:transition-none",
           className
         )}
       >
         {/* Mobile-only drag handle; decorative (the Sheet handles dismissal). */}
         <div
+          data-testid="chat-screen-cot-mobile-sheet-handle"
           aria-hidden
           className="bg-muted mx-auto mt-1.5 h-1 w-12 shrink-0 rounded-full sm:hidden"
         />
@@ -104,7 +105,11 @@ export function ContentSheetShell({
           {/* The cluster IS the dialog's accessible name; the `·` span is
               aria-hidden, so the name reads "Activity 5m 42s". */}
           <header className="grid min-h-[var(--spacing-panel-header)] grid-cols-[minmax(0,1fr)_min-content] items-center gap-3 ps-6 pe-4 pt-4 pb-2 select-none">
-            <SheetTitle className="m-0 min-w-0 overflow-hidden text-lg leading-7">
+            <SheetTitle
+              data-testid="chat-screen-cot-mobile-sheet-title-focus-target"
+              tabIndex={-1}
+              className="m-0 min-w-0 overflow-hidden text-lg leading-7"
+            >
               <TitleDurationCluster
                 title={title}
                 durationSeconds={durationSeconds}
@@ -112,7 +117,12 @@ export function ContentSheetShell({
             </SheetTitle>
             <SheetClose
               aria-label="Close"
-              render={<PanelCloseButton className="rounded-md p-1 max-sm:hidden" />}
+              render={
+                <PanelCloseButton
+                  data-testid="close-button"
+                  className="rounded-md p-1 max-sm:hidden"
+                />
+              }
             >
               <Icon icon={RiCloseLine} slotSize={20} />
             </SheetClose>

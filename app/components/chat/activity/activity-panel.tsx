@@ -14,12 +14,15 @@ import { PanelSectionHeading } from "./panel-section-heading"
 import { SourcesGallery } from "./sources-gallery"
 import { useDockedPanelCollapse } from "./use-docked-panel-collapse"
 
-// `lg` (1024px / 64rem) — the docked↔sheet boundary. NOTE: this is a VIEWPORT
-// media query (useBreakpoint → matchMedia on innerWidth); it must stay in
-// lockstep BY HAND with the `@[64rem]/main` CONTAINER thresholds that drive the
-// thread tiers (see THREAD_MAXWIDTH_VARS in ./thread-bounds). They are different
-// query axes (viewport vs the @container/main width), so a shared constant would
-// imply a false equivalence — the coupling is intentionally prose-only.
+// `lg` (1024px / 64rem) — the docked↔sheet boundary. This is a VIEWPORT media
+// query (useBreakpoint → matchMedia on innerWidth) that gates whether the panel
+// mounts as the docked flyout (≥lg) or the sheet (<lg), matching ChatGPT's
+// `max-lg:w-0!`. It coincides numerically with the thread's cap tier
+// (`@[64rem]/main`; see THREAD_MAXWIDTH_VARS in ./thread-bounds) but is a
+// DIFFERENT query axis — VIEWPORT width here vs the `@container/main` width
+// there. They no longer interact during the panel animation: `layout-app` scopes
+// `@container/main` to span the dock slot, so opening the panel can't drive the
+// container across the cap tier (the close reflows continuously, no re-cap).
 const LG_BREAKPOINT = 1024
 
 /**
@@ -79,7 +82,7 @@ function PanelBody({
   return (
     <div className="space-y-4">
       {hasReasoning ? (
-        <div className="animate-show px-3 pt-2 pb-2 motion-reduce:animate-none">
+        <div className="px-3 pt-2 pb-2">
           <PanelSectionHeading title="Pro thinking" />
           <ActivityTimeline className="mt-3 flex flex-col">
             <ActivityStep leading="done" body="description">
@@ -94,10 +97,7 @@ function PanelBody({
         </div>
       ) : null}
       {gallerySources.length > 0 ? (
-        <SourcesGallery
-          sources={gallerySources}
-          className="animate-show motion-reduce:animate-none"
-        />
+        <SourcesGallery sources={gallerySources} />
       ) : null}
     </div>
   )
@@ -141,11 +141,9 @@ export function ActivityPanel({
   const sheetActive = isBelowLg
 
   // The deferred-unmount / close-collapse lifecycle lives in this hook so the
-  // component stays focused on shell composition. It owns the imperative slot
-  // `data-expanded` attribute and keeps the shell mounted (populated) through
-  // the close until the slot's width `transitionend` (motion-reduce / sub-lg
-  // short-circuit to immediate unmount).
-  const { dockedPresent } = useDockedPanelCollapse({
+  // component stays focused on shell composition. The layout slot owns the
+  // width transition and stays mounted (populated) until its `transitionend`.
+  const { dockedPresent, onDockedContentRef } = useDockedPanelCollapse({
     slotElement,
     dockedExpanded,
     isBelowLg,
@@ -155,15 +153,20 @@ export function ActivityPanel({
     <>
       {dockedPresent && slotElement
         ? createPortal(
-            <DockedFlyoutShell
-              panelId={panelId}
-              title={title}
-              durationSeconds={durationSeconds}
-              active={dockedExpanded}
-              onClose={close}
+            <div
+              ref={onDockedContentRef}
+              className="absolute h-full w-[var(--activity-panel-width)]"
             >
-              {body}
-            </DockedFlyoutShell>,
+              <DockedFlyoutShell
+                panelId={panelId}
+                title={title}
+                durationSeconds={durationSeconds}
+                active={dockedExpanded}
+                onClose={close}
+              >
+                {body}
+              </DockedFlyoutShell>
+            </div>,
             slotElement
           )
         : null}

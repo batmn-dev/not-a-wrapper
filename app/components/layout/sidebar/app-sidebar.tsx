@@ -114,7 +114,8 @@ function DesktopAppSidebar() {
       */}
 
       {/* === COLLAPSED RAIL === */}
-      <div
+      <nav
+        aria-label="Sidebar"
         className={cn(
           "absolute inset-y-0 left-0 z-10 flex h-full w-(--sidebar-rail-width) flex-col items-start",
           "cursor-e-resize bg-transparent pb-1.5 rtl:cursor-w-resize",
@@ -189,7 +190,7 @@ function DesktopAppSidebar() {
             onSignedOutMenuOpenChange={setRailPopupOpen}
           />
         </div>
-      </div>
+      </nav>
 
       {/* === EXPANDED CONTENT === */}
       {/*
@@ -355,7 +356,7 @@ function SidebarExpandedNav({
 
         {/* === STICKY ACTION BUTTONS === */}
         {/* Conditionally sticky: pinned on tall viewports, scrolls on short ones */}
-        <div
+        <aside
           className={cn(
             "bg-sidebar z-20 px-0 pt-(--sidebar-section-first-margin-top)",
             "tall:sticky tall:top-(--sidebar-header-height)",
@@ -411,7 +412,7 @@ function SidebarExpandedNav({
             )}
             aria-hidden="true"
           />
-        </div>
+        </aside>
 
         {/* === SCROLLABLE CONTENT === */}
         <div className="px-0">
