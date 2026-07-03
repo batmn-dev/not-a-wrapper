@@ -17,12 +17,11 @@
  * rejected turn (`false`) restores the payload into the composer — the error
  * toast must not fire over an emptied box.
  */
-
 import { useTurnContext } from "@/app/components/chat/turn-context"
 import { useFileUpload } from "@/app/components/chat/use-file-upload"
 import { useChatDraft } from "@/app/hooks/use-chat-draft"
-import { Button } from "@/components/ui/button"
 import { ModelSelector } from "@/components/common/model-selector/base"
+import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
 import {
   PromptInput,
@@ -41,6 +40,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -85,6 +85,89 @@ type ComposerProps = {
 
 const isOnlyWhitespace = (text: string) => !/[^\s]/.test(text)
 
+type ComposerDraftIdentity = {
+  persistenceId: string | null
+  displayId: string
+}
+
+const useBrowserLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect
+
+function resolveComposerDraftIdentity(
+  chatId: string | null,
+  draftScopeId?: string
+): ComposerDraftIdentity {
+  if (chatId) {
+    return {
+      persistenceId: chatId,
+      displayId: `chat:${chatId}`,
+    }
+  }
+
+  if (draftScopeId) {
+    return {
+      persistenceId: draftScopeId,
+      displayId: `scope:${draftScopeId}`,
+    }
+  }
+
+  return {
+    persistenceId: null,
+    displayId: "new-chat",
+  }
+}
+
+function useComposerDraftDisplay(
+  draftIdentity: ComposerDraftIdentity,
+  draftValue: string
+) {
+  const [localValue, setLocalValue] = useState(() => draftValue)
+  const valueRef = useRef(localValue)
+  const draftSyncRef = useRef({
+    displayId: draftIdentity.displayId,
+    hasLocalOverride: false,
+    lastDraftValue: draftValue,
+  })
+
+  const adoptDraftValue = useCallback((newValue: string) => {
+    draftSyncRef.current.hasLocalOverride = false
+    valueRef.current = newValue
+    setLocalValue(newValue)
+  }, [])
+
+  const applyValue = useCallback((newValue: string) => {
+    draftSyncRef.current.hasLocalOverride = true
+    valueRef.current = newValue
+    setLocalValue(newValue)
+  }, [])
+
+  useBrowserLayoutEffect(() => {
+    const currentDraft = draftSyncRef.current
+
+    if (currentDraft.displayId !== draftIdentity.displayId) {
+      draftSyncRef.current = {
+        displayId: draftIdentity.displayId,
+        hasLocalOverride: false,
+        lastDraftValue: draftValue,
+      }
+
+      adoptDraftValue(draftValue)
+      return
+    }
+
+    if (currentDraft.lastDraftValue === draftValue) {
+      return
+    }
+
+    currentDraft.lastDraftValue = draftValue
+    if (!currentDraft.hasLocalOverride && draftValue !== valueRef.current) {
+      adoptDraftValue(draftValue)
+    }
+  }, [adoptDraftValue, draftIdentity.displayId, draftValue])
+
+  return { localValue, valueRef, applyValue }
+}
+
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(
   function Composer(
     {
@@ -126,11 +209,20 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     } = useFileUpload()
 
     // Draft: display state here, persistence per chat (or per scope) in
-    // localStorage via useChatDraft, debounced per keystroke.
-    const { draftValue, setDraftValue, clearDraft } = useChatDraft(
-      chatId ?? draftScopeId ?? null
+    // localStorage via useChatDraft, debounced per keystroke. Scoped no-chat
+    // surfaces and chat routes are identity-isolated, so route changes adopt
+    // the active key's persisted draft instead of retaining the previous display.
+    const draftIdentity = useMemo(
+      () => resolveComposerDraftIdentity(chatId, draftScopeId),
+      [chatId, draftScopeId]
     )
-    const [localValue, setLocalValue] = useState(() => draftValue)
+    const { draftValue, setDraftValue, clearDraft } = useChatDraft(
+      draftIdentity.persistenceId
+    )
+    const { localValue, valueRef, applyValue } = useComposerDraftDisplay(
+      draftIdentity,
+      draftValue
+    )
 
     const debouncedSetDraftValue = useMemo(
       () => debounce((value: string) => setDraftValue(value), 500),
@@ -148,16 +240,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       }
     }, [debouncedSetDraftValue])
 
-    // The ref mirrors the display text and is written SYNCHRONOUSLY at every
-    // write site (all of which run at event/imperative time, never during
-    // render), so a send in the same tick as a text change always reads the
-    // current text — the same guarantee the pre-Composer inputRef gave.
-    const valueRef = useRef(localValue)
-    const applyValue = useCallback((newValue: string) => {
-      valueRef.current = newValue
-      setLocalValue(newValue)
-    }, [])
-
+    // The ref mirrors the display text and is written SYNCHRONOUSLY by
+    // useComposerDraftDisplay at every write site (event/imperative time, never
+    // during render), so a send in the same tick as a text change always reads
+    // the current text — the same guarantee the pre-Composer inputRef gave.
     const handleValueChange = useCallback(
       (newValue: string) => {
         applyValue(newValue)
@@ -174,7 +260,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       // ref synchronously, so a second Enter in the same commit cannot
       // re-send the old text.
       applyValue("")
-      clearFiles()
+      const fileRestoreToken = clearFiles()
       const accepted = await onTurn({ text, files: submittedFiles })
       if (accepted === true) {
         debouncedSetDraftValue.cancel()
@@ -188,7 +274,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       if (text && valueRef.current === "") {
         applyValue(text)
       }
-      restoreFiles(submittedFiles)
+      restoreFiles(submittedFiles, fileRestoreToken)
     }, [
       applyValue,
       files,
@@ -197,6 +283,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       onTurn,
       debouncedSetDraftValue,
       clearDraft,
+      valueRef,
     ])
 
     const primaryAction = useMemo(
@@ -303,7 +390,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           textareaRef.current?.focus()
         },
       }),
-      [applyValue, handleValueChange]
+      [applyValue, handleValueChange, valueRef]
     )
 
     return (
@@ -330,11 +417,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               value={localValue}
               onValueChange={handleValueChange}
             >
-              <div className="[grid-area:header] min-w-0">
+              <div className="min-w-0 [grid-area:header]">
                 <FileList files={files} onFileRemove={handleFileRemove} />
               </div>
               <PromptInputActions
-                className="[grid-area:leading] h-9 justify-start self-center"
+                className="h-9 justify-start self-center [grid-area:leading]"
                 data-composer-leading="true"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -356,11 +443,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               />
               <PromptInputFooter aria-hidden="true" />
               <PromptInputActions
-                className="[grid-area:trailing] h-9 gap-1 cant-hover:gap-1.5 self-center"
+                className="cant-hover:gap-1.5 h-9 gap-1 self-center [grid-area:trailing]"
                 data-composer-trailing="true"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="relative ms-1 flex items-center gap-1.5 cant-hover:gap-1.5 cant-hover:px-1.5">
+                <div className="cant-hover:gap-1.5 cant-hover:px-1.5 relative ms-1 flex items-center gap-1.5">
                   <ModelSelector
                     variant="composer"
                     selectedModelId={selectedModel}
@@ -369,7 +456,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                     onLockedGuestModelSelect={onLockedGuestModelSelect}
                   />
                 </div>
-                <div className="ms-auto flex items-center gap-2 cant-hover:gap-1.5">
+                <div className="cant-hover:gap-1.5 ms-auto flex items-center gap-2">
                   {/* TODO: Add dictation here when the app exposes a local voice input capability. */}
                   <PromptInputAction tooltip={primaryAction.tooltip}>
                     <Button

@@ -46,7 +46,7 @@ export type TurnSnapshot = {
   systemPrompt: string
   enableSearch: boolean
   isAuthenticated: boolean
-  /** Model preferences hydrated — auto-submit must wait for this. */
+  /** Model preferences and catalog are ready — auto-submit must wait for this. */
   isHydrated: boolean
 }
 
@@ -87,7 +87,7 @@ export function TurnContextProvider({
   const { user } = useUser()
   const { updateChatModel } = useChats()
   const { preferences, setWebSearchEnabled } = useUserPreferences()
-  const { modelPrefsHydrated } = useModelStore()
+  const { modelPrefsHydrated, isLoading: modelStoreLoading } = useModelStore()
 
   const { selectedModel, handleModelChange } = useModel({
     currentChat,
@@ -106,13 +106,14 @@ export function TurnContextProvider({
 
   const isAuthenticated = !!user?.id
   const systemPrompt = user?.system_prompt || SYSTEM_PROMPT_DEFAULT
+  const isHydrated = modelPrefsHydrated && !modelStoreLoading
 
   const snapshot: TurnSnapshot = {
     selectedModel,
     systemPrompt,
     enableSearch,
     isAuthenticated,
-    isHydrated: modelPrefsHydrated,
+    isHydrated,
   }
 
   // Initialized with the first render's values, then kept current from
@@ -133,7 +134,7 @@ export function TurnContextProvider({
       setEnableSearch,
       isAuthenticated,
       systemPrompt,
-      isHydrated: modelPrefsHydrated,
+      isHydrated,
       getTurnSnapshot,
     }),
     [
@@ -143,7 +144,7 @@ export function TurnContextProvider({
       setEnableSearch,
       isAuthenticated,
       systemPrompt,
-      modelPrefsHydrated,
+      isHydrated,
       getTurnSnapshot,
     ]
   )

@@ -118,15 +118,19 @@ export function getReasoningDurationMs(metadata: unknown): number | undefined {
     : undefined
 }
 
+type ToolDisplayMetadataRecord = Readonly<Record<string, unknown>>
+
 export type ToolDisplayMetadataRecords = {
-  byName: Record<string, unknown>
-  byCallId: Record<string, unknown>
+  readonly byName: ToolDisplayMetadataRecord
+  readonly byCallId: ToolDisplayMetadataRecord
 }
 
-const EMPTY_TOOL_DISPLAY_RECORDS: ToolDisplayMetadataRecords = {
-  byName: {},
-  byCallId: {},
-}
+const EMPTY_TOOL_DISPLAY_RECORD: ToolDisplayMetadataRecord = Object.freeze({})
+
+const EMPTY_TOOL_DISPLAY_RECORDS: ToolDisplayMetadataRecords = Object.freeze({
+  byName: EMPTY_TOOL_DISPLAY_RECORD,
+  byCallId: EMPTY_TOOL_DISPLAY_RECORD,
+})
 
 /**
  * Read the per-tool display-metadata records the chat turn runtime streams

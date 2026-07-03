@@ -179,6 +179,42 @@ describe("deriveAssistantLoadingState", () => {
     expect(state.showDots).toBe(true)
   })
 
+  it("keeps dots visible for opaque streaming reasoning with no visible output", () => {
+    const view = deriveAssistantTurnView(
+      {
+        parts: parts([{ type: "reasoning", text: "", state: "streaming" }]),
+      },
+      "streaming"
+    )
+    const state = deriveAssistantLoadingState(view, {
+      status: "streaming",
+      isLast: true,
+      contentNullOrEmpty: true,
+      showToolInvocations: true,
+    })
+    expect(view.reasoning.isOpaque).toBe(true)
+    expect(state.showDots).toBe(true)
+  })
+
+  it("suppresses dots when streaming reasoning has visible text", () => {
+    const view = deriveAssistantTurnView(
+      {
+        parts: parts([
+          { type: "reasoning", text: "thinking", state: "streaming" },
+        ]),
+      },
+      "streaming"
+    )
+    const state = deriveAssistantLoadingState(view, {
+      status: "streaming",
+      isLast: true,
+      contentNullOrEmpty: true,
+      showToolInvocations: true,
+    })
+    expect(view.reasoning.isOpaque).toBe(false)
+    expect(state.showDots).toBe(false)
+  })
+
   it("suppresses dots when reasoning is present and reports in-progress tools", () => {
     const view = deriveAssistantTurnView(
       {

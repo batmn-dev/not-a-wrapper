@@ -409,10 +409,11 @@ opaque → bodyless "Thought for Ns" row).
   `exact`.
 
 ### 4.2 Intentional scaffolding (carried, NOT consumed — do not "clean up")
+
 | # | Scaffold | Evidence | Status |
 | --- | --- | --- | --- |
 | 1 | `phase`, `steps`, `isReasoningStreaming` | declared `activity-panel.tsx:44-56`; supplied at `use-activity-panel.ts:241-256`; spread at `chat.tsx:373-377`; **omitted from the `ActivityPanel` destructure `:115-124`** | accepted & silently dropped `exact` |
-| 2 | `leading=globe|bullet`, `body=chips` cva axes | `activity-timeline.tsx:63-79`; only `done`/`description` in prod; globe/bullet/chips only in `activity-timeline.test.tsx` | unconsumed `exact` |
+| 2 | <code>leading=globe&#124;bullet</code>, `body=chips` cva axes | `activity-timeline.tsx:63-79`; only `done`/`description` in prod; globe/bullet/chips only in `activity-timeline.test.tsx` | unconsumed `exact` |
 | 3 | `DockedFlyoutShell.viewportRef` | wired to ScrollArea `docked-flyout-shell.tsx:52-74`; `ActivityPanel` never passes it (`activity-panel.tsx:160-168`) → internal ref wins | unfed `exact` |
 | 4 | `badge.tsx` `variant="source"` (hover-invert) + `size:md→h-[25px]` | `components/ui/badge.tsx:19-27`; **zero usages repo-wide** | reserved `exact` |
 | 5 | `StepLeadingIndicator` exported | `activity-timeline.tsx:81-112` | internal-only `exact` |

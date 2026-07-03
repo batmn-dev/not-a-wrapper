@@ -17,16 +17,12 @@ type MessageAttachment = {
   url: string
 }
 
-type MessageProps = {
+type BaseMessageProps = {
   variant: MessageType["role"]
   children: string
   id: string
   attachments?: MessageAttachment[]
   isLast?: boolean
-  /** The Assistant turn view — Conversation derives it once per assistant
-   * message per render; the memo comparator below compares its precomputed
-   * signature fields instead of re-deriving from raw parts. */
-  view?: AssistantTurnView
   onDelete: (id: string) => void
   onEdit: (
     id: string,
@@ -48,6 +44,21 @@ type MessageProps = {
     reason?: string
   ) => Promise<void> | void
 }
+
+type AssistantMessageProps = BaseMessageProps & {
+  variant: "assistant"
+  /** The Assistant turn view — Conversation derives it once per assistant
+   * message per render; the memo comparator below compares its precomputed
+   * signature fields instead of re-deriving from raw parts. */
+  view: AssistantTurnView
+}
+
+type NonAssistantMessageProps = BaseMessageProps & {
+  variant: Exclude<MessageType["role"], "assistant">
+  view?: never
+}
+
+type MessageProps = AssistantMessageProps | NonAssistantMessageProps
 
 // --- Content-based equality helpers for React.memo ---
 
@@ -169,7 +180,7 @@ function MessageInner({
     )
   }
 
-  if (variant === "assistant" && view) {
+  if (variant === "assistant") {
     return (
       <MessageAssistant
         copied={copied}

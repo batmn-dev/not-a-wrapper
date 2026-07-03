@@ -189,18 +189,22 @@ export function useActivityPanel({
     selectedActivityTurnId,
   })
 
-  // One derivation for the panel target — the same Assistant turn view the
-  // message row derives, so the trigger and the panel can never disagree.
-  const panelView = panelMessage
-    ? deriveAssistantTurnView(panelMessage, status)
-    : undefined
-
   // The reasoning hook runs once for the panel target. The live timer only runs
   // for the default generation turn; historical selections remain stable while a
   // newer generation streams elsewhere in the thread.
   const isPanelDefaultTurn =
     panelActivityTurnId !== undefined &&
     panelActivityTurnId === defaultActivityTurnId
+
+  // One derivation for the panel target — the same Assistant turn view the
+  // message row derives, so the trigger and the panel can never disagree.
+  const panelView = panelMessage
+    ? deriveAssistantTurnView(
+        panelMessage,
+        isPanelDefaultTurn ? status : "ready"
+      )
+    : undefined
+
   const {
     phase,
     reasoningText,

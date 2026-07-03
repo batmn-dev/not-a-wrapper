@@ -4,6 +4,7 @@ import {
   adoptServerOwned,
   getBranch,
   getServerMessageId,
+  getToolDisplayMetadataRecords,
   stampServerFields,
   type DurableMetadataSource,
 } from "./metadata"
@@ -208,5 +209,26 @@ describe("server-owned key-set drift guard", () => {
 
     expect(written).toEqual(new Set(SERVER_OWNED_METADATA_KEYS))
     expect(new Set(governed)).toEqual(new Set(SERVER_OWNED_METADATA_KEYS))
+  })
+})
+
+describe("getToolDisplayMetadataRecords", () => {
+  it("does not expose a mutable shared empty fallback", () => {
+    const records = getToolDisplayMetadataRecords(undefined)
+    expect(Object.isFrozen(records)).toBe(true)
+    expect(Object.isFrozen(records.byName)).toBe(true)
+    expect(Object.isFrozen(records.byCallId)).toBe(true)
+
+    try {
+      ;(records.byName as Record<string, unknown>).leaked = true
+      ;(records.byCallId as Record<string, unknown>).leaked = true
+    } catch {
+      // Strict-mode runtimes throw on frozen-object writes; loose runtimes
+      // silently ignore them. Either behavior must leave the fallback empty.
+    }
+
+    const nextRecords = getToolDisplayMetadataRecords(null)
+    expect(nextRecords.byName).not.toHaveProperty("leaked")
+    expect(nextRecords.byCallId).not.toHaveProperty("leaked")
   })
 })

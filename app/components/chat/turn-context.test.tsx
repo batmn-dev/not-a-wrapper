@@ -13,6 +13,7 @@ import {
 const turnMocks = vi.hoisted(() => ({
   selectedModel: "model-a",
   modelPrefsHydrated: true,
+  modelStoreLoading: false,
 }))
 
 vi.mock("@/lib/user-store/provider", () => ({
@@ -31,7 +32,10 @@ vi.mock("@/lib/user-preference-store/provider", () => ({
 }))
 
 vi.mock("@/lib/model-store/provider", () => ({
-  useModel: () => ({ modelPrefsHydrated: turnMocks.modelPrefsHydrated }),
+  useModel: () => ({
+    modelPrefsHydrated: turnMocks.modelPrefsHydrated,
+    isLoading: turnMocks.modelStoreLoading,
+  }),
 }))
 
 vi.mock("@/app/components/chat/use-model", () => ({
@@ -64,14 +68,21 @@ describe("TurnContextProvider snapshot contract", () => {
     // provider's lifetime, and reading it — even from a child effect on the
     // very commit a value changed (the ?prompt= auto-submit path) — yields
     // that commit's values, never the previous one.
-    const seen: Array<{ snapshot: TurnSnapshot; getter: () => TurnSnapshot }> =
-      []
+    const seen: Array<{
+      snapshot: TurnSnapshot
+      getter: () => TurnSnapshot
+      reactiveHydrated: boolean
+    }> = []
 
     function Probe() {
-      const { getTurnSnapshot } = useTurnContext()
+      const { getTurnSnapshot, isHydrated } = useTurnContext()
       // Passive effect read on every commit — the hardest consumer.
       React.useEffect(() => {
-        seen.push({ snapshot: getTurnSnapshot(), getter: getTurnSnapshot })
+        seen.push({
+          snapshot: getTurnSnapshot(),
+          getter: getTurnSnapshot,
+          reactiveHydrated: isHydrated,
+        })
       })
       return null
     }
@@ -92,19 +103,30 @@ describe("TurnContextProvider snapshot contract", () => {
 
     turnMocks.selectedModel = "model-a"
     turnMocks.modelPrefsHydrated = false
+    turnMocks.modelStoreLoading = true
     mount()
 
     expect(seen.at(-1)?.snapshot.selectedModel).toBe("model-a")
     expect(seen.at(-1)?.snapshot.isHydrated).toBe(false)
+    expect(seen.at(-1)?.reactiveHydrated).toBe(false)
 
-    // Hydration completes and the resolved model changes in one commit.
-    turnMocks.selectedModel = "model-b"
+    // Browser prefs can hydrate before the model catalog settles; this must
+    // still keep auto-submit closed.
     turnMocks.modelPrefsHydrated = true
+    mount()
+
+    expect(seen.at(-1)?.snapshot.isHydrated).toBe(false)
+    expect(seen.at(-1)?.reactiveHydrated).toBe(false)
+
+    // Once model loading settles, the final selected model becomes submit-safe.
+    turnMocks.selectedModel = "model-b"
+    turnMocks.modelStoreLoading = false
     mount()
 
     const last = seen.at(-1)
     expect(last?.snapshot.selectedModel).toBe("model-b")
     expect(last?.snapshot.isHydrated).toBe(true)
+    expect(last?.reactiveHydrated).toBe(true)
     expect(last?.snapshot.systemPrompt).toBe("sp")
     expect(last?.snapshot.enableSearch).toBe(true)
     // Same getter identity across commits — safe to hold in a closure forever.

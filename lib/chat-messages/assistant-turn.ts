@@ -242,7 +242,8 @@ export function deriveAssistantLoadingState(
   const isLastStreaming = status === "streaming" && isLast
 
   // Suppress generating dots only when reasoning has visible text.
-  const hasVisibleReasoning = view.reasoning.phase !== "idle"
+  const hasVisibleReasoning =
+    view.reasoning.phase !== "idle" && !view.reasoning.isOpaque
 
   const hasVisibleTools = Boolean(
     view.toolParts.length > 0 && showToolInvocations

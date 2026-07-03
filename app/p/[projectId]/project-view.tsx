@@ -16,7 +16,7 @@ import { convexChatToChat } from "@/lib/chat-store/types"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
-import { MESSAGE_MAX_LENGTH, SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
+import { MESSAGE_MAX_LENGTH } from "@/lib/config"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
 import { RiChat3Line } from "@remixicon/react"
@@ -108,14 +108,15 @@ function ProjectViewInner({ projectId }: ProjectViewProps) {
 
       setIsSubmitting(true)
       try {
-        // Read the model at run time from the Turn context snapshot — never
+        // Read turn inputs at run time from the Turn context snapshot — never
         // from a render-time closure.
+        const turnSnapshot = getTurnSnapshot()
         const newChat = await createNewChat(
           user.id,
           text,
-          getTurnSnapshot().selectedModel,
+          turnSnapshot.selectedModel,
           true,
-          SYSTEM_PROMPT_DEFAULT,
+          turnSnapshot.systemPrompt,
           projectId
         )
         if (!newChat) return false

@@ -156,13 +156,59 @@ export function Conversation({
               ? status
               : "ready"
 
-        // The single per-render derivation of everything the assistant row
-        // renders (see CONTEXT.md "Assistant turn view"). Derived fresh each
-        // render — the AI SDK mutates part objects in place during streaming,
-        // so this must never be memoized by message reference.
-        const view = isAssistant
-          ? deriveAssistantTurnView(message, status)
-          : undefined
+        let messageContent: ReactNode
+        if (message.role === "assistant") {
+          // The single per-render derivation of everything the assistant row
+          // renders (see CONTEXT.md "Assistant turn view"). Derived fresh each
+          // render — the AI SDK mutates part objects in place during streaming,
+          // so this must never be memoized by message reference.
+          const view = deriveAssistantTurnView(
+            message,
+            isLast ? status : "ready"
+          )
+
+          messageContent = (
+            <Message
+              id={message.id}
+              variant="assistant"
+              isLast={isLast}
+              view={view}
+              onDelete={onDelete}
+              onEdit={onEdit}
+              onReload={generationActive ? undefined : onReload}
+              onSelectBranch={onSelectBranch}
+              branch={turnBranch}
+              status={messageStatus}
+              onQuote={onQuote}
+              isDurableChat={isDurableChat}
+              finishReason={isLast ? lastFinishReason : undefined}
+              onToolApproval={onToolApproval}
+            >
+              {view.text}
+            </Message>
+          )
+        } else {
+          messageContent = (
+            <Message
+              id={message.id}
+              variant={message.role}
+              attachments={isUser ? getMessageAttachments(message) : undefined}
+              isLast={isLast}
+              onDelete={onDelete}
+              onEdit={onEdit}
+              onReload={generationActive ? undefined : onReload}
+              onSelectBranch={onSelectBranch}
+              branch={turnBranch}
+              status={messageStatus}
+              onQuote={onQuote}
+              isDurableChat={isDurableChat}
+              finishReason={isLast ? lastFinishReason : undefined}
+              onToolApproval={onToolApproval}
+            >
+              {getMessageText(message)}
+            </Message>
+          )
+        }
 
         return (
           <TurnRow
@@ -177,25 +223,7 @@ export function Conversation({
             dataTurn={message.role}
             dataTurnId={message.id}
           >
-            <Message
-              id={message.id}
-              variant={message.role}
-              attachments={isUser ? getMessageAttachments(message) : undefined}
-              isLast={isLast}
-              view={view}
-              onDelete={onDelete}
-              onEdit={onEdit}
-              onReload={generationActive ? undefined : onReload}
-              onSelectBranch={onSelectBranch}
-              branch={turnBranch}
-              status={messageStatus}
-              onQuote={onQuote}
-              isDurableChat={isDurableChat}
-              finishReason={isLast ? lastFinishReason : undefined}
-              onToolApproval={onToolApproval}
-            >
-              {view ? view.text : getMessageText(message)}
-            </Message>
+            {messageContent}
           </TurnRow>
         )
       })}

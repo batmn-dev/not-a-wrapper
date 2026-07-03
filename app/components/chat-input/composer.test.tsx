@@ -18,11 +18,17 @@ const promptInputMockCalls: Array<{
   expanded?: boolean
   maxHeight?: number | string
   value?: string
+  onValueChange?: (value: string) => void
 }> = []
 
 // Controllable module state for the Composer's internal seams.
 const composerMocks = vi.hoisted(() => ({
   draftValue: "",
+  draftById: new Map<string | null, string>(),
+  setDraftFns: new Map<string | null, (value: string) => void>(),
+  clearDraftFns: new Map<string | null, () => void>(),
+  setDraftValueById: [] as Array<{ draftId: string | null; value: string }>,
+  clearDraftById: [] as Array<string | null>,
   files: [] as File[],
   setDraftValue: vi.fn(),
   clearDraft: vi.fn(),
@@ -59,11 +65,34 @@ vi.mock("@/lib/user-store/provider", () => ({
 }))
 
 vi.mock("@/app/hooks/use-chat-draft", () => ({
-  useChatDraft: () => ({
-    draftValue: composerMocks.draftValue,
-    setDraftValue: composerMocks.setDraftValue,
-    clearDraft: composerMocks.clearDraft,
-  }),
+  useChatDraft: (draftId: string | null) => {
+    if (!composerMocks.setDraftFns.has(draftId)) {
+      composerMocks.setDraftFns.set(draftId, (value: string) => {
+        composerMocks.setDraftValue(value)
+        composerMocks.setDraftValueById.push({ draftId, value })
+        if (value) {
+          composerMocks.draftById.set(draftId, value)
+        } else {
+          composerMocks.draftById.delete(draftId)
+        }
+      })
+    }
+
+    if (!composerMocks.clearDraftFns.has(draftId)) {
+      composerMocks.clearDraftFns.set(draftId, () => {
+        composerMocks.clearDraft()
+        composerMocks.clearDraftById.push(draftId)
+        composerMocks.draftById.delete(draftId)
+      })
+    }
+
+    return {
+      draftValue:
+        composerMocks.draftById.get(draftId) ?? composerMocks.draftValue,
+      setDraftValue: composerMocks.setDraftFns.get(draftId)!,
+      clearDraft: composerMocks.clearDraftFns.get(draftId)!,
+    }
+  },
 }))
 
 vi.mock("@/app/components/chat/use-file-upload", () => ({
@@ -94,13 +123,15 @@ vi.mock("@/components/ui/prompt-input", () => ({
     expanded,
     maxHeight,
     value,
+    onValueChange,
   }: {
     children: React.ReactNode
     expanded?: boolean
     maxHeight?: number | string
     value?: string
+    onValueChange?: (value: string) => void
   }) => {
-    promptInputMockCalls.push({ expanded, maxHeight, value })
+    promptInputMockCalls.push({ expanded, maxHeight, value, onValueChange })
     return <div>{children}</div>
   },
   PromptInputAction: ({
@@ -144,6 +175,11 @@ describe("Composer primary action", () => {
   beforeEach(() => {
     promptInputMockCalls.length = 0
     composerMocks.draftValue = ""
+    composerMocks.draftById.clear()
+    composerMocks.setDraftFns.clear()
+    composerMocks.clearDraftFns.clear()
+    composerMocks.setDraftValueById.length = 0
+    composerMocks.clearDraftById.length = 0
     composerMocks.files = []
     vi.clearAllMocks()
   })
@@ -172,11 +208,35 @@ describe("Composer primary action", () => {
     root = mountedRoot
 
     act(() => {
-      mountedRoot.render(
-        <Composer chatId={null} onTurn={() => false} {...props} />
-      )
+      mountedRoot.render(composerElement(props))
     })
     return mountedContainer
+  }
+
+  function rerenderComposer(
+    props: Partial<React.ComponentProps<typeof Composer>> & {
+      ref?: React.Ref<ComposerHandle>
+    }
+  ) {
+    act(() => {
+      root?.render(composerElement(props))
+    })
+  }
+
+  function composerElement(
+    props: Partial<React.ComponentProps<typeof Composer>> & {
+      ref?: React.Ref<ComposerHandle>
+    }
+  ) {
+    return <Composer chatId={null} onTurn={() => false} {...props} />
+  }
+
+  function changeComposerValue(value: string) {
+    const onValueChange = promptInputMockCalls.at(-1)?.onValueChange
+    expect(onValueChange).toBeTruthy()
+    act(() => {
+      onValueChange?.(value)
+    })
   }
 
   it("keeps Stop actionable while streaming even with empty input", () => {
@@ -234,6 +294,81 @@ describe("Composer primary action", () => {
     ]
     renderComposer({ isSubmitting: false, status: "ready" })
     expect(promptInputMockCalls.at(-1)?.expanded).toBe(true)
+  })
+
+  it("does not leak the previous scoped draft when the project scope changes", () => {
+    composerMocks.draftById.set("project-a", "project A draft")
+
+    renderComposer({
+      draftScopeId: "project-a",
+      isSubmitting: false,
+      status: "ready",
+    })
+    expect(promptInputMockCalls.at(-1)?.value).toBe("project A draft")
+
+    rerenderComposer({
+      draftScopeId: "project-b",
+      isSubmitting: false,
+      status: "ready",
+    })
+
+    expect(promptInputMockCalls.at(-1)?.value).toBe("")
+  })
+
+  it("restores the persisted draft for the active scoped composer", () => {
+    renderComposer({
+      draftScopeId: "project-a",
+      isSubmitting: false,
+      status: "ready",
+    })
+    expect(promptInputMockCalls.at(-1)?.value).toBe("")
+
+    composerMocks.draftById.set("project-a", "persisted project draft")
+    rerenderComposer({
+      draftScopeId: "project-a",
+      isSubmitting: false,
+      status: "ready",
+    })
+
+    expect(promptInputMockCalls.at(-1)?.value).toBe("persisted project draft")
+  })
+
+  it("does not let later scoped draft hydration overwrite active user edits", () => {
+    renderComposer({
+      draftScopeId: "project-a",
+      isSubmitting: false,
+      status: "ready",
+    })
+
+    changeComposerValue("typed after mount")
+    composerMocks.draftById.set("project-a", "older persisted draft")
+    rerenderComposer({
+      draftScopeId: "project-a",
+      isSubmitting: false,
+      status: "ready",
+    })
+
+    expect(promptInputMockCalls.at(-1)?.value).toBe("typed after mount")
+  })
+
+  it("restores the persisted draft when the chat identity changes", () => {
+    composerMocks.draftById.set("chat-a", "chat A draft")
+    composerMocks.draftById.set("chat-b", "chat B draft")
+
+    renderComposer({
+      chatId: "chat-a",
+      isSubmitting: false,
+      status: "ready",
+    })
+    expect(promptInputMockCalls.at(-1)?.value).toBe("chat A draft")
+
+    rerenderComposer({
+      chatId: "chat-b",
+      isSubmitting: false,
+      status: "ready",
+    })
+
+    expect(promptInputMockCalls.at(-1)?.value).toBe("chat B draft")
   })
 
   it("emits one turn payload on send and clears the draft only on success", async () => {

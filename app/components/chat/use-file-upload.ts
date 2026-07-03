@@ -4,9 +4,10 @@ import {
   checkFileUploadLimit,
   processFiles,
 } from "@/lib/file-handling"
-import { useCallback, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 
 type ConvexClient = Parameters<typeof processFiles>[2]
+type FileRestoreToken = number
 
 /**
  * Upload files for a chat at turn time. Pure of React state — the Composer
@@ -31,6 +32,10 @@ export async function uploadFiles(
       })
       return null
     }
+    console.warn(
+      "File upload limit check failed; continuing with server-side enforcement:",
+      error
+    )
   }
 
   try {
@@ -84,23 +89,34 @@ export function cleanupOptimisticAttachments(
  */
 export const useFileUpload = () => {
   const [files, setFiles] = useState<File[]>([])
+  const fileMutationVersionRef = useRef(0)
+
+  const markFilesChanged = useCallback(() => {
+    fileMutationVersionRef.current += 1
+    return fileMutationVersionRef.current
+  }, [])
 
   const handleFileUpload = useCallback((newFiles: File[]) => {
+    if (newFiles.length === 0) return
+    markFilesChanged()
     setFiles((prev) => [...prev, ...newFiles])
-  }, [])
+  }, [markFilesChanged])
 
   const handleFileRemove = useCallback((file: File) => {
+    markFilesChanged()
     setFiles((prev) => prev.filter((f) => f !== file))
-  }, [])
+  }, [markFilesChanged])
 
   const clearFiles = useCallback(() => {
+    const restoreToken = markFilesChanged()
     setFiles([])
-  }, [])
+    return restoreToken
+  }, [markFilesChanged])
 
-  /** Put a rejected turn's files back — unless the user attached new ones
-   * while the turn was in flight. */
-  const restoreFiles = useCallback((previous: File[]) => {
+  /** Put a rejected turn's files back unless attachment state changed since clear. */
+  const restoreFiles = useCallback((previous: File[], token: FileRestoreToken) => {
     if (previous.length === 0) return
+    if (fileMutationVersionRef.current !== token) return
     setFiles((prev) => (prev.length > 0 ? prev : previous))
   }, [])
 
