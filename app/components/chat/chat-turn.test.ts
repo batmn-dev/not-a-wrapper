@@ -79,10 +79,12 @@ function createHarness() {
     },
     getStoredGuestChatId: vi.fn(() => null),
     readMessages: vi.fn(async () => cachedMessages),
-    writeMessages: vi.fn(async (_chatId: string, nextMessages: ChatTurnMessage[]) => {
-      cachedMessages = nextMessages
-      events.push("writeTrimmedMessages")
-    }),
+    writeMessages: vi.fn(
+      async (_chatId: string, nextMessages: ChatTurnMessage[]) => {
+        cachedMessages = nextMessages
+        events.push("writeTrimmedMessages")
+      }
+    ),
     reportError: vi.fn((message: string) => {
       events.push(`reportError:${message}`)
     }),
@@ -327,6 +329,30 @@ describe("chat turn controller", () => {
     expect(adapters.sendMessage).not.toHaveBeenCalled()
     expect(adapters.setIsSending).not.toHaveBeenCalled()
     expect(onSuccess).not.toHaveBeenCalled()
+  })
+
+  it("cleans optimistic attachment URLs when an over-limit send is rejected", async () => {
+    const { adapters, controller } = createHarness()
+    const optimisticAttachments = [
+      {
+        name: "image.png",
+        contentType: "image/png",
+        url: "blob:local-image",
+      },
+    ]
+
+    await controller.runSendTurn({
+      text: "x".repeat(MESSAGE_MAX_LENGTH + 1),
+      optimisticAttachments,
+    })
+
+    expect(adapters.cleanupOptimisticAttachments).toHaveBeenCalledWith(
+      optimisticAttachments
+    )
+    expect(adapters.ensureChatExists).not.toHaveBeenCalled()
+    expect(adapters.setMessages).not.toHaveBeenCalled()
+    expect(adapters.sendMessage).not.toHaveBeenCalled()
+    expect(adapters.setIsSending).not.toHaveBeenCalled()
   })
 
   it("runs suggestions through send behavior with the suggestion error message and chatVersion", async () => {
@@ -634,8 +660,13 @@ describe("chat turn controller", () => {
   })
 
   it("regenerates with a target message id and explicit intent", async () => {
-    const { adapters, controller, setMessagesState, setSnapshot, storeAdapters } =
-      createHarness()
+    const {
+      adapters,
+      controller,
+      setMessagesState,
+      setSnapshot,
+      storeAdapters,
+    } = createHarness()
     setSnapshot({ isAuthenticated: true, systemPrompt: "custom system" })
     const targetCreatedAt = new Date("2026-01-02T00:00:00.000Z")
     const messages = [

@@ -4,8 +4,8 @@ import {
   createOptimisticMessageId,
 } from "@/lib/chat-store/identity"
 import {
-  buildEditIntent,
   buildChatTurnRequestBody,
+  buildEditIntent,
   buildSelectedPathToken,
   prepareEditTurnPlan,
   prepareRegenerationTurnPlan,
@@ -208,6 +208,9 @@ export async function runSendTurn(
   // rejected turn must leave no trace: no chat, no navigation, no optimistic
   // bubble — the Composer restores the payload and the user fixes it in place.
   if (text.length > MESSAGE_MAX_LENGTH) {
+    if (optimisticAttachments.length > 0) {
+      adapters.cleanupOptimisticAttachments(optimisticAttachments)
+    }
     adapters.toastError(MESSAGE_TOO_LONG_ERROR)
     return
   }
@@ -339,7 +342,14 @@ export async function runSuggestionTurn(
 
 export async function runEditTurn(
   adapters: ChatTurnAdapters,
-  { chatId, messages, messageId, newContent, isSubmitting, status }: EditTurnArgs
+  {
+    chatId,
+    messages,
+    messageId,
+    newContent,
+    isSubmitting,
+    status,
+  }: EditTurnArgs
 ): Promise<EditTurnResult> {
   // Read the Turn context at run time — never from a render-time closure.
   const snapshot = adapters.getTurnSnapshot()
@@ -499,7 +509,9 @@ export async function runRegenerationTurn(
   const snapshot = adapters.getTurnSnapshot()
 
   if (isGenerationActive({ isSubmitting, status })) {
-    adapters.toastError("Please wait until the current message finishes sending.")
+    adapters.toastError(
+      "Please wait until the current message finishes sending."
+    )
     return
   }
 
