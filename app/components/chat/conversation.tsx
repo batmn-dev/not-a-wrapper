@@ -1,16 +1,14 @@
 import { ScrollRootContent } from "@/components/ui/scroll-root"
 import {
-  resolveTurnBranch,
-  type ChatMessageMetadata,
-} from "@/lib/chat-messages/branch"
+  deriveAssistantTurnView,
+  type AssistantTurnView,
+} from "@/lib/chat-messages/assistant-turn"
+import { resolveTurnBranch } from "@/lib/chat-messages/branch"
 import {
   isDurableMessageStatus,
   type DurableMessageStatus,
 } from "@/lib/chat-messages/durable-contract"
-import {
-  extractTextFromMessageParts,
-  getToolRenderSignature,
-} from "@/lib/chat-messages/parts"
+import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import { cn } from "@/lib/utils"
 import { UIMessage as MessageType } from "@ai-sdk/react"
 import type { ReactNode } from "react"
@@ -20,7 +18,6 @@ import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
 import {
   isGenerationActive,
   PENDING_ACTIVITY_TURN_ID,
-  type ActivityPanelControls,
 } from "./use-activity-panel"
 
 type MessageRenderStatus = DurableMessageStatus | "ready" | "error"
@@ -36,7 +33,8 @@ function getMessageText(message: MessageType): string {
   return extractTextFromMessageParts(message.parts)
 }
 
-// Extract file attachments from parts array
+// Extract file attachments from parts array (user rows; assistant rows render
+// no attachments)
 function getMessageAttachments(
   message: MessageType
 ): Array<{ name: string; contentType: string; url: string }> | undefined {
@@ -85,17 +83,12 @@ type ConversationProps = {
   messages: MessageType[]
   status?: "streaming" | "ready" | "submitted" | "error"
   isSubmitting?: boolean
-  /** Id currently projected into the single Chat-owned Activity panel surface. */
-  activityPanelTurnId?: string
-  /** Chat-owned Activity-panel controls, forwarded to the assistant trigger. */
-  activityPanel?: ActivityPanelControls
   onDelete: (id: string) => void
   onEdit: (
     id: string,
     newText: string
   ) => Promise<EditTurnResult | void> | EditTurnResult | void
   onReload: (messageId: string) => void
-  onStop?: () => void
   onQuote?: (text: string, messageId: string) => void
   onSelectBranch?: (messageId: string) => void
   isDurableChat?: boolean
@@ -107,16 +100,20 @@ type ConversationProps = {
   ) => Promise<void> | void
 }
 
+/** The pending placeholder's view: no parts yet, generation submitted. Module
+ * constant so its metadata identity is stable across renders (memo-friendly). */
+const PENDING_TURN_VIEW: AssistantTurnView = deriveAssistantTurnView(
+  { parts: [] },
+  "submitted"
+)
+
 export function Conversation({
   messages,
   status = "ready",
   isSubmitting = false,
-  activityPanelTurnId,
-  activityPanel,
   onDelete,
   onEdit,
   onReload,
-  onStop,
   onQuote,
   onSelectBranch,
   isDurableChat,
@@ -129,7 +126,6 @@ export function Conversation({
   const generationActive = isGenerationActive(status, isSubmitting)
   const hasPendingAssistantTurn =
     generationActive && messages[messages.length - 1]?.role === "user"
-  const pendingActivityTurnId = activityPanelTurnId ?? PENDING_ACTIVITY_TURN_ID
 
   return (
     <ScrollRootContent className="relative -mb-[var(--composer-overlap-px)] flex w-full flex-1 flex-col items-center pt-4 pb-[var(--thread-bottom-offset)] [--composer-overlap-px:28px] [--thread-bottom-offset:calc(var(--spacing-input-area)+env(safe-area-inset-bottom,0px))]">
@@ -160,6 +156,14 @@ export function Conversation({
               ? status
               : "ready"
 
+        // The single per-render derivation of everything the assistant row
+        // renders (see CONTEXT.md "Assistant turn view"). Derived fresh each
+        // render — the AI SDK mutates part objects in place during streaming,
+        // so this must never be memoized by message reference.
+        const view = isAssistant
+          ? deriveAssistantTurnView(message, status)
+          : undefined
+
         return (
           <TurnRow
             key={message.id}
@@ -176,26 +180,21 @@ export function Conversation({
             <Message
               id={message.id}
               variant={message.role}
-              attachments={getMessageAttachments(message)}
+              attachments={isUser ? getMessageAttachments(message) : undefined}
               isLast={isLast}
-              activityPanelTurnId={activityPanelTurnId}
-              activityPanel={isAssistant ? activityPanel : undefined}
+              view={view}
               onDelete={onDelete}
               onEdit={onEdit}
               onReload={generationActive ? undefined : onReload}
-              onStop={isLast && status === "streaming" ? onStop : undefined}
               onSelectBranch={onSelectBranch}
               branch={turnBranch}
-              parts={message.parts}
-              toolRenderSignature={getToolRenderSignature(message.parts)}
-              metadata={message.metadata as ChatMessageMetadata | undefined}
               status={messageStatus}
               onQuote={onQuote}
               isDurableChat={isDurableChat}
               finishReason={isLast ? lastFinishReason : undefined}
               onToolApproval={onToolApproval}
             >
-              {getMessageText(message)}
+              {view ? view.text : getMessageText(message)}
             </Message>
           </TurnRow>
         )
@@ -211,14 +210,11 @@ export function Conversation({
             id={PENDING_ACTIVITY_TURN_ID}
             variant="assistant"
             isLast
-            activityPanelTurnId={pendingActivityTurnId}
-            activityPanel={activityPanel}
+            view={PENDING_TURN_VIEW}
             onDelete={onDelete}
             onEdit={onEdit}
             onReload={undefined}
-            onStop={onStop}
             onSelectBranch={onSelectBranch}
-            parts={[]}
             status="submitted"
             onQuote={onQuote}
             isDurableChat={isDurableChat}

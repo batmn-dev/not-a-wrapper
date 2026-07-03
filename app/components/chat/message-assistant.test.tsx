@@ -1,8 +1,25 @@
 /** @vitest-environment jsdom */
+import {
+  deriveAssistantTurnView,
+  type AssistantTurnView,
+} from "@/lib/chat-messages/assistant-turn"
 import type { UIMessage } from "@ai-sdk/react"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "vitest"
+import { vi } from "vitest"
+import {
+  ActivityPanelStoreProvider,
+  createActivityPanelStore,
+  type ActivityPanelStore,
+} from "./activity/activity-panel-store"
 import { MessageAssistant } from "./message-assistant"
 
 vi.mock("@/lib/user-preference-store/provider", () => ({
@@ -14,8 +31,9 @@ vi.mock("@/lib/user-preference-store/provider", () => ({
 }))
 
 beforeAll(async () => {
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-    true
+  ;(
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true
   // MessageContent loads Markdown via next/dynamic; preload it so the dynamic
   // import resolves before the render flush. Otherwise the markdown chunk lands
   // after the test's microtask and the rendered answer content is missing — a
@@ -23,6 +41,35 @@ beforeAll(async () => {
   // through reasoning.tsx (decoupled when formatDuration moved to lib).
   await import("@/components/ui/markdown")
 })
+
+type ChatStatus = "streaming" | "ready" | "submitted" | "error"
+
+function makeView(
+  parts: UIMessage["parts"],
+  status: ChatStatus,
+  metadata?: unknown
+): AssistantTurnView {
+  return deriveAssistantTurnView({ parts, metadata }, status)
+}
+
+/** Test store preconfigured like Chat's sync effect would leave it. */
+function makeStore({
+  panelTurnId,
+  defaultTurnId,
+  open = false,
+}: {
+  panelTurnId?: string
+  defaultTurnId?: string
+  open?: boolean
+}): ActivityPanelStore {
+  const store = createActivityPanelStore()
+  store.setDerivedTurnIds({
+    panelTurnId,
+    defaultTurnId: defaultTurnId ?? panelTurnId,
+  })
+  if (open) store.setOpen(true)
+  return store
+}
 
 describe("MessageAssistant activity trigger", () => {
   let container: HTMLDivElement | null = null
@@ -47,29 +94,22 @@ describe("MessageAssistant activity trigger", () => {
   })
 
   it("keeps the activity trigger for completed opaque reasoning", () => {
-    const onActivityPanelOpenChange = vi.fn()
-    const onOpenTurn = vi.fn()
+    const store = makeStore({ panelTurnId: "assistant-1" })
     const parts = [
       { type: "reasoning", text: "", state: "done" },
     ] as unknown as UIMessage["parts"]
 
     act(() => {
       root?.render(
-        <MessageAssistant
-          messageId="assistant-1"
-          activityPanelTurnId="assistant-1"
-          activityPanel={{
-            open: false,
-            onOpenChange: onActivityPanelOpenChange,
-            onOpenTurn,
-            panelId: "activity-panel",
-          }}
-          parts={parts}
-          metadata={{ reasoningDurationMs: 2000 }}
-          status="ready"
-        >
-          {""}
-        </MessageAssistant>
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView(parts, "ready", { reasoningDurationMs: 2000 })}
+            status="ready"
+          >
+            {""}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
       )
     })
 
@@ -85,31 +125,25 @@ describe("MessageAssistant activity trigger", () => {
       trigger?.click()
     })
 
-    expect(onOpenTurn).toHaveBeenCalledWith("assistant-1")
-    expect(onActivityPanelOpenChange).not.toHaveBeenCalled()
+    expect(store.getState().open).toBe(true)
+    expect(store.getState().panelTurnId).toBe("assistant-1")
   })
 
   it("renders the activity trigger for submitted pre-stream state without duplicate loading UI", () => {
-    const onActivityPanelOpenChange = vi.fn()
-    const onOpenTurn = vi.fn()
+    const store = makeStore({ panelTurnId: "pending-assistant" })
 
     act(() => {
       root?.render(
-        <MessageAssistant
-          messageId="pending-assistant"
-          activityPanelTurnId="pending-assistant"
-          activityPanel={{
-            open: false,
-            onOpenChange: onActivityPanelOpenChange,
-            onOpenTurn,
-            panelId: "activity-panel",
-          }}
-          parts={[]}
-          status="submitted"
-          isLast
-        >
-          {""}
-        </MessageAssistant>
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="pending-assistant"
+            view={makeView([], "submitted")}
+            status="submitted"
+            isLast
+          >
+            {""}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
       )
     })
 
@@ -125,82 +159,27 @@ describe("MessageAssistant activity trigger", () => {
       trigger?.click()
     })
 
-    expect(onOpenTurn).toHaveBeenCalledWith("pending-assistant")
-    expect(onActivityPanelOpenChange).not.toHaveBeenCalled()
-  })
-
-  it("renders the activity trigger for tool-only turns", () => {
-    const onActivityPanelOpenChange = vi.fn()
-    const onOpenTurn = vi.fn()
-    const parts = [
-      {
-        type: "tool-search",
-        toolCallId: "tool-call-1",
-        state: "output-available",
-        input: { query: "weather" },
-        output: { summary: "Cloudy" },
-      },
-    ] as unknown as UIMessage["parts"]
-
-    act(() => {
-      root?.render(
-        <MessageAssistant
-          messageId="tool-only-assistant"
-          activityPanelTurnId="tool-only-assistant"
-          activityPanel={{
-            open: false,
-            onOpenChange: onActivityPanelOpenChange,
-            onOpenTurn,
-            panelId: "activity-panel",
-          }}
-          parts={parts}
-          status="ready"
-        >
-          {""}
-        </MessageAssistant>
-      )
-    })
-
-    const trigger = container?.querySelector(
-      'button[aria-label="Open activity: Activity"]'
-    ) as HTMLButtonElement | null
-
-    expect(trigger).toBeTruthy()
-    expect(container?.textContent).toContain("Activity")
-    expect(trigger?.getAttribute("aria-expanded")).toBe("false")
-    expect(trigger?.getAttribute("aria-controls")).toBe("activity-panel")
-
-    act(() => {
-      trigger?.click()
-    })
-
-    expect(onOpenTurn).toHaveBeenCalledWith("tool-only-assistant")
-    expect(onActivityPanelOpenChange).not.toHaveBeenCalled()
+    expect(store.getState().open).toBe(true)
+    expect(store.getState().panelTurnId).toBe("pending-assistant")
   })
 
   it("keeps historical reasoning triggers visible when another turn owns the panel", () => {
-    const onOpenTurn = vi.fn()
+    const store = makeStore({ panelTurnId: "pending-assistant", open: true })
     const parts = [
       { type: "reasoning", text: "historical reasoning", state: "done" },
     ] as unknown as UIMessage["parts"]
 
     act(() => {
       root?.render(
-        <MessageAssistant
-          messageId="assistant-1"
-          activityPanelTurnId="pending-assistant"
-          activityPanel={{
-            open: true,
-            onOpenChange: vi.fn(),
-            onOpenTurn,
-            panelId: "activity-panel",
-          }}
-          parts={parts}
-          metadata={{ reasoningDurationMs: 2000 }}
-          status="ready"
-        >
-          {"First answer"}
-        </MessageAssistant>
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView(parts, "ready", { reasoningDurationMs: 2000 })}
+            status="ready"
+          >
+            {"First answer"}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
       )
     })
 
@@ -213,44 +192,29 @@ describe("MessageAssistant activity trigger", () => {
   })
 
   it("renders one trigger per completed reasoning turn and only expands the selected turn", () => {
+    const store = makeStore({ panelTurnId: "assistant-2", open: true })
     const parts = [
       { type: "reasoning", text: "reasoning", state: "done" },
     ] as unknown as UIMessage["parts"]
 
     act(() => {
       root?.render(
-        <>
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
           <MessageAssistant
             messageId="assistant-1"
-            activityPanelTurnId="assistant-2"
-            activityPanel={{
-              open: true,
-              onOpenChange: vi.fn(),
-              onOpenTurn: vi.fn(),
-              panelId: "activity-panel",
-            }}
-            parts={parts}
-            metadata={{ reasoningDurationMs: 1000 }}
+            view={makeView(parts, "ready", { reasoningDurationMs: 1000 })}
             status="ready"
           >
             {"First answer"}
           </MessageAssistant>
           <MessageAssistant
             messageId="assistant-2"
-            activityPanelTurnId="assistant-2"
-            activityPanel={{
-              open: true,
-              onOpenChange: vi.fn(),
-              onOpenTurn: vi.fn(),
-              panelId: "activity-panel",
-            }}
-            parts={parts}
-            metadata={{ reasoningDurationMs: 2000 }}
+            view={makeView(parts, "ready", { reasoningDurationMs: 2000 })}
             status="ready"
           >
             {"Second answer"}
           </MessageAssistant>
-        </>
+        </ActivityPanelStoreProvider>
       )
     })
 
@@ -268,29 +232,26 @@ describe("MessageAssistant activity trigger", () => {
   })
 
   it("retargets the open panel when a different trigger is clicked", () => {
-    const onActivityPanelOpenChange = vi.fn()
-    const onOpenTurn = vi.fn()
+    const store = makeStore({
+      panelTurnId: "assistant-1",
+      defaultTurnId: "assistant-1",
+      open: true,
+    })
     const parts = [
       { type: "reasoning", text: "reasoning", state: "done" },
     ] as unknown as UIMessage["parts"]
 
     act(() => {
       root?.render(
-        <MessageAssistant
-          messageId="assistant-2"
-          activityPanelTurnId="assistant-1"
-          activityPanel={{
-            open: true,
-            onOpenChange: onActivityPanelOpenChange,
-            onOpenTurn,
-            panelId: "activity-panel",
-          }}
-          parts={parts}
-          metadata={{ reasoningDurationMs: 2000 }}
-          status="ready"
-        >
-          {"Second answer"}
-        </MessageAssistant>
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-2"
+            view={makeView(parts, "ready", { reasoningDurationMs: 2000 })}
+            status="ready"
+          >
+            {"Second answer"}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
       )
     })
 
@@ -302,11 +263,56 @@ describe("MessageAssistant activity trigger", () => {
       trigger?.click()
     })
 
-    expect(onOpenTurn).toHaveBeenCalledWith("assistant-2")
-    expect(onActivityPanelOpenChange).not.toHaveBeenCalled()
+    // Clicking a non-default turn records an explicit selection and retargets
+    // the panel in the same commit.
+    expect(store.getState().open).toBe(true)
+    expect(store.getState().panelTurnId).toBe("assistant-2")
+    expect(store.getState().selectedTurnId).toBe("assistant-2")
   })
 
-  it("matches the expanded trigger by server message id", () => {
+  it("closes the panel from the expanded trigger and clears the selection", () => {
+    const store = makeStore({
+      panelTurnId: "assistant-1",
+      defaultTurnId: "assistant-1",
+      open: true,
+    })
+    const parts = [
+      { type: "reasoning", text: "reasoning", state: "done" },
+    ] as unknown as UIMessage["parts"]
+
+    act(() => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView(parts, "ready", { reasoningDurationMs: 2000 })}
+            status="ready"
+          >
+            {"Answer"}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    const trigger = container?.querySelector(
+      'button[aria-label="Close activity: Thought for 2s"]'
+    ) as HTMLButtonElement | null
+    expect(trigger?.getAttribute("aria-expanded")).toBe("true")
+
+    act(() => {
+      trigger?.click()
+    })
+
+    expect(store.getState().open).toBe(false)
+    expect(store.getState().selectedTurnId).toBeUndefined()
+    expect(
+      container
+        ?.querySelector('button[aria-controls="activity-panel"]')
+        ?.getAttribute("aria-expanded")
+    ).toBe("false")
+  })
+
+  it("renders no trigger without a hosted panel (outside the provider)", () => {
     const parts = [
       { type: "reasoning", text: "reasoning", state: "done" },
     ] as unknown as UIMessage["parts"]
@@ -314,19 +320,8 @@ describe("MessageAssistant activity trigger", () => {
     act(() => {
       root?.render(
         <MessageAssistant
-          messageId="client-assistant"
-          activityPanelTurnId="server-assistant"
-          activityPanel={{
-            open: true,
-            onOpenChange: vi.fn(),
-            onOpenTurn: vi.fn(),
-            panelId: "activity-panel",
-          }}
-          parts={parts}
-          metadata={{
-            reasoningDurationMs: 2000,
-            serverMessageId: "server-assistant",
-          }}
+          messageId="assistant-1"
+          view={makeView(parts, "ready")}
           status="ready"
         >
           {"Answer"}
@@ -334,38 +329,30 @@ describe("MessageAssistant activity trigger", () => {
       )
     })
 
-    const trigger = container?.querySelector(
-      'button[aria-label="Close activity: Thought for 2s"]'
-    ) as HTMLButtonElement | null
-
-    expect(trigger).toBeTruthy()
-    expect(trigger?.getAttribute("aria-expanded")).toBe("true")
+    expect(
+      container?.querySelector('button[aria-controls="activity-panel"]')
+    ).toBeNull()
   })
 
   it("renders the activity trigger before content and footer actions", async () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
     const parts = [
       { type: "reasoning", text: "", state: "done" },
     ] as unknown as UIMessage["parts"]
 
     await act(async () => {
       root?.render(
-        <MessageAssistant
-          messageId="assistant-1"
-          activityPanelTurnId="assistant-1"
-          activityPanel={{
-            open: false,
-            onOpenChange: () => {},
-            onOpenTurn: () => {},
-            panelId: "activity-panel",
-          }}
-          copied={false}
-          copyToClipboard={() => {}}
-          parts={parts}
-          metadata={{ reasoningDurationMs: 2000 }}
-          status="ready"
-        >
-          {"Assistant answer"}
-        </MessageAssistant>
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            copied={false}
+            copyToClipboard={() => {}}
+            view={makeView(parts, "ready", { reasoningDurationMs: 2000 })}
+            status="ready"
+          >
+            {"Assistant answer"}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
       )
     })
     await act(async () => {
@@ -390,8 +377,7 @@ describe("MessageAssistant activity trigger", () => {
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
     expect(
-      answer!.compareDocumentPosition(copy!) &
-        Node.DOCUMENT_POSITION_FOLLOWING
+      answer!.compareDocumentPosition(copy!) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
   })
 })

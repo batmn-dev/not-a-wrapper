@@ -1,33 +1,17 @@
 "use client"
 
-import type { ChatMessageMetadata } from "@/lib/chat-messages/branch"
+import {
+  deriveAssistantTurnView,
+  IDLE_REASONING_VIEW,
+} from "@/lib/chat-messages/assistant-turn"
 import { getServerMessageId } from "@/lib/chat-messages/metadata"
 import type { UIMessage } from "@ai-sdk/react"
 import type { SourceUrlUIPart, ToolUIPart } from "ai"
-import { isStaticToolUIPart } from "ai"
-import { getSources } from "./get-sources"
 import { useReasoningPhase, type ReasoningPhase } from "./use-reasoning-phase"
 
 type ChatStatus = "streaming" | "ready" | "submitted" | "error"
 
 export const PENDING_ACTIVITY_TURN_ID = "__pending_activity_turn__"
-
-/**
- * The Chat-owned Activity-panel controls, forwarded as ONE object from Chat
- * through Conversation → Message → MessageAssistant to the assistant trigger
- * Chat retains ownership of panel open/selection state; assistant rows only
- * request a turn selection or close the shared surface.
- */
-export type ActivityPanelControls = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  /** Id of the turn currently shown by the single Activity panel surface. */
-  panelTurnId?: string
-  /** Selects a turn and opens the single Chat-owned Activity panel surface. */
-  onOpenTurn: (turnId: string) => void
-  /** Stable id of the panel surface; emitted as the trigger's `aria-controls`. */
-  panelId?: string
-}
 
 /**
  * Data the selector hands to `<ActivityPanel>` via `panelProps`.
@@ -90,8 +74,7 @@ export function isGenerationActive(
 function getActivityTurnId(message: UIMessage | undefined): string | undefined {
   if (!message) return undefined
 
-  const metadata = message.metadata as ChatMessageMetadata | undefined
-  return message.id ?? getServerMessageId(metadata)
+  return message.id ?? getServerMessageId(message.metadata)
 }
 
 function matchesActivityTurn(
@@ -100,8 +83,9 @@ function matchesActivityTurn(
 ): boolean {
   if (!message || turnId === undefined) return false
 
-  const metadata = message.metadata as ChatMessageMetadata | undefined
-  return message.id === turnId || getServerMessageId(metadata) === turnId
+  return (
+    message.id === turnId || getServerMessageId(message.metadata) === turnId
+  )
 }
 
 function findAssistantTurn(
@@ -176,7 +160,10 @@ export function selectActivityPanelTarget({
  * The default target follows the latest generation/pending assistant. An
  * explicit selected turn, when still present in the rendered path, overrides
  * that default so historical Activity panel content stays addressable while new
- * messages stream. Individual `MessageAssistant` instances never call this hook.
+ * messages stream. Individual `MessageAssistant` instances never call this hook
+ * — rows reach the panel through the activity panel store seam
+ * (activity/activity-panel-store.tsx), which Chat syncs with this selector's
+ * output.
  */
 export function useActivityPanel({
   messages,
@@ -202,14 +189,11 @@ export function useActivityPanel({
     selectedActivityTurnId,
   })
 
-  const panelMetadata = panelMessage?.metadata as
-    | ChatMessageMetadata
-    | undefined
-
-  const persistedDurationMs =
-    typeof panelMetadata?.reasoningDurationMs === "number"
-      ? panelMetadata.reasoningDurationMs
-      : undefined
+  // One derivation for the panel target — the same Assistant turn view the
+  // message row derives, so the trigger and the panel can never disagree.
+  const panelView = panelMessage
+    ? deriveAssistantTurnView(panelMessage, status)
+    : undefined
 
   // The reasoning hook runs once for the panel target. The live timer only runs
   // for the default generation turn; historical selections remain stable while a
@@ -224,17 +208,9 @@ export function useActivityPanel({
     isReasoningStreaming,
     isOpaqueReasoning,
   } = useReasoningPhase({
-    parts: panelMessage?.parts,
-    status,
+    reasoning: panelView?.reasoning ?? IDLE_REASONING_VIEW,
     isLast: Boolean(panelMessage) && isPanelDefaultTurn,
-    persistedDurationMs,
   })
-
-  const sources = getSources(panelMessage?.parts ?? [])
-  const steps =
-    panelMessage?.parts?.filter((part): part is ToolUIPart =>
-      isStaticToolUIPart(part)
-    ) ?? []
 
   const panelProps: ActivityPanelProps = isPendingActivityTurn
     ? {
@@ -248,8 +224,8 @@ export function useActivityPanel({
       }
     : {
         phase,
-        steps,
-        sources,
+        steps: panelView?.toolParts ?? [],
+        sources: panelView?.sources ?? [],
         durationSeconds,
         reasoningText,
         isReasoningStreaming,

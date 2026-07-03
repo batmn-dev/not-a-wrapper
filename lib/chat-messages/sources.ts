@@ -1,5 +1,12 @@
-import type { UIMessage as MessageAISDK } from "@ai-sdk/react"
-import type { SourceUrlUIPart, ToolUIPart } from "ai"
+/**
+ * Source extraction from message parts — one half of the Assistant turn view
+ * derivation (see ./assistant-turn.ts and CONTEXT.md "Assistant turn view").
+ * Moved from app/components/chat/get-sources.ts so the view module (and any
+ * server-adjacent consumer, e.g. the share page) can derive sources without
+ * importing from the component tree.
+ */
+import type { UIMessage } from "ai"
+import type { SourceUrlUIPart } from "ai"
 import { isStaticToolUIPart, getStaticToolName } from "ai"
 
 // Source type for validation
@@ -20,11 +27,9 @@ function isValidSource(source: unknown): source is SourceLike {
   )
 }
 
-export function getSources(parts: MessageAISDK["parts"]): SourceUrlUIPart[] {
+export function getSources(parts: UIMessage["parts"]): SourceUrlUIPart[] {
   const sources = parts
-    ?.filter(
-      (part) => part.type === "source-url" || isStaticToolUIPart(part)
-    )
+    ?.filter((part) => part.type === "source-url" || isStaticToolUIPart(part))
     .map((part) => {
       if (part.type === "source-url") {
         return part // In v6, the source-url part IS the source object
@@ -37,7 +42,9 @@ export function getSources(parts: MessageAISDK["parts"]): SourceUrlUIPart[] {
 
         // Handle summarizeSources tool which returns citations
         if (toolName === "summarizeSources") {
-          const typedResult = result as { result?: Array<{ citations?: unknown[] }> } | undefined
+          const typedResult = result as
+            | { result?: Array<{ citations?: unknown[] }> }
+            | undefined
           if (typedResult?.result?.[0]?.citations) {
             return typedResult.result.flatMap((item) => item.citations || [])
           }
@@ -54,12 +61,14 @@ export function getSources(parts: MessageAISDK["parts"]): SourceUrlUIPart[] {
   // Filter and convert to SourceUrlUIPart format
   const validSources = (sources || [])
     .filter(isValidSource)
-    .map((source): SourceUrlUIPart => ({
-      type: "source-url",
-      sourceId: source.sourceId || source.url,
-      url: source.url,
-      title: source.title || source.url,
-    }))
+    .map(
+      (source): SourceUrlUIPart => ({
+        type: "source-url",
+        sourceId: source.sourceId || source.url,
+        url: source.url,
+        title: source.title || source.url,
+      })
+    )
 
   return validSources
 }

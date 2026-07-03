@@ -46,9 +46,25 @@ type SendMessage = (
   options?: SendMessageOptions
 ) => void
 
+/**
+ * The Turn context snapshot every turn runner reads AT RUN TIME through
+ * `adapters.getTurnSnapshot` — never from arguments captured in a render-time
+ * closure. This is what keeps the model in the picker and the model in the
+ * request structurally identical, and what gives suggestion/regeneration
+ * turns the same systemPrompt/enableSearch inputs as plain sends (they
+ * previously diverged silently). See CONTEXT.md "Turn context".
+ */
+export type ChatTurnSnapshot = {
+  selectedModel: string
+  isAuthenticated: boolean
+  systemPrompt: string
+  enableSearch: boolean
+}
+
 export type ChatTurnAdapters = {
   createOptimisticMessageId?: () => string
   createOptimisticEditMessageId?: () => string
+  getTurnSnapshot: () => ChatTurnSnapshot
   getIsSending: () => boolean
   setIsSending: (isSending: boolean) => void
   setIsSubmitting: (isSubmitting: boolean) => void
@@ -60,7 +76,10 @@ export type ChatTurnAdapters = {
   ensureChatExists: (userId: string, input: string) => Promise<string | null>
   setPreviousChatId: (chatId: string) => void
   cleanupOptimisticAttachments: (attachments?: Array<{ url?: string }>) => void
-  handleFileUploads: (chatId: string) => Promise<UploadedAttachment[] | null>
+  handleFileUploads: (
+    chatId: string,
+    files: File[]
+  ) => Promise<UploadedAttachment[] | null>
   sendMessage: SendMessage
   regenerate: (options?: RegenerateMessageOptions) => void | Promise<void>
   toastError: (title: string) => void
@@ -71,8 +90,6 @@ export type ChatTurnAdapters = {
 
 export type SendTurnArgs = {
   text: string
-  selectedModel: string
-  isAuthenticated: boolean
   messages?: ChatTurnMessage[]
   submittedFiles?: File[]
   optimisticAttachments?: OptimisticAttachment[]
@@ -83,8 +100,6 @@ export type SendTurnArgs = {
 
 export type SuggestionTurnArgs = {
   text: string
-  selectedModel: string
-  isAuthenticated: boolean
   messages?: ChatTurnMessage[]
   chatVersion: number
 }
@@ -94,10 +109,6 @@ export type EditTurnArgs = {
   messages: ChatTurnMessage[]
   messageId: string
   newContent: string
-  selectedModel: string
-  isAuthenticated: boolean
-  systemPrompt: string
-  enableSearch: boolean
   isSubmitting: boolean
   status: string
 }
@@ -128,9 +139,6 @@ export type RegenerationTurnArgs = {
   chatId: string | null
   messages: ChatTurnMessage[]
   targetAssistantMessageId: string
-  selectedModel: string
-  isAuthenticated: boolean
-  systemPrompt: string
   chatVersion: number
   isSubmitting: boolean
   status: string
@@ -182,8 +190,6 @@ export async function runSendTurn(
   adapters: ChatTurnAdapters,
   {
     text,
-    selectedModel,
-    isAuthenticated,
     messages = [],
     submittedFiles = [],
     optimisticAttachments = [],
@@ -195,6 +201,9 @@ export async function runSendTurn(
   if (adapters.getIsSending()) return
   adapters.setIsSending(true)
   adapters.setIsSubmitting(true)
+
+  // Read the Turn context at run time — never from a render-time closure.
+  const snapshot = adapters.getTurnSnapshot()
 
   const optimisticId = (
     adapters.createOptimisticMessageId ?? createOptimisticMessageId
@@ -256,7 +265,10 @@ export async function runSendTurn(
 
     let attachments: UploadedAttachment[] | null = []
     if (submittedFiles.length > 0) {
-      attachments = await adapters.handleFileUploads(currentChatId)
+      attachments = await adapters.handleFileUploads(
+        currentChatId,
+        submittedFiles
+      )
       if (attachments === null) {
         removeOptimistic()
         return
@@ -274,8 +286,10 @@ export async function runSendTurn(
         body: buildChatTurnRequestBody({
           chatId: currentChatId,
           userId,
-          selectedModel,
-          isAuthenticated,
+          selectedModel: snapshot.selectedModel,
+          isAuthenticated: snapshot.isAuthenticated,
+          systemPrompt: snapshot.systemPrompt,
+          enableSearch: snapshot.enableSearch,
           selectedPathToken: buildSelectedPathToken(messages),
           bodyExtras,
         }),
@@ -299,10 +313,11 @@ export async function runSuggestionTurn(
   adapters: ChatTurnAdapters,
   args: SuggestionTurnArgs
 ) {
+  // Delegates to the send runner, which reads the Turn context snapshot — so
+  // suggestions carry the same systemPrompt/enableSearch as typed sends
+  // (previously omitted, silently diverging).
   await runSendTurn(adapters, {
     text: args.text,
-    selectedModel: args.selectedModel,
-    isAuthenticated: args.isAuthenticated,
     messages: args.messages,
     bodyExtras: {
       chatVersion: args.chatVersion,
@@ -313,19 +328,11 @@ export async function runSuggestionTurn(
 
 export async function runEditTurn(
   adapters: ChatTurnAdapters,
-  {
-    chatId,
-    messages,
-    messageId,
-    newContent,
-    selectedModel,
-    isAuthenticated,
-    systemPrompt,
-    enableSearch,
-    isSubmitting,
-    status,
-  }: EditTurnArgs
+  { chatId, messages, messageId, newContent, isSubmitting, status }: EditTurnArgs
 ): Promise<EditTurnResult> {
+  // Read the Turn context at run time — never from a render-time closure.
+  const snapshot = adapters.getTurnSnapshot()
+
   const reject = (
     reason: EditTurnFailureReason,
     message: string
@@ -354,7 +361,7 @@ export async function runEditTurn(
   // Edit is a server-owned Chat turn: the backend creates the message branch
   // and derives the selected path. It is only available on a durable chat;
   // guest/local chats are send-only. See CONTEXT.md "Chat turn".
-  if (!isRouteDurableChat(chatId, isAuthenticated)) {
+  if (!isRouteDurableChat(chatId, snapshot.isAuthenticated)) {
     const message =
       "Editing is available once the chat is saved. Sign in to edit messages."
     adapters.toastError(message)
@@ -438,10 +445,10 @@ export async function runEditTurn(
         body: buildChatTurnRequestBody({
           chatId: currentChatId,
           userId,
-          selectedModel,
-          isAuthenticated,
-          systemPrompt,
-          enableSearch,
+          selectedModel: snapshot.selectedModel,
+          isAuthenticated: snapshot.isAuthenticated,
+          systemPrompt: snapshot.systemPrompt,
+          enableSearch: snapshot.enableSearch,
           chatVersion: editPlan.chatVersion,
           edit: buildEditIntent(messageId, editPlan),
         }),
@@ -474,14 +481,14 @@ export async function runRegenerationTurn(
     chatId,
     messages,
     targetAssistantMessageId,
-    selectedModel,
-    isAuthenticated,
-    systemPrompt,
     chatVersion,
     isSubmitting,
     status,
   }: RegenerationTurnArgs
 ) {
+  // Read the Turn context at run time — never from a render-time closure.
+  const snapshot = adapters.getTurnSnapshot()
+
   if (isGenerationActive({ isSubmitting, status })) {
     adapters.toastError("Please wait until the current message finishes sending.")
     return
@@ -494,7 +501,7 @@ export async function runRegenerationTurn(
 
   // Regeneration is a server-owned Chat turn, available only on a durable
   // chat; guest/local chats are send-only. See CONTEXT.md "Chat turn".
-  if (!isRouteDurableChat(chatId, isAuthenticated)) {
+  if (!isRouteDurableChat(chatId, snapshot.isAuthenticated)) {
     adapters.toastError("Regenerating is available once the chat is saved.")
     return
   }
@@ -526,9 +533,10 @@ export async function runRegenerationTurn(
       body: buildChatTurnRequestBody({
         chatId,
         userId,
-        selectedModel,
-        isAuthenticated,
-        systemPrompt,
+        selectedModel: snapshot.selectedModel,
+        isAuthenticated: snapshot.isAuthenticated,
+        systemPrompt: snapshot.systemPrompt,
+        enableSearch: snapshot.enableSearch,
         chatVersion,
         regeneration: regenerationPlan.regeneration,
       }),

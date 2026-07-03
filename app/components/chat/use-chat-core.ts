@@ -3,7 +3,6 @@ import {
   type ChatTurnMessage,
 } from "@/app/components/chat/chat-turn"
 import { useChatEdit } from "@/app/components/chat/use-chat-edit"
-import { useChatDraft } from "@/app/hooks/use-chat-draft"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import { getOrCreateGuestUserId } from "@/lib/api"
@@ -15,26 +14,32 @@ import {
 } from "@/lib/chat-store/identity"
 import { createChatTurnStore } from "@/lib/chat-store/turns/chat-turn-service"
 import { projectSelectedPath } from "@/lib/chat-store/turns/selected-path"
-import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
-import { Attachment } from "@/lib/file-handling"
 import { API_ROUTE_CHAT } from "@/lib/routes"
-import { useUserPreferences } from "@/lib/user-preference-store/provider"
-import { resolveWebSearchEnabled } from "@/lib/user-preference-store/web-search"
 import type { UserProfile } from "@/lib/user/types"
-import { debounce } from "@/lib/utils"
 import type { UIMessage } from "@ai-sdk/react"
 import { useChat } from "@ai-sdk/react"
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
 } from "ai"
-import { useMutation } from "convex/react"
+import { useConvex, useMutation } from "convex/react"
 import { useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useTurnContext } from "./turn-context"
+import {
+  cleanupOptimisticAttachments,
+  createOptimisticAttachments,
+  uploadFiles,
+} from "./use-file-upload"
+
+/** One send-type Chat turn's inputs, assembled by the Composer. */
+export type ChatTurnPayload = {
+  text: string
+  files: File[]
+}
 
 type UseChatCoreProps = {
   initialMessages: UIMessage[]
-  draftValue: string
   /** Cache message locally and persist to Convex. Pass overrideChatId to handle stale closures during chat creation. */
   cacheAndAddMessage: (
     message: UIMessage,
@@ -42,41 +47,39 @@ type UseChatCoreProps = {
   ) => void | Promise<void>
   chatId: string | null
   user: UserProfile | null
-  files: File[]
-  createOptimisticAttachments: (
-    files: File[]
-  ) => Array<{ name: string; contentType: string; url: string }>
-  setFiles: (files: File[]) => void
   checkLimitsAndNotify: (uid: string) => Promise<boolean>
-  cleanupOptimisticAttachments: (attachments?: Array<{ url?: string }>) => void
   ensureChatExists: (uid: string, input: string) => Promise<string | null>
-  handleFileUploads: (chatId: string) => Promise<Attachment[] | null>
-  selectedModel: string
-  clearDraft: () => void
   bumpChat: (chatId: string) => void
+  /** Imperative bridge to the Composer's display, for ?prompt= hydration. */
+  setComposerText?: (text: string) => void
 }
 
 export function useChatCore({
   initialMessages,
-  draftValue,
   cacheAndAddMessage,
   chatId,
   user,
-  files,
-  createOptimisticAttachments,
-  setFiles,
   checkLimitsAndNotify,
-  cleanupOptimisticAttachments,
   ensureChatExists,
-  handleFileUploads,
-  selectedModel,
-  clearDraft,
   bumpChat,
+  setComposerText,
 }: UseChatCoreProps) {
   // State management
   const [isSubmitting, setIsSubmitting] = useState(false)
   const approveToolCall = useMutation(api.chatRuntime.approveToolCall)
   const denyToolCall = useMutation(api.chatRuntime.denyToolCall)
+  const convex = useConvex()
+
+  // The Turn context — model/search/system-prompt inputs read at run time by
+  // the turn runners (adapters.getTurnSnapshot), reactive here only where a
+  // render depends on them. See CONTEXT.md "Turn context".
+  const {
+    getTurnSnapshot,
+    isAuthenticated,
+    systemPrompt,
+    isHydrated: turnContextHydrated,
+  } = useTurnContext()
+
   // Mutable guard prevents concurrent sends (state updates are batched and can lag).
   const [isSendingStore] = useState(() => {
     let isSending = false
@@ -113,8 +116,6 @@ export function useChatCore({
   })
 
   const [hasDialogAuth, setHasDialogAuth] = useState(false)
-  const { preferences, setWebSearchEnabled } = useUserPreferences()
-  const enableSearch = resolveWebSearchEnabled(preferences.webSearchEnabled)
 
   // Track the finish reason of the last assistant message.
   // Used to show a truncation indicator when finishReason is "length".
@@ -155,11 +156,6 @@ export function useChatCore({
     [chatId, previousChatIdStore]
   )
   const hydratedChatIdRef = useRef<string | null>(null)
-  const isAuthenticated = useMemo(() => !!user?.id, [user?.id])
-  const systemPrompt = useMemo(
-    () => user?.system_prompt || SYSTEM_PROMPT_DEFAULT,
-    [user?.system_prompt]
-  )
   const setLastFinishReason = useCallback(
     (finishReason: string | undefined) => {
       setLastFinishReasonState({
@@ -174,26 +170,6 @@ export function useChatCore({
   const searchParams = useSearchParams()
   const prompt = searchParams.get("prompt")
   const shouldAutoSubmitPrompt = searchParams.get("autoSubmit") === "1"
-
-  // Ref-based input management — avoids cascading re-renders on every keystroke.
-  // ChatInput owns the display state; this ref is the source of truth for submit/handlers.
-  const [initialInputValue] = useState(() => prompt || draftValue || "")
-  const inputRef = useRef(initialInputValue)
-  const inputListenerRef = useRef<((value: string) => void) | null>(null)
-
-  const getInput = useCallback(() => inputRef.current, [])
-
-  const registerInputListener = useCallback(
-    (listener: ((value: string) => void) | null) => {
-      inputListenerRef.current = listener
-    },
-    []
-  )
-
-  const setInputValue = useCallback((value: string) => {
-    inputRef.current = value
-    inputListenerRef.current?.(value)
-  }, [])
 
   // Chats operations
   const { updateTitle } = useChats()
@@ -365,6 +341,7 @@ export function useChatCore({
 
   const chatTurn = createChatTurnController({
     createOptimisticMessageId,
+    getTurnSnapshot,
     getIsSending,
     setIsSending,
     setIsSubmitting,
@@ -376,7 +353,8 @@ export function useChatCore({
     ensureChatExists,
     setPreviousChatId,
     cleanupOptimisticAttachments,
-    handleFileUploads,
+    handleFileUploads: (currentChatId, files) =>
+      uploadFiles(convex, files, currentChatId),
     sendMessage,
     regenerate,
     toastError: (title) => toast({ title, status: "error" }),
@@ -495,74 +473,43 @@ export function useChatCore({
     }
   }, [chatId, initialMessages, status])
 
-  // Handle search params — hydrate input from ?prompt= on mount or navigation
+  // Handle search params — hydrate the Composer's display from ?prompt= on
+  // mount or navigation (the non-auto-submit form of a shared prompt link).
   useEffect(() => {
     if (prompt && !shouldAutoSubmitPrompt && typeof window !== "undefined") {
-      requestAnimationFrame(() => setInputValue(prompt))
+      requestAnimationFrame(() => setComposerText?.(prompt))
     }
-  }, [prompt, shouldAutoSubmitPrompt, setInputValue])
+  }, [prompt, shouldAutoSubmitPrompt, setComposerText])
 
-  const setEnableSearch = useCallback(
-    (enabled: boolean) => {
-      setWebSearchEnabled(enabled)
+  // Submit action — one send-type Chat turn from a Composer payload. Returns
+  // whether the turn was accepted (dispatched), so the Composer knows whether
+  // to clear its persisted draft.
+  const submit = useCallback(
+    async ({ text, files }: ChatTurnPayload): Promise<boolean> => {
+      const optimisticAttachments =
+        files.length > 0 ? createOptimisticAttachments(files) : []
+      const submittedFiles = [...files]
+
+      let accepted = false
+      await chatTurn.runSendTurn({
+        text,
+        messages,
+        submittedFiles,
+        optimisticAttachments,
+        bodyExtras: {
+          chatVersion: messages.length + 1, // current messages + 1 for the new message being sent
+        },
+        onSuccess: (currentChatId) => {
+          accepted = true
+          if (messages.length > 0) {
+            bumpChat(currentChatId)
+          }
+        },
+      })
+      return accepted
     },
-    [setWebSearchEnabled]
+    [chatTurn, messages, bumpChat]
   )
-
-  // Debounced draft persistence — avoids writing to localStorage on every keystroke.
-  // Declared before submit so submit's onSuccess can call .cancel().
-  const { setDraftValue } = useChatDraft(chatId)
-
-  const debouncedSetDraftValue = useMemo(
-    () => debounce((value: string) => setDraftValue(value), 500),
-    [setDraftValue]
-  )
-
-  // Submit action
-  const submit = useCallback(async () => {
-    const currentInput = inputRef.current
-    const optimisticAttachments =
-      files.length > 0 ? createOptimisticAttachments(files) : []
-    const submittedFiles = [...files]
-
-    setInputValue("")
-    setFiles([])
-
-    await chatTurn.runSendTurn({
-      text: currentInput,
-      selectedModel,
-      isAuthenticated,
-      messages,
-      submittedFiles,
-      optimisticAttachments,
-      bodyExtras: {
-        systemPrompt: systemPrompt || SYSTEM_PROMPT_DEFAULT,
-        enableSearch,
-        chatVersion: messages.length + 1, // current messages + 1 for the new message being sent
-      },
-      onSuccess: (currentChatId) => {
-        debouncedSetDraftValue.cancel()
-        clearDraft()
-        if (messages.length > 0) {
-          bumpChat(currentChatId)
-        }
-      },
-    })
-  }, [
-    files,
-    createOptimisticAttachments,
-    setInputValue,
-    setFiles,
-    chatTurn,
-    selectedModel,
-    isAuthenticated,
-    systemPrompt,
-    enableSearch,
-    debouncedSetDraftValue,
-    clearDraft,
-    messages,
-    bumpChat,
-  ])
 
   const autoSubmittedPromptRef = useRef<string | null>(null)
   useEffect(() => {
@@ -575,11 +522,15 @@ export function useChatCore({
       return
     }
 
+    // Wait for model preferences to hydrate before dispatching, so the turn
+    // snapshot resolves the user's model — not the tier default. The once-
+    // guard is only consumed after this gate, so the effect retries on the
+    // hydration commit.
+    if (!turnContextHydrated) return
+
     const autoSubmitKey = `${chatId}:${prompt}`
     if (autoSubmittedPromptRef.current === autoSubmitKey) return
     autoSubmittedPromptRef.current = autoSubmitKey
-
-    setInputValue(prompt)
 
     const nextUrl = new URL(window.location.href)
     nextUrl.searchParams.delete("prompt")
@@ -590,17 +541,13 @@ export function useChatCore({
       `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`
     )
 
-    void submit()
-  }, [chatId, prompt, shouldAutoSubmitPrompt, setInputValue, submit])
+    void submit({ text: prompt, files: [] })
+  }, [chatId, prompt, shouldAutoSubmitPrompt, turnContextHydrated, submit])
 
   const { submitEdit } = useChatEdit({
     chatTurn,
     chatId,
     messages,
-    selectedModel,
-    isAuthenticated,
-    systemPrompt,
-    enableSearch,
     getStatus,
     getIsSubmitting,
   })
@@ -610,13 +557,11 @@ export function useChatCore({
     async (suggestion: string) => {
       await chatTurn.runSuggestionTurn({
         text: suggestion,
-        selectedModel,
-        isAuthenticated,
         messages,
         chatVersion: messages.length + 1, // current messages + 1 for the new message being sent
       })
     },
-    [chatTurn, selectedModel, isAuthenticated, messages]
+    [chatTurn, messages]
   )
 
   // Handle reload (v6: renamed to regenerate)
@@ -626,42 +571,12 @@ export function useChatCore({
         chatId,
         messages,
         targetAssistantMessageId: messageId,
-        selectedModel,
-        isAuthenticated,
-        systemPrompt,
         chatVersion: messages.length, // same count since we're regenerating, not adding
         isSubmitting: getIsSubmitting(),
         status: getStatus(),
       })
     },
-    [
-      chatTurn,
-      chatId,
-      selectedModel,
-      isAuthenticated,
-      systemPrompt,
-      messages,
-      getIsSubmitting,
-      getStatus,
-    ]
-  )
-
-  // Flush pending draft on tab close; also flush on unmount (navigation)
-  useEffect(() => {
-    const flush = () => debouncedSetDraftValue.flush()
-    window.addEventListener("beforeunload", flush)
-    return () => {
-      window.removeEventListener("beforeunload", flush)
-      debouncedSetDraftValue.flush()
-    }
-  }, [debouncedSetDraftValue])
-
-  const handleInputChange = useCallback(
-    (value: string) => {
-      inputRef.current = value
-      debouncedSetDraftValue(value)
-    },
-    [debouncedSetDraftValue]
+    [chatTurn, chatId, messages, getIsSubmitting, getStatus]
   )
 
   return {
@@ -676,13 +591,6 @@ export function useChatCore({
     hasSentFirstMessage,
     setHasSentFirstMessage,
 
-    // Ref-based input API (no useState — avoids cascading re-renders)
-    initialInputValue,
-    inputRef,
-    getInput,
-    setInputValue,
-    registerInputListener,
-
     // v5 API functions (exposed for direct access if needed)
     sendMessage,
     regenerate,
@@ -692,15 +600,12 @@ export function useChatCore({
     setIsSubmitting,
     hasDialogAuth,
     setHasDialogAuth,
-    enableSearch,
-    setEnableSearch,
     lastFinishReason,
 
     // Actions
     submit,
     handleSuggestion,
     handleReload,
-    handleInputChange,
     submitEdit,
     handleToolApproval,
   }

@@ -1,17 +1,17 @@
 "use client"
 
-import { ChatInput } from "@/app/components/chat-input/chat-input"
+import {
+  Composer,
+  type ComposerHandle,
+} from "@/app/components/chat-input/composer"
 import { Conversation } from "@/app/components/chat/conversation"
-import { useModel } from "@/app/components/chat/use-model"
-import { useChatDraft } from "@/app/hooks/use-chat-draft"
 import { useGlobalPromptFocus } from "@/app/hooks/use-global-prompt-focus"
 import { ScrollButton } from "@/components/ui/scroll-button"
-import { ScrollRootContext } from "@/components/ui/scroll-root"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useChat } from "@/lib/chat-store/chats/use-chat"
 import { useMessages } from "@/lib/chat-store/messages/provider"
 import { useChatSession } from "@/lib/chat-store/session/provider"
-import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
+import type { Chats } from "@/lib/chat-store/types"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
@@ -20,7 +20,6 @@ import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import {
   useCallback,
-  useContext,
   useEffect,
   useId,
   useMemo,
@@ -28,36 +27,63 @@ import {
   useState,
 } from "react"
 import { ActivityPanel } from "./activity/activity-panel"
+import {
+  ActivityPanelStoreProvider,
+  createActivityPanelStore,
+  useActivityPanelOpen,
+  useActivityPanelSelectedTurnId,
+} from "./activity/activity-panel-store"
 import { ChatStatusAnnouncer } from "./chat-announcer"
 import { isRouteDurableChat } from "./chat-turn"
 import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
-import {
-  selectExplicitActivityTurnOnOpen,
-  useActivityPanel,
-} from "./use-activity-panel"
+import { TurnContextProvider, useTurnContext } from "./turn-context"
+import { useActivityPanel } from "./use-activity-panel"
 import { useChatCore } from "./use-chat-core"
 import { useChatOperations } from "./use-chat-operations"
-import { useFileUpload } from "./use-file-upload"
 
 const DialogAuth = dynamic(
   () => import("./dialog-auth").then((mod) => mod.DialogAuth),
   { ssr: false }
 )
 
+/**
+ * Chat — resolves the route's chat and hosts the Turn context (model, search,
+ * system prompt — the inputs every Chat turn snapshots at run time). The body
+ * lives in ChatInner so its hooks read the context.
+ */
 export function Chat() {
-  const router = useRouter()
   const { chatId } = useChatSession()
-  const {
-    createNewChat,
-    updateChatModel,
-    bumpChat,
-    isLoading: isChatsLoading,
-  } = useChats()
-
   // Resolve the current chat even when it is outside the bounded sidebar window
   // (deep-links to old chats). In-window chats resolve synchronously; out-of-
   // window chats load via the chats.getById fallback (isChatLoading).
   const { chat: currentChat, isLoading: isChatLoading } = useChat(chatId)
+
+  return (
+    <TurnContextProvider chatId={chatId} currentChat={currentChat || null}>
+      <ChatInner
+        chatId={chatId}
+        currentChat={currentChat || null}
+        isChatLoading={isChatLoading}
+      />
+    </TurnContextProvider>
+  )
+}
+
+function ChatInner({
+  chatId,
+  currentChat,
+  isChatLoading,
+}: {
+  chatId: string | null
+  currentChat: Chats | null
+  isChatLoading: boolean
+}) {
+  const router = useRouter()
+  const {
+    createNewChat,
+    bumpChat,
+    isLoading: isChatsLoading,
+  } = useChats()
 
   const {
     messages: initialMessages,
@@ -66,30 +92,13 @@ export function Chat() {
   } = useMessages()
   const { user } = useUser()
   const { preferences } = useUserPreferences()
-  const { draftValue, clearDraft } = useChatDraft(chatId)
 
-  // File upload functionality
-  const {
-    files,
-    setFiles,
-    handleFileUploads,
-    createOptimisticAttachments,
-    cleanupOptimisticAttachments,
-    handleFileUpload,
-    handleFileRemove,
-  } = useFileUpload()
-
-  // Model selection
-  const { selectedModel, handleModelChange } = useModel({
-    currentChat: currentChat || null,
-    user,
-    updateChatModel,
-    chatId,
-  })
+  // Turn inputs — reactive reads for rendering; the turn runners read the
+  // same values at run time through the context's snapshot getter.
+  const { selectedModel, isAuthenticated, systemPrompt } = useTurnContext()
 
   // State to pass between hooks
   const [hasDialogAuth, setHasDialogAuth] = useState(false)
-  const isAuthenticated = useMemo(() => !!user?.id, [user?.id])
   // Edit and regeneration are server-owned Chat turns, available only on a
   // durable chat. Drives whether the message tree shows those controls so the
   // UI agrees with the turn-controller precondition. See CONTEXT.md "Chat turn".
@@ -97,28 +106,20 @@ export function Chat() {
     () => isRouteDurableChat(chatId, isAuthenticated),
     [chatId, isAuthenticated]
   )
-  const systemPrompt = useMemo(
-    () => user?.system_prompt || SYSTEM_PROMPT_DEFAULT,
-    [user?.system_prompt]
-  )
-  const navigateToChat = useCallback(
-    (nextChatId: string) => {
-      window.history.pushState(null, "", `/c/${nextChatId}`)
-    },
-    []
-  )
+  const navigateToChat = useCallback((nextChatId: string) => {
+    window.history.pushState(null, "", `/c/${nextChatId}`)
+  }, [])
 
-  // New state for quoted text
-  const [quotedText, setQuotedText] = useState<{
-    text: string
-    messageId: string
-  }>()
-  const handleQuotedSelected = useCallback(
-    (text: string, messageId: string) => {
-      setQuotedText({ text, messageId })
-    },
-    []
-  )
+  // The Composer's imperative handle — quote insertion, ?prompt= hydration,
+  // and global focus are commands into the Composer, not state threaded
+  // through props.
+  const composerRef = useRef<ComposerHandle>(null)
+  const setComposerText = useCallback((text: string) => {
+    composerRef.current?.setText(text)
+  }, [])
+  const handleQuotedSelected = useCallback((text: string) => {
+    composerRef.current?.insertQuote(text)
+  }, [])
 
   // Chat operations (pure async utilities) - created first
   const { checkLimitsAndNotify, ensureChatExists } = useChatOperations({
@@ -135,45 +136,38 @@ export function Chat() {
   const {
     messages,
     setMessages,
-    initialInputValue,
-    registerInputListener,
     status,
     stop,
     hasSentFirstMessage,
     isSubmitting,
-    enableSearch,
-    setEnableSearch,
     lastFinishReason,
     submit,
     handleSuggestion,
     handleReload,
-    handleInputChange,
     submitEdit,
     handleToolApproval,
   } = useChatCore({
     initialMessages,
-    draftValue,
     cacheAndAddMessage,
     chatId,
     user,
-    files,
-    createOptimisticAttachments,
-    setFiles,
     checkLimitsAndNotify,
-    cleanupOptimisticAttachments,
     ensureChatExists,
-    handleFileUploads,
-    selectedModel,
-    clearDraft,
     bumpChat,
+    setComposerText,
   })
 
-  // Chat owns the explicit Activity selection separately from the generation
-  // default. The selector uses the explicit selection when valid; otherwise the
-  // panel can follow the latest/pending generation turn.
-  const [selectedActivityTurnId, setSelectedActivityTurnId] = useState<
-    string | undefined
-  >()
+  // The Activity panel store — the seam assistant rows use to reach the single
+  // Chat-hosted panel surface (see CONTEXT.md "Activity panel"). Chat keeps the
+  // selection derivation (useActivityPanel) and syncs its output into the
+  // store; rows subscribe through per-row selectors instead of a controls
+  // object threaded down the tree. The provider wires the scroll-anchoring
+  // release on open (the panel module's own quirk).
+  const [activityPanelStore] = useState(() => createActivityPanelStore())
+  const activityPanelOpen = useActivityPanelOpen(activityPanelStore)
+  const selectedActivityTurnId =
+    useActivityPanelSelectedTurnId(activityPanelStore)
+  const activityPanelId = useId()
   const { defaultActivityTurnId, panelActivityTurnId, panelProps } =
     useActivityPanel({
       messages,
@@ -182,53 +176,19 @@ export function Chat() {
       selectedActivityTurnId,
     })
 
-  // Chat owns the panel open state; the assistant trigger toggles it.
-  const activityPanelId = useId()
-  const [activityPanelOpen, setActivityPanelOpen] = useState(false)
-  // Opening the docked panel narrows the thread column, which reflows the
-  // conversation taller. `use-stick-to-bottom` would read that positive resize
-  // as "follow new content" and animate to the bottom — but clicking the
-  // thinking trigger must leave the scroll position untouched. Releasing the
-  // lock (same lever the user-message edit uses) makes the resize a no-op, so
-  // native scroll anchoring holds the view in place. Read defensively: Chat may
-  // mount outside a ScrollRoot in tests.
-  const scrollRoot = useContext(ScrollRootContext)
-  const stopScroll = scrollRoot?.stopScroll
-  const handleActivityPanelOpenChange = useCallback((open: boolean) => {
-    setActivityPanelOpen(open)
-    if (!open) setSelectedActivityTurnId(undefined)
-  }, [])
-  const handleOpenActivityTurn = useCallback(
-    (turnId: string) => {
-      stopScroll?.()
-      setSelectedActivityTurnId(
-        selectExplicitActivityTurnOnOpen({
-          requestedTurnId: turnId,
-          defaultActivityTurnId,
-        })
-      )
-      setActivityPanelOpen(true)
-    },
-    [defaultActivityTurnId, stopScroll]
-  )
-
-  // One controls object is forwarded to assistant triggers. Chat keeps
-  // ownership of both the selected turn and the responsive panel surface.
-  const activityPanel = useMemo(
-    () => ({
-      open: activityPanelOpen,
-      onOpenChange: handleActivityPanelOpenChange,
+  // Sync the authoritative selection derivation into the store so row
+  // subscriptions (trigger aria-expanded) follow branch switches and
+  // generation handoffs — not only explicit trigger clicks.
+  useEffect(() => {
+    activityPanelStore.setDerivedTurnIds({
       panelTurnId: panelActivityTurnId,
-      onOpenTurn: handleOpenActivityTurn,
-      panelId: activityPanelId,
-    }),
-    [
-      activityPanelOpen,
-      handleActivityPanelOpenChange,
-      panelActivityTurnId,
-      handleOpenActivityTurn,
-      activityPanelId,
-    ]
+      defaultTurnId: defaultActivityTurnId,
+    })
+  }, [activityPanelStore, panelActivityTurnId, defaultActivityTurnId])
+
+  const handleActivityPanelOpenChange = useCallback(
+    (open: boolean) => activityPanelStore.setOpen(open),
+    [activityPanelStore]
   )
 
   // Local delete handler — filters a message from the local array
@@ -242,9 +202,11 @@ export function Chat() {
   // Auto-focus chat textarea when user types a printable character anywhere
   const focusTextareaRef = useRef<(() => void) | null>(null)
   useGlobalPromptFocus(focusTextareaRef)
-
-  const registerFocus = useCallback((fn: (() => void) | null) => {
-    focusTextareaRef.current = fn
+  useEffect(() => {
+    focusTextareaRef.current = () => composerRef.current?.focus()
+    return () => {
+      focusTextareaRef.current = null
+    }
   }, [])
 
   // Memoize the conversation props to prevent unnecessary rerenders
@@ -253,12 +215,9 @@ export function Chat() {
       messages,
       status,
       isSubmitting,
-      activityPanelTurnId: panelActivityTurnId,
-      activityPanel,
       onDelete: handleDelete,
       onEdit: submitEdit,
       onReload: handleReload,
-      onStop: stop,
       onQuote: handleQuotedSelected,
       onSelectBranch: selectMessageBranch,
       isDurableChat,
@@ -269,65 +228,14 @@ export function Chat() {
       messages,
       status,
       isSubmitting,
-      panelActivityTurnId,
-      activityPanel,
       handleDelete,
       submitEdit,
       handleReload,
-      stop,
       handleQuotedSelected,
       selectMessageBranch,
       isDurableChat,
       lastFinishReason,
       handleToolApproval,
-    ]
-  )
-
-  // Memoize the chat input props
-  const chatInputProps = useMemo(
-    () => ({
-      onSuggestion: handleSuggestion,
-      onValueChange: handleInputChange,
-      onSend: submit,
-      isSubmitting,
-      files,
-      onFileUpload: handleFileUpload,
-      onFileRemove: handleFileRemove,
-      hasSuggestions:
-        preferences.promptSuggestions && !chatId && messages.length === 0,
-      selectedModel,
-      onSelectModel: handleModelChange,
-      onLockedGuestModelSelect: () => setHasDialogAuth(true),
-      isUserAuthenticated: isAuthenticated,
-      stop,
-      status,
-      setEnableSearch,
-      enableSearch,
-      quotedText,
-      registerInputListener,
-      registerFocus,
-    }),
-    [
-      handleSuggestion,
-      handleInputChange,
-      submit,
-      isSubmitting,
-      files,
-      handleFileUpload,
-      handleFileRemove,
-      preferences.promptSuggestions,
-      chatId,
-      messages.length,
-      selectedModel,
-      handleModelChange,
-      isAuthenticated,
-      stop,
-      status,
-      setEnableSearch,
-      enableSearch,
-      quotedText,
-      registerInputListener,
-      registerFocus,
     ]
   )
 
@@ -366,86 +274,105 @@ export function Chat() {
   const showOnboarding = !chatId && messages.length === 0
 
   return (
-    <div id="thread" className="group/thread flex min-h-full flex-1 flex-col">
-      <ChatStatusAnnouncer status={status} isSubmitting={isSubmitting} />
-      <DialogAuth open={hasDialogAuth} setOpen={setHasDialogAuth} />
+    <ActivityPanelStoreProvider
+      store={activityPanelStore}
+      panelId={activityPanelId}
+    >
+      <div id="thread" className="group/thread flex min-h-full flex-1 flex-col">
+        <ChatStatusAnnouncer status={status} isSubmitting={isSubmitting} />
+        <DialogAuth open={hasDialogAuth} setOpen={setHasDialogAuth} />
 
-      <ActivityPanel
-        panelId={activityPanelId}
-        open={activityPanelOpen}
-        onOpenChange={handleActivityPanelOpenChange}
-        {...panelProps}
-      />
-
-      <div
-        role="presentation"
-        className="composer-parent flex flex-1 flex-col focus-visible:outline-0"
-      >
-        <AnimatePresence initial={false} mode="popLayout">
-          {showOnboarding ? (
-            <motion.div
-              key="onboarding"
-              className="relative flex shrink basis-auto flex-col justify-end max-sm:grow max-sm:justify-center sm:min-h-[calc(42svh-var(--spacing-app-header))]"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <div
-                className="flex justify-center"
-                data-splash-headline-option="WHATS_ON_YOUR_MIND"
-              >
-                <div className="hidden text-center sm:mb-[22px] sm:block">
-                  <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
-                    What&apos;s on your mind?
-                  </h1>
-                </div>
-                <div className="flex h-full w-full shrink flex-col items-center justify-center px-4 text-center sm:hidden">
-                  <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
-                    What&apos;s on your mind?
-                  </h1>
-                </div>
-              </div>
-            </motion.div>
-          ) : (
-            <Conversation key="conversation" {...conversationProps} />
-          )}
-        </AnimatePresence>
+        <ActivityPanel
+          panelId={activityPanelId}
+          open={activityPanelOpen}
+          onOpenChange={handleActivityPanelOpenChange}
+          {...panelProps}
+        />
 
         <div
-          id="thread-bottom-container"
-          className={cn(
-            `group/thread-bottom-container sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col px-[var(--thread-content-margin,1rem)] pb-[env(safe-area-inset-bottom,0px)] ${THREAD_GUTTER_VARS}`,
-            showOnboarding ? "sm:grow" : "content-fade"
-          )}
+          role="presentation"
+          className="composer-parent flex flex-1 flex-col focus-visible:outline-0"
         >
-          {!showOnboarding && (
-            <div className="relative h-0">
-              <div className="pointer-events-none absolute inset-x-0 bottom-[calc(100%+1.5rem)] z-30 flex justify-center">
-                <div className="pointer-events-auto">
-                  <ScrollButton />
+          <AnimatePresence initial={false} mode="popLayout">
+            {showOnboarding ? (
+              <motion.div
+                key="onboarding"
+                className="relative flex shrink basis-auto flex-col justify-end max-sm:grow max-sm:justify-center sm:min-h-[calc(42svh-var(--spacing-app-header))]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <div
+                  className="flex justify-center"
+                  data-splash-headline-option="WHATS_ON_YOUR_MIND"
+                >
+                  <div className="hidden text-center sm:mb-[22px] sm:block">
+                    <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
+                      What&apos;s on your mind?
+                    </h1>
+                  </div>
+                  <div className="flex h-full w-full shrink flex-col items-center justify-center px-4 text-center sm:hidden">
+                    <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
+                      What&apos;s on your mind?
+                    </h1>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
+              </motion.div>
+            ) : (
+              <Conversation key="conversation" {...conversationProps} />
+            )}
+          </AnimatePresence>
+
           <div
-            id="thread-bottom"
-            className={`mx-auto w-full max-w-[var(--thread-content-max-width,40rem)] ${THREAD_MAXWIDTH_VARS}`}
+            id="thread-bottom-container"
+            className={cn(
+              `group/thread-bottom-container sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col px-[var(--thread-content-margin,1rem)] pb-[env(safe-area-inset-bottom,0px)] ${THREAD_GUTTER_VARS}`,
+              showOnboarding ? "sm:grow" : "content-fade"
+            )}
           >
-            <ChatInput defaultValue={initialInputValue} {...chatInputProps} />
-          </div>
-          {!showOnboarding && (
-            <div className="text-muted-foreground relative -mt-4 w-full overflow-hidden text-center text-xs md:px-[60px]">
-              <div className="flex min-h-8 w-full items-center justify-center p-2 select-none">
-                <div className="pointer-events-auto">
-                  <div>
-                    Not A Wrapper can make mistakes. Check important info.
+            {!showOnboarding && (
+              <div className="relative h-0">
+                <div className="pointer-events-none absolute inset-x-0 bottom-[calc(100%+1.5rem)] z-30 flex justify-center">
+                  <div className="pointer-events-auto">
+                    <ScrollButton />
                   </div>
                 </div>
               </div>
+            )}
+            <div
+              id="thread-bottom"
+              className={`mx-auto w-full max-w-[var(--thread-content-max-width,40rem)] ${THREAD_MAXWIDTH_VARS}`}
+            >
+              <Composer
+                ref={composerRef}
+                chatId={chatId}
+                onTurn={submit}
+                onSuggestion={handleSuggestion}
+                isSubmitting={isSubmitting}
+                status={status}
+                stop={stop}
+                hasSuggestions={
+                  preferences.promptSuggestions &&
+                  !chatId &&
+                  messages.length === 0
+                }
+                onLockedGuestModelSelect={() => setHasDialogAuth(true)}
+              />
             </div>
-          )}
+            {!showOnboarding && (
+              <div className="text-muted-foreground relative -mt-4 w-full overflow-hidden text-center text-xs md:px-[60px]">
+                <div className="flex min-h-8 w-full items-center justify-center p-2 select-none">
+                  <div className="pointer-events-auto">
+                    <div>
+                      Not A Wrapper can make mistakes. Check important info.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </ActivityPanelStoreProvider>
   )
 }

@@ -1,18 +1,14 @@
-import type {
-  ChatMessageMetadata,
-  MessageBranchInfo,
-} from "@/lib/chat-messages/branch"
-import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import {
-  extractTextFromMessageParts,
-  getToolRenderSignature,
-} from "@/lib/chat-messages/parts"
+  assistantTurnViewsEqual,
+  type AssistantTurnView,
+} from "@/lib/chat-messages/assistant-turn"
+import type { MessageBranchInfo } from "@/lib/chat-messages/branch"
+import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { UIMessage as MessageType } from "@ai-sdk/react"
 import React, { useState } from "react"
 import type { EditTurnResult } from "./chat-turn"
 import { MessageAssistant } from "./message-assistant"
 import { MessageUser } from "./message-user"
-import type { ActivityPanelControls } from "./use-activity-panel"
 
 // Attachment type for file parts
 type MessageAttachment = {
@@ -27,27 +23,20 @@ type MessageProps = {
   id: string
   attachments?: MessageAttachment[]
   isLast?: boolean
-  /** Id currently projected into the single Chat-owned Activity panel surface. */
-  activityPanelTurnId?: string
-  /** Chat-owned Activity-panel controls, forwarded to the assistant trigger. */
-  activityPanel?: ActivityPanelControls
+  /** The Assistant turn view — Conversation derives it once per assistant
+   * message per render; the memo comparator below compares its precomputed
+   * signature fields instead of re-deriving from raw parts. */
+  view?: AssistantTurnView
   onDelete: (id: string) => void
   onEdit: (
     id: string,
     newText: string
   ) => Promise<EditTurnResult | void> | EditTurnResult | void
   onReload?: (messageId: string) => void
-  onStop?: () => void
   onSelectBranch?: (messageId: string) => void
   /** Branch descriptor to render for this message's turn (anchored on the user
    * message in conversation.tsx). Undefined for assistant messages. */
   branch?: MessageBranchInfo
-  parts?: MessageType["parts"]
-  /** Immutable snapshot of rendered tool input/output for memo comparison.
-   * Conversation computes this during render so in-place part mutations do not
-   * make the previous and next memo props point at the same mutated object. */
-  toolRenderSignature?: string
-  metadata?: ChatMessageMetadata
   status?: DurableMessageStatus | "ready" | "error"
   className?: string
   onQuote?: (text: string, messageId: string) => void
@@ -61,17 +50,6 @@ type MessageProps = {
 }
 
 // --- Content-based equality helpers for React.memo ---
-
-function getTextContent(parts: MessageType["parts"] | undefined): string {
-  return extractTextFromMessageParts(parts)
-}
-
-function getComparableToolSignature({
-  parts,
-  toolRenderSignature,
-}: Pick<MessageProps, "parts" | "toolRenderSignature">): string {
-  return toolRenderSignature ?? getToolRenderSignature(parts)
-}
 
 function branchesEqual(
   prev: MessageBranchInfo | undefined,
@@ -94,50 +72,24 @@ function branchesEqual(
   )
 }
 
+/**
+ * Content-based memo gate. Conversation derives text (`children`) and the
+ * Assistant turn view fresh each render — the AI SDK mutates part objects in
+ * place during streaming, so the view is a new object every render and
+ * equality must be content-based. `children` compares the rendered text;
+ * `assistantTurnViewsEqual` compares exactly the remaining facts the row
+ * renders (tool signature, reasoning phase, source count, metadata identity).
+ * Streaming reasoning deltas therefore do NOT churn the row body — the
+ * Activity panel owns and updates that state through its own store seam.
+ */
 function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
   if (prev.variant !== next.variant) return false
   if (prev.id !== next.id) return false
-
-  // A branch switch or panel-target handoff must re-render the assistant row so
-  // aria-expanded follows the selected/default Activity turn — even when the
-  // body content is unchanged (GA §6.7E, §7 R3).
-  if (prev.activityPanelTurnId !== next.activityPanelTurnId) return false
-  // Compare the bundle's inner fields, not its identity: Chat recreates the
-  // object each render, but only open/panelId changes should re-render the row.
-  if (prev.activityPanel?.open !== next.activityPanel?.open) return false
-  if (prev.activityPanel?.panelId !== next.activityPanel?.panelId) return false
-
-  // While the last message actively streams, skip re-render unless the rendered
-  // body changed. Reasoning + source deltas no longer churn the body — the
-  // Activity panel owns and updates that state — so only text and rendered tool
-  // projections gate a body re-render here. Conversation provides tool
-  // projections as an immutable string so in-place AI SDK part mutations do not
-  // make previous and next memo props compare against the same mutated object.
-  // This narrows the previous blanket `return false`, which re-rendered on
-  // every streaming delta.
-  if (next.status === "streaming" && next.isLast) {
-    if (getTextContent(prev.parts) !== getTextContent(next.parts)) return false
-    if (getComparableToolSignature(prev) !== getComparableToolSignature(next)) {
-      return false
-    }
-    // Reasoning-only deltas fall through to the remaining structural gates.
-  }
-
-  // Content comparisons via parts
-  if (getTextContent(prev.parts) !== getTextContent(next.parts)) return false
-  if (getComparableToolSignature(prev) !== getComparableToolSignature(next))
-    return false
-
-  // Fallback: if parts are both empty/undefined, compare children directly
-  if (!prev.parts?.length && !next.parts?.length) {
-    if (prev.children !== next.children) return false
-  }
-  // If parts matched but children diverged (shouldn't happen, but safety net)
   if (prev.children !== next.children) return false
+  if (!assistantTurnViewsEqual(prev.view, next.view)) return false
 
   if (prev.isLast !== next.isLast) return false
   if (prev.status !== next.status) return false
-  if (prev.metadata !== next.metadata) return false
   if (prev.finishReason !== next.finishReason) return false
   if (prev.className !== next.className) return false
   if (prev.isDurableChat !== next.isDurableChat) return false
@@ -178,15 +130,11 @@ function MessageInner({
   id,
   attachments,
   isLast,
-  activityPanelTurnId,
-  activityPanel,
+  view,
   onEdit,
   onReload,
-  onStop,
   onSelectBranch,
   branch,
-  parts,
-  metadata,
   status,
   className,
   onQuote,
@@ -221,18 +169,14 @@ function MessageInner({
     )
   }
 
-  if (variant === "assistant") {
+  if (variant === "assistant" && view) {
     return (
       <MessageAssistant
         copied={copied}
         copyToClipboard={copyToClipboard}
         onReload={onReload}
-        onStop={onStop}
         isLast={isLast}
-        activityPanelTurnId={activityPanelTurnId}
-        activityPanel={activityPanel}
-        parts={parts}
-        metadata={metadata}
+        view={view}
         status={status}
         className={className}
         messageId={id}

@@ -1,4 +1,4 @@
-import { getSources } from "@/app/components/chat/get-sources"
+import { getSources } from "@/lib/chat-messages/sources"
 import { SourcesList } from "@/app/components/chat/sources-list"
 import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"

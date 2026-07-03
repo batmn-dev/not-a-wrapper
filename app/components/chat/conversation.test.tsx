@@ -22,19 +22,16 @@ vi.mock("@/components/ui/thinking-bar", () => ({
 vi.mock("./message", () => ({
   Message: ({
     id,
-    activityPanelTurnId,
     onReload,
     status,
     children,
   }: {
     id: string
-    activityPanelTurnId?: string
     onReload?: (messageId: string) => void
     status?: string
     children: React.ReactNode
   }) => (
     <button
-      data-activity-panel-turn-id={activityPanelTurnId}
       data-can-reload={Boolean(onReload)}
       data-status={status}
       data-testid={`message-${id}`}
@@ -187,7 +184,6 @@ describe("Conversation regeneration availability", () => {
           messages={userTail}
           status="submitted"
           isSubmitting
-          activityPanelTurnId={PENDING_ACTIVITY_TURN_ID}
           onDelete={vi.fn()}
           onEdit={vi.fn()}
           onReload={vi.fn()}
@@ -203,9 +199,6 @@ describe("Conversation regeneration availability", () => {
     expect(container?.querySelector('[data-testid="thinking"]')).toBeNull()
     expect(pendingMessage).toBeTruthy()
     expect(pendingMessage?.dataset.status).toBe("submitted")
-    expect(pendingMessage?.dataset.activityPanelTurnId).toBe(
-      PENDING_ACTIVITY_TURN_ID
-    )
   })
 
   it("routes submit preflight through the activity assistant row before status flips", () => {
@@ -225,7 +218,6 @@ describe("Conversation regeneration availability", () => {
           messages={userTail}
           status="ready"
           isSubmitting
-          activityPanelTurnId={PENDING_ACTIVITY_TURN_ID}
           onDelete={vi.fn()}
           onEdit={vi.fn()}
           onReload={vi.fn()}
@@ -241,8 +233,5 @@ describe("Conversation regeneration availability", () => {
     expect(container?.querySelector('[data-testid="thinking"]')).toBeNull()
     expect(pendingMessage).toBeTruthy()
     expect(pendingMessage?.dataset.status).toBe("submitted")
-    expect(pendingMessage?.dataset.activityPanelTurnId).toBe(
-      PENDING_ACTIVITY_TURN_ID
-    )
   })
 })

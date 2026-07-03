@@ -5,6 +5,7 @@ import {
   createChatTurnController,
   type ChatTurnAdapters,
   type ChatTurnMessage,
+  type ChatTurnSnapshot,
 } from "./chat-turn"
 
 function userMessage(
@@ -38,6 +39,13 @@ function createHarness() {
   let messages: ChatTurnMessage[] = []
   let cachedMessages: ChatTurnMessage[] = []
   let isSending = false
+  // The Turn context snapshot runners read at run time (adapters.getTurnSnapshot).
+  let snapshot: ChatTurnSnapshot = {
+    selectedModel: "model-1",
+    isAuthenticated: false,
+    systemPrompt: SYSTEM_PROMPT_DEFAULT,
+    enableSearch: false,
+  }
   let pendingEdit: { message: ChatTurnMessage; chatId: string } | null = null
   let routePersistsMessages = false
   const events: string[] = []
@@ -83,6 +91,7 @@ function createHarness() {
   const adapters: ChatTurnAdapters = {
     createOptimisticMessageId: vi.fn(() => "optimistic-message"),
     createOptimisticEditMessageId: vi.fn(() => "optimistic-edit-message"),
+    getTurnSnapshot: vi.fn(() => snapshot),
     getIsSending: vi.fn(() => isSending),
     setIsSending: vi.fn((value) => {
       isSending = value
@@ -159,6 +168,9 @@ function createHarness() {
     setRoutePersistsMessages: (next: boolean) => {
       routePersistsMessages = next
     },
+    setSnapshot: (next: Partial<ChatTurnSnapshot>) => {
+      snapshot = { ...snapshot, ...next }
+    },
     stagePendingEdit: storeAdapters.pendingEdit.stage,
   }
 }
@@ -174,13 +186,11 @@ describe("chat turn controller", () => {
       local.events.push(`onSuccess:${chatId}`)
     })
 
+    local.setSnapshot({ systemPrompt: "custom system", enableSearch: true })
+
     await local.controller.runSendTurn({
       text: "Hello",
-      selectedModel: "model-1",
-      isAuthenticated: false,
       bodyExtras: {
-        systemPrompt: "custom system",
-        enableSearch: true,
         chatVersion: 1,
       },
       onSuccess,
@@ -212,10 +222,9 @@ describe("chat turn controller", () => {
     const durable = createHarness()
     durable.setRoutePersistsMessages(true)
 
+    durable.setSnapshot({ isAuthenticated: true })
     await durable.controller.runSendTurn({
       text: "Hello",
-      selectedModel: "model-1",
-      isAuthenticated: true,
     })
 
     expect(durable.adapters.sendMessage).toHaveBeenCalledTimes(1)
@@ -228,8 +237,6 @@ describe("chat turn controller", () => {
 
     await controller.runSendTurn({
       text: "Hello with file",
-      selectedModel: "model-1",
-      isAuthenticated: false,
       optimisticAttachments: [
         {
           name: "image.png",
@@ -247,7 +254,8 @@ describe("chat turn controller", () => {
   })
 
   it("sends normal turns with the rendered selected-path server tail", async () => {
-    const { adapters, controller } = createHarness()
+    const { adapters, controller, setSnapshot } = createHarness()
+    setSnapshot({ isAuthenticated: true })
     const visibleMessages = [
       {
         ...userMessage("client-user-1", "prompt"),
@@ -261,8 +269,6 @@ describe("chat turn controller", () => {
 
     await controller.runSendTurn({
       text: "next prompt",
-      selectedModel: "model-1",
-      isAuthenticated: true,
       messages: visibleMessages,
     })
 
@@ -285,8 +291,6 @@ describe("chat turn controller", () => {
 
     await controller.runSuggestionTurn({
       text: "Try this",
-      selectedModel: "model-1",
-      isAuthenticated: false,
       chatVersion: 4,
     })
 
@@ -299,6 +303,9 @@ describe("chat turn controller", () => {
           model: "model-1",
           isAuthenticated: false,
           systemPrompt: SYSTEM_PROMPT_DEFAULT,
+          // Suggestions now read the same Turn context snapshot as typed
+          // sends, so enableSearch no longer silently diverges.
+          enableSearch: false,
           chatVersion: 4,
           expectedVisibleMessageCount: 0,
         },
@@ -315,9 +322,15 @@ describe("chat turn controller", () => {
       controller,
       events,
       setMessagesState,
+      setSnapshot,
       snapshots,
       storeAdapters,
     } = createHarness()
+    setSnapshot({
+      isAuthenticated: true,
+      systemPrompt: "custom system",
+      enableSearch: true,
+    })
     const targetCreatedAt = new Date("2026-01-02T00:00:00.000Z")
     const targetFile = {
       type: "file" as const,
@@ -338,10 +351,6 @@ describe("chat turn controller", () => {
       ],
       messageId: "user-1",
       newContent: "new text",
-      selectedModel: "model-1",
-      isAuthenticated: true,
-      systemPrompt: "custom system",
-      enableSearch: true,
       isSubmitting: false,
       status: "ready",
     })
@@ -386,8 +395,19 @@ describe("chat turn controller", () => {
   })
 
   it("restores visible messages when edit resend dispatch throws", async () => {
-    const { adapters, controller, getMessages, setMessagesState, storeAdapters } =
-      createHarness()
+    const {
+      adapters,
+      controller,
+      getMessages,
+      setMessagesState,
+      setSnapshot,
+      storeAdapters,
+    } = createHarness()
+    setSnapshot({
+      isAuthenticated: true,
+      systemPrompt: "custom system",
+      enableSearch: true,
+    })
     const originalMessages = [
       userMessage("user-1", "old text"),
       assistantMessage("assistant-1", "old answer"),
@@ -404,10 +424,6 @@ describe("chat turn controller", () => {
       messages: originalMessages,
       messageId: "user-1",
       newContent: "new text",
-      selectedModel: "model-1",
-      isAuthenticated: true,
-      systemPrompt: "custom system",
-      enableSearch: true,
       isSubmitting: false,
       status: "ready",
     })
@@ -425,9 +441,15 @@ describe("chat turn controller", () => {
       controller,
       setMessagesState,
       setRoutePersistsMessages,
+      setSnapshot,
       storeAdapters,
     } = createHarness()
     setRoutePersistsMessages(true)
+    setSnapshot({
+      isAuthenticated: true,
+      systemPrompt: "custom system",
+      enableSearch: true,
+    })
     const targetCreatedAt = new Date("2026-01-02T00:00:00.000Z")
     const originalMessages = [
       userMessage("user-1", "old text", targetCreatedAt),
@@ -442,10 +464,6 @@ describe("chat turn controller", () => {
       messages: originalMessages,
       messageId: "user-1",
       newContent: "new text",
-      selectedModel: "model-1",
-      isAuthenticated: true,
-      systemPrompt: "custom system",
-      enableSearch: true,
       isSubmitting: false,
       status: "ready",
     })
@@ -489,8 +507,10 @@ describe("chat turn controller", () => {
       controller,
       setMessagesState,
       setRoutePersistsMessages,
+      setSnapshot,
     } = createHarness()
     setRoutePersistsMessages(true)
+    setSnapshot({ isAuthenticated: true, systemPrompt: "custom system" })
     const targetCreatedAt = new Date("2026-01-02T00:00:00.000Z")
     const clientMessageId = "msg-client-123"
     const originalMessages = [
@@ -504,10 +524,6 @@ describe("chat turn controller", () => {
       messages: originalMessages,
       messageId: clientMessageId,
       newContent: "new text",
-      selectedModel: "model-1",
-      isAuthenticated: true,
-      systemPrompt: "custom system",
-      enableSearch: false,
       isSubmitting: false,
       status: "ready",
     })
@@ -527,16 +543,13 @@ describe("chat turn controller", () => {
   })
 
   it("blocks edit while generation is active without closing the draft lifecycle", async () => {
-    const { adapters, controller } = createHarness()
+    const { adapters, controller, setSnapshot } = createHarness()
+    setSnapshot({ isAuthenticated: true })
     const result = await controller.runEditTurn({
       chatId: "server-chat",
       messages: [userMessage("user-1", "old text")],
       messageId: "user-1",
       newContent: "new text",
-      selectedModel: "model-1",
-      isAuthenticated: true,
-      systemPrompt: "custom system",
-      enableSearch: false,
       isSubmitting: false,
       status: "streaming",
     })
@@ -560,10 +573,6 @@ describe("chat turn controller", () => {
       messages: [userMessage("user-1", "old text")],
       messageId: "user-1",
       newContent: "new text",
-      selectedModel: "model-1",
-      isAuthenticated: false,
-      systemPrompt: "custom system",
-      enableSearch: false,
       isSubmitting: false,
       status: "ready",
     })
@@ -579,8 +588,9 @@ describe("chat turn controller", () => {
   })
 
   it("regenerates with a target message id and explicit intent", async () => {
-    const { adapters, controller, setMessagesState, storeAdapters } =
+    const { adapters, controller, setMessagesState, setSnapshot, storeAdapters } =
       createHarness()
+    setSnapshot({ isAuthenticated: true, systemPrompt: "custom system" })
     const targetCreatedAt = new Date("2026-01-02T00:00:00.000Z")
     const messages = [
       userMessage("user-1", "prompt"),
@@ -592,9 +602,6 @@ describe("chat turn controller", () => {
       chatId: "chat-1",
       messages,
       targetAssistantMessageId: "assistant-1",
-      selectedModel: "model-1",
-      isAuthenticated: true,
-      systemPrompt: "custom system",
       chatVersion: 2,
       isSubmitting: false,
       status: "ready",
@@ -608,6 +615,9 @@ describe("chat turn controller", () => {
         model: "model-1",
         isAuthenticated: true,
         systemPrompt: "custom system",
+        // Regeneration reads the same Turn context snapshot as sends, so the
+        // request now carries the search enablement uniformly.
+        enableSearch: false,
         chatVersion: 2,
         regeneration: {
           targetAssistantMessageId: "assistant-1",
@@ -628,9 +638,11 @@ describe("chat turn controller", () => {
       controller,
       setMessagesState,
       setRoutePersistsMessages,
+      setSnapshot,
       storeAdapters,
     } = createHarness()
     setRoutePersistsMessages(true)
+    setSnapshot({ isAuthenticated: true, systemPrompt: "custom system" })
     const targetCreatedAt = new Date("2026-01-02T00:00:00.000Z")
     const messages = [
       userMessage("user-1", "prompt"),
@@ -642,9 +654,6 @@ describe("chat turn controller", () => {
       chatId: "server-chat",
       messages,
       targetAssistantMessageId: "assistant-1",
-      selectedModel: "model-1",
-      isAuthenticated: true,
-      systemPrompt: "custom system",
       chatVersion: 2,
       isSubmitting: false,
       status: "ready",
@@ -667,7 +676,9 @@ describe("chat turn controller", () => {
   })
 
   it("refuses regeneration while another generation is active", async () => {
-    const { adapters, controller, setMessagesState } = createHarness()
+    const { adapters, controller, setMessagesState, setSnapshot } =
+      createHarness()
+    setSnapshot({ isAuthenticated: true })
     const messages = [
       userMessage("user-1", "prompt"),
       assistantMessage("assistant-1", "old answer"),
@@ -679,9 +690,6 @@ describe("chat turn controller", () => {
       chatId: "chat-1",
       messages,
       targetAssistantMessageId: "assistant-1",
-      selectedModel: "model-1",
-      isAuthenticated: true,
-      systemPrompt: "custom system",
       chatVersion: 3,
       isSubmitting: false,
       status: "streaming",
@@ -707,9 +715,6 @@ describe("chat turn controller", () => {
       chatId: "local-chat",
       messages,
       targetAssistantMessageId: "assistant-1",
-      selectedModel: "model-1",
-      isAuthenticated: false,
-      systemPrompt: "custom system",
       chatVersion: 2,
       isSubmitting: false,
       status: "ready",

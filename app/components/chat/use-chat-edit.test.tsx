@@ -36,10 +36,6 @@ describe("useChatEdit generation-active guard", () => {
         chatTurn,
         chatId: "chat-1",
         messages: [],
-        selectedModel: "openai/gpt-4.1-mini",
-        isAuthenticated: true,
-        systemPrompt: "system",
-        enableSearch: false,
         getStatus: () => live.status,
         getIsSubmitting: () => live.submitting,
       })

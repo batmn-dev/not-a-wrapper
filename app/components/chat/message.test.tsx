@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { getToolRenderSignature } from "@/lib/chat-messages/parts"
+import { deriveAssistantTurnView } from "@/lib/chat-messages/assistant-turn"
 import type { UIMessage } from "@ai-sdk/react"
 import React, { act } from "react"
 import { createRoot, Root } from "react-dom/client"
@@ -32,7 +32,6 @@ vi.mock("./message-assistant", () => ({
       approved: boolean,
       reason?: string
     ) => Promise<void> | void
-    activityPanelTurnId?: string
   }) => {
     messageAssistantSpy()
     lastAssistantProps.current = props
@@ -70,6 +69,8 @@ beforeAll(() => {
     globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true
 })
+
+const EMPTY_VIEW = deriveAssistantTurnView({ parts: [] }, "ready")
 
 describe("Message memoization", () => {
   let container: HTMLDivElement | null = null
@@ -109,6 +110,7 @@ describe("Message memoization", () => {
         <Message
           id="assistant-1"
           variant="assistant"
+          view={EMPTY_VIEW}
           onDelete={() => {}}
           onEdit={() => {}}
           onReload={onReload}
@@ -203,21 +205,26 @@ describe("Message body memo contract (R3)", () => {
 
   function renderAssistant(props: {
     parts?: UIMessage["parts"]
+    metadata?: unknown
     status?: "streaming" | "ready" | "submitted" | "error"
     isLast?: boolean
-    activityPanelTurnId?: string
     children?: string
   }) {
+    // Derive the view fresh each render — exactly what Conversation does. The
+    // AI SDK mutates part objects in place, so the derivation must observe
+    // mutations through the same parts reference.
+    const view = deriveAssistantTurnView(
+      { parts: props.parts, metadata: props.metadata },
+      props.status ?? "ready"
+    )
     act(() => {
       root?.render(
         <Message
           id="assistant-1"
           variant="assistant"
           isLast={props.isLast}
-          activityPanelTurnId={props.activityPanelTurnId}
           status={props.status}
-          parts={props.parts}
-          toolRenderSignature={getToolRenderSignature(props.parts)}
+          view={view}
           onDelete={() => {}}
           onEdit={() => {}}
         >
@@ -279,72 +286,6 @@ describe("Message body memo contract (R3)", () => {
     expect(messageAssistantSpy).toHaveBeenCalledTimes(2)
   })
 
-  it("re-renders the body when streaming tool input changes without a state transition", () => {
-    renderAssistant({
-      parts: [
-        {
-          type: "tool-search",
-          toolCallId: "tool-call-1",
-          state: "input-streaming",
-          input: { query: "new" },
-        },
-      ] as unknown as UIMessage["parts"],
-      status: "streaming",
-      isLast: true,
-      children: "",
-    })
-    expect(messageAssistantSpy).toHaveBeenCalledTimes(1)
-
-    renderAssistant({
-      parts: [
-        {
-          type: "tool-search",
-          toolCallId: "tool-call-1",
-          state: "input-streaming",
-          input: { query: "new york weather" },
-        },
-      ] as unknown as UIMessage["parts"],
-      status: "streaming",
-      isLast: true,
-      children: "",
-    })
-    expect(messageAssistantSpy).toHaveBeenCalledTimes(2)
-  })
-
-  it("re-renders the body when rendered tool output changes without a state transition", () => {
-    renderAssistant({
-      parts: [
-        {
-          type: "tool-search",
-          toolCallId: "tool-call-1",
-          state: "output-available",
-          input: { query: "new york weather" },
-          output: { summary: "Cloudy" },
-        },
-      ] as unknown as UIMessage["parts"],
-      status: "streaming",
-      isLast: true,
-      children: "",
-    })
-    expect(messageAssistantSpy).toHaveBeenCalledTimes(1)
-
-    renderAssistant({
-      parts: [
-        {
-          type: "tool-search",
-          toolCallId: "tool-call-1",
-          state: "output-available",
-          input: { query: "new york weather" },
-          output: { summary: "Cloudy", temperature: "72 F" },
-        },
-      ] as unknown as UIMessage["parts"],
-      status: "streaming",
-      isLast: true,
-      children: "",
-    })
-    expect(messageAssistantSpy).toHaveBeenCalledTimes(2)
-  })
-
   it("re-renders the body when rendered tool input/output mutate in place", () => {
     const parts = [
       {
@@ -400,7 +341,7 @@ describe("Message body memo contract (R3)", () => {
     expect(messageAssistantSpy).toHaveBeenCalledTimes(4)
   })
 
-  it("re-renders and forwards the new activityPanelTurnId on handoff", () => {
+  it("re-renders when the metadata identity changes (durable adoption)", () => {
     const parts = [
       { type: "text", text: "Answer" },
     ] as unknown as UIMessage["parts"]
@@ -409,20 +350,19 @@ describe("Message body memo contract (R3)", () => {
       parts,
       status: "ready",
       isLast: true,
-      activityPanelTurnId: "turn-1",
       children: "Answer",
     })
     expect(messageAssistantSpy).toHaveBeenCalledTimes(1)
-    expect(lastAssistantProps.current.activityPanelTurnId).toBe("turn-1")
 
+    // The metadata writers return a NEW object when server-owned keys change
+    // (and the same reference on no-op), so identity is the change signal.
     renderAssistant({
       parts,
+      metadata: { serverMessageId: "server-1", reasoningDurationMs: 2000 },
       status: "ready",
       isLast: true,
-      activityPanelTurnId: "turn-2",
       children: "Answer",
     })
     expect(messageAssistantSpy).toHaveBeenCalledTimes(2)
-    expect(lastAssistantProps.current.activityPanelTurnId).toBe("turn-2")
   })
 })

@@ -12,41 +12,38 @@ import {
   messageFooterRevealClassName,
 } from "@/components/ui/message"
 import { SystemMessage } from "@/components/ui/system-message"
-import type { ChatMessageMetadata } from "@/lib/chat-messages/branch"
-import { getServerMessageId } from "@/lib/chat-messages/metadata"
+import {
+  deriveAssistantLoadingState,
+  type AssistantTurnView,
+} from "@/lib/chat-messages/assistant-turn"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
-import type { UIMessage as MessageAISDK } from "@ai-sdk/react"
 import { RiCheckLine, RiFileCopyLine, RiRefreshLine } from "@remixicon/react"
-import type { ToolUIPart } from "ai"
-import { getStaticToolName, isStaticToolUIPart } from "ai"
 import { useCallback, useRef, useState } from "react"
+import {
+  useActivityPanelActions,
+  useActivityPanelId,
+  useIsActivityPanelTurnOpen,
+} from "./activity/activity-panel-store"
 import {
   ActivityPanelTrigger,
   type ActivityTriggerState,
 } from "./activity/activity-panel-trigger"
-import { getSources } from "./get-sources"
 import { QuoteButton } from "./quote-button"
-import type { ActivityPanelControls } from "./use-activity-panel"
 import { SearchImages } from "./search-images"
 import { ToolInvocation } from "./tool-invocation"
-import { useLoadingState } from "./use-loading-state"
 import { useAssistantMessageSelection } from "./useAssistantMessageSelection"
 
 type MessageAssistantProps = {
   children: string
+  /** The Assistant turn view — the single derivation of everything this row
+   * renders from the message's parts/metadata. See CONTEXT.md. */
+  view: AssistantTurnView
   isLast?: boolean
-  /** Id currently projected into the single Chat-owned Activity panel surface. */
-  activityPanelTurnId?: string
-  /** Chat-owned Activity-panel controls; gates + drives the reopen trigger. */
-  activityPanel?: ActivityPanelControls
   copied?: boolean
   copyToClipboard?: () => void
   onReload?: (messageId: string) => void
-  onStop?: () => void
-  parts?: MessageAISDK["parts"]
-  metadata?: ChatMessageMetadata
   status?: DurableMessageStatus | "ready" | "error"
   className?: string
   messageId: string
@@ -86,15 +83,11 @@ function formatToolProgressLabel(toolName: string): string {
 
 export function MessageAssistant({
   children,
+  view,
   isLast,
-  activityPanelTurnId,
-  activityPanel,
   copied,
   copyToClipboard,
   onReload,
-  onStop,
-  parts,
-  metadata,
   status,
   className,
   messageId,
@@ -104,15 +97,10 @@ export function MessageAssistant({
   onToolApproval,
 }: MessageAssistantProps) {
   const { preferences } = useUserPreferences()
-  const sources = getSources(parts || [])
+  const { sources, toolParts, searchImageResults, reasoning } = view
   // Regeneration is a server-owned Chat turn, available only on a durable
   // chat. Matches the turn-controller precondition. See CONTEXT.md "Chat turn".
   const canRegenerate = Boolean(onReload) && Boolean(isDurableChat)
-
-  // v6: Filter tool parts using official helper
-  const toolInvocationParts = parts?.filter((part): part is ToolUIPart =>
-    isStaticToolUIPart(part)
-  )
 
   const contentNullOrEmpty = children === null || children === ""
   const isLastStreaming = status === "streaming" && isLast
@@ -127,34 +115,28 @@ export function MessageAssistant({
 
   // Reasoning + sources live in the Chat-owned Activity panel. Each assistant
   // row with activity keeps its own trigger; only the row currently projected
-  // into the panel reports aria-expanded=true.
-  const serverMessageId = getServerMessageId(metadata)
-  const isPanelTurn =
-    activityPanelTurnId !== undefined &&
-    (messageId === activityPanelTurnId ||
-      serverMessageId === activityPanelTurnId)
-  const hasReasoningPart = Boolean(
-    parts?.some((part) => part.type === "reasoning")
+  // into the panel reports aria-expanded=true. The row reaches the panel
+  // through the activity panel store seam — no props thread through the tree.
+  const panelActions = useActivityPanelActions()
+  const panelId = useActivityPanelId()
+  const isPanelTurnOpen = useIsActivityPanelTurnOpen(
+    messageId,
+    view.serverMessageId
   )
-  const isReasoningStreaming = Boolean(
-    parts?.some(
-      (part) =>
-        part.type === "reasoning" &&
-        (part as { state?: string }).state === "streaming"
-    )
-  )
+  const hasReasoningPart = reasoning.phase !== "idle"
+  const isReasoningStreaming = reasoning.isStreaming
   const hasSources = sources.length > 0
-  const hasToolActivity = Boolean(toolInvocationParts?.length)
+  const hasToolActivity = toolParts.length > 0
   const showActivityTrigger =
-    Boolean(activityPanel?.onOpenTurn) &&
+    Boolean(panelActions) &&
     (isSubmittedPending ||
       isReasoningStreaming ||
       hasReasoningPart ||
       hasSources ||
       hasToolActivity)
   const reasoningDurationSeconds =
-    typeof metadata?.reasoningDurationMs === "number"
-      ? Math.round(metadata.reasoningDurationMs / 1000)
+    reasoning.persistedDurationMs !== undefined
+      ? Math.round(reasoning.persistedDurationMs / 1000)
       : undefined
   // Compose the trigger's thinking state: live "Thinking" while reasoning
   // streams, then "Thought for {duration}" once it completes, else a source
@@ -168,36 +150,14 @@ export function MessageAssistant({
           ? { status: "sources", count: sources.length }
           : { status: "activity" }
 
-  // Type for image search results
-  type ImageResult = { title: string; imageUrl: string; sourceUrl: string }
-
-  // v6: Use flat properties and official helper for tool name
-  const searchImageResults: ImageResult[] =
-    parts
-      ?.filter(
-        (part): part is ToolUIPart =>
-          isStaticToolUIPart(part) &&
-          part.state === "output-available" &&
-          getStaticToolName(part) === "imageSearch" &&
-          (part.output as { content?: Array<{ type: string }> })?.content?.[0]
-            ?.type === "images"
-      )
-      .flatMap((part) => {
-        const output = part.output as {
-          content?: Array<{ type: string; results?: ImageResult[] }>
-        }
-        return output?.content?.[0]?.results ?? []
-      }) ?? []
-
   const {
     showDots: showStreamingLoader,
     showToolProgress,
     showImageGenProgress,
     activeToolNames,
-  } = useLoadingState({
+  } = deriveAssistantLoadingState(view, {
     status: loadingStatus,
     isLast: isLast ?? false,
-    parts,
     contentNullOrEmpty,
     showToolInvocations: preferences.showToolInvocations,
   })
@@ -215,14 +175,14 @@ export function MessageAssistant({
   }, [selectionInfo, onQuote, clearSelection])
   const handleActivityTriggerOpenChange = useCallback(
     (open: boolean) => {
-      if (!activityPanel) return
+      if (!panelActions) return
       if (open) {
-        activityPanel.onOpenTurn(messageId)
+        panelActions.openTurn(messageId)
       } else {
-        activityPanel.onOpenChange(false)
+        panelActions.close()
       }
     },
-    [activityPanel, messageId]
+    [panelActions, messageId]
   )
 
   const [contentCaretPhase, setContentCaretPhase] = useState<
@@ -278,15 +238,13 @@ export function MessageAssistant({
         // Inner data-message-id for quote selection — closest() finds this before the outer article
         data-message-id={messageId}
       >
-        {toolInvocationParts &&
-          toolInvocationParts.length > 0 &&
-          preferences.showToolInvocations && (
-            <ToolInvocation
-              toolInvocations={toolInvocationParts}
-              metadata={metadata}
-              onToolApproval={onToolApproval}
-            />
-          )}
+        {toolParts.length > 0 && preferences.showToolInvocations && (
+          <ToolInvocation
+            toolInvocations={toolParts}
+            metadata={view.metadata}
+            onToolApproval={onToolApproval}
+          />
+        )}
 
         {showToolProgress && (
           <Loader
@@ -316,13 +274,13 @@ export function MessageAssistant({
           />
         )}
 
-        {showActivityTrigger && activityPanel && (
+        {showActivityTrigger && panelActions && (
           <div className="flex items-center justify-between">
             <div className="flex min-w-0 items-center">
               <ActivityPanelTrigger
-                open={activityPanel.open && isPanelTurn}
+                open={isPanelTurnOpen}
                 onOpenChange={handleActivityTriggerOpenChange}
-                controlsId={activityPanel.panelId}
+                controlsId={panelId}
                 state={activityState}
               />
             </div>

@@ -1,7 +1,8 @@
 "use client"
 
-import { ChatInput } from "@/app/components/chat-input/chat-input"
+import { Composer } from "@/app/components/chat-input/composer"
 import { SourcesList } from "@/app/components/chat/sources-list"
+import { TurnContextProvider } from "@/app/components/chat/turn-context"
 import {
   THREAD_GUTTER_VARS,
   THREAD_MAXWIDTH_VARS,
@@ -414,10 +415,6 @@ export default function ThinkingStatesTestPage() {
   const liveSeconds = useLiveTimer()
 
   const noop = useCallback(() => {}, [])
-  const noopStr = useCallback((_s: string) => {}, [])
-  const noopBool = useCallback((_b: boolean) => {}, [])
-  const noopFiles = useCallback((_f: File[]) => {}, [])
-  const noopFile = useCallback((_f: File) => {}, [])
 
   return (
     <MessagesProvider>
@@ -920,23 +917,17 @@ export default function ThinkingStatesTestPage() {
               </div>
             </div>
             <div className={`mx-auto w-full max-w-[var(--thread-content-max-width,40rem)] ${THREAD_MAXWIDTH_VARS}`}>
-              <ChatInput
-                defaultValue=""
-                onValueChange={noopStr}
-                onSend={noop}
-                isSubmitting={false}
-                files={[]}
-                onFileUpload={noopFiles}
-                onFileRemove={noopFile}
-                onSuggestion={noopStr}
-                hasSuggestions={false}
-                selectedModel="gpt-5.4"
-                isUserAuthenticated={true}
-                stop={noop}
-                status="ready"
-                setEnableSearch={noopBool}
-                enableSearch={false}
-              />
+              <TurnContextProvider chatId={null} currentChat={null}>
+                <Composer
+                  chatId={null}
+                  draftScopeId="thinking-states-playground"
+                  onTurn={() => false}
+                  isSubmitting={false}
+                  status="ready"
+                  stop={noop}
+                  hasSuggestions={false}
+                />
+              </TurnContextProvider>
             </div>
             <div className="text-muted-foreground relative -mt-4 w-full overflow-hidden text-center text-xs md:px-[60px]">
               <div className="flex min-h-8 w-full items-center justify-center p-2 select-none">

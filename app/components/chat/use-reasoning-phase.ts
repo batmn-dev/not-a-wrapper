@@ -1,6 +1,6 @@
 "use client"
 
-import type { UIMessage } from "@ai-sdk/react"
+import type { ReasoningView } from "@/lib/chat-messages/assistant-turn"
 import { useEffect, useRef, useState } from "react"
 
 export type ReasoningPhase = {
@@ -12,56 +12,23 @@ export type ReasoningPhase = {
 }
 
 type UseReasoningPhaseParams = {
-  parts: UIMessage["parts"] | undefined
-  status: "streaming" | "ready" | "submitted" | "error"
+  /** The pure reasoning derivation from the Assistant turn view. */
+  reasoning: ReasoningView
   isLast: boolean
-  /** Server-persisted reasoning duration in ms (from messageMetadata). */
-  persistedDurationMs?: number
 }
 
+/**
+ * The stateful remainder of the reasoning derivation: the live "thinking"
+ * timer. Everything pure (phase, text, opacity, persisted duration) moved to
+ * `deriveReasoningView` in lib/chat-messages/assistant-turn.ts — this hook
+ * consumes that view and owns only the tick/freeze/resume timer semantics.
+ */
 export function useReasoningPhase({
-  parts,
-  status,
+  reasoning,
   isLast,
-  persistedDurationMs,
 }: UseReasoningPhaseParams): ReasoningPhase {
-  // Derive phase and text from parts on every render.
-  // AI SDK can mutate part objects in place during streaming without
-  // changing the array reference, so memoizing by `parts` can miss updates.
-  const reasoningParts = parts?.filter((p) => p.type === "reasoning") ?? []
-
-  let phase: ReasoningPhase["phase"] = "idle"
-  let reasoningText = ""
-
-  if (reasoningParts.length > 0) {
-    const text = reasoningParts.map((p) => p.text).join("\n\n")
-
-    const isAnyStreaming = reasoningParts.some(
-      (p) => (p as { state?: string }).state === "streaming"
-    )
-
-    if (isAnyStreaming) {
-      phase = "thinking"
-      reasoningText = text
-    } else {
-      const isAnyDone = reasoningParts.some(
-        (p) => (p as { state?: string }).state === "done"
-      )
-
-      if (isAnyDone || status === "ready" || status === "error") {
-        phase = "complete"
-        reasoningText = text
-      } else if (text.trim()) {
-        phase = "complete"
-        reasoningText = text
-      } else {
-        phase = "thinking"
-        reasoningText = ""
-      }
-    }
-  }
-
-  const isOpaqueReasoning = phase !== "idle" && !reasoningText.trim()
+  const { phase, text: reasoningText, isOpaque, persistedDurationMs } =
+    reasoning
 
   // Client-side timer.
   // React 19 render-sync pattern: reset tickedSeconds when entering thinking.
@@ -146,6 +113,6 @@ export function useReasoningPhase({
     reasoningText,
     durationSeconds,
     isReasoningStreaming: phase === "thinking",
-    isOpaqueReasoning,
+    isOpaqueReasoning: isOpaque,
   }
 }
