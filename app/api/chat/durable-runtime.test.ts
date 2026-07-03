@@ -1,7 +1,7 @@
+import type { Id } from "@/convex/_generated/dataModel"
 import type { TextStreamPart, ToolSet, UIMessage } from "ai"
 import { fetchMutation } from "convex/nextjs"
 import { describe, expect, it, vi } from "vitest"
-import type { Id } from "@/convex/_generated/dataModel"
 import {
   createDurableSnapshotTracker,
   createRuntimeApprovalPersistenceTransform,
@@ -338,6 +338,47 @@ describe("durable chat runtime helpers", () => {
     expect(vi.mocked(fetchMutation).mock.calls.length).toBeLessThanOrEqual(3)
     const lastCall = vi.mocked(fetchMutation).mock.calls.at(-1)
     expect(lastCall?.[1]).toMatchObject({ textSnapshot: "AB" })
+  })
+
+  it("times out stalled snapshot writes so flush can settle and retry", async () => {
+    vi.useFakeTimers()
+    vi.mocked(fetchMutation)
+      .mockReset()
+      .mockImplementation(
+        () =>
+          new Promise(() => {}) as unknown as ReturnType<typeof fetchMutation>
+      )
+
+    try {
+      const tracker = createDurableSnapshotTracker({
+        convexToken: "token",
+        runId: "run_1" as Id<"generationRuns">,
+        chatId: "chat_1" as Id<"chats">,
+        messageId: "message_1" as Id<"messages">,
+        order: 1,
+      })
+
+      tracker.onChunk({ type: "text-delta", text: "A" } as never)
+
+      const flushPromise = tracker.flush()
+      const flushExpectation = expect(flushPromise).rejects.toThrow(
+        "Timed out writing assistant snapshot after 10000ms"
+      )
+      await vi.advanceTimersByTimeAsync(10_000)
+      await flushExpectation
+
+      vi.mocked(fetchMutation).mockResolvedValue(undefined)
+      await tracker.flush()
+
+      expect(fetchMutation).toHaveBeenCalledTimes(2)
+      expect(vi.mocked(fetchMutation).mock.calls[1]?.[1]).toMatchObject({
+        sequence: 2,
+        textSnapshot: "A",
+        partsSnapshot: [{ type: "text", text: "A" }],
+      })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("catches rejected incremental snapshot writes", async () => {

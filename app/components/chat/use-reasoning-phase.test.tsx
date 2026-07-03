@@ -55,10 +55,12 @@ describe("useReasoningPhase", () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
   let latest: ReasoningPhase | null = null
+  let resultHistory: ReasoningPhase[] = []
 
   beforeEach(() => {
     vi.useFakeTimers()
     latest = null
+    resultHistory = []
     container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
@@ -90,6 +92,7 @@ describe("useReasoningPhase", () => {
           {...props}
           onResult={(result) => {
             latest = result
+            resultHistory.push(result)
           }}
         />
       )
@@ -154,6 +157,7 @@ describe("useReasoningPhase", () => {
       isLast: true,
       turnKey: "b",
     })
+    expect(latest!.durationSeconds).toBeUndefined()
     act(() => {
       vi.advanceTimersByTime(6000)
     })
@@ -175,12 +179,19 @@ describe("useReasoningPhase", () => {
     })
     expect(latest!.durationSeconds).toBe(9)
 
+    const historyStart = resultHistory.length
     render({
       parts: reasoningPart("…", "streaming"),
       status: "streaming",
       isLast: true,
       turnKey: "b",
     })
+    expect(
+      resultHistory
+        .slice(historyStart)
+        .map((result) => result.durationSeconds)
+    ).not.toContain(9)
+    expect(latest!.durationSeconds).toBeUndefined()
     act(() => {
       vi.advanceTimersByTime(6000)
     })

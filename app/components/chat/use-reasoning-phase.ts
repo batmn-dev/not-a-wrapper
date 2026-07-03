@@ -65,6 +65,11 @@ export function useReasoningPhase({
   // and either way the R1 anchor would inherit the previous turn's ticks
   // (e.g. a panel header resuming a settled turn's 9s under a new turn).
   if (turnKey !== prevTurnKey) {
+    // Invalidate the previous turn's interval before its cleanup can freeze
+    // stale elapsed seconds into this handoff render. Same-turn stop/resume
+    // still freezes in the cleanup below.
+    startTimestampRef.current = null
+    tickedSecondsRef.current = 0
     setPrevTurnKey(turnKey)
     setPrevPhase(phase)
     setTickedSeconds(0)
@@ -99,11 +104,14 @@ export function useReasoningPhase({
 
     return () => {
       clearInterval(interval)
-      // Freeze final value on cleanup
+      // Freeze final value on cleanup, unless a turn handoff invalidated this
+      // interval during render.
       if (startTimestampRef.current !== null) {
-        setTickedSeconds(
-          Math.round((Date.now() - startTimestampRef.current) / 1000)
+        const elapsedSeconds = Math.round(
+          (Date.now() - startTimestampRef.current) / 1000
         )
+        tickedSecondsRef.current = elapsedSeconds
+        setTickedSeconds(elapsedSeconds)
         startTimestampRef.current = null
       }
     }

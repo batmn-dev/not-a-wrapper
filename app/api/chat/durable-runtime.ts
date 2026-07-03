@@ -155,6 +155,28 @@ type SnapshotPart =
   | { type: "text"; text: string }
   | { type: "reasoning"; text: string }
 
+const SNAPSHOT_WRITE_TIMEOUT_MS = 10_000
+
+class SnapshotWriteTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Timed out writing assistant snapshot after ${timeoutMs}ms`)
+    this.name = "SnapshotWriteTimeoutError"
+  }
+}
+
+function withSnapshotWriteTimeout<T>(write: Promise<T>): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      reject(new SnapshotWriteTimeoutError(SNAPSHOT_WRITE_TIMEOUT_MS))
+    }, SNAPSHOT_WRITE_TIMEOUT_MS)
+  })
+
+  return Promise.race([write, timeoutPromise]).finally(() => {
+    if (timeout) clearTimeout(timeout)
+  })
+}
+
 type DurableSnapshotTrackerOptions = {
   convexToken: string
   runId: Id<"generationRuns">
@@ -207,18 +229,20 @@ export function createDurableSnapshotTracker(
       lastWriteAt = now
       const versionAtWrite = contentVersion
       const currentSequence = ++sequence
-      writeInFlight = persistSnapshot(
-        api.chatRuntime.updateAssistantSnapshot,
-        {
-          runId: options.runId,
-          chatId: options.chatId,
-          messageId: options.messageId,
-          order: options.order,
-          sequence: currentSequence,
-          textSnapshot: text,
-          partsSnapshot: getParts(),
-        },
-        { token: options.convexToken }
+      writeInFlight = withSnapshotWriteTimeout(
+        persistSnapshot(
+          api.chatRuntime.updateAssistantSnapshot,
+          {
+            runId: options.runId,
+            chatId: options.chatId,
+            messageId: options.messageId,
+            order: options.order,
+            sequence: currentSequence,
+            textSnapshot: text,
+            partsSnapshot: getParts(),
+          },
+          { token: options.convexToken }
+        )
       )
         .then((written) => {
           writtenVersion = Math.max(writtenVersion, versionAtWrite)

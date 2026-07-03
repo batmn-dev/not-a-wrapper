@@ -70,6 +70,31 @@ describe("ToolInvocation", () => {
     expect(markup).not.toContain("Running")
   })
 
+  it("presents an approval request as Stopped without actions once the turn settles", () => {
+    const approvalTool = {
+      type: "tool-web_search",
+      toolCallId: "call_search_005",
+      state: "approval-requested",
+      input: { query: "stale approval" },
+      approval: { id: "approval_005" },
+    } as unknown as ToolUIPart
+
+    const markup = renderToStaticMarkup(
+      <ToolInvocation
+        toolInvocations={[approvalTool]}
+        turnActive={false}
+        defaultOpen
+        onToolApproval={() => Promise.resolve()}
+      />
+    )
+
+    expect(markup).toContain("Stopped")
+    expect(markup).not.toContain("Review")
+    expect(markup).not.toContain("Approval required")
+    expect(markup).not.toContain("Approve")
+    expect(markup).not.toContain("Deny")
+  })
+
   it("keeps a denied approval response as the terminal display state", () => {
     const toolCallId = "call_search_003"
     const deniedTool = {

@@ -465,13 +465,16 @@ function SingleToolCard({
   const idempotent = runtimeMetadata?.idempotent
   const openWorld = runtimeMetadata?.openWorld
   const args = toolData.input as Record<string, unknown> | undefined
+  const isApprovalRequested = state === "approval-requested"
   const isInFlightState =
-    state === "input-available" || state === "input-streaming"
+    state === "input-available" ||
+    state === "input-streaming" ||
+    isApprovalRequested
   // Part states freeze in place on stop/abort/error — a settled turn presents
-  // an in-flight part as "Stopped", never an animated "Running".
+  // an in-flight part as "Stopped", never an animated/actionable state.
   const isLoading = isInFlightState && turnActive
   const isStopped = isInFlightState && !turnActive
-  const isAwaitingApproval = state === "approval-requested"
+  const isAwaitingApproval = isApprovalRequested && turnActive
   const isApprovalResponded = state === "approval-responded"
   const isCompleted = state === "output-available"
   const result = isCompleted ? toolData.output : undefined
@@ -526,7 +529,12 @@ function SingleToolCard({
   }, [isCompleted, result])
 
   const submitToolApproval = async (approved: boolean, reason?: string) => {
-    if (!onToolApproval || !approvalId || isSubmittingApprovalRef.current) {
+    if (
+      !onToolApproval ||
+      !approvalId ||
+      !turnActive ||
+      isSubmittingApprovalRef.current
+    ) {
       return
     }
 
