@@ -89,9 +89,11 @@ function branchesEqual(
  * place during streaming, so the view is a new object every render and
  * equality must be content-based. `children` compares the rendered text;
  * `assistantTurnViewsEqual` compares exactly the remaining facts the row
- * renders (tool signature, reasoning phase, source count, metadata identity).
- * Streaming reasoning deltas therefore do NOT churn the row body — the
- * Activity panel owns and updates that state through its own store seam.
+ * renders (tool signature, reasoning phase, metadata identity, server id) —
+ * deliberately NOT sources, whose trigger count settles when the status flip
+ * re-renders the row. Streaming reasoning/source deltas therefore do NOT
+ * churn the row body — the Activity panel owns and updates that state
+ * through its own store seam.
  */
 function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
   if (prev.variant !== next.variant) return false

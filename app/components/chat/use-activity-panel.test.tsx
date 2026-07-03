@@ -153,6 +153,23 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.panelActivityTurnId).toBe("a9")
     expect(latest!.panelProps.durationSeconds).toBe(9)
     expect(latest!.panelProps.sources[0].url).toBe("https://b.com")
+    expect(latest!.selectedTurnPresent).toBe(true)
+
+    // An explicit selection referencing the branch that left the rendered
+    // path: the panel falls back to the default and reports the selection
+    // stale, so Chat can drop it from the store instead of letting it
+    // resurrect on a later branch switch.
+    render({
+      messages: [
+        user("u1"),
+        assistant("a9", { durationMs: 9000, sourceUrl: "https://b.com" }),
+      ],
+      status: "ready",
+      isSubmitting: false,
+      selectedActivityTurnId: "a2",
+    })
+    expect(latest!.panelActivityTurnId).toBe("a9")
+    expect(latest!.selectedTurnPresent).toBe(false)
   })
 
   it("projects an explicit historical assistant turn instead of the pending default", () => {

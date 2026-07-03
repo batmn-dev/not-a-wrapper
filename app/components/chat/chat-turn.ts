@@ -239,7 +239,13 @@ export async function runSendTurn(
 
   try {
     const userId = await adapters.resolveUserId()
-    if (!userId) return
+    if (!userId) {
+      // Same cleanup as every other rejected path: drop the optimistic bubble
+      // and revoke its blob: URLs — the Composer restores the payload on the
+      // rejected turn, so leaving the bubble would show the text twice.
+      removeOptimistic()
+      return
+    }
 
     const allowed = await adapters.checkLimitsAndNotify(userId)
     if (!allowed) {

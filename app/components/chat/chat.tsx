@@ -5,6 +5,7 @@ import {
   type ComposerHandle,
 } from "@/app/components/chat-input/composer"
 import { Conversation } from "@/app/components/chat/conversation"
+import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { useGlobalPromptFocus } from "@/app/hooks/use-global-prompt-focus"
 import { ScrollButton } from "@/components/ui/scroll-button"
 import { useChats } from "@/lib/chat-store/chats/provider"
@@ -168,23 +169,57 @@ function ChatInner({
   const selectedActivityTurnId =
     useActivityPanelSelectedTurnId(activityPanelStore)
   const activityPanelId = useId()
-  const { defaultActivityTurnId, panelActivityTurnId, panelProps } =
-    useActivityPanel({
-      messages,
-      status,
-      isSubmitting,
-      selectedActivityTurnId,
-    })
+  const {
+    defaultActivityTurnId,
+    panelActivityTurnId,
+    selectedTurnPresent,
+    panelProps,
+  } = useActivityPanel({
+    messages,
+    status,
+    isSubmitting,
+    selectedActivityTurnId,
+  })
+
+  // The panel's open state and explicit selection belong to the chat they
+  // were made in — navigating into a different chat must not carry them over.
+  // The null → id transition is this same conversation acquiring its route on
+  // first send (mirrors use-chat-core's chat-transition rule), so the panel
+  // survives that handoff.
+  const panelResetChatIdRef = useRef(chatId)
+  useBrowserLayoutEffect(() => {
+    const previousChatId = panelResetChatIdRef.current
+    panelResetChatIdRef.current = chatId
+    if (previousChatId === chatId || previousChatId === null) return
+    activityPanelStore.setOpen(false)
+  }, [chatId, activityPanelStore])
 
   // Sync the authoritative selection derivation into the store so row
   // subscriptions (trigger aria-expanded) follow branch switches and
-  // generation handoffs — not only explicit trigger clicks.
-  useEffect(() => {
+  // generation handoffs — not only explicit trigger clicks. A LAYOUT effect
+  // deliberately: a passive effect leaves one painted frame where triggers
+  // report the previous panel turn, and a click landing in that frame would
+  // be classified against a stale default — the misclassification this store
+  // exists to prevent.
+  useBrowserLayoutEffect(() => {
     activityPanelStore.setDerivedTurnIds({
       panelTurnId: panelActivityTurnId,
       defaultTurnId: defaultActivityTurnId,
     })
-  }, [activityPanelStore, panelActivityTurnId, defaultActivityTurnId])
+    // An explicit selection whose turn left the rendered path (branch switch,
+    // local delete) is dropped so it cannot resurrect on a later path change.
+    // The store re-checks the id at call time, so a newer selection made
+    // after this render is never clobbered.
+    if (selectedActivityTurnId !== undefined && !selectedTurnPresent) {
+      activityPanelStore.clearStaleSelection(selectedActivityTurnId)
+    }
+  }, [
+    activityPanelStore,
+    panelActivityTurnId,
+    defaultActivityTurnId,
+    selectedActivityTurnId,
+    selectedTurnPresent,
+  ])
 
   const handleActivityPanelOpenChange = useCallback(
     (open: boolean) => activityPanelStore.setOpen(open),

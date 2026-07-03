@@ -253,6 +253,30 @@ describe("chat turn controller", () => {
     ])
   })
 
+  it("removes optimistic state when no user id resolves", async () => {
+    // The Composer restores the payload on a rejected turn — a lingering
+    // optimistic bubble would show the text twice (and leak its blob: URLs).
+    const { adapters, controller, getMessages } = createHarness()
+    adapters.resolveUserId = vi.fn(async () => null)
+
+    await controller.runSendTurn({
+      text: "Hello without a user",
+      optimisticAttachments: [
+        {
+          name: "image.png",
+          contentType: "image/png",
+          url: "blob:local-image",
+        },
+      ],
+    })
+
+    expect(getMessages()).toEqual([])
+    expect(adapters.sendMessage).not.toHaveBeenCalled()
+    expect(adapters.cleanupOptimisticAttachments).toHaveBeenCalledWith([
+      { url: "blob:local-image" },
+    ])
+  })
+
   it("sends normal turns with the rendered selected-path server tail", async () => {
     const { adapters, controller, setSnapshot } = createHarness()
     setSnapshot({ isAuthenticated: true })

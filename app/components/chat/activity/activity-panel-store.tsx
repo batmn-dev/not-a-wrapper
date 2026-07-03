@@ -68,6 +68,13 @@ export type ActivityPanelStore = {
    * against the store's CURRENT defaultTurnId — never a render-time closure.
    */
   openTurn: (turnId: string) => void
+  /**
+   * Drop an explicit selection whose turn has left the rendered path (branch
+   * switch, local delete) so it cannot linger and resurrect when the path
+   * changes again. Guarded by id at call time: a newer selection made between
+   * the derivation render and the sync effect is never clobbered.
+   */
+  clearStaleSelection: (staleTurnId: string) => void
   setOpen: (open: boolean) => void
   /** Wire the side effect fired when a turn opens the panel (e.g. scroll-lock
    * release). The provider owns this wiring — see below. */
@@ -108,6 +115,10 @@ export function createActivityPanelStore(): ActivityPanelStore {
     },
     setDerivedTurnIds: ({ panelTurnId, defaultTurnId }) => {
       setState({ panelTurnId, defaultTurnId })
+    },
+    clearStaleSelection: (staleTurnId) => {
+      if (state.selectedTurnId !== staleTurnId) return
+      setState({ selectedTurnId: undefined })
     },
     openTurn: (turnId) => {
       onOpen?.()

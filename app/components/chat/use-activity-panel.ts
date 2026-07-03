@@ -38,6 +38,10 @@ export type UseActivityPanelResult = {
   panelActivityTurnId: string | undefined
   /** True while a generation is in flight (covers the pre-stream submitted state). */
   isGenerationActive: boolean
+  /** False when an explicit selection no longer resolves to a rendered turn
+   * (branch switch, local delete) — Chat's signal to drop the stale selection
+   * from the store instead of letting it linger and resurrect later. */
+  selectedTurnPresent: boolean
   panelProps: ActivityPanelProps
 }
 
@@ -47,6 +51,9 @@ export type ActivityPanelTarget = {
   panelMessage: UIMessage | undefined
   isGenerationActive: boolean
   isPendingActivityTurn: boolean
+  /** False when `selectedActivityTurnId` matched no rendered turn (the panel
+   * silently fell back to the default). Vacuously true with no selection. */
+  selectedTurnPresent: boolean
 }
 
 export function selectExplicitActivityTurnOnOpen({
@@ -149,6 +156,10 @@ export function selectActivityPanelTarget({
     panelMessage: selectedMessage ?? defaultMessage,
     isGenerationActive: generationActive,
     isPendingActivityTurn: panelActivityTurnId === PENDING_ACTIVITY_TURN_ID,
+    selectedTurnPresent:
+      selectedActivityTurnId === undefined ||
+      selectedPendingTurn ||
+      selectedMessage !== undefined,
   }
 }
 
@@ -182,6 +193,7 @@ export function useActivityPanel({
     panelMessage,
     isGenerationActive: generationActive,
     isPendingActivityTurn,
+    selectedTurnPresent,
   } = selectActivityPanelTarget({
     messages,
     status,
@@ -240,6 +252,7 @@ export function useActivityPanel({
     defaultActivityTurnId,
     panelActivityTurnId,
     isGenerationActive: generationActive,
+    selectedTurnPresent,
     panelProps,
   }
 }

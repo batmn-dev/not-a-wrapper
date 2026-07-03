@@ -46,7 +46,8 @@ export type TurnSnapshot = {
   systemPrompt: string
   enableSearch: boolean
   isAuthenticated: boolean
-  /** Model preferences and catalog are ready — auto-submit must wait for this. */
+  /** Model preferences, model catalog, and user preferences are ready —
+   * auto-submit must wait for this. */
   isHydrated: boolean
 }
 
@@ -86,7 +87,11 @@ export function TurnContextProvider({
 }) {
   const { user } = useUser()
   const { updateChatModel } = useChats()
-  const { preferences, setWebSearchEnabled } = useUserPreferences()
+  const {
+    preferences,
+    setWebSearchEnabled,
+    isLoading: preferencesLoading,
+  } = useUserPreferences()
   const { modelPrefsHydrated, isLoading: modelStoreLoading } = useModelStore()
 
   const { selectedModel, handleModelChange } = useModel({
@@ -106,7 +111,12 @@ export function TurnContextProvider({
 
   const isAuthenticated = !!user?.id
   const systemPrompt = user?.system_prompt || SYSTEM_PROMPT_DEFAULT
-  const isHydrated = modelPrefsHydrated && !modelStoreLoading
+  // Every async-hydrating input a turn snapshot reads: model prefs + catalog
+  // (selectedModel) and user preferences (enableSearch). The user store is
+  // SSR-seeded (systemPrompt has no async gap), and preferencesLoading is
+  // false for guests, so the gate cannot deadlock unauthenticated loads.
+  const isHydrated =
+    modelPrefsHydrated && !modelStoreLoading && !preferencesLoading
 
   const snapshot: TurnSnapshot = {
     selectedModel,

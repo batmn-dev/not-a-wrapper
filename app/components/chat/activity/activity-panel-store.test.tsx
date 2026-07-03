@@ -75,6 +75,24 @@ describe("activity panel store — explicit-vs-default classification", () => {
     expect(onOpen).toHaveBeenCalledTimes(2)
   })
 
+  it("clearStaleSelection drops only the named selection, never a newer one", () => {
+    const store = createActivityPanelStore()
+    store.setDerivedTurnIds({ panelTurnId: "a2", defaultTurnId: "a2" })
+    store.openTurn("a1")
+    expect(store.getState().selectedTurnId).toBe("a1")
+
+    // The selected turn left the rendered path (branch switch): dropped, so
+    // switching back later cannot resurrect it.
+    store.clearStaleSelection("a1")
+    expect(store.getState().selectedTurnId).toBeUndefined()
+    expect(store.getState().open).toBe(true)
+
+    // Call-time guard: a clear computed against a previous render must not
+    // clobber a selection the user made after that render.
+    store.openTurn("a3")
+    store.clearStaleSelection("a1")
+    expect(store.getState().selectedTurnId).toBe("a3")
+  })
 })
 
 describe("activity panel store — row subscription precision", () => {

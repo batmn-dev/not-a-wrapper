@@ -19,6 +19,7 @@
  */
 import { useTurnContext } from "@/app/components/chat/turn-context"
 import { useFileUpload } from "@/app/components/chat/use-file-upload"
+import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { useChatDraft } from "@/app/hooks/use-chat-draft"
 import { ModelSelector } from "@/components/common/model-selector/base"
 import { Button } from "@/components/ui/button"
@@ -40,7 +41,6 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -68,10 +68,11 @@ export type ComposerHandle = {
 type ComposerProps = {
   chatId: string | null
   /** Run one send-type Chat turn from the assembled payload. Resolve `true`
-   * when the turn was dispatched so the Composer clears its persisted draft. */
-  onTurn: (
-    payload: ComposerTurnPayload
-  ) => Promise<boolean> | boolean | void | Promise<void>
+   * when the turn was dispatched (the Composer clears its persisted draft) or
+   * `false` when it was rejected (the Composer restores the payload). The
+   * boolean is required: a `void` handler would silently take the
+   * restore-payload path after every successful send. */
+  onTurn: (payload: ComposerTurnPayload) => Promise<boolean> | boolean
   onSuggestion?: (suggestion: string) => void | Promise<void>
   isSubmitting?: boolean
   status?: "submitted" | "streaming" | "ready" | "error"
@@ -89,9 +90,6 @@ type ComposerDraftIdentity = {
   persistenceId: string | null
   displayId: string
 }
-
-const useBrowserLayoutEffect =
-  typeof window === "undefined" ? useEffect : useLayoutEffect
 
 function resolveComposerDraftIdentity(
   chatId: string | null,

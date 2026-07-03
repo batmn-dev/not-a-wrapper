@@ -16,10 +16,11 @@
  *  - All metadata reads go through the Message metadata module's readers
  *    (ADR-0002) — never `metadata as Record<string, unknown>`.
  *  - `assistantTurnViewsEqual` is the render-gate: it compares only the facts
- *    the message ROW renders (tool signature, reasoning phase, source count,
- *    metadata identity) — deliberately NOT `reasoning.text`, so streaming
- *    reasoning deltas do not churn the row body (the activity panel owns that
- *    state). Message text is compared by the row's `children` prop.
+ *    the message ROW renders (tool signature, reasoning phase, metadata
+ *    identity, server id) — deliberately NOT `reasoning.text` or `sources`,
+ *    so streaming reasoning/source deltas do not churn the row body (the
+ *    activity panel owns that state; the trigger's source count settles on
+ *    the status flip). Message text is compared by the row's `children` prop.
  */
 import type { UIMessage } from "ai"
 import type { SourceUrlUIPart, ToolUIPart } from "ai"

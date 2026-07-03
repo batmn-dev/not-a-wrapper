@@ -14,6 +14,7 @@ const turnMocks = vi.hoisted(() => ({
   selectedModel: "model-a",
   modelPrefsHydrated: true,
   modelStoreLoading: false,
+  preferencesLoading: false,
 }))
 
 vi.mock("@/lib/user-store/provider", () => ({
@@ -28,6 +29,7 @@ vi.mock("@/lib/user-preference-store/provider", () => ({
   useUserPreferences: () => ({
     preferences: { webSearchEnabled: true },
     setWebSearchEnabled: vi.fn(),
+    isLoading: turnMocks.preferencesLoading,
   }),
 }))
 
@@ -104,6 +106,7 @@ describe("TurnContextProvider snapshot contract", () => {
     turnMocks.selectedModel = "model-a"
     turnMocks.modelPrefsHydrated = false
     turnMocks.modelStoreLoading = true
+    turnMocks.preferencesLoading = true
     mount()
 
     expect(seen.at(-1)?.snapshot.selectedModel).toBe("model-a")
@@ -118,9 +121,17 @@ describe("TurnContextProvider snapshot contract", () => {
     expect(seen.at(-1)?.snapshot.isHydrated).toBe(false)
     expect(seen.at(-1)?.reactiveHydrated).toBe(false)
 
-    // Once model loading settles, the final selected model becomes submit-safe.
+    // The model side can settle before the user-preference read (enableSearch)
+    // resolves — auto-submit must also wait for that.
     turnMocks.selectedModel = "model-b"
     turnMocks.modelStoreLoading = false
+    mount()
+
+    expect(seen.at(-1)?.snapshot.isHydrated).toBe(false)
+    expect(seen.at(-1)?.reactiveHydrated).toBe(false)
+
+    // Every async-hydrating snapshot input settled: submit-safe.
+    turnMocks.preferencesLoading = false
     mount()
 
     const last = seen.at(-1)
