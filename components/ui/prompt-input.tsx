@@ -8,10 +8,17 @@
  *   - Removes redundant `TooltipProvider` wrapper in `PromptInputAction`
  *   - Not A Wrapper uses app-level TooltipProvider for consistency and smaller bundle
  *   - Upstream uses useLayoutEffect; Not A Wrapper uses standard useEffect for SSR safety
+ *   - Layout-loop hardening in PromptInputTextarea: the expansion decision is
+ *     a pure function of (value, derived compact width) — it must not read
+ *     layout that `textareaExpanded` itself influences; the passive effect
+ *     skips values the change handler already laid out (consume-once ref);
+ *     clone measurement is capped to a bounded prefix of the value
  * @upgradeNotes
  *   - Preserve autoFocus default on PromptInputTextarea
  *   - Do NOT re-add TooltipProvider wrapper in PromptInputAction
  *   - Verify useEffect vs useLayoutEffect for textarea auto-resize
+ *   - Preserve the layout-loop hardening: no live-layout reads in the
+ *     expansion decision, no double setTextareaExpanded dispatch per keystroke
  */
 "use client"
 
@@ -217,6 +224,15 @@ function getCollapsedTextareaHeight(textarea: HTMLTextAreaElement) {
   )
 }
 
+/**
+ * The expansion decision only needs "does this value wrap past one line?", so
+ * measuring a bounded prefix is equivalent — no composer line fits anywhere
+ * near this many characters. The cap keeps a pathological value (e.g. a 60k
+ * character paste) from forcing a full clone layout of the entire text on
+ * every keystroke.
+ */
+const EXPANSION_MEASURE_CHAR_LIMIT = 2000
+
 export type PromptInputTextareaProps = {
   disableAutosize?: boolean
   containerClassName?: string
@@ -254,23 +270,40 @@ function PromptInputTextarea({
       const compactWidth = getCompactTextareaWidth(textarea)
       const compactScrollHeight = measureTextareaScrollHeight(
         textarea,
-        nextValue,
+        nextValue.slice(0, EXPANSION_MEASURE_CHAR_LIMIT),
         compactWidth
       )
-      const currentScrollHeight = textarea.scrollHeight
+      // The expansion decision is a function of the value and the DERIVED
+      // compact width only. It must not read layout that `textareaExpanded`
+      // itself influences (e.g. the live textarea scrollHeight, which changes
+      // with the data-expanded grid/padding): state → CSS → measurement →
+      // state is a feedback cycle, and a boundary value oscillates it into
+      // React's "Maximum update depth exceeded" guard. The live term was also
+      // redundant — the expanded textarea is never narrower than the compact
+      // one, so any value that wraps live wraps in the compact measurement.
       const shouldExpand =
         nextValue.length > 0 &&
         (nextValue.includes("\n") ||
-          compactScrollHeight > collapsedHeight + 1 ||
-          currentScrollHeight > collapsedHeight + 1)
+          compactScrollHeight > collapsedHeight + 1)
 
-      textarea.style.height = `${Math.max(collapsedHeight, currentScrollHeight)}px`
+      textarea.style.height = `${Math.max(collapsedHeight, textarea.scrollHeight)}px`
       setTextareaExpanded(shouldExpand)
     },
     [disableAutosize, setTextareaExpanded]
   )
 
+  // Consume-once handshake with handleChange: the effect exists for values
+  // that arrive OUTSIDE a change event (mount, draft restore, quote insert,
+  // clear-on-send). For typed input, handleChange already laid this exact
+  // value out — re-dispatching setTextareaExpanded from the passive effect
+  // both doubles the forced reflow per keystroke and feeds React's nested-
+  // update accounting during rapid input.
+  const eventLaidOutValueRef = useRef<string | null>(null)
+
   useEffect(() => {
+    const alreadyLaidOut = eventLaidOutValueRef.current === value
+    eventLaidOutValueRef.current = null
+    if (alreadyLaidOut) return
     applyTextareaLayout(textareaRef.current, value)
   }, [applyTextareaLayout, textareaRef, value])
 
@@ -284,6 +317,7 @@ function PromptInputTextarea({
 
   const handleChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     applyTextareaLayout(event.currentTarget, event.currentTarget.value)
+    eventLaidOutValueRef.current = event.currentTarget.value
     setValue(event.currentTarget.value)
   }
 

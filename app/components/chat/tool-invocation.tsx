@@ -1,6 +1,7 @@
 "use client"
 
 import { Icon } from "@/components/ui/icon"
+import { getToolDisplayMetadataRecords } from "@/lib/chat-messages/metadata"
 import {
   humanizeToolName,
   resolveToolInvocationMetadata,
@@ -28,7 +29,9 @@ import { useMemo, useRef, useState } from "react"
 
 type ToolInvocationProps = {
   toolInvocations: ToolUIPart[]
-  metadata?: Record<string, unknown>
+  /** The message's metadata; display records are read through the Message
+   * metadata module (ADR-0002), never by casting raw keys. */
+  metadata?: unknown
   className?: string
   defaultOpen?: boolean
   onToolApproval?: ToolApprovalHandler
@@ -162,10 +165,11 @@ function toMetadataRecord(
   return parsed
 }
 
-function getToolMetadataMaps(metadata?: Record<string, unknown>) {
+function getToolMetadataMaps(metadata: unknown) {
+  const records = getToolDisplayMetadataRecords(metadata)
   return {
-    byName: toMetadataRecord(metadata?.toolMetadataByName),
-    byCallId: toMetadataRecord(metadata?.toolMetadataByCallId),
+    byName: toMetadataRecord(records.byName),
+    byCallId: toMetadataRecord(records.byCallId),
   }
 }
 

@@ -31,11 +31,22 @@ function assistant(
   id: string,
   opts: {
     durationMs?: number
+    omitReasoningState?: boolean
+    reasoningState?: string
+    reasoningText?: string
     sourceUrl?: string
     serverMessageId?: string
   } = {}
 ): UIMessage {
-  const parts: unknown[] = [{ type: "reasoning", text: "r", state: "done" }]
+  const reasoningPart: { type: "reasoning"; text: string; state?: string } = {
+    type: "reasoning",
+    text: opts.reasoningText ?? "r",
+  }
+  if (!opts.omitReasoningState) {
+    reasoningPart.state = opts.reasoningState ?? "done"
+  }
+
+  const parts: unknown[] = [reasoningPart]
   if (opts.sourceUrl) {
     parts.push({
       type: "source-url",
@@ -142,6 +153,23 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.panelActivityTurnId).toBe("a9")
     expect(latest!.panelProps.durationSeconds).toBe(9)
     expect(latest!.panelProps.sources[0].url).toBe("https://b.com")
+    expect(latest!.selectedTurnPresent).toBe(true)
+
+    // An explicit selection referencing the branch that left the rendered
+    // path: the panel falls back to the default and reports the selection
+    // stale, so Chat can drop it from the store instead of letting it
+    // resurrect on a later branch switch.
+    render({
+      messages: [
+        user("u1"),
+        assistant("a9", { durationMs: 9000, sourceUrl: "https://b.com" }),
+      ],
+      status: "ready",
+      isSubmitting: false,
+      selectedActivityTurnId: "a2",
+    })
+    expect(latest!.panelActivityTurnId).toBe("a9")
+    expect(latest!.selectedTurnPresent).toBe(false)
   })
 
   it("projects an explicit historical assistant turn instead of the pending default", () => {
@@ -162,6 +190,29 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.panelProps.phase).toBe("complete")
     expect(latest!.panelProps.durationSeconds).toBe(4)
     expect(latest!.panelProps.sources[0].url).toBe("https://a.com")
+  })
+
+  it("keeps an explicit historical opaque reasoning panel complete while a newer assistant streams", () => {
+    render({
+      messages: [
+        user("u1"),
+        assistant("a1", {
+          omitReasoningState: true,
+          reasoningText: "",
+        }),
+        user("u2"),
+        assistant("a2", { reasoningState: "streaming" }),
+      ],
+      status: "streaming",
+      isSubmitting: false,
+      selectedActivityTurnId: "a1",
+    })
+
+    expect(latest!.defaultActivityTurnId).toBe("a2")
+    expect(latest!.panelActivityTurnId).toBe("a1")
+    expect(latest!.panelProps.phase).toBe("complete")
+    expect(latest!.panelProps.isReasoningStreaming).toBe(false)
+    expect(latest!.panelProps.isOpaqueReasoning).toBe(true)
   })
 
   it("keeps a default-opened panel following the next pending generation", () => {

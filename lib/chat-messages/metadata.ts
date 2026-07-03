@@ -105,6 +105,51 @@ export function getBranch(
   return getMessageBranchInfo(source)
 }
 
+/**
+ * Read the server-persisted reasoning duration (ms) off a message's metadata.
+ * Written by the chat turn runtime at stream completion; renderers must read
+ * it through this accessor, never via `metadata.reasoningDurationMs` directly.
+ */
+export function getReasoningDurationMs(metadata: unknown): number | undefined {
+  if (!isRecord(metadata)) return undefined
+  const value = metadata.reasoningDurationMs
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined
+}
+
+type ToolDisplayMetadataRecord = Readonly<Record<string, unknown>>
+
+export type ToolDisplayMetadataRecords = {
+  readonly byName: ToolDisplayMetadataRecord
+  readonly byCallId: ToolDisplayMetadataRecord
+}
+
+const EMPTY_TOOL_DISPLAY_RECORD: ToolDisplayMetadataRecord = Object.freeze({})
+
+const EMPTY_TOOL_DISPLAY_RECORDS: ToolDisplayMetadataRecords = Object.freeze({
+  byName: EMPTY_TOOL_DISPLAY_RECORD,
+  byCallId: EMPTY_TOOL_DISPLAY_RECORD,
+})
+
+/**
+ * Read the per-tool display-metadata records the chat turn runtime streams
+ * into message metadata (`toolMetadataByName` / `toolMetadataByCallId`). This
+ * module owns the KEY NAMES; entry-shape validation is the display layer's
+ * concern (tool-invocation validates each record entry against its own type).
+ */
+export function getToolDisplayMetadataRecords(
+  metadata: unknown
+): ToolDisplayMetadataRecords {
+  if (!isRecord(metadata)) return EMPTY_TOOL_DISPLAY_RECORDS
+  const byName = metadata.toolMetadataByName
+  const byCallId = metadata.toolMetadataByCallId
+  return {
+    byName: isRecord(byName) ? byName : {},
+    byCallId: isRecord(byCallId) ? byCallId : {},
+  }
+}
+
 /** The stored-message fields {@link stampServerFields} projects into metadata. */
 export type DurableMetadataSource = {
   _id: string

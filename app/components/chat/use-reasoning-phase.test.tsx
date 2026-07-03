@@ -1,4 +1,5 @@
 /** @vitest-environment jsdom */
+import { deriveReasoningView } from "@/lib/chat-messages/assistant-turn"
 import type { UIMessage } from "@ai-sdk/react"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -22,8 +23,17 @@ function Harness(props: {
   persistedDurationMs?: number
   onResult: (result: ReasoningPhase) => void
 }) {
-  const { onResult, ...params } = props
-  const result = useReasoningPhase(params)
+  const { onResult, parts, status, isLast, persistedDurationMs } = props
+  // Derive the reasoning view exactly as production does (Conversation /
+  // useActivityPanel derive it per render), then run the timer hook over it.
+  const reasoning = deriveReasoningView(
+    parts,
+    status,
+    persistedDurationMs !== undefined
+      ? { reasoningDurationMs: persistedDurationMs }
+      : undefined
+  )
+  const result = useReasoningPhase({ reasoning, isLast })
   React.useEffect(() => {
     onResult(result)
   })
@@ -34,8 +44,9 @@ const reasoningPart = (text: string, state: "streaming" | "done") =>
   [{ type: "reasoning", text, state }] as unknown as UIMessage["parts"]
 
 beforeAll(() => {
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-    true
+  ;(
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true
 })
 
 describe("useReasoningPhase", () => {
@@ -72,7 +83,12 @@ describe("useReasoningPhase", () => {
   }) {
     act(() => {
       root?.render(
-        <Harness {...props} onResult={(result) => { latest = result }} />
+        <Harness
+          {...props}
+          onResult={(result) => {
+            latest = result
+          }}
+        />
       )
     })
   }
@@ -114,4 +130,5 @@ describe("useReasoningPhase", () => {
     expect(latest!.phase).toBe("complete")
     expect(latest!.reasoningText).toBe("partial then final")
   })
+
 })

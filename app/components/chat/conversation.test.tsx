@@ -22,20 +22,20 @@ vi.mock("@/components/ui/thinking-bar", () => ({
 vi.mock("./message", () => ({
   Message: ({
     id,
-    activityPanelTurnId,
     onReload,
     status,
+    view,
     children,
   }: {
     id: string
-    activityPanelTurnId?: string
     onReload?: (messageId: string) => void
     status?: string
+    view?: { reasoning?: { phase?: string } }
     children: React.ReactNode
   }) => (
     <button
-      data-activity-panel-turn-id={activityPanelTurnId}
       data-can-reload={Boolean(onReload)}
+      data-reasoning-phase={view?.reasoning?.phase}
       data-status={status}
       data-testid={`message-${id}`}
       onClick={() => onReload?.(id)}
@@ -187,7 +187,6 @@ describe("Conversation regeneration availability", () => {
           messages={userTail}
           status="submitted"
           isSubmitting
-          activityPanelTurnId={PENDING_ACTIVITY_TURN_ID}
           onDelete={vi.fn()}
           onEdit={vi.fn()}
           onReload={vi.fn()}
@@ -203,9 +202,6 @@ describe("Conversation regeneration availability", () => {
     expect(container?.querySelector('[data-testid="thinking"]')).toBeNull()
     expect(pendingMessage).toBeTruthy()
     expect(pendingMessage?.dataset.status).toBe("submitted")
-    expect(pendingMessage?.dataset.activityPanelTurnId).toBe(
-      PENDING_ACTIVITY_TURN_ID
-    )
   })
 
   it("routes submit preflight through the activity assistant row before status flips", () => {
@@ -225,7 +221,6 @@ describe("Conversation regeneration availability", () => {
           messages={userTail}
           status="ready"
           isSubmitting
-          activityPanelTurnId={PENDING_ACTIVITY_TURN_ID}
           onDelete={vi.fn()}
           onEdit={vi.fn()}
           onReload={vi.fn()}
@@ -241,8 +236,62 @@ describe("Conversation regeneration availability", () => {
     expect(container?.querySelector('[data-testid="thinking"]')).toBeNull()
     expect(pendingMessage).toBeTruthy()
     expect(pendingMessage?.dataset.status).toBe("submitted")
-    expect(pendingMessage?.dataset.activityPanelTurnId).toBe(
-      PENDING_ACTIVITY_TURN_ID
-    )
+  })
+
+  it("keeps historical assistant views ready while the current assistant streams", () => {
+    cleanupRender()
+    const mounted = document.createElement("div")
+    document.body.appendChild(mounted)
+    container = mounted
+    root = createRoot(mounted)
+
+    const opaqueReasoningMessages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "first prompt" }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "reasoning", text: "" },
+          { type: "text", text: "first answer" },
+        ],
+      },
+      {
+        id: "user-2",
+        role: "user",
+        parts: [{ type: "text", text: "second prompt" }],
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [{ type: "reasoning", text: "" }],
+      },
+    ] satisfies UIMessage[]
+
+    act(() => {
+      root?.render(
+        <Conversation
+          messages={opaqueReasoningMessages}
+          status="streaming"
+          onDelete={vi.fn()}
+          onEdit={vi.fn()}
+          onReload={vi.fn()}
+          isDurableChat
+        />
+      )
+    })
+
+    const priorAssistant = container?.querySelector(
+      '[data-testid="message-assistant-1"]'
+    ) as HTMLButtonElement | null
+    const currentAssistant = container?.querySelector(
+      '[data-testid="message-assistant-2"]'
+    ) as HTMLButtonElement | null
+
+    expect(priorAssistant?.dataset.reasoningPhase).toBe("complete")
+    expect(currentAssistant?.dataset.reasoningPhase).toBe("thinking")
   })
 })

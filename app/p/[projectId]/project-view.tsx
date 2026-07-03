@@ -1,8 +1,13 @@
 "use client"
 
-import { ChatInput } from "@/app/components/chat-input/chat-input"
-import { useFileUpload } from "@/app/components/chat/use-file-upload"
-import { useModel } from "@/app/components/chat/use-model"
+import {
+  Composer,
+  type ComposerTurnPayload,
+} from "@/app/components/chat-input/composer"
+import {
+  TurnContextProvider,
+  useTurnContext,
+} from "@/app/components/chat/turn-context"
 import { ProjectChatItem } from "@/app/components/layout/sidebar/project-chat-item"
 import { Icon } from "@/components/ui/icon"
 import { toast } from "@/components/ui/toast"
@@ -11,19 +16,14 @@ import { convexChatToChat } from "@/lib/chat-store/types"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
-import { MESSAGE_MAX_LENGTH, SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
-import { useUserPreferences } from "@/lib/user-preference-store/provider"
-import {
-  persistWebSearchToggle,
-  resolveWebSearchEnabled,
-} from "@/lib/user-preference-store/web-search"
+import { MESSAGE_MAX_LENGTH } from "@/lib/config"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
 import { RiChat3Line } from "@remixicon/react"
 import { useQuery } from "@tanstack/react-query"
 import { motion } from "motion/react"
 import { useRouter } from "next/navigation"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 
 type Project = {
   id: string
@@ -36,18 +36,25 @@ type ProjectViewProps = {
   projectId: string
 }
 
+/**
+ * ProjectView hosts its own Turn context (no chat yet — model resolution runs
+ * with chatId null) so the Composer's picker and search toggle read the same
+ * module the chat surface uses.
+ */
 export function ProjectView({ projectId }: ProjectViewProps) {
+  return (
+    <TurnContextProvider chatId={null} currentChat={null}>
+      <ProjectViewInner projectId={projectId} />
+    </TurnContextProvider>
+  )
+}
+
+function ProjectViewInner({ projectId }: ProjectViewProps) {
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [input, setInput] = useState("")
-  const { preferences, setWebSearchEnabled } = useUserPreferences()
-  const [enableSearch, setEnableSearchState] = useState(() =>
-    resolveWebSearchEnabled(preferences.webSearchEnabled)
-  )
   const { user } = useUser()
   const { createNewChat } = useChats()
-  const { files, setFiles, handleFileUpload, handleFileRemove } =
-    useFileUpload()
+  const { getTurnSnapshot } = useTurnContext()
 
   const { data: project } = useQuery<Project>({
     queryKey: ["project", projectId],
@@ -72,135 +79,71 @@ export function ProjectView({ projectId }: ProjectViewProps) {
   )
   const hasProjectChats = (chats?.length ?? 0) > 0
   const shouldShowEmptyState = chats !== undefined && chats.length === 0
-  const isAuthenticated = useMemo(() => !!user?.id, [user?.id])
 
-  const setEnableSearch = useCallback(
-    (enabled: boolean) => {
-      persistWebSearchToggle(enabled, setEnableSearchState, setWebSearchEnabled)
-    },
-    [setWebSearchEnabled]
-  )
+  const handleTurn = useCallback(
+    async ({ text, files }: ComposerTurnPayload): Promise<boolean> => {
+      if (isSubmitting) return false
+      if (!/[^\s]/.test(text)) return false
 
-  useEffect(() => {
-    setEnableSearchState(resolveWebSearchEnabled(preferences.webSearchEnabled))
-  }, [preferences.webSearchEnabled])
-
-  const { selectedModel, handleModelChange } = useModel({
-    currentChat: null,
-    user,
-    updateChatModel: () => Promise.resolve(),
-    chatId: null,
-  })
-
-  const handleInputChange = useCallback((value: string) => {
-    setInput(value)
-  }, [])
-
-  const submit = useCallback(async () => {
-    if (isSubmitting) return
-
-    const currentInput = input
-    if (!/[^\s]/.test(currentInput)) return
-
-    if (!user?.id) {
-      toast({ title: "Please sign in and try again.", status: "error" })
-      return
-    }
-
-    if (files.length > 0) {
-      toast({
-        title: "Open the project chat before attaching files.",
-        status: "error",
-      })
-      return
-    }
-
-    if (currentInput.length > MESSAGE_MAX_LENGTH) {
-      toast({
-        title: `The message you submitted was too long, please submit something shorter. (Max ${MESSAGE_MAX_LENGTH} characters)`,
-        status: "error",
-      })
-      return
-    }
-
-    setIsSubmitting(true)
-    try {
-      const newChat = await createNewChat(
-        user.id,
-        currentInput,
-        selectedModel,
-        true,
-        SYSTEM_PROMPT_DEFAULT,
-        projectId
-      )
-      if (!newChat) return
-
-      setInput("")
-      setFiles([])
-      const chatParams = new URLSearchParams({
-        prompt: currentInput,
-        autoSubmit: "1",
-      })
-      router.push(`/c/${newChat.id}?${chatParams.toString()}`)
-    } catch (error) {
-      let errorMessage = "Something went wrong."
-      if (error instanceof Error && error.message) {
-        try {
-          const parsed = JSON.parse(error.message) as { error?: string }
-          errorMessage = parsed.error || errorMessage
-        } catch {
-          errorMessage = error.message
-        }
+      if (!user?.id) {
+        toast({ title: "Please sign in and try again.", status: "error" })
+        return false
       }
-      toast({ title: errorMessage, status: "error" })
-    } finally {
-      setIsSubmitting(false)
-    }
-  }, [
-    createNewChat,
-    files.length,
-    input,
-    isSubmitting,
-    projectId,
-    router,
-    selectedModel,
-    setFiles,
-    user?.id,
-  ])
 
-  const chatInputProps = useMemo(
-    () => ({
-      defaultValue: input,
-      onSuggestion: () => {},
-      onValueChange: handleInputChange,
-      onSend: submit,
-      isSubmitting,
-      files,
-      onFileUpload: handleFileUpload,
-      onFileRemove: handleFileRemove,
-      hasSuggestions: false,
-      onSelectModel: handleModelChange,
-      selectedModel,
-      isUserAuthenticated: isAuthenticated,
-      stop: () => {},
-      status: "ready" as const,
-      setEnableSearch,
-      enableSearch,
-    }),
-    [
-      enableSearch,
-      files,
-      handleFileRemove,
-      handleFileUpload,
-      handleInputChange,
-      handleModelChange,
-      input,
-      isAuthenticated,
-      isSubmitting,
-      selectedModel,
-      setEnableSearch,
-      submit,
-    ]
+      if (files.length > 0) {
+        toast({
+          title: "Open the project chat before attaching files.",
+          status: "error",
+        })
+        return false
+      }
+
+      if (text.length > MESSAGE_MAX_LENGTH) {
+        toast({
+          title: `The message you submitted was too long, please submit something shorter. (Max ${MESSAGE_MAX_LENGTH} characters)`,
+          status: "error",
+        })
+        return false
+      }
+
+      setIsSubmitting(true)
+      try {
+        // Read turn inputs at run time from the Turn context snapshot — never
+        // from a render-time closure.
+        const turnSnapshot = getTurnSnapshot()
+        const newChat = await createNewChat(
+          user.id,
+          text,
+          turnSnapshot.selectedModel,
+          true,
+          turnSnapshot.systemPrompt,
+          projectId
+        )
+        if (!newChat) return false
+
+        const chatParams = new URLSearchParams({
+          prompt: text,
+          autoSubmit: "1",
+        })
+        router.push(`/c/${newChat.id}?${chatParams.toString()}`)
+        return true
+      } catch (error) {
+        let errorMessage = "Something went wrong."
+        if (error instanceof Error && error.message) {
+          try {
+            const parsed = JSON.parse(error.message) as { error?: string }
+            errorMessage = parsed.error || errorMessage
+          } catch {
+            errorMessage = error.message
+          }
+        }
+        toast({ title: errorMessage, status: "error" })
+        return false
+      } finally {
+        setIsSubmitting(false)
+      }
+    },
+    [createNewChat, getTurnSnapshot, isSubmitting, projectId, router, user?.id]
   )
 
   const formatDate = (dateString: string) => {
@@ -253,7 +196,13 @@ export function ProjectView({ projectId }: ProjectViewProps) {
           },
         }}
       >
-        <ChatInput {...chatInputProps} />
+        <Composer
+          chatId={null}
+          draftScopeId={`project-${projectId}`}
+          onTurn={handleTurn}
+          isSubmitting={isSubmitting}
+          status="ready"
+        />
       </motion.div>
 
       {chats !== undefined && chats.length > 0 ? (
