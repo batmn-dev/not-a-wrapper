@@ -337,6 +337,15 @@ function createGenerationRunLinkageFixture() {
     runId: otherRunId,
     orderId: 2,
   })
+  const tables: TableDocuments = {
+    toolApprovalRequests: [],
+    generationRuns: [run],
+    messages: [message, otherMessage],
+    assistantMessageSnapshots: [],
+    toolInvocations: [],
+    users: [user],
+    chats: [chat],
+  }
 
   return {
     user,
@@ -350,12 +359,7 @@ function createGenerationRunLinkageFixture() {
     run,
     message,
     otherMessage,
-    tables: {
-      users: [user],
-      chats: [chat],
-      generationRuns: [run],
-      messages: [message, otherMessage],
-    },
+    tables,
   }
 }
 
