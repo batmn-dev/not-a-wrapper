@@ -3,23 +3,21 @@
 import { Icon } from "@/components/ui/icon"
 import { formatDuration } from "@/lib/format-duration"
 import { TextShimmer } from "@/components/ui/text-shimmer"
+import type { ActivityTriggerState } from "@/lib/chat-messages/assistant-turn"
 import { cn } from "@/lib/utils"
 import { RiArrowRightSLine } from "@remixicon/react"
 
-/**
- * The thinking states the trigger can display. Composable — add a variant here
- * and `activityStateLabel` renders it. "thinking" shimmers; the rest are static.
- */
-export type ActivityTriggerState =
-  | { status: "thinking" }
-  | { status: "thought"; durationSeconds?: number }
-  | { status: "sources"; count: number }
-  | { status: "activity" }
+// The trigger state union is derived data and lives with the Assistant turn
+// phase derivation (lib/chat-messages/assistant-turn.ts); re-exported here so
+// presentation-side consumers keep one import path.
+export type { ActivityTriggerState }
 
 export function activityStateLabel(state: ActivityTriggerState): string {
   switch (state.status) {
     case "thinking":
       return "Thinking"
+    case "running":
+      return state.label
     case "thought":
       return state.durationSeconds !== undefined
         ? `Thought for ${formatDuration(state.durationSeconds)}`
@@ -46,10 +44,11 @@ export type ActivityPanelTriggerProps = {
 /**
  * ActivityPanelTrigger — the explicit, focusable reopen affordance for the
  * Activity panel (plan §5 commit 5). Renders a composable thinking-state label
- * ("Thinking" / "Thought for 1s" / "N sources") with a trailing chevron — no
- * leading icon — and toggles the panel on click. It renders NO reasoning/source
- * content; the overlay primitives (Sheet / docked section) restore focus here
- * on close. The "thinking" state shimmers (motion-reduce gated).
+ * ("Thinking" / "Searching the web" / "Thought for 1s" / "N sources") with a
+ * trailing chevron — no leading icon — and toggles the panel on click. It
+ * renders NO reasoning/source content; the overlay primitives (Sheet / docked
+ * section) restore focus here on close. The live "thinking" and "running"
+ * states shimmer (motion-reduce gated).
  */
 export function ActivityPanelTrigger({
   open,
@@ -59,7 +58,7 @@ export function ActivityPanelTrigger({
   className,
 }: ActivityPanelTriggerProps) {
   const label = activityStateLabel(state)
-  const pending = state.status === "thinking"
+  const pending = state.status === "thinking" || state.status === "running"
 
   return (
     <button

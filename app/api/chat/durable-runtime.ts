@@ -179,7 +179,14 @@ export function createDurableSnapshotTracker(
   let sequence = 0
   let lastWriteAt = 0
   let writeInFlight: Promise<unknown> | null = null
-  let pending = false
+  // Dirtiness is content-versioned, not a boolean: a persist loop re-runs only
+  // when a chunk advanced the version past what the last completed write
+  // captured. A shared `pending` flag let two overlapping flush() calls (the
+  // streamText onAbort and the response-level onFinish both flush on Stop)
+  // re-arm each other forever — neither flush resolved, markGenerationRunAborted
+  // never ran, and snapshot writes continued at the write-latency rate.
+  let contentVersion = 0
+  let writtenVersion = 0
 
   const getParts = (): SnapshotPart[] => [
     ...(reasoning ? [{ type: "reasoning" as const, text: reasoning }] : []),
@@ -187,53 +194,52 @@ export function createDurableSnapshotTracker(
   ]
 
   const persist = async (force = false) => {
-    if (!text && !reasoning) return
-
-    const now = Date.now()
-    const throttleMs = options.throttleMs ?? 750
-    if (!force && now - lastWriteAt < throttleMs) {
-      pending = true
-      return
-    }
-    if (writeInFlight) {
-      pending = true
-      if (force) {
-        const activeWrite = writeInFlight
-        await activeWrite
-        return persist(true)
+    while (writtenVersion < contentVersion) {
+      if (writeInFlight) {
+        await writeInFlight
+        continue
       }
-      return
+
+      const now = Date.now()
+      const throttleMs = options.throttleMs ?? 750
+      if (!force && now - lastWriteAt < throttleMs) return
+
+      lastWriteAt = now
+      const versionAtWrite = contentVersion
+      const currentSequence = ++sequence
+      writeInFlight = persistSnapshot(
+        api.chatRuntime.updateAssistantSnapshot,
+        {
+          runId: options.runId,
+          chatId: options.chatId,
+          messageId: options.messageId,
+          order: options.order,
+          sequence: currentSequence,
+          textSnapshot: text,
+          partsSnapshot: getParts(),
+        },
+        { token: options.convexToken }
+      )
+        .then((written) => {
+          writtenVersion = Math.max(writtenVersion, versionAtWrite)
+          return written
+        })
+        .finally(() => {
+          writeInFlight = null
+        })
+
+      await writeInFlight
     }
-
-    lastWriteAt = now
-    pending = false
-    const currentSequence = ++sequence
-    writeInFlight = persistSnapshot(
-      api.chatRuntime.updateAssistantSnapshot,
-      {
-        runId: options.runId,
-        chatId: options.chatId,
-        messageId: options.messageId,
-        order: options.order,
-        sequence: currentSequence,
-        textSnapshot: text,
-        partsSnapshot: getParts(),
-      },
-      { token: options.convexToken }
-    ).finally(() => {
-      writeInFlight = null
-    })
-
-    await writeInFlight
-    if (pending) await persist(force)
   }
 
   const onChunk = (chunk: TextStreamPart<ToolSet>) => {
     if (chunk.type === "text-delta") {
       text += chunk.text
+      contentVersion++
       void persist(false).catch(() => {})
     } else if (chunk.type === "reasoning-delta") {
       reasoning += chunk.text
+      contentVersion++
       void persist(false).catch(() => {})
     }
   }

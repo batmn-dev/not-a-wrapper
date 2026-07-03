@@ -20,10 +20,12 @@ function Harness(props: {
   parts: UIMessage["parts"] | undefined
   status: Status
   isLast: boolean
+  turnKey?: string
   persistedDurationMs?: number
   onResult: (result: ReasoningPhase) => void
 }) {
-  const { onResult, parts, status, isLast, persistedDurationMs } = props
+  const { onResult, parts, status, isLast, turnKey, persistedDurationMs } =
+    props
   // Derive the reasoning view exactly as production does (Conversation /
   // useActivityPanel derive it per render), then run the timer hook over it.
   const reasoning = deriveReasoningView(
@@ -33,7 +35,7 @@ function Harness(props: {
       ? { reasoningDurationMs: persistedDurationMs }
       : undefined
   )
-  const result = useReasoningPhase({ reasoning, isLast })
+  const result = useReasoningPhase({ reasoning, isLast, turnKey })
   React.useEffect(() => {
     onResult(result)
   })
@@ -79,6 +81,7 @@ describe("useReasoningPhase", () => {
     parts: UIMessage["parts"] | undefined
     status: Status
     isLast: boolean
+    turnKey?: string
     persistedDurationMs?: number
   }) {
     act(() => {
@@ -93,24 +96,94 @@ describe("useReasoningPhase", () => {
     })
   }
 
-  // R1: a same-id isLast true→false→true bounce (regenerate handoff) must RESUME
-  // the timer, never restart it from 0 mid-stream.
+  // R1: a same-turn isLast true→false→true bounce (regenerate handoff) must
+  // RESUME the timer, never restart it from 0 mid-stream.
   it("resumes (never regresses) across an isLast true→false→true bounce while thinking", () => {
     const thinking = reasoningPart("…", "streaming")
 
-    render({ parts: thinking, status: "streaming", isLast: true })
+    render({ parts: thinking, status: "streaming", isLast: true, turnKey: "a" })
     act(() => {
       vi.advanceTimersByTime(5000)
     })
     expect(latest!.durationSeconds).toBe(5)
 
-    render({ parts: thinking, status: "streaming", isLast: false })
-    render({ parts: thinking, status: "streaming", isLast: true })
+    render({ parts: thinking, status: "streaming", isLast: false, turnKey: "a" })
+    render({ parts: thinking, status: "streaming", isLast: true, turnKey: "a" })
     act(() => {
       vi.advanceTimersByTime(1000)
     })
 
     expect(latest!.durationSeconds).toBeGreaterThanOrEqual(5)
+    expect(latest!.durationSeconds).toBe(6)
+  })
+
+  // A turnKey change is a HANDOFF: the timer must restart from 0. Regression
+  // (QA "6s → 15s"): the panel's single hook instance carried a settled turn's
+  // frozen 9s into the next generation's anchor. The swap render lands before
+  // `isLast` settles, so the phase-transition reset is skipped and only the
+  // turnKey reset stands between the stale ref and the new anchor.
+  it("restarts from 0 on a turn handoff (settled 9s turn → new streaming turn)", () => {
+    render({
+      parts: reasoningPart("…", "streaming"),
+      status: "streaming",
+      isLast: true,
+      turnKey: "a",
+    })
+    act(() => {
+      vi.advanceTimersByTime(9000)
+    })
+    render({
+      parts: reasoningPart("done", "done"),
+      status: "ready",
+      isLast: true,
+      turnKey: "a",
+    })
+    expect(latest!.durationSeconds).toBe(9)
+
+    // Default-follow onto turn b: its thinking view renders one pass before
+    // isLast settles to true.
+    render({
+      parts: reasoningPart("…", "streaming"),
+      status: "streaming",
+      isLast: false,
+      turnKey: "b",
+    })
+    render({
+      parts: reasoningPart("…", "streaming"),
+      status: "streaming",
+      isLast: true,
+      turnKey: "b",
+    })
+    act(() => {
+      vi.advanceTimersByTime(6000)
+    })
+    expect(latest!.durationSeconds).toBe(6)
+  })
+
+  // Handoff variant with no phase transition at all (thinking→thinking swap):
+  // the render-sync resets can't stop the old turn's still-running interval —
+  // only the timer effect re-anchoring on turnKey does.
+  it("re-anchors when the turn swaps while both turns read as thinking", () => {
+    render({
+      parts: reasoningPart("…", "streaming"),
+      status: "streaming",
+      isLast: true,
+      turnKey: "a",
+    })
+    act(() => {
+      vi.advanceTimersByTime(9000)
+    })
+    expect(latest!.durationSeconds).toBe(9)
+
+    render({
+      parts: reasoningPart("…", "streaming"),
+      status: "streaming",
+      isLast: true,
+      turnKey: "b",
+    })
+    act(() => {
+      vi.advanceTimersByTime(6000)
+    })
     expect(latest!.durationSeconds).toBe(6)
   })
 

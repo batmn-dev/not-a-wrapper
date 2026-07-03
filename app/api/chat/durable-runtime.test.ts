@@ -297,6 +297,49 @@ describe("durable chat runtime helpers", () => {
     })
   })
 
+  it("resolves overlapping flushes with bounded writes (post-Stop livelock)", async () => {
+    // Regression: onAbort and the response-level onFinish both flush() within
+    // ~200ms of a Stop. With a shared boolean `pending` flag, the two forced
+    // persist loops re-armed each other forever — flush() never resolved, so
+    // markGenerationRunAborted never ran and snapshot writes continued at the
+    // write-latency rate until the Convex token expired.
+    vi.mocked(fetchMutation)
+      .mockReset()
+      .mockImplementation(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(resolve, 5)
+          ) as unknown as ReturnType<typeof fetchMutation>
+      )
+
+    const tracker = createDurableSnapshotTracker({
+      convexToken: "token",
+      runId: "run_1" as Id<"generationRuns">,
+      chatId: "chat_1" as Id<"chats">,
+      messageId: "message_1" as Id<"messages">,
+      order: 1,
+      throttleMs: 60_000,
+    })
+
+    // First chunk starts an in-flight write both flushes must contend with.
+    tracker.onChunk({ type: "text-delta", text: "A" } as never)
+    tracker.onChunk({ type: "text-delta", text: "B" } as never)
+
+    const flushes = Promise.all([tracker.flush(), tracker.flush()])
+    const outcome = await Promise.race([
+      flushes.then(() => "flushed" as const),
+      new Promise<"livelocked">((resolve) =>
+        setTimeout(() => resolve("livelocked"), 500)
+      ),
+    ])
+
+    expect(outcome).toBe("flushed")
+    // One in-flight incremental write plus at most one forced final write.
+    expect(vi.mocked(fetchMutation).mock.calls.length).toBeLessThanOrEqual(3)
+    const lastCall = vi.mocked(fetchMutation).mock.calls.at(-1)
+    expect(lastCall?.[1]).toMatchObject({ textSnapshot: "AB" })
+  })
+
   it("catches rejected incremental snapshot writes", async () => {
     const unhandledRejections: unknown[] = []
     const onUnhandledRejection = (reason: unknown) => {

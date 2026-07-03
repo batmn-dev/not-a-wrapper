@@ -2,9 +2,11 @@ import type { UIMessage } from "ai"
 import { describe, expect, it } from "vitest"
 import {
   assistantTurnViewsEqual,
-  deriveAssistantLoadingState,
+  deriveAssistantTurnIndicator,
+  deriveAssistantTurnPhase,
   deriveAssistantTurnView,
   deriveReasoningView,
+  type AssistantTurnRenderStatus,
 } from "./assistant-turn"
 
 const parts = (value: unknown) => value as UIMessage["parts"]
@@ -40,6 +42,36 @@ describe("deriveReasoningView", () => {
     )
     expect(view.phase).toBe("thinking")
     expect(view.isStreaming).toBe(false)
+  })
+
+  it("treats a persisted duration without reasoning parts as completed opaque reasoning", () => {
+    // The persist layer drops empty opaque reasoning parts; the stamped
+    // duration is the surviving evidence. The settled trigger must not vanish
+    // when the durable snapshot is adopted.
+    const view = deriveReasoningView(parts([]), "ready", {
+      reasoningDurationMs: 3000,
+    })
+    expect(view.phase).toBe("complete")
+    expect(view.isOpaque).toBe(true)
+    expect(view.persistedDurationMs).toBe(3000)
+
+    // No parts AND no duration stays idle (e.g. the pending placeholder).
+    expect(deriveReasoningView(parts([]), "ready").phase).toBe("idle")
+  })
+
+  it("settles a part frozen in 'streaming' state once the chat status ends (Stop/error kills the timer)", () => {
+    // Abort/stop/error never transitions part states, so a stuck "streaming"
+    // part must read complete on a settled turn — this is what freezes the
+    // panel's elapsed timer and the trigger's shimmer after Stop.
+    for (const status of ["ready", "error"] as const) {
+      const view = deriveReasoningView(
+        parts([{ type: "reasoning", text: "", state: "streaming" }]),
+        status
+      )
+      expect(view.phase).toBe("complete")
+      expect(view.isStreaming).toBe(false)
+      expect(view.isOpaque).toBe(true)
+    }
   })
 })
 
@@ -167,77 +199,377 @@ describe("assistantTurnViewsEqual (the R3 memo contract)", () => {
   })
 })
 
-describe("deriveAssistantLoadingState", () => {
-  it("shows dots only for a bare streaming tail", () => {
-    const view = deriveAssistantTurnView({ parts: parts([]) }, "streaming")
-    const state = deriveAssistantLoadingState(view, {
-      status: "streaming",
-      isLast: true,
-      contentNullOrEmpty: true,
-      showToolInvocations: true,
-    })
-    expect(state.showDots).toBe(true)
+// --- The canonical turn phase + its single indicator ---
+
+const liveCtx = { status: "streaming" as const, isLast: true }
+
+function viewOf(
+  rawParts: unknown,
+  status: "streaming" | "ready" | "submitted" | "error" = "streaming",
+  metadata?: unknown
+) {
+  return deriveAssistantTurnView({ parts: parts(rawParts), metadata }, status)
+}
+
+describe("deriveAssistantTurnPhase", () => {
+  it("is generating for a bare live stream with nothing else signaled", () => {
+    const phase = deriveAssistantTurnPhase(viewOf([]), liveCtx)
+    expect(phase).toEqual({ kind: "generating" })
   })
 
-  it("keeps dots visible for opaque streaming reasoning with no visible output", () => {
-    const view = deriveAssistantTurnView(
-      {
-        parts: parts([{ type: "reasoning", text: "", state: "streaming" }]),
-      },
-      "streaming"
+  it("is thinking(opaque) while opaque reasoning streams — the dots+Thinking regression", () => {
+    const phase = deriveAssistantTurnPhase(
+      viewOf([{ type: "reasoning", text: "", state: "streaming" }]),
+      liveCtx
     )
-    const state = deriveAssistantLoadingState(view, {
-      status: "streaming",
-      isLast: true,
-      contentNullOrEmpty: true,
-      showToolInvocations: true,
-    })
-    expect(view.reasoning.isOpaque).toBe(true)
-    expect(state.showDots).toBe(true)
+    expect(phase).toEqual({ kind: "thinking", visibility: "opaque" })
   })
 
-  it("suppresses dots when streaming reasoning has visible text", () => {
-    const view = deriveAssistantTurnView(
-      {
-        parts: parts([
-          { type: "reasoning", text: "thinking", state: "streaming" },
-        ]),
-      },
-      "streaming"
+  it("is thinking(visible) while reasoning streams visible text", () => {
+    const phase = deriveAssistantTurnPhase(
+      viewOf([{ type: "reasoning", text: "let me think", state: "streaming" }]),
+      liveCtx
     )
-    const state = deriveAssistantLoadingState(view, {
-      status: "streaming",
-      isLast: true,
-      contentNullOrEmpty: true,
-      showToolInvocations: true,
-    })
-    expect(view.reasoning.isOpaque).toBe(false)
-    expect(state.showDots).toBe(false)
+    expect(phase).toEqual({ kind: "thinking", visibility: "visible" })
   })
 
-  it("suppresses dots when reasoning is present and reports in-progress tools", () => {
-    const view = deriveAssistantTurnView(
-      {
-        parts: parts([
-          { type: "reasoning", text: "…", state: "streaming" },
+  it("ranks an in-flight tool above streaming reasoning", () => {
+    const phase = deriveAssistantTurnPhase(
+      viewOf([
+        { type: "reasoning", text: "…", state: "streaming" },
+        {
+          type: "tool-web_search",
+          toolCallId: "t1",
+          state: "input-streaming",
+          input: {},
+        },
+      ]),
+      liveCtx
+    )
+    expect(phase).toEqual({ kind: "tooling", toolNames: ["web_search"] })
+  })
+
+  it("ranks image generation above other in-flight tools", () => {
+    const phase = deriveAssistantTurnPhase(
+      viewOf([
+        {
+          type: "tool-web_search",
+          toolCallId: "t1",
+          state: "input-available",
+          input: {},
+        },
+        {
+          type: "tool-imageGeneration",
+          toolCallId: "t2",
+          state: "input-available",
+          input: {},
+        },
+      ]),
+      liveCtx
+    )
+    expect(phase).toEqual({ kind: "generating-image" })
+  })
+
+  it("is awaiting-approval for an approval-requested part, not tooling", () => {
+    const phase = deriveAssistantTurnPhase(
+      viewOf([
+        {
+          type: "tool-web_search",
+          toolCallId: "t1",
+          state: "approval-requested",
+          input: {},
+          approval: { id: "a1" },
+        },
+      ]),
+      liveCtx
+    )
+    expect(phase).toEqual({ kind: "awaiting-approval" })
+  })
+
+  it("is awaiting-approval when the durable status pauses the turn", () => {
+    const phase = deriveAssistantTurnPhase(viewOf([], "ready"), {
+      status: "awaiting_approval",
+      isLast: true,
+    })
+    expect(phase).toEqual({ kind: "awaiting-approval" })
+  })
+
+  it("counts an approved approval response as in-flight, but not a denied one", () => {
+    const approved = deriveAssistantTurnPhase(
+      viewOf([
+        {
+          type: "tool-web_search",
+          toolCallId: "t1",
+          state: "approval-responded",
+          input: {},
+          approval: { id: "a1", approved: true },
+        },
+      ]),
+      liveCtx
+    )
+    expect(approved).toEqual({ kind: "tooling", toolNames: ["web_search"] })
+
+    const denied = deriveAssistantTurnPhase(
+      viewOf([
+        {
+          type: "tool-web_search",
+          toolCallId: "t1",
+          state: "approval-responded",
+          input: {},
+          approval: { id: "a1", approved: false },
+        },
+      ]),
+      liveCtx
+    )
+    expect(denied.kind).toBe("responding")
+  })
+
+  it("is responding once the turn has substance and nothing is in flight", () => {
+    // Text streaming
+    expect(
+      deriveAssistantTurnPhase(viewOf([{ type: "text", text: "Hi" }]), liveCtx)
+        .kind
+    ).toBe("responding")
+    // Opaque reasoning finished, first token not yet arrived — the trigger
+    // must settle to "Thought", not bounce back to the generating shimmer.
+    expect(
+      deriveAssistantTurnPhase(
+        viewOf([{ type: "reasoning", text: "", state: "done" }]),
+        liveCtx
+      ).kind
+    ).toBe("responding")
+    // A completed tool card is substance too.
+    expect(
+      deriveAssistantTurnPhase(
+        viewOf([
           {
-            type: "tool-search",
+            type: "tool-web_search",
             toolCallId: "t1",
-            state: "input-streaming",
+            state: "output-available",
             input: {},
+            output: {},
           },
         ]),
-      },
-      "streaming"
-    )
-    const state = deriveAssistantLoadingState(view, {
-      status: "streaming",
+        liveCtx
+      ).kind
+    ).toBe("responding")
+  })
+
+  it("is submitted pre-stream", () => {
+    const phase = deriveAssistantTurnPhase(viewOf([], "submitted"), {
+      status: "submitted",
       isLast: true,
-      contentNullOrEmpty: true,
-      showToolInvocations: true,
     })
-    expect(state.showDots).toBe(false)
-    expect(state.showToolProgress).toBe(true)
-    expect(state.activeToolNames).toEqual(["search"])
+    expect(phase).toEqual({ kind: "submitted" })
+  })
+
+  it("settles non-last turns regardless of frozen in-progress part states", () => {
+    const phase = deriveAssistantTurnPhase(
+      viewOf(
+        [
+          { type: "reasoning", text: "", state: "streaming" },
+          {
+            type: "tool-web_search",
+            toolCallId: "t1",
+            state: "input-available",
+            input: {},
+          },
+        ],
+        "ready"
+      ),
+      { status: "streaming", isLast: false }
+    )
+    expect(phase).toEqual({ kind: "settled" })
+  })
+
+  it("settles the last turn the moment the client stream ends — Stop mid-tool-call", () => {
+    for (const status of [
+      "ready",
+      "error",
+      "aborted",
+      "failed",
+      "completed",
+    ] as AssistantTurnRenderStatus[]) {
+      const phase = deriveAssistantTurnPhase(
+        viewOf(
+          [
+            {
+              type: "tool-web_search",
+              toolCallId: "t1",
+              state: "input-available",
+              input: {},
+            },
+          ],
+          "ready"
+        ),
+        { status, isLast: true }
+      )
+      expect(phase).toEqual({ kind: "settled" })
+    }
+  })
+})
+
+describe("deriveAssistantTurnIndicator", () => {
+  it("maps every live phase to exactly one indicator", () => {
+    const emptyView = viewOf([])
+    expect(
+      deriveAssistantTurnIndicator({ kind: "submitted" }, emptyView)
+    ).toEqual({ kind: "trigger", state: { status: "thinking" } })
+    expect(
+      deriveAssistantTurnIndicator(
+        { kind: "thinking", visibility: "opaque" },
+        emptyView
+      )
+    ).toEqual({ kind: "trigger", state: { status: "thinking" } })
+    expect(
+      deriveAssistantTurnIndicator(
+        { kind: "tooling", toolNames: ["web_search"] },
+        emptyView
+      )
+    ).toEqual({
+      kind: "trigger",
+      state: { status: "running", label: "Searching the web" },
+    })
+    expect(
+      deriveAssistantTurnIndicator({ kind: "generating-image" }, emptyView)
+    ).toEqual({
+      kind: "trigger",
+      state: { status: "running", label: "Generating image" },
+    })
+    expect(
+      deriveAssistantTurnIndicator({ kind: "generating" }, emptyView)
+    ).toEqual({ kind: "generating" })
+  })
+
+  it("labels multi-tool and custom-tool progress", () => {
+    const emptyView = viewOf([])
+    expect(
+      deriveAssistantTurnIndicator(
+        { kind: "tooling", toolNames: ["web_search", "extract_content"] },
+        emptyView
+      )
+    ).toEqual({
+      kind: "trigger",
+      state: { status: "running", label: "Running tools" },
+    })
+    expect(
+      deriveAssistantTurnIndicator(
+        { kind: "tooling", toolNames: ["fetchWeather"] },
+        emptyView
+      )
+    ).toEqual({
+      kind: "trigger",
+      state: { status: "running", label: "Running Fetch Weather" },
+    })
+  })
+
+  it("settles to thought > sources > activity > none", () => {
+    const settled = { kind: "settled" } as const
+
+    // Duration metadata without a stored reasoning part still reads as
+    // thought — the adopted durable snapshot must keep the live turn's label.
+    const durationOnly = viewOf([], "ready", { reasoningDurationMs: 3000 })
+    expect(deriveAssistantTurnIndicator(settled, durationOnly)).toEqual({
+      kind: "trigger",
+      state: { status: "thought", durationSeconds: 3 },
+    })
+
+    const withReasoning = viewOf(
+      [{ type: "reasoning", text: "t", state: "done" }],
+      "ready",
+      { reasoningDurationMs: 2000 }
+    )
+    expect(deriveAssistantTurnIndicator(settled, withReasoning)).toEqual({
+      kind: "trigger",
+      state: { status: "thought", durationSeconds: 2 },
+    })
+
+    const withSources = viewOf(
+      [{ type: "source-url", sourceId: "s1", url: "https://example.com" }],
+      "ready"
+    )
+    expect(deriveAssistantTurnIndicator(settled, withSources)).toEqual({
+      kind: "trigger",
+      state: { status: "sources", count: 1 },
+    })
+
+    const withTools = viewOf(
+      [
+        {
+          type: "tool-web_search",
+          toolCallId: "t1",
+          state: "output-available",
+          input: {},
+          output: {},
+        },
+      ],
+      "ready"
+    )
+    expect(deriveAssistantTurnIndicator(settled, withTools)).toEqual({
+      kind: "trigger",
+      state: { status: "activity" },
+    })
+
+    expect(
+      deriveAssistantTurnIndicator(settled, viewOf([], "ready"))
+    ).toEqual({ kind: "none" })
+  })
+
+  it("never yields more than one indicator across a sweep of turn states", () => {
+    // The closed-by-construction property: for any (parts × status × isLast)
+    // combination, the derivation is total and single-valued.
+    const partVariants: unknown[] = [
+      [],
+      [{ type: "reasoning", text: "", state: "streaming" }],
+      [{ type: "reasoning", text: "visible", state: "streaming" }],
+      [{ type: "reasoning", text: "", state: "done" }],
+      [{ type: "text", text: "answer" }],
+      [
+        {
+          type: "tool-web_search",
+          toolCallId: "t1",
+          state: "input-available",
+          input: {},
+        },
+      ],
+      [
+        { type: "reasoning", text: "…", state: "streaming" },
+        {
+          type: "tool-imageGeneration",
+          toolCallId: "t2",
+          state: "input-streaming",
+          input: {},
+        },
+        { type: "text", text: "partial" },
+      ],
+    ]
+    const statuses: AssistantTurnRenderStatus[] = [
+      "submitted",
+      "streaming",
+      "ready",
+      "error",
+      "completed",
+      "aborted",
+      "failed",
+      "awaiting_approval",
+    ]
+    const kinds = new Set<string>()
+    for (const p of partVariants) {
+      for (const status of statuses) {
+        for (const isLast of [true, false]) {
+          const view = viewOf(
+            p,
+            status === "streaming" || status === "submitted"
+              ? (status as "streaming" | "submitted")
+              : "ready"
+          )
+          const phase = deriveAssistantTurnPhase(view, { status, isLast })
+          const indicator = deriveAssistantTurnIndicator(phase, view)
+          kinds.add(indicator.kind)
+          expect(["none", "generating", "trigger"]).toContain(indicator.kind)
+        }
+      }
+    }
+    expect(kinds.size).toBeGreaterThan(1)
   })
 })

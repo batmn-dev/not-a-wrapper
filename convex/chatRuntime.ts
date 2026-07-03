@@ -1313,45 +1313,67 @@ export const updateAssistantSnapshot = mutation({
     delta: v.optional(v.string()),
     payload: v.optional(v.any()),
   },
-  handler: async (ctx, args) => {
-    await requireChatOwner(ctx, args.chatId)
-    const run = await ctx.db.get(args.runId)
-    const message = await ctx.db.get(args.messageId)
-    if (!run || run.chatId !== args.chatId) throw new Error("Run not found")
-    if (!message || message.chatId !== args.chatId) {
-      throw new Error("Message not found")
-    }
-
-    const now = nowMs()
-    await ctx.db.insert("assistantMessageSnapshots", {
-      runId: args.runId,
-      chatId: args.chatId,
-      messageId: args.messageId,
-      order: args.order,
-      stepOrder: args.stepOrder ?? 0,
-      sequence: args.sequence,
-      format: args.payload ? "UIMessageChunk" : "text_snapshot",
-      delta: args.delta,
-      payload: args.payload,
-      textSnapshot: args.textSnapshot,
-      partsSnapshot: args.partsSnapshot,
-      createdAt: now,
-    })
-
-    if (!isTerminalMessageStatus(message.status)) {
-      await ctx.db.patch(args.messageId, {
-        content: args.textSnapshot,
-        parts: args.partsSnapshot,
-        status: "streaming",
-        updatedAt: now,
-      })
-      await ctx.db.patch(args.runId, {
-        status: "streaming",
-        updatedAt: now,
-      })
-    }
-  },
+  handler: async (ctx, args) => updateAssistantSnapshotForChat(ctx, args),
 })
+
+export async function updateAssistantSnapshotForChat(
+  ctx: MutationCtx,
+  args: {
+    runId: Id<"generationRuns">
+    chatId: Id<"chats">
+    messageId: Id<"messages">
+    order: number
+    stepOrder?: number
+    sequence: number
+    textSnapshot: string
+    partsSnapshot: unknown
+    delta?: string
+    payload?: unknown
+  }
+) {
+  await requireChatOwner(ctx, args.chatId)
+  const run = await ctx.db.get(args.runId)
+  const message = await ctx.db.get(args.messageId)
+  if (!run || run.chatId !== args.chatId) throw new Error("Run not found")
+  if (!message || message.chatId !== args.chatId) {
+    throw new Error("Message not found")
+  }
+
+  // A terminal run accepts no further snapshots. A streamer that lost the
+  // abort/supersede race must become read-only here — its continued writes
+  // to the run and message docs are what OCC-starve the next turn's
+  // prepareGeneration on the same chat.
+  if (isTerminalGenerationRunStatus(run.status)) return
+
+  const now = nowMs()
+  await ctx.db.insert("assistantMessageSnapshots", {
+    runId: args.runId,
+    chatId: args.chatId,
+    messageId: args.messageId,
+    order: args.order,
+    stepOrder: args.stepOrder ?? 0,
+    sequence: args.sequence,
+    format: args.payload ? "UIMessageChunk" : "text_snapshot",
+    delta: args.delta,
+    payload: args.payload,
+    textSnapshot: args.textSnapshot,
+    partsSnapshot: args.partsSnapshot,
+    createdAt: now,
+  })
+
+  if (!isTerminalMessageStatus(message.status)) {
+    await ctx.db.patch(args.messageId, {
+      content: args.textSnapshot,
+      parts: args.partsSnapshot,
+      status: "streaming",
+      updatedAt: now,
+    })
+    await ctx.db.patch(args.runId, {
+      status: "streaming",
+      updatedAt: now,
+    })
+  }
+}
 
 export const appendStreamDelta = updateAssistantSnapshot
 

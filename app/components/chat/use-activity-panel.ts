@@ -226,6 +226,10 @@ export function useActivityPanel({
   } = useReasoningPhase({
     reasoning: panelView?.reasoning ?? IDLE_REASONING_VIEW,
     isLast: Boolean(panelMessage) && isPanelDefaultTurn,
+    // Turn identity for the timer: a panel re-target (default-follow onto a
+    // new generation, explicit selection) must restart the tick from 0, never
+    // inherit the previous turn's frozen duration.
+    turnKey: panelActivityTurnId,
   })
 
   const panelProps: ActivityPanelProps = isPendingActivityTurn

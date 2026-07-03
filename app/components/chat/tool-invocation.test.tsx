@@ -54,6 +54,22 @@ describe("ToolInvocation", () => {
     expect(markup).not.toContain("Running")
   })
 
+  it("presents an in-flight part as Stopped once the turn settles", () => {
+    const runningTool = {
+      type: "tool-web_search",
+      toolCallId: "call_search_004",
+      state: "input-available",
+      input: { query: "stopped mid-call" },
+    } as unknown as ToolUIPart
+
+    const markup = renderToStaticMarkup(
+      <ToolInvocation toolInvocations={[runningTool]} turnActive={false} />
+    )
+
+    expect(markup).toContain("Stopped")
+    expect(markup).not.toContain("Running")
+  })
+
   it("keeps a denied approval response as the terminal display state", () => {
     const toolCallId = "call_search_003"
     const deniedTool = {

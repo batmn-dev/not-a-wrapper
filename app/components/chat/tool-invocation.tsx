@@ -32,6 +32,14 @@ type ToolInvocationProps = {
   /** The message's metadata; display records are read through the Message
    * metadata module (ADR-0002), never by casting raw keys. */
   metadata?: unknown
+  /**
+   * Whether the owning turn is still in a live phase (see
+   * deriveAssistantTurnPhase). Tool part states never transition on
+   * stop/abort/error, so an in-flight part on a settled turn must present as
+   * "Stopped", not an animated "Running". Defaults to true for callers that
+   * only render live turns.
+   */
+  turnActive?: boolean
   className?: string
   defaultOpen?: boolean
   onToolApproval?: ToolApprovalHandler
@@ -191,6 +199,7 @@ function formatSource(source: ToolInvocationDisplayMetadata["source"]): string {
 export function ToolInvocation({
   toolInvocations,
   metadata,
+  turnActive = true,
   defaultOpen = false,
   onToolApproval,
 }: ToolInvocationProps) {
@@ -226,6 +235,7 @@ export function ToolInvocation({
         toolInvocations={toolInvocationsData}
         metadataByName={byName}
         metadataByCallId={byCallId}
+        turnActive={turnActive}
         defaultOpen={defaultOpen}
         className="mb-10"
         onToolApproval={onToolApproval}
@@ -290,6 +300,7 @@ export function ToolInvocation({
                           toolInvocations={toolInvocationsForId}
                           metadataByName={byName}
                           metadataByCallId={byCallId}
+                          turnActive={turnActive}
                           onToolApproval={onToolApproval}
                         />
                       </div>
@@ -309,6 +320,7 @@ type SingleToolViewProps = {
   toolInvocations: ToolUIPart[]
   metadataByName: Record<string, ToolInvocationDisplayMetadata>
   metadataByCallId: Record<string, ToolInvocationDisplayMetadata>
+  turnActive?: boolean
   defaultOpen?: boolean
   className?: string
   onToolApproval?: ToolApprovalHandler
@@ -318,6 +330,7 @@ function SingleToolView({
   toolInvocations,
   metadataByName,
   metadataByCallId,
+  turnActive = true,
   defaultOpen = false,
   className,
   onToolApproval,
@@ -378,6 +391,7 @@ function SingleToolView({
         toolData={toolsToDisplay[0]}
         metadataByName={metadataByName}
         metadataByCallId={metadataByCallId}
+        turnActive={turnActive}
         defaultOpen={defaultOpen}
         className={className}
         onToolApproval={onToolApproval}
@@ -395,6 +409,7 @@ function SingleToolView({
             toolData={tool}
             metadataByName={metadataByName}
             metadataByCallId={metadataByCallId}
+            turnActive={turnActive}
             defaultOpen={defaultOpen}
             onToolApproval={onToolApproval}
           />
@@ -409,6 +424,7 @@ function SingleToolCard({
   toolData,
   metadataByName,
   metadataByCallId,
+  turnActive = true,
   defaultOpen = false,
   className,
   onToolApproval,
@@ -416,6 +432,7 @@ function SingleToolCard({
   toolData: ToolUIPart
   metadataByName: Record<string, ToolInvocationDisplayMetadata>
   metadataByCallId: Record<string, ToolInvocationDisplayMetadata>
+  turnActive?: boolean
   defaultOpen?: boolean
   className?: string
   onToolApproval?: ToolApprovalHandler
@@ -448,7 +465,12 @@ function SingleToolCard({
   const idempotent = runtimeMetadata?.idempotent
   const openWorld = runtimeMetadata?.openWorld
   const args = toolData.input as Record<string, unknown> | undefined
-  const isLoading = state === "input-available" || state === "input-streaming"
+  const isInFlightState =
+    state === "input-available" || state === "input-streaming"
+  // Part states freeze in place on stop/abort/error — a settled turn presents
+  // an in-flight part as "Stopped", never an animated "Running".
+  const isLoading = isInFlightState && turnActive
+  const isStopped = isInFlightState && !turnActive
   const isAwaitingApproval = state === "approval-requested"
   const isApprovalResponded = state === "approval-responded"
   const isCompleted = state === "output-available"
@@ -710,6 +732,18 @@ function SingleToolCard({
                     className="mr-1 animate-spin"
                   />
                   Running
+                </div>
+              </motion.div>
+            ) : isStopped ? (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
+                animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+                exit={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
+                transition={{ duration: 0.15 }}
+                key="stopped"
+              >
+                <div className="border-border bg-muted text-muted-foreground inline-flex items-center rounded-full border px-1.5 py-0.5 text-xs">
+                  Stopped
                 </div>
               </motion.div>
             ) : isError ? (

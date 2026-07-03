@@ -149,8 +149,19 @@ export function Conversation({
         // descriptor carries the assistant sibling ids.
         const turnBranch = resolveTurnBranch(message, messages[index + 1])
         const durableStatus = (message as { status?: string }).status
+        // Durable status wins only when it asserts a settled/paused OUTCOME
+        // (aborted/failed/awaiting_approval). Durable LIVE statuses
+        // (submitted/streaming) are deliberately ignored: after a Stop or a
+        // dropped stream the server run can lag its terminal transition, and
+        // adopting its stale "streaming" here resurrected live loaders on a
+        // turn whose stream this client already knows is over. The client's
+        // own stream status is authoritative for liveness on the last turn;
+        // older turns always render settled.
         const messageStatus: MessageRenderStatus =
-          isMessageRenderStatus(durableStatus) && durableStatus !== "completed"
+          isMessageRenderStatus(durableStatus) &&
+          (durableStatus === "aborted" ||
+            durableStatus === "failed" ||
+            durableStatus === "awaiting_approval")
             ? durableStatus
             : isLast
               ? status

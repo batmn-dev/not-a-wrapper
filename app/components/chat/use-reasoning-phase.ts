@@ -15,6 +15,13 @@ type UseReasoningPhaseParams = {
   /** The pure reasoning derivation from the Assistant turn view. */
   reasoning: ReasoningView
   isLast: boolean
+  /**
+   * Identity of the turn `reasoning` derives from. The panel's single hook
+   * instance re-targets across turns (default-follow, explicit selection); a
+   * key change is a turn HANDOFF and always restarts the timer from 0. The R1
+   * resume applies only within one turn's isLast bounce.
+   */
+  turnKey: string | undefined
 }
 
 /**
@@ -26,6 +33,7 @@ type UseReasoningPhaseParams = {
 export function useReasoningPhase({
   reasoning,
   isLast,
+  turnKey,
 }: UseReasoningPhaseParams): ReasoningPhase {
   const { phase, text: reasoningText, isOpaque, persistedDurationMs } =
     reasoning
@@ -38,6 +46,7 @@ export function useReasoningPhase({
   const startTimestampRef = useRef<number | null>(null)
   const [tickedSeconds, setTickedSeconds] = useState(0)
   const [prevPhase, setPrevPhase] = useState(phase)
+  const [prevTurnKey, setPrevTurnKey] = useState(turnKey)
 
   // Mirror the live tick count in a ref (synced in an effect, never during
   // render) so the timer effect can resume from the accumulated elapsed time
@@ -50,11 +59,20 @@ export function useReasoningPhase({
 
   const shouldRunTimer = isLast && phase === "thinking"
 
-  // React 19 render-sync: reset timer state when entering thinking phase. This
-  // fires only on a genuine phase transition into "thinking" (idle/complete →
-  // thinking), e.g. a fresh turn or regenerate handoff — never during an
-  // isLast bounce where the phase stays "thinking".
-  if (phase !== prevPhase) {
+  // React 19 render-sync: restart the timer on a turn handoff. The phase
+  // transition below cannot catch every handoff — the swap may render before
+  // `isLast` settles, or never transition phase at all (thinking→thinking) —
+  // and either way the R1 anchor would inherit the previous turn's ticks
+  // (e.g. a panel header resuming a settled turn's 9s under a new turn).
+  if (turnKey !== prevTurnKey) {
+    setPrevTurnKey(turnKey)
+    setPrevPhase(phase)
+    setTickedSeconds(0)
+  } else if (phase !== prevPhase) {
+    // Reset timer state when entering thinking phase. This fires only on a
+    // genuine phase transition into "thinking" (idle/complete → thinking),
+    // e.g. a same-turn regenerate — never during an isLast bounce where the
+    // phase stays "thinking".
     setPrevPhase(phase)
     if (phase === "thinking" && isLast) {
       setTickedSeconds(0)
@@ -66,11 +84,12 @@ export function useReasoningPhase({
     if (!shouldRunTimer) return
 
     // R1: anchor the wall clock to the already-accumulated elapsed time so a
-    // same-id `isLast` true→false→true bounce (e.g. regenerate handoff, while
-    // the phase stays "thinking") RESUMES the timer instead of restarting it
-    // from 0 — `tickedSeconds` must never regress mid-stream. On a genuine
-    // fresh "thinking" entry the render-sync reset above has already zeroed
-    // `tickedSeconds`, so `start` collapses to `Date.now()` (unchanged).
+    // same-turn `isLast` true→false→true bounce (while the phase stays
+    // "thinking") RESUMES the timer instead of restarting it from 0 —
+    // `tickedSeconds` must never regress mid-stream. On a fresh "thinking"
+    // entry or a turn handoff the render-sync resets above have already
+    // zeroed `tickedSeconds` (the mirror effect runs before this one), so
+    // `start` collapses to `Date.now()`.
     const start = Date.now() - tickedSecondsRef.current * 1000
     startTimestampRef.current = start
 
@@ -88,7 +107,11 @@ export function useReasoningPhase({
         startTimestampRef.current = null
       }
     }
-  }, [shouldRunTimer])
+    // `turnKey` is a dep so a handoff that keeps `shouldRunTimer` true
+    // (thinking→thinking swap) tears down the old turn's interval and
+    // re-anchors — the render-sync reset alone can't stop a running interval
+    // still anchored to the previous turn.
+  }, [shouldRunTimer, turnKey])
 
   // Compute final durationSeconds.
   // Priority: live timer (last message) > server-persisted duration (historical)

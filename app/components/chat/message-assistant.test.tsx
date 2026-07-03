@@ -163,6 +163,69 @@ describe("MessageAssistant activity trigger", () => {
     expect(store.getState().panelTurnId).toBe("pending-assistant")
   })
 
+  it("shows ONLY the Thinking trigger while opaque reasoning streams (no Generating shimmer underneath)", () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+    const parts = [
+      { type: "reasoning", text: "", state: "streaming" },
+    ] as unknown as UIMessage["parts"]
+
+    act(() => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView(parts, "streaming")}
+            status="streaming"
+            isLast
+          >
+            {""}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    expect(
+      container?.querySelector('button[aria-label="Open activity: Thinking"]')
+    ).toBeTruthy()
+    expect(container?.textContent).not.toContain("Generating")
+  })
+
+  it("shows ONLY the running trigger while a tool call is in flight", () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+    const parts = [
+      { type: "reasoning", text: "…", state: "streaming" },
+      {
+        type: "tool-web_search",
+        toolCallId: "t1",
+        state: "input-available",
+        input: { query: "q" },
+      },
+    ] as unknown as UIMessage["parts"]
+
+    act(() => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView(parts, "streaming")}
+            status="streaming"
+            isLast
+          >
+            {""}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    expect(
+      container?.querySelector(
+        'button[aria-label="Open activity: Searching the web"]'
+      )
+    ).toBeTruthy()
+    expect(container?.textContent).not.toContain("Generating")
+    expect(container?.textContent).not.toContain("Thinking")
+  })
+
   it("keeps historical reasoning triggers visible when another turn owns the panel", () => {
     const store = makeStore({ panelTurnId: "pending-assistant", open: true })
     const parts = [

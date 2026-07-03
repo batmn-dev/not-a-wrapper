@@ -11,6 +11,7 @@ import {
   markGenerationRunFailedForChat,
   prepareGenerationForChat,
   recordToolInvocationsForChat,
+  updateAssistantSnapshotForChat,
 } from "./chatRuntime"
 import { getSelectedPathMessages } from "./domain/message_branches"
 import { selectBranchForChat } from "./messages"
@@ -2373,6 +2374,51 @@ describe("generation run linkage validation", () => {
 
     expect(inserts).toEqual([])
     expect(patches).toEqual([])
+  })
+})
+
+describe("updateAssistantSnapshotForChat", () => {
+  it("persists the snapshot and keeps the run/message streaming while the run is active", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    const { ctx, inserts } = createMutationCtx(fixture.tables)
+
+    await updateAssistantSnapshotForChat(ctx, {
+      runId: fixture.runId,
+      chatId: fixture.chatId,
+      messageId: fixture.messageId,
+      order: 1,
+      sequence: 1,
+      textSnapshot: "partial",
+      partsSnapshot: [{ type: "text", text: "partial" }],
+    })
+
+    expect(inserts).toHaveLength(1)
+    expect(fixture.message.content).toBe("partial")
+    expect(fixture.message.status).toBe("streaming")
+    expect(fixture.run.status).toBe("streaming")
+  })
+
+  it("becomes a no-op once the run is terminal (post-Stop write storm)", async () => {
+    // A streamer that lost the abort/supersede race must not keep inserting
+    // snapshots or patching the run/message docs — that write pressure is what
+    // OCC-starved the next turn's prepareGeneration after a Stop.
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.run.status = "aborted"
+    const { ctx, inserts, patches } = createMutationCtx(fixture.tables)
+
+    await updateAssistantSnapshotForChat(ctx, {
+      runId: fixture.runId,
+      chatId: fixture.chatId,
+      messageId: fixture.messageId,
+      order: 1,
+      sequence: 2,
+      textSnapshot: "late write",
+      partsSnapshot: [{ type: "text", text: "late write" }],
+    })
+
+    expect(inserts).toEqual([])
+    expect(patches).toEqual([])
+    expect(fixture.message.content).toBe("")
   })
 })
 
