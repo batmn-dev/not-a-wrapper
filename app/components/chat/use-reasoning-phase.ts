@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReasoningView } from "@/lib/chat-messages/assistant-turn"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 
 export type ReasoningPhase = {
   phase: "idle" | "thinking" | "complete"
@@ -15,6 +15,20 @@ type UseReasoningPhaseParams = {
   /** The pure reasoning derivation from the Assistant turn view. */
   reasoning: ReasoningView
   isLast: boolean
+  /**
+   * Identity of the turn `reasoning` derives from. The panel's single hook
+   * instance re-targets across turns (default-follow, explicit selection); a
+   * key change is a turn HANDOFF and always restarts the timer from 0. The R1
+   * resume applies only within one turn's isLast bounce.
+   */
+  turnKey: string | undefined
+}
+
+type TimerState = {
+  turnKey: string | undefined
+  phase: ReasoningView["phase"]
+  displaySeconds: number
+  frozenSeconds: number
 }
 
 /**
@@ -26,69 +40,106 @@ type UseReasoningPhaseParams = {
 export function useReasoningPhase({
   reasoning,
   isLast,
+  turnKey,
 }: UseReasoningPhaseParams): ReasoningPhase {
   const { phase, text: reasoningText, isOpaque, persistedDurationMs } =
     reasoning
 
   // Client-side timer.
-  // React 19 render-sync pattern: reset tickedSeconds when entering thinking.
+  // React 19 render-sync pattern: reset timer state when entering thinking.
   // The interval in useEffect ticks every second while shouldRunTimer is true.
-  // When phase leaves "thinking", the interval stops and tickedSeconds
-  // holds the frozen final value.
-  const startTimestampRef = useRef<number | null>(null)
-  const [tickedSeconds, setTickedSeconds] = useState(0)
-  const [prevPhase, setPrevPhase] = useState(phase)
-
-  // Mirror the live tick count in a ref (synced in an effect, never during
-  // render) so the timer effect can resume from the accumulated elapsed time
-  // without listing `tickedSeconds` as a dependency — which would restart the
-  // interval every second (R1).
-  const tickedSecondsRef = useRef(tickedSeconds)
-  useEffect(() => {
-    tickedSecondsRef.current = tickedSeconds
-  }, [tickedSeconds])
+  // When phase leaves "thinking", the interval stops and freezes the final
+  // value into the state used by the next resume.
+  const [timerState, setTimerState] = useState<TimerState>(() => ({
+    turnKey,
+    phase,
+    displaySeconds: 0,
+    frozenSeconds: 0,
+  }))
 
   const shouldRunTimer = isLast && phase === "thinking"
 
-  // React 19 render-sync: reset timer state when entering thinking phase. This
-  // fires only on a genuine phase transition into "thinking" (idle/complete →
-  // thinking), e.g. a fresh turn or regenerate handoff — never during an
-  // isLast bounce where the phase stays "thinking".
-  if (phase !== prevPhase) {
-    setPrevPhase(phase)
-    if (phase === "thinking" && isLast) {
-      setTickedSeconds(0)
-    }
+  // React 19 render-sync: restart the timer on a turn handoff. The phase
+  // transition below cannot catch every handoff — the swap may render before
+  // `isLast` settles, or never transition phase at all (thinking→thinking) —
+  // and either way the R1 anchor would inherit the previous turn's ticks
+  // (e.g. a panel header resuming a settled turn's 9s under a new turn).
+  if (turnKey !== timerState.turnKey) {
+    setTimerState({
+      turnKey,
+      phase,
+      displaySeconds: 0,
+      frozenSeconds: 0,
+    })
+  } else if (phase !== timerState.phase) {
+    // Reset timer state when entering thinking phase. This fires only on a
+    // genuine phase transition into "thinking" (idle/complete → thinking),
+    // e.g. a same-turn regenerate — never during an isLast bounce where the
+    // phase stays "thinking".
+    const resetSeconds = phase === "thinking" && isLast
+    setTimerState({
+      turnKey,
+      phase,
+      displaySeconds: resetSeconds ? 0 : timerState.displaySeconds,
+      frozenSeconds: resetSeconds ? 0 : timerState.frozenSeconds,
+    })
   }
+
+  const tickedSeconds =
+    timerState.turnKey === turnKey ? timerState.displaySeconds : 0
+
+  // The elapsed time used to anchor a new interval changes only when the timer
+  // stops/resumes or is synchronously reset. It does not change on every tick,
+  // so it is safe to depend on without restarting the interval every second.
+  const frozenSeconds =
+    timerState.turnKey === turnKey ? timerState.frozenSeconds : 0
 
   // Tick every second while thinking.
   useEffect(() => {
     if (!shouldRunTimer) return
 
     // R1: anchor the wall clock to the already-accumulated elapsed time so a
-    // same-id `isLast` true→false→true bounce (e.g. regenerate handoff, while
-    // the phase stays "thinking") RESUMES the timer instead of restarting it
-    // from 0 — `tickedSeconds` must never regress mid-stream. On a genuine
-    // fresh "thinking" entry the render-sync reset above has already zeroed
-    // `tickedSeconds`, so `start` collapses to `Date.now()` (unchanged).
-    const start = Date.now() - tickedSecondsRef.current * 1000
-    startTimestampRef.current = start
+    // same-turn `isLast` true→false→true bounce (while the phase stays
+    // "thinking") RESUMES the timer instead of restarting it from 0 —
+    // `tickedSeconds` must never regress mid-stream. On a fresh "thinking"
+    // entry or a turn handoff the render-sync resets above have already
+    // zeroed `frozenSeconds`, so `start` collapses to `Date.now()`.
+    const activeTurnKey = turnKey
+    const start = Date.now() - frozenSeconds * 1000
 
     const interval = setInterval(() => {
-      setTickedSeconds(Math.round((Date.now() - start) / 1000))
+      const elapsedSeconds = Math.round((Date.now() - start) / 1000)
+      setTimerState((current) =>
+        current.turnKey === activeTurnKey
+          ? {
+              ...current,
+              displaySeconds: elapsedSeconds,
+            }
+          : current
+      )
     }, 1000)
 
     return () => {
       clearInterval(interval)
-      // Freeze final value on cleanup
-      if (startTimestampRef.current !== null) {
-        setTickedSeconds(
-          Math.round((Date.now() - startTimestampRef.current) / 1000)
-        )
-        startTimestampRef.current = null
-      }
+      const elapsedSeconds = Math.round((Date.now() - start) / 1000)
+      // Same-turn stop/resume freezes elapsed time. A turn handoff has already
+      // synchronously changed timerState.turnKey, so stale cleanup from the
+      // previous turn is ignored without touching refs during render.
+      setTimerState((current) =>
+        current.turnKey === activeTurnKey
+          ? {
+              ...current,
+              displaySeconds: elapsedSeconds,
+              frozenSeconds: elapsedSeconds,
+            }
+          : current
+      )
     }
-  }, [shouldRunTimer])
+    // `turnKey` is a dep so a handoff that keeps `shouldRunTimer` true
+    // (thinking→thinking swap) tears down the old turn's interval and
+    // re-anchors — the render-sync reset alone can't stop a running interval
+    // still anchored to the previous turn.
+  }, [frozenSeconds, shouldRunTimer, turnKey])
 
   // Compute final durationSeconds.
   // Priority: live timer (last message) > server-persisted duration (historical)

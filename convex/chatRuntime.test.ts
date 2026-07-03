@@ -11,6 +11,7 @@ import {
   markGenerationRunFailedForChat,
   prepareGenerationForChat,
   recordToolInvocationsForChat,
+  updateAssistantSnapshotForChat,
 } from "./chatRuntime"
 import { getSelectedPathMessages } from "./domain/message_branches"
 import { selectBranchForChat } from "./messages"
@@ -126,9 +127,16 @@ function createMutationCtx(
             },
             order: (direction: "asc" | "desc") => {
               results = [...results].sort((a, b) => {
-                const left = (a as unknown as { orderId?: number }).orderId ?? 0
-                const right =
-                  (b as unknown as { orderId?: number }).orderId ?? 0
+                const leftRecord = a as unknown as {
+                  orderId?: number
+                  sequence?: number
+                }
+                const rightRecord = b as unknown as {
+                  orderId?: number
+                  sequence?: number
+                }
+                const left = leftRecord.sequence ?? leftRecord.orderId ?? 0
+                const right = rightRecord.sequence ?? rightRecord.orderId ?? 0
                 return direction === "desc" ? right - left : left - right
               })
               return resultApi
@@ -329,6 +337,15 @@ function createGenerationRunLinkageFixture() {
     runId: otherRunId,
     orderId: 2,
   })
+  const tables: TableDocuments = {
+    toolApprovalRequests: [],
+    generationRuns: [run],
+    messages: [message, otherMessage],
+    assistantMessageSnapshots: [],
+    toolInvocations: [],
+    users: [user],
+    chats: [chat],
+  }
 
   return {
     user,
@@ -342,12 +359,7 @@ function createGenerationRunLinkageFixture() {
     run,
     message,
     otherMessage,
-    tables: {
-      users: [user],
-      chats: [chat],
-      generationRuns: [run],
-      messages: [message, otherMessage],
-    },
+    tables,
   }
 }
 
@@ -2373,6 +2385,112 @@ describe("generation run linkage validation", () => {
 
     expect(inserts).toEqual([])
     expect(patches).toEqual([])
+  })
+})
+
+describe("updateAssistantSnapshotForChat", () => {
+  it("persists the snapshot and keeps the run/message streaming while the run is active", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    const { ctx, inserts } = createMutationCtx(fixture.tables)
+
+    await updateAssistantSnapshotForChat(ctx, {
+      runId: fixture.runId,
+      chatId: fixture.chatId,
+      messageId: fixture.messageId,
+      order: 1,
+      sequence: 1,
+      textSnapshot: "partial",
+      partsSnapshot: [{ type: "text", text: "partial" }],
+    })
+
+    expect(inserts).toHaveLength(1)
+    expect(fixture.message.content).toBe("partial")
+    expect(fixture.message.status).toBe("streaming")
+    expect(fixture.run.status).toBe("streaming")
+  })
+
+  it("rejects snapshots for assistant messages outside the run", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    const { ctx, inserts, patches } = createMutationCtx(fixture.tables)
+
+    await expect(
+      updateAssistantSnapshotForChat(ctx, {
+        runId: fixture.runId,
+        chatId: fixture.chatId,
+        messageId: fixture.otherMessageId,
+        order: 2,
+        sequence: 1,
+        textSnapshot: "wrong turn",
+        partsSnapshot: [{ type: "text", text: "wrong turn" }],
+      })
+    ).rejects.toThrow("Assistant message not found for run")
+
+    expect(inserts).toEqual([])
+    expect(patches).toEqual([])
+    expect(fixture.otherMessage.content).toBe("")
+    expect(fixture.otherMessage.status).toBe("streaming")
+    expect(fixture.run.status).toBe("streaming")
+  })
+
+  it("does not let late lower-sequence snapshots overwrite newer content", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.message.content = "newer"
+    fixture.message.parts = [{ type: "text", text: "newer" }]
+    fixture.tables.assistantMessageSnapshots = [
+      {
+        _id: asId<"assistantMessageSnapshots">("snapshot_existing"),
+        _creationTime: 1,
+        runId: fixture.runId,
+        chatId: fixture.chatId,
+        messageId: fixture.messageId,
+        order: 1,
+        stepOrder: 0,
+        sequence: 2,
+        format: "text_snapshot",
+        textSnapshot: "newer",
+        partsSnapshot: [{ type: "text", text: "newer" }],
+        createdAt: 1,
+      },
+    ]
+    const { ctx, inserts, patches } = createMutationCtx(fixture.tables)
+
+    await updateAssistantSnapshotForChat(ctx, {
+      runId: fixture.runId,
+      chatId: fixture.chatId,
+      messageId: fixture.messageId,
+      order: 1,
+      sequence: 1,
+      textSnapshot: "stale",
+      partsSnapshot: [{ type: "text", text: "stale" }],
+    })
+
+    expect(inserts).toHaveLength(1)
+    expect(patches).toEqual([])
+    expect(fixture.message.content).toBe("newer")
+    expect(fixture.message.parts).toEqual([{ type: "text", text: "newer" }])
+  })
+
+  it("becomes a no-op once the run is terminal (post-Stop write storm)", async () => {
+    // A streamer that lost the abort/supersede race must not keep inserting
+    // snapshots or patching the run/message docs — that write pressure is what
+    // OCC-starved the next turn's prepareGeneration after a Stop.
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.run.status = "aborted"
+    const { ctx, inserts, patches } = createMutationCtx(fixture.tables)
+
+    await updateAssistantSnapshotForChat(ctx, {
+      runId: fixture.runId,
+      chatId: fixture.chatId,
+      messageId: fixture.messageId,
+      order: 1,
+      sequence: 2,
+      textSnapshot: "late write",
+      partsSnapshot: [{ type: "text", text: "late write" }],
+    })
+
+    expect(inserts).toEqual([])
+    expect(patches).toEqual([])
+    expect(fixture.message.content).toBe("")
   })
 })
 

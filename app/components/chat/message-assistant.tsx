@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/message"
 import { SystemMessage } from "@/components/ui/system-message"
 import {
-  deriveAssistantLoadingState,
+  deriveAssistantTurnIndicator,
+  deriveAssistantTurnPhase,
   type AssistantTurnView,
 } from "@/lib/chat-messages/assistant-turn"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
@@ -26,10 +27,7 @@ import {
   useActivityPanelId,
   useIsActivityPanelTurnOpen,
 } from "./activity/activity-panel-store"
-import {
-  ActivityPanelTrigger,
-  type ActivityTriggerState,
-} from "./activity/activity-panel-trigger"
+import { ActivityPanelTrigger } from "./activity/activity-panel-trigger"
 import { QuoteButton } from "./quote-button"
 import { SearchImages } from "./search-images"
 import { ToolInvocation } from "./tool-invocation"
@@ -59,28 +57,6 @@ type MessageAssistantProps = {
 
 const STREAMING_INDICATOR_VARIANT: StreamingIndicatorVariant = "caret"
 
-function formatToolProgressLabel(toolName: string): string {
-  switch (toolName) {
-    case "web_search":
-    case "google_search":
-      return "Searching the web"
-    case "imageGeneration":
-    case "image_generation":
-      return "Generating image"
-    default: {
-      const readableName = toolName
-        .replace(/_/g, " ")
-        .replace(/([a-z])([A-Z])/g, "$1 $2")
-        .trim()
-      const normalized =
-        readableName.length > 0
-          ? readableName.charAt(0).toUpperCase() + readableName.slice(1)
-          : "Running tool"
-      return `Running ${normalized}`
-    }
-  }
-}
-
 export function MessageAssistant({
   children,
   view,
@@ -97,21 +73,14 @@ export function MessageAssistant({
   onToolApproval,
 }: MessageAssistantProps) {
   const { preferences } = useUserPreferences()
-  const { sources, toolParts, searchImageResults, reasoning } = view
+  const { toolParts, searchImageResults } = view
   // Regeneration is a server-owned Chat turn, available only on a durable
   // chat. Matches the turn-controller precondition. See CONTEXT.md "Chat turn".
   const canRegenerate = Boolean(onReload) && Boolean(isDurableChat)
 
   const contentNullOrEmpty = children === null || children === ""
   const isLastStreaming = status === "streaming" && isLast
-  const isSubmittedPending = status === "submitted" && isLast
   const hasContent = !contentNullOrEmpty
-  const loadingStatus: "streaming" | "ready" | "submitted" | "error" =
-    status === "streaming" || status === "submitted" || status === "error"
-      ? status
-      : status === "failed"
-        ? "error"
-        : "ready"
 
   // Reasoning + sources live in the Chat-owned Activity panel. Each assistant
   // row with activity keeps its own trigger; only the row currently projected
@@ -123,44 +92,16 @@ export function MessageAssistant({
     messageId,
     view.serverMessageId
   )
-  const hasReasoningPart = reasoning.phase !== "idle"
-  const isReasoningStreaming = reasoning.isStreaming
-  const hasSources = sources.length > 0
-  const hasToolActivity = toolParts.length > 0
-  const showActivityTrigger =
-    Boolean(panelActions) &&
-    (isSubmittedPending ||
-      isReasoningStreaming ||
-      hasReasoningPart ||
-      hasSources ||
-      hasToolActivity)
-  const reasoningDurationSeconds =
-    reasoning.persistedDurationMs !== undefined
-      ? Math.round(reasoning.persistedDurationMs / 1000)
-      : undefined
-  // Compose the trigger's thinking state: live "Thinking" while reasoning
-  // streams, then "Thought for {duration}" once it completes, else a source
-  // count or the generic label.
-  const activityState: ActivityTriggerState =
-    isSubmittedPending || isReasoningStreaming
-      ? { status: "thinking" }
-      : hasReasoningPart
-        ? { status: "thought", durationSeconds: reasoningDurationSeconds }
-        : hasSources
-          ? { status: "sources", count: sources.length }
-          : { status: "activity" }
 
-  const {
-    showDots: showStreamingLoader,
-    showToolProgress,
-    showImageGenProgress,
-    activeToolNames,
-  } = deriveAssistantLoadingState(view, {
-    status: loadingStatus,
+  // The canonical turn phase and its single indicator — every loading
+  // affordance on this row is a presentation of `phase`. See CONTEXT.md
+  // "Assistant turn view" and the derivation in lib/chat-messages.
+  const phase = deriveAssistantTurnPhase(view, {
+    status: status ?? "ready",
     isLast: isLast ?? false,
-    contentNullOrEmpty,
-    showToolInvocations: preferences.showToolInvocations,
   })
+  const indicator = deriveAssistantTurnIndicator(phase, view)
+  const turnActive = phase.kind !== "settled"
 
   const messageRef = useRef<HTMLDivElement>(null)
   const { selectionInfo, clearSelection } = useAssistantMessageSelection(
@@ -223,6 +164,7 @@ export function MessageAssistant({
       as="div"
       className={cn("flex w-full flex-col gap-2", className)}
       data-turn="assistant"
+      data-turn-phase={phase.kind}
       data-message-id={messageId}
       data-message-author-role="assistant"
       data-scroll-anchor={isLast ? "true" : "false"}
@@ -242,18 +184,8 @@ export function MessageAssistant({
           <ToolInvocation
             toolInvocations={toolParts}
             metadata={view.metadata}
+            turnActive={turnActive}
             onToolApproval={onToolApproval}
-          />
-        )}
-
-        {showToolProgress && (
-          <Loader
-            variant="loading-dots"
-            text={
-              activeToolNames.length === 1
-                ? formatToolProgressLabel(activeToolNames[0])
-                : "Running tools"
-            }
           />
         )}
 
@@ -261,11 +193,11 @@ export function MessageAssistant({
           <SearchImages results={searchImageResults} />
         )}
 
-        {showImageGenProgress && (
-          <Loader variant="loading-dots" text="Generating image" />
-        )}
-
-        {showStreamingLoader && (
+        {/* The single indicator slot — renders the one presentation of the
+            turn phase. Mutually exclusive by construction: `indicator` is a
+            single discriminated value, so this slot can never stack a loader
+            under a live trigger the way the old per-affordance gates could. */}
+        {indicator.kind === "generating" && (
           <Loader
             variant="text-shimmer"
             text="Generating"
@@ -274,14 +206,14 @@ export function MessageAssistant({
           />
         )}
 
-        {showActivityTrigger && panelActions && (
+        {indicator.kind === "trigger" && panelActions && (
           <div className="flex items-center justify-between">
             <div className="flex min-w-0 items-center">
               <ActivityPanelTrigger
                 open={isPanelTurnOpen}
                 onOpenChange={handleActivityTriggerOpenChange}
                 controlsId={panelId}
-                state={activityState}
+                state={indicator.state}
               />
             </div>
           </div>

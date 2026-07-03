@@ -25,6 +25,7 @@
 import type { UIMessage } from "ai"
 import type { SourceUrlUIPart, ToolUIPart } from "ai"
 import { getStaticToolName, isStaticToolUIPart } from "ai"
+import type { DurableMessageStatus } from "./durable-contract"
 import { getReasoningDurationMs, getServerMessageId } from "./metadata"
 import {
   extractTextFromMessageParts,
@@ -101,13 +102,35 @@ export function deriveReasoningView(
   metadata?: unknown
 ): ReasoningView {
   const reasoningParts = parts?.filter((p) => p.type === "reasoning") ?? []
+  const persistedDurationMs = getReasoningDurationMs(metadata)
+
+  // A persisted duration is durable evidence that reasoning happened even
+  // when the stored parts carry no reasoning part (the persist layer drops
+  // empty opaque reasoning). Without this, a turn that read "Thought for Ns"
+  // while settling would lose its trigger the moment the durable snapshot is
+  // adopted — the same turn rendering two different settled states.
+  if (reasoningParts.length === 0 && persistedDurationMs !== undefined) {
+    return {
+      phase: "complete",
+      text: "",
+      isStreaming: false,
+      isOpaque: true,
+      persistedDurationMs,
+    }
+  }
 
   let phase: ReasoningView["phase"] = "idle"
   let text = ""
 
-  const isAnyStreaming = reasoningParts.some(
-    (p) => (p as { state?: string }).state === "streaming"
-  )
+  // A raw "streaming" part state only means "thinking" while the chat status
+  // itself is live. An abort/stop/error freezes part states in place without a
+  // terminal transition, so a stuck "streaming" part on a settled turn must
+  // read as complete — otherwise the trigger shimmers and the panel timer
+  // ticks forever after Stop.
+  const isLiveStatus = status === "streaming" || status === "submitted"
+  const isAnyStreaming =
+    isLiveStatus &&
+    reasoningParts.some((p) => (p as { state?: string }).state === "streaming")
 
   if (reasoningParts.length > 0) {
     const joined = reasoningParts.map((p) => p.text).join("\n\n")
@@ -138,7 +161,7 @@ export function deriveReasoningView(
     text,
     isStreaming: isAnyStreaming,
     isOpaque: phase !== "idle" && !text.trim(),
-    persistedDurationMs: getReasoningDurationMs(metadata),
+    persistedDurationMs,
   }
 }
 
@@ -209,12 +232,59 @@ export function assistantTurnViewsEqual(
   )
 }
 
-export type AssistantLoadingState = {
-  showDots: boolean
-  showToolProgress: boolean
-  showImageGenProgress: boolean
-  activeToolNames: string[]
-}
+/**
+ * The canonical Assistant turn phase — the single answer to "what is this
+ * turn doing right now?", derived once per row render. Every loading/progress
+ * affordance on the row (activity trigger, loaders, tool chips, panel timer)
+ * is a PRESENTATION of this value; none re-derives its own gate from raw
+ * parts/status, which is how two indicators used to be true at once.
+ *
+ * Discriminated union, not booleans: the kinds are mutually exclusive by
+ * construction (a first-match ladder), so a new capability adds a kind or a
+ * presentation — it cannot add a second simultaneous indicator.
+ */
+export type AssistantTurnPhase =
+  | { kind: "submitted" }
+  | { kind: "thinking"; visibility: "visible" | "opaque" }
+  | { kind: "generating-image" }
+  | { kind: "tooling"; toolNames: string[] }
+  | { kind: "awaiting-approval" }
+  | { kind: "generating" }
+  | { kind: "responding" }
+  | { kind: "settled" }
+
+/**
+ * The row render status the phase ladder consumes: the client stream status
+ * for the turn this client owns, plus the durable settled/paused sub-states
+ * adopted from the server (aborted/failed/awaiting_approval). Durable LIVE
+ * statuses (submitted/streaming) are deliberately not trusted here — after a
+ * Stop or a dropped stream the server-side run can lag its terminal
+ * transition by up to a minute, and the row must settle on the client's
+ * verdict immediately.
+ */
+export type AssistantTurnRenderStatus = ChatStatus | DurableMessageStatus
+
+/**
+ * The thinking states the activity trigger can display. Lives here (not in
+ * the trigger component) because it is derived data: the indicator derivation
+ * below produces it from the phase, and the trigger only renders it.
+ */
+export type ActivityTriggerState =
+  | { status: "thinking" }
+  | { status: "running"; label: string }
+  | { status: "thought"; durationSeconds?: number }
+  | { status: "sources"; count: number }
+  | { status: "activity" }
+
+/**
+ * Exactly one indicator per turn — the value the row's single indicator slot
+ * renders. `generating` is the plain shimmer loader (a turn with no openable
+ * activity); `trigger` is the activity panel trigger in one of its states.
+ */
+export type AssistantTurnIndicator =
+  | { kind: "none" }
+  | { kind: "generating" }
+  | { kind: "trigger"; state: ActivityTriggerState }
 
 const IMAGE_GENERATION_TOOL_NAMES = new Set([
   "imageGeneration",
@@ -222,63 +292,163 @@ const IMAGE_GENERATION_TOOL_NAMES = new Set([
 ])
 
 /**
- * Loading affordances for a streaming assistant row, derived from the view.
- * Folded from the former use-loading-state hook (it held no state — only a
- * memo over the same part-derivations this module now owns).
+ * Tool part states that mean "work is in flight". Approval states are
+ * deliberately excluded: `approval-requested` is the paused awaiting-approval
+ * phase (rendering it as "Running" contradicted the Review chip), and a
+ * denied `approval-responded` will never run. An approved response is
+ * in flight — the tool is about to execute.
  */
-export function deriveAssistantLoadingState(
+function isInFlightToolPart(part: ToolUIPart): boolean {
+  if (part.state === "input-streaming" || part.state === "input-available") {
+    return true
+  }
+  return (
+    part.state === "approval-responded" &&
+    "approval" in part &&
+    (part as { approval?: { approved?: boolean } }).approval?.approved === true
+  )
+}
+
+/**
+ * Derive the canonical turn phase. A first-match ladder over one liveness
+ * fact: only the last turn, while THIS client's stream is submitted/streaming,
+ * is ever in a live phase. Everything else — historical rows, stopped or
+ * errored streams, turns another session may still be running — is settled,
+ * so raw in-progress part states frozen by an abort can never keep a live
+ * indicator on screen.
+ */
+export function deriveAssistantTurnPhase(
   view: AssistantTurnView,
   {
     status,
     isLast,
-    contentNullOrEmpty,
-    showToolInvocations,
   }: {
-    status: ChatStatus
+    status: AssistantTurnRenderStatus
     isLast: boolean
-    contentNullOrEmpty: boolean
-    showToolInvocations: boolean
   }
-): AssistantLoadingState {
-  const isLastStreaming = status === "streaming" && isLast
+): AssistantTurnPhase {
+  // A durable approval pause is authoritative wherever it appears.
+  if (status === "awaiting_approval") return { kind: "awaiting-approval" }
 
-  // Suppress generating dots only when reasoning has visible text.
-  const hasVisibleReasoning =
-    view.reasoning.phase !== "idle" && !view.reasoning.isOpaque
+  const isLive =
+    isLast && (status === "submitted" || status === "streaming")
+  if (!isLive) return { kind: "settled" }
 
-  const hasVisibleTools = Boolean(
-    view.toolParts.length > 0 && showToolInvocations
-  )
-  const inProgressToolParts = view.toolParts.filter(
-    (part) => part.state !== "output-available"
-  )
-  const activeToolNames = Array.from(
-    new Set(inProgressToolParts.map((part) => getStaticToolName(part)))
-  )
-  const showToolProgress =
-    isLastStreaming && showToolInvocations && inProgressToolParts.length > 0
+  if (status === "submitted") return { kind: "submitted" }
 
-  const showImageGenProgress =
-    isLastStreaming &&
-    inProgressToolParts.some((part) =>
+  if (view.toolParts.some((part) => part.state === "approval-requested")) {
+    return { kind: "awaiting-approval" }
+  }
+
+  const inFlightToolParts = view.toolParts.filter(isInFlightToolPart)
+  if (
+    inFlightToolParts.some((part) =>
       IMAGE_GENERATION_TOOL_NAMES.has(getStaticToolName(part))
     )
+  ) {
+    return { kind: "generating-image" }
+  }
+  if (inFlightToolParts.length > 0) {
+    return {
+      kind: "tooling",
+      toolNames: Array.from(
+        new Set(inFlightToolParts.map((part) => getStaticToolName(part)))
+      ),
+    }
+  }
 
-  const hasVisibleImages = view.searchImageResults.length > 0
+  if (view.reasoning.phase === "thinking") {
+    return {
+      kind: "thinking",
+      visibility: view.reasoning.isOpaque ? "opaque" : "visible",
+    }
+  }
 
-  const showDots =
-    isLastStreaming &&
-    contentNullOrEmpty &&
-    !hasVisibleReasoning &&
-    !hasVisibleTools &&
-    !hasVisibleImages &&
-    !showToolProgress &&
-    !showImageGenProgress
+  // Substance = anything of this turn already on screen (text, tool cards,
+  // image results) or invisible-but-real activity (opaque reasoning that
+  // finished). With substance the turn reads as responding; without it the
+  // bare stream shows the generating shimmer.
+  const hasSubstance =
+    view.text.length > 0 ||
+    view.toolParts.length > 0 ||
+    view.searchImageResults.length > 0 ||
+    view.reasoning.phase !== "idle"
+  return hasSubstance ? { kind: "responding" } : { kind: "generating" }
+}
 
-  return {
-    showDots,
-    showToolProgress,
-    showImageGenProgress,
-    activeToolNames,
+function toolProgressLabel(toolNames: string[]): string {
+  if (toolNames.length !== 1) return "Running tools"
+  const toolName = toolNames[0]
+  switch (toolName) {
+    case "web_search":
+    case "google_search":
+      return "Searching the web"
+    case "imageGeneration":
+    case "image_generation":
+      return "Generating image"
+    default: {
+      const readableName = toolName
+        .replace(/_/g, " ")
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .trim()
+      return readableName.length > 0
+        ? `Running ${readableName.charAt(0).toUpperCase()}${readableName.slice(1)}`
+        : "Running tool"
+    }
+  }
+}
+
+/** The settled trigger label: reasoning wins, then sources, then generic
+ * activity; a turn with none of them renders no trigger at all. */
+function settledTriggerState(
+  view: AssistantTurnView
+): ActivityTriggerState | null {
+  if (view.reasoning.phase !== "idle") {
+    return {
+      status: "thought",
+      durationSeconds:
+        view.reasoning.persistedDurationMs !== undefined
+          ? Math.round(view.reasoning.persistedDurationMs / 1000)
+          : undefined,
+    }
+  }
+  if (view.sources.length > 0) {
+    return { status: "sources", count: view.sources.length }
+  }
+  if (view.toolParts.length > 0) return { status: "activity" }
+  return null
+}
+
+/**
+ * Map the phase to the ONE indicator the row's slot renders. Total over the
+ * phase union (exhaustive switch), and single-valued by type — the
+ * "two indicators at once" bug class is unrepresentable downstream of this.
+ */
+export function deriveAssistantTurnIndicator(
+  phase: AssistantTurnPhase,
+  view: AssistantTurnView
+): AssistantTurnIndicator {
+  switch (phase.kind) {
+    case "submitted":
+    case "thinking":
+      return { kind: "trigger", state: { status: "thinking" } }
+    case "generating-image":
+      return {
+        kind: "trigger",
+        state: { status: "running", label: "Generating image" },
+      }
+    case "tooling":
+      return {
+        kind: "trigger",
+        state: { status: "running", label: toolProgressLabel(phase.toolNames) },
+      }
+    case "generating":
+      return { kind: "generating" }
+    case "awaiting-approval":
+    case "responding":
+    case "settled": {
+      const settled = settledTriggerState(view)
+      return settled ? { kind: "trigger", state: settled } : { kind: "none" }
+    }
   }
 }
