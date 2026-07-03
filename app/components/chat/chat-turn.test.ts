@@ -1,5 +1,5 @@
 import { createChatTurnStore } from "@/lib/chat-store/turns/chat-turn-service"
-import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
+import { MESSAGE_MAX_LENGTH, SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   createChatTurnController,
@@ -305,6 +305,28 @@ describe("chat turn controller", () => {
         }),
       }
     )
+  })
+
+  it("rejects an over-limit send before any side effect — no chat creation, no optimistic bubble, no flags", async () => {
+    const { adapters, controller } = createHarness()
+    const onSuccess = vi.fn()
+
+    await controller.runSendTurn({
+      text: "x".repeat(MESSAGE_MAX_LENGTH + 1),
+      onSuccess,
+    })
+
+    expect(adapters.toastError).toHaveBeenCalledWith(
+      `The message you submitted was too long, please submit something shorter. (Max ${MESSAGE_MAX_LENGTH} characters)`
+    )
+    // A rejected payload must leave no trace: previously the guard ran after
+    // ensureChatExists, so a too-long new-chat send created, titled, and
+    // navigated to an empty orphan chat before rejecting.
+    expect(adapters.ensureChatExists).not.toHaveBeenCalled()
+    expect(adapters.setMessages).not.toHaveBeenCalled()
+    expect(adapters.sendMessage).not.toHaveBeenCalled()
+    expect(adapters.setIsSending).not.toHaveBeenCalled()
+    expect(onSuccess).not.toHaveBeenCalled()
   })
 
   it("runs suggestions through send behavior with the suggestion error message and chatVersion", async () => {

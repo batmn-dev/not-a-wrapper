@@ -18,6 +18,8 @@ import { MESSAGE_MAX_LENGTH } from "@/lib/config"
 
 export type { ChatTurnMessage } from "@/lib/chat-store/turns/chat-turn-service"
 
+const MESSAGE_TOO_LONG_ERROR = `The message you submitted was too long, please submit something shorter. (Max ${MESSAGE_MAX_LENGTH} characters)`
+
 type SetMessagesAction =
   | ChatTurnMessage[]
   | ((messages: ChatTurnMessage[]) => ChatTurnMessage[])
@@ -199,6 +201,17 @@ export async function runSendTurn(
   }: SendTurnArgs
 ) {
   if (adapters.getIsSending()) return
+
+  // Validate the payload before ANY side effect. This guard once lived after
+  // ensureChatExists, so a rejected new-chat send had already created, titled
+  // (from the rejected text), and navigated to an empty orphan chat. A
+  // rejected turn must leave no trace: no chat, no navigation, no optimistic
+  // bubble — the Composer restores the payload and the user fixes it in place.
+  if (text.length > MESSAGE_MAX_LENGTH) {
+    adapters.toastError(MESSAGE_TOO_LONG_ERROR)
+    return
+  }
+
   adapters.setIsSending(true)
   adapters.setIsSubmitting(true)
 
@@ -260,14 +273,6 @@ export async function runSendTurn(
     }
 
     adapters.setPreviousChatId(currentChatId)
-
-    if (text.length > MESSAGE_MAX_LENGTH) {
-      adapters.toastError(
-        `The message you submitted was too long, please submit something shorter. (Max ${MESSAGE_MAX_LENGTH} characters)`
-      )
-      removeOptimistic()
-      return
-    }
 
     let attachments: UploadedAttachment[] | null = []
     if (submittedFiles.length > 0) {
@@ -397,10 +402,8 @@ export async function runEditTurn(
   }
 
   if (newContent.length > MESSAGE_MAX_LENGTH) {
-    const message =
-      `The message you submitted was too long, please submit something shorter. (Max ${MESSAGE_MAX_LENGTH} characters)`
-    adapters.toastError(message)
-    return reject("message-too-long", message)
+    adapters.toastError(MESSAGE_TOO_LONG_ERROR)
+    return reject("message-too-long", MESSAGE_TOO_LONG_ERROR)
   }
 
   if (!editPlan.ok) {
