@@ -43,7 +43,10 @@ describe("anthropicReplayCompiler", () => {
       },
     ]
 
-    const result = await anthropicReplayCompiler.compileReplay(messages, context)
+    const result = await anthropicReplayCompiler.compileReplay(
+      messages,
+      context
+    )
 
     expect(result.warnings).toHaveLength(0)
     expect(result.messages).toHaveLength(1)
@@ -104,7 +107,10 @@ describe("anthropicReplayCompiler", () => {
       },
     ]
 
-    const result = await anthropicReplayCompiler.compileReplay(messages, context)
+    const result = await anthropicReplayCompiler.compileReplay(
+      messages,
+      context
+    )
 
     expect(result.messages[0].parts).toEqual([
       {
@@ -112,7 +118,11 @@ describe("anthropicReplayCompiler", () => {
         text: 'Replay context from prior web_search for "Batman merch":\n- Merch (https://example.com/merch) - Listing',
       },
     ])
-    expect(result.warnings.some((warning) => warning.code === "invariant_block_dropped")).toBe(true)
+    expect(
+      result.warnings.some(
+        (warning) => warning.code === "invariant_block_dropped"
+      )
+    ).toBe(true)
     expect(result.stats.toolExchangesCompiled).toBe(0)
     expect(result.stats.toolExchangesDropped).toBe(1)
   })
@@ -143,7 +153,10 @@ describe("anthropicReplayCompiler", () => {
       },
     ]
 
-    const result = await anthropicReplayCompiler.compileReplay(messages, context)
+    const result = await anthropicReplayCompiler.compileReplay(
+      messages,
+      context
+    )
 
     expect(result.messages).toHaveLength(1)
     expect(result.messages[0].parts).toEqual([
@@ -152,7 +165,9 @@ describe("anthropicReplayCompiler", () => {
         text: 'Replay note: web_search for "Batman masks" was omitted for Anthropic-safe replay.',
       },
     ])
-    expect(result.warnings.some((warning) => warning.code === "tool_non_replayable")).toBe(true)
+    expect(
+      result.warnings.some((warning) => warning.code === "tool_non_replayable")
+    ).toBe(true)
     expect(result.stats.toolExchangesSeen).toBe(1)
     expect(result.stats.toolExchangesCompiled).toBe(0)
     expect(result.stats.toolExchangesDropped).toBe(1)

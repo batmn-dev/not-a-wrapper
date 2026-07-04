@@ -8,13 +8,15 @@ import {
   reasoningPlusText,
   singleProviderExecutedTool,
   singleSdkToolComplete,
-  textOnlyConversation,
   textOnlyAssistant,
+  textOnlyConversation,
   userMessage,
 } from "./fixtures"
 
 function hasPartType(messages: UIMessage[], type: string): boolean {
-  return messages.some((message) => message.parts.some((part) => part.type === type))
+  return messages.some((message) =>
+    message.parts.some((part) => part.type === type)
+  )
 }
 
 function getAssistantMessages(messages: UIMessage[]): UIMessage[] {
@@ -39,7 +41,11 @@ function assertOpenAIAtomicToolStructure(messages: UIMessage[]): void {
         continue
       }
 
-      expect(message.parts.slice(0, index).some((candidate) => candidate.type === "reasoning")).toBe(true)
+      expect(
+        message.parts
+          .slice(0, index)
+          .some((candidate) => candidate.type === "reasoning")
+      ).toBe(true)
     }
   }
 }
@@ -70,13 +76,20 @@ describe("cross-provider replay matrix", () => {
 
     it("regression: handles OpenAI action/sources web_search replay without compile fallback", async () => {
       const regressionHistory: UIMessage[] = [
-        userMessage("reg-openai-anthropic-user-1", "Find Batman products on Amazon"),
+        userMessage(
+          "reg-openai-anthropic-user-1",
+          "Find Batman products on Amazon"
+        ),
         {
           id: "reg-openai-anthropic-assistant-1",
           role: "assistant",
           parts: [
             { type: "step-start" },
-            { type: "reasoning", reasoning: "I will check Amazon listings.", state: "done" },
+            {
+              type: "reasoning",
+              reasoning: "I will check Amazon listings.",
+              state: "done",
+            },
             {
               type: "tool-web_search",
               state: "output-available",
@@ -104,31 +117,45 @@ describe("cross-provider replay matrix", () => {
             { type: "text", text: "I found Amazon links and product context." },
           ],
         } as UIMessage,
-        userMessage("reg-openai-anthropic-user-2", "Why were links missing before?"),
+        userMessage(
+          "reg-openai-anthropic-user-2",
+          "Why were links missing before?"
+        ),
       ]
 
-      const result = await adaptHistoryForProvider(regressionHistory, provider, context, {
-        useReplayCompiler: true,
-      })
-      const assistant = result.messages.find((message) => message.role === "assistant")
+      const result = await adaptHistoryForProvider(
+        regressionHistory,
+        provider,
+        context,
+        {
+          useReplayCompiler: true,
+        }
+      )
+      const assistant = result.messages.find(
+        (message) => message.role === "assistant"
+      )
       const hasCompiledWebSearch = Boolean(
-        assistant?.parts.some((part) => part.type === "tool-web_search"),
+        assistant?.parts.some((part) => part.type === "tool-web_search")
       )
       const continuityTextKept = Boolean(
         assistant?.parts.some(
           (part) =>
             part.type === "text" &&
             typeof (part as { text?: unknown }).text === "string" &&
-            (part as { text: string }).text.includes("Amazon links"),
-        ),
+            (part as { text: string }).text.includes("Amazon links")
+        )
       )
       const replayDropWarning = result.warnings.some(
         (warning) =>
           warning.code === "replay_compile_warning" &&
-          warning.detail.includes("invariant_block_dropped"),
+          warning.detail.includes("invariant_block_dropped")
       )
 
-      expect(result.warnings.some((warning) => warning.code === "replay_compile_fallback")).toBe(false)
+      expect(
+        result.warnings.some(
+          (warning) => warning.code === "replay_compile_fallback"
+        )
+      ).toBe(false)
       expect(hasCompiledWebSearch).toBe(false)
       expect(replayDropWarning).toBe(true)
       expect(continuityTextKept).toBe(true)
@@ -137,24 +164,41 @@ describe("cross-provider replay matrix", () => {
           (part) =>
             part.type === "text" &&
             typeof (part as { text?: unknown }).text === "string" &&
-            (part as { text: string }).text.includes("Replay context from prior web_search"),
-        ),
+            (part as { text: string }).text.includes(
+              "Replay context from prior web_search"
+            )
+        )
       ).toBe(true)
-
     })
 
     it("keeps text-only history unchanged", async () => {
-      const result = await adaptHistoryForProvider(textOnlyConversation, provider, context)
-      expect(getAssistantMessages(result.messages).every((message) => hasPartType([message], "text"))).toBe(true)
+      const result = await adaptHistoryForProvider(
+        textOnlyConversation,
+        provider,
+        context
+      )
+      expect(
+        getAssistantMessages(result.messages).every((message) =>
+          hasPartType([message], "text")
+        )
+      ).toBe(true)
     })
 
     it("preserves reasoning parts", async () => {
-      const result = await adaptHistoryForProvider([reasoningPlusText], provider, context)
+      const result = await adaptHistoryForProvider(
+        [reasoningPlusText],
+        provider,
+        context
+      )
       expect(hasPartType(result.messages, "reasoning")).toBe(true)
     })
 
     it("converts incompatible web_search replay into text and strips cross-provider metadata", async () => {
-      const result = await adaptHistoryForProvider([singleProviderExecutedTool], provider, context)
+      const result = await adaptHistoryForProvider(
+        [singleProviderExecutedTool],
+        provider,
+        context
+      )
       expect(hasPartType(result.messages, "tool-web_search")).toBe(false)
       expect(hasPartType(result.messages, "text")).toBe(true)
       assertNoCallProviderMetadata(result.messages)
@@ -162,18 +206,29 @@ describe("cross-provider replay matrix", () => {
     })
 
     it("keeps reasoning + tool chains", async () => {
-      const result = await adaptHistoryForProvider([multiStepToolChain], provider, context)
+      const result = await adaptHistoryForProvider(
+        [multiStepToolChain],
+        provider,
+        context
+      )
       expect(hasPartType(result.messages, "reasoning")).toBe(true)
       expect(hasPartType(result.messages, "tool-web_search")).toBe(false)
       expect(hasPartType(result.messages, "tool-exa_search")).toBe(true)
     })
 
     it("keeps provider-executed and SDK-executed tools", async () => {
-      const result = await adaptHistoryForProvider([mixedProviderAndSdkTools], provider, context)
-      const parts = result.messages[0]?.parts ?? []
-      expect(parts.some((part) => (part as { providerExecuted?: boolean }).providerExecuted === false)).toBe(
-        true,
+      const result = await adaptHistoryForProvider(
+        [mixedProviderAndSdkTools],
+        provider,
+        context
       )
+      const parts = result.messages[0]?.parts ?? []
+      expect(
+        parts.some(
+          (part) =>
+            (part as { providerExecuted?: boolean }).providerExecuted === false
+        )
+      ).toBe(true)
       expect(parts.some((part) => part.type === "text")).toBe(true)
     })
   })
@@ -183,36 +238,64 @@ describe("cross-provider replay matrix", () => {
     const context = { targetModelId: "gpt-5.2", hasTools: true }
 
     it("keeps text-only history valid", async () => {
-      const result = await adaptHistoryForProvider(textOnlyConversation, provider, context)
-      expect(getAssistantMessages(result.messages).every((message) => hasPartType([message], "text"))).toBe(true)
+      const result = await adaptHistoryForProvider(
+        textOnlyConversation,
+        provider,
+        context
+      )
+      expect(
+        getAssistantMessages(result.messages).every((message) =>
+          hasPartType([message], "text")
+        )
+      ).toBe(true)
     })
 
     it("keeps reasoning when paired with text", async () => {
-      const result = await adaptHistoryForProvider([reasoningPlusText], provider, context)
+      const result = await adaptHistoryForProvider(
+        [reasoningPlusText],
+        provider,
+        context
+      )
       expect(hasPartType(result.messages, "reasoning")).toBe(true)
     })
 
     it("enforces atomic triples for tool calls", async () => {
-      const result = await adaptHistoryForProvider([singleSdkToolComplete], provider, context)
+      const result = await adaptHistoryForProvider(
+        [singleSdkToolComplete],
+        provider,
+        context
+      )
       expect(hasPartType(result.messages, "tool-exa_search")).toBe(true)
       assertOpenAIAtomicToolStructure(result.messages)
     })
 
     it("enforces atomic triples for reasoning + tool chains", async () => {
-      const result = await adaptHistoryForProvider([multiStepToolChain], provider, context)
+      const result = await adaptHistoryForProvider(
+        [multiStepToolChain],
+        provider,
+        context
+      )
       expect(hasPartType(result.messages, "reasoning")).toBe(true)
       expect(hasPartType(result.messages, "tool-web_search")).toBe(true)
       assertOpenAIAtomicToolStructure(result.messages)
     })
 
     it("strips callProviderMetadata from replayed tool parts", async () => {
-      const result = await adaptHistoryForProvider([crossProviderMetadata], provider, context)
+      const result = await adaptHistoryForProvider(
+        [crossProviderMetadata],
+        provider,
+        context
+      )
       assertNoCallProviderMetadata(result.messages)
       expect(result.stats.providerIdsStripped).toBeGreaterThan(0)
     })
 
     it("handles provider-executed and SDK-executed tools without breaking triples", async () => {
-      const result = await adaptHistoryForProvider([mixedProviderAndSdkTools], provider, context)
+      const result = await adaptHistoryForProvider(
+        [mixedProviderAndSdkTools],
+        provider,
+        context
+      )
       assertOpenAIAtomicToolStructure(result.messages)
       assertNoCallProviderMetadata(result.messages)
     })
@@ -223,7 +306,11 @@ describe("cross-provider replay matrix", () => {
     const context = { targetModelId: "gpt-5.2", hasTools: true }
 
     it("supports same-provider text continuation", async () => {
-      const result = await adaptHistoryForProvider(textOnlyConversation, provider, context)
+      const result = await adaptHistoryForProvider(
+        textOnlyConversation,
+        provider,
+        context
+      )
       expect(result.messages.length).toBe(textOnlyConversation.length)
     })
 
@@ -241,7 +328,11 @@ describe("cross-provider replay matrix", () => {
     const context = { targetModelId: "gemini-3-pro", hasTools: true }
 
     it("preserves reasoning as native-thought candidate content", async () => {
-      const result = await adaptHistoryForProvider([reasoningPlusText], provider, context)
+      const result = await adaptHistoryForProvider(
+        [reasoningPlusText],
+        provider,
+        context
+      )
       expect(hasPartType(result.messages, "reasoning")).toBe(true)
     })
 
@@ -251,23 +342,39 @@ describe("cross-provider replay matrix", () => {
         userMessage("u-google-2", "second user"),
         multiStepToolChain,
       ]
-      const result = await adaptHistoryForProvider(roleBreakHistory, provider, context)
+      const result = await adaptHistoryForProvider(
+        roleBreakHistory,
+        provider,
+        context
+      )
       expect(hasPartType(result.messages, "reasoning")).toBe(true)
       assertAlternatingRoles(result.messages)
       expect(
-        result.warnings.some((warning) => warning.code === "role_alternation_repaired"),
+        result.warnings.some(
+          (warning) => warning.code === "role_alternation_repaired"
+        )
       ).toBe(true)
     })
 
     it("injects Gemini 3 thought signatures for tool invocations", async () => {
-      const result = await adaptHistoryForProvider([singleSdkToolComplete], provider, context)
+      const result = await adaptHistoryForProvider(
+        [singleSdkToolComplete],
+        provider,
+        context
+      )
       const toolParts = getAssistantMessages(result.messages)
         .flatMap((message) => message.parts)
-        .filter((part) => part.type.startsWith("tool-") && part.type !== "tool-result")
+        .filter(
+          (part) => part.type.startsWith("tool-") && part.type !== "tool-result"
+        )
       expect(toolParts.length).toBeGreaterThan(0)
 
-      for (const part of toolParts as Array<{ providerMetadata?: { google?: { thoughtSignature?: string } } }>) {
-        expect(part.providerMetadata?.google?.thoughtSignature).toBe("skip_thought_signature_validator")
+      for (const part of toolParts as Array<{
+        providerMetadata?: { google?: { thoughtSignature?: string } }
+      }>) {
+        expect(part.providerMetadata?.google?.thoughtSignature).toBe(
+          "skip_thought_signature_validator"
+        )
       }
     })
   })
@@ -277,7 +384,7 @@ describe("cross-provider replay matrix", () => {
       const result = await adaptHistoryForProvider(
         [singleProviderExecutedTool, singleSdkToolComplete, reasoningPlusText],
         "perplexity",
-        { targetModelId: "sonar-pro", hasTools: true },
+        { targetModelId: "sonar-pro", hasTools: true }
       )
 
       for (const message of result.messages) {
@@ -294,14 +401,22 @@ describe("cross-provider replay matrix", () => {
       const longHistory = repeatConversation(textOnlyConversation, 13)
       expect(longHistory.length).toBeGreaterThan(50)
 
-      const openaiToAnthropic = await adaptHistoryForProvider(longHistory, "anthropic", {
-        targetModelId: "claude-4-opus",
-        hasTools: false,
-      })
-      const anthropicToOpenai = await adaptHistoryForProvider(longHistory, "openai", {
-        targetModelId: "gpt-5.2",
-        hasTools: false,
-      })
+      const openaiToAnthropic = await adaptHistoryForProvider(
+        longHistory,
+        "anthropic",
+        {
+          targetModelId: "claude-4-opus",
+          hasTools: false,
+        }
+      )
+      const anthropicToOpenai = await adaptHistoryForProvider(
+        longHistory,
+        "openai",
+        {
+          targetModelId: "gpt-5.2",
+          hasTools: false,
+        }
+      )
 
       expect(openaiToAnthropic.messages.length).toBe(longHistory.length)
       expect(anthropicToOpenai.messages.length).toBe(longHistory.length)
@@ -315,10 +430,14 @@ describe("cross-provider replay matrix", () => {
         targetModelId: "claude-4-opus",
         hasTools: true,
       })
-      const throughOpenRouter = await adaptHistoryForProvider(messages, "openrouter", {
-        targetModelId: "openrouter:anthropic/claude-4-opus",
-        hasTools: true,
-      })
+      const throughOpenRouter = await adaptHistoryForProvider(
+        messages,
+        "openrouter",
+        {
+          targetModelId: "openrouter:anthropic/claude-4-opus",
+          hasTools: true,
+        }
+      )
 
       expect(throughOpenRouter.messages).toEqual(direct.messages)
       expect(hasPartType(throughOpenRouter.messages, "reasoning")).toBe(true)
@@ -326,20 +445,30 @@ describe("cross-provider replay matrix", () => {
 
     it("routes unknown org models to DefaultAdapter behavior", async () => {
       const messages = [reasoningPlusText, textOnlyAssistant]
-      const direct = await adaptHistoryForProvider(messages, "unknown-provider", {
-        targetModelId: "meta-llama/llama-4-maverick",
-        hasTools: true,
-      })
-      const throughOpenRouter = await adaptHistoryForProvider(messages, "openrouter", {
-        targetModelId: "meta-llama/llama-4-maverick",
-        hasTools: true,
-      })
+      const direct = await adaptHistoryForProvider(
+        messages,
+        "unknown-provider",
+        {
+          targetModelId: "meta-llama/llama-4-maverick",
+          hasTools: true,
+        }
+      )
+      const throughOpenRouter = await adaptHistoryForProvider(
+        messages,
+        "openrouter",
+        {
+          targetModelId: "meta-llama/llama-4-maverick",
+          hasTools: true,
+        }
+      )
 
       expect(throughOpenRouter.messages).toEqual(direct.messages)
       expect(hasPartType(throughOpenRouter.messages, "reasoning")).toBe(false)
-      expect(getAssistantMessages(throughOpenRouter.messages).every((message) => hasPartType([message], "text"))).toBe(
-        true,
-      )
+      expect(
+        getAssistantMessages(throughOpenRouter.messages).every((message) =>
+          hasPartType([message], "text")
+        )
+      ).toBe(true)
     })
   })
 })

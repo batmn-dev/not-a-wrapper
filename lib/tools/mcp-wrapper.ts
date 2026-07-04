@@ -6,31 +6,33 @@
 //
 // Replaces wrapToolsWithTruncation(mcpTools) in route.ts:300-302.
 
-import type { ToolSet } from "ai"
-import { ToolTraceCollector } from "./types"
-import type { ToolTrace } from "./types"
-import {
-  truncateToolResult,
-  enrichToolError,
-  executeWithRetries,
-  extractAbortSignalFromOptions,
-  runWithToolAbortAndTimeout,
-  ToolTimeoutError,
-} from "./utils"
-import { extractToolErrorData, type ToolErrorCode } from "./errors"
-import { extractPolicyErrorData } from "./policy"
-import type { ServerInfo } from "@/lib/mcp/load-tools"
 import {
   MAX_TOOL_RESULT_SIZE,
   MCP_CIRCUIT_BREAKER_THRESHOLD,
   MCP_TOOL_EXECUTION_TIMEOUT_MS,
 } from "@/lib/config"
+import type { ServerInfo } from "@/lib/mcp/load-tools"
+import type { ToolSet } from "ai"
+import { extractToolErrorData, type ToolErrorCode } from "./errors"
+import { extractPolicyErrorData } from "./policy"
+import { ToolTraceCollector } from "./types"
+import type { ToolTrace } from "./types"
+import {
+  enrichToolError,
+  executeWithRetries,
+  extractAbortSignalFromOptions,
+  runWithToolAbortAndTimeout,
+  ToolTimeoutError,
+  truncateToolResult,
+} from "./utils"
 
 // Re-export trace types for backward compatibility (route.ts imports from here)
 export { ToolTraceCollector, type ToolTrace }
 export { ToolTimeoutError }
 
-function isTransientCircuitFailure(errorCode: ToolErrorCode | undefined): boolean {
+function isTransientCircuitFailure(
+  errorCode: ToolErrorCode | undefined
+): boolean {
   if (!errorCode) return false
   return (
     errorCode === "timeout" ||
@@ -68,8 +70,8 @@ type WrapMcpToolsConfig = {
  * Replaces wrapToolsWithTruncation(mcpTools) at route.ts:300-302.
  *
  * Error behavior: throws on failure (does NOT envelope errors).
- * This preserves the AI SDK's isError detection in onFinish for
- * audit logs and PostHog events. The SDK passes the error message
+ * This preserves the AI SDK's isError detection in the step-end
+ * outcome recording for audit logs and PostHog events. The SDK passes the error message
  * to the model as a tool result — the model can still explain
  * "tool X failed" without the app crashing.
  *
@@ -266,4 +268,3 @@ export function wrapMcpTools(
 
   return wrapped as ToolSet
 }
-

@@ -1,9 +1,8 @@
 "use client"
 
+import { cn } from "@/lib/utils"
 import * as React from "react"
 import { Drawer as DrawerPrimitive } from "vaul-base"
-
-import { cn } from "@/lib/utils"
 
 function Drawer({
   ...props
@@ -36,9 +35,7 @@ function DrawerPortal({
 function DrawerClose({
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Close>) {
-  return (
-    <DrawerPrimitive.Close data-slot="drawer-close" {...props} />
-  )
+  return <DrawerPrimitive.Close data-slot="drawer-close" {...props} />
 }
 
 function DrawerOverlay({

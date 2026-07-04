@@ -5,7 +5,11 @@ import type {
   AdaptationWarning,
   ProviderHistoryAdapter,
 } from "./types"
-import { createEmptyStats, incrementStat, stripCallProviderMetadata } from "./types"
+import {
+  createEmptyStats,
+  incrementStat,
+  stripCallProviderMetadata,
+} from "./types"
 
 type MessagePart = UIMessage["parts"][number]
 
@@ -32,9 +36,12 @@ export const textOnlyAdapter: ProviderHistoryAdapter = {
 
   async adaptMessages(
     messages: readonly UIMessage[],
-    _context: AdaptationContext,
+    _context: AdaptationContext
   ): Promise<AdaptationResult> {
-    const totalPartsOriginal = messages.reduce((sum, message) => sum + message.parts.length, 0)
+    const totalPartsOriginal = messages.reduce(
+      (sum, message) => sum + message.parts.length,
+      0
+    )
     const stats = createEmptyStats(messages.length, totalPartsOriginal)
     const warnings: AdaptationWarning[] = []
     const adaptedMessages: UIMessage[] = []
@@ -86,8 +93,12 @@ export const textOnlyAdapter: ProviderHistoryAdapter = {
     }
 
     stats.adaptedMessageCount = adaptedMessages.length
-    stats.totalPartsAdapted = adaptedMessages.reduce((sum, message) => sum + message.parts.length, 0)
-    stats.droppedMessages += messages.length - adaptedMessages.length - stats.droppedMessages
+    stats.totalPartsAdapted = adaptedMessages.reduce(
+      (sum, message) => sum + message.parts.length,
+      0
+    )
+    stats.droppedMessages +=
+      messages.length - adaptedMessages.length - stats.droppedMessages
 
     return {
       messages: adaptedMessages,

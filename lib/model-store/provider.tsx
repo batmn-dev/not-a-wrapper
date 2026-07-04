@@ -1,11 +1,14 @@
 "use client"
 
 import { api } from "@/convex/_generated/api"
+import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
 import { fetchClient } from "@/lib/fetch"
 import { getModelInfo } from "@/lib/models"
-import { resolveModelId, resolveModelIds } from "@/lib/models/model-id-migration"
+import {
+  resolveModelId,
+  resolveModelIds,
+} from "@/lib/models/model-id-migration"
 import { ModelConfig } from "@/lib/models/types"
-import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
 import {
   createContext,
   useCallback,
@@ -61,8 +64,7 @@ function normalizeFavoriteModels(value: unknown): string[] {
   if (!Array.isArray(value)) return []
 
   const rawFavorites = value.filter(
-    (entry): entry is string =>
-      typeof entry === "string"
+    (entry): entry is string => typeof entry === "string"
   )
 
   const resolvedFavorites = resolveModelIds(rawFavorites)
@@ -143,7 +145,10 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
         const normalized = normalizeFavoriteModels(data.favorite_models)
         setFavoriteModels(normalized)
         try {
-          localStorage.setItem("cachedFavoriteModels", JSON.stringify(normalized))
+          localStorage.setItem(
+            "cachedFavoriteModels",
+            JSON.stringify(normalized)
+          )
         } catch {}
       }
     } catch (error) {

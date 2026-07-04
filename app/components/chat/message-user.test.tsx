@@ -17,8 +17,9 @@ vi.mock("next/image", () => ({
 }))
 
 beforeAll(() => {
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean })
-    .IS_REACT_ACT_ENVIRONMENT = true
+  ;(
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true
 })
 
 describe("MessageUser attachments", () => {
@@ -172,11 +173,14 @@ describe("MessageUser edits", () => {
   })
 
   it("keeps edit mode open when onEdit returns a failed result", async () => {
-    const onEdit = vi.fn(async () => ({
-      ok: false,
-      reason: "message-not-found",
-      message: "Message not found",
-    }) as const)
+    const onEdit = vi.fn(
+      async () =>
+        ({
+          ok: false,
+          reason: "message-not-found",
+          message: "Message not found",
+        }) as const
+    )
     renderEditableMessage({ onEdit })
 
     openEditor()
@@ -213,9 +217,9 @@ describe("MessageUser edits", () => {
 
     openEditor()
     updateTextarea("Edited text")
-    const cancelButton = [...(container?.querySelectorAll("button") ?? [])].find(
-      (button) => button.textContent === "Cancel"
-    )
+    const cancelButton = [
+      ...(container?.querySelectorAll("button") ?? []),
+    ].find((button) => button.textContent === "Cancel")
     expect(cancelButton).toBeTruthy()
     act(() => {
       cancelButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))

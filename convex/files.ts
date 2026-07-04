@@ -1,6 +1,6 @@
 import { v } from "convex/values"
-import type { MutationCtx, QueryCtx } from "./_generated/server"
 import type { Id } from "./_generated/dataModel"
+import type { MutationCtx, QueryCtx } from "./_generated/server"
 import {
   authenticatedMutation,
   authenticatedQuery,
@@ -49,7 +49,9 @@ export function isFileUploadLimitExceeded(
 }
 
 export function getFileUploadLimit(user: FileUploadLimitUser): number | null {
-  return user.premium === true ? PREMIUM_FILE_UPLOAD_LIMIT : DAILY_FILE_UPLOAD_LIMIT
+  return user.premium === true
+    ? PREMIUM_FILE_UPLOAD_LIMIT
+    : DAILY_FILE_UPLOAD_LIMIT
 }
 
 export function getFileUploadLimitStatus(

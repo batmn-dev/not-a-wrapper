@@ -1,18 +1,14 @@
-import { createMCPClient } from "@ai-sdk/mcp"
-import { fetchQuery, fetchMutation } from "convex/nextjs"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
-import { decryptKey } from "@/lib/encryption"
 import {
   MCP_CONNECTION_TIMEOUT_MS,
   MCP_MAX_TOOLS_PER_REQUEST,
   MCP_TRUSTED_RETRY_SERVER_ALLOWLIST,
 } from "@/lib/config"
-import {
-  isCircuitOpen,
-  recordFailure,
-  recordSuccess,
-} from "./circuit-breaker"
+import { decryptKey } from "@/lib/encryption"
+import { createMCPClient } from "@ai-sdk/mcp"
+import { fetchMutation, fetchQuery } from "convex/nextjs"
+import { isCircuitOpen, recordFailure, recordSuccess } from "./circuit-breaker"
 import { validateResolvedUrl } from "./url-validation"
 
 // =============================================================================
@@ -114,7 +110,8 @@ function extractToolAnnotationHints(tool: unknown): ToolAnnotationHints {
   const toolRecord = tool as Record<string, unknown>
   if (!("annotations" in toolRecord)) return {}
 
-  const annotations = toolRecord.annotations as Record<string, unknown> | undefined
+  const annotations = toolRecord.annotations as
+    Record<string, unknown> | undefined
   if (!annotations) return {}
 
   return {
@@ -197,10 +194,7 @@ function buildAuthHeaders(server: {
   if (!server.encryptedAuthValue || !server.authIv) return undefined
 
   try {
-    const decryptedValue = decryptKey(
-      server.encryptedAuthValue,
-      server.authIv
-    )
+    const decryptedValue = decryptKey(server.encryptedAuthValue, server.authIv)
 
     if (server.authType === "bearer") {
       return { Authorization: `Bearer ${decryptedValue}` }
@@ -217,6 +211,31 @@ function buildAuthHeaders(server: {
   }
 
   return undefined
+}
+
+/**
+ * Translate an MCP connection failure into the message stored as the server's
+ * `lastError` (shown in MCP settings). Most errors pass through verbatim; a
+ * redirect rejection is rewritten because the raw fetch error ("fetch failed"
+ * on Node, "UnexpectedRedirect fetching …" on Bun) does not tell the user
+ * what to fix. @ai-sdk/mcp 2.x rejects 3xx responses by default
+ * (redirect: "error") where 1.x silently followed them — kept as-is here
+ * because auto-following would re-send decrypted auth headers to the redirect
+ * target and bypass the pre-connect DNS/private-IP validation.
+ */
+export function describeMcpConnectionError(reason: unknown): string {
+  let cause: unknown = reason
+  while (cause instanceof Error) {
+    if (/redirect/i.test(cause.message)) {
+      return (
+        "Server URL responded with a redirect, which MCP connections do not " +
+        "follow. Update the server URL to its final address (e.g. use " +
+        "https:// and the exact path the server reports)."
+      )
+    }
+    cause = cause.cause
+  }
+  return reason instanceof Error ? reason.message : "Connection failed"
 }
 
 /**
@@ -332,6 +351,9 @@ export async function loadUserMcpTools(
 
       // Hold a reference to the client promise so we can clean up orphaned
       // connections when the timeout wins the race (prevents resource leaks).
+      // Note: @ai-sdk/mcp 2.x HTTP/SSE transports reject 3xx responses by
+      // default (redirect: "error") — deliberate here; see
+      // describeMcpConnectionError for the rationale and the user-facing error.
       const clientPromise = createMCPClient({
         transport: {
           type: server.transport,
@@ -385,10 +407,7 @@ export async function loadUserMcpTools(
 
     // --- Failed connection: log, record failure for circuit breaker, skip ---
     if (result.status === "rejected") {
-      const errorMsg =
-        result.reason instanceof Error
-          ? result.reason.message
-          : "Connection failed"
+      const errorMsg = describeMcpConnectionError(result.reason)
 
       console.error(`[MCP] Connection failed for "${server.name}":`, errorMsg)
       recordFailure(server._id)

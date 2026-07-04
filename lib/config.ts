@@ -1,9 +1,5 @@
 export type SuggestionIconId =
-  | "code"
-  | "research"
-  | "analysis"
-  | "creative"
-  | "learning"
+  "code" | "research" | "analysis" | "creative" | "learning"
 
 // ============================================================================
 // Rate Limits & Usage

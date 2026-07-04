@@ -162,7 +162,9 @@ describe("normalizeReplayMessages", () => {
         },
       },
     })
-    expect(result.warnings.some((warning) => warning.code === "tool_non_replayable")).toBe(true)
+    expect(
+      result.warnings.some((warning) => warning.code === "tool_non_replayable")
+    ).toBe(true)
   })
 
   it("captures pay_purchase URL from legacy tool input for continuity fallback", () => {
@@ -187,7 +189,9 @@ describe("normalizeReplayMessages", () => {
     ]
 
     const result = normalizeReplayMessages(messages)
-    expect(result.warnings.some((warning) => warning.code === "tool_non_replayable")).toBe(true)
+    expect(
+      result.warnings.some((warning) => warning.code === "tool_non_replayable")
+    ).toBe(true)
     expect(result.messages[0]?.parts[0]).toEqual({
       type: "tool-exchange",
       tool: {

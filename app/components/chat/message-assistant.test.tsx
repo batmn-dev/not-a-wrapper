@@ -13,8 +13,8 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest"
-import { vi } from "vitest"
 import {
   ActivityPanelStoreProvider,
   createActivityPanelStore,
@@ -572,9 +572,9 @@ describe("MessageAssistant activity trigger", () => {
       )
     })
 
-    const retry = Array.from(
-      container?.querySelectorAll("button") ?? []
-    ).find((button) => button.textContent === "Retry")
+    const retry = Array.from(container?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent === "Retry"
+    )
     expect(retry).toBeTruthy()
     expect(container?.textContent).toContain(
       "Generation stopped. Partial response preserved."

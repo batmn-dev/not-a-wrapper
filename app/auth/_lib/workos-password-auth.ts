@@ -1,8 +1,6 @@
 import "server-only"
-
 import { getWorkOS, saveSession } from "@workos-inc/authkit-nextjs"
 import type { AuthenticationResponse } from "@workos-inc/node"
-
 import {
   clearAuthFlowCookie,
   getEmailVerificationFlowCookie,
@@ -425,7 +423,9 @@ export async function requestPasswordResetEmail(
   dependencies = getDefaultWorkosAuthDependencies()
 ): Promise<PasswordResetRequestResult> {
   try {
-    await dependencies.userManagement.createPasswordReset({ email: input.email })
+    await dependencies.userManagement.createPasswordReset({
+      email: input.email,
+    })
   } catch (error) {
     if (isRateLimitedStatus(getErrorStatus(error))) {
       return { status: "rate-limited", message: RATE_LIMIT_MESSAGE }

@@ -1,21 +1,21 @@
-import * as Sentry from "@sentry/nextjs"
-import { resolveModelId } from "@/lib/models/model-id-migration"
 import { getWorkosSession } from "@/lib/auth/workos"
+import { resolveModelId } from "@/lib/models/model-id-migration"
 import {
   classifyChatError,
   getToolDimensionForError,
 } from "@/lib/observability/chat-error-taxonomy"
+import * as Sentry from "@sentry/nextjs"
 import {
   checkServerSideUsage,
   incrementServerSideUsage,
   validateAndTrackUsage,
 } from "./api"
-import { createErrorResponse } from "./utils"
 import {
   createChatTurnRuntime,
   type ChatRequest,
   type ChatTurnRuntime,
 } from "./chat-turn-runtime"
+import { createErrorResponse } from "./utils"
 
 export const maxDuration = 60
 
@@ -63,6 +63,21 @@ export async function POST(req: Request) {
     // Convex token for authenticated usage tracking + durable persistence.
     const convexToken = isAuthenticated ? authSession.accessToken : undefined
 
+    // A body that isn't valid JSON is a client error, not a server fault —
+    // classify it as 400 INVALID_REQUEST instead of letting the SyntaxError
+    // fall through to the generic 500 catch (which would page via Sentry).
+    let parsedBody: ChatRequest
+    try {
+      parsedBody = (await req.json()) as ChatRequest
+    } catch {
+      return new Response(
+        JSON.stringify({
+          error: "Request body is not valid JSON",
+          code: "INVALID_REQUEST",
+        }),
+        { status: 400 }
+      )
+    }
     const {
       messages,
       chatId,
@@ -75,7 +90,7 @@ export async function POST(req: Request) {
       userId: clientUserId,
       edit,
       regeneration,
-    } = (await req.json()) as ChatRequest
+    } = parsedBody
     const model = resolveModelId(requestedModel)
     telemetryChatId = chatId
     telemetryModel = model

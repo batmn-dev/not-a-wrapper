@@ -10,13 +10,15 @@ export function convertAttachmentsToFiles(
     url: string
     attachmentId?: string
   }>
-): Array<{
-  type: "file"
-  filename: string
-  mediaType: string
-  url: string
-  attachmentId?: string
-}> | undefined {
+):
+  | Array<{
+      type: "file"
+      filename: string
+      mediaType: string
+      url: string
+      attachmentId?: string
+    }>
+  | undefined {
   if (!attachments?.length) return undefined
   return attachments.map((att) => ({
     type: "file" as const,

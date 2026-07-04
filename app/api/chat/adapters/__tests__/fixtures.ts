@@ -10,7 +10,11 @@ export const reasoningPlusText = {
   id: "msg-assistant-2",
   role: "assistant",
   parts: [
-    { type: "reasoning", reasoning: "Let me think about this...", state: "done" },
+    {
+      type: "reasoning",
+      reasoning: "Let me think about this...",
+      state: "done",
+    },
     { type: "text", text: "Here's my answer" },
   ],
 } as UIMessage
@@ -20,7 +24,11 @@ export const singleSdkToolComplete = {
   role: "assistant",
   parts: [
     { type: "step-start" },
-    { type: "reasoning", reasoning: "I'll run Exa search for this.", state: "done" },
+    {
+      type: "reasoning",
+      reasoning: "I'll run Exa search for this.",
+      state: "done",
+    },
     {
       type: "tool-exa_search",
       state: "output-available",
@@ -30,7 +38,9 @@ export const singleSdkToolComplete = {
       input: { query: "Batman products Amazon" },
       output: {
         ok: true,
-        data: [{ title: "Batman Figure", url: "https://example.com/batman-figure" }],
+        data: [
+          { title: "Batman Figure", url: "https://example.com/batman-figure" },
+        ],
       },
     },
     { type: "text", text: "Here are the top search results." },
@@ -42,7 +52,11 @@ export const singleProviderExecutedTool = {
   role: "assistant",
   parts: [
     { type: "step-start" },
-    { type: "reasoning", reasoning: "I'll use web search to verify live listings.", state: "done" },
+    {
+      type: "reasoning",
+      reasoning: "I'll use web search to verify live listings.",
+      state: "done",
+    },
     {
       type: "tool-web_search",
       state: "output-available",
@@ -51,7 +65,9 @@ export const singleProviderExecutedTool = {
       providerExecuted: true,
       input: { query: "Batman collectibles Amazon" },
       output: {
-        content: [{ type: "text", text: "Found multiple Amazon Batman listings." }],
+        content: [
+          { type: "text", text: "Found multiple Amazon Batman listings." },
+        ],
       },
       callProviderMetadata: {
         openai: {
@@ -69,7 +85,11 @@ export const parallelToolCalls = {
   role: "assistant",
   parts: [
     { type: "step-start" },
-    { type: "reasoning", reasoning: "I'll run two searches in parallel.", state: "done" },
+    {
+      type: "reasoning",
+      reasoning: "I'll run two searches in parallel.",
+      state: "done",
+    },
     {
       type: "tool-web_search",
       state: "output-available",
@@ -100,7 +120,11 @@ export const multiStepToolChain = {
   role: "assistant",
   parts: [
     { type: "step-start" },
-    { type: "reasoning", reasoning: "First, I'll gather initial inventory.", state: "done" },
+    {
+      type: "reasoning",
+      reasoning: "First, I'll gather initial inventory.",
+      state: "done",
+    },
     {
       type: "tool-web_search",
       state: "output-available",
@@ -112,14 +136,21 @@ export const multiStepToolChain = {
     },
     { type: "text", text: "I found a first pass of best sellers." },
     { type: "step-start" },
-    { type: "reasoning", reasoning: "Now I'll refine by price and reviews.", state: "done" },
+    {
+      type: "reasoning",
+      reasoning: "Now I'll refine by price and reviews.",
+      state: "done",
+    },
     {
       type: "tool-exa_search",
       state: "output-available",
       toolCallId: "tc_chain_2",
       toolName: "exa_search",
       providerExecuted: false,
-      input: { query: "Batman products Amazon under 50 dollars high rating", numResults: 8 },
+      input: {
+        query: "Batman products Amazon under 50 dollars high rating",
+        numResults: 8,
+      },
       output: {
         ok: true,
         data: [{ title: "Budget Batman Figure", rating: 4.8 }],
@@ -153,7 +184,11 @@ export const incompleteAbortedTool = {
   role: "assistant",
   parts: [
     { type: "step-start" },
-    { type: "reasoning", reasoning: "Starting search request...", state: "done" },
+    {
+      type: "reasoning",
+      reasoning: "Starting search request...",
+      state: "done",
+    },
     {
       type: "tool-exa_search",
       state: "input-streaming",
@@ -171,7 +206,11 @@ export const crossProviderMetadata = {
   role: "assistant",
   parts: [
     { type: "step-start" },
-    { type: "reasoning", reasoning: "Replaying prior provider output.", state: "done" },
+    {
+      type: "reasoning",
+      reasoning: "Replaying prior provider output.",
+      state: "done",
+    },
     {
       type: "tool-web_search",
       state: "output-available",
@@ -193,7 +232,11 @@ export const mixedProviderAndSdkTools = {
   role: "assistant",
   parts: [
     { type: "step-start" },
-    { type: "reasoning", reasoning: "I'll use both provider and SDK tools.", state: "done" },
+    {
+      type: "reasoning",
+      reasoning: "I'll use both provider and SDK tools.",
+      state: "done",
+    },
     {
       type: "tool-web_search",
       state: "output-available",
@@ -232,7 +275,11 @@ const assistantWithWebSearchChain = {
   role: "assistant",
   parts: [
     { type: "step-start" },
-    { type: "reasoning", reasoning: "Let me search Amazon for Batman products.", state: "done" },
+    {
+      type: "reasoning",
+      reasoning: "Let me search Amazon for Batman products.",
+      state: "done",
+    },
     {
       type: "tool-web_search",
       state: "output-available",
@@ -247,7 +294,11 @@ const assistantWithWebSearchChain = {
     },
     { type: "text", text: "I found an initial set of Batman items." },
     { type: "step-start" },
-    { type: "reasoning", reasoning: "Now I will refine for official Amazon product pages.", state: "done" },
+    {
+      type: "reasoning",
+      reasoning: "Now I will refine for official Amazon product pages.",
+      state: "done",
+    },
     {
       type: "tool-web_search",
       state: "output-available",
@@ -262,7 +313,11 @@ const assistantWithWebSearchChain = {
     },
     { type: "text", text: "I narrowed the results to likely official pages." },
     { type: "step-start" },
-    { type: "reasoning", reasoning: "Final pass to add links and pricing context.", state: "done" },
+    {
+      type: "reasoning",
+      reasoning: "Final pass to add links and pricing context.",
+      state: "done",
+    },
     {
       type: "tool-web_search",
       state: "output-available",
@@ -270,12 +325,17 @@ const assistantWithWebSearchChain = {
       toolName: "web_search",
       providerExecuted: true,
       input: { query: "Batman collectibles Amazon links and prices" },
-      output: { content: [{ type: "text", text: "Pricing snippets and links." }] },
+      output: {
+        content: [{ type: "text", text: "Pricing snippets and links." }],
+      },
       callProviderMetadata: {
         openai: { responseId: "msg_batman_3", reasoningId: "rs_batman_3" },
       },
     },
-    { type: "text", text: "Here are Batman options and the best links I found." },
+    {
+      type: "text",
+      text: "Here are Batman options and the best links I found.",
+    },
   ],
 } as UIMessage
 
@@ -290,7 +350,11 @@ const anthropicAssistant = {
   role: "assistant",
   parts: [
     { type: "step-start" },
-    { type: "reasoning", reasoning: "I'll inspect options from a neutral search index.", state: "done" },
+    {
+      type: "reasoning",
+      reasoning: "I'll inspect options from a neutral search index.",
+      state: "done",
+    },
     {
       type: "tool-exa_search",
       state: "output-available",
@@ -298,7 +362,10 @@ const anthropicAssistant = {
       toolName: "exa_search",
       providerExecuted: false,
       input: { query: "Batman products with reviews" },
-      output: { ok: true, data: [{ title: "Anthropic-style result", score: 0.88 }] },
+      output: {
+        ok: true,
+        data: [{ title: "Anthropic-style result", score: 0.88 }],
+      },
     },
     { type: "text", text: "I found reviewed Batman products." },
   ],
@@ -309,7 +376,11 @@ const openaiAssistant = {
   role: "assistant",
   parts: [
     { type: "step-start" },
-    { type: "reasoning", reasoning: "I'll enrich with live web data.", state: "done" },
+    {
+      type: "reasoning",
+      reasoning: "I'll enrich with live web data.",
+      state: "done",
+    },
     {
       type: "tool-web_search",
       state: "output-available",
@@ -403,7 +474,10 @@ export const heavyToolUseConversation: UIMessage[] = [
         toolName: "exa_search",
         providerExecuted: false,
         input: { query: "Batman comic bundle Amazon" },
-        output: { ok: true, data: [{ title: "Comic bundle pack", bundleSize: 6 }] },
+        output: {
+          ok: true,
+          data: [{ title: "Comic bundle pack", bundleSize: 6 }],
+        },
       },
       { type: "text", text: "Added comic bundle suggestions." },
     ],
@@ -414,7 +488,11 @@ export const heavyToolUseConversation: UIMessage[] = [
     role: "assistant",
     parts: [
       { type: "step-start" },
-      { type: "reasoning", reasoning: "Checking shipping information.", state: "done" },
+      {
+        type: "reasoning",
+        reasoning: "Checking shipping information.",
+        state: "done",
+      },
       {
         type: "tool-web_search",
         state: "output-available",
@@ -422,7 +500,9 @@ export const heavyToolUseConversation: UIMessage[] = [
         toolName: "web_search",
         providerExecuted: true,
         input: { query: "Batman products Prime shipping speed" },
-        output: { content: [{ type: "text", text: "Shipping estimates collected." }] },
+        output: {
+          content: [{ type: "text", text: "Shipping estimates collected." }],
+        },
       },
       { type: "text", text: "Shipping speed comparison complete." },
     ],
@@ -449,12 +529,21 @@ export const heavyToolUseConversation: UIMessage[] = [
 
 export const textOnlyConversation: UIMessage[] = [
   userMessage("msg-user-11", "Hi"),
-  { id: "msg-assistant-11", role: "assistant", parts: [{ type: "text", text: "Hello!" }] } as UIMessage,
+  {
+    id: "msg-assistant-11",
+    role: "assistant",
+    parts: [{ type: "text", text: "Hello!" }],
+  } as UIMessage,
   userMessage("msg-user-12", "Can you help me pick Batman comics?"),
   {
     id: "msg-assistant-12",
     role: "assistant",
-    parts: [{ type: "text", text: "Absolutely, tell me your budget and format preference." }],
+    parts: [
+      {
+        type: "text",
+        text: "Absolutely, tell me your budget and format preference.",
+      },
+    ],
   } as UIMessage,
 ]
 
@@ -484,7 +573,11 @@ export const abortedToolConversation: UIMessage[] = [
     role: "assistant",
     parts: [
       { type: "step-start" },
-      { type: "reasoning", reasoning: "Launching another search.", state: "done" },
+      {
+        type: "reasoning",
+        reasoning: "Launching another search.",
+        state: "done",
+      },
       {
         type: "tool-exa_search",
         state: "input-streaming",

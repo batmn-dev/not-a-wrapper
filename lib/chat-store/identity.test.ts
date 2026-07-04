@@ -40,8 +40,8 @@ describe("chat identity helpers", () => {
     expect(getChatPersistenceMode("jh7f4n2k9p8q6r3s5t1v0wxyz", options)).toBe(
       "sharedReadOnly"
     )
-    expect(getMessagePersistenceMode("jh7f4n2k9p8q6r3s5t1v0wxyz", options)).toBe(
-      "localOnly"
-    )
+    expect(
+      getMessagePersistenceMode("jh7f4n2k9p8q6r3s5t1v0wxyz", options)
+    ).toBe("localOnly")
   })
 })

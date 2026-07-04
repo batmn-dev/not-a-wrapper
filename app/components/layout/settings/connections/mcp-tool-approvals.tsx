@@ -70,8 +70,8 @@ export function McpToolApprovals({ serverId }: McpToolApprovalsProps) {
   return (
     <div className="mt-2 space-y-2">
       <p className="text-muted-foreground text-xs">
-        {approvals.filter((a) => a.approved).length} of {approvals.length}{" "}
-        tools approved
+        {approvals.filter((a) => a.approved).length} of {approvals.length} tools
+        approved
       </p>
       {approvals.map((approval) => (
         <div

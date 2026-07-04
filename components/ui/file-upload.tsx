@@ -129,8 +129,7 @@ function FileUpload({
   )
 }
 
-export type FileUploadTriggerProps =
-  useRender.ComponentProps<"button">
+export type FileUploadTriggerProps = useRender.ComponentProps<"button">
 
 function FileUploadTrigger({
   className,
@@ -162,7 +161,11 @@ function FileUploadTrigger({
 
 type FileUploadContentProps = React.HTMLAttributes<HTMLDivElement>
 
-function FileUploadContent({ className, style, ...props }: FileUploadContentProps) {
+function FileUploadContent({
+  className,
+  style,
+  ...props
+}: FileUploadContentProps) {
   const context = useContext(FileUploadContext)
   const mounted = useHydrated()
 
@@ -174,8 +177,8 @@ function FileUploadContent({ className, style, ...props }: FileUploadContentProp
     <div
       className={cn(
         "bg-background/80 fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm",
-        "opacity-100 [transform:translateY(0)_scale(1)]",
-        "starting:opacity-0 starting:[transform:translateY(2.5rem)_scale(0.9)]",
+        "[transform:translateY(0)_scale(1)] opacity-100",
+        "starting:[transform:translateY(2.5rem)_scale(0.9)] starting:opacity-0",
         className
       )}
       style={{

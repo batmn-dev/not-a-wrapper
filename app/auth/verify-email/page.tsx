@@ -1,10 +1,10 @@
-import { getWorkosSession } from "@/lib/auth/workos"
 import { Button } from "@/components/ui/button"
+import { getWorkosSession } from "@/lib/auth/workos"
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { getEmailVerificationFlowCookie } from "../_lib/auth-flow-cookie"
 import { VerifyEmailForm } from "../_components/auth-forms"
 import { AuthShell } from "../_components/auth-shell"
+import { getEmailVerificationFlowCookie } from "../_lib/auth-flow-cookie"
 
 type VerifyEmailPageProps = {
   searchParams?: Promise<{
@@ -31,7 +31,7 @@ export default async function VerifyEmailPage({
         <VerifyEmailForm email={email} />
       ) : (
         <div className="space-y-4 text-center">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             That verification session expired. Sign in again to request a new
             code.
           </p>

@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest"
-import {
-  extractTextFromMessageParts,
-  getMessagePartsForDisplay,
-} from "./parts"
+import { extractTextFromMessageParts, getMessagePartsForDisplay } from "./parts"
 
 describe("extractTextFromMessageParts", () => {
   it("returns an empty string for empty or missing parts", () => {
@@ -43,9 +40,9 @@ describe("getMessagePartsForDisplay", () => {
   })
 
   it("falls back to content text for legacy rows without parts", () => {
-    expect(getMessagePartsForDisplay({ content: "legacy", parts: [] })).toEqual([
-      { type: "text", text: "legacy" },
-    ])
+    expect(getMessagePartsForDisplay({ content: "legacy", parts: [] })).toEqual(
+      [{ type: "text", text: "legacy" }]
+    )
   })
 
   it("bridges legacy attachments into file parts", () => {

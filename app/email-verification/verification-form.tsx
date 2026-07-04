@@ -1,11 +1,8 @@
 "use client"
 
-import {
-  resendMagicAuthCode,
-  verifyMagicAuthCode,
-} from "@/app/auth/actions"
-import { initialAuthActionState } from "@/app/auth/_lib/schemas"
 import { useAuthFormAction } from "@/app/auth/_components/use-auth-form-action"
+import { initialAuthActionState } from "@/app/auth/_lib/schemas"
+import { resendMagicAuthCode, verifyMagicAuthCode } from "@/app/auth/actions"
 import { Button } from "@/components/ui/button"
 import {
   InputOTP,
@@ -77,7 +74,7 @@ export function VerificationForm({ email }: VerificationFormProps) {
             </InputOTPGroup>
           </InputOTP>
           {verifyState.fieldErrors?.code ? (
-            <p role="alert" className="text-center text-sm text-destructive">
+            <p role="alert" className="text-destructive text-center text-sm">
               {verifyState.fieldErrors.code}
             </p>
           ) : null}
@@ -108,9 +105,9 @@ export function VerificationForm({ email }: VerificationFormProps) {
       ) : null}
 
       <div className="my-5 grid grid-cols-[1fr_max-content_1fr] items-center">
-        <div className="h-px bg-border" />
+        <div className="bg-border h-px" />
         <div className="mx-6 text-[13px] font-medium">OR</div>
-        <div className="h-px bg-border" />
+        <div className="bg-border h-px" />
       </div>
 
       <Button
@@ -121,16 +118,16 @@ export function VerificationForm({ email }: VerificationFormProps) {
         Continue with password
       </Button>
 
-      <div className="mt-12 flex items-center justify-center gap-3 text-sm text-muted-foreground">
+      <div className="text-muted-foreground mt-12 flex items-center justify-center gap-3 text-sm">
         <a
-          className="underline-offset-4 hover:text-foreground hover:underline"
+          className="hover:text-foreground underline-offset-4 hover:underline"
           href={`${APP_DOMAIN}/terms`}
         >
           Terms of Use
         </a>
         <span aria-hidden="true">|</span>
         <a
-          className="underline-offset-4 hover:text-foreground hover:underline"
+          className="hover:text-foreground underline-offset-4 hover:underline"
           href={`${APP_DOMAIN}/privacy`}
         >
           Privacy Policy

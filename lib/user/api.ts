@@ -1,13 +1,16 @@
-import type { NoUserInfo, UserInfo } from "@workos-inc/authkit-nextjs"
-import type { User as WorkosUser } from "@workos-inc/node"
-import { withAuth } from "@workos-inc/authkit-nextjs"
 import { defaultPreferences } from "@/lib/user-preference-store/utils"
+import type { NoUserInfo, UserInfo } from "@workos-inc/authkit-nextjs"
+import { withAuth } from "@workos-inc/authkit-nextjs"
+import type { User as WorkosUser } from "@workos-inc/node"
 import type { UserProfile } from "./types"
 
 type InitialAuth = Omit<UserInfo | NoUserInfo, "accessToken">
 
 function getDisplayName(user: WorkosUser) {
-  const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim()
+  const fullName = [user.firstName, user.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim()
   if (fullName) return fullName
 
   const [localPart] = user.email.split("@")

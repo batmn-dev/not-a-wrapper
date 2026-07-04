@@ -34,9 +34,7 @@ function Harness(props: {
   slotElement: HTMLElement | null
   dockedExpanded: boolean
   isBelowLg: boolean
-  onResult: (result: {
-    dockedPresent: boolean
-  }) => void
+  onResult: (result: { dockedPresent: boolean }) => void
 }) {
   const { onResult, ...params } = props
   const { dockedPresent, onDockedContentRef } = useDockedPanelCollapse(params)

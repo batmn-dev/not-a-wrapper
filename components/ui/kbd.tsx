@@ -48,7 +48,7 @@ export function KbdGroup({ children, className }: KbdGroupProps) {
   return (
     <div
       className={cn(
-        "text-muted-foreground pointer-coarse:hidden inline-flex whitespace-pre",
+        "text-muted-foreground inline-flex whitespace-pre pointer-coarse:hidden",
         className
       )}
     >

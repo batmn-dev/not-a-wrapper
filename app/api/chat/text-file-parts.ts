@@ -53,13 +53,16 @@ type ResolvedFetchTextFileOptions = {
 
 function normalizeMediaType(mediaType: unknown): string {
   return typeof mediaType === "string"
-    ? mediaType.split(";")[0]?.trim().toLowerCase() ?? ""
+    ? (mediaType.split(";")[0]?.trim().toLowerCase() ?? "")
     : ""
 }
 
 function isPlainTextFilePart(part: MessagePart): boolean {
   if (part.type !== "file") return false
-  return normalizeMediaType((part as { mediaType?: unknown }).mediaType) === "text/plain"
+  return (
+    normalizeMediaType((part as { mediaType?: unknown }).mediaType) ===
+    "text/plain"
+  )
 }
 
 function getFileName(part: MessagePart): string {
@@ -165,7 +168,9 @@ async function readResponseBytes(
   const contentLength = response.headers.get("content-length")
   const expectedBytes = contentLength ? Number(contentLength) : null
   const expectedTruncated =
-    expectedBytes !== null && Number.isFinite(expectedBytes) && expectedBytes > maxBytes
+    expectedBytes !== null &&
+    Number.isFinite(expectedBytes) &&
+    expectedBytes > maxBytes
 
   if (!response.body) {
     if (
@@ -227,7 +232,10 @@ async function readResponseBytes(
 
 async function readPlainTextFile(
   url: string,
-  options: Pick<ResolvedFetchTextFileOptions, "fetchImpl" | "maxBytes" | "timeoutMs">
+  options: Pick<
+    ResolvedFetchTextFileOptions,
+    "fetchImpl" | "maxBytes" | "timeoutMs"
+  >
 ): Promise<{ text: string; truncated: boolean; byteLength: number }> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs)
@@ -393,10 +401,7 @@ export async function prepareTextFilePartsForModelInput(
 
       try {
         fetchedFileCount += 1
-        const maxBytes = Math.min(
-          resolvedOptions.maxBytes,
-          remainingTotalBytes
-        )
+        const maxBytes = Math.min(resolvedOptions.maxBytes, remainingTotalBytes)
         const { text, truncated, byteLength } = await readPlainTextFile(
           trustedAttachment.url,
           {

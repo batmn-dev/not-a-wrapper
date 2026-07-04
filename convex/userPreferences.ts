@@ -1,8 +1,5 @@
 import { v } from "convex/values"
-import {
-  authenticatedMutation,
-  maybeAuthQuery,
-} from "./lib/authedFunctions"
+import { authenticatedMutation, maybeAuthQuery } from "./lib/authedFunctions"
 
 /**
  * Get preferences for current user

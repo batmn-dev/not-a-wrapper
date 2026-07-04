@@ -1,20 +1,21 @@
-'use client';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { motion, MotionProps, HTMLMotionProps } from 'motion/react';
+"use client"
+
+import { HTMLMotionProps, motion, MotionProps } from "motion/react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 export type TextScrambleProps = {
-  children: string;
-  duration?: number;
-  speed?: number;
-  characterSet?: string;
-  as?: React.ElementType;
-  className?: string;
-  trigger?: boolean;
-  onScrambleComplete?: () => void;
-} & MotionProps;
+  children: string
+  duration?: number
+  speed?: number
+  characterSet?: string
+  as?: React.ElementType
+  className?: string
+  trigger?: boolean
+  onScrambleComplete?: () => void
+} & MotionProps
 
 const defaultChars =
-  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
 export function TextScramble({
   children,
@@ -22,73 +23,73 @@ export function TextScramble({
   speed = 0.04,
   characterSet = defaultChars,
   className,
-  as: Component = 'p',
+  as: Component = "p",
   trigger = true,
   onScrambleComplete,
   ...props
 }: TextScrambleProps) {
   const MotionComponent = motion.create(
     Component as string
-  ) as React.ComponentType<HTMLMotionProps<'p'>>;
-  const [displayText, setDisplayText] = useState(children);
-  const isAnimatingRef = useRef(false);
-  const text = children;
+  ) as React.ComponentType<HTMLMotionProps<"p">>
+  const [displayText, setDisplayText] = useState(children)
+  const isAnimatingRef = useRef(false)
+  const text = children
 
   const scramble = useCallback(() => {
-    if (isAnimatingRef.current) return;
-    isAnimatingRef.current = true;
+    if (isAnimatingRef.current) return
+    isAnimatingRef.current = true
 
-    const steps = duration / speed;
-    let step = 0;
+    const steps = duration / speed
+    let step = 0
 
     const interval = setInterval(() => {
-      let scrambled = '';
-      const progress = step / steps;
+      let scrambled = ""
+      const progress = step / steps
 
       for (let i = 0; i < text.length; i++) {
-        if (text[i] === ' ') {
-          scrambled += ' ';
-          continue;
+        if (text[i] === " ") {
+          scrambled += " "
+          continue
         }
 
         if (progress * text.length > i) {
-          scrambled += text[i];
+          scrambled += text[i]
         } else {
           scrambled +=
-            characterSet[Math.floor(Math.random() * characterSet.length)];
+            characterSet[Math.floor(Math.random() * characterSet.length)]
         }
       }
 
-      setDisplayText(scrambled);
-      step++;
+      setDisplayText(scrambled)
+      step++
 
       if (step > steps) {
-        clearInterval(interval);
-        setDisplayText(text);
-        isAnimatingRef.current = false;
-        onScrambleComplete?.();
+        clearInterval(interval)
+        setDisplayText(text)
+        isAnimatingRef.current = false
+        onScrambleComplete?.()
       }
-    }, speed * 1000);
+    }, speed * 1000)
 
-    return interval;
-  }, [duration, speed, text, characterSet, onScrambleComplete]);
+    return interval
+  }, [duration, speed, text, characterSet, onScrambleComplete])
 
   useEffect(() => {
-    if (!trigger) return;
+    if (!trigger) return
 
-    const interval = scramble();
+    const interval = scramble()
 
     return () => {
       if (interval) {
-        clearInterval(interval);
-        isAnimatingRef.current = false;
+        clearInterval(interval)
+        isAnimatingRef.current = false
       }
-    };
-  }, [trigger, scramble]);
+    }
+  }, [trigger, scramble])
 
   return (
     <MotionComponent className={className} {...props}>
       {displayText}
     </MotionComponent>
-  );
+  )
 }

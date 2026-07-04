@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest"
 import { getDefaultModelForUser } from "@/lib/config"
 import type { ModelConfig } from "@/lib/models/types"
+import { describe, expect, it } from "vitest"
 import {
   filterAndSortModels,
   isModelAllowedForAnonymous,
@@ -51,7 +51,9 @@ const MODELS: ModelConfig[] = [
   },
 ]
 
-const VISIBLE_MODELS = MODELS.filter((model) => model.catalogStatus === "visible")
+const VISIBLE_MODELS = MODELS.filter(
+  (model) => model.catalogStatus === "visible"
+)
 
 describe("resolvePreferredModelId", () => {
   it("preserves the current chat model even when it is not accessible", () => {
@@ -119,7 +121,9 @@ describe("filterAndSortModels", () => {
 
   it("prunes models marked invisible for selectors", () => {
     expect(
-      filterAndSortModels(MODELS, [], "", isModelHidden).map((model) => model.id)
+      filterAndSortModels(MODELS, [], "", isModelHidden).map(
+        (model) => model.id
+      )
     ).not.toContain("gpt-4.1")
   })
 

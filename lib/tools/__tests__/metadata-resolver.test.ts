@@ -1,8 +1,8 @@
+import type { ServerInfo } from "@/lib/mcp/load-tools"
 import { describe, expect, it } from "vitest"
 import { createToolMetadataResolver } from "../metadata-resolver"
-import { buildToolInvocationMetadataByName } from "../ui-metadata"
 import type { ToolMetadata } from "../types"
-import type { ServerInfo } from "@/lib/mcp/load-tools"
+import { buildToolInvocationMetadataByName } from "../ui-metadata"
 
 const builtInTool: ToolMetadata = {
   displayName: "Web Search",
@@ -178,13 +178,30 @@ describe("createToolMetadataResolver — precedence (documented effective behavi
   it("non-MCP collisions: later spread wins (built-in → third-party → content), matching the prior merged Map", () => {
     const resolver = createToolMetadataResolver({
       builtIn: new Map([
-        ["dup", { displayName: "From BuiltIn", source: "builtin", serviceName: "A" }],
+        [
+          "dup",
+          { displayName: "From BuiltIn", source: "builtin", serviceName: "A" },
+        ],
       ]),
       thirdParty: new Map([
-        ["dup", { displayName: "From ThirdParty", source: "third-party", serviceName: "B" }],
+        [
+          "dup",
+          {
+            displayName: "From ThirdParty",
+            source: "third-party",
+            serviceName: "B",
+          },
+        ],
       ]),
       content: new Map([
-        ["dup", { displayName: "From Content", source: "third-party", serviceName: "C" }],
+        [
+          "dup",
+          {
+            displayName: "From Content",
+            source: "third-party",
+            serviceName: "C",
+          },
+        ],
       ]),
       mcpToolServerMap: new Map(),
     })
@@ -195,7 +212,10 @@ describe("createToolMetadataResolver — precedence (documented effective behavi
   it("MCP wins over non-MCP for get()/source() (MCP is consulted first)", () => {
     const resolver = createToolMetadataResolver({
       builtIn: new Map([
-        ["collide", { displayName: "Non MCP", source: "builtin", serviceName: "A" }],
+        [
+          "collide",
+          { displayName: "Non MCP", source: "builtin", serviceName: "A" },
+        ],
       ]),
       thirdParty: new Map(),
       content: new Map(),

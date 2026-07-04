@@ -1,8 +1,8 @@
 "use client"
 
-import { ReactNode } from "react"
-import { AuthKitProvider } from "@workos-inc/authkit-nextjs/components"
 import type { NoUserInfo, UserInfo } from "@workos-inc/authkit-nextjs"
+import { AuthKitProvider } from "@workos-inc/authkit-nextjs/components"
+import { ReactNode } from "react"
 import { ConvexClientProvider } from "./convex-client-provider"
 import { PostHogProvider } from "./posthog-provider"
 

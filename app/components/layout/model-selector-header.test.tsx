@@ -4,7 +4,15 @@ import type { ModelConfig } from "@/lib/models/types"
 import { JSDOM } from "jsdom"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
 
 type ModelSelectorProps = {
   selectedModelId: string | null
@@ -135,8 +143,9 @@ describe("ModelSelectorHeader", () => {
   beforeAll(async () => {
     installDomIfNeeded()
 
-    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean })
-      .IS_REACT_ACT_ENVIRONMENT = true
+    ;(
+      globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true
 
     ;({ ModelSelectorHeader } = await import("./model-selector-header"))
   })

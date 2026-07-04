@@ -1,6 +1,6 @@
-import type { ProviderOptions } from "@ai-sdk/provider-utils"
-import type { ModelConfig } from "@/lib/models/types"
 import { ANTHROPIC_BETA_HEADERS } from "@/lib/config"
+import type { ModelConfig } from "@/lib/models/types"
+import type { ProviderOptions } from "@ai-sdk/provider-utils"
 
 /**
  * Request shaping (CONTEXT.md): everything provider-specific about issuing
@@ -54,7 +54,8 @@ export function shapeRequest(
  *   - Other models use "enabled" with the model's declared thinkingBudget
  *     (falling back to DEFAULT_THINKING_BUDGET_TOKENS).
  *
- * SDK LIMITATION (ai@6.0.78 / @ai-sdk/anthropic@3.0.41):
+ * SDK LIMITATION (still present in ai@7.0.15 / @ai-sdk/anthropic@4.0.8 —
+ * map-anthropic-stop-reason.ts maps "pause_turn" to "stop"):
  * When adaptive thinking is used with server-side tools (web search), the
  * Anthropic API may return stop_reason: "pause_turn" — indicating the model
  * needs a follow-up request to continue generating text. The AI SDK maps
@@ -93,6 +94,14 @@ function resolveProviderOptions(
     // unconditionally — xAI's reasoning_effort knob applies only to
     // grok-3-mini-class models, so any value sent for the cataloged Groks
     // is rejected (the pre-fix "invalid xai provider options" 503).
+    //
+    // openrouter: unreachable from here by design. Its reasoning knob is a
+    // construction-time provider setting (`.chat(id, { reasoning })` on the
+    // spec-V3 provider), not a per-call providerOptions namespace — enabling
+    // it means widening the Provider strategy's `languageModel` seam, not
+    // adding a case here. ai@7's unified `reasoning` call option is NOT a
+    // substitute: the V3 model silently ignores it (see the
+    // ProviderLanguageModel note in provider-strategy.ts).
     default:
       return {}
   }
@@ -103,7 +112,7 @@ function resolveProviderOptions(
  * injected, the token-efficient beta header reduces tool definition token
  * consumption. Request-scoped via streamText({ headers }) — only affects
  * Anthropic requests that actually include tools. Safe to apply:
- * @ai-sdk/anthropic@3.0.41 comma-merges user and inferred betas
+ * @ai-sdk/anthropic@4.0.8 comma-merges user and inferred betas
  * (getBetasFromHeaders + Array.from(betas).join(",")).
  *
  * Disable with ANTHROPIC_TOKEN_EFFICIENT_TOOLS=false.
@@ -116,7 +125,11 @@ function resolveHeaders(
   const isTokenEfficient =
     process.env.ANTHROPIC_TOKEN_EFFICIENT_TOOLS !== "false"
 
-  if (modelConfig.providerId === "anthropic" && ctx.hasTools && isTokenEfficient) {
+  if (
+    modelConfig.providerId === "anthropic" &&
+    ctx.hasTools &&
+    isTokenEfficient
+  ) {
     headers["anthropic-beta"] = ANTHROPIC_BETA_HEADERS.tokenEfficient
   }
   return headers

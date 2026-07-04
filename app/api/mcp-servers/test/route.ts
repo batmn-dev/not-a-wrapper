@@ -1,6 +1,6 @@
-import { loadMCPToolsFromURL } from "@/lib/mcp/load-mcp-from-url"
-import { MCP_CONNECTION_TIMEOUT_MS } from "@/lib/config"
 import { getWorkosSession } from "@/lib/auth/workos"
+import { MCP_CONNECTION_TIMEOUT_MS } from "@/lib/config"
+import { loadMCPToolsFromURL } from "@/lib/mcp/load-mcp-from-url"
 import { NextResponse } from "next/server"
 
 /**
@@ -74,8 +74,10 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error("Error in POST /api/mcp-servers/test:", error)
-    const message =
-      error instanceof Error ? error.message : "Connection failed"
-    return NextResponse.json({ error: message, success: false }, { status: 500 })
+    const message = error instanceof Error ? error.message : "Connection failed"
+    return NextResponse.json(
+      { error: message, success: false },
+      { status: 500 }
+    )
   }
 }

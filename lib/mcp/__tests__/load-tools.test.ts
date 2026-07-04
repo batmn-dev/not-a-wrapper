@@ -1,5 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
-import { resetAllCircuits, recordFailure } from "../circuit-breaker"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { recordFailure, resetAllCircuits } from "../circuit-breaker"
+// =============================================================================
+// Import after mocks
+// =============================================================================
+
+import {
+  describeMcpConnectionError,
+  loadUserMcpTools,
+  slugify,
+} from "../load-tools"
 
 // =============================================================================
 // Module mocks — must be before imports that use them
@@ -45,12 +54,6 @@ vi.mock("@/lib/config", () => ({
 }))
 
 // =============================================================================
-// Import after mocks
-// =============================================================================
-
-import { loadUserMcpTools, slugify } from "../load-tools"
-
-// =============================================================================
 // Test Helpers
 // =============================================================================
 
@@ -70,10 +73,7 @@ function mockServer(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 /** Create a mock MCP client with tools */
-function mockClient(
-  tools: Record<string, unknown> = {},
-  closeError?: Error
-) {
+function mockClient(tools: Record<string, unknown> = {}, closeError?: Error) {
   return {
     tools: vi.fn().mockResolvedValue(tools),
     close: closeError
@@ -94,6 +94,31 @@ function mockTool(name: string) {
 // =============================================================================
 // Tests
 // =============================================================================
+
+describe("describeMcpConnectionError", () => {
+  it("rewrites redirect rejections into an actionable message", () => {
+    // Node/undici shape: TypeError("fetch failed") with a redirect cause.
+    const nodeShape = new TypeError("fetch failed")
+    nodeShape.cause = new Error("unexpected redirect")
+    // Bun shape: single error, redirect named in the message.
+    const bunShape = new Error(
+      'UnexpectedRedirect fetching "http://example.com/mcp"'
+    )
+
+    for (const reason of [nodeShape, bunShape]) {
+      expect(describeMcpConnectionError(reason)).toContain(
+        "responded with a redirect"
+      )
+    }
+  })
+
+  it("passes other errors through verbatim", () => {
+    expect(
+      describeMcpConnectionError(new Error("MCP connection timeout"))
+    ).toBe("MCP connection timeout")
+    expect(describeMcpConnectionError("not-an-error")).toBe("Connection failed")
+  })
+})
 
 describe("slugify", () => {
   it("converts name to lowercase URL-safe slug", () => {
@@ -155,9 +180,7 @@ describe("loadUserMcpTools", () => {
 
     it("returns empty result when all servers are disabled", async () => {
       mockFetchQuery
-        .mockResolvedValueOnce([
-          mockServer({ enabled: false }),
-        ])
+        .mockResolvedValueOnce([mockServer({ enabled: false })])
         .mockResolvedValueOnce([])
 
       const result = await loadUserMcpTools("test-token")
@@ -179,9 +202,7 @@ describe("loadUserMcpTools", () => {
         list_repos: mockTool("list_repos"),
       })
 
-      mockFetchQuery
-        .mockResolvedValueOnce([server])
-        .mockResolvedValueOnce([]) // no specific approvals → default approved
+      mockFetchQuery.mockResolvedValueOnce([server]).mockResolvedValueOnce([]) // no specific approvals → default approved
 
       mockCreateMCPClient.mockResolvedValue(client)
 
@@ -216,9 +237,7 @@ describe("loadUserMcpTools", () => {
         },
       })
 
-      mockFetchQuery
-        .mockResolvedValueOnce([server])
-        .mockResolvedValueOnce([])
+      mockFetchQuery.mockResolvedValueOnce([server]).mockResolvedValueOnce([])
 
       mockCreateMCPClient.mockResolvedValue(client)
 
@@ -251,9 +270,7 @@ describe("loadUserMcpTools", () => {
         },
       })
 
-      mockFetchQuery
-        .mockResolvedValueOnce([server])
-        .mockResolvedValueOnce([])
+      mockFetchQuery.mockResolvedValueOnce([server]).mockResolvedValueOnce([])
 
       mockCreateMCPClient.mockResolvedValue(client)
 
@@ -280,9 +297,7 @@ describe("loadUserMcpTools", () => {
         },
       })
 
-      mockFetchQuery
-        .mockResolvedValueOnce([server])
-        .mockResolvedValueOnce([])
+      mockFetchQuery.mockResolvedValueOnce([server]).mockResolvedValueOnce([])
 
       mockCreateMCPClient.mockResolvedValue(client)
 
@@ -302,7 +317,11 @@ describe("loadUserMcpTools", () => {
     it("merges tools from multiple servers with different namespaces", async () => {
       const servers = [
         mockServer({ _id: "s1", name: "GitHub" }),
-        mockServer({ _id: "s2", name: "Jira", url: "https://jira.example.com" }),
+        mockServer({
+          _id: "s2",
+          name: "Jira",
+          url: "https://jira.example.com",
+        }),
       ]
 
       const client1 = mockClient({
@@ -312,9 +331,7 @@ describe("loadUserMcpTools", () => {
         create_ticket: mockTool("create_ticket"),
       })
 
-      mockFetchQuery
-        .mockResolvedValueOnce(servers)
-        .mockResolvedValueOnce([])
+      mockFetchQuery.mockResolvedValueOnce(servers).mockResolvedValueOnce([])
 
       mockCreateMCPClient
         .mockResolvedValueOnce(client1)
@@ -330,15 +347,17 @@ describe("loadUserMcpTools", () => {
     it("handles same tool name from different servers via namespacing", async () => {
       const servers = [
         mockServer({ _id: "s1", name: "Server A" }),
-        mockServer({ _id: "s2", name: "Server B", url: "https://b.example.com" }),
+        mockServer({
+          _id: "s2",
+          name: "Server B",
+          url: "https://b.example.com",
+        }),
       ]
 
       const client1 = mockClient({ search: mockTool("search") })
       const client2 = mockClient({ search: mockTool("search") })
 
-      mockFetchQuery
-        .mockResolvedValueOnce(servers)
-        .mockResolvedValueOnce([])
+      mockFetchQuery.mockResolvedValueOnce(servers).mockResolvedValueOnce([])
 
       mockCreateMCPClient
         .mockResolvedValueOnce(client1)
@@ -354,15 +373,17 @@ describe("loadUserMcpTools", () => {
     it("drops colliding namespaced tools when slug normalization collides", async () => {
       const servers = [
         mockServer({ _id: "s1", name: "Alpha Beta" }),
-        mockServer({ _id: "s2", name: "Alpha---Beta", url: "https://alpha2.example.com" }),
+        mockServer({
+          _id: "s2",
+          name: "Alpha---Beta",
+          url: "https://alpha2.example.com",
+        }),
       ]
 
       const client1 = mockClient({ search: mockTool("search") })
       const client2 = mockClient({ search: mockTool("search") })
 
-      mockFetchQuery
-        .mockResolvedValueOnce(servers)
-        .mockResolvedValueOnce([])
+      mockFetchQuery.mockResolvedValueOnce(servers).mockResolvedValueOnce([])
 
       mockCreateMCPClient
         .mockResolvedValueOnce(client1)
@@ -378,15 +399,17 @@ describe("loadUserMcpTools", () => {
       const base = "a".repeat(30)
       const servers = [
         mockServer({ _id: "s1", name: `${base}-x` }),
-        mockServer({ _id: "s2", name: `${base}_y`, url: "https://long2.example.com" }),
+        mockServer({
+          _id: "s2",
+          name: `${base}_y`,
+          url: "https://long2.example.com",
+        }),
       ]
 
       const client1 = mockClient({ lookup: mockTool("lookup") })
       const client2 = mockClient({ lookup: mockTool("lookup") })
 
-      mockFetchQuery
-        .mockResolvedValueOnce(servers)
-        .mockResolvedValueOnce([])
+      mockFetchQuery.mockResolvedValueOnce(servers).mockResolvedValueOnce([])
 
       mockCreateMCPClient
         .mockResolvedValueOnce(client1)
@@ -412,24 +435,22 @@ describe("loadUserMcpTools", () => {
         rejected_tool: mockTool("rejected_tool"),
       })
 
-      mockFetchQuery
-        .mockResolvedValueOnce([server])
-        .mockResolvedValueOnce([
-          {
-            _id: "a1",
-            userId: "user_1",
-            serverId: "s1",
-            toolName: "approved_tool",
-            approved: true,
-          },
-          {
-            _id: "a2",
-            userId: "user_1",
-            serverId: "s1",
-            toolName: "rejected_tool",
-            approved: false,
-          },
-        ])
+      mockFetchQuery.mockResolvedValueOnce([server]).mockResolvedValueOnce([
+        {
+          _id: "a1",
+          userId: "user_1",
+          serverId: "s1",
+          toolName: "approved_tool",
+          approved: true,
+        },
+        {
+          _id: "a2",
+          userId: "user_1",
+          serverId: "s1",
+          toolName: "rejected_tool",
+          approved: false,
+        },
+      ])
 
       mockCreateMCPClient.mockResolvedValue(client)
 
@@ -445,9 +466,7 @@ describe("loadUserMcpTools", () => {
         new_tool: mockTool("new_tool"),
       })
 
-      mockFetchQuery
-        .mockResolvedValueOnce([server])
-        .mockResolvedValueOnce([]) // no approval records at all
+      mockFetchQuery.mockResolvedValueOnce([server]).mockResolvedValueOnce([]) // no approval records at all
 
       mockCreateMCPClient.mockResolvedValue(client)
 
@@ -473,9 +492,7 @@ describe("loadUserMcpTools", () => {
       const server = mockServer({ name: "ManyTools" })
       const client = mockClient(tools)
 
-      mockFetchQuery
-        .mockResolvedValueOnce([server])
-        .mockResolvedValueOnce([])
+      mockFetchQuery.mockResolvedValueOnce([server]).mockResolvedValueOnce([])
 
       mockCreateMCPClient.mockResolvedValue(client)
 
@@ -494,23 +511,27 @@ describe("loadUserMcpTools", () => {
     it("skips failed server connections gracefully", async () => {
       const servers = [
         mockServer({ _id: "s1", name: "Healthy" }),
-        mockServer({ _id: "s2", name: "Broken", url: "https://broken.example.com" }),
+        mockServer({
+          _id: "s2",
+          name: "Broken",
+          url: "https://broken.example.com",
+        }),
       ]
 
       const healthyClient = mockClient({
         working_tool: mockTool("working_tool"),
       })
 
-      mockFetchQuery
-        .mockResolvedValueOnce(servers)
-        .mockResolvedValueOnce([])
+      mockFetchQuery.mockResolvedValueOnce(servers).mockResolvedValueOnce([])
 
-      mockCreateMCPClient.mockImplementation((options: { transport?: { url?: string } }) => {
-        if (options.transport?.url === "https://broken.example.com") {
-          return Promise.reject(new Error("Connection refused"))
+      mockCreateMCPClient.mockImplementation(
+        (options: { transport?: { url?: string } }) => {
+          if (options.transport?.url === "https://broken.example.com") {
+            return Promise.reject(new Error("Connection refused"))
+          }
+          return Promise.resolve(healthyClient)
         }
-        return Promise.resolve(healthyClient)
-      })
+      )
 
       const result = await loadUserMcpTools("test-token")
 
@@ -522,9 +543,7 @@ describe("loadUserMcpTools", () => {
     it("returns empty tools when ALL servers fail", async () => {
       const server = mockServer({ _id: "s1", name: "Broken" })
 
-      mockFetchQuery
-        .mockResolvedValueOnce([server])
-        .mockResolvedValueOnce([])
+      mockFetchQuery.mockResolvedValueOnce([server]).mockResolvedValueOnce([])
 
       mockCreateMCPClient.mockRejectedValue(new Error("Timeout"))
 
@@ -537,7 +556,11 @@ describe("loadUserMcpTools", () => {
     it("handles tools() call failure after successful connection", async () => {
       const servers = [
         mockServer({ _id: "s1", name: "Flaky" }),
-        mockServer({ _id: "s2", name: "Stable", url: "https://stable.example.com" }),
+        mockServer({
+          _id: "s2",
+          name: "Stable",
+          url: "https://stable.example.com",
+        }),
       ]
 
       const flakyClient = {
@@ -548,9 +571,7 @@ describe("loadUserMcpTools", () => {
         good_tool: mockTool("good_tool"),
       })
 
-      mockFetchQuery
-        .mockResolvedValueOnce(servers)
-        .mockResolvedValueOnce([])
+      mockFetchQuery.mockResolvedValueOnce(servers).mockResolvedValueOnce([])
 
       mockCreateMCPClient
         .mockResolvedValueOnce(flakyClient)
@@ -573,7 +594,11 @@ describe("loadUserMcpTools", () => {
     it("skips servers with open circuits", async () => {
       const servers = [
         mockServer({ _id: "s1", name: "Healthy" }),
-        mockServer({ _id: "s2", name: "CircuitOpen", url: "https://bad.example.com" }),
+        mockServer({
+          _id: "s2",
+          name: "CircuitOpen",
+          url: "https://bad.example.com",
+        }),
       ]
 
       // Open circuit for s2 (3 consecutive failures)
@@ -585,9 +610,7 @@ describe("loadUserMcpTools", () => {
         tool: mockTool("tool"),
       })
 
-      mockFetchQuery
-        .mockResolvedValueOnce(servers)
-        .mockResolvedValueOnce([])
+      mockFetchQuery.mockResolvedValueOnce(servers).mockResolvedValueOnce([])
 
       mockCreateMCPClient.mockResolvedValue(healthyClient)
 
@@ -601,7 +624,11 @@ describe("loadUserMcpTools", () => {
     it("returns empty when all servers have open circuits", async () => {
       const servers = [
         mockServer({ _id: "s1", name: "Bad1" }),
-        mockServer({ _id: "s2", name: "Bad2", url: "https://bad2.example.com" }),
+        mockServer({
+          _id: "s2",
+          name: "Bad2",
+          url: "https://bad2.example.com",
+        }),
       ]
 
       // Open circuits for both
@@ -610,9 +637,7 @@ describe("loadUserMcpTools", () => {
         recordFailure("s2")
       }
 
-      mockFetchQuery
-        .mockResolvedValueOnce(servers)
-        .mockResolvedValueOnce([])
+      mockFetchQuery.mockResolvedValueOnce(servers).mockResolvedValueOnce([])
 
       const result = await loadUserMcpTools("test-token")
 
@@ -630,9 +655,7 @@ describe("loadUserMcpTools", () => {
       const server = mockServer({ name: "Slow" })
       const orphanedClient = mockClient({ tool: mockTool("tool") })
 
-      mockFetchQuery
-        .mockResolvedValueOnce([server])
-        .mockResolvedValueOnce([])
+      mockFetchQuery.mockResolvedValueOnce([server]).mockResolvedValueOnce([])
 
       // Use a deferred promise so the client never resolves during loadUserMcpTools
       let resolveClient!: (value: typeof orphanedClient) => void
@@ -660,9 +683,7 @@ describe("loadUserMcpTools", () => {
     it("does not crash when orphaned client also rejects", async () => {
       const server = mockServer({ name: "Broken" })
 
-      mockFetchQuery
-        .mockResolvedValueOnce([server])
-        .mockResolvedValueOnce([])
+      mockFetchQuery.mockResolvedValueOnce([server]).mockResolvedValueOnce([])
 
       // Client promise will also reject (after the timeout)
       let rejectClient!: (reason: Error) => void
@@ -694,9 +715,7 @@ describe("loadUserMcpTools", () => {
       const server = mockServer({ name: "Slow" })
       const client = mockClient({ tool: mockTool("tool") })
 
-      mockFetchQuery
-        .mockResolvedValueOnce([server])
-        .mockResolvedValueOnce([])
+      mockFetchQuery.mockResolvedValueOnce([server]).mockResolvedValueOnce([])
 
       mockCreateMCPClient.mockResolvedValue(client)
 

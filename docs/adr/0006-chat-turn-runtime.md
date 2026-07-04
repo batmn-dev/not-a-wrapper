@@ -22,9 +22,9 @@ naïve `run(turn) → stream` shape:
 1. **There is a synchronous PREPARE phase that throws HTTP-mappable errors before
    any model call** — auth-resolved model/key resolution, key preflight (401),
    Tool runtime construction, durable-prepare (the optimistic-concurrency guard
-   + `prepareGeneration`, which can reject with a 4xx), history adaptation, and
-   request shaping. A single `run()` would force these into the response stream,
-   losing the status codes (clients get a 500 or a 200-with-error-stream).
+   - `prepareGeneration`, which can reject with a 4xx), history adaptation, and
+     request shaping. A single `run()` would force these into the response stream,
+     losing the status codes (clients get a 500 or a 200-with-error-stream).
 
 2. **`streamText()` returns a result handle synchronously while generation runs
    in the background** (in `app/api/chat/chat-turn-runtime.ts`,
@@ -35,7 +35,7 @@ naïve `run(turn) → stream` shape:
 
 The fragile, untested heart is the **cross-callback handoff**:
 `durableFinalUsage` / `durableFinalFinishReason` / `durableFinalToolCounts` are
-written in the `streamText` `onFinish` and read in the *response-level*
+written in the `streamText` `onFinish` and read in the _response-level_
 `onFinish` (`markGenerationRunCompleted`). If those two `onFinish` bodies are
 split across a seam, the handoff silently breaks — completion falls back to
 `countToolParts(responseMessage)` and **masks the bug** rather than failing
@@ -104,8 +104,8 @@ gate), the 400/401 validation short-circuits, and returning the `Response`.
   ownership and failure-mode boundary; loses HTTP status codes on prepare errors.
 - **Naming it a "session."** Collides with the client `ChatSessionProvider` and
   the WorkOS auth session. "Runtime" reuses the established
-  *"X runtime = everything a request needs for X, prepared once, alive for the
-  stream"* pattern (Tool runtime) and composes the Tool runtime cleanly.
+  _"X runtime = everything a request needs for X, prepared once, alive for the
+  stream"_ pattern (Tool runtime) and composes the Tool runtime cleanly.
 - **Route keeps `toUIMessageStreamResponse` / its own abort listener.** Forces
   the route to hold runtime internals (`durableFinal*`, `approvalWritePromises`)
   as callbacks and risks double-counting aborts across two listeners.
@@ -138,3 +138,25 @@ gate), the 400/401 validation short-circuits, and returning the `Response`.
   against the catch-path durable writes; (c) the edit/regen optimistic-concurrency
   guard (`expectedVisibleMessageCount` / `tailMessageId`) is relocated verbatim —
   it is the area with the known version-guard count-drift edge.
+
+## Addendum (2026-07-04): AI SDK v7 surface
+
+The decision is unchanged; the names in the text above moved with the ai@7
+upgrade (PR #97). Read the body's names through this mapping:
+
+- The two `onFinish` layers are now the two `onEnd` layers (v7 rename of the
+  same callbacks). The shared-closure `durableFinal*` handoff contract is
+  identical; note that v7's `onEnd.usage` aggregates across ALL steps where
+  v6's `onFinish.usage` was final-step only.
+- `toUIMessageStreamResponse` (deprecated, removed in ai@8) was split into
+  `result.toUIMessageStream(...)` — the UI-message semantics, carrying the
+  response-level `onEnd` — plus `createUIMessageStreamResponse` — SSE encoding,
+  the `Response`, and `consumeSseStream`. Both halves remain inside
+  `toResponse(signal)`'s single closure, so the "both finish layers share one
+  closure" invariant is untouched.
+- Approval gating is no longer applied by wrapping tools (the
+  `applyDurableApprovals` mutation, an implementation detail below this
+  decision); the Tool runtime now exposes a declarative call-site
+  `toolApproval` map that `toResponse` spreads into `streamText` for durable
+  runs only. Absent entries fall through to a tool's own `needsApproval`,
+  preserving the old OR-composition.

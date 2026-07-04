@@ -5,9 +5,8 @@
  * server-adjacent consumer, e.g. the share page) can derive sources without
  * importing from the component tree.
  */
-import type { UIMessage } from "ai"
-import type { SourceUrlUIPart } from "ai"
-import { isStaticToolUIPart, getStaticToolName } from "ai"
+import type { SourceUrlUIPart, UIMessage } from "ai"
+import { getStaticToolName, isStaticToolUIPart } from "ai"
 
 // Source type for validation
 type SourceLike = {
@@ -43,8 +42,7 @@ export function getSources(parts: UIMessage["parts"]): SourceUrlUIPart[] {
         // Handle summarizeSources tool which returns citations
         if (toolName === "summarizeSources") {
           const typedResult = result as
-            | { result?: Array<{ citations?: unknown[] }> }
-            | undefined
+            { result?: Array<{ citations?: unknown[] }> } | undefined
           if (typedResult?.result?.[0]?.citations) {
             return typedResult.result.flatMap((item) => item.citations || [])
           }
@@ -61,14 +59,12 @@ export function getSources(parts: UIMessage["parts"]): SourceUrlUIPart[] {
   // Filter and convert to SourceUrlUIPart format
   const validSources = (sources || [])
     .filter(isValidSource)
-    .map(
-      (source): SourceUrlUIPart => ({
-        type: "source-url",
-        sourceId: source.sourceId || source.url,
-        url: source.url,
-        title: source.title || source.url,
-      })
-    )
+    .map((source): SourceUrlUIPart => ({
+      type: "source-url",
+      sourceId: source.sourceId || source.url,
+      url: source.url,
+      title: source.title || source.url,
+    }))
 
   // Dedupe by URL, keeping the first occurrence. Providers cite the same URL
   // across multiple source parts / tool steps; this derivation feeds every

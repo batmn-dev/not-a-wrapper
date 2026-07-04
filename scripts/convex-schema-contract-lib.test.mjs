@@ -4,6 +4,13 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 import {
+  convexDeployArgs,
+  deployPlanForEnv,
+  deployPreflightMode,
+  preflightArgsForDeployEnv,
+  runDeploy,
+} from "./convex-deploy.mjs"
+import {
   baseRefToFetchDestination,
   buildInlineCountQuery,
   checksFromManifests,
@@ -22,13 +29,6 @@ import {
   shouldRequireDiffBase,
   validatePreflightResults,
 } from "./convex-schema-contract-preflight.mjs"
-import {
-  convexDeployArgs,
-  deployPlanForEnv,
-  deployPreflightMode,
-  preflightArgsForDeployEnv,
-  runDeploy,
-} from "./convex-deploy.mjs"
 
 const baseSchema = `
 import { defineSchema, defineTable } from "convex/server"
@@ -91,7 +91,11 @@ function contractedManifest(status = "contracted") {
       fields: [
         { table: "messages", field: "messageGroupId", expectedCount: 0 },
         { table: "messages", field: "model", expectedCount: 0 },
-        { table: "userPreferences", field: "multiModelEnabled", expectedCount: 0 },
+        {
+          table: "userPreferences",
+          field: "multiModelEnabled",
+          expectedCount: 0,
+        },
       ],
       cleanupFunction: "historical:cleanup",
       verifier: "bun run convex:schema-preflight",
@@ -163,7 +167,9 @@ describe("Convex schema contraction helpers", () => {
     expect(shouldRequireDiffBase({ prod: true })).toBe(true)
     expect(shouldRequireDiffBase({ prod: true, dryRun: true })).toBe(false)
     expect(shouldRequireDiffBase({ deployment: "prod" })).toBe(true)
-    expect(shouldRequireDiffBase({ requireDiffBase: true, dryRun: true })).toBe(true)
+    expect(shouldRequireDiffBase({ requireDiffBase: true, dryRun: true })).toBe(
+      true
+    )
     expect(shouldRequireDiffBase({ dryRun: true })).toBe(false)
   })
 
@@ -175,11 +181,13 @@ describe("Convex schema contraction helpers", () => {
     })
 
     expect(plan.errors).toEqual([])
-    expect(plan.checks.map((check) => `${check.table}.${check.field}`)).toEqual([
-      "messages.messageGroupId",
-      "messages.model",
-      "userPreferences.multiModelEnabled",
-    ])
+    expect(plan.checks.map((check) => `${check.table}.${check.field}`)).toEqual(
+      [
+        "messages.messageGroupId",
+        "messages.model",
+        "userPreferences.multiModelEnabled",
+      ]
+    )
   })
 
   it("fails dry-run when a contracted manifest field is present in the current schema", () => {
@@ -472,7 +480,9 @@ describe("Convex schema contraction helpers", () => {
   })
 
   it("builds inline queries that return only aggregate counts", () => {
-    const query = buildInlineCountQuery(checksFromManifests([contractedManifest()]))
+    const query = buildInlineCountQuery(
+      checksFromManifests([contractedManifest()])
+    )
 
     expect(query).toContain("count")
     expect(query).toContain("q.neq(q.field(check.field), undefined)")
@@ -493,15 +503,18 @@ describe("Convex schema contraction helpers", () => {
 
   it("fails preflight results when a legacy field count is nonzero", () => {
     const [check] = checksFromManifests([contractedManifest()])
-    const result = validatePreflightResults([check], [
-      {
-        table: check.table,
-        field: check.field,
-        count: 1,
-        countIsCapped: false,
-        expectedCount: check.expectedCount,
-      },
-    ])
+    const result = validatePreflightResults(
+      [check],
+      [
+        {
+          table: check.table,
+          field: check.field,
+          count: 1,
+          countIsCapped: false,
+          expectedCount: check.expectedCount,
+        },
+      ]
+    )
 
     expect(result.failures).toEqual([
       "messages.messageGroupId count 1 does not match expected 0",
@@ -510,15 +523,18 @@ describe("Convex schema contraction helpers", () => {
 
   it("fails preflight results when a legacy field count is capped", () => {
     const [check] = checksFromManifests([contractedManifest()])
-    const result = validatePreflightResults([check], [
-      {
-        table: check.table,
-        field: check.field,
-        count: 1000,
-        countIsCapped: true,
-        expectedCount: check.expectedCount,
-      },
-    ])
+    const result = validatePreflightResults(
+      [check],
+      [
+        {
+          table: check.table,
+          field: check.field,
+          count: 1000,
+          countIsCapped: true,
+          expectedCount: check.expectedCount,
+        },
+      ]
+    )
 
     expect(result.failures).toEqual([
       "messages.messageGroupId has at least 1000 legacy documents",
@@ -529,21 +545,26 @@ describe("Convex schema contraction helpers", () => {
     const [check] = checksFromManifests([contractedManifest()])
     const result = validatePreflightResults([check], [])
 
-    expect(result.failures).toEqual(["messages.messageGroupId did not return a count"])
+    expect(result.failures).toEqual([
+      "messages.messageGroupId did not return a count",
+    ])
   })
 
   it("fails preflight results when Convex returns malformed count data", () => {
     const [check] = checksFromManifests([contractedManifest()])
 
     expect(() =>
-      validatePreflightResults([check], [
-        {
-          table: check.table,
-          count: 0,
-          countIsCapped: false,
-          expectedCount: check.expectedCount,
-        },
-      ])
+      validatePreflightResults(
+        [check],
+        [
+          {
+            table: check.table,
+            count: 0,
+            countIsCapped: false,
+            expectedCount: check.expectedCount,
+          },
+        ]
+      )
     ).toThrow("Convex verification returned an invalid count result")
   })
 })

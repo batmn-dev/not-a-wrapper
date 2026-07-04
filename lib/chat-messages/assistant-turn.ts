@@ -22,15 +22,11 @@
  *    activity panel owns that state; the trigger's source count settles on
  *    the status flip). Message text is compared by the row's `children` prop.
  */
-import type { UIMessage } from "ai"
-import type { SourceUrlUIPart, ToolUIPart } from "ai"
+import type { SourceUrlUIPart, ToolUIPart, UIMessage } from "ai"
 import { getStaticToolName, isStaticToolUIPart } from "ai"
 import type { DurableMessageStatus } from "./durable-contract"
 import { getReasoningDurationMs, getServerMessageId } from "./metadata"
-import {
-  extractTextFromMessageParts,
-  getToolRenderSignature,
-} from "./parts"
+import { extractTextFromMessageParts, getToolRenderSignature } from "./parts"
 import { getSources } from "./sources"
 
 type ChatStatus = "streaming" | "ready" | "submitted" | "error"
@@ -165,9 +161,7 @@ export function deriveReasoningView(
   }
 }
 
-function getSearchImageResults(
-  toolParts: ToolUIPart[]
-): SearchImageResult[] {
+function getSearchImageResults(toolParts: ToolUIPart[]): SearchImageResult[] {
   return toolParts
     .filter(
       (part) =>
@@ -350,8 +344,7 @@ export function deriveAssistantTurnPhase(
   // A durable approval pause is authoritative wherever it appears.
   if (status === "awaiting_approval") return { kind: "awaiting-approval" }
 
-  const isLive =
-    isLast && (status === "submitted" || status === "streaming")
+  const isLive = isLast && (status === "submitted" || status === "streaming")
   if (!isLive) return { kind: "settled" }
 
   if (status === "submitted") return { kind: "submitted" }

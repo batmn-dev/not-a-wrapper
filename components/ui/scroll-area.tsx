@@ -1,9 +1,8 @@
 "use client"
 
-import * as React from "react"
-import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area"
-
 import { cn } from "@/lib/utils"
+import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area"
+import * as React from "react"
 
 type ScrollAreaProps = ScrollAreaPrimitive.Root.Props & {
   /** Optional ref to access the scroll viewport element */

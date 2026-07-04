@@ -1,18 +1,12 @@
 // lib/tools/runtime.ts
 
-import type { ToolSet } from "ai"
 import { MCP_CONNECTION_TIMEOUT_MS, PREPARE_STEP_THRESHOLD } from "@/lib/config"
-import { getPostHogClient } from "@/lib/posthog"
-import type { ToolKeyMode } from "@/lib/user-keys"
 import {
   loadUserMcpTools,
   type LoadToolsResult,
   type ServerInfo,
 } from "@/lib/mcp/load-tools"
-import {
-  enforceToolNamingGovernance,
-  type ToolLayerMap,
-} from "@/lib/tools/naming"
+import { getPostHogClient } from "@/lib/posthog"
 import {
   filterMetadataMapByPolicy,
   filterToolSetByPolicy,
@@ -25,11 +19,15 @@ import {
   type ToolPolicyInput,
   type UserTier,
 } from "@/lib/tools/capability-policy"
+import { ToolTraceCollector, wrapMcpTools } from "@/lib/tools/mcp-wrapper"
 import {
   createToolMetadataResolver,
   type ToolMetadataResolver,
 } from "@/lib/tools/metadata-resolver"
-import { ToolTraceCollector, wrapMcpTools } from "@/lib/tools/mcp-wrapper"
+import {
+  enforceToolNamingGovernance,
+  type ToolLayerMap,
+} from "@/lib/tools/naming"
 import {
   getRuntimeToolApprovalDecision,
   type RuntimeToolApprovalDecision,
@@ -40,6 +38,8 @@ import type {
   ToolSource,
 } from "@/lib/tools/types"
 import { sanitizeForJson } from "@/lib/tools/utils"
+import type { ToolKeyMode } from "@/lib/user-keys"
+import type { ToolApprovalStatus, ToolSet } from "ai"
 
 function serializeToolOutcomePreview(value: unknown): string | undefined {
   if (value === undefined) return undefined
@@ -204,12 +204,16 @@ export type ToolRuntime = {
   /** Approval decision lookup for the persistence sites. */
   approvalFor(toolName: string): RuntimeToolApprovalDecision | undefined
   /**
-   * Wrap `tools` with runtime-approval gating exactly once. Idempotent — a
-   * second call is a no-op. Called by the route only when a durable run is
-   * active (durableRunState is assigned after the tool block runs, so this
-   * cannot be a `prepareToolRuntime` flag).
+   * Call-site tool-approval configuration for streamText — the runtime
+   * decisions projected onto ai@7's `toolApproval` map. Entries exist only
+   * for tools whose decision needs approval ("user-approval"); a tool with no
+   * entry falls through to its own `needsApproval` at the SDK layer, which
+   * preserves the pre-v7 OR-composition without wrapping or mutating the tool
+   * set. `undefined` when no tool needs approval. The Chat turn runtime
+   * spreads this into streamText only for durable runs — guest chats run
+   * ungated, as before.
    */
-  applyDurableApprovals(): void
+  readonly toolApproval: Record<string, ToolApprovalStatus> | undefined
   /**
    * Step gate for streamText. `undefined` when the runtime has no tools —
    * pass directly: `prepareStep: runtime.prepareStep`.
@@ -243,7 +247,7 @@ export type ToolRuntime = {
 
 /**
  * Timeout classification over an outcome's error signals — absorbed from the
- * chat route's onFinish aggregate so the summary owns its own rules.
+ * chat runtime's end-of-stream aggregate so the summary owns its own rules.
  */
 function isTimeoutSignal(value: string | undefined): boolean {
   if (!value) return false
@@ -425,7 +429,8 @@ async function buildToolRuntime(
             exaPolicyGuard.enforceToolBudget(toolName),
           keyMode: resolvedExaKeyMode,
           maxCallsPerTool: PREPARE_STEP_THRESHOLD,
-          onEvent: (event) => logOutageTolerantBudgetEvent("third-party", event),
+          onEvent: (event) =>
+            logOutageTolerantBudgetEvent("third-party", event),
         })
       : undefined
 
@@ -474,7 +479,8 @@ async function buildToolRuntime(
   let contentToolMetadata = new Map<string, ToolMetadata>()
 
   if (resolvedExaKey && capabilities.extract) {
-    const { getContentExtractionTools } = await import("@/lib/tools/third-party")
+    const { getContentExtractionTools } =
+      await import("@/lib/tools/third-party")
     const contentResult = await getContentExtractionTools({
       exaKey: resolvedExaKey,
       policyGuard: exaPolicyGuard,
@@ -623,12 +629,18 @@ async function buildToolRuntime(
   contentTools = filterToolSetByPolicy(contentTools, toolPolicy)
   mcpTools = filterToolSetByPolicy(mcpTools, toolPolicy)
 
-  builtInToolMetadata = filterMetadataMapByPolicy(builtInToolMetadata, toolPolicy)
+  builtInToolMetadata = filterMetadataMapByPolicy(
+    builtInToolMetadata,
+    toolPolicy
+  )
   thirdPartyToolMetadata = filterMetadataMapByPolicy(
     thirdPartyToolMetadata,
     toolPolicy
   )
-  contentToolMetadata = filterMetadataMapByPolicy(contentToolMetadata, toolPolicy)
+  contentToolMetadata = filterMetadataMapByPolicy(
+    contentToolMetadata,
+    toolPolicy
+  )
   mcpToolServerMap = filterMetadataMapByPolicy(mcpToolServerMap, toolPolicy)
 
   // -----------------------------------------------------------------------
@@ -851,7 +863,7 @@ async function buildToolRuntime(
   // Spread order = conflict resolution priority (last wins).
   // -----------------------------------------------------------------------
   const searchTools = { ...builtInTools, ...thirdPartyTools }
-  let mergedTools = {
+  const mergedTools = {
     ...searchTools,
     ...contentTools,
     ...mcpTools,
@@ -895,15 +907,18 @@ async function buildToolRuntime(
     approvalDecisionsByToolName.set(toolName, decision)
   }
 
-  let durableApprovalsApplied = false
-  const applyDurableApprovals = () => {
-    if (durableApprovalsApplied) return
-    durableApprovalsApplied = true
-    mergedTools = wrapToolsWithRuntimeApproval(
-      mergedTools,
-      approvalDecisionsByToolName
-    )
-  }
+  // Project the decisions onto ai@7's call-site `toolApproval` map: an entry
+  // only where approval is needed, so absent tools keep their own
+  // `needsApproval` (the SDK's fallback), and the tool set is never mutated.
+  const toolApprovalEntries = Object.fromEntries(
+    [...approvalDecisionsByToolName]
+      .filter(([, decision]) => decision.needsApproval)
+      .map(([toolName]) => [toolName, "user-approval" as const])
+  )
+  const toolApproval: Record<string, ToolApprovalStatus> | undefined =
+    Object.keys(toolApprovalEntries).length > 0
+      ? toolApprovalEntries
+      : undefined
 
   // -----------------------------------------------------------------------
   // dispose() — idempotent MCP client cleanup.
@@ -1059,9 +1074,7 @@ async function buildToolRuntime(
     const result = step.toolResults?.find(
       (candidate) => candidate.toolCallId === call.toolCallId
     )
-    const success = result
-      ? !(result as { isError?: boolean }).isError
-      : false
+    const success = result ? !(result as { isError?: boolean }).isError : false
     const trace = traceCollector.get(call.toolCallId)
     const resolved = metadata.get(call.toolName)
     const mcpServer = resolved?.mcpServer
@@ -1163,7 +1176,9 @@ async function buildToolRuntime(
   }
 
   const mcpServerCount = new Set(
-    Array.from(mcpToolServerMap.values()).map((info: ServerInfo) => info.serverId)
+    Array.from(mcpToolServerMap.values()).map(
+      (info: ServerInfo) => info.serverId
+    )
   ).size
   const mcpClientCount = mcpClients.length
 
@@ -1183,7 +1198,7 @@ async function buildToolRuntime(
     approvalFor(toolName: string) {
       return approvalDecisionsByToolName.get(toolName)
     },
-    applyDurableApprovals,
+    toolApproval,
     prepareStep,
     onStepFinish,
     outcomeSummary() {
@@ -1193,46 +1208,3 @@ async function buildToolRuntime(
   }
 }
 
-/**
- * Wrap tools with runtime-approval gating. A tool whose decision needs approval
- * gets a composed `needsApproval` that ORs the existing predicate with the
- * runtime decision; all other tools pass through unchanged.
- *
- * Moved verbatim from the chat route — used only by `applyDurableApprovals`.
- */
-function wrapToolsWithRuntimeApproval(
-  tools: ToolSet,
-  approvalByToolName: ReadonlyMap<string, { needsApproval: boolean }>
-): ToolSet {
-  const wrapped: Record<string, unknown> = {}
-
-  for (const [toolName, descriptor] of Object.entries(tools)) {
-    const original = descriptor as Record<string, unknown>
-    const decision = approvalByToolName.get(toolName)
-    if (!decision?.needsApproval) {
-      wrapped[toolName] = original
-      continue
-    }
-
-    const existingNeedsApproval = original.needsApproval
-    wrapped[toolName] = {
-      ...original,
-      needsApproval: async (input: unknown, options: unknown) => {
-        let existingDecision = false
-        if (typeof existingNeedsApproval === "function") {
-          existingDecision = await (
-            existingNeedsApproval as (
-              input: unknown,
-              options: unknown
-            ) => boolean | PromiseLike<boolean>
-          )(input, options)
-        } else if (typeof existingNeedsApproval === "boolean") {
-          existingDecision = existingNeedsApproval
-        }
-        return existingDecision || decision.needsApproval
-      },
-    }
-  }
-
-  return wrapped as ToolSet
-}

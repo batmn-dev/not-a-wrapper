@@ -116,9 +116,10 @@ function redactSensitiveKeys(value: unknown, depth = 0): unknown {
   for (const [key, childValue] of Object.entries(
     value as Record<string, unknown>
   )) {
-    result[key] = isSensitiveKey(key) || isUnsafeIdentifierKey(key)
-      ? REDACTED
-      : redactSensitiveKeys(childValue, depth + 1)
+    result[key] =
+      isSensitiveKey(key) || isUnsafeIdentifierKey(key)
+        ? REDACTED
+        : redactSensitiveKeys(childValue, depth + 1)
   }
   return result
 }
@@ -192,7 +193,9 @@ function sanitizeMetadataValue(
 }
 
 function sanitizeContentMetadataValue(value: unknown): BraintrustMetadataValue {
-  return scrubForAnalytics(redactSensitiveKeys(value)) as BraintrustMetadataValue
+  return scrubForAnalytics(
+    redactSensitiveKeys(value)
+  ) as BraintrustMetadataValue
 }
 
 export function sanitizeBraintrustMetadata(

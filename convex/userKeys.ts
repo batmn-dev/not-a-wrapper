@@ -1,8 +1,5 @@
 import { v } from "convex/values"
-import {
-  authenticatedMutation,
-  maybeAuthQuery,
-} from "./lib/authedFunctions"
+import { authenticatedMutation, maybeAuthQuery } from "./lib/authedFunctions"
 
 /**
  * Get all API keys for current user (encrypted)

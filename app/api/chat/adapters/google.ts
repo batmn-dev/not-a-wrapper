@@ -48,7 +48,7 @@ function hasToolResult(part: MessagePart): boolean {
 function addFallbackAssistantText(
   message: UIMessage,
   warnings: AdaptationWarning[],
-  messageIndex: number,
+  messageIndex: number
 ): UIMessage {
   if (message.role !== "assistant") return message
   if (message.parts.length > 0) return message
@@ -56,7 +56,8 @@ function addFallbackAssistantText(
   warnings.push({
     code: "empty_message_fallback",
     messageIndex,
-    detail: "Assistant message became empty after adaptation; injected empty text part.",
+    detail:
+      "Assistant message became empty after adaptation; injected empty text part.",
   })
 
   return {
@@ -104,30 +105,38 @@ function mergeUserTextParts(prev: UIMessage, current: UIMessage): UIMessage {
 
 function dropWithStat(
   statsRecord: Record<string, number>,
-  partType: string,
+  partType: string
 ): void {
   incrementStat(statsRecord, partType)
 }
 
 function isDroppedArtifactType(partType: string): boolean {
-  return partType === "step-start" || partType === "source-url" || partType === "source-document"
+  return (
+    partType === "step-start" ||
+    partType === "source-url" ||
+    partType === "source-document"
+  )
 }
 
 function pairFilterParts(
   parts: MessagePart[],
   messageIndex: number,
   warnings: AdaptationWarning[],
-  stats: AdaptationResult["stats"],
+  stats: AdaptationResult["stats"]
 ): MessagePart[] {
   const invocationCount = new Map<string, number>()
   const resultCount = new Map<string, number>()
 
   for (const part of parts) {
     if (!isToolPart(part)) continue
-    const toolCallId = typeof part.toolCallId === "string" ? part.toolCallId : null
+    const toolCallId =
+      typeof part.toolCallId === "string" ? part.toolCallId : null
     if (!toolCallId) continue
     if (hasToolInvocation(part)) {
-      invocationCount.set(toolCallId, (invocationCount.get(toolCallId) ?? 0) + 1)
+      invocationCount.set(
+        toolCallId,
+        (invocationCount.get(toolCallId) ?? 0) + 1
+      )
     }
     if (hasToolResult(part)) {
       resultCount.set(toolCallId, (resultCount.get(toolCallId) ?? 0) + 1)
@@ -141,7 +150,8 @@ function pairFilterParts(
       continue
     }
 
-    const toolCallId = typeof part.toolCallId === "string" ? part.toolCallId : null
+    const toolCallId =
+      typeof part.toolCallId === "string" ? part.toolCallId : null
     if (!toolCallId) {
       warnings.push({
         code: "incomplete_triple_dropped",
@@ -176,17 +186,21 @@ function enforceFcFrParity(
   parts: MessagePart[],
   messageIndex: number,
   warnings: AdaptationWarning[],
-  stats: AdaptationResult["stats"],
+  stats: AdaptationResult["stats"]
 ): MessagePart[] {
   const invocationCount = new Map<string, number>()
   const resultCount = new Map<string, number>()
 
   for (const part of parts) {
     if (!isToolPart(part)) continue
-    const toolCallId = typeof part.toolCallId === "string" ? part.toolCallId : null
+    const toolCallId =
+      typeof part.toolCallId === "string" ? part.toolCallId : null
     if (!toolCallId) continue
     if (hasToolInvocation(part)) {
-      invocationCount.set(toolCallId, (invocationCount.get(toolCallId) ?? 0) + 1)
+      invocationCount.set(
+        toolCallId,
+        (invocationCount.get(toolCallId) ?? 0) + 1
+      )
     }
     if (hasToolResult(part)) {
       resultCount.set(toolCallId, (resultCount.get(toolCallId) ?? 0) + 1)
@@ -201,7 +215,7 @@ function enforceFcFrParity(
   for (const toolCallId of allToolCallIds) {
     const allowed = Math.min(
       invocationCount.get(toolCallId) ?? 0,
-      resultCount.get(toolCallId) ?? 0,
+      resultCount.get(toolCallId) ?? 0
     )
     allowedPairs.set(toolCallId, allowed)
   }
@@ -216,12 +230,14 @@ function enforceFcFrParity(
       continue
     }
 
-    const toolCallId = typeof part.toolCallId === "string" ? part.toolCallId : null
+    const toolCallId =
+      typeof part.toolCallId === "string" ? part.toolCallId : null
     if (!toolCallId) {
       warnings.push({
         code: "incomplete_triple_dropped",
         messageIndex,
-        detail: "Dropped tool part without toolCallId during FC/FR parity check.",
+        detail:
+          "Dropped tool part without toolCallId during FC/FR parity check.",
       })
       dropWithStat(stats.partsDropped, part.type)
       continue
@@ -262,7 +278,7 @@ function injectGemini3ThoughtSignatures(
   messages: UIMessage[],
   warnings: AdaptationWarning[],
   stats: AdaptationResult["stats"],
-  messageIndex: number,
+  messageIndex: number
 ): UIMessage[] {
   let lastAssistantIndex = -1
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -280,16 +296,26 @@ function injectGemini3ThoughtSignatures(
       return rawPart
     }
 
-    const providerMetadata = (part.providerMetadata ?? {}) as Record<string, unknown>
-    const googleMetadata = (providerMetadata.google ?? {}) as Record<string, unknown>
-    if (typeof googleMetadata.thoughtSignature === "string" && googleMetadata.thoughtSignature.length > 0) {
+    const providerMetadata = (part.providerMetadata ?? {}) as Record<
+      string,
+      unknown
+    >
+    const googleMetadata = (providerMetadata.google ?? {}) as Record<
+      string,
+      unknown
+    >
+    if (
+      typeof googleMetadata.thoughtSignature === "string" &&
+      googleMetadata.thoughtSignature.length > 0
+    ) {
       return rawPart
     }
 
     warnings.push({
       code: "thought_signature_injected",
       messageIndex,
-      detail: "Injected Gemini 3 thought signature placeholder for tool invocation replay.",
+      detail:
+        "Injected Gemini 3 thought signature placeholder for tool invocation replay.",
     })
     incrementStat(stats.partsTransformed, part.type)
 
@@ -327,11 +353,11 @@ export const googleAdapter: ProviderHistoryAdapter = {
 
   async adaptMessages(
     messages: readonly UIMessage[],
-    context: AdaptationContext,
+    context: AdaptationContext
   ): Promise<AdaptationResult> {
     const totalPartsOriginal = messages.reduce(
       (sum, message) => sum + message.parts.length,
-      0,
+      0
     )
     const stats = createEmptyStats(messages.length, totalPartsOriginal)
     const warnings: AdaptationWarning[] = []
@@ -360,7 +386,7 @@ export const googleAdapter: ProviderHistoryAdapter = {
         let nextPart = part
         if (isToolPart(part)) {
           const sourceProvider = detectSourceProvider(
-            part as { callProviderMetadata?: Record<string, unknown> },
+            part as { callProviderMetadata?: Record<string, unknown> }
           )
           if (sourceProvider && sourceProvider !== "google") {
             nextPart = stripCallProviderMetadata(nextPart)
@@ -381,7 +407,7 @@ export const googleAdapter: ProviderHistoryAdapter = {
         nextPartsRaw,
         messageIndex,
         warnings,
-        stats,
+        stats
       )
       const paritySafeParts =
         message.role === "assistant"
@@ -418,7 +444,10 @@ export const googleAdapter: ProviderHistoryAdapter = {
       })
 
       if (current.role === "user") {
-        pass2Messages[pass2Messages.length - 1] = mergeUserTextParts(previous, current)
+        pass2Messages[pass2Messages.length - 1] = mergeUserTextParts(
+          previous,
+          current
+        )
       } else if (current.role === "assistant") {
         const mergedAssistant = {
           ...previous,
@@ -431,35 +460,35 @@ export const googleAdapter: ProviderHistoryAdapter = {
             mergedAssistant.parts.map(toPart),
             index,
             warnings,
-            stats,
+            stats
           ),
         } as UIMessage
 
         pass2Messages[pass2Messages.length - 1] = addFallbackAssistantText(
           paritySafeMerged,
           warnings,
-          index,
+          index
         )
       } else {
         pass2Messages.push(current)
       }
     }
 
-    const finalMessages =
-      context.targetModelId.startsWith("gemini-3")
-        ? injectGemini3ThoughtSignatures(
-            pass2Messages,
-            warnings,
-            stats,
-            Math.max(0, pass2Messages.length - 1),
-          )
-        : pass2Messages
+    const finalMessages = context.targetModelId.startsWith("gemini-3")
+      ? injectGemini3ThoughtSignatures(
+          pass2Messages,
+          warnings,
+          stats,
+          Math.max(0, pass2Messages.length - 1)
+        )
+      : pass2Messages
 
     stats.adaptedMessageCount = finalMessages.length
-    stats.droppedMessages = stats.originalMessageCount - stats.adaptedMessageCount
+    stats.droppedMessages =
+      stats.originalMessageCount - stats.adaptedMessageCount
     stats.totalPartsAdapted = finalMessages.reduce(
       (sum, message) => sum + message.parts.length,
-      0,
+      0
     )
 
     return {

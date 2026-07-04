@@ -12,9 +12,7 @@ export type OptimisticUpdate = {
 }
 export type OptimisticDelete = { type: "delete"; id: string }
 export type OptimisticOperation =
-  | OptimisticAdd
-  | OptimisticUpdate
-  | OptimisticDelete
+  OptimisticAdd | OptimisticUpdate | OptimisticDelete
 
 /** Map a stored Convex chat to the unified client Chat type. */
 export function mapConvexChat(chat: Doc<"chats">): Chats {
@@ -79,9 +77,7 @@ export function applyOptimisticOps(
         result = [op.chat, ...result.filter((c) => c.id !== op.chat.id)]
       }
     } else if (op.type === "update") {
-      result = result.map((c) =>
-        c.id === op.id ? { ...c, ...op.changes } : c
-      )
+      result = result.map((c) => (c.id === op.id ? { ...c, ...op.changes } : c))
     } else if (op.type === "delete") {
       result = result.filter((c) => c.id !== op.id)
     }

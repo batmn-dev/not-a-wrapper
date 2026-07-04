@@ -1,10 +1,10 @@
-import { ConvexHttpClient } from "convex/browser"
-import { api } from "@/convex/_generated/api"
-import type { Id } from "@/convex/_generated/dataModel"
 import { LayoutApp } from "@/app/components/layout/layout-app"
 import { ProjectView } from "@/app/p/[projectId]/project-view"
+import { api } from "@/convex/_generated/api"
+import type { Id } from "@/convex/_generated/dataModel"
 import { getAuthenticatedWorkosSession } from "@/lib/auth/workos"
 import { MessagesProvider } from "@/lib/chat-store/messages/provider"
+import { ConvexHttpClient } from "convex/browser"
 import { notFound, redirect } from "next/navigation"
 
 // Lazy initialization to avoid build-time errors when env var is not set

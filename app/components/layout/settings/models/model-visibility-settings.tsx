@@ -93,7 +93,9 @@ export function ModelVisibilitySettings() {
 
   return (
     <div>
-      <h3 className="mb-2 text-lg font-medium text-balance">Available models</h3>
+      <h3 className="mb-2 text-lg font-medium text-balance">
+        Available models
+      </h3>
       <p className="text-muted-foreground mb-4 text-sm text-pretty">
         Choose which models appear in your model selector.
       </p>
@@ -119,7 +121,9 @@ export function ModelVisibilitySettings() {
             <div key={iconKey} className="space-y-3">
               <div className="flex items-center gap-2">
                 {provider?.icon && <provider.icon className="size-5" />}
-                <h4 className="font-medium text-balance">{provider?.name || iconKey}</h4>
+                <h4 className="font-medium text-balance">
+                  {provider?.name || iconKey}
+                </h4>
                 <span className="text-muted-foreground text-sm">
                   ({modelsGroup.length} models)
                 </span>

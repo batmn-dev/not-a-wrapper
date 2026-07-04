@@ -29,7 +29,9 @@ function withBaseAccessFlags(models: ModelConfig[]): ModelConfig[] {
   }))
 }
 
-export function isVisibleModel(model: Pick<ModelConfig, "catalogStatus">): boolean {
+export function isVisibleModel(
+  model: Pick<ModelConfig, "catalogStatus">
+): boolean {
   return model.catalogStatus === "visible"
 }
 
@@ -38,7 +40,9 @@ export async function getAllModels(): Promise<ModelConfig[]> {
   return STATIC_MODELS
 }
 
-export async function getRoutableModelsWithAccessFlags(): Promise<ModelConfig[]> {
+export async function getRoutableModelsWithAccessFlags(): Promise<
+  ModelConfig[]
+> {
   return withBaseAccessFlags(await getAllModels())
 }
 
@@ -47,7 +51,9 @@ export async function getVisibleModels(): Promise<ModelConfig[]> {
   return models.filter((model) => isVisibleModel(model))
 }
 
-export async function getVisibleModelsWithAccessFlags(): Promise<ModelConfig[]> {
+export async function getVisibleModelsWithAccessFlags(): Promise<
+  ModelConfig[]
+> {
   return withBaseAccessFlags(await getVisibleModels())
 }
 

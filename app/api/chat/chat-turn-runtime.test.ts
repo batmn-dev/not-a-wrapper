@@ -1,4 +1,18 @@
+import { api } from "@/convex/_generated/api"
+import { getAllModels } from "@/lib/models"
+import { prepareToolRuntime } from "@/lib/tools/runtime"
+import { getEffectiveApiKey } from "@/lib/user-keys"
+import * as Sentry from "@sentry/nextjs"
+import { convertToModelMessages, validateUIMessages } from "ai"
+import { getFunctionName } from "convex/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { adaptHistoryForProvider } from "./adapters"
+import {
+  createChatTurnRuntime,
+  type ChatTurnDeps,
+  type ChatTurnInput,
+} from "./chat-turn-runtime"
+import { prepareTextFilePartsForModelInput } from "./text-file-parts"
 
 // --- mock the heavy collaborators so a whole turn runs without HTTP or a model.
 // The Chat turn runtime's interface IS the test surface: inject streamText +
@@ -49,8 +63,8 @@ vi.mock("./text-file-parts", () => ({
 
 vi.mock("@/lib/observability/braintrust", () => ({
   getBraintrustStreamText: vi.fn(),
-  withBraintrustTrace: vi.fn(
-    (_opts: unknown, cb: (span: null) => unknown) => cb(null)
+  withBraintrustTrace: vi.fn((_opts: unknown, cb: (span: null) => unknown) =>
+    cb(null)
   ),
   hashBraintrustIdentifier: vi.fn(async () => "hash"),
   logBraintrustTraceMetadata: vi.fn(),
@@ -81,21 +95,6 @@ vi.mock("ai", async (importActual) => {
     convertToModelMessages: vi.fn(async () => []),
   }
 })
-
-import * as Sentry from "@sentry/nextjs"
-import { getFunctionName } from "convex/server"
-import { validateUIMessages, convertToModelMessages } from "ai"
-import { getAllModels } from "@/lib/models"
-import { getEffectiveApiKey } from "@/lib/user-keys"
-import { prepareToolRuntime } from "@/lib/tools/runtime"
-import { adaptHistoryForProvider } from "./adapters"
-import { prepareTextFilePartsForModelInput } from "./text-file-parts"
-import { api } from "@/convex/_generated/api"
-import {
-  createChatTurnRuntime,
-  type ChatTurnInput,
-  type ChatTurnDeps,
-} from "./chat-turn-runtime"
 
 const SERVER_CHAT_ID = "convexchatid000000000000"
 
@@ -129,7 +128,7 @@ function makeToolRuntime(overrides: Record<string, unknown> = {}) {
     mcpClientCount: 0,
     approvalDecisionsByToolName: new Map(),
     approvalFor: () => undefined,
-    applyDurableApprovals: vi.fn(),
+    toolApproval: undefined,
     prepareStep: undefined,
     onStepFinish: vi.fn(async () => {}),
     outcomeSummary: () => ({
@@ -172,9 +171,16 @@ function makeStreamHarness(): StreamHarness {
   const streamText = vi.fn((opts: any) => {
     captured.streamOpts = opts
     return {
-      toUIMessageStreamResponse: (responseOpts: any) => {
+      // The runtime shapes the UI message stream here (responseOpts carries
+      // the response-level onEnd) and builds the Response via the real
+      // createUIMessageStreamResponse — an empty closed stream keeps it inert.
+      toUIMessageStream: (responseOpts: any) => {
         captured.responseOpts = responseOpts
-        return new Response("stream-body")
+        return new ReadableStream({
+          start(controller) {
+            controller.close()
+          },
+        })
       },
     }
   })
@@ -218,13 +224,17 @@ function findCall(fetchMutation: ReturnType<typeof vi.fn>, ref: unknown) {
   return fetchMutation.mock.calls.find((call) => sameRef(call[0], ref))
 }
 
-function makeDeps(harness: StreamHarness, fetchMutation: ReturnType<typeof vi.fn>) {
+function makeDeps(
+  harness: StreamHarness,
+  fetchMutation: ReturnType<typeof vi.fn>
+) {
   return {
     streamText: harness.streamText as unknown as ChatTurnDeps["streamText"],
     fetchMutation: fetchMutation as unknown as ChatTurnDeps["fetchMutation"],
     fetchQuery: vi.fn(async () => []) as unknown as ChatTurnDeps["fetchQuery"],
     after: vi.fn() as unknown as ChatTurnDeps["after"],
-    getPostHogClient: (() => null) as unknown as ChatTurnDeps["getPostHogClient"],
+    getPostHogClient: (() =>
+      null) as unknown as ChatTurnDeps["getPostHogClient"],
   }
 }
 
@@ -243,7 +253,9 @@ beforeEach(() => {
   ] as unknown as Awaited<ReturnType<typeof getAllModels>>)
   vi.mocked(getEffectiveApiKey).mockResolvedValue("byok-key")
   vi.mocked(prepareToolRuntime).mockResolvedValue(
-    makeToolRuntime() as unknown as Awaited<ReturnType<typeof prepareToolRuntime>>
+    makeToolRuntime() as unknown as Awaited<
+      ReturnType<typeof prepareToolRuntime>
+    >
   )
   vi.mocked(adaptHistoryForProvider).mockResolvedValue({
     messages: [],
@@ -286,9 +298,9 @@ describe("createChatTurnRuntime — prepare()", () => {
   })
 
   it("throws a 400 INVALID_REQUEST error when the model is unknown", async () => {
-    vi.mocked(getAllModels).mockResolvedValue([] as unknown as Awaited<
-      ReturnType<typeof getAllModels>
-    >)
+    vi.mocked(getAllModels).mockResolvedValue(
+      [] as unknown as Awaited<ReturnType<typeof getAllModels>>
+    )
     const runtime = createChatTurnRuntime({
       input: makeInput(),
       deps: makeDeps(makeStreamHarness(), makeFetchMutation()),
@@ -313,9 +325,10 @@ describe("createChatTurnRuntime — prepare()", () => {
     })
     await runtime.prepare()
 
-    const validateOrder = vi.mocked(validateUIMessages).mock.invocationCallOrder[0]
-    const convertOrder =
-      vi.mocked(convertToModelMessages).mock.invocationCallOrder[0]
+    const validateOrder =
+      vi.mocked(validateUIMessages).mock.invocationCallOrder[0]
+    const convertOrder = vi.mocked(convertToModelMessages).mock
+      .invocationCallOrder[0]
     expect(validateOrder).toBeGreaterThan(0)
     expect(convertOrder).toBeGreaterThan(0)
     expect(validateOrder).toBeLessThan(convertOrder)
@@ -332,10 +345,10 @@ describe("createChatTurnRuntime — prepare()", () => {
 })
 
 describe("createChatTurnRuntime — durable completion handoff", () => {
-  it("completes with durableFinal tool counts from streamText onFinish, not the countToolParts fallback", async () => {
+  it("completes with durableFinal tool counts from streamText onEnd, not the countToolParts fallback", async () => {
     const harness = makeStreamHarness()
     const fetchMutation = makeFetchMutation()
-    // Two tool calls, one failed — the streamText onFinish freezes these into
+    // Two tool calls, one failed — the streamText onEnd freezes these into
     // durableFinal*. The response message carries NO tool parts, so the
     // countToolParts fallback would yield {0,0}; seeing {2,1} on the completion
     // write proves the cross-callback handoff is intact.
@@ -347,6 +360,7 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
           timeoutToolCalls: 0,
           budgetDeniedToolCalls: 0,
         }),
+        toolApproval: { risky_tool: "user-approval" },
       }) as unknown as Awaited<ReturnType<typeof prepareToolRuntime>>
     )
     const runtime = createChatTurnRuntime({
@@ -357,15 +371,21 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     await runtime.prepare()
     runtime.toResponse(notAbortedSignal())
 
-    // Writer: streamText onFinish freezes durableFinal*.
-    await harness.captured.streamOpts.onFinish({
+    // Durable run: the Tool runtime's call-site approval config reaches
+    // streamText (guest runs omit it — the spread is durable-gated).
+    expect(harness.captured.streamOpts.toolApproval).toEqual({
+      risky_tool: "user-approval",
+    })
+
+    // Writer: streamText onEnd freezes durableFinal*.
+    await harness.captured.streamOpts.onEnd({
       text: "final answer",
       usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
       steps: [],
       finishReason: "stop",
     })
-    // Reader: the response-level onFinish performs markGenerationRunCompleted.
-    await harness.captured.responseOpts.onFinish({
+    // Reader: the response-level onEnd performs markGenerationRunCompleted.
+    await harness.captured.responseOpts.onEnd({
       responseMessage: {
         id: "msg1",
         role: "assistant",
@@ -404,8 +424,13 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     await runtime.prepare()
     runtime.toResponse(notAbortedSignal())
 
-    await harness.captured.responseOpts.onFinish({
-      responseMessage: { id: "msg1", role: "assistant", parts: [], metadata: {} },
+    await harness.captured.responseOpts.onEnd({
+      responseMessage: {
+        id: "msg1",
+        role: "assistant",
+        parts: [],
+        metadata: {},
+      },
       isAborted: true,
       finishReason: "stop",
     })
@@ -441,7 +466,7 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
       runtime.toResponse(notAbortedSignal())
 
       await expect(
-        harness.captured.responseOpts.onFinish({
+        harness.captured.responseOpts.onEnd({
           responseMessage: {
             id: "msg1",
             role: "assistant",
@@ -586,7 +611,7 @@ describe("createChatTurnRuntime — abort telemetry", () => {
 
     // Stream then completes — the streamCompleted/abortCaptured guards must
     // prevent any second chat_client_abort capture.
-    await harness.captured.streamOpts.onFinish({
+    await harness.captured.streamOpts.onEnd({
       text: "",
       usage: undefined,
       steps: [],

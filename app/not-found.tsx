@@ -2,7 +2,9 @@ export default function NotFound() {
   return (
     <div className="flex h-screen w-screen items-center justify-center">
       <div className="text-center">
-        <h1 className="text-xl font-semibold text-balance">404 – Page not found</h1>
+        <h1 className="text-xl font-semibold text-balance">
+          404 – Page not found
+        </h1>
         <p className="text-muted-foreground mt-2 text-pretty">
           Sorry, this page doesn’t exist.
         </p>

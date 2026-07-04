@@ -18,8 +18,7 @@ const SENSITIVE_KEYS = new Set([
 ])
 
 const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
-const PHONE_RE =
-  /(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}/g
+const PHONE_RE = /(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}/g
 
 function isSensitiveKey(key: string): boolean {
   return SENSITIVE_KEYS.has(key.toLowerCase())
@@ -35,7 +34,8 @@ function scrubValue(value: unknown, depth: number): unknown {
   if (typeof value === "string") return scrubString(value)
   if (typeof value === "number" || typeof value === "boolean") return value
   if (Array.isArray(value)) return scrubArray(value, depth)
-  if (typeof value === "object") return scrubObject(value as Record<string, unknown>, depth)
+  if (typeof value === "object")
+    return scrubObject(value as Record<string, unknown>, depth)
   return REDACTED
 }
 
@@ -45,7 +45,7 @@ function scrubArray(arr: unknown[], depth: number): unknown[] {
 
 function scrubObject(
   obj: Record<string, unknown>,
-  depth: number,
+  depth: number
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {}
   for (const key of Object.keys(obj)) {

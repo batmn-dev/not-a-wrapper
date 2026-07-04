@@ -2,19 +2,15 @@
 
 import { MAX_TOOL_RESULT_SIZE, TOOL_EXECUTION_TIMEOUT_MS } from "@/lib/config"
 import type { ToolSet } from "ai"
-import { ToolTraceCollector, type ToolMetadata } from "./types"
 import {
-  ToolExecutionError,
-  type ToolErrorData,
-  type ToolErrorCode,
   extractToolErrorData,
   getToolRecoveryHint,
   normalizeToolError,
+  ToolExecutionError,
+  type ToolErrorCode,
+  type ToolErrorData,
 } from "./errors"
-import {
-  extractPolicyErrorData,
-  isToolPolicyError,
-} from "./policy"
+import { extractPolicyErrorData, isToolPolicyError } from "./policy"
 import {
   findSemanticBoundary,
   resolveTruncationStrategy,
@@ -22,6 +18,7 @@ import {
   type TruncationCategory,
   type TruncationContext,
 } from "./truncation-policy"
+import { ToolTraceCollector, type ToolMetadata } from "./types"
 
 type ToolExecuteOptions = {
   toolCallId: string
@@ -139,11 +136,7 @@ export function combineAbortSignals(
         }
       }
       listeners.push({ signal, handler: onAbort })
-      signal.addEventListener(
-        "abort",
-        onAbort,
-        { once: true }
-      )
+      signal.addEventListener("abort", onAbort, { once: true })
     }
   }
   return controller.signal
@@ -227,9 +220,7 @@ function isRetrySafeTool(metadata?: RetrySafetyMetadata): boolean {
   return metadata.readOnly === true && metadata.destructive !== true
 }
 
-function isTransientRetryableError(
-  error: ToolErrorData
-): boolean {
+function isTransientRetryableError(error: ToolErrorData): boolean {
   if (error.code === "policy_limit") return false
   if (error.code === "auth") return false
   if (error.code === "validation_input") return false
@@ -306,7 +297,9 @@ export async function executeWithRetries<T>(options: {
       const value = await options.execute(attempt)
       return { value, retryCount: attempt - 1 }
     } catch (err) {
-      const normalized = extractToolErrorData(err, { toolName: options.toolName })
+      const normalized = extractToolErrorData(err, {
+        toolName: options.toolName,
+      })
       const shouldRetry =
         retrySafe &&
         attempt < maxAttempts &&
@@ -527,10 +520,7 @@ function truncateLongString(
   }
 
   if (best) return best
-  const clippedSuffix = compactTruncationHint(
-    buildCompactSuffix(0),
-    maxBytes
-  )
+  const clippedSuffix = compactTruncationHint(buildCompactSuffix(0), maxBytes)
   if (clippedSuffix) return clippedSuffix
   return trimStringToSerializedBudget("[truncated]", maxBytes)
 }
@@ -564,7 +554,9 @@ function truncateOversizedArray(
   const hint = `Result was truncated from ${items.length} items. ${options.strategy.arrayHint}`
 
   for (const candidate of rankedIndexes) {
-    const nextIndexes = [...selectedIndexes, candidate.index].sort((a, b) => a - b)
+    const nextIndexes = [...selectedIndexes, candidate.index].sort(
+      (a, b) => a - b
+    )
     const nextData = nextIndexes.map((index) => sanitizedItems[index])
     const nextEnvelope = buildEnvelope(nextData, hint)
     if (serializedSizeBytes(nextEnvelope) <= options.maxBytes) {
@@ -707,11 +699,14 @@ export function truncateToolResult(
   }
 
   if (typeof result === "object" && result !== null) {
-    const truncated = truncateOversizedObject(result as Record<string, unknown>, {
-      maxBytes,
-      originalSizeBytes,
-      strategy,
-    })
+    const truncated = truncateOversizedObject(
+      result as Record<string, unknown>,
+      {
+        maxBytes,
+        originalSizeBytes,
+        strategy,
+      }
+    )
     return finalize(truncated, "Object truncated.")
   }
 
@@ -747,7 +742,9 @@ export function wrapToolsWithTruncation(
   for (const [name, t] of Object.entries(tools)) {
     const original = t as Record<string, unknown>
     if (typeof original.execute === "function") {
-      const origExec = original.execute as (...args: unknown[]) => Promise<unknown>
+      const origExec = original.execute as (
+        ...args: unknown[]
+      ) => Promise<unknown>
       wrapped[name] = {
         ...original,
         execute: async (...args: unknown[]) => {
@@ -768,8 +765,8 @@ export function wrapToolsWithTruncation(
 /**
  * Wrap all tools in a ToolSet with timing + trace recording.
  * Records start/end time around each execute() call and writes
- * the trace to the shared ToolTraceCollector so onStepFinish
- * and onFinish can read durationMs for ALL tool types.
+ * the trace to the shared ToolTraceCollector so the step-end
+ * outcome recording can read durationMs for ALL tool types.
  *
  * Structural twin of wrapToolsWithTruncation — same iteration
  * and casting pattern. Applied SEPARATELY (not composed) because
@@ -799,9 +796,7 @@ export function wrapToolsWithTracing(
           options: ToolExecuteOptions
         ): Promise<unknown> => {
           const startMs = Date.now()
-          const upstreamAbortSignal = extractAbortSignalFromOptions(
-            options
-          )
+          const upstreamAbortSignal = extractAbortSignalFromOptions(options)
           let success = true
           let error: string | undefined
           let resultSizeBytes: number | undefined

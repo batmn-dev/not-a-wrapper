@@ -9,7 +9,7 @@ import {
 } from "idb-keyval"
 
 let dbInitPromise: Promise<void> | null = null
- 
+
 const stores: Record<string, any> = {}
 
 const isClient = typeof window !== "undefined"
@@ -185,7 +185,7 @@ export async function readFromIndexedDB<T>(
     const allKeys = await keys(store)
     if (allKeys.length > 0) {
       const results = await getMany<T>(allKeys as string[], store)
-      return results.filter(Boolean)
+      return results.filter((result): result is T => Boolean(result))
     }
 
     return []

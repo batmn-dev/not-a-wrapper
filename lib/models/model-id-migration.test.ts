@@ -29,9 +29,7 @@ describe("model ID migration", () => {
     expect(resolveModelId("claude-sonnet-4-5")).toBe(
       "claude-sonnet-4-5-20250929"
     )
-    expect(resolveModelId("claude-haiku-4-5")).toBe(
-      "claude-haiku-4-5-20251001"
-    )
+    expect(resolveModelId("claude-haiku-4-5")).toBe("claude-haiku-4-5-20251001")
   })
 
   it("normalizes arrays and de-duplicates in stable order", () => {

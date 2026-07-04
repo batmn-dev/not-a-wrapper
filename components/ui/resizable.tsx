@@ -1,10 +1,9 @@
 "use client"
 
-import * as React from "react"
 import { GripVertical } from "@/lib/icons"
-import { Group, Panel, Separator } from "react-resizable-panels"
-
 import { cn } from "@/lib/utils"
+import * as React from "react"
+import { Group, Panel, Separator } from "react-resizable-panels"
 
 function ResizablePanelGroup({
   className,
@@ -22,9 +21,7 @@ function ResizablePanelGroup({
   )
 }
 
-function ResizablePanel({
-  ...props
-}: React.ComponentProps<typeof Panel>) {
+function ResizablePanel({ ...props }: React.ComponentProps<typeof Panel>) {
   return <Panel data-slot="resizable-panel" {...props} />
 }
 

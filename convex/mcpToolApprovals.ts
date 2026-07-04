@@ -113,7 +113,10 @@ export const bulkApprove = ownedMcpServerMutation({
       const existing = await ctx.db
         .query("mcpToolApprovals")
         .withIndex("by_user_server_tool", (q) =>
-          q.eq("userId", userId).eq("serverId", serverId).eq("toolName", toolName)
+          q
+            .eq("userId", userId)
+            .eq("serverId", serverId)
+            .eq("toolName", toolName)
         )
         .unique()
 

@@ -22,7 +22,6 @@
  *    even an effect-driven turn (the `?prompt=` auto-submit) reads the values
  *    of its own commit, not the previous one.
  */
-
 import { useModel } from "@/app/components/chat/use-model"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import type { Chats } from "@/lib/chat-store/types"

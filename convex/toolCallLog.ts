@@ -3,10 +3,7 @@
 
 import { paginationOptsValidator } from "convex/server"
 import { v } from "convex/values"
-import {
-  authenticatedMutation,
-  maybeAuthQuery,
-} from "./lib/authedFunctions"
+import { authenticatedMutation, maybeAuthQuery } from "./lib/authedFunctions"
 
 // =============================================================================
 // Helpers

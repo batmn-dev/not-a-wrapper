@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
 import { ANTHROPIC_BETA_HEADERS } from "@/lib/config"
 import { getAllModels } from "@/lib/models"
 import type { ModelConfig } from "@/lib/models/types"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { shapeRequest, type RequestShapingContext } from "./request-shaping"
 
 function makeModel(overrides: Partial<ModelConfig>): ModelConfig {

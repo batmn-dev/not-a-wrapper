@@ -13,7 +13,9 @@ if (!convexUrl) {
 const convex = new ConvexReactClient(convexUrl)
 
 function isAuthKitRefreshFailure(error: unknown) {
-  return error instanceof Error && error.message === "Failed to refresh access token"
+  return (
+    error instanceof Error && error.message === "Failed to refresh access token"
+  )
 }
 
 function useAuthFromAuthKit() {

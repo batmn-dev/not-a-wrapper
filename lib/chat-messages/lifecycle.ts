@@ -1,8 +1,8 @@
 import {
-  type DurableMessageStatus,
-  type GenerationStatus,
   isDurableMessageStatus,
   isGenerationStatus,
+  type DurableMessageStatus,
+  type GenerationStatus,
 } from "./durable-contract"
 
 const terminalMessageStatuses = new Set<DurableMessageStatus>([
@@ -25,10 +25,7 @@ const activeGenerationStatuses = new Set<GenerationStatus>([
 ])
 
 export function isTerminalMessageStatus(status: unknown): boolean {
-  return (
-    isDurableMessageStatus(status) &&
-    terminalMessageStatuses.has(status)
-  )
+  return isDurableMessageStatus(status) && terminalMessageStatuses.has(status)
 }
 
 export function isTerminalGenerationStatus(status: unknown): boolean {

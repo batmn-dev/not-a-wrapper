@@ -1,8 +1,7 @@
 "use client"
 
-import { Progress as ProgressPrimitive } from "@base-ui/react/progress"
-
 import { cn } from "@/lib/utils"
+import { Progress as ProgressPrimitive } from "@base-ui/react/progress"
 
 function Progress({
   className,
@@ -10,11 +9,7 @@ function Progress({
   ...props
 }: ProgressPrimitive.Root.Props) {
   return (
-    <ProgressPrimitive.Root
-      data-slot="progress"
-      value={value}
-      {...props}
-    >
+    <ProgressPrimitive.Root data-slot="progress" value={value} {...props}>
       <ProgressPrimitive.Track
         className={cn(
           "bg-primary/20 relative h-2 w-full overflow-hidden rounded-full",

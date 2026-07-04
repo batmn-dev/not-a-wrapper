@@ -36,16 +36,16 @@ The landscape splits into five useful families.
 
 ## Comparison matrix
 
-| Project | License | Theme definition format | Runtime application method | Supports user preferences | Supports extension themes | Supports structural component changes | Supports layout changes | Accessibility safeguards | Testing strategy | Relevance for Not a Wrapper |
-|---|---|---|---|---|---|---|---|---|---|---|
-| VS Code citeturn42view0turn29view0turn29view2turn31view0turn33view0turn29view5 | MIT | JSON theme files + schema + manifest contribution points | Workbench settings, CSS variables in webviews, theme service | User + workspace | Yes | Limited in theme layer; deeper changes via extensions/webviews | Moderate via workbench contributions | High-contrast defaults, semantic colors | Mature internal test suite in repo; highly production-hardened | **Very high** for extension themes and preference model |
-| JupyterLab citeturn43view0turn22view0turn22view2turn22view3turn24search4 | BSD-3-Clause | Theme plugins + CSS variables + settings schema | Dynamic CSS/theme plugin loading; app/workspace restore | User + app overrides + workspaces | Yes | Limited in theme layer; strong plugin architecture overall | Yes, via plugin/layout/workspace model | Semantic CSS variable conventions and separation of public/private vars | Build/static asset pipeline; extension ecosystem conventions | **High** for plugin themes + layout persistence |
-| Eclipse Theia citeturn43view1turn34view0turn34view2turn35view2turn36search2turn36search3 | EPL-2.0 primary, with additional GPL/MIT/VS Code license files present | Preferences schemas + frontend config + shell APIs | Preference service + frontend application config | Default/User/Workspace/Folder | Yes, including VS Code extensions | Yes through widgets and custom frontend extensions | **Yes, strongly** via `ApplicationShell` and frontend contributions | Scope-aware prefs; modular APIs; inherits editor accessibility patterns | Mature framework repo testing; long-lived platform | **Very high** for shell/layout renderer architecture |
-| Grafana citeturn43view2turn37view0turn37view1turn37view2turn37view3turn37view4turn38view0turn38view3 | AGPL-3.0 | TypeScript theme objects + `plugin.json` metadata + extension-point manifests | Theme hooks/providers + Emotion + manifest-declared lazy extensions | Org/user plugin settings model | Yes | Yes via component exposure and extension points | Yes in bounded extension-point form | Theme hooks, strong component guidance, RBAC/IAM for plugins | Plugin examples and official E2E/plugin guidance; production-hardened | **Very high** for future marketplace/plugin safety model |
-| MUI citeturn43view3turn41view1turn41view2turn41view3turn41view4 | MIT | TypeScript theme object + slots + CSS variables | `ThemeProvider`, CSS variables, `data`/`class` selectors, SSR init script | Yes | N/A marketplace-style | **Yes** via slots and slot replacement | Limited, mostly app-owned | Warns against breaking semantic DOM; theme/system APIs | Visual regression with Argos; large internal suite | **Very high** for component renderer contract design |
-| React Spectrum / React Aria citeturn43view4turn40search0turn40search1turn40search5turn16search5 | Apache-2.0 | Provider themes + style macros + headless hooks | `Provider` resolves theme, color scheme, scale, locale | Yes | N/A marketplace-style | **Yes** via hooks/render freedom | Limited, mostly app-owned | Excellent keyboard/screen-reader support; DOM treated as black box in tests | Accessibility-centered testing guidance; large suite in repo | **Very high** for controller/renderer separation |
-| Zag + Ark UI citeturn43view5turn17search0turn17search2turn17search8turn17search12turn17search17 | MIT | State machines + headless parts + `data-scope` / `data-part` | Machine connect APIs + part/state attributes + CSS variables where needed | App-owned | N/A marketplace-style | **Yes** | Limited, mostly app-owned | Accessibility-first state machines; inert hidden interactive content | Mature OSS repo tests; machine contracts enable deterministic tests | **Extremely high** for Not a Wrapper controllers |
-| Primer React + Primitives citeturn43view6turn21search0turn21search1turn21search4turn21search7turn21search6 | MIT | CSS variables + color modes + theme hooks | `data-color-mode`, `data-light-theme`, `data-dark-theme` | Yes | Internal ecosystem more than open marketplace | Limited structural overrides | Limited | High-contrast themes, forced-colors guidance, component accessibility docs | Integration and accessibility checks documented per component | **High** for semantic token naming and accessibility rules |
+| Project                                                                                                            | License                                                                | Theme definition format                                                       | Runtime application method                                                | Supports user preferences         | Supports extension themes                     | Supports structural component changes                          | Supports layout changes                                             | Accessibility safeguards                                                    | Testing strategy                                                      | Relevance for Not a Wrapper                                |
+| ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------- | --------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------- |
+| VS Code citeturn42view0turn29view0turn29view2turn31view0turn33view0turn29view5                             | MIT                                                                    | JSON theme files + schema + manifest contribution points                      | Workbench settings, CSS variables in webviews, theme service              | User + workspace                  | Yes                                           | Limited in theme layer; deeper changes via extensions/webviews | Moderate via workbench contributions                                | High-contrast defaults, semantic colors                                     | Mature internal test suite in repo; highly production-hardened        | **Very high** for extension themes and preference model    |
+| JupyterLab citeturn43view0turn22view0turn22view2turn22view3turn24search4                                    | BSD-3-Clause                                                           | Theme plugins + CSS variables + settings schema                               | Dynamic CSS/theme plugin loading; app/workspace restore                   | User + app overrides + workspaces | Yes                                           | Limited in theme layer; strong plugin architecture overall     | Yes, via plugin/layout/workspace model                              | Semantic CSS variable conventions and separation of public/private vars     | Build/static asset pipeline; extension ecosystem conventions          | **High** for plugin themes + layout persistence            |
+| Eclipse Theia citeturn43view1turn34view0turn34view2turn35view2turn36search2turn36search3                   | EPL-2.0 primary, with additional GPL/MIT/VS Code license files present | Preferences schemas + frontend config + shell APIs                            | Preference service + frontend application config                          | Default/User/Workspace/Folder     | Yes, including VS Code extensions             | Yes through widgets and custom frontend extensions             | **Yes, strongly** via `ApplicationShell` and frontend contributions | Scope-aware prefs; modular APIs; inherits editor accessibility patterns     | Mature framework repo testing; long-lived platform                    | **Very high** for shell/layout renderer architecture       |
+| Grafana citeturn43view2turn37view0turn37view1turn37view2turn37view3turn37view4turn38view0turn38view3     | AGPL-3.0                                                               | TypeScript theme objects + `plugin.json` metadata + extension-point manifests | Theme hooks/providers + Emotion + manifest-declared lazy extensions       | Org/user plugin settings model    | Yes                                           | Yes via component exposure and extension points                | Yes in bounded extension-point form                                 | Theme hooks, strong component guidance, RBAC/IAM for plugins                | Plugin examples and official E2E/plugin guidance; production-hardened | **Very high** for future marketplace/plugin safety model   |
+| MUI citeturn43view3turn41view1turn41view2turn41view3turn41view4                                             | MIT                                                                    | TypeScript theme object + slots + CSS variables                               | `ThemeProvider`, CSS variables, `data`/`class` selectors, SSR init script | Yes                               | N/A marketplace-style                         | **Yes** via slots and slot replacement                         | Limited, mostly app-owned                                           | Warns against breaking semantic DOM; theme/system APIs                      | Visual regression with Argos; large internal suite                    | **Very high** for component renderer contract design       |
+| React Spectrum / React Aria citeturn43view4turn40search0turn40search1turn40search5turn16search5             | Apache-2.0                                                             | Provider themes + style macros + headless hooks                               | `Provider` resolves theme, color scheme, scale, locale                    | Yes                               | N/A marketplace-style                         | **Yes** via hooks/render freedom                               | Limited, mostly app-owned                                           | Excellent keyboard/screen-reader support; DOM treated as black box in tests | Accessibility-centered testing guidance; large suite in repo          | **Very high** for controller/renderer separation           |
+| Zag + Ark UI citeturn43view5turn17search0turn17search2turn17search8turn17search12turn17search17            | MIT                                                                    | State machines + headless parts + `data-scope` / `data-part`                  | Machine connect APIs + part/state attributes + CSS variables where needed | App-owned                         | N/A marketplace-style                         | **Yes**                                                        | Limited, mostly app-owned                                           | Accessibility-first state machines; inert hidden interactive content        | Mature OSS repo tests; machine contracts enable deterministic tests   | **Extremely high** for Not a Wrapper controllers           |
+| Primer React + Primitives citeturn43view6turn21search0turn21search1turn21search4turn21search7turn21search6 | MIT                                                                    | CSS variables + color modes + theme hooks                                     | `data-color-mode`, `data-light-theme`, `data-dark-theme`                  | Yes                               | Internal ecosystem more than open marketplace | Limited structural overrides                                   | Limited                                                             | High-contrast themes, forced-colors guidance, component accessibility docs  | Integration and accessibility checks documented per component         | **High** for semantic token naming and accessibility rules |
 
 ## Deep dives
 
@@ -226,7 +226,7 @@ type ExperiencePackManifest = {
   id: string
   label: string
   version: string
-  kind: 'official' | 'partner' | 'community'
+  kind: "official" | "partner" | "community"
   capabilities: {
     tokens: boolean
     skins: boolean
@@ -240,7 +240,7 @@ type ExperiencePackManifest = {
     contractVersion: string
   }
   appearance: {
-    supportedModes: Array<'light' | 'dark' | 'system'>
+    supportedModes: Array<"light" | "dark" | "system">
     highContrast?: boolean
   }
   assets: {
@@ -274,10 +274,11 @@ At runtime, set root attributes as early as possible:
   data-appearance="dark"
   data-density="compact"
   data-motion="reduced"
->
+></html>
 ```
 
 Then load:
+
 - a tiny critical CSS layer for semantic variables,
 - the selected pack’s token CSS,
 - the selected pack’s skin CSS,
@@ -334,6 +335,7 @@ Adopt a staged model:
 
 **Stage one**  
 Community packs are declarative only:
+
 - tokens
 - semantic skin CSS
 - approved background assets
@@ -342,6 +344,7 @@ Community packs are declarative only:
 
 **Stage two**  
 Partner packs may include reviewed renderer bundles:
+
 - signed manifest
 - compatibility gate
 - capability declaration
@@ -357,9 +360,9 @@ This is the safest route. Mature systems become much stricter the moment extensi
 ### Example TypeScript interfaces
 
 ```ts
-export type AppearanceMode = 'light' | 'dark' | 'system'
-export type DensityMode = 'comfortable' | 'compact'
-export type MotionMode = 'full' | 'reduced'
+export type AppearanceMode = "light" | "dark" | "system"
+export type DensityMode = "comfortable" | "compact"
+export type MotionMode = "full" | "reduced"
 
 export interface ThemeTokens {
   color: Record<string, string>
@@ -391,8 +394,8 @@ export interface ThemeTokens {
 export interface BackgroundDefinition {
   id: string
   label: string
-  kind: 'solid' | 'gradient' | 'image' | 'shader-like'
-  appearance?: 'light' | 'dark' | 'both'
+  kind: "solid" | "gradient" | "image" | "shader-like"
+  appearance?: "light" | "dark" | "both"
   css?: Record<string, string>
   assetUrl?: string
   blurhash?: string
@@ -408,19 +411,19 @@ export interface ExperienceBehaviorProfiles {
 
 export interface MotionProfile {
   prefersReducedMotionAware: boolean
-  emphasis: 'low' | 'medium' | 'high'
-  springiness?: 'none' | 'soft' | 'playful'
+  emphasis: "low" | "medium" | "high"
+  springiness?: "none" | "soft" | "playful"
 }
 
 export interface InputBehaviorProfile {
-  pointerTargets: 'default' | 'large'
+  pointerTargets: "default" | "large"
   keyboardFirst: boolean
   commandPalettePriority?: boolean
 }
 
 export interface NavigationBehaviorProfile {
-  shellMode: 'standard' | 'terminal-first' | 'windowed' | 'grid'
-  sidebarBehavior?: 'persistent' | 'overlay' | 'hidden'
+  shellMode: "standard" | "terminal-first" | "windowed" | "grid"
+  sidebarBehavior?: "persistent" | "overlay" | "hidden"
 }
 
 export interface WindowBehaviorProfile {
@@ -434,8 +437,8 @@ export interface ButtonContract {
   disabled?: boolean
   loading?: boolean
   pressed?: boolean
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger'
-  size?: 'sm' | 'md' | 'lg'
+  variant?: "primary" | "secondary" | "ghost" | "danger"
+  size?: "sm" | "md" | "lg"
   iconStart?: React.ReactNode
   iconEnd?: React.ReactNode
   children?: React.ReactNode
@@ -490,7 +493,7 @@ export interface ExperiencePackManifest {
   id: string
   label: string
   version: string
-  kind: 'official' | 'partner' | 'community'
+  kind: "official" | "partner" | "community"
   capabilities: {
     tokens: boolean
     skins: boolean
@@ -530,11 +533,12 @@ export interface UserUIPreferences {
 
 ## Implementation roadmap
 
-A successful rollout should be staged by *power*, not by theme count.
+A successful rollout should be staged by _power_, not by theme count.
 
 ### Prototype phase
 
 Build the semantic core first:
+
 - stable contracts for Button, Card, Dialog, Input, WorkspaceShell
 - headless controllers for those components
 - token pipeline and root runtime attributes
@@ -546,11 +550,13 @@ Success criterion: a single app can flip between product-native and one highly s
 ### Official themes phase
 
 Add official first-party packs:
+
 - `default`
 - `brutalist`
 - `aqua-lite`
 
 Still keep them mostly at Levels 1 to 3:
+
 - tokens
 - skins
 - limited slot changes
@@ -561,6 +567,7 @@ This will validate the token taxonomy and CSS variable boundaries before introdu
 ### Structural renderers phase
 
 Introduce first-party renderer overrides for a narrow set of components:
+
 - Button
 - Card
 - Dialog
@@ -571,6 +578,7 @@ Do not open this to third parties yet. Add renderer contract tests and accessibi
 ### Backgrounds phase
 
 Add background packs:
+
 - approved gradients
 - user-uploaded images with sanitization, sizing, and performance limits
 - reduced-motion handling for animated backgrounds
@@ -580,6 +588,7 @@ Keep backgrounds isolated from renderer logic. They should be purely decorative 
 ### Community theme support phase
 
 Open community support only for:
+
 - tokens
 - semantic skin CSS
 - approved backgrounds
@@ -590,6 +599,7 @@ No arbitrary JS. No custom renderers. No layout packs. This mirrors the safety/v
 ### Marketplace or extension phase
 
 If the product truly needs third-party renderer/layout packs:
+
 - require manifest metadata
 - version every contract and extension point
 - require automated a11y checks and screenshot baselines
@@ -632,6 +642,7 @@ But the implementation should be more disciplined than a standard “theme objec
 - **background assets**
 
 The most important thing to copy is **not** any single theme engine. It is the combination of:
+
 - **VS Code** for declarative theme manifests, semantic color registries, and preference hierarchy
 - **Theia** for shell/layout customization without backend coupling
 - **JupyterLab** for separating themes from workspace/layout persistence

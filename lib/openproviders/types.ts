@@ -73,11 +73,8 @@ export type MistralModel =
   | "open-mixtral-8x7b"
   | "open-mixtral-8x22b"
 
-export type PerplexityModel = 
-  | "sonar"
-  | "sonar-pro"
-  | "sonar-deep-research"
-  | "sonar-reasoning-pro"
+export type PerplexityModel =
+  "sonar" | "sonar-pro" | "sonar-deep-research" | "sonar-reasoning-pro"
 
 export type GeminiModel =
   | "gemini-2.0-flash-001"

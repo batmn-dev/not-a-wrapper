@@ -27,11 +27,7 @@ import remarkMath from "remark-math"
 import remarkParse from "remark-parse"
 import { unified } from "unified"
 import { ButtonCopy } from "../common/button-copy"
-import {
-  CodeBlock,
-  CodeBlockCode,
-  CodeBlockGroup,
-} from "./code-block"
+import { CodeBlock, CodeBlockCode, CodeBlockGroup } from "./code-block"
 import { LinkMarkdown } from "./markdown-link"
 
 export type MarkdownProps = {
@@ -129,7 +125,12 @@ const MemoizedMarkdownBlock = memo(
   }) {
     return (
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkBreaks, remarkMath, remarkUnwrapLinkParens]}
+        remarkPlugins={[
+          remarkGfm,
+          remarkBreaks,
+          remarkMath,
+          remarkUnwrapLinkParens,
+        ]}
         rehypePlugins={[rehypeKatex]}
         components={components}
       >
@@ -152,10 +153,7 @@ function MarkdownComponent({
 }: MarkdownProps) {
   const generatedId = useId()
   const blockId = id ?? generatedId
-  const blocks = useMemo(
-    () => parseMarkdownIntoBlocks(children),
-    [children]
-  )
+  const blocks = useMemo(() => parseMarkdownIntoBlocks(children), [children])
   const mergedComponents = useMemo(
     () =>
       components

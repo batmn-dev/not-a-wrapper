@@ -1,5 +1,5 @@
-import { getWorkosSession } from "@/lib/auth/workos"
 import { Button } from "@/components/ui/button"
+import { getWorkosSession } from "@/lib/auth/workos"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { ResetPasswordForm } from "../_components/auth-forms"
@@ -26,7 +26,7 @@ export default async function ResetPasswordPage({
         <ResetPasswordForm token={token} />
       ) : (
         <div className="space-y-4 text-center">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             This reset link is invalid or expired.
           </p>
           <Button render={<Link href="/auth/forgot-password" />}>

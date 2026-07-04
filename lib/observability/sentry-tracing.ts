@@ -3,8 +3,21 @@ const CHAT_CRITICAL_ROUTE_PATTERNS = [
   CHAT_ROUTE_PATTERN,
   "/api/user-preferences/favorite-models",
 ]
-const HEALTHCHECK_ROUTE_PATTERNS = ["/api/health", "/healthz", "/readyz", "/livez"]
-const STATIC_ASSET_PATTERNS = ["/_next/", ".js", ".css", ".map", ".png", ".jpg", ".svg"]
+const HEALTHCHECK_ROUTE_PATTERNS = [
+  "/api/health",
+  "/healthz",
+  "/readyz",
+  "/livez",
+]
+const STATIC_ASSET_PATTERNS = [
+  "/_next/",
+  ".js",
+  ".css",
+  ".map",
+  ".png",
+  ".jpg",
+  ".svg",
+]
 
 type TraceSamplerConfig = {
   chatHealthyRate: number
@@ -51,7 +64,10 @@ function loadTraceSamplerConfig(): TraceSamplerConfig {
   return {
     chatHealthyRate: parseRateFromEnv("SENTRY_TRACES_RATE_CHAT_HEALTHY", 0.25),
     chatFailureRate: parseRateFromEnv("SENTRY_TRACES_RATE_CHAT_FAILURE", 1),
-    chatClientErrorRate: parseRateFromEnv("SENTRY_TRACES_RATE_CHAT_CLIENT_ERROR", 0.5),
+    chatClientErrorRate: parseRateFromEnv(
+      "SENTRY_TRACES_RATE_CHAT_CLIENT_ERROR",
+      0.5
+    ),
     criticalApiRate: parseRateFromEnv("SENTRY_TRACES_RATE_CRITICAL_API", 0.2),
     defaultApiRate: parseRateFromEnv("SENTRY_TRACES_RATE_DEFAULT_API", 0.05),
     frontendRate: parseRateFromEnv("SENTRY_TRACES_RATE_FRONTEND", 0.01),
@@ -137,8 +153,8 @@ function getTransactionNameFromEvent(event: SentryTransactionEvent): string {
 function getStatusCodeFromTransactionEvent(
   event: SentryTransactionEvent
 ): number | undefined {
-  const responseContext =
-    event.contexts?.["response"] as { status_code?: unknown } | undefined
+  const responseContext = event.contexts?.["response"] as
+    { status_code?: unknown } | undefined
   const statusFromContext = parseNumericStatus(responseContext?.status_code)
   if (typeof statusFromContext === "number") return statusFromContext
 
@@ -167,10 +183,16 @@ export function sentryTracesSampler(
   const transactionName = getTransactionName(samplingContext)
   // Health checks and assets are low-value and often high-volume.
   if (hasAnyPattern(transactionName, HEALTHCHECK_ROUTE_PATTERNS)) {
-    return sampleWithInheritance(samplingContext, traceSamplerConfig.healthcheckRate)
+    return sampleWithInheritance(
+      samplingContext,
+      traceSamplerConfig.healthcheckRate
+    )
   }
   if (hasAnyPattern(transactionName, STATIC_ASSET_PATTERNS)) {
-    return sampleWithInheritance(samplingContext, traceSamplerConfig.staticAssetRate)
+    return sampleWithInheritance(
+      samplingContext,
+      traceSamplerConfig.staticAssetRate
+    )
   }
 
   // High-fidelity chat traces for reliability SLOs and release regression detection.
@@ -183,12 +205,18 @@ export function sentryTracesSampler(
 
   // Keep strong fidelity for other chat-critical API routes.
   if (hasAnyPattern(transactionName, CHAT_CRITICAL_ROUTE_PATTERNS)) {
-    return sampleWithInheritance(samplingContext, traceSamplerConfig.criticalApiRate)
+    return sampleWithInheritance(
+      samplingContext,
+      traceSamplerConfig.criticalApiRate
+    )
   }
 
   // Down-sample lower-value API traffic.
   if (transactionName.includes("/api/")) {
-    return sampleWithInheritance(samplingContext, traceSamplerConfig.defaultApiRate)
+    return sampleWithInheritance(
+      samplingContext,
+      traceSamplerConfig.defaultApiRate
+    )
   }
 
   // Lowest baseline for frontend/navigation traces.

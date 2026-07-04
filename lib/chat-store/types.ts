@@ -85,7 +85,7 @@ export function convexMessageToMessage(convexMessage: ConvexMessage): Message {
     content: convexMessage.content,
     parts: convexMessage.parts,
     created_at: new Date(convexMessage.createdAt).toISOString(),
-  };
+  }
 }
 
 /**

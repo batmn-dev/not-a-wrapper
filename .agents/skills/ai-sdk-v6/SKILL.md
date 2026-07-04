@@ -14,48 +14,55 @@ Use this skill when adding or updating AI SDK v6 usage in `app/api/` routes or c
 
 ## Quick Reference
 
-| Area | Default Pattern |
-|------|-----------------|
-| Server streaming | `streamText(...)` → `result.toUIMessageStreamResponse(...)` |
-| Message conversion | `await convertToModelMessages(...)` (async in v6) |
-| Structured output | `output: Output.object({...})` (no `generateObject/streamObject`) |
-| Tool calling | `tools: { name: tool({ inputSchema, execute, strict }) }` |
-| Client UI | `useChat` from `@ai-sdk/react` |
-| Stream protocol | `x-vercel-ai-ui-message-stream: v1` |
+| Area               | Default Pattern                                                   |
+| ------------------ | ----------------------------------------------------------------- |
+| Server streaming   | `streamText(...)` → `result.toUIMessageStreamResponse(...)`       |
+| Message conversion | `await convertToModelMessages(...)` (async in v6)                 |
+| Structured output  | `output: Output.object({...})` (no `generateObject/streamObject`) |
+| Tool calling       | `tools: { name: tool({ inputSchema, execute, strict }) }`         |
+| Client UI          | `useChat` from `@ai-sdk/react`                                    |
+| Stream protocol    | `x-vercel-ai-ui-message-stream: v1`                               |
 
 ## Step-by-Step Checklist (Server)
 
-1) **Validate input + auth**
+1. **Validate input + auth**
+
 - [ ] Validate request body and required params.
 - [ ] Apply rate limiting **before** `streamText()`.
 - [ ] Use repo auth patterns if touching user data.
 
-2) **Convert messages**
+2. **Convert messages**
+
 - [ ] Convert UI messages with `await convertToModelMessages(...)`.
 - [ ] Do not use deprecated `CoreMessage`.
 
-3) **Call the model**
+3. **Call the model**
+
 - [ ] Use `streamText({ model, messages, tools, output, ... })`.
 - [ ] Add tool definitions with `tool({ description, inputSchema, execute, strict: true })`.
 - [ ] For sensitive tools, set `needsApproval: true` and handle approval UI.
 - [ ] For structured data, use `output: Output.object({ schema, name, description })`.
 
-4) **Return the UI stream**
+4. **Return the UI stream**
+
 - [ ] Use `result.toUIMessageStreamResponse({ sendReasoning, sendSources, onError })`.
 - [ ] If wiring a custom stream, use `createUIMessageStreamResponse({ stream })`.
 - [ ] Ensure the stream protocol header is `x-vercel-ai-ui-message-stream: v1`.
 
 ## Step-by-Step Checklist (Client)
 
-1) **Chat UI**
+1. **Chat UI**
+
 - [ ] Use `useChat` from `@ai-sdk/react` (transport-based, default `/api/chat`).
 - [ ] Keep UI message state consistent with the server stream protocol.
 
-2) **Tools + approvals**
+2. **Tools + approvals**
+
 - [ ] Use `addToolOutput` for tool results.
 - [ ] Use `addToolApprovalResponse` for approval flows.
 
-3) **Custom streaming**
+3. **Custom streaming**
+
 - [ ] For manual stream parsing, use `readUIMessageStream(...)`.
 - [ ] Match the server’s stream protocol and message parts.
 
@@ -69,16 +76,16 @@ Inside `processUIMessageStream`, each delta chunk mutates the part object that w
 
 ```typescript
 // reasoning-delta (same pattern for text-delta)
-reasoningPart.text += chunk.delta  // mutates the object already in parts[]
-write()                            // flushes to React state
+reasoningPart.text += chunk.delta // mutates the object already in parts[]
+write() // flushes to React state
 ```
 
 ### pushMessage vs replaceMessage Asymmetry
 
-| Call | When | Clone behavior |
-|------|------|----------------|
-| `pushMessage(message)` | First `write()` — streaming message ID not yet in state | **No clone** — uses `.concat(message)`, leaks the mutable working object |
-| `replaceMessage(message)` | Subsequent `write()` calls — ID matches last message | **structuredClone** — deep clone for React Compiler compatibility |
+| Call                      | When                                                    | Clone behavior                                                           |
+| ------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `pushMessage(message)`    | First `write()` — streaming message ID not yet in state | **No clone** — uses `.concat(message)`, leaks the mutable working object |
+| `replaceMessage(message)` | Subsequent `write()` calls — ID matches last message    | **structuredClone** — deep clone for React Compiler compatibility        |
 
 The first `pushMessage` leaks the SDK’s mutable working object into React state. Subsequent stream mutations retroactively modify the object already held as “previous props” by React.
 
@@ -101,6 +108,7 @@ if (next.status === "streaming" && next.isLast) return false
 ## Do / Don’t (Repo-Specific)
 
 **Do**
+
 - Use `toUIMessageStreamResponse()` for streaming chat responses.
 - Use `Output.object(...)` for structured data in v6.
 - Await `convertToModelMessages(...)`.
@@ -108,6 +116,7 @@ if (next.status === "streaming" && next.isLast) return false
 - Keep tool schemas strict and validated.
 
 **Don’t**
+
 - Don’t use `generateObject` or `streamObject` (deprecated in v6).
 - Don’t return raw `ReadableStream` without UI message stream helpers.
 - Don’t skip the rate limit check before `streamText()`.

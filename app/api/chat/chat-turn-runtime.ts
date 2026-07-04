@@ -1,66 +1,15 @@
-import * as Sentry from "@sentry/nextjs"
-import { after } from "next/server"
-import {
-  SYSTEM_PROMPT_DEFAULT,
-  MCP_MAX_STEP_COUNT,
-  DEFAULT_MAX_STEP_COUNT,
-  ANONYMOUS_MAX_STEP_COUNT,
-  HISTORY_REPLAY_COMPILER_V1,
-} from "@/lib/config"
-import { getAllModels } from "@/lib/models"
-import type { ModelConfig } from "@/lib/models/types"
-import { getProviderForModel } from "@/lib/openproviders/provider-map"
-import { createLanguageModel } from "@/lib/openproviders/create-language-model"
-import { shapeRequest } from "@/lib/openproviders/request-shaping"
-import {
-  captureGeneration,
-  flushPostHog,
-  getPostHogClient,
-} from "@/lib/posthog"
-import { scrubForAnalytics } from "@/lib/posthog/scrub"
-import type { Provider, ToolKeyMode } from "@/lib/user-keys"
-import {
-  UIMessage as MessageAISDK,
-  consumeStream,
-  stepCountIs,
-  convertToModelMessages,
-  validateUIMessages,
-  type ModelMessage,
-} from "ai"
-import {
-  fetchMutation as defaultFetchMutation,
-  fetchQuery as defaultFetchQuery,
-} from "convex/nextjs"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { projectPersistedMessageMetadata } from "@/convex/lib/messageMetadata"
 import {
-  extractErrorMessage,
-  hasProviderLinkedResponseIds,
-  toPlainTextModelMessages,
-} from "./utils"
-import { adaptHistoryForProvider } from "./adapters"
-import type { AdaptationContext, AdaptationWarning } from "./adapters/types"
-import {
-  getTextFilePartReferences,
-  prepareTextFilePartsForModelInput,
-} from "./text-file-parts"
-import { prepareToolRuntime, type ToolRuntime } from "@/lib/tools/runtime"
-import {
-  createPostHogToolCallSink,
-  createToolCallLogSink,
-  createToolTraceLogSink,
-} from "./outcome-sinks"
-import {
-  buildFinishToolInvocationStreamMetadata,
-  buildStartToolInvocationStreamMetadata,
-  type ToolInvocationMetadataByCallId,
-  type ToolInvocationMetadataByName,
-} from "@/lib/tools/ui-metadata"
-import {
-  classifyChatError,
-  getToolDimensionForError,
-} from "@/lib/observability/chat-error-taxonomy"
+  ANONYMOUS_MAX_STEP_COUNT,
+  DEFAULT_MAX_STEP_COUNT,
+  HISTORY_REPLAY_COMPILER_V1,
+  MCP_MAX_STEP_COUNT,
+  SYSTEM_PROMPT_DEFAULT,
+} from "@/lib/config"
+import { getAllModels } from "@/lib/models"
+import type { ModelConfig } from "@/lib/models/types"
 import {
   flushBraintrust,
   getBraintrustErrorMetadata,
@@ -71,6 +20,44 @@ import {
   type BraintrustChatMetadata,
   type BraintrustTraceSpan,
 } from "@/lib/observability/braintrust"
+import {
+  classifyChatError,
+  getToolDimensionForError,
+} from "@/lib/observability/chat-error-taxonomy"
+import { createLanguageModel } from "@/lib/openproviders/create-language-model"
+import { getProviderForModel } from "@/lib/openproviders/provider-map"
+import { shapeRequest } from "@/lib/openproviders/request-shaping"
+import {
+  captureGeneration,
+  flushPostHog,
+  getPostHogClient,
+} from "@/lib/posthog"
+import { scrubForAnalytics } from "@/lib/posthog/scrub"
+import { prepareToolRuntime, type ToolRuntime } from "@/lib/tools/runtime"
+import {
+  buildFinishToolInvocationStreamMetadata,
+  buildStartToolInvocationStreamMetadata,
+  type ToolInvocationMetadataByCallId,
+  type ToolInvocationMetadataByName,
+} from "@/lib/tools/ui-metadata"
+import type { Provider, ToolKeyMode } from "@/lib/user-keys"
+import * as Sentry from "@sentry/nextjs"
+import {
+  consumeStream,
+  convertToModelMessages,
+  createUIMessageStreamResponse,
+  isStepCount,
+  UIMessage as MessageAISDK,
+  validateUIMessages,
+  type ModelMessage,
+} from "ai"
+import {
+  fetchMutation as defaultFetchMutation,
+  fetchQuery as defaultFetchQuery,
+} from "convex/nextjs"
+import { after } from "next/server"
+import { adaptHistoryForProvider } from "./adapters"
+import type { AdaptationContext, AdaptationWarning } from "./adapters/types"
 import {
   countToolParts,
   createDurableSnapshotTracker,
@@ -85,6 +72,22 @@ import {
   type DurableUiMessage,
   type ToolInvocationForPersistence,
 } from "./durable-runtime"
+import {
+  createPostHogToolCallSink,
+  createToolCallLogSink,
+  createToolTraceLogSink,
+} from "./outcome-sinks"
+import {
+  getTextFilePartReferences,
+  prepareTextFilePartsForModelInput,
+} from "./text-file-parts"
+import {
+  excludeSystemRoleMessages,
+  extractErrorMessage,
+  hasProviderLinkedResponseIds,
+  isConvexArgumentValidationError,
+  toPlainTextModelMessages,
+} from "./utils"
 
 // ---------------------------------------------------------------------------
 // Chat turn runtime (CONTEXT.md): the server-side execution of one Chat turn
@@ -93,7 +96,7 @@ import {
 // `docs/adr/0006-chat-turn-runtime.md`. Two-phase: `prepare()` resolves the
 // execution plan and may throw status-coded errors before any model call;
 // `toResponse(signal)` invokes streamText, owns the stream-lifecycle state and
-// both `onFinish` layers, and returns the streaming Response; `fail(error)`
+// both `onEnd` layers, and returns the streaming Response; `fail(error)`
 // finalizes a failed run for the route's outer catch.
 // ---------------------------------------------------------------------------
 
@@ -186,17 +189,10 @@ type DurableRunState = {
 }
 
 type ChatStreamPhase =
-  | "pre_first_chunk"
-  | "post_tool_continue"
-  | "post_first_chunk"
-  | "unknown"
+  "pre_first_chunk" | "post_tool_continue" | "post_first_chunk" | "unknown"
 
 type ToolExecutionOutcome =
-  | "none"
-  | "success"
-  | "failure"
-  | "timeout"
-  | "budget_denied"
+  "none" | "success" | "failure" | "timeout" | "budget_denied"
 
 type PreparedTurn = {
   aiModel: ReturnType<typeof createLanguageModel>
@@ -346,7 +342,7 @@ export type ChatTurnRuntime = {
    */
   prepare(): Promise<void>
   /**
-   * Invoke streamText, own the stream-lifecycle state and both `onFinish`
+   * Invoke streamText, own the stream-lifecycle state and both `onEnd`
    * layers, and return the streaming Response. The abort signal is wired to the
    * stream and to the chat lifecycle telemetry here.
    */
@@ -433,10 +429,8 @@ export function createChatTurnRuntime(args: {
     if (isAuthenticated && convexToken) {
       const { getEffectiveApiKey } = await import("@/lib/user-keys")
       apiKey =
-        (await getEffectiveApiKey(
-          resolvedProvider as Provider,
-          convexToken
-        )) || undefined
+        (await getEffectiveApiKey(resolvedProvider as Provider, convexToken)) ||
+        undefined
     }
 
     // Pre-flight check: verify an API key is available before calling the provider.
@@ -577,33 +571,57 @@ export function createChatTurnRuntime(args: {
           ? undefined
           : getLatestUserMessage(messages)
 
-      const generation = await deps.fetchMutation(
-        api.chatRuntime.prepareGeneration,
-        {
-          chatId: chatId as Id<"chats">,
-          requestId,
-          model,
-          provider: resolvedProvider,
-          chatVersion: normalizedChatVersion,
-          expectedVisibleMessageCount,
-          tailMessageId,
-          latestUserMessage: latestUserMessage
-            ? {
-                id: latestUserMessage.id,
-                role: "user" as const,
-                content: getStringField(
-                  getRecord(latestUserMessage as unknown),
-                  "content"
-                ),
-                parts: latestUserMessage.parts,
-              }
-            : undefined,
-          edit,
-          regeneration,
-          approvalResponses,
-        },
-        { token: convexToken }
-      )
+      const generation = await deps
+        .fetchMutation(
+          api.chatRuntime.prepareGeneration,
+          {
+            chatId: chatId as Id<"chats">,
+            requestId,
+            model,
+            provider: resolvedProvider,
+            chatVersion: normalizedChatVersion,
+            expectedVisibleMessageCount,
+            tailMessageId,
+            latestUserMessage: latestUserMessage
+              ? {
+                  id: latestUserMessage.id,
+                  role: "user" as const,
+                  content: getStringField(
+                    getRecord(latestUserMessage as unknown),
+                    "content"
+                  ),
+                  parts: latestUserMessage.parts,
+                }
+              : undefined,
+            edit,
+            regeneration,
+            approvalResponses,
+          },
+          { token: convexToken }
+        )
+        .catch((error: unknown) => {
+          // `isServerChatId` only rules out local/optimistic prefixes, so a
+          // crafted or corrupted id reaches the durable contract here and
+          // Convex rejects it with argument validation. That is a request-
+          // shape fault: map it to the route's 400 instead of a 500 that
+          // leaks Convex error internals. Everything else (concurrency
+          // guards, transient failures) passes through unchanged.
+          if (isConvexArgumentValidationError(error)) {
+            console.warn(
+              JSON.stringify({
+                _tag: "durable_prepare_argument_rejected",
+                requestId,
+                chatId,
+                error: error instanceof Error ? error.message : String(error),
+              })
+            )
+            throw Object.assign(
+              new Error("Request does not reference a valid durable chat"),
+              { statusCode: 400, code: "INVALID_REQUEST" }
+            )
+          }
+          throw error
+        })
 
       const durableMessages = sanitizeModelHistoryMessages(
         toDurableUiMessages(generation.messages)
@@ -643,6 +661,26 @@ export function createChatTurnRuntime(args: {
     canonicalMessages = sanitizeModelHistoryMessages(
       canonicalMessages
     ) as MessageAISDK[]
+
+    // ai@7 rejects system-role messages inside `messages` mid-stream
+    // (InvalidPromptError; `allowSystemInMessages` defaults to false). The
+    // system prompt already rides streamText's `instructions`, so any
+    // system-role history message is excluded from model input here — the one
+    // seam both durable and guest histories flow through.
+    const systemRoleExclusion = excludeSystemRoleMessages(canonicalMessages)
+    if (systemRoleExclusion.excludedCount > 0) {
+      console.warn(
+        JSON.stringify({
+          _tag: "model_history_system_messages_excluded",
+          requestId,
+          chatId,
+          provider: resolvedProvider,
+          model,
+          excludedCount: systemRoleExclusion.excludedCount,
+        })
+      )
+    }
+    canonicalMessages = systemRoleExclusion.messages
 
     const validatedMessages = await validateUIMessages({
       messages: canonicalMessages,
@@ -801,7 +839,7 @@ export function createChatTurnRuntime(args: {
       })
     }
 
-    // Convert UIMessage[] to ModelMessage[] for streamText (v6)
+    // Convert UIMessage[] to ModelMessage[] for streamText
     let modelMessages: ModelMessage[] = await convertToModelMessages(
       adapterResult.messages,
       {
@@ -846,13 +884,6 @@ export function createChatTurnRuntime(args: {
     // Transport-safe by-name display metadata, resolved by the Tool runtime's
     // metadata resolver (the four per-layer maps never escape the runtime).
     const toolMetadataByName = tool.metadata.toInvocationMetadataByName()
-
-    // durableRunState is assigned after the tool block ran (above), so approval
-    // wrapping cannot be a prepareToolRuntime flag. The runtime computed the
-    // decisions eagerly; apply them exactly once here for durable runs.
-    if (durableRunState) {
-      tool.applyDurableApprovals()
-    }
 
     const enrichedSystemPrompt = effectiveSystemPrompt
 
@@ -966,7 +997,7 @@ export function createChatTurnRuntime(args: {
 
     // Track reasoning timing for messageMetadata persistence. The first
     // reasoning chunk records a start timestamp; when text-delta arrives
-    // (reasoning is done) or onFinish fires, we compute elapsed ms.
+    // (reasoning is done) or onEnd fires, we compute elapsed ms.
     let reasoningStartMs: number | null = null
     let reasoningDurationMs: number | null = null
     let firstChunkLatencyMs: number | null = null
@@ -987,8 +1018,7 @@ export function createChatTurnRuntime(args: {
       | undefined
     let durableFinalFinishReason: string | undefined
     let durableFinalToolCounts:
-      | { totalToolCalls: number; failedToolCalls: number }
-      | undefined
+      { totalToolCalls: number; failedToolCalls: number } | undefined
     const approvalWritePromises: Promise<unknown>[] = []
 
     const clearStalledContinuationTimer = () => {
@@ -1123,25 +1153,17 @@ export function createChatTurnRuntime(args: {
     const runGeneration = (braintrustSpan: BraintrustTraceSpan) =>
       streamText({
         model: aiModel,
-        system: enrichedSystemPrompt,
+        instructions: enrichedSystemPrompt,
         messages: modelMessages,
         tools: tool.tools,
-        stopWhen: stepCountIs(maxSteps),
+        stopWhen: isStepCount(maxSteps),
         abortSignal: signal,
-        experimental_telemetry: {
+        // ai@7 telemetry has no per-call metadata field; the request dimensions
+        // that used to ride here (provider, model, auth, tools…) are already
+        // attached as Sentry tags/context in onEnd and the error paths.
+        telemetry: {
           isEnabled: true,
           functionId: "api.chat.streamText",
-          metadata: {
-            route: "api/chat",
-            operation: "stream_text",
-            conversationId: chatId,
-            provider: resolvedProvider,
-            model,
-            isAuthenticated,
-            hasTools: hasAnyTools,
-            enableSearch: shouldInjectSearch,
-            chatVersionBucket: bucketChatVersion(normalizedChatVersion),
-          },
         },
 
         // Centralized step gating from the Tool runtime. After
@@ -1150,7 +1172,7 @@ export function createChatTurnRuntime(args: {
         prepareStep: tool.prepareStep,
 
         // Per-step structured tracing: tool name, duration, token usage, success.
-        onStepFinish: async ({ toolCalls, toolResults, usage, finishReason }) => {
+        onStepEnd: async ({ toolCalls, toolResults, usage, finishReason }) => {
           stepCounter++
           observedToolCalls += toolCalls.length
           lastProgressAtMs = Date.now()
@@ -1241,23 +1263,31 @@ export function createChatTurnRuntime(args: {
         ...(Object.keys(requestHeaders).length > 0 && {
           headers: requestHeaders,
         }),
+        // Call-site approval config (ai@7): the Tool runtime's decisions,
+        // durable runs only — guest chats run ungated, matching the pre-v7
+        // wrap-on-durable behavior.
+        ...(durable && convexToken && tool.toolApproval
+          ? { toolApproval: tool.toolApproval }
+          : {}),
         ...(durable && convexToken
           ? {
-              experimental_transform: createRuntimeApprovalPersistenceTransform({
-                chatId,
-                convexToken,
-                durableRunState: durable,
-                runtimeApprovalByToolName: tool.approvalDecisionsByToolName,
-                toolMetadataResolver: tool.metadata,
-                approvalWritePromises,
-                requestId,
-                persistApprovalRequest: (approvalArgs) =>
-                  deps.fetchMutation(
-                    api.chatRuntime.createToolApprovalRequest,
-                    approvalArgs,
-                    { token: convexToken }
-                  ),
-              }),
+              experimental_transform: createRuntimeApprovalPersistenceTransform(
+                {
+                  chatId,
+                  convexToken,
+                  durableRunState: durable,
+                  runtimeApprovalByToolName: tool.approvalDecisionsByToolName,
+                  toolMetadataResolver: tool.metadata,
+                  approvalWritePromises,
+                  requestId,
+                  persistApprovalRequest: (approvalArgs) =>
+                    deps.fetchMutation(
+                      api.chatRuntime.createToolApprovalRequest,
+                      approvalArgs,
+                      { token: convexToken }
+                    ),
+                }
+              ),
             }
           : {}),
 
@@ -1352,7 +1382,10 @@ export function createChatTurnRuntime(args: {
                 },
               })
             } catch (captureErr) {
-              console.error("[PostHog] Failed to capture error event:", captureErr)
+              console.error(
+                "[PostHog] Failed to capture error event:",
+                captureErr
+              )
             }
           }
         },
@@ -1366,7 +1399,7 @@ export function createChatTurnRuntime(args: {
           }
         },
 
-        onFinish: async ({ text, usage, steps, finishReason }) => {
+        onEnd: async ({ text, usage, steps, finishReason }) => {
           streamCompleted = true
           lastProgressAtMs = Date.now()
           resolvePostToolContinuation()
@@ -1410,6 +1443,10 @@ export function createChatTurnRuntime(args: {
                     ? "failure"
                     : "success"
 
+          // ai@7 `onEnd.usage` aggregates across ALL steps (v6 `onFinish.usage`
+          // was the final step only, undercounting multi-step tool turns).
+          // Generation-run accounting wants the aggregate; rows written before
+          // the v7 upgrade are not comparable for tool-using turns.
           durableFinalUsage = {
             inputTokens: usage?.inputTokens,
             outputTokens: usage?.outputTokens,
@@ -1582,14 +1619,16 @@ export function createChatTurnRuntime(args: {
       runGeneration
     )
 
-    return result.toUIMessageStreamResponse({
+    // Stream shaping and HTTP envelope are split on purpose (the deprecated
+    // result.toUIMessageStreamResponse fused them and is removed in ai@8):
+    // toUIMessageStream owns the UI-message semantics — including the
+    // response-level half of the durableFinal* handoff in onEnd — while
+    // createUIMessageStreamResponse owns only SSE + Response construction.
+    const uiMessageStream = result.toUIMessageStream({
       originalMessages: durable?.originalMessages ?? validatedMessages,
-      generateMessageId: durable
-        ? () => durable.assistantMessageId
-        : undefined,
+      generateMessageId: durable ? () => durable.assistantMessageId : undefined,
       sendReasoning: true,
       sendSources: true,
-      consumeSseStream: consumeStream,
       messageMetadata: ({ part }) => {
         if (part.type === "start") {
           return buildStartToolInvocationStreamMetadata(toolMetadataByName)
@@ -1602,7 +1641,7 @@ export function createChatTurnRuntime(args: {
         }
         return {}
       },
-      onFinish: async ({ responseMessage, isAborted, finishReason }) => {
+      onEnd: async ({ responseMessage, isAborted, finishReason }) => {
         if (!durable || !convexToken) return
 
         await Promise.allSettled(approvalWritePromises)
@@ -1656,6 +1695,11 @@ export function createChatTurnRuntime(args: {
         })
         return extractErrorMessage(error)
       },
+    })
+
+    return createUIMessageStreamResponse({
+      stream: uiMessageStream,
+      consumeSseStream: consumeStream,
     })
   }
 

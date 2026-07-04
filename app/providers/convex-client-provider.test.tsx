@@ -2,10 +2,20 @@
 
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
 
 type CapturedAuth = {
-  fetchAccessToken: (args?: { forceRefreshToken?: boolean }) => Promise<string | null>
+  fetchAccessToken: (args?: {
+    forceRefreshToken?: boolean
+  }) => Promise<string | null>
   isAuthenticated: boolean
   isLoading: boolean
 }
@@ -90,8 +100,9 @@ describe("ConvexClientProvider", () => {
   let cleanup: (() => void) | undefined
 
   beforeAll(() => {
-    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean })
-      .IS_REACT_ACT_ENVIRONMENT = true
+    ;(
+      globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true
   })
 
   beforeEach(() => {

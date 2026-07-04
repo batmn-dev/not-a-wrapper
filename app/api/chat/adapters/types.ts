@@ -65,7 +65,7 @@ export type ProviderHistoryAdapter = {
   readonly providerId: string
   adaptMessages(
     messages: readonly UIMessage[],
-    context: AdaptationContext,
+    context: AdaptationContext
   ): Promise<AdaptationResult>
   readonly metadata: {
     droppedPartTypes: ReadonlySet<string>
@@ -77,7 +77,11 @@ export type ProviderHistoryAdapter = {
 
 export type AdapterRegistry = Map<string, ProviderHistoryAdapter>
 
-const FINAL_TOOL_STATES = new Set(["output-available", "output-error", "output-denied"])
+const FINAL_TOOL_STATES = new Set([
+  "output-available",
+  "output-error",
+  "output-denied",
+])
 
 export function isToolPartFinal(part: { state?: string }): boolean {
   return part.state == null || FINAL_TOOL_STATES.has(part.state)
@@ -89,7 +93,7 @@ export function isToolPart(part: { type: string }): boolean {
 
 export function createEmptyStats(
   originalMessageCount: number,
-  totalPartsOriginal: number,
+  totalPartsOriginal: number
 ): AdaptationStats {
   return {
     originalMessageCount,
@@ -104,7 +108,11 @@ export function createEmptyStats(
   }
 }
 
-export function incrementStat(record: Record<string, number>, key: string, amount = 1): void {
+export function incrementStat(
+  record: Record<string, number>,
+  key: string,
+  amount = 1
+): void {
   record[key] = (record[key] ?? 0) + amount
 }
 

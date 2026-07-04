@@ -2,12 +2,12 @@
 
 import { Composer } from "@/app/components/chat-input/composer"
 import { SourcesList } from "@/app/components/chat/sources-list"
-import { TurnContextProvider } from "@/app/components/chat/turn-context"
 import {
   THREAD_GUTTER_VARS,
   THREAD_MAXWIDTH_VARS,
 } from "@/app/components/chat/thread-bounds"
 import { ToolInvocation } from "@/app/components/chat/tool-invocation"
+import { TurnContextProvider } from "@/app/components/chat/turn-context"
 import { LayoutApp } from "@/app/components/layout/layout-app"
 import { Icon } from "@/components/ui/icon"
 import {
@@ -305,7 +305,9 @@ function ArticleWrapper({
       )}
       data-turn={role}
     >
-      <div className={`group/turn-messages relative mx-auto flex w-full max-w-[var(--thread-content-max-width,40rem)] min-w-0 flex-1 flex-col ${THREAD_MAXWIDTH_VARS}`}>
+      <div
+        className={`group/turn-messages relative mx-auto flex w-full max-w-[var(--thread-content-max-width,40rem)] min-w-0 flex-1 flex-col ${THREAD_MAXWIDTH_VARS}`}
+      >
         {children}
       </div>
     </article>
@@ -908,7 +910,9 @@ export default function ThinkingStatesTestPage() {
           </ScrollRootContent>
 
           {/* ━━━ Composer ━━━ */}
-          <div className={`group/thread-bottom-container content-fade relative sticky bottom-0 isolate z-10 flex w-full basis-auto flex-col px-[var(--thread-content-margin,1rem)] pb-[env(safe-area-inset-bottom,0px)] ${THREAD_GUTTER_VARS}`}>
+          <div
+            className={`group/thread-bottom-container content-fade relative sticky bottom-0 isolate z-10 flex w-full basis-auto flex-col px-[var(--thread-content-margin,1rem)] pb-[env(safe-area-inset-bottom,0px)] ${THREAD_GUTTER_VARS}`}
+          >
             <div className="relative h-0">
               <div className="pointer-events-none absolute inset-x-0 bottom-[calc(100%+1.5rem)] z-30 flex justify-center">
                 <div className="pointer-events-auto">
@@ -916,7 +920,9 @@ export default function ThinkingStatesTestPage() {
                 </div>
               </div>
             </div>
-            <div className={`mx-auto w-full max-w-[var(--thread-content-max-width,40rem)] ${THREAD_MAXWIDTH_VARS}`}>
+            <div
+              className={`mx-auto w-full max-w-[var(--thread-content-max-width,40rem)] ${THREAD_MAXWIDTH_VARS}`}
+            >
               <TurnContextProvider chatId={null} currentChat={null}>
                 <Composer
                   chatId={null}

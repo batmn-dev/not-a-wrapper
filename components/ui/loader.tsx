@@ -509,13 +509,19 @@ export function StreamingCaret({
 
     if (variant === "wave-segment") {
       return (
-        <span className={cn("inline-flex h-[1em] items-end gap-[2px]", animationStateClass)}>
+        <span
+          className={cn(
+            "inline-flex h-[1em] items-end gap-[2px]",
+            animationStateClass
+          )}
+        >
           {[0, 1, 2].map((index) => (
             <span
               key={index}
               className={cn(
                 "bg-foreground inline-block w-[1.5px] rounded-sm",
-                !animationStateClass && "animate-[indicator-wave_700ms_ease-in-out_infinite]"
+                !animationStateClass &&
+                  "animate-[indicator-wave_700ms_ease-in-out_infinite]"
               )}
               style={{
                 height: `${0.45 + index * 0.2}em`,
@@ -530,7 +536,12 @@ export function StreamingCaret({
 
     if (variant === "slide-dot-trail") {
       return (
-        <span className={cn("inline-flex h-[1em] items-center gap-[1px]", animationStateClass)}>
+        <span
+          className={cn(
+            "inline-flex h-[1em] items-center gap-[1px]",
+            animationStateClass
+          )}
+        >
           {[0, 1, 2].map((index) => (
             <span
               key={index}
@@ -552,7 +563,8 @@ export function StreamingCaret({
         <span
           className={cn(
             "bg-foreground inline-block h-[0.42em] w-[0.42em] rounded-full",
-            !animationStateClass && "animate-[indicator-pulse-dot_900ms_ease-in-out_infinite]",
+            !animationStateClass &&
+              "animate-[indicator-pulse-dot_900ms_ease-in-out_infinite]",
             animationStateClass
           )}
           aria-hidden
@@ -581,7 +593,8 @@ export function StreamingCaret({
         <span
           className={cn(
             "bg-foreground/80 inline-block h-[0.72em] w-[0.28em] rounded-[2px]",
-            !animationStateClass && "animate-[indicator-soft-glow_1.3s_ease-in-out_infinite]",
+            !animationStateClass &&
+              "animate-[indicator-soft-glow_1.3s_ease-in-out_infinite]",
             animationStateClass
           )}
           aria-hidden
@@ -628,9 +641,7 @@ export function TextDotsLoader({
   }
 
   return (
-    <div
-      className={cn("inline-flex items-center", className)}
-    >
+    <div className={cn("inline-flex items-center", className)}>
       <span className={cn("text-primary font-medium", textSizes[size])}>
         {text}
       </span>

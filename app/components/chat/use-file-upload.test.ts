@@ -28,8 +28,9 @@ const mockCheckFileUploadLimit = vi.mocked(checkFileUploadLimit)
 const mockProcessFiles = vi.mocked(processFiles)
 
 beforeAll(() => {
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean })
-    .IS_REACT_ACT_ENVIRONMENT = true
+  ;(
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true
 })
 
 function createTestFile(name: string): File {
@@ -109,14 +110,13 @@ describe("useFileUpload", () => {
   let root: Root | null = null
   let hookRef: React.RefObject<FileUploadControls | null> | null = null
 
-  const Harness = React.forwardRef<FileUploadControls>(function Harness(
-    _props,
-    ref
-  ) {
-    const fileUpload = useFileUpload()
-    React.useImperativeHandle(ref, () => fileUpload, [fileUpload])
-    return null
-  })
+  const Harness = React.forwardRef<FileUploadControls>(
+    function Harness(_props, ref) {
+      const fileUpload = useFileUpload()
+      React.useImperativeHandle(ref, () => fileUpload, [fileUpload])
+      return null
+    }
+  )
 
   function renderHook() {
     container = document.createElement("div")

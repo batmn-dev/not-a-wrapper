@@ -19,7 +19,11 @@ describe("replay compiler matrix", () => {
         role: "assistant",
         parts: [
           { type: "step-start" },
-          { type: "reasoning", reasoning: "Searching for links.", state: "done" },
+          {
+            type: "reasoning",
+            reasoning: "Searching for links.",
+            state: "done",
+          },
           {
             type: "tool-web_search",
             state: "output-available",
@@ -38,7 +42,10 @@ describe("replay compiler matrix", () => {
               ],
             },
             callProviderMetadata: {
-              openai: { responseId: "msg_matrix_openai", reasoningId: "rs_matrix_openai" },
+              openai: {
+                responseId: "msg_matrix_openai",
+                reasoningId: "rs_matrix_openai",
+              },
             },
           },
           { type: "text", text: "I found Amazon links." },
@@ -50,14 +57,18 @@ describe("replay compiler matrix", () => {
       history,
       "anthropic",
       { targetModelId: "claude-opus-4-6", hasTools: true },
-      { useReplayCompiler: true },
+      { useReplayCompiler: true }
     )
     const assistant = findAssistant(result.messages)
-    const toolPart = assistant?.parts.find((part) => part.type === "tool-web_search") as
-      | { output?: unknown }
-      | undefined
+    const toolPart = assistant?.parts.find(
+      (part) => part.type === "tool-web_search"
+    ) as { output?: unknown } | undefined
 
-    expect(result.warnings.some((warning) => warning.code === "replay_compile_fallback")).toBe(false)
+    expect(
+      result.warnings.some(
+        (warning) => warning.code === "replay_compile_fallback"
+      )
+    ).toBe(false)
     expect(assistant).toBeDefined()
     expect(assistant?.parts.some((part) => part.type === "text")).toBe(true)
     expect(toolPart).toBeUndefined()
@@ -65,8 +76,8 @@ describe("replay compiler matrix", () => {
       result.warnings.some(
         (warning) =>
           warning.code === "replay_compile_warning" &&
-          warning.detail.includes("invariant_block_dropped"),
-      ),
+          warning.detail.includes("invariant_block_dropped")
+      )
     ).toBe(true)
   })
 
@@ -108,16 +119,24 @@ describe("replay compiler matrix", () => {
       history,
       "openai",
       { targetModelId: "gpt-5.2", hasTools: true },
-      { useReplayCompiler: true },
+      { useReplayCompiler: true }
     )
     const assistant = findAssistant(result.messages)
     const toolIndex =
-      assistant?.parts.findIndex((part) => part.type.startsWith("tool-") || part.type === "dynamic-tool") ?? -1
+      assistant?.parts.findIndex(
+        (part) => part.type.startsWith("tool-") || part.type === "dynamic-tool"
+      ) ?? -1
 
-    expect(result.warnings.some((warning) => warning.code === "replay_compile_fallback")).toBe(false)
+    expect(
+      result.warnings.some(
+        (warning) => warning.code === "replay_compile_fallback"
+      )
+    ).toBe(false)
     expect(toolIndex).toBeGreaterThan(0)
     expect(
-      (assistant?.parts.slice(0, toolIndex) ?? []).some((part) => part.type === "reasoning"),
+      (assistant?.parts.slice(0, toolIndex) ?? []).some(
+        (part) => part.type === "reasoning"
+      )
     ).toBe(true)
   })
 
@@ -157,16 +176,19 @@ describe("replay compiler matrix", () => {
       history,
       "anthropic",
       { targetModelId: "claude-opus-4-6", hasTools: true },
-      { useReplayCompiler: true },
+      { useReplayCompiler: true }
     )
     const assistant = findAssistant(result.messages)
     const replayText = assistant?.parts
-      .filter((part): part is { type: "text"; text: string } => part.type === "text")
+      .filter(
+        (part): part is { type: "text"; text: string } => part.type === "text"
+      )
       .map((part) => part.text)
       .join("\n")
 
     const toolPart = assistant?.parts.find(
-      (part) => part.type === "tool-pay_purchase" || part.type === "dynamic-tool",
+      (part) =>
+        part.type === "tool-pay_purchase" || part.type === "dynamic-tool"
     )
     expect(toolPart).toBeUndefined()
     expect(assistant?.parts.some((part) => part.type === "text")).toBe(true)
@@ -212,12 +234,12 @@ describe("replay compiler matrix", () => {
       history,
       "openai",
       { targetModelId: "gpt-5.2", hasTools: true },
-      { useReplayCompiler: true },
+      { useReplayCompiler: true }
     )
     const assistant = findAssistant(result.messages)
 
     const toolPart = assistant?.parts.find(
-      (part) => part.type === "tool-pay_status" || part.type === "dynamic-tool",
+      (part) => part.type === "tool-pay_status" || part.type === "dynamic-tool"
     )
     expect(toolPart).toBeUndefined()
     expect(assistant?.parts.some((part) => part.type === "text")).toBe(true)
@@ -258,10 +280,14 @@ describe("replay compiler matrix", () => {
       history,
       "google",
       { targetModelId: "gemini-3-pro", hasTools: true },
-      { useReplayCompiler: true },
+      { useReplayCompiler: true }
     )
 
-    expect(result.warnings.some((warning) => warning.code === "replay_compile_fallback")).toBe(true)
+    expect(
+      result.warnings.some(
+        (warning) => warning.code === "replay_compile_fallback"
+      )
+    ).toBe(true)
     expect(result.messages.length).toBeGreaterThan(0)
   })
 })

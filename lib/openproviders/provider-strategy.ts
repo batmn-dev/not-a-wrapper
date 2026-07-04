@@ -1,13 +1,13 @@
+import type { ToolMetadata } from "@/lib/tools/types"
 import { anthropic, createAnthropic } from "@ai-sdk/anthropic"
-import { createGoogleGenerativeAI, google } from "@ai-sdk/google"
+import { createGoogle, google } from "@ai-sdk/google"
 import { createMistral, mistral } from "@ai-sdk/mistral"
 import { createOpenAI, openai } from "@ai-sdk/openai"
 import { createPerplexity, perplexity } from "@ai-sdk/perplexity"
-import type { LanguageModelV3 } from "@ai-sdk/provider"
+import type { LanguageModelV3, LanguageModelV4 } from "@ai-sdk/provider"
 import { createXai, xai } from "@ai-sdk/xai"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import type { ToolSet } from "ai"
-import type { ToolMetadata } from "@/lib/tools/types"
 import type { Provider } from "./types"
 
 /**
@@ -33,6 +33,28 @@ function asSearchTool(tool: unknown): ToolSet[string] {
 }
 
 /**
+ * The concrete model shapes our providers produce: the first-party @ai-sdk
+ * v4-generation providers implement `LanguageModelV4`; the community
+ * OpenRouter provider still implements `LanguageModelV3` (ai@7 accepts both
+ * spec versions). Widening past this union — e.g. a provider handing back a
+ * V2 model — should fail compilation rather than silently regress.
+ *
+ * What the V3 path silently degrades (ai@7's V3→V4 shim is a thin proxy that
+ * only fakes `specificationVersion` — V4-only call options pass through and
+ * are ignored by the model):
+ *   - the unified `reasoning` effort call option ('minimal'…'xhigh') — do NOT
+ *     use it to configure OpenRouter models; their reasoning knob is a
+ *     construction-time provider setting (`.chat(id, { reasoning })`), not a
+ *     per-call option (see request-shaping.ts)
+ *   - V4-only content shapes (custom content parts, reasoning-file parts)
+ *
+ * TODO(openrouter-v4): when @openrouter/ai-sdk-provider ships a v4-spec
+ * release (peer `ai ^7`), bump it, delete `LanguageModelV3` from this union,
+ * and let the compiler surface every place that tolerated the V3 shape.
+ */
+export type ProviderLanguageModel = LanguageModelV4 | LanguageModelV3
+
+/**
  * A provider's @ai-sdk client, constructed once from a resolved API key and
  * usable for BOTH the language model and the built-in search tool — so tool
  * calls structurally bill to the same key as model calls (BYOK parity is no
@@ -43,7 +65,7 @@ export type ProviderInstance = {
    * Build the language model. The model-id argument is the SDK's open string
    * enum, so no literal-union cast is needed.
    */
-  languageModel(resolvedModelId: string): LanguageModelV3
+  languageModel(resolvedModelId: string): ProviderLanguageModel
   /**
    * The provider's native built-in web search tool, or undefined if it has
    * none. Typed as the AI SDK's tool-set element type — the type the SDK itself
@@ -68,7 +90,7 @@ export type ProviderInstance = {
  *
  * `languageModel` is synchronous: the registry is statically constructed and
  * the provider SDKs are eagerly imported, because model construction has
- * always had to return a non-Promise `LanguageModelV3`.
+ * always had to return a non-Promise `ProviderLanguageModel`.
  */
 export type ProviderStrategy = {
   readonly id: Provider
@@ -138,7 +160,7 @@ const STRATEGIES: Record<Provider, ProviderStrategy> = {
       openWorld: true,
     },
     instance(apiKey) {
-      const provider = apiKey ? createGoogleGenerativeAI({ apiKey }) : google
+      const provider = apiKey ? createGoogle({ apiKey }) : google
       return {
         languageModel: (id) => provider(id),
         searchTool: () => asSearchTool(provider.tools.googleSearch({})),
@@ -197,8 +219,9 @@ const STRATEGIES: Record<Provider, ProviderStrategy> = {
     instance(apiKey) {
       // OpenRouter is the documented irregular: no callable default singleton,
       // self-resolved env fallback (the SDK does not read it), `.chat()` to
-      // produce a LanguageModelV3, and the `openrouter:` prefix strip. All four
-      // stay body-internal — they never widen the shared interface.
+      // produce a LanguageModelV3 (the community provider has no v4-spec
+      // release; ai@7 accepts V3 models), and the `openrouter:` prefix strip.
+      // All four stay body-internal — they never widen the shared interface.
       const provider = createOpenRouter({
         apiKey: apiKey || process.env.OPENROUTER_API_KEY,
         compatibility: "strict",

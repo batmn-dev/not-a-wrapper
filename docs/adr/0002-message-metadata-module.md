@@ -41,7 +41,7 @@ and writing message metadata:
 
 2. **Typed readers, no casts.** `getServerMessageId` and `getBranch` are the
    accessors; callers no longer reach through `metadata as Record<string,
-   unknown>`. The `isRecord` guard lives once in `branch.ts` (the lower module
+unknown>`. The `isRecord` guard lives once in `branch.ts` (the lower module
    that also needs it) and is re-exported as the canonical metadata guard.
 
 3. **The write surface is owned at the persist boundary.**
@@ -63,9 +63,9 @@ and writing message metadata:
   validator, so the stored shape is provably the owned key-set rather than an
   opaque `v.any()`. This was safe because there is no production data; the
   narrowed schema pushed cleanly to the dev deployment. Note this is a validator
-  *narrowing*, which the repo's expand/migrate/contract tooling
+  _narrowing_, which the repo's expand/migrate/contract tooling
   (`convex:schema-guard` / `convex:schema-preflight`) does **not** guard — that
-  tooling detects field *removals* only. A future narrowing against a populated
+  tooling detects field _removals_ only. A future narrowing against a populated
   deployment would need a bespoke cleanup + verifier (Convex strict objects
   reject unknown keys, and the preflight would not catch non-conforming rows),
   not the removal-oriented manifest flow.
@@ -74,7 +74,7 @@ and writing message metadata:
 
 ADR-0001 states the message model's `metadata` "stays `unknown` (to match the
 SDK's `UIMessage` for variance)." That justification is imprecise: the AI SDK
-types `metadata?: METADATA` as a generic *defaulting* to `unknown`, not a hard
+types `metadata?: METADATA` as a generic _defaulting_ to `unknown`, not a hard
 `unknown`, and the codebase already applies a concrete type via
 `DurableAdaptedUiMessage = UIMessage & { metadata?: ChatMessageMetadata }`. A
 concrete or branded metadata type is assignable into the SDK's optional field;

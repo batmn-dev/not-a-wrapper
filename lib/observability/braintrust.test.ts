@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
-  hashBraintrustIdentifier,
   getBraintrustErrorMetadata,
+  hashBraintrustIdentifier,
   isBraintrustEnabled,
   maskBraintrustPayload,
   sanitizeBraintrustMetadata,
@@ -38,7 +38,7 @@ describe("Braintrust observability helpers", () => {
       apiKey: "sk-secret",
       input: [{ role: "user", content: "hello@example.com" }],
       nested: {
-        experimental_telemetry: {
+        telemetry: {
           metadata: {
             conversationId: "chat_raw",
             requestId: "req_123",
@@ -56,7 +56,7 @@ describe("Braintrust observability helpers", () => {
       apiKey: "[REDACTED]",
       input: "[REDACTED]",
       nested: {
-        experimental_telemetry: {
+        telemetry: {
           metadata: {
             conversationId: "[REDACTED]",
             requestId: "req_123",

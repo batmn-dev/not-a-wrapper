@@ -7,8 +7,9 @@ import type { ChatTurnController } from "./chat-turn"
 import { useChatEdit } from "./use-chat-edit"
 
 beforeAll(() => {
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean })
-    .IS_REACT_ACT_ENVIRONMENT = true
+  ;(
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true
 })
 
 describe("useChatEdit generation-active guard", () => {

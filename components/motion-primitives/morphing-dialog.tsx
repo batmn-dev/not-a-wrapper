@@ -1,6 +1,7 @@
 "use client"
 
 import { Icon } from "@/components/ui/icon"
+import useClickOutside from "@/hooks/useClickOutside"
 import { cn } from "@/lib/utils"
 import { RiCloseLargeLine } from "@remixicon/react"
 import {
@@ -21,7 +22,6 @@ import React, {
   useSyncExternalStore,
 } from "react"
 import { createPortal } from "react-dom"
-import useClickOutside from "@/hooks/useClickOutside"
 
 // Hydration-safe hook using useSyncExternalStore (React 19 pattern)
 const subscribe = () => () => {}

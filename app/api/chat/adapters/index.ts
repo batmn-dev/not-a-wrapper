@@ -1,11 +1,11 @@
 import type { UIMessage } from "ai"
+import { compileReplay } from "../replay/compilers"
+import { normalizeReplayMessages } from "../replay/normalize"
 import { anthropicAdapter } from "./anthropic"
 import { defaultAdapter } from "./default"
 import { googleAdapter } from "./google"
-import { openaiCompatibleAdapter } from "./openai-compatible"
 import { openaiAdapter } from "./openai"
-import { compileReplay } from "../replay/compilers"
-import { normalizeReplayMessages } from "../replay/normalize"
+import { openaiCompatibleAdapter } from "./openai-compatible"
 import { textOnlyAdapter } from "./text-only"
 import type {
   AdaptationContext,
@@ -14,21 +14,34 @@ import type {
   ProviderHistoryAdapter,
 } from "./types"
 
-const KNOWN_UNDERLYING_PROVIDERS = ["anthropic", "openai", "google", "xai", "mistral"] as const
+const KNOWN_UNDERLYING_PROVIDERS = [
+  "anthropic",
+  "openai",
+  "google",
+  "xai",
+  "mistral",
+] as const
 
-function extractUnderlyingProvider(modelId: string): (typeof KNOWN_UNDERLYING_PROVIDERS)[number] | null {
+function extractUnderlyingProvider(
+  modelId: string
+): (typeof KNOWN_UNDERLYING_PROVIDERS)[number] | null {
   const modelIdWithoutOpenRouterPrefix = modelId.startsWith("openrouter:")
     ? modelId.slice("openrouter:".length)
     : modelId
   const [prefix] = modelIdWithoutOpenRouterPrefix.split("/")
   if (!prefix) return null
 
-  return KNOWN_UNDERLYING_PROVIDERS.includes(prefix as (typeof KNOWN_UNDERLYING_PROVIDERS)[number])
+  return KNOWN_UNDERLYING_PROVIDERS.includes(
+    prefix as (typeof KNOWN_UNDERLYING_PROVIDERS)[number]
+  )
     ? (prefix as (typeof KNOWN_UNDERLYING_PROVIDERS)[number])
     : null
 }
 
-export const registry: AdapterRegistry = new Map<string, ProviderHistoryAdapter>()
+export const registry: AdapterRegistry = new Map<
+  string,
+  ProviderHistoryAdapter
+>()
 
 registry.set("openai", openaiAdapter)
 registry.set("anthropic", anthropicAdapter)
@@ -43,13 +56,15 @@ type AdaptHistoryOptions = {
 
 function resolveAdapter(
   providerId: string,
-  context: AdaptationContext,
+  context: AdaptationContext
 ): { adapter: ProviderHistoryAdapter; effectiveProviderId: string } {
   if (providerId === "openrouter") {
     const underlyingProvider = extractUnderlyingProvider(context.targetModelId)
     const effectiveProviderId = underlyingProvider ?? "default"
     return {
-      adapter: (underlyingProvider ? registry.get(underlyingProvider) : null) ?? defaultAdapter,
+      adapter:
+        (underlyingProvider ? registry.get(underlyingProvider) : null) ??
+        defaultAdapter,
       effectiveProviderId,
     }
   }
@@ -69,7 +84,7 @@ export async function adaptHistoryForProvider(
   messages: readonly UIMessage[],
   providerId: string,
   context: AdaptationContext,
-  options: AdaptHistoryOptions = {},
+  options: AdaptHistoryOptions = {}
 ): Promise<AdaptationResult> {
   const { adapter, effectiveProviderId } = resolveAdapter(providerId, context)
 
@@ -79,7 +94,11 @@ export async function adaptHistoryForProvider(
 
   try {
     const normalization = normalizeReplayMessages(messages)
-    const compiled = await compileReplay(normalization.messages, effectiveProviderId, context)
+    const compiled = await compileReplay(
+      normalization.messages,
+      effectiveProviderId,
+      context
+    )
     const adapted = await adapter.adaptMessages(compiled.messages, context)
 
     return {
@@ -103,7 +122,7 @@ export async function adaptHistoryForProvider(
     const detail = formatReplayError(error)
 
     console.warn(
-      `[history-replay] compiler fallback -> legacy adapter (${effectiveProviderId}): ${detail}`,
+      `[history-replay] compiler fallback -> legacy adapter (${effectiveProviderId}): ${detail}`
     )
 
     return {

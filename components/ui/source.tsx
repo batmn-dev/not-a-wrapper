@@ -54,9 +54,7 @@ export function Source({ href, children }: SourceProps) {
 
   return (
     <SourceContext.Provider value={{ href, safeHref, domain }}>
-      <HoverCard>
-        {children}
-      </HoverCard>
+      <HoverCard>{children}</HoverCard>
     </SourceContext.Provider>
   )
 }
@@ -95,11 +93,7 @@ export function SourceTrigger({
   })
 
   return (
-    <HoverCardTrigger
-      delay={150}
-      closeDelay={0}
-      render={trigger}
-    >
+    <HoverCardTrigger delay={150} closeDelay={0} render={trigger}>
       {showFavicon && (
         // eslint-disable-next-line @next/next/no-img-element -- Dynamic external favicon, optimization not beneficial
         <img
@@ -112,7 +106,9 @@ export function SourceTrigger({
           className="size-3.5 rounded-full"
         />
       )}
-      <span className="truncate tabular-nums text-center font-normal">{labelToShow}</span>
+      <span className="truncate text-center font-normal tabular-nums">
+        {labelToShow}
+      </span>
     </HoverCardTrigger>
   )
 }
@@ -131,7 +127,7 @@ export function SourceContent({
   const { href, safeHref, domain } = useSourceContext()
 
   return (
-    <HoverCardContent className={cn("w-80 p-0 shadow-border-md", className)}>
+    <HoverCardContent className={cn("shadow-border-md w-80 p-0", className)}>
       <a
         href={safeHref}
         target={safeHref ? "_blank" : undefined}
@@ -204,7 +200,7 @@ export function SourcesGalleryItem({
       href={safeHref}
       target={safeHref ? "_blank" : undefined}
       rel={safeHref ? "noopener noreferrer" : undefined}
-      className="flex flex-col gap-0.5 rounded-xl px-3 py-2.5 hover:bg-accent"
+      className="hover:bg-accent flex flex-col gap-0.5 rounded-xl px-3 py-2.5"
     >
       <div className="flex h-6 items-center gap-2 text-xs">
         {/* eslint-disable-next-line @next/next/no-img-element -- Dynamic external favicon, optimization not beneficial */}

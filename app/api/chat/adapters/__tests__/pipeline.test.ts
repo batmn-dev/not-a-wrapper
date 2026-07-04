@@ -1,8 +1,8 @@
 import type { ModelMessage } from "ai"
 import { convertToModelMessages } from "ai"
 import { describe, expect, it } from "vitest"
-import { adaptHistoryForProvider } from "../index"
 import { hasProviderLinkedResponseIds } from "../../utils"
+import { adaptHistoryForProvider } from "../index"
 import {
   abortedToolConversation,
   crossProviderConversation,
@@ -30,7 +30,10 @@ const modelByProvider: Record<(typeof providers)[number], string> = {
 // Phase 4B references this fixture name. Current fixtures export it as heavyToolUseConversation.
 const multiStepToolConversation = heavyToolUseConversation
 
-type ModelContentPart = Record<string, unknown> & { type?: string; toolCallId?: string }
+type ModelContentPart = Record<string, unknown> & {
+  type?: string
+  toolCallId?: string
+}
 
 function toContentParts(message: ModelMessage): ModelContentPart[] {
   if (!("content" in message)) return []
@@ -73,7 +76,8 @@ function assertToolCallsHaveResults(messages: ModelMessage[]): void {
 
   for (const message of messages) {
     for (const part of toContentParts(message)) {
-      const toolCallId = typeof part.toolCallId === "string" ? part.toolCallId : null
+      const toolCallId =
+        typeof part.toolCallId === "string" ? part.toolCallId : null
       if (!toolCallId) continue
       if (isToolCallPart(part)) {
         callCounts.set(toolCallId, (callCounts.get(toolCallId) ?? 0) + 1)
@@ -101,10 +105,14 @@ function assertNoEmptyContentArrays(messages: ModelMessage[]): void {
 for (const provider of providers) {
   describe(`${provider} adapter -> convertToModelMessages pipeline`, () => {
     it("produces structurally valid ModelMessage[] for multi-step tool history", async () => {
-      const adapted = await adaptHistoryForProvider(multiStepToolConversation, provider, {
-        targetModelId: modelByProvider[provider],
-        hasTools: true,
-      })
+      const adapted = await adaptHistoryForProvider(
+        multiStepToolConversation,
+        provider,
+        {
+          targetModelId: modelByProvider[provider],
+          hasTools: true,
+        }
+      )
 
       const modelMessages = await convertToModelMessages(adapted.messages, {
         ignoreIncompleteToolCalls: true,
@@ -117,10 +125,14 @@ for (const provider of providers) {
     })
 
     it("keeps cross-provider history replay-safe after conversion", async () => {
-      const adapted = await adaptHistoryForProvider(crossProviderConversation, provider, {
-        targetModelId: modelByProvider[provider],
-        hasTools: true,
-      })
+      const adapted = await adaptHistoryForProvider(
+        crossProviderConversation,
+        provider,
+        {
+          targetModelId: modelByProvider[provider],
+          hasTools: true,
+        }
+      )
 
       const modelMessages = await convertToModelMessages(adapted.messages, {
         ignoreIncompleteToolCalls: true,
@@ -133,10 +145,14 @@ for (const provider of providers) {
     })
 
     it("drops aborted/incomplete tool states without breaking conversion invariants", async () => {
-      const adapted = await adaptHistoryForProvider(abortedToolConversation, provider, {
-        targetModelId: modelByProvider[provider],
-        hasTools: true,
-      })
+      const adapted = await adaptHistoryForProvider(
+        abortedToolConversation,
+        provider,
+        {
+          targetModelId: modelByProvider[provider],
+          hasTools: true,
+        }
+      )
 
       const modelMessages = await convertToModelMessages(adapted.messages, {
         ignoreIncompleteToolCalls: true,
@@ -152,11 +168,15 @@ for (const provider of providers) {
       for (const sourceProvider of providers) {
         if (sourceProvider === provider) continue
 
-        const adapted = await adaptHistoryForProvider(crossProviderConversation, provider, {
-          targetModelId: modelByProvider[provider],
-          hasTools: true,
-          sourceProviderHint: sourceProvider,
-        })
+        const adapted = await adaptHistoryForProvider(
+          crossProviderConversation,
+          provider,
+          {
+            targetModelId: modelByProvider[provider],
+            hasTools: true,
+            sourceProviderHint: sourceProvider,
+          }
+        )
 
         const modelMessages = await convertToModelMessages(adapted.messages, {
           ignoreIncompleteToolCalls: true,

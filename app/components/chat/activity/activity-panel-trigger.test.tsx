@@ -16,8 +16,9 @@ import {
 } from "./activity-panel-trigger"
 
 beforeAll(() => {
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-    true
+  ;(
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true
 })
 
 describe("ActivityPanelTrigger", () => {
@@ -27,7 +28,9 @@ describe("ActivityPanelTrigger", () => {
       "Thought for 1s"
     )
     expect(activityStateLabel({ status: "thought" })).toBe("Thought")
-    expect(activityStateLabel({ status: "sources", count: 3 })).toBe("3 sources")
+    expect(activityStateLabel({ status: "sources", count: 3 })).toBe(
+      "3 sources"
+    )
     expect(activityStateLabel({ status: "activity" })).toBe("Activity")
   })
 
@@ -51,12 +54,12 @@ describe("ActivityPanelTrigger", () => {
     expect(container.textContent).toContain("Thought for 1s")
     // The only icon is the trailing chevron — no leading sparkle.
     expect(container.querySelectorAll("svg")).toHaveLength(1)
-    expect(container.querySelector("button")?.getAttribute("aria-expanded")).toBe(
-      "false"
-    )
-    expect(container.querySelector("button")?.getAttribute("aria-controls")).toBe(
-      "activity-panel"
-    )
+    expect(
+      container.querySelector("button")?.getAttribute("aria-expanded")
+    ).toBe("false")
+    expect(
+      container.querySelector("button")?.getAttribute("aria-controls")
+    ).toBe("activity-panel")
 
     act(() => {
       container!.querySelector("button")!.click()
@@ -73,12 +76,12 @@ describe("ActivityPanelTrigger", () => {
         />
       )
     })
-    expect(
-      container.querySelector("button")?.getAttribute("aria-label")
-    ).toBe("Close activity: Thought for 1s")
-    expect(container.querySelector("button")?.getAttribute("aria-expanded")).toBe(
-      "true"
+    expect(container.querySelector("button")?.getAttribute("aria-label")).toBe(
+      "Close activity: Thought for 1s"
     )
+    expect(
+      container.querySelector("button")?.getAttribute("aria-expanded")
+    ).toBe("true")
 
     act(() => {
       container!.querySelector("button")!.click()

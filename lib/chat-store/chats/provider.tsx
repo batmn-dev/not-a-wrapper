@@ -3,12 +3,12 @@
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
-import { resolveModelId } from "@/lib/models/model-id-migration"
 import {
   usePerUserPaginatedQuery,
   usePerUserQuery,
 } from "@/lib/convex/use-per-user-query"
 import { ENABLE_PAGINATED_SIDEBAR } from "@/lib/flags"
+import { resolveModelId } from "@/lib/models/model-id-migration"
 import { useConvexAuth, useMutation } from "convex/react"
 import {
   createContext,

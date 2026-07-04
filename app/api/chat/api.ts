@@ -1,10 +1,74 @@
 import type { ChatApiParams } from "@/app/types/api.types"
+import { api } from "@/convex/_generated/api"
 import { FREE_MODELS_IDS, NON_AUTH_ALLOWED_MODELS } from "@/lib/config"
 import { resolveModelId } from "@/lib/models/model-id-migration"
 import { getProviderForModel } from "@/lib/openproviders/provider-map"
 import { hasUserKey } from "@/lib/user-keys"
-import { fetchQuery, fetchMutation } from "convex/nextjs"
-import { api } from "@/convex/_generated/api"
+import { fetchMutation, fetchQuery } from "convex/nextjs"
+
+const USAGE_ERROR_CODES = {
+  ANONYMOUS_ID_REQUIRED: "ANONYMOUS_ID_REQUIRED",
+  USER_NOT_FOUND: "USER_NOT_FOUND",
+} as const
+
+const INTERNAL_SERVER_ERROR_MESSAGE = "Internal server error"
+
+type UsageErrorCode = (typeof USAGE_ERROR_CODES)[keyof typeof USAGE_ERROR_CODES]
+
+type ChatApiError = Error & {
+  statusCode: number
+  code: string
+}
+
+function normalizeUsageErrorCode(
+  error: string,
+  errorCode: unknown
+): UsageErrorCode | "UNKNOWN" {
+  if (
+    errorCode === USAGE_ERROR_CODES.ANONYMOUS_ID_REQUIRED ||
+    errorCode === USAGE_ERROR_CODES.USER_NOT_FOUND
+  ) {
+    return errorCode
+  }
+
+  if (error === "Anonymous ID required for usage tracking") {
+    return USAGE_ERROR_CODES.ANONYMOUS_ID_REQUIRED
+  }
+
+  if (error === "User not found") {
+    return USAGE_ERROR_CODES.USER_NOT_FOUND
+  }
+
+  return "UNKNOWN"
+}
+
+function createUsageCheckApiError(
+  error: string,
+  errorCode?: unknown
+): ChatApiError {
+  const normalizedCode = normalizeUsageErrorCode(error, errorCode)
+
+  if (normalizedCode === USAGE_ERROR_CODES.ANONYMOUS_ID_REQUIRED) {
+    return Object.assign(new Error(error), {
+      statusCode: 400,
+      code: "INVALID_REQUEST",
+    })
+  }
+
+  if (normalizedCode === USAGE_ERROR_CODES.USER_NOT_FOUND) {
+    return Object.assign(new Error(INTERNAL_SERVER_ERROR_MESSAGE), {
+      cause: new Error(error),
+      statusCode: 500,
+      code: "USER_NOT_FOUND",
+    })
+  }
+
+  return Object.assign(new Error(INTERNAL_SERVER_ERROR_MESSAGE), {
+    cause: new Error(error),
+    statusCode: 500,
+    code: "USAGE_CHECK_FAILED",
+  })
+}
 
 /**
  * Check if a model is a "pro" model (requires more stringent limits)
@@ -35,14 +99,21 @@ export async function checkServerSideUsage(
   )
 
   if (!usage.canSend) {
-    // Surface specific error messages (e.g., "User not found", "Anonymous ID required")
-    // before falling back to the generic rate limit message
+    // Surface specific usage-check failures before falling back to the generic
+    // rate-limit message. Status codes ride the ApiError shape so
+    // createErrorResponse maps them explicitly.
     if (usage.error) {
-      throw new Error(usage.error)
+      throw createUsageCheckApiError(
+        usage.error,
+        "errorCode" in usage ? usage.errorCode : undefined
+      )
     }
     const modelType = isPro ? "pro model" : "message"
-    throw new Error(
-      `Daily ${modelType} limit reached (${usage.limit}). Please try again tomorrow or upgrade your plan.`
+    throw Object.assign(
+      new Error(
+        `Daily ${modelType} limit reached (${usage.limit}). Please try again tomorrow or upgrade your plan.`
+      ),
+      { statusCode: 403, code: "DAILY_LIMIT_REACHED" }
     )
   }
 }
@@ -85,8 +156,11 @@ export async function validateAndTrackUsage({
   if (!isAuthenticated) {
     // For unauthenticated users, only allow specific models
     if (!NON_AUTH_ALLOWED_MODELS.includes(resolvedModel)) {
-      throw new Error(
-        "This model requires authentication. Please sign in to access more models."
+      throw Object.assign(
+        new Error(
+          "This model requires authentication. Please sign in to access more models."
+        ),
+        { statusCode: 401, code: "AUTH_REQUIRED" }
       )
     }
   } else {
@@ -98,8 +172,11 @@ export async function validateAndTrackUsage({
 
     // If no API key and model is not in free list, deny access
     if (!hasKey && !FREE_MODELS_IDS.includes(resolvedModel)) {
-      throw new Error(
-        `This model requires an API key for ${provider}. Please add your API key in settings or use a free model.`
+      throw Object.assign(
+        new Error(
+          `This model requires an API key for ${provider}. Please add your API key in settings or use a free model.`
+        ),
+        { statusCode: 401, code: "MISSING_API_KEY" }
       )
     }
   }

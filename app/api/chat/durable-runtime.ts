@@ -152,8 +152,7 @@ export function countToolParts(message: UIMessage): {
 }
 
 type SnapshotPart =
-  | { type: "text"; text: string }
-  | { type: "reasoning"; text: string }
+  { type: "text"; text: string } | { type: "reasoning"; text: string }
 
 const SNAPSHOT_WRITE_TIMEOUT_MS = 10_000
 
@@ -204,7 +203,7 @@ export function createDurableSnapshotTracker(
   // Dirtiness is content-versioned, not a boolean: a persist loop re-runs only
   // when a chunk advanced the version past what the last completed write
   // captured. A shared `pending` flag let two overlapping flush() calls (the
-  // streamText onAbort and the response-level onFinish both flush on Stop)
+  // streamText onAbort and the response-level onEnd both flush on Stop)
   // re-arm each other forever — neither flush resolved, markGenerationRunAborted
   // never ran, and snapshot writes continued at the write-latency rate.
   let contentVersion = 0

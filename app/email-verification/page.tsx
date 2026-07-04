@@ -21,13 +21,13 @@ export default async function EmailVerificationPage({
   const email = parsed.success ? parsed.data.email : null
 
   return (
-    <main className="flex min-h-svh w-full items-center justify-center bg-background px-4 py-10 text-foreground">
+    <main className="bg-background text-foreground flex min-h-svh w-full items-center justify-center px-4 py-10">
       <section className="mx-auto w-full max-w-[388px]">
         <div className="mb-8 space-y-3 text-center">
           <h1 className="text-[32px] leading-10 font-normal tracking-normal">
             Check your inbox
           </h1>
-          <p className="mx-auto max-w-[320px] text-base leading-6 text-muted-foreground">
+          <p className="text-muted-foreground mx-auto max-w-[320px] text-base leading-6">
             {email ? (
               <>
                 Enter the verification code we just sent to{" "}

@@ -18,15 +18,15 @@ cites both the GA section AND the target `file:line`. When the GA and this plan 
 evidence**, not as code to copy blindly: target implementation still follows not-a-wrapper primitives, tokens, and
 product patterns. When an implementation step lacks visual/source context, load these before inventing behavior:
 
-| Need | Load |
-| --- | --- |
-| ChatGPT reference index and routing notes | `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/README.md` |
-| CSS capture load order and provenance | `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/css/README.md` |
-| Activity panel CSS/tokens/breakpoints | `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/css/conversation-with-activity-panel.md` |
-| Activity panel component inventory and shell/content split | `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/research/activity-panel-component-inventory.md` |
-| Desktop docked flyout HTML capture | `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/pages/conversation-with-activity-panel.md` |
-| Tablet centered-card HTML capture | `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/pages/conversation-with-activity-panel-tablet-820px-light.md` |
-| Mobile bottom-sheet HTML capture | `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/pages/conversation-with-activity-panel-mobile-592px-light.md` |
+| Need                                                       | Load                                                                                                                      |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| ChatGPT reference index and routing notes                  | `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/README.md`                                                    |
+| CSS capture load order and provenance                      | `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/css/README.md`                                                |
+| Activity panel CSS/tokens/breakpoints                      | `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/css/conversation-with-activity-panel.md`                      |
+| Activity panel component inventory and shell/content split | `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/research/activity-panel-component-inventory.md`               |
+| Desktop docked flyout HTML capture                         | `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/pages/conversation-with-activity-panel.md`                    |
+| Tablet centered-card HTML capture                          | `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/pages/conversation-with-activity-panel-tablet-820px-light.md` |
+| Mobile bottom-sheet HTML capture                           | `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/pages/conversation-with-activity-panel-mobile-592px-light.md` |
 
 Use those reference-ui markdowns for source material such as stable selectors, visual recipes, token values,
 breakpoint behavior, shell/content decomposition, and known gaps. Do not rely on brittle ChatGPT implementation
@@ -89,13 +89,13 @@ receives `activeTurnId` only so memoized messages/trigger affordances re-render 
 **The one-PR / five-commit sequence** (GA §5, §7 R-rollback) — one branch and one final PR, with each commit
 kept locally green and independently understandable. Cutover stays last:
 
-| Commit | Objective | If it breaks before merge |
-|----|-----------|-----------|
-| **1** | Additive leaves + tokens (dormant). **Step A leaves already shipped (commit `9040090`);** commit 1 remainder = globals.css panel tokens/keyframe, `Favicon` loading/decoding forwarding, `SourcesGalleryItem`, app-level `SourcesGallery`, `SourceChipGroup`, new `activity/*` leaf components. | amend/revert this commit; dead code only |
-| **2** | Compose `content-sheet-shell.tsx` over the **unchanged** Sheet; sole sheet edit = additive `overlayClassName?`. | amend/revert this commit; shell + optional prop removed, 2 sidebars untouched |
-| **3** | Hoist panel state behind one chat-level `use-activity-panel.ts` (active-turn selector) + flip `message.tsx` memo contract. Inline body still renders. | amend/revert this commit; restores `:107`/`:111`, removes hook |
-| **4** | Add the LayoutApp dock slot + host registration seam; render panel shell/content with the track collapsed below lg. | amend/revert this commit; removes host/track, full-width conversation |
-| **5** | **Cutover** — remove inline reasoning/sources from the body; add the explicit Activity trigger as the only reopen path. | amend/revert this commit; commits 1–4 remain green |
+| Commit | Objective                                                                                                                                                                                                                                                                                       | If it breaks before merge                                                     |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **1**  | Additive leaves + tokens (dormant). **Step A leaves already shipped (commit `9040090`);** commit 1 remainder = globals.css panel tokens/keyframe, `Favicon` loading/decoding forwarding, `SourcesGalleryItem`, app-level `SourcesGallery`, `SourceChipGroup`, new `activity/*` leaf components. | amend/revert this commit; dead code only                                      |
+| **2**  | Compose `content-sheet-shell.tsx` over the **unchanged** Sheet; sole sheet edit = additive `overlayClassName?`.                                                                                                                                                                                 | amend/revert this commit; shell + optional prop removed, 2 sidebars untouched |
+| **3**  | Hoist panel state behind one chat-level `use-activity-panel.ts` (active-turn selector) + flip `message.tsx` memo contract. Inline body still renders.                                                                                                                                           | amend/revert this commit; restores `:107`/`:111`, removes hook                |
+| **4**  | Add the LayoutApp dock slot + host registration seam; render panel shell/content with the track collapsed below lg.                                                                                                                                                                             | amend/revert this commit; removes host/track, full-width conversation         |
+| **5**  | **Cutover** — remove inline reasoning/sources from the body; add the explicit Activity trigger as the only reopen path.                                                                                                                                                                         | amend/revert this commit; commits 1–4 remain green                            |
 
 ---
 
@@ -133,37 +133,37 @@ kept locally green and independently understandable. Cutover stays last:
 
 ## 3. Current-state cheat sheet (load-bearing file:line facts)
 
-| Concern | Fact | file:line |
-|--------|------|-----------|
-| Memo streaming short-circuit | `if (next.status === "streaming" && next.isLast) return false` — the dominant re-render driver; **narrow**, don't leave intact (GA §7 R3) | message.tsx:107 |
-| Memo reasoning projection | `if (getReasoningContent(prev.parts) !== getReasoningContent(next.parts)) return false` — **delete** | message.tsx:111 |
-| `getReasoningContent` helper | concatenates reasoning part text — **delete** when orphaned | message.tsx:58-65 |
-| `getTextContent` / `getToolSignature` | **keep** — mutation-safe string projections; become the narrowed guard | message.tsx:54-56 / 67-76 |
-| `prev.isLast !== next.isLast` gate | **keep** | message.tsx:121 |
-| Un-memoized parts.filter (reasoning) | intentionally un-memoized — AI SDK mutates parts in place w/o changing array ref. **Do NOT memoize** (GA §7 R1) | use-reasoning-phase.ts:28-31 |
-| `shouldRunTimer` | `isLast && phase === "thinking"` — `isLast` becomes `isActiveTurn` (GA §6.7B) | use-reasoning-phase.ts:75 |
-| Render-sync reset | `if (phase !== prevPhase){...; if(thinking&&isLast) setTickedSeconds(0)}` — preserve verbatim; R1 fix gates this on `prevPhase !== "thinking"` | use-reasoning-phase.ts:78-83 |
-| setInterval timer + cleanup-freeze | freeze final `tickedSeconds` on cleanup — preserve verbatim | use-reasoning-phase.ts:86-106 |
-| Persisted duration fallback ladder | live timer (active) > persisted ms/1000 (historical/complete-no-ticks) | use-reasoning-phase.ts:110-124 |
-| `formatDuration` | module-private; `<60→Ns` else `Xm Ys`. EXPORT additively at reasoning.tsx:299 only if needed standalone | reasoning.tsx:55-60 |
-| Panel title/duration formatting | Export `formatDuration` additively if the panel header needs duration text. Do **not** render `Reasoning` / `ReasoningLabel` inside the panel header; those own disclosure/auto-open state for inline reasoning. | reasoning.tsx:55-60 / 183-206 |
-| React-19 render-sync auto-open | preserve verbatim — do NOT revert to useEffect (@upgradeNotes) | reasoning.tsx:92-105 |
-| `getSources(parts)` | pure; REUSE as-is to populate `sources` | get-sources.ts:23 ; called message-assistant.tsx:102 |
-| `useReasoningPhase` call | move into use-activity-panel.ts (preferred) | message-assistant.tsx:127-138 |
-| toolInvocationParts (steps) | `parts.filter(isStaticToolUIPart)` | message-assistant.tsx:108-110 |
-| persistedDurationMs read | `metadata.reasoningDurationMs` (ms) | message-assistant.tsx:122-126 |
-| Inline reasoning JSX (cutover removes) | commit 5 | message-assistant.tsx:237-249 |
-| Inline sources JSX (cutover removes) | commit 5 | message-assistant.tsx:301 |
-| Sheet overlay base class | the string `overlayClassName` defaults to (must stay byte-identical when undefined) | sheet.tsx:40 |
-| `<SheetOverlay />` invocation | the single additive forward point | sheet.tsx:60 |
-| SheetContent props/defaults | `side="right"`, `showCloseButton=true`; add `overlayClassName?` | sheet.tsx:48-57 |
-| Layout sibling seam | flyout track goes AFTER the `@container/main` column close, inside the `.flex.h-svh` row | layout-app.tsx:15, :17-24 |
-| Scroll machinery that must NOT move | ScrollRoot stays inside `@container/main` | layout-app.tsx:18 |
-| Chat composer (sticky, stick-to-bottom) | NOT a panel seam; its breakpoints are container-queries on `@container/main` | chat.tsx:321-354, :324, :339 |
-| Selected-path tail source | `projectSelectedPath(live, serverPath)` — last element with role==='assistant' | selected-path.ts:171-180 |
-| Divergence guard | `isSelectedPathDivergent` → serverPath (C2 tolerance, GA §6.7F) | selected-path.ts:145-164 |
-| Cross-key id idiom | `getServerMessageId(metadata)` from `@/lib/chat-messages/metadata` | selected-path.ts:110-119 |
-| globals.css token blocks | first `@theme` (:49-54 spacing/animate), `:root` composer vars (:422-425), `.dark` composer vars (:507-510), top-level keyframes (:27-47) | app/globals.css |
+| Concern                                 | Fact                                                                                                                                                                                                             | file:line                                            |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Memo streaming short-circuit            | `if (next.status === "streaming" && next.isLast) return false` — the dominant re-render driver; **narrow**, don't leave intact (GA §7 R3)                                                                        | message.tsx:107                                      |
+| Memo reasoning projection               | `if (getReasoningContent(prev.parts) !== getReasoningContent(next.parts)) return false` — **delete**                                                                                                             | message.tsx:111                                      |
+| `getReasoningContent` helper            | concatenates reasoning part text — **delete** when orphaned                                                                                                                                                      | message.tsx:58-65                                    |
+| `getTextContent` / `getToolSignature`   | **keep** — mutation-safe string projections; become the narrowed guard                                                                                                                                           | message.tsx:54-56 / 67-76                            |
+| `prev.isLast !== next.isLast` gate      | **keep**                                                                                                                                                                                                         | message.tsx:121                                      |
+| Un-memoized parts.filter (reasoning)    | intentionally un-memoized — AI SDK mutates parts in place w/o changing array ref. **Do NOT memoize** (GA §7 R1)                                                                                                  | use-reasoning-phase.ts:28-31                         |
+| `shouldRunTimer`                        | `isLast && phase === "thinking"` — `isLast` becomes `isActiveTurn` (GA §6.7B)                                                                                                                                    | use-reasoning-phase.ts:75                            |
+| Render-sync reset                       | `if (phase !== prevPhase){...; if(thinking&&isLast) setTickedSeconds(0)}` — preserve verbatim; R1 fix gates this on `prevPhase !== "thinking"`                                                                   | use-reasoning-phase.ts:78-83                         |
+| setInterval timer + cleanup-freeze      | freeze final `tickedSeconds` on cleanup — preserve verbatim                                                                                                                                                      | use-reasoning-phase.ts:86-106                        |
+| Persisted duration fallback ladder      | live timer (active) > persisted ms/1000 (historical/complete-no-ticks)                                                                                                                                           | use-reasoning-phase.ts:110-124                       |
+| `formatDuration`                        | module-private; `<60→Ns` else `Xm Ys`. EXPORT additively at reasoning.tsx:299 only if needed standalone                                                                                                          | reasoning.tsx:55-60                                  |
+| Panel title/duration formatting         | Export `formatDuration` additively if the panel header needs duration text. Do **not** render `Reasoning` / `ReasoningLabel` inside the panel header; those own disclosure/auto-open state for inline reasoning. | reasoning.tsx:55-60 / 183-206                        |
+| React-19 render-sync auto-open          | preserve verbatim — do NOT revert to useEffect (@upgradeNotes)                                                                                                                                                   | reasoning.tsx:92-105                                 |
+| `getSources(parts)`                     | pure; REUSE as-is to populate `sources`                                                                                                                                                                          | get-sources.ts:23 ; called message-assistant.tsx:102 |
+| `useReasoningPhase` call                | move into use-activity-panel.ts (preferred)                                                                                                                                                                      | message-assistant.tsx:127-138                        |
+| toolInvocationParts (steps)             | `parts.filter(isStaticToolUIPart)`                                                                                                                                                                               | message-assistant.tsx:108-110                        |
+| persistedDurationMs read                | `metadata.reasoningDurationMs` (ms)                                                                                                                                                                              | message-assistant.tsx:122-126                        |
+| Inline reasoning JSX (cutover removes)  | commit 5                                                                                                                                                                                                         | message-assistant.tsx:237-249                        |
+| Inline sources JSX (cutover removes)    | commit 5                                                                                                                                                                                                         | message-assistant.tsx:301                            |
+| Sheet overlay base class                | the string `overlayClassName` defaults to (must stay byte-identical when undefined)                                                                                                                              | sheet.tsx:40                                         |
+| `<SheetOverlay />` invocation           | the single additive forward point                                                                                                                                                                                | sheet.tsx:60                                         |
+| SheetContent props/defaults             | `side="right"`, `showCloseButton=true`; add `overlayClassName?`                                                                                                                                                  | sheet.tsx:48-57                                      |
+| Layout sibling seam                     | flyout track goes AFTER the `@container/main` column close, inside the `.flex.h-svh` row                                                                                                                         | layout-app.tsx:15, :17-24                            |
+| Scroll machinery that must NOT move     | ScrollRoot stays inside `@container/main`                                                                                                                                                                        | layout-app.tsx:18                                    |
+| Chat composer (sticky, stick-to-bottom) | NOT a panel seam; its breakpoints are container-queries on `@container/main`                                                                                                                                     | chat.tsx:321-354, :324, :339                         |
+| Selected-path tail source               | `projectSelectedPath(live, serverPath)` — last element with role==='assistant'                                                                                                                                   | selected-path.ts:171-180                             |
+| Divergence guard                        | `isSelectedPathDivergent` → serverPath (C2 tolerance, GA §6.7F)                                                                                                                                                  | selected-path.ts:145-164                             |
+| Cross-key id idiom                      | `getServerMessageId(metadata)` from `@/lib/chat-messages/metadata`                                                                                                                                               | selected-path.ts:110-119                             |
+| globals.css token blocks                | first `@theme` (:49-54 spacing/animate), `:root` composer vars (:422-425), `.dark` composer vars (:507-510), top-level keyframes (:27-47)                                                                        | app/globals.css                                      |
 
 ---
 
@@ -178,7 +178,12 @@ kept locally green and independently understandable. Cutover stays last:
   accessor — scan from the end for `role === 'assistant'`:
   ```ts
   let tail
-  for (let i = messages.length - 1; i >= 0; i--) { if (messages[i].role === "assistant") { tail = messages[i]; break } }
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "assistant") {
+      tail = messages[i]
+      break
+    }
+  }
   const activeTurnId = tail?.id
   ```
   Cross-key with `getServerMessageId(tail.metadata)` when the optimistic id hasn't anchored (mirror
@@ -222,13 +227,14 @@ change, nothing wired into the conversation. (GA §5 PR1, now commit 1.) **Step 
 `title` slot, and the `sources-list.tsx` → `Favicon` refactor — **do not redo these.** What remains in commit 1 is below.
 
 **Files touched (exact).**
+
 - `app/globals.css` (panel tokens + `show` keyframe)
 - `components/ui/favicon.tsx` (additive `loading`/`decoding` forward — the file already exists from Step A)
 - `components/ui/source.tsx` (new `SourcesGalleryItem` export only; keep `Source*` byte-identical)
-- `app/components/chat/activity/activity-timeline.tsx` *(new)*
-- `app/components/chat/activity/panel-section-heading.tsx` *(new)*
-- `app/components/chat/activity/source-chip-group.tsx` *(new)*
-- `app/components/chat/activity/sources-gallery.tsx` *(new)*
+- `app/components/chat/activity/activity-timeline.tsx` _(new)_
+- `app/components/chat/activity/panel-section-heading.tsx` _(new)_
+- `app/components/chat/activity/source-chip-group.tsx` _(new)_
+- `app/components/chat/activity/sources-gallery.tsx` _(new)_
 
 **Already shipped in Step A (commit `9040090`) — do NOT touch/re-add:** `components/ui/favicon.tsx` (the component),
 `badge.tsx` `source` variant + sizes (`:21`), `chain-of-thought.tsx` `leading` markers (`:18-30`), `reasoning.tsx`
@@ -292,13 +298,13 @@ animation, and the `Sources · N` gallery, start with
    - DO NOT add `SourcesGallery` here. The gallery needs `PanelSectionHeading`, so it lives in
      `app/components/chat/activity/sources-gallery.tsx` to preserve the `components/ui` → app dependency boundary.
 
-4. **`app/components/chat/activity/panel-section-heading.tsx`** *(new)* (GA §B PanelSectionHeading, D1): a plain
+4. **`app/components/chat/activity/panel-section-heading.tsx`** _(new)_ (GA §B PanelSectionHeading, D1): a plain
    `div` (NOT a heading — dialog name lives in the header), `flex items-baseline justify-between`,
    `text-muted-foreground font-medium` ~`text-base`. Props `{ title: string; trailing?: ReactNode; className? }`.
    Title `truncate`; trailing slot holds `· {count}`. Prefer stock `text-base`/`text-lg` + `font-medium` over the
    arbitrary `text-[1.05rem]` (GA §4 row 32).
 
-5. **`app/components/chat/activity/activity-timeline.tsx`** *(new)* — mirror chain-of-thought.tsx WITHOUT editing it
+5. **`app/components/chat/activity/activity-timeline.tsx`** _(new)_ — mirror chain-of-thought.tsx WITHOUT editing it
    (GA §D2-D5, evidence changeRecipe). `"use client"` (timeline maps children/cloneElement; keep parity with
    chain-of-thought.tsx:1).
    - `ActivityTimeline({ children, className })` — copy the mapper at chain-of-thought.tsx:148-166:
@@ -313,7 +319,7 @@ animation, and the `Sources · N` gallery, start with
    - Steps carry ascending inline `z-index` inside a `relative isolate` timeline so connectors overlap (GA §5 Step B
      "Animations").
 
-6. **`app/components/chat/activity/source-chip-group.tsx`** *(new)* — source chips + overflow chip (GA §6.3, D7-D9):
+6. **`app/components/chat/activity/source-chip-group.tsx`** _(new)_ — source chips + overflow chip (GA §6.3, D7-D9):
    - `SourceChip` wraps the already-shipped `<Badge variant="source" size="md" render={<a ... />}>` pattern, uses
      `rel="noopener noreferrer"`, a leading `<Favicon loading="lazy" decoding="async">`, `max-w-full overflow-hidden`,
      and the existing hover-invert token utilities. Do not introduce another badge variant.
@@ -322,7 +328,7 @@ animation, and the `Sources · N` gallery, start with
      but keyboard activation and focus styling must be correct now.
    - `SourceChipGroup` renders ONE flex-wrap row. Keep the reserved-empty first row dropped per GA §6.3.
 
-7. **`app/components/chat/activity/sources-gallery.tsx`** *(new)* — app-level gallery composition (GA §6.1):
+7. **`app/components/chat/activity/sources-gallery.tsx`** _(new)_ — app-level gallery composition (GA §6.1):
    props `sources: SourcesGalleryItemProps[]`, `count?: number` (default `sources.length`). Render ONE `ul` with
    `PanelSectionHeading title="Sources" trailing={<>· {count}</>}` and `<SourcesGalleryItem>` rows. Do not add `groups`
    until real grouped source data exists. DO NOT route rows through `Source`/`SourceTrigger`/`SourceContent`.
@@ -332,11 +338,12 @@ animation, and the `Sources · N` gallery, start with
 `app/components/chat/activity/sources-gallery.tsx`. (`SourcesGalleryItem` is in source.tsx.)
 
 **Tests to add.**
+
 - `app/components/chat/activity/activity-timeline.test.tsx` — string-markup (skeleton c):
   ```tsx
   import { renderToStaticMarkup } from "react-dom/server"
   import { describe, expect, it } from "vitest"
-  import { ActivityTimeline, ActivityStep } from "./activity-timeline"
+  import { ActivityStep, ActivityTimeline } from "./activity-timeline"
 
   describe("ActivityTimeline", () => {
     it("omits the connector on the last step", () => {
@@ -358,20 +365,46 @@ animation, and the `Sources · N` gallery, start with
   /** @vitest-environment jsdom */
   import React, { act } from "react"
   import { createRoot, type Root } from "react-dom/client"
-  import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
+  import {
+    afterEach,
+    beforeAll,
+    beforeEach,
+    describe,
+    expect,
+    it,
+  } from "vitest"
   import { SourcesGallery } from "./sources-gallery"
 
-  beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true })
+  beforeAll(() => {
+    ;(
+      globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true
+  })
 
   describe("SourcesGallery favicon attrs", () => {
     let container: HTMLDivElement | null = null
     let root: Root | null = null
-    beforeEach(() => { container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container) })
-    afterEach(() => { const m = root; if (m) act(() => m.unmount()); container?.remove(); root = null; container = null })
+    beforeEach(() => {
+      container = document.createElement("div")
+      document.body.appendChild(container)
+      root = createRoot(container)
+    })
+    afterEach(() => {
+      const m = root
+      if (m) act(() => m.unmount())
+      container?.remove()
+      root = null
+      container = null
+    })
 
     it("sets loading=lazy + decoding=async on every gallery img and renders exactly N imgs", () => {
-      const sources = Array.from({ length: 141 }, (_, i) => ({ href: `https://example${i}.com/page`, title: `Title ${i}` }))
-      act(() => { root?.render(<SourcesGallery sources={sources} />) })
+      const sources = Array.from({ length: 141 }, (_, i) => ({
+        href: `https://example${i}.com/page`,
+        title: `Title ${i}`,
+      }))
+      act(() => {
+        root?.render(<SourcesGallery sources={sources} />)
+      })
       const imgs = Array.from(container!.querySelectorAll("img"))
       expect(imgs.length).toBe(141)
       for (const img of imgs) {
@@ -397,7 +430,7 @@ dark (new exports are unreferenced).
 additive `overlayClassName?`. (GA §5 PR2, now commit 2; §7 R2.)
 
 **Files touched.** `components/ui/sheet.tsx` (one additive prop), `app/components/chat/activity/content-sheet-shell.tsx`
-*(new)*.
+_(new)_.
 
 **Current-state findings.** `sheet.tsx` has NO cva and NO `defaultVariants` — every part is `cn(base, className)`
 (GA §7 R2; sheet.tsx:48-89). `SheetContent` renders `<SheetOverlay />` with no className passthrough (sheet.tsx:60);
@@ -422,7 +455,7 @@ and `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/pages/conversati
      `cn(base, className)` (:39-42), so undefined is a no-op — `cn("…sheet.tsx:40 base…", undefined)` is
      byte-identical to today. **By construction backward-compatible** (not a flag).
 
-2. **`app/components/chat/activity/content-sheet-shell.tsx`** *(new, "use client")* — reach every behavior through
+2. **`app/components/chat/activity/content-sheet-shell.tsx`** _(new, "use client")_ — reach every behavior through
    the public API, leaving sheet.tsx defaults byte-unchanged (GA §7 R2, §6.2):
    - Props: `{ open: boolean; onOpenChange: (o: boolean) => void; title: string; children: ReactNode }`.
    - Radius/shadow via `SheetContent className`: mobile `side="bottom"` `rounded-t-2xl` (16px top corners squared
@@ -443,7 +476,8 @@ and `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/pages/conversati
 **New files created.** `app/components/chat/activity/content-sheet-shell.tsx`.
 
 **Tests to add.**
-- `components/ui/sheet.test.tsx` *(new)* — **default-equivalence snapshot** (GA §5 PR2 / commit 2): render `SheetContent`
+
+- `components/ui/sheet.test.tsx` _(new)_ — **default-equivalence snapshot** (GA §5 PR2 / commit 2): render `SheetContent`
   WITHOUT `overlayClassName`, assert the `[data-slot="sheet-overlay"]` element's `className` is byte-identical to the
   sheet.tsx:40 base string. (createRoot+act, jsdom.)
 - Per-consumer green tests for the **exactly two** consumers (`components/ui/sidebar.tsx:207-227`, `app/components/layout/sidebar/app-sidebar.tsx:227-247`):
@@ -468,7 +502,7 @@ path and feeding `{phase, steps, sources, durationSeconds}`; flip the `message.t
 longer churn the body. Panel state exists **alongside** the still-inline body (dormant until commit 5). (GA §5 PR3, now
 commit 3; §6.7, §7 R1/R3.)
 
-**Files touched.** `app/components/chat/use-activity-panel.ts` *(new)*, `app/components/chat/chat.tsx`,
+**Files touched.** `app/components/chat/use-activity-panel.ts` _(new)_, `app/components/chat/chat.tsx`,
 `app/components/chat/conversation.tsx`, `app/components/chat/message.tsx`, `app/components/chat/message-assistant.tsx`,
 `app/components/chat/use-reasoning-phase.ts` (R1 reset gate).
 
@@ -484,9 +518,14 @@ single-shell-plus-shared-body model, use
 
 **Change recipe per file.**
 
-1. **`app/components/chat/use-activity-panel.ts`** *(new, "use client")* — chat-owned state selector:
+1. **`app/components/chat/use-activity-panel.ts`** _(new, "use client")_ — chat-owned state selector:
+
    ```ts
-   export function useActivityPanel({ messages, status, isSubmitting }: {
+   export function useActivityPanel({
+     messages,
+     status,
+     isSubmitting,
+   }: {
      messages: UIMessage[]
      status: "streaming" | "ready" | "submitted" | "error"
      isSubmitting: boolean
@@ -494,22 +533,27 @@ single-shell-plus-shared-body model, use
      activeTurnId: string | undefined
      isGenerationActive: boolean
      panelProps: {
-       phase: ReasoningPhase["phase"]; steps: ToolUIPart[]; sources: SourceUrlUIPart[]
+       phase: ReasoningPhase["phase"]
+       steps: ToolUIPart[]
+       sources: SourceUrlUIPart[]
        durationSeconds: number | undefined
-       reasoningText: string; isReasoningStreaming: boolean; isOpaqueReasoning: boolean
+       reasoningText: string
+       isReasoningStreaming: boolean
+       isOpaqueReasoning: boolean
      }
    }
    ```
+
    Body: (1) scan `messages` from the end for the last `role === "assistant"` message; do not recompute
    `projectSelectedPath` here. (2) `activeTurnId = tail?.id`; use `getServerMessageId(tail.metadata as
-   ChatMessageMetadata | undefined)` only as a cross-key when comparing optimistic/server ids. (3)
+ChatMessageMetadata | undefined)` only as a cross-key when comparing optimistic/server ids. (3)
    `persistedDurationMs` exactly as message-assistant.tsx:122-126. (4)
    `useReasoningPhase({ parts: tail?.parts, status, isLast: Boolean(tail), persistedDurationMs })`; the hook is called
    once for the selected tail, so `isLast` now means "panel-active turn", not positional per-message rendering. (5)
    `sources = getSources(tail?.parts || [])` (get-sources.ts). (6)
    `steps = tail?.parts?.filter((p): p is ToolUIPart => isStaticToolUIPart(p)) ?? []` (from `ai`, like
    message-assistant.tsx:108-110). (7) return `isGenerationActive = isSubmitting || status === "submitted" ||
-   status === "streaming"`. **Keep the hook derivations un-memoized by `parts` — AI SDK can mutate part objects in
+status === "streaming"`. **Keep the hook derivations un-memoized by `parts` — AI SDK can mutate part objects in
    place** (GA §7 R1).
 
 2. **`app/components/chat/use-reasoning-phase.ts`** — R1 fix only (GA §7 R1): gate the render-sync reset at :80 on
@@ -528,8 +572,10 @@ single-shell-plus-shared-body model, use
    - NARROW the streaming short-circuit at :107 to content-gated:
      ```ts
      if (next.status === "streaming" && next.isLast) {
-       if (getTextContent(prev.parts) !== getTextContent(next.parts)) return false
-       if (getToolSignature(prev.parts) !== getToolSignature(next.parts)) return false
+       if (getTextContent(prev.parts) !== getTextContent(next.parts))
+         return false
+       if (getToolSignature(prev.parts) !== getToolSignature(next.parts))
+         return false
        // reasoning-only deltas: panel updates itself; fall through to remaining gates
      }
      ```
@@ -546,6 +592,7 @@ single-shell-plus-shared-body model, use
 **New files created.** `app/components/chat/use-activity-panel.ts`.
 
 **Tests to add.**
+
 - `app/components/chat/message.test.tsx` (extend) — render-count suite (skeleton a; GA §7 R3): mock
   `./message-assistant` with a `vi.fn()` body spy. Test 1: adding reasoning + `source-url` parts with identical
   text during `streaming+isLast` does NOT re-render the body (fails today on :107/:111, passes after). Test 2: a real
@@ -553,13 +600,13 @@ single-shell-plus-shared-body model, use
   `activeTurnId` DOES re-render/forward the new value so branch switches and active-turn handoffs cannot leave stale
   panel state. Plus an explicit assertion that no in-body element reads tool output/args without a state change (R3
   residual on getToolSignature :67-76).
-- `app/components/chat/use-activity-panel.test.tsx` *(new)* — chat-level ownership suite: (a) derives `activeTurnId`
+- `app/components/chat/use-activity-panel.test.tsx` _(new)_ — chat-level ownership suite: (a) derives `activeTurnId`
   from the last assistant in the rendered `messages` array; (b) after a simulated branch switch (same conversation,
   different rendered assistant tail) the hook returns the new tail id and that tail's persisted duration/sources; (c)
   regenerate handoff moves from old assistant sibling to new sibling and keeps the superseded sibling out of live timer
   ownership; (d) `status==="submitted"` with a user tail returns `activeTurnId: undefined` and `isGenerationActive:
-  true` so commit 5 can keep `ThinkingBar` instead of inventing a synthetic assistant owner.
-- `app/components/chat/use-reasoning-phase.test.tsx` *(new)* — fake-timer suite (skeleton b; GA §7 R1): (a) freeze at
+true` so commit 5 can keep `ThinkingBar` instead of inventing a synthetic assistant owner.
+- `app/components/chat/use-reasoning-phase.test.tsx` _(new)_ — fake-timer suite (skeleton b; GA §7 R1): (a) freeze at
   5s on cleanup (:99-102); (b) persisted fallback when `isLast && complete && tickedSeconds===0` (:115-116);
   (c) historical `!isLast` fallback (:120-121); (d) in-place mutation: same `parts` array ref with a mutated
   reasoning part `.text`/`.state` updates the derivation (:29-31); (e) **`isLast` `true→false→true` handoff** asserting
@@ -580,10 +627,10 @@ rendering still drives the body.
 evidence layoutSeam.)
 
 **Files touched.** `app/components/layout/layout-app.tsx` (sibling track + provider), `app/components/chat/chat.tsx`
-(registers the docked panel), `app/components/chat/activity/activity-panel-host.tsx` *(new)*,
-`app/components/chat/activity/activity-panel.tsx` *(new)*,
-`app/components/chat/activity/docked-flyout-shell.tsx` *(new)*,
-`app/components/chat/activity/panel-header.tsx` *(new)*. Panel **data** comes from `use-activity-panel.ts`; panel
+(registers the docked panel), `app/components/chat/activity/activity-panel-host.tsx` _(new)_,
+`app/components/chat/activity/activity-panel.tsx` _(new)_,
+`app/components/chat/activity/docked-flyout-shell.tsx` _(new)_,
+`app/components/chat/activity/panel-header.tsx` _(new)_. Panel **data** comes from `use-activity-panel.ts`; panel
 **open state** lives in `chat.tsx`.
 
 **Current-state findings.** The flex row is `div.flex.h-svh.w-full.overflow-hidden` (layout-app.tsx:15); its current
@@ -599,60 +646,63 @@ docked shell pushes the thread and has no backdrop, and the CSS-gated coexistenc
 
 **Change recipe per file.**
 
-1. **`app/components/chat/activity/activity-panel-host.tsx`** *(new, "use client")* — bridge Chat-owned panel state to
+1. **`app/components/chat/activity/activity-panel-host.tsx`** _(new, "use client")_ — bridge Chat-owned panel state to
    the `LayoutApp` sibling slot without moving the scroll column. Export:
    - `ActivityPanelHostProvider({ children })`
    - `useActivityPanelHost()` returning `{ setDockContent(node: ReactNode): void }`
    - `ActivityPanelDockSlot()` rendering the current dock content
-   The setter must clear content on unmount so navigating away from a chat cannot leave stale panel DOM in the layout.
+     The setter must clear content on unmount so navigating away from a chat cannot leave stale panel DOM in the layout.
 
 2. **`app/components/layout/layout-app.tsx`** (GA §7 R4, evidence layoutSeam): wrap the existing flex row in
    `ActivityPanelHostProvider`, then insert the NEW track as a sibling AFTER layout-app.tsx:24:
+
    ```tsx
-   <div className="shrink-0 w-0 overflow-hidden border-l border-border bg-card transition-[width] lg:w-[var(--activity-panel-width)]">
+   <div className="border-border bg-card w-0 shrink-0 overflow-hidden border-l transition-[width] lg:w-[var(--activity-panel-width)]">
      <ActivityPanelDockSlot />
    </div>
    ```
+
    Because ScrollRoot (:18) and the sticky composer (chat.tsx:321-354) stay inside `@container/main`, NO scroll
    machinery moves (GA §7 R4). Opening changes only the conversation column **width**, never `ScrollRootContent`
    height / `--thread-bottom-offset` / `--spacing-input-area`.
 
 3. **`app/components/chat/chat.tsx`** — call `useActivityPanel({ messages, status, isSubmitting })` once (commit 3),
    own `activityPanelOpen`, and render `<ActivityPanel open={activityPanelOpen} onOpenChange={setActivityPanelOpen}
-   {...panelProps} />`. The `ActivityPanel` registers its docked subtree with the host and renders its sheet subtree
+{...panelProps} />`. The `ActivityPanel` registers its docked subtree with the host and renders its sheet subtree
    locally so the Sheet portal/focus trap remains rooted in Chat. Do not alter the sticky composer (:321-354) or
    `Conversation` placement (:317).
 
-4. **`app/components/chat/activity/activity-panel.tsx`** *(new, "use client")* — composition root (GA §B):
+4. **`app/components/chat/activity/activity-panel.tsx`** _(new, "use client")_ — composition root (GA §B):
    Props: `{ open: boolean; onOpenChange: (o: boolean) => void; title?: string; phase: ReasoningPhase["phase"];
-   durationSeconds?: number; steps: ToolUIPart[]; sources: SourceUrlUIPart[]; reasoningText: string;
-   isReasoningStreaming: boolean; isOpaqueReasoning: boolean }`. Use CSS/Tailwind for visual shell styling and the
+durationSeconds?: number; steps: ToolUIPart[]; sources: SourceUrlUIPart[]; reasoningText: string;
+isReasoningStreaming: boolean; isOpaqueReasoning: boolean }`. Use CSS/Tailwind for visual shell styling and the
    existing `app/hooks/use-breakpoint.ts` with breakpoint `1024` only to gate Base UI Sheet `open`/portal/focus-lock:
    `const isBelowLg = useBreakpoint(1024); const sheetOpen = open && isBelowLg`. The docked subtree is registered in
    the host slot and remains visually collapsed below lg; the Sheet subtree is only open below lg. Render the shared
    body (PanelHeader + PanelScrollBody → ActivityTimeline + SourcesGallery) into the **active** shell only (GA §7 R6 —
    favicons load once, `<img>` count == N not 2N).
 
-5. **`app/components/chat/activity/docked-flyout-shell.tsx`** *(new)* — in-flow `<section aria-label="Reasoning
-   details">` (landmark, NOT dialog — GA §7 R9), `bg-card border-s border-border`, pinned to
+5. **`app/components/chat/activity/docked-flyout-shell.tsx`** _(new)_ — in-flow `<section aria-label="Reasoning
+details">` (landmark, NOT dialog — GA §7 R9), `bg-card border-s border-border`, pinned to
    `--spacing-panel-header`, `width: var(--activity-panel-width, 400px)`, collapses to `w-0` below lg. **No
    backdrop, no focus trap, no scroll-lock, ESC inert** (GA §7 R9). Reuses `Button(ghost,icon-sm)` close
    (always visible) + `ScrollArea` body (`px-2 py-3` + trailing scroll spacer; evidence scroll-area changeRecipe —
    pass `viewportRef` for auto-scroll).
 
-6. **`app/components/chat/activity/panel-header.tsx`** *(new)* — `PanelHeader` renders `TitleDurationCluster` +
+6. **`app/components/chat/activity/panel-header.tsx`** _(new)_ — `PanelHeader` renders `TitleDurationCluster` +
    `CloseIconButton`.
    - `TitleDurationCluster` is a plain flex text cluster: title text plus `formatDuration(durationSeconds)` when present.
      Export `formatDuration` additively from `components/ai-elements/reasoning.tsx` if needed, but do **not** render
      `Reasoning` or `ReasoningLabel` inside the panel header. Those components own inline disclosure state and
      React-19 auto-open behavior that the panel header must not inherit.
    - `CloseIconButton` = `<Button variant="ghost" size="icon-sm" aria-label="Close"><Icon icon={RiCloseLine}
-     slotSize={16} /></Button>` (button.tsx:17/31-32; icon via icon.tsx, currentColor — GA §4 row 22). No new file
+slotSize={16} /></Button>` (button.tsx:17/31-32; icon via icon.tsx, currentColor — GA §4 row 22). No new file
      for the button itself.
 
 **New files created.** `activity-panel-host.tsx`, `activity-panel.tsx`, `docked-flyout-shell.tsx`, `panel-header.tsx`.
 
 **Tests to add.**
+
 - **Layout test** (GA §7 R4): toggling the width var leaves `ScrollRootContent` height / `--thread-bottom-offset` /
   `--spacing-input-area` unchanged (computed-style assertions).
 - **Host registration test:** rendering a Chat-like child registers dock content into `ActivityPanelDockSlot`; unmounting
@@ -690,7 +740,7 @@ as the only reasoning/source path and reopen affordance.
 
 **Files touched.** `app/components/chat/message-assistant.tsx`, `app/components/chat/conversation.tsx`,
 `app/components/chat/message.tsx`, `app/components/chat/chat.tsx`,
-`app/components/chat/activity/activity-panel-trigger.tsx` *(new)*, `app/components/chat/sources-list.tsx` (retire if now
+`app/components/chat/activity/activity-panel-trigger.tsx` _(new)_, `app/components/chat/sources-list.tsx` (retire if now
 unused).
 
 **Current-state findings.** message-assistant.tsx inline reasoning JSX :237-249, inline sources JSX :301; imports
@@ -706,7 +756,8 @@ Use `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/css/conversation
 token, breakpoint, and selector questions during the final pass.
 
 **Change recipe per file.**
-1. **`app/components/chat/activity/activity-panel-trigger.tsx`** *(new)*: small client button/link styled in the existing
+
+1. **`app/components/chat/activity/activity-panel-trigger.tsx`** _(new)_: small client button/link styled in the existing
    message-action idiom, accessible name `"Open activity"`, optional compact summary (`Thinking`, `{n} sources`, or
    `Activity`). It calls `onOpenActivityPanel` and must be focusable/reopen the panel after close. This replaces the
    old inline `ReasoningLabel` affordance; it does **not** render reasoning content.
@@ -722,7 +773,7 @@ token, breakpoint, and selector questions during the final pass.
    panel.
 4. **`chat.tsx`**: keep owning `activityPanelOpen`; pass `onOpenActivityPanel={() => setActivityPanelOpen(true)}` to
    `Conversation`; render `<ActivityPanel open={activityPanelOpen} onOpenChange={setActivityPanelOpen}
-   {...panelProps} />`. No structural change to the sticky composer (:321-354) or `Conversation` placement (:317).
+{...panelProps} />`. No structural change to the sticky composer (:321-354) or `Conversation` placement (:317).
 5. **`sources-list.tsx`**: retire if message-assistant.tsx was its only consumer (it was, per evidence). Otherwise
    leave and mark.
 
@@ -747,27 +798,27 @@ revert the squashed PR commit.
 
 ## 6. New component API appendix
 
-| Component | Location | Props / CVA | Satisfies |
-|-----------|----------|-------------|-----------|
-| **ActivityPanelHostProvider / ActivityPanelDockSlot** | app/components/chat/activity/activity-panel-host.tsx ("use client") | Context bridge from Chat to LayoutApp. `setDockContent(node)` registers docked content; clears on unmount. No app state beyond the current dock node. | GA §7 R4/R6 |
-| **ActivityPanel** | app/components/chat/activity/activity-panel.tsx ("use client") | `{ open; onOpenChange; title?="Activity"; phase; durationSeconds?; steps; sources; reasoningText; isReasoningStreaming; isOpaqueReasoning }`. Registers docked content into host; renders Sheet locally. CSS handles visual shell styling; existing `useBreakpoint(1024)` gates Sheet `open`/portal/focus. No cva. | GA §B, §C1-2, §6.7, §7 R5/R6 |
-| **DockedFlyoutShell** | app/components/chat/activity/docked-flyout-shell.tsx | `{ open; onClose; children }`. `<section aria-label="Reasoning details">`, `bg-card border-s border-border`, `width: var(--activity-panel-width,400px)`, `max-lg:w-0`. No backdrop/trap/lock. | GA §A2, §7 R4/R9 |
-| **ContentSheetShell** | app/components/chat/activity/content-sheet-shell.tsx ("use client") | `{ open; onOpenChange; title; children }`. Wraps `SheetContent` (side=bottom mobile / sm card), `rounded-t-2xl`/`sm:rounded-2xl sm:shadow-border-xl`, `overlayClassName` scrim, `[&>button]:max-sm:hidden`, aria-hidden handle `h-1 w-12`. | GA §A3-5, §6.2, §7 R2/R7 |
-| **PanelHeader** | app/components/chat/activity/panel-header.tsx | `{ title; phase; durationSeconds?; onClose; isReasoningStreaming; isOpaqueReasoning }`. Renders TitleDurationCluster + CloseIconButton. | GA §B1 |
-| **TitleDurationCluster** | inside panel-header.tsx | Plain title + duration text cluster. May import/export `formatDuration` from reasoning.tsx, but must not render `Reasoning` / `ReasoningLabel` because those own inline disclosure state. | GA §B2, §C7-8 |
-| **CloseIconButton** | reuses button.tsx (no new file) | `<Button variant="ghost" size="icon-sm" aria-label="Close"><Icon RiCloseLine slotSize={16}/></Button>` | GA §B3 (exact), §4 row 22 |
-| **PanelScrollBody** | inside each shell | flyout `ScrollArea px-2 py-3` + spacer; sheet `ScrollArea px-6 pb-4`, `aria-controls` target. `viewportRef` for auto-scroll. | GA §C1, §C6 |
-| **ActivityPanelTrigger** | app/components/chat/activity/activity-panel-trigger.tsx ("use client") | Focusable button/link, accessible name `"Open activity"`, optional compact summary. Opens/reopens the Chat-owned panel; does not render reasoning/source content. | GA §5 PR5, §6.7 |
-| **ActivityTimeline** | app/components/chat/activity/activity-timeline.tsx ("use client") | `{ children; className? }`. Maps children injecting `isLast` (mirror chain-of-thought.tsx:148-166). `relative isolate`, ascending z-index. | GA §D2, §7 R6 |
-| **ActivityStep** | activity-timeline.tsx | `{ children; isLast?; leading?; body?; className? }` & cva. Non-collapsible. `group data-last`. | GA §D3 |
-| **StepLeadingIndicator** | activity-timeline.tsx | `stepVariants` cva `{ leading: {globe,bullet,done}, body: {chips,description} }`, `defaultVariants {leading:"bullet", body:"description"}`. Icon via icon.tsx slotSize=16, currentColor. Connector `bg-primary/20 ml-1.75 w-px` hidden on `group-data-[last=true]`. | GA §D4, §6.6, §4 rows 19-21 |
-| **SourceChip** | reuses badge.tsx `source` variant (already present) | `<Badge variant="source" size="md" render={<a target="_blank" rel="noopener noreferrer">}>` + leading `<Favicon>`. `rounded-full h-[25px] px-3 text-xs`, hover-invert 150ms. s2 `sz=64`. | GA §D8, §C13, §4 rows 10-14 |
-| **OverflowChip** | app/components/chat/activity/source-chip-group.tsx | `<button>` (keyboard, name `{n} more`), chip skin, up to 3 `Favicon overlap` (`-ms-3/first:-ms-1`, `ring-2 ring-card`, `group-hover:border-foreground`). | GA §D9, §C11-12 |
-| **SourceChipGroup** | app/components/chat/activity/source-chip-group.tsx *(new)* | ONE flex-wrap row (chips + OverflowChip). Reserved-empty first row DROPPED (GA §6.3). | GA §D7, §6.3 |
-| **Favicon (extended)** | components/ui/favicon.tsx | additive `loading?` / `decoding?` forwarded through AvatarImage (:72). `overlap` ring variant exists. | GA §D10, §7 R8 |
-| **PanelSectionHeading** | app/components/chat/activity/panel-section-heading.tsx *(new)* | `{ title; trailing?; className? }`. Plain div, `text-muted-foreground font-medium`, truncating title + trailing `· N`. | GA §D1, §4 row 32 |
-| **SourcesGallery** | app/components/chat/activity/sources-gallery.tsx | App-level gallery composition: `{ sources: SourcesGalleryItemProps[]; count? }` → ONE `ul` + `PanelSectionHeading "Sources"`. No `groups` until real grouped source data exists. | GA §6.1, §7 R8 |
-| **SourcesGalleryItem** | components/ui/source.tsx (additive sibling) | Export `SourcesGalleryItemProps`: `{ href; title; siteName?; description?; faviconDomain? }`; render a full-bleed `<a rel="noopener">` with internal `<img>` `sz=32` ORIGIN `loading=lazy decoding=async`. Keeps `Source*` byte-identical and app dependencies out of `components/ui`. | GA §6.1, §7 R8 |
+| Component                                             | Location                                                               | Props / CVA                                                                                                                                                                                                                                                                                                        | Satisfies                    |
+| ----------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
+| **ActivityPanelHostProvider / ActivityPanelDockSlot** | app/components/chat/activity/activity-panel-host.tsx ("use client")    | Context bridge from Chat to LayoutApp. `setDockContent(node)` registers docked content; clears on unmount. No app state beyond the current dock node.                                                                                                                                                              | GA §7 R4/R6                  |
+| **ActivityPanel**                                     | app/components/chat/activity/activity-panel.tsx ("use client")         | `{ open; onOpenChange; title?="Activity"; phase; durationSeconds?; steps; sources; reasoningText; isReasoningStreaming; isOpaqueReasoning }`. Registers docked content into host; renders Sheet locally. CSS handles visual shell styling; existing `useBreakpoint(1024)` gates Sheet `open`/portal/focus. No cva. | GA §B, §C1-2, §6.7, §7 R5/R6 |
+| **DockedFlyoutShell**                                 | app/components/chat/activity/docked-flyout-shell.tsx                   | `{ open; onClose; children }`. `<section aria-label="Reasoning details">`, `bg-card border-s border-border`, `width: var(--activity-panel-width,400px)`, `max-lg:w-0`. No backdrop/trap/lock.                                                                                                                      | GA §A2, §7 R4/R9             |
+| **ContentSheetShell**                                 | app/components/chat/activity/content-sheet-shell.tsx ("use client")    | `{ open; onOpenChange; title; children }`. Wraps `SheetContent` (side=bottom mobile / sm card), `rounded-t-2xl`/`sm:rounded-2xl sm:shadow-border-xl`, `overlayClassName` scrim, `[&>button]:max-sm:hidden`, aria-hidden handle `h-1 w-12`.                                                                         | GA §A3-5, §6.2, §7 R2/R7     |
+| **PanelHeader**                                       | app/components/chat/activity/panel-header.tsx                          | `{ title; phase; durationSeconds?; onClose; isReasoningStreaming; isOpaqueReasoning }`. Renders TitleDurationCluster + CloseIconButton.                                                                                                                                                                            | GA §B1                       |
+| **TitleDurationCluster**                              | inside panel-header.tsx                                                | Plain title + duration text cluster. May import/export `formatDuration` from reasoning.tsx, but must not render `Reasoning` / `ReasoningLabel` because those own inline disclosure state.                                                                                                                          | GA §B2, §C7-8                |
+| **CloseIconButton**                                   | reuses button.tsx (no new file)                                        | `<Button variant="ghost" size="icon-sm" aria-label="Close"><Icon RiCloseLine slotSize={16}/></Button>`                                                                                                                                                                                                             | GA §B3 (exact), §4 row 22    |
+| **PanelScrollBody**                                   | inside each shell                                                      | flyout `ScrollArea px-2 py-3` + spacer; sheet `ScrollArea px-6 pb-4`, `aria-controls` target. `viewportRef` for auto-scroll.                                                                                                                                                                                       | GA §C1, §C6                  |
+| **ActivityPanelTrigger**                              | app/components/chat/activity/activity-panel-trigger.tsx ("use client") | Focusable button/link, accessible name `"Open activity"`, optional compact summary. Opens/reopens the Chat-owned panel; does not render reasoning/source content.                                                                                                                                                  | GA §5 PR5, §6.7              |
+| **ActivityTimeline**                                  | app/components/chat/activity/activity-timeline.tsx ("use client")      | `{ children; className? }`. Maps children injecting `isLast` (mirror chain-of-thought.tsx:148-166). `relative isolate`, ascending z-index.                                                                                                                                                                         | GA §D2, §7 R6                |
+| **ActivityStep**                                      | activity-timeline.tsx                                                  | `{ children; isLast?; leading?; body?; className? }` & cva. Non-collapsible. `group data-last`.                                                                                                                                                                                                                    | GA §D3                       |
+| **StepLeadingIndicator**                              | activity-timeline.tsx                                                  | `stepVariants` cva `{ leading: {globe,bullet,done}, body: {chips,description} }`, `defaultVariants {leading:"bullet", body:"description"}`. Icon via icon.tsx slotSize=16, currentColor. Connector `bg-primary/20 ml-1.75 w-px` hidden on `group-data-[last=true]`.                                                | GA §D4, §6.6, §4 rows 19-21  |
+| **SourceChip**                                        | reuses badge.tsx `source` variant (already present)                    | `<Badge variant="source" size="md" render={<a target="_blank" rel="noopener noreferrer">}>` + leading `<Favicon>`. `rounded-full h-[25px] px-3 text-xs`, hover-invert 150ms. s2 `sz=64`.                                                                                                                           | GA §D8, §C13, §4 rows 10-14  |
+| **OverflowChip**                                      | app/components/chat/activity/source-chip-group.tsx                     | `<button>` (keyboard, name `{n} more`), chip skin, up to 3 `Favicon overlap` (`-ms-3/first:-ms-1`, `ring-2 ring-card`, `group-hover:border-foreground`).                                                                                                                                                           | GA §D9, §C11-12              |
+| **SourceChipGroup**                                   | app/components/chat/activity/source-chip-group.tsx _(new)_             | ONE flex-wrap row (chips + OverflowChip). Reserved-empty first row DROPPED (GA §6.3).                                                                                                                                                                                                                              | GA §D7, §6.3                 |
+| **Favicon (extended)**                                | components/ui/favicon.tsx                                              | additive `loading?` / `decoding?` forwarded through AvatarImage (:72). `overlap` ring variant exists.                                                                                                                                                                                                              | GA §D10, §7 R8               |
+| **PanelSectionHeading**                               | app/components/chat/activity/panel-section-heading.tsx _(new)_         | `{ title; trailing?; className? }`. Plain div, `text-muted-foreground font-medium`, truncating title + trailing `· N`.                                                                                                                                                                                             | GA §D1, §4 row 32            |
+| **SourcesGallery**                                    | app/components/chat/activity/sources-gallery.tsx                       | App-level gallery composition: `{ sources: SourcesGalleryItemProps[]; count? }` → ONE `ul` + `PanelSectionHeading "Sources"`. No `groups` until real grouped source data exists.                                                                                                                                   | GA §6.1, §7 R8               |
+| **SourcesGalleryItem**                                | components/ui/source.tsx (additive sibling)                            | Export `SourcesGalleryItemProps`: `{ href; title; siteName?; description?; faviconDomain? }`; render a full-bleed `<a rel="noopener">` with internal `<img>` `sz=32` ORIGIN `loading=lazy decoding=async`. Keeps `Source*` byte-identical and app dependencies out of `components/ui`.                             | GA §6.1, §7 R8               |
 
 ---
 
@@ -797,43 +848,43 @@ NO existing token is edited. Per GA §6.5/§6.6: do NOT add `--muted-foreground-
 
 ## 8. Test → residual matrix
 
-| Residual / case | Test that proves it pre-merge | Commit | file:line anchor |
-|-----------------|-------------------------------|----|------------------|
-| **R1** isLast bounce zeros counter | use-reasoning-phase.test.tsx case (e): `true→false→true`, `tickedSeconds` never regresses; fix gates :80 on `prevPhase!=="thinking"` | 3 | use-reasoning-phase.ts:78-83 |
-| **R2** sheet mutation / overlay bleed | sheet.test.tsx default-equivalence snapshot (overlay class byte-identical w/o `overlayClassName`); 2-consumer green tests; single-caller grep gate; fix-overlay-bleedthrough opaque surface | 2 | sheet.tsx:40, :60 |
-| **R3** memo body churn | message.test.tsx Test1 (reasoning+source delta → no body re-render), Test2 (text delta → re-render), Test3 (tool-state → re-render), Test4 (`activeTurnId` change → re-render/forward) + no-output-read-without-state assertion | 3 | message.tsx:107, :111, :67-76 |
-| **R4** layout/scroll move | layout computed-style test (width var toggle leaves height/`--thread-bottom-offset`/`--spacing-input-area` unchanged); stick-to-bottom anchor-in-view at ≥lg | 4 | layout-app.tsx:18, chat.tsx:324 |
-| **R5** focus/scroll-lock across lg swap | resize-crossing-lg matchMedia test: activeElement never in display:none; trap only active path; ≤1 scroll-lock owner; Sheet `open` gated by existing `useBreakpoint(1024)` | 4 | chat.tsx, app/hooks/use-breakpoint.ts |
-| **R6** SSR duplicate DOM | SSR test: no hydration warning; exactly 1 Activity landmark; favicon `<img>` count == N | 4 / 1 | globals.css:17-25 |
-| **R6 host stale content** | activity-panel-host.test.tsx: Chat-like child registers dock content into `ActivityPanelDockSlot`; unmount clears it | 4 | layout-app.tsx:17-24 |
-| **R7** reduced-motion | reduced-motion matchMedia snapshot: new animations suppressed, instant final state | 4 | globals.css:5, --animate-show |
-| **R8** 141-favicon perf | SourcesGallery test: `loading=lazy`+`decoding=async` on every `<img>`, count == N | 1 | source.tsx, favicon.tsx:72 |
-| **R9** trap vs non-trap divergence | two-path interaction test: flyout focus returns/no-lock/ESC-inert; sheet traps/locks/ESC-closes | 4 | sheet.tsx:6 |
-| **§6.7C** duration freeze | use-reasoning-phase.test.tsx case (a): freeze at 5s on cleanup | 3 | use-reasoning-phase.ts:96-106 |
-| **§6.7C** persisted fallback (complete, no ticks) | case (b): `isLast && complete && tickedSeconds===0` → persisted | 3 | use-reasoning-phase.ts:115-116 |
-| **§6.7C** historical fallback | case (c): `!isLast` → persisted | 3 | use-reasoning-phase.ts:120-121 |
-| **§6.7 / R1** in-place mutation derivation | case (d): same parts ref, mutated `.text`/`.state` updates | 3 | use-reasoning-phase.ts:28-31 |
-| **§6.7D** regenerate handoff | case (e) (shared with R1): timer resets new turn, freezes old | 3 | use-reasoning-phase.ts:78-83 |
-| **§6.7E** branch switch | use-activity-panel.test.tsx: simulated branch switch changes rendered assistant tail → new `activeTurnId`, persisted duration/sources shown, no stale live timer | 3 | selected-path.ts:171-180 |
-| **Commit 5 trigger reopen** | trigger interaction test: close panel, focus returns to trigger, trigger reopens correct active turn on desktop and sheet breakpoints | 5 | message-assistant.tsx:237-249 |
-| **Submitted/no-assistant boundary** | conversation test: `status==="submitted"` + user tail still renders `ThinkingBar`; `useActivityPanel` returns no synthetic `activeTurnId` | 3 / 5 | conversation.tsx:156-171 |
-| **R-rollback** | Local proof bundle green at each commit boundary (targeted tests + typecheck + lint); full local `bun run test` before PR; grep over integration diff returns no flag/runtime-toggle usage | all | — |
+| Residual / case                                   | Test that proves it pre-merge                                                                                                                                                                                                   | Commit | file:line anchor                      |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------------------------- |
+| **R1** isLast bounce zeros counter                | use-reasoning-phase.test.tsx case (e): `true→false→true`, `tickedSeconds` never regresses; fix gates :80 on `prevPhase!=="thinking"`                                                                                            | 3      | use-reasoning-phase.ts:78-83          |
+| **R2** sheet mutation / overlay bleed             | sheet.test.tsx default-equivalence snapshot (overlay class byte-identical w/o `overlayClassName`); 2-consumer green tests; single-caller grep gate; fix-overlay-bleedthrough opaque surface                                     | 2      | sheet.tsx:40, :60                     |
+| **R3** memo body churn                            | message.test.tsx Test1 (reasoning+source delta → no body re-render), Test2 (text delta → re-render), Test3 (tool-state → re-render), Test4 (`activeTurnId` change → re-render/forward) + no-output-read-without-state assertion | 3      | message.tsx:107, :111, :67-76         |
+| **R4** layout/scroll move                         | layout computed-style test (width var toggle leaves height/`--thread-bottom-offset`/`--spacing-input-area` unchanged); stick-to-bottom anchor-in-view at ≥lg                                                                    | 4      | layout-app.tsx:18, chat.tsx:324       |
+| **R5** focus/scroll-lock across lg swap           | resize-crossing-lg matchMedia test: activeElement never in display:none; trap only active path; ≤1 scroll-lock owner; Sheet `open` gated by existing `useBreakpoint(1024)`                                                      | 4      | chat.tsx, app/hooks/use-breakpoint.ts |
+| **R6** SSR duplicate DOM                          | SSR test: no hydration warning; exactly 1 Activity landmark; favicon `<img>` count == N                                                                                                                                         | 4 / 1  | globals.css:17-25                     |
+| **R6 host stale content**                         | activity-panel-host.test.tsx: Chat-like child registers dock content into `ActivityPanelDockSlot`; unmount clears it                                                                                                            | 4      | layout-app.tsx:17-24                  |
+| **R7** reduced-motion                             | reduced-motion matchMedia snapshot: new animations suppressed, instant final state                                                                                                                                              | 4      | globals.css:5, --animate-show         |
+| **R8** 141-favicon perf                           | SourcesGallery test: `loading=lazy`+`decoding=async` on every `<img>`, count == N                                                                                                                                               | 1      | source.tsx, favicon.tsx:72            |
+| **R9** trap vs non-trap divergence                | two-path interaction test: flyout focus returns/no-lock/ESC-inert; sheet traps/locks/ESC-closes                                                                                                                                 | 4      | sheet.tsx:6                           |
+| **§6.7C** duration freeze                         | use-reasoning-phase.test.tsx case (a): freeze at 5s on cleanup                                                                                                                                                                  | 3      | use-reasoning-phase.ts:96-106         |
+| **§6.7C** persisted fallback (complete, no ticks) | case (b): `isLast && complete && tickedSeconds===0` → persisted                                                                                                                                                                 | 3      | use-reasoning-phase.ts:115-116        |
+| **§6.7C** historical fallback                     | case (c): `!isLast` → persisted                                                                                                                                                                                                 | 3      | use-reasoning-phase.ts:120-121        |
+| **§6.7 / R1** in-place mutation derivation        | case (d): same parts ref, mutated `.text`/`.state` updates                                                                                                                                                                      | 3      | use-reasoning-phase.ts:28-31          |
+| **§6.7D** regenerate handoff                      | case (e) (shared with R1): timer resets new turn, freezes old                                                                                                                                                                   | 3      | use-reasoning-phase.ts:78-83          |
+| **§6.7E** branch switch                           | use-activity-panel.test.tsx: simulated branch switch changes rendered assistant tail → new `activeTurnId`, persisted duration/sources shown, no stale live timer                                                                | 3      | selected-path.ts:171-180              |
+| **Commit 5 trigger reopen**                       | trigger interaction test: close panel, focus returns to trigger, trigger reopens correct active turn on desktop and sheet breakpoints                                                                                           | 5      | message-assistant.tsx:237-249         |
+| **Submitted/no-assistant boundary**               | conversation test: `status==="submitted"` + user tail still renders `ThinkingBar`; `useActivityPanel` returns no synthetic `activeTurnId`                                                                                       | 3 / 5  | conversation.tsx:156-171              |
+| **R-rollback**                                    | Local proof bundle green at each commit boundary (targeted tests + typecheck + lint); full local `bun run test` before PR; grep over integration diff returns no flag/runtime-toggle usage                                      | all    | —                                     |
 
 ---
 
 ## 9. Open risks / sequencing notes
 
-1. **Branch-switch (§6.7E) must be tested in commit 3** *(inferred)*. The fake-timer suite covers regenerate (D) and
+1. **Branch-switch (§6.7E) must be tested in commit 3** _(inferred)_. The fake-timer suite covers regenerate (D) and
    the C2 divergence path is structurally guarded by `projectSelectedPath` returning serverPath on divergence
    (selected-path.ts:171-180), but the panel owner is derived from rendered messages. Add the cheap
    `use-activity-panel.test.tsx` branch-switch case; do not accept only the structural guarantee.
 
-2. **ThinkingBar boundary (§C9, commit 5)** *(inferred)*. Default to keeping the existing `ThinkingBar` for
+2. **ThinkingBar boundary (§C9, commit 5)** _(inferred)_. Default to keeping the existing `ThinkingBar` for
    `status==='submitted'`/last-is-user pre-stream state (conversation.tsx:156-171). Folding that into the panel requires
    inventing a synthetic assistant owner before an assistant message exists; do it only after an explicit product
    decision, and then test the synthetic owner separately.
 
-3. **Coexistence vs portal duplication (§7 R6)** *(inferred)*. The selected fix is not a CSS-only
+3. **Coexistence vs portal duplication (§7 R6)** _(inferred)_. The selected fix is not a CSS-only
    `display:contents` fallback. Use CSS for visual shell styling, but gate the Base UI Sheet `open` prop with existing
    `useBreakpoint(1024)` so the portal/focus-lock path is inactive at desktop. If the R6 test still reports duplicate
    landmarks or favicon counts, fix the active-body rendering/registration logic before adding more CSS.

@@ -1,5 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { getWorkosSession } from "@/lib/auth/workos"
+import { getToolDimensionForError } from "@/lib/observability/chat-error-taxonomy"
 import * as Sentry from "@sentry/nextjs"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { createChatTurnRuntime } from "./chat-turn-runtime"
+import { POST } from "./route"
 
 vi.mock("@sentry/nextjs", () => ({
   setTag: vi.fn(),
@@ -19,7 +23,9 @@ vi.mock("@/lib/auth/workos", () => ({
 
 vi.mock("@/lib/observability/chat-error-taxonomy", async (importActual) => {
   const actual =
-    await importActual<typeof import("@/lib/observability/chat-error-taxonomy")>()
+    await importActual<
+      typeof import("@/lib/observability/chat-error-taxonomy")
+    >()
   return {
     ...actual,
     classifyChatError: vi.fn(() => "unknown"),
@@ -36,14 +42,7 @@ vi.mock("./chat-turn-runtime", () => ({
   createChatTurnRuntime: vi.fn(),
 }))
 
-import { getWorkosSession } from "@/lib/auth/workos"
-import { getToolDimensionForError } from "@/lib/observability/chat-error-taxonomy"
-import { createChatTurnRuntime } from "./chat-turn-runtime"
-import { POST } from "./route"
-
-const consoleErrorSpy = vi
-  .spyOn(console, "error")
-  .mockImplementation(() => {})
+const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
 const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
 
 function makeRequest(): Request {
@@ -99,10 +98,10 @@ describe("/api/chat route", () => {
     expect(response.status).toBe(502)
     expect(fail).toHaveBeenCalledWith(originalError)
     expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("\"_tag\":\"chat_turn_fail_failed\"")
+      expect.stringContaining('"_tag":"chat_turn_fail_failed"')
     )
     expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("\"error\":\"cleanup failed\"")
+      expect.stringContaining('"error":"cleanup failed"')
     )
     expect(Sentry.captureException).toHaveBeenCalledWith(failError, {
       tags: {
@@ -123,5 +122,23 @@ describe("/api/chat route", () => {
         originalError: "provider failed",
       },
     })
+  })
+
+  it("returns 400 for malformed JSON without capturing to Sentry", async () => {
+    const response = await POST(
+      new Request("http://test.local/api/chat", {
+        method: "POST",
+        body: "{",
+      })
+    )
+
+    await expect(response.json()).resolves.toEqual({
+      error: "Request body is not valid JSON",
+      code: "INVALID_REQUEST",
+    })
+    expect(response.status).toBe(400)
+    expect(createChatTurnRuntime).not.toHaveBeenCalled()
+    expect(Sentry.captureException).not.toHaveBeenCalled()
+    expect(consoleErrorSpy).not.toHaveBeenCalled()
   })
 })

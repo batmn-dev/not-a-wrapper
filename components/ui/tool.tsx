@@ -20,10 +20,7 @@ import { useState } from "react"
 export type ToolPart = {
   type: string
   state:
-    | "input-streaming"
-    | "input-available"
-    | "output-available"
-    | "output-error"
+    "input-streaming" | "input-available" | "output-available" | "output-error"
   input?: Record<string, unknown>
   output?: Record<string, unknown>
   toolCallId?: string

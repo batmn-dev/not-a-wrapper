@@ -3,13 +3,12 @@ import { execFileSync, spawnSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 import {
-  DEFAULT_BASE_REF,
-  DEFAULT_MANIFEST_DIR,
-  DEFAULT_SCHEMA_PATH,
-  PRELAUNCH_DISPOSABLE_DB,
   buildInlineCountQuery,
   checksFromManifests,
   contractedManifestSchemaErrors,
+  DEFAULT_BASE_REF,
+  DEFAULT_MANIFEST_DIR,
+  DEFAULT_SCHEMA_PATH,
   diffSchemaContractions,
   envValue,
   evaluateSchemaContractions,
@@ -19,6 +18,7 @@ import {
   loadMigrationManifests,
   mergeChecks,
   parseConvexRunJson,
+  PRELAUNCH_DISPOSABLE_DB,
 } from "./convex-schema-contract-lib.mjs"
 
 function parseArgs(argv) {
@@ -27,7 +27,8 @@ function parseArgs(argv) {
     schemaPath: DEFAULT_SCHEMA_PATH,
     manifestDir: DEFAULT_MANIFEST_DIR,
     limit: 1000,
-    convexCommand: process.env.CONVEX_SCHEMA_PREFLIGHT_CONVEX_COMMAND ?? "bunx convex",
+    convexCommand:
+      process.env.CONVEX_SCHEMA_PREFLIGHT_CONVEX_COMMAND ?? "bunx convex",
     baseBranch: process.env.SCHEMA_GUARD_BASE_BRANCH,
     repoUrl: process.env.SCHEMA_GUARD_REPO_URL,
   }
@@ -182,13 +183,18 @@ export function planPreflight({
   const removedFields = baseSource
     ? diffSchemaContractions(baseSource, currentSource, schemaPath)
     : []
-  const diffEvaluation = evaluateSchemaContractions({ removedFields, manifests })
+  const diffEvaluation = evaluateSchemaContractions({
+    removedFields,
+    manifests,
+  })
   const manifestSchemaErrors = contractedManifestSchemaErrors({
     currentSource,
     manifests,
     schemaPath,
   })
-  const manifestChecks = checksFromManifests(manifests, { statuses: ["contracted"] })
+  const manifestChecks = checksFromManifests(manifests, {
+    statuses: ["contracted"],
+  })
   const checks = mergeChecks(manifestChecks, diffEvaluation.approved)
 
   return {
@@ -356,11 +362,15 @@ function runCli() {
   }
 
   if (plan.checks.length === 0) {
-    console.log("OK no contracted Convex schema fields require preflight checks")
+    console.log(
+      "OK no contracted Convex schema fields require preflight checks"
+    )
     return
   }
 
-  console.log(`Convex schema contraction preflight target: ${targetLabel(options)}`)
+  console.log(
+    `Convex schema contraction preflight target: ${targetLabel(options)}`
+  )
   console.log("Read-only aggregate checks:")
   printChecks(plan.checks)
 
@@ -374,7 +384,9 @@ function runCli() {
     const results = runConvexChecks(plan.checks, options)
     verification = validatePreflightResults(plan.checks, results)
   } catch (error) {
-    console.error(`Convex schema contraction preflight failed: ${error.message}`)
+    console.error(
+      `Convex schema contraction preflight failed: ${error.message}`
+    )
     console.error(
       "Deploy blocked: legacy-field aggregate counts were not verified. Treat Convex query or result-shape failures as not verified, not as zero counts."
     )
@@ -386,7 +398,9 @@ function runCli() {
 
   console.log("Results:")
   for (const result of orderedResults) {
-    const count = result.countIsCapped ? `>=${result.count}` : String(result.count)
+    const count = result.countIsCapped
+      ? `>=${result.count}`
+      : String(result.count)
     console.log(
       `- ${formatCheck(result)} count=${count} expected=${result.expectedCount}`
     )
@@ -404,14 +418,18 @@ function runCli() {
     return
   }
 
-  console.log("OK all contracted Convex schema fields matched expected zero counts")
+  console.log(
+    "OK all contracted Convex schema fields matched expected zero counts"
+  )
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     runCli()
   } catch (error) {
-    console.error(`Convex schema contraction preflight failed: ${error.message}`)
+    console.error(
+      `Convex schema contraction preflight failed: ${error.message}`
+    )
     process.exitCode = 1
   }
 }

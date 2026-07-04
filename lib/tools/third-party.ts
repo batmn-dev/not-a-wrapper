@@ -1,17 +1,5 @@
 // lib/tools/third-party.ts
 
-import { tool } from "ai"
-import { z } from "zod"
-import type { ToolSet } from "ai"
-import type { ToolMetadata } from "./types"
-import {
-  truncateToolResult,
-  enrichToolError,
-  extractAbortSignalFromOptions,
-  runWithToolAbortAndTimeout,
-  throwIfAborted,
-} from "./utils"
-import type { ToolPolicyGuard } from "./policy"
 import {
   EXA_CONTENT_FRESHNESS_MAX_AGE_HOURS,
   THIRD_PARTY_EXTRACTION_CACHE_MAX_ENTRIES,
@@ -20,7 +8,19 @@ import {
   THIRD_PARTY_SEARCH_CACHE_TTL_MS,
   TOOL_EXECUTION_TIMEOUT_MS,
 } from "@/lib/config"
+import { tool } from "ai"
+import type { ToolSet } from "ai"
+import { z } from "zod"
 import { LruTtlCache } from "./cache"
+import type { ToolPolicyGuard } from "./policy"
+import type { ToolMetadata } from "./types"
+import {
+  enrichToolError,
+  extractAbortSignalFromOptions,
+  runWithToolAbortAndTimeout,
+  throwIfAborted,
+  truncateToolResult,
+} from "./utils"
 
 // ── Content Extraction Cache ────────────────────────────────
 // Process-level LRU cache for content extraction results.
@@ -174,7 +174,11 @@ export async function getThirdPartyTools(
             .describe("The search query — be specific for better results"),
         }),
         inputExamples: [
-          { input: { query: "latest federal reserve interest rate decision summary" } },
+          {
+            input: {
+              query: "latest federal reserve interest rate decision summary",
+            },
+          },
           { input: { query: "vercel ai sdk 6 tool calling docs" } },
         ],
         execute: async ({ query }, options) => {
@@ -191,14 +195,16 @@ export async function getThirdPartyTools(
             // ── Cache check ──────────────────────────────
             const cached = getCachedSearch(query)
             if (cached) {
-              console.log(JSON.stringify({
-                _tag: "tool_exec",
-                tool: "web_search",
-                source: "exa",
-                durationMs: Date.now() - startMs,
-                resultCount: cached.length,
-                cached: true,
-              }))
+              console.log(
+                JSON.stringify({
+                  _tag: "tool_exec",
+                  tool: "web_search",
+                  source: "exa",
+                  durationMs: Date.now() - startMs,
+                  resultCount: cached.length,
+                  cached: true,
+                })
+              )
               return truncateToolResult(cached, {
                 toolName: "web_search",
                 resultCategory: "search_results",
@@ -232,13 +238,15 @@ export async function getThirdPartyTools(
               publishedDate: r.publishedDate ?? undefined,
             }))
             setCachedSearch(query, mapped)
-            console.log(JSON.stringify({
-              _tag: "tool_exec",
-              tool: "web_search",
-              source: "exa",
-              durationMs: Date.now() - startMs,
-              resultCount: results.length,
-            }))
+            console.log(
+              JSON.stringify({
+                _tag: "tool_exec",
+                tool: "web_search",
+                source: "exa",
+                durationMs: Date.now() - startMs,
+                resultCount: results.length,
+              })
+            )
             return truncateToolResult(mapped, {
               toolName: "web_search",
               resultCategory: "search_results",
@@ -328,7 +336,9 @@ export async function getContentExtractionTools(options: {
       inputExamples: [
         {
           input: {
-            urls: ["https://ai-sdk.dev/docs/ai-sdk-core/tools-and-tool-calling"],
+            urls: [
+              "https://ai-sdk.dev/docs/ai-sdk-core/tools-and-tool-calling",
+            ],
           },
         },
         {
@@ -368,16 +378,18 @@ export async function getContentExtractionTools(options: {
             const mapped = urls.map(
               (url) => cached.get(url) ?? { url, error: "CACHE_MISS" }
             )
-            console.log(JSON.stringify({
-              _tag: "tool_exec",
-              tool: "extract_content",
-              source: "exa",
-              durationMs: Date.now() - startMs,
-              urlCount: urls.length,
-              successCount: cached.size,
-              failedCount: 0,
-              cachedCount: cached.size,
-            }))
+            console.log(
+              JSON.stringify({
+                _tag: "tool_exec",
+                tool: "extract_content",
+                source: "exa",
+                durationMs: Date.now() - startMs,
+                urlCount: urls.length,
+                successCount: cached.size,
+                failedCount: 0,
+                cachedCount: cached.size,
+              })
+            )
             return truncateToolResult(mapped, {
               toolName: "extract_content",
               resultCategory: "content_extraction",
@@ -444,10 +456,7 @@ export async function getContentExtractionTools(options: {
             }
           }
 
-          const resultMap = new Map<
-            string,
-            (typeof response.results)[number]
-          >()
+          const resultMap = new Map<string, (typeof response.results)[number]>()
           for (const r of response.results) {
             resultMap.set(r.url, r)
           }
@@ -508,16 +517,18 @@ export async function getContentExtractionTools(options: {
             return { url, error: "NO_RESULT_RETURNED" }
           })
 
-          console.log(JSON.stringify({
-            _tag: "tool_exec",
-            tool: "extract_content",
-            source: "exa",
-            durationMs: Date.now() - startMs,
-            urlCount: urls.length,
-            successCount,
-            failedCount,
-            cachedCount: cached.size,
-          }))
+          console.log(
+            JSON.stringify({
+              _tag: "tool_exec",
+              tool: "extract_content",
+              source: "exa",
+              durationMs: Date.now() - startMs,
+              urlCount: urls.length,
+              successCount,
+              failedCount,
+              cachedCount: cached.size,
+            })
+          )
           return truncateToolResult(mapped, {
             toolName: "extract_content",
             resultCategory: "content_extraction",

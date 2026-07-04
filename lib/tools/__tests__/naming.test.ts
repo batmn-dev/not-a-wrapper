@@ -8,7 +8,9 @@ import {
 } from "../naming"
 
 function makeToolSet(keys: string[]): import("ai").ToolSet {
-  return Object.fromEntries(keys.map((key) => [key, {}])) as unknown as import("ai").ToolSet
+  return Object.fromEntries(
+    keys.map((key) => [key, {}])
+  ) as unknown as import("ai").ToolSet
 }
 
 describe("validateToolName", () => {
@@ -68,8 +70,14 @@ describe("collectGlobalCollisions", () => {
   it("detects collisions across all layers and reports the precedence winner", () => {
     const layers: ToolLayerMap = {
       "built-in": makeToolSet(["web_search", "shared_builtin_platform"]),
-      "third-party-search": makeToolSet(["web_search", "shared_search_content"]),
-      "content-extraction": makeToolSet(["extract_content", "shared_search_content"]),
+      "third-party-search": makeToolSet([
+        "web_search",
+        "shared_search_content",
+      ]),
+      "content-extraction": makeToolSet([
+        "extract_content",
+        "shared_search_content",
+      ]),
       platform: makeToolSet(["read_ticket_status", "shared_builtin_platform"]),
       mcp: makeToolSet(["web_search", "read_ticket_status"]),
     }
@@ -144,10 +152,14 @@ describe("enforceToolNamingGovernance", () => {
       },
     ])
 
-    expect(result.sanitizedLayers["built-in"]).toEqual(makeToolSet(["web_search"]))
+    expect(result.sanitizedLayers["built-in"]).toEqual(
+      makeToolSet(["web_search"])
+    )
     expect(result.sanitizedLayers["third-party-search"]).toEqual(
       makeToolSet(["shared"])
     )
-    expect(result.sanitizedLayers.platform).toEqual(makeToolSet(["create_ticket"]))
+    expect(result.sanitizedLayers.platform).toEqual(
+      makeToolSet(["create_ticket"])
+    )
   })
 })

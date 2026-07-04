@@ -1,7 +1,9 @@
-import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { resolveModelId } from "@/lib/models/model-id-migration"
 import { getProviderForModel } from "./provider-map"
-import { getProviderStrategy } from "./provider-strategy"
+import {
+  getProviderStrategy,
+  type ProviderLanguageModel,
+} from "./provider-strategy"
 import type { SupportedModel } from "./types"
 
 /**
@@ -15,8 +17,10 @@ import type { SupportedModel } from "./types"
 export function createProviderLanguageModel<T extends SupportedModel | string>(
   modelId: T,
   apiKey?: string
-): LanguageModelV3 {
+): ProviderLanguageModel {
   const resolvedModelId = resolveModelId(modelId)
   const provider = getProviderForModel(resolvedModelId)
-  return getProviderStrategy(provider).instance(apiKey).languageModel(resolvedModelId)
+  return getProviderStrategy(provider)
+    .instance(apiKey)
+    .languageModel(resolvedModelId)
 }

@@ -1,6 +1,5 @@
 "use client"
 
-import { api } from "@/convex/_generated/api"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -12,6 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { toast } from "@/components/ui/toast"
+import { api } from "@/convex/_generated/api"
 import { useMutation } from "convex/react"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
@@ -78,10 +78,7 @@ export function DialogCreateProject({
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={!projectName.trim() || isPending}
-            >
+            <Button type="submit" disabled={!projectName.trim() || isPending}>
               {isPending ? "Creating..." : "Create Project"}
             </Button>
           </DialogFooter>

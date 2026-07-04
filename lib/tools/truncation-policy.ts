@@ -1,9 +1,5 @@
 export type TruncationCategory =
-  | "default"
-  | "generic"
-  | "search_results"
-  | "content_extraction"
-  | "plain_text"
+  "default" | "generic" | "search_results" | "content_extraction" | "plain_text"
 
 export type TruncationContext = {
   toolName?: string

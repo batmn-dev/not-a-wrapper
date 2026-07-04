@@ -88,8 +88,8 @@ export type ToolMetadata = {
  * console.log with `_tag: "tool_exec"` or recorded in ToolTraceCollector.
  *
  * On error, tools throw so the AI SDK sets isError: true — this
- * preserves correct success detection in onFinish, PostHog events,
- * and audit logs.
+ * preserves correct success detection in the step-end outcome
+ * recording, PostHog events, and audit logs.
  *
  * Retained for type reference in tests only. Do NOT use in new code.
  */
@@ -137,11 +137,11 @@ export type ToolTrace = {
  * Created before streamText(), read in onStepFinish and onFinish.
  *
  * Lifecycle:
- *   1. Created in route.ts before streamText()
+ *   1. Created by the Chat turn runtime before streamText()
  *   2. wrapMcpTools() / wrapToolsWithTracing() record traces during execute()
- *   3. onStepFinish reads traces for structured logging
- *   4. onFinish reads traces for Convex + PostHog enrichment
- *   5. Garbage collected when the request ends
+ *   3. The Tool runtime's onStepFinish reads traces at step end and the
+ *      outcome sinks project them into Convex, PostHog, and trace logs
+ *   4. Garbage collected when the request ends
  */
 export class ToolTraceCollector {
   private traces = new Map<string, ToolTrace>()
@@ -184,8 +184,22 @@ export type ToolCapabilities = {
 export function resolveToolCapabilities(
   tools: boolean | ToolCapabilities | undefined
 ): Required<ToolCapabilities> {
-  if (tools === false) return { search: false, extract: false, code: false, mcp: false, platform: false }
-  if (tools === true || tools === undefined) return { search: true, extract: true, code: true, mcp: true, platform: true }
+  if (tools === false)
+    return {
+      search: false,
+      extract: false,
+      code: false,
+      mcp: false,
+      platform: false,
+    }
+  if (tools === true || tools === undefined)
+    return {
+      search: true,
+      extract: true,
+      code: true,
+      mcp: true,
+      platform: true,
+    }
   return {
     search: tools.search !== false,
     extract: tools.extract !== false,

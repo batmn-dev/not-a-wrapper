@@ -1,8 +1,8 @@
 import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
-  buildEditIntent,
   buildChatTurnRequestBody,
+  buildEditIntent,
   buildSelectedPathToken,
   createChatTurnStore,
   prepareEditTurnPlan,
@@ -271,11 +271,7 @@ describe("chat turn service", () => {
       status: "failed",
     }
     const harness = createStoreHarness({ isAuthenticated: true })
-    harness.setMessages([
-      userMessage("user-1", "prompt"),
-      failedStub,
-      sdkEmpty,
-    ])
+    harness.setMessages([userMessage("user-1", "prompt"), failedStub, sdkEmpty])
 
     await harness.store.finishTurn({
       message: sdkEmpty,

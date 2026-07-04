@@ -110,7 +110,12 @@ describe("useReasoningPhase", () => {
     })
     expect(latest!.durationSeconds).toBe(5)
 
-    render({ parts: thinking, status: "streaming", isLast: false, turnKey: "a" })
+    render({
+      parts: thinking,
+      status: "streaming",
+      isLast: false,
+      turnKey: "a",
+    })
     render({ parts: thinking, status: "streaming", isLast: true, turnKey: "a" })
     act(() => {
       vi.advanceTimersByTime(1000)
@@ -187,9 +192,7 @@ describe("useReasoningPhase", () => {
       turnKey: "b",
     })
     expect(
-      resultHistory
-        .slice(historyStart)
-        .map((result) => result.durationSeconds)
+      resultHistory.slice(historyStart).map((result) => result.durationSeconds)
     ).not.toContain(9)
     expect(latest!.durationSeconds).toBeUndefined()
     act(() => {
@@ -214,5 +217,4 @@ describe("useReasoningPhase", () => {
     expect(latest!.phase).toBe("complete")
     expect(latest!.reasoningText).toBe("partial then final")
   })
-
 })

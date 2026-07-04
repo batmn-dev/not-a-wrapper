@@ -21,8 +21,7 @@ export type { ChatTurnMessage } from "@/lib/chat-store/turns/chat-turn-service"
 const MESSAGE_TOO_LONG_ERROR = `The message you submitted was too long, please submit something shorter. (Max ${MESSAGE_MAX_LENGTH} characters)`
 
 type SetMessagesAction =
-  | ChatTurnMessage[]
-  | ((messages: ChatTurnMessage[]) => ChatTurnMessage[])
+  ChatTurnMessage[] | ((messages: ChatTurnMessage[]) => ChatTurnMessage[])
 
 type OptimisticAttachment = {
   name: string

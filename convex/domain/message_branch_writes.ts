@@ -88,7 +88,10 @@ export async function clearSiblingSelectionForMutation(
       selected: false,
       updatedAt: now,
     }
-    if (sibling.parentMessageId === undefined && parentMessageId !== undefined) {
+    if (
+      sibling.parentMessageId === undefined &&
+      parentMessageId !== undefined
+    ) {
       patch.parentMessageId = parentMessageId
     }
     if (sibling.branchIndex === undefined) {
@@ -118,7 +121,10 @@ export async function selectMessageSiblingForMutation(
       selected: sibling._id === message._id,
       updatedAt: now,
     }
-    if (sibling.parentMessageId === undefined && parentMessageId !== undefined) {
+    if (
+      sibling.parentMessageId === undefined &&
+      parentMessageId !== undefined
+    ) {
       patch.parentMessageId = parentMessageId
     }
     if (sibling.branchIndex === undefined) {

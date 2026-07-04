@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest"
 import type { UIMessage } from "ai"
+import { describe, expect, it } from "vitest"
 import {
+  excludeSystemRoleMessages,
   hasProviderLinkedResponseIds,
+  isConvexArgumentValidationError,
   sanitizeMessagesForProvider,
   toPlainTextModelMessages,
 } from "./utils"
@@ -29,7 +31,9 @@ describe("sanitizeMessagesForProvider", () => {
       {
         id: "tool-role",
         role: "tool",
-        parts: [{ type: "tool-result", toolCallId: "tc1", output: { ok: true } }],
+        parts: [
+          { type: "tool-result", toolCallId: "tc1", output: { ok: true } },
+        ],
       },
       {
         id: "assistant-with-mixed-parts",
@@ -37,7 +41,11 @@ describe("sanitizeMessagesForProvider", () => {
         parts: [
           { type: "step-start" },
           { type: "reasoning", text: "thinking..." },
-          { type: "tool-web_search", toolCallId: "tc1", input: { q: "batman" } },
+          {
+            type: "tool-web_search",
+            toolCallId: "tc1",
+            input: { q: "batman" },
+          },
           { type: "text", text: "Here are suggestions." },
           { type: "source-url", sourceId: "s1", url: "https://example.com" },
         ],
@@ -66,7 +74,11 @@ describe("sanitizeMessagesForProvider", () => {
         role: "assistant",
         parts: [
           { type: "reasoning", text: "thinking..." },
-          { type: "tool-web_search", toolCallId: "tc1", input: { q: "batman" } },
+          {
+            type: "tool-web_search",
+            toolCallId: "tc1",
+            input: { q: "batman" },
+          },
         ],
       },
     ] as unknown as UIMessage[]
@@ -100,7 +112,9 @@ describe("hasProviderLinkedResponseIds", () => {
   })
 
   it("returns false for regular text-only model messages", () => {
-    const modelMessages = [{ role: "assistant", content: "normal response text" }] as const
+    const modelMessages = [
+      { role: "assistant", content: "normal response text" },
+    ] as const
     expect(hasProviderLinkedResponseIds(modelMessages as any)).toBe(false)
   })
 })
@@ -129,5 +143,42 @@ describe("toPlainTextModelMessages", () => {
       { role: "assistant", content: "line 1\n\nline 2" },
       { role: "user", content: "follow-up" },
     ])
+  })
+})
+
+describe("isConvexArgumentValidationError", () => {
+  it("matches Convex argument-validation rejections and nothing else", () => {
+    const convexShape = new Error(
+      '[Request ID: abc123] Server Error\nArgumentValidationError: Value does not match validator.\nPath: .chatId\nValue: "smoke"\nValidator: v.id("chats")'
+    )
+    expect(isConvexArgumentValidationError(convexShape)).toBe(true)
+    expect(isConvexArgumentValidationError(new Error("stream aborted"))).toBe(
+      false
+    )
+    expect(isConvexArgumentValidationError("not-an-error")).toBe(false)
+  })
+})
+
+describe("excludeSystemRoleMessages", () => {
+  it("drops system-role messages and reports the count", () => {
+    const messages = [
+      { id: "s", role: "system", parts: [{ type: "text", text: "legacy" }] },
+      { id: "u", role: "user", parts: [{ type: "text", text: "hi" }] },
+      { id: "a", role: "assistant", parts: [{ type: "text", text: "hello" }] },
+    ] as unknown as UIMessage[]
+
+    const result = excludeSystemRoleMessages(messages)
+    expect(result.excludedCount).toBe(1)
+    expect(result.messages.map((m) => m.role)).toEqual(["user", "assistant"])
+  })
+
+  it("returns the same array reference when nothing is excluded", () => {
+    const messages = [
+      { id: "u", role: "user", parts: [{ type: "text", text: "hi" }] },
+    ] as unknown as UIMessage[]
+
+    const result = excludeSystemRoleMessages(messages)
+    expect(result.excludedCount).toBe(0)
+    expect(result.messages).toBe(messages)
   })
 })

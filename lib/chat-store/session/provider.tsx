@@ -18,7 +18,7 @@ export function ChatSessionProvider({
   const chatId = useMemo(() => {
     if (!pathname?.startsWith("/c/")) return null
     const segments = pathname.split("/").filter(Boolean)
-    return segments[0] === "c" ? segments[1] ?? null : null
+    return segments[0] === "c" ? (segments[1] ?? null) : null
   }, [pathname])
 
   return (

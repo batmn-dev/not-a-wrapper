@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { ToolPolicyError } from "../policy"
 import { normalizeToolError } from "../errors"
+import { ToolPolicyError } from "../policy"
 
 describe("normalizeToolError", () => {
   it("maps abort/cancel errors", () => {

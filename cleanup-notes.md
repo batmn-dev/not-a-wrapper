@@ -8,18 +8,18 @@ attributes changed. Validation at the bottom.
 ## Scope correction from the original brief
 
 Mid-pass the owner redirected: **skip the "remove apparently-unused surface"
-findings (T3, T13, and similar)** — several props/variants are *intentional
-ChatGPT-replication scaffolding* for an upcoming live-timeline pass, not dead
+findings (T3, T13, and similar)** — several props/variants are _intentional
+ChatGPT-replication scaffolding_ for an upcoming live-timeline pass, not dead
 code. Those were instead **annotated in place + logged in `TODO.md`**, and
 **verified against the real reference** (`reference-ui/ChatGPT`) so the
 annotations state the truth, not a guess:
 
-| Scaffolding | Reference verdict |
-| --- | --- |
-| `steps` + timeline `globe`/`bullet`/`done` markers + `chips` body | **SUPPORTED** (capture shows 40 steps, all 3 markers, chip bodies on globe steps) |
-| `isReasoningStreaming` | **PARTIAL** (`animate-show` + reserved empty chip-row slot present; live typing not captured) |
-| `viewportRef` auto-scroll | **PARTIAL** (scroll container + `scroll-mb-4` spacer present; programmatic scroll not observable) |
-| `phase` (`thinking`/`complete`) | **NOT-FOUND** (only the settled end-state is captured) — speculative; re-verify against a live "still thinking" capture before wiring |
+| Scaffolding                                                       | Reference verdict                                                                                                                     |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `steps` + timeline `globe`/`bullet`/`done` markers + `chips` body | **SUPPORTED** (capture shows 40 steps, all 3 markers, chip bodies on globe steps)                                                     |
+| `isReasoningStreaming`                                            | **PARTIAL** (`animate-show` + reserved empty chip-row slot present; live typing not captured)                                         |
+| `viewportRef` auto-scroll                                         | **PARTIAL** (scroll container + `scroll-mb-4` spacer present; programmatic scroll not observable)                                     |
+| `phase` (`thinking`/`complete`)                                   | **NOT-FOUND** (only the settled end-state is captured) — speculative; re-verify against a live "still thinking" capture before wiring |
 
 Annotated files: `activity/activity-panel.tsx`, `use-activity-panel.ts`,
 `activity/activity-timeline.tsx`, `activity/docked-flyout-shell.tsx`,
@@ -61,13 +61,13 @@ renames) were all completed.
 
 **Panel-controls prop drill (Chat → Conversation → Message → MessageAssistant):**
 
-| Before (each component) | After |
-| --- | --- |
-| `activityPanelOpen?: boolean` | bundled |
-| `activityPanelId?: string` | bundled |
-| `onActivityPanelOpenChange?: (open) => void` | bundled |
-| — | `activityPanel?: ActivityPanelControls` `{ open, onOpenChange, panelId? }` |
-| `activeTurnId?: string` | `activeTurnId?: string` (**unchanged — kept separate**) |
+| Before (each component)                      | After                                                                      |
+| -------------------------------------------- | -------------------------------------------------------------------------- |
+| `activityPanelOpen?: boolean`                | bundled                                                                    |
+| `activityPanelId?: string`                   | bundled                                                                    |
+| `onActivityPanelOpenChange?: (open) => void` | bundled                                                                    |
+| —                                            | `activityPanel?: ActivityPanelControls` `{ open, onOpenChange, panelId? }` |
+| `activeTurnId?: string`                      | `activeTurnId?: string` (**unchanged — kept separate**)                    |
 
 - 3 forwarded props → 1 at every hop; the `isAssistant ? x : undefined` ternary
   collapsed **3 → 1** (`conversation.tsx`); the rename-wrapper arrow in
@@ -101,7 +101,7 @@ renames) were all completed.
   object keeps the comparator trivial — it compares the bundle's **inner fields**
   (`open`, `panelId`), not its identity, so Chat recreating the object each
   render doesn't churn. **`activeTurnId` deliberately excluded from the bundle:**
-  it's passed to *every* row (incl. user rows) and is memo-load-bearing, so
+  it's passed to _every_ row (incl. user rows) and is memo-load-bearing, so
   bundling it under the assistant-gate would change user-row behavior.
 - **J2 (header chrome depth):** stop at `PanelCloseButton` (+ the existing shared
   `TitleDurationCluster`). A shared `PanelChrome` bar would add more
@@ -111,8 +111,8 @@ renames) were all completed.
   annotate** the timeline variants and `viewportRef` (owner decision), grounded
   in the reference verification above.
 - **J4 (`LG_BREAKPOINT`):** keep the named literal + an explanatory comment — **no
-  shared `BREAKPOINTS` constant.** The JS gate is a *viewport* media query while
-  `@[64rem]/main` is a *container* query (different axes); a shared constant would
+  shared `BREAKPOINTS` constant.** The JS gate is a _viewport_ media query while
+  `@[64rem]/main` is a _container_ query (different axes); a shared constant would
   imply a false equivalence. Coupling is intentionally prose-only.
 - **J5 (`formatDuration`):** relocated to `lib/format-duration.ts` with a
   back-compat re-export from `reasoning.tsx`; both Activity importers repointed to
@@ -135,7 +135,7 @@ renames) were all completed.
 
 - **T3 narrowing / T13 variant trim / `viewportRef` removal** — kept as
   intentional ChatGPT scaffolding (owner decision; annotated + in `TODO.md`).
-- **T12 `favicon.tsx` / `markdown-link.tsx`** — *not* routed through the new
+- **T12 `favicon.tsx` / `markdown-link.tsx`** — _not_ routed through the new
   helper. They use raw `new URL` with **different** safety semantics (no
   `toSafeWebHref` gating) and **divergent** fallbacks/www-strip variants
   (`replace("www.", "")` vs `replace(/^www\./)`); consolidating would change

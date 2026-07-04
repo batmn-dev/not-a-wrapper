@@ -4,7 +4,15 @@ import type { ModelConfig } from "@/lib/models/types"
 import { JSDOM } from "jsdom"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
 
 vi.mock("server-only", () => ({}))
 
@@ -120,7 +128,9 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
 }))
 
 vi.mock("@/components/ui/drawer", () => ({
-  Drawer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Drawer: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
   DrawerContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -144,8 +154,9 @@ describe("ModelSelector", () => {
   beforeAll(async () => {
     installDomIfNeeded()
 
-    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean })
-      .IS_REACT_ACT_ENVIRONMENT = true
+    ;(
+      globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true
 
     ;({ ModelSelector } = await import("./base"))
   })

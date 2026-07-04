@@ -13,7 +13,9 @@ function toRetryAfterSeconds(retryAfterMs: number): number {
   return Math.max(1, Math.ceil(retryAfterMs / 1000))
 }
 
-function formatDomainLimitCode(toolName: string): `${string}_DOMAIN_LIMIT_EXCEEDED` {
+function formatDomainLimitCode(
+  toolName: string
+): `${string}_DOMAIN_LIMIT_EXCEEDED` {
   const normalizedToolName = toolName
     .trim()
     .replace(/[^a-zA-Z0-9]+/g, "_")
@@ -58,7 +60,9 @@ export const checkAndConsume = optionalAuthMutation({
     }
 
     if (scopeCounts.length > MAX_SCOPE_ITEMS) {
-      throw new Error(`Too many scopes (${scopeCounts.length}); max ${MAX_SCOPE_ITEMS}`)
+      throw new Error(
+        `Too many scopes (${scopeCounts.length}); max ${MAX_SCOPE_ITEMS}`
+      )
     }
 
     if (windowMs <= 0 || maxCount <= 0 || bucketSizeMs <= 0) {
@@ -77,8 +81,7 @@ export const checkAndConsume = optionalAuthMutation({
     }
 
     const now = Date.now()
-    const currentBucketStartMs =
-      Math.floor(now / bucketSizeMs) * bucketSizeMs
+    const currentBucketStartMs = Math.floor(now / bucketSizeMs) * bucketSizeMs
     const windowStartMs = now - windowMs + 1
     const firstBucketStartMs =
       Math.floor(windowStartMs / bucketSizeMs) * bucketSizeMs
@@ -139,8 +142,7 @@ export const checkAndConsume = optionalAuthMutation({
         return {
           allowed: false,
           code: formatDomainLimitCode(toolName),
-          message:
-            `Too many "${toolName}" requests for domain "${denied.scopeKey}" in the active window.`,
+          message: `Too many "${toolName}" requests for domain "${denied.scopeKey}" in the active window.`,
           retryAfterSeconds: toRetryAfterSeconds(retryAfterMs),
           scopeKey: denied.scopeKey,
           remaining: Math.max(0, maxCount - denied.total),
@@ -150,8 +152,7 @@ export const checkAndConsume = optionalAuthMutation({
       return {
         allowed: false,
         code: "TOOL_BUDGET_EXCEEDED",
-        message:
-          `Tool budget exceeded for "${toolName}" (${keyMode} key mode) in the active window.`,
+        message: `Tool budget exceeded for "${toolName}" (${keyMode} key mode) in the active window.`,
         retryAfterSeconds: toRetryAfterSeconds(retryAfterMs),
         scopeKey: denied.scopeKey,
         remaining: Math.max(0, maxCount - denied.total),

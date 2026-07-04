@@ -1,14 +1,14 @@
-import { describe, it, expect, vi } from "vitest"
-import {
-  truncateToolResult,
-  isTruncated,
-  wrapToolsWithTruncation,
-  wrapToolsWithTracing,
-  enrichToolError,
-} from "../utils"
-import { ToolTraceCollector } from "../types"
+import { describe, expect, it, vi } from "vitest"
 import { ToolExecutionError } from "../errors"
 import { ToolPolicyError } from "../policy"
+import { ToolTraceCollector } from "../types"
+import {
+  enrichToolError,
+  isTruncated,
+  truncateToolResult,
+  wrapToolsWithTracing,
+  wrapToolsWithTruncation,
+} from "../utils"
 
 function serializedSize(value: unknown): number {
   try {
@@ -407,13 +407,22 @@ describe("truncateToolResult", () => {
 describe("isTruncated", () => {
   it("returns true for truncated array results", () => {
     expect(
-      isTruncated({ _truncated: true, _originalCount: 100, _returnedCount: 10, data: [] })
+      isTruncated({
+        _truncated: true,
+        _originalCount: 100,
+        _returnedCount: 10,
+        data: [],
+      })
     ).toBe(true)
   })
 
   it("returns true for truncated object results", () => {
     expect(
-      isTruncated({ _truncated: true, _originalSizeBytes: 200000, _hint: "..." })
+      isTruncated({
+        _truncated: true,
+        _originalSizeBytes: 200000,
+        _hint: "...",
+      })
     ).toBe(true)
   })
 
@@ -445,8 +454,13 @@ describe("wrapToolsWithTruncation", () => {
       },
     }
 
-    const wrapped = wrapToolsWithTruncation(mockTools as unknown as import("ai").ToolSet, 100)
-    const wrappedTool = wrapped.myTool as unknown as { execute: () => Promise<unknown> }
+    const wrapped = wrapToolsWithTruncation(
+      mockTools as unknown as import("ai").ToolSet,
+      100
+    )
+    const wrappedTool = wrapped.myTool as unknown as {
+      execute: () => Promise<unknown>
+    }
     const result = await wrappedTool.execute()
 
     expect(typeof result).toBe("string")
@@ -463,8 +477,13 @@ describe("wrapToolsWithTruncation", () => {
       },
     }
 
-    const wrapped = wrapToolsWithTruncation(mockTools as unknown as import("ai").ToolSet, 10240)
-    const wrappedTool = wrapped.myTool as unknown as { execute: () => Promise<unknown> }
+    const wrapped = wrapToolsWithTruncation(
+      mockTools as unknown as import("ai").ToolSet,
+      10240
+    )
+    const wrappedTool = wrapped.myTool as unknown as {
+      execute: () => Promise<unknown>
+    }
     const result = await wrappedTool.execute()
 
     expect(result).toEqual(smallResult)
@@ -479,7 +498,10 @@ describe("wrapToolsWithTruncation", () => {
       },
     }
 
-    const wrapped = wrapToolsWithTruncation(mockTools as unknown as import("ai").ToolSet, 1024)
+    const wrapped = wrapToolsWithTruncation(
+      mockTools as unknown as import("ai").ToolSet,
+      1024
+    )
     const wrappedTool = wrapped.myTool as Record<string, unknown>
 
     expect(wrappedTool.description).toBe("A test tool")
@@ -493,7 +515,10 @@ describe("wrapToolsWithTruncation", () => {
       },
     }
 
-    const wrapped = wrapToolsWithTruncation(mockTools as unknown as import("ai").ToolSet, 1024)
+    const wrapped = wrapToolsWithTruncation(
+      mockTools as unknown as import("ai").ToolSet,
+      1024
+    )
     const wrappedTool = wrapped.noExecTool as Record<string, unknown>
 
     expect(wrappedTool.description).toBe("No execute")
@@ -512,10 +537,17 @@ describe("wrapToolsWithTruncation", () => {
       },
     }
 
-    const wrapped = wrapToolsWithTruncation(mockTools as unknown as import("ai").ToolSet, 100)
+    const wrapped = wrapToolsWithTruncation(
+      mockTools as unknown as import("ai").ToolSet,
+      100
+    )
 
-    const toolA = wrapped.toolA as unknown as { execute: () => Promise<unknown> }
-    const toolB = wrapped.toolB as unknown as { execute: () => Promise<unknown> }
+    const toolA = wrapped.toolA as unknown as {
+      execute: () => Promise<unknown>
+    }
+    const toolB = wrapped.toolB as unknown as {
+      execute: () => Promise<unknown>
+    }
 
     const resultA = await toolA.execute()
     const resultB = await toolB.execute()
@@ -530,7 +562,10 @@ describe("wrapToolsWithTruncation", () => {
 
 describe("structured tool errors", () => {
   it("enrichToolError returns ToolExecutionError with taxonomy code", () => {
-    const err = enrichToolError(new Error("429 rate limit exceeded"), "web_search")
+    const err = enrichToolError(
+      new Error("429 rate limit exceeded"),
+      "web_search"
+    )
     expect(err).toBeInstanceOf(ToolExecutionError)
     const typed = err as ToolExecutionError
     expect(typed.code).toBe("rate_limit")
@@ -613,15 +648,17 @@ describe("wrapToolsWithTracing reliability", () => {
       "req_abort",
       undefined,
       new Map([
-        ["cancellable_tool", { readOnly: true, idempotent: true, destructive: false }],
+        [
+          "cancellable_tool",
+          { readOnly: true, idempotent: true, destructive: false },
+        ],
       ])
     )
 
     const controller = new AbortController()
-    const execution = (wrapped.cancellable_tool as { execute: Function }).execute(
-      {},
-      { toolCallId: "call_abort", abortSignal: controller.signal }
-    )
+    const execution = (
+      wrapped.cancellable_tool as { execute: Function }
+    ).execute({}, { toolCallId: "call_abort", abortSignal: controller.signal })
     controller.abort("caller_cancelled")
 
     await expect(execution).rejects.toThrow(/cancelled|aborted/i)
@@ -649,7 +686,10 @@ describe("wrapToolsWithTracing reliability", () => {
       "req_retry",
       undefined,
       new Map([
-        ["flaky_tool", { readOnly: true, idempotent: true, destructive: false }],
+        [
+          "flaky_tool",
+          { readOnly: true, idempotent: true, destructive: false },
+        ],
       ])
     )
 
@@ -681,7 +721,10 @@ describe("wrapToolsWithTracing reliability", () => {
       "req_non_idempotent",
       undefined,
       new Map([
-        ["write_tool", { readOnly: false, idempotent: false, destructive: false }],
+        [
+          "write_tool",
+          { readOnly: false, idempotent: false, destructive: false },
+        ],
       ])
     )
 
@@ -699,16 +742,14 @@ describe("wrapToolsWithTracing reliability", () => {
 
   it("does not retry policy/auth/validation failures", async () => {
     const traces = new ToolTraceCollector()
-    const execute = vi
-      .fn()
-      .mockRejectedValueOnce(
-        new ToolPolicyError("TOOL_BUDGET_EXCEEDED: retry later", {
-          code: "TOOL_BUDGET_EXCEEDED",
-          retryAfterSeconds: 10,
-          keyMode: "platform",
-          budgetDenied: true,
-        })
-      )
+    const execute = vi.fn().mockRejectedValueOnce(
+      new ToolPolicyError("TOOL_BUDGET_EXCEEDED: retry later", {
+        code: "TOOL_BUDGET_EXCEEDED",
+        retryAfterSeconds: 10,
+        keyMode: "platform",
+        budgetDenied: true,
+      })
+    )
     const tools = {
       guarded_tool: {
         description: "guarded",
@@ -722,7 +763,10 @@ describe("wrapToolsWithTracing reliability", () => {
       "req_no_retry",
       undefined,
       new Map([
-        ["guarded_tool", { readOnly: true, idempotent: true, destructive: false }],
+        [
+          "guarded_tool",
+          { readOnly: true, idempotent: true, destructive: false },
+        ],
       ])
     )
 
@@ -743,7 +787,9 @@ describe("wrapToolsWithTracing reliability", () => {
     ).rejects.toThrow("401 unauthorized")
     expect(execute).toHaveBeenCalledTimes(1)
 
-    execute.mockReset().mockRejectedValueOnce(new Error("Validation failed: invalid input"))
+    execute
+      .mockReset()
+      .mockRejectedValueOnce(new Error("Validation failed: invalid input"))
     await expect(
       (wrapped.guarded_tool as { execute: Function }).execute(
         {},

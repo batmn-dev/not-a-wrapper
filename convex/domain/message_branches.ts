@@ -215,7 +215,10 @@ export function getSelectedPathBranchNormalizationPatches(
     const patch: MessageBranchPatch = { messageId: message._id }
     let hasPatch = false
 
-    if (parentMessageId !== undefined && message.parentMessageId === undefined) {
+    if (
+      parentMessageId !== undefined &&
+      message.parentMessageId === undefined
+    ) {
       patch.parentMessageId = parentMessageId
       hasPatch = true
     }
@@ -247,7 +250,9 @@ export function getBranchInfoForMessage(
   const siblings = getSiblingMessages(messages, parentId, message.role)
   if (siblings.length < 2) return undefined
 
-  const currentIndex = siblings.findIndex((sibling) => sibling._id === message._id)
+  const currentIndex = siblings.findIndex(
+    (sibling) => sibling._id === message._id
+  )
   if (currentIndex < 0) return undefined
 
   return {

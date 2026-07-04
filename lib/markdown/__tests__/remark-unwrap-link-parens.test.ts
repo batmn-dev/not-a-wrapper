@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest"
 import type { Code, InlineCode, Link, Paragraph, Root, Text } from "mdast"
 import remarkGfm from "remark-gfm"
 import remarkParse from "remark-parse"
 import { unified } from "unified"
+import { describe, expect, it } from "vitest"
 import { remarkUnwrapLinkParens } from "../remark-unwrap-link-parens"
 
 function process(md: string): Root {

@@ -3,12 +3,9 @@
 // only until removal is approved; migrated to the auth seam so it doesn't trip
 // the raw-getUserIdentity guard in the meantime.
 
-import { v } from "convex/values"
 import { paginationOptsValidator } from "convex/server"
-import {
-  authenticatedMutation,
-  maybeAuthQuery,
-} from "./lib/authedFunctions"
+import { v } from "convex/values"
+import { authenticatedMutation, maybeAuthQuery } from "./lib/authedFunctions"
 
 // =============================================================================
 // Helpers
