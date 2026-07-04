@@ -93,7 +93,7 @@ import {
 // `docs/adr/0006-chat-turn-runtime.md`. Two-phase: `prepare()` resolves the
 // execution plan and may throw status-coded errors before any model call;
 // `toResponse(signal)` invokes streamText, owns the stream-lifecycle state and
-// both `onFinish` layers, and returns the streaming Response; `fail(error)`
+// both `onEnd` layers, and returns the streaming Response; `fail(error)`
 // finalizes a failed run for the route's outer catch.
 // ---------------------------------------------------------------------------
 
@@ -339,7 +339,7 @@ export type ChatTurnRuntime = {
    */
   prepare(): Promise<void>
   /**
-   * Invoke streamText, own the stream-lifecycle state and both `onFinish`
+   * Invoke streamText, own the stream-lifecycle state and both `onEnd`
    * layers, and return the streaming Response. The abort signal is wired to the
    * stream and to the chat lifecycle telemetry here.
    */
@@ -957,7 +957,7 @@ export function createChatTurnRuntime(args: {
 
     // Track reasoning timing for messageMetadata persistence. The first
     // reasoning chunk records a start timestamp; when text-delta arrives
-    // (reasoning is done) or onFinish fires, we compute elapsed ms.
+    // (reasoning is done) or onEnd fires, we compute elapsed ms.
     let reasoningStartMs: number | null = null
     let reasoningDurationMs: number | null = null
     let firstChunkLatencyMs: number | null = null
@@ -1120,7 +1120,7 @@ export function createChatTurnRuntime(args: {
         abortSignal: signal,
         // ai@7 telemetry has no per-call metadata field; the request dimensions
         // that used to ride here (provider, model, auth, tools…) are already
-        // attached as Sentry tags/context in onFinish and the error paths.
+        // attached as Sentry tags/context in onEnd and the error paths.
         telemetry: {
           isEnabled: true,
           functionId: "api.chat.streamText",
@@ -1132,12 +1132,7 @@ export function createChatTurnRuntime(args: {
         prepareStep: tool.prepareStep,
 
         // Per-step structured tracing: tool name, duration, token usage, success.
-        onStepFinish: async ({
-          toolCalls,
-          toolResults,
-          usage,
-          finishReason,
-        }) => {
+        onStepEnd: async ({ toolCalls, toolResults, usage, finishReason }) => {
           stepCounter++
           observedToolCalls += toolCalls.length
           lastProgressAtMs = Date.now()
@@ -1358,7 +1353,7 @@ export function createChatTurnRuntime(args: {
           }
         },
 
-        onFinish: async ({ text, usage, steps, finishReason }) => {
+        onEnd: async ({ text, usage, steps, finishReason }) => {
           streamCompleted = true
           lastProgressAtMs = Date.now()
           resolvePostToolContinuation()
@@ -1402,6 +1397,10 @@ export function createChatTurnRuntime(args: {
                     ? "failure"
                     : "success"
 
+          // ai@7 `onEnd.usage` aggregates across ALL steps (v6 `onFinish.usage`
+          // was the final step only, undercounting multi-step tool turns).
+          // Generation-run accounting wants the aggregate; rows written before
+          // the v7 upgrade are not comparable for tool-using turns.
           durableFinalUsage = {
             inputTokens: usage?.inputTokens,
             outputTokens: usage?.outputTokens,
@@ -1592,7 +1591,7 @@ export function createChatTurnRuntime(args: {
         }
         return {}
       },
-      onFinish: async ({ responseMessage, isAborted, finishReason }) => {
+      onEnd: async ({ responseMessage, isAborted, finishReason }) => {
         if (!durable || !convexToken) return
 
         await Promise.allSettled(approvalWritePromises)

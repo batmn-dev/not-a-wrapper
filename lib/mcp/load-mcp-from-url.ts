@@ -41,6 +41,10 @@ export async function loadMCPToolsFromURL(config: string | McpTransportConfig) {
 
   const { url, transport = "http", headers } = normalized
 
+  // @ai-sdk/mcp 2.x HTTP/SSE transports reject 3xx responses by default
+  // (redirect: "error", an SSRF hardening). A server URL that redirects —
+  // http→https upgrades, trailing-slash normalization — now fails loudly
+  // here instead of being silently followed; point configs at the final URL.
   const mcpClient = await createMCPClient({
     transport: {
       type: transport,

@@ -338,10 +338,10 @@ describe("createChatTurnRuntime — prepare()", () => {
 })
 
 describe("createChatTurnRuntime — durable completion handoff", () => {
-  it("completes with durableFinal tool counts from streamText onFinish, not the countToolParts fallback", async () => {
+  it("completes with durableFinal tool counts from streamText onEnd, not the countToolParts fallback", async () => {
     const harness = makeStreamHarness()
     const fetchMutation = makeFetchMutation()
-    // Two tool calls, one failed — the streamText onFinish freezes these into
+    // Two tool calls, one failed — the streamText onEnd freezes these into
     // durableFinal*. The response message carries NO tool parts, so the
     // countToolParts fallback would yield {0,0}; seeing {2,1} on the completion
     // write proves the cross-callback handoff is intact.
@@ -363,15 +363,15 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     await runtime.prepare()
     runtime.toResponse(notAbortedSignal())
 
-    // Writer: streamText onFinish freezes durableFinal*.
-    await harness.captured.streamOpts.onFinish({
+    // Writer: streamText onEnd freezes durableFinal*.
+    await harness.captured.streamOpts.onEnd({
       text: "final answer",
       usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
       steps: [],
       finishReason: "stop",
     })
-    // Reader: the response-level onFinish performs markGenerationRunCompleted.
-    await harness.captured.responseOpts.onFinish({
+    // Reader: the response-level onEnd performs markGenerationRunCompleted.
+    await harness.captured.responseOpts.onEnd({
       responseMessage: {
         id: "msg1",
         role: "assistant",
@@ -410,7 +410,7 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     await runtime.prepare()
     runtime.toResponse(notAbortedSignal())
 
-    await harness.captured.responseOpts.onFinish({
+    await harness.captured.responseOpts.onEnd({
       responseMessage: {
         id: "msg1",
         role: "assistant",
@@ -452,7 +452,7 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
       runtime.toResponse(notAbortedSignal())
 
       await expect(
-        harness.captured.responseOpts.onFinish({
+        harness.captured.responseOpts.onEnd({
           responseMessage: {
             id: "msg1",
             role: "assistant",
@@ -597,7 +597,7 @@ describe("createChatTurnRuntime — abort telemetry", () => {
 
     // Stream then completes — the streamCompleted/abortCaptured guards must
     // prevent any second chat_client_abort capture.
-    await harness.captured.streamOpts.onFinish({
+    await harness.captured.streamOpts.onEnd({
       text: "",
       usage: undefined,
       steps: [],
