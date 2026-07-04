@@ -25,7 +25,7 @@
         "@tanstack/react-query": "^5.101.2",
         "@workos-inc/authkit-nextjs": "^4.2.0",
         "@workos-inc/authkit-react": "^0.16.1",
-        "@workos-inc/node": "^9.3.0",
+        "@workos-inc/node": "^10.7.0",
         "ai": "^7.0.15",
         "braintrust": "^3.20.0",
         "class-variance-authority": "^0.7.1",
@@ -822,7 +822,7 @@
 
     "@workos-inc/authkit-react": ["@workos-inc/authkit-react@0.16.1", "", { "dependencies": { "@workos-inc/authkit-js": "0.20.0" }, "peerDependencies": { "react": ">=17" } }, "sha512-u8IJsAAyZFFM02+3JhvvNTopSNQoJk/hjOoBlmOkh6j+AnVYrR8hjzJn8j3m9Vi5tRE0il7mpsEDT9fI2xRNjg=="],
 
-    "@workos-inc/node": ["@workos-inc/node@9.3.0", "", { "dependencies": { "eventemitter3": "^5.0.4" } }, "sha512-QFNl3ixF59L+vlTWPE5ix2EKhxJTVb5aALcA14PqB1zHpnGi4wC5i+YTyUJ08u4xw8e36MpZsvkDRoqsDpt+5w=="],
+    "@workos-inc/node": ["@workos-inc/node@10.7.0", "", {}, "sha512-rffa9znZuIv4yo+9JRxGOLTTSxh0XhOT6jlsktgqEi9MuB9V0VFHRzLd3bTpkq+J9sgrPZNGpvX4aWNfMqt5cQ=="],
 
     "@xtuc/ieee754": ["@xtuc/ieee754@1.2.0", "", {}, "sha512-DX8nKgqcGwsc0eJSqYt5lwP4DH5FlHnmuWWBRy7X0NcaGR0ZtuyeESgMwTYVEtxmsNGY+qit4QYT/MIYTOTPeA=="],
 
