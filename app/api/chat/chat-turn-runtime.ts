@@ -22,7 +22,7 @@ import type { Provider, ToolKeyMode } from "@/lib/user-keys"
 import {
   UIMessage as MessageAISDK,
   consumeStream,
-  stepCountIs,
+  isStepCount,
   convertToModelMessages,
   validateUIMessages,
   type ModelMessage,
@@ -1123,25 +1123,17 @@ export function createChatTurnRuntime(args: {
     const runGeneration = (braintrustSpan: BraintrustTraceSpan) =>
       streamText({
         model: aiModel,
-        system: enrichedSystemPrompt,
+        instructions: enrichedSystemPrompt,
         messages: modelMessages,
         tools: tool.tools,
-        stopWhen: stepCountIs(maxSteps),
+        stopWhen: isStepCount(maxSteps),
         abortSignal: signal,
-        experimental_telemetry: {
+        // ai@7 telemetry has no per-call metadata field; the request dimensions
+        // that used to ride here (provider, model, auth, tools…) are already
+        // attached as Sentry tags/context in onFinish and the error paths.
+        telemetry: {
           isEnabled: true,
           functionId: "api.chat.streamText",
-          metadata: {
-            route: "api/chat",
-            operation: "stream_text",
-            conversationId: chatId,
-            provider: resolvedProvider,
-            model,
-            isAuthenticated,
-            hasTools: hasAnyTools,
-            enableSearch: shouldInjectSearch,
-            chatVersionBucket: bucketChatVersion(normalizedChatVersion),
-          },
         },
 
         // Centralized step gating from the Tool runtime. After

@@ -54,7 +54,8 @@ export function shapeRequest(
  *   - Other models use "enabled" with the model's declared thinkingBudget
  *     (falling back to DEFAULT_THINKING_BUDGET_TOKENS).
  *
- * SDK LIMITATION (ai@6.0.78 / @ai-sdk/anthropic@3.0.41):
+ * SDK LIMITATION (still present in ai@7.0.15 / @ai-sdk/anthropic@4.0.8 —
+ * map-anthropic-stop-reason.ts maps "pause_turn" to "stop"):
  * When adaptive thinking is used with server-side tools (web search), the
  * Anthropic API may return stop_reason: "pause_turn" — indicating the model
  * needs a follow-up request to continue generating text. The AI SDK maps
@@ -103,7 +104,7 @@ function resolveProviderOptions(
  * injected, the token-efficient beta header reduces tool definition token
  * consumption. Request-scoped via streamText({ headers }) — only affects
  * Anthropic requests that actually include tools. Safe to apply:
- * @ai-sdk/anthropic@3.0.41 comma-merges user and inferred betas
+ * @ai-sdk/anthropic@4.0.8 comma-merges user and inferred betas
  * (getBetasFromHeaders + Array.from(betas).join(",")).
  *
  * Disable with ANTHROPIC_TOKEN_EFFICIENT_TOOLS=false.
