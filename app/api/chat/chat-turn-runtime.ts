@@ -81,6 +81,7 @@ import {
   prepareTextFilePartsForModelInput,
 } from "./text-file-parts"
 import {
+  excludeSystemRoleMessages,
   extractErrorMessage,
   hasProviderLinkedResponseIds,
   toPlainTextModelMessages,
@@ -634,6 +635,26 @@ export function createChatTurnRuntime(args: {
     canonicalMessages = sanitizeModelHistoryMessages(
       canonicalMessages
     ) as MessageAISDK[]
+
+    // ai@7 rejects system-role messages inside `messages` mid-stream
+    // (InvalidPromptError; `allowSystemInMessages` defaults to false). The
+    // system prompt already rides streamText's `instructions`, so any
+    // system-role history message is excluded from model input here — the one
+    // seam both durable and guest histories flow through.
+    const systemRoleExclusion = excludeSystemRoleMessages(canonicalMessages)
+    if (systemRoleExclusion.excludedCount > 0) {
+      console.warn(
+        JSON.stringify({
+          _tag: "model_history_system_messages_excluded",
+          requestId,
+          chatId,
+          provider: resolvedProvider,
+          model,
+          excludedCount: systemRoleExclusion.excludedCount,
+        })
+      )
+    }
+    canonicalMessages = systemRoleExclusion.messages
 
     const validatedMessages = await validateUIMessages({
       messages: canonicalMessages,

@@ -120,6 +120,28 @@ export function sanitizeMessagesForProvider(
 }
 
 /**
+ * Exclude system-role messages from model-input history. ai@7 rejects
+ * system-role messages inside `messages` (`allowSystemInMessages` defaults to
+ * false; the system prompt rides streamText's `instructions`), where ai@6
+ * forwarded them to the provider. A system-role message in this app's history
+ * is never a real instruction — it is a legacy `data`-role artifact (the UI
+ * message adapter maps data/unknown stored roles to "system") or arrived
+ * client-supplied on a guest chat — so model input drops it rather than
+ * restoring the v6 behavior via `allowSystemInMessages: true`, which would
+ * hand user-controllable history system-level privilege. Returns the input
+ * array unchanged (same reference) when nothing is excluded.
+ */
+export function excludeSystemRoleMessages(messages: MessageAISDK[]): {
+  messages: MessageAISDK[]
+  excludedCount: number
+} {
+  const filtered = messages.filter((message) => message.role !== "system")
+  return filtered.length === messages.length
+    ? { messages, excludedCount: 0 }
+    : { messages: filtered, excludedCount: messages.length - filtered.length }
+}
+
+/**
  * Detect provider-linked response item identifiers in converted model messages.
  * These IDs (msg_/rs_/ws_) can trigger replay pairing errors in Responses APIs
  * when the required companion items are not present.

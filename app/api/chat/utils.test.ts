@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai"
 import { describe, expect, it } from "vitest"
 import {
+  excludeSystemRoleMessages,
   hasProviderLinkedResponseIds,
   sanitizeMessagesForProvider,
   toPlainTextModelMessages,
@@ -141,5 +142,29 @@ describe("toPlainTextModelMessages", () => {
       { role: "assistant", content: "line 1\n\nline 2" },
       { role: "user", content: "follow-up" },
     ])
+  })
+})
+
+describe("excludeSystemRoleMessages", () => {
+  it("drops system-role messages and reports the count", () => {
+    const messages = [
+      { id: "s", role: "system", parts: [{ type: "text", text: "legacy" }] },
+      { id: "u", role: "user", parts: [{ type: "text", text: "hi" }] },
+      { id: "a", role: "assistant", parts: [{ type: "text", text: "hello" }] },
+    ] as unknown as UIMessage[]
+
+    const result = excludeSystemRoleMessages(messages)
+    expect(result.excludedCount).toBe(1)
+    expect(result.messages.map((m) => m.role)).toEqual(["user", "assistant"])
+  })
+
+  it("returns the same array reference when nothing is excluded", () => {
+    const messages = [
+      { id: "u", role: "user", parts: [{ type: "text", text: "hi" }] },
+    ] as unknown as UIMessage[]
+
+    const result = excludeSystemRoleMessages(messages)
+    expect(result.excludedCount).toBe(0)
+    expect(result.messages).toBe(messages)
   })
 })
