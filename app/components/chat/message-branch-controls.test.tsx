@@ -4,7 +4,10 @@ import type { MessageBranchInfo } from "@/lib/chat-messages/branch"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
-import { getMessageBranch, MessageBranchControls } from "./message-branch-controls"
+import {
+  getMessageBranch,
+  MessageBranchControls,
+} from "./message-branch-controls"
 
 vi.mock("@/components/ui/message", () => ({
   MessageAction: ({ children }: { children: React.ReactNode }) => children,
@@ -15,8 +18,9 @@ vi.mock("@/components/ui/icon", () => ({
 }))
 
 beforeAll(() => {
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean })
-    .IS_REACT_ACT_ENVIRONMENT = true
+  ;(
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true
 })
 
 describe("getMessageBranch gate", () => {
@@ -91,11 +95,7 @@ describe("MessageBranchControls", () => {
     messageId: "m2",
     currentIndex: 1,
     total: 3,
-    siblings: [
-      { messageId: "m1" },
-      { messageId: "m2" },
-      { messageId: "m3" },
-    ],
+    siblings: [{ messageId: "m1" }, { messageId: "m2" }, { messageId: "m3" }],
   }
 
   it("shows the current position and navigates to siblings", () => {
@@ -116,10 +116,7 @@ describe("MessageBranchControls", () => {
   })
 
   it("disables previous at the first sibling and next at the last", () => {
-    render(
-      { ...branch, currentIndex: 0 },
-      vi.fn()
-    )
+    render({ ...branch, currentIndex: 0 }, vi.fn())
     const buttons = Array.from(
       container?.querySelectorAll("button") ?? []
     ) as HTMLButtonElement[]

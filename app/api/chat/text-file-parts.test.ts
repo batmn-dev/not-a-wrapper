@@ -592,7 +592,9 @@ describe("prepareTextFilePartsForModelInput", () => {
   })
 
   it("removes unsupported text/plain file parts even when storage read fails", async () => {
-    const fetchImpl = vi.fn(async () => new Response("missing", { status: 404 }))
+    const fetchImpl = vi.fn(
+      async () => new Response("missing", { status: 404 })
+    )
     const messages = [
       {
         id: "u1",

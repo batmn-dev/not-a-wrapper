@@ -1,3 +1,4 @@
+import type { ToolMetadata } from "@/lib/tools/types"
 import { anthropic, createAnthropic } from "@ai-sdk/anthropic"
 import { createGoogle, google } from "@ai-sdk/google"
 import { createMistral, mistral } from "@ai-sdk/mistral"
@@ -7,7 +8,6 @@ import type { LanguageModelV3, LanguageModelV4 } from "@ai-sdk/provider"
 import { createXai, xai } from "@ai-sdk/xai"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import type { ToolSet } from "ai"
-import type { ToolMetadata } from "@/lib/tools/types"
 import type { Provider } from "./types"
 
 /**

@@ -1,9 +1,9 @@
 "use client"
 
 import { Icon } from "@/components/ui/icon"
-import { formatDuration } from "@/lib/format-duration"
 import { TextShimmer } from "@/components/ui/text-shimmer"
 import type { ActivityTriggerState } from "@/lib/chat-messages/assistant-turn"
+import { formatDuration } from "@/lib/format-duration"
 import { cn } from "@/lib/utils"
 import { RiArrowRightSLine } from "@remixicon/react"
 

@@ -7,17 +7,22 @@ import {
   type ToolPolicyInput,
 } from "../capability-policy"
 
-function policyFor(tools: ToolPolicyInput[], options?: {
-  isAuthenticated?: boolean
-  modelTools?: boolean | {
-    search?: boolean
-    extract?: boolean
-    code?: boolean
-    mcp?: boolean
-    platform?: boolean
+function policyFor(
+  tools: ToolPolicyInput[],
+  options?: {
+    isAuthenticated?: boolean
+    modelTools?:
+      | boolean
+      | {
+          search?: boolean
+          extract?: boolean
+          code?: boolean
+          mcp?: boolean
+          platform?: boolean
+        }
+    keyMode?: "platform" | "byok"
   }
-  keyMode?: "platform" | "byok"
-}) {
+) {
   return resolveCapabilityPolicy({
     modelTools: options?.modelTools,
     isAuthenticated: options?.isAuthenticated ?? true,
@@ -30,10 +35,30 @@ describe("capability policy matrix", () => {
   it("blocks anonymous users from risky capability classes", () => {
     const policy = policyFor(
       [
-        { toolName: "web_search", source: "third-party", capability: "search", readOnly: true },
-        { toolName: "extract_content", source: "third-party", capability: "extract", readOnly: true },
-        { toolName: "github_create_issue", source: "mcp", capability: "mcp", readOnly: false },
-        { toolName: "create_ticket", source: "platform", capability: "platform", readOnly: false },
+        {
+          toolName: "web_search",
+          source: "third-party",
+          capability: "search",
+          readOnly: true,
+        },
+        {
+          toolName: "extract_content",
+          source: "third-party",
+          capability: "extract",
+          readOnly: true,
+        },
+        {
+          toolName: "github_create_issue",
+          source: "mcp",
+          capability: "mcp",
+          readOnly: false,
+        },
+        {
+          toolName: "create_ticket",
+          source: "platform",
+          capability: "platform",
+          readOnly: false,
+        },
       ],
       { isAuthenticated: false, modelTools: true }
     )
@@ -44,8 +69,12 @@ describe("capability policy matrix", () => {
     expect(policy.capabilities.mcp).toBe(false)
     expect(policy.capabilities.platform).toBe(false)
 
-    const mcpDecision = policy.toolDecisions.find((d) => d.toolName === "github_create_issue")
-    const platformDecision = policy.toolDecisions.find((d) => d.toolName === "create_ticket")
+    const mcpDecision = policy.toolDecisions.find(
+      (d) => d.toolName === "github_create_issue"
+    )
+    const platformDecision = policy.toolDecisions.find(
+      (d) => d.toolName === "create_ticket"
+    )
     expect(mcpDecision?.allowInEarlySteps).toBe(false)
     expect(platformDecision?.allowInEarlySteps).toBe(false)
   })
@@ -77,7 +106,9 @@ describe("capability policy matrix", () => {
     expect(platform.earlyToolNames).toContain("web_search")
     expect(platform.lateToolNames).toContain("web_search")
     expect(byok.toolDecisions[0]?.earlyReasonCode).toBe("key_mode_byok_allowed")
-    expect(platform.toolDecisions[0]?.earlyReasonCode).toBe("key_mode_platform_allowed")
+    expect(platform.toolDecisions[0]?.earlyReasonCode).toBe(
+      "key_mode_platform_allowed"
+    )
   })
 
   it("fails closed for third-party tools when key mode is unknown", () => {
@@ -106,18 +137,38 @@ describe("capability policy matrix", () => {
   it("honors model capability opt-outs", () => {
     const policy = policyFor(
       [
-        { toolName: "web_search", source: "builtin", capability: "search", readOnly: true },
-        { toolName: "extract_content", source: "third-party", capability: "extract", readOnly: true },
+        {
+          toolName: "web_search",
+          source: "builtin",
+          capability: "search",
+          readOnly: true,
+        },
+        {
+          toolName: "extract_content",
+          source: "third-party",
+          capability: "extract",
+          readOnly: true,
+        },
       ],
       {
         isAuthenticated: true,
-        modelTools: { search: false, extract: true, code: true, mcp: true, platform: true },
+        modelTools: {
+          search: false,
+          extract: true,
+          code: true,
+          mcp: true,
+          platform: true,
+        },
         keyMode: "platform",
       }
     )
 
-    const searchDecision = policy.toolDecisions.find((d) => d.toolName === "web_search")
-    const extractDecision = policy.toolDecisions.find((d) => d.toolName === "extract_content")
+    const searchDecision = policy.toolDecisions.find(
+      (d) => d.toolName === "web_search"
+    )
+    const extractDecision = policy.toolDecisions.find(
+      (d) => d.toolName === "extract_content"
+    )
 
     expect(policy.capabilities.search).toBe(false)
     expect(searchDecision?.allowInEarlySteps).toBe(false)
@@ -127,8 +178,18 @@ describe("capability policy matrix", () => {
   it("enforces risk-based late-step restrictions", () => {
     const policy = policyFor(
       [
-        { toolName: "web_search", source: "builtin", capability: "search", readOnly: true },
-        { toolName: "read_ticket_status", source: "platform", capability: "platform", readOnly: true },
+        {
+          toolName: "web_search",
+          source: "builtin",
+          capability: "search",
+          readOnly: true,
+        },
+        {
+          toolName: "read_ticket_status",
+          source: "platform",
+          capability: "platform",
+          readOnly: true,
+        },
         {
           toolName: "create_ticket",
           source: "platform",
@@ -170,7 +231,9 @@ describe("capability policy matrix", () => {
     expect(decision.risk).toBe("unknown")
     expect(decision.allowInEarlySteps).toBe(true)
     expect(decision.allowInLateSteps).toBe(false)
-    expect(decision.earlyReasonCode).toBe("risk_unknown_early_step_advisory_allow")
+    expect(decision.earlyReasonCode).toBe(
+      "risk_unknown_early_step_advisory_allow"
+    )
     expect(decision.lateReasonCode).toBe("risk_unknown_fail_closed")
   })
 
@@ -237,9 +300,13 @@ describe("capability policy matrix", () => {
     expect(policy.lateToolNames).not.toContain("web_search")
     expect(policy.lateToolNames).not.toContain("extract_content")
 
-    const searchDecision = policy.toolDecisions.find((d) => d.toolName === "web_search")
+    const searchDecision = policy.toolDecisions.find(
+      (d) => d.toolName === "web_search"
+    )
     expect(searchDecision?.risk).toBe("open_world")
-    expect(searchDecision?.lateReasonCode).toBe("risk_open_world_late_step_block")
+    expect(searchDecision?.lateReasonCode).toBe(
+      "risk_open_world_late_step_block"
+    )
   })
 
   it("applies centralized policy output to early filtering and late gating", () => {

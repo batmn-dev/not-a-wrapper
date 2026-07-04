@@ -40,10 +40,14 @@ export const defaultAdapter: ProviderHistoryAdapter = {
     ]),
     transformedPartTypes: new Set(),
     tier: "simple",
-    description: "Conservative fallback - strip all non-text content (current behavior)",
+    description:
+      "Conservative fallback - strip all non-text content (current behavior)",
   },
   async adaptMessages(messages): Promise<AdaptationResult> {
-    const totalPartsOriginal = messages.reduce((sum, message) => sum + message.parts.length, 0)
+    const totalPartsOriginal = messages.reduce(
+      (sum, message) => sum + message.parts.length,
+      0
+    )
     const stats = createEmptyStats(messages.length, totalPartsOriginal)
     const warnings: AdaptationWarning[] = []
     const adapted: UIMessage[] = []
@@ -64,7 +68,8 @@ export const defaultAdapter: ProviderHistoryAdapter = {
 
       for (const part of message.parts) {
         const mutablePart = part as Record<string, unknown>
-        const partType = typeof mutablePart.type === "string" ? mutablePart.type : "unknown"
+        const partType =
+          typeof mutablePart.type === "string" ? mutablePart.type : "unknown"
 
         if (isToolPart({ type: partType }) && !isToolPartFinal(mutablePart)) {
           incrementStat(stats.partsDropped, partType)
@@ -103,7 +108,8 @@ export const defaultAdapter: ProviderHistoryAdapter = {
         warnings.push({
           code: "empty_message_fallback",
           messageIndex,
-          detail: "Injected empty text fallback because assistant parts were stripped",
+          detail:
+            "Injected empty text fallback because assistant parts were stripped",
         })
       }
 
@@ -114,7 +120,10 @@ export const defaultAdapter: ProviderHistoryAdapter = {
     }
 
     stats.adaptedMessageCount = adapted.length
-    stats.totalPartsAdapted = adapted.reduce((sum, message) => sum + message.parts.length, 0)
+    stats.totalPartsAdapted = adapted.reduce(
+      (sum, message) => sum + message.parts.length,
+      0
+    )
 
     return {
       messages: adapted,

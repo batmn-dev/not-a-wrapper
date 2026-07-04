@@ -5,8 +5,8 @@ import { ModelSelector } from "@/components/common/model-selector/base"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useChat } from "@/lib/chat-store/chats/use-chat"
 import { useChatSession } from "@/lib/chat-store/session/provider"
-import { resolvePreferredModelId } from "@/lib/model-store/utils"
 import { useModel } from "@/lib/model-store/provider"
+import { resolvePreferredModelId } from "@/lib/model-store/utils"
 import { useUser } from "@/lib/user-store/provider"
 import { useCallback, useMemo, useState } from "react"
 
@@ -60,7 +60,13 @@ export function ModelSelectorHeader() {
         )
       }
     },
-    [isResolvingCurrentChat, setLastUsedModel, chatId, user?.id, updateChatModel]
+    [
+      isResolvingCurrentChat,
+      setLastUsedModel,
+      chatId,
+      user?.id,
+      updateChatModel,
+    ]
   )
 
   return (

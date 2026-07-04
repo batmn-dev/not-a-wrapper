@@ -154,7 +154,9 @@ export async function softDeleteAppUserFromWorkOS(
     })
   }
 
-  if (isOlderWorkOSUpdate(existingUser.workosUpdatedAt, input.workosUpdatedAt)) {
+  if (
+    isOlderWorkOSUpdate(existingUser.workosUpdatedAt, input.workosUpdatedAt)
+  ) {
     return existingUser._id
   }
 

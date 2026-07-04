@@ -1,4 +1,17 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import type { ServerInfo } from "@/lib/mcp/load-tools"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { ToolPolicyError } from "../policy"
+// =============================================================================
+// Imports after mocks
+// =============================================================================
+
+import {
+  prepareToolRuntime,
+  type PrepareToolRuntimeOptions,
+  type ToolOutcome,
+  type ToolRuntime,
+} from "../runtime"
+import type { ToolMetadata } from "../types"
 
 // =============================================================================
 // Module mocks — must be declared before importing the runtime. The loader
@@ -15,7 +28,10 @@ const mocks = vi.hoisted(() => ({
   // Swapped per test; the real policy guard/probe/soft-cap run against it.
   store: null as unknown as {
     state?: { available: boolean }
-    checkAndConsume: (input: { keyMode: string; consume?: boolean }) => Promise<{
+    checkAndConsume: (input: {
+      keyMode: string
+      consume?: boolean
+    }) => Promise<{
       allowed: boolean
       remaining: number
     }>
@@ -64,26 +80,14 @@ vi.mock("@/lib/tools/utils", async () => {
     )
   return {
     ...actual,
-    wrapToolsWithTracing: (...args: Parameters<typeof actual.wrapToolsWithTracing>) => {
+    wrapToolsWithTracing: (
+      ...args: Parameters<typeof actual.wrapToolsWithTracing>
+    ) => {
       if (mocks.failTracing) throw new Error("tracing wrap failed")
       return actual.wrapToolsWithTracing(...args)
     },
   }
 })
-
-// =============================================================================
-// Imports after mocks
-// =============================================================================
-
-import {
-  prepareToolRuntime,
-  type PrepareToolRuntimeOptions,
-  type ToolOutcome,
-  type ToolRuntime,
-} from "../runtime"
-import { ToolPolicyError } from "../policy"
-import type { ToolMetadata } from "../types"
-import type { ServerInfo } from "@/lib/mcp/load-tools"
 
 // =============================================================================
 // Fixtures
@@ -487,7 +491,8 @@ describe("prepareToolRuntime — runtime approvals", () => {
     // ...and the approval-needing tool gained a needsApproval predicate.
     expect(afterFirst.risky_tool).not.toBe(riskyBefore)
     expect(
-      typeof (afterFirst.risky_tool as { needsApproval?: unknown }).needsApproval
+      typeof (afterFirst.risky_tool as { needsApproval?: unknown })
+        .needsApproval
     ).toBe("function")
 
     // Idempotent: a second call is a no-op (same object identity).
@@ -532,9 +537,7 @@ describe("prepareToolRuntime — MCP client lifecycle", () => {
     // A content tool makes the tracing wrapper run (and throw) after MCP loaded.
     mocks.getContentExtractionTools.mockResolvedValue({
       tools: { extract_content: {} },
-      metadata: new Map([
-        ["extract_content", meta({ source: "third-party" })],
-      ]),
+      metadata: new Map([["extract_content", meta({ source: "third-party" })]]),
     })
 
     const onMcpClientsOpened = vi.fn()
@@ -765,7 +768,11 @@ describe("prepareToolRuntime — Tool outcome recording", () => {
     await runtime.onStepFinish({
       stepNumber: 1,
       toolCalls: [
-        { toolCallId: "call_1", toolName: "mcp_github_create_issue", input: {} },
+        {
+          toolCallId: "call_1",
+          toolName: "mcp_github_create_issue",
+          input: {},
+        },
       ],
       toolResults: [{ toolCallId: "call_1", output: "created" }],
     })
@@ -797,7 +804,9 @@ describe("prepareToolRuntime — Tool outcome recording", () => {
 
     await runtime.onStepFinish({
       stepNumber: 1,
-      toolCalls: [{ toolCallId: "call_1", toolName: "mystery_tool", input: {} }],
+      toolCalls: [
+        { toolCallId: "call_1", toolName: "mystery_tool", input: {} },
+      ],
       toolResults: [],
     })
 
@@ -833,7 +842,11 @@ describe("prepareToolRuntime — Tool outcome recording", () => {
       toolResults: [
         { toolCallId: "call_1", output: "ok" },
         // call_2: timeout signal in a string output, and isError set.
-        { toolCallId: "call_2", output: "Request timed out", isError: true } as {
+        {
+          toolCallId: "call_2",
+          output: "Request timed out",
+          isError: true,
+        } as {
           toolCallId: string
           output?: unknown
         },
@@ -876,7 +889,9 @@ describe("prepareToolRuntime — Tool outcome recording", () => {
       await expect(
         runtime.onStepFinish({
           stepNumber: 1,
-          toolCalls: [{ toolCallId: "call_1", toolName: "web_search", input: {} }],
+          toolCalls: [
+            { toolCallId: "call_1", toolName: "web_search", input: {} },
+          ],
           toolResults: [{ toolCallId: "call_1", output: "ok" }],
         })
       ).resolves.toBeUndefined()

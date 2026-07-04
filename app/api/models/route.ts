@@ -1,7 +1,4 @@
-import {
-  getAllModels,
-  getVisibleModelsWithAccessFlags,
-} from "@/lib/models"
+import { getAllModels, getVisibleModelsWithAccessFlags } from "@/lib/models"
 import { NextResponse } from "next/server"
 
 /**

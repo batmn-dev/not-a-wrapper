@@ -33,11 +33,7 @@ function unwrapLinksInPlace(children: RootContent[]): void {
     const curr = children[i]
     const next = children[i + 1]
 
-    if (
-      prev.type === "text" &&
-      curr.type === "link" &&
-      next.type === "text"
-    ) {
+    if (prev.type === "text" && curr.type === "link" && next.type === "text") {
       const openMatch = prev.value.match(/\(\s*$/)
       const closeMatch = next.value.match(/^\s*\)/)
       if (!openMatch || !closeMatch) continue

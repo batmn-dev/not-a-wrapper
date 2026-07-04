@@ -1,4 +1,4 @@
-import { NON_AUTH_ALLOWED_MODELS, getDefaultModelForUser } from "@/lib/config"
+import { getDefaultModelForUser, NON_AUTH_ALLOWED_MODELS } from "@/lib/config"
 import { getModelInfo } from "@/lib/models"
 import { resolveModelId } from "@/lib/models/model-id-migration"
 import { ModelConfig } from "@/lib/models/types"
@@ -188,13 +188,12 @@ export function resolvePreferredModelId({
   const defaultRoutableModelId = resolveModelId(
     getDefaultModelForUser(isAuthenticated)
   )
-  if (
-    isAuthenticated ||
-    isModelAllowedForAnonymous(defaultRoutableModelId)
-  ) {
+  if (isAuthenticated || isModelAllowedForAnonymous(defaultRoutableModelId)) {
     return defaultRoutableModelId
   }
 
   if (defaultModelId) return defaultModelId
-  return models[0]?.id ?? resolveModelId(getDefaultModelForUser(isAuthenticated))
+  return (
+    models[0]?.id ?? resolveModelId(getDefaultModelForUser(isAuthenticated))
+  )
 }

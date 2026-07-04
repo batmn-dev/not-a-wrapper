@@ -84,7 +84,9 @@ describe("WorkOS password auth helpers", () => {
     )
 
     expect(result).toEqual({ status: "authenticated" })
-    expect(dependencies.userManagement.authenticateWithPassword).toHaveBeenCalledWith({
+    expect(
+      dependencies.userManagement.authenticateWithPassword
+    ).toHaveBeenCalledWith({
       clientId: "client_123",
       email: "person@example.com",
       password: "password123",
@@ -265,7 +267,9 @@ describe("WorkOS password auth helpers", () => {
     )
 
     expect(result).toEqual({ status: "authenticated" })
-    expect(dependencies.userManagement.authenticateWithMagicAuth).toHaveBeenCalledWith({
+    expect(
+      dependencies.userManagement.authenticateWithMagicAuth
+    ).toHaveBeenCalledWith({
       clientId: "client_123",
       email: "person@example.com",
       code: "123456",
@@ -362,7 +366,8 @@ describe("WorkOS password auth helpers", () => {
       requestPasswordResetEmail({ email: "missing@example.com" }, dependencies)
     ).resolves.toEqual({
       status: "sent",
-      message: "If an account exists for that email, a reset link has been sent.",
+      message:
+        "If an account exists for that email, a reset link has been sent.",
     })
   })
 

@@ -3,9 +3,9 @@ import type { ReplayMessage, ReplayPart, ReplayToolExchange } from "../types"
 import { synthesizePlatformToolFallback } from "./platform-tool-fallback"
 import type {
   ReplayCompileContext,
+  ReplayCompiler,
   ReplayCompileResult,
   ReplayCompileStats,
-  ReplayCompiler,
   ReplayCompileWarning,
 } from "./types"
 
@@ -17,7 +17,11 @@ type ToolPart = MessagePart & {
   output?: unknown
 }
 
-const OPENAI_FINAL_TOOL_STATES = new Set(["output-available", "output-error", "output-denied"])
+const OPENAI_FINAL_TOOL_STATES = new Set([
+  "output-available",
+  "output-error",
+  "output-denied",
+])
 
 function isReasoningPart(part: MessagePart): boolean {
   return part.type === "reasoning"
@@ -57,11 +61,13 @@ function splitByStepStart(parts: MessagePart[]): MessagePart[][] {
 function buildToolReplayPart(
   tool: ReplayToolExchange,
   messageIndex: number,
-  partIndex: number,
+  partIndex: number
 ): MessagePart | null {
-  if (!tool.replayable || tool.toolName !== "web_search" || !tool.webSearch) return null
+  if (!tool.replayable || tool.toolName !== "web_search" || !tool.webSearch)
+    return null
 
-  const toolCallId = tool.toolCallId?.trim() || `replay_ws_${messageIndex}_${partIndex}`
+  const toolCallId =
+    tool.toolCallId?.trim() || `replay_ws_${messageIndex}_${partIndex}`
   const query = tool.webSearch.query
   const sources = tool.webSearch.results.map((result) => ({
     url: result.url,
@@ -87,7 +93,7 @@ function compileAssistantParts(
   parts: ReplayPart[],
   messageIndex: number,
   warnings: ReplayCompileWarning[],
-  stats: ReplayCompileStats,
+  stats: ReplayCompileStats
 ): MessagePart[] {
   const compiled: MessagePart[] = []
 
@@ -118,7 +124,11 @@ function compileAssistantParts(
     }
 
     stats.toolExchangesSeen += 1
-    const replayToolPart = buildToolReplayPart(part.tool, messageIndex, partIndex)
+    const replayToolPart = buildToolReplayPart(
+      part.tool,
+      messageIndex,
+      partIndex
+    )
 
     if (!replayToolPart) {
       stats.toolExchangesDropped += 1
@@ -132,7 +142,9 @@ function compileAssistantParts(
         code: "tool_non_replayable",
         messageIndex,
         partIndex,
-        detail: part.tool.nonReplayableReason ?? `Tool "${part.tool.toolName}" is not replayable for OpenAI.`,
+        detail:
+          part.tool.nonReplayableReason ??
+          `Tool "${part.tool.toolName}" is not replayable for OpenAI.`,
       })
       return
     }
@@ -155,7 +167,7 @@ function enforceAssistantInvariants(
   parts: MessagePart[],
   messageIndex: number,
   warnings: ReplayCompileWarning[],
-  stats: ReplayCompileStats,
+  stats: ReplayCompileStats
 ): MessagePart[] {
   const blocks = splitByStepStart(parts)
   if (blocks.length === 0) return parts
@@ -170,9 +182,16 @@ function enforceAssistantInvariants(
     }
 
     const firstToolIndex = block.findIndex((part) => isToolPart(part))
-    const hasReasoningBeforeTool = block.slice(0, firstToolIndex).some((part) => isReasoningPart(part))
-    const hasReasoningAfterTool = block.slice(firstToolIndex + 1).some((part) => isReasoningPart(part))
-    const hasInvalidToolParts = block.some((part) => isToolPart(part) && (!hasToolOutput(part) || !hasFinalToolState(part)))
+    const hasReasoningBeforeTool = block
+      .slice(0, firstToolIndex)
+      .some((part) => isReasoningPart(part))
+    const hasReasoningAfterTool = block
+      .slice(firstToolIndex + 1)
+      .some((part) => isReasoningPart(part))
+    const hasInvalidToolParts = block.some(
+      (part) =>
+        isToolPart(part) && (!hasToolOutput(part) || !hasFinalToolState(part))
+    )
 
     if (hasReasoningAfterTool || hasInvalidToolParts) {
       warnings.push({
@@ -190,7 +209,8 @@ function enforceAssistantInvariants(
         type: "reasoning",
         state: "done",
         text: "",
-        reasoning: "Replay reasoning context injected to preserve OpenAI tool/result invariants.",
+        reasoning:
+          "Replay reasoning context injected to preserve OpenAI tool/result invariants.",
       } as unknown as MessagePart)
       warnings.push({
         code: "invariant_reasoning_injected",
@@ -210,7 +230,7 @@ function compileMessage(
   message: ReplayMessage,
   messageIndex: number,
   warnings: ReplayCompileWarning[],
-  stats: ReplayCompileStats,
+  stats: ReplayCompileStats
 ): UIMessage {
   if (message.role !== "assistant") {
     const nonAssistantParts: MessagePart[] = []
@@ -246,7 +266,8 @@ function compileMessage(
           code: "source_url_dropped",
           messageIndex,
           partIndex,
-          detail: "Dropped source-url part in non-assistant message for OpenAI replay.",
+          detail:
+            "Dropped source-url part in non-assistant message for OpenAI replay.",
         })
       }
     })
@@ -259,18 +280,32 @@ function compileMessage(
     return {
       id: message.id,
       role,
-      parts: nonAssistantParts.length > 0 ? nonAssistantParts : ([{ type: "text", text: "" }] as MessagePart[]),
+      parts:
+        nonAssistantParts.length > 0
+          ? nonAssistantParts
+          : ([{ type: "text", text: "" }] as MessagePart[]),
     } as UIMessage
   }
 
-  const assistantCompiled = compileAssistantParts(message.parts, messageIndex, warnings, stats)
-  const invariantSafe = enforceAssistantInvariants(assistantCompiled, messageIndex, warnings, stats)
+  const assistantCompiled = compileAssistantParts(
+    message.parts,
+    messageIndex,
+    warnings,
+    stats
+  )
+  const invariantSafe = enforceAssistantInvariants(
+    assistantCompiled,
+    messageIndex,
+    warnings,
+    stats
+  )
 
   if (invariantSafe.length === 0) {
     warnings.push({
       code: "message_empty_fallback",
       messageIndex,
-      detail: "Injected fallback text because all assistant replay parts were removed.",
+      detail:
+        "Injected fallback text because all assistant replay parts were removed.",
     })
     stats.invariantsRepaired += 1
     return {
@@ -289,13 +324,19 @@ function compileMessage(
 
 export const openaiReplayCompiler: ReplayCompiler = {
   providerId: "openai",
-  compileReplay(messages: readonly ReplayMessage[], _context: ReplayCompileContext): ReplayCompileResult {
+  compileReplay(
+    messages: readonly ReplayMessage[],
+    _context: ReplayCompileContext
+  ): ReplayCompileResult {
     const warnings: ReplayCompileWarning[] = []
     const stats: ReplayCompileStats = {
       originalMessageCount: messages.length,
       compiledMessageCount: 0,
       droppedMessages: 0,
-      totalPartsOriginal: messages.reduce((sum, message) => sum + message.parts.length, 0),
+      totalPartsOriginal: messages.reduce(
+        (sum, message) => sum + message.parts.length,
+        0
+      ),
       totalPartsCompiled: 0,
       toolExchangesSeen: 0,
       toolExchangesCompiled: 0,
@@ -304,12 +345,18 @@ export const openaiReplayCompiler: ReplayCompiler = {
     }
 
     const compiledMessages = messages.map((message, messageIndex) =>
-      compileMessage(message, messageIndex, warnings, stats),
+      compileMessage(message, messageIndex, warnings, stats)
     )
 
     stats.compiledMessageCount = compiledMessages.length
-    stats.droppedMessages = Math.max(0, stats.originalMessageCount - stats.compiledMessageCount)
-    stats.totalPartsCompiled = compiledMessages.reduce((sum, message) => sum + message.parts.length, 0)
+    stats.droppedMessages = Math.max(
+      0,
+      stats.originalMessageCount - stats.compiledMessageCount
+    )
+    stats.totalPartsCompiled = compiledMessages.reduce(
+      (sum, message) => sum + message.parts.length,
+      0
+    )
 
     return {
       messages: compiledMessages,

@@ -87,7 +87,7 @@ export function ActivityPanelDockSlot({ className }: { className?: string }) {
         // `max-lg:transition-none` keeps the lg-boundary snap instant; `motion-reduce`
         // disables it (the hook also unmounts immediately under reduced motion, so no
         // transitionend is awaited).
-        "relative w-0 shrink-0 overflow-hidden transition-[width] duration-[520ms] ease-[linear(0,0.0377,0.1243,0.2318,0.3434,0.4497,0.5459,0.6299,0.7017,0.7619,0.8117,0.8523,0.8853,0.9118,0.9329,0.9497,0.963,0.9735,0.9817,0.9881,0.9931,0.997,1)] max-lg:w-0! max-lg:transition-none motion-reduce:transition-none",
+        "relative w-0 shrink-0 overflow-hidden transition-[width] duration-[520ms] ease-[linear(0,0.0377,0.1243,0.2318,0.3434,0.4497,0.5459,0.6299,0.7017,0.7619,0.8117,0.8523,0.8853,0.9118,0.9329,0.9497,0.963,0.9735,0.9817,0.9881,0.9931,0.997,1)] motion-reduce:transition-none max-lg:w-0! max-lg:transition-none",
         "data-[expanded]:w-[var(--activity-panel-width)]",
         className
       )}

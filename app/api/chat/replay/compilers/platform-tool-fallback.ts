@@ -1,6 +1,8 @@
 import type { ReplayToolExchange } from "../types"
 
-export function synthesizePlatformToolFallback(tool: ReplayToolExchange): string | null {
+export function synthesizePlatformToolFallback(
+  tool: ReplayToolExchange
+): string | null {
   const ctx = tool.platformToolContext
   if (!ctx) return null
 

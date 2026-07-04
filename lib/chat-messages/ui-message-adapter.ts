@@ -1,10 +1,10 @@
 import type { UIMessage } from "ai"
 import { type ChatMessageMetadata } from "./branch"
-import { stampServerFields } from "./metadata"
 import {
-  type DurableMessageStatus,
   isDurableMessageStatus,
+  type DurableMessageStatus,
 } from "./durable-contract"
+import { stampServerFields } from "./metadata"
 import { extractTextFromMessageParts, getMessagePartsForDisplay } from "./parts"
 
 export type DurableStoredMessageLike = {

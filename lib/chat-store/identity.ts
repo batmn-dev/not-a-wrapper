@@ -14,10 +14,7 @@ export type OptimisticEditMessageId =
 export type GuestUserId = `${typeof GUEST_USER_ID_PREFIX}${string}`
 
 export type ChatPersistenceMode =
-  | "guestLocal"
-  | "optimisticServer"
-  | "durableServer"
-  | "sharedReadOnly"
+  "guestLocal" | "optimisticServer" | "durableServer" | "sharedReadOnly"
 
 export type MessagePersistenceMode = "localOnly" | "optimistic" | "server"
 
@@ -32,9 +29,7 @@ function createPrefixedId<TPrefix extends string>(
   return `${prefix}${randomId()}`
 }
 
-export function createLocalChatId(
-  randomId?: () => string
-): LocalChatId {
+export function createLocalChatId(randomId?: () => string): LocalChatId {
   return createPrefixedId(LOCAL_CHAT_ID_PREFIX, randomId)
 }
 
@@ -60,7 +55,9 @@ export function createGuestUserId(randomId?: () => string): GuestUserId {
   return createPrefixedId(GUEST_USER_ID_PREFIX, randomId)
 }
 
-export function isLocalChatId(id: string | null | undefined): id is LocalChatId {
+export function isLocalChatId(
+  id: string | null | undefined
+): id is LocalChatId {
   return typeof id === "string" && id.startsWith(LOCAL_CHAT_ID_PREFIX)
 }
 
@@ -84,7 +81,9 @@ export function isOptimisticMessageId(
   return typeof id === "string" && id.startsWith(OPTIMISTIC_ID_PREFIX)
 }
 
-export function isGuestUserId(id: string | null | undefined): id is GuestUserId {
+export function isGuestUserId(
+  id: string | null | undefined
+): id is GuestUserId {
   return typeof id === "string" && id.startsWith(GUEST_USER_ID_PREFIX)
 }
 

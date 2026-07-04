@@ -208,8 +208,8 @@ export function DesktopSearchModal({
             <div
               className={cn(
                 "pointer-events-auto col-start-2 row-start-2 mx-auto flex h-[440px] w-full flex-col overflow-hidden rounded-2xl",
-                "bg-popover bg-clip-padding text-popover-foreground shadow-border-xl",
-                "max-w-md md:min-w-[680px] md:max-w-[680px]"
+                "bg-popover text-popover-foreground shadow-border-xl bg-clip-padding",
+                "max-w-md md:max-w-[680px] md:min-w-[680px]"
               )}
             >
               <div className="me-4 flex h-16 shrink-0 items-center justify-between">
@@ -232,8 +232,8 @@ export function DesktopSearchModal({
                   aria-expanded={isOpen}
                   role="combobox"
                   className={cn(
-                    "h-full w-full border-none bg-transparent ps-5 text-base text-foreground",
-                    "placeholder:text-muted-foreground focus:outline-none focus:ring-0"
+                    "text-foreground h-full w-full border-none bg-transparent ps-5 text-base",
+                    "placeholder:text-muted-foreground focus:ring-0 focus:outline-none"
                   )}
                 />
                 <DialogPrimitive.Close
@@ -241,7 +241,7 @@ export function DesktopSearchModal({
                   className={cn(
                     "ms-4 inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent",
                     "text-muted-foreground hover:bg-accent hover:text-foreground",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                    "focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none"
                   )}
                 >
                   <RiCloseLargeLine className="size-5" aria-hidden="true" />
@@ -279,14 +279,15 @@ export function DesktopSearchModal({
                   {visibleGroups.map((group) => (
                     <div key={group.name}>
                       <div
-                        className="relative my-2 px-4 pt-2 text-xs leading-4 text-muted-foreground"
+                        className="text-muted-foreground relative my-2 px-4 pt-2 text-xs leading-4"
                         aria-hidden="true"
                       >
                         {group.name}
                       </div>
                       {group.chats.map((chat) => {
                         const index = flatRows.findIndex(
-                          (row) => row.type === "chat" && row.chat.id === chat.id
+                          (row) =>
+                            row.type === "chat" && row.chat.id === chat.id
                         )
 
                         return (
@@ -320,7 +321,7 @@ export function DesktopSearchModal({
                   ))}
 
                   {flatRows.length === 0 && (
-                    <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center text-muted-foreground">
+                    <div className="text-muted-foreground flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
                       <RiSearchLine className="size-6 opacity-60" />
                       <span className="text-sm">No chat history found.</span>
                     </div>
@@ -341,7 +342,7 @@ export function DesktopSearchModal({
                   className={cn(
                     "inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent",
                     "text-muted-foreground hover:bg-accent hover:text-foreground",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                    "focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none"
                   )}
                 >
                   <RiCloseLargeLine className="size-5" aria-hidden="true" />
@@ -390,13 +391,13 @@ function SearchRow({
     >
       <div
         className={cn(
-          "group relative flex items-center rounded-xl px-4 py-3 text-foreground",
+          "group text-foreground relative flex items-center rounded-xl px-4 py-3",
           "hover:bg-accent hover:text-accent-foreground",
           active && "bg-accent text-accent-foreground"
         )}
       >
         {icon}
-        <div className="relative min-w-0 grow overflow-hidden whitespace-nowrap ps-2">
+        <div className="relative min-w-0 grow overflow-hidden ps-2 whitespace-nowrap">
           <div className="truncate text-sm">{label}</div>
         </div>
       </div>

@@ -1,8 +1,8 @@
-import { ConvexHttpClient } from "convex/browser"
 import { api } from "@/convex/_generated/api"
 import { getAuthenticatedWorkosSession } from "@/lib/auth/workos"
-import { NextRequest, NextResponse } from "next/server"
 import { resolveModelIds } from "@/lib/models/model-id-migration"
+import { ConvexHttpClient } from "convex/browser"
+import { NextRequest, NextResponse } from "next/server"
 
 /**
  * Favorite Models API
@@ -81,7 +81,10 @@ export async function GET() {
     const favoriteModels = user?.favoriteModels ?? []
     const normalizedFavoriteModels = resolveModelIds(favoriteModels)
 
-    if (JSON.stringify(normalizedFavoriteModels) !== JSON.stringify(favoriteModels)) {
+    if (
+      JSON.stringify(normalizedFavoriteModels) !==
+      JSON.stringify(favoriteModels)
+    ) {
       await convex.mutation(api.users.updateFavoriteModels, {
         favoriteModels: normalizedFavoriteModels,
       })

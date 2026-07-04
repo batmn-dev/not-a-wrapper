@@ -55,7 +55,10 @@ describe("scrubForAnalytics", () => {
   it("handles nested objects and arrays", () => {
     const input = {
       messages: [
-        { role: "user", parts: [{ type: "text", text: "Email me at a@b.com" }] },
+        {
+          role: "user",
+          parts: [{ type: "text", text: "Email me at a@b.com" }],
+        },
         { role: "assistant", parts: [{ type: "text", text: "Sure" }] },
       ],
       meta: { nested: { email: "x@y.com" } },

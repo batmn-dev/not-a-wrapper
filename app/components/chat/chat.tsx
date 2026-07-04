@@ -19,14 +19,7 @@ import { cn } from "@/lib/utils"
 import { AnimatePresence, motion } from "motion/react"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react"
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { ActivityPanel } from "./activity/activity-panel"
 import {
   ActivityPanelStoreProvider,
@@ -80,11 +73,7 @@ function ChatInner({
   isChatLoading: boolean
 }) {
   const router = useRouter()
-  const {
-    createNewChat,
-    bumpChat,
-    isLoading: isChatsLoading,
-  } = useChats()
+  const { createNewChat, bumpChat, isLoading: isChatsLoading } = useChats()
 
   const {
     messages: initialMessages,

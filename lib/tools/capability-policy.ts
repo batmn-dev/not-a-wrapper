@@ -39,9 +39,7 @@ export type CapabilityReasonCode =
   | "authenticated_allowed"
 
 export type KeyModeReasonCode =
-  | "key_mode_byok"
-  | "key_mode_platform"
-  | "key_mode_unknown"
+  "key_mode_byok" | "key_mode_platform" | "key_mode_unknown"
 
 export type ToolPolicyReasonCode =
   | "allowed"
@@ -154,7 +152,8 @@ function computeCapabilityMatrix(options: CapabilityPolicyOptions): {
 
 function lateStepReasonForRisk(risk: ToolRiskLevel): ToolPolicyReasonCode {
   if (risk === "read_only") return "risk_read_only_allowed"
-  if (risk === "stateful_non_destructive") return "risk_stateful_late_step_block"
+  if (risk === "stateful_non_destructive")
+    return "risk_stateful_late_step_block"
   if (risk === "destructive") return "risk_destructive_late_step_block"
   if (risk === "open_world") return "risk_open_world_late_step_block"
   return "risk_unknown_fail_closed"
@@ -207,7 +206,7 @@ export function resolveCapabilityPolicy(
           ? "risk_unknown_early_step_block"
           : risk === "unknown" && tool.source === "mcp"
             ? "risk_unknown_early_step_advisory_allow"
-          : (keyModePolicy.allowReason ?? "allowed")
+            : (keyModePolicy.allowReason ?? "allowed")
 
     const allowInLateSteps =
       capabilityAllowed && keyModePolicy.allow && risk === "read_only"
@@ -285,4 +284,3 @@ export function filterMetadataMapByPolicy<T>(
 }
 
 // ── Payment Policy Overrides ────────────────────────────────
-

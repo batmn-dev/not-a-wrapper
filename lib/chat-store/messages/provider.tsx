@@ -6,8 +6,8 @@ import type { Id } from "@/convex/_generated/dataModel"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import { durableStoredMessageToUiMessage } from "@/lib/chat-messages/ui-message-adapter"
-import type { UIMessage } from "ai"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
+import type { UIMessage } from "ai"
 import { useMutation } from "convex/react"
 import {
   createContext,

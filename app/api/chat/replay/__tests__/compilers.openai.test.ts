@@ -8,7 +8,9 @@ const context = {
 }
 
 function hasToolPart(parts: Array<{ type: string }>): boolean {
-  return parts.some((part) => part.type.startsWith("tool-") || part.type === "dynamic-tool")
+  return parts.some(
+    (part) => part.type.startsWith("tool-") || part.type === "dynamic-tool"
+  )
 }
 
 describe("openai replay compiler", () => {
@@ -45,13 +47,18 @@ describe("openai replay compiler", () => {
     const result = await compileReplay(messages, "openai", context)
     const assistant = result.messages[0]
     const toolIndex = assistant.parts.findIndex(
-      (part) => part.type.startsWith("tool-") || part.type === "dynamic-tool",
+      (part) => part.type.startsWith("tool-") || part.type === "dynamic-tool"
     )
-    const toolPart = assistant.parts[toolIndex] as { state?: string; output?: unknown }
+    const toolPart = assistant.parts[toolIndex] as {
+      state?: string
+      output?: unknown
+    }
 
     expect(toolIndex).toBeGreaterThan(0)
     expect(
-      assistant.parts.slice(0, toolIndex).some((part) => part.type === "reasoning"),
+      assistant.parts
+        .slice(0, toolIndex)
+        .some((part) => part.type === "reasoning")
     ).toBe(true)
     expect(toolPart.state).toBe("output-available")
     expect(toolPart.output).toBeDefined()
@@ -83,8 +90,14 @@ describe("openai replay compiler", () => {
 
     expect(hasToolPart(assistant.parts)).toBe(false)
     expect(assistant.parts).toEqual([{ type: "text", text: "" }])
-    expect(result.warnings.some((warning) => warning.code === "tool_non_replayable")).toBe(true)
-    expect(result.warnings.some((warning) => warning.code === "message_empty_fallback")).toBe(true)
+    expect(
+      result.warnings.some((warning) => warning.code === "tool_non_replayable")
+    ).toBe(true)
+    expect(
+      result.warnings.some(
+        (warning) => warning.code === "message_empty_fallback"
+      )
+    ).toBe(true)
     expect(result.stats.toolExchangesCompiled).toBe(0)
     expect(result.stats.toolExchangesDropped).toBe(1)
   })
@@ -124,8 +137,14 @@ describe("openai replay compiler", () => {
         text: "Replay context: Purchase status check for job job_replay_test_2: completed (completed).",
       },
     ])
-    expect(result.warnings.some((warning) => warning.code === "tool_non_replayable")).toBe(true)
-    expect(result.warnings.some((warning) => warning.code === "message_empty_fallback")).toBe(false)
+    expect(
+      result.warnings.some((warning) => warning.code === "tool_non_replayable")
+    ).toBe(true)
+    expect(
+      result.warnings.some(
+        (warning) => warning.code === "message_empty_fallback"
+      )
+    ).toBe(false)
     expect(result.stats.toolExchangesCompiled).toBe(0)
     expect(result.stats.toolExchangesDropped).toBe(1)
   })
@@ -154,6 +173,10 @@ describe("openai replay compiler", () => {
     expect(message.role).toBe("assistant")
     expect(hasToolPart(message.parts)).toBe(false)
     expect(message.parts).toEqual([{ type: "text", text: "" }])
-    expect(result.warnings.some((warning) => warning.code === "tool_dropped_invalid_role")).toBe(true)
+    expect(
+      result.warnings.some(
+        (warning) => warning.code === "tool_dropped_invalid_role"
+      )
+    ).toBe(true)
   })
 })

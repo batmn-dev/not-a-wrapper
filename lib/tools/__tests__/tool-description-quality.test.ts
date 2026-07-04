@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { z } from "zod"
-import { getThirdPartyTools, getContentExtractionTools } from "../third-party"
+import { getContentExtractionTools, getThirdPartyTools } from "../third-party"
 
 vi.mock("exa-js", () => {
   class MockExa {
@@ -33,9 +33,7 @@ function getToolDescriptor(
   return descriptor as ToolDescriptor
 }
 
-function getTopLevelShape(
-  schema: unknown
-): Record<string, z.ZodTypeAny> {
+function getTopLevelShape(schema: unknown): Record<string, z.ZodTypeAny> {
   if (!(schema instanceof z.ZodObject)) {
     throw new Error("Expected tool inputSchema to be a ZodObject")
   }
@@ -48,11 +46,17 @@ function hasPlaceholderText(text: string): boolean {
   )
 }
 
-function assertDescriptionQuality(toolName: string, description: unknown): void {
+function assertDescriptionQuality(
+  toolName: string,
+  description: unknown
+): void {
   expect(typeof description).toBe("string")
   const text = (description as string).trim()
 
-  expect(text.length, `${toolName} description should not be empty`).toBeGreaterThan(0)
+  expect(
+    text.length,
+    `${toolName} description should not be empty`
+  ).toBeGreaterThan(0)
 
   // Low-signal placeholders or generic filler should fail fast.
   expect(
@@ -78,9 +82,15 @@ function assertInputExamples(
   inputSchema: unknown,
   inputExamples: unknown
 ): void {
-  expect(Array.isArray(inputExamples), `${toolName} must define inputExamples`).toBe(true)
+  expect(
+    Array.isArray(inputExamples),
+    `${toolName} must define inputExamples`
+  ).toBe(true)
   const examples = inputExamples as unknown[]
-  expect(examples.length, `${toolName} should provide at least one example`).toBeGreaterThan(0)
+  expect(
+    examples.length,
+    `${toolName} should provide at least one example`
+  ).toBeGreaterThan(0)
 
   if (!(inputSchema instanceof z.ZodType)) {
     throw new Error(`${toolName} inputSchema is not a Zod schema`)
@@ -88,9 +98,7 @@ function assertInputExamples(
 
   for (const [index, example] of examples.entries()) {
     expect(
-      typeof example === "object" &&
-      example !== null &&
-      "input" in example,
+      typeof example === "object" && example !== null && "input" in example,
       `${toolName} inputExamples[${index}] must include an input object`
     ).toBe(true)
 
@@ -105,13 +113,15 @@ function assertInputExamples(
 
 describe("custom tool description quality gates", () => {
   it("enforces quality for third-party and content extraction tools", async () => {
-    const { tools: thirdPartyTools, metadata: thirdPartyMetadata } = await getThirdPartyTools({
-      exaKey: "exa_test_key",
-      skipSearch: false,
-    })
-    const { tools: contentTools, metadata: contentMetadata } = await getContentExtractionTools({
-      exaKey: "exa_test_key",
-    })
+    const { tools: thirdPartyTools, metadata: thirdPartyMetadata } =
+      await getThirdPartyTools({
+        exaKey: "exa_test_key",
+        skipSearch: false,
+      })
+    const { tools: contentTools, metadata: contentMetadata } =
+      await getContentExtractionTools({
+        exaKey: "exa_test_key",
+      })
 
     const webSearch = getToolDescriptor(
       thirdPartyTools as unknown as Record<string, unknown>,

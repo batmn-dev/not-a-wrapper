@@ -3,11 +3,10 @@ import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 import {
+  contractedManifestSchemaErrors,
   DEFAULT_BASE_REF,
   DEFAULT_MANIFEST_DIR,
   DEFAULT_SCHEMA_PATH,
-  PRELAUNCH_DISPOSABLE_DB,
-  contractedManifestSchemaErrors,
   diffSchemaContractions,
   envValue,
   evaluateSchemaContractions,
@@ -15,6 +14,7 @@ import {
   fieldKey,
   formatCheck,
   loadMigrationManifests,
+  PRELAUNCH_DISPOSABLE_DB,
 } from "./convex-schema-contract-lib.mjs"
 
 function parseArgs(argv) {
@@ -103,7 +103,11 @@ export function runGuard({
   manifests,
   schemaPath = DEFAULT_SCHEMA_PATH,
 }) {
-  const removedFields = diffSchemaContractions(baseSource, currentSource, schemaPath)
+  const removedFields = diffSchemaContractions(
+    baseSource,
+    currentSource,
+    schemaPath
+  )
   const result = evaluateSchemaContractions({ removedFields, manifests })
   const manifestSchemaErrors = contractedManifestSchemaErrors({
     currentSource,

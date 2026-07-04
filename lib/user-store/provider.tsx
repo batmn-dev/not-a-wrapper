@@ -7,22 +7,22 @@
 "use client"
 
 import { api } from "@/convex/_generated/api"
+import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
 import { defaultPreferences } from "@/lib/user-preference-store/utils"
 import type { UserProfile } from "@/lib/user/types"
-import { mergeUserProfileWithConvexFields } from "./merge-user-profile"
 import { useAuth } from "@workos-inc/authkit-nextjs/components"
 import type { User as WorkosUser } from "@workos-inc/node"
-import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
 import { useConvexAuth, useMutation } from "convex/react"
 import {
   createContext,
-  type PropsWithChildren,
   useCallback,
   useContext,
   useEffect,
   useRef,
   useState,
+  type PropsWithChildren,
 } from "react"
+import { mergeUserProfileWithConvexFields } from "./merge-user-profile"
 
 type UserContextType = {
   user: UserProfile | null
@@ -132,7 +132,9 @@ export function UserProvider({
   useEffect(() => {
     if (isAuthLoading || !workosUser) return
     if (convexUser === undefined) return
-    setUser((prevUser) => mergeUserProfileWithConvexFields(prevUser, convexUser))
+    setUser((prevUser) =>
+      mergeUserProfileWithConvexFields(prevUser, convexUser)
+    )
   }, [convexUser, isAuthLoading, workosUser])
 
   const updateUser = useCallback(

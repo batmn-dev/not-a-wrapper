@@ -1,8 +1,5 @@
 import { v } from "convex/values"
-import {
-  optionalAuthMutation,
-  optionalAuthQuery,
-} from "./lib/authedFunctions"
+import { optionalAuthMutation, optionalAuthQuery } from "./lib/authedFunctions"
 
 // Import limits - these should match lib/config.ts
 const NON_AUTH_DAILY_MESSAGE_LIMIT = 5

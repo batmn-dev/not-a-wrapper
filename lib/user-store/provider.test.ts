@@ -1,9 +1,17 @@
 /** @vitest-environment jsdom */
 
+import type { UserProfile } from "@/lib/user/types"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
-import type { UserProfile } from "@/lib/user/types"
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
 import { mergeUserProfileWithConvexFields } from "./merge-user-profile"
 import { UserProvider, useUser } from "./provider"
 
@@ -134,8 +142,9 @@ describe("UserProvider", () => {
   let root: Root | null = null
 
   beforeAll(() => {
-    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean })
-      .IS_REACT_ACT_ENVIRONMENT = true
+    ;(
+      globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true
   })
 
   beforeEach(() => {

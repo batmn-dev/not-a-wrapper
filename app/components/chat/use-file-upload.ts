@@ -96,16 +96,22 @@ export const useFileUpload = () => {
     return fileMutationVersionRef.current
   }, [])
 
-  const handleFileUpload = useCallback((newFiles: File[]) => {
-    if (newFiles.length === 0) return
-    markFilesChanged()
-    setFiles((prev) => [...prev, ...newFiles])
-  }, [markFilesChanged])
+  const handleFileUpload = useCallback(
+    (newFiles: File[]) => {
+      if (newFiles.length === 0) return
+      markFilesChanged()
+      setFiles((prev) => [...prev, ...newFiles])
+    },
+    [markFilesChanged]
+  )
 
-  const handleFileRemove = useCallback((file: File) => {
-    markFilesChanged()
-    setFiles((prev) => prev.filter((f) => f !== file))
-  }, [markFilesChanged])
+  const handleFileRemove = useCallback(
+    (file: File) => {
+      markFilesChanged()
+      setFiles((prev) => prev.filter((f) => f !== file))
+    },
+    [markFilesChanged]
+  )
 
   const clearFiles = useCallback(() => {
     const restoreToken = markFilesChanged()
@@ -114,11 +120,14 @@ export const useFileUpload = () => {
   }, [markFilesChanged])
 
   /** Put a rejected turn's files back unless attachment state changed since clear. */
-  const restoreFiles = useCallback((previous: File[], token: FileRestoreToken) => {
-    if (previous.length === 0) return
-    if (fileMutationVersionRef.current !== token) return
-    setFiles((prev) => (prev.length > 0 ? prev : previous))
-  }, [])
+  const restoreFiles = useCallback(
+    (previous: File[], token: FileRestoreToken) => {
+      if (previous.length === 0) return
+      if (fileMutationVersionRef.current !== token) return
+      setFiles((prev) => (prev.length > 0 ? prev : previous))
+    },
+    []
+  )
 
   return {
     files,

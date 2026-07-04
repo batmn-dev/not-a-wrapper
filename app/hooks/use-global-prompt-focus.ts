@@ -10,9 +10,7 @@ import { useEffect } from "react"
  * - The active element is already an input, textarea, select, or contentEditable
  * - The key is non-printable (arrows, Escape, function keys, etc.)
  */
-export function useGlobalPromptFocus(
-  focusRef: RefObject<(() => void) | null>
-) {
+export function useGlobalPromptFocus(focusRef: RefObject<(() => void) | null>) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       // Let existing shortcuts (Cmd+K, Cmd+Shift+P, etc.) pass through

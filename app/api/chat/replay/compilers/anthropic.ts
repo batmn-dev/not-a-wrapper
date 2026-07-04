@@ -3,11 +3,11 @@ import { z } from "zod"
 import type { ReplayMessage, ReplayToolExchange } from "../types"
 import { synthesizePlatformToolFallback } from "./platform-tool-fallback"
 import type {
-  ReplayCompileResult,
   ReplayCompileContext,
+  ReplayCompiler,
+  ReplayCompileResult,
   ReplayCompileStats,
   ReplayCompileWarning,
-  ReplayCompiler,
 } from "./types"
 
 type MessagePart = UIMessage["parts"][number]
@@ -42,7 +42,10 @@ function createStats(messages: readonly ReplayMessage[]): ReplayCompileStats {
     originalMessageCount: messages.length,
     compiledMessageCount: 0,
     droppedMessages: 0,
-    totalPartsOriginal: messages.reduce((sum, message) => sum + message.parts.length, 0),
+    totalPartsOriginal: messages.reduce(
+      (sum, message) => sum + message.parts.length,
+      0
+    ),
     totalPartsCompiled: 0,
     toolExchangesSeen: 0,
     toolExchangesCompiled: 0,
@@ -55,28 +58,35 @@ function synthesizeWebSearchFallback(tool: ReplayToolExchange): string | null {
   const webSearch = tool.webSearch
   if (!webSearch) return null
 
-  const queryLabel = webSearch.query.trim().length > 0 ? ` for "${webSearch.query}"` : ""
+  const queryLabel =
+    webSearch.query.trim().length > 0 ? ` for "${webSearch.query}"` : ""
   if (webSearch.results.length === 0) {
     return `Replay note: web_search${queryLabel} was omitted for Anthropic-safe replay.`
   }
 
   const lines = webSearch.results.slice(0, 3).map((result) => {
     const title = result.title?.trim().length ? result.title.trim() : "Result"
-    const snippet = result.snippet?.trim().length ? ` - ${result.snippet.trim()}` : ""
+    const snippet = result.snippet?.trim().length
+      ? ` - ${result.snippet.trim()}`
+      : ""
     return `- ${title} (${result.url})${snippet}`
   })
 
   return `Replay context from prior web_search${queryLabel}:\n${lines.join("\n")}`
 }
 
-function compileWebSearchToolPart(tool: ReplayToolExchange, messageId: string, partIndex: number) {
+function compileWebSearchToolPart(
+  tool: ReplayToolExchange,
+  messageId: string,
+  partIndex: number
+) {
   if (!tool.webSearch) return null
 
   const hasNativeAnthropicResults = tool.webSearch.results.every(
     (result) =>
       result.resultType === "web_search_result" &&
       typeof result.encryptedContent === "string" &&
-      result.encryptedContent.length > 0,
+      result.encryptedContent.length > 0
   )
   if (!hasNativeAnthropicResults) return null
 
@@ -109,7 +119,7 @@ function compileMessageParts(
   message: ReplayMessage,
   messageIndex: number,
   warnings: ReplayCompileWarning[],
-  stats: ReplayCompileStats,
+  stats: ReplayCompileStats
 ): MessagePart[] {
   const nextParts: MessagePart[] = []
 
@@ -143,7 +153,9 @@ function compileMessageParts(
       }
 
       if (part.type === "file") {
-        const label = part.filename?.trim().length ? part.filename : "attached file"
+        const label = part.filename?.trim().length
+          ? part.filename
+          : "attached file"
         nextParts.push({
           type: "text",
           text: `Replay note: ${label} was present in prior context.`,
@@ -159,7 +171,8 @@ function compileMessageParts(
       }
 
       {
-        const unsupportedPartType = (part as { type?: string }).type ?? "unknown"
+        const unsupportedPartType =
+          (part as { type?: string }).type ?? "unknown"
         stats.invariantsRepaired += 1
         warnings.push({
           code: "invariant_block_dropped",
@@ -199,7 +212,8 @@ function compileMessageParts(
         code: "tool_non_replayable",
         messageIndex,
         partIndex,
-        detail: tool.nonReplayableReason ?? "web_search payload is non-replayable",
+        detail:
+          tool.nonReplayableReason ?? "web_search payload is non-replayable",
       })
 
       const fallbackText = synthesizeWebSearchFallback(tool)
@@ -217,7 +231,8 @@ function compileMessageParts(
         code: "invariant_block_dropped",
         messageIndex,
         partIndex,
-        detail: "Dropped web_search replay part because Anthropic output validation failed",
+        detail:
+          "Dropped web_search replay part because Anthropic output validation failed",
       })
 
       const fallbackText = synthesizeWebSearchFallback(tool)
@@ -236,7 +251,8 @@ function compileMessageParts(
     warnings.push({
       code: "message_empty_fallback",
       messageIndex,
-      detail: "Injected empty text fallback because no Anthropic-safe parts remained",
+      detail:
+        "Injected empty text fallback because no Anthropic-safe parts remained",
     })
   }
 
@@ -247,14 +263,17 @@ function validateCompiledMessage(
   message: UIMessage,
   messageIndex: number,
   warnings: ReplayCompileWarning[],
-  stats: ReplayCompileStats,
+  stats: ReplayCompileStats
 ): UIMessage {
   const validatedParts: MessagePart[] = []
 
   message.parts.forEach((part, partIndex) => {
     const toolCheck =
-      part.type === "tool-web_search" ? anthropicToolPartSchema.safeParse(part).success : true
-    const textCheck = part.type === "text" ? textPartSchema.safeParse(part).success : true
+      part.type === "tool-web_search"
+        ? anthropicToolPartSchema.safeParse(part).success
+        : true
+    const textCheck =
+      part.type === "text" ? textPartSchema.safeParse(part).success : true
     if (toolCheck && textCheck) {
       validatedParts.push(part)
       return
@@ -288,7 +307,7 @@ export const anthropicReplayCompiler: ReplayCompiler = {
   providerId: "anthropic",
   compileReplay(
     messages: readonly ReplayMessage[],
-    _context: ReplayCompileContext,
+    _context: ReplayCompileContext
   ): ReplayCompileResult {
     const stats = createStats(messages)
     const warnings: ReplayCompileWarning[] = []
@@ -299,7 +318,8 @@ export const anthropicReplayCompiler: ReplayCompiler = {
         warnings.push({
           code: "tool_dropped_invalid_role",
           messageIndex,
-          detail: "Converted tool role message to assistant for Anthropic-safe replay",
+          detail:
+            "Converted tool role message to assistant for Anthropic-safe replay",
         })
         stats.invariantsRepaired += 1
       }
@@ -309,12 +329,23 @@ export const anthropicReplayCompiler: ReplayCompiler = {
         role,
         parts: compileMessageParts(message, messageIndex, warnings, stats),
       }
-      return validateCompiledMessage(compiledMessage, messageIndex, warnings, stats)
+      return validateCompiledMessage(
+        compiledMessage,
+        messageIndex,
+        warnings,
+        stats
+      )
     })
 
     stats.compiledMessageCount = compiled.length
-    stats.droppedMessages = Math.max(0, stats.originalMessageCount - stats.compiledMessageCount)
-    stats.totalPartsCompiled = compiled.reduce((sum, message) => sum + message.parts.length, 0)
+    stats.droppedMessages = Math.max(
+      0,
+      stats.originalMessageCount - stats.compiledMessageCount
+    )
+    stats.totalPartsCompiled = compiled.reduce(
+      (sum, message) => sum + message.parts.length,
+      0
+    )
 
     return {
       messages: compiled,

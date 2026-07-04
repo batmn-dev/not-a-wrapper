@@ -1,12 +1,12 @@
-import { describe, it, expect, vi } from "vitest"
-import {
-  wrapMcpTools,
-  ToolTraceCollector,
-  ToolTimeoutError,
-} from "../mcp-wrapper"
-import type { ToolSet } from "ai"
-import { ToolPolicyError } from "../policy"
 import { MCP_CIRCUIT_BREAKER_THRESHOLD } from "@/lib/config"
+import type { ToolSet } from "ai"
+import { describe, expect, it, vi } from "vitest"
+import {
+  ToolTimeoutError,
+  ToolTraceCollector,
+  wrapMcpTools,
+} from "../mcp-wrapper"
+import { ToolPolicyError } from "../policy"
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -14,7 +14,11 @@ import { MCP_CIRCUIT_BREAKER_THRESHOLD } from "@/lib/config"
 function makeTool(
   executeFn: (
     params: unknown,
-    options: { toolCallId: string; abortSignal?: AbortSignal; [k: string]: unknown }
+    options: {
+      toolCallId: string
+      abortSignal?: AbortSignal
+      [k: string]: unknown
+    }
   ) => Promise<unknown>
 ) {
   return {
@@ -202,7 +206,8 @@ describe("wrapMcpTools", () => {
     ).rejects.toThrow(/fetch failed/i)
     expect(execute).toHaveBeenCalledTimes(1)
     expect(
-      traceCollector.get("call_retry_trusted_without_non_destructive")?.retryCount
+      traceCollector.get("call_retry_trusted_without_non_destructive")
+        ?.retryCount
     ).toBe(0)
   })
 
@@ -474,7 +479,9 @@ describe("wrapMcpTools", () => {
   })
 
   it("isolates circuit state for tools without server metadata", async () => {
-    const flakyExecute = vi.fn().mockRejectedValue(new Error("fetch failed ECONNREFUSED"))
+    const flakyExecute = vi
+      .fn()
+      .mockRejectedValue(new Error("fetch failed ECONNREFUSED"))
     const healthyExecute = vi.fn().mockResolvedValue({ ok: true })
 
     const wrapped = wrapMcpTools(
@@ -538,7 +545,8 @@ describe("wrapMcpTools", () => {
     )
 
     // Raw string result should be truncated (contains truncation marker)
-    const resultStr = typeof result === "string" ? result : JSON.stringify(result)
+    const resultStr =
+      typeof result === "string" ? result : JSON.stringify(result)
     expect(resultStr.length).toBeLessThan(1000)
 
     // Trace should record original size

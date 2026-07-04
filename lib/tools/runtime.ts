@@ -1,18 +1,12 @@
 // lib/tools/runtime.ts
 
-import type { ToolSet } from "ai"
 import { MCP_CONNECTION_TIMEOUT_MS, PREPARE_STEP_THRESHOLD } from "@/lib/config"
-import { getPostHogClient } from "@/lib/posthog"
-import type { ToolKeyMode } from "@/lib/user-keys"
 import {
   loadUserMcpTools,
   type LoadToolsResult,
   type ServerInfo,
 } from "@/lib/mcp/load-tools"
-import {
-  enforceToolNamingGovernance,
-  type ToolLayerMap,
-} from "@/lib/tools/naming"
+import { getPostHogClient } from "@/lib/posthog"
 import {
   filterMetadataMapByPolicy,
   filterToolSetByPolicy,
@@ -25,11 +19,15 @@ import {
   type ToolPolicyInput,
   type UserTier,
 } from "@/lib/tools/capability-policy"
+import { ToolTraceCollector, wrapMcpTools } from "@/lib/tools/mcp-wrapper"
 import {
   createToolMetadataResolver,
   type ToolMetadataResolver,
 } from "@/lib/tools/metadata-resolver"
-import { ToolTraceCollector, wrapMcpTools } from "@/lib/tools/mcp-wrapper"
+import {
+  enforceToolNamingGovernance,
+  type ToolLayerMap,
+} from "@/lib/tools/naming"
 import {
   getRuntimeToolApprovalDecision,
   type RuntimeToolApprovalDecision,
@@ -40,6 +38,8 @@ import type {
   ToolSource,
 } from "@/lib/tools/types"
 import { sanitizeForJson } from "@/lib/tools/utils"
+import type { ToolKeyMode } from "@/lib/user-keys"
+import type { ToolSet } from "ai"
 
 function serializeToolOutcomePreview(value: unknown): string | undefined {
   if (value === undefined) return undefined
@@ -425,7 +425,8 @@ async function buildToolRuntime(
             exaPolicyGuard.enforceToolBudget(toolName),
           keyMode: resolvedExaKeyMode,
           maxCallsPerTool: PREPARE_STEP_THRESHOLD,
-          onEvent: (event) => logOutageTolerantBudgetEvent("third-party", event),
+          onEvent: (event) =>
+            logOutageTolerantBudgetEvent("third-party", event),
         })
       : undefined
 
@@ -474,7 +475,8 @@ async function buildToolRuntime(
   let contentToolMetadata = new Map<string, ToolMetadata>()
 
   if (resolvedExaKey && capabilities.extract) {
-    const { getContentExtractionTools } = await import("@/lib/tools/third-party")
+    const { getContentExtractionTools } =
+      await import("@/lib/tools/third-party")
     const contentResult = await getContentExtractionTools({
       exaKey: resolvedExaKey,
       policyGuard: exaPolicyGuard,
@@ -623,12 +625,18 @@ async function buildToolRuntime(
   contentTools = filterToolSetByPolicy(contentTools, toolPolicy)
   mcpTools = filterToolSetByPolicy(mcpTools, toolPolicy)
 
-  builtInToolMetadata = filterMetadataMapByPolicy(builtInToolMetadata, toolPolicy)
+  builtInToolMetadata = filterMetadataMapByPolicy(
+    builtInToolMetadata,
+    toolPolicy
+  )
   thirdPartyToolMetadata = filterMetadataMapByPolicy(
     thirdPartyToolMetadata,
     toolPolicy
   )
-  contentToolMetadata = filterMetadataMapByPolicy(contentToolMetadata, toolPolicy)
+  contentToolMetadata = filterMetadataMapByPolicy(
+    contentToolMetadata,
+    toolPolicy
+  )
   mcpToolServerMap = filterMetadataMapByPolicy(mcpToolServerMap, toolPolicy)
 
   // -----------------------------------------------------------------------
@@ -1059,9 +1067,7 @@ async function buildToolRuntime(
     const result = step.toolResults?.find(
       (candidate) => candidate.toolCallId === call.toolCallId
     )
-    const success = result
-      ? !(result as { isError?: boolean }).isError
-      : false
+    const success = result ? !(result as { isError?: boolean }).isError : false
     const trace = traceCollector.get(call.toolCallId)
     const resolved = metadata.get(call.toolName)
     const mcpServer = resolved?.mcpServer
@@ -1163,7 +1169,9 @@ async function buildToolRuntime(
   }
 
   const mcpServerCount = new Set(
-    Array.from(mcpToolServerMap.values()).map((info: ServerInfo) => info.serverId)
+    Array.from(mcpToolServerMap.values()).map(
+      (info: ServerInfo) => info.serverId
+    )
   ).size
   const mcpClientCount = mcpClients.length
 

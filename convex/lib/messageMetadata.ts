@@ -1,4 +1,4 @@
-import { type Infer, v } from "convex/values"
+import { v, type Infer } from "convex/values"
 
 /**
  * The named shape of a persisted assistant message's `metadata` blob.
@@ -51,7 +51,9 @@ export const vToolInvocationStreamMetadata = v.object({
   ),
 })
 
-export type PersistedMessageMetadata = Infer<typeof vToolInvocationStreamMetadata>
+export type PersistedMessageMetadata = Infer<
+  typeof vToolInvocationStreamMetadata
+>
 type DisplayMetadata = Infer<typeof vToolInvocationDisplayMetadata>
 
 const TOOL_SOURCES = new Set(["builtin", "third-party", "mcp", "platform"])
@@ -94,7 +96,11 @@ function projectDisplayMetadata(raw: unknown): DisplayMetadata | undefined {
     serviceName,
   }
   if (typeof icon === "string" && TOOL_ICONS.has(icon)) display.icon = icon
-  setIfDefined(display, "estimatedCostPer1k", optionalNumber(raw.estimatedCostPer1k))
+  setIfDefined(
+    display,
+    "estimatedCostPer1k",
+    optionalNumber(raw.estimatedCostPer1k)
+  )
   setIfDefined(display, "readOnly", optionalBoolean(raw.readOnly))
   setIfDefined(display, "destructive", optionalBoolean(raw.destructive))
   setIfDefined(display, "idempotent", optionalBoolean(raw.idempotent))
@@ -128,9 +134,21 @@ export function projectPersistedMessageMetadata(
 ): PersistedMessageMetadata | undefined {
   if (!isRecord(raw)) return undefined
   const result: Record<string, unknown> = {}
-  setIfDefined(result, "reasoningDurationMs", optionalNumber(raw.reasoningDurationMs))
-  setIfDefined(result, "toolMetadataByName", projectDisplayRecord(raw.toolMetadataByName))
-  setIfDefined(result, "toolMetadataByCallId", projectDisplayRecord(raw.toolMetadataByCallId))
+  setIfDefined(
+    result,
+    "reasoningDurationMs",
+    optionalNumber(raw.reasoningDurationMs)
+  )
+  setIfDefined(
+    result,
+    "toolMetadataByName",
+    projectDisplayRecord(raw.toolMetadataByName)
+  )
+  setIfDefined(
+    result,
+    "toolMetadataByCallId",
+    projectDisplayRecord(raw.toolMetadataByCallId)
+  )
   return Object.keys(result).length > 0
     ? (result as PersistedMessageMetadata)
     : undefined

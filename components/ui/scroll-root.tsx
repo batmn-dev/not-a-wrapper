@@ -1,9 +1,9 @@
 "use client"
 
+import { cn } from "@/lib/utils"
 import { createContext, useContext, useMemo } from "react"
 import { useStickToBottom } from "use-stick-to-bottom"
 import type { StickToBottomInstance } from "use-stick-to-bottom"
-import { cn } from "@/lib/utils"
 
 type ScrollRootContextValue = Pick<
   StickToBottomInstance,
@@ -63,7 +63,7 @@ function ScrollRoot({ children, className, ...props }: ScrollRootProps) {
         ref={scrollRef}
         data-scroll-root=""
         className={cn(
-          "relative flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-clip",
+          "relative flex min-h-0 flex-1 flex-col overflow-x-clip overflow-y-auto",
           className
         )}
         {...props}
@@ -77,9 +77,7 @@ function ScrollRoot({ children, className, ...props }: ScrollRootProps) {
 function useScrollRoot() {
   const context = useContext(ScrollRootContext)
   if (!context) {
-    throw new Error(
-      "useScrollRoot must be used within a <ScrollRoot> provider"
-    )
+    throw new Error("useScrollRoot must be used within a <ScrollRoot> provider")
   }
   return context
 }

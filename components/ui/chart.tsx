@@ -1,9 +1,8 @@
 "use client"
 
+import { cn } from "@/lib/utils"
 import * as React from "react"
 import * as RechartsPrimitive from "recharts"
-
-import { cn } from "@/lib/utils"
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const
@@ -173,7 +172,7 @@ function ChartTooltipContent({
   return (
     <div
       className={cn(
-        "bg-background grid min-w-[8rem] items-start gap-1.5 rounded-lg px-2.5 py-1.5 text-xs shadow-border-md",
+        "bg-background shadow-border-md grid min-w-[8rem] items-start gap-1.5 rounded-lg px-2.5 py-1.5 text-xs",
         className
       )}
     >

@@ -184,8 +184,22 @@ export type ToolCapabilities = {
 export function resolveToolCapabilities(
   tools: boolean | ToolCapabilities | undefined
 ): Required<ToolCapabilities> {
-  if (tools === false) return { search: false, extract: false, code: false, mcp: false, platform: false }
-  if (tools === true || tools === undefined) return { search: true, extract: true, code: true, mcp: true, platform: true }
+  if (tools === false)
+    return {
+      search: false,
+      extract: false,
+      code: false,
+      mcp: false,
+      platform: false,
+    }
+  if (tools === true || tools === undefined)
+    return {
+      search: true,
+      extract: true,
+      code: true,
+      mcp: true,
+      platform: true,
+    }
   return {
     search: tools.search !== false,
     extract: tools.extract !== false,

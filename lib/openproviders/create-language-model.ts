@@ -1,5 +1,5 @@
-import type { ModelConfig } from "@/lib/models/types"
 import { resolveModelId } from "@/lib/models/model-id-migration"
+import type { ModelConfig } from "@/lib/models/types"
 import { createProviderLanguageModel } from "./model-factory"
 import type { ProviderLanguageModel } from "./provider-strategy"
 

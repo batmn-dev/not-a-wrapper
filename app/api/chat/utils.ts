@@ -5,14 +5,14 @@ import type { ModelMessage } from "ai"
  * Check if a part is tool-related (v5 uses parts with type starting with 'tool-')
  */
 function isToolPart(part: { type: string }): boolean {
-  return part.type.startsWith('tool-')
+  return part.type.startsWith("tool-")
 }
 
 /**
  * Clean messages when switching between agents with different tool capabilities.
  * This removes tool invocations and tool-related content from messages when tools are not available
  * to prevent OpenAI API errors.
- * 
+ *
  * In v5, messages use `parts` array instead of `content` and `toolInvocations`.
  */
 export function cleanMessagesForTools(
@@ -32,13 +32,13 @@ export function cleanMessagesForTools(
       }
 
       // Filter out tool-related parts from the message
-      const filteredParts = message.parts.filter(part => !isToolPart(part))
+      const filteredParts = message.parts.filter((part) => !isToolPart(part))
 
       // If all parts were tool-related, provide a fallback text part
       if (filteredParts.length === 0) {
         return {
           ...message,
-          parts: [{ type: 'text' as const, text: '[Response]' }],
+          parts: [{ type: "text" as const, text: "[Response]" }],
         }
       }
 
@@ -64,7 +64,7 @@ export function cleanMessagesForTools(
 export function messageHasToolContent(message: MessageAISDK): boolean {
   return (
     (message as { role: string }).role === "tool" ||
-    message.parts.some(part => isToolPart(part))
+    message.parts.some((part) => isToolPart(part))
   )
 }
 
@@ -186,7 +186,7 @@ export function handleStreamError(err: unknown): ApiError {
   console.error("🛑 streamText error:", err)
 
   // Extract error details from the AI SDK error
-   
+
   const aiError = (err as { error?: any })?.error
 
   if (aiError) {
@@ -307,16 +307,26 @@ export function extractErrorMessage(error: unknown): string {
   }
 
   // Handle AI SDK error objects
-   
-  const aiError = (error as { error?: { statusCode?: number; responseBody?: string; message?: string } })?.error
+
+  const aiError = (
+    error as {
+      error?: { statusCode?: number; responseBody?: string; message?: string }
+    }
+  )?.error
   if (aiError) {
     // Try to extract a detailed message from the response body
     const detailedMessage = extractResponseBodyMessage(aiError.responseBody)
 
     if (aiError.statusCode === 401) {
-      return detailedMessage || `Invalid API key${providerHint}. Please check your API key in settings.`
+      return (
+        detailedMessage ||
+        `Invalid API key${providerHint}. Please check your API key in settings.`
+      )
     } else if (aiError.statusCode === 402) {
-      return detailedMessage || `Insufficient credits or payment required${providerHint}.`
+      return (
+        detailedMessage ||
+        `Insufficient credits or payment required${providerHint}.`
+      )
     } else if (aiError.statusCode === 429) {
       return detailedMessage || "Rate limit exceeded. Please try again later."
     } else if (detailedMessage) {
@@ -347,10 +357,16 @@ function extractProviderHint(error: unknown): string {
   if (errorStr.includes("anthropic") || errorStr.includes("x-api-key")) {
     return " for Anthropic"
   }
-  if (errorStr.includes("openai.com") || errorStr.includes("Incorrect API key provided")) {
+  if (
+    errorStr.includes("openai.com") ||
+    errorStr.includes("Incorrect API key provided")
+  ) {
     return " for OpenAI"
   }
-  if (errorStr.includes("generativelanguage.googleapis") || errorStr.includes("google")) {
+  if (
+    errorStr.includes("generativelanguage.googleapis") ||
+    errorStr.includes("google")
+  ) {
     return " for Google"
   }
   if (errorStr.includes("mistral")) {

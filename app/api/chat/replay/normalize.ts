@@ -32,7 +32,9 @@ function isRecord(value: unknown): value is JsonRecord {
   return value !== null && typeof value === "object"
 }
 
-function detectProviderOrigin(part: JsonRecord): ReplayProviderOrigin | undefined {
+function detectProviderOrigin(
+  part: JsonRecord
+): ReplayProviderOrigin | undefined {
   const metadata = part.callProviderMetadata
   if (!isRecord(metadata)) return undefined
   if ("openai" in metadata) return "openai"
@@ -43,7 +45,11 @@ function detectProviderOrigin(part: JsonRecord): ReplayProviderOrigin | undefine
 }
 
 function toWebSearchResult(value: unknown): ReplayWebSearchResult | null {
-  if (!isRecord(value) || typeof value.url !== "string" || value.url.length === 0) {
+  if (
+    !isRecord(value) ||
+    typeof value.url !== "string" ||
+    value.url.length === 0
+  ) {
     return null
   }
 
@@ -61,28 +67,34 @@ function toWebSearchResult(value: unknown): ReplayWebSearchResult | null {
         ? value.pageAge
         : typeof value.page_age === "string"
           ? value.page_age
-        : value.pageAge === null
-          ? null
-          : value.page_age === null
+          : value.pageAge === null
             ? null
-          : undefined,
+            : value.page_age === null
+              ? null
+              : undefined,
     encryptedContent:
-      typeof value.encryptedContent === "string" ? value.encryptedContent : undefined,
+      typeof value.encryptedContent === "string"
+        ? value.encryptedContent
+        : undefined,
     resultType:
       value.type === "web_search_result" ? "web_search_result" : undefined,
   }
 }
 
-function normalizeWebSearchShape(
-  output: unknown,
-): {
-  rawShape: "object-action-sources" | "array-results" | "array-anthropic-native" | "unknown"
+function normalizeWebSearchShape(output: unknown): {
+  rawShape:
+    | "object-action-sources"
+    | "array-results"
+    | "array-anthropic-native"
+    | "unknown"
   results: ReplayWebSearchResult[]
 } {
   if (isRecord(output) && Array.isArray(output.sources)) {
     return {
       rawShape: "object-action-sources",
-      results: output.sources.map(toWebSearchResult).filter((item) => item !== null),
+      results: output.sources
+        .map(toWebSearchResult)
+        .filter((item) => item !== null),
     }
   }
 
@@ -91,10 +103,12 @@ function normalizeWebSearchShape(
       (item) =>
         isRecord(item) &&
         typeof item.encryptedContent === "string" &&
-        item.type === "web_search_result",
+        item.type === "web_search_result"
     )
     return {
-      rawShape: hasAnthropicNativeFields ? "array-anthropic-native" : "array-results",
+      rawShape: hasAnthropicNativeFields
+        ? "array-anthropic-native"
+        : "array-results",
       results: output.map(toWebSearchResult).filter((item) => item !== null),
     }
   }
@@ -102,7 +116,9 @@ function normalizeWebSearchShape(
   if (isRecord(output) && Array.isArray(output.results)) {
     return {
       rawShape: "array-results",
-      results: output.results.map(toWebSearchResult).filter((item) => item !== null),
+      results: output.results
+        .map(toWebSearchResult)
+        .filter((item) => item !== null),
     }
   }
 
@@ -125,7 +141,7 @@ const PLATFORM_PAYMENT_TOOLS = new Set([
 
 function extractPlatformToolContext(
   part: JsonRecord,
-  toolName: string,
+  toolName: string
 ): ReplayPlatformToolContext | undefined {
   const toolKey =
     toolName === "Purchase" || toolName === "pay_purchase"
@@ -150,7 +166,8 @@ function extractPlatformToolContext(
     jobId: typeof output?.jobId === "string" ? output.jobId : undefined,
     status: typeof output?.status === "string" ? output.status : undefined,
     url: purchaseUrl,
-    isTerminal: typeof output?.isTerminal === "boolean" ? output.isTerminal : undefined,
+    isTerminal:
+      typeof output?.isTerminal === "boolean" ? output.isTerminal : undefined,
   }
 }
 
@@ -164,7 +181,8 @@ function normalizeToolExchange(part: JsonRecord): ReplayToolExchange {
 
   const base: ReplayToolExchange = {
     toolName,
-    toolCallId: typeof part.toolCallId === "string" ? part.toolCallId : undefined,
+    toolCallId:
+      typeof part.toolCallId === "string" ? part.toolCallId : undefined,
     state: typeof part.state === "string" ? part.state : undefined,
     replayable: false,
     nonReplayableReason: "Tool replay not supported yet.",
@@ -184,7 +202,9 @@ function normalizeToolExchange(part: JsonRecord): ReplayToolExchange {
   }
 
   const query =
-    isRecord(part.input) && typeof part.input.query === "string" ? part.input.query : ""
+    isRecord(part.input) && typeof part.input.query === "string"
+      ? part.input.query
+      : ""
   const { rawShape, results } = normalizeWebSearchShape(part.output)
 
   if (rawShape === "unknown") {
@@ -202,7 +222,8 @@ function normalizeToolExchange(part: JsonRecord): ReplayToolExchange {
 
   return {
     toolName,
-    toolCallId: typeof part.toolCallId === "string" ? part.toolCallId : undefined,
+    toolCallId:
+      typeof part.toolCallId === "string" ? part.toolCallId : undefined,
     state: typeof part.state === "string" ? part.state : undefined,
     replayable: true,
     webSearch: {
@@ -218,19 +239,27 @@ function normalizePart(part: unknown): ReplayPart | null {
   if (!isRecord(part) || typeof part.type !== "string") return null
 
   if (part.type === "text") {
-    return { type: "text", text: typeof part.text === "string" ? part.text : "" }
+    return {
+      type: "text",
+      text: typeof part.text === "string" ? part.text : "",
+    }
   }
 
   if (part.type === "file") {
     return {
       type: "file",
-      mediaType: typeof part.mediaType === "string" ? part.mediaType : undefined,
+      mediaType:
+        typeof part.mediaType === "string" ? part.mediaType : undefined,
       filename: typeof part.filename === "string" ? part.filename : undefined,
       url: typeof part.url === "string" ? part.url : undefined,
     }
   }
 
-  if (part.type === "source-url" && typeof part.url === "string" && part.url.length > 0) {
+  if (
+    part.type === "source-url" &&
+    typeof part.url === "string" &&
+    part.url.length > 0
+  ) {
     return {
       type: "source-url",
       sourceId: typeof part.sourceId === "string" ? part.sourceId : undefined,
@@ -246,7 +275,9 @@ function normalizePart(part: unknown): ReplayPart | null {
   return null
 }
 
-export function normalizeReplayMessages(messages: readonly UIMessage[]): ReplayNormalizationResult {
+export function normalizeReplayMessages(
+  messages: readonly UIMessage[]
+): ReplayNormalizationResult {
   const warnings: ReplayNormalizationWarning[] = []
   const normalized: ReplayMessage[] = []
 
@@ -283,12 +314,17 @@ export function normalizeReplayMessages(messages: readonly UIMessage[]): ReplayN
             return
           }
 
-          if (normalizedPart.type === "tool-exchange" && !normalizedPart.tool.replayable) {
+          if (
+            normalizedPart.type === "tool-exchange" &&
+            !normalizedPart.tool.replayable
+          ) {
             warnings.push({
               code: "tool_non_replayable",
               messageIndex,
               partIndex,
-              detail: normalizedPart.tool.nonReplayableReason ?? "Tool payload is non-replayable.",
+              detail:
+                normalizedPart.tool.nonReplayableReason ??
+                "Tool payload is non-replayable.",
             })
           }
 
@@ -328,7 +364,9 @@ export function normalizeReplayMessages(messages: readonly UIMessage[]): ReplayN
         code: "message_invalid",
         messageIndex,
         detail:
-          error instanceof Error ? error.message : "Unknown error while normalizing message.",
+          error instanceof Error
+            ? error.message
+            : "Unknown error while normalizing message.",
       })
     }
   })

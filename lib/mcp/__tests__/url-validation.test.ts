@@ -1,11 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import * as dns from "node:dns/promises"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
-  validateServerUrl,
-  validateResolvedUrl,
   isPrivateIP,
   isPrivateIPv6,
+  validateResolvedUrl,
+  validateServerUrl,
 } from "../url-validation"
-import * as dns from "node:dns/promises"
 
 vi.mock("node:dns/promises")
 
@@ -32,9 +32,7 @@ describe("validateServerUrl", () => {
     })
 
     it("accepts URLs with query parameters", () => {
-      expect(
-        validateServerUrl("https://example.com/mcp?key=value")
-      ).toBeNull()
+      expect(validateServerUrl("https://example.com/mcp?key=value")).toBeNull()
     })
 
     it("accepts public IP addresses", () => {
@@ -135,9 +133,7 @@ describe("validateServerUrl", () => {
 
     it("allows public IPv6 addresses", () => {
       expect(validateServerUrl("http://[2001:db8::1]")).toBeNull()
-      expect(
-        validateServerUrl("http://[2607:f8b0:4004:800::200e]")
-      ).toBeNull()
+      expect(validateServerUrl("http://[2607:f8b0:4004:800::200e]")).toBeNull()
     })
   })
 
@@ -263,15 +259,11 @@ describe("validateServerUrl", () => {
   describe("edge cases", () => {
     it("handles URLs with authentication in them", () => {
       // user:pass@host URLs — should validate the host part
-      expect(
-        validateServerUrl("https://user:pass@mcp.example.com")
-      ).toBeNull()
+      expect(validateServerUrl("https://user:pass@mcp.example.com")).toBeNull()
     })
 
     it("handles URLs with fragments", () => {
-      expect(
-        validateServerUrl("https://example.com/mcp#section")
-      ).toBeNull()
+      expect(validateServerUrl("https://example.com/mcp#section")).toBeNull()
     })
 
     it("handles case-insensitive hostnames", () => {

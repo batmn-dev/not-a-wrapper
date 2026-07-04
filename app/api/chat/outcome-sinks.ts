@@ -6,11 +6,11 @@
 // only project them onto a destination. Tests inject an in-memory sink instead —
 // the seam's second adapter.
 
-import { fetchMutation } from "convex/nextjs"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import type { getPostHogClient } from "@/lib/posthog"
 import type { ToolOutcomeSink } from "@/lib/tools/runtime"
+import { fetchMutation } from "convex/nextjs"
 
 type PostHogClient = NonNullable<ReturnType<typeof getPostHogClient>>
 

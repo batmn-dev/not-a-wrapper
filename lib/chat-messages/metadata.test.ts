@@ -1,16 +1,16 @@
+import type { PersistedMessageMetadata } from "@/convex/lib/messageMetadata"
+import type { ToolInvocationStreamMetadata } from "@/lib/tools/ui-metadata"
 import { describe, expect, it } from "vitest"
+import type { MessageBranchInfo } from "./branch"
 import {
-  SERVER_OWNED_METADATA_KEYS,
   adoptServerOwned,
   getBranch,
   getServerMessageId,
   getToolDisplayMetadataRecords,
+  SERVER_OWNED_METADATA_KEYS,
   stampServerFields,
   type DurableMetadataSource,
 } from "./metadata"
-import type { MessageBranchInfo } from "./branch"
-import type { PersistedMessageMetadata } from "@/convex/lib/messageMetadata"
-import type { ToolInvocationStreamMetadata } from "@/lib/tools/ui-metadata"
 
 // Drift guard across the persistence boundary: the Convex persisted-metadata
 // validator and the client stream-metadata type must stay structurally
@@ -25,7 +25,8 @@ type MetadataKeyDrift =
 const _metadataKeysMatch: Assert<
   [MetadataKeyDrift] extends [never] ? true : false
 > = true
-const _toPersisted: PersistedMessageMetadata = {} as ToolInvocationStreamMetadata
+const _toPersisted: PersistedMessageMetadata =
+  {} as ToolInvocationStreamMetadata
 const _toClient: ToolInvocationStreamMetadata = {} as PersistedMessageMetadata
 void _metadataKeysMatch
 void _toPersisted
@@ -73,7 +74,11 @@ describe("stampServerFields", () => {
   })
 
   it("omits undefined source fields rather than writing them", () => {
-    const result = stampServerFields({}, { _id: "s", status: "pending" }, "extended")
+    const result = stampServerFields(
+      {},
+      { _id: "s", status: "pending" },
+      "extended"
+    )
     expect(result).toEqual({ serverMessageId: "s", durableStatus: "pending" })
     expect("model" in result).toBe(false)
   })
@@ -102,9 +107,16 @@ describe("stampServerFields", () => {
   })
 
   it("normalizes a valid branch descriptor and drops an invalid one", () => {
-    expect(getBranch({ metadata: stampServerFields({ branch }, { _id: "s" }, "extended") }))
-      .toEqual(branch)
-    const dropped = stampServerFields({ branch: { bogus: true } }, { _id: "s" }, "extended")
+    expect(
+      getBranch({
+        metadata: stampServerFields({ branch }, { _id: "s" }, "extended"),
+      })
+    ).toEqual(branch)
+    const dropped = stampServerFields(
+      { branch: { bogus: true } },
+      { _id: "s" },
+      "extended"
+    )
     expect("branch" in dropped).toBe(false)
   })
 
@@ -195,7 +207,9 @@ describe("server-owned key-set drift guard", () => {
     // The keys stampServerFields writes (minus the id + branch) must be exactly
     // the set adoptServerOwned governs. Both derive from one source, so this
     // fails the moment a key is added to one writer and not the other.
-    const written = new Set(Object.keys(stampServerFields({}, fullSource, "extended")))
+    const written = new Set(
+      Object.keys(stampServerFields({}, fullSource, "extended"))
+    )
     written.delete("serverMessageId")
 
     const local: Record<string, unknown> = {}

@@ -15,7 +15,9 @@ export type Provider = {
   id: string
   name: string
   available?: boolean
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number | string }>
+  icon: React.ComponentType<
+    React.SVGProps<SVGSVGElement> & { size?: number | string }
+  >
 }
 
 export const PROVIDERS: Provider[] = [

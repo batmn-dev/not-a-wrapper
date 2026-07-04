@@ -206,23 +206,29 @@ describe("normalizeMessagePartsForStorage", () => {
     }
 
     expect(
-      normalizeMessagePartsForStorage([filePart], [
-        {
-          name: "legacy-photo.png",
-          contentType: "image/png",
-          url: "https://example.com/legacy-photo.png",
-        },
-      ])
+      normalizeMessagePartsForStorage(
+        [filePart],
+        [
+          {
+            name: "legacy-photo.png",
+            contentType: "image/png",
+            url: "https://example.com/legacy-photo.png",
+          },
+        ]
+      )
     ).toEqual([filePart])
   })
 
   it("ignores malformed legacy attachments", () => {
     expect(
-      normalizeMessagePartsForStorage([], [
-        null,
-        { name: "missing-url.pdf", contentType: "application/pdf" },
-        { name: "", contentType: "", url: "https://example.com/file.bin" },
-      ])
+      normalizeMessagePartsForStorage(
+        [],
+        [
+          null,
+          { name: "missing-url.pdf", contentType: "application/pdf" },
+          { name: "", contentType: "", url: "https://example.com/file.bin" },
+        ]
+      )
     ).toEqual([
       {
         type: "file",
@@ -281,9 +287,7 @@ describe("message branch selection", () => {
       "user_2",
     ])
 
-    expect(
-      getBranchInfoForMessage(messages, selectedPath[1]!)
-    ).toMatchObject({
+    expect(getBranchInfoForMessage(messages, selectedPath[1]!)).toMatchObject({
       messageId: "assistant_new",
       currentIndex: 1,
       total: 2,
@@ -354,10 +358,15 @@ describe("message branch selection", () => {
       { _id: "message_user_1" },
       { _id: "message_assistant_old" },
     ])
-    await expect(getPublicForChatHandler(ctx, { chatId })).resolves
-      .toMatchObject([{ _id: "message_user_1" }, { _id: "message_assistant_old" }])
-    await expect(getLastMessagesHandler(ctx, { chatId, limit: 1 })).resolves
-      .toMatchObject([{ _id: "message_assistant_old" }])
+    await expect(
+      getPublicForChatHandler(ctx, { chatId })
+    ).resolves.toMatchObject([
+      { _id: "message_user_1" },
+      { _id: "message_assistant_old" },
+    ])
+    await expect(
+      getLastMessagesHandler(ctx, { chatId, limit: 1 })
+    ).resolves.toMatchObject([{ _id: "message_assistant_old" }])
   })
 
   it("assigns unique missing branch indexes when clearing sparse siblings", async () => {

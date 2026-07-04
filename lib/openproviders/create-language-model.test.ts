@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest"
 import { getModelInfo } from "@/lib/models"
+import { describe, expect, it } from "vitest"
 import { createLanguageModel } from "./create-language-model"
 
 describe("createLanguageModel", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import type { Provider } from "./types"
 import { getProviderStrategy } from "./provider-strategy"
+import type { Provider } from "./types"
 
 const SEARCH_PROVIDERS = ["openai", "anthropic", "google", "xai"] as const
 const NON_SEARCH_PROVIDERS = ["mistral", "perplexity", "openrouter"] as const

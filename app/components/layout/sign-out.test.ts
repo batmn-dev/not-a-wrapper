@@ -1,10 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { toast } from "@/components/ui/toast"
 import { clearAllIndexedDBStores } from "@/lib/chat-store/persist"
-import {
-  isNextRedirectError,
-  signOutAndClearLocalState,
-} from "./sign-out"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { isNextRedirectError, signOutAndClearLocalState } from "./sign-out"
 
 vi.mock("@/components/ui/toast", () => ({
   toast: vi.fn(),

@@ -1,5 +1,10 @@
 import type { UIMessage } from "ai"
-import type { AdaptationContext, AdaptationResult, AdaptationWarning, ProviderHistoryAdapter } from "./types"
+import type {
+  AdaptationContext,
+  AdaptationResult,
+  AdaptationWarning,
+  ProviderHistoryAdapter,
+} from "./types"
 import {
   createEmptyStats,
   incrementStat,
@@ -29,7 +34,11 @@ function isTextPart(part: MessagePart): boolean {
 }
 
 function isDroppedArtifactType(part: MessagePart): boolean {
-  return part.type === "step-start" || part.type === "source-url" || part.type === "source-document"
+  return (
+    part.type === "step-start" ||
+    part.type === "source-url" ||
+    part.type === "source-document"
+  )
 }
 
 function hasStepStarts(parts: MessagePart[]): boolean {
@@ -88,7 +97,11 @@ function splitBySemanticFallback(parts: MessagePart[]): MessagePart[][] {
 function validateOpenAIBlock(block: MessagePart[]): BlockValidationResult {
   const sanitized = block.filter((part) => !isDroppedArtifactType(part))
   if (sanitized.length === 0) {
-    return { keep: false, reason: "block had only dropped artifacts", droppedParts: block }
+    return {
+      keep: false,
+      reason: "block had only dropped artifacts",
+      droppedParts: block,
+    }
   }
 
   const hasTool = sanitized.some((part) => isToolPart(part))
@@ -103,11 +116,15 @@ function validateOpenAIBlock(block: MessagePart[]): BlockValidationResult {
     }
 
     const hasReasoningTextPair = reasoningIndexes.some((reasoningIndex) =>
-      sanitized.slice(reasoningIndex + 1).some((part) => isTextPart(part)),
+      sanitized.slice(reasoningIndex + 1).some((part) => isTextPart(part))
     )
 
     if (!hasReasoningTextPair) {
-      return { keep: false, reason: "reasoning had no text pair", droppedParts: sanitized }
+      return {
+        keep: false,
+        reason: "reasoning had no text pair",
+        droppedParts: sanitized,
+      }
     }
 
     return { keep: true, parts: sanitized }
@@ -133,7 +150,8 @@ function validateOpenAIBlock(block: MessagePart[]): BlockValidationResult {
   if (hasReasoningAfterFirstTool) {
     return {
       keep: false,
-      reason: "tool block had mid-block reasoning and is structurally ambiguous",
+      reason:
+        "tool block had mid-block reasoning and is structurally ambiguous",
       droppedParts: sanitized,
     }
   }
@@ -165,13 +183,17 @@ export const openaiAdapter: ProviderHistoryAdapter = {
     droppedPartTypes: new Set(["step-start", "source-url", "source-document"]),
     transformedPartTypes: new Set(["tool-*", "reasoning"]),
     tier: "complex",
-    description: "OpenAI Responses API — atomic reasoning→tool→result triple enforcement",
+    description:
+      "OpenAI Responses API — atomic reasoning→tool→result triple enforcement",
   },
   async adaptMessages(
     messages: readonly UIMessage[],
-    _context: AdaptationContext,
+    _context: AdaptationContext
   ): Promise<AdaptationResult> {
-    const totalPartsOriginal = messages.reduce((sum, message) => sum + message.parts.length, 0)
+    const totalPartsOriginal = messages.reduce(
+      (sum, message) => sum + message.parts.length,
+      0
+    )
     const stats = createEmptyStats(messages.length, totalPartsOriginal)
     const warnings: AdaptationWarning[] = []
     const adaptedMessages: UIMessage[] = []
@@ -256,7 +278,8 @@ export const openaiAdapter: ProviderHistoryAdapter = {
           warnings.push({
             code: "incomplete_triple_dropped",
             messageIndex,
-            detail: "Dropped block containing non-final tool state to preserve atomic triple",
+            detail:
+              "Dropped block containing non-final tool state to preserve atomic triple",
           })
           continue
         }
@@ -302,7 +325,8 @@ export const openaiAdapter: ProviderHistoryAdapter = {
         warnings.push({
           code: "empty_message_fallback",
           messageIndex,
-          detail: "All assistant parts were stripped; injected fallback empty text",
+          detail:
+            "All assistant parts were stripped; injected fallback empty text",
         })
       }
 
@@ -313,10 +337,13 @@ export const openaiAdapter: ProviderHistoryAdapter = {
     }
 
     stats.adaptedMessageCount = adaptedMessages.length
-    stats.droppedMessages = Math.max(0, stats.originalMessageCount - stats.adaptedMessageCount)
+    stats.droppedMessages = Math.max(
+      0,
+      stats.originalMessageCount - stats.adaptedMessageCount
+    )
     stats.totalPartsAdapted = adaptedMessages.reduce(
       (sum, message) => sum + message.parts.length,
-      0,
+      0
     )
 
     return {

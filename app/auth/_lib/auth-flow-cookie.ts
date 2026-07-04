@@ -1,6 +1,10 @@
 import "server-only"
-
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto"
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from "crypto"
 import { cookies } from "next/headers"
 
 const AUTH_FLOW_COOKIE = "naw-auth-flow"
@@ -77,9 +81,9 @@ export function openAuthFlowCookieValue(
       decipher.update(fromBase64Url(encryptedValue)),
       decipher.final(),
     ])
-    const parsed = JSON.parse(decrypted.toString("utf8")) as Partial<
-      EmailVerificationFlow
-    >
+    const parsed = JSON.parse(
+      decrypted.toString("utf8")
+    ) as Partial<EmailVerificationFlow>
 
     if (
       parsed.version !== AUTH_FLOW_VERSION ||

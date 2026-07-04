@@ -431,8 +431,8 @@ untouched; visual/animation parity still needs a live render (see ambiguities).
 Details per finding below and in the Update Log.
 
 What the STATIC captures prove vs. what needs a LIVE render: the checked-in
-ChatGPT captures are settled end-states, so they prove the panel's *structure*
-and the CSS *transition intent* (the `transition-[width] duration-300 ease-out`
+ChatGPT captures are settled end-states, so they prove the panel's _structure_
+and the CSS _transition intent_ (the `transition-[width] duration-300 ease-out`
 declared on the reference rail; the `max-lg:w-0!` collapse; the fixed-width
 clipped inner). They do NOT contain the interpolated open/close frames — the
 desktop flyout's own slide and the tablet/mobile Silk sheet enter/exit are
@@ -447,14 +447,14 @@ Desktop = in-flow docked flyout that pushes the thread. Tablet/mobile = a
 Silk-driven dialog overlay (no thread push). Reference citations use the durable
 capture files.
 
-| Surface | Action | Animated property | Duration | Timing | Mount strategy | Inner reflow-avoidance | Thread push | Confidence |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Desktop | open | `width` 0→400px on the in-flow slot/rail; no transform | `300ms` (declared on the rail); interpolated frames needs-live-render | `ease-out` (declared on the rail) | Always-mounted; CSS-collapse via `max-lg:w-0!` | Clip — content in a fixed-width `absolute` carrier inside `overflow-x-hidden` | In-flow `shrink-0` 400px sibling shrinks `@container/main` | strong |
-| Desktop | close | `width` 400px→0; shell STAYS mounted (collapses, no unmount) | `300ms` declared; exit/asymmetry needs-live-render | `ease-out` declared | Stays mounted, collapses to 0 | Clip (same carrier) | Reverse in-flow expansion | strong (struct) / unobtainable (timing) |
-| Tablet | open | Backdrop `opacity` 0→1 + `backdrop-blur` 0→1px; card slide = Silk JS | Backdrop `250ms` (exact); card needs-live-render | Backdrop default `transition` ease; card needs-live-render | Sheet mounted-on-demand; flyout stays mounted-at-0 | Fixed `max-w-md` width + `overflow-hidden` → no reflow | None (overlay) | exact (backdrop) / unobtainable (card) |
-| Tablet | close | needs-live-render (only a settled open frame captured) | needs-live-render | needs-live-render | Unmount/hide (Silk) | Fixed width → no reflow (structural) | None | unobtainable |
-| Mobile | open | Backdrop instant (`sm:`-gated fade is inert <640px); sheet slide-up = Silk JS | Backdrop instant; sheet needs-live-render | n/a / needs-live-render | Sheet mounted-on-demand; flyout stays mounted-at-0 | Fixed full-width + `overflow-hidden` → no reflow | None (overlay) | strong (backdrop) / unobtainable (sheet) |
-| Mobile | close | needs-live-render | needs-live-render | needs-live-render | Unmount/hide (Silk) | Fixed width → no reflow (structural) | None | unobtainable |
+| Surface | Action | Animated property                                                             | Duration                                                              | Timing                                                     | Mount strategy                                     | Inner reflow-avoidance                                                        | Thread push                                                | Confidence                               |
+| ------- | ------ | ----------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------- |
+| Desktop | open   | `width` 0→400px on the in-flow slot/rail; no transform                        | `300ms` (declared on the rail); interpolated frames needs-live-render | `ease-out` (declared on the rail)                          | Always-mounted; CSS-collapse via `max-lg:w-0!`     | Clip — content in a fixed-width `absolute` carrier inside `overflow-x-hidden` | In-flow `shrink-0` 400px sibling shrinks `@container/main` | strong                                   |
+| Desktop | close  | `width` 400px→0; shell STAYS mounted (collapses, no unmount)                  | `300ms` declared; exit/asymmetry needs-live-render                    | `ease-out` declared                                        | Stays mounted, collapses to 0                      | Clip (same carrier)                                                           | Reverse in-flow expansion                                  | strong (struct) / unobtainable (timing)  |
+| Tablet  | open   | Backdrop `opacity` 0→1 + `backdrop-blur` 0→1px; card slide = Silk JS          | Backdrop `250ms` (exact); card needs-live-render                      | Backdrop default `transition` ease; card needs-live-render | Sheet mounted-on-demand; flyout stays mounted-at-0 | Fixed `max-w-md` width + `overflow-hidden` → no reflow                        | None (overlay)                                             | exact (backdrop) / unobtainable (card)   |
+| Tablet  | close  | needs-live-render (only a settled open frame captured)                        | needs-live-render                                                     | needs-live-render                                          | Unmount/hide (Silk)                                | Fixed width → no reflow (structural)                                          | None                                                       | unobtainable                             |
+| Mobile  | open   | Backdrop instant (`sm:`-gated fade is inert <640px); sheet slide-up = Silk JS | Backdrop instant; sheet needs-live-render                             | n/a / needs-live-render                                    | Sheet mounted-on-demand; flyout stays mounted-at-0 | Fixed full-width + `overflow-hidden` → no reflow                              | None (overlay)                                             | strong (backdrop) / unobtainable (sheet) |
+| Mobile  | close  | needs-live-render                                                             | needs-live-render                                                     | needs-live-render                                          | Unmount/hide (Silk)                                | Fixed width → no reflow (structural)                                          | None                                                       | unobtainable                             |
 
 Reference anchors (verified directly from the captures):
 
@@ -467,7 +467,7 @@ Reference anchors (verified directly from the captures):
   `…/pages/conversation-with-activity-panel.md:7528`.
 - The push/slide transition lives on a SEPARATE empty spacer
   (`data-side-pane-shell-rail`, `transition-[width] duration-300 ease-out
-  motion-reduce:transition-none`, `width:0`) —
+motion-reduce:transition-none`, `width:0`) —
   `…/pages/conversation-with-activity-panel.md:7509`. These are the SAME utility
   classes our dock slot uses.
 - The push target is `@container/main` (`flex-1 min-w-0`), inside
@@ -552,7 +552,7 @@ Proposed Fix:
 
 Open Question / Tradeoff:
 
-- The reference animates *width* (not transform), so the slot still incurs layout
+- The reference animates _width_ (not transform), so the slot still incurs layout
   per frame — that is acceptable and reference-faithful. Do NOT switch to a
   transform/clip slide to "GPU-composite" it: a transform does not reclaim flex
   space, so it would decouple the thread push from the visual slide. Keep the
@@ -589,14 +589,14 @@ Reference:
   — the flyout shell is ALWAYS mounted and CSS-collapsed via `max-lg:w-0!` (never
   unmounted; present in the DOM at desktop, tablet 820px, and mobile 592px), and
   the collapsing slot is the empty rail with the declared `transition-[width]
-  duration-300` (`…:7509`). So on close the width interpolates from a still-populated
+duration-300` (`…:7509`). So on close the width interpolates from a still-populated
   400px shell to 0 — a continuous slide.
 
 Our Current Value:
 
 - `app/components/chat/activity/activity-panel.tsx:115, 120-132` — `dockedActive =
-  open && !isBelowLg`; on close it flips false, so `createPortal(<DockedFlyoutShell/>,
-  slotElement)` returns null and the flyout content unmounts in ONE FRAME; the
+open && !isBelowLg`; on close it flips false, so `createPortal(<DockedFlyoutShell/>,
+slotElement)` returns null and the flyout content unmounts in ONE FRAME; the
   slot becomes `:empty` immediately.
 
 Delta:
@@ -677,12 +677,12 @@ Delta:
   bump is at `@[64rem]/main` = `1024px` container width, which the `/main` column
   straddles during a 400px open/close on typical desktops — so OUR max-width snap
   (`48rem↔40rem`) does fire at the 1024px crossing; (b) our MARGIN tiers use the
-  Tailwind *container* scale (`@sm/main` = `384px`, `@lg/main` = `512px`), so on a
+  Tailwind _container_ scale (`@sm/main` = `384px`, `@lg/main` = `512px`), so on a
   wide viewport our margin stays pinned at `4rem` and does NOT snap — whereas the
-  reference's `@w-sm/main`/`@w-lg/main` appear to be the Tailwind *screens* scale
+  reference's `@w-sm/main`/`@w-lg/main` appear to be the Tailwind _screens_ scale
   (`≈640px`/`1024px`, inferred — see ambiguity), which would snap the margin too.
   Net: our margin tier thresholds are likely ported on the wrong breakpoint scale
-  (container vs screens), but our build actually snaps *less* than the reference,
+  (container vs screens), but our build actually snaps _less_ than the reference,
   not more.
 
 Why It Matters:
@@ -743,13 +743,13 @@ Items (Reference → Ours):
    MATCHES exactly; the sheet curve parity is unprovable (Silk). Confidence: strong.
 3. `scrollbar-gutter` snap at `@sm/main`. Ours:
    `app/components/layout/layout-app.tsx:23` — `[scrollbar-gutter:stable]
-   @sm/main:[scrollbar-gutter:stable_both-edges]` snaps when `/main` crosses
+@sm/main:[scrollbar-gutter:stable_both-edges]` snaps when `/main` crosses
    `640px` during the push (the reference also keys gutter off `@w-sm/main`, so
    structurally similar). Narrow-viewport only; cosmetic. Reference exact behavior
    not audited.
 4. Header bg/shadow snap at `@7xl/main`. Ours:
    `app/components/layout/header.tsx:39` — `@7xl/main:bg-transparent
-   @7xl/main:[box-shadow:none]!` snaps when `/main` crosses `1280px` (wide
+@7xl/main:[box-shadow:none]!` snaps when `/main` crosses `1280px` (wide
    viewports only). Same in-flow-push family; reference not audited.
 5. `border-s` toggles instantly — IMPLEMENTED 2026-06-27. The seam moved off the
    slot onto the always-present shell (`docked-flyout-shell.tsx` `<section>` now
@@ -759,7 +759,7 @@ Items (Reference → Ours):
    (`…/pages/conversation-with-activity-panel.md:7519`). Confidence: strong.
 6. `animate-show` replay on every open. Ours:
    `app/components/chat/activity/activity-panel.tsx:58, 75` — `animate-show` (`show
-   150ms ease-in`, opacity `0→1` + `translateX 0.5rem→0`, `app/globals.css:57-68`),
+150ms ease-in`, opacity `0→1` + `translateX 0.5rem→0`, `app/globals.css:57-68`),
    motion-reduce gated. Reference: chips `animate-[show_150ms_ease-in]`
    (recipe `…/css/conversation-with-activity-panel.md:110`) — duration/easing
    MATCH. The divergence is cadence: our content unmounts on close so the keyframe
@@ -912,7 +912,7 @@ token at `L 0.931`, sub-perceptual).
 4. Tablet card elevation (this is the existing `Exact Tablet Shadow` finding,
    now confirmed as a real visible mismatch).
    - Reference `sm:shadow-long` = a single soft `0 8px 12px rgba(0,0,0,.08)` drop
-     + a faint `0 0 1px` hairline.
+     - a faint `0 0 1px` hairline.
    - Ours `sm:shadow-border-xl` (`content-sheet-shell.tsx:86`; `globals.css:427`)
      = a deep 7-layer floating shadow with a visible `color-mix(foreground 10%)`
      ring - the tablet card reads heavier/more lifted than the reference.
@@ -1052,38 +1052,38 @@ semibold, description `14px leading-snug`.
   needs-live-render item).
 - 2026-06-27: Motion & layout-animation investigation pass (documentation only,
   no code changed). Added the `Activity Panel Open/Close Motion & Layout
-  Animation` section: a reference motion-spec table (desktop/tablet/mobile ×
+Animation` section: a reference motion-spec table (desktop/tablet/mobile ×
   open/close), four prioritized findings (M1 inner-content reflow, M2 instant
   unmount on close, M3 shared `@container` thread snap, M4 secondary micro-motion),
   a mount-strategy recommendation (ship b+c: pin the flyout inner to a fixed width
-  + defer unmount; hold a as the fidelity ceiling), and eight live-render
-  ambiguities. Method: direct source-read of our open/close + breakpoint paths
-  (`activity-panel.tsx`, `activity-panel-host.tsx`, `docked-flyout-shell.tsx`,
-  `content-sheet-shell.tsx`, `conversation.tsx`, `chat.tsx`, `layout-app.tsx`,
-  `header.tsx`, `globals.css`, `use-breakpoint.ts`) plus an independent
-  multi-agent extraction across the desktop/tablet/mobile captures, `matched-rules`,
-  `component-computed-styles`, the CSS recipe, and the inventory, with four
-  load-bearing claims adversarially re-verified against the raw files. VERIFIED
-  from static captures: reference flyout is always-mounted + CSS-collapsed
-  (`max-lg:w-0!`, present in all three captures), animates WIDTH not transform via
-  the `data-side-pane-shell-rail` spacer (`transition-[width] duration-300
-  ease-out` — same classes as our dock slot), and pins inner content in a
-  fixed-width `absolute` carrier inside `overflow-x-hidden` so it CLIPS not
-  reflows. CORRECTED a mid-pass hypothesis: the thread margin/max-width
-  `@container` snap is SHARED with the reference (its tokens are un-transitioned
-  too), so it is NOT the clean differentiator for the sharp re-expansion — the
-  primary causes are our instant content unmount on close (M2) and `w-full`
-  reflowing inner (M1). LEFT AS NEEDS-LIVE-RENDER: desktop flyout interpolated
-  open/close timing, enter/exit asymmetry, whether the snap is masked by the
-  slide, the exact `@w-*/main` thresholds, and all Silk sheet enter/exit. Updated
-  `Outstanding Work At A Glance` (item 7) and cross-linked the `Responsive Shell
-  Coexistence At Breakpoint` finding (shared in-flow-push root cause; reference
-  coexistence now confirmed). Validation: `git diff --check` clean;
-  `git diff -- polish-acitivity-panel-and-page.md` is the only change;
-  `git status --short` shows no unexpected files.
+  - defer unmount; hold a as the fidelity ceiling), and eight live-render
+    ambiguities. Method: direct source-read of our open/close + breakpoint paths
+    (`activity-panel.tsx`, `activity-panel-host.tsx`, `docked-flyout-shell.tsx`,
+    `content-sheet-shell.tsx`, `conversation.tsx`, `chat.tsx`, `layout-app.tsx`,
+    `header.tsx`, `globals.css`, `use-breakpoint.ts`) plus an independent
+    multi-agent extraction across the desktop/tablet/mobile captures, `matched-rules`,
+    `component-computed-styles`, the CSS recipe, and the inventory, with four
+    load-bearing claims adversarially re-verified against the raw files. VERIFIED
+    from static captures: reference flyout is always-mounted + CSS-collapsed
+    (`max-lg:w-0!`, present in all three captures), animates WIDTH not transform via
+    the `data-side-pane-shell-rail` spacer (`transition-[width] duration-300
+ease-out` — same classes as our dock slot), and pins inner content in a
+    fixed-width `absolute` carrier inside `overflow-x-hidden` so it CLIPS not
+    reflows. CORRECTED a mid-pass hypothesis: the thread margin/max-width
+    `@container` snap is SHARED with the reference (its tokens are un-transitioned
+    too), so it is NOT the clean differentiator for the sharp re-expansion — the
+    primary causes are our instant content unmount on close (M2) and `w-full`
+    reflowing inner (M1). LEFT AS NEEDS-LIVE-RENDER: desktop flyout interpolated
+    open/close timing, enter/exit asymmetry, whether the snap is masked by the
+    slide, the exact `@w-*/main` thresholds, and all Silk sheet enter/exit. Updated
+    `Outstanding Work At A Glance` (item 7) and cross-linked the `Responsive Shell
+Coexistence At Breakpoint` finding (shared in-flow-push root cause; reference
+    coexistence now confirmed). Validation: `git diff --check` clean;
+    `git diff -- polish-acitivity-panel-and-page.md` is the only change;
+    `git status --short` shows no unexpected files.
 - 2026-06-27: Implemented the guardrail-safe deep-diff fixes. Code changed:
   `activity-panel.tsx` (reasoning description `text-muted-foreground text-sm
-  leading-5`), `activity-timeline.tsx` (`done` marker + `bullet` dot ->
+leading-5`), `activity-timeline.tsx` (`done` marker + `bullet` dot ->
   `text-muted-foreground`, connector `mt-1` removed, `StepTitle` `leading-[21px]`),
   `panel-header.tsx` + `content-sheet-shell.tsx` (close-button translucent
   `hover:bg-foreground/[0.07]`), and `activity-panel-trigger.tsx` (chevron
@@ -1099,7 +1099,7 @@ semibold, description `14px leading-snug`.
   mobile page captures + computed styles), cross-checked against direct source
   reads. Added the `Reference Divergences From Deep Diff` section with 11
   prioritized actionable items (Tier 1: reasoning description `text-sm
-  leading-5` + secondary color, `done` marker secondary tint, sheet
+leading-5` + secondary color, `done` marker secondary tint, sheet
   reasoning-block `px-3` over-indent; Tier 2: tablet `shadow-long` elevation,
   close-button translucent hover; Tier 3: connector color/`mt-1`/bullet tint,
   drag-handle fill, flyout seam, step-title line-height) plus a "Confirmed

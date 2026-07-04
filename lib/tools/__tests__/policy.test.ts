@@ -1,7 +1,6 @@
-import { describe, expect, it } from "vitest"
 import type { ToolSet } from "ai"
-import { wrapMcpTools, ToolTraceCollector } from "../mcp-wrapper"
-import { wrapToolsWithTracing } from "../utils"
+import { describe, expect, it } from "vitest"
+import { ToolTraceCollector, wrapMcpTools } from "../mcp-wrapper"
 import {
   createOutageTolerantToolBudgetEnforcer,
   createRequestLocalToolSoftCap,
@@ -10,9 +9,10 @@ import {
   InMemoryToolLimitStore,
   isPolicyUnavailableError,
   probeToolBudget,
-  type ToolLimitStore,
   ToolPolicyError,
+  type ToolLimitStore,
 } from "../policy"
+import { wrapToolsWithTracing } from "../utils"
 
 describe("tool policy guardrails", () => {
   it("persists extract_content domain limits across separate requests", async () => {
@@ -58,7 +58,9 @@ describe("tool policy guardrails", () => {
       actorKey: "user:user_b",
     })
 
-    await userAGuard.enforceExtractDomainLimit(new Map([["docs.example.com", 6]]))
+    await userAGuard.enforceExtractDomainLimit(
+      new Map([["docs.example.com", 6]])
+    )
     await expect(
       userAGuard.enforceExtractDomainLimit(new Map([["docs.example.com", 1]]))
     ).rejects.toThrow("EXTRACT_CONTENT_DOMAIN_LIMIT_EXCEEDED")
@@ -120,7 +122,10 @@ describe("tool policy guardrails", () => {
     )
 
     await expect(
-      (wrapped.web_search as { execute: Function }).execute({}, { toolCallId: "call_layer2" })
+      (wrapped.web_search as { execute: Function }).execute(
+        {},
+        { toolCallId: "call_layer2" }
+      )
     ).rejects.toThrow("TOOL_BUDGET_EXCEEDED")
 
     const trace = traces.get("call_layer2")
@@ -167,7 +172,10 @@ describe("tool policy guardrails", () => {
     })
 
     await expect(
-      (wrapped.mcp_read_docs as { execute: Function }).execute({}, { toolCallId: "call_layer3" })
+      (wrapped.mcp_read_docs as { execute: Function }).execute(
+        {},
+        { toolCallId: "call_layer3" }
+      )
     ).rejects.toThrow("TOOL_BUDGET_EXCEEDED")
 
     const trace = traces.get("call_layer3")
@@ -318,7 +326,9 @@ describe("tool policy guardrails", () => {
     }
 
     for (let i = 0; i < budget.maxCount; i++) {
-      await expect(guard.enforceToolBudget("web_search")).resolves.toBeUndefined()
+      await expect(
+        guard.enforceToolBudget("web_search")
+      ).resolves.toBeUndefined()
     }
 
     const exhaustedProbe = await probeToolBudget({

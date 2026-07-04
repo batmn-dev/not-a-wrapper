@@ -1,8 +1,8 @@
 "use client"
 
+import { ScrollButton } from "@/components/ui/scroll-button"
 import { cn } from "@/lib/utils"
 import { StickToBottom } from "use-stick-to-bottom"
-import { ScrollButton } from "@/components/ui/scroll-button"
 
 export type ChatContainerRootProps = {
   children: React.ReactNode

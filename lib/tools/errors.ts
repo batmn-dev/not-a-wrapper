@@ -144,7 +144,9 @@ function isValidationLike(err: Error, statusCode?: number): boolean {
   )
 }
 
-function mapPolicyErrorDetails(policyCode: ToolPolicyCode): ToolExecutionErrorDetails {
+function mapPolicyErrorDetails(
+  policyCode: ToolPolicyCode
+): ToolExecutionErrorDetails {
   return { policyCode }
 }
 

@@ -129,21 +129,35 @@ export function UserPreferencesProvider({
   const { data: convexPreferences } = usePerUserQuery(api.userPreferences.get)
 
   // Convex mutation for updating preferences
-  const updatePreferencesMutation = useConvexMutation(api.userPreferences.update)
+  const updatePreferencesMutation = useConvexMutation(
+    api.userPreferences.update
+  )
 
   // Track optimistic updates (pending changes)
-  const [optimisticUpdates, setOptimisticUpdates] = useState<Partial<UserPreferences>>({})
+  const [optimisticUpdates, setOptimisticUpdates] = useState<
+    Partial<UserPreferences>
+  >({})
 
   // Derive server preferences from Convex data
   const serverPreferences: UserPreferences = useMemo(() => {
     if (convexPreferences && isAuthenticated) {
       return {
-        layout: (convexPreferences.layout as LayoutType) || defaultPreferences.layout,
-        promptSuggestions: convexPreferences.promptSuggestions ?? defaultPreferences.promptSuggestions,
-        showToolInvocations: convexPreferences.showToolInvocations ?? defaultPreferences.showToolInvocations,
-        showConversationPreviews: convexPreferences.showConversationPreviews ?? defaultPreferences.showConversationPreviews,
-        webSearchEnabled: convexPreferences.webSearchEnabled ?? defaultPreferences.webSearchEnabled,
-        hiddenModels: convexPreferences.hiddenModels ?? defaultPreferences.hiddenModels,
+        layout:
+          (convexPreferences.layout as LayoutType) || defaultPreferences.layout,
+        promptSuggestions:
+          convexPreferences.promptSuggestions ??
+          defaultPreferences.promptSuggestions,
+        showToolInvocations:
+          convexPreferences.showToolInvocations ??
+          defaultPreferences.showToolInvocations,
+        showConversationPreviews:
+          convexPreferences.showConversationPreviews ??
+          defaultPreferences.showConversationPreviews,
+        webSearchEnabled:
+          convexPreferences.webSearchEnabled ??
+          defaultPreferences.webSearchEnabled,
+        hiddenModels:
+          convexPreferences.hiddenModels ?? defaultPreferences.hiddenModels,
       }
     }
     return defaultPreferences

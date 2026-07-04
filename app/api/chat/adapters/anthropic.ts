@@ -56,8 +56,11 @@ function toWebSearchResult(item: unknown): WebSearchResult | null {
             ? null
             : undefined,
     encryptedContent:
-      typeof item.encryptedContent === "string" ? item.encryptedContent : undefined,
-    resultType: item.type === "web_search_result" ? "web_search_result" : undefined,
+      typeof item.encryptedContent === "string"
+        ? item.encryptedContent
+        : undefined,
+    resultType:
+      item.type === "web_search_result" ? "web_search_result" : undefined,
   }
 }
 
@@ -91,9 +94,13 @@ function isAnthropicNativeWebSearchResult(result: WebSearchResult): boolean {
   )
 }
 
-function buildWebSearchReplayFallbackText(part: Record<string, unknown>): string {
+function buildWebSearchReplayFallbackText(
+  part: Record<string, unknown>
+): string {
   const query =
-    isRecord(part.input) && typeof part.input.query === "string" ? part.input.query.trim() : ""
+    isRecord(part.input) && typeof part.input.query === "string"
+      ? part.input.query.trim()
+      : ""
   const queryLabel = query.length > 0 ? ` for "${query}"` : ""
   const results = extractWebSearchResults(part.output)
 
@@ -103,7 +110,9 @@ function buildWebSearchReplayFallbackText(part: Record<string, unknown>): string
 
   const lines = results.slice(0, 3).map((result) => {
     const title = result.title?.trim().length ? result.title.trim() : "Result"
-    const snippet = result.snippet?.trim().length ? ` - ${result.snippet.trim()}` : ""
+    const snippet = result.snippet?.trim().length
+      ? ` - ${result.snippet.trim()}`
+      : ""
     return `- ${title} (${result.url})${snippet}`
   })
 
@@ -115,16 +124,18 @@ function buildWebSearchReplayFallbackText(part: Record<string, unknown>): string
  * OpenAI replay history can contain object-shaped output like { action, sources }.
  * Coerce known object shapes to an array to avoid cross-provider validation failures.
  */
-function normalizeWebSearchOutputForAnthropic(
+function normalizeWebSearchOutputForAnthropic(part: Record<string, unknown>): {
   part: Record<string, unknown>
-): { part: Record<string, unknown>; transformed: boolean } {
+  transformed: boolean
+} {
   if (part.type !== "tool-web_search") {
     return { part, transformed: false }
   }
 
   const normalizedResults = extractWebSearchResults(part.output)
   const hasNativeAnthropicPayload =
-    normalizedResults.length > 0 && normalizedResults.every(isAnthropicNativeWebSearchResult)
+    normalizedResults.length > 0 &&
+    normalizedResults.every(isAnthropicNativeWebSearchResult)
 
   if (!hasNativeAnthropicPayload) {
     return {
@@ -154,17 +165,21 @@ function normalizeWebSearchOutputForAnthropic(
 function warnForOrphanedToolPairs(
   warnings: AdaptationWarning[],
   messageIndex: number,
-  parts: Array<Record<string, unknown>>,
+  parts: Array<Record<string, unknown>>
 ): void {
   const invocationCounts = new Map<string, number>()
   const resultCounts = new Map<string, number>()
 
   for (const part of parts) {
-    const toolCallId = typeof part.toolCallId === "string" ? part.toolCallId : null
+    const toolCallId =
+      typeof part.toolCallId === "string" ? part.toolCallId : null
     if (!toolCallId) continue
 
     if (isToolInvocationPart(part)) {
-      invocationCounts.set(toolCallId, (invocationCounts.get(toolCallId) ?? 0) + 1)
+      invocationCounts.set(
+        toolCallId,
+        (invocationCounts.get(toolCallId) ?? 0) + 1
+      )
     }
     if (isToolResultPart(part)) {
       resultCounts.set(toolCallId, (resultCounts.get(toolCallId) ?? 0) + 1)
@@ -200,10 +215,14 @@ export const anthropicAdapter: ProviderHistoryAdapter = {
     droppedPartTypes: new Set(["step-start"]),
     transformedPartTypes: new Set(),
     tier: "standard",
-    description: "Anthropic near-passthrough - API auto-manages thinking lifecycle",
+    description:
+      "Anthropic near-passthrough - API auto-manages thinking lifecycle",
   },
   async adaptMessages(messages, _context): Promise<AdaptationResult> {
-    const totalPartsOriginal = messages.reduce((sum, message) => sum + message.parts.length, 0)
+    const totalPartsOriginal = messages.reduce(
+      (sum, message) => sum + message.parts.length,
+      0
+    )
     const stats = createEmptyStats(messages.length, totalPartsOriginal)
     const warnings: AdaptationWarning[] = []
     const adapted: UIMessage[] = []
@@ -214,7 +233,8 @@ export const anthropicAdapter: ProviderHistoryAdapter = {
 
       for (const part of message.parts) {
         const mutablePart = part as Record<string, unknown>
-        const partType = typeof mutablePart.type === "string" ? mutablePart.type : "unknown"
+        const partType =
+          typeof mutablePart.type === "string" ? mutablePart.type : "unknown"
 
         if (isToolPart({ type: partType }) && !isToolPartFinal(mutablePart)) {
           incrementStat(stats.partsDropped, partType)
@@ -246,7 +266,8 @@ export const anthropicAdapter: ProviderHistoryAdapter = {
           }
         }
 
-        const normalizedToolPart = normalizeWebSearchOutputForAnthropic(nextPart)
+        const normalizedToolPart =
+          normalizeWebSearchOutputForAnthropic(nextPart)
         if (normalizedToolPart.transformed) {
           nextPart = normalizedToolPart.part
           incrementStat(stats.partsTransformed, partType)
@@ -265,7 +286,8 @@ export const anthropicAdapter: ProviderHistoryAdapter = {
         warnings.push({
           code: "empty_message_fallback",
           messageIndex,
-          detail: "Injected empty text fallback because all message parts were removed",
+          detail:
+            "Injected empty text fallback because all message parts were removed",
         })
         nextParts.push({ type: "text", text: "" })
         incrementStat(stats.partsTransformed, "fallback-text")
@@ -278,8 +300,14 @@ export const anthropicAdapter: ProviderHistoryAdapter = {
     }
 
     stats.adaptedMessageCount = adapted.length
-    stats.droppedMessages = Math.max(0, stats.originalMessageCount - adapted.length)
-    stats.totalPartsAdapted = adapted.reduce((sum, message) => sum + message.parts.length, 0)
+    stats.droppedMessages = Math.max(
+      0,
+      stats.originalMessageCount - adapted.length
+    )
+    stats.totalPartsAdapted = adapted.reduce(
+      (sum, message) => sum + message.parts.length,
+      0
+    )
 
     return {
       messages: adapted,

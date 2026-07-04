@@ -20,7 +20,9 @@ describe("Convex message parts helpers", () => {
 
   it("returns empty text for missing or malformed parts", () => {
     expect(extractTextFromMessageParts(undefined)).toBe("")
-    expect(extractTextFromMessageParts({ type: "text", text: "ignored" })).toBe("")
+    expect(extractTextFromMessageParts({ type: "text", text: "ignored" })).toBe(
+      ""
+    )
   })
 
   it("preserves legacy attachment bridging for storage", () => {

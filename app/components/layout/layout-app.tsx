@@ -4,8 +4,8 @@ import {
   ActivityPanelDockSlot,
   ActivityPanelHostProvider,
 } from "@/app/components/chat/activity/activity-panel-host"
-import { Header } from "@/app/components/layout/header"
 import { HistorySearchProvider } from "@/app/components/history/history-search-provider"
+import { Header } from "@/app/components/layout/header"
 import { AppSidebar } from "@/app/components/layout/sidebar/app-sidebar"
 import { ScrollRoot } from "@/components/ui/scroll-root"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
@@ -34,7 +34,7 @@ export function LayoutApp({ children }: { children: React.ReactNode }) {
               @w-lg/512px flip; ours holds at all widths by construction). */}
           <div className="@container/main relative flex min-w-0 flex-1">
             <div className="relative flex min-w-0 flex-1 flex-col">
-              <ScrollRoot className="min-w-0 [--sticky-padding-top:var(--spacing-app-header)] @7xl/main:[--sticky-padding-top:0px] scroll-pt-[var(--sticky-padding-top)] [scrollbar-gutter:stable] @[40rem]/main:[scrollbar-gutter:stable_both-edges] pointer-coarse:[scrollbar-width:none] print:overflow-visible">
+              <ScrollRoot className="min-w-0 scroll-pt-[var(--sticky-padding-top)] [scrollbar-gutter:stable] [--sticky-padding-top:var(--spacing-app-header)] @[40rem]/main:[scrollbar-gutter:stable_both-edges] @7xl/main:[--sticky-padding-top:0px] print:overflow-visible pointer-coarse:[scrollbar-width:none]">
                 <Header hasSidebar={hasSidebar} />
                 <main id="main" className="min-h-0 flex-1">
                   {children}

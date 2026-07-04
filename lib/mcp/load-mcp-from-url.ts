@@ -35,9 +35,7 @@ export type McpTransportConfig = {
  * })
  * ```
  */
-export async function loadMCPToolsFromURL(
-  config: string | McpTransportConfig
-) {
+export async function loadMCPToolsFromURL(config: string | McpTransportConfig) {
   const normalized: McpTransportConfig =
     typeof config === "string" ? { url: config } : config
 

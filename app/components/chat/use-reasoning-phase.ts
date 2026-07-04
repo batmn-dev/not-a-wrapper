@@ -42,8 +42,12 @@ export function useReasoningPhase({
   isLast,
   turnKey,
 }: UseReasoningPhaseParams): ReasoningPhase {
-  const { phase, text: reasoningText, isOpaque, persistedDurationMs } =
-    reasoning
+  const {
+    phase,
+    text: reasoningText,
+    isOpaque,
+    persistedDurationMs,
+  } = reasoning
 
   // Client-side timer.
   // React 19 render-sync pattern: reset timer state when entering thinking.

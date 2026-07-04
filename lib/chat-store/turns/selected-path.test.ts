@@ -204,12 +204,7 @@ describe("reconcileSelectedPath", () => {
       serverMessage("s2", "assistant", "answer"),
     ]
     const result = reconcileSelectedPath(live, server)
-    expect(result.map((m) => m.id)).toEqual([
-      "s1",
-      "s2",
-      "opt-u2",
-      "opt-a2",
-    ])
+    expect(result.map((m) => m.id)).toEqual(["s1", "s2", "opt-u2", "opt-a2"])
   })
 })
 

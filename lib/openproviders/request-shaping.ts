@@ -1,6 +1,6 @@
-import type { ProviderOptions } from "@ai-sdk/provider-utils"
-import type { ModelConfig } from "@/lib/models/types"
 import { ANTHROPIC_BETA_HEADERS } from "@/lib/config"
+import type { ModelConfig } from "@/lib/models/types"
+import type { ProviderOptions } from "@ai-sdk/provider-utils"
 
 /**
  * Request shaping (CONTEXT.md): everything provider-specific about issuing
@@ -117,7 +117,11 @@ function resolveHeaders(
   const isTokenEfficient =
     process.env.ANTHROPIC_TOKEN_EFFICIENT_TOOLS !== "false"
 
-  if (modelConfig.providerId === "anthropic" && ctx.hasTools && isTokenEfficient) {
+  if (
+    modelConfig.providerId === "anthropic" &&
+    ctx.hasTools &&
+    isTokenEfficient
+  ) {
     headers["anthropic-beta"] = ANTHROPIC_BETA_HEADERS.tokenEfficient
   }
   return headers

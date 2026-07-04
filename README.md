@@ -7,23 +7,27 @@ Forked from [Zola](https://github.com/ibelick/zola) and rebuilt with Convex, Wor
 ## Features
 
 ### Core Chat
+
 - **Multi-provider AI chat** — Stream responses from OpenAI, Anthropic, Google, Mistral, xAI, Perplexity, and OpenRouter-hosted models
 - **Streaming with reasoning** — See model thinking in real-time (Claude, o3, DeepSeek R1, etc.)
 - **File uploads** — Share documents, images, and code for AI analysis (Convex-backed storage)
 - **Guest access** — Try the app without signing up (5 messages/day, limited model selection)
 
 ### Tools & Integrations
+
 - **Web search** — Native provider search (OpenAI, Anthropic, Google, xAI) with Exa fallback for providers without built-in search
 - **MCP support** — Connect external tool servers via the Model Context Protocol; per-tool approval, circuit breaker, and audit logging
 - **BYOK (Bring Your Own Key)** — Securely use your own API keys with AES-256-GCM encryption at rest
 
 ### Organization & Sharing
+
 - **Projects** — Group related chats into folders
 - **Public sharing** — Publish chats with a shareable link and OG metadata
 - **Pinned chats** — Pin important conversations for quick access
 - **Chat history** — Full conversation history with search
 
 ### Personalization
+
 - **Light / Dark / System themes** — Automatic or manual theme switching
 - **Layout options** — Sidebar or fullscreen modes
 - **Favorite & hidden models** — Curate your model list
@@ -31,15 +35,15 @@ Forked from [Zola](https://github.com/ibelick/zola) and rebuilt with Convex, Wor
 
 ## Supported AI Providers
 
-| Provider | Notable Models | Capabilities |
-|----------|---------------|-------------|
-| **OpenAI** | GPT-5.4, GPT-5.4 Pro, GPT-5 Mini | Vision, Tools, Web Search |
-| **Anthropic** | Claude Opus 4.6, Sonnet 4.6, Haiku 4.5 | Extended thinking, Vision, Web Search |
-| **Google** | Gemini 2.5 Pro, 2.5 Flash, 2.5 Flash-Lite | Vision, Multimodal, Web Search |
-| **Mistral** | Mistral Large, Mistral Small, Codestral | Vision, Code |
-| **xAI** | Grok 4.1 Fast, Grok Code Fast | Vision, Reasoning |
-| **Perplexity** | Sonar, Sonar Reasoning Pro | Built-in web search |
-| **OpenRouter** | DeepSeek R1, Llama 3.3 8B Instruct | Aggregator, BYOK |
+| Provider       | Notable Models                            | Capabilities                          |
+| -------------- | ----------------------------------------- | ------------------------------------- |
+| **OpenAI**     | GPT-5.4, GPT-5.4 Pro, GPT-5 Mini          | Vision, Tools, Web Search             |
+| **Anthropic**  | Claude Opus 4.6, Sonnet 4.6, Haiku 4.5    | Extended thinking, Vision, Web Search |
+| **Google**     | Gemini 2.5 Pro, 2.5 Flash, 2.5 Flash-Lite | Vision, Multimodal, Web Search        |
+| **Mistral**    | Mistral Large, Mistral Small, Codestral   | Vision, Code                          |
+| **xAI**        | Grok 4.1 Fast, Grok Code Fast             | Vision, Reasoning                     |
+| **Perplexity** | Sonar, Sonar Reasoning Pro                | Built-in web search                   |
+| **OpenRouter** | DeepSeek R1, Llama 3.3 8B Instruct        | Aggregator, BYOK                      |
 
 > Models are regularly updated. The full list is configured in `lib/models/`.
 
@@ -61,16 +65,16 @@ The current Convex setup uses the official WorkOS AuthKit component for webhook-
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Framework | [Next.js 16](https://nextjs.org/) (App Router), React 19, TypeScript |
-| Database | [Convex](https://convex.dev) — Real-time reactive database with file storage and WorkOS webhook-backed user sync |
-| Auth | [WorkOS AuthKit](https://workos.com/authkit) — Hosted authentication with guest access preserved |
-| AI | [Vercel AI SDK v6](https://sdk.vercel.ai/) — Multi-provider streaming, tool calling |
-| State | Zustand + TanStack Query |
-| UI | [Base UI](https://base-ui.com/) + [Tailwind CSS 4](https://tailwindcss.com/) |
+| Layer         | Technology                                                                                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Framework     | [Next.js 16](https://nextjs.org/) (App Router), React 19, TypeScript                                                                                                                 |
+| Database      | [Convex](https://convex.dev) — Real-time reactive database with file storage and WorkOS webhook-backed user sync                                                                     |
+| Auth          | [WorkOS AuthKit](https://workos.com/authkit) — Hosted authentication with guest access preserved                                                                                     |
+| AI            | [Vercel AI SDK v6](https://sdk.vercel.ai/) — Multi-provider streaming, tool calling                                                                                                  |
+| State         | Zustand + TanStack Query                                                                                                                                                             |
+| UI            | [Base UI](https://base-ui.com/) + [Tailwind CSS 4](https://tailwindcss.com/)                                                                                                         |
 | Observability | [Sentry](https://sentry.io/) for app/error tracing, [PostHog](https://posthog.com/) for product and LLM analytics, [Braintrust](https://www.braintrust.dev/) for AI traces and evals |
-| Testing | [Vitest](https://vitest.dev/) |
+| Testing       | [Vitest](https://vitest.dev/)                                                                                                                                                        |
 
 ## Architecture
 
@@ -101,19 +105,19 @@ convex/                     # Database schema, queries, mutations, file storage
 
 ## Roadmap
 
-| Feature | Status |
-|---------|--------|
-| Multi-provider chat | Shipped |
-| BYOK with AES-256-GCM encryption | Shipped |
-| File uploads with Convex storage | Shipped |
-| Projects & chat organization | Shipped |
-| Public chat sharing | Shipped |
-| Web search (native + Exa fallback) | Shipped |
-| MCP tool integration | Shipped |
-| Light/dark themes, layout options | Shipped |
+| Feature                                       | Status  |
+| --------------------------------------------- | ------- |
+| Multi-provider chat                           | Shipped |
+| BYOK with AES-256-GCM encryption              | Shipped |
+| File uploads with Convex storage              | Shipped |
+| Projects & chat organization                  | Shipped |
+| Public chat sharing                           | Shipped |
+| Web search (native + Exa fallback)            | Shipped |
+| MCP tool integration                          | Shipped |
+| Light/dark themes, layout options             | Shipped |
 | Sentry, PostHog, and Braintrust observability | Shipped |
-| Guest access with rate limiting | Shipped |
-| Code execution tools | Planned |
+| Guest access with rate limiting               | Shipped |
+| Code execution tools                          | Planned |
 
 ## Development
 

@@ -13,9 +13,9 @@ describe("model catalog exposure", () => {
     ])
 
     expect(visibleModels.length).toBeLessThan(allModels.length)
-    expect(visibleModels.every((model) => model.catalogStatus === "visible")).toBe(
-      true
-    )
+    expect(
+      visibleModels.every((model) => model.catalogStatus === "visible")
+    ).toBe(true)
   })
 
   it("omits hidden and legacy entries from the visible selector catalog", async () => {
@@ -31,8 +31,14 @@ describe("model catalog exposure", () => {
   it("adds access flags only to the curated visible catalog", async () => {
     const models = await getVisibleModelsWithAccessFlags()
 
-    expect(models.find((model) => model.id === "gpt-5-mini")?.accessible).toBe(true)
-    expect(models.find((model) => model.id === "gpt-5.4")?.accessible).toBe(false)
-    expect(models.some((model) => model.id === "pixtral-large-2411")).toBe(false)
+    expect(models.find((model) => model.id === "gpt-5-mini")?.accessible).toBe(
+      true
+    )
+    expect(models.find((model) => model.id === "gpt-5.4")?.accessible).toBe(
+      false
+    )
+    expect(models.some((model) => model.id === "pixtral-large-2411")).toBe(
+      false
+    )
   })
 })

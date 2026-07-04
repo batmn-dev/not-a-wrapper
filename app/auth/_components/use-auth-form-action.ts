@@ -3,10 +3,7 @@
 import { useAuth } from "@workos-inc/authkit-nextjs/components"
 import { useRouter } from "next/navigation"
 import { useActionState } from "react"
-import {
-  initialAuthActionState,
-  type AuthActionState,
-} from "../_lib/schemas"
+import { initialAuthActionState, type AuthActionState } from "../_lib/schemas"
 
 type AuthFormAction = (
   previousState: AuthActionState,

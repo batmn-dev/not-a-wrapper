@@ -100,7 +100,9 @@ describe("McpServers", () => {
   afterEach(cleanupRender)
 
   function queryLoadingSkeleton() {
-    return container?.querySelector('[role="status"][aria-label="Loading connections"]')
+    return container?.querySelector(
+      '[role="status"][aria-label="Loading connections"]'
+    )
   }
 
   it("shows the loading skeleton instead of the empty state while the list is loading", () => {

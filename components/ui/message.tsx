@@ -30,10 +30,10 @@ export type MessageProps = {
   children: React.ReactNode
   className?: string
   as?: "article" | "div"
-  'data-turn'?: 'user' | 'assistant'
-  'data-turn-phase'?: string
-  'data-message-id'?: string
-  'data-message-author-role'?: 'user' | 'assistant'
+  "data-turn"?: "user" | "assistant"
+  "data-turn-phase"?: string
+  "data-message-id"?: string
+  "data-message-author-role"?: "user" | "assistant"
 } & React.HTMLProps<HTMLElement>
 
 const Message = ({
@@ -68,9 +68,7 @@ const MessageAvatar = ({
   return (
     <Avatar className={cn("h-8 w-8 shrink-0", className)}>
       <AvatarImage src={src} alt={alt} />
-      {fallback && (
-        <AvatarFallback delay={delayMs}>{fallback}</AvatarFallback>
-      )}
+      {fallback && <AvatarFallback delay={delayMs}>{fallback}</AvatarFallback>}
     </Avatar>
   )
 }

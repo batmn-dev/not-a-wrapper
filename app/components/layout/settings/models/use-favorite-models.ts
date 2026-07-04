@@ -87,7 +87,11 @@ export function useFavoriteModels() {
       // Return a context object with the snapshotted value
       return { previousFavoriteModels }
     },
-    onError: (error: Error, _newFavoriteModels: string[], context: { previousFavoriteModels?: string[] } | undefined) => {
+    onError: (
+      error: Error,
+      _newFavoriteModels: string[],
+      context: { previousFavoriteModels?: string[] } | undefined
+    ) => {
       // If the mutation fails, use the context returned from onMutate to roll back
       if (
         context &&

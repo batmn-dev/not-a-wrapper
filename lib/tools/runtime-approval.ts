@@ -69,7 +69,8 @@ export function getRuntimeToolApprovalDecision(
     return {
       needsApproval: true,
       riskClass: "destructive",
-      reason: "Tool can delete, overwrite, or otherwise destructively mutate state.",
+      reason:
+        "Tool can delete, overwrite, or otherwise destructively mutate state.",
     }
   }
 

@@ -152,8 +152,7 @@ export function countToolParts(message: UIMessage): {
 }
 
 type SnapshotPart =
-  | { type: "text"; text: string }
-  | { type: "reasoning"; text: string }
+  { type: "text"; text: string } | { type: "reasoning"; text: string }
 
 const SNAPSHOT_WRITE_TIMEOUT_MS = 10_000
 

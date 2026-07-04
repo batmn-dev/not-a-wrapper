@@ -12,11 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton"
  */
 export function ConnectionCardsSkeleton({ cards = 2 }: { cards?: number }) {
   return (
-    <div
-      className="space-y-3"
-      role="status"
-      aria-label="Loading connections"
-    >
+    <div className="space-y-3" role="status" aria-label="Loading connections">
       {Array.from({ length: cards }, (_, index) => (
         <div
           key={index}

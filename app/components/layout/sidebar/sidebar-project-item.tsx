@@ -67,10 +67,7 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
 
   // Memoize computed values
   const isActive = useMemo(
-    () =>
-      pathname.startsWith(`/p/${project._id}`) ||
-      isEditing ||
-      isMenuOpen,
+    () => pathname.startsWith(`/p/${project._id}`) || isEditing || isMenuOpen,
     [pathname, project._id, isEditing, isMenuOpen]
   )
 

@@ -17,10 +17,10 @@ vi.mock("@/components/ui/avatar", () => ({
 
 function renderFaviconSrc(url: string): string | null {
   const markup = renderToStaticMarkup(<Favicon url={url} alt="site icon" />)
-  return markup.match(/<img\b[^>]*\bsrc="([^"]*)"/)?.[1].replaceAll(
-    "&amp;",
-    "&"
-  ) ?? null
+  return (
+    markup.match(/<img\b[^>]*\bsrc="([^"]*)"/)?.[1].replaceAll("&amp;", "&") ??
+    null
+  )
 }
 
 describe("Favicon", () => {

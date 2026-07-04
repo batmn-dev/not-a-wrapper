@@ -21,9 +21,7 @@ describe("ToolInvocation", () => {
     } as unknown as ToolUIPart
 
     const markup = renderToStaticMarkup(
-      <ToolInvocation
-        toolInvocations={[approvalRespondedTool, runningTool]}
-      />
+      <ToolInvocation toolInvocations={[approvalRespondedTool, runningTool]} />
     )
 
     expect(markup).toContain("Running")

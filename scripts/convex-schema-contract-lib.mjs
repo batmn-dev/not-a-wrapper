@@ -22,7 +22,11 @@ const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/
 const GITHUB_REPO_PART = /^[A-Za-z0-9_.-]+$/
 
 function isIdentifierName(node) {
-  return ts.isIdentifier(node) || ts.isStringLiteral(node) || ts.isNumericLiteral(node)
+  return (
+    ts.isIdentifier(node) ||
+    ts.isStringLiteral(node) ||
+    ts.isNumericLiteral(node)
+  )
 }
 
 function propertyNameText(name) {
@@ -118,9 +122,16 @@ export function parseSchemaFields(source, fileName = DEFAULT_SCHEMA_PATH) {
   return tables
 }
 
-export function diffSchemaContractions(baseSource, currentSource, schemaPath = DEFAULT_SCHEMA_PATH) {
+export function diffSchemaContractions(
+  baseSource,
+  currentSource,
+  schemaPath = DEFAULT_SCHEMA_PATH
+) {
   const baseTables = parseSchemaFields(baseSource, `${schemaPath}:base`)
-  const currentTables = parseSchemaFields(currentSource, `${schemaPath}:current`)
+  const currentTables = parseSchemaFields(
+    currentSource,
+    `${schemaPath}:current`
+  )
   const removed = []
 
   for (const [table, baseFields] of baseTables) {
@@ -202,7 +213,10 @@ export function validateManifest(manifest, pathForMessage) {
   }
 
   for (const key of ["cleanupFunction", "verifier", "rollback"]) {
-    if (typeof manifest[key] !== "string" || manifest[key].trim().length === 0) {
+    if (
+      typeof manifest[key] !== "string" ||
+      manifest[key].trim().length === 0
+    ) {
       errors.push(`${pathForMessage} ${key} is required`)
     }
   }
@@ -221,7 +235,9 @@ export function loadMigrationManifests({
   if (!existsSync(resolvedDir)) {
     return {
       manifests,
-      errors: [`${manifestDir} does not exist; add a schema contraction manifest`],
+      errors: [
+        `${manifestDir} does not exist; add a schema contraction manifest`,
+      ],
     }
   }
 
@@ -246,13 +262,18 @@ export function loadMigrationManifests({
   }
 
   if (manifests.length === 0 && errors.length === 0) {
-    errors.push(`${manifestDir} does not contain any schema contraction manifests`)
+    errors.push(
+      `${manifestDir} does not contain any schema contraction manifests`
+    )
   }
 
   return { manifests, errors }
 }
 
-export function checksFromManifests(manifests, { statuses = ["contracted"] } = {}) {
+export function checksFromManifests(
+  manifests,
+  { statuses = ["contracted"] } = {}
+) {
   const allowedStatuses = new Set(statuses)
   const checksByKey = new Map()
 
@@ -280,7 +301,10 @@ export function contractedManifestSchemaErrors({
   manifests,
   schemaPath = DEFAULT_SCHEMA_PATH,
 }) {
-  const currentTables = parseSchemaFields(currentSource, `${schemaPath}:current`)
+  const currentTables = parseSchemaFields(
+    currentSource,
+    `${schemaPath}:current`
+  )
   const conflicts = []
 
   for (const entry of manifests) {
@@ -297,10 +321,12 @@ export function contractedManifestSchemaErrors({
     }
   }
 
-  return conflicts.sort(compareFieldCheck).map(
-    (conflict) =>
-      `${fieldKey(conflict)} is listed as contracted in ${conflict.path}, but ${schemaPath} still defines it; update the manifest if the field is live again or remove the schema field after cleanup`
-  )
+  return conflicts
+    .sort(compareFieldCheck)
+    .map(
+      (conflict) =>
+        `${fieldKey(conflict)} is listed as contracted in ${conflict.path}, but ${schemaPath} still defines it; update the manifest if the field is live again or remove the schema field after cleanup`
+    )
 }
 
 export function evaluateSchemaContractions({ removedFields, manifests }) {
@@ -458,7 +484,8 @@ export function resolveBaseFetchPlan({
   assertFetchableRefPart(resolvedBaseBranch, "base branch")
   assertFetchableRefPart(destinationRef, "base destination ref")
 
-  const explicitRepoUrl = envValue(repoUrl) ?? envValue(env.SCHEMA_GUARD_REPO_URL)
+  const explicitRepoUrl =
+    envValue(repoUrl) ?? envValue(env.SCHEMA_GUARD_REPO_URL)
   if (explicitRepoUrl) {
     return {
       baseRef,
@@ -471,7 +498,9 @@ export function resolveBaseFetchPlan({
   }
 
   const detectedOriginUrl =
-    originRemoteUrl === undefined ? readOriginRemoteUrl() : envValue(originRemoteUrl)
+    originRemoteUrl === undefined
+      ? readOriginRemoteUrl()
+      : envValue(originRemoteUrl)
   if (detectedOriginUrl) {
     return {
       baseRef,

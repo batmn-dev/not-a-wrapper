@@ -1,23 +1,23 @@
 import { v } from "convex/values"
+import type { Doc, Id } from "./_generated/dataModel"
 import {
   mutation,
   query,
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server"
-import type { Doc, Id } from "./_generated/dataModel"
 import {
-  extractTextFromMessageParts,
-  normalizeMessagePartsForStorage,
-} from "./domain/message_parts"
+  normalizeSelectedBranchPathForMutation,
+  selectMessageSiblingForMutation,
+} from "./domain/message_branch_writes"
 import {
   getBranchInfoForMessage,
   getSelectedPathMessages,
 } from "./domain/message_branches"
 import {
-  normalizeSelectedBranchPathForMutation,
-  selectMessageSiblingForMutation,
-} from "./domain/message_branch_writes"
+  extractTextFromMessageParts,
+  normalizeMessagePartsForStorage,
+} from "./domain/message_parts"
 import { isVisibleChatMessage } from "./domain/message_visibility"
 import { getAuthorizedChatForRead, requireOwnedChat } from "./lib/auth"
 import { ownedChatMutation } from "./lib/authedFunctions"
@@ -209,10 +209,7 @@ export const add = ownedChatMutation({
     const now = Date.now()
     await ctx.db.patch(chatId, { updatedAt: now })
     const orderId = await getNextOrder(ctx, chatId)
-    const parts = normalizeMessagePartsForStorage(
-      args.parts,
-      args.attachments
-    )
+    const parts = normalizeMessagePartsForStorage(args.parts, args.attachments)
 
     return await ctx.db.insert("messages", {
       chatId,
@@ -261,10 +258,7 @@ export const addBatch = ownedChatMutation({
     const ids = []
     let nextOrder = await getNextOrder(ctx, chatId)
     for (const msg of messages) {
-      const parts = normalizeMessagePartsForStorage(
-        msg.parts,
-        msg.attachments
-      )
+      const parts = normalizeMessagePartsForStorage(msg.parts, msg.attachments)
       const id = await ctx.db.insert("messages", {
         chatId,
         orderId: nextOrder,

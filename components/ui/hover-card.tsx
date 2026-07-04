@@ -1,12 +1,9 @@
 "use client"
 
+import { cn } from "@/lib/utils"
 import { PreviewCard as HoverCardPrimitive } from "@base-ui/react/preview-card"
 
-import { cn } from "@/lib/utils"
-
-function HoverCard({
-  ...props
-}: HoverCardPrimitive.Root.Props) {
+function HoverCard({ ...props }: HoverCardPrimitive.Root.Props) {
   return <HoverCardPrimitive.Root data-slot="hover-card" {...props} />
 }
 
@@ -33,10 +30,7 @@ function HoverCardContent({
   sideOffset = 4,
   ...props
 }: HoverCardPrimitive.Popup.Props &
-  Pick<
-    HoverCardPrimitive.Positioner.Props,
-    "align" | "side" | "sideOffset"
-  >) {
+  Pick<HoverCardPrimitive.Positioner.Props, "align" | "side" | "sideOffset">) {
   return (
     <HoverCardPrimitive.Portal>
       <HoverCardPrimitive.Positioner
@@ -48,10 +42,12 @@ function HoverCardContent({
         <HoverCardPrimitive.Popup
           data-slot="hover-card-content"
           className={cn(
-            "bg-popover text-popover-foreground z-50 w-64 origin-(--transform-origin) rounded-md p-4 shadow-border-md outline-hidden data-[starting-style]:opacity-0 data-[starting-style]:[transform:scale(0.95)] data-[ending-style]:opacity-0 data-[ending-style]:[transform:scale(0.95)]",
+            "bg-popover text-popover-foreground shadow-border-md z-50 w-64 origin-(--transform-origin) rounded-md p-4 outline-hidden data-[ending-style]:[transform:scale(0.95)] data-[ending-style]:opacity-0 data-[starting-style]:[transform:scale(0.95)] data-[starting-style]:opacity-0",
             className
           )}
-          style={{ transition: "opacity 150ms ease-out, transform 150ms ease-out" }}
+          style={{
+            transition: "opacity 150ms ease-out, transform 150ms ease-out",
+          }}
           {...props}
         />
       </HoverCardPrimitive.Positioner>

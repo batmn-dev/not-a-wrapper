@@ -20,8 +20,12 @@ import { createMCPClient } from "@ai-sdk/mcp"
 const url = process.argv[2]
 
 if (!url) {
-  console.error("Usage: bun run scripts/mcp-transport-spike.ts <mcp-server-url>")
-  console.error("Example: bun run scripts/mcp-transport-spike.ts https://mcp.example.com/mcp")
+  console.error(
+    "Usage: bun run scripts/mcp-transport-spike.ts <mcp-server-url>"
+  )
+  console.error(
+    "Example: bun run scripts/mcp-transport-spike.ts https://mcp.example.com/mcp"
+  )
   process.exit(1)
 }
 
@@ -40,7 +44,9 @@ async function testTransport(type: "http" | "sse", serverUrl: string) {
     console.log(`  Status: SUCCESS`)
     console.log(`  Tools discovered: ${toolNames.length}`)
     if (toolNames.length > 0) {
-      console.log(`  Tool names: ${toolNames.slice(0, 10).join(", ")}${toolNames.length > 10 ? "..." : ""}`)
+      console.log(
+        `  Tool names: ${toolNames.slice(0, 10).join(", ")}${toolNames.length > 10 ? "..." : ""}`
+      )
     }
 
     await client.close()
@@ -63,7 +69,9 @@ async function main() {
 
   if (httpWorks) {
     console.log("\n=== TRANSPORT_DECISION: http ===")
-    console.log("HTTP (Streamable HTTP) transport works. Use as primary for all phases.")
+    console.log(
+      "HTTP (Streamable HTTP) transport works. Use as primary for all phases."
+    )
     process.exit(0)
   }
 

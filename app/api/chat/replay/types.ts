@@ -26,7 +26,12 @@ export const replayWebSearchSchema = z.object({
   results: z.array(replayWebSearchResultSchema),
   providerOrigin: replayProviderOriginSchema.optional(),
   rawShape: z
-    .enum(["object-action-sources", "array-results", "array-anthropic-native", "unknown"])
+    .enum([
+      "object-action-sources",
+      "array-results",
+      "array-anthropic-native",
+      "unknown",
+    ])
     .optional(),
 })
 
@@ -40,7 +45,9 @@ export const replayPlatformToolContextSchema = z.object({
   isTerminal: z.boolean().optional(),
 })
 
-export type ReplayPlatformToolContext = z.infer<typeof replayPlatformToolContextSchema>
+export type ReplayPlatformToolContext = z.infer<
+  typeof replayPlatformToolContextSchema
+>
 
 export const replayToolExchangeSchema = z.object({
   toolName: z.string(),

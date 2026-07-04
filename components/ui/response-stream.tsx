@@ -110,7 +110,7 @@ function useTextStream({
   }, [])
 
   const onErrorRef = useRef(onError)
-  
+
   useEffect(() => {
     onErrorRef.current = onError
   }, [onError])

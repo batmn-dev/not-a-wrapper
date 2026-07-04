@@ -58,7 +58,9 @@ function extractStatusCode(err: ErrorLike): number | undefined {
 }
 
 function collectErrorChain(error: unknown): ErrorLike[] {
-  const queue: Array<{ value: unknown; depth: number }> = [{ value: error, depth: 0 }]
+  const queue: Array<{ value: unknown; depth: number }> = [
+    { value: error, depth: 0 },
+  ]
   const seen = new Set<object>()
   const collected: ErrorLike[] = []
 
@@ -101,7 +103,9 @@ export function classifyChatError(error: unknown): ChatErrorType {
 
   const codes = chain.map((err) => toLowerString(err.code)).filter(Boolean)
   const names = chain.map((err) => toLowerString(err.name)).filter(Boolean)
-  const messages = chain.map((err) => toLowerString(err.message)).filter(Boolean)
+  const messages = chain
+    .map((err) => toLowerString(err.message))
+    .filter(Boolean)
   const statuses = chain
     .map((err) => extractStatusCode(err))
     .filter((status): status is number => typeof status === "number")
@@ -141,8 +145,16 @@ export function classifyChatError(error: unknown): ChatErrorType {
 
   if (
     hasStatus(statuses, 429) ||
-    matchesAnyIn(codes, ["rate_limit", "too_many_requests", "quota_exceeded"]) ||
-    matchesAnyIn(messages, ["rate limit", "too many requests", "quota exceeded"])
+    matchesAnyIn(codes, [
+      "rate_limit",
+      "too_many_requests",
+      "quota_exceeded",
+    ]) ||
+    matchesAnyIn(messages, [
+      "rate limit",
+      "too many requests",
+      "quota exceeded",
+    ])
   ) {
     return "rate_limit"
   }
@@ -154,7 +166,12 @@ export function classifyChatError(error: unknown): ChatErrorType {
     toolSignals &&
     (matchesAnyIn(names, ["timeout"]) ||
       matchesAnyIn(codes, ["timeout"]) ||
-      matchesAnyIn(messages, ["timeout", "timed out", "deadline exceeded", "aborterror"]))
+      matchesAnyIn(messages, [
+        "timeout",
+        "timed out",
+        "deadline exceeded",
+        "aborterror",
+      ]))
   ) {
     return "tool_timeout"
   }

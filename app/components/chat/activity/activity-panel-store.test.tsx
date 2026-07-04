@@ -172,9 +172,9 @@ describe("activity panel store — row subscription precision", () => {
 
     expect(commits).toEqual({ a1: 1, a2: 1, a3: 1 })
     expect(
-      container?.querySelector('[data-testid="row-a1"]')?.getAttribute(
-        "data-open"
-      )
+      container
+        ?.querySelector('[data-testid="row-a1"]')
+        ?.getAttribute("data-open")
     ).toBe("true")
 
     // Handoff a1 → a2: exactly the two flipped rows re-render; a3 does not.
@@ -184,25 +184,19 @@ describe("activity panel store — row subscription precision", () => {
 
     expect(commits).toEqual({ a1: 2, a2: 2, a3: 1 })
     expect(
-      container?.querySelector('[data-testid="row-a1"]')?.getAttribute(
-        "data-open"
-      )
+      container
+        ?.querySelector('[data-testid="row-a1"]')
+        ?.getAttribute("data-open")
     ).toBe("false")
     expect(
-      container?.querySelector('[data-testid="row-a2"]')?.getAttribute(
-        "data-open"
-      )
+      container
+        ?.querySelector('[data-testid="row-a2"]')
+        ?.getAttribute("data-open")
     ).toBe("true")
   })
 
   it("matches the panel turn by server message id", () => {
-    function Row({
-      id,
-      serverId,
-    }: {
-      id: string
-      serverId?: string
-    }) {
+    function Row({ id, serverId }: { id: string; serverId?: string }) {
       const isOpen = useIsActivityPanelTurnOpen(id, serverId)
       return <div data-testid={`row-${id}`} data-open={isOpen} />
     }

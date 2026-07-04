@@ -125,9 +125,7 @@ export function getDurableError(metadata: unknown): string | undefined {
 export function getReasoningDurationMs(metadata: unknown): number | undefined {
   if (!isRecord(metadata)) return undefined
   const value = metadata.reasoningDurationMs
-  return typeof value === "number" && Number.isFinite(value)
-    ? value
-    : undefined
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
 
 type ToolDisplayMetadataRecord = Readonly<Record<string, unknown>>

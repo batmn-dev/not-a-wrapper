@@ -5,7 +5,11 @@ import {
   projectModelHistoryMessages,
 } from "./message_visibility"
 
-const user = { role: "user", content: "q", parts: [{ type: "text", text: "q" }] }
+const user = {
+  role: "user",
+  content: "q",
+  parts: [{ type: "text", text: "q" }],
+}
 const answered = {
   role: "assistant",
   content: "a",

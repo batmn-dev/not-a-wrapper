@@ -1,4 +1,3 @@
-import { fetchMutation } from "convex/nextjs"
 import { api } from "@/convex/_generated/api"
 import {
   EXTRACT_CONTENT_DOMAIN_MAX_REQUESTS,
@@ -7,15 +6,14 @@ import {
   TOOL_BUDGET_WINDOW_MS,
   TOOL_LIMIT_BUCKET_SIZE_MS,
 } from "@/lib/config"
+import { fetchMutation } from "convex/nextjs"
 
 export type ToolKeyMode = "platform" | "byok"
 export type ToolLimitType = "domain" | "budget"
 
 export type ToolDomainLimitCode = `${string}_DOMAIN_LIMIT_EXCEEDED`
 export type ToolPolicyCode =
-  | ToolDomainLimitCode
-  | "TOOL_BUDGET_EXCEEDED"
-  | "TOOL_POLICY_UNAVAILABLE"
+  ToolDomainLimitCode | "TOOL_BUDGET_EXCEEDED" | "TOOL_POLICY_UNAVAILABLE"
 
 export type ToolPolicyErrorData = {
   code: ToolPolicyCode
@@ -51,7 +49,9 @@ export function isPolicyUnavailableError(err: unknown): err is ToolPolicyError {
   return isToolPolicyError(err) && err.code === "TOOL_POLICY_UNAVAILABLE"
 }
 
-export function extractPolicyErrorData(err: unknown): ToolPolicyErrorData | null {
+export function extractPolicyErrorData(
+  err: unknown
+): ToolPolicyErrorData | null {
   if (!isToolPolicyError(err)) return null
   return {
     code: err.code,
@@ -275,7 +275,10 @@ export function createConvexToolLimitStore(
   }
 }
 
-export function getToolBudgetPolicy(toolName: string, keyMode: ToolKeyMode): {
+export function getToolBudgetPolicy(
+  toolName: string,
+  keyMode: ToolKeyMode
+): {
   windowMs: number
   maxCount: number
   bucketSizeMs: number
@@ -387,7 +390,9 @@ export function createToolPolicyGuard(options: {
       }
     },
 
-    async enforceExtractDomainLimit(domainCounts: Map<string, number>): Promise<void> {
+    async enforceExtractDomainLimit(
+      domainCounts: Map<string, number>
+    ): Promise<void> {
       if (domainCounts.size === 0) return
 
       const policy = getExtractContentDomainPolicy()
@@ -435,7 +440,9 @@ export class InMemoryToolLimitStore implements ToolLimitStore {
     this.nowFn = nowFn
   }
 
-  async checkAndConsume(input: ToolLimitStoreInput): Promise<ToolLimitStoreResult> {
+  async checkAndConsume(
+    input: ToolLimitStoreInput
+  ): Promise<ToolLimitStoreResult> {
     const now = this.nowFn()
     const currentBucketStartMs =
       Math.floor(now / input.bucketSizeMs) * input.bucketSizeMs
@@ -464,7 +471,10 @@ export class InMemoryToolLimitStore implements ToolLimitStore {
         const retryAfterMs = totals.oldestBucketStartMs
           ? Math.max(
               1_000,
-              totals.oldestBucketStartMs + input.bucketSizeMs + input.windowMs - now
+              totals.oldestBucketStartMs +
+                input.bucketSizeMs +
+                input.windowMs -
+                now
             )
           : input.windowMs
 

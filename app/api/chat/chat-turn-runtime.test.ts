@@ -1,4 +1,18 @@
+import { api } from "@/convex/_generated/api"
+import { getAllModels } from "@/lib/models"
+import { prepareToolRuntime } from "@/lib/tools/runtime"
+import { getEffectiveApiKey } from "@/lib/user-keys"
+import * as Sentry from "@sentry/nextjs"
+import { convertToModelMessages, validateUIMessages } from "ai"
+import { getFunctionName } from "convex/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { adaptHistoryForProvider } from "./adapters"
+import {
+  createChatTurnRuntime,
+  type ChatTurnDeps,
+  type ChatTurnInput,
+} from "./chat-turn-runtime"
+import { prepareTextFilePartsForModelInput } from "./text-file-parts"
 
 // --- mock the heavy collaborators so a whole turn runs without HTTP or a model.
 // The Chat turn runtime's interface IS the test surface: inject streamText +
@@ -49,8 +63,8 @@ vi.mock("./text-file-parts", () => ({
 
 vi.mock("@/lib/observability/braintrust", () => ({
   getBraintrustStreamText: vi.fn(),
-  withBraintrustTrace: vi.fn(
-    (_opts: unknown, cb: (span: null) => unknown) => cb(null)
+  withBraintrustTrace: vi.fn((_opts: unknown, cb: (span: null) => unknown) =>
+    cb(null)
   ),
   hashBraintrustIdentifier: vi.fn(async () => "hash"),
   logBraintrustTraceMetadata: vi.fn(),
@@ -81,21 +95,6 @@ vi.mock("ai", async (importActual) => {
     convertToModelMessages: vi.fn(async () => []),
   }
 })
-
-import * as Sentry from "@sentry/nextjs"
-import { getFunctionName } from "convex/server"
-import { validateUIMessages, convertToModelMessages } from "ai"
-import { getAllModels } from "@/lib/models"
-import { getEffectiveApiKey } from "@/lib/user-keys"
-import { prepareToolRuntime } from "@/lib/tools/runtime"
-import { adaptHistoryForProvider } from "./adapters"
-import { prepareTextFilePartsForModelInput } from "./text-file-parts"
-import { api } from "@/convex/_generated/api"
-import {
-  createChatTurnRuntime,
-  type ChatTurnInput,
-  type ChatTurnDeps,
-} from "./chat-turn-runtime"
 
 const SERVER_CHAT_ID = "convexchatid000000000000"
 
@@ -218,13 +217,17 @@ function findCall(fetchMutation: ReturnType<typeof vi.fn>, ref: unknown) {
   return fetchMutation.mock.calls.find((call) => sameRef(call[0], ref))
 }
 
-function makeDeps(harness: StreamHarness, fetchMutation: ReturnType<typeof vi.fn>) {
+function makeDeps(
+  harness: StreamHarness,
+  fetchMutation: ReturnType<typeof vi.fn>
+) {
   return {
     streamText: harness.streamText as unknown as ChatTurnDeps["streamText"],
     fetchMutation: fetchMutation as unknown as ChatTurnDeps["fetchMutation"],
     fetchQuery: vi.fn(async () => []) as unknown as ChatTurnDeps["fetchQuery"],
     after: vi.fn() as unknown as ChatTurnDeps["after"],
-    getPostHogClient: (() => null) as unknown as ChatTurnDeps["getPostHogClient"],
+    getPostHogClient: (() =>
+      null) as unknown as ChatTurnDeps["getPostHogClient"],
   }
 }
 
@@ -243,7 +246,9 @@ beforeEach(() => {
   ] as unknown as Awaited<ReturnType<typeof getAllModels>>)
   vi.mocked(getEffectiveApiKey).mockResolvedValue("byok-key")
   vi.mocked(prepareToolRuntime).mockResolvedValue(
-    makeToolRuntime() as unknown as Awaited<ReturnType<typeof prepareToolRuntime>>
+    makeToolRuntime() as unknown as Awaited<
+      ReturnType<typeof prepareToolRuntime>
+    >
   )
   vi.mocked(adaptHistoryForProvider).mockResolvedValue({
     messages: [],
@@ -286,9 +291,9 @@ describe("createChatTurnRuntime — prepare()", () => {
   })
 
   it("throws a 400 INVALID_REQUEST error when the model is unknown", async () => {
-    vi.mocked(getAllModels).mockResolvedValue([] as unknown as Awaited<
-      ReturnType<typeof getAllModels>
-    >)
+    vi.mocked(getAllModels).mockResolvedValue(
+      [] as unknown as Awaited<ReturnType<typeof getAllModels>>
+    )
     const runtime = createChatTurnRuntime({
       input: makeInput(),
       deps: makeDeps(makeStreamHarness(), makeFetchMutation()),
@@ -313,9 +318,10 @@ describe("createChatTurnRuntime — prepare()", () => {
     })
     await runtime.prepare()
 
-    const validateOrder = vi.mocked(validateUIMessages).mock.invocationCallOrder[0]
-    const convertOrder =
-      vi.mocked(convertToModelMessages).mock.invocationCallOrder[0]
+    const validateOrder =
+      vi.mocked(validateUIMessages).mock.invocationCallOrder[0]
+    const convertOrder = vi.mocked(convertToModelMessages).mock
+      .invocationCallOrder[0]
     expect(validateOrder).toBeGreaterThan(0)
     expect(convertOrder).toBeGreaterThan(0)
     expect(validateOrder).toBeLessThan(convertOrder)
@@ -405,7 +411,12 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     runtime.toResponse(notAbortedSignal())
 
     await harness.captured.responseOpts.onFinish({
-      responseMessage: { id: "msg1", role: "assistant", parts: [], metadata: {} },
+      responseMessage: {
+        id: "msg1",
+        role: "assistant",
+        parts: [],
+        metadata: {},
+      },
       isAborted: true,
       finishReason: "stop",
     })

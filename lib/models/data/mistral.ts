@@ -12,7 +12,8 @@ const mistralModels: ModelConfig[] = [
     lastVerifiedAt: "2026-03-08",
     baseProviderId: "mistral",
     modelFamily: "Codestral",
-    description: "Mistral's specialized code model optimized for code generation, completion, and developer tasks.",
+    description:
+      "Mistral's specialized code model optimized for code generation, completion, and developer tasks.",
     tags: ["code", "coding", "fast", "developer"],
     contextWindow: 128000,
     inputCost: 0.3,

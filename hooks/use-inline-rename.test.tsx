@@ -40,15 +40,17 @@ describe("useInlineRename", () => {
   let root: Root | null = null
 
   beforeAll(() => {
-    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean })
-      .IS_REACT_ACT_ENVIRONMENT = true
+    ;(
+      globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true
 
     if (!globalThis.requestAnimationFrame) {
       globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
         cb(0)
         return 0
       }) as typeof requestAnimationFrame
-      globalThis.cancelAnimationFrame = (() => {}) as typeof cancelAnimationFrame
+      globalThis.cancelAnimationFrame =
+        (() => {}) as typeof cancelAnimationFrame
     }
   })
 
@@ -104,7 +106,9 @@ describe("useInlineRename", () => {
   function keyDown(key: string) {
     const el = input()
     if (!el) throw new Error("input not mounted")
-    act(() => el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })))
+    act(() =>
+      el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }))
+    )
   }
 
   it("enters edit mode showing the current value as the draft", () => {

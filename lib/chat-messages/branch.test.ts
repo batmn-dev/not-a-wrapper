@@ -171,7 +171,9 @@ describe("resolveTurnBranch", () => {
   })
 
   it("falls back to the response's regenerate branch when the prompt wasn't edited", () => {
-    expect(resolveTurnBranch(user(), assistant(regenBranch))).toEqual(regenBranch)
+    expect(resolveTurnBranch(user(), assistant(regenBranch))).toEqual(
+      regenBranch
+    )
   })
 
   it("prefers the edit branch when both exist", () => {

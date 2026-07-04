@@ -1,10 +1,10 @@
 import type { ChatApiParams } from "@/app/types/api.types"
+import { api } from "@/convex/_generated/api"
 import { FREE_MODELS_IDS, NON_AUTH_ALLOWED_MODELS } from "@/lib/config"
 import { resolveModelId } from "@/lib/models/model-id-migration"
 import { getProviderForModel } from "@/lib/openproviders/provider-map"
 import { hasUserKey } from "@/lib/user-keys"
-import { fetchQuery, fetchMutation } from "convex/nextjs"
-import { api } from "@/convex/_generated/api"
+import { fetchMutation, fetchQuery } from "convex/nextjs"
 
 /**
  * Check if a model is a "pro" model (requires more stringent limits)

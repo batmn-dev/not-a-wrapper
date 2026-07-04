@@ -22,7 +22,9 @@ function getPartType(part: MessagePart): string {
 
 function getToolCallId(part: MessagePart): string | null {
   const toolCallId = (part as { toolCallId?: unknown }).toolCallId
-  return typeof toolCallId === "string" && toolCallId.length > 0 ? toolCallId : null
+  return typeof toolCallId === "string" && toolCallId.length > 0
+    ? toolCallId
+    : null
 }
 
 function getToolName(part: MessagePart): string | null {
@@ -35,7 +37,10 @@ function getToolName(part: MessagePart): string | null {
 
 function isToolInvocationPart(part: MessagePart): boolean {
   const type = getPartType(part)
-  return type === "dynamic-tool" || (type.startsWith("tool-") && type !== "tool-result")
+  return (
+    type === "dynamic-tool" ||
+    (type.startsWith("tool-") && type !== "tool-result")
+  )
 }
 
 function isToolResultPart(part: MessagePart): boolean {
@@ -45,13 +50,23 @@ function isToolResultPart(part: MessagePart): boolean {
 }
 
 function isDropByType(type: string): boolean {
-  return type === "reasoning" || type === "step-start" || type === "source-url" || type === "source-document"
+  return (
+    type === "reasoning" ||
+    type === "step-start" ||
+    type === "source-url" ||
+    type === "source-document"
+  )
 }
 
 export const openaiCompatibleAdapter: ProviderHistoryAdapter = {
   providerId: "openai-compatible",
   metadata: {
-    droppedPartTypes: new Set(["reasoning", "step-start", "source-url", "source-document"]),
+    droppedPartTypes: new Set([
+      "reasoning",
+      "step-start",
+      "source-url",
+      "source-document",
+    ]),
     transformedPartTypes: new Set(["tool-*"]),
     tier: "standard",
     description: "OpenAI-compatible format — shared for xAI + Mistral",
@@ -59,9 +74,12 @@ export const openaiCompatibleAdapter: ProviderHistoryAdapter = {
 
   async adaptMessages(
     messages: readonly UIMessage[],
-    _context: AdaptationContext,
+    _context: AdaptationContext
   ): Promise<AdaptationResult> {
-    const totalPartsOriginal = messages.reduce((sum, message) => sum + message.parts.length, 0)
+    const totalPartsOriginal = messages.reduce(
+      (sum, message) => sum + message.parts.length,
+      0
+    )
     const stats = createEmptyStats(messages.length, totalPartsOriginal)
     const warnings: AdaptationWarning[] = []
     const adaptedMessages: UIMessage[] = []
@@ -70,7 +88,8 @@ export const openaiCompatibleAdapter: ProviderHistoryAdapter = {
       const invocationIds = new Set<string>()
       const resultIds = new Set<string>()
       const toolNameById = new Map<string, string>()
-      const pendingParts: Array<{ part: MessagePart; transformed: boolean }> = []
+      const pendingParts: Array<{ part: MessagePart; transformed: boolean }> =
+        []
 
       for (const part of message.parts) {
         const type = getPartType(part)
@@ -134,7 +153,10 @@ export const openaiCompatibleAdapter: ProviderHistoryAdapter = {
         const type = getPartType(part)
         const toolCallId = getToolCallId(part)
 
-        if (toolCallId && (isToolInvocationPart(part) || isToolResultPart(part))) {
+        if (
+          toolCallId &&
+          (isToolInvocationPart(part) || isToolResultPart(part))
+        ) {
           if (!validToolIds.has(toolCallId)) {
             incrementStat(stats.partsDropped, type)
             warnings.push({
@@ -146,7 +168,8 @@ export const openaiCompatibleAdapter: ProviderHistoryAdapter = {
           }
 
           if (isToolResultPart(part)) {
-            const hasName = typeof (part as { name?: unknown }).name === "string"
+            const hasName =
+              typeof (part as { name?: unknown }).name === "string"
             if (!hasName) {
               const derivedName = toolNameById.get(toolCallId)
               if (!derivedName) {
@@ -214,8 +237,12 @@ export const openaiCompatibleAdapter: ProviderHistoryAdapter = {
     }
 
     stats.adaptedMessageCount = adaptedMessages.length
-    stats.totalPartsAdapted = adaptedMessages.reduce((sum, message) => sum + message.parts.length, 0)
-    stats.droppedMessages += messages.length - adaptedMessages.length - stats.droppedMessages
+    stats.totalPartsAdapted = adaptedMessages.reduce(
+      (sum, message) => sum + message.parts.length,
+      0
+    )
+    stats.droppedMessages +=
+      messages.length - adaptedMessages.length - stats.droppedMessages
 
     return {
       messages: adaptedMessages,

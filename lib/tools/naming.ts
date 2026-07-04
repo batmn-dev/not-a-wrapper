@@ -4,11 +4,7 @@ export const TOOL_NAME_MAX_LENGTH = 128
 const TOOL_NAME_PATTERN = /^[A-Za-z0-9_.-]+$/
 
 export type ToolLayer =
-  | "built-in"
-  | "third-party-search"
-  | "content-extraction"
-  | "platform"
-  | "mcp"
+  "built-in" | "third-party-search" | "content-extraction" | "platform" | "mcp"
 
 export const TOOL_LAYER_PRECEDENCE: readonly ToolLayer[] = [
   "built-in",
@@ -21,8 +17,7 @@ export const TOOL_LAYER_PRECEDENCE: readonly ToolLayer[] = [
 export type ToolLayerMap = Partial<Record<ToolLayer, ToolSet>>
 
 export type ToolNameValidationResult =
-  | { valid: true }
-  | { valid: false; reason: string }
+  { valid: true } | { valid: false; reason: string }
 
 export type GlobalToolCollision = {
   toolKey: string
@@ -57,7 +52,9 @@ export function validateToolName(name: string): ToolNameValidationResult {
   return { valid: true }
 }
 
-export function collectInvalidToolNames(layers: ToolLayerMap): InvalidToolName[] {
+export function collectInvalidToolNames(
+  layers: ToolLayerMap
+): InvalidToolName[] {
   const invalid: InvalidToolName[] = []
 
   for (const layer of TOOL_LAYER_PRECEDENCE) {
@@ -79,7 +76,9 @@ export function collectInvalidToolNames(layers: ToolLayerMap): InvalidToolName[]
   return invalid.sort((a, b) => a.toolKey.localeCompare(b.toolKey))
 }
 
-export function collectGlobalCollisions(layers: ToolLayerMap): GlobalToolCollision[] {
+export function collectGlobalCollisions(
+  layers: ToolLayerMap
+): GlobalToolCollision[] {
   const ownership = new Map<string, Set<ToolLayer>>()
 
   for (const layer of TOOL_LAYER_PRECEDENCE) {

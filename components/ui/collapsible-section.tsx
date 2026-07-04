@@ -1,11 +1,11 @@
 "use client"
 
-import { Icon } from "@/components/ui/icon"
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 import { RiArrowRightSLine } from "@remixicon/react"
 import * as React from "react"

@@ -9,7 +9,7 @@ import {
 } from "idb-keyval"
 
 let dbInitPromise: Promise<void> | null = null
- 
+
 const stores: Record<string, any> = {}
 
 const isClient = typeof window !== "undefined"

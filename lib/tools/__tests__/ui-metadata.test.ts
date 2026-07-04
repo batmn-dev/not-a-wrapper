@@ -1,4 +1,6 @@
+import type { ServerInfo } from "@/lib/mcp/load-tools"
 import { describe, expect, it } from "vitest"
+import type { ToolMetadata } from "../types"
 import {
   buildFinishToolInvocationStreamMetadata,
   buildStartToolInvocationStreamMetadata,
@@ -6,8 +8,6 @@ import {
   humanizeToolName,
   resolveToolInvocationMetadata,
 } from "../ui-metadata"
-import type { ToolMetadata } from "../types"
-import type { ServerInfo } from "@/lib/mcp/load-tools"
 
 describe("humanizeToolName", () => {
   it("converts snake/camel case names to readable labels", () => {

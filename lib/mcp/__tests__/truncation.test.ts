@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { truncateToolResult } from "../truncation"
 
 // Mock the config module to control MAX_TOOL_RESULT_SIZE in tests
@@ -120,9 +120,7 @@ describe("truncateToolResult", () => {
 
       // The result should be valid UTF-8 (no broken sequences)
       // This is ensured by slicing at character boundaries
-      const decoded = new TextDecoder().decode(
-        new TextEncoder().encode(result)
-      )
+      const decoded = new TextDecoder().decode(new TextEncoder().encode(result))
       expect(decoded).toBe(result)
     })
 

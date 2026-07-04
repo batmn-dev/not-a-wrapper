@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react"
 import useClickOutside from "@/hooks/useClickOutside"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 export type UseInlineRenameOptions = {
   /**

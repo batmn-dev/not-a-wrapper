@@ -545,9 +545,9 @@ describe("deriveAssistantTurnIndicator", () => {
       state: { status: "activity" },
     })
 
-    expect(
-      deriveAssistantTurnIndicator(settled, viewOf([], "ready"))
-    ).toEqual({ kind: "none" })
+    expect(deriveAssistantTurnIndicator(settled, viewOf([], "ready"))).toEqual({
+      kind: "none",
+    })
   })
 
   it("never yields more than one indicator across a sweep of turn states", () => {

@@ -1,7 +1,7 @@
 "use client"
 
-import * as React from "react"
 import { cn } from "@/lib/utils"
+import * as React from "react"
 
 type ScrollShadowWrapperProps = {
   children: React.ReactNode
@@ -51,8 +51,8 @@ export function ScrollShadowWrapper({
       <div
         className={cn(
           "pointer-events-none absolute inset-x-0 top-0 z-10 h-4",
-          "bg-gradient-to-b from-sidebar to-transparent",
-          "motion-safe:transition-opacity duration-150",
+          "from-sidebar bg-gradient-to-b to-transparent",
+          "duration-150 motion-safe:transition-opacity",
           scrollState.top ? "opacity-100" : "opacity-0"
         )}
         aria-hidden="true"
@@ -64,8 +64,8 @@ export function ScrollShadowWrapper({
       <div
         className={cn(
           "pointer-events-none absolute inset-x-0 bottom-0 z-10 h-4",
-          "bg-gradient-to-t from-sidebar to-transparent",
-          "motion-safe:transition-opacity duration-150",
+          "from-sidebar bg-gradient-to-t to-transparent",
+          "duration-150 motion-safe:transition-opacity",
           scrollState.bottom ? "opacity-100" : "opacity-0"
         )}
         aria-hidden="true"

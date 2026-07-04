@@ -1,18 +1,14 @@
-import { createMCPClient } from "@ai-sdk/mcp"
-import { fetchQuery, fetchMutation } from "convex/nextjs"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
-import { decryptKey } from "@/lib/encryption"
 import {
   MCP_CONNECTION_TIMEOUT_MS,
   MCP_MAX_TOOLS_PER_REQUEST,
   MCP_TRUSTED_RETRY_SERVER_ALLOWLIST,
 } from "@/lib/config"
-import {
-  isCircuitOpen,
-  recordFailure,
-  recordSuccess,
-} from "./circuit-breaker"
+import { decryptKey } from "@/lib/encryption"
+import { createMCPClient } from "@ai-sdk/mcp"
+import { fetchMutation, fetchQuery } from "convex/nextjs"
+import { isCircuitOpen, recordFailure, recordSuccess } from "./circuit-breaker"
 import { validateResolvedUrl } from "./url-validation"
 
 // =============================================================================
@@ -114,7 +110,8 @@ function extractToolAnnotationHints(tool: unknown): ToolAnnotationHints {
   const toolRecord = tool as Record<string, unknown>
   if (!("annotations" in toolRecord)) return {}
 
-  const annotations = toolRecord.annotations as Record<string, unknown> | undefined
+  const annotations = toolRecord.annotations as
+    Record<string, unknown> | undefined
   if (!annotations) return {}
 
   return {
@@ -197,10 +194,7 @@ function buildAuthHeaders(server: {
   if (!server.encryptedAuthValue || !server.authIv) return undefined
 
   try {
-    const decryptedValue = decryptKey(
-      server.encryptedAuthValue,
-      server.authIv
-    )
+    const decryptedValue = decryptKey(server.encryptedAuthValue, server.authIv)
 
     if (server.authType === "bearer") {
       return { Authorization: `Bearer ${decryptedValue}` }

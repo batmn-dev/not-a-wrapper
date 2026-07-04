@@ -4,9 +4,13 @@ import type { UIMessage } from "@ai-sdk/react"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
+import { Conversation } from "./conversation"
+import { PENDING_ACTIVITY_TURN_ID } from "./use-activity-panel"
 
 vi.mock("@/components/ui/message", () => ({
-  Message: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Message: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
 }))
 
 vi.mock("@/components/ui/scroll-root", () => ({
@@ -46,12 +50,10 @@ vi.mock("./message", () => ({
   ),
 }))
 
-import { Conversation } from "./conversation"
-import { PENDING_ACTIVITY_TURN_ID } from "./use-activity-panel"
-
 beforeAll(() => {
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean })
-    .IS_REACT_ACT_ENVIRONMENT = true
+  ;(
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true
 })
 
 describe("Conversation regeneration availability", () => {

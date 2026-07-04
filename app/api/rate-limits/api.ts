@@ -1,10 +1,10 @@
+import { api } from "@/convex/_generated/api"
 import {
   AUTH_DAILY_MESSAGE_LIMIT,
   DAILY_LIMIT_PRO_MODELS,
   NON_AUTH_DAILY_MESSAGE_LIMIT,
 } from "@/lib/config"
 import { fetchQuery } from "convex/nextjs"
-import { api } from "@/convex/_generated/api"
 
 export type UsageResult = {
   dailyCount: number

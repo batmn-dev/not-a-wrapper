@@ -28,7 +28,6 @@
  * aria-expanded flips in the same commit; the synced derivation corrects any
  * fallback case one commit later.
  */
-
 import { ScrollRootContext } from "@/components/ui/scroll-root"
 import {
   createContext,
@@ -78,7 +77,10 @@ export type ActivityPanelStore = {
    * against the store's CURRENT defaultTurnId — never a render-time closure.
    * `options.section` requests the panel land on a body section (one-shot).
    */
-  openTurn: (turnId: string, options?: { section?: ActivityPanelSection }) => void
+  openTurn: (
+    turnId: string,
+    options?: { section?: ActivityPanelSection }
+  ) => void
   /** Consume the one-shot section target after the panel has honored it. */
   clearOpenSection: () => void
   /**
@@ -175,9 +177,7 @@ export function createActivityPanelStore(): ActivityPanelStore {
   }
 }
 
-const ActivityPanelStoreContext = createContext<ActivityPanelStore | null>(
-  null
-)
+const ActivityPanelStoreContext = createContext<ActivityPanelStore | null>(null)
 const ActivityPanelIdContext = createContext<string | undefined>(undefined)
 
 export function ActivityPanelStoreProvider({
@@ -234,8 +234,7 @@ export function useIsActivityPanelTurnOpen(
       if (!state.open || state.panelTurnId === undefined) return false
       return (
         state.panelTurnId === messageId ||
-        (serverMessageId !== undefined &&
-          state.panelTurnId === serverMessageId)
+        (serverMessageId !== undefined && state.panelTurnId === serverMessageId)
       )
     },
     () => false
@@ -243,7 +242,10 @@ export function useIsActivityPanelTurnOpen(
 }
 
 export type ActivityPanelActions = {
-  openTurn: (turnId: string, options?: { section?: ActivityPanelSection }) => void
+  openTurn: (
+    turnId: string,
+    options?: { section?: ActivityPanelSection }
+  ) => void
   close: () => void
 }
 

@@ -20,5 +20,7 @@ export function createProviderLanguageModel<T extends SupportedModel | string>(
 ): ProviderLanguageModel {
   const resolvedModelId = resolveModelId(modelId)
   const provider = getProviderForModel(resolvedModelId)
-  return getProviderStrategy(provider).instance(apiKey).languageModel(resolvedModelId)
+  return getProviderStrategy(provider)
+    .instance(apiKey)
+    .languageModel(resolvedModelId)
 }

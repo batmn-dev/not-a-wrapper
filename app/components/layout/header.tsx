@@ -1,7 +1,7 @@
 "use client"
 
-import { HistoryTrigger } from "@/app/components/history/history-trigger"
 import { AuthModalTrigger } from "@/app/auth/_components/auth-modal"
+import { HistoryTrigger } from "@/app/components/history/history-trigger"
 import { ButtonNewChat } from "@/app/components/layout/button-new-chat"
 import { ModelSelectorHeader } from "@/app/components/layout/model-selector-header"
 import { UserMenu } from "@/app/components/layout/user-menu"

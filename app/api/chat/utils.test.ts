@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest"
 import type { UIMessage } from "ai"
+import { describe, expect, it } from "vitest"
 import {
   hasProviderLinkedResponseIds,
   sanitizeMessagesForProvider,
@@ -29,7 +29,9 @@ describe("sanitizeMessagesForProvider", () => {
       {
         id: "tool-role",
         role: "tool",
-        parts: [{ type: "tool-result", toolCallId: "tc1", output: { ok: true } }],
+        parts: [
+          { type: "tool-result", toolCallId: "tc1", output: { ok: true } },
+        ],
       },
       {
         id: "assistant-with-mixed-parts",
@@ -37,7 +39,11 @@ describe("sanitizeMessagesForProvider", () => {
         parts: [
           { type: "step-start" },
           { type: "reasoning", text: "thinking..." },
-          { type: "tool-web_search", toolCallId: "tc1", input: { q: "batman" } },
+          {
+            type: "tool-web_search",
+            toolCallId: "tc1",
+            input: { q: "batman" },
+          },
           { type: "text", text: "Here are suggestions." },
           { type: "source-url", sourceId: "s1", url: "https://example.com" },
         ],
@@ -66,7 +72,11 @@ describe("sanitizeMessagesForProvider", () => {
         role: "assistant",
         parts: [
           { type: "reasoning", text: "thinking..." },
-          { type: "tool-web_search", toolCallId: "tc1", input: { q: "batman" } },
+          {
+            type: "tool-web_search",
+            toolCallId: "tc1",
+            input: { q: "batman" },
+          },
         ],
       },
     ] as unknown as UIMessage[]
@@ -100,7 +110,9 @@ describe("hasProviderLinkedResponseIds", () => {
   })
 
   it("returns false for regular text-only model messages", () => {
-    const modelMessages = [{ role: "assistant", content: "normal response text" }] as const
+    const modelMessages = [
+      { role: "assistant", content: "normal response text" },
+    ] as const
     expect(hasProviderLinkedResponseIds(modelMessages as any)).toBe(false)
   })
 })

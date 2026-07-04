@@ -66,7 +66,7 @@ export function ModelSelector({
 
   const currentModel = selectedModelId
     ? (models.find((model) => model.id === selectedModelId) ??
-        getModelInfo(selectedModelId))
+      getModelInfo(selectedModelId))
     : null
 
   useKeyShortcut(
@@ -130,10 +130,7 @@ export function ModelSelector({
   )
 
   const renderModelItem = (model: ModelConfig) => {
-    const isLocked = !isModelSelectableForAuthState(
-      model,
-      isUserAuthenticated
-    )
+    const isLocked = !isModelSelectableForAuthState(model, isUserAuthenticated)
     const provider = PROVIDERS.find((provider) => provider.id === model.icon)
 
     return (
@@ -167,7 +164,7 @@ export function ModelSelector({
       className={cn(
         "min-w-0 shrink overflow-hidden font-normal",
         isComposerVariant
-          ? "h-9 max-w-none justify-start gap-1.5 rounded-full py-0 ps-3.5 cant-hover:ps-4 pe-3 text-sm text-muted-foreground active:scale-100 pointer-fine:hover:bg-black/5 active:bg-black/5 aria-expanded:bg-black/5 dark:pointer-fine:hover:bg-white/10 dark:active:bg-white/10 dark:aria-expanded:bg-white/10"
+          ? "cant-hover:ps-4 text-muted-foreground h-9 max-w-none justify-start gap-1.5 rounded-full py-0 ps-3.5 pe-3 text-sm active:scale-100 active:bg-black/5 aria-expanded:bg-black/5 dark:active:bg-white/10 dark:aria-expanded:bg-white/10 pointer-fine:hover:bg-black/5 dark:pointer-fine:hover:bg-white/10"
           : "max-w-full justify-between rounded-lg text-lg",
         className
       )}
@@ -183,7 +180,7 @@ export function ModelSelector({
         glyphSize={isComposerVariant ? 14 : undefined}
         className={cn(
           "shrink-0",
-          isComposerVariant ? "-me-0.5 text-muted-foreground" : "opacity-50"
+          isComposerVariant ? "text-muted-foreground -me-0.5" : "opacity-50"
         )}
       />
     </Button>
@@ -280,7 +277,7 @@ export function ModelSelector({
       >
         <DropdownMenuTrigger render={trigger} />
         <DropdownMenuContent
-          className="[--model-selector-fixed-height:3rem] [--model-selector-list-max-height:18rem] w-[300px] overflow-hidden"
+          className="w-[300px] overflow-hidden [--model-selector-fixed-height:3rem] [--model-selector-list-max-height:18rem]"
           align={isComposerVariant ? "end" : "start"}
           sideOffset={4}
           animated={false}
@@ -296,7 +293,7 @@ export function ModelSelector({
               <Input
                 ref={searchInputRef}
                 placeholder="Search models..."
-                className="h-9 rounded-xl border border-input/60 bg-muted/60 pl-8 shadow-none focus-visible:ring-0 dark:border-input dark:bg-muted/40"
+                className="border-input/60 bg-muted/60 dark:border-input dark:bg-muted/40 h-9 rounded-xl border pl-8 shadow-none focus-visible:ring-0"
                 value={searchQuery}
                 onChange={handleSearchChange}
                 onClick={(e) => e.stopPropagation()}
@@ -305,8 +302,8 @@ export function ModelSelector({
               />
             </div>
           </div>
-          <div className="relative mt-[2px] rounded-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-3 before:bg-gradient-to-b before:from-popover before:to-transparent before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:z-10 after:h-4 after:bg-gradient-to-t after:from-popover after:to-transparent after:content-['']">
-            <div className="max-h-[min(var(--model-selector-list-max-height),max(0px,calc(var(--available-height)-var(--model-selector-fixed-height))))] scroll-py-2 overflow-x-hidden overflow-y-auto overscroll-contain py-1 pr-1 [scrollbar-color:color-mix(in_oklab,var(--muted-foreground)_35%,transparent)_transparent] [scrollbar-gutter:stable] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-track]:bg-transparent">
+          <div className="before:from-popover after:from-popover relative mt-[2px] rounded-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-3 before:bg-gradient-to-b before:to-transparent before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:z-10 after:h-4 after:bg-gradient-to-t after:to-transparent after:content-['']">
+            <div className="[&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 max-h-[min(var(--model-selector-list-max-height),max(0px,calc(var(--available-height)-var(--model-selector-fixed-height))))] scroll-py-2 [scrollbar-width:thin] [scrollbar-color:color-mix(in_oklab,var(--muted-foreground)_35%,transparent)_transparent] [scrollbar-gutter:stable] overflow-x-hidden overflow-y-auto overscroll-contain py-1 pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent">
               {isLoadingModels ? (
                 <div className="flex h-full flex-col items-center justify-center p-6 text-center">
                   <p className="text-muted-foreground mb-2 text-sm">

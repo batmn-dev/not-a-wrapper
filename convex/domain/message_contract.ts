@@ -9,8 +9,7 @@ export const DURABLE_MESSAGE_STATUSES = [
   "awaiting_approval",
 ] as const
 
-export type DurableMessageStatus =
-  (typeof DURABLE_MESSAGE_STATUSES)[number]
+export type DurableMessageStatus = (typeof DURABLE_MESSAGE_STATUSES)[number]
 
 export const GENERATION_RUN_STATUSES = [
   "queued",
@@ -22,8 +21,7 @@ export const GENERATION_RUN_STATUSES = [
   "failed",
 ] as const
 
-export type GenerationRunStatus =
-  (typeof GENERATION_RUN_STATUSES)[number]
+export type GenerationRunStatus = (typeof GENERATION_RUN_STATUSES)[number]
 
 export const vMessageStatus = v.union(
   v.literal("submitted"),

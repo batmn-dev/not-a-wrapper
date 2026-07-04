@@ -89,7 +89,10 @@ function runCli() {
   runDeploy({ extraArgs: process.argv.slice(2) })
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   try {
     runCli()
   } catch (error) {

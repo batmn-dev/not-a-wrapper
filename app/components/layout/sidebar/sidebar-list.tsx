@@ -1,5 +1,5 @@
-import { Chat } from "@/lib/chat-store/types"
 import { CollapsibleSection } from "@/components/ui/collapsible-section"
+import { Chat } from "@/lib/chat-store/types"
 import { SidebarItem } from "./sidebar-item"
 
 type SidebarListProps = {

@@ -284,7 +284,9 @@ describe("useChatCore prompt query handling", () => {
 
     expect(chatCoreMocks.sendMessage).not.toHaveBeenCalled()
     // The URL cleanup must also wait — the prompt params survive the deferral.
-    expect(window.location.search).toBe("?prompt=Project%20question&autoSubmit=1")
+    expect(window.location.search).toBe(
+      "?prompt=Project%20question&autoSubmit=1"
+    )
 
     chatCoreMocks.turnContextHydrated = true
     rerender()

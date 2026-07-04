@@ -121,7 +121,7 @@ function PromptInput({
         <div
           data-composer-surface="true"
           data-slot="prompt-input-surface"
-          className="shadow-composer relative grid min-h-[84px] grid-cols-[auto_1fr_auto] grid-rows-[auto_minmax(38px,auto)_36px] [grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] cursor-text overflow-clip rounded-[28px] border-0 border-black/5 bg-[var(--composer-bg)] bg-clip-padding py-[5px] ps-[7px] pe-2 contain-inline-size motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out sm:min-h-[52px] sm:grid-rows-[auto_minmax(42px,auto)_0px] sm:[grid-template-areas:'header_header_header'_'leading_primary_trailing'_'._footer_.'] group-data-[expanded]/composer:grid-rows-[auto_minmax(38px,auto)_36px] group-data-[expanded]/composer:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] sm:group-data-[expanded]/composer:min-h-[102px] sm:group-data-[expanded]/composer:grid-rows-[auto_minmax(56px,auto)_36px] dark:border-white/5"
+          className="shadow-composer relative grid min-h-[84px] cursor-text grid-cols-[auto_1fr_auto] grid-rows-[auto_minmax(38px,auto)_36px] overflow-clip rounded-[28px] border-0 border-black/5 bg-[var(--composer-bg)] bg-clip-padding py-[5px] ps-[7px] pe-2 contain-inline-size [grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] group-data-[expanded]/composer:grid-rows-[auto_minmax(38px,auto)_36px] group-data-[expanded]/composer:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out sm:min-h-[52px] sm:grid-rows-[auto_minmax(42px,auto)_0px] sm:[grid-template-areas:'header_header_header'_'leading_primary_trailing'_'._footer_.'] sm:group-data-[expanded]/composer:min-h-[102px] sm:group-data-[expanded]/composer:grid-rows-[auto_minmax(56px,auto)_36px] dark:border-white/5"
           onClick={() => {
             textareaRef.current?.focus()
           }}
@@ -152,7 +152,9 @@ function getCompactTextareaWidth(textarea: HTMLTextAreaElement) {
     return textarea.getBoundingClientRect().width
   }
 
-  const surface = textarea.closest<HTMLElement>('[data-composer-surface="true"]')
+  const surface = textarea.closest<HTMLElement>(
+    '[data-composer-surface="true"]'
+  )
   const scroller = textarea.closest<HTMLElement>(
     '[data-composer-editor-scroller="true"]'
   )
@@ -283,8 +285,7 @@ function PromptInputTextarea({
       // one, so any value that wraps live wraps in the compact measurement.
       const shouldExpand =
         nextValue.length > 0 &&
-        (nextValue.includes("\n") ||
-          compactScrollHeight > collapsedHeight + 1)
+        (nextValue.includes("\n") || compactScrollHeight > collapsedHeight + 1)
 
       textarea.style.height = `${Math.max(collapsedHeight, textarea.scrollHeight)}px`
       setTextareaExpanded(shouldExpand)
@@ -337,7 +338,7 @@ function PromptInputTextarea({
       data-composer-editor-scroller="true"
       data-slot="prompt-input-editor-scroller"
       className={cn(
-        "flex min-h-[38px] min-w-0 items-center overflow-x-hidden overflow-y-auto px-1.5 [scrollbar-width:thin] group-data-[expanded]/composer:min-h-14 group-data-[expanded]/composer:px-2.5 sm:-my-2.5 sm:min-h-14 sm:group-data-[expanded]/composer:my-0 sm:group-data-[expanded]/composer:min-h-14",
+        "flex min-h-[38px] min-w-0 [scrollbar-width:thin] items-center overflow-x-hidden overflow-y-auto px-1.5 group-data-[expanded]/composer:min-h-14 group-data-[expanded]/composer:px-2.5 sm:-my-2.5 sm:min-h-14 sm:group-data-[expanded]/composer:my-0 sm:group-data-[expanded]/composer:min-h-14",
         containerClassName
       )}
       style={{ maxHeight: maxHeightStyle }}
@@ -377,7 +378,7 @@ function PromptInputFooter({
     <div
       data-composer-footer="true"
       data-slot="prompt-input-footer"
-      className={cn("[grid-area:footer] min-w-0", className)}
+      className={cn("min-w-0 [grid-area:footer]", className)}
       {...props}
     >
       {children}

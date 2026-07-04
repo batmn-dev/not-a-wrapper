@@ -7,9 +7,7 @@ describe("toSafeWebHref", () => {
       "https://example.com/path"
     )
     expect(toSafeWebHref("http://example.com")).toBe("http://example.com/")
-    expect(toSafeWebHref("//example.com/path")).toBe(
-      "https://example.com/path"
-    )
+    expect(toSafeWebHref("//example.com/path")).toBe("https://example.com/path")
   })
 
   it("rejects non-web and relative URLs", () => {

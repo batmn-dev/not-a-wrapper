@@ -1,66 +1,15 @@
-import * as Sentry from "@sentry/nextjs"
-import { after } from "next/server"
-import {
-  SYSTEM_PROMPT_DEFAULT,
-  MCP_MAX_STEP_COUNT,
-  DEFAULT_MAX_STEP_COUNT,
-  ANONYMOUS_MAX_STEP_COUNT,
-  HISTORY_REPLAY_COMPILER_V1,
-} from "@/lib/config"
-import { getAllModels } from "@/lib/models"
-import type { ModelConfig } from "@/lib/models/types"
-import { getProviderForModel } from "@/lib/openproviders/provider-map"
-import { createLanguageModel } from "@/lib/openproviders/create-language-model"
-import { shapeRequest } from "@/lib/openproviders/request-shaping"
-import {
-  captureGeneration,
-  flushPostHog,
-  getPostHogClient,
-} from "@/lib/posthog"
-import { scrubForAnalytics } from "@/lib/posthog/scrub"
-import type { Provider, ToolKeyMode } from "@/lib/user-keys"
-import {
-  UIMessage as MessageAISDK,
-  consumeStream,
-  isStepCount,
-  convertToModelMessages,
-  validateUIMessages,
-  type ModelMessage,
-} from "ai"
-import {
-  fetchMutation as defaultFetchMutation,
-  fetchQuery as defaultFetchQuery,
-} from "convex/nextjs"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { projectPersistedMessageMetadata } from "@/convex/lib/messageMetadata"
 import {
-  extractErrorMessage,
-  hasProviderLinkedResponseIds,
-  toPlainTextModelMessages,
-} from "./utils"
-import { adaptHistoryForProvider } from "./adapters"
-import type { AdaptationContext, AdaptationWarning } from "./adapters/types"
-import {
-  getTextFilePartReferences,
-  prepareTextFilePartsForModelInput,
-} from "./text-file-parts"
-import { prepareToolRuntime, type ToolRuntime } from "@/lib/tools/runtime"
-import {
-  createPostHogToolCallSink,
-  createToolCallLogSink,
-  createToolTraceLogSink,
-} from "./outcome-sinks"
-import {
-  buildFinishToolInvocationStreamMetadata,
-  buildStartToolInvocationStreamMetadata,
-  type ToolInvocationMetadataByCallId,
-  type ToolInvocationMetadataByName,
-} from "@/lib/tools/ui-metadata"
-import {
-  classifyChatError,
-  getToolDimensionForError,
-} from "@/lib/observability/chat-error-taxonomy"
+  ANONYMOUS_MAX_STEP_COUNT,
+  DEFAULT_MAX_STEP_COUNT,
+  HISTORY_REPLAY_COMPILER_V1,
+  MCP_MAX_STEP_COUNT,
+  SYSTEM_PROMPT_DEFAULT,
+} from "@/lib/config"
+import { getAllModels } from "@/lib/models"
+import type { ModelConfig } from "@/lib/models/types"
 import {
   flushBraintrust,
   getBraintrustErrorMetadata,
@@ -71,6 +20,43 @@ import {
   type BraintrustChatMetadata,
   type BraintrustTraceSpan,
 } from "@/lib/observability/braintrust"
+import {
+  classifyChatError,
+  getToolDimensionForError,
+} from "@/lib/observability/chat-error-taxonomy"
+import { createLanguageModel } from "@/lib/openproviders/create-language-model"
+import { getProviderForModel } from "@/lib/openproviders/provider-map"
+import { shapeRequest } from "@/lib/openproviders/request-shaping"
+import {
+  captureGeneration,
+  flushPostHog,
+  getPostHogClient,
+} from "@/lib/posthog"
+import { scrubForAnalytics } from "@/lib/posthog/scrub"
+import { prepareToolRuntime, type ToolRuntime } from "@/lib/tools/runtime"
+import {
+  buildFinishToolInvocationStreamMetadata,
+  buildStartToolInvocationStreamMetadata,
+  type ToolInvocationMetadataByCallId,
+  type ToolInvocationMetadataByName,
+} from "@/lib/tools/ui-metadata"
+import type { Provider, ToolKeyMode } from "@/lib/user-keys"
+import * as Sentry from "@sentry/nextjs"
+import {
+  consumeStream,
+  convertToModelMessages,
+  isStepCount,
+  UIMessage as MessageAISDK,
+  validateUIMessages,
+  type ModelMessage,
+} from "ai"
+import {
+  fetchMutation as defaultFetchMutation,
+  fetchQuery as defaultFetchQuery,
+} from "convex/nextjs"
+import { after } from "next/server"
+import { adaptHistoryForProvider } from "./adapters"
+import type { AdaptationContext, AdaptationWarning } from "./adapters/types"
 import {
   countToolParts,
   createDurableSnapshotTracker,
@@ -85,6 +71,20 @@ import {
   type DurableUiMessage,
   type ToolInvocationForPersistence,
 } from "./durable-runtime"
+import {
+  createPostHogToolCallSink,
+  createToolCallLogSink,
+  createToolTraceLogSink,
+} from "./outcome-sinks"
+import {
+  getTextFilePartReferences,
+  prepareTextFilePartsForModelInput,
+} from "./text-file-parts"
+import {
+  extractErrorMessage,
+  hasProviderLinkedResponseIds,
+  toPlainTextModelMessages,
+} from "./utils"
 
 // ---------------------------------------------------------------------------
 // Chat turn runtime (CONTEXT.md): the server-side execution of one Chat turn
@@ -186,17 +186,10 @@ type DurableRunState = {
 }
 
 type ChatStreamPhase =
-  | "pre_first_chunk"
-  | "post_tool_continue"
-  | "post_first_chunk"
-  | "unknown"
+  "pre_first_chunk" | "post_tool_continue" | "post_first_chunk" | "unknown"
 
 type ToolExecutionOutcome =
-  | "none"
-  | "success"
-  | "failure"
-  | "timeout"
-  | "budget_denied"
+  "none" | "success" | "failure" | "timeout" | "budget_denied"
 
 type PreparedTurn = {
   aiModel: ReturnType<typeof createLanguageModel>
@@ -433,10 +426,8 @@ export function createChatTurnRuntime(args: {
     if (isAuthenticated && convexToken) {
       const { getEffectiveApiKey } = await import("@/lib/user-keys")
       apiKey =
-        (await getEffectiveApiKey(
-          resolvedProvider as Provider,
-          convexToken
-        )) || undefined
+        (await getEffectiveApiKey(resolvedProvider as Provider, convexToken)) ||
+        undefined
     }
 
     // Pre-flight check: verify an API key is available before calling the provider.
@@ -987,8 +978,7 @@ export function createChatTurnRuntime(args: {
       | undefined
     let durableFinalFinishReason: string | undefined
     let durableFinalToolCounts:
-      | { totalToolCalls: number; failedToolCalls: number }
-      | undefined
+      { totalToolCalls: number; failedToolCalls: number } | undefined
     const approvalWritePromises: Promise<unknown>[] = []
 
     const clearStalledContinuationTimer = () => {
@@ -1142,7 +1132,12 @@ export function createChatTurnRuntime(args: {
         prepareStep: tool.prepareStep,
 
         // Per-step structured tracing: tool name, duration, token usage, success.
-        onStepFinish: async ({ toolCalls, toolResults, usage, finishReason }) => {
+        onStepFinish: async ({
+          toolCalls,
+          toolResults,
+          usage,
+          finishReason,
+        }) => {
           stepCounter++
           observedToolCalls += toolCalls.length
           lastProgressAtMs = Date.now()
@@ -1235,21 +1230,23 @@ export function createChatTurnRuntime(args: {
         }),
         ...(durable && convexToken
           ? {
-              experimental_transform: createRuntimeApprovalPersistenceTransform({
-                chatId,
-                convexToken,
-                durableRunState: durable,
-                runtimeApprovalByToolName: tool.approvalDecisionsByToolName,
-                toolMetadataResolver: tool.metadata,
-                approvalWritePromises,
-                requestId,
-                persistApprovalRequest: (approvalArgs) =>
-                  deps.fetchMutation(
-                    api.chatRuntime.createToolApprovalRequest,
-                    approvalArgs,
-                    { token: convexToken }
-                  ),
-              }),
+              experimental_transform: createRuntimeApprovalPersistenceTransform(
+                {
+                  chatId,
+                  convexToken,
+                  durableRunState: durable,
+                  runtimeApprovalByToolName: tool.approvalDecisionsByToolName,
+                  toolMetadataResolver: tool.metadata,
+                  approvalWritePromises,
+                  requestId,
+                  persistApprovalRequest: (approvalArgs) =>
+                    deps.fetchMutation(
+                      api.chatRuntime.createToolApprovalRequest,
+                      approvalArgs,
+                      { token: convexToken }
+                    ),
+                }
+              ),
             }
           : {}),
 
@@ -1344,7 +1341,10 @@ export function createChatTurnRuntime(args: {
                 },
               })
             } catch (captureErr) {
-              console.error("[PostHog] Failed to capture error event:", captureErr)
+              console.error(
+                "[PostHog] Failed to capture error event:",
+                captureErr
+              )
             }
           }
         },
@@ -1576,9 +1576,7 @@ export function createChatTurnRuntime(args: {
 
     return result.toUIMessageStreamResponse({
       originalMessages: durable?.originalMessages ?? validatedMessages,
-      generateMessageId: durable
-        ? () => durable.assistantMessageId
-        : undefined,
+      generateMessageId: durable ? () => durable.assistantMessageId : undefined,
       sendReasoning: true,
       sendSources: true,
       consumeSseStream: consumeStream,
