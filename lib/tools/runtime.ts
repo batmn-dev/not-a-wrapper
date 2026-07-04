@@ -39,7 +39,7 @@ import type {
 } from "@/lib/tools/types"
 import { sanitizeForJson } from "@/lib/tools/utils"
 import type { ToolKeyMode } from "@/lib/user-keys"
-import type { ToolSet } from "ai"
+import type { ToolApprovalStatus, ToolSet } from "ai"
 
 function serializeToolOutcomePreview(value: unknown): string | undefined {
   if (value === undefined) return undefined
@@ -204,12 +204,16 @@ export type ToolRuntime = {
   /** Approval decision lookup for the persistence sites. */
   approvalFor(toolName: string): RuntimeToolApprovalDecision | undefined
   /**
-   * Wrap `tools` with runtime-approval gating exactly once. Idempotent — a
-   * second call is a no-op. Called by the route only when a durable run is
-   * active (durableRunState is assigned after the tool block runs, so this
-   * cannot be a `prepareToolRuntime` flag).
+   * Call-site tool-approval configuration for streamText — the runtime
+   * decisions projected onto ai@7's `toolApproval` map. Entries exist only
+   * for tools whose decision needs approval ("user-approval"); a tool with no
+   * entry falls through to its own `needsApproval` at the SDK layer, which
+   * preserves the pre-v7 OR-composition without wrapping or mutating the tool
+   * set. `undefined` when no tool needs approval. The Chat turn runtime
+   * spreads this into streamText only for durable runs — guest chats run
+   * ungated, as before.
    */
-  applyDurableApprovals(): void
+  readonly toolApproval: Record<string, ToolApprovalStatus> | undefined
   /**
    * Step gate for streamText. `undefined` when the runtime has no tools —
    * pass directly: `prepareStep: runtime.prepareStep`.
@@ -859,7 +863,7 @@ async function buildToolRuntime(
   // Spread order = conflict resolution priority (last wins).
   // -----------------------------------------------------------------------
   const searchTools = { ...builtInTools, ...thirdPartyTools }
-  let mergedTools = {
+  const mergedTools = {
     ...searchTools,
     ...contentTools,
     ...mcpTools,
@@ -903,15 +907,18 @@ async function buildToolRuntime(
     approvalDecisionsByToolName.set(toolName, decision)
   }
 
-  let durableApprovalsApplied = false
-  const applyDurableApprovals = () => {
-    if (durableApprovalsApplied) return
-    durableApprovalsApplied = true
-    mergedTools = wrapToolsWithRuntimeApproval(
-      mergedTools,
-      approvalDecisionsByToolName
-    )
-  }
+  // Project the decisions onto ai@7's call-site `toolApproval` map: an entry
+  // only where approval is needed, so absent tools keep their own
+  // `needsApproval` (the SDK's fallback), and the tool set is never mutated.
+  const toolApprovalEntries = Object.fromEntries(
+    [...approvalDecisionsByToolName]
+      .filter(([, decision]) => decision.needsApproval)
+      .map(([toolName]) => [toolName, "user-approval" as const])
+  )
+  const toolApproval: Record<string, ToolApprovalStatus> | undefined =
+    Object.keys(toolApprovalEntries).length > 0
+      ? toolApprovalEntries
+      : undefined
 
   // -----------------------------------------------------------------------
   // dispose() — idempotent MCP client cleanup.
@@ -1191,7 +1198,7 @@ async function buildToolRuntime(
     approvalFor(toolName: string) {
       return approvalDecisionsByToolName.get(toolName)
     },
-    applyDurableApprovals,
+    toolApproval,
     prepareStep,
     onStepFinish,
     outcomeSummary() {
@@ -1201,46 +1208,3 @@ async function buildToolRuntime(
   }
 }
 
-/**
- * Wrap tools with runtime-approval gating. A tool whose decision needs approval
- * gets a composed `needsApproval` that ORs the existing predicate with the
- * runtime decision; all other tools pass through unchanged.
- *
- * Moved verbatim from the chat route — used only by `applyDurableApprovals`.
- */
-function wrapToolsWithRuntimeApproval(
-  tools: ToolSet,
-  approvalByToolName: ReadonlyMap<string, { needsApproval: boolean }>
-): ToolSet {
-  const wrapped: Record<string, unknown> = {}
-
-  for (const [toolName, descriptor] of Object.entries(tools)) {
-    const original = descriptor as Record<string, unknown>
-    const decision = approvalByToolName.get(toolName)
-    if (!decision?.needsApproval) {
-      wrapped[toolName] = original
-      continue
-    }
-
-    const existingNeedsApproval = original.needsApproval
-    wrapped[toolName] = {
-      ...original,
-      needsApproval: async (input: unknown, options: unknown) => {
-        let existingDecision = false
-        if (typeof existingNeedsApproval === "function") {
-          existingDecision = await (
-            existingNeedsApproval as (
-              input: unknown,
-              options: unknown
-            ) => boolean | PromiseLike<boolean>
-          )(input, options)
-        } else if (typeof existingNeedsApproval === "boolean") {
-          existingDecision = existingNeedsApproval
-        }
-        return existingDecision || decision.needsApproval
-      },
-    }
-  }
-
-  return wrapped as ToolSet
-}

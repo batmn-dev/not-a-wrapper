@@ -128,7 +128,7 @@ function makeToolRuntime(overrides: Record<string, unknown> = {}) {
     mcpClientCount: 0,
     approvalDecisionsByToolName: new Map(),
     approvalFor: () => undefined,
-    applyDurableApprovals: vi.fn(),
+    toolApproval: undefined,
     prepareStep: undefined,
     onStepFinish: vi.fn(async () => {}),
     outcomeSummary: () => ({
@@ -353,6 +353,7 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
           timeoutToolCalls: 0,
           budgetDeniedToolCalls: 0,
         }),
+        toolApproval: { risky_tool: "user-approval" },
       }) as unknown as Awaited<ReturnType<typeof prepareToolRuntime>>
     )
     const runtime = createChatTurnRuntime({
@@ -362,6 +363,12 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
 
     await runtime.prepare()
     runtime.toResponse(notAbortedSignal())
+
+    // Durable run: the Tool runtime's call-site approval config reaches
+    // streamText (guest runs omit it — the spread is durable-gated).
+    expect(harness.captured.streamOpts.toolApproval).toEqual({
+      risky_tool: "user-approval",
+    })
 
     // Writer: streamText onEnd freezes durableFinal*.
     await harness.captured.streamOpts.onEnd({

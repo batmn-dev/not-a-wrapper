@@ -455,7 +455,7 @@ describe("prepareToolRuntime — naming governance", () => {
 })
 
 describe("prepareToolRuntime — runtime approvals", () => {
-  it("applyDurableApprovals wraps only approval-needing tools and is idempotent", async () => {
+  it("projects approval-needing tools into the call-site toolApproval map", async () => {
     mocks.getProviderTools.mockResolvedValue({
       tools: { web_search: {} },
       metadata: new Map([["web_search", meta({ readOnly: true })]]),
@@ -477,27 +477,27 @@ describe("prepareToolRuntime — runtime approvals", () => {
     expect(runtime.approvalFor("web_search")?.needsApproval).toBe(false)
     expect(runtime.approvalFor("risky_tool")?.needsApproval).toBe(true)
 
-    const before = runtime.tools
-    const safeBefore = before.web_search
-    const riskyBefore = before.risky_tool
+    // Only the approval-needing tool gets an entry; absent tools fall through
+    // to their own needsApproval at the SDK layer.
+    expect(runtime.toolApproval).toEqual({ risky_tool: "user-approval" })
 
-    runtime.applyDurableApprovals()
-    const afterFirst = runtime.tools
-
-    // Approval wrapping replaced the merged set...
-    expect(afterFirst).not.toBe(before)
-    // ...but a tool that needs no approval keeps its original descriptor.
-    expect(afterFirst.web_search).toBe(safeBefore)
-    // ...and the approval-needing tool gained a needsApproval predicate.
-    expect(afterFirst.risky_tool).not.toBe(riskyBefore)
+    // The tool set itself is never wrapped or mutated.
     expect(
-      typeof (afterFirst.risky_tool as { needsApproval?: unknown })
-        .needsApproval
-    ).toBe("function")
+      (runtime.tools.risky_tool as { needsApproval?: unknown }).needsApproval
+    ).toBeUndefined()
+  })
 
-    // Idempotent: a second call is a no-op (same object identity).
-    runtime.applyDurableApprovals()
-    expect(runtime.tools).toBe(afterFirst)
+  it("exposes no toolApproval when nothing needs approval", async () => {
+    mocks.getProviderTools.mockResolvedValue({
+      tools: { web_search: {} },
+      metadata: new Map([["web_search", meta({ readOnly: true })]]),
+    })
+
+    const runtime = await prepareToolRuntime(
+      baseOptions({ isAuthenticated: true, convexToken: "token" })
+    )
+
+    expect(runtime.toolApproval).toBeUndefined()
   })
 })
 

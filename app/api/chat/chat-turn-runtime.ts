@@ -859,13 +859,6 @@ export function createChatTurnRuntime(args: {
     // metadata resolver (the four per-layer maps never escape the runtime).
     const toolMetadataByName = tool.metadata.toInvocationMetadataByName()
 
-    // durableRunState is assigned after the tool block ran (above), so approval
-    // wrapping cannot be a prepareToolRuntime flag. The runtime computed the
-    // decisions eagerly; apply them exactly once here for durable runs.
-    if (durableRunState) {
-      tool.applyDurableApprovals()
-    }
-
     const enrichedSystemPrompt = effectiveSystemPrompt
 
     const mcpServerCount = tool.mcpServerCount
@@ -1244,6 +1237,12 @@ export function createChatTurnRuntime(args: {
         ...(Object.keys(requestHeaders).length > 0 && {
           headers: requestHeaders,
         }),
+        // Call-site approval config (ai@7): the Tool runtime's decisions,
+        // durable runs only — guest chats run ungated, matching the pre-v7
+        // wrap-on-durable behavior.
+        ...(durable && convexToken && tool.toolApproval
+          ? { toolApproval: tool.toolApproval }
+          : {}),
         ...(durable && convexToken
           ? {
               experimental_transform: createRuntimeApprovalPersistenceTransform(
