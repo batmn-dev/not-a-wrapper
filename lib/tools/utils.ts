@@ -765,8 +765,8 @@ export function wrapToolsWithTruncation(
 /**
  * Wrap all tools in a ToolSet with timing + trace recording.
  * Records start/end time around each execute() call and writes
- * the trace to the shared ToolTraceCollector so onStepFinish
- * and onFinish can read durationMs for ALL tool types.
+ * the trace to the shared ToolTraceCollector so the step-end
+ * outcome recording can read durationMs for ALL tool types.
  *
  * Structural twin of wrapToolsWithTruncation — same iteration
  * and casting pattern. Applied SEPARATELY (not composed) because

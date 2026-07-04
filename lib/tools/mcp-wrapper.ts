@@ -70,8 +70,8 @@ type WrapMcpToolsConfig = {
  * Replaces wrapToolsWithTruncation(mcpTools) at route.ts:300-302.
  *
  * Error behavior: throws on failure (does NOT envelope errors).
- * This preserves the AI SDK's isError detection in onFinish for
- * audit logs and PostHog events. The SDK passes the error message
+ * This preserves the AI SDK's isError detection in the step-end
+ * outcome recording for audit logs and PostHog events. The SDK passes the error message
  * to the model as a tool result — the model can still explain
  * "tool X failed" without the app crashing.
  *

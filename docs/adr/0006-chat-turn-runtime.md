@@ -138,3 +138,25 @@ gate), the 400/401 validation short-circuits, and returning the `Response`.
   against the catch-path durable writes; (c) the edit/regen optimistic-concurrency
   guard (`expectedVisibleMessageCount` / `tailMessageId`) is relocated verbatim —
   it is the area with the known version-guard count-drift edge.
+
+## Addendum (2026-07-04): AI SDK v7 surface
+
+The decision is unchanged; the names in the text above moved with the ai@7
+upgrade (PR #97). Read the body's names through this mapping:
+
+- The two `onFinish` layers are now the two `onEnd` layers (v7 rename of the
+  same callbacks). The shared-closure `durableFinal*` handoff contract is
+  identical; note that v7's `onEnd.usage` aggregates across ALL steps where
+  v6's `onFinish.usage` was final-step only.
+- `toUIMessageStreamResponse` (deprecated, removed in ai@8) was split into
+  `result.toUIMessageStream(...)` — the UI-message semantics, carrying the
+  response-level `onEnd` — plus `createUIMessageStreamResponse` — SSE encoding,
+  the `Response`, and `consumeSseStream`. Both halves remain inside
+  `toResponse(signal)`'s single closure, so the "both finish layers share one
+  closure" invariant is untouched.
+- Approval gating is no longer applied by wrapping tools (the
+  `applyDurableApprovals` mutation, an implementation detail below this
+  decision); the Tool runtime now exposes a declarative call-site
+  `toolApproval` map that `toResponse` spreads into `streamText` for durable
+  runs only. Absent entries fall through to a tool's own `needsApproval`,
+  preserving the old OR-composition.

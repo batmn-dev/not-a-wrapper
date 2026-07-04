@@ -247,7 +247,7 @@ export type ToolRuntime = {
 
 /**
  * Timeout classification over an outcome's error signals — absorbed from the
- * chat route's onFinish aggregate so the summary owns its own rules.
+ * chat runtime's end-of-stream aggregate so the summary owns its own rules.
  */
 function isTimeoutSignal(value: string | undefined): boolean {
   if (!value) return false
