@@ -4,7 +4,11 @@ import { recordFailure, resetAllCircuits } from "../circuit-breaker"
 // Import after mocks
 // =============================================================================
 
-import { loadUserMcpTools, slugify } from "../load-tools"
+import {
+  describeMcpConnectionError,
+  loadUserMcpTools,
+  slugify,
+} from "../load-tools"
 
 // =============================================================================
 // Module mocks — must be before imports that use them
@@ -90,6 +94,31 @@ function mockTool(name: string) {
 // =============================================================================
 // Tests
 // =============================================================================
+
+describe("describeMcpConnectionError", () => {
+  it("rewrites redirect rejections into an actionable message", () => {
+    // Node/undici shape: TypeError("fetch failed") with a redirect cause.
+    const nodeShape = new TypeError("fetch failed")
+    nodeShape.cause = new Error("unexpected redirect")
+    // Bun shape: single error, redirect named in the message.
+    const bunShape = new Error(
+      'UnexpectedRedirect fetching "http://example.com/mcp"'
+    )
+
+    for (const reason of [nodeShape, bunShape]) {
+      expect(describeMcpConnectionError(reason)).toContain(
+        "responded with a redirect"
+      )
+    }
+  })
+
+  it("passes other errors through verbatim", () => {
+    expect(
+      describeMcpConnectionError(new Error("MCP connection timeout"))
+    ).toBe("MCP connection timeout")
+    expect(describeMcpConnectionError("not-an-error")).toBe("Connection failed")
+  })
+})
 
 describe("slugify", () => {
   it("converts name to lowercase URL-safe slug", () => {
