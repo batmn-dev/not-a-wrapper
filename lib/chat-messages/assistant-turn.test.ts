@@ -107,6 +107,41 @@ describe("deriveAssistantTurnView", () => {
     expect(view.toolRenderSignature).toContain("search")
   })
 
+  it("dedupes sources by URL, keeping the first occurrence", () => {
+    // Providers cite the same URL across parts/steps. The view is the single
+    // derivation for every consumer (gallery rows, "Sources · N", trigger
+    // counts), so one URL must appear once — with its first title.
+    const message = {
+      parts: parts([
+        {
+          type: "source-url",
+          sourceId: "s1",
+          url: "https://releasebot.io/a",
+          title: "Releasebot",
+        },
+        {
+          type: "source-url",
+          sourceId: "s2",
+          url: "https://releasebot.io/a",
+          title: "Releasebot (duplicate)",
+        },
+        {
+          type: "source-url",
+          sourceId: "s3",
+          url: "https://other.dev/b",
+          title: "Other",
+        },
+      ]),
+    }
+
+    const view = deriveAssistantTurnView(message, "ready")
+    expect(view.sources.map((s) => s.url)).toEqual([
+      "https://releasebot.io/a",
+      "https://other.dev/b",
+    ])
+    expect(view.sources[0].title).toBe("Releasebot")
+  })
+
   it("observes in-place part mutation across derivations (no memoization)", () => {
     const shared = parts([
       {

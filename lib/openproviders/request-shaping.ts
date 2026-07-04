@@ -89,8 +89,10 @@ function resolveProviderOptions(
       return { google: { thinkingConfig: { includeThoughts: true } } }
     case "openai":
       return { openai: { reasoningEffort: "medium", reasoningSummary: "auto" } }
-    case "xai":
-      return { xai: { reasoningEffort: "medium" } }
+    // xai: deliberately no options. Grok 4-family reasoning models reason
+    // unconditionally — xAI's reasoning_effort knob applies only to
+    // grok-3-mini-class models, so any value sent for the cataloged Groks
+    // is rejected (the pre-fix "invalid xai provider options" 503).
     default:
       return {}
   }

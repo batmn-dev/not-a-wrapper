@@ -106,6 +106,18 @@ export function getBranch(
 }
 
 /**
+ * Read the durable error summary off a message's metadata (the `error` field
+ * of a failed/aborted message, projected as `durableError` by
+ * {@link stampServerFields}). Renderers use it for the inline failed-state
+ * summary; read through this accessor, never via `metadata.durableError`.
+ */
+export function getDurableError(metadata: unknown): string | undefined {
+  if (!isRecord(metadata)) return undefined
+  const value = metadata.durableError
+  return typeof value === "string" && value.length > 0 ? value : undefined
+}
+
+/**
  * Read the server-persisted reasoning duration (ms) off a message's metadata.
  * Written by the chat turn runtime at stream completion; renderers must read
  * it through this accessor, never via `metadata.reasoningDurationMs` directly.

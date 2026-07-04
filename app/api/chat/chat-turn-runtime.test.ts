@@ -526,6 +526,32 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
       warn.mockRestore()
     }
   })
+
+  it("fail() finalizes the durable run as failed with the assistant message", async () => {
+    // The route's outer catch path: a post-prepare error must reach
+    // markGenerationRunFailed with the run AND its placeholder message id —
+    // the durable layer keeps that placeholder as the turn's visible failed
+    // stub, so losing the id here would orphan the turn again.
+    const harness = makeStreamHarness()
+    const fetchMutation = makeFetchMutation()
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(harness, fetchMutation),
+    })
+
+    await runtime.prepare()
+    await runtime.fail(new Error("provider exploded"))
+
+    const failed = findCall(
+      fetchMutation,
+      api.chatRuntime.markGenerationRunFailed
+    )
+    expect(failed?.[1]).toMatchObject({
+      runId: "run1",
+      messageId: "msg1",
+      error: "provider exploded",
+    })
+  })
 })
 
 describe("createChatTurnRuntime — abort telemetry", () => {

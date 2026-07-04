@@ -26,6 +26,7 @@ import {
 } from "@remixicon/react"
 import { useMutation } from "convex/react"
 import { useState } from "react"
+import { ConnectionCardsSkeleton } from "./connection-cards-skeleton"
 import { McpServerForm } from "./mcp-server-form"
 import { McpToolApprovals } from "./mcp-tool-approvals"
 
@@ -136,11 +137,7 @@ export function McpServers() {
       </div>
 
       {/* Loading state */}
-      {isLoading && (
-        <div className="py-8 text-center">
-          <div className="text-muted-foreground">Loading connections...</div>
-        </div>
-      )}
+      {isLoading && <ConnectionCardsSkeleton />}
 
       {/* Empty state */}
       {!isLoading && servers.length === 0 && (

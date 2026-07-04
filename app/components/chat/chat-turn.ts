@@ -41,10 +41,20 @@ type SendMessageOptions = { body?: Record<string, unknown> }
 type RegenerateMessageOptions = SendMessageOptions & { messageId?: string }
 
 type SendMessage = (
-  message: {
-    text: string
-    files?: SendFilePart[]
-  },
+  message:
+    | {
+        text: string
+        files?: SendFilePart[]
+      }
+    // The full-message form: the SDK appends it verbatim (keeping `id`), so a
+    // turn runner can control the live message's identity. The edit runner
+    // needs this — see runEditTurn.
+    | {
+        id: string
+        role: "user"
+        parts: ChatTurnMessage["parts"]
+        createdAt?: Date
+      },
   options?: SendMessageOptions
 ) => void
 
@@ -455,10 +465,20 @@ export async function runEditTurn(
 
     adapters.setMessages(editPlan.trimmedMessages)
 
+    // Send the replacement as a full message so the SDK appends it with the
+    // optimistic edit id — the same id the edit intent tells the server to
+    // record as the replacement's clientMessageId. Live and persisted message
+    // then share an identity key, so the selected-path projection RECONCILES
+    // the edited turn like a send/regenerate instead of detecting divergence
+    // and swapping wholesale — a swap that discarded the streamed assistant
+    // metadata (e.g. the live reasoningDurationMs) in favor of a durable
+    // snapshot that lags the final flush. See selected-path.ts identityKeys.
     adapters.sendMessage(
       {
-        text: newContent,
-        files: editPlan.sendFiles.length > 0 ? editPlan.sendFiles : undefined,
+        id: editPlan.optimisticEditedMessage.id,
+        role: "user",
+        parts: editPlan.optimisticEditedMessage.parts,
+        createdAt: editPlan.optimisticEditedMessage.createdAt,
       },
       {
         body: buildChatTurnRequestBody({
@@ -474,11 +494,6 @@ export async function runEditTurn(
       }
     )
 
-    adapters.setMessages((prev) =>
-      prev.filter(
-        (message) => message.id !== editPlan.optimisticEditedMessage.id
-      )
-    )
     adapters.turnStore.stagePendingEdit(
       editPlan.optimisticEditedMessage,
       currentChatId

@@ -330,6 +330,42 @@ describe("projectSelectedPath", () => {
     expect(result[1].metadata).toMatchObject({ serverMessageId: "s2" })
   })
 
+  it("reconciles an edit turn (replacement id shared with the server), preserving streamed assistant metadata", () => {
+    // The edit runner sends the replacement through the SDK with the
+    // optimistic edit id — the id the edit intent tells the server to record
+    // as clientMessageId — so an accepted edit converges like a send. A
+    // wholesale swap here would discard the streamed assistant's
+    // client-transient metadata (the live reasoningDurationMs delivered by
+    // the finish part) for a durable snapshot that lags the final flush.
+    const live = [
+      serverMessage("s1", "user", "q"),
+      serverMessage("s2", "assistant", "a"),
+      message("optimistic-edit-1", "user", "edited q"),
+      message("srv-a2", "assistant", "new answer", {
+        reasoningDurationMs: 1200,
+      }),
+    ]
+    const server = [
+      serverMessage("s1", "user", "q"),
+      serverMessage("s2", "assistant", "a"),
+      serverMessage("s3", "user", "edited q", undefined, "optimistic-edit-1"),
+      serverMessage("srv-a2", "assistant", "new answer"),
+    ]
+    expect(isSelectedPathDivergent(live, server)).toBe(false)
+    const result = projectSelectedPath(live, server)
+    expect(result.map((m) => m.id)).toEqual([
+      "s1",
+      "s2",
+      "optimistic-edit-1",
+      "srv-a2",
+    ])
+    expect(result[2].metadata).toMatchObject({ serverMessageId: "s3" })
+    expect(result[3].metadata).toMatchObject({
+      serverMessageId: "srv-a2",
+      reasoningDurationMs: 1200,
+    })
+  })
+
   it("is idempotent — projecting a converged array is a no-op", () => {
     const live = [
       message("opt-u1", "user", "q"),
@@ -342,5 +378,70 @@ describe("projectSelectedPath", () => {
     const once = projectSelectedPath(live, server)
     const twice = projectSelectedPath(once, server)
     expect(twice).toBe(once)
+  })
+})
+
+describe("durable content adoption", () => {
+  // A generation that survives navigation keeps writing durable snapshots and
+  // finalizes after this client detached; the idle projection must converge
+  // the rendered array onto that content instead of freezing at the
+  // hydration-moment snapshot.
+
+  it("adopts server parts when durable content moved past the local copy", () => {
+    const live = [
+      serverMessage("s1", "user", "essay please"),
+      serverMessage("s2", "assistant", "partial essay"),
+    ]
+    const server = [
+      serverMessage("s1", "user", "essay please"),
+      {
+        ...serverMessage("s2", "assistant", "partial essay grew much longer"),
+        status: "streaming" as const,
+      },
+    ]
+    const result = projectSelectedPath(live, server)
+    expect(result[1].parts).toEqual([
+      { type: "text", text: "partial essay grew much longer" },
+    ])
+  })
+
+  it("keeps local parts when the server holds a shorter non-terminal snapshot", () => {
+    // Completion lag: this client just finished streaming; the durable row
+    // still holds the last throttled snapshot. Adopting it would visibly
+    // truncate the message until the completion write lands.
+    const live = [
+      serverMessage("s1", "user", "q"),
+      serverMessage("s2", "assistant", "the complete final answer"),
+    ]
+    const server = [
+      serverMessage("s1", "user", "q"),
+      {
+        ...serverMessage("s2", "assistant", "the complete fin"),
+        status: "streaming" as const,
+      },
+    ]
+    const result = projectSelectedPath(live, server)
+    // Status may still adopt (durable live statuses are ignored for
+    // liveness), but the local content must not be truncated.
+    expect(result[1].parts).toBe(live[1].parts)
+  })
+
+  it("adopts terminal server content even when it differs without being longer", () => {
+    const live = [
+      serverMessage("s1", "user", "q"),
+      serverMessage("s2", "assistant", "locally rendered draft"),
+    ]
+    const server = [
+      serverMessage("s1", "user", "q"),
+      {
+        ...serverMessage("s2", "assistant", "final persisted form"),
+        status: "completed" as const,
+      },
+    ]
+    const result = projectSelectedPath(live, server)
+    expect(result[1].parts).toEqual([
+      { type: "text", text: "final persisted form" },
+    ])
+    expect(result[1].status).toBe("completed")
   })
 })

@@ -100,10 +100,12 @@ describe("shapeRequest provider options", () => {
       },
     },
     {
-      name: "xai reasoning model gets medium effort",
+      // xAI accepts reasoning_effort only on grok-3-mini ("low" | "high");
+      // the cataloged Grok 4-family models reject it, so xai sends none.
+      name: "xai reasoning model gets no provider options",
       model: { providerId: "xai", reasoningText: true },
       ctx: NO_TOOLS,
-      expected: { xai: { reasoningEffort: "medium" } },
+      expected: {},
     },
     {
       name: "model without reasoningText gets no options",

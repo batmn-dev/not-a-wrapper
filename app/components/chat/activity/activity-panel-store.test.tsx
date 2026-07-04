@@ -62,6 +62,29 @@ describe("activity panel store — explicit-vs-default classification", () => {
     expect(store.getState().panelTurnId).toBe("a2")
   })
 
+  it("carries the one-shot section target through openTurn and clears it on consume, re-open, and close", () => {
+    const store = createActivityPanelStore()
+    store.setDerivedTurnIds({ panelTurnId: "a1", defaultTurnId: "a1" })
+
+    // The sources badge opens with a section target.
+    store.openTurn("a1", { section: "sources" })
+    expect(store.getState().openSection).toBe("sources")
+
+    // The panel consumes it after scrolling.
+    store.clearOpenSection()
+    expect(store.getState().openSection).toBeUndefined()
+
+    // A section-less open (the activity trigger) clears a stale target.
+    store.openTurn("a1", { section: "sources" })
+    store.openTurn("a2")
+    expect(store.getState().openSection).toBeUndefined()
+
+    // Closing clears an unconsumed target.
+    store.openTurn("a2", { section: "sources" })
+    store.setOpen(false)
+    expect(store.getState().openSection).toBeUndefined()
+  })
+
   it("fires the wired onOpen side effect on every turn open", () => {
     const onOpen = vi.fn()
     const store = createActivityPanelStore()

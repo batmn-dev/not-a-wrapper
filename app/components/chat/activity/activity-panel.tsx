@@ -4,9 +4,11 @@ import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { Markdown } from "@/components/ui/markdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { SourceUrlUIPart, ToolUIPart } from "ai"
+import { useEffect, useRef } from "react"
 import { createPortal } from "react-dom"
 import type { ReasoningPhase } from "../use-reasoning-phase"
 import { useActivityPanelDockSlot } from "./activity-panel-host"
+import { useActivityPanelSectionTarget } from "./activity-panel-store"
 import { ActivityStep, ActivityTimeline, StepTitle } from "./activity-timeline"
 import { ContentSheetShell } from "./content-sheet-shell"
 import { DockedFlyoutShell } from "./docked-flyout-shell"
@@ -79,11 +81,24 @@ function PanelBody({
   const hasVisibleReasoning = reasoningText.trim().length > 0
   const hasReasoning = hasVisibleReasoning || isOpaqueReasoning
 
+  // One-shot section target from the store (the sources badge opens the panel
+  // "on the Sources section"). Runs after the commit that projected the target
+  // turn, so the gallery below is this turn's; scrollIntoView reaches whichever
+  // shell's scroll viewport hosts the body. Consumed even when the projected
+  // turn has no sources so a stale target can't fire on a later open.
+  const { section, consume } = useActivityPanelSectionTarget()
+  const sourcesSectionRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (section !== "sources") return
+    sourcesSectionRef.current?.scrollIntoView({ block: "start" })
+    consume()
+  }, [section, consume])
+
   return (
     <div className="space-y-4">
       {hasReasoning ? (
         <div className="px-3 pt-2 pb-2">
-          <PanelSectionHeading title="Pro thinking" />
+          <PanelSectionHeading title="Thinking" />
           <ActivityTimeline className="mt-3 flex flex-col">
             <ActivityStep leading="done" body="description">
               <StepTitle>Reasoning</StepTitle>
@@ -97,7 +112,9 @@ function PanelBody({
         </div>
       ) : null}
       {gallerySources.length > 0 ? (
-        <SourcesGallery sources={gallerySources} />
+        <div ref={sourcesSectionRef} className="scroll-mt-3">
+          <SourcesGallery sources={gallerySources} />
+        </div>
       ) : null}
     </div>
   )

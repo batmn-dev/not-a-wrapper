@@ -427,15 +427,24 @@ describe("chat turn controller", () => {
       status: "ready",
     })
 
-    expect(snapshots[0]).toEqual(["optimistic-edit-message"])
+    // Optimistic frame, then the pre-send trim — and nothing after: the SDK
+    // appends the replacement itself (with the optimistic edit id), so a
+    // post-send removal by that id would delete the just-sent message.
+    expect(snapshots).toEqual([["optimistic-edit-message"], []])
     expect(events.indexOf("ensureChatExists")).toBeLessThan(
       events.indexOf("sendMessage")
     )
     expect(storeAdapters.writeMessages).not.toHaveBeenCalled()
+    // The replacement goes out as a full message carrying the optimistic edit
+    // id — the same id the edit intent records as the server's
+    // clientMessageId — so the live and persisted message share identity and
+    // the selected-path projection reconciles instead of swapping.
     expect(adapters.sendMessage).toHaveBeenCalledWith(
       {
-        text: "new text",
-        files: [targetFile],
+        id: "optimistic-edit-message",
+        role: "user",
+        parts: [{ type: "text", text: "new text" }, targetFile],
+        createdAt: expect.any(Date),
       },
       {
         body: expect.objectContaining({
@@ -544,8 +553,10 @@ describe("chat turn controller", () => {
     expect(storeAdapters.writeMessages).not.toHaveBeenCalled()
     expect(adapters.sendMessage).toHaveBeenCalledWith(
       {
-        text: "new text",
-        files: undefined,
+        id: "optimistic-edit-message",
+        role: "user",
+        parts: [{ type: "text", text: "new text" }],
+        createdAt: expect.any(Date),
       },
       {
         body: expect.objectContaining({
@@ -602,7 +613,12 @@ describe("chat turn controller", () => {
 
     expect(result).toEqual({ ok: true })
     expect(adapters.sendMessage).toHaveBeenCalledWith(
-      { text: "new text", files: undefined },
+      {
+        id: "optimistic-edit-message",
+        role: "user",
+        parts: [{ type: "text", text: "new text" }],
+        createdAt: expect.any(Date),
+      },
       {
         body: expect.objectContaining({
           edit: expect.objectContaining({

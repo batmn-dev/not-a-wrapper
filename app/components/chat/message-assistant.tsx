@@ -15,9 +15,11 @@ import { SystemMessage } from "@/components/ui/system-message"
 import {
   deriveAssistantTurnIndicator,
   deriveAssistantTurnPhase,
+  hasPreservedResponseContent,
   type AssistantTurnView,
 } from "@/lib/chat-messages/assistant-turn"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
+import { getDurableError } from "@/lib/chat-messages/metadata"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
 import { RiCheckLine, RiFileCopyLine, RiRefreshLine } from "@remixicon/react"
@@ -30,6 +32,7 @@ import {
 import { ActivityPanelTrigger } from "./activity/activity-panel-trigger"
 import { QuoteButton } from "./quote-button"
 import { SearchImages } from "./search-images"
+import { SourcesBadge } from "./sources-badge"
 import { ToolInvocation } from "./tool-invocation"
 import { useAssistantMessageSelection } from "./useAssistantMessageSelection"
 
@@ -81,6 +84,10 @@ export function MessageAssistant({
   const contentNullOrEmpty = children === null || children === ""
   const isLastStreaming = status === "streaming" && isLast
   const hasContent = !contentNullOrEmpty
+  // Durable terminal-state presentation inputs: whether any visible response
+  // content survived, and the persisted error summary for failed turns.
+  const preservedResponse = hasPreservedResponseContent(view)
+  const durableError = getDurableError(view.metadata)
 
   // Reasoning + sources live in the Chat-owned Activity panel. Each assistant
   // row with activity keeps its own trigger; only the row currently projected
@@ -125,6 +132,13 @@ export function MessageAssistant({
     },
     [panelActions, messageId]
   )
+  // The sources badge is a navigate-to affordance, not a disclosure: it always
+  // opens/projects this turn with the Sources section in view (re-clicking
+  // while open re-scrolls to sources rather than closing — closing stays on
+  // the activity trigger and the panel's own close affordances).
+  const handleSourcesBadgeOpen = useCallback(() => {
+    panelActions?.openTurn(messageId, { section: "sources" })
+  }, [panelActions, messageId])
 
   const [contentCaretPhase, setContentCaretPhase] = useState<
     "hidden" | "visible" | "fading"
@@ -254,15 +268,47 @@ export function MessageAssistant({
           </SystemMessage>
         )}
 
+        {/* Terminal aborted/failed states are durable data (the message row's
+            status + error), not transient client state: a turn that died
+            before producing content renders as a first-class stub with a
+            retry (regeneration) affordance instead of vanishing behind a
+            toast. Retry re-runs the turn against the same user message. */}
         {status === "aborted" && (
-          <SystemMessage variant="warning" fill>
-            Generation stopped. Partial response preserved.
+          <SystemMessage
+            variant="warning"
+            fill
+            cta={
+              !preservedResponse && canRegenerate
+                ? {
+                    label: "Retry",
+                    onClick: () => onReload?.(messageId),
+                  }
+                : undefined
+            }
+          >
+            {preservedResponse
+              ? "Generation stopped. Partial response preserved."
+              : "Generation stopped."}
           </SystemMessage>
         )}
 
         {status === "failed" && (
-          <SystemMessage variant="error" fill>
-            Generation failed. Partial response preserved.
+          <SystemMessage
+            variant="error"
+            fill
+            cta={
+              canRegenerate
+                ? {
+                    label: "Retry",
+                    onClick: () => onReload?.(messageId),
+                  }
+                : undefined
+            }
+          >
+            {durableError
+              ? `Generation failed: ${durableError}`
+              : "Generation failed."}
+            {preservedResponse ? " Partial response preserved." : ""}
           </SystemMessage>
         )}
 
@@ -327,6 +373,20 @@ export function MessageAssistant({
                     </button>
                   </MessageAction>
                 ) : null}
+                {/* Trailing sources badge (reference: last child of the
+                    response-actions row). Settled turns only — while the turn
+                    is live, source deltas stay panel-owned and this row's memo
+                    deliberately ignores them; the settle re-render (status
+                    flip / metadata adoption) is what reveals the badge with
+                    the final deduped sources. */}
+                {!turnActive && panelActions && (
+                  <SourcesBadge
+                    sources={view.sources}
+                    open={isPanelTurnOpen}
+                    onOpen={handleSourcesBadgeOpen}
+                    controlsId={panelId}
+                  />
+                )}
               </MessageActions>
             )}
           </div>

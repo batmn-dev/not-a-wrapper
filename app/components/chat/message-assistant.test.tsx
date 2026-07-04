@@ -397,6 +397,103 @@ describe("MessageAssistant activity trigger", () => {
     ).toBeNull()
   })
 
+  it("renders the sources badge on a settled grounded turn and opens the panel at Sources", async () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+    // Four sources across three unique hosts — the favicon cluster dedupes by
+    // host (reference behavior) while the full deduped list stays panel-owned.
+    const parts = [
+      { type: "source-url", sourceId: "s1", url: "https://a.example/one" },
+      { type: "source-url", sourceId: "s2", url: "https://a.example/two" },
+      { type: "source-url", sourceId: "s3", url: "https://b.example/three" },
+      { type: "source-url", sourceId: "s4", url: "https://c.example/four" },
+    ] as unknown as UIMessage["parts"]
+
+    await act(async () => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            copied={false}
+            copyToClipboard={() => {}}
+            view={makeView(parts, "ready")}
+            status="ready"
+          >
+            {"Grounded answer"}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    const badge = container?.querySelector(
+      'button[aria-label="Sources"]'
+    ) as HTMLButtonElement | null
+    expect(badge).toBeTruthy()
+    expect(badge?.textContent).toContain("Sources")
+    expect(badge?.getAttribute("aria-controls")).toBe("activity-panel")
+    expect(badge?.getAttribute("aria-expanded")).toBe("false")
+    // Cluster caps at the first 3 unique hosts: a.example once, b, c.
+    expect(badge?.querySelectorAll('[data-slot="avatar"]')).toHaveLength(3)
+
+    act(() => {
+      badge?.click()
+    })
+
+    expect(store.getState().open).toBe(true)
+    expect(store.getState().panelTurnId).toBe("assistant-1")
+    expect(store.getState().openSection).toBe("sources")
+  })
+
+  it("renders no sources badge without sources, and none while the turn is live", async () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+
+    await act(async () => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            copied={false}
+            copyToClipboard={() => {}}
+            view={makeView([], "ready")}
+            status="ready"
+          >
+            {"Plain answer"}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    // Settled turn without sources: actions row renders, badge does not.
+    expect(
+      container?.querySelector('button[aria-label="Copy text"]')
+    ).toBeTruthy()
+    expect(container?.querySelector('button[aria-label="Sources"]')).toBeNull()
+
+    const sourcedParts = [
+      { type: "source-url", sourceId: "s1", url: "https://a.example/one" },
+    ] as unknown as UIMessage["parts"]
+
+    await act(async () => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            copied={false}
+            copyToClipboard={() => {}}
+            view={makeView(sourcedParts, "streaming")}
+            status="streaming"
+            isLast
+          >
+            {"Streaming answer"}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    // Live turn: sources exist but the badge waits for the settle (the appear
+    // timing the row memo's sources exclusion relies on).
+    expect(container?.querySelector('button[aria-label="Sources"]')).toBeNull()
+  })
+
   it("renders the activity trigger before content and footer actions", async () => {
     const store = makeStore({ panelTurnId: "assistant-1" })
     const parts = [

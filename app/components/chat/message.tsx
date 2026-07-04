@@ -90,8 +90,10 @@ function branchesEqual(
  * equality must be content-based. `children` compares the rendered text;
  * `assistantTurnViewsEqual` compares exactly the remaining facts the row
  * renders (tool signature, reasoning phase, metadata identity, server id) —
- * deliberately NOT sources, whose trigger count settles when the status flip
- * re-renders the row. Streaming reasoning/source deltas therefore do NOT
+ * deliberately NOT sources: the row's sources presentations (trigger count,
+ * footer sources badge) render only on settled turns, and every path into
+ * settled re-renders through compared fields (status flip, isLast handoff,
+ * metadata adoption). Streaming reasoning/source deltas therefore do NOT
  * churn the row body — the Activity panel owns and updates that state
  * through its own store seam.
  */

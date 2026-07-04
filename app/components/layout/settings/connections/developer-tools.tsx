@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
 import { useQuery } from "@tanstack/react-query"
+import { ConnectionCardsSkeleton } from "./connection-cards-skeleton"
 
 type DeveloperTool = {
   id: string
@@ -47,17 +48,11 @@ export function DeveloperTools() {
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="py-8 text-center">
-        <div className="text-muted-foreground">Loading connections...</div>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-6 pb-8">
-      {/* Header */}
+      {/* Header — always rendered; only the body below swaps between the
+          loading skeleton and the loaded list, so the section keeps its
+          identity while its read resolves. */}
       <div>
         <h3 className="mb-2 text-lg font-medium">Developer Tool connections</h3>
         <p className="text-muted-foreground text-sm">
@@ -65,6 +60,9 @@ export function DeveloperTools() {
           keys follow specific formats and are only used in development mode.
         </p>
       </div>
+
+      {/* Loading state */}
+      {isLoading && <ConnectionCardsSkeleton />}
 
       {/* Tools List */}
       <div className="space-y-6">

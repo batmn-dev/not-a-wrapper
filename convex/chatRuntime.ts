@@ -26,8 +26,8 @@ import {
 import { extractTextFromMessageParts } from "./domain/message_parts"
 import {
   hasSemanticAssistantParts,
-  isModelHistoryMessage,
   isVisibleChatMessage,
+  projectModelHistoryMessages,
 } from "./domain/message_visibility"
 import {
   getAuthorizedChatForRead,
@@ -270,24 +270,57 @@ async function validateSelectedPathTokenForChat(
   validateSelectedPathToken(await listMessages(ctx, chatId), token)
 }
 
-async function selectFallbackSiblingBeforeDelete(
+/**
+ * Resolve the terminal outcome of an EMPTY assistant placeholder — a run that
+ * ended (failed/aborted/superseded) before producing any content.
+ *
+ * Two honest resolutions, chosen by whether the turn has a prior answer to
+ * fall back to:
+ *  - a semantic sibling exists (a regeneration died before its first chunk):
+ *    delete the placeholder and re-select the sibling — the turn reverts to
+ *    the previous answer instead of showing an empty stub next to it;
+ *  - no semantic sibling (a fresh send died): KEEP the placeholder and mark
+ *    it with the terminal status + error. Deleting it here is what made
+ *    failed turns invisible — the user message read as silently unanswered
+ *    and got re-sent as duplicate history. The stub renders as an inline
+ *    failed/stopped state with retry, and projects into model history as an
+ *    explicit "never answered" marker.
+ *
+ * Returns whether the placeholder was deleted or kept.
+ */
+async function resolveEmptyAssistantTerminalOutcome(
   ctx: MutationCtx,
   message: Doc<"messages">,
+  outcome: TerminalGenerationOutcome,
   now: number
-) {
-  if (message.selected !== true) return
-
+): Promise<"deleted" | "kept"> {
   const messages = await listMessages(ctx, message.chatId)
   const parentMessageId = getEffectiveParentId(messages, message)
-  const siblings = getSiblingMessages(
+  const fallbackSibling = getSiblingMessages(
     messages,
     parentMessageId,
     message.role
-  ).filter((sibling) => sibling._id !== message._id)
-  const fallbackSibling = siblings[siblings.length - 1]
-  if (!fallbackSibling) return
+  )
+    .filter(
+      (sibling) =>
+        sibling._id !== message._id && hasSemanticAssistantParts(sibling)
+    )
+    .at(-1)
 
-  await selectMessageSiblingForMutation(ctx, messages, fallbackSibling, now)
+  if (fallbackSibling) {
+    if (message.selected === true) {
+      await selectMessageSiblingForMutation(ctx, messages, fallbackSibling, now)
+    }
+    await ctx.db.delete(message._id)
+    return "deleted"
+  }
+
+  await ctx.db.patch(message._id, {
+    status: outcome.status,
+    error: outcome.error,
+    updatedAt: now,
+  })
+  return "kept"
 }
 
 type TerminalGenerationOutcome = {
@@ -343,11 +376,18 @@ async function applyTerminalAssistantOutcome(
   }
 
   if (!hasSemanticAssistantParts(message)) {
-    await selectFallbackSiblingBeforeDelete(ctx, message, now)
-    await ctx.db.delete(message._id)
-    return run.assistantMessageId === message._id
-      ? undefined
-      : run.assistantMessageId
+    const resolution = await resolveEmptyAssistantTerminalOutcome(
+      ctx,
+      message,
+      outcome,
+      now
+    )
+    if (resolution === "deleted") {
+      return run.assistantMessageId === message._id
+        ? undefined
+        : run.assistantMessageId
+    }
+    return message._id
   }
 
   await ctx.db.patch(message._id, {
@@ -407,19 +447,27 @@ async function closeSupersededGenerationsForChat(
 
   for (const message of assistantMessages) {
     if (supersededMessageIds.has(message._id)) continue
-    if (!hasSemanticAssistantParts(message)) {
-      await selectFallbackSiblingBeforeDelete(ctx, message, now)
-      await ctx.db.delete(message._id)
-      continue
-    }
-
+    // Terminal statuses are settled turns — completed answers and first-class
+    // failed/aborted stubs alike. The sweep must not delete or restate them;
+    // it only closes out messages a live-looking run left behind.
     if (!isSupersedableMessageStatus(message.status)) continue
 
-    await ctx.db.patch(message._id, {
-      status: "aborted",
-      error: reason,
-      updatedAt: now,
-    })
+    let supersededMessageId: Id<"messages"> | undefined = message._id
+    if (!hasSemanticAssistantParts(message)) {
+      const resolution = await resolveEmptyAssistantTerminalOutcome(
+        ctx,
+        message,
+        { status: "aborted", error: reason },
+        now
+      )
+      if (resolution === "deleted") supersededMessageId = undefined
+    } else {
+      await ctx.db.patch(message._id, {
+        status: "aborted",
+        error: reason,
+        updatedAt: now,
+      })
+    }
 
     if (
       message.generationRunId &&
@@ -437,7 +485,7 @@ async function closeSupersededGenerationsForChat(
           completedAt: now,
           updatedAt: now,
           activeStreamId: undefined,
-          assistantMessageId: message._id,
+          assistantMessageId: supersededMessageId,
         })
       }
     }
@@ -513,6 +561,11 @@ async function insertUserMessageForGeneration(
   })
 }
 
+// The selected path token is validated by the caller BEFORE the supersede
+// sweep runs (prepareGenerationForChat) — the token describes the client's
+// rendered view, and the sweep may legitimately materialize a terminal stub
+// the client could not have counted yet. Re-validating here after the sweep
+// falsely rejected the first send following a reaped zombie run.
 async function selectOrInsertLatestUserMessageForGeneration(
   ctx: MutationCtx,
   owner: AuthenticatedOwner,
@@ -523,15 +576,13 @@ async function selectOrInsertLatestUserMessageForGeneration(
     provider: string
   },
   latestUserMessage: StoredUserMessage,
-  now: number,
-  selectedPathToken: SelectedPathToken
+  now: number
 ) {
   let currentMessages = await normalizeSelectedBranchPathForMutation(
     ctx,
     await listMessages(ctx, args.chatId),
     now
   )
-  validateSelectedPathToken(currentMessages, selectedPathToken)
   const alreadyStored = currentMessages.find(
     (message) =>
       message.role === "user" &&
@@ -684,9 +735,9 @@ export async function applyRegenerationIntentForGeneration(
   return {
     assistantMessageId,
     assistantOrder,
-    messages: selectedMessages
-      .slice(0, pairedUserIndex + 1)
-      .filter(isModelHistoryMessage),
+    messages: projectModelHistoryMessages(
+      selectedMessages.slice(0, pairedUserIndex + 1)
+    ),
   }
 }
 
@@ -1157,11 +1208,7 @@ export async function prepareGenerationForChat(
         owner,
         args,
         latestUserMessage as StoredUserMessage,
-        now,
-        {
-          expectedVisibleMessageCount: args.expectedVisibleMessageCount,
-          tailMessageId: args.tailMessageId,
-        }
+        now
       )
     }
   }
@@ -1258,11 +1305,11 @@ export async function prepareGenerationForChat(
 
   const modelHistory =
     preparedModelHistory ??
-    getSelectedPathMessages(await listMessages(ctx, args.chatId)).filter(
-      (message) =>
-        (includeAssistantInModelHistory ||
-          message._id !== assistantMessageId) &&
-        isModelHistoryMessage(message)
+    projectModelHistoryMessages(
+      getSelectedPathMessages(await listMessages(ctx, args.chatId)).filter(
+        (message) =>
+          includeAssistantInModelHistory || message._id !== assistantMessageId
+      )
     )
 
   return {
@@ -1453,6 +1500,11 @@ export async function markGenerationRunCompletedForChat(
   const run = await ctx.db.get(args.runId)
   if (!run) throw new Error("Run not found")
   await requireChatOwner(ctx, run.chatId)
+  // A terminal outcome is written once. The response envelope's onFinish
+  // fires for ERRORED streams too (isAborted false), racing the stream
+  // onError's failed write — without this guard the empty "completion"
+  // repaints a failed run as completed and hides the turn's failed stub.
+  if (isTerminalGenerationRunStatus(run.status)) return
   await requireAssistantMessageForRun(ctx, run, args.messageId)
   const now = nowMs()
   const hasPendingApprovals = await ctx.db
@@ -1505,6 +1557,11 @@ export async function markGenerationRunFailedForChat(
   const run = await ctx.db.get(args.runId)
   if (!run) throw new Error("Run not found")
   await requireChatOwner(ctx, run.chatId)
+  // Failed may overwrite "completed" — the response envelope's completion
+  // write races the stream onError on an errored stream, and both orders must
+  // converge to failed. It must NOT overwrite "aborted": a user Stop is a
+  // settled outcome a late failure signal may not repaint.
+  if (run.status === "aborted" || run.status === "failed") return
   const now = nowMs()
   const assistantMessageId = await applyTerminalAssistantOutcome(
     ctx,
@@ -1543,6 +1600,10 @@ export async function markGenerationRunAbortedForChat(
   const run = await ctx.db.get(args.runId)
   if (!run) throw new Error("Run not found")
   await requireChatOwner(ctx, run.chatId)
+  // First terminal outcome wins: the streamText onAbort and the response
+  // envelope's isAborted finish both write aborted (benign), but a run that
+  // already settled as failed/completed must not be repainted.
+  if (isTerminalGenerationRunStatus(run.status)) return
   const now = nowMs()
   const assistantMessageId = await applyTerminalAssistantOutcome(
     ctx,

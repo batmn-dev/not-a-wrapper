@@ -8,9 +8,13 @@
  * server selected path onto the live array while the chat is idle, in a way
  * that:
  *
- *   - adopts server identity (message id, createdAt) and the typed branch
- *     descriptor onto matching live messages — including ones several turns
- *     back, so deep edits no longer keep a stale optimistic id;
+ *   - adopts server identity (message id, createdAt), the typed branch
+ *     descriptor, durable status, and — for assistant messages — durable
+ *     content that has moved past the local copy (a generation surviving in
+ *     the background keeps writing snapshots and its completion after this
+ *     client detached; see shouldAdoptServerParts) onto matching live
+ *     messages — including ones several turns back, so deep edits no longer
+ *     keep a stale optimistic id;
  *   - never drops in-flight messages the server has not persisted yet (the
  *     brief's "lag window"); and
  *   - swaps wholesale to the server path when the selection diverged (a branch
@@ -20,14 +24,49 @@
  * It operates purely on arrays so it can be unit-tested without React.
  */
 
+import { isTerminalMessageStatus } from "@/lib/chat-messages/lifecycle"
 import {
   adoptServerOwned,
   getServerMessageId,
 } from "@/lib/chat-messages/metadata"
+import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import type { ChatTurnMessage } from "./chat-turn-service"
 
 function createdAtMs(value: unknown): number | undefined {
   return value instanceof Date ? value.getTime() : undefined
+}
+
+/**
+ * Whether a matched assistant message should adopt the server's parts.
+ *
+ * The projection runs only while this client's stream is idle, but "idle for
+ * this client" no longer implies "nothing is writing": a generation this
+ * client started keeps streaming durable snapshots after navigation unmounts
+ * the chat (the fetch is never aborted), and its completion write lands
+ * later still. Without content adoption the thread freezes at whatever
+ * snapshot hydration installed and renders a stale partial as a finished
+ * answer.
+ *
+ * Adoption is monotonic-with-terminal-override so a just-streamed local
+ * message is never truncated by the server's lagging throttled snapshot:
+ *  - adopt when the server has MORE content (text grew / parts appended);
+ *  - adopt any difference once the server status is terminal
+ *    (completed/aborted/failed — the durable final form is authoritative);
+ *  - otherwise keep the local parts (server is a lagging prefix).
+ */
+function shouldAdoptServerParts(
+  local: ChatTurnMessage,
+  server: ChatTurnMessage
+): boolean {
+  const localParts = local.parts ?? []
+  const serverParts = server.parts ?? []
+  const localText = extractTextFromMessageParts(local.parts)
+  const serverText = extractTextFromMessageParts(server.parts)
+
+  if (serverText.length > localText.length) return true
+  if (serverParts.length > localParts.length) return true
+  if (!isTerminalMessageStatus(server.status)) return false
+  return serverText !== localText || serverParts.length !== localParts.length
 }
 
 /**
@@ -83,8 +122,16 @@ export function reconcileSelectedPath(
       serverCreatedAt instanceof Date &&
       createdAtMs(localMessage.createdAt) !== serverCreatedAt.getTime()
     const statusChanged = localMessage.status !== match.status
+    const partsChanged =
+      localMessage.role === "assistant" &&
+      shouldAdoptServerParts(localMessage, match)
 
-    if (!metadataChanged && !createdAtChanged && !statusChanged) {
+    if (
+      !metadataChanged &&
+      !createdAtChanged &&
+      !statusChanged &&
+      !partsChanged
+    ) {
       return localMessage
     }
 
@@ -94,6 +141,7 @@ export function reconcileSelectedPath(
       ...(metadataChanged ? { metadata: mergedMetadata } : {}),
       ...(createdAtChanged ? { createdAt: serverCreatedAt } : {}),
       ...(statusChanged ? { status: match.status } : {}),
+      ...(partsChanged ? { parts: match.parts } : {}),
     }
   })
 

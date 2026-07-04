@@ -405,9 +405,20 @@ export function useChatCore({
     return () => clearTimeout(timeout)
   }, [status])
 
-  // Handle chat transitions: stop active streams, reset state.
-  // IMPORTANT: This effect MUST run before the hydration effect below so that
-  // chat-to-chat navigation correctly stops the old stream before setting new messages.
+  // Handle chat transitions WITHIN a mounted Chat: stop the active stream,
+  // reset state. This only governs pushState-driven chatId changes (the
+  // null→id handoff when a fresh conversation acquires its route, and
+  // popstate back to home) — sidebar/Link navigation swaps the route segment
+  // and REMOUNTS Chat, so this effect never sees it. That is deliberate
+  // nav-survival: a Link navigation leaves the request running, the server
+  // keeps streaming durable snapshots and finalizes the run, and returning to
+  // the chat converges on the durable content via the selected-path
+  // projection (shouldAdoptServerParts). Do not "fix" Link navigation to
+  // abort here — killing a paid-for generation on navigation is the wrong
+  // product behavior and resumable generation is the roadmap direction
+  // (TODO.md "Better in-progress conversation view").
+  // IMPORTANT: This effect MUST run before the hydration effect below so a
+  // mounted transition stops the old stream before new messages install.
   useEffect(() => {
     const prevChatId = previousChatIdStore.get()
     previousChatIdStore.set(chatId)
