@@ -63,6 +63,18 @@ export async function POST(req: Request) {
     // Convex token for authenticated usage tracking + durable persistence.
     const convexToken = isAuthenticated ? authSession.accessToken : undefined
 
+    // A body that isn't valid JSON is a client error, not a server fault —
+    // classify it as 400 INVALID_REQUEST instead of letting the SyntaxError
+    // fall through to the generic 500 catch (which would page via Sentry).
+    let parsedBody: ChatRequest
+    try {
+      parsedBody = (await req.json()) as ChatRequest
+    } catch {
+      throw Object.assign(new Error("Request body is not valid JSON"), {
+        statusCode: 400,
+        code: "INVALID_REQUEST",
+      })
+    }
     const {
       messages,
       chatId,
@@ -75,7 +87,7 @@ export async function POST(req: Request) {
       userId: clientUserId,
       edit,
       regeneration,
-    } = (await req.json()) as ChatRequest
+    } = parsedBody
     const model = resolveModelId(requestedModel)
     telemetryChatId = chatId
     telemetryModel = model
