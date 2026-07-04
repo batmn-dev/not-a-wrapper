@@ -94,6 +94,14 @@ function resolveProviderOptions(
     // unconditionally — xAI's reasoning_effort knob applies only to
     // grok-3-mini-class models, so any value sent for the cataloged Groks
     // is rejected (the pre-fix "invalid xai provider options" 503).
+    //
+    // openrouter: unreachable from here by design. Its reasoning knob is a
+    // construction-time provider setting (`.chat(id, { reasoning })` on the
+    // spec-V3 provider), not a per-call providerOptions namespace — enabling
+    // it means widening the Provider strategy's `languageModel` seam, not
+    // adding a case here. ai@7's unified `reasoning` call option is NOT a
+    // substitute: the V3 model silently ignores it (see the
+    // ProviderLanguageModel note in provider-strategy.ts).
     default:
       return {}
   }

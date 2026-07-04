@@ -813,7 +813,7 @@ export function createChatTurnRuntime(args: {
       })
     }
 
-    // Convert UIMessage[] to ModelMessage[] for streamText (v6)
+    // Convert UIMessage[] to ModelMessage[] for streamText
     let modelMessages: ModelMessage[] = await convertToModelMessages(
       adapterResult.messages,
       {

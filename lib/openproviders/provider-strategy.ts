@@ -38,6 +38,19 @@ function asSearchTool(tool: unknown): ToolSet[string] {
  * OpenRouter provider still implements `LanguageModelV3` (ai@7 accepts both
  * spec versions). Widening past this union — e.g. a provider handing back a
  * V2 model — should fail compilation rather than silently regress.
+ *
+ * What the V3 path silently degrades (ai@7's V3→V4 shim is a thin proxy that
+ * only fakes `specificationVersion` — V4-only call options pass through and
+ * are ignored by the model):
+ *   - the unified `reasoning` effort call option ('minimal'…'xhigh') — do NOT
+ *     use it to configure OpenRouter models; their reasoning knob is a
+ *     construction-time provider setting (`.chat(id, { reasoning })`), not a
+ *     per-call option (see request-shaping.ts)
+ *   - V4-only content shapes (custom content parts, reasoning-file parts)
+ *
+ * TODO(openrouter-v4): when @openrouter/ai-sdk-provider ships a v4-spec
+ * release (peer `ai ^7`), bump it, delete `LanguageModelV3` from this union,
+ * and let the compiler surface every place that tolerated the V3 shape.
  */
 export type ProviderLanguageModel = LanguageModelV4 | LanguageModelV3
 
