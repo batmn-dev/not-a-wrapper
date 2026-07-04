@@ -53,6 +53,7 @@ export function SettingsContent({ isDrawer = false }: SettingsContentProps) {
       <Tabs
         value={activeTab}
         onValueChange={(value) => setActiveTab(value as TabType)}
+        orientation={isDrawer ? "horizontal" : "vertical"}
         className={cn(
           "flex w-full flex-row",
           isDrawer ? "" : "flex min-h-[400px]"
