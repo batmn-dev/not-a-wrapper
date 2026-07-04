@@ -45,6 +45,7 @@ import * as Sentry from "@sentry/nextjs"
 import {
   consumeStream,
   convertToModelMessages,
+  createUIMessageStreamResponse,
   isStepCount,
   UIMessage as MessageAISDK,
   validateUIMessages,
@@ -1593,12 +1594,16 @@ export function createChatTurnRuntime(args: {
       runGeneration
     )
 
-    return result.toUIMessageStreamResponse({
+    // Stream shaping and HTTP envelope are split on purpose (the deprecated
+    // result.toUIMessageStreamResponse fused them and is removed in ai@8):
+    // toUIMessageStream owns the UI-message semantics — including the
+    // response-level half of the durableFinal* handoff in onEnd — while
+    // createUIMessageStreamResponse owns only SSE + Response construction.
+    const uiMessageStream = result.toUIMessageStream({
       originalMessages: durable?.originalMessages ?? validatedMessages,
       generateMessageId: durable ? () => durable.assistantMessageId : undefined,
       sendReasoning: true,
       sendSources: true,
-      consumeSseStream: consumeStream,
       messageMetadata: ({ part }) => {
         if (part.type === "start") {
           return buildStartToolInvocationStreamMetadata(toolMetadataByName)
@@ -1665,6 +1670,11 @@ export function createChatTurnRuntime(args: {
         })
         return extractErrorMessage(error)
       },
+    })
+
+    return createUIMessageStreamResponse({
+      stream: uiMessageStream,
+      consumeSseStream: consumeStream,
     })
   }
 

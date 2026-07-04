@@ -171,9 +171,16 @@ function makeStreamHarness(): StreamHarness {
   const streamText = vi.fn((opts: any) => {
     captured.streamOpts = opts
     return {
-      toUIMessageStreamResponse: (responseOpts: any) => {
+      // The runtime shapes the UI message stream here (responseOpts carries
+      // the response-level onEnd) and builds the Response via the real
+      // createUIMessageStreamResponse — an empty closed stream keeps it inert.
+      toUIMessageStream: (responseOpts: any) => {
         captured.responseOpts = responseOpts
-        return new Response("stream-body")
+        return new ReadableStream({
+          start(controller) {
+            controller.close()
+          },
+        })
       },
     }
   })
