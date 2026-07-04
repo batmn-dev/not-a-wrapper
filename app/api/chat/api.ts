@@ -36,13 +36,20 @@ export async function checkServerSideUsage(
 
   if (!usage.canSend) {
     // Surface specific error messages (e.g., "User not found", "Anonymous ID required")
-    // before falling back to the generic rate limit message
+    // before falling back to the generic rate limit message. Status codes ride
+    // the ApiError shape so createErrorResponse maps them instead of 500ing.
     if (usage.error) {
-      throw new Error(usage.error)
+      throw Object.assign(new Error(usage.error), {
+        statusCode: 400,
+        code: "INVALID_REQUEST",
+      })
     }
     const modelType = isPro ? "pro model" : "message"
-    throw new Error(
-      `Daily ${modelType} limit reached (${usage.limit}). Please try again tomorrow or upgrade your plan.`
+    throw Object.assign(
+      new Error(
+        `Daily ${modelType} limit reached (${usage.limit}). Please try again tomorrow or upgrade your plan.`
+      ),
+      { statusCode: 403, code: "DAILY_LIMIT_REACHED" }
     )
   }
 }
@@ -85,8 +92,11 @@ export async function validateAndTrackUsage({
   if (!isAuthenticated) {
     // For unauthenticated users, only allow specific models
     if (!NON_AUTH_ALLOWED_MODELS.includes(resolvedModel)) {
-      throw new Error(
-        "This model requires authentication. Please sign in to access more models."
+      throw Object.assign(
+        new Error(
+          "This model requires authentication. Please sign in to access more models."
+        ),
+        { statusCode: 401, code: "AUTH_REQUIRED" }
       )
     }
   } else {
@@ -98,8 +108,11 @@ export async function validateAndTrackUsage({
 
     // If no API key and model is not in free list, deny access
     if (!hasKey && !FREE_MODELS_IDS.includes(resolvedModel)) {
-      throw new Error(
-        `This model requires an API key for ${provider}. Please add your API key in settings or use a free model.`
+      throw Object.assign(
+        new Error(
+          `This model requires an API key for ${provider}. Please add your API key in settings or use a free model.`
+        ),
+        { statusCode: 401, code: "MISSING_API_KEY" }
       )
     }
   }

@@ -85,6 +85,7 @@ import {
   excludeSystemRoleMessages,
   extractErrorMessage,
   hasProviderLinkedResponseIds,
+  isConvexArgumentValidationError,
   toPlainTextModelMessages,
 } from "./utils"
 
@@ -570,33 +571,57 @@ export function createChatTurnRuntime(args: {
           ? undefined
           : getLatestUserMessage(messages)
 
-      const generation = await deps.fetchMutation(
-        api.chatRuntime.prepareGeneration,
-        {
-          chatId: chatId as Id<"chats">,
-          requestId,
-          model,
-          provider: resolvedProvider,
-          chatVersion: normalizedChatVersion,
-          expectedVisibleMessageCount,
-          tailMessageId,
-          latestUserMessage: latestUserMessage
-            ? {
-                id: latestUserMessage.id,
-                role: "user" as const,
-                content: getStringField(
-                  getRecord(latestUserMessage as unknown),
-                  "content"
-                ),
-                parts: latestUserMessage.parts,
-              }
-            : undefined,
-          edit,
-          regeneration,
-          approvalResponses,
-        },
-        { token: convexToken }
-      )
+      const generation = await deps
+        .fetchMutation(
+          api.chatRuntime.prepareGeneration,
+          {
+            chatId: chatId as Id<"chats">,
+            requestId,
+            model,
+            provider: resolvedProvider,
+            chatVersion: normalizedChatVersion,
+            expectedVisibleMessageCount,
+            tailMessageId,
+            latestUserMessage: latestUserMessage
+              ? {
+                  id: latestUserMessage.id,
+                  role: "user" as const,
+                  content: getStringField(
+                    getRecord(latestUserMessage as unknown),
+                    "content"
+                  ),
+                  parts: latestUserMessage.parts,
+                }
+              : undefined,
+            edit,
+            regeneration,
+            approvalResponses,
+          },
+          { token: convexToken }
+        )
+        .catch((error: unknown) => {
+          // `isServerChatId` only rules out local/optimistic prefixes, so a
+          // crafted or corrupted id reaches the durable contract here and
+          // Convex rejects it with argument validation. That is a request-
+          // shape fault: map it to the route's 400 instead of a 500 that
+          // leaks Convex error internals. Everything else (concurrency
+          // guards, transient failures) passes through unchanged.
+          if (isConvexArgumentValidationError(error)) {
+            console.warn(
+              JSON.stringify({
+                _tag: "durable_prepare_argument_rejected",
+                requestId,
+                chatId,
+                error: error instanceof Error ? error.message : String(error),
+              })
+            )
+            throw Object.assign(
+              new Error("Request does not reference a valid durable chat"),
+              { statusCode: 400, code: "INVALID_REQUEST" }
+            )
+          }
+          throw error
+        })
 
       const durableMessages = sanitizeModelHistoryMessages(
         toDurableUiMessages(generation.messages)

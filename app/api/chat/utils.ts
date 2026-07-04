@@ -120,6 +120,21 @@ export function sanitizeMessagesForProvider(
 }
 
 /**
+ * Detect a Convex argument-validation rejection ("ArgumentValidationError" is
+ * Convex's stable public error name; the client receives it as a generic Error
+ * whose message embeds it). At the durable-prepare seam this means the request
+ * named ids that pass the client-shape checks (`isServerChatId` is only
+ * "not local, not optimistic") but do not match the durable contract — a
+ * client fault to map to a 400, not a 500 that leaks Convex internals.
+ */
+export function isConvexArgumentValidationError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes("ArgumentValidationError")
+  )
+}
+
+/**
  * Exclude system-role messages from model-input history. ai@7 rejects
  * system-role messages inside `messages` (`allowSystemInMessages` defaults to
  * false; the system prompt rides streamText's `instructions`), where ai@6

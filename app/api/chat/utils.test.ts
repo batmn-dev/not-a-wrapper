@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   excludeSystemRoleMessages,
   hasProviderLinkedResponseIds,
+  isConvexArgumentValidationError,
   sanitizeMessagesForProvider,
   toPlainTextModelMessages,
 } from "./utils"
@@ -142,6 +143,19 @@ describe("toPlainTextModelMessages", () => {
       { role: "assistant", content: "line 1\n\nline 2" },
       { role: "user", content: "follow-up" },
     ])
+  })
+})
+
+describe("isConvexArgumentValidationError", () => {
+  it("matches Convex argument-validation rejections and nothing else", () => {
+    const convexShape = new Error(
+      '[Request ID: abc123] Server Error\nArgumentValidationError: Value does not match validator.\nPath: .chatId\nValue: "smoke"\nValidator: v.id("chats")'
+    )
+    expect(isConvexArgumentValidationError(convexShape)).toBe(true)
+    expect(isConvexArgumentValidationError(new Error("stream aborted"))).toBe(
+      false
+    )
+    expect(isConvexArgumentValidationError("not-an-error")).toBe(false)
   })
 })
 
