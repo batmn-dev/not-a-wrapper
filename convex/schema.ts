@@ -128,6 +128,9 @@ export default defineSchema({
     parentMessageId: v.optional(v.id("messages")),
     branchIndex: v.optional(v.number()),
     selected: v.optional(v.boolean()),
+    // Sibling a regeneration placeholder forked from; the branch to restore
+    // when the run dies before its first chunk
+    regenerationSourceMessageId: v.optional(v.id("messages")),
     status: messageStatus,
     requestId: v.optional(v.string()),
     generationRunId: v.optional(v.id("generationRuns")),

@@ -26,6 +26,7 @@ import {
 import { extractTextFromMessageParts } from "./domain/message_parts"
 import {
   hasSemanticAssistantParts,
+  isTerminalOutcomeStub,
   isVisibleChatMessage,
   projectModelHistoryMessages,
 } from "./domain/message_visibility"
@@ -233,6 +234,24 @@ function getVisibleSelectedMessages(messages: Doc<"messages">[]) {
   return getSelectedPathMessages(messages).filter(isVisibleChatMessage)
 }
 
+function selectedMessagesMatchToken(
+  selectedMessages: Doc<"messages">[],
+  token: Required<Pick<SelectedPathToken, "expectedVisibleMessageCount">> &
+    Pick<SelectedPathToken, "tailMessageId">
+) {
+  if (selectedMessages.length !== token.expectedVisibleMessageCount) {
+    return false
+  }
+
+  const tailMessage = selectedMessages[selectedMessages.length - 1]
+  const actualTailMessageId = tailMessage?._id
+
+  return (
+    token.tailMessageId === undefined ||
+    actualTailMessageId === token.tailMessageId
+  )
+}
+
 function getLastSelectedMessage(messages: Doc<"messages">[]) {
   const selectedMessages = getSelectedPathMessages(messages)
   return selectedMessages[selectedMessages.length - 1]
@@ -247,19 +266,27 @@ function validateSelectedPathToken(
   }
 
   const selectedMessages = getVisibleSelectedMessages(messages)
-  if (selectedMessages.length !== token.expectedVisibleMessageCount) {
-    throw new Error("Stale chat state: selected path changed")
+  const requiredToken = {
+    expectedVisibleMessageCount: token.expectedVisibleMessageCount,
+    tailMessageId: token.tailMessageId,
   }
 
-  const tailMessage = selectedMessages[selectedMessages.length - 1]
-  const actualTailMessageId = tailMessage?._id
+  if (selectedMessagesMatchToken(selectedMessages, requiredToken)) return
 
+  const selectedMessagesBeforeTerminalStubs = selectedMessages.filter(
+    (message) => !isTerminalOutcomeStub(message)
+  )
   if (
-    token.tailMessageId !== undefined &&
-    actualTailMessageId !== token.tailMessageId
+    selectedMessagesBeforeTerminalStubs.length !== selectedMessages.length &&
+    selectedMessagesMatchToken(
+      selectedMessagesBeforeTerminalStubs,
+      requiredToken
+    )
   ) {
-    throw new Error("Stale chat state: selected path changed")
+    return
   }
+
+  throw new Error("Stale chat state: selected path changed")
 }
 
 async function validateSelectedPathTokenForChat(
@@ -277,8 +304,9 @@ async function validateSelectedPathTokenForChat(
  * Two honest resolutions, chosen by whether the turn has a prior answer to
  * fall back to:
  *  - a semantic sibling exists (a regeneration died before its first chunk):
- *    delete the placeholder and re-select the sibling — the turn reverts to
- *    the previous answer instead of showing an empty stub next to it;
+ *    delete the placeholder and re-select the sibling — preferring the branch
+ *    the regeneration forked from (regenerationSourceMessageId), so the turn
+ *    reverts to the answer the user was viewing, not the newest sibling;
  *  - no semantic sibling (a fresh send died): KEEP the placeholder and mark
  *    it with the terminal status + error. Deleting it here is what made
  *    failed turns invisible — the user message read as silently unanswered
@@ -296,16 +324,18 @@ async function resolveEmptyAssistantTerminalOutcome(
 ): Promise<"deleted" | "kept"> {
   const messages = await listMessages(ctx, message.chatId)
   const parentMessageId = getEffectiveParentId(messages, message)
-  const fallbackSibling = getSiblingMessages(
+  const semanticSiblings = getSiblingMessages(
     messages,
     parentMessageId,
     message.role
+  ).filter(
+    (sibling) =>
+      sibling._id !== message._id && hasSemanticAssistantParts(sibling)
   )
-    .filter(
-      (sibling) =>
-        sibling._id !== message._id && hasSemanticAssistantParts(sibling)
-    )
-    .at(-1)
+  const fallbackSibling =
+    semanticSiblings.find(
+      (sibling) => sibling._id === message.regenerationSourceMessageId
+    ) ?? semanticSiblings.at(-1)
 
   if (fallbackSibling) {
     if (message.selected === true) {
@@ -723,6 +753,7 @@ export async function applyRegenerationIntentForGeneration(
       "assistant"
     ),
     selected: true,
+    regenerationSourceMessageId: targetMessage._id,
     status: "streaming",
     requestId: args.requestId,
     generationRunId: args.runId,

@@ -51,7 +51,11 @@ function createdAtMs(value: unknown): number | undefined {
  * message is never truncated by the server's lagging throttled snapshot:
  *  - adopt when the server has MORE content (text grew / parts appended);
  *  - adopt any difference once the server status is terminal
- *    (completed/aborted/failed — the durable final form is authoritative);
+ *    (completed/aborted/failed — the durable final form is authoritative).
+ *    Compared structurally, not by text/count: the completion write can
+ *    differ from the local copy only inside part payloads (a tool part's
+ *    state/output, a reasoning part's state), and renderers key off those
+ *    fields;
  *  - otherwise keep the local parts (server is a lagging prefix).
  */
 function shouldAdoptServerParts(
@@ -66,7 +70,7 @@ function shouldAdoptServerParts(
   if (serverText.length > localText.length) return true
   if (serverParts.length > localParts.length) return true
   if (!isTerminalMessageStatus(server.status)) return false
-  return serverText !== localText || serverParts.length !== localParts.length
+  return JSON.stringify(serverParts) !== JSON.stringify(localParts)
 }
 
 /**

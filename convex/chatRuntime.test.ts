@@ -1102,6 +1102,96 @@ describe("prepareGenerationForChat", () => {
     })
   })
 
+  for (const terminalStub of [
+    {
+      status: "failed" as const,
+      error: "provider rejected",
+      historyMarker:
+        "[This response failed with an error before producing content.]",
+    },
+    {
+      status: "aborted" as const,
+      error: "stream aborted",
+      historyMarker: "[This response was stopped before producing content.]",
+    },
+  ]) {
+    it(`accepts normal sends when an unseen ${terminalStub.status} stub is the only token mismatch`, async () => {
+      vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+      const { user, chat, userId, chatId } = createOwnerFixture()
+      const assistantMessageId = asId<"messages">(
+        `message_${terminalStub.status}_assistant`
+      )
+      const terminalAssistant = {
+        ...createAssistantRuntimeMessage({
+          id: assistantMessageId,
+          chatId,
+          orderId: 1,
+          parts: [],
+          content: "",
+          status: terminalStub.status,
+          createdAt: 1001,
+        }),
+        error: terminalStub.error,
+      }
+      const { ctx, tables } = createMutationCtx({
+        users: [user],
+        chats: [chat],
+        messages: [
+          createStoredMessage({
+            id: "message_user_1",
+            chatId,
+            userId,
+            orderId: 0,
+            clientMessageId: "user-1",
+            role: "user",
+            content: "prompt",
+            createdAt: 1000,
+          }),
+          terminalAssistant,
+        ],
+      })
+
+      const result = await prepareGenerationForChat(ctx, {
+        chatId,
+        requestId: "request_followup",
+        model: "gpt-5",
+        provider: "openai",
+        expectedVisibleMessageCount: 1,
+        tailMessageId: "message_user_1",
+        latestUserMessage: {
+          id: "user-2",
+          role: "user",
+          content: "next prompt",
+          parts: [{ type: "text", text: "next prompt" }],
+        },
+      })
+
+      const insertedUser = tables.messages.find(
+        (message) => message.clientMessageId === "user-2"
+      )
+      const insertedAssistant = tables.messages.find(
+        (message) => message._id === result.assistantMessageId
+      )
+
+      expect(result.messages.map((message) => message.content)).toEqual([
+        "prompt",
+        terminalStub.historyMarker,
+        "next prompt",
+      ])
+      expect(insertedUser).toMatchObject({
+        parentMessageId: assistantMessageId,
+        branchIndex: 0,
+        selected: true,
+      })
+      expect(insertedAssistant).toMatchObject({
+        parentMessageId: insertedUser?._id,
+        branchIndex: 0,
+        selected: true,
+        status: "streaming",
+      })
+    })
+  }
+
   it("rejects normal sends when the selected branch changed with the same visible count", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1700000000000)
     const { user, chat, userId, chatId } = createOwnerFixture()
@@ -1964,6 +2054,78 @@ describe("prepareGenerationForChat", () => {
     })
   })
 
+  it("restores the regeneration target on empty abort when a newer sibling exists", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const branchOne = {
+      ...createStoredMessage({
+        id: "message_assistant_1",
+        chatId,
+        orderId: 1,
+        role: "assistant",
+        content: "answer one",
+        createdAt: 1001,
+      }),
+      parentMessageId: asId<"messages">("message_user_1"),
+      branchIndex: 0,
+      selected: true,
+    }
+    const branchTwo = {
+      ...createStoredMessage({
+        id: "message_assistant_2",
+        chatId,
+        orderId: 2,
+        role: "assistant",
+        content: "answer two",
+        createdAt: 1002,
+      }),
+      parentMessageId: asId<"messages">("message_user_1"),
+      branchIndex: 1,
+      selected: false,
+    }
+    const { ctx, deletes } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages: [
+        createStoredMessage({
+          id: "message_user_1",
+          chatId,
+          userId,
+          orderId: 0,
+          clientMessageId: "user-1",
+          role: "user",
+          content: "prompt",
+          createdAt: 1000,
+        }),
+        branchOne,
+        branchTwo,
+      ],
+    })
+
+    // The user branch-navigated back to branch one before regenerating it.
+    const result = await prepareGenerationForChat(ctx, {
+      chatId,
+      requestId: "request_regen",
+      model: "gpt-5",
+      provider: "openai",
+      regeneration: {
+        targetAssistantMessageId: "message_assistant_1",
+        targetAssistantCreatedAt: 1001,
+        expectedChatVersion: 2,
+        precedingUserMessageId: "user-1",
+      },
+    })
+    await markGenerationRunAbortedForChat(ctx, {
+      runId: result.runId,
+      messageId: result.assistantMessageId,
+      reason: "stream aborted",
+    })
+
+    expect(deletes).toEqual([result.assistantMessageId])
+    expect(branchOne).toMatchObject({ selected: true })
+    expect(branchTwo).toMatchObject({ selected: false })
+  })
+
   it("preserves partial regenerated assistant content on abort", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1700000000000)
     const { user, chat, userId, chatId } = createOwnerFixture()
@@ -2232,7 +2394,10 @@ describe("prepareGenerationForChat", () => {
       content: "",
       parts: [],
     })
-    expect(first.run).toMatchObject({ status: "failed", error: "provider rejected" })
+    expect(first.run).toMatchObject({
+      status: "failed",
+      error: "provider rejected",
+    })
     expect(first.assistantMessage).toMatchObject({ status: "failed" })
 
     // Order 2: completed lands first; the failed write must overwrite it.
@@ -2248,7 +2413,10 @@ describe("prepareGenerationForChat", () => {
       messageId: second.assistantMessageId,
       error: "provider rejected",
     })
-    expect(second.run).toMatchObject({ status: "failed", error: "provider rejected" })
+    expect(second.run).toMatchObject({
+      status: "failed",
+      error: "provider rejected",
+    })
     expect(second.assistantMessage).toMatchObject({ status: "failed" })
 
     // Aborted is settled: a late failure signal may not repaint a user Stop.
@@ -2263,7 +2431,10 @@ describe("prepareGenerationForChat", () => {
       messageId: third.assistantMessageId,
       error: "late failure",
     })
-    expect(third.run).toMatchObject({ status: "aborted", error: "stream aborted" })
+    expect(third.run).toMatchObject({
+      status: "aborted",
+      error: "stream aborted",
+    })
     expect(third.assistantMessage).toMatchObject({ status: "aborted" })
   })
 

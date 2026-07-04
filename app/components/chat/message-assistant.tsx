@@ -272,13 +272,16 @@ export function MessageAssistant({
             status + error), not transient client state: a turn that died
             before producing content renders as a first-class stub with a
             retry (regeneration) affordance instead of vanishing behind a
-            toast. Retry re-runs the turn against the same user message. */}
+            toast. Retry re-runs the turn against the same user message. The
+            banner hosts Retry exactly when the text footer (which carries the
+            regenerate action) is absent — gate on text, not on preserved
+            content, so tool-only turns keep a retry control. */}
         {status === "aborted" && (
           <SystemMessage
             variant="warning"
             fill
             cta={
-              !preservedResponse && canRegenerate
+              !hasContent && canRegenerate
                 ? {
                     label: "Retry",
                     onClick: () => onReload?.(messageId),

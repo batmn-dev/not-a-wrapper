@@ -444,4 +444,41 @@ describe("durable content adoption", () => {
     ])
     expect(result[1].status).toBe("completed")
   })
+
+  it("adopts terminal server parts that differ only inside part payloads", () => {
+    // Same text, same part count — the durable completion finalized a tool
+    // part (state/output) that the local copy still holds mid-flight.
+    // Renderers and source extraction key off those part fields.
+    const partsWithTool = (
+      state: string,
+      output?: unknown
+    ): ChatTurnMessage["parts"] =>
+      [
+        { type: "text", text: "answer" },
+        {
+          type: "tool-search",
+          toolCallId: "call-1",
+          state,
+          input: { query: "q" },
+          ...(output !== undefined ? { output } : {}),
+        },
+      ] as ChatTurnMessage["parts"]
+    const live = [
+      serverMessage("s1", "user", "q"),
+      {
+        ...serverMessage("s2", "assistant", "answer"),
+        parts: partsWithTool("input-available"),
+      },
+    ]
+    const server = [
+      serverMessage("s1", "user", "q"),
+      {
+        ...serverMessage("s2", "assistant", "answer"),
+        parts: partsWithTool("output-available", { hits: 3 }),
+        status: "completed" as const,
+      },
+    ]
+    const result = projectSelectedPath(live, server)
+    expect(result[1].parts).toBe(server[1].parts)
+  })
 })

@@ -540,4 +540,49 @@ describe("MessageAssistant activity trigger", () => {
       answer!.compareDocumentPosition(copy!) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
   })
+
+  it("keeps a Retry control on an aborted turn whose only preserved content is a tool card", async () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+    const onReload = vi.fn()
+    // Tool output preserved, no text: the text footer (which hosts regenerate)
+    // never renders, so the aborted banner must host Retry itself.
+    const parts = [
+      {
+        type: "tool-web_search",
+        toolCallId: "call-1",
+        state: "output-available",
+        input: { query: "q" },
+        output: { content: [] },
+      },
+    ] as unknown as UIMessage["parts"]
+
+    await act(async () => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView(parts, "ready")}
+            status="aborted"
+            isDurableChat
+            onReload={onReload}
+          >
+            {""}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    const retry = Array.from(
+      container?.querySelectorAll("button") ?? []
+    ).find((button) => button.textContent === "Retry")
+    expect(retry).toBeTruthy()
+    expect(container?.textContent).toContain(
+      "Generation stopped. Partial response preserved."
+    )
+
+    act(() => {
+      retry?.click()
+    })
+    expect(onReload).toHaveBeenCalledWith("assistant-1")
+  })
 })
