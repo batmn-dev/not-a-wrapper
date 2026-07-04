@@ -75,4 +75,44 @@ describe("provider strategy registry", () => {
     expect(model.provider).toBe("openrouter")
     expect(model.modelId).toBe("openai/gpt-oss-120b:free")
   })
+
+  // Construction settings: the OpenRouter strategy maps the neutral shape to
+  // its `.chat(id, settings)` vocabulary; absent settings must construct
+  // exactly the pre-seam model; other strategies ignore the argument.
+  describe("construction settings", () => {
+    const OPENROUTER_ID = "openrouter:openai/gpt-oss-120b:free"
+    type OpenRouterModelShape = {
+      modelId?: string
+      settings?: { reasoning?: unknown }
+    }
+
+    it("maps reasoning effort and token budgets onto OpenRouter chat settings", () => {
+      const instance = getProviderStrategy("openrouter").instance("byok-key")
+      const effortModel = instance.languageModel(OPENROUTER_ID, {
+        reasoning: { effort: "medium" },
+      }) as OpenRouterModelShape
+      expect(effortModel.settings?.reasoning).toEqual({ effort: "medium" })
+
+      const budgetModel = instance.languageModel(OPENROUTER_ID, {
+        reasoning: { maxTokens: 2048 },
+      }) as OpenRouterModelShape
+      expect(budgetModel.settings?.reasoning).toEqual({ max_tokens: 2048 })
+    })
+
+    it("constructs OpenRouter models without reasoning when settings are absent", () => {
+      const model = getProviderStrategy("openrouter")
+        .instance("byok-key")
+        .languageModel(OPENROUTER_ID) as OpenRouterModelShape
+      expect(model.settings?.reasoning).toBeUndefined()
+    })
+
+    it("leaves strategies without construction knobs unaffected", () => {
+      const model = getProviderStrategy("openai")
+        .instance("byok-key")
+        .languageModel("gpt-5-mini", { reasoning: { effort: "high" } }) as {
+        modelId?: string
+      }
+      expect(model.modelId).toBe("gpt-5-mini")
+    })
+  })
 })

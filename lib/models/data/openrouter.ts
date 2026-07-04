@@ -28,6 +28,11 @@ export const openrouterModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: true,
+    // Construction-time enablement (Provider strategy seam): OpenRouter only
+    // returns reasoning when the request asks for it, and its knob is a
+    // `.chat(id, { reasoning })` setting. gpt-oss takes effort levels
+    // natively; "medium" is its default depth.
+    reasoning: { effort: "medium" },
     webSearch: false,
     openSource: true,
     speed: "Fast",

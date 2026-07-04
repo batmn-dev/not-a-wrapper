@@ -2,6 +2,7 @@ import { resolveModelId } from "@/lib/models/model-id-migration"
 import { getProviderForModel } from "./provider-map"
 import {
   getProviderStrategy,
+  type ModelConstructionSettings,
   type ProviderLanguageModel,
 } from "./provider-strategy"
 import type { SupportedModel } from "./types"
@@ -12,15 +13,17 @@ import type { SupportedModel } from "./types"
  * Provider-specific construction (SDK factory, BYOK-vs-default credentials,
  * OpenRouter's quirks) lives behind the provider strategy; this function only
  * resolves the id, routes it to a provider, and asks that provider's strategy
- * for the model. `getProviderForModel` throws on an unknown provider.
+ * for the model — passing the caller's construction settings through
+ * untouched. `getProviderForModel` throws on an unknown provider.
  */
 export function createProviderLanguageModel<T extends SupportedModel | string>(
   modelId: T,
-  apiKey?: string
+  apiKey?: string,
+  settings?: ModelConstructionSettings
 ): ProviderLanguageModel {
   const resolvedModelId = resolveModelId(modelId)
   const provider = getProviderForModel(resolvedModelId)
   return getProviderStrategy(provider)
     .instance(apiKey)
-    .languageModel(resolvedModelId)
+    .languageModel(resolvedModelId, settings)
 }

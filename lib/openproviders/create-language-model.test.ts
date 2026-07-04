@@ -32,4 +32,21 @@ describe("createLanguageModel", () => {
     expect(model.modelId).toBe("openai/gpt-oss-120b:free")
     expect(model.config?.compatibility).toBe("strict")
   })
+
+  it("feeds the catalog's construction reasoning settings into the model", () => {
+    const gptOss = getModelInfo("openrouter:openai/gpt-oss-120b:free")
+    expect(gptOss?.reasoning).toEqual({ effort: "medium" })
+
+    const configured = createLanguageModel(gptOss!, "test-api-key") as {
+      settings?: { reasoning?: unknown }
+    }
+    expect(configured.settings?.reasoning).toEqual({ effort: "medium" })
+
+    // Bare string ids carry no catalog config — prior construction unchanged.
+    const bare = createLanguageModel(
+      "openrouter:openai/gpt-oss-120b:free",
+      "test-api-key"
+    ) as { settings?: { reasoning?: unknown } }
+    expect(bare.settings?.reasoning).toBeUndefined()
+  })
 })
