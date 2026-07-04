@@ -120,6 +120,10 @@ export function MessageUser({
   const contentRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const savedScrollTopRef = useRef<number | null>(null)
+  // Bubble width captured at edit start — the editor keeps the bubble's
+  // footprint. Must be read BEFORE the isEditing flip: MessageContent unmounts
+  // with it, so reading offsetWidth at render time always yields null.
+  const editWidthRef = useRef<number | null>(null)
   const { stopScroll, scrollRef } = useScrollRoot()
 
   const handleEditCancel = () => {
@@ -154,6 +158,7 @@ export function MessageUser({
   }
 
   const handleEditStart = () => {
+    editWidthRef.current = contentRef.current?.offsetWidth ?? null
     savedScrollTopRef.current = scrollRef.current?.scrollTop ?? null
     setIsEditing(true)
     setEditInput(children)
@@ -236,13 +241,9 @@ export function MessageUser({
       ))}
       {isEditing ? (
         <div
-          className="bg-accent relative flex w-full max-w-xl min-w-[180px] flex-col gap-2 rounded-[18px] px-4 py-2.5"
-          // TODO: contentRef.current is null here — MessageContent unmounts
-          // when isEditing flips, so offsetWidth always reads null. Consider
-          // capturing the width into a ref inside handleEditStart (before
-          // setIsEditing) and reading that ref here instead.
+          className="bg-accent relative flex w-full max-w-full min-w-[180px] flex-col gap-2 rounded-[18px] px-4 py-2.5"
           style={{
-            width: contentRef.current?.offsetWidth,
+            width: editWidthRef.current ?? undefined,
           }}
         >
           <textarea
@@ -299,45 +300,50 @@ export function MessageUser({
           {children}
         </MessageContent>
       )}
-      {/* Hover/focus reveal shared with the assistant footer so both surfaces
-          behave identically (see messageFooterRevealClassName). */}
-      <MessageActions
-        className={cn("flex gap-0", messageFooterRevealClassName)}
-      >
-        <MessageAction tooltip={copied ? "Copied!" : "Copy text"} side="bottom">
-          <button
-            className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-md bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
-            aria-label="Copy text"
-            onClick={copyToClipboard}
-            type="button"
-          >
-            {copied ? (
-              <Icon icon={RiCheckLine} slotSize={20} />
-            ) : (
-              <Icon icon={RiFileCopyLine} slotSize={20} />
-            )}
-          </button>
-        </MessageAction>
-        {isDurableChat && (
+      <MessageActions className="flex gap-0">
+        {/* Hover/focus reveal shared with the assistant footer so both surfaces
+            behave identically (see messageFooterRevealClassName). Scoped to
+            copy/edit only: the branch nav must stay visible without hover, or a
+            fresh regenerate/edit gives no cue that versions now exist. */}
+        <div className={cn("flex gap-0", messageFooterRevealClassName)}>
           <MessageAction
-            tooltip={isEditing ? "Cancel edit" : "Edit message"}
+            tooltip={copied ? "Copied!" : "Copy text"}
             side="bottom"
-            delay={0}
           >
             <button
               className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-md bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
-              aria-label={isEditing ? "Cancel edit" : "Edit message"}
-              onClick={isEditing ? handleEditCancel : handleEditStart}
+              aria-label="Copy text"
+              onClick={copyToClipboard}
               type="button"
             >
-              {isEditing ? (
-                <Icon icon={RiPencilLine} slotSize={20} />
+              {copied ? (
+                <Icon icon={RiCheckLine} slotSize={20} />
               ) : (
-                <Icon icon={RiEditLine} slotSize={20} />
+                <Icon icon={RiFileCopyLine} slotSize={20} />
               )}
             </button>
           </MessageAction>
-        )}
+          {isDurableChat && (
+            <MessageAction
+              tooltip={isEditing ? "Cancel edit" : "Edit message"}
+              side="bottom"
+              delay={0}
+            >
+              <button
+                className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-md bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
+                aria-label={isEditing ? "Cancel edit" : "Edit message"}
+                onClick={isEditing ? handleEditCancel : handleEditStart}
+                type="button"
+              >
+                {isEditing ? (
+                  <Icon icon={RiPencilLine} slotSize={20} />
+                ) : (
+                  <Icon icon={RiEditLine} slotSize={20} />
+                )}
+              </button>
+            </MessageAction>
+          )}
+        </div>
         {/* Branch nav trails the copy/edit actions on user messages, matching
             ChatGPT (the right-aligned user toolbar reads copy · edit · < n/m >).
             On assistant messages it leads instead — see message-assistant.tsx. */}

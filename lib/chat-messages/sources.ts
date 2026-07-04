@@ -70,5 +70,14 @@ export function getSources(parts: UIMessage["parts"]): SourceUrlUIPart[] {
       })
     )
 
-  return validSources
+  // Dedupe by URL, keeping the first occurrence. Providers cite the same URL
+  // across multiple source parts / tool steps; this derivation feeds every
+  // consumer (gallery rows, "Sources · N" labels, trigger counts), so the
+  // dedupe lives here rather than in any one renderer.
+  const seenUrls = new Set<string>()
+  return validSources.filter((source) => {
+    if (seenUrls.has(source.url)) return false
+    seenUrls.add(source.url)
+    return true
+  })
 }

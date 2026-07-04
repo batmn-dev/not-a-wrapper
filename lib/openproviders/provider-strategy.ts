@@ -160,8 +160,11 @@ const STRATEGIES: Record<Provider, ProviderStrategy> = {
     instance(apiKey) {
       const provider = apiKey ? createXai({ apiKey }) : xai
       return {
-        languageModel: (id) => provider(id),
-        // Verified: xAI exports webSearch tool (discovered Feb 2026)
+        // Responses API, not chat completions: xAI's server-side agentic
+        // tools (webSearch below) are Responses-only — the chat-completions
+        // class 400s at api.x.ai/v1/chat/completions once the tool engages.
+        // All four cataloged Grok ids verified against responses 2026-07-03.
+        languageModel: (id) => provider.responses(id),
         searchTool: () => asSearchTool(provider.tools.webSearch({})),
       }
     },

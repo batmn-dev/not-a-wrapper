@@ -40,6 +40,9 @@ import {
 } from "react"
 import { selectExplicitActivityTurnOnOpen } from "../use-activity-panel"
 
+/** Panel body sections an opener can request to land on. */
+export type ActivityPanelSection = "sources"
+
 export type ActivityPanelStoreState = {
   /** Whether the single panel surface is expanded. */
   open: boolean
@@ -49,6 +52,13 @@ export type ActivityPanelStoreState = {
   panelTurnId: string | undefined
   /** The generation-following default turn id. */
   defaultTurnId: string | undefined
+  /**
+   * One-shot section target set by `openTurn` (the sources badge opens "on
+   * the Sources section"). The panel body consumes it — scrolls the section
+   * into view, then `clearOpenSection` — so it cannot re-fire on a later
+   * unrelated open; a section-less `openTurn` clears any stale target.
+   */
+  openSection: ActivityPanelSection | undefined
 }
 
 export type ActivityPanelStore = {
@@ -66,8 +76,11 @@ export type ActivityPanelStore = {
   /**
    * Select a turn and open the panel. Explicit-vs-default classification runs
    * against the store's CURRENT defaultTurnId — never a render-time closure.
+   * `options.section` requests the panel land on a body section (one-shot).
    */
-  openTurn: (turnId: string) => void
+  openTurn: (turnId: string, options?: { section?: ActivityPanelSection }) => void
+  /** Consume the one-shot section target after the panel has honored it. */
+  clearOpenSection: () => void
   /**
    * Drop an explicit selection whose turn has left the rendered path (branch
    * switch, local delete) so it cannot linger and resurrect when the path
@@ -87,6 +100,7 @@ export function createActivityPanelStore(): ActivityPanelStore {
     selectedTurnId: undefined,
     panelTurnId: undefined,
     defaultTurnId: undefined,
+    openSection: undefined,
   }
   let onOpen: (() => void) | null = null
   const listeners = new Set<() => void>()
@@ -97,7 +111,8 @@ export function createActivityPanelStore(): ActivityPanelStore {
       next.open === state.open &&
       next.selectedTurnId === state.selectedTurnId &&
       next.panelTurnId === state.panelTurnId &&
-      next.defaultTurnId === state.defaultTurnId
+      next.defaultTurnId === state.defaultTurnId &&
+      next.openSection === state.openSection
     ) {
       return
     }
@@ -120,7 +135,7 @@ export function createActivityPanelStore(): ActivityPanelStore {
       if (state.selectedTurnId !== staleTurnId) return
       setState({ selectedTurnId: undefined })
     },
-    openTurn: (turnId) => {
+    openTurn: (turnId, options) => {
       onOpen?.()
       setState({
         selectedTurnId: selectExplicitActivityTurnOnOpen({
@@ -132,7 +147,12 @@ export function createActivityPanelStore(): ActivityPanelStore {
         // setDerivedTurnIds on the next sync.
         panelTurnId: turnId,
         open: true,
+        // Section-less opens clear a stale, unconsumed target.
+        openSection: options?.section,
       })
+    },
+    clearOpenSection: () => {
+      setState({ openSection: undefined })
     },
     setOpen: (open) => {
       if (open) {
@@ -146,6 +166,7 @@ export function createActivityPanelStore(): ActivityPanelStore {
         open: false,
         selectedTurnId: undefined,
         panelTurnId: state.defaultTurnId,
+        openSection: undefined,
       })
     },
     setOnOpen: (next) => {
@@ -222,7 +243,7 @@ export function useIsActivityPanelTurnOpen(
 }
 
 export type ActivityPanelActions = {
-  openTurn: (turnId: string) => void
+  openTurn: (turnId: string, options?: { section?: ActivityPanelSection }) => void
   close: () => void
 }
 
@@ -244,6 +265,28 @@ export function useActivityPanelActions(): ActivityPanelActions | null {
 /** The panel surface's DOM id, for the trigger's aria-controls. */
 export function useActivityPanelId(): string | undefined {
   return useContext(ActivityPanelIdContext)
+}
+
+/**
+ * Panel-side subscription to the one-shot section target. The panel body
+ * scrolls the section into view, then calls `consume` so the target cannot
+ * re-fire on a later, unrelated open. No-ops (undefined section) outside a
+ * hosted provider, e.g. isolated panel renders in tests.
+ */
+export function useActivityPanelSectionTarget(): {
+  section: ActivityPanelSection | undefined
+  consume: () => void
+} {
+  const store = useContext(ActivityPanelStoreContext)
+  const section = useSyncExternalStore(
+    store ? store.subscribe : noopSubscribe,
+    () => (store ? store.getState().openSection : undefined),
+    () => undefined
+  )
+  return useMemo(
+    () => ({ section, consume: () => store?.clearOpenSection() }),
+    [section, store]
+  )
 }
 
 /** Chat-side subscription to the open flag (renders the panel surface). */

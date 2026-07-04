@@ -255,6 +255,43 @@ describe("chat turn service", () => {
     ])
   })
 
+  it("keeps terminal failed/aborted stubs when cleaning up empty assistants", async () => {
+    // A projected terminal stub (durable status) is the turn's visible failed
+    // state — the abort/error cleanup may only remove the SDK's transient
+    // empty message (no status), or the stub silently vanishes.
+    const sdkEmpty: ChatTurnMessage = {
+      id: "sdk-empty",
+      role: "assistant",
+      parts: [],
+    }
+    const failedStub: ChatTurnMessage = {
+      id: "failed-stub",
+      role: "assistant",
+      parts: [],
+      status: "failed",
+    }
+    const harness = createStoreHarness({ isAuthenticated: true })
+    harness.setMessages([
+      userMessage("user-1", "prompt"),
+      failedStub,
+      sdkEmpty,
+    ])
+
+    await harness.store.finishTurn({
+      message: sdkEmpty,
+      isAbort: false,
+      isDisconnect: false,
+      isError: true,
+      chatId: "server-chat",
+      previousChatId: null,
+    })
+
+    expect(harness.getMessages().map((message) => message.id)).toEqual([
+      "user-1",
+      "failed-stub",
+    ])
+  })
+
   it("prepares regeneration intent for the targeted latest assistant", () => {
     const targetCreatedAt = new Date("2026-01-02T00:00:00.000Z")
     const messages = [

@@ -16,10 +16,15 @@ const badgeVariants = cva(
           "border-transparent bg-destructive text-white [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
         outline:
           "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        // Reference "source chip": subtle surface that hover-inverts to the
-        // primary color (reserved for the Activity panel source chips; see TODO.md).
+        // The sources badge on settled search-grounded assistant turns
+        // (app/components/chat/sources-badge.tsx). Grounded in the reference
+        // capture (reference-ui/ChatGPT pages/conversation-with-activity-panel,
+        // identical at all three breakpoints): transparent rest, action-hover
+        // wash, 8px radius (our rounded-md == the reference rounded-lg == 8px),
+        // 12px/6px padding, no border (32px tall — flush with h-8 action
+        // icons), 13px medium secondary label that keeps its color on hover.
         source:
-          "border-transparent bg-secondary text-muted-foreground transition-colors duration-150 hover:bg-primary hover:text-primary-foreground",
+          "group/source-badge gap-1.5 rounded-md border-0 bg-transparent px-3 py-1.5 text-[13px] text-muted-foreground hover:bg-accent/60",
       },
       size: {
         default: "",

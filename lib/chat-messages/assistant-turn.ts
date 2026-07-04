@@ -205,6 +205,21 @@ export function deriveAssistantTurnView(
 }
 
 /**
+ * True when any of the turn's visible thread content survived: text, tool
+ * cards, or image results. The aborted/failed banners' "Partial response
+ * preserved." claim must hold only when this is true — reasoning alone lives
+ * in the Activity panel and is not preserved response content, so a stop that
+ * lands mid-thinking reads as a bare "Generation stopped."
+ */
+export function hasPreservedResponseContent(view: AssistantTurnView): boolean {
+  return (
+    view.text.length > 0 ||
+    view.toolParts.length > 0 ||
+    view.searchImageResults.length > 0
+  )
+}
+
+/**
  * The row's render gate. Views are fresh objects every render (in-place part
  * mutation forbids reference memoization), so equality is content-based over
  * exactly the facts the message row renders:
@@ -215,8 +230,13 @@ export function deriveAssistantTurnView(
  *  - `serverMessageId` — the trigger's panel-turn identity
  * Deliberately excluded: `text` (compared via the row's `children` prop) and
  * `reasoning.text` / `sources` — reasoning and source deltas are panel-owned
- * and must not churn the streaming row body (the R3 memo contract; the
- * trigger's source count settles when the stream's status flip re-renders).
+ * and must not churn the streaming row body (the R3 memo contract). The row's
+ * sources presentations (the trigger's source count, the footer sources
+ * badge) render from `sources` but ONLY on settled turns, and every path into
+ * settled re-renders the row through compared fields — the client status
+ * flip, an isLast handoff, or the durable snapshot's metadata identity change
+ * — so excluding `sources` can neither churn a live row nor swallow the
+ * settle that reveals them.
  */
 export function assistantTurnViewsEqual(
   a: AssistantTurnView | undefined,

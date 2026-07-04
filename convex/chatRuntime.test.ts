@@ -1102,6 +1102,96 @@ describe("prepareGenerationForChat", () => {
     })
   })
 
+  for (const terminalStub of [
+    {
+      status: "failed" as const,
+      error: "provider rejected",
+      historyMarker:
+        "[This response failed with an error before producing content.]",
+    },
+    {
+      status: "aborted" as const,
+      error: "stream aborted",
+      historyMarker: "[This response was stopped before producing content.]",
+    },
+  ]) {
+    it(`accepts normal sends when an unseen ${terminalStub.status} stub is the only token mismatch`, async () => {
+      vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+      const { user, chat, userId, chatId } = createOwnerFixture()
+      const assistantMessageId = asId<"messages">(
+        `message_${terminalStub.status}_assistant`
+      )
+      const terminalAssistant = {
+        ...createAssistantRuntimeMessage({
+          id: assistantMessageId,
+          chatId,
+          orderId: 1,
+          parts: [],
+          content: "",
+          status: terminalStub.status,
+          createdAt: 1001,
+        }),
+        error: terminalStub.error,
+      }
+      const { ctx, tables } = createMutationCtx({
+        users: [user],
+        chats: [chat],
+        messages: [
+          createStoredMessage({
+            id: "message_user_1",
+            chatId,
+            userId,
+            orderId: 0,
+            clientMessageId: "user-1",
+            role: "user",
+            content: "prompt",
+            createdAt: 1000,
+          }),
+          terminalAssistant,
+        ],
+      })
+
+      const result = await prepareGenerationForChat(ctx, {
+        chatId,
+        requestId: "request_followup",
+        model: "gpt-5",
+        provider: "openai",
+        expectedVisibleMessageCount: 1,
+        tailMessageId: "message_user_1",
+        latestUserMessage: {
+          id: "user-2",
+          role: "user",
+          content: "next prompt",
+          parts: [{ type: "text", text: "next prompt" }],
+        },
+      })
+
+      const insertedUser = tables.messages.find(
+        (message) => message.clientMessageId === "user-2"
+      )
+      const insertedAssistant = tables.messages.find(
+        (message) => message._id === result.assistantMessageId
+      )
+
+      expect(result.messages.map((message) => message.content)).toEqual([
+        "prompt",
+        terminalStub.historyMarker,
+        "next prompt",
+      ])
+      expect(insertedUser).toMatchObject({
+        parentMessageId: assistantMessageId,
+        branchIndex: 0,
+        selected: true,
+      })
+      expect(insertedAssistant).toMatchObject({
+        parentMessageId: insertedUser?._id,
+        branchIndex: 0,
+        selected: true,
+        status: "streaming",
+      })
+    })
+  }
+
   it("rejects normal sends when the selected branch changed with the same visible count", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1700000000000)
     const { user, chat, userId, chatId } = createOwnerFixture()
@@ -1524,7 +1614,7 @@ describe("prepareGenerationForChat", () => {
     ).toHaveLength(3)
   })
 
-  it("regenerates after a previously stopped turn without retaining stale empty placeholders", async () => {
+  it("regenerates after a previously stopped turn, keeping the stopped stub as a first-class turn", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1700000000000)
     const { user, chat, userId, chatId } = createOwnerFixture()
     const targetAssistant = createStoredMessage({
@@ -1580,18 +1670,30 @@ describe("prepareGenerationForChat", () => {
       regeneration: {
         targetAssistantMessageId: "message_assistant_2",
         targetAssistantCreatedAt: 1003,
-        expectedChatVersion: 3,
+        // The aborted stub is a visible first-class turn now, counted by the
+        // client's rendered path like any other message.
+        expectedChatVersion: 4,
         precedingUserMessageId: "user-2",
       },
     })
 
-    expect(deletes).toContain("message_empty_assistant")
+    expect(deletes).toEqual([])
     expect(result.messages.map((message) => message._id)).toEqual([
       "message_user_1",
+      "message_empty_assistant",
       "message_user_2",
     ])
+    expect(result.messages[1]).toMatchObject({
+      parts: [
+        {
+          type: "text",
+          text: "[This response was stopped before producing content.]",
+        },
+      ],
+    })
     expect(tables.messages.map((message) => message._id)).toEqual([
       "message_user_1",
+      "message_empty_assistant",
       "message_user_2",
       "message_assistant_2",
       result.assistantMessageId,
@@ -1612,7 +1714,7 @@ describe("prepareGenerationForChat", () => {
     })
   })
 
-  it("edits after stopped and regenerated turns without retaining stale empty placeholders", async () => {
+  it("edits after stopped and regenerated turns, projecting the stopped stub as a history marker", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1700000000000)
     const { user, chat, userId, chatId } = createOwnerFixture()
     const { ctx, deletes, tables } = createMutationCtx({
@@ -1676,7 +1778,9 @@ describe("prepareGenerationForChat", () => {
       edit: {
         editedMessageId: "user-2",
         editCutoffTimestamp: 1003,
-        expectedChatVersion: 4,
+        // The aborted stub is a visible first-class turn now, counted by the
+        // client's rendered path like any other message.
+        expectedChatVersion: 5,
         replacementMessage: {
           id: "replacement-user-2",
           role: "user",
@@ -1686,10 +1790,11 @@ describe("prepareGenerationForChat", () => {
       },
     })
 
-    expect(deletes).toEqual(["message_empty_assistant"])
+    expect(deletes).toEqual([])
     expect(result.messages.map((message) => message.content)).toEqual([
       "first prompt",
       "partial answer",
+      "[This response was stopped before producing content.]",
       "edited second prompt",
     ])
     expect(
@@ -1949,6 +2054,78 @@ describe("prepareGenerationForChat", () => {
     })
   })
 
+  it("restores the regeneration target on empty abort when a newer sibling exists", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const branchOne = {
+      ...createStoredMessage({
+        id: "message_assistant_1",
+        chatId,
+        orderId: 1,
+        role: "assistant",
+        content: "answer one",
+        createdAt: 1001,
+      }),
+      parentMessageId: asId<"messages">("message_user_1"),
+      branchIndex: 0,
+      selected: true,
+    }
+    const branchTwo = {
+      ...createStoredMessage({
+        id: "message_assistant_2",
+        chatId,
+        orderId: 2,
+        role: "assistant",
+        content: "answer two",
+        createdAt: 1002,
+      }),
+      parentMessageId: asId<"messages">("message_user_1"),
+      branchIndex: 1,
+      selected: false,
+    }
+    const { ctx, deletes } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages: [
+        createStoredMessage({
+          id: "message_user_1",
+          chatId,
+          userId,
+          orderId: 0,
+          clientMessageId: "user-1",
+          role: "user",
+          content: "prompt",
+          createdAt: 1000,
+        }),
+        branchOne,
+        branchTwo,
+      ],
+    })
+
+    // The user branch-navigated back to branch one before regenerating it.
+    const result = await prepareGenerationForChat(ctx, {
+      chatId,
+      requestId: "request_regen",
+      model: "gpt-5",
+      provider: "openai",
+      regeneration: {
+        targetAssistantMessageId: "message_assistant_1",
+        targetAssistantCreatedAt: 1001,
+        expectedChatVersion: 2,
+        precedingUserMessageId: "user-1",
+      },
+    })
+    await markGenerationRunAbortedForChat(ctx, {
+      runId: result.runId,
+      messageId: result.assistantMessageId,
+      reason: "stream aborted",
+    })
+
+    expect(deletes).toEqual([result.assistantMessageId])
+    expect(branchOne).toMatchObject({ selected: true })
+    expect(branchTwo).toMatchObject({ selected: false })
+  })
+
   it("preserves partial regenerated assistant content on abort", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1700000000000)
     const { user, chat, userId, chatId } = createOwnerFixture()
@@ -2035,7 +2212,11 @@ describe("prepareGenerationForChat", () => {
     ])
   })
 
-  it("deletes an empty assistant placeholder when a run aborts before the first chunk", async () => {
+  it("keeps and marks an empty assistant placeholder when a run aborts before the first chunk", async () => {
+    // The stub IS the turn's durable outcome: deleting it made the turn
+    // invisible (user bubble with no marker) and its user message got
+    // re-sent as duplicate history. A fresh send has no sibling answer to
+    // revert to, so the placeholder stays, marked aborted.
     vi.spyOn(Date, "now").mockReturnValue(1700000000000)
     const { user, chat, userId, chatId } = createOwnerFixture()
     const runId = asId<"generationRuns">("run_1")
@@ -2078,17 +2259,183 @@ describe("prepareGenerationForChat", () => {
       reason: "stream aborted",
     })
 
-    expect(deletes).toEqual(["message_empty_assistant"])
+    expect(deletes).toEqual([])
     expect(tables.messages.map((message) => message._id)).toEqual([
       "message_user_1",
+      "message_empty_assistant",
     ])
+    expect(assistantMessage).toMatchObject({
+      status: "aborted",
+      error: "stream aborted",
+    })
     expect(run).toMatchObject({
       status: "aborted",
       error: "stream aborted",
       completedAt: 1700000000000,
       activeStreamId: undefined,
-      assistantMessageId: undefined,
+      assistantMessageId,
     })
+  })
+
+  it("keeps and marks an empty assistant placeholder when a run fails before the first chunk", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const runId = asId<"generationRuns">("run_1")
+    const assistantMessageId = asId<"messages">("message_empty_assistant")
+    const assistantMessage = createAssistantRuntimeMessage({
+      id: assistantMessageId,
+      chatId,
+      runId,
+      orderId: 1,
+      parts: [],
+      content: "",
+      status: "streaming",
+    })
+    const run = createGenerationRun({
+      id: runId,
+      chatId,
+      userId,
+      assistantMessageId,
+    })
+    const { ctx, deletes } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages: [
+        createStoredMessage({
+          id: "message_user_1",
+          chatId,
+          userId,
+          orderId: 0,
+          clientMessageId: "user-1",
+          role: "user",
+          content: "prompt",
+          createdAt: 1000,
+        }),
+        assistantMessage,
+      ],
+      generationRuns: [run],
+    })
+
+    await markGenerationRunFailedForChat(ctx, {
+      runId,
+      messageId: assistantMessageId,
+      error: "invalid xai provider options",
+    })
+
+    expect(deletes).toEqual([])
+    expect(assistantMessage).toMatchObject({
+      status: "failed",
+      error: "invalid xai provider options",
+    })
+    expect(run).toMatchObject({
+      status: "failed",
+      error: "invalid xai provider options",
+      assistantMessageId,
+    })
+  })
+
+  it("converges to failed in both orders of the onError/envelope-finish race", async () => {
+    // An errored stream fires BOTH the streamText onError (failed write) and
+    // the response envelope's onFinish (completed write, isAborted false).
+    // Whichever lands first, the run must settle failed — the envelope's
+    // empty "completion" repainting a failed run is what hid the failed stub.
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+
+    function makeFixture() {
+      const { user, chat, userId, chatId } = createOwnerFixture()
+      const runId = asId<"generationRuns">("run_1")
+      const assistantMessageId = asId<"messages">("message_empty_assistant")
+      const assistantMessage = createAssistantRuntimeMessage({
+        id: assistantMessageId,
+        chatId,
+        runId,
+        orderId: 1,
+        parts: [],
+        content: "",
+        status: "streaming",
+      })
+      const run = createGenerationRun({
+        id: runId,
+        chatId,
+        userId,
+        assistantMessageId,
+      })
+      const { ctx } = createMutationCtx({
+        users: [user],
+        chats: [chat],
+        messages: [
+          createStoredMessage({
+            id: "message_user_1",
+            chatId,
+            userId,
+            orderId: 0,
+            clientMessageId: "user-1",
+            role: "user",
+            content: "prompt",
+            createdAt: 1000,
+          }),
+          assistantMessage,
+        ],
+        generationRuns: [run],
+      })
+      return { ctx, run, assistantMessage, runId, assistantMessageId }
+    }
+
+    // Order 1: failed lands first; the completed write must no-op.
+    const first = makeFixture()
+    await markGenerationRunFailedForChat(first.ctx, {
+      runId: first.runId,
+      messageId: first.assistantMessageId,
+      error: "provider rejected",
+    })
+    await markGenerationRunCompletedForChat(first.ctx, {
+      runId: first.runId,
+      messageId: first.assistantMessageId,
+      content: "",
+      parts: [],
+    })
+    expect(first.run).toMatchObject({
+      status: "failed",
+      error: "provider rejected",
+    })
+    expect(first.assistantMessage).toMatchObject({ status: "failed" })
+
+    // Order 2: completed lands first; the failed write must overwrite it.
+    const second = makeFixture()
+    await markGenerationRunCompletedForChat(second.ctx, {
+      runId: second.runId,
+      messageId: second.assistantMessageId,
+      content: "",
+      parts: [],
+    })
+    await markGenerationRunFailedForChat(second.ctx, {
+      runId: second.runId,
+      messageId: second.assistantMessageId,
+      error: "provider rejected",
+    })
+    expect(second.run).toMatchObject({
+      status: "failed",
+      error: "provider rejected",
+    })
+    expect(second.assistantMessage).toMatchObject({ status: "failed" })
+
+    // Aborted is settled: a late failure signal may not repaint a user Stop.
+    const third = makeFixture()
+    await markGenerationRunAbortedForChat(third.ctx, {
+      runId: third.runId,
+      messageId: third.assistantMessageId,
+      reason: "stream aborted",
+    })
+    await markGenerationRunFailedForChat(third.ctx, {
+      runId: third.runId,
+      messageId: third.assistantMessageId,
+      error: "late failure",
+    })
+    expect(third.run).toMatchObject({
+      status: "aborted",
+      error: "stream aborted",
+    })
+    expect(third.assistantMessage).toMatchObject({ status: "aborted" })
   })
 
   it("sanitizes a prior streaming empty placeholder before preparing the next generation", async () => {
@@ -2145,16 +2492,33 @@ describe("prepareGenerationForChat", () => {
       },
     })
 
-    expect(deletes).toEqual(["message_empty_assistant"])
+    // The zombie placeholder is superseded, not erased: it stays as a
+    // first-class aborted stub marking its turn's outcome, and projects into
+    // model history as an explicit "never answered" marker instead of leaving
+    // the first prompt looking fresh.
+    expect(deletes).toEqual([])
     expect(run).toMatchObject({
       status: "aborted",
       activeStreamId: undefined,
-      assistantMessageId: undefined,
+      assistantMessageId: asId<"messages">("message_empty_assistant"),
+    })
+    expect(messages[1]).toMatchObject({
+      status: "aborted",
+      error: "superseded by a new generation",
     })
     expect(result.messages.map((message) => message.role)).toEqual([
       "user",
+      "assistant",
       "user",
     ])
+    expect(result.messages[1]).toMatchObject({
+      parts: [
+        {
+          type: "text",
+          text: "[This response was stopped before producing content.]",
+        },
+      ],
+    })
     expect(
       result.messages.some(
         (message) => message.role === "assistant" && message.parts.length === 0
@@ -2162,6 +2526,7 @@ describe("prepareGenerationForChat", () => {
     ).toBe(false)
     expect(tables.messages.map((message) => message.role)).toEqual([
       "user",
+      "assistant",
       "user",
       "assistant",
     ])

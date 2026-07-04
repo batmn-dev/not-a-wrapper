@@ -235,7 +235,7 @@ describe("ActivityPanel coexistence (R6)", () => {
       )
     })
 
-    expect(document.body.textContent).toContain("Pro thinking")
+    expect(document.body.textContent).toContain("Thinking")
     expect(document.body.textContent).toContain("Reasoning")
     expect(document.body.textContent).toContain("Activity")
   })

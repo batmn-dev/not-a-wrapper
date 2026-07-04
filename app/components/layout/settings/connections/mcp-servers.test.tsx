@@ -99,14 +99,18 @@ describe("McpServers", () => {
 
   afterEach(cleanupRender)
 
-  it("shows loading instead of the empty state while the list is loading", () => {
+  function queryLoadingSkeleton() {
+    return container?.querySelector('[role="status"][aria-label="Loading connections"]')
+  }
+
+  it("shows the loading skeleton instead of the empty state while the list is loading", () => {
     renderPanel({
       data: undefined,
       isAuthReady: true,
       isLoading: true,
     })
 
-    expect(container?.textContent).toContain("Loading connections...")
+    expect(queryLoadingSkeleton()).toBeTruthy()
     expect(container?.textContent).not.toContain("No MCP servers configured")
   })
 
@@ -118,7 +122,7 @@ describe("McpServers", () => {
     })
 
     expect(container?.textContent).toContain("No MCP servers configured")
-    expect(container?.textContent).not.toContain("Loading connections...")
+    expect(queryLoadingSkeleton()).toBeFalsy()
   })
 
   it("shows resolved MCP servers", () => {
@@ -137,6 +141,6 @@ describe("McpServers", () => {
 
     expect(container?.textContent).toContain("Filesystem tools")
     expect(container?.textContent).not.toContain("No MCP servers configured")
-    expect(container?.textContent).not.toContain("Loading connections...")
+    expect(queryLoadingSkeleton()).toBeFalsy()
   })
 })

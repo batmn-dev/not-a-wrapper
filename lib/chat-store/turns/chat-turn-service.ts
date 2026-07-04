@@ -1,6 +1,7 @@
 import {
   hasSemanticAssistantParts as hasSharedSemanticAssistantParts,
   isEmptyAssistantMessage as isSharedEmptyAssistantMessage,
+  isTerminalOutcomeStub,
   sanitizeVisibleChatMessages,
 } from "@/convex/domain/message_visibility"
 import { readServerMessageId } from "@/lib/chat-messages/branch"
@@ -146,21 +147,6 @@ export function routePersistsChatMessages(
   )
 }
 
-export function messageFilePartsToSendFiles(
-  parts: ChatTurnMessage["parts"]
-): SendFilePart[] {
-  return (parts ?? [])
-    .filter((part) => part.type === "file")
-    .map((part) => ({
-      type: "file" as const,
-      filename: (part as { filename?: string }).filename || "file",
-      mediaType:
-        (part as { mediaType?: string }).mediaType ||
-        "application/octet-stream",
-      url: (part as { url?: string }).url || "",
-    }))
-}
-
 type PrepareEditTurnPlanArgs = {
   messages: ChatTurnMessage[]
   messageId: string
@@ -173,8 +159,10 @@ export type EditTurnPlan =
       ok: true
       originalMessages: ChatTurnMessage[]
       trimmedMessages: ChatTurnMessage[]
+      /** The replacement user message. The edit runner sends it (id, parts)
+       * through the SDK and the edit intent tells the server to persist its id
+       * as clientMessageId, so live and durable identity stay matched. */
       optimisticEditedMessage: ChatTurnMessage
-      sendFiles: SendFilePart[]
       cutoffTimestamp: number
       chatVersion: number
       expectedChatVersion: number
@@ -219,7 +207,6 @@ export function prepareEditTurnPlan({
     originalMessages: [...visibleMessages],
     trimmedMessages,
     optimisticEditedMessage,
-    sendFiles: messageFilePartsToSendFiles(targetFileParts),
     cutoffTimestamp,
     chatVersion: trimmedMessages.length + 1,
     expectedChatVersion: visibleMessages.length,
@@ -374,20 +361,21 @@ export function createChatTurnStore(adapters: ChatTurnStoreAdapters) {
     return adapters.cacheAndAddMessage(message, chatId)
   }
 
-  const removeEmptyAssistantMessages = async (
-    chatId: string,
-    targetMessage?: ChatTurnMessage
-  ) => {
-    const targetId = targetMessage ? String(targetMessage.id) : null
+  // The SDK's transient empty assistant (no durable status) is removable
+  // noise after an abort/error. An empty assistant carrying a terminal
+  // failed/aborted status is NOT: it is the durable stub the selected-path
+  // projection installs, and removing it here raced the projection — the
+  // stub vanished with nothing left to re-trigger its reinstall.
+  const isRemovableEmptyAssistantMessage = (candidate: ChatTurnMessage) =>
+    isEmptyAssistantMessage(candidate) && !isTerminalOutcomeStub(candidate)
+
+  const removeEmptyAssistantMessages = async (chatId: string) => {
     let removedVisible = false
 
     adapters.updateMessages((prev) => {
-      const next = prev.filter((candidate) => {
-        if (targetId && String(candidate.id) === targetId) {
-          return !isEmptyAssistantMessage(candidate)
-        }
-        return !isEmptyAssistantMessage(candidate)
-      })
+      const next = prev.filter(
+        (candidate) => !isRemovableEmptyAssistantMessage(candidate)
+      )
       removedVisible = next.length !== prev.length
       return removedVisible ? next : prev
     })
@@ -395,12 +383,9 @@ export function createChatTurnStore(adapters: ChatTurnStoreAdapters) {
     const readMessages = adapters.readMessages ?? getCachedMessages
     const writeMessages = adapters.writeMessages ?? cacheMessages
     const cachedMessages = await readMessages(chatId)
-    const cleanedMessages = cachedMessages.filter((candidate) => {
-      if (targetId && String(candidate.id) === targetId) {
-        return !isEmptyAssistantMessage(candidate)
-      }
-      return !isEmptyAssistantMessage(candidate)
-    })
+    const cleanedMessages = cachedMessages.filter(
+      (candidate) => !isRemovableEmptyAssistantMessage(candidate)
+    )
 
     if (cleanedMessages.length !== cachedMessages.length) {
       await writeMessages(chatId, cleanedMessages)
@@ -445,7 +430,7 @@ export function createChatTurnStore(adapters: ChatTurnStoreAdapters) {
 
       if (isEmptyAssistantMessage(message)) {
         try {
-          await removeEmptyAssistantMessages(effectiveChatId, message)
+          await removeEmptyAssistantMessages(effectiveChatId)
         } catch (error) {
           adapters.reportError(
             "Failed to remove empty assistant message after abort/error:",
