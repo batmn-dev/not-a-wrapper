@@ -70,10 +70,13 @@ export async function POST(req: Request) {
     try {
       parsedBody = (await req.json()) as ChatRequest
     } catch {
-      throw Object.assign(new Error("Request body is not valid JSON"), {
-        statusCode: 400,
-        code: "INVALID_REQUEST",
-      })
+      return new Response(
+        JSON.stringify({
+          error: "Request body is not valid JSON",
+          code: "INVALID_REQUEST",
+        }),
+        { status: 400 }
+      )
     }
     const {
       messages,

@@ -6,6 +6,66 @@ import { getProviderForModel } from "@/lib/openproviders/provider-map"
 import { hasUserKey } from "@/lib/user-keys"
 import { fetchMutation, fetchQuery } from "convex/nextjs"
 
+const USAGE_ERROR_CODES = {
+  ANONYMOUS_ID_REQUIRED: "ANONYMOUS_ID_REQUIRED",
+  USER_NOT_FOUND: "USER_NOT_FOUND",
+} as const
+
+type UsageErrorCode = (typeof USAGE_ERROR_CODES)[keyof typeof USAGE_ERROR_CODES]
+
+type ChatApiError = Error & {
+  statusCode: number
+  code: string
+}
+
+function normalizeUsageErrorCode(
+  error: string,
+  errorCode: unknown
+): UsageErrorCode | "UNKNOWN" {
+  if (
+    errorCode === USAGE_ERROR_CODES.ANONYMOUS_ID_REQUIRED ||
+    errorCode === USAGE_ERROR_CODES.USER_NOT_FOUND
+  ) {
+    return errorCode
+  }
+
+  if (error === "Anonymous ID required for usage tracking") {
+    return USAGE_ERROR_CODES.ANONYMOUS_ID_REQUIRED
+  }
+
+  if (error === "User not found") {
+    return USAGE_ERROR_CODES.USER_NOT_FOUND
+  }
+
+  return "UNKNOWN"
+}
+
+function createUsageCheckApiError(
+  error: string,
+  errorCode?: unknown
+): ChatApiError {
+  const normalizedCode = normalizeUsageErrorCode(error, errorCode)
+
+  if (normalizedCode === USAGE_ERROR_CODES.ANONYMOUS_ID_REQUIRED) {
+    return Object.assign(new Error(error), {
+      statusCode: 400,
+      code: "INVALID_REQUEST",
+    })
+  }
+
+  if (normalizedCode === USAGE_ERROR_CODES.USER_NOT_FOUND) {
+    return Object.assign(new Error(error), {
+      statusCode: 500,
+      code: "USER_NOT_FOUND",
+    })
+  }
+
+  return Object.assign(new Error(error), {
+    statusCode: 500,
+    code: "USAGE_CHECK_FAILED",
+  })
+}
+
 /**
  * Check if a model is a "pro" model (requires more stringent limits)
  */
@@ -35,14 +95,14 @@ export async function checkServerSideUsage(
   )
 
   if (!usage.canSend) {
-    // Surface specific error messages (e.g., "User not found", "Anonymous ID required")
-    // before falling back to the generic rate limit message. Status codes ride
-    // the ApiError shape so createErrorResponse maps them instead of 500ing.
+    // Surface specific usage-check failures before falling back to the generic
+    // rate-limit message. Status codes ride the ApiError shape so
+    // createErrorResponse maps them explicitly.
     if (usage.error) {
-      throw Object.assign(new Error(usage.error), {
-        statusCode: 400,
-        code: "INVALID_REQUEST",
-      })
+      throw createUsageCheckApiError(
+        usage.error,
+        "errorCode" in usage ? usage.errorCode : undefined
+      )
     }
     const modelType = isPro ? "pro model" : "message"
     throw Object.assign(

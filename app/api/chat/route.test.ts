@@ -123,4 +123,22 @@ describe("/api/chat route", () => {
       },
     })
   })
+
+  it("returns 400 for malformed JSON without capturing to Sentry", async () => {
+    const response = await POST(
+      new Request("http://test.local/api/chat", {
+        method: "POST",
+        body: "{",
+      })
+    )
+
+    await expect(response.json()).resolves.toEqual({
+      error: "Request body is not valid JSON",
+      code: "INVALID_REQUEST",
+    })
+    expect(response.status).toBe(400)
+    expect(createChatTurnRuntime).not.toHaveBeenCalled()
+    expect(Sentry.captureException).not.toHaveBeenCalled()
+    expect(consoleErrorSpy).not.toHaveBeenCalled()
+  })
 })

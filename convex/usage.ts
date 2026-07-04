@@ -5,6 +5,10 @@ import { optionalAuthMutation, optionalAuthQuery } from "./lib/authedFunctions"
 const NON_AUTH_DAILY_MESSAGE_LIMIT = 5
 const AUTH_DAILY_MESSAGE_LIMIT = 1000
 const DAILY_LIMIT_PRO_MODELS = 500
+const USAGE_ERROR_CODES = {
+  ANONYMOUS_ID_REQUIRED: "ANONYMOUS_ID_REQUIRED",
+  USER_NOT_FOUND: "USER_NOT_FOUND",
+} as const
 
 /**
  * Get the start of the current UTC day as a timestamp
@@ -39,6 +43,7 @@ export const checkUsage = optionalAuthQuery({
           limit: NON_AUTH_DAILY_MESSAGE_LIMIT,
           isAnonymous: true,
           error: "Anonymous ID required for usage tracking",
+          errorCode: USAGE_ERROR_CODES.ANONYMOUS_ID_REQUIRED,
         }
       }
 
@@ -82,6 +87,7 @@ export const checkUsage = optionalAuthQuery({
         remaining: 0,
         limit: 0,
         error: "User not found",
+        errorCode: USAGE_ERROR_CODES.USER_NOT_FOUND,
       }
     }
 
