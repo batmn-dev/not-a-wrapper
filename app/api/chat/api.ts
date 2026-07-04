@@ -11,6 +11,8 @@ const USAGE_ERROR_CODES = {
   USER_NOT_FOUND: "USER_NOT_FOUND",
 } as const
 
+const INTERNAL_SERVER_ERROR_MESSAGE = "Internal server error"
+
 type UsageErrorCode = (typeof USAGE_ERROR_CODES)[keyof typeof USAGE_ERROR_CODES]
 
 type ChatApiError = Error & {
@@ -54,13 +56,15 @@ function createUsageCheckApiError(
   }
 
   if (normalizedCode === USAGE_ERROR_CODES.USER_NOT_FOUND) {
-    return Object.assign(new Error(error), {
+    return Object.assign(new Error(INTERNAL_SERVER_ERROR_MESSAGE), {
+      cause: new Error(error),
       statusCode: 500,
       code: "USER_NOT_FOUND",
     })
   }
 
-  return Object.assign(new Error(error), {
+  return Object.assign(new Error(INTERNAL_SERVER_ERROR_MESSAGE), {
+    cause: new Error(error),
     statusCode: 500,
     code: "USAGE_CHECK_FAILED",
   })
