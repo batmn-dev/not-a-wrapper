@@ -18,6 +18,8 @@ type ModelIdSuccessor = {
 
 const MODEL_ID_ALIASES = [
   {
+    // Alias of a now-delisted id: resolveCompatibilityModelId chains this
+    // through the `openrouter:deepseek/deepseek-r1:free` succession below.
     sourceId: "deepseek-r1",
     targetId: "openrouter:deepseek/deepseek-r1:free",
     idKind: "alias",
@@ -90,12 +92,33 @@ const MODEL_ID_ALIASES = [
 ] as const satisfies readonly ModelIdAlias[]
 
 const MODEL_ID_SUCCESSIONS = [
+  // Successions resolve in a single hop (no chaining), so every entry must
+  // target a LIVE catalog id — when a target dies, repoint all entries that
+  // reached it (see deepseek-v3 below, which previously targeted R1:free).
   {
     sourceId: "deepseek-v3",
-    targetId: "openrouter:deepseek/deepseek-r1:free",
-    replacementModelId: "openrouter:deepseek/deepseek-r1:free",
-    verifiedAgainst: "openrouter:deepseek/deepseek-r1:free",
-    lastVerifiedAt: "2026-03-08",
+    targetId: "openrouter:openai/gpt-oss-120b:free",
+    replacementModelId: "openrouter:openai/gpt-oss-120b:free",
+    verifiedAgainst: "openai/gpt-oss-120b:free",
+    lastVerifiedAt: "2026-07-04",
+  },
+  {
+    // OpenRouter delisted `deepseek/deepseek-r1:free` (no free R1 remains as
+    // of 2026-07-04). GPT-OSS 120B is the free reasoning-model successor.
+    sourceId: "openrouter:deepseek/deepseek-r1:free",
+    targetId: "openrouter:openai/gpt-oss-120b:free",
+    replacementModelId: "openrouter:openai/gpt-oss-120b:free",
+    verifiedAgainst: "openai/gpt-oss-120b:free",
+    lastVerifiedAt: "2026-07-04",
+  },
+  {
+    // OpenRouter delisted `meta-llama/llama-3.3-8b-instruct:free` (the paid
+    // variant is gone too); the 70B free endpoint is the same-family successor.
+    sourceId: "openrouter:meta-llama/llama-3.3-8b-instruct:free",
+    targetId: "openrouter:meta-llama/llama-3.3-70b-instruct:free",
+    replacementModelId: "openrouter:meta-llama/llama-3.3-70b-instruct:free",
+    verifiedAgainst: "meta-llama/llama-3.3-70b-instruct:free",
+    lastVerifiedAt: "2026-07-04",
   },
   {
     sourceId: "mistral-small-2503",

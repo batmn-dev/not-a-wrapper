@@ -68,11 +68,11 @@ describe("provider strategy registry", () => {
   it("strips the openrouter: prefix when building the model", () => {
     const model = getProviderStrategy("openrouter")
       .instance("byok-key")
-      .languageModel("openrouter:deepseek/deepseek-r1:free") as {
+      .languageModel("openrouter:openai/gpt-oss-120b:free") as {
       modelId?: string
       provider?: string
     }
     expect(model.provider).toBe("openrouter")
-    expect(model.modelId).toBe("deepseek/deepseek-r1:free")
+    expect(model.modelId).toBe("openai/gpt-oss-120b:free")
   })
 })

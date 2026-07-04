@@ -18,7 +18,17 @@ describe("model ID migration", () => {
 
   it("keeps compatibility remaps limited to explicit aliases and safe successors", () => {
     expect(resolveModelId("deepseek-v3")).toBe(
-      "openrouter:deepseek/deepseek-r1:free"
+      "openrouter:openai/gpt-oss-120b:free"
+    )
+    expect(resolveModelId("openrouter:deepseek/deepseek-r1:free")).toBe(
+      "openrouter:openai/gpt-oss-120b:free"
+    )
+    expect(
+      resolveModelId("openrouter:meta-llama/llama-3.3-8b-instruct:free")
+    ).toBe("openrouter:meta-llama/llama-3.3-70b-instruct:free")
+    // Alias-of-a-delisted-id chains through the succession in one resolve.
+    expect(resolveModelId("deepseek-r1")).toBe(
+      "openrouter:openai/gpt-oss-120b:free"
     )
     expect(resolveModelId("mistral-small-2503")).toBe("mistral-small-2506")
     expect(resolveModelId("mistral-large-latest")).toBe("mistral-large-2512")
@@ -45,7 +55,7 @@ describe("model ID migration", () => {
         "claude-haiku-4-5-20251001",
       ])
     ).toEqual([
-      "openrouter:deepseek/deepseek-r1:free",
+      "openrouter:openai/gpt-oss-120b:free",
       "gpt-5.4",
       "gpt-5-mini",
       "claude-haiku-4-5-20251001",

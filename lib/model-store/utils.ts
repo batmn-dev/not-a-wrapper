@@ -25,8 +25,8 @@ export const DEFAULT_MODEL_ORDER: string[] = [
   "codestral-2508",
   "sonar",
   "sonar-reasoning-pro",
-  "openrouter:deepseek/deepseek-r1:free",
-  "openrouter:meta-llama/llama-3.3-8b-instruct:free",
+  "openrouter:openai/gpt-oss-120b:free",
+  "openrouter:meta-llama/llama-3.3-70b-instruct:free",
 ]
 
 export function isModelVisibleInSelector(

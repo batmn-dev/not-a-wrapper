@@ -14,8 +14,8 @@ export const DAILY_LIMIT_PRO_MODELS = 500
 export const NON_AUTH_ALLOWED_MODELS = ["gpt-5-mini"]
 
 export const FREE_MODELS_IDS = [
-  "openrouter:deepseek/deepseek-r1:free",
-  "openrouter:meta-llama/llama-3.3-8b-instruct:free",
+  "openrouter:openai/gpt-oss-120b:free",
+  "openrouter:meta-llama/llama-3.3-70b-instruct:free",
   "pixtral-large-2411",
   "mistral-large-2512",
   "gpt-5-mini",

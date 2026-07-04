@@ -14,13 +14,13 @@ describe("createLanguageModel", () => {
       "gpt-5-mini"
     )
     expect(createLanguageModel("deepseek-r1", "test-api-key").modelId).toBe(
-      "deepseek/deepseek-r1:free"
+      "openai/gpt-oss-120b:free"
     )
   })
 
   it("uses OpenRouter runtime behavior for prefixed model ids", () => {
     const model = createLanguageModel(
-      "openrouter:deepseek/deepseek-r1:free",
+      "openrouter:openai/gpt-oss-120b:free",
       "test-api-key"
     ) as unknown as {
       config?: { compatibility?: string }
@@ -29,7 +29,7 @@ describe("createLanguageModel", () => {
     }
 
     expect(model.provider).toBe("openrouter")
-    expect(model.modelId).toBe("deepseek/deepseek-r1:free")
+    expect(model.modelId).toBe("openai/gpt-oss-120b:free")
     expect(model.config?.compatibility).toBe("strict")
   })
 })
