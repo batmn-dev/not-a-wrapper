@@ -233,6 +233,21 @@ async function main(): Promise<void> {
   const keySource = process.env.SMOKE_OPENROUTER_KEY
     ? "SMOKE_OPENROUTER_KEY override"
     : "OPENROUTER_API_KEY"
+
+  // Explicitly targeting a paid entry with --model is a request to actually
+  // exercise it; without --paid the generation would be silently skipped and
+  // the run would exit 0 having generated nothing — reading as "verified" to a
+  // human or a CI wrapper. Fail loudly instead.
+  if (apiKey && targetModelId && !paidMode && !isFreeModel(selectedModels[0]!)) {
+    console.error(
+      `"${targetModelId}" is a paid model; a keyed run skips it without --paid, ` +
+        `so nothing would be generated. Re-run with --paid to spend real ` +
+        `credits on a live generation:\n` +
+        `  SMOKE_OPENROUTER_KEY=… bun run smoke:openrouter -- --paid --model ${targetModelId}`
+    )
+    process.exit(1)
+  }
+
   console.log(
     `OpenRouter smoke — ${
       apiKey ? `key present (${keySource})` : "NO KEY (catalog checks only)"
