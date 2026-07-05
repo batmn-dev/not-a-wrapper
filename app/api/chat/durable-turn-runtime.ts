@@ -141,7 +141,11 @@ export type DurableStepRecord = {
     toolName: string
     input?: unknown
   }>
-  toolResults?: ReadonlyArray<{ toolCallId: string; output?: unknown }>
+  toolResults?: ReadonlyArray<{
+    toolCallId: string
+    output?: unknown
+    isError?: boolean
+  }>
 }
 
 export type DurableTurnRuntime = {
@@ -879,9 +883,7 @@ export function createConvexDurableTurn(args: {
           const result = toolResults?.find(
             (candidate) => candidate.toolCallId === call.toolCallId
           )
-          const isError = result
-            ? Boolean((result as { isError?: boolean }).isError)
-            : false
+          const isError = result ? Boolean(result.isError) : false
           const approvalDecision = facts.approvalFor(call.toolName)
           return {
             toolCallId: call.toolCallId,
@@ -890,7 +892,7 @@ export function createConvexDurableTurn(args: {
             input: call.input,
             output: result?.output,
             error: isError
-              ? String((result as { output?: unknown })?.output ?? "Tool failed")
+              ? String(result?.output ?? "Tool failed")
               : undefined,
             status: result
               ? isError

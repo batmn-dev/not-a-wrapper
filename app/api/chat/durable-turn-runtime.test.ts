@@ -392,6 +392,46 @@ describe("durable turn runtime — terminal ordering", () => {
       warn.mockRestore()
     }
   })
+
+  it("issues both abort writes with distinct reasons when onStreamAbort precedes finalize (double-terminal, first-terminal-wins)", async () => {
+    const fetchMutation = makeRecordingFetchMutation()
+    const turn = makeConvexTurn(
+      makeInput() as DurableTurnInput & { convexToken: string },
+      fetchMutation
+    )
+    await turn.prepare({ provider: "anthropic" })
+
+    // The stream `onAbort` half flushes + marks aborted ("stream aborted")...
+    await turn.onStreamAbort("stream aborted")
+    // ...then the envelope `onEnd` half marks aborted again ("ui message stream
+    // aborted"). Both fire by design; the Generation run lifecycle's
+    // first-terminal-wins absorbs the second, and finalize never rejects.
+    await expect(
+      turn.finalize({
+        responseMessage: {
+          id: "msg1",
+          role: "assistant",
+          parts: [],
+          metadata: {},
+        } as unknown as UIMessage,
+        isAborted: true,
+        finishReason: "stop",
+      })
+    ).resolves.toBeUndefined()
+
+    const abortReasons = findCalls(
+      fetchMutation,
+      api.chatRuntime.markGenerationRunAborted
+    ).map((call) => (call[1] as { reason: string }).reason)
+    expect(abortReasons).toEqual([
+      "stream aborted",
+      "ui message stream aborted",
+    ])
+    // The abort path never completes the run.
+    expect(
+      findCalls(fetchMutation, api.chatRuntime.markGenerationRunCompleted)
+    ).toHaveLength(0)
+  })
 })
 
 describe("durable turn runtime — prepare() error mapping", () => {
