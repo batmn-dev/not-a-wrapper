@@ -82,6 +82,19 @@ function mockClient(tools: Record<string, unknown> = {}, closeError?: Error) {
   }
 }
 
+/** Create MCP clients by URL, not call order, because DNS validation is parallel. */
+function mockClientsByUrl(clients: Record<string, unknown>) {
+  mockCreateMCPClient.mockImplementation(
+    (options: { transport?: { url?: string } }) => {
+      const url = options.transport?.url
+      if (!url || !(url in clients)) {
+        throw new Error(`Unexpected MCP client URL: ${url ?? "<missing>"}`)
+      }
+      return Promise.resolve(clients[url])
+    }
+  )
+}
+
 /** Create a mock tool object */
 function mockTool(name: string) {
   return {
@@ -333,9 +346,10 @@ describe("loadUserMcpTools", () => {
 
       mockFetchQuery.mockResolvedValueOnce(servers).mockResolvedValueOnce([])
 
-      mockCreateMCPClient
-        .mockResolvedValueOnce(client1)
-        .mockResolvedValueOnce(client2)
+      mockClientsByUrl({
+        "https://mcp.example.com": client1,
+        "https://jira.example.com": client2,
+      })
 
       const result = await loadUserMcpTools("test-token")
 
@@ -359,9 +373,10 @@ describe("loadUserMcpTools", () => {
 
       mockFetchQuery.mockResolvedValueOnce(servers).mockResolvedValueOnce([])
 
-      mockCreateMCPClient
-        .mockResolvedValueOnce(client1)
-        .mockResolvedValueOnce(client2)
+      mockClientsByUrl({
+        "https://mcp.example.com": client1,
+        "https://b.example.com": client2,
+      })
 
       const result = await loadUserMcpTools("test-token")
 
@@ -385,9 +400,10 @@ describe("loadUserMcpTools", () => {
 
       mockFetchQuery.mockResolvedValueOnce(servers).mockResolvedValueOnce([])
 
-      mockCreateMCPClient
-        .mockResolvedValueOnce(client1)
-        .mockResolvedValueOnce(client2)
+      mockClientsByUrl({
+        "https://mcp.example.com": client1,
+        "https://alpha2.example.com": client2,
+      })
 
       const result = await loadUserMcpTools("test-token")
 
@@ -411,9 +427,10 @@ describe("loadUserMcpTools", () => {
 
       mockFetchQuery.mockResolvedValueOnce(servers).mockResolvedValueOnce([])
 
-      mockCreateMCPClient
-        .mockResolvedValueOnce(client1)
-        .mockResolvedValueOnce(client2)
+      mockClientsByUrl({
+        "https://mcp.example.com": client1,
+        "https://long2.example.com": client2,
+      })
 
       const result = await loadUserMcpTools("test-token")
       const collidingName = `${base}_lookup`
@@ -573,9 +590,10 @@ describe("loadUserMcpTools", () => {
 
       mockFetchQuery.mockResolvedValueOnce(servers).mockResolvedValueOnce([])
 
-      mockCreateMCPClient
-        .mockResolvedValueOnce(flakyClient)
-        .mockResolvedValueOnce(stableClient)
+      mockClientsByUrl({
+        "https://mcp.example.com": flakyClient,
+        "https://stable.example.com": stableClient,
+      })
 
       const result = await loadUserMcpTools("test-token")
 

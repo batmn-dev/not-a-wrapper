@@ -19,7 +19,12 @@ export async function POST(request: Request) {
   try {
     const { provider, apiKey } = await request.json()
 
-    if (!provider || !apiKey) {
+    // Keys pasted from dashboards routinely carry stray whitespace or a
+    // trailing newline; stored verbatim they decrypt back into a value the
+    // provider rejects as "Invalid API key" with no visible cause. Normalize
+    // before encryption so the stored key is exactly the credential.
+    const normalizedApiKey = typeof apiKey === "string" ? apiKey.trim() : ""
+    if (!provider || !normalizedApiKey) {
       return jsonError("Provider and API key are required", 400)
     }
 
@@ -29,7 +34,7 @@ export async function POST(request: Request) {
     }
 
     // Encrypt the key for storage
-    const { encrypted, iv } = encryptKey(apiKey)
+    const { encrypted, iv } = encryptKey(normalizedApiKey)
 
     // Get Convex client and set auth
     const convex = createAuthenticatedConvexClient(authSession.accessToken)

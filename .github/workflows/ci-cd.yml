@@ -59,9 +59,8 @@ jobs:
       #       exit 1
       #     fi
 
-      # Full suite can be enabled once non-script tests are stable.
-      # - name: Run all tests
-      #   run: bun run test
+      - name: Run all tests
+        run: bun run test
 
   build:
     name: Build

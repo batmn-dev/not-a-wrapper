@@ -97,11 +97,12 @@ function resolveProviderOptions(
     //
     // openrouter: unreachable from here by design. Its reasoning knob is a
     // construction-time provider setting (`.chat(id, { reasoning })` on the
-    // spec-V3 provider), not a per-call providerOptions namespace — enabling
-    // it means widening the Provider strategy's `languageModel` seam, not
-    // adding a case here. ai@7's unified `reasoning` call option is NOT a
-    // substitute: the V3 model silently ignores it (see the
-    // ProviderLanguageModel note in provider-strategy.ts).
+    // spec-V3 provider), not a per-call providerOptions namespace — it rides
+    // the Provider strategy's construction-settings seam instead
+    // (ModelConfig.reasoning → ModelConstructionSettings; see
+    // provider-strategy.ts), never a case here. ai@7's unified `reasoning`
+    // call option is NOT a substitute: the V3 model silently ignores it (see
+    // the ProviderLanguageModel note in provider-strategy.ts).
     default:
       return {}
   }

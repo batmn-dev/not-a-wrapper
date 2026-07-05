@@ -1,3 +1,4 @@
+import type { ModelReasoningSettings } from "@/lib/models/types"
 import type { ToolMetadata } from "@/lib/tools/types"
 import { anthropic, createAnthropic } from "@ai-sdk/anthropic"
 import { createGoogle, google } from "@ai-sdk/google"
@@ -11,6 +12,20 @@ import type { ToolSet } from "ai"
 import type { Provider } from "./types"
 
 /**
+ * Per-model settings a strategy MAY consume when constructing the language
+ * model. Provider-neutral vocabulary: each strategy consumes only the
+ * settings its SDK takes at construction time and ignores the rest — today
+ * only OpenRouter does (its reasoning knob is `.chat(id, { reasoning })`,
+ * not a per-call providerOptions namespace; see the ProviderLanguageModel
+ * note). Per-CALL configuration stays in Request shaping
+ * (request-shaping.ts); this seam exists only for knobs that cannot ride
+ * `providerOptions`.
+ */
+export type ModelConstructionSettings = {
+  reasoning?: ModelReasoningSettings
+}
+
+/**
  * Strip the internal `openrouter:` namespace prefix before handing the id to
  * the OpenRouter chat endpoint, whose catalog id is the bare `vendor/model`
  * form. OpenRouter-only — the other six providers use bare native ids.
@@ -19,6 +34,23 @@ function toOpenRouterChatModelId(modelId: string): string {
   return modelId.startsWith("openrouter:")
     ? modelId.slice("openrouter:".length)
     : modelId
+}
+
+/**
+ * Map neutral construction settings onto OpenRouter's chat settings.
+ * Body-internal like the id-prefix strip — the shared interface never sees
+ * OpenRouter's snake_case shapes. Returns undefined when nothing is declared
+ * so the no-settings construction stays identical to the pre-seam call.
+ */
+function toOpenRouterChatSettings(settings?: ModelConstructionSettings) {
+  const reasoning = settings?.reasoning
+  if (!reasoning) return undefined
+  if (reasoning.maxTokens !== undefined) {
+    return { reasoning: { max_tokens: reasoning.maxTokens } }
+  }
+  return {
+    reasoning: { effort: reasoning.effort },
+  }
 }
 
 /**
@@ -63,9 +95,14 @@ export type ProviderLanguageModel = LanguageModelV4 | LanguageModelV3
 export type ProviderInstance = {
   /**
    * Build the language model. The model-id argument is the SDK's open string
-   * enum, so no literal-union cast is needed.
+   * enum, so no literal-union cast is needed. `settings` carries optional
+   * per-model construction settings; strategies whose SDK has no
+   * construction-time knobs simply declare `(id) => …` and ignore it.
    */
-  languageModel(resolvedModelId: string): ProviderLanguageModel
+  languageModel(
+    resolvedModelId: string,
+    settings?: ModelConstructionSettings
+  ): ProviderLanguageModel
   /**
    * The provider's native built-in web search tool, or undefined if it has
    * none. Typed as the AI SDK's tool-set element type — the type the SDK itself
@@ -220,14 +257,20 @@ const STRATEGIES: Record<Provider, ProviderStrategy> = {
       // OpenRouter is the documented irregular: no callable default singleton,
       // self-resolved env fallback (the SDK does not read it), `.chat()` to
       // produce a LanguageModelV3 (the community provider has no v4-spec
-      // release; ai@7 accepts V3 models), and the `openrouter:` prefix strip.
-      // All four stay body-internal — they never widen the shared interface.
+      // release; ai@7 accepts V3 models), the `openrouter:` prefix strip, and
+      // the construction-settings mapping (reasoning is a `.chat()` setting —
+      // the V3 model silently ignores ai@7's unified per-call `reasoning`).
+      // All five stay body-internal — they never widen the shared interface.
       const provider = createOpenRouter({
         apiKey: apiKey || process.env.OPENROUTER_API_KEY,
         compatibility: "strict",
       })
       return {
-        languageModel: (id) => provider.chat(toOpenRouterChatModelId(id)),
+        languageModel: (id, settings) =>
+          provider.chat(
+            toOpenRouterChatModelId(id),
+            toOpenRouterChatSettings(settings)
+          ),
         searchTool: () => undefined,
       }
     },

@@ -1,0 +1,524 @@
+import { api } from "@/convex/_generated/api"
+import { getEffectiveApiKey, getEffectiveToolKeyWithMode } from "@/lib/user-keys"
+import { loadUserMcpTools } from "@/lib/mcp/load-tools"
+import { createLanguageModel } from "@/lib/openproviders/create-language-model"
+import type { LanguageModelV3StreamPart } from "@ai-sdk/provider"
+import { jsonSchema, streamText, tool } from "ai"
+import { MockLanguageModelV3, simulateReadableStream } from "ai/test"
+import { fetchMutation as convexNextjsFetchMutation } from "convex/nextjs"
+import { getFunctionName } from "convex/server"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import {
+  createChatTurnRuntime,
+  type ChatTurnDeps,
+  type ChatTurnInput,
+} from "./chat-turn-runtime"
+
+// ---------------------------------------------------------------------------
+// AI SDK seam tests (PR #97 regression class): run the REAL `ai` package —
+// streamText, its v7 callback names (onStepEnd/onEnd/prepareStep), tool
+// execution, and the UI-message Response — against the real Chat turn runtime
+// and the real Tool runtime. The unit suite (chat-turn-runtime.test.ts) fakes
+// streamText, so a callback the SDK renamed or silently dropped is invisible
+// there; here only true externals are mocked:
+//   - the provider model (MockLanguageModelV3 at the createLanguageModel seam),
+//   - Convex (deps.fetchMutation for durable writes; convex/nextjs for the
+//     budget store and audit sink), MCP servers (loadUserMcpTools),
+//   - key resolution, Sentry/PostHog/Braintrust.
+// vi.mock("ai") is deliberately absent.
+// ---------------------------------------------------------------------------
+
+vi.mock("@sentry/nextjs", () => ({
+  setTag: vi.fn(),
+  setContext: vi.fn(),
+  captureMessage: vi.fn(),
+  captureException: vi.fn(),
+  startSpan: vi.fn((_opts: unknown, cb: () => unknown) => cb()),
+}))
+
+vi.mock("@/lib/observability/braintrust", () => ({
+  getBraintrustStreamText: vi.fn(),
+  withBraintrustTrace: vi.fn((_opts: unknown, cb: (span: null) => unknown) =>
+    cb(null)
+  ),
+  hashBraintrustIdentifier: vi.fn(async () => "hash"),
+  logBraintrustTraceMetadata: vi.fn(),
+  getBraintrustErrorMetadata: vi.fn(() => ({})),
+  flushBraintrust: vi.fn(async () => {}),
+}))
+
+vi.mock("@/lib/posthog", () => ({
+  captureGeneration: vi.fn(),
+  flushPostHog: vi.fn(async () => {}),
+  getPostHogClient: vi.fn(() => null),
+}))
+
+vi.mock("@/lib/user-keys", () => ({
+  getEffectiveApiKey: vi.fn(),
+  getEffectiveToolKeyWithMode: vi.fn(),
+}))
+
+// MCP servers are remote processes — the one Tool layer whose loader is a true
+// external. The tools it returns here are real ai@7 `tool()` definitions that
+// execute locally, so the merged ToolSet flows through the real policy,
+// naming, budget, and approval machinery.
+vi.mock("@/lib/mcp/load-tools", () => ({
+  loadUserMcpTools: vi.fn(),
+}))
+
+// convex/nextjs backs the Tool budget store (toolLimits.checkAndConsume) and
+// the audit outcome sink (toolCallLog.log). The durable-run writes go through
+// the runtime's injected deps.fetchMutation instead.
+vi.mock("convex/nextjs", () => ({
+  fetchMutation: vi.fn(),
+  fetchQuery: vi.fn(),
+}))
+
+// The model-factory seam: the only place a fake enters the model path.
+vi.mock("@/lib/openproviders/create-language-model", () => ({
+  createLanguageModel: vi.fn(),
+}))
+
+const SERVER_CHAT_ID = "convexchatid000000000000"
+const MODEL_ID = "claude-haiku-4-5-20251001"
+
+// Loose-typed handle on the mocked convex/nextjs boundary (budget store +
+// audit sink) — the real signature's tuple types fight mockImplementation.
+const convexBoundaryMutation =
+  convexNextjsFetchMutation as unknown as ReturnType<typeof vi.fn>
+
+// v3-spec usage for each mock step; streamText aggregates across steps.
+const STEP_USAGE = {
+  inputTokens: {
+    total: 10,
+    noCache: 10,
+    cacheRead: undefined,
+    cacheWrite: undefined,
+  },
+  outputTokens: { total: 5, text: 5, reasoning: undefined },
+}
+
+const TOOL_STEPS = 4 // crosses PREPARE_STEP_THRESHOLD (3) on the final step
+
+function makeToolCallStepChunks(step: number): LanguageModelV3StreamPart[] {
+  return [
+    { type: "stream-start" as const, warnings: [] },
+    {
+      type: "tool-call" as const,
+      toolCallId: `call-${step}`,
+      toolName: "get_weather",
+      input: JSON.stringify({ city: `City ${step}` }),
+    },
+    {
+      type: "finish" as const,
+      finishReason: { unified: "tool-calls" as const, raw: "tool_use" },
+      usage: STEP_USAGE,
+    },
+  ]
+}
+
+function makeFinalTextStepChunks(): LanguageModelV3StreamPart[] {
+  return [
+    { type: "stream-start" as const, warnings: [] },
+    { type: "text-start" as const, id: "t1" },
+    { type: "text-delta" as const, id: "t1", delta: "The weather is " },
+    { type: "text-delta" as const, id: "t1", delta: "sunny." },
+    { type: "text-end" as const, id: "t1" },
+    {
+      type: "finish" as const,
+      finishReason: { unified: "stop" as const, raw: "end_turn" },
+      usage: STEP_USAGE,
+    },
+  ]
+}
+
+/** A model that answers with TOOL_STEPS tool-call steps, then a text step. */
+function makeToolLoopModel() {
+  let call = 0
+  return new MockLanguageModelV3({
+    doStream: async () => {
+      call += 1
+      return {
+        stream: simulateReadableStream({
+          chunks:
+            call <= TOOL_STEPS
+              ? makeToolCallStepChunks(call)
+              : makeFinalTextStepChunks(),
+          chunkDelayInMs: null,
+        }),
+      }
+    },
+  })
+}
+
+/** A model that streams text slowly enough for the request to abort mid-way. */
+function makeSlowTextModel() {
+  return new MockLanguageModelV3({
+    doStream: async () => ({
+      stream: simulateReadableStream<LanguageModelV3StreamPart>({
+        chunks: [
+          { type: "stream-start", warnings: [] },
+          { type: "text-start", id: "t1" },
+          ...Array.from(
+            { length: 8 },
+            (_, i): LanguageModelV3StreamPart => ({
+              type: "text-delta",
+              id: "t1",
+              delta: `chunk-${i} `,
+            })
+          ),
+          { type: "text-end", id: "t1" },
+          {
+            type: "finish",
+            finishReason: { unified: "stop", raw: "end_turn" },
+            usage: STEP_USAGE,
+          },
+        ],
+        chunkDelayInMs: 30,
+      }),
+    }),
+  })
+}
+
+function makeMcpToolsFixture() {
+  const weatherExecute = vi.fn(async ({ city }: { city: string }) => ({
+    city,
+    temperature: 21,
+  }))
+
+  const tools = {
+    // Trusted read-only tool — passes runtime approval ungated and stays
+    // available in late steps.
+    get_weather: tool({
+      description: "Look up the current weather for a city",
+      inputSchema: jsonSchema<{ city: string }>({
+        type: "object",
+        properties: { city: { type: "string" } },
+        required: ["city"],
+        additionalProperties: false,
+      }),
+      execute: weatherExecute,
+    }),
+    // Untrusted-hints decoy — early-step advisory allow, late-step
+    // fail-closed. Its disappearance from the last model call proves the
+    // real streamText consulted prepareStep.
+    scratch_pad: tool({
+      description: "Jot a scratch note",
+      inputSchema: jsonSchema<{ note: string }>({
+        type: "object",
+        properties: { note: { type: "string" } },
+        required: ["note"],
+        additionalProperties: false,
+      }),
+      execute: async (): Promise<{ ok: true }> => {
+        throw new Error("scratch_pad must never execute in this test")
+      },
+    }),
+  }
+
+  const loadResult = {
+    tools,
+    clients: [{ close: vi.fn(async () => {}) }],
+    toolServerMap: new Map([
+      [
+        "get_weather",
+        {
+          displayName: "get_weather",
+          serverName: "Weather Server",
+          serverId: "srv-weather",
+          readOnly: true,
+          policyHintsTrusted: true,
+        },
+      ],
+      [
+        "scratch_pad",
+        {
+          displayName: "scratch_pad",
+          serverName: "Scratch Server",
+          serverId: "srv-scratch",
+        },
+      ],
+    ]),
+    failedServerCount: 0,
+  }
+
+  return { loadResult, weatherExecute }
+}
+
+function makeInput(overrides: Partial<ChatTurnInput> = {}): ChatTurnInput {
+  return {
+    messages: [
+      {
+        id: "u1",
+        role: "user",
+        parts: [{ type: "text", text: "What is the weather in Berlin?" }],
+      },
+    ] as ChatTurnInput["messages"],
+    chatId: SERVER_CHAT_ID,
+    model: MODEL_ID,
+    systemPrompt: "You are a weather assistant.",
+    enableSearch: false,
+    chatVersion: 1,
+    requestId: "req-seam-1",
+    userId: "user-1",
+    anonymousId: undefined,
+    isAuthenticated: true,
+    convexToken: "tok",
+    ...overrides,
+  }
+}
+
+/** A stored user message shaped like the Convex `messages` doc the durable
+ * prepare returns — flows through the real adapter + validateUIMessages. */
+function makeStoredUserMessage() {
+  return {
+    _id: "usermsg1",
+    role: "user",
+    content: "What is the weather in Berlin?",
+    parts: [{ type: "text", text: "What is the weather in Berlin?" }],
+    createdAt: Date.now() - 1000,
+    status: "completed",
+    metadata: {},
+  }
+}
+
+function sameRef(a: unknown, b: unknown): boolean {
+  try {
+    return (
+      getFunctionName(a as Parameters<typeof getFunctionName>[0]) ===
+      getFunctionName(b as Parameters<typeof getFunctionName>[0])
+    )
+  } catch {
+    return false
+  }
+}
+
+function makeDurableFetchMutation() {
+  return vi.fn(async (ref: unknown) => {
+    if (sameRef(ref, api.chatRuntime.prepareGeneration)) {
+      return {
+        runId: "run1",
+        assistantMessageId: "msg1",
+        assistantOrder: 2,
+        messages: [makeStoredUserMessage()],
+      }
+    }
+    return undefined
+  })
+}
+
+function findCalls(fn: ReturnType<typeof vi.fn>, ref: unknown) {
+  return fn.mock.calls.filter((call) => sameRef(call[0], ref))
+}
+
+function makeDeps(fetchMutation: ReturnType<typeof vi.fn>): ChatTurnDeps {
+  return {
+    streamText,
+    fetchMutation: fetchMutation as unknown as ChatTurnDeps["fetchMutation"],
+    fetchQuery: vi.fn(async () => []) as unknown as ChatTurnDeps["fetchQuery"],
+    after: vi.fn() as unknown as ChatTurnDeps["after"],
+    getPostHogClient: (() =>
+      null) as unknown as ChatTurnDeps["getPostHogClient"],
+  }
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.spyOn(console, "log").mockImplementation(() => {})
+  vi.mocked(getEffectiveApiKey).mockResolvedValue("sk-test")
+  vi.mocked(getEffectiveToolKeyWithMode).mockResolvedValue({
+    key: undefined,
+    keyMode: undefined,
+  } as unknown as Awaited<ReturnType<typeof getEffectiveToolKeyWithMode>>)
+  // Budget store: allow every consume; audit-log writes resolve.
+  convexBoundaryMutation.mockImplementation(async (ref: unknown) => {
+    if (sameRef(ref, api.toolLimits.checkAndConsume)) {
+      return { allowed: true, remaining: 99 }
+    }
+    return null
+  })
+})
+
+describe("chat turn runtime × real ai@7 streamText", () => {
+  it("runs a durable multi-step tool turn end-to-end: step hooks, sinks, ordered durable writes, streamed Response", async () => {
+    const { loadResult, weatherExecute } = makeMcpToolsFixture()
+    vi.mocked(loadUserMcpTools).mockResolvedValue(
+      loadResult as unknown as Awaited<ReturnType<typeof loadUserMcpTools>>
+    )
+    const model = makeToolLoopModel()
+    vi.mocked(createLanguageModel).mockReturnValue(
+      model as unknown as ReturnType<typeof createLanguageModel>
+    )
+    const durableFetchMutation = makeDurableFetchMutation()
+
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(durableFetchMutation),
+    })
+    await runtime.prepare()
+    const response = runtime.toResponse(new AbortController().signal)
+
+    // The HTTP envelope streams to completion with a finish state.
+    expect(response.status).toBe(200)
+    const sse = await response.text()
+    expect(sse).toContain('"messageId":"msg1"') // durable assistant id
+    expect(sse).toContain("The weather is ")
+    expect(sse).toContain('"type":"finish"')
+    expect(sse.trimEnd().endsWith("data: [DONE]")).toBe(true)
+
+    // The real streamText looped TOOL_STEPS tool steps plus the final text
+    // step, and consulted prepareStep each time: past PREPARE_STEP_THRESHOLD
+    // the untrusted-hints tool is gone while the read-only tool remains.
+    expect(model.doStreamCalls).toHaveLength(TOOL_STEPS + 1)
+    const toolNames = (call: (typeof model.doStreamCalls)[number]) =>
+      (call.tools ?? []).map((t) => t.name).sort()
+    expect(toolNames(model.doStreamCalls[0])).toEqual([
+      "get_weather",
+      "scratch_pad",
+    ])
+    expect(toolNames(model.doStreamCalls[TOOL_STEPS])).toEqual(["get_weather"])
+
+    // The SDK executed the tool locally once per step.
+    expect(weatherExecute).toHaveBeenCalledTimes(TOOL_STEPS)
+    expect(weatherExecute.mock.calls[0][0]).toEqual({ city: "City 1" })
+
+    // Per-step accounting through the Tool runtime's onStepFinish, observed at
+    // its sinks: budget accounting + one audit-log outcome per call.
+    const budgetCalls = findCalls(
+      convexBoundaryMutation,
+      api.toolLimits.checkAndConsume
+    )
+    expect(budgetCalls.length).toBeGreaterThanOrEqual(TOOL_STEPS)
+    const auditCalls = findCalls(convexBoundaryMutation, api.toolCallLog.log)
+    expect(auditCalls).toHaveLength(TOOL_STEPS)
+    expect(auditCalls.map((call) => call[1])).toEqual(
+      Array.from({ length: TOOL_STEPS }, (_, i) =>
+        expect.objectContaining({
+          toolKey: "get_weather",
+          success: true,
+          stepNumber: i + 1,
+          requestId: "req-seam-1",
+        })
+      )
+    )
+
+    // Durable persistence happened in order: prepare first, per-step tool
+    // invocation writes and snapshots in between, completion last.
+    await vi.waitFor(() => {
+      expect(
+        findCalls(durableFetchMutation, api.chatRuntime.markGenerationRunCompleted)
+      ).toHaveLength(1)
+    })
+    const orderedNames = durableFetchMutation.mock.calls.map((call) =>
+      getFunctionName(call[0] as Parameters<typeof getFunctionName>[0])
+    )
+    expect(orderedNames[0]).toBe(
+      getFunctionName(api.chatRuntime.prepareGeneration)
+    )
+    expect(orderedNames.at(-1)).toBe(
+      getFunctionName(api.chatRuntime.markGenerationRunCompleted)
+    )
+
+    const invocationWrites = findCalls(
+      durableFetchMutation,
+      api.chatRuntime.recordToolInvocations
+    )
+    expect(invocationWrites).toHaveLength(TOOL_STEPS)
+    expect(invocationWrites.map((call) => (call[1] as { stepNumber: number }).stepNumber)).toEqual([1, 2, 3, 4])
+    expect(invocationWrites[0][1]).toMatchObject({
+      runId: "run1",
+      messageId: "msg1",
+      invocations: [
+        expect.objectContaining({
+          toolCallId: "call-1",
+          toolName: "get_weather",
+          source: "mcp",
+          status: "completed",
+        }),
+      ],
+    })
+
+    expect(
+      findCalls(durableFetchMutation, api.chatRuntime.updateAssistantSnapshot)
+        .length
+    ).toBeGreaterThanOrEqual(1)
+
+    // The completion write carries the streamText onEnd aggregate — usage
+    // across ALL steps and the runtime's tool-outcome totals.
+    const completed = findCalls(
+      durableFetchMutation,
+      api.chatRuntime.markGenerationRunCompleted
+    )[0]
+    expect(completed[1]).toMatchObject({
+      runId: "run1",
+      messageId: "msg1",
+      content: "The weather is sunny.",
+      finishReason: "stop",
+      totalToolCalls: TOOL_STEPS,
+      failedToolCalls: 0,
+      usage: {
+        inputTokens: 10 * (TOOL_STEPS + 1),
+        outputTokens: 5 * (TOOL_STEPS + 1),
+      },
+    })
+    expect(completed[2]).toEqual({ token: "tok" })
+
+    // No failure/abort writes on the happy path.
+    expect(
+      findCalls(durableFetchMutation, api.chatRuntime.markGenerationRunFailed)
+    ).toHaveLength(0)
+    expect(
+      findCalls(durableFetchMutation, api.chatRuntime.markGenerationRunAborted)
+    ).toHaveLength(0)
+  })
+
+  it("persists the aborted outcome when the request signal aborts mid-stream", async () => {
+    const { loadResult } = makeMcpToolsFixture()
+    vi.mocked(loadUserMcpTools).mockResolvedValue(
+      loadResult as unknown as Awaited<ReturnType<typeof loadUserMcpTools>>
+    )
+    vi.mocked(createLanguageModel).mockReturnValue(
+      makeSlowTextModel() as unknown as ReturnType<typeof createLanguageModel>
+    )
+    const durableFetchMutation = makeDurableFetchMutation()
+
+    const runtime = createChatTurnRuntime({
+      input: makeInput({ requestId: "req-seam-abort" }),
+      deps: makeDeps(durableFetchMutation),
+    })
+    await runtime.prepare()
+
+    const abortController = new AbortController()
+    const response = runtime.toResponse(abortController.signal)
+    const reader = response.body!.getReader()
+
+    // Wait for the stream to actually start, then abort the request signal.
+    await reader.read()
+    abortController.abort()
+    while (!(await reader.read()).done) {
+      // drain whatever the runtime still emits after the abort
+    }
+
+    // The aborted outcome is durable: the run is marked aborted (the app keeps
+    // the placeholder as a first-class aborted stub) and never completed.
+    await vi.waitFor(() => {
+      expect(
+        findCalls(
+          durableFetchMutation,
+          api.chatRuntime.markGenerationRunAborted
+        ).length
+      ).toBeGreaterThanOrEqual(1)
+    })
+    const abortWrite = findCalls(
+      durableFetchMutation,
+      api.chatRuntime.markGenerationRunAborted
+    )[0]
+    expect(abortWrite[1]).toMatchObject({ runId: "run1", messageId: "msg1" })
+    expect(
+      findCalls(durableFetchMutation, api.chatRuntime.markGenerationRunCompleted)
+    ).toHaveLength(0)
+    expect(
+      findCalls(durableFetchMutation, api.chatRuntime.markGenerationRunFailed)
+    ).toHaveLength(0)
+  })
+})

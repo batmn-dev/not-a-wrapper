@@ -5,6 +5,20 @@ export type ModelCatalogStatus = "visible" | "hidden" | "legacy"
 
 export type ModelIdKind = "stable" | "snapshot" | "alias" | "wrapped"
 
+export type ModelReasoningEffort =
+  "minimal" | "low" | "medium" | "high" | "xhigh"
+
+/**
+ * Construction-time reasoning declaration for models whose provider takes
+ * reasoning as a model-construction setting rather than a per-call provider
+ * option (today: OpenRouter's `.chat(id, { reasoning })`; per-call reasoning
+ * lives in Request shaping — lib/openproviders/request-shaping.ts). Exactly
+ * one knob: an effort level or a reasoning-token budget.
+ */
+export type ModelReasoningSettings =
+  | { effort: ModelReasoningEffort; maxTokens?: never }
+  | { maxTokens: number; effort?: never }
+
 type ModelConfig = {
   id: string // "gpt-5-mini" // same from AI SDKs
   name: string // "GPT-4.1 Nano"
@@ -49,6 +63,16 @@ type ModelConfig = {
    * Request shaping default (10000).
    */
   thinkingBudget?: number
+
+  /**
+   * Construction-time reasoning settings, fed to the Provider strategy's
+   * `languageModel(id, settings)` when the model is built. Only providers
+   * whose reasoning knob is construction-time consume it (today: OpenRouter);
+   * every other strategy ignores it. Distinct from `reasoningText`, which
+   * remains the capability FLAG (the model emits reasoning text) — this field
+   * is the request CONFIGURATION that turns reasoning output on.
+   */
+  reasoning?: ModelReasoningSettings
 
   speed?: "Fast" | "Medium" | "Slow"
   intelligence?: "Low" | "Medium" | "High"
