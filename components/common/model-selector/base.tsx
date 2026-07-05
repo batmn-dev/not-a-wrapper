@@ -146,6 +146,11 @@ export function ModelSelector({
           {provider?.icon && <provider.icon className="size-5" />}
           <div className="flex flex-col gap-0">
             <span className="text-sm">{model.name}</span>
+            {/* Dual-route disambiguation: wrapped entries can share a name and
+                vendor icon with their direct sibling (e.g. GPT-5.5). */}
+            {model.providerId === "openrouter" && (
+              <span className="text-muted-foreground text-xs">OpenRouter</span>
+            )}
           </div>
         </div>
         {isLocked && (
@@ -335,6 +340,14 @@ export function ModelSelector({
                           <provider.icon className="size-5 shrink-0" />
                         )}
                         <span className="truncate text-sm">{model.name}</span>
+                        {/* Dual-route disambiguation: wrapped entries can share
+                            a name and vendor icon with their direct sibling
+                            (e.g. GPT-5.5). */}
+                        {model.providerId === "openrouter" && (
+                          <span className="text-muted-foreground shrink-0 text-xs">
+                            OpenRouter
+                          </span>
+                        )}
                       </div>
                       {isLocked ? (
                         <div className="border-input bg-accent text-muted-foreground flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">

@@ -253,13 +253,18 @@ export function ModelsSettings() {
 
                   <div className="space-y-2 pl-7">
                     {modelsGroup.map((model) => {
-                      // For OpenRouter models, show the underlying provider (e.g., "via Claude")
-                      // For direct models, show the model's provider name
-                      const viaProvider =
+                      // Wrapped models route via OpenRouter regardless of the
+                      // underlying vendor — keep the vendor icon for identity,
+                      // but label the route accurately ("via Gemini" on an
+                      // OpenRouter-served model misstates who serves it).
+                      const underlyingProvider =
                         model.providerId === "openrouter"
                           ? PROVIDERS.find((p) => p.id === model.icon)
                           : null
-                      const viaLabel = viaProvider?.name || model.provider
+                      const viaLabel =
+                        model.providerId === "openrouter"
+                          ? "OpenRouter"
+                          : model.provider
 
                       return (
                         <motion.div
@@ -275,8 +280,8 @@ export function ModelsSettings() {
                             <div className="flex items-center gap-2">
                               {/* Show underlying provider icon for OpenRouter models */}
                               {model.providerId === "openrouter" &&
-                                viaProvider?.icon && (
-                                  <viaProvider.icon className="size-4 shrink-0" />
+                                underlyingProvider?.icon && (
+                                  <underlyingProvider.icon className="size-4 shrink-0" />
                                 )}
                               <span className="text-sm">{model.name}</span>
                               <span className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 text-xs">
