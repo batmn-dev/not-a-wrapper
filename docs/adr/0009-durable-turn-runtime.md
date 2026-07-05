@@ -1,6 +1,6 @@
 # 9. Durable persistence is a deep module: the Durable turn runtime
 
-- Status: accepted (designed; implementation pending)
+- Status: accepted
 - Date: 2026-07-05
 - Context: Architecture deepening — generation runtime core; branch
   `darknight/bat-signal-20260705-133514`
