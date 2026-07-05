@@ -40,16 +40,45 @@ describe("shapeRequest provider options", () => {
       expected: { anthropic: { thinking: { type: "adaptive" } } },
     },
     {
-      name: "anthropic adaptive with search downgrades to enabled (pause_turn workaround)",
+      // The pause_turn downgrade is catalog-driven: only 4.6-generation
+      // models (where budget_tokens is deprecated but functional) carry
+      // searchThinkingDowngrade.
+      name: "flagged anthropic adaptive with search downgrades to enabled (pause_turn workaround)",
+      model: {
+        providerId: "anthropic",
+        reasoningText: true,
+        thinkingMode: "adaptive",
+        searchThinkingDowngrade: true,
+      },
+      ctx: { searchToolsActive: true, hasTools: true },
+      expected: {
+        anthropic: { thinking: { type: "enabled", budgetTokens: 10000 } },
+      },
+    },
+    {
+      // Opus 4.8/Sonnet 5/Fable 5: budget_tokens is removed upstream (HTTP
+      // 400), so unflagged adaptive models stay adaptive even with search
+      // tools active.
+      name: "unflagged anthropic adaptive keeps adaptive thinking with search active",
       model: {
         providerId: "anthropic",
         reasoningText: true,
         thinkingMode: "adaptive",
       },
       ctx: { searchToolsActive: true, hasTools: true },
-      expected: {
-        anthropic: { thinking: { type: "enabled", budgetTokens: 10000 } },
+      expected: { anthropic: { thinking: { type: "adaptive" } } },
+    },
+    {
+      // The flag without active search tools changes nothing.
+      name: "flagged anthropic adaptive without search keeps adaptive thinking",
+      model: {
+        providerId: "anthropic",
+        reasoningText: true,
+        thinkingMode: "adaptive",
+        searchThinkingDowngrade: true,
       },
+      ctx: { searchToolsActive: false, hasTools: true },
+      expected: { anthropic: { thinking: { type: "adaptive" } } },
     },
     {
       name: "anthropic fixed-budget model uses its declared thinkingBudget",

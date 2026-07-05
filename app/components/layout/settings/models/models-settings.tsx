@@ -116,7 +116,11 @@ export function ModelsSettings() {
 
   const getProviderIcon = (model: ModelConfig) => {
     const provider = PROVIDERS.find((p) => p.id === model.baseProviderId)
-    return provider?.icon
+    if (provider) return provider.icon
+    // Wrapped models carry real vendor ids without registered icons (qwen,
+    // z-ai, moonshotai, …) — fall back to the OpenRouter icon instead of
+    // rendering nothing.
+    return PROVIDERS.find((p) => p.id === "openrouter")?.icon
   }
 
   return (
