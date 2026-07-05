@@ -1,12 +1,6 @@
-import { paginationOptsValidator } from "convex/server"
 import { v } from "convex/values"
 import type { Doc, Id } from "./_generated/dataModel"
-import {
-  mutation,
-  query,
-  type MutationCtx,
-  type QueryCtx,
-} from "./_generated/server"
+import { mutation, type MutationCtx, type QueryCtx } from "./_generated/server"
 import {
   clearSiblingSelectionForMutation,
   getNextBranchIndexForMutation,
@@ -19,7 +13,6 @@ import {
   getSiblingMessages,
 } from "./domain/message_branches"
 import {
-  isActiveGenerationRunStatus,
   isTerminalGenerationRunStatus,
   isTerminalMessageStatus,
 } from "./domain/message_contract"
@@ -30,11 +23,7 @@ import {
   isVisibleChatMessage,
   projectModelHistoryMessages,
 } from "./domain/message_visibility"
-import {
-  getAuthorizedChatForRead,
-  getCurrentUser,
-  requireOwnedChat,
-} from "./lib/auth"
+import { getCurrentUser, requireOwnedChat } from "./lib/auth"
 import {
   vToolInvocationStreamMetadata,
   type PersistedMessageMetadata,
@@ -129,7 +118,6 @@ type AuthenticatedOwner = {
 }
 
 const ACTIVE_RUN_SCAN_LIMIT = 50
-const RECOVERABLE_RUN_SCAN_LIMIT = 10
 
 const terminalToolInvocationStatuses = new Set<
   Doc<"toolInvocations">["status"]
@@ -1119,30 +1107,6 @@ export async function applyApprovalResponses(
   return updatedMessage
 }
 
-export const createGenerationRun = mutation({
-  args: {
-    chatId: v.id("chats"),
-    requestId: v.string(),
-    model: v.string(),
-    provider: v.string(),
-    chatVersion: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const { user } = await requireChatOwner(ctx, args.chatId)
-    const now = nowMs()
-    return await ctx.db.insert("generationRuns", {
-      chatId: args.chatId,
-      userId: user._id,
-      requestId: args.requestId,
-      model: args.model,
-      provider: args.provider,
-      status: "queued",
-      chatVersion: args.chatVersion,
-      updatedAt: now,
-    })
-  },
-})
-
 type GenerationApprovalResponse = {
   messageId: string
   approvalId: string
@@ -1157,7 +1121,6 @@ type PrepareGenerationForChatArgs = {
   requestId: string
   model: string
   provider: string
-  chatVersion?: number
   expectedVisibleMessageCount?: number
   tailMessageId?: string
   latestUserMessage?: {
@@ -1251,7 +1214,6 @@ export async function prepareGenerationForChat(
     model: args.model,
     provider: args.provider,
     status: "running",
-    chatVersion: args.chatVersion,
     startedAt: now,
     updatedAt: now,
   })
@@ -1357,7 +1319,6 @@ export const prepareGeneration = mutation({
     requestId: v.string(),
     model: v.string(),
     provider: v.string(),
-    chatVersion: v.optional(v.number()),
     expectedVisibleMessageCount: v.optional(v.number()),
     tailMessageId: v.optional(v.string()),
     latestUserMessage: v.optional(vStoredMessage),
@@ -1366,16 +1327,6 @@ export const prepareGeneration = mutation({
     approvalResponses: v.optional(v.array(vApprovalResponse)),
   },
   handler: async (ctx, args) => prepareGenerationForChat(ctx, args),
-})
-
-export const markGenerationRunRunning = mutation({
-  args: { runId: v.id("generationRuns") },
-  handler: async (ctx, { runId }) => {
-    const run = await ctx.db.get(runId)
-    if (!run) throw new Error("Run not found")
-    await requireChatOwner(ctx, run.chatId)
-    await ctx.db.patch(runId, { status: "running", updatedAt: nowMs() })
-  },
 })
 
 export const updateAssistantSnapshot = mutation({
@@ -1452,44 +1403,6 @@ export async function updateAssistantSnapshotForChat(
     })
     await ctx.db.patch(args.runId, {
       status: "streaming",
-      updatedAt: now,
-    })
-  }
-}
-
-export const appendStreamDelta = updateAssistantSnapshot
-
-export const markGenerationRunAwaitingApproval = mutation({
-  args: {
-    runId: v.id("generationRuns"),
-    messageId: v.optional(v.id("messages")),
-  },
-  handler: async (ctx, args) =>
-    markGenerationRunAwaitingApprovalForChat(ctx, args),
-})
-
-export async function markGenerationRunAwaitingApprovalForChat(
-  ctx: MutationCtx,
-  args: {
-    runId: Id<"generationRuns">
-    messageId?: Id<"messages">
-  }
-) {
-  const run = await ctx.db.get(args.runId)
-  if (!run) throw new Error("Run not found")
-  await requireChatOwner(ctx, run.chatId)
-  const messageId = args.messageId ?? run.assistantMessageId
-  if (messageId) {
-    await requireAssistantMessageForRun(ctx, run, messageId)
-  }
-  const now = nowMs()
-  await ctx.db.patch(args.runId, {
-    status: "awaiting_approval",
-    updatedAt: now,
-  })
-  if (messageId) {
-    await ctx.db.patch(messageId, {
-      status: "awaiting_approval",
       updatedAt: now,
     })
   }
@@ -1652,101 +1565,6 @@ export async function markGenerationRunAbortedForChat(
     assistantMessageId,
   })
 }
-
-export const listMessagesForChatPaginated = query({
-  args: {
-    chatId: v.id("chats"),
-    paginationOpts: paginationOptsValidator,
-  },
-  handler: async (ctx, args) => {
-    const chat = await getAuthorizedChatForRead(ctx, args.chatId)
-    if (!chat) return { page: [], isDone: true, continueCursor: "" }
-
-    const page = await ctx.db
-      .query("messages")
-      .withIndex("by_chat_order", (q) => q.eq("chatId", args.chatId))
-      .paginate(args.paginationOpts)
-
-    return {
-      ...page,
-      page: page.page.filter(isVisibleChatMessage),
-    }
-  },
-})
-
-export const listActiveRunsForChat = query({
-  args: { chatId: v.id("chats") },
-  handler: async (ctx, { chatId }) => {
-    const chat = await getAuthorizedChatForRead(ctx, chatId)
-    if (!chat) return []
-    const runs = await ctx.db
-      .query("generationRuns")
-      .withIndex("by_chat_updated", (q) => q.eq("chatId", chatId))
-      .order("desc")
-      .take(ACTIVE_RUN_SCAN_LIMIT)
-    return runs
-      .filter((run) => isActiveGenerationRunStatus(run.status))
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-  },
-})
-
-export const listStreamDeltasForRun = query({
-  args: { runId: v.id("generationRuns") },
-  handler: async (ctx, { runId }) => {
-    const run = await ctx.db.get(runId)
-    if (!run) return []
-    await requireChatOwner(ctx, run.chatId)
-    return await ctx.db
-      .query("assistantMessageSnapshots")
-      .withIndex("by_run_sequence", (q) => q.eq("runId", runId))
-      .collect()
-  },
-})
-
-export const getRecoverableChatState = query({
-  args: { chatId: v.id("chats") },
-  handler: async (ctx, { chatId }) => {
-    const chat = await getAuthorizedChatForRead(ctx, chatId)
-    if (!chat) return null
-
-    const messages = (await listMessages(ctx, chatId)).filter(
-      isVisibleChatMessage
-    )
-    const runs = await ctx.db
-      .query("generationRuns")
-      .withIndex("by_chat_updated", (q) => q.eq("chatId", chatId))
-      .order("desc")
-      .take(RECOVERABLE_RUN_SCAN_LIMIT)
-
-    if (chat.public) {
-      return {
-        chat,
-        messages: messages.filter((message) => message.status === "completed"),
-        activeRuns: [],
-        pendingApprovals: [],
-      }
-    }
-
-    const user = await getCurrentUser(ctx)
-    const pendingApprovals = user
-      ? await ctx.db
-          .query("toolApprovalRequests")
-          .withIndex("by_user_status", (q) =>
-            q.eq("userId", user._id).eq("status", "pending")
-          )
-          .collect()
-      : []
-
-    return {
-      chat,
-      messages,
-      activeRuns: runs.filter((run) => isActiveGenerationRunStatus(run.status)),
-      pendingApprovals: pendingApprovals.filter(
-        (approval) => approval.chatId === chatId
-      ),
-    }
-  },
-})
 
 export const createToolApprovalRequest = mutation({
   args: {

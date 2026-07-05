@@ -579,7 +579,6 @@ export function createChatTurnRuntime(args: {
             requestId,
             model,
             provider: resolvedProvider,
-            chatVersion: normalizedChatVersion,
             expectedVisibleMessageCount,
             tailMessageId,
             latestUserMessage: latestUserMessage

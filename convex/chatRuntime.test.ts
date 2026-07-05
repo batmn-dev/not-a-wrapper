@@ -6,7 +6,6 @@ import {
   createToolApprovalRequestForChat,
   denyPendingApprovalsForChat,
   markGenerationRunAbortedForChat,
-  markGenerationRunAwaitingApprovalForChat,
   markGenerationRunCompletedForChat,
   markGenerationRunFailedForChat,
   prepareGenerationForChat,
@@ -523,7 +522,6 @@ describe("prepareGenerationForChat", () => {
       requestId: "request_edit",
       model: "gpt-5",
       provider: "openai",
-      chatVersion: 1,
       edit: {
         editedMessageId: "user-1",
         editCutoffTimestamp: 1000,
@@ -573,7 +571,6 @@ describe("prepareGenerationForChat", () => {
       chatId,
       requestId: "request_edit",
       status: "streaming",
-      chatVersion: 1,
       assistantMessageId: result.assistantMessageId,
     })
     expect(chat).toMatchObject({
@@ -655,7 +652,6 @@ describe("prepareGenerationForChat", () => {
       requestId: "request_edit",
       model: "gpt-5",
       provider: "openai",
-      chatVersion: 3,
       edit: {
         editedMessageId: "message_user_1",
         editCutoffTimestamp: 1000,
@@ -1401,7 +1397,6 @@ describe("prepareGenerationForChat", () => {
       requestId: "request_regen",
       model: "gpt-5",
       provider: "openai",
-      chatVersion: 4,
       regeneration: {
         targetAssistantMessageId: "message_assistant_2",
         targetAssistantCreatedAt: 1003,
@@ -1492,7 +1487,6 @@ describe("prepareGenerationForChat", () => {
       requestId: "request_regen",
       model: "gpt-5",
       provider: "openai",
-      chatVersion: 4,
       regeneration: {
         targetAssistantMessageId: "message_assistant_1",
         targetAssistantCreatedAt: 1001,
@@ -2604,22 +2598,6 @@ describe("prepareGenerationForChat", () => {
 })
 
 describe("generation run linkage validation", () => {
-  it("rejects awaiting-approval updates for assistant messages outside the run", async () => {
-    const fixture = createGenerationRunLinkageFixture()
-    const { ctx, patches } = createMutationCtx(fixture.tables)
-
-    await expect(
-      markGenerationRunAwaitingApprovalForChat(ctx, {
-        runId: fixture.runId,
-        messageId: fixture.otherMessageId,
-      })
-    ).rejects.toThrow("Assistant message not found for run")
-
-    expect(patches).toEqual([])
-    expect(fixture.run.status).toBe("streaming")
-    expect(fixture.otherMessage.status).toBe("streaming")
-  })
-
   it("rejects completion updates for assistant messages outside the run", async () => {
     const fixture = createGenerationRunLinkageFixture()
     const { ctx, patches } = createMutationCtx(fixture.tables)
