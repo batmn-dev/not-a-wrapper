@@ -64,6 +64,17 @@ const modelSelectorMocks = {
       accessible: true,
     },
     {
+      id: "openrouter:openai/gpt-5.4",
+      name: "GPT-5.4",
+      provider: "OpenRouter",
+      providerId: "openrouter",
+      catalogStatus: "visible",
+      idKind: "wrapped",
+      baseProviderId: "openai",
+      icon: "openai",
+      accessible: true,
+    },
+    {
       id: "claude-opus-4-6",
       name: "Claude Opus 4.6",
       provider: "Anthropic",
@@ -184,10 +195,12 @@ describe("ModelSelector", () => {
     isUserAuthenticated,
     onSelect = vi.fn(),
     disabled = false,
+    selectedModelId = "gpt-5-mini",
   }: {
     isUserAuthenticated: boolean
     onSelect?: (modelId: string) => void
     disabled?: boolean
+    selectedModelId?: string
   }) {
     container = document.createElement("div")
     document.body.appendChild(container)
@@ -199,7 +212,7 @@ describe("ModelSelector", () => {
       return (
         <>
           <ModelSelector
-            selectedModelId="gpt-5-mini"
+            selectedModelId={selectedModelId}
             setSelectedModelId={onSelect}
             isUserAuthenticated={isUserAuthenticated}
             onLockedGuestModelSelect={() => setIsAuthPromptOpen(true)}
@@ -260,6 +273,34 @@ describe("ModelSelector", () => {
     expect(
       document.body.querySelector('[data-testid="pro-model-dialog"]')
     ).toBeNull()
+  })
+
+  it("keeps OpenRouter route labels in options, not the selected trigger", () => {
+    renderSelector({
+      isUserAuthenticated: false,
+      selectedModelId: "openrouter:openai/gpt-5.4",
+    })
+
+    const trigger = document.body.querySelector<HTMLButtonElement>(
+      '[data-testid="model-trigger"]'
+    )
+
+    expect(trigger?.textContent).toContain("GPT-5.4")
+    expect(trigger?.textContent).not.toContain("OpenRouter")
+    expect(trigger?.getAttribute("aria-label")).toBe(
+      "Select model, current model GPT-5.4"
+    )
+    expect(
+      Array.from(
+        document.body.querySelectorAll<HTMLButtonElement>(
+          '[data-testid="model-option"]'
+        )
+      ).some(
+        (option) =>
+          option.textContent?.includes("GPT-5.4") &&
+          option.textContent.includes("OpenRouter")
+      )
+    ).toBe(true)
   })
 
   it("disables the trigger and ignores option clicks when disabled", () => {

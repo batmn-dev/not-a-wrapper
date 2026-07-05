@@ -65,6 +65,15 @@ type ModelConfig = {
   thinkingBudget?: number
 
   /**
+   * Anthropic-only: when server-side search tools are active, Request shaping
+   * downgrades adaptive thinking to {type: "enabled", budgetTokens} (the
+   * pause_turn workaround). Set ONLY on 4.6-generation models — `budget_tokens`
+   * is removed upstream on Opus 4.7+/Sonnet 5/Fable 5 (HTTP 400; Fable 5
+   * accepts only adaptive or omitted thinking).
+   */
+  searchThinkingDowngrade?: boolean
+
+  /**
    * Construction-time reasoning settings, fed to the Provider strategy's
    * `languageModel(id, settings)` when the model is built. Only providers
    * whose reasoning knob is construction-time consume it (today: OpenRouter);

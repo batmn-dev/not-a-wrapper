@@ -123,6 +123,7 @@ export type XaiModel =
   | "grok-vision-beta"
   | "grok-beta"
   | "grok-4"
+  | "grok-4.3"
   | "grok-4-0709"
   | "grok-4-fast-reasoning"
   | "grok-4-fast-non-reasoning"

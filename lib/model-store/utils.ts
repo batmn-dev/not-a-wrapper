@@ -1,32 +1,44 @@
 import { getDefaultModelForUser, NON_AUTH_ALLOWED_MODELS } from "@/lib/config"
 import { getModelInfo } from "@/lib/models"
+import { openrouterModels } from "@/lib/models/data/openrouter"
 import { resolveModelId } from "@/lib/models/model-id-migration"
-import { ModelConfig } from "@/lib/models/types"
+import type { ModelConfig } from "@/lib/models/types"
 
 /**
- * Curated default model order for the model selector.
+ * Curated direct-provider model order for the model selector.
  * Models in this list appear first, in the exact order specified.
- * Models not in this list preserve their original array-declaration order.
  */
-export const DEFAULT_MODEL_ORDER: string[] = [
-  "claude-opus-4-6",
-  "claude-sonnet-4-6",
+const DIRECT_PROVIDER_DEFAULT_MODEL_ORDER: string[] = [
+  "claude-opus-4-8",
+  "claude-fable-5",
+  "claude-sonnet-5",
   "claude-haiku-4-5-20251001",
+  "gpt-5.5",
   "gpt-5.4",
   "gpt-5.4-pro",
+  "gpt-5.4-mini",
   "gpt-5-mini",
-  "gemini-2.5-pro",
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
-  "grok-4-1-fast-reasoning",
-  "grok-code-fast-1",
+  "gemini-3.1-pro-preview",
+  "gemini-3.5-flash",
+  "gemini-3.1-flash-lite",
+  "grok-4.3",
   "mistral-large-2512",
   "mistral-small-2506",
   "codestral-2508",
   "sonar",
   "sonar-reasoning-pro",
-  "openrouter:openai/gpt-oss-120b:free",
-  "openrouter:meta-llama/llama-3.3-70b-instruct:free",
+]
+
+/**
+ * Curated default model order for the model selector.
+ * Direct-provider IDs are curated above. Wrapped OpenRouter IDs are generated
+ * from the allowlist order, so derive that suffix from the generated catalog
+ * instead of keeping a second manual copy here.
+ * Models not in this list preserve their original array-declaration order.
+ */
+export const DEFAULT_MODEL_ORDER: string[] = [
+  ...DIRECT_PROVIDER_DEFAULT_MODEL_ORDER,
+  ...openrouterModels.map((model) => model.id),
 ]
 
 export function isModelVisibleInSelector(

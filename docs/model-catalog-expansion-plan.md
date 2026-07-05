@@ -1,20 +1,20 @@
 # Model catalog expansion — implementation plan
 
 **Status:** investigation complete, ready to implement. **Investigated:** 2026-07-04
-(all file:line references and live-API facts verified that day, on branch
-`darknight/bludhaven`; baseline `bunx tsc --noEmit` and `bun run test` green).
+(all file:line references and live-API facts verified that day; baseline
+`bunx tsc --noEmit` and `bun run test` green).
 
-> **Concurrency note (2026-07-04 ~23:30):** while this plan was being written,
-> a separate uncommitted refactor landed in the working tree touching
-> `lib/openproviders/{provider-map,create-language-model,model-factory,provider-strategy}.ts`,
-> `lib/models/types.ts`, and `scripts/smoke-openrouter.ts` — it split
-> `getProviderForModel` into `getProviderForResolvedModel` + a resolving
-> wrapper, centralized id resolution in the model factory, made the
-> `ModelReasoningSettings` variants mutually exclusive (`never` fields), and
-> stopped the smoke script printing masked key material. All citations below
-> were re-verified against that state. Nothing in it conflicts with this plan;
-> if those files move again before implementation, anchor on the quoted symbol
-> names, not just the line numbers.
+> **Provenance (updated 2026-07-05):** the investigation ran on
+> `darknight/bludhaven`, since squash-merged — the AI SDK v7 dependency train
+> landed as PR #97 (`d44515f`), and the OpenRouter free-model restore plus the
+> provider-strategy/provider-map refactor this plan cites (the
+> `getProviderForModel` → `getProviderForResolvedModel` split, id resolution
+> centralized in the model factory, mutually-exclusive `ModelReasoningSettings`
+> variants) landed as PR #98 (`063a4be`), which also carries this plan file.
+> All citations were re-verified against that committed state on 2026-07-05,
+> with `bunx tsc --noEmit` and `bun run test` green. If these files move again
+> before implementation, anchor on the quoted symbol names, not just the line
+> numbers.
 
 This document is self-contained: it carries the architecture decision, the
 evidence-cited model matrix, the verified seam inventory, phased steps, per-phase
@@ -30,7 +30,7 @@ models — a user who saves an OpenRouter key can reach almost nothing with it, 
 paid OpenRouter credits are structurally unspendable. The four direct-provider
 catalogs have also drifted behind current generations (Claude tops out at 4.6,
 OpenAI at GPT-5.4, Gemini at 2.5, Grok at 4.1-fast). The 2026-07-04 delisting
-incident (commit `f872214`: two `:free` ids vanished overnight) proved that any
+incident (PR #98, `063a4be`: two `:free` ids vanished overnight) proved that any
 expansion multiplies churn surface — the architecture below makes drift cheap to
 detect and cheap to fix.
 
@@ -98,8 +98,9 @@ The implementer should commit this as ADR 0007 (adjust number if taken):
 > **Status:** accepted **Date:** (implementation date)
 >
 > **Context.** The OpenRouter catalog is our highest-churn model surface:
-> `:free` ids get delisted without notice (2026-07-04 incident, commit
-> `f872214`), pricing and `supported_parameters` drift, and every entry carries
+> `:free` ids get delisted without notice (2026-07-04 incident, PR #98 merge
+> commit `063a4be`), pricing and `supported_parameters` drift, and every entry
+> carries
 > hand-maintained provenance fields (`verifiedAgainst`, `lastVerifiedAt`).
 > Expanding from 2 to ~28 wrapped entries multiplies that maintenance surface.
 > The live listing (`GET /api/v1/models`, keyless, free) is authoritative for

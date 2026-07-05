@@ -14,12 +14,35 @@ import type {
   ProviderHistoryAdapter,
 } from "./types"
 
+// Vendor prefixes that replay through the OpenAI-compatible adapter: OpenRouter
+// normalizes upstream traffic to the OpenAI chat-completions wire shape, and
+// that adapter preserves complete tool triples while stripping reasoning (which
+// must not be echoed back to reasoning models). Note "x-ai" carries a hyphen —
+// the OpenRouter slug prefix, unlike the direct-provider id "xai". This one
+// array is the single source of truth: it drives both the known-vendor set and
+// the registry wiring below, so adding a vendor is a one-line change that
+// cannot desync the two (a mismatch would route history through the wrong
+// adapter).
+const OPENAI_COMPATIBLE_VENDORS = [
+  "xai",
+  "mistral",
+  "x-ai",
+  "deepseek",
+  "z-ai",
+  "moonshotai",
+  "minimax",
+  "qwen",
+  "meta-llama",
+  "xiaomi",
+  "inclusionai",
+  "nvidia",
+] as const
+
 const KNOWN_UNDERLYING_PROVIDERS = [
   "anthropic",
   "openai",
   "google",
-  "xai",
-  "mistral",
+  ...OPENAI_COMPATIBLE_VENDORS,
 ] as const
 
 function extractUnderlyingProvider(
@@ -46,15 +69,16 @@ export const registry: AdapterRegistry = new Map<
 registry.set("openai", openaiAdapter)
 registry.set("anthropic", anthropicAdapter)
 registry.set("google", googleAdapter)
-registry.set("xai", openaiCompatibleAdapter)
-registry.set("mistral", openaiCompatibleAdapter)
 registry.set("perplexity", textOnlyAdapter)
+for (const vendor of OPENAI_COMPATIBLE_VENDORS) {
+  registry.set(vendor, openaiCompatibleAdapter)
+}
 
 type AdaptHistoryOptions = {
   useReplayCompiler?: boolean
 }
 
-function resolveAdapter(
+export function resolveAdapter(
   providerId: string,
   context: AdaptationContext
 ): { adapter: ProviderHistoryAdapter; effectiveProviderId: string } {

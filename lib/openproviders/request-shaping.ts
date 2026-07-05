@@ -68,6 +68,15 @@ export function shapeRequest(
  * API call (no pause_turn). For non-search requests, adaptive thinking works
  * correctly and is preferred. Delete this downgrade once the SDK handles
  * pause_turn continuation.
+ *
+ * The downgrade is CATALOG-DRIVEN via `searchThinkingDowngrade` (set on
+ * exactly the 4.6-generation adaptive models, where `budget_tokens` is
+ * deprecated but functional). On Opus 4.8/Sonnet 5/Fable 5 the parameter is
+ * removed upstream — sending it is an immediate HTTP 400, and Fable 5 rejects
+ * every non-adaptive thinking config — so unflagged adaptive models send
+ * {type: "adaptive"} unconditionally, search tools or not. If pause_turn
+ * zero-text responses recur on those models, fix it at the SDK level; do not
+ * resurrect the budget downgrade for 4.7+/5-generation models.
  */
 function resolveProviderOptions(
   modelConfig: ModelConfig,
@@ -77,7 +86,9 @@ function resolveProviderOptions(
 
   switch (modelConfig.providerId) {
     case "anthropic": {
-      if (modelConfig.thinkingMode === "adaptive" && !ctx.searchToolsActive) {
+      const downgradeForSearch =
+        modelConfig.searchThinkingDowngrade === true && ctx.searchToolsActive
+      if (modelConfig.thinkingMode === "adaptive" && !downgradeForSearch) {
         return { anthropic: { thinking: { type: "adaptive" } } }
       }
       const budgetTokens =
