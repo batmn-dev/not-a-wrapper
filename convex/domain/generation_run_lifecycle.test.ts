@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  isIgnoredSignal,
   isSupersedableGenerationRunStatus,
   isSupersedableMessageStatus,
   resolveGenerationRunTransition,
@@ -12,7 +13,6 @@ import {
 // A semantic, non-reused message — the "ordinary partial answer" facts. Terminal
 // signals stamp it; individual cases override the fields that carry the rule.
 const semanticFacts: AssistantMessageFacts = {
-  status: "streaming",
   hasSemanticParts: true,
   isReusedForRegeneration: false,
   hasSnapshotForRun: false,
@@ -71,6 +71,27 @@ describe("resolveGenerationRunTransition", () => {
       expect(
         resolve("aborted", { kind: "complete", hasPendingApprovals: false })
       ).toEqual({ kind: "ignore", reason: "already-terminal" })
+    })
+
+    // awaiting_approval is ACTIVE, not terminal — a paused run must still be
+    // closable by a failure or a user Stop (the old per-site guards allowed
+    // this; these rows pin that the isActive translation preserved it).
+    it("fail from awaiting_approval transitions to failed", () => {
+      expect(
+        resolve("awaiting_approval", { kind: "fail", error: "boom" })
+      ).toMatchObject({
+        kind: "transition",
+        run: { status: "failed", error: "boom", settle: true },
+      })
+    })
+
+    it("abort from awaiting_approval transitions to aborted", () => {
+      expect(
+        resolve("awaiting_approval", { kind: "abort", reason: "stop" })
+      ).toMatchObject({
+        kind: "transition",
+        run: { status: "aborted", settle: true },
+      })
     })
   })
 
@@ -214,7 +235,6 @@ describe("resolveTerminalAssistantMessageResolution — first match wins", () =>
     expect(
       resolveTerminalAssistantMessageResolution(
         {
-          status: "streaming",
           hasSemanticParts: true,
           isReusedForRegeneration: true,
           hasSnapshotForRun: false,
@@ -231,7 +251,6 @@ describe("resolveTerminalAssistantMessageResolution — first match wins", () =>
     expect(
       resolveTerminalAssistantMessageResolution(
         {
-          status: "streaming",
           hasSemanticParts: true,
           isReusedForRegeneration: true,
           hasSnapshotForRun: true,
@@ -246,7 +265,6 @@ describe("resolveTerminalAssistantMessageResolution — first match wins", () =>
     expect(
       resolveTerminalAssistantMessageResolution(
         {
-          status: "streaming",
           hasSemanticParts: false,
           isReusedForRegeneration: false,
           hasSnapshotForRun: false,
@@ -261,7 +279,6 @@ describe("resolveTerminalAssistantMessageResolution — first match wins", () =>
     expect(
       resolveTerminalAssistantMessageResolution(
         {
-          status: "streaming",
           hasSemanticParts: false,
           isReusedForRegeneration: false,
           hasSnapshotForRun: false,
@@ -278,7 +295,6 @@ describe("resolveTerminalAssistantMessageResolution — first match wins", () =>
     expect(
       resolveTerminalAssistantMessageResolution(
         {
-          status: "streaming",
           hasSemanticParts: false,
           isReusedForRegeneration: true,
           hasSnapshotForRun: false,
@@ -287,6 +303,35 @@ describe("resolveTerminalAssistantMessageResolution — first match wins", () =>
         outcome
       )
     ).toEqual({ kind: "delete-and-reselect", siblingId: "sibling_1" })
+  })
+})
+
+describe("isIgnoredSignal", () => {
+  it("agrees with the resolver's ignore column for every status × signal", () => {
+    const statuses = [
+      "queued",
+      "running",
+      "streaming",
+      "awaiting_approval",
+      "completed",
+      "aborted",
+      "failed",
+    ]
+    const signals: LifecycleSignal[] = [
+      { kind: "complete", hasPendingApprovals: true },
+      { kind: "fail", error: "boom" },
+      { kind: "abort", reason: "stop" },
+      { kind: "supersede", reason: "superseded" },
+      { kind: "approval-requested" },
+      { kind: "approvals-resolved", anyDenied: true },
+    ]
+    for (const status of statuses) {
+      for (const signal of signals) {
+        expect(isIgnoredSignal(status, signal.kind)).toBe(
+          resolve(status, signal).kind === "ignore"
+        )
+      }
+    }
   })
 })
 

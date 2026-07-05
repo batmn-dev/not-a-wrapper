@@ -34,7 +34,6 @@ export type LifecycleSignal =
  * so this module stays pure.
  */
 export type AssistantMessageFacts = {
-  status: unknown
   hasSemanticParts: boolean
   // message.createdAt < run.startedAt — a regeneration streaming into an older,
   // reused message rather than a fresh sibling.
@@ -60,7 +59,9 @@ export type MessageResolution =
   | { kind: "delete-and-reselect"; siblingId: string }
   | { kind: "restore-completed" }
 
-export type LifecycleVerdict =
+export type LifecycleVerdict<
+  M extends MessageResolution = MessageResolution,
+> =
   | { kind: "ignore"; reason: "already-terminal" | "not-supersedable" }
   | {
       kind: "transition"
@@ -74,7 +75,7 @@ export type LifecycleVerdict =
         // (from either a pending completion or an approval request) does not.
         settle: boolean
       }
-      message: MessageResolution
+      message: M
     }
 
 type TerminalOutcome = { status: "failed" | "aborted"; error?: string }
@@ -141,7 +142,19 @@ function terminalMessage(
  * facts for signals whose message half is the terminal policy (fail/abort/
  * supersede); it may be `null` for signals that stamp a fixed status or leave
  * the message to another owner (complete/approval-requested/approvals-resolved).
+ *
+ * The overloads narrow the verdict for the two signals whose message half is
+ * always a stamp, so call sites read `verdict.message.status` directly instead
+ * of guarding a branch the table never produces.
  */
+export function resolveGenerationRunTransition(
+  current: { runStatus: unknown; message: AssistantMessageFacts | null },
+  signal: Extract<LifecycleSignal, { kind: "complete" | "approval-requested" }>
+): LifecycleVerdict<Extract<MessageResolution, { kind: "stamp" }>>
+export function resolveGenerationRunTransition(
+  current: { runStatus: unknown; message: AssistantMessageFacts | null },
+  signal: LifecycleSignal
+): LifecycleVerdict
 export function resolveGenerationRunTransition(
   current: { runStatus: unknown; message: AssistantMessageFacts | null },
   signal: LifecycleSignal
@@ -273,6 +286,38 @@ export function resolveGenerationRunTransition(
       }
     }
   }
+}
+
+// Minimal signal per kind, used only to probe the ignore half of a rule. The
+// payload fields never influence whether a signal is ignored — only what the
+// resulting transition writes.
+const probeSignals: Record<LifecycleSignal["kind"], LifecycleSignal> = {
+  complete: { kind: "complete", hasPendingApprovals: false },
+  fail: { kind: "fail", error: "" },
+  abort: { kind: "abort" },
+  supersede: { kind: "supersede", reason: "" },
+  "approval-requested": { kind: "approval-requested" },
+  "approvals-resolved": { kind: "approvals-resolved", anyDenied: false },
+}
+
+/**
+ * Cheap gate: would `kind` on a run in `runStatus` resolve to ignore? The
+ * ignore half of every rule reads only the run status — never the message
+ * facts or the signal payload — so handlers may check this BEFORE paying the
+ * fact-gathering reads (the double-terminal races are exactly the paths where
+ * those reads are wasted). `resolveGenerationRunTransition` stays authoritative;
+ * this is a projection of its ignore column, not a second table.
+ */
+export function isIgnoredSignal(
+  runStatus: unknown,
+  kind: LifecycleSignal["kind"]
+): boolean {
+  return (
+    resolveGenerationRunTransition(
+      { runStatus, message: null },
+      probeSignals[kind]
+    ).kind === "ignore"
+  )
 }
 
 // Lifecycle vocabulary, not chatRuntime plumbing — supersedable run statuses are

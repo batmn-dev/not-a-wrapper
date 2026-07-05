@@ -2,6 +2,7 @@ import { v } from "convex/values"
 import type { Doc, Id } from "./_generated/dataModel"
 import { mutation, type MutationCtx, type QueryCtx } from "./_generated/server"
 import {
+  isIgnoredSignal,
   isSupersedableGenerationRunStatus,
   isSupersedableMessageStatus,
   resolveGenerationRunTransition,
@@ -375,7 +376,6 @@ async function gatherAssistantMessageFacts(
     message,
     messages,
     facts: {
-      status: message.status,
       hasSemanticParts,
       isReusedForRegeneration,
       hasSnapshotForRun,
@@ -412,7 +412,7 @@ async function applyMessageResolution(
       })
       return message._id
     case "delete-and-reselect": {
-      // Only re-select when the placeholder was the selected branch (L341 guard).
+      // Only re-select when the placeholder was the selected branch.
       if (message.selected === true && messages) {
         const sibling = messages.find(
           (candidate) => candidate._id === resolution.siblingId
@@ -541,7 +541,6 @@ async function closeSupersededGenerationsForChat(
       message,
       resolveTerminalAssistantMessageResolution(
         {
-          status: message.status,
           hasSemanticParts: hasSemantic,
           isReusedForRegeneration: false,
           hasSnapshotForRun: false,
@@ -558,19 +557,24 @@ async function closeSupersededGenerationsForChat(
       !supersededRunIds.has(message.generationRunId)
     ) {
       const run = await ctx.db.get(message.generationRunId)
-      if (
-        run &&
-        run.chatId === chatId &&
-        isSupersedableGenerationRunStatus(run.status)
-      ) {
-        await ctx.db.patch(run._id, {
-          status: "aborted",
-          error: reason,
-          completedAt: now,
-          updatedAt: now,
-          activeStreamId: undefined,
-          assistantMessageId: supersededMessageId,
-        })
+      if (run && run.chatId === chatId) {
+        // The message half was already resolved above; the run closes via the
+        // lifecycle's supersede rule like the in-window runs, with message:null
+        // so the verdict does not restate it.
+        const verdict = resolveGenerationRunTransition(
+          { runStatus: run.status, message: null },
+          { kind: "supersede", reason }
+        )
+        if (verdict.kind === "transition") {
+          await ctx.db.patch(run._id, {
+            status: verdict.run.status,
+            error: verdict.run.error,
+            completedAt: verdict.run.settle ? now : undefined,
+            updatedAt: now,
+            activeStreamId: undefined,
+            assistantMessageId: supersededMessageId,
+          })
+        }
       }
     }
   }
@@ -1534,6 +1538,9 @@ export async function markGenerationRunCompletedForChat(
   // live in the Generation run lifecycle's `complete` rule. `hasPendingApprovals`
   // is fact-gathering for it; the message payload (content/parts/metadata/usage)
   // and the run's usage/toolCounts stay here — the module decides status only.
+  // Gate before gathering: the ignore decision reads only the run status, and
+  // the already-terminal case is the racing duplicate this guard exists for.
+  if (isIgnoredSignal(run.status, "complete")) return
   const hasPendingApprovals =
     (await ctx.db
       .query("toolApprovalRequests")
@@ -1548,9 +1555,7 @@ export async function markGenerationRunCompletedForChat(
   if (verdict.kind === "ignore") return
   await requireAssistantMessageForRun(ctx, run, args.messageId)
   const now = nowMs()
-  // `complete` always resolves the message to a stamp of the run's status.
-  const status =
-    verdict.message.kind === "stamp" ? verdict.message.status : "completed"
+  const status = verdict.message.status
 
   await ctx.db.patch(args.messageId, {
     content: args.content,
@@ -1596,7 +1601,10 @@ export async function markGenerationRunFailedForChat(
   await requireChatOwner(ctx, run.chatId)
   const now = nowMs()
   // Failed may overwrite completed but never aborted — the Generation run
-  // lifecycle's `fail` rule owns that convergence and the message half.
+  // lifecycle's `fail` rule owns that convergence and the message half. Gate
+  // before gathering: the ignore decision reads only the run status, and the
+  // already-settled case is the racing duplicate this rule absorbs.
+  if (isIgnoredSignal(run.status, "fail")) return
   const resolved = await gatherAssistantMessageFacts(ctx, run, args.messageId)
   const verdict = resolveGenerationRunTransition(
     { runStatus: run.status, message: resolved?.facts ?? null },
@@ -1628,7 +1636,10 @@ export async function markGenerationRunAbortedForChat(
   await requireChatOwner(ctx, run.chatId)
   const now = nowMs()
   // First-terminal-wins and the empty-placeholder policy both live in the
-  // Generation run lifecycle's `abort` rule now.
+  // Generation run lifecycle's `abort` rule. Gate before gathering: the ignore
+  // decision reads only the run status, and the double-terminal race (onAbort
+  // vs envelope finish) is exactly where the gather reads would be wasted.
+  if (isIgnoredSignal(run.status, "abort")) return
   const resolved = await gatherAssistantMessageFacts(ctx, run, args.messageId)
   const verdict = resolveGenerationRunTransition(
     { runStatus: run.status, message: resolved?.facts ?? null },
@@ -1725,10 +1736,7 @@ export async function createToolApprovalRequestForChat(
     updatedAt: now,
   })
   await ctx.db.patch(args.assistantMessageId, {
-    status:
-      verdict.message.kind === "stamp"
-        ? verdict.message.status
-        : "awaiting_approval",
+    status: verdict.message.status,
     updatedAt: now,
   })
 
