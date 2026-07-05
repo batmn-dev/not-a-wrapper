@@ -16,8 +16,8 @@ export type ModelReasoningEffort =
  * one knob: an effort level or a reasoning-token budget.
  */
 export type ModelReasoningSettings =
-  | { effort: ModelReasoningEffort }
-  | { maxTokens: number }
+  | { effort: ModelReasoningEffort; maxTokens?: never }
+  | { maxTokens: number; effort?: never }
 
 type ModelConfig = {
   id: string // "gpt-5-mini" // same from AI SDKs

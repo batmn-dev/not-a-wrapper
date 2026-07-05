@@ -1,8 +1,13 @@
-import { describe, expect, it } from "vitest"
+import * as modelIdMigration from "@/lib/models/model-id-migration"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { getAllModels, getModelInfo } from "../models"
-import { getProviderForModel } from "./provider-map"
+import { getProviderForModel, getProviderForResolvedModel } from "./provider-map"
 
 describe("getProviderForModel", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it("resolves migrated legacy IDs before provider lookup", () => {
     expect(getProviderForModel("deepseek-r1")).toBe("openrouter")
     expect(getProviderForModel("codestral-latest")).toBe("mistral")
@@ -19,6 +24,18 @@ describe("getProviderForModel", () => {
       getProviderForModel("openrouter:google/gemini-2.0-flash-lite-001")
     ).toBe("openrouter")
     expect(getProviderForModel("openrouter:openai/gpt-4.1")).toBe("openrouter")
+  })
+
+  it("routes resolved IDs without applying migration rules again", () => {
+    const resolveModelIdSpy = vi.spyOn(modelIdMigration, "resolveModelId")
+
+    expect(
+      getProviderForResolvedModel("openrouter:openai/gpt-oss-120b:free")
+    ).toBe("openrouter")
+    expect(resolveModelIdSpy).not.toHaveBeenCalled()
+
+    expect(getProviderForModel("mistral-small-2503")).toBe("mistral")
+    expect(resolveModelIdSpy).toHaveBeenCalledWith("mistral-small-2503")
   })
 
   it("routes canonical and fast non-reasoning Grok IDs", () => {

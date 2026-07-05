@@ -120,17 +120,17 @@ const FALLBACK_PROVIDER_MAP: Record<string, Provider> = {
   "grok-code-fast-1": "xai",
 }
 
-export function getProviderForModel(model: string): Provider {
-  const resolvedModel = resolveModelId(model)
-
-  if (resolvedModel.startsWith("openrouter:")) {
+export function getProviderForResolvedModel(model: string): Provider {
+  if (model.startsWith("openrouter:")) {
     return "openrouter"
   }
 
-  const provider =
-    getModelInfo(resolvedModel)?.providerId ??
-    FALLBACK_PROVIDER_MAP[resolvedModel]
+  const provider = getModelInfo(model)?.providerId ?? FALLBACK_PROVIDER_MAP[model]
   if (provider) return provider
 
-  throw new Error(`Unknown provider for model: ${resolvedModel}`)
+  throw new Error(`Unknown provider for model: ${model}`)
+}
+
+export function getProviderForModel(model: string): Provider {
+  return getProviderForResolvedModel(resolveModelId(model))
 }

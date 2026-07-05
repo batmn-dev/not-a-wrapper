@@ -1,5 +1,5 @@
 import { resolveModelId } from "@/lib/models/model-id-migration"
-import { getProviderForModel } from "./provider-map"
+import { getProviderForResolvedModel } from "./provider-map"
 import {
   getProviderStrategy,
   type ModelConstructionSettings,
@@ -22,7 +22,7 @@ export function createProviderLanguageModel<T extends SupportedModel | string>(
   settings?: ModelConstructionSettings
 ): ProviderLanguageModel {
   const resolvedModelId = resolveModelId(modelId)
-  const provider = getProviderForModel(resolvedModelId)
+  const provider = getProviderForResolvedModel(resolvedModelId)
   return getProviderStrategy(provider)
     .instance(apiKey)
     .languageModel(resolvedModelId, settings)

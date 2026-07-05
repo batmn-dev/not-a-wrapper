@@ -1,4 +1,3 @@
-import { resolveModelId } from "@/lib/models/model-id-migration"
 import type { ModelConfig } from "@/lib/models/types"
 import { createProviderLanguageModel } from "./model-factory"
 import type { ProviderLanguageModel } from "./provider-strategy"
@@ -13,10 +12,10 @@ export function createLanguageModel(
   apiKey?: string
 ): ProviderLanguageModel {
   if (typeof model === "string") {
-    return createProviderLanguageModel(resolveModelId(model), apiKey)
+    return createProviderLanguageModel(model, apiKey)
   }
   return createProviderLanguageModel(
-    resolveModelId(model.id),
+    model.id,
     apiKey,
     model.reasoning ? { reasoning: model.reasoning } : undefined
   )

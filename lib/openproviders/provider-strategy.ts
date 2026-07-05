@@ -45,11 +45,11 @@ function toOpenRouterChatModelId(modelId: string): string {
 function toOpenRouterChatSettings(settings?: ModelConstructionSettings) {
   const reasoning = settings?.reasoning
   if (!reasoning) return undefined
+  if (reasoning.maxTokens !== undefined) {
+    return { reasoning: { max_tokens: reasoning.maxTokens } }
+  }
   return {
-    reasoning:
-      "maxTokens" in reasoning
-        ? { max_tokens: reasoning.maxTokens }
-        : { effort: reasoning.effort },
+    reasoning: { effort: reasoning.effort },
   }
 }
 

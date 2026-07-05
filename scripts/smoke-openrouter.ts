@@ -21,11 +21,11 @@
  * Not wired into CI: it needs a live key and the free pool saturates at peak
  * hours — treat failures here as diagnosis input, not build health.
  */
+import { existsSync, readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import { openrouterModels } from "@/lib/models/data/openrouter"
 import { createLanguageModel } from "@/lib/openproviders/create-language-model"
 import { streamText } from "ai"
-import { existsSync, readFileSync } from "node:fs"
-import { fileURLToPath } from "node:url"
 
 const MODELS_ENDPOINT = "https://openrouter.ai/api/v1/models"
 const PER_MODEL_TIMEOUT_MS = 60_000
@@ -44,7 +44,10 @@ function loadDotEnvLocal(): void {
     if (!line || line.startsWith("#")) continue
     const eq = line.indexOf("=")
     if (eq <= 0) continue
-    const key = line.slice(0, eq).replace(/^export\s+/, "").trim()
+    const key = line
+      .slice(0, eq)
+      .replace(/^export\s+/, "")
+      .trim()
     let value = line.slice(eq + 1).trim()
     if (
       (value.startsWith('"') && value.endsWith('"')) ||
@@ -54,10 +57,6 @@ function loadDotEnvLocal(): void {
     }
     if (!(key in process.env)) process.env[key] = value
   }
-}
-
-function maskKey(key: string): string {
-  return key.length > 14 ? `${key.slice(0, 10)}…${key.slice(-3)}` : "…"
 }
 
 function classifyFailure(error: unknown): string {
@@ -80,7 +79,9 @@ function classifyFailure(error: unknown): string {
 
 async function checkLiveCatalog(): Promise<Verdict[]> {
   const verdicts: Verdict[] = []
-  const response = await fetch(MODELS_ENDPOINT)
+  const response = await fetch(MODELS_ENDPOINT, {
+    signal: AbortSignal.timeout(PER_MODEL_TIMEOUT_MS),
+  })
   if (!response.ok) {
     return openrouterModels.map((config) => ({
       model: config.id,
@@ -182,22 +183,21 @@ async function main(): Promise<void> {
   loadDotEnvLocal()
   const apiKey =
     process.env.SMOKE_OPENROUTER_KEY || process.env.OPENROUTER_API_KEY
+  const keySource = process.env.SMOKE_OPENROUTER_KEY
+    ? "SMOKE_OPENROUTER_KEY override"
+    : "OPENROUTER_API_KEY"
   console.log(
     `OpenRouter smoke — ${
-      apiKey
-        ? `key ${maskKey(apiKey)}${
-            process.env.SMOKE_OPENROUTER_KEY
-              ? " (SMOKE_OPENROUTER_KEY override)"
-              : ""
-          }`
-        : "NO KEY (catalog checks only)"
+      apiKey ? `key present (${keySource})` : "NO KEY (catalog checks only)"
     }, ${openrouterModels.length} catalog model(s)\n`
   )
 
   console.log("1) Live catalog listing")
   const catalogVerdicts = await checkLiveCatalog()
   for (const verdict of catalogVerdicts) {
-    console.log(`   ${verdict.status === "OK" ? "✓" : "✗"} ${verdict.model} — ${verdict.detail}`)
+    console.log(
+      `   ${verdict.status === "OK" ? "✓" : "✗"} ${verdict.model} — ${verdict.detail}`
+    )
   }
 
   const generationVerdicts: Verdict[] = []
@@ -206,14 +206,16 @@ async function main(): Promise<void> {
     for (const config of openrouterModels) {
       const verdict = await smokeModel(config, apiKey)
       generationVerdicts.push(verdict)
-      console.log(`   ${verdict.status === "OK" ? "✓" : "✗"} ${verdict.model} — ${verdict.detail}`)
+      console.log(
+        `   ${verdict.status === "OK" ? "✓" : "✗"} ${verdict.model} — ${verdict.detail}`
+      )
     }
   } else {
     console.log(
       "\n2) SKIPPED live generation — no key in the shell or .env.local.\n" +
         "   The app resolves OpenRouter via a BYOK key stored in Convex, which\n" +
         "   this script cannot decrypt. Run the full smoke with your key:\n" +
-        "     SMOKE_OPENROUTER_KEY=sk-or-v1-… bun run smoke:openrouter\n" +
+        "     SMOKE_OPENROUTER_KEY=your-openrouter-key bun run smoke:openrouter\n" +
         "   or add OPENROUTER_API_KEY to .env.local."
     )
   }
