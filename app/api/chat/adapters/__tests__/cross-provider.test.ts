@@ -449,7 +449,7 @@ describe("cross-provider replay matrix", () => {
         messages,
         "unknown-provider",
         {
-          targetModelId: "meta-llama/llama-4-maverick",
+          targetModelId: "unknown-org/mystery-model",
           hasTools: true,
         }
       )
@@ -457,7 +457,7 @@ describe("cross-provider replay matrix", () => {
         messages,
         "openrouter",
         {
-          targetModelId: "meta-llama/llama-4-maverick",
+          targetModelId: "unknown-org/mystery-model",
           hasTools: true,
         }
       )

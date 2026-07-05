@@ -20,6 +20,17 @@ const KNOWN_UNDERLYING_PROVIDERS = [
   "google",
   "xai",
   "mistral",
+  // OpenRouter slug vendor prefixes (note "x-ai" with hyphen, unlike direct "xai")
+  "x-ai",
+  "deepseek",
+  "z-ai",
+  "moonshotai",
+  "minimax",
+  "qwen",
+  "meta-llama",
+  "xiaomi",
+  "inclusionai",
+  "nvidia",
 ] as const
 
 function extractUnderlyingProvider(
@@ -49,12 +60,26 @@ registry.set("google", googleAdapter)
 registry.set("xai", openaiCompatibleAdapter)
 registry.set("mistral", openaiCompatibleAdapter)
 registry.set("perplexity", textOnlyAdapter)
+// OpenRouter-wrapped vendors: OpenRouter normalizes upstream traffic to the
+// OpenAI chat-completions wire shape, so replay history the same way — the
+// openai-compatible adapter preserves complete tool triples and strips
+// reasoning (which must not be echoed back to reasoning models).
+registry.set("x-ai", openaiCompatibleAdapter)
+registry.set("deepseek", openaiCompatibleAdapter)
+registry.set("z-ai", openaiCompatibleAdapter)
+registry.set("moonshotai", openaiCompatibleAdapter)
+registry.set("minimax", openaiCompatibleAdapter)
+registry.set("qwen", openaiCompatibleAdapter)
+registry.set("meta-llama", openaiCompatibleAdapter)
+registry.set("xiaomi", openaiCompatibleAdapter)
+registry.set("inclusionai", openaiCompatibleAdapter)
+registry.set("nvidia", openaiCompatibleAdapter)
 
 type AdaptHistoryOptions = {
   useReplayCompiler?: boolean
 }
 
-function resolveAdapter(
+export function resolveAdapter(
   providerId: string,
   context: AdaptationContext
 ): { adapter: ProviderHistoryAdapter; effectiveProviderId: string } {
