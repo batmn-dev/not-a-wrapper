@@ -9,14 +9,19 @@
  * (the 2026-07-04 delisting incident class: `:free` ids vanish and pools
  * saturate; see lib/models/data/openrouter.ts header).
  *
- * Run:  bun run smoke:openrouter
+ * Run:  bun run smoke:openrouter                       (keyless: catalog checks)
+ *       bun run smoke:openrouter -- --model <id>       (target one entry)
+ *       bun run smoke:openrouter -- --paid             (keyed: include paid models)
  * Key:  OPENROUTER_API_KEY from the shell or .env.local. The key is always
  *       passed explicitly into createLanguageModel — the same arm production
  *       uses for both BYOK and env-resolved keys. Set SMOKE_OPENROUTER_KEY to
  *       try a different key (e.g. a user's) without touching .env.local.
  *
- * Cost: both catalog models are `:free` → $0.00. Requests count against the
- *       free-tier daily cap (50/day under $10 lifetime credits).
+ * Cost: keyed mode generates against `:free` entries only ($0.00; counts
+ *       against the free-tier daily cap) unless --paid is passed. --paid
+ *       prints an estimated cost table first (≈60 input + ≤600 output tokens
+ *       per model at catalog prices — the whole paid set is well under
+ *       $0.25/run) and caps generations at 600 output tokens.
  *
  * Not wired into CI: it needs a live key and the free pool saturates at peak
  * hours — treat failures here as diagnosis input, not build health.
@@ -77,13 +82,15 @@ function classifyFailure(error: unknown): string {
   return message
 }
 
-async function checkLiveCatalog(): Promise<Verdict[]> {
+async function checkLiveCatalog(
+  models: readonly (typeof openrouterModels)[number][]
+): Promise<Verdict[]> {
   const verdicts: Verdict[] = []
   const response = await fetch(MODELS_ENDPOINT, {
     signal: AbortSignal.timeout(PER_MODEL_TIMEOUT_MS),
   })
   if (!response.ok) {
-    return openrouterModels.map((config) => ({
+    return models.map((config) => ({
       model: config.id,
       status: "FAIL",
       detail: `${MODELS_ENDPOINT} returned ${response.status} — cannot verify listing`,
@@ -94,7 +101,7 @@ async function checkLiveCatalog(): Promise<Verdict[]> {
   }
   const liveById = new Map(body.data.map((entry) => [entry.id, entry]))
 
-  for (const config of openrouterModels) {
+  for (const config of models) {
     const bareId = config.id.replace(/^openrouter:/, "")
     const live = liveById.get(bareId)
     if (!live) {
@@ -125,13 +132,19 @@ async function checkLiveCatalog(): Promise<Verdict[]> {
 
 async function smokeModel(
   config: (typeof openrouterModels)[number],
-  apiKey: string
+  apiKey: string,
+  options: { maxOutputTokens?: number } = {}
 ): Promise<Verdict> {
   try {
     const result = streamText({
       model: createLanguageModel(config, apiKey),
       prompt: "Smoke test: reply with exactly one word: ok",
       abortSignal: AbortSignal.timeout(PER_MODEL_TIMEOUT_MS),
+      // Paid mode caps spend while leaving room for reasoning tokens so
+      // reasoning models still produce text after thinking.
+      ...(options.maxOutputTokens
+        ? { maxOutputTokens: options.maxOutputTokens }
+        : {}),
     })
 
     let sawReasoningDelta = false
@@ -179,8 +192,42 @@ async function smokeModel(
   }
 }
 
+const ESTIMATED_INPUT_TOKENS = 60
+const PAID_MAX_OUTPUT_TOKENS = 600
+
+function isFreeModel(config: (typeof openrouterModels)[number]): boolean {
+  return (config.inputCost ?? 0) === 0 && (config.outputCost ?? 0) === 0
+}
+
+function estimatedCostUsd(config: (typeof openrouterModels)[number]): number {
+  return (
+    (ESTIMATED_INPUT_TOKENS / 1_000_000) * (config.inputCost ?? 0) +
+    (PAID_MAX_OUTPUT_TOKENS / 1_000_000) * (config.outputCost ?? 0)
+  )
+}
+
 async function main(): Promise<void> {
   loadDotEnvLocal()
+  const args = process.argv.slice(2)
+  const paidMode = args.includes("--paid")
+  const modelFlagIndex = args.indexOf("--model")
+  const targetModelId = modelFlagIndex >= 0 ? args[modelFlagIndex + 1] : null
+  if (modelFlagIndex >= 0 && !targetModelId) {
+    console.error("--model requires a catalog id argument")
+    process.exit(1)
+  }
+
+  const selectedModels = targetModelId
+    ? openrouterModels.filter((config) => config.id === targetModelId)
+    : openrouterModels
+  if (targetModelId && selectedModels.length === 0) {
+    console.error(
+      `Unknown catalog id "${targetModelId}". Valid ids:\n` +
+        openrouterModels.map((config) => `  ${config.id}`).join("\n")
+    )
+    process.exit(1)
+  }
+
   const apiKey =
     process.env.SMOKE_OPENROUTER_KEY || process.env.OPENROUTER_API_KEY
   const keySource = process.env.SMOKE_OPENROUTER_KEY
@@ -189,11 +236,11 @@ async function main(): Promise<void> {
   console.log(
     `OpenRouter smoke — ${
       apiKey ? `key present (${keySource})` : "NO KEY (catalog checks only)"
-    }, ${openrouterModels.length} catalog model(s)\n`
+    }, ${selectedModels.length} catalog model(s)${paidMode ? ", PAID mode" : ""}\n`
   )
 
   console.log("1) Live catalog listing")
-  const catalogVerdicts = await checkLiveCatalog()
+  const catalogVerdicts = await checkLiveCatalog(selectedModels)
   for (const verdict of catalogVerdicts) {
     console.log(
       `   ${verdict.status === "OK" ? "✓" : "✗"} ${verdict.model} — ${verdict.detail}`
@@ -202,9 +249,43 @@ async function main(): Promise<void> {
 
   const generationVerdicts: Verdict[] = []
   if (apiKey) {
+    // Keyed generation spends real money on paid entries — default to the
+    // `:free` set; --paid opts into the full selection with a cost preview.
+    const generationModels = paidMode
+      ? selectedModels
+      : selectedModels.filter(isFreeModel)
+    const skippedPaidCount = selectedModels.length - generationModels.length
+
+    if (paidMode) {
+      const paidModels = generationModels.filter(
+        (config) => !isFreeModel(config)
+      )
+      if (paidModels.length > 0) {
+        console.log(
+          `\n   Estimated cost (≈${ESTIMATED_INPUT_TOKENS} input + ≤${PAID_MAX_OUTPUT_TOKENS} output tokens each):`
+        )
+        let total = 0
+        for (const config of paidModels) {
+          const cost = estimatedCostUsd(config)
+          total += cost
+          console.log(`     $${cost.toFixed(4)}  ${config.id}`)
+        }
+        console.log(`     $${total.toFixed(4)}  TOTAL`)
+      }
+    }
+
     console.log("\n2) Live streamed generation through the production factory")
-    for (const config of openrouterModels) {
-      const verdict = await smokeModel(config, apiKey)
+    if (skippedPaidCount > 0) {
+      console.log(
+        `   (skipping ${skippedPaidCount} paid model(s) — pass --paid to include them)`
+      )
+    }
+    for (const config of generationModels) {
+      const verdict = await smokeModel(
+        config,
+        apiKey,
+        paidMode ? { maxOutputTokens: PAID_MAX_OUTPUT_TOKENS } : {}
+      )
       generationVerdicts.push(verdict)
       console.log(
         `   ${verdict.status === "OK" ? "✓" : "✗"} ${verdict.model} — ${verdict.detail}`

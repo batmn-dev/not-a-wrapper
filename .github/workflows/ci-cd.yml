@@ -41,6 +41,12 @@ jobs:
       - name: Run TypeScript checks
         run: bun run typecheck
 
+      # Offline + deterministic: regenerates from the committed snapshot +
+      # allowlist and fails on drift (including hand-edits to the generated
+      # file). No network access.
+      - name: Verify generated OpenRouter catalog is in sync
+        run: bun run catalog:openrouter:check
+
       - name: Run Convex schema deploy contract tests
         run: bunx vitest run scripts/convex-schema-contract-lib.test.mjs
 
