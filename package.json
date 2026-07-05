@@ -20,6 +20,7 @@
     "env:check": "node scripts/validate-env.mjs .env.local",
     "start": "next start",
     "lint": "eslint .",
+    "smoke:openrouter": "bun scripts/smoke-openrouter.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
