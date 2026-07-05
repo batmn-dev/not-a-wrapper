@@ -196,7 +196,7 @@ const ESTIMATED_INPUT_TOKENS = 60
 const PAID_MAX_OUTPUT_TOKENS = 600
 
 function isFreeModel(config: (typeof openrouterModels)[number]): boolean {
-  return (config.inputCost ?? 0) === 0 && (config.outputCost ?? 0) === 0
+  return config.inputCost === 0 && config.outputCost === 0
 }
 
 function estimatedCostUsd(config: (typeof openrouterModels)[number]): number {
@@ -211,7 +211,8 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2)
   const paidMode = args.includes("--paid")
   const modelFlagIndex = args.indexOf("--model")
-  const targetModelId = modelFlagIndex >= 0 ? args[modelFlagIndex + 1] : null
+  const modelArg = modelFlagIndex >= 0 ? args[modelFlagIndex + 1] : null
+  const targetModelId = modelArg?.startsWith("--") ? null : modelArg
   if (modelFlagIndex >= 0 && !targetModelId) {
     console.error("--model requires a catalog id argument")
     process.exit(1)
@@ -238,7 +239,12 @@ async function main(): Promise<void> {
   // exercise it; without --paid the generation would be silently skipped and
   // the run would exit 0 having generated nothing — reading as "verified" to a
   // human or a CI wrapper. Fail loudly instead.
-  if (apiKey && targetModelId && !paidMode && !isFreeModel(selectedModels[0]!)) {
+  if (
+    apiKey &&
+    targetModelId &&
+    !paidMode &&
+    !isFreeModel(selectedModels[0]!)
+  ) {
     console.error(
       `"${targetModelId}" is a paid model; a keyed run skips it without --paid, ` +
         `so nothing would be generated. Re-run with --paid to spend real ` +

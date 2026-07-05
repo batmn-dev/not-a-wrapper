@@ -442,7 +442,7 @@ export const openrouterModels: ModelConfig[] = [
     priceUnit: "per 1M tokens",
     vision: true,
     tools: true,
-    audio: false,
+    audio: true,
     reasoningText: true,
     reasoning: {
       effort: "medium",
@@ -477,7 +477,7 @@ export const openrouterModels: ModelConfig[] = [
     priceUnit: "per 1M tokens",
     vision: true,
     tools: true,
-    audio: false,
+    audio: true,
     reasoningText: true,
     reasoning: {
       effort: "medium",
@@ -512,7 +512,7 @@ export const openrouterModels: ModelConfig[] = [
     priceUnit: "per 1M tokens",
     vision: true,
     tools: true,
-    audio: false,
+    audio: true,
     reasoningText: true,
     reasoning: {
       effort: "medium",
@@ -924,7 +924,7 @@ export const openrouterModels: ModelConfig[] = [
     priceUnit: "per 1M tokens",
     vision: true,
     tools: true,
-    audio: false,
+    audio: true,
     reasoningText: true,
     reasoning: {
       effort: "medium",

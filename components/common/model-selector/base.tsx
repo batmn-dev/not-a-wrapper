@@ -43,6 +43,10 @@ type ModelSelectorProps = {
   variant?: "default" | "composer"
 }
 
+function getModelRouteLabel(model: ModelConfig | null | undefined) {
+  return model?.providerId === "openrouter" ? "OpenRouter" : null
+}
+
 export function ModelSelector({
   className,
   isUserAuthenticated = true,
@@ -132,6 +136,7 @@ export function ModelSelector({
   const renderModelItem = (model: ModelConfig) => {
     const isLocked = !isModelSelectableForAuthState(model, isUserAuthenticated)
     const provider = PROVIDERS.find((provider) => provider.id === model.icon)
+    const routeLabel = getModelRouteLabel(model)
 
     return (
       <div
@@ -148,8 +153,10 @@ export function ModelSelector({
             <span className="text-sm">{model.name}</span>
             {/* Dual-route disambiguation: wrapped entries can share a name and
                 vendor icon with their direct sibling (e.g. GPT-5.5). */}
-            {model.providerId === "openrouter" && (
-              <span className="text-muted-foreground text-xs">OpenRouter</span>
+            {routeLabel && (
+              <span className="text-muted-foreground text-xs">
+                {routeLabel}
+              </span>
             )}
           </div>
         </div>
@@ -325,6 +332,7 @@ export function ModelSelector({
                   const provider = PROVIDERS.find(
                     (provider) => provider.id === model.icon
                   )
+                  const routeLabel = getModelRouteLabel(model)
 
                   return (
                     <DropdownMenuItem
@@ -343,9 +351,9 @@ export function ModelSelector({
                         {/* Dual-route disambiguation: wrapped entries can share
                             a name and vendor icon with their direct sibling
                             (e.g. GPT-5.5). */}
-                        {model.providerId === "openrouter" && (
+                        {routeLabel && (
                           <span className="text-muted-foreground shrink-0 text-xs">
-                            OpenRouter
+                            {routeLabel}
                           </span>
                         )}
                       </div>

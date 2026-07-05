@@ -73,7 +73,8 @@ const grokModels: ModelConfig[] = [
     catalogStatus: "legacy",
     replacementModelId: "grok-4.3",
     idKind: "stable",
-    lastVerifiedAt: "2026-03-08",
+    verifiedAgainst: "grok-4-1-fast-reasoning",
+    lastVerifiedAt: "2026-07-03",
     modelFamily: "Grok",
     baseProviderId: "xai",
     description:

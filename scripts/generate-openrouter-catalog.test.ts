@@ -1,12 +1,17 @@
 import type { OpenRouterAllowlistEntry } from "@/lib/models/data/openrouter.allowlist"
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   buildCatalog,
+  fetchLiveListing,
   MissingAllowlistedIdsError,
   pricePerMillionTokens,
   type OpenRouterSnapshot,
   type OpenRouterSnapshotModel,
 } from "./generate-openrouter-catalog"
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 function snapshotModel(
   overrides: Partial<OpenRouterSnapshotModel> & { id: string }
@@ -49,7 +54,7 @@ describe("generate-openrouter-catalog invariants", () => {
         snapshotModel({
           id: "vendor/reasoner",
           supported_parameters: ["reasoning", "tools"],
-          architecture: { input_modalities: ["text", "image"] },
+          architecture: { input_modalities: ["text", "image", "audio"] },
           pricing: { prompt: "0.000000574", completion: "0.000001804" },
         }),
         snapshotModel({
@@ -77,6 +82,7 @@ describe("generate-openrouter-catalog invariants", () => {
       reasoning: { effort: "medium" },
       vision: true,
       tools: true,
+      audio: true,
       webSearch: false,
       apiDocs: "https://openrouter.ai/vendor/reasoner",
     })
@@ -88,6 +94,7 @@ describe("generate-openrouter-catalog invariants", () => {
     expect(plain?.reasoningText).toBe(false)
     expect(plain?.reasoning).toBeUndefined()
     expect(plain?.vision).toBe(false)
+    expect(plain?.audio).toBe(false)
     expect(plain?.webSearch).toBe(false)
     // Null max_completion_tokens → field omitted entirely.
     expect(plain && "maxOutput" in plain).toBe(false)
@@ -119,5 +126,16 @@ describe("generate-openrouter-catalog invariants", () => {
     expect(pricePerMillionTokens("0.000002")).toBe(2)
     expect(pricePerMillionTokens("0.00000001")).toBe(0.01)
     expect(pricePerMillionTokens("0.0000015")).toBe(1.5)
+  })
+
+  it("fails explicitly when the live listing JSON shape changes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ data: null })))
+    )
+
+    await expect(fetchLiveListing()).rejects.toThrowError(
+      "https://openrouter.ai/api/v1/models returned an unexpected JSON shape"
+    )
   })
 })

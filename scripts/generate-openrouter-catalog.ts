@@ -192,7 +192,7 @@ export function buildModelConfig(
     priceUnit: "per 1M tokens",
     vision: snapshotModel.architecture.input_modalities.includes("image"),
     tools: snapshotModel.supported_parameters.includes("tools"),
-    audio: false,
+    audio: snapshotModel.architecture.input_modalities.includes("audio"),
     reasoningText: reasoningSupported,
     ...(reasoningSupported ? { reasoning: { effort: "medium" as const } } : {}),
     // No native search tool on the OpenRouter path (provider-strategy.ts).
@@ -278,6 +278,16 @@ function writeSnapshot(snapshot: OpenRouterSnapshot): void {
   writeFileSync(SNAPSHOT_PATH, `${JSON.stringify(snapshot, null, 2)}\n`)
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function isRecordArray(
+  value: unknown
+): value is Array<Record<string, unknown>> {
+  return Array.isArray(value) && value.every(isRecord)
+}
+
 async function generateFromCommittedFiles(): Promise<string> {
   const snapshot = readCommittedSnapshot()
   const configs = buildCatalog(snapshot, OPENROUTER_ALLOWLIST)
@@ -286,15 +296,20 @@ async function generateFromCommittedFiles(): Promise<string> {
   )
 }
 
-async function fetchLiveListing(): Promise<Array<Record<string, unknown>>> {
+export async function fetchLiveListing(): Promise<
+  Array<Record<string, unknown>>
+> {
   const response = await fetch(MODELS_ENDPOINT, {
     signal: AbortSignal.timeout(60_000),
   })
   if (!response.ok) {
     throw new Error(`${MODELS_ENDPOINT} returned HTTP ${response.status}`)
   }
-  const body = (await response.json()) as {
-    data: Array<Record<string, unknown>>
+  const body: unknown = await response.json()
+  if (!isRecord(body) || !isRecordArray(body.data)) {
+    throw new Error(
+      `${MODELS_ENDPOINT} returned an unexpected JSON shape: expected { data: Array<object> }`
+    )
   }
   return body.data
 }

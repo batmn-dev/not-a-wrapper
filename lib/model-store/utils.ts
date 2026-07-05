@@ -1,14 +1,14 @@
 import { getDefaultModelForUser, NON_AUTH_ALLOWED_MODELS } from "@/lib/config"
 import { getModelInfo } from "@/lib/models"
+import { openrouterModels } from "@/lib/models/data/openrouter"
 import { resolveModelId } from "@/lib/models/model-id-migration"
-import { ModelConfig } from "@/lib/models/types"
+import type { ModelConfig } from "@/lib/models/types"
 
 /**
- * Curated default model order for the model selector.
+ * Curated direct-provider model order for the model selector.
  * Models in this list appear first, in the exact order specified.
- * Models not in this list preserve their original array-declaration order.
  */
-export const DEFAULT_MODEL_ORDER: string[] = [
+const DIRECT_PROVIDER_DEFAULT_MODEL_ORDER: string[] = [
   "claude-opus-4-8",
   "claude-fable-5",
   "claude-sonnet-5",
@@ -27,36 +27,18 @@ export const DEFAULT_MODEL_ORDER: string[] = [
   "codestral-2508",
   "sonar",
   "sonar-reasoning-pro",
-  // Wrapped OpenRouter entries: frees first, then the paid set in the
-  // allowlist's curated order (lib/models/data/openrouter.allowlist.ts).
-  "openrouter:openai/gpt-oss-120b:free",
-  "openrouter:meta-llama/llama-3.3-70b-instruct:free",
-  "openrouter:qwen/qwen3-coder:free",
-  "openrouter:google/gemma-4-26b-a4b-it:free",
-  "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
-  "openrouter:anthropic/claude-sonnet-5",
-  "openrouter:anthropic/claude-opus-4.8",
-  "openrouter:anthropic/claude-fable-5",
-  "openrouter:anthropic/claude-haiku-4.5",
-  "openrouter:openai/gpt-5.5",
-  "openrouter:openai/gpt-5.4",
-  "openrouter:openai/gpt-5.4-mini",
-  "openrouter:google/gemini-3.5-flash",
-  "openrouter:google/gemini-3.1-pro-preview",
-  "openrouter:google/gemini-3.1-flash-lite",
-  "openrouter:x-ai/grok-4.3",
-  "openrouter:deepseek/deepseek-v4-pro",
-  "openrouter:deepseek/deepseek-v4-flash",
-  "openrouter:z-ai/glm-5.2",
-  "openrouter:z-ai/glm-5",
-  "openrouter:moonshotai/kimi-k2.6",
-  "openrouter:minimax/minimax-m3",
-  "openrouter:minimax/minimax-m2.5",
-  "openrouter:qwen/qwen3.7-max",
-  "openrouter:qwen/qwen3-coder",
-  "openrouter:meta-llama/llama-4-maverick",
-  "openrouter:xiaomi/mimo-v2.5",
-  "openrouter:inclusionai/ling-2.6-flash",
+]
+
+/**
+ * Curated default model order for the model selector.
+ * Direct-provider IDs are curated above. Wrapped OpenRouter IDs are generated
+ * from the allowlist order, so derive that suffix from the generated catalog
+ * instead of keeping a second manual copy here.
+ * Models not in this list preserve their original array-declaration order.
+ */
+export const DEFAULT_MODEL_ORDER: string[] = [
+  ...DIRECT_PROVIDER_DEFAULT_MODEL_ORDER,
+  ...openrouterModels.map((model) => model.id),
 ]
 
 export function isModelVisibleInSelector(

@@ -98,8 +98,8 @@ The implementer should commit this as ADR 0007 (adjust number if taken):
 > **Status:** accepted **Date:** (implementation date)
 >
 > **Context.** The OpenRouter catalog is our highest-churn model surface:
-> `:free` ids get delisted without notice (2026-07-04 incident, commit
-> PR #98, `063a4be`), pricing and `supported_parameters` drift, and every entry
+> `:free` ids get delisted without notice (2026-07-04 incident, PR #98 merge
+> commit `063a4be`), pricing and `supported_parameters` drift, and every entry
 > carries
 > hand-maintained provenance fields (`verifiedAgainst`, `lastVerifiedAt`).
 > Expanding from 2 to ~28 wrapped entries multiplies that maintenance surface.

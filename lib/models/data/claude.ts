@@ -155,8 +155,7 @@ const claudeModels: ModelConfig[] = [
     lastVerifiedAt: "2026-07-05",
     modelFamily: "Claude 4.6",
     baseProviderId: "claude",
-    description:
-      "Previous Sonnet generation with adaptive thinking support.",
+    description: "Previous Sonnet generation with adaptive thinking support.",
     tags: ["balanced", "fast", "reasoning", "coding"],
     // 1M ctx / 128k out per the Anthropic legacy-models table (was 200k/64k).
     contextWindow: 1000000,
@@ -188,7 +187,7 @@ const claudeModels: ModelConfig[] = [
     providerId: "anthropic",
     catalogStatus: "legacy",
     idKind: "snapshot",
-    replacementModelId: "claude-sonnet-4-6",
+    replacementModelId: "claude-sonnet-5",
     verifiedAgainst: "claude-sonnet-4-5-20250929",
     lastVerifiedAt: "2026-03-08",
     modelFamily: "Claude 4.5",
