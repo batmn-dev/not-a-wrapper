@@ -2663,6 +2663,43 @@ describe("generation run linkage validation", () => {
     expect(patches).toEqual([])
   })
 
+  it("ignores a late approval request on a run a Stop already aborted (zombie-repaint fix)", async () => {
+    // User Stop settles the run first; then a late approval-request write from
+    // the stream's persistence transform arrives. It must not repaint the run
+    // awaiting_approval nor accrue a pending row (which would feed
+    // hasPendingApprovals on a future completion) — the Generation run
+    // lifecycle's approval-requested rule ignores the terminal run.
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const fixture = createGenerationRunLinkageFixture()
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunAbortedForChat(ctx, {
+      runId: fixture.runId,
+      messageId: fixture.messageId,
+      reason: "stream aborted",
+    })
+    expect(fixture.run.status).toBe("aborted")
+
+    const approvalRequestId = await createToolApprovalRequestForChat(ctx, {
+      chatId: fixture.chatId,
+      runId: fixture.runId,
+      assistantMessageId: fixture.messageId,
+      toolCallId: "call_late",
+      toolName: "send_email",
+      source: "mcp",
+      riskClass: "destructive",
+      approvalId: "approval_late",
+    })
+
+    expect(approvalRequestId).toBeNull()
+    expect(fixture.tables.toolApprovalRequests).toEqual([])
+    expect(fixture.run.status).toBe("aborted")
+    expect(fixture.message).toMatchObject({
+      status: "aborted",
+      error: "stream aborted",
+    })
+  })
+
   it("rejects tool invocations for assistant messages outside the run", async () => {
     const fixture = createGenerationRunLinkageFixture()
     const { ctx, inserts, patches } = createMutationCtx(fixture.tables)
@@ -2955,6 +2992,35 @@ describe("applyApprovalResponses", () => {
         },
       },
     ])
+  })
+
+  it("does not repaint a run a racing Stop already aborted (zombie-repaint fix)", async () => {
+    // The paused run was settled aborted by a user Stop before the approval
+    // continuation landed. Resolving the approvals must NOT flip the aborted run
+    // back to completed — the Generation run lifecycle's approvals-resolved rule
+    // ignores an already-terminal run.
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const fixture = createApprovalContinuationFixture([
+      {
+        approvalId: "approval_1",
+        approved: true,
+        toolCallId: "call_1",
+        toolName: "read_file",
+      },
+    ])
+    fixture.run.status = "aborted"
+    fixture.run.completedAt = 1699999999999
+    fixture.run.activeStreamId = undefined
+    const { ctx, patches } = createMutationCtx(fixture.tables)
+
+    await applyApprovalResponses(ctx, fixture.owner, fixture.responses)
+
+    expect(fixture.run).toMatchObject({
+      status: "aborted",
+      completedAt: 1699999999999,
+    })
+    // The run is left untouched — no close patch fires against the settled run.
+    expect(patches.filter((patch) => patch.id === fixture.run._id)).toEqual([])
   })
 })
 
