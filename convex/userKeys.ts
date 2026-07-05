@@ -40,7 +40,10 @@ export const getProviderStatus = maybeAuthQuery({
 })
 
 /**
- * Get API key for a specific provider
+ * Get API key for a specific provider.
+ *
+ * Includes `ownerId` (the caller's WorkOS subject) so the server can rebuild the
+ * AAD binding needed to decrypt — the same identifier the encrypting route used.
  */
 export const getByProvider = maybeAuthQuery({
   args: { provider: v.string() },
@@ -55,7 +58,10 @@ export const getByProvider = maybeAuthQuery({
       )
       .collect()
 
-    return keys[0] ?? null
+    const key = keys[0]
+    if (!key) return null
+
+    return { ...key, ownerId: user.workosUserId }
   },
 })
 

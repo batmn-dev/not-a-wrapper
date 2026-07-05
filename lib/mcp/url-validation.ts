@@ -209,3 +209,26 @@ export async function validateResolvedUrl(url: string): Promise<string | null> {
 
   return null
 }
+
+/**
+ * The single SSRF gate every outbound MCP connection must pass through.
+ *
+ * Combines the pure string check (`validateServerUrl`) with the DNS-resolving
+ * rebinding check (`validateResolvedUrl`) and throws on the first failure, so a
+ * caller cannot connect to a URL that skipped one layer. Both the transient
+ * "test connection" path (`app/api/mcp-servers/test`) and the durable chat
+ * runtime (`lib/mcp/load-tools.ts`) call this before handing a URL to the MCP
+ * transport — there is no other sanctioned way to open an MCP connection.
+ *
+ * Requires a Node runtime (uses `node:dns` via `validateResolvedUrl`); do not
+ * call from the Convex runtime, which keeps its own mirrored string check.
+ *
+ * @throws Error with the specific rejection reason if the URL is disallowed.
+ */
+export async function assertMcpUrlAllowed(url: string): Promise<void> {
+  const stringError = validateServerUrl(url)
+  if (stringError) throw new Error(stringError)
+
+  const dnsError = await validateResolvedUrl(url)
+  if (dnsError) throw new Error(dnsError)
+}

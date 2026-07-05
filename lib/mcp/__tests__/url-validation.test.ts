@@ -1,6 +1,7 @@
 import * as dns from "node:dns/promises"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
+  assertMcpUrlAllowed,
   isPrivateIP,
   isPrivateIPv6,
   validateResolvedUrl,
@@ -478,5 +479,54 @@ describe("validateResolvedUrl", () => {
       const result = await validateResolvedUrl("https://evil.example.com")
       expect(result).toMatch(/resolves to private IPv6/)
     })
+  })
+})
+
+// =============================================================================
+// assertMcpUrlAllowed — the single SSRF chokepoint (string + DNS)
+// =============================================================================
+
+describe("assertMcpUrlAllowed", () => {
+  const mockResolve4 = vi.mocked(dns.resolve4)
+  const mockResolve6 = vi.mocked(dns.resolve6)
+
+  beforeEach(() => {
+    mockResolve4.mockReset()
+    mockResolve6.mockReset()
+    mockResolve6.mockRejectedValue(new Error("ENOTFOUND"))
+  })
+
+  it("throws on the cloud metadata IP", async () => {
+    await expect(
+      assertMcpUrlAllowed("http://169.254.169.254/latest/meta-data/")
+    ).rejects.toThrow(/Private IP/)
+  })
+
+  it("throws on localhost and loopback", async () => {
+    await expect(assertMcpUrlAllowed("http://localhost:6379")).rejects.toThrow()
+    await expect(assertMcpUrlAllowed("http://127.0.0.1:5432")).rejects.toThrow()
+  })
+
+  it("throws on private IPv4 ranges", async () => {
+    await expect(assertMcpUrlAllowed("http://10.0.0.5")).rejects.toThrow()
+    await expect(assertMcpUrlAllowed("http://192.168.1.1")).rejects.toThrow()
+  })
+
+  it("throws on a public hostname that resolves to a private IP (rebinding)", async () => {
+    mockResolve4.mockResolvedValue(["169.254.169.254"])
+    await expect(
+      assertMcpUrlAllowed("https://rebind.evil.example.com")
+    ).rejects.toThrow(/DNS rebinding|private IP/i)
+  })
+
+  it("rejects non-http(s) schemes", async () => {
+    await expect(assertMcpUrlAllowed("file:///etc/passwd")).rejects.toThrow()
+  })
+
+  it("allows a public hostname resolving to a public IP", async () => {
+    mockResolve4.mockResolvedValue(["93.184.216.34"])
+    await expect(
+      assertMcpUrlAllowed("https://mcp.example.com")
+    ).resolves.toBeUndefined()
   })
 })

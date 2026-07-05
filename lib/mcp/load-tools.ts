@@ -5,11 +5,11 @@ import {
   MCP_MAX_TOOLS_PER_REQUEST,
   MCP_TRUSTED_RETRY_SERVER_ALLOWLIST,
 } from "@/lib/config"
-import { decryptKey } from "@/lib/encryption"
+import { decryptSecret } from "@/lib/encryption"
 import { createMCPClient } from "@ai-sdk/mcp"
 import { fetchMutation, fetchQuery } from "convex/nextjs"
 import { isCircuitOpen, recordFailure, recordSuccess } from "./circuit-breaker"
-import { validateResolvedUrl } from "./url-validation"
+import { assertMcpUrlAllowed } from "./url-validation"
 
 // =============================================================================
 // Types
@@ -184,17 +184,24 @@ function isRetrySafetyTrustedServer(server: RetryTrustServer): boolean {
  * Build auth headers for an MCP server connection.
  * Decrypts the stored auth value using AES-256-GCM (same pattern as BYOK keys).
  */
-function buildAuthHeaders(server: {
-  authType?: "none" | "bearer" | "header"
-  encryptedAuthValue?: string
-  authIv?: string
-  headerName?: string
-}): Record<string, string> | undefined {
+function buildAuthHeaders(
+  server: {
+    authType?: "none" | "bearer" | "header"
+    encryptedAuthValue?: string
+    authIv?: string
+    headerName?: string
+  },
+  ownerId: string
+): Record<string, string> | undefined {
   if (!server.authType || server.authType === "none") return undefined
   if (!server.encryptedAuthValue || !server.authIv) return undefined
 
   try {
-    const decryptedValue = decryptKey(server.encryptedAuthValue, server.authIv)
+    const decryptedValue = decryptSecret(
+      server.encryptedAuthValue,
+      server.authIv,
+      { kind: "mcpAuth", ownerId }
+    )
 
     if (server.authType === "bearer") {
       return { Authorization: `Bearer ${decryptedValue}` }
@@ -300,10 +307,15 @@ export async function loadUserMcpTools(
   // -------------------------------------------------------------------------
   // 1. Load server configs + tool approvals in parallel (~50-100ms Convex RTT)
   // -------------------------------------------------------------------------
-  const [allServers, allApprovals] = await Promise.all([
+  const [allServers, allApprovals, currentUser] = await Promise.all([
     fetchQuery(api.mcpServers.list, {}, { token: convexToken }),
     fetchQuery(api.mcpToolApprovals.listByUser, {}, { token: convexToken }),
+    fetchQuery(api.users.getCurrent, {}, { token: convexToken }),
   ])
+
+  // Owner's WorkOS subject — the AAD binding the stored auth values were
+  // encrypted under. Without it we cannot decrypt server auth headers.
+  const ownerId = currentUser?.workosUserId
 
   const enabledServers = allServers.filter((s) => s.enabled)
   if (enabledServers.length === 0) return emptyResult
@@ -343,11 +355,14 @@ export async function loadUserMcpTools(
   // -------------------------------------------------------------------------
   const clientResults = await Promise.allSettled(
     serversToConnect.map(async (server) => {
-      // DNS rebinding guard — resolve hostname and reject private IPs
-      const dnsError = await validateResolvedUrl(server.url)
-      if (dnsError) throw new Error(dnsError)
+      // SSRF gate — string + DNS-rebinding checks. Shared with the transient
+      // test-connection path so both routes enforce one policy. A stored URL
+      // passed the string check at create time, but re-run it here: DNS can
+      // rebind and the create-time check can be bypassed by calling the Convex
+      // mutation directly.
+      await assertMcpUrlAllowed(server.url)
 
-      const headers = buildAuthHeaders(server)
+      const headers = ownerId ? buildAuthHeaders(server, ownerId) : undefined
 
       // Hold a reference to the client promise so we can clean up orphaned
       // connections when the timeout wins the race (prevents resource leaks).

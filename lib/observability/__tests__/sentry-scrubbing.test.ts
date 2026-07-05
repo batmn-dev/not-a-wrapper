@@ -1,0 +1,89 @@
+import {
+  containsSecret,
+  redactSecretsInString,
+} from "@/lib/observability/secret-patterns"
+import { sentryBeforeSend } from "@/lib/observability/sentry-scrubbing"
+import { describe, expect, it } from "vitest"
+
+describe("secret value detection", () => {
+  it("matches the key shapes this app brokers", () => {
+    for (const s of [
+      "sk-proj-abcdefgh12345678",
+      "sk-ant-api03-abcdefgh12345678",
+      "sk-or-v1-abcdefgh12345678",
+      "fc-abcdefgh12345678",
+      "Bearer sk-abcdefgh12345678",
+      "ghp_abcdefgh12345678",
+      "xoxb-abcdefgh12345678",
+      "AKIAIOSFODNN7EXAMPLE",
+    ]) {
+      expect(containsSecret(s)).toBe(true)
+    }
+  })
+
+  it("does not flag ordinary dashed identifiers", () => {
+    for (const s of [
+      "550e8400-e29b-41d4-a716-446655440000", // uuid
+      "flex-row-gap-2",
+      "chat-abc",
+      "model-id-migration",
+    ]) {
+      expect(containsSecret(s)).toBe(false)
+    }
+  })
+
+  it("redacts only the secret run, preserving surrounding text", () => {
+    expect(
+      redactSecretsInString(
+        "Incorrect API key provided: sk-ant-api03-abcd1234efgh"
+      )
+    ).toBe("Incorrect API key provided: [REDACTED]")
+  })
+})
+
+describe("sentryBeforeSend", () => {
+  it("redacts a key embedded in an exception message (value-level, innocuous path)", () => {
+    const event = {
+      exception: {
+        values: [
+          {
+            type: "AuthenticationError",
+            // No sensitive KEY name here — only key-value scrubbing would miss this.
+            value:
+              "401 Incorrect API key provided: sk-ant-api03-verysecretvalue00",
+          },
+        ],
+      },
+    }
+    const scrubbed = sentryBeforeSend(event)
+    const message = scrubbed.exception.values[0].value
+    expect(message).not.toContain("sk-ant-api03-verysecretvalue00")
+    expect(message).toContain("[REDACTED]")
+  })
+
+  it("still redacts by sensitive key name", () => {
+    const event = {
+      request: {
+        headers: { authorization: "Bearer sk-secret", cookie: "session=abc" },
+      },
+    }
+    const scrubbed = sentryBeforeSend(event) as typeof event
+    expect(scrubbed.request.headers.authorization).toBe("[REDACTED]")
+    expect(scrubbed.request.headers.cookie).toBe("[REDACTED]")
+  })
+
+  it("redacts secret-shaped values nested in arrays and objects", () => {
+    const event = {
+      breadcrumbs: [
+        { data: { note: "retrying with sk-or-v1-anothersecret000" } },
+      ],
+    }
+    const scrubbed = sentryBeforeSend(event)
+    expect(JSON.stringify(scrubbed)).not.toContain("sk-or-v1-anothersecret000")
+  })
+
+  it("leaves non-sensitive content intact", () => {
+    const event = { tags: { route: "api/chat", model: "gpt-5" } }
+    expect(sentryBeforeSend(event)).toEqual(event)
+  })
+})

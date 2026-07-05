@@ -39,11 +39,14 @@ vi.mock("@/convex/_generated/api", () => ({
     mcpToolApprovals: {
       listByUser: "mcpToolApprovals:listByUser",
     },
+    users: {
+      getCurrent: "users:getCurrent",
+    },
   },
 }))
 
 vi.mock("@/lib/encryption", () => ({
-  decryptKey: vi.fn((encrypted: string) => `decrypted_${encrypted}`),
+  decryptSecret: vi.fn((encrypted: string) => `decrypted_${encrypted}`),
 }))
 
 vi.mock("@/lib/config", () => ({
@@ -169,6 +172,15 @@ describe("loadUserMcpTools", () => {
     mockTrustedRetryAllowlist.length = 0
     // fetchMutation is fire-and-forget with .catch() — must return a promise
     mockFetchMutation.mockResolvedValue(undefined)
+    // The parallel load fires three fetchQuery calls: mcpServers.list,
+    // mcpToolApprovals.listByUser, then users.getCurrent. Tests queue the first
+    // two via mockResolvedValueOnce; this fallback answers getCurrent (and any
+    // otherwise-unqueued call) so the owner id needed to decrypt auth resolves.
+    mockFetchQuery.mockImplementation((ref: unknown) =>
+      Promise.resolve(
+        ref === "users:getCurrent" ? { workosUserId: "test-user" } : []
+      )
+    )
     // Suppress console output in tests
     vi.spyOn(console, "error").mockImplementation(() => {})
     vi.spyOn(console, "warn").mockImplementation(() => {})

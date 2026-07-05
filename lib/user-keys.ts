@@ -1,6 +1,6 @@
 import { api } from "@/convex/_generated/api"
 import { fetchQuery } from "convex/nextjs"
-import { decryptKey } from "./encryption"
+import { decryptSecret } from "./encryption"
 import { getProviderStrategy } from "./openproviders/provider-strategy"
 import { Provider } from "./openproviders/types"
 
@@ -54,7 +54,11 @@ export async function getUserKeyFromConvex(
       return null
     }
 
-    return decryptKey(userKey.encryptedKey, userKey.iv)
+    return decryptSecret(userKey.encryptedKey, userKey.iv, {
+      kind: "userKey",
+      ownerId: userKey.ownerId,
+      provider,
+    })
   } catch (error) {
     console.error("Error fetching user key from Convex:", error)
     return null

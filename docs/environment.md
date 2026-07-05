@@ -36,8 +36,18 @@ Required local `.env.local` values:
 openssl rand -base64 32
 ```
 
-Do not rotate `ENCRYPTION_KEY` after users have saved API keys unless you also
-migrate existing encrypted values. Existing encrypted keys will stop decrypting.
+To rotate `ENCRYPTION_KEY` without downtime, move the current value to
+`ENCRYPTION_KEY_PREVIOUS` (optional, comma-separated for multiple old keys) and
+set `ENCRYPTION_KEY` to the new key. Decryption tries the new key first, then each
+previous key, so saved secrets keep working while they are lazily re-encrypted on
+next write; drop `ENCRYPTION_KEY_PREVIOUS` once every row has been re-encrypted.
+Rotating without keeping the old key in `ENCRYPTION_KEY_PREVIOUS` makes existing
+encrypted secrets undecryptable (owners must re-enter them).
+
+Stored secrets are also bound (AES-GCM AAD) to their owner + provider/purpose, so
+ciphertext copied to another user or provider fails to decrypt rather than
+leaking. Ciphertext is versioned (`v2`); rows written before this format must be
+re-entered.
 
 For local WorkOS AuthKit, configure:
 
