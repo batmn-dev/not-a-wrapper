@@ -22,6 +22,24 @@ re-generates offline and fails on diff (wired into CI). Generation fails
 loudly when an allowlisted id is absent from the snapshot, printing the
 succession stub for `lib/models/model-id-migration.ts`.
 
+## Curation Policy
+
+The allowlist is intentionally selective. Per vendor, keep at most the
+flagship + workhorse models, plus one specialist where the family warrants it
+(for example, a coder model). Anthropic can carry about four wrapped entries;
+other vendors should normally stay around two or three. This keeps the selector
+useful without turning OpenRouter into a duplicate of the live marketplace.
+
+`:free` pool entries must have either `tools` or `reasoning` in
+`supported_parameters`, at least a 128k context window, and a total free-pool
+cap around six entries. Router pseudo-models, image/audio/video models, and
+vendor variants that only duplicate a direct catalog entry or a cheaper wrapped
+entry are excluded unless there is new product evidence for exposing them.
+
+When a snapshot refresh shows an allowlisted id is gone, remove it from
+`lib/models/data/openrouter.allowlist.ts` and add a single-hop succession entry
+in `lib/models/model-id-migration.ts` targeting a live catalog id.
+
 **Consequences.** Catalog drift is detected by CI (`--check`) and by the
 keyless smoke (`bun run smoke:openrouter`), and fixed by one command plus a
 curated diff review. Editorial quality stays human-owned in the allowlist.

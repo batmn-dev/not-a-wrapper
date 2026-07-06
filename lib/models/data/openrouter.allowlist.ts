@@ -9,7 +9,8 @@ import type { ModelConfig } from "../types"
  * that rot live in the snapshot; anything a human should word or rank lives
  * here. Refresh: `bun run catalog:openrouter:refresh`.
  *
- * Curation policy (see docs/model-catalog-expansion-plan.md §8-E8): per vendor
+ * Curation policy (see docs/adr/0007-snapshot-generated-openrouter-catalog.md):
+ * per vendor
  * keep at most flagship + workhorse (+1 specialist where the family warrants
  * it, e.g. coder), cap ~4/vendor (Anthropic) and ~2-3 elsewhere. `:free` pool
  * entries must have `tools` or `reasoning` in `supported_parameters` AND
