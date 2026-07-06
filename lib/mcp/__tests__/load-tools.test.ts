@@ -1,3 +1,4 @@
+import { decryptSecret } from "@/lib/encryption"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { recordFailure, resetAllCircuits } from "../circuit-breaker"
 // =============================================================================
@@ -331,6 +332,101 @@ describe("loadUserMcpTools", () => {
 
       expect(issueInfo?.retrySafetyTrusted).toBe(true)
       expect(issueInfo?.policyHintsTrusted).toBe(true)
+    })
+  })
+
+  // ===========================================================================
+  // Auth headers
+  // ===========================================================================
+
+  describe("auth headers", () => {
+    it("passes decrypted bearer auth headers to the MCP transport", async () => {
+      const server = mockServer({
+        name: "Authenticated",
+        authType: "bearer",
+        encryptedAuthValue: "encrypted-token",
+        authIv: "iv-1",
+      })
+      const client = mockClient({
+        protected_tool: mockTool("protected_tool"),
+      })
+
+      mockFetchQuery.mockResolvedValueOnce([server]).mockResolvedValueOnce([])
+
+      mockCreateMCPClient.mockResolvedValue(client)
+
+      const result = await loadUserMcpTools("test-token")
+
+      expect(result.tools).toHaveProperty("authenticated_protected_tool")
+      expect(decryptSecret).toHaveBeenCalledWith("encrypted-token", "iv-1", {
+        kind: "mcpAuth",
+        ownerId: "test-user",
+      })
+      expect(mockCreateMCPClient).toHaveBeenCalledWith({
+        transport: {
+          type: "http",
+          url: "https://mcp.example.com",
+          headers: { Authorization: "Bearer decrypted_encrypted-token" },
+        },
+      })
+    })
+
+    it("fails closed for auth-required servers when owner identity is unavailable", async () => {
+      const server = mockServer({
+        authType: "bearer",
+        encryptedAuthValue: "encrypted-token",
+        authIv: "iv-1",
+      })
+
+      mockFetchQuery.mockImplementation((ref: unknown) => {
+        if (ref === "mcpServers:list") return Promise.resolve([server])
+        if (ref === "mcpToolApprovals:listByUser") return Promise.resolve([])
+        if (ref === "users:getCurrent") return Promise.resolve(null)
+        return Promise.resolve([])
+      })
+
+      const result = await loadUserMcpTools("test-token")
+
+      expect(mockCreateMCPClient).not.toHaveBeenCalled()
+      expect(result.tools).toEqual({})
+      expect(result.clients).toHaveLength(0)
+      expect(result.failedServerCount).toBe(1)
+      expect(mockFetchMutation).toHaveBeenCalledWith(
+        "mcpServers:updateConnectionStatus",
+        {
+          serverId: "server_1",
+          lastError: "Cannot load MCP auth headers: missing owner identity",
+        },
+        { token: "test-token" }
+      )
+    })
+
+    it("fails closed for auth-required servers when auth decryption fails", async () => {
+      const server = mockServer({
+        authType: "bearer",
+        encryptedAuthValue: "encrypted-token",
+        authIv: "iv-1",
+      })
+
+      vi.mocked(decryptSecret).mockImplementationOnce(() => {
+        throw new Error("bad auth tag")
+      })
+      mockFetchQuery.mockResolvedValueOnce([server]).mockResolvedValueOnce([])
+
+      const result = await loadUserMcpTools("test-token")
+
+      expect(mockCreateMCPClient).not.toHaveBeenCalled()
+      expect(result.tools).toEqual({})
+      expect(result.clients).toHaveLength(0)
+      expect(result.failedServerCount).toBe(1)
+      expect(mockFetchMutation).toHaveBeenCalledWith(
+        "mcpServers:updateConnectionStatus",
+        {
+          serverId: "server_1",
+          lastError: "Failed to decrypt MCP auth headers",
+        },
+        { token: "test-token" }
+      )
     })
   })
 

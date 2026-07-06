@@ -109,9 +109,10 @@ old value to `_PREVIOUS`, then dropped once rows re-encrypt.
 
 ### Residual / follow-up
 
-- **MCP owner-binding depends on `users.getCurrent`** in the loader; if that query
-  returns null the loader cannot decrypt auth headers and those servers connect
-  without auth (fails safe, not open).
+- MCP owner-binding depends on `users.getCurrent` in the loader. Auth-required
+  MCP servers fail closed when the owner identity, stored credential material, or
+  decrypted header cannot be produced, so the loader does not silently contact
+  them anonymously.
 - **DNS TOCTOU:** `assertMcpUrlAllowed` resolves, then the transport resolves
   again — a sub-second rebind between the two still slips through. Pinning the
   validated IP into the connection is the complete fix.

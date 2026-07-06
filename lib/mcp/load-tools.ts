@@ -191,10 +191,19 @@ function buildAuthHeaders(
     authIv?: string
     headerName?: string
   },
-  ownerId: string
+  ownerId?: string
 ): Record<string, string> | undefined {
   if (!server.authType || server.authType === "none") return undefined
-  if (!server.encryptedAuthValue || !server.authIv) return undefined
+
+  if (!ownerId) {
+    throw new Error("Cannot load MCP auth headers: missing owner identity")
+  }
+
+  if (!server.encryptedAuthValue || !server.authIv) {
+    throw new Error(
+      "Cannot load MCP auth headers: missing encrypted credential"
+    )
+  }
 
   try {
     const decryptedValue = decryptSecret(
@@ -215,9 +224,10 @@ function buildAuthHeaders(
       "[MCP] Failed to decrypt auth for server:",
       error instanceof Error ? error.message : error
     )
+    throw new Error("Failed to decrypt MCP auth headers")
   }
 
-  return undefined
+  throw new Error("Cannot load MCP auth headers: missing header name")
 }
 
 /**
@@ -362,7 +372,7 @@ export async function loadUserMcpTools(
       // mutation directly.
       await assertMcpUrlAllowed(server.url)
 
-      const headers = ownerId ? buildAuthHeaders(server, ownerId) : undefined
+      const headers = buildAuthHeaders(server, ownerId)
 
       // Hold a reference to the client promise so we can clean up orphaned
       // connections when the timeout wins the race (prevents resource leaks).
