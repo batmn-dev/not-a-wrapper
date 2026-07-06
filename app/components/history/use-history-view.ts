@@ -31,7 +31,7 @@ export type HistoryView = {
  * recency read — both subscribed only while the drawer is open, so the history
  * surface reaches the browseable history without holding the live full list.
  *
- * See docs/sidebar-chat-list-streaming-plan.md commit 4.
+ * See docs/adr/0005-bounded-chat-list-window.md.
  */
 export function useHistoryView(open: boolean): HistoryView {
   const search = useTitleSearchProvider(open)

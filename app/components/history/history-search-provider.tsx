@@ -42,7 +42,7 @@ export function HistorySearchProvider({ children }: { children: ReactNode }) {
 
   // The history surface reads its own data (server search + paginated browse),
   // not useChats().chats, so it reaches the full history once the sidebar is
-  // bounded. See docs/sidebar-chat-list-streaming-plan.md commit 4.
+  // bounded. See docs/adr/0005-bounded-chat-list-window.md.
   const history = useHistoryView(isOpen)
 
   const openHistory = useCallback(() => setIsOpen(true), [])

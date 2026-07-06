@@ -46,7 +46,7 @@ export const getForCurrentUser = maybeAuthQuery({
 /**
  * The current user's pinned, non-project chats over the composite sidebar
  * index — a small, live read rendered as its own sidebar section alongside the
- * paginated recency window (commit 8). Kept separate so pinned chats stay
+ * paginated recency window (ADR-0005). Kept separate so pinned chats stay
  * visible even when they fall outside the bounded window, while project chats
  * stay owned by the project view.
  */
@@ -80,7 +80,7 @@ export const getPinnedForCurrentUser = maybeAuthQuery({
  * rendering. Filtering project chats at the index level keeps every page full
  * of rows the drawer can display; title search and project pages reach project
  * chats through their own reads. A signed-out caller gets an empty, done page.
- * See docs/sidebar-chat-list-streaming-plan.md commit 4.
+ * See docs/adr/0005-bounded-chat-list-window.md.
  */
 export async function listForCurrentUserPaginatedHandler(
   ctx: MaybeUserChatQueryCtx,
@@ -113,7 +113,7 @@ export const listForCurrentUserPaginated = maybeAuthQuery({
  * chats the sidebar actually renders — pinned/project chats never consume a
  * window slot. Pinned chats are read separately (`getPinnedForCurrentUser`);
  * project chats live in the project view (`getProjectChatsForCurrentUser`). See
- * docs/sidebar-chat-list-streaming-plan.md commit 8.
+ * docs/adr/0005-bounded-chat-list-window.md.
  */
 export const getRecentWindowForCurrentUser = maybeAuthQuery({
   args: { paginationOpts: paginationOptsValidator },
@@ -137,7 +137,7 @@ export const getRecentWindowForCurrentUser = maybeAuthQuery({
  * All chats in a project the caller owns, newest activity first, over the
  * `by_project` index. Lets a project view show its full chat history rather than
  * only those chats that happen to be in the bounded sidebar window — see
- * docs/sidebar-chat-list-streaming-plan.md commit 7. Ownership is enforced by
+ * docs/adr/0005-bounded-chat-list-window.md. Ownership is enforced by
  * the ownedProjectQuery builder (ctx.project).
  */
 export const getProjectChatsForCurrentUser = ownedProjectQuery({
@@ -163,7 +163,7 @@ export const getProjectChatsForCurrentUser = ownedProjectQuery({
  * CHAT_SEARCH_RESULT_LIMIT.
  *
  * This is the read that lets history search reach chats outside the bounded
- * sidebar window — see docs/sidebar-chat-list-streaming-plan.md commit 3. Scope
+ * sidebar window — see docs/adr/0005-bounded-chat-list-window.md. Scope
  * is title-only by design; message-content search would be a separate index on
  * `messages` and is out of scope.
  */
@@ -285,7 +285,7 @@ export const getPublicById = query({
 
 /**
  * Defensive backfill for the `updatedAt` optional→required narrowing
- * (docs/sidebar-chat-list-streaming-plan.md commit 5). Sets
+ * (docs/adr/0005-bounded-chat-list-window.md). Sets
  * `updatedAt = _creationTime` for any chat missing it, so recency indexes have
  * no null keys. Idempotent.
  *

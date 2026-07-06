@@ -138,6 +138,63 @@ describe("chat turn store", () => {
     expect(durable.getPendingEdit()).toBeNull()
   })
 
+  it("persists success-path pending edits under the effective chat id", async () => {
+    const harness = createStoreHarness()
+    const editedMessage = userMessage("edited-user", "edited")
+    const assistant = assistantMessage("assistant", "answer")
+    harness.adapters.pendingEdit.stage(editedMessage, "local-stale")
+
+    await harness.store.finishTurn({
+      message: assistant,
+      isAbort: false,
+      isDisconnect: false,
+      isError: false,
+      chatId: null,
+      previousChatId: "local-current",
+    })
+
+    expect(harness.adapters.cacheAndAddMessage).toHaveBeenNthCalledWith(
+      1,
+      editedMessage,
+      "local-current"
+    )
+    expect(harness.adapters.cacheAndAddMessage).toHaveBeenNthCalledWith(
+      2,
+      assistant,
+      "local-current"
+    )
+    expect(harness.getPendingEdit()).toBeNull()
+  })
+
+  it("keeps success-path pending edits staged when local persistence fails", async () => {
+    const harness = createStoreHarness()
+    const editedMessage = userMessage("edited-user", "edited")
+    harness.adapters.pendingEdit.stage(editedMessage, "local-chat")
+    harness.adapters.cacheAndAddMessage.mockRejectedValueOnce(
+      new Error("cache failed")
+    )
+
+    await harness.store.finishTurn({
+      message: assistantMessage("assistant", "answer"),
+      isAbort: false,
+      isDisconnect: false,
+      isError: false,
+      chatId: "local-chat",
+      previousChatId: null,
+    })
+
+    expect(harness.adapters.cacheAndAddMessage).toHaveBeenCalledTimes(1)
+    expect(harness.adapters.reportError).toHaveBeenCalledWith(
+      "Failed to persist pending edited message:",
+      expect.any(Error)
+    )
+    expect(harness.adapters.pendingEdit.clear).not.toHaveBeenCalled()
+    expect(harness.getPendingEdit()).toEqual({
+      message: editedMessage,
+      chatId: "local-chat",
+    })
+  })
+
   it("removes empty local assistant messages after abort before the first chunk", async () => {
     const emptyAssistant: ChatTurnMessage = {
       id: "empty-assistant",

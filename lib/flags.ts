@@ -2,7 +2,7 @@
  * Feature flags.
  *
  * `ENABLE_PAGINATED_SIDEBAR` gates the bounded sidebar window
- * (docs/sidebar-chat-list-streaming-plan.md commit 8). Default OFF — with it off
+ * (docs/adr/0005-bounded-chat-list-window.md). Default OFF — with it off
  * the sidebar reads the full chat list via `chats.getForCurrentUser`, exactly as
  * before. With it on the sidebar reads a paginated non-project recency window
  * (`chats.getRecentWindowForCurrentUser`) plus a small live pinned non-project

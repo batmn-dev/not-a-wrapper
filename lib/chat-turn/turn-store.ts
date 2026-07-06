@@ -168,12 +168,11 @@ export function createChatTurnStore(adapters: ChatTurnStoreAdapters) {
       const pendingEdit = adapters.pendingEdit.get()
 
       if (pendingEdit) {
-        adapters.pendingEdit.clear()
         if (!routePersists) {
           try {
             await adapters.cacheAndAddMessage(
               pendingEdit.message,
-              pendingEdit.chatId
+              effectiveChatId
             )
           } catch (error) {
             adapters.reportError(
@@ -183,6 +182,7 @@ export function createChatTurnStore(adapters: ChatTurnStoreAdapters) {
             return
           }
         }
+        adapters.pendingEdit.clear()
       }
 
       if (!routePersists) {
