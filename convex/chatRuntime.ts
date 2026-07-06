@@ -1,12 +1,16 @@
-import { paginationOptsValidator } from "convex/server"
 import { v } from "convex/values"
 import type { Doc, Id } from "./_generated/dataModel"
+import { mutation, type MutationCtx, type QueryCtx } from "./_generated/server"
 import {
-  mutation,
-  query,
-  type MutationCtx,
-  type QueryCtx,
-} from "./_generated/server"
+  isIgnoredSignal,
+  isSupersedableGenerationRunStatus,
+  isSupersedableMessageStatus,
+  resolveGenerationRunTransition,
+  resolveTerminalAssistantMessageResolution,
+  type AssistantMessageFacts,
+  type LifecycleVerdict,
+  type MessageResolution,
+} from "./domain/generation_run_lifecycle"
 import {
   clearSiblingSelectionForMutation,
   getNextBranchIndexForMutation,
@@ -19,7 +23,6 @@ import {
   getSiblingMessages,
 } from "./domain/message_branches"
 import {
-  isActiveGenerationRunStatus,
   isTerminalGenerationRunStatus,
   isTerminalMessageStatus,
 } from "./domain/message_contract"
@@ -30,11 +33,7 @@ import {
   isVisibleChatMessage,
   projectModelHistoryMessages,
 } from "./domain/message_visibility"
-import {
-  getAuthorizedChatForRead,
-  getCurrentUser,
-  requireOwnedChat,
-} from "./lib/auth"
+import { getCurrentUser, requireOwnedChat } from "./lib/auth"
 import {
   vToolInvocationStreamMetadata,
   type PersistedMessageMetadata,
@@ -129,7 +128,6 @@ type AuthenticatedOwner = {
 }
 
 const ACTIVE_RUN_SCAN_LIMIT = 50
-const RECOVERABLE_RUN_SCAN_LIMIT = 10
 
 const terminalToolInvocationStatuses = new Set<
   Doc<"toolInvocations">["status"]
@@ -297,32 +295,14 @@ async function validateSelectedPathTokenForChat(
   validateSelectedPathToken(await listMessages(ctx, chatId), token)
 }
 
-/**
- * Resolve the terminal outcome of an EMPTY assistant placeholder — a run that
- * ended (failed/aborted/superseded) before producing any content.
- *
- * Two honest resolutions, chosen by whether the turn has a prior answer to
- * fall back to:
- *  - a semantic sibling exists (a regeneration died before its first chunk):
- *    delete the placeholder and re-select the sibling — preferring the branch
- *    the regeneration forked from (regenerationSourceMessageId), so the turn
- *    reverts to the answer the user was viewing, not the newest sibling;
- *  - no semantic sibling (a fresh send died): KEEP the placeholder and mark
- *    it with the terminal status + error. Deleting it here is what made
- *    failed turns invisible — the user message read as silently unanswered
- *    and got re-sent as duplicate history. The stub renders as an inline
- *    failed/stopped state with retry, and projects into model history as an
- *    explicit "never answered" marker.
- *
- * Returns whether the placeholder was deleted or kept.
- */
-async function resolveEmptyAssistantTerminalOutcome(
-  ctx: MutationCtx,
-  message: Doc<"messages">,
-  outcome: TerminalGenerationOutcome,
-  now: number
-): Promise<"deleted" | "kept"> {
-  const messages = await listMessages(ctx, message.chatId)
+// Resolves the semantic sibling an empty terminal placeholder reverts to,
+// preferring the branch a regeneration forked from (regenerationSourceMessageId),
+// else the latest. Pure over the messages array — the Generation run lifecycle
+// consumes only the precomputed id, so branch logic stays out of the module.
+function resolveFallbackSibling(
+  messages: Doc<"messages">[],
+  message: Doc<"messages">
+): Id<"messages"> | null {
   const parentMessageId = getEffectiveParentId(messages, message)
   const semanticSiblings = getSiblingMessages(
     messages,
@@ -336,48 +316,36 @@ async function resolveEmptyAssistantTerminalOutcome(
     semanticSiblings.find(
       (sibling) => sibling._id === message.regenerationSourceMessageId
     ) ?? semanticSiblings.at(-1)
-
-  if (fallbackSibling) {
-    if (message.selected === true) {
-      await selectMessageSiblingForMutation(ctx, messages, fallbackSibling, now)
-    }
-    await ctx.db.delete(message._id)
-    return "deleted"
-  }
-
-  await ctx.db.patch(message._id, {
-    status: outcome.status,
-    error: outcome.error,
-    updatedAt: now,
-  })
-  return "kept"
+  return fallbackSibling?._id ?? null
 }
 
-type TerminalGenerationOutcome = {
-  status: "aborted" | "failed"
-  error?: string
+// The assistant message a terminal transition resolves against, plus the facts
+// the Generation run lifecycle needs. `messages` is the chat's message list,
+// loaded only when the message is empty (matching the pre-extraction lazy read)
+// and reused by delete-and-reselect so it is never read twice.
+type ResolvedAssistantMessage = {
+  message: Doc<"messages">
+  messages: Doc<"messages">[] | null
+  facts: AssistantMessageFacts
 }
 
-function isSupersedableGenerationRunStatus(status: unknown): boolean {
-  return status === "queued" || status === "running" || status === "streaming"
-}
-
-function isSupersedableMessageStatus(status: unknown): boolean {
-  return status === "submitted" || status === "streaming"
-}
-
-async function applyTerminalAssistantOutcome(
+// Gather-phase counterpart to the module's resolve: reads the target message
+// (messageId ?? run.assistantMessageId ?? run.activeStreamId), validates
+// chatId/role linkage, and builds the AssistantMessageFacts. Returns null when
+// no linked assistant message resolves — the module then treats the message half
+// as a no-op and the run keeps its existing assistantMessageId.
+async function gatherAssistantMessageFacts(
   ctx: MutationCtx,
   run: Doc<"generationRuns">,
-  messageId: Id<"messages"> | undefined,
-  outcome: TerminalGenerationOutcome,
-  now: number
-): Promise<Id<"messages"> | undefined> {
+  messageId?: Id<"messages">
+): Promise<ResolvedAssistantMessage | null> {
+  const activeStreamMessageId =
+    run.activeStreamId === undefined
+      ? null
+      : ctx.db.normalizeId("messages", run.activeStreamId)
   const resolvedMessageId =
-    messageId ??
-    run.assistantMessageId ??
-    (run.activeStreamId as Id<"messages"> | undefined)
-  if (!resolvedMessageId) return run.assistantMessageId
+    messageId ?? run.assistantMessageId ?? activeStreamMessageId
+  if (!resolvedMessageId) return null
 
   const message = await ctx.db.get(resolvedMessageId)
   if (
@@ -385,47 +353,122 @@ async function applyTerminalAssistantOutcome(
     message.chatId !== run.chatId ||
     message.role !== "assistant"
   ) {
-    return run.assistantMessageId
+    return null
   }
 
-  const isReusedAssistantForRegeneration =
+  const isReusedForRegeneration =
     typeof run.startedAt === "number" && message.createdAt < run.startedAt
-  if (isReusedAssistantForRegeneration) {
-    const latestSnapshot = await ctx.db
-      .query("assistantMessageSnapshots")
-      .withIndex("by_run_sequence", (q) => q.eq("runId", run._id))
-      .first()
-    if (!latestSnapshot && hasSemanticAssistantParts(message)) {
+  // Only meaningful for a reused regeneration, and only worth the read there.
+  const hasSnapshotForRun = isReusedForRegeneration
+    ? (await ctx.db
+        .query("assistantMessageSnapshots")
+        .withIndex("by_run_sequence", (q) => q.eq("runId", run._id))
+        .first()) !== null
+    : false
+
+  const hasSemanticParts = hasSemanticAssistantParts(message)
+  let messages: Doc<"messages">[] | null = null
+  let fallbackSiblingId: Id<"messages"> | null = null
+  if (!hasSemanticParts) {
+    messages = await listMessages(ctx, message.chatId)
+    fallbackSiblingId = resolveFallbackSibling(messages, message)
+  }
+
+  return {
+    message,
+    messages,
+    facts: {
+      hasSemanticParts,
+      isReusedForRegeneration,
+      hasSnapshotForRun,
+      fallbackSiblingId,
+    },
+  }
+}
+
+// Applies the message half of a verdict. Returns the surviving assistant message
+// id, or undefined when the empty placeholder was deleted.
+async function applyMessageResolution(
+  ctx: MutationCtx,
+  message: Doc<"messages">,
+  resolution: MessageResolution,
+  messages: Doc<"messages">[] | null,
+  now: number
+): Promise<Id<"messages"> | undefined> {
+  switch (resolution.kind) {
+    case "none":
+      return message._id
+    case "restore-completed":
       await ctx.db.patch(message._id, {
         status: "completed",
         error: undefined,
         updatedAt: now,
       })
       return message._id
+    case "stamp":
+    case "keep-stub":
+      await ctx.db.patch(message._id, {
+        status: resolution.status,
+        error: resolution.error,
+        updatedAt: now,
+      })
+      return message._id
+    case "delete-and-reselect": {
+      // Only re-select when the placeholder was the selected branch.
+      if (message.selected === true && messages) {
+        const sibling = messages.find(
+          (candidate) => candidate._id === resolution.siblingId
+        )
+        if (sibling) {
+          await selectMessageSiblingForMutation(ctx, messages, sibling, now)
+        }
+      }
+      await ctx.db.delete(message._id)
+      return undefined
     }
   }
+}
 
-  if (!hasSemanticAssistantParts(message)) {
-    const resolution = await resolveEmptyAssistantTerminalOutcome(
+// Applies a transition verdict for the terminal-close paths (fail/abort/
+// supersede): the message half (stamp / keep-stub / delete + reselect /
+// restore-completed), then the run's shared terminal field set. Returns the
+// resulting assistantMessageId (undefined when the linked placeholder was
+// deleted). Call sites that write extra run fields keep them: completed's
+// usage/toolCounts and approval-requested's minimal pause patch the run
+// directly rather than routing through here.
+async function applyLifecycleVerdict(
+  ctx: MutationCtx,
+  run: Doc<"generationRuns">,
+  verdict: Extract<LifecycleVerdict, { kind: "transition" }>,
+  resolved: ResolvedAssistantMessage | null,
+  now: number
+): Promise<Id<"messages"> | undefined> {
+  let assistantMessageId = run.assistantMessageId
+  if (resolved) {
+    const survivingId = await applyMessageResolution(
       ctx,
-      message,
-      outcome,
+      resolved.message,
+      verdict.message,
+      resolved.messages,
       now
     )
-    if (resolution === "deleted") {
-      return run.assistantMessageId === message._id
+    assistantMessageId =
+      survivingId ??
+      (run.assistantMessageId === resolved.message._id
         ? undefined
-        : run.assistantMessageId
-    }
-    return message._id
+        : run.assistantMessageId)
   }
 
-  await ctx.db.patch(message._id, {
-    status: outcome.status,
-    error: outcome.error,
+  await ctx.db.patch(run._id, {
+    status: verdict.run.status,
+    error: verdict.run.error,
+    completedAt: verdict.run.settle ? now : undefined,
     updatedAt: now,
+    ...(verdict.run.clearActiveStream ? { activeStreamId: undefined } : {}),
+    assistantMessageId,
   })
-  return message._id
+
+  return assistantMessageId
 }
 
 async function closeSupersededGenerationsForChat(
@@ -445,27 +488,29 @@ async function closeSupersededGenerationsForChat(
   const reason = "superseded by a new generation"
 
   for (const run of runs) {
+    // Fast-path pre-filter with the lifecycle predicate. The supersede resolve
+    // below is authoritative, but gathering facts for every run in the scan
+    // window (most already terminal) would be wasteful — same predicate, same
+    // answer, so a non-supersedable run never reaches the gather.
     if (!isSupersedableGenerationRunStatus(run.status)) continue
     if (run.userId !== undefined && run.userId !== userId) continue
 
+    const resolved = await gatherAssistantMessageFacts(ctx, run, undefined)
+    const verdict = resolveGenerationRunTransition(
+      { runStatus: run.status, message: resolved?.facts ?? null },
+      { kind: "supersede", reason }
+    )
+    if (verdict.kind === "ignore") continue
+
     supersededRunIds.add(run._id)
-    const assistantMessageId = await applyTerminalAssistantOutcome(
+    const assistantMessageId = await applyLifecycleVerdict(
       ctx,
       run,
-      undefined,
-      { status: "aborted", error: reason },
+      verdict,
+      resolved,
       now
     )
     if (assistantMessageId) supersededMessageIds.add(assistantMessageId)
-
-    await ctx.db.patch(run._id, {
-      status: "aborted",
-      error: reason,
-      completedAt: now,
-      updatedAt: now,
-      activeStreamId: undefined,
-      assistantMessageId,
-    })
   }
 
   const assistantMessages = await ctx.db
@@ -482,41 +527,56 @@ async function closeSupersededGenerationsForChat(
     // it only closes out messages a live-looking run left behind.
     if (!isSupersedableMessageStatus(message.status)) continue
 
-    let supersededMessageId: Id<"messages"> | undefined = message._id
-    if (!hasSemanticAssistantParts(message)) {
-      const resolution = await resolveEmptyAssistantTerminalOutcome(
-        ctx,
-        message,
-        { status: "aborted", error: reason },
-        now
-      )
-      if (resolution === "deleted") supersededMessageId = undefined
-    } else {
-      await ctx.db.patch(message._id, {
-        status: "aborted",
-        error: reason,
-        updatedAt: now,
-      })
+    // Orphan messages whose run fell outside the scan window: the terminal
+    // policy runs with no reused-regeneration restore (there is no run in hand
+    // to date the message against), so an empty message keeps/deletes and a
+    // semantic one is stamped aborted — the pre-extraction split, unchanged.
+    const hasSemantic = hasSemanticAssistantParts(message)
+    let orphanMessages: Doc<"messages">[] | null = null
+    let fallbackSiblingId: Id<"messages"> | null = null
+    if (!hasSemantic) {
+      orphanMessages = await listMessages(ctx, chatId)
+      fallbackSiblingId = resolveFallbackSibling(orphanMessages, message)
     }
+    const supersededMessageId = await applyMessageResolution(
+      ctx,
+      message,
+      resolveTerminalAssistantMessageResolution(
+        {
+          hasSemanticParts: hasSemantic,
+          isReusedForRegeneration: false,
+          hasSnapshotForRun: false,
+          fallbackSiblingId,
+        },
+        { status: "aborted", error: reason }
+      ),
+      orphanMessages,
+      now
+    )
 
     if (
       message.generationRunId &&
       !supersededRunIds.has(message.generationRunId)
     ) {
       const run = await ctx.db.get(message.generationRunId)
-      if (
-        run &&
-        run.chatId === chatId &&
-        isSupersedableGenerationRunStatus(run.status)
-      ) {
-        await ctx.db.patch(run._id, {
-          status: "aborted",
-          error: reason,
-          completedAt: now,
-          updatedAt: now,
-          activeStreamId: undefined,
-          assistantMessageId: supersededMessageId,
-        })
+      if (run && run.chatId === chatId) {
+        // The message half was already resolved above; the run closes via the
+        // lifecycle's supersede rule like the in-window runs, with message:null
+        // so the verdict does not restate it.
+        const verdict = resolveGenerationRunTransition(
+          { runStatus: run.status, message: null },
+          { kind: "supersede", reason }
+        )
+        if (verdict.kind === "transition") {
+          await ctx.db.patch(run._id, {
+            status: verdict.run.status,
+            error: verdict.run.error,
+            completedAt: verdict.run.settle ? now : undefined,
+            updatedAt: now,
+            activeStreamId: undefined,
+            assistantMessageId: supersededMessageId,
+          })
+        }
       }
     }
   }
@@ -1008,16 +1068,24 @@ export async function denyPendingApprovalsForChat(
     if (
       run &&
       run.chatId === chatId &&
-      (run.userId === undefined || run.userId === userId) &&
-      !isTerminalGenerationRunStatus(run.status)
+      (run.userId === undefined || run.userId === userId)
     ) {
-      await ctx.db.patch(request.runId, {
-        status: "aborted",
-        error: reason,
-        completedAt: now,
-        updatedAt: now,
-        activeStreamId: undefined,
-      })
+      // The run closes via the Generation run lifecycle's `abort` rule (a run
+      // already terminal is left settled). Only the run patch routes through the
+      // module — the message parts/status writes are the per-message loop above.
+      const verdict = resolveGenerationRunTransition(
+        { runStatus: run.status, message: null },
+        { kind: "abort", reason }
+      )
+      if (verdict.kind === "transition") {
+        await ctx.db.patch(request.runId, {
+          status: verdict.run.status,
+          error: verdict.run.error,
+          completedAt: verdict.run.settle ? now : undefined,
+          updatedAt: now,
+          activeStreamId: undefined,
+        })
+      }
     }
   }
 }
@@ -1108,9 +1176,21 @@ export async function applyApprovalResponses(
   }
 
   for (const [runId, runDecision] of runDecisions) {
+    const run = await ctx.db.get(runId)
+    if (!run) continue
+    // The continuation closes the paused run via the Generation run lifecycle's
+    // `approvals-resolved` rule. A run already settled (a racing Stop aborted it
+    // mid-approval) is left alone — the late resolution must not repaint it. The
+    // continuation message stays "streaming" (patched above): it belongs to the
+    // NEW continuation run's prepare, not this close.
+    const verdict = resolveGenerationRunTransition(
+      { runStatus: run.status, message: null },
+      { kind: "approvals-resolved", anyDenied: runDecision.denied }
+    )
+    if (verdict.kind === "ignore") continue
     await ctx.db.patch(runId, {
-      status: runDecision.denied ? "aborted" : "completed",
-      completedAt: now,
+      status: verdict.run.status,
+      completedAt: verdict.run.settle ? now : undefined,
       updatedAt: now,
       activeStreamId: undefined,
     })
@@ -1118,30 +1198,6 @@ export async function applyApprovalResponses(
 
   return updatedMessage
 }
-
-export const createGenerationRun = mutation({
-  args: {
-    chatId: v.id("chats"),
-    requestId: v.string(),
-    model: v.string(),
-    provider: v.string(),
-    chatVersion: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const { user } = await requireChatOwner(ctx, args.chatId)
-    const now = nowMs()
-    return await ctx.db.insert("generationRuns", {
-      chatId: args.chatId,
-      userId: user._id,
-      requestId: args.requestId,
-      model: args.model,
-      provider: args.provider,
-      status: "queued",
-      chatVersion: args.chatVersion,
-      updatedAt: now,
-    })
-  },
-})
 
 type GenerationApprovalResponse = {
   messageId: string
@@ -1157,7 +1213,6 @@ type PrepareGenerationForChatArgs = {
   requestId: string
   model: string
   provider: string
-  chatVersion?: number
   expectedVisibleMessageCount?: number
   tailMessageId?: string
   latestUserMessage?: {
@@ -1251,7 +1306,6 @@ export async function prepareGenerationForChat(
     model: args.model,
     provider: args.provider,
     status: "running",
-    chatVersion: args.chatVersion,
     startedAt: now,
     updatedAt: now,
   })
@@ -1357,7 +1411,6 @@ export const prepareGeneration = mutation({
     requestId: v.string(),
     model: v.string(),
     provider: v.string(),
-    chatVersion: v.optional(v.number()),
     expectedVisibleMessageCount: v.optional(v.number()),
     tailMessageId: v.optional(v.string()),
     latestUserMessage: v.optional(vStoredMessage),
@@ -1366,16 +1419,6 @@ export const prepareGeneration = mutation({
     approvalResponses: v.optional(v.array(vApprovalResponse)),
   },
   handler: async (ctx, args) => prepareGenerationForChat(ctx, args),
-})
-
-export const markGenerationRunRunning = mutation({
-  args: { runId: v.id("generationRuns") },
-  handler: async (ctx, { runId }) => {
-    const run = await ctx.db.get(runId)
-    if (!run) throw new Error("Run not found")
-    await requireChatOwner(ctx, run.chatId)
-    await ctx.db.patch(runId, { status: "running", updatedAt: nowMs() })
-  },
 })
 
 export const updateAssistantSnapshot = mutation({
@@ -1457,44 +1500,6 @@ export async function updateAssistantSnapshotForChat(
   }
 }
 
-export const appendStreamDelta = updateAssistantSnapshot
-
-export const markGenerationRunAwaitingApproval = mutation({
-  args: {
-    runId: v.id("generationRuns"),
-    messageId: v.optional(v.id("messages")),
-  },
-  handler: async (ctx, args) =>
-    markGenerationRunAwaitingApprovalForChat(ctx, args),
-})
-
-export async function markGenerationRunAwaitingApprovalForChat(
-  ctx: MutationCtx,
-  args: {
-    runId: Id<"generationRuns">
-    messageId?: Id<"messages">
-  }
-) {
-  const run = await ctx.db.get(args.runId)
-  if (!run) throw new Error("Run not found")
-  await requireChatOwner(ctx, run.chatId)
-  const messageId = args.messageId ?? run.assistantMessageId
-  if (messageId) {
-    await requireAssistantMessageForRun(ctx, run, messageId)
-  }
-  const now = nowMs()
-  await ctx.db.patch(args.runId, {
-    status: "awaiting_approval",
-    updatedAt: now,
-  })
-  if (messageId) {
-    await ctx.db.patch(messageId, {
-      status: "awaiting_approval",
-      updatedAt: now,
-    })
-  }
-}
-
 export const markGenerationRunCompleted = mutation({
   args: {
     runId: v.id("generationRuns"),
@@ -1531,20 +1536,28 @@ export async function markGenerationRunCompletedForChat(
   const run = await ctx.db.get(args.runId)
   if (!run) throw new Error("Run not found")
   await requireChatOwner(ctx, run.chatId)
-  // A terminal outcome is written once. The response envelope's onFinish
-  // fires for ERRORED streams too (isAborted false), racing the stream
-  // onError's failed write — without this guard the empty "completion"
-  // repaints a failed run as completed and hides the turn's failed stub.
-  if (isTerminalGenerationRunStatus(run.status)) return
+  // The first-terminal-wins guard and the completed-vs-awaiting_approval shape
+  // live in the Generation run lifecycle's `complete` rule. `hasPendingApprovals`
+  // is fact-gathering for it; the message payload (content/parts/metadata/usage)
+  // and the run's usage/toolCounts stay here — the module decides status only.
+  // Gate before gathering: the ignore decision reads only the run status, and
+  // the already-terminal case is the racing duplicate this guard exists for.
+  if (isIgnoredSignal(run.status, "complete")) return
+  const hasPendingApprovals =
+    (await ctx.db
+      .query("toolApprovalRequests")
+      .withIndex("by_run_status", (q) =>
+        q.eq("runId", args.runId).eq("status", "pending")
+      )
+      .first()) !== null
+  const verdict = resolveGenerationRunTransition(
+    { runStatus: run.status, message: null },
+    { kind: "complete", hasPendingApprovals }
+  )
+  if (verdict.kind === "ignore") return
   await requireAssistantMessageForRun(ctx, run, args.messageId)
   const now = nowMs()
-  const hasPendingApprovals = await ctx.db
-    .query("toolApprovalRequests")
-    .withIndex("by_run_status", (q) =>
-      q.eq("runId", args.runId).eq("status", "pending")
-    )
-    .first()
-  const status = hasPendingApprovals ? "awaiting_approval" : "completed"
+  const status = verdict.message.status
 
   await ctx.db.patch(args.messageId, {
     content: args.content,
@@ -1556,8 +1569,8 @@ export async function markGenerationRunCompletedForChat(
     updatedAt: now,
   })
   await ctx.db.patch(args.runId, {
-    status,
-    completedAt: status === "completed" ? now : undefined,
+    status: verdict.run.status,
+    completedAt: verdict.run.settle ? now : undefined,
     updatedAt: now,
     finishReason: args.finishReason,
     inputTokens: args.usage?.inputTokens,
@@ -1588,27 +1601,19 @@ export async function markGenerationRunFailedForChat(
   const run = await ctx.db.get(args.runId)
   if (!run) throw new Error("Run not found")
   await requireChatOwner(ctx, run.chatId)
-  // Failed may overwrite "completed" — the response envelope's completion
-  // write races the stream onError on an errored stream, and both orders must
-  // converge to failed. It must NOT overwrite "aborted": a user Stop is a
-  // settled outcome a late failure signal may not repaint.
-  if (run.status === "aborted" || run.status === "failed") return
   const now = nowMs()
-  const assistantMessageId = await applyTerminalAssistantOutcome(
-    ctx,
-    run,
-    args.messageId,
-    { status: "failed", error: args.error },
-    now
+  // Failed may overwrite completed but never aborted — the Generation run
+  // lifecycle's `fail` rule owns that convergence and the message half. Gate
+  // before gathering: the ignore decision reads only the run status, and the
+  // already-settled case is the racing duplicate this rule absorbs.
+  if (isIgnoredSignal(run.status, "fail")) return
+  const resolved = await gatherAssistantMessageFacts(ctx, run, args.messageId)
+  const verdict = resolveGenerationRunTransition(
+    { runStatus: run.status, message: resolved?.facts ?? null },
+    { kind: "fail", error: args.error }
   )
-  await ctx.db.patch(args.runId, {
-    status: "failed",
-    error: args.error,
-    completedAt: now,
-    updatedAt: now,
-    activeStreamId: undefined,
-    assistantMessageId,
-  })
+  if (verdict.kind === "ignore") return
+  await applyLifecycleVerdict(ctx, run, verdict, resolved, now)
 }
 
 export const markGenerationRunAborted = mutation({
@@ -1631,122 +1636,20 @@ export async function markGenerationRunAbortedForChat(
   const run = await ctx.db.get(args.runId)
   if (!run) throw new Error("Run not found")
   await requireChatOwner(ctx, run.chatId)
-  // First terminal outcome wins: the streamText onAbort and the response
-  // envelope's isAborted finish both write aborted (benign), but a run that
-  // already settled as failed/completed must not be repainted.
-  if (isTerminalGenerationRunStatus(run.status)) return
   const now = nowMs()
-  const assistantMessageId = await applyTerminalAssistantOutcome(
-    ctx,
-    run,
-    args.messageId,
-    { status: "aborted", error: args.reason },
-    now
+  // First-terminal-wins and the empty-placeholder policy both live in the
+  // Generation run lifecycle's `abort` rule. Gate before gathering: the ignore
+  // decision reads only the run status, and the double-terminal race (onAbort
+  // vs envelope finish) is exactly where the gather reads would be wasted.
+  if (isIgnoredSignal(run.status, "abort")) return
+  const resolved = await gatherAssistantMessageFacts(ctx, run, args.messageId)
+  const verdict = resolveGenerationRunTransition(
+    { runStatus: run.status, message: resolved?.facts ?? null },
+    { kind: "abort", reason: args.reason }
   )
-  await ctx.db.patch(args.runId, {
-    status: "aborted",
-    error: args.reason,
-    completedAt: now,
-    updatedAt: now,
-    activeStreamId: undefined,
-    assistantMessageId,
-  })
+  if (verdict.kind === "ignore") return
+  await applyLifecycleVerdict(ctx, run, verdict, resolved, now)
 }
-
-export const listMessagesForChatPaginated = query({
-  args: {
-    chatId: v.id("chats"),
-    paginationOpts: paginationOptsValidator,
-  },
-  handler: async (ctx, args) => {
-    const chat = await getAuthorizedChatForRead(ctx, args.chatId)
-    if (!chat) return { page: [], isDone: true, continueCursor: "" }
-
-    const page = await ctx.db
-      .query("messages")
-      .withIndex("by_chat_order", (q) => q.eq("chatId", args.chatId))
-      .paginate(args.paginationOpts)
-
-    return {
-      ...page,
-      page: page.page.filter(isVisibleChatMessage),
-    }
-  },
-})
-
-export const listActiveRunsForChat = query({
-  args: { chatId: v.id("chats") },
-  handler: async (ctx, { chatId }) => {
-    const chat = await getAuthorizedChatForRead(ctx, chatId)
-    if (!chat) return []
-    const runs = await ctx.db
-      .query("generationRuns")
-      .withIndex("by_chat_updated", (q) => q.eq("chatId", chatId))
-      .order("desc")
-      .take(ACTIVE_RUN_SCAN_LIMIT)
-    return runs
-      .filter((run) => isActiveGenerationRunStatus(run.status))
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-  },
-})
-
-export const listStreamDeltasForRun = query({
-  args: { runId: v.id("generationRuns") },
-  handler: async (ctx, { runId }) => {
-    const run = await ctx.db.get(runId)
-    if (!run) return []
-    await requireChatOwner(ctx, run.chatId)
-    return await ctx.db
-      .query("assistantMessageSnapshots")
-      .withIndex("by_run_sequence", (q) => q.eq("runId", runId))
-      .collect()
-  },
-})
-
-export const getRecoverableChatState = query({
-  args: { chatId: v.id("chats") },
-  handler: async (ctx, { chatId }) => {
-    const chat = await getAuthorizedChatForRead(ctx, chatId)
-    if (!chat) return null
-
-    const messages = (await listMessages(ctx, chatId)).filter(
-      isVisibleChatMessage
-    )
-    const runs = await ctx.db
-      .query("generationRuns")
-      .withIndex("by_chat_updated", (q) => q.eq("chatId", chatId))
-      .order("desc")
-      .take(RECOVERABLE_RUN_SCAN_LIMIT)
-
-    if (chat.public) {
-      return {
-        chat,
-        messages: messages.filter((message) => message.status === "completed"),
-        activeRuns: [],
-        pendingApprovals: [],
-      }
-    }
-
-    const user = await getCurrentUser(ctx)
-    const pendingApprovals = user
-      ? await ctx.db
-          .query("toolApprovalRequests")
-          .withIndex("by_user_status", (q) =>
-            q.eq("userId", user._id).eq("status", "pending")
-          )
-          .collect()
-      : []
-
-    return {
-      chat,
-      messages,
-      activeRuns: runs.filter((run) => isActiveGenerationRunStatus(run.status)),
-      pendingApprovals: pendingApprovals.filter(
-        (approval) => approval.chatId === chatId
-      ),
-    }
-  },
-})
 
 export const createToolApprovalRequest = mutation({
   args: {
@@ -1778,11 +1681,10 @@ export async function createToolApprovalRequestForChat(
     inputPreview?: string
     approvalId: string
   }
-) {
+): Promise<Id<"toolApprovalRequests"> | null> {
   const { user } = await requireChatOwner(ctx, args.chatId)
   const run = await ctx.db.get(args.runId)
   if (!run || run.chatId !== args.chatId) throw new Error("Run not found")
-  await requireAssistantMessageForRun(ctx, run, args.assistantMessageId)
 
   const existing = await ctx.db
     .query("toolApprovalRequests")
@@ -1796,8 +1698,24 @@ export async function createToolApprovalRequestForChat(
     ) {
       throw new Error("Approval request does not belong to this run")
     }
-    return existing._id
   }
+
+  // Bug fix: a late approval request landing on an already-settled run — a user
+  // Stop that raced the stream's approval-persistence transform — must not
+  // repaint the run awaiting_approval (not supersedable, it would zombie until
+  // the next turn's deny-pending pass), nor insert a pending row that would feed
+  // hasPendingApprovals on a future completion. The Generation run lifecycle's
+  // `approval-requested` rule ignores terminal runs; on ignore we insert nothing
+  // and return null. Both API-runtime callers fire-and-forget this write and
+  // never consume the returned id, so null is a no-op for them.
+  const verdict = resolveGenerationRunTransition(
+    { runStatus: run.status, message: null },
+    { kind: "approval-requested" }
+  )
+  if (verdict.kind === "ignore") return null
+
+  await requireAssistantMessageForRun(ctx, run, args.assistantMessageId)
+  if (existing) return existing._id
 
   const now = nowMs()
   const approvalRequestId = await ctx.db.insert("toolApprovalRequests", {
@@ -1817,11 +1735,11 @@ export async function createToolApprovalRequestForChat(
   })
 
   await ctx.db.patch(args.runId, {
-    status: "awaiting_approval",
+    status: verdict.run.status,
     updatedAt: now,
   })
   await ctx.db.patch(args.assistantMessageId, {
-    status: "awaiting_approval",
+    status: verdict.message.status,
     updatedAt: now,
   })
 
