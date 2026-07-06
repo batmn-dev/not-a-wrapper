@@ -1,6 +1,6 @@
 import "server-only"
-import type { RateLimitBucket } from "@/convex/rateLimits"
 import { api } from "@/convex/_generated/api"
+import type { RateLimitBucket } from "@/convex/rateLimits"
 import { getAuthenticatedWorkosSession } from "@/lib/auth/workos"
 import {
   CSRF_COOKIE_NAME,
