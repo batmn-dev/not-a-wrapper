@@ -18,7 +18,7 @@ import {
   loadMigrationManifests,
   mergeChecks,
   parseConvexRunJson,
-  PRELAUNCH_DISPOSABLE_DB,
+  shouldSkipSchemaContractionChecks,
 } from "./convex-schema-contract-lib.mjs"
 
 function parseArgs(argv) {
@@ -164,13 +164,17 @@ Options:
 }
 
 export function shouldRequireDiffBase(options) {
-  const productionDeployment =
-    options.prod ||
-    options.deployment === "prod" ||
-    options.deployment === "production"
-
   return Boolean(
-    options.requireDiffBase || (!options.dryRun && productionDeployment)
+    options.requireDiffBase ||
+      (!options.dryRun && isProductionDeployment(options))
+  )
+}
+
+function isProductionDeployment(options) {
+  return Boolean(
+    options.prod ||
+      options.deployment === "prod" ||
+      options.deployment === "production"
   )
 }
 
@@ -295,17 +299,22 @@ function printChecks(checks) {
 }
 
 function runCli() {
-  if (PRELAUNCH_DISPOSABLE_DB) {
-    console.log(
-      "Convex schema contraction preflight: dormant pre-launch (disposable DB) — skipping. See AGENTS.md."
-    )
-    return
-  }
-
   const options = parseArgs(process.argv.slice(2))
 
   if (options.help) {
     printHelp()
+    return
+  }
+
+  if (
+    shouldSkipSchemaContractionChecks({
+      productionTarget: isProductionDeployment(options),
+      dryRun: Boolean(options.dryRun),
+    })
+  ) {
+    console.log(
+      "Convex schema contraction preflight: skipping disposable non-production target. Production deploy preflight remains active unless CONVEX_PROD_DB_DISPOSABLE=true."
+    )
     return
   }
 

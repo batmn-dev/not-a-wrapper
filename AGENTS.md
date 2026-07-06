@@ -8,28 +8,32 @@ Deliver correct, maintainable, well-researched, best practice changes.
 
 ## Pre-Launch: The Database Is Disposable (MUST)
 
-This project has **no users and no production data**. The development database is
-disposable. Do not spend effort protecting data that does not exist.
+This project has **no users**. The development database is disposable. Production
+Convex can still contain smoke-test or manually created rows, so production
+deploy validation treats it as stateful unless explicitly marked disposable.
 
-- Change `convex/schema.ts` directly: add, remove, rename, retype, or narrow
-  fields as the design needs. **No** expand/migrate/contract, **no** migration
-  manifests, **no** field-removal ceremony.
+- Change `convex/schema.ts` directly for development data: add, remove, rename,
+  retype, or narrow fields as the design needs. For fields that have reached
+  production, keep removed/narrowed fields optional until production is cleaned
+  or wiped and the deploy preflight can prove compatibility.
 - If existing dev data conflicts with a schema change, wipe it (Convex dashboard
   or a one-off `bunx convex run`/clear) and move on. Losing dev data is not a risk.
 - Schema and data-model changes are **not** high-risk and require **no** approval
   gate while pre-launch.
 - The expand/migrate/contract workflow (`docs/convex-migrations.md`), the
-  migration manifests (`convex/migrations/`), and the schema-guard / deploy
-  preflight tooling are **dormant** until launch. Do not re-introduce them for a
-  schema change.
+  migration manifests (`convex/migrations/`), and the schema-guard ceremony are
+  dormant for non-production pre-launch work. Production deploy preflight and CI
+  dry-run checks stay active to prevent strict schemas from rejecting existing
+  production documents. Set `CONVEX_PROD_DB_DISPOSABLE=true` only when the
+  production data can intentionally be wiped or ignored.
 
 Scope: **the database only.** This does NOT relax working-tree/file hygiene (do
 not delete user-owned or untracked files — see "Dirty Worktree And Generated
 Files"), secret handling (never log secrets; treat BYOK keys as
 encrypted-at-rest), or auth correctness.
 
-When the app gains real users, revert this section and re-activate the migration
-discipline.
+When the app gains real users, revert this section and fully re-activate the
+migration discipline.
 
 ## Implementation Philosophy (SHOULD)
 
@@ -113,10 +117,10 @@ if (!identity) throw new Error("Not authenticated")
 
 ### Convex Schema Contractions
 
-**Dormant pre-launch.** The database is disposable — change `convex/schema.ts`
-directly and wipe dev data if it conflicts. See "Pre-Launch: The Database Is
-Disposable". Re-activate the expand/migrate/contract workflow, manifests, and
-schema-guard/preflight only when the app has real users.
+**Dormant for non-production pre-launch work.** The development database is
+disposable, so change `convex/schema.ts` directly and wipe dev data if it
+conflicts. Production deploy preflight remains active unless
+`CONVEX_PROD_DB_DISPOSABLE=true` is deliberately set.
 
 ### Optimistic Update Pattern
 

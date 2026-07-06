@@ -23,6 +23,7 @@ import {
   parseConvexRunJson,
   parseSchemaFields,
   resolveBaseFetchPlan,
+  shouldSkipSchemaContractionChecks,
 } from "./convex-schema-contract-lib.mjs"
 import {
   planPreflight,
@@ -337,6 +338,25 @@ describe("Convex schema contraction helpers", () => {
       "--require-diff-base",
       "--dry-run",
     ])
+  })
+
+  it("keeps dry-run and production schema checks active while pre-launch", () => {
+    expect(
+      shouldSkipSchemaContractionChecks({ dryRun: true, env: {} })
+    ).toBe(false)
+    expect(
+      shouldSkipSchemaContractionChecks({
+        productionTarget: true,
+        env: {},
+      })
+    ).toBe(false)
+    expect(
+      shouldSkipSchemaContractionChecks({
+        productionTarget: true,
+        env: { CONVEX_PROD_DB_DISPOSABLE: "true" },
+      })
+    ).toBe(true)
+    expect(shouldSkipSchemaContractionChecks({ env: {} })).toBe(true)
   })
 
   it("plans the Convex deploy command without dropping extra CLI args", () => {

@@ -200,13 +200,11 @@ Production `convex deploy` must go through the shared deploy command:
 bun run convex:deploy
 ```
 
-> **Dormant pre-launch.** The schema guard and deploy preflight currently no-op
-> (`PRELAUNCH_DISPOSABLE_DB` in `scripts/convex-schema-contract-lib.mjs`) because
-> the project has no users or production data — `bun run convex:deploy` runs
-> `convex deploy` without the manifest checks, and the `SCHEMA_GUARD_*` env vars
-> below are not needed yet. See AGENTS.md → "Pre-Launch: The Database Is
-> Disposable". The paragraph below applies once the discipline is re-activated at
-> launch.
+> **Pre-launch scope.** Non-production data is disposable, but production deploys
+> still run schema-contraction preflight because Convex rejects strict schemas
+> when existing production documents contain removed fields. Set
+> `CONVEX_PROD_DB_DISPOSABLE=true` only for an intentional production wipe or
+> throwaway production deploy.
 
 The read-only preflight uses `convex/migrations/` manifests to verify that
 removed schema fields have zero legacy documents on the target deployment. It

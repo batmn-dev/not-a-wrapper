@@ -8,13 +8,34 @@ export const DEFAULT_MANIFEST_DIR = "convex/migrations"
 export const DEFAULT_BASE_REF = "origin/main"
 export const DEFAULT_BASE_BRANCH = "main"
 
-// Pre-launch: this project has no users and no production data, so the schema
-// contraction discipline (manifests, guard, preflight) is dormant. While this is
-// true the guard and deploy preflight no-op, so editing convex/schema.ts —
-// including removing fields — never blocks a build or CI. Flip to false and
-// restore the manifest workflow when the app has real users.
+// Pre-launch: local/dev data is disposable, but production deploys may still
+// encounter smoke-test or manually created rows. Non-production write-side
+// migration ceremony stays dormant, while production schema contractions must be
+// verified unless the production database is explicitly marked disposable.
 // See AGENTS.md -> "Pre-Launch: The Database Is Disposable".
 export const PRELAUNCH_DISPOSABLE_DB = true
+
+export function truthyEnvFlag(value) {
+  return ["1", "true", "yes", "on"].includes(
+    String(value ?? "")
+      .trim()
+      .toLowerCase()
+  )
+}
+
+export function shouldSkipSchemaContractionChecks({
+  productionTarget = false,
+  dryRun = false,
+  env = process.env,
+} = {}) {
+  if (!PRELAUNCH_DISPOSABLE_DB) return false
+  if (dryRun) return false
+  if (productionTarget && !truthyEnvFlag(env.CONVEX_PROD_DB_DISPOSABLE)) {
+    return false
+  }
+
+  return true
+}
 
 const VALID_STATUSES = new Set(["expand", "migrate", "contracted"])
 const VALID_KIND = "convex-schema-contraction"
