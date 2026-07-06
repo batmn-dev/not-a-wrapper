@@ -121,12 +121,26 @@ jobs:
             exit 1
           fi
 
+          if [ -z "${CONVEX_DEPLOY_KEY:-}" ]; then
+            echo "::error title=Missing CONVEX_DEPLOY_KEY::Set the GitHub Actions secret CONVEX_DEPLOY_KEY to a Convex production deploy key with deployment:deploy."
+            exit 1
+          fi
+
+          if [ -z "${CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY:-}" ]; then
+            echo "::error title=Missing CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY::Set the GitHub Actions secret CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY to a Convex production deploy key with deployment:functions:runTestQuery."
+            exit 1
+          fi
+
           if [[ "$VERCEL_PROJECT_PRODUCTION_URL" == http://* || "$VERCEL_PROJECT_PRODUCTION_URL" == https://* || "$VERCEL_PROJECT_PRODUCTION_URL" == */* ]]; then
             echo "::error title=Invalid VERCEL_PROJECT_PRODUCTION_URL::Use only the production host, for example example.com. convex.json adds https:// and /callback."
             exit 1
           fi
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY: ${{ secrets.CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY }}
 
       - name: Deploy to Convex
         run: bun run convex:deploy
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY: ${{ secrets.CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY }}

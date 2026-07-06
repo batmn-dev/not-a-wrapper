@@ -21,6 +21,9 @@ import {
   shouldSkipSchemaContractionChecks,
 } from "./convex-schema-contract-lib.mjs"
 
+const PREFLIGHT_DEPLOY_KEY_ENV = "CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY"
+const CONVEX_DEPLOY_KEY_ENV = "CONVEX_DEPLOY_KEY"
+
 function parseArgs(argv) {
   const options = {
     baseRef: envValue(process.env.SCHEMA_GUARD_BASE_REF) ?? DEFAULT_BASE_REF,
@@ -139,6 +142,33 @@ function targetLabel(options) {
   return "Convex CLI default deployment"
 }
 
+function preflightDeployKey(env) {
+  const trimmed = env[PREFLIGHT_DEPLOY_KEY_ENV]?.trim()
+  return trimmed ? trimmed : null
+}
+
+export function convexRunEnvForPreflight({
+  env = process.env,
+  options = {},
+} = {}) {
+  const deployKey = preflightDeployKey(env)
+
+  if (!deployKey) {
+    if (isProductionDeployment(options)) {
+      throw new Error(
+        `${PREFLIGHT_DEPLOY_KEY_ENV} is required for production schema preflight queries. Create a Convex deploy key with deployment:functions:runTestQuery and store it separately from ${CONVEX_DEPLOY_KEY_ENV}.`
+      )
+    }
+
+    return env
+  }
+
+  return {
+    ...env,
+    [CONVEX_DEPLOY_KEY_ENV]: deployKey,
+  }
+}
+
 function printHelp() {
   console.log(`Usage: node scripts/convex-schema-contract-preflight.mjs [options]
 
@@ -166,15 +196,15 @@ Options:
 export function shouldRequireDiffBase(options) {
   return Boolean(
     options.requireDiffBase ||
-      (!options.dryRun && isProductionDeployment(options))
+    (!options.dryRun && isProductionDeployment(options))
   )
 }
 
-function isProductionDeployment(options) {
+export function isProductionDeployment(options) {
   return Boolean(
     options.prod ||
-      options.deployment === "prod" ||
-      options.deployment === "production"
+    options.deployment === "prod" ||
+    options.deployment === "production"
   )
 }
 
@@ -225,6 +255,7 @@ function runConvexChecks(checks, options) {
 
   const result = spawnSync(executable, args, {
     encoding: "utf8",
+    env: convexRunEnvForPreflight({ options }),
     stdio: ["ignore", "pipe", "pipe"],
   })
 

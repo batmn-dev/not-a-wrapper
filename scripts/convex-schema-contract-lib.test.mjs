@@ -8,6 +8,7 @@ import {
   deployPlanForEnv,
   deployPreflightMode,
   preflightArgsForDeployEnv,
+  preflightEnvForDeployEnv,
   runDeploy,
 } from "./convex-deploy.mjs"
 import {
@@ -26,6 +27,7 @@ import {
   shouldSkipSchemaContractionChecks,
 } from "./convex-schema-contract-lib.mjs"
 import {
+  convexRunEnvForPreflight,
   planPreflight,
   shouldRequireDiffBase,
   validatePreflightResults,
@@ -340,10 +342,34 @@ describe("Convex schema contraction helpers", () => {
     ])
   })
 
-  it("keeps dry-run and production schema checks active while pre-launch", () => {
+  it("uses a separate query-capable key for production preflight runs", () => {
+    const env = {
+      CONVEX_DEPLOY_KEY: "deploy-key",
+      CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY: "query-key",
+    }
+
     expect(
-      shouldSkipSchemaContractionChecks({ dryRun: true, env: {} })
-    ).toBe(false)
+      convexRunEnvForPreflight({ env, options: { prod: true } })
+    ).toMatchObject({
+      CONVEX_DEPLOY_KEY: "query-key",
+      CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY: "query-key",
+    })
+    expect(env.CONVEX_DEPLOY_KEY).toBe("deploy-key")
+  })
+
+  it("fails production preflight queries without a query-capable key", () => {
+    expect(() =>
+      convexRunEnvForPreflight({
+        env: { CONVEX_DEPLOY_KEY: "deploy-key" },
+        options: { prod: true },
+      })
+    ).toThrow("CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY")
+  })
+
+  it("keeps dry-run and production schema checks active while pre-launch", () => {
+    expect(shouldSkipSchemaContractionChecks({ dryRun: true, env: {} })).toBe(
+      false
+    )
     expect(
       shouldSkipSchemaContractionChecks({
         productionTarget: true,
@@ -397,6 +423,31 @@ describe("Convex schema contraction helpers", () => {
         "branch-name",
       ],
     })
+  })
+
+  it("passes the preflight deploy key only to the preflight subprocess", () => {
+    const env = {
+      VERCEL_ENV: "production",
+      CONVEX_DEPLOY_KEY: "deploy-key",
+      CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY: "query-key",
+    }
+
+    expect(preflightEnvForDeployEnv(env)).toMatchObject({
+      CONVEX_DEPLOY_KEY: "query-key",
+      CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY: "query-key",
+    })
+
+    const calls = []
+    runDeploy({
+      env,
+      log: () => {},
+      runCommand: (command, args, commandEnv) => {
+        calls.push({ command, args, env: commandEnv })
+      },
+    })
+
+    expect(calls[0].env.CONVEX_DEPLOY_KEY).toBe("query-key")
+    expect(calls[1].env.CONVEX_DEPLOY_KEY).toBe("deploy-key")
   })
 
   it("runs preflight before Convex deploy using the selected deploy environment", () => {

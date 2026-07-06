@@ -12,3 +12,7 @@ Keep fields that have reached production optional until the production data is
 cleaned or intentionally discarded. The deploy preflight remains active for
 production and CI dry-run checks, and can be skipped for production only by
 deliberately setting `CONVEX_PROD_DB_DISPOSABLE=true`.
+
+Production preflight queries require `CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY`, a
+separate Convex deploy key with `deployment:functions:runTestQuery`. Keep
+`CONVEX_DEPLOY_KEY` scoped to the actual `convex deploy` operation.

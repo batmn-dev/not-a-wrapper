@@ -87,6 +87,20 @@ describe("validateEnvContent", () => {
     )
   })
 
+  it("warns when deploy keys are present locally", () => {
+    const result = validate({
+      CONVEX_DEPLOY_KEY: "deploy-key",
+      CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY: "query-key",
+    })
+
+    expect(result.warnings).toContain(
+      "CONVEX_DEPLOY_KEY is Vercel-only and should not be needed locally"
+    )
+    expect(result.warnings).toContain(
+      "CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY is Vercel/GitHub deploy-only and should not be needed locally"
+    )
+  })
+
   it("warns when stale Clerk variables are present", () => {
     const result = validate({
       CLERK_JWT_ISSUER_DOMAIN: "legacy-clerk.example",
