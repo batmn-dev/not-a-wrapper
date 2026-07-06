@@ -35,7 +35,7 @@ describe("encryptSecret / decryptSecret", () => {
   it("emits versioned ciphertext and a fresh IV per call", () => {
     const a = encryptSecret("same", userKeyBinding)
     const b = encryptSecret("same", userKeyBinding)
-    expect(a.encrypted.startsWith("v2:")).toBe(true)
+    expect(a.encrypted.startsWith("v3:")).toBe(true)
     // GCM nonce must never repeat under one key.
     expect(a.iv).not.toBe(b.iv)
     expect(a.encrypted).not.toBe(b.encrypted)
@@ -63,6 +63,22 @@ describe("encryptSecret / decryptSecret", () => {
     const { encrypted, iv } = encryptSecret("secret", userKeyBinding)
     expect(() =>
       decryptSecret(encrypted, iv, { ...userKeyBinding, provider: "anthropic" })
+    ).toThrow()
+  })
+
+  it("rejects delimiter-colliding userKey bindings", () => {
+    const { encrypted, iv } = encryptSecret("secret", {
+      kind: "userKey",
+      ownerId: "user alice",
+      provider: "openai",
+    })
+
+    expect(() =>
+      decryptSecret(encrypted, iv, {
+        kind: "userKey",
+        ownerId: "user",
+        provider: "alice openai",
+      })
     ).toThrow()
   })
 

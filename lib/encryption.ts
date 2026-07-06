@@ -1,9 +1,10 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "crypto"
 
 const ALGORITHM = "aes-256-gcm"
-// Ciphertext format version. Bump when the on-the-wire shape changes so decrypt
-// can branch instead of silently misreading old rows.
-const VERSION = "v2"
+// Ciphertext format/auth-binding version. Bump when the on-the-wire shape or
+// AAD contract changes so decrypt can reject or branch instead of silently
+// misreading old rows.
+const VERSION = "v3"
 // GCM's standard nonce length. 12 bytes is the NIST-recommended size and what
 // every GCM implementation is tuned for.
 const IV_LENGTH = 12
@@ -58,7 +59,7 @@ function aadFor(binding: SecretBinding): Buffer {
     binding.kind === "userKey"
       ? ["userKey", binding.ownerId, binding.provider]
       : ["mcpAuth", binding.ownerId]
-  return Buffer.from(parts.join(" "), "utf8")
+  return Buffer.from(JSON.stringify(parts), "utf8")
 }
 
 export type EncryptedSecret = { encrypted: string; iv: string }
