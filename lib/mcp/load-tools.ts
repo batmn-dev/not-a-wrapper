@@ -9,7 +9,8 @@ import { decryptSecret } from "@/lib/encryption"
 import { createMCPClient } from "@ai-sdk/mcp"
 import { fetchMutation, fetchQuery } from "convex/nextjs"
 import { isCircuitOpen, recordFailure, recordSuccess } from "./circuit-breaker"
-import { assertMcpUrlAllowed } from "./url-validation"
+import { createPinnedMcpFetch } from "./pinned-fetch"
+import { resolveMcpUrlForConnection } from "./url-validation"
 
 // =============================================================================
 // Types
@@ -365,12 +366,10 @@ export async function loadUserMcpTools(
   // -------------------------------------------------------------------------
   const clientResults = await Promise.allSettled(
     serversToConnect.map(async (server) => {
-      // SSRF gate — string + DNS-rebinding checks. Shared with the transient
-      // test-connection path so both routes enforce one policy. A stored URL
-      // passed the string check at create time, but re-run it here: DNS can
-      // rebind and the create-time check can be bypassed by calling the Convex
-      // mutation directly.
-      await assertMcpUrlAllowed(server.url)
+      // SSRF gate — string + DNS-rebinding checks. The returned address is also
+      // pinned into the transport fetch so validation and connection cannot
+      // diverge between check and use.
+      const resolvedUrl = await resolveMcpUrlForConnection(server.url)
 
       const headers = buildAuthHeaders(server, ownerId)
 
@@ -383,6 +382,7 @@ export async function loadUserMcpTools(
         transport: {
           type: server.transport,
           url: server.url,
+          fetch: createPinnedMcpFetch(resolvedUrl),
           ...(headers ? { headers } : {}),
         },
       })

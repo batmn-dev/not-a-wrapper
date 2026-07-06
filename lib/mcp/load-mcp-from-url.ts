@@ -1,5 +1,6 @@
 import { createMCPClient } from "@ai-sdk/mcp"
-import { assertMcpUrlAllowed } from "./url-validation"
+import { createPinnedMcpFetch } from "./pinned-fetch"
+import { resolveMcpUrlForConnection } from "./url-validation"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,11 +43,10 @@ export async function loadMCPToolsFromURL(config: string | McpTransportConfig) {
 
   const { url, transport = "http", headers } = normalized
 
-  // SSRF gate — reject private/reserved hosts and DNS-rebinding targets before
-  // opening any connection. This is the transient "test connection" path's only
-  // guard (the durable path guards separately in load-tools.ts), so it must run
-  // here, not at the callsite.
-  await assertMcpUrlAllowed(url)
+  // SSRF gate — reject private/reserved hosts and DNS-rebinding targets, then
+  // pin the MCP transport's socket lookup to the vetted address so validation
+  // and connection cannot diverge via DNS rebinding.
+  const resolvedUrl = await resolveMcpUrlForConnection(url)
 
   // @ai-sdk/mcp 2.x HTTP/SSE transports reject 3xx responses by default
   // (redirect: "error", an SSRF hardening). A server URL that redirects —
@@ -56,6 +56,7 @@ export async function loadMCPToolsFromURL(config: string | McpTransportConfig) {
     transport: {
       type: transport,
       url,
+      fetch: createPinnedMcpFetch(resolvedUrl),
       ...(headers && Object.keys(headers).length > 0 ? { headers } : {}),
     },
   })

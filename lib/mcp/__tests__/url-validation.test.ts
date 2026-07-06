@@ -5,6 +5,7 @@ import {
   isPrivateIP,
   isPrivateIPv6,
   McpUrlValidationError,
+  resolveMcpUrlForConnection,
   validateResolvedUrl,
   validateServerUrl,
 } from "../url-validation"
@@ -439,7 +440,7 @@ describe("validateResolvedUrl", () => {
     expect(result).toBe("Private IP addresses are not allowed")
   })
 
-  it("fails closed when DNS cannot resolve any address", async () => {
+  it("fails closed when DNS resolution cannot validate any address", async () => {
     mockResolve4.mockRejectedValue(new Error("ENOTFOUND"))
     const result = await validateResolvedUrl("https://nonexistent.example.com")
     expect(result).toBe("Domain could not be resolved to a public IP address")
@@ -450,6 +451,13 @@ describe("validateResolvedUrl", () => {
     mockResolve6.mockResolvedValue([])
     const result = await validateResolvedUrl("https://empty.example.com")
     expect(result).toBe("Domain could not be resolved to a public IP address")
+  })
+
+  it("allows a single-family DNS gap when another family resolves publicly", async () => {
+    mockResolve4.mockResolvedValue(["93.184.216.34"])
+    mockResolve6.mockRejectedValue(new Error("ENOTFOUND"))
+    const result = await validateResolvedUrl("https://example.com")
+    expect(result).toBeNull()
   })
 
   describe("IPv6 DNS rebinding protection", () => {
@@ -546,5 +554,45 @@ describe("assertMcpUrlAllowed", () => {
     await expect(
       assertMcpUrlAllowed("https://nonexistent.example.com")
     ).rejects.toThrow(/could not be resolved/)
+  })
+})
+
+// =============================================================================
+// resolveMcpUrlForConnection — returns the public addresses that transport code pins
+// =============================================================================
+
+describe("resolveMcpUrlForConnection", () => {
+  const mockResolve4 = vi.mocked(dns.resolve4)
+  const mockResolve6 = vi.mocked(dns.resolve6)
+
+  beforeEach(() => {
+    mockResolve4.mockReset()
+    mockResolve6.mockReset()
+    mockResolve6.mockRejectedValue(new Error("ENOTFOUND"))
+  })
+
+  it("returns resolved public addresses for hostnames", async () => {
+    mockResolve4.mockResolvedValue(["93.184.216.34"])
+    mockResolve6.mockResolvedValue(["2606:2800:220:1:248:1893:25c8:1946"])
+
+    await expect(
+      resolveMcpUrlForConnection("https://mcp.example.com")
+    ).resolves.toMatchObject({
+      hostname: "mcp.example.com",
+      addresses: [
+        { address: "93.184.216.34", family: 4 },
+        { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 },
+      ],
+    })
+  })
+
+  it("returns literal public IPs without DNS", async () => {
+    await expect(
+      resolveMcpUrlForConnection("https://8.8.8.8")
+    ).resolves.toMatchObject({
+      hostname: "8.8.8.8",
+      addresses: [{ address: "8.8.8.8", family: 4 }],
+    })
+    expect(mockResolve4).not.toHaveBeenCalled()
   })
 })

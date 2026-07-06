@@ -19,8 +19,17 @@ import {
 const mockCreateMCPClient = vi.fn()
 const mockFetchQuery = vi.fn()
 const mockFetchMutation = vi.fn()
-const { mockTrustedRetryAllowlist } = vi.hoisted(() => ({
-  mockTrustedRetryAllowlist: [] as string[],
+const { mockResolve4, mockResolve6, mockTrustedRetryAllowlist } = vi.hoisted(
+  () => ({
+    mockResolve4: vi.fn(),
+    mockResolve6: vi.fn(),
+    mockTrustedRetryAllowlist: [] as string[],
+  })
+)
+
+vi.mock("node:dns/promises", () => ({
+  resolve4: mockResolve4,
+  resolve6: mockResolve6,
 }))
 
 vi.mock("@ai-sdk/mcp", () => ({
@@ -247,6 +256,14 @@ describe("loadUserMcpTools", () => {
       expect(result.tools).toHaveProperty("github_list_repos")
       expect(result.clients).toHaveLength(1)
       expect(result.clients[0]).toBe(client)
+      expect(mockCreateMCPClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          transport: expect.objectContaining({
+            fetch: expect.any(Function),
+            url: "https://mcp.example.com",
+          }),
+        })
+      )
 
       // Tool server map should have entries
       const issueInfo = result.toolServerMap.get("github_create_issue")
@@ -375,6 +392,7 @@ describe("loadUserMcpTools", () => {
           type: "http",
           url: "https://mcp.example.com",
           headers: { Authorization: "Bearer decrypted_encrypted-token" },
+          fetch: expect.any(Function),
         },
       })
     })
