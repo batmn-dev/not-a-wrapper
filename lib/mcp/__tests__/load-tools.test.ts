@@ -1,3 +1,4 @@
+import * as dns from "node:dns/promises"
 import { decryptSecret } from "@/lib/encryption"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { recordFailure, resetAllCircuits } from "../circuit-breaker"
@@ -49,6 +50,8 @@ vi.mock("@/convex/_generated/api", () => ({
 vi.mock("@/lib/encryption", () => ({
   decryptSecret: vi.fn((encrypted: string) => `decrypted_${encrypted}`),
 }))
+
+vi.mock("node:dns/promises")
 
 vi.mock("@/lib/config", () => ({
   MCP_CONNECTION_TIMEOUT_MS: 5000,
@@ -167,10 +170,15 @@ describe("slugify", () => {
 })
 
 describe("loadUserMcpTools", () => {
+  const mockResolve4 = vi.mocked(dns.resolve4)
+  const mockResolve6 = vi.mocked(dns.resolve6)
+
   beforeEach(() => {
     vi.clearAllMocks()
     resetAllCircuits()
     mockTrustedRetryAllowlist.length = 0
+    mockResolve4.mockResolvedValue(["93.184.216.34"])
+    mockResolve6.mockRejectedValue(new Error("ENOTFOUND"))
     // fetchMutation is fire-and-forget with .catch() — must return a promise
     mockFetchMutation.mockResolvedValue(undefined)
     // The parallel load fires three fetchQuery calls: mcpServers.list,
