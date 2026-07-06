@@ -438,10 +438,17 @@ describe("validateResolvedUrl", () => {
     expect(result).toBe("Private IP addresses are not allowed")
   })
 
-  it("passes through on DNS resolution failure", async () => {
+  it("fails closed when DNS cannot resolve any address", async () => {
     mockResolve4.mockRejectedValue(new Error("ENOTFOUND"))
     const result = await validateResolvedUrl("https://nonexistent.example.com")
-    expect(result).toBeNull()
+    expect(result).toBe("Domain could not be resolved to a public IP address")
+  })
+
+  it("fails closed when DNS returns no addresses", async () => {
+    mockResolve4.mockResolvedValue([])
+    mockResolve6.mockResolvedValue([])
+    const result = await validateResolvedUrl("https://empty.example.com")
+    expect(result).toBe("Domain could not be resolved to a public IP address")
   })
 
   describe("IPv6 DNS rebinding protection", () => {
@@ -528,5 +535,12 @@ describe("assertMcpUrlAllowed", () => {
     await expect(
       assertMcpUrlAllowed("https://mcp.example.com")
     ).resolves.toBeUndefined()
+  })
+
+  it("throws when DNS cannot validate any address", async () => {
+    mockResolve4.mockRejectedValue(new Error("ENOTFOUND"))
+    await expect(
+      assertMcpUrlAllowed("https://nonexistent.example.com")
+    ).rejects.toThrow(/could not be resolved/)
   })
 })

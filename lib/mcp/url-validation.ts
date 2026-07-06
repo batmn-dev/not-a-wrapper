@@ -191,7 +191,10 @@ export async function validateResolvedUrl(url: string): Promise<string | null> {
     resolve6(hostname),
   ])
 
+  let resolvedAddressCount = 0
+
   if (v4Result.status === "fulfilled") {
+    resolvedAddressCount += v4Result.value.length
     for (const addr of v4Result.value) {
       if (isPrivateIP(addr)) {
         return `Domain resolves to private IP (${addr}) — possible DNS rebinding`
@@ -200,11 +203,16 @@ export async function validateResolvedUrl(url: string): Promise<string | null> {
   }
 
   if (v6Result.status === "fulfilled") {
+    resolvedAddressCount += v6Result.value.length
     for (const addr of v6Result.value) {
       if (isPrivateIPv6(addr)) {
         return `Domain resolves to private IPv6 (${addr}) — possible DNS rebinding`
       }
     }
+  }
+
+  if (resolvedAddressCount === 0) {
+    return "Domain could not be resolved to a public IP address"
   }
 
   return null
