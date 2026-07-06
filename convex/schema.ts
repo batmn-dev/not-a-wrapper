@@ -163,9 +163,6 @@ export default defineSchema({
     model: v.string(),
     provider: v.string(),
     status: generationRunStatus,
-    // No longer written (ADR-0008); kept optional so pre-existing run docs
-    // validate. Drop after a migration unsets it.
-    chatVersion: v.optional(v.number()),
     startedAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     updatedAt: v.number(),

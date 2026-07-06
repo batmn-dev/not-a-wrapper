@@ -32,7 +32,11 @@ describe("resolveGenerationRunTransition", () => {
     it("fail overwrites completed (onError vs envelope must converge to failed)", () => {
       // Both orders converge: completed-then-fail lands here (completed → failed),
       // and fail-then-completed no-ops the completion (see complete-from-terminal).
-      const verdict = resolve("completed", { kind: "fail", error: "boom" }, semanticFacts)
+      const verdict = resolve(
+        "completed",
+        { kind: "fail", error: "boom" },
+        semanticFacts
+      )
       expect(verdict).toMatchObject({
         kind: "transition",
         run: { status: "failed", error: "boom", settle: true },
@@ -114,6 +118,14 @@ describe("resolveGenerationRunTransition", () => {
         resolve("completed", { kind: "approvals-resolved", anyDenied: true })
       ).toEqual({ kind: "ignore", reason: "already-terminal" })
     })
+
+    it("approvals-resolved from active non-paused runs is ignored", () => {
+      for (const status of ["queued", "running", "streaming"]) {
+        expect(
+          resolve(status, { kind: "approvals-resolved", anyDenied: false })
+        ).toEqual({ kind: "ignore", reason: "not-awaiting-approval" })
+      }
+    })
   })
 
   describe("approval shape", () => {
@@ -124,7 +136,11 @@ describe("resolveGenerationRunTransition", () => {
       })
       expect(verdict).toEqual({
         kind: "transition",
-        run: { status: "awaiting_approval", clearActiveStream: true, settle: false },
+        run: {
+          status: "awaiting_approval",
+          clearActiveStream: true,
+          settle: false,
+        },
         message: { kind: "stamp", status: "awaiting_approval" },
       })
     })
@@ -194,7 +210,10 @@ describe("resolveGenerationRunTransition", () => {
 
     it("supersede from awaiting_approval is not-supersedable (paused runs are deny-pending's job)", () => {
       expect(
-        resolve("awaiting_approval", { kind: "supersede", reason: "superseded" })
+        resolve("awaiting_approval", {
+          kind: "supersede",
+          reason: "superseded",
+        })
       ).toEqual({ kind: "ignore", reason: "not-supersedable" })
     })
 
@@ -219,7 +238,11 @@ describe("resolveGenerationRunTransition", () => {
     })
 
     it("abort of an unresolvable message leaves the message half as none", () => {
-      const verdict = resolve("streaming", { kind: "abort", reason: "stop" }, null)
+      const verdict = resolve(
+        "streaming",
+        { kind: "abort", reason: "stop" },
+        null
+      )
       expect(verdict).toMatchObject({
         kind: "transition",
         message: { kind: "none" },

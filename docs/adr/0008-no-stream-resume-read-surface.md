@@ -47,16 +47,18 @@ message doc, not replay `assistantMessageSnapshots` rows).
 `chatVersion` is no longer sent by the Chat turn runtime nor stored on
 generation runs (it was written and never read — the telemetry that uses
 the request's chat version reads the runtime-local value, not the stored
-field). The schema field stays `v.optional` until a migration unsets it
-on existing docs.
+field). Because the database is pre-launch, the generation-runs schema
+drops the field directly instead of carrying a migration placeholder.
 
 `app/api/chat/search-tools.ts` (superseded by the Tool runtime's
 `policySummary.searchInjected`) is deleted with its test.
 
 ## Consequences
 
-- The module's interface matches its behaviour: 9 public functions, all
-  exercised in production and covered through their `*ForChat` handlers.
+- The module's interface matches its behaviour: 9 public functions are
+  exercised in production. Seven Chat-turn-driven mutations route through
+  their `*ForChat` handlers; the two client approval mutations
+  (`approveToolCall`, `denyToolCall`) are direct client-facing handlers.
 - `assistantMessageSnapshots` remains written (throttled) but its only
   readers are now internal: the write-path sequence dedupe and the
   regeneration-reuse probe in `applyTerminalAssistantOutcome`. Whether

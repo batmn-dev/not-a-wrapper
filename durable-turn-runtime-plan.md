@@ -1,12 +1,17 @@
-# Implementation plan: Durable turn runtime (step 2 — follows generation-run-lifecycle-plan)
+# Archived implementation plan: Durable turn runtime
 
-Implement ADR-0009: extract ALL durable knowledge from the **Chat turn runtime**
-(`app/api/chat/chat-turn-runtime.ts`) into one deep module — the **Durable turn
-runtime** (`app/api/chat/durable-turn-runtime.ts`, new CONTEXT.md entry),
-absorbing `app/api/chat/durable-runtime.ts` as internal vocabulary. The parent
-loses every `durable && convexToken` branch, five mutable cells, and the
-`convexToken` reference in `toResponse()`; the fragile `durableFinal*` handoff
-becomes a named two-method protocol with a LOUD miss.
+Status: completed 2026-07-05 and retained as historical implementation context.
+Do not use this file as the active source of truth for current architecture or
+pending work; use `CONTEXT.md` and `docs/adr/0009-durable-turn-runtime.md`.
+
+This plan described implementing ADR-0009: extracting ALL durable knowledge from
+the **Chat turn runtime** (`app/api/chat/chat-turn-runtime.ts`) into one deep
+module — the **Durable turn runtime**
+(`app/api/chat/durable-turn-runtime.ts`), absorbing
+`app/api/chat/durable-runtime.ts` as internal vocabulary. The parent lost every
+`durable && convexToken` branch, five mutable cells, and the `convexToken`
+reference in `toResponse()`; the fragile `durableFinal*` handoff became a named
+two-method protocol with a LOUD miss.
 
 **Branch discipline: work on the current branch. Do not create or switch branches.**
 

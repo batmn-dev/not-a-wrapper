@@ -59,10 +59,11 @@ export type MessageResolution =
   | { kind: "delete-and-reselect"; siblingId: string }
   | { kind: "restore-completed" }
 
-export type LifecycleVerdict<
-  M extends MessageResolution = MessageResolution,
-> =
-  | { kind: "ignore"; reason: "already-terminal" | "not-supersedable" }
+export type LifecycleVerdict<M extends MessageResolution = MessageResolution> =
+  | {
+      kind: "ignore"
+      reason: "already-terminal" | "not-supersedable" | "not-awaiting-approval"
+    }
   | {
       kind: "transition"
       run: {
@@ -120,7 +121,7 @@ export function resolveTerminalAssistantMessageResolution(
 }
 
 function ignore(
-  reason: "already-terminal" | "not-supersedable"
+  reason: "already-terminal" | "not-supersedable" | "not-awaiting-approval"
 ): LifecycleVerdict {
   return { kind: "ignore", reason }
 }
@@ -170,7 +171,9 @@ export function resolveGenerationRunTransition(
       if (!isActiveGenerationRunStatus(runStatus)) {
         return ignore("already-terminal")
       }
-      const status = signal.hasPendingApprovals ? "awaiting_approval" : "completed"
+      const status = signal.hasPendingApprovals
+        ? "awaiting_approval"
+        : "completed"
       return {
         kind: "transition",
         run: {
@@ -270,10 +273,15 @@ export function resolveGenerationRunTransition(
     case "approvals-resolved": {
       // The continuation turn closes the paused run once its approvals resolve.
       // A run already settled (aborted by a racing Stop, or completed) is left
-      // alone — the continuation owns a NEW run and message, so the message half
-      // is none.
-      if (!isActiveGenerationRunStatus(runStatus)) {
-        return ignore("already-terminal")
+      // alone. A queued/running/streaming run never reached the approval pause,
+      // so a stale or misrouted response must not settle it. The continuation
+      // owns a NEW run and message, so the message half is none.
+      if (runStatus !== "awaiting_approval") {
+        return ignore(
+          isActiveGenerationRunStatus(runStatus)
+            ? "not-awaiting-approval"
+            : "already-terminal"
+        )
       }
       return {
         kind: "transition",

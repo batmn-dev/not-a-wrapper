@@ -339,10 +339,12 @@ async function gatherAssistantMessageFacts(
   run: Doc<"generationRuns">,
   messageId?: Id<"messages">
 ): Promise<ResolvedAssistantMessage | null> {
+  const activeStreamMessageId =
+    run.activeStreamId === undefined
+      ? null
+      : ctx.db.normalizeId("messages", run.activeStreamId)
   const resolvedMessageId =
-    messageId ??
-    run.assistantMessageId ??
-    (run.activeStreamId as Id<"messages"> | undefined)
+    messageId ?? run.assistantMessageId ?? activeStreamMessageId
   if (!resolvedMessageId) return null
 
   const message = await ctx.db.get(resolvedMessageId)
@@ -1683,7 +1685,6 @@ export async function createToolApprovalRequestForChat(
   const { user } = await requireChatOwner(ctx, args.chatId)
   const run = await ctx.db.get(args.runId)
   if (!run || run.chatId !== args.chatId) throw new Error("Run not found")
-  await requireAssistantMessageForRun(ctx, run, args.assistantMessageId)
 
   const existing = await ctx.db
     .query("toolApprovalRequests")
@@ -1697,7 +1698,6 @@ export async function createToolApprovalRequestForChat(
     ) {
       throw new Error("Approval request does not belong to this run")
     }
-    return existing._id
   }
 
   // Bug fix: a late approval request landing on an already-settled run — a user
@@ -1713,6 +1713,9 @@ export async function createToolApprovalRequestForChat(
     { kind: "approval-requested" }
   )
   if (verdict.kind === "ignore") return null
+
+  await requireAssistantMessageForRun(ctx, run, args.assistantMessageId)
+  if (existing) return existing._id
 
   const now = nowMs()
   const approvalRequestId = await ctx.db.insert("toolApprovalRequests", {
