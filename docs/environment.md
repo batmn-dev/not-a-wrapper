@@ -124,6 +124,9 @@ Set these Vercel Preview environment variables:
   repositories that can be fetched without credentials
 
 Use a Convex preview deploy key for `CONVEX_DEPLOY_KEY`.
+`CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY` is not needed for normal previews because
+preview deploys run a dry-run schema preflight. Set it only if
+`CONVEX_SCHEMA_PREFLIGHT_MODE=prod` is deliberately enabled for a preview.
 
 Vercel provides `VERCEL_BRANCH_URL` and
 `VERCEL_PROJECT_PRODUCTION_URL`. `convex.json` uses those values to configure
@@ -165,6 +168,7 @@ Set these Vercel Production environment variables:
 - `WORKOS_COOKIE_PASSWORD`
 - `NEXT_PUBLIC_WORKOS_REDIRECT_URI`
 - `CONVEX_DEPLOY_KEY`
+- `CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY`
 - `CSRF_SECRET`
 - `ENCRYPTION_KEY`
 - AI provider keys needed by the deployment
@@ -174,7 +178,14 @@ Set these Vercel Production environment variables:
 - optional `SCHEMA_GUARD_ALLOW_VERCEL_GITHUB_FALLBACK=1` only for public GitHub
   repositories that can be fetched without credentials
 
-Use a Convex production deploy key for `CONVEX_DEPLOY_KEY`.
+Use a Convex production deploy key with `deployment:deploy` for
+`CONVEX_DEPLOY_KEY`.
+
+Use a separate Convex production deploy key with
+`deployment:functions:runTestQuery` for
+`CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY`. `bun run convex:deploy` passes this key
+only to the read-only `convex run --inline-query --prod` schema preflight, then
+passes `CONVEX_DEPLOY_KEY` to `convex deploy`.
 
 GitHub Actions production Convex deploys also need the repository variable
 `VERCEL_PROJECT_PRODUCTION_URL`, because they do not run inside Vercel and do
@@ -182,6 +193,10 @@ not receive Vercel system environment variables automatically. Set it to the
 production host only, without `https://` and without a path. The deploy workflow
 passes it through to `convex deploy` so `convex.json` can configure WorkOS
 AuthKit redirect URIs and CORS origins.
+
+GitHub Actions production Convex deploys also need two repository secrets:
+`CONVEX_DEPLOY_KEY` for deployment and `CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY` for
+the query-capable preflight.
 
 In WorkOS production, configure:
 
@@ -200,19 +215,21 @@ Production `convex deploy` must go through the shared deploy command:
 bun run convex:deploy
 ```
 
-> **Dormant pre-launch.** The schema guard and deploy preflight currently no-op
-> (`PRELAUNCH_DISPOSABLE_DB` in `scripts/convex-schema-contract-lib.mjs`) because
-> the project has no users or production data — `bun run convex:deploy` runs
-> `convex deploy` without the manifest checks, and the `SCHEMA_GUARD_*` env vars
-> below are not needed yet. See AGENTS.md → "Pre-Launch: The Database Is
-> Disposable". The paragraph below applies once the discipline is re-activated at
-> launch.
+> **Pre-launch scope.** Non-production data is disposable, but production deploys
+> still run schema-contraction preflight because Convex rejects strict schemas
+> when existing production documents contain removed fields. Set
+> `CONVEX_PROD_DB_DISPOSABLE=true` only for an intentional production wipe or
+> throwaway production deploy.
 
 The read-only preflight uses `convex/migrations/` manifests to verify that
 removed schema fields have zero legacy documents on the target deployment. It
 prints only table names, field names, and aggregate counts, and blocks deploys
 if the diff base or Convex aggregate counts cannot be verified. See
 `docs/convex-migrations.md` for the expand/migrate/contract workflow.
+
+For direct `bun run convex:schema-preflight` production runs, set
+`CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY`; the script maps it to the Convex CLI's
+`CONVEX_DEPLOY_KEY` only for the inline query process.
 
 For private production deployments, confirm that the production environment can
 fetch the base schema before relying on deploy automation. Configure either a

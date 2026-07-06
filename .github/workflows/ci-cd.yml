@@ -50,20 +50,15 @@ jobs:
       - name: Run Convex schema deploy contract tests
         run: bunx vitest run scripts/convex-schema-contract-lib.test.mjs
 
-      # The schema preflight/guard fail-closed CI checks are dormant pre-launch:
-      # the database is disposable (PRELAUNCH_DISPOSABLE_DB in
-      # scripts/convex-schema-contract-lib.mjs), so the preflight no-ops and the
-      # fail-closed assertions below no longer apply. Re-enable them at launch
-      # alongside the migration discipline. See AGENTS.md → "Pre-Launch: The
-      # Database Is Disposable".
-      # - name: Dry-run Convex schema preflight script
-      #   run: node scripts/convex-schema-contract-preflight.mjs --fetch-base --require-diff-base --dry-run
-      # - name: Verify schema preflight fails closed without diff base
-      #   run: |
-      #     if node scripts/convex-schema-contract-preflight.mjs --base refs/remotes/schema-guard/missing-${{ github.run_id }} --require-diff-base --dry-run; then
-      #       echo "Expected schema preflight to fail when the required diff base cannot be read"
-      #       exit 1
-      #     fi
+      - name: Dry-run Convex schema preflight script
+        run: node scripts/convex-schema-contract-preflight.mjs --fetch-base --require-diff-base --dry-run
+
+      - name: Verify schema preflight fails closed without diff base
+        run: |
+          if node scripts/convex-schema-contract-preflight.mjs --base refs/remotes/schema-guard/missing-${{ github.run_id }} --require-diff-base --dry-run; then
+            echo "Expected schema preflight to fail when the required diff base cannot be read"
+            exit 1
+          fi
 
       - name: Run all tests
         run: bun run test
@@ -126,12 +121,26 @@ jobs:
             exit 1
           fi
 
+          if [ -z "${CONVEX_DEPLOY_KEY:-}" ]; then
+            echo "::error title=Missing CONVEX_DEPLOY_KEY::Set the GitHub Actions secret CONVEX_DEPLOY_KEY to a Convex production deploy key with deployment:deploy."
+            exit 1
+          fi
+
+          if [ -z "${CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY:-}" ]; then
+            echo "::error title=Missing CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY::Set the GitHub Actions secret CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY to a Convex production deploy key with deployment:functions:runTestQuery."
+            exit 1
+          fi
+
           if [[ "$VERCEL_PROJECT_PRODUCTION_URL" == http://* || "$VERCEL_PROJECT_PRODUCTION_URL" == https://* || "$VERCEL_PROJECT_PRODUCTION_URL" == */* ]]; then
             echo "::error title=Invalid VERCEL_PROJECT_PRODUCTION_URL::Use only the production host, for example example.com. convex.json adds https:// and /callback."
             exit 1
           fi
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY: ${{ secrets.CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY }}
 
       - name: Deploy to Convex
         run: bun run convex:deploy
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY: ${{ secrets.CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY }}

@@ -14,7 +14,7 @@ import {
   fieldKey,
   formatCheck,
   loadMigrationManifests,
-  PRELAUNCH_DISPOSABLE_DB,
+  shouldSkipSchemaContractionChecks,
 } from "./convex-schema-contract-lib.mjs"
 
 function parseArgs(argv) {
@@ -123,17 +123,17 @@ export function runGuard({
 }
 
 function runCli() {
-  if (PRELAUNCH_DISPOSABLE_DB) {
-    console.log(
-      "Convex schema contraction guard: dormant pre-launch (disposable DB) — skipping. See AGENTS.md."
-    )
-    return
-  }
-
   const options = parseArgs(process.argv.slice(2))
 
   if (options.help) {
     printHelp()
+    return
+  }
+
+  if (shouldSkipSchemaContractionChecks()) {
+    console.log(
+      "Convex schema contraction guard: skipping disposable non-production workflow. Production deploy preflight remains active."
+    )
     return
   }
 

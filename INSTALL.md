@@ -146,9 +146,9 @@ bun run convex:schema-guard
 Use `bun run test`; the configured test runner is Vitest.
 
 `bun run build` deploys Convex before building and injects
-`NEXT_PUBLIC_CONVEX_URL` (the schema contraction preflight is dormant
-pre-launch); use `bun run build:next` for a local Next.js production build
-without deploying Convex.
+`NEXT_PUBLIC_CONVEX_URL`; production deploys also run the schema contraction
+preflight. Use `bun run build:next` for a local Next.js production build without
+deploying Convex.
 
 ## Production Deployment
 

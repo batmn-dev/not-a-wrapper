@@ -3,6 +3,8 @@ import { spawnSync } from "node:child_process"
 import { pathToFileURL } from "node:url"
 
 const PREFLIGHT_SCRIPT = "scripts/convex-schema-contract-preflight.mjs"
+const PREFLIGHT_DEPLOY_KEY_ENV = "CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY"
+const CONVEX_DEPLOY_KEY_ENV = "CONVEX_DEPLOY_KEY"
 const BASE_DEPLOY_ARGS = [
   "deploy",
   "--cmd-url-env-var-name",
@@ -44,6 +46,24 @@ export function preflightArgsForDeployEnv(env = process.env) {
   return args
 }
 
+function envValue(value) {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : null
+}
+
+export function preflightEnvForDeployEnv(env = process.env) {
+  const preflightDeployKey = envValue(env[PREFLIGHT_DEPLOY_KEY_ENV])
+
+  if (!preflightDeployKey) {
+    return env
+  }
+
+  return {
+    ...env,
+    [CONVEX_DEPLOY_KEY_ENV]: preflightDeployKey,
+  }
+}
+
 export function convexDeployArgs(extraArgs = []) {
   return [...BASE_DEPLOY_ARGS, ...extraArgs]
 }
@@ -81,7 +101,11 @@ export function runDeploy({
   const plan = deployPlanForEnv({ env, extraArgs })
 
   log(`Convex schema contraction preflight mode: ${plan.mode}`)
-  runCommand(process.execPath, plan.preflightArgs, env)
+  runCommand(
+    process.execPath,
+    plan.preflightArgs,
+    preflightEnvForDeployEnv(env)
+  )
   runCommand("convex", plan.deployArgs, env)
 }
 

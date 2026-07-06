@@ -199,6 +199,12 @@ export function validateEnvContent(content, options = {}) {
     )
   }
 
+  if (hasValue(env, "CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY")) {
+    warnings.push(
+      "CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY is Vercel/GitHub deploy-only and should not be needed locally"
+    )
+  }
+
   return { env, errors, warnings }
 }
 

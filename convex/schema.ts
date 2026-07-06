@@ -163,6 +163,9 @@ export default defineSchema({
     model: v.string(),
     provider: v.string(),
     status: generationRunStatus,
+    // Compatibility field: no longer written, but production may still contain
+    // older run docs. Drop only after preflight proves zero legacy documents.
+    chatVersion: v.optional(v.number()),
     startedAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     updatedAt: v.number(),
