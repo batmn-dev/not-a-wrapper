@@ -22,9 +22,10 @@ import {
  * (`getAuthenticatedWorkosSession()` → 401, then build a Convex client) and
  * *none* validated CSRF, so the token the client faithfully attached was never
  * checked. A route wrapped here cannot run its body without a verified session,
- * and — for unsafe methods — cannot run without a valid CSRF double-submit. The
- * check moves in front of the handler instead of being a helper each route has
- * to remember to call. See ADR-0010.
+ * and — for unsafe methods — cannot run without a valid CSRF double-submit. CSRF
+ * is checked after auth so anonymous unsafe requests still receive the normal
+ * 401 response. The check moves in front of the handler instead of being a helper
+ * each route has to remember to call. See ADR-0010.
  */
 
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
@@ -80,13 +81,13 @@ export function authenticatedRoute<Rest extends unknown[]>(
   const enforceCsrf = opts.csrf ?? true
 
   return async (req: Request, ...rest: Rest): Promise<Response> => {
+    const session = await getAuthenticatedWorkosSession()
+    if (!session) return unauthorizedError()
+
     if (enforceCsrf && UNSAFE_METHODS.has(req.method.toUpperCase())) {
       const csrfError = await assertCsrf(req)
       if (csrfError) return csrfError
     }
-
-    const session = await getAuthenticatedWorkosSession()
-    if (!session) return unauthorizedError()
 
     const convex = createAuthenticatedConvexClient(session.accessToken)
 
