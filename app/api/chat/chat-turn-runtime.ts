@@ -106,7 +106,9 @@ export type ChatTurnInput = {
   messages: MessageAISDK[]
   chatId: string
   model: string
-  systemPrompt: string
+  // Optional: absent for a malformed request that passed shape validation;
+  // prepare() falls back to SYSTEM_PROMPT_DEFAULT.
+  systemPrompt?: string
   enableSearch: boolean
   chatVersion?: number
   expectedVisibleMessageCount?: number

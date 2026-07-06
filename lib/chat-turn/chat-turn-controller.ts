@@ -4,6 +4,7 @@ import {
   createOptimisticMessageId,
 } from "@/lib/chat-store/identity"
 import { MESSAGE_MAX_LENGTH } from "@/lib/config"
+import type { Attachment } from "@/lib/file-handling"
 import {
   buildChatTurnRequestBody,
   buildEditRequest,
@@ -38,18 +39,10 @@ const MESSAGE_TOO_LONG_ERROR = `The message you submitted was too long, please s
 type SetMessagesAction =
   ChatTurnMessage[] | ((messages: ChatTurnMessage[]) => ChatTurnMessage[])
 
-type OptimisticAttachment = {
-  name: string
-  contentType: string
-  url: string
-}
-
-type UploadedAttachment = {
-  name: string
-  contentType: string
-  url: string
-  attachmentId?: string
-}
+// The shared attachment shape (lib/file-handling.ts). An optimistic attachment
+// is the same minus the server-assigned id it does not have yet.
+type OptimisticAttachment = Omit<Attachment, "attachmentId">
+type UploadedAttachment = Attachment
 
 type SendMessageOptions = { body?: Record<string, unknown> }
 type RegenerateMessageOptions = SendMessageOptions & { messageId?: string }

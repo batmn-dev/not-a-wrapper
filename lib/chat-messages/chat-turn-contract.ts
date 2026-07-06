@@ -67,7 +67,10 @@ export type ChatTurnBodyFields = {
    * (`MISSING_GUEST_ID` otherwise); ignored when a session exists. */
   userId?: string
   model: string
-  systemPrompt: string
+  /** Optional on the wire: the parser does not require it and the Chat turn
+   * runtime falls back to `SYSTEM_PROMPT_DEFAULT`. The client builder always
+   * sends one. */
+  systemPrompt?: string
   enableSearch?: boolean
   chatVersion?: number
   expectedVisibleMessageCount?: number
@@ -87,6 +90,10 @@ export type ChatTurnRequestRejection = {
   code: "INVALID_REQUEST" | "MISSING_GUEST_ID"
   error: string
   details?: Record<string, string>
+  /** True when the rejection represents a state our own client should never
+   * produce (a contract violation, not routine bad input), so the route
+   * captures it to Sentry instead of dropping it as an expected 400. */
+  unexpected?: boolean
 }
 
 export type ChatTurnRequestParseResult =
@@ -129,11 +136,14 @@ export function parseChatTurnRequest(
   }
 
   if (record.edit && record.regeneration) {
+    // Edit and regeneration are mutually exclusive by client construction, so
+    // both present means a client bug worth surfacing — not routine bad input.
     return {
       ok: false,
       status: 400,
       code: "INVALID_REQUEST",
       error: "Regeneration cannot be combined with edit generation",
+      unexpected: true,
     }
   }
 

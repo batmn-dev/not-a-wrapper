@@ -6,33 +6,7 @@ import {
   type ChatTurnMessage,
   type ChatTurnSnapshot,
 } from "./chat-turn-controller"
-
-function userMessage(
-  id: string,
-  text: string,
-  createdAt = new Date("2026-01-01T00:00:00.000Z"),
-  extraParts: NonNullable<ChatTurnMessage["parts"]> = []
-): ChatTurnMessage {
-  return {
-    id,
-    role: "user",
-    createdAt,
-    parts: [{ type: "text", text }, ...extraParts],
-  }
-}
-
-function assistantMessage(
-  id: string,
-  text: string,
-  createdAt = new Date("2026-01-01T00:00:01.000Z")
-): ChatTurnMessage {
-  return {
-    id,
-    role: "assistant",
-    createdAt,
-    parts: [{ type: "text", text }],
-  }
-}
+import { assistantMessage, userMessage } from "./fixtures"
 
 function createHarness() {
   let messages: ChatTurnMessage[] = []

@@ -85,6 +85,21 @@ export async function POST(req: Request) {
     // the parser only uses `isAuthenticated` for the guest-id rule.
     const parsed = parseChatTurnRequest(jsonBody, { isAuthenticated })
     if (!parsed.ok) {
+      // Routine bad input (missing fields, malformed JSON, absent guest id) is
+      // an expected 400 and stays silent. An `unexpected` rejection is a
+      // client-contract violation our own client should never produce (e.g.
+      // edit+regeneration together), so capture it — this is the one
+      // validation 400 that carried a Sentry signal before the contract move.
+      if (parsed.unexpected) {
+        Sentry.captureException(new Error(parsed.error), {
+          tags: {
+            route: "api/chat",
+            chat_is_authenticated: String(isAuthenticated),
+            chat_failure_stage: "request_validation",
+          },
+          extra: { requestId, code: parsed.code },
+        })
+      }
       return new Response(
         JSON.stringify({
           error: parsed.error,

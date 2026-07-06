@@ -1,5 +1,6 @@
 import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { describe, expect, it } from "vitest"
+import { assistantMessage, userMessage } from "./fixtures"
 import {
   buildChatTurnRequestBody,
   buildEditRequest,
@@ -8,32 +9,6 @@ import {
   prepareRegenerationTurnPlan,
   type ChatTurnMessage,
 } from "./turn-plans"
-
-function userMessage(
-  id: string,
-  text: string,
-  createdAt = new Date("2026-01-01T00:00:00.000Z")
-): ChatTurnMessage {
-  return {
-    id,
-    role: "user",
-    createdAt,
-    parts: [{ type: "text", text }],
-  }
-}
-
-function assistantMessage(
-  id: string,
-  text: string,
-  createdAt = new Date("2026-01-01T00:00:01.000Z")
-): ChatTurnMessage {
-  return {
-    id,
-    role: "assistant",
-    createdAt,
-    parts: [{ type: "text", text }],
-  }
-}
 
 describe("chat turn plans", () => {
   it("prepares regeneration intent for the targeted latest assistant", () => {

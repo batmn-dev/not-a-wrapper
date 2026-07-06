@@ -1,32 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { assistantMessage, userMessage } from "./fixtures"
 import { type ChatTurnMessage } from "./turn-plans"
 import { createChatTurnStore } from "./turn-store"
-
-function userMessage(
-  id: string,
-  text: string,
-  createdAt = new Date("2026-01-01T00:00:00.000Z")
-): ChatTurnMessage {
-  return {
-    id,
-    role: "user",
-    createdAt,
-    parts: [{ type: "text", text }],
-  }
-}
-
-function assistantMessage(
-  id: string,
-  text: string,
-  createdAt = new Date("2026-01-01T00:00:01.000Z")
-): ChatTurnMessage {
-  return {
-    id,
-    role: "assistant",
-    createdAt,
-    parts: [{ type: "text", text }],
-  }
-}
 
 function createStoreHarness({
   isAuthenticated = false,

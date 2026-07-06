@@ -51,7 +51,16 @@ describe("parseChatTurnRequest", () => {
       status: 400,
       code: "INVALID_REQUEST",
       error: "Regeneration cannot be combined with edit generation",
+      // Flagged unexpected — a client-contract violation the route captures to
+      // Sentry, unlike routine bad input which stays silent.
+      unexpected: true,
     })
+    // Routine bad input is NOT flagged unexpected.
+    const missingFields = parseChatTurnRequest(
+      { messages: validBody.messages },
+      { isAuthenticated: true }
+    )
+    expect(missingFields).not.toHaveProperty("unexpected")
   })
 
   it("requires a guest id only for unauthenticated turns", () => {
