@@ -40,6 +40,23 @@ describe("/api/mcp-servers/test route", () => {
     consoleErrorSpy.mockClear()
   })
 
+  it("returns 400 for malformed JSON without testing the MCP connection", async () => {
+    const response = await POST(
+      new Request("http://test.local/api/mcp-servers/test", {
+        method: "POST",
+        body: "{",
+      })
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: "Request body is not valid JSON",
+      success: false,
+    })
+    expect(loadMCPToolsFromURL).not.toHaveBeenCalled()
+    expect(consoleErrorSpy).not.toHaveBeenCalled()
+  })
+
   it("returns 400 for MCP URL policy rejections without logging a server error", async () => {
     vi.mocked(loadMCPToolsFromURL).mockRejectedValue(
       new McpUrlValidationError("Private IP addresses are not allowed")

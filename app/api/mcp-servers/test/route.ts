@@ -4,6 +4,14 @@ import { loadMCPToolsFromURL } from "@/lib/mcp/load-mcp-from-url"
 import { McpUrlValidationError } from "@/lib/mcp/url-validation"
 import { NextResponse } from "next/server"
 
+type TestMCPServerRequestBody = {
+  url?: string
+  transport?: string
+  authType?: string
+  authValue?: string
+  headerName?: string
+}
+
 /**
  * POST /api/mcp-servers/test
  *
@@ -19,14 +27,20 @@ import { NextResponse } from "next/server"
 export const POST = authenticatedRoute(
   async (request) => {
     try {
-      const body = await request.json()
-      const { url, transport, authType, authValue, headerName } = body as {
-        url?: string
-        transport?: string
-        authType?: string
-        authValue?: string
-        headerName?: string
+      let body: TestMCPServerRequestBody
+      try {
+        body = (await request.json()) as TestMCPServerRequestBody
+      } catch (error) {
+        if (error instanceof SyntaxError) {
+          return NextResponse.json(
+            { error: "Request body is not valid JSON", success: false },
+            { status: 400 }
+          )
+        }
+        throw error
       }
+
+      const { url, transport, authType, authValue, headerName } = body
 
       if (!url?.trim()) {
         return NextResponse.json(
