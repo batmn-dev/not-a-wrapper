@@ -163,7 +163,6 @@ export default defineSchema({
     model: v.string(),
     provider: v.string(),
     status: generationRunStatus,
-    chatVersion: v.optional(v.number()),
     startedAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     updatedAt: v.number(),
