@@ -25,7 +25,7 @@ const REDACTED = "[REDACTED]"
  * - `ghp_…` / `gho_…` / `ghu_…` / `ghs_…` / `ghr_…` — GitHub tokens (underscore)
  * - `xox[baprs]-…` — Slack tokens
  * - `bt-…` — Braintrust
- * - `AKIA…` — AWS access key id
+ * - `AKIA…` / `ASIA…` — AWS access key id (long-term / STS temporary)
  * - `AIza…` — Google API key
  *
  * The prefix is followed by `-` or `_` (GitHub uses `_`, the rest `-`) and an
@@ -36,7 +36,7 @@ const REDACTED = "[REDACTED]"
  * call the provided helpers which build a fresh regex per invocation.
  */
 export function buildSecretValueRegex(): RegExp {
-  return /\b(?:Bearer\s+)?(?:bt|fc|gh[pousr]|sk|xox[baprs]?)[-_][A-Za-z0-9_-]{8,}\b|\bAKIA[0-9A-Z]{16}\b|\bAIza[0-9A-Za-z_-]{35}\b/g
+  return /\b(?:Bearer\s+)?(?:bt|fc|gh[pousr]|sk|xox[baprs]?)[-_][A-Za-z0-9_-]{8,}\b|\b(?:AKIA|ASIA)[0-9A-Z]{16}\b|\bAIza[0-9A-Za-z_-]{35}\b/g
 }
 
 /** True if the string contains anything shaped like a credential. */

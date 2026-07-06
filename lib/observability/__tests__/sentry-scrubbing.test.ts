@@ -16,6 +16,7 @@ describe("secret value detection", () => {
       "ghp_abcdefgh12345678",
       "xoxb-abcdefgh12345678",
       "AKIAIOSFODNN7EXAMPLE",
+      "ASIAIOSFODNN7EXAMPLE",
     ]) {
       expect(containsSecret(s)).toBe(true)
     }
@@ -59,6 +60,23 @@ describe("sentryBeforeSend", () => {
     const message = scrubbed.exception.values[0].value
     expect(message).not.toContain("sk-ant-api03-verysecretvalue00")
     expect(message).toContain("[REDACTED]")
+  })
+
+  it("redacts a temporary AWS access key embedded in an exception message", () => {
+    const event = {
+      exception: {
+        values: [
+          {
+            type: "CredentialsProviderError",
+            value: "STS credentials failed for access key ASIAIOSFODNN7EXAMPLE",
+          },
+        ],
+      },
+    }
+    const scrubbed = sentryBeforeSend(event)
+    const message = scrubbed.exception.values[0].value
+    expect(message).not.toContain("ASIAIOSFODNN7EXAMPLE")
+    expect(message).toBe("STS credentials failed for access key [REDACTED]")
   })
 
   it("still redacts by sensitive key name", () => {
