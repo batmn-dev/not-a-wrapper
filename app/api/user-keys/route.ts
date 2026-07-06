@@ -1,21 +1,17 @@
-import {
-  createAuthenticatedConvexClient,
-  internalServerError,
-  jsonError,
-  unauthorizedError,
-} from "@/app/api/_lib/convex"
+import { authenticatedRoute } from "@/app/api/_lib/authenticated-route"
+import { internalServerError, jsonError } from "@/app/api/_lib/convex"
 import { api } from "@/convex/_generated/api"
-import { getAuthenticatedWorkosSession } from "@/lib/auth/workos"
-import { encryptKey } from "@/lib/encryption"
+import { encryptSecret } from "@/lib/encryption"
 import { NextResponse } from "next/server"
 
 /**
  * User API Keys Management
  *
- * Handles encryption/decryption of API keys and delegates storage to Convex.
+ * Handles encryption of API keys and delegates storage to Convex. Auth + CSRF
+ * are enforced by the `authenticatedRoute` seam.
  */
 
-export async function POST(request: Request) {
+export const POST = authenticatedRoute(async (request, { session, convex }) => {
   try {
     const { provider, apiKey } = await request.json()
 
@@ -24,28 +20,23 @@ export async function POST(request: Request) {
     // provider rejects as "Invalid API key" with no visible cause. Normalize
     // before encryption so the stored key is exactly the credential.
     const normalizedApiKey = typeof apiKey === "string" ? apiKey.trim() : ""
-    if (!provider || !normalizedApiKey) {
+    if (!provider || typeof provider !== "string" || !normalizedApiKey) {
       return jsonError("Provider and API key are required", 400)
     }
 
-    const authSession = await getAuthenticatedWorkosSession()
-    if (!authSession) {
-      return unauthorizedError()
-    }
+    // Bind the ciphertext to its owner + provider (AAD). A row spliced under a
+    // different user or provider fails authentication at decrypt time.
+    const { encrypted, iv } = encryptSecret(normalizedApiKey, {
+      kind: "userKey",
+      ownerId: session.userId,
+      provider,
+    })
 
-    // Encrypt the key for storage
-    const { encrypted, iv } = encryptKey(normalizedApiKey)
-
-    // Get Convex client and set auth
-    const convex = createAuthenticatedConvexClient(authSession.accessToken)
-
-    // Check if key already exists for this provider
     const existingKey = await convex.query(api.userKeys.getByProvider, {
       provider,
     })
     const isNewKey = !existingKey
 
-    // Store the encrypted key in Convex
     await convex.mutation(api.userKeys.upsert, {
       provider,
       encryptedKey: encrypted,
@@ -61,23 +52,15 @@ export async function POST(request: Request) {
     console.error("Error in POST /api/user-keys:", error)
     return internalServerError()
   }
-}
+})
 
-export async function DELETE(request: Request) {
+export const DELETE = authenticatedRoute(async (request, { convex }) => {
   try {
     const { provider } = await request.json()
 
-    if (!provider) {
+    if (!provider || typeof provider !== "string") {
       return jsonError("Provider is required", 400)
     }
-
-    const authSession = await getAuthenticatedWorkosSession()
-    if (!authSession) {
-      return unauthorizedError()
-    }
-
-    // Call Convex mutation to delete the key
-    const convex = createAuthenticatedConvexClient(authSession.accessToken)
 
     await convex.mutation(api.userKeys.remove, { provider })
 
@@ -86,4 +69,4 @@ export async function DELETE(request: Request) {
     console.error("Error in DELETE /api/user-keys:", error)
     return internalServerError()
   }
-}
+})

@@ -323,6 +323,16 @@ export default defineSchema({
     "bucketStartMs",
   ]),
 
+  // Fixed-window per-identity throttle for expensive API routes (e.g. the MCP
+  // "test connection" endpoint, which opens an outbound connection per call).
+  // Keyed by the authenticated user; see convex/rateLimits.ts.
+  apiRateLimits: defineTable({
+    actorKey: v.string(), // "user:<users._id>"
+    bucket: v.string(), // logical limit name, e.g. "mcp_test"
+    windowStartMs: v.number(),
+    count: v.number(),
+  }).index("by_actor_bucket_window", ["actorKey", "bucket", "windowStartMs"]),
+
   // ============================================================================
   // MCP (Model Context Protocol) Integration
   // ============================================================================

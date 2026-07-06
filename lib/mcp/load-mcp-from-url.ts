@@ -1,4 +1,6 @@
 import { createMCPClient } from "@ai-sdk/mcp"
+import { createPinnedMcpFetch } from "./pinned-fetch"
+import { resolveMcpUrlForConnection } from "./url-validation"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -41,6 +43,11 @@ export async function loadMCPToolsFromURL(config: string | McpTransportConfig) {
 
   const { url, transport = "http", headers } = normalized
 
+  // SSRF gate — reject private/reserved hosts and DNS-rebinding targets, then
+  // pin the MCP transport's socket lookup to the vetted address so validation
+  // and connection cannot diverge via DNS rebinding.
+  const resolvedUrl = await resolveMcpUrlForConnection(url)
+
   // @ai-sdk/mcp 2.x HTTP/SSE transports reject 3xx responses by default
   // (redirect: "error", an SSRF hardening). A server URL that redirects —
   // http→https upgrades, trailing-slash normalization — now fails loudly
@@ -49,6 +56,7 @@ export async function loadMCPToolsFromURL(config: string | McpTransportConfig) {
     transport: {
       type: transport,
       url,
+      fetch: createPinnedMcpFetch(resolvedUrl),
       ...(headers && Object.keys(headers).length > 0 ? { headers } : {}),
     },
   })

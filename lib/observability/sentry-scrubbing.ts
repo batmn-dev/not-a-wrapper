@@ -1,3 +1,5 @@
+import { redactSecretsInString } from "./secret-patterns"
+
 const REDACTED_VALUE = "[REDACTED]"
 
 const AI_SENSITIVE_PATH_PREFIXES = [
@@ -69,6 +71,13 @@ function scrubValue(
     }
 
     return outputArray
+  }
+
+  if (typeof value === "string") {
+    // Value-level pass: a credential can appear inside an otherwise-innocuous
+    // string (e.g. a provider 401 message under `exception.values[].value`),
+    // which key-name/path redaction never reaches.
+    return redactSecretsInString(value)
   }
 
   if (typeof value !== "object") {

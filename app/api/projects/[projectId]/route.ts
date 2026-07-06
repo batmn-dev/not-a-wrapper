@@ -1,13 +1,10 @@
-import {
-  createAuthenticatedConvexClient,
-  internalServerError,
-  jsonError,
-  unauthorizedError,
-} from "@/app/api/_lib/convex"
+import { authenticatedRoute } from "@/app/api/_lib/authenticated-route"
+import { internalServerError, jsonError } from "@/app/api/_lib/convex"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
-import { getAuthenticatedWorkosSession } from "@/lib/auth/workos"
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
+
+type ProjectRouteArg = { params: Promise<{ projectId: string }> }
 
 /**
  * Helper to safely convert string to Convex ID
@@ -29,149 +26,132 @@ function toConvexId(projectId: string): Id<"projects"> | null {
  * Fetches project from Convex with ownership verification
  */
 
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ projectId: string }> }
-) {
-  try {
-    const { projectId } = await params
-    const authSession = await getAuthenticatedWorkosSession()
+export const GET = authenticatedRoute(
+  async (_request, { session, convex }, { params }: ProjectRouteArg) => {
+    try {
+      const { projectId } = await params
 
-    if (!authSession) {
-      return unauthorizedError()
+      // Validate project ID format
+      const convexId = toConvexId(projectId)
+      if (!convexId) {
+        return jsonError("Invalid project ID", 400)
+      }
+
+      // getById has built-in ownership checks — returns null if the caller
+      // doesn't own the project.
+      const project = await convex.query(api.projects.getById, {
+        projectId: convexId,
+      })
+
+      // getById returns null if: project doesn't exist OR user doesn't own it
+      // We return 404 for both cases (don't reveal existence)
+      if (!project) {
+        return jsonError("Project not found", 404)
+      }
+
+      return NextResponse.json({
+        id: project._id,
+        name: project.name,
+        user_id: session.userId,
+        created_at: new Date(project._creationTime).toISOString(),
+      })
+    } catch (err: unknown) {
+      console.error("Error in project endpoint:", err)
+      return internalServerError()
     }
-
-    // Validate project ID format
-    const convexId = toConvexId(projectId)
-    if (!convexId) {
-      return jsonError("Invalid project ID", 400)
-    }
-
-    // Fetch project from Convex with authenticated query
-    // getById has built-in ownership checks - returns null if user doesn't own the project
-    const convex = createAuthenticatedConvexClient(authSession.accessToken)
-
-    const project = await convex.query(api.projects.getById, {
-      projectId: convexId,
-    })
-
-    // getById returns null if: project doesn't exist OR user doesn't own it
-    // We return 404 for both cases (security best practice - don't reveal existence)
-    if (!project) {
-      return jsonError("Project not found", 404)
-    }
-
-    // Return the actual project data
-    return NextResponse.json({
-      id: project._id,
-      name: project.name,
-      user_id: authSession.userId,
-      created_at: new Date(project._creationTime).toISOString(),
-    })
-  } catch (err: unknown) {
-    console.error("Error in project endpoint:", err)
-    return internalServerError()
   }
-}
+)
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ projectId: string }> }
-) {
-  try {
-    const { projectId } = await params
-    const { name } = await request.json()
-
-    if (!name?.trim()) {
-      return jsonError("Project name is required", 400)
+export const PUT = authenticatedRoute(
+  async (request, { session, convex }, { params }: ProjectRouteArg) => {
+    let name: string | undefined
+    try {
+      const body: unknown = await request.json()
+      const candidate =
+        body && typeof body === "object"
+          ? (body as { name?: unknown }).name
+          : undefined
+      name = typeof candidate === "string" ? candidate : undefined
+    } catch {
+      return jsonError("Invalid JSON body", 400)
     }
 
-    const authSession = await getAuthenticatedWorkosSession()
+    try {
+      const { projectId } = await params
 
-    if (!authSession) {
-      return unauthorizedError()
+      if (!name?.trim()) {
+        return jsonError("Project name is required", 400)
+      }
+
+      // Validate project ID format
+      const convexId = toConvexId(projectId)
+      if (!convexId) {
+        return jsonError("Invalid project ID", 400)
+      }
+
+      await convex.mutation(api.projects.updateName, {
+        projectId: convexId,
+        name: name.trim(),
+      })
+
+      return NextResponse.json({
+        id: projectId,
+        name: name.trim(),
+        user_id: session.userId,
+        updated_at: new Date().toISOString(),
+      })
+    } catch (err: unknown) {
+      console.error("Error updating project:", err)
+      const message = (err as Error).message || "Internal server error"
+
+      // Handle specific Convex errors
+      if (
+        message.includes("Not authorized") ||
+        message.includes("Not authenticated")
+      ) {
+        return jsonError("Not authorized", 403)
+      }
+      if (message.includes("not found")) {
+        return jsonError("Project not found", 404)
+      }
+
+      return internalServerError()
     }
-
-    // Validate project ID format
-    const convexId = toConvexId(projectId)
-    if (!convexId) {
-      return jsonError("Invalid project ID", 400)
-    }
-
-    // Call Convex mutation with auth
-    const convex = createAuthenticatedConvexClient(authSession.accessToken)
-
-    await convex.mutation(api.projects.updateName, {
-      projectId: convexId,
-      name: name.trim(),
-    })
-
-    return NextResponse.json({
-      id: projectId,
-      name: name.trim(),
-      user_id: authSession.userId,
-      updated_at: new Date().toISOString(),
-    })
-  } catch (err: unknown) {
-    console.error("Error updating project:", err)
-    const message = (err as Error).message || "Internal server error"
-
-    // Handle specific Convex errors
-    if (
-      message.includes("Not authorized") ||
-      message.includes("Not authenticated")
-    ) {
-      return jsonError("Not authorized", 403)
-    }
-    if (message.includes("not found")) {
-      return jsonError("Project not found", 404)
-    }
-
-    return internalServerError()
   }
-}
+)
 
-export async function DELETE(
-  _request: NextRequest,
-  { params }: { params: Promise<{ projectId: string }> }
-) {
-  try {
-    const { projectId } = await params
-    const authSession = await getAuthenticatedWorkosSession()
+export const DELETE = authenticatedRoute(
+  async (_request, { convex }, { params }: ProjectRouteArg) => {
+    try {
+      const { projectId } = await params
 
-    if (!authSession) {
-      return unauthorizedError()
+      // Validate project ID format
+      const convexId = toConvexId(projectId)
+      if (!convexId) {
+        return jsonError("Invalid project ID", 400)
+      }
+
+      await convex.mutation(api.projects.remove, {
+        projectId: convexId,
+      })
+
+      return NextResponse.json({ success: true })
+    } catch (err: unknown) {
+      console.error("Error deleting project:", err)
+      const message = (err as Error).message || "Internal server error"
+
+      // Handle specific Convex errors
+      if (
+        message.includes("Not authorized") ||
+        message.includes("Not authenticated")
+      ) {
+        return jsonError("Not authorized", 403)
+      }
+      if (message.includes("not found")) {
+        return jsonError("Project not found", 404)
+      }
+
+      return internalServerError()
     }
-
-    // Validate project ID format
-    const convexId = toConvexId(projectId)
-    if (!convexId) {
-      return jsonError("Invalid project ID", 400)
-    }
-
-    // Call Convex mutation with auth
-    const convex = createAuthenticatedConvexClient(authSession.accessToken)
-
-    await convex.mutation(api.projects.remove, {
-      projectId: convexId,
-    })
-
-    return NextResponse.json({ success: true })
-  } catch (err: unknown) {
-    console.error("Error deleting project:", err)
-    const message = (err as Error).message || "Internal server error"
-
-    // Handle specific Convex errors
-    if (
-      message.includes("Not authorized") ||
-      message.includes("Not authenticated")
-    ) {
-      return jsonError("Not authorized", 403)
-    }
-    if (message.includes("not found")) {
-      return jsonError("Project not found", 404)
-    }
-
-    return internalServerError()
   }
-}
+)

@@ -1,30 +1,15 @@
+import { authenticatedRoute } from "@/app/api/_lib/authenticated-route"
 import { api } from "@/convex/_generated/api"
-import { getAuthenticatedWorkosSession } from "@/lib/auth/workos"
 import { resolveModelIds } from "@/lib/models/model-id-migration"
-import { ConvexHttpClient } from "convex/browser"
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 
 /**
  * Favorite Models API
- * Fetches and updates favorite models via Convex
+ * Fetches and updates favorite models via Convex. Auth + CSRF via the seam.
  */
 
-function getConvexClient() {
-  const url = process.env.NEXT_PUBLIC_CONVEX_URL
-  if (!url) {
-    throw new Error("NEXT_PUBLIC_CONVEX_URL is not set")
-  }
-  return new ConvexHttpClient(url)
-}
-
-export async function POST(request: NextRequest) {
+export const POST = authenticatedRoute(async (request, { convex }) => {
   try {
-    const authSession = await getAuthenticatedWorkosSession()
-
-    if (!authSession) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
     // Parse the request body
     const body = await request.json()
     const { favorite_models } = body
@@ -46,9 +31,6 @@ export async function POST(request: NextRequest) {
     }
     const normalizedFavoriteModels = resolveModelIds(favorite_models)
 
-    // Update favorite models in Convex with authenticated client
-    const convex = getConvexClient()
-    convex.setAuth(authSession.accessToken)
     await convex.mutation(api.users.updateFavoriteModels, {
       favoriteModels: normalizedFavoriteModels,
     })
@@ -64,19 +46,10 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
+})
 
-export async function GET() {
+export const GET = authenticatedRoute(async (_request, { convex }) => {
   try {
-    const authSession = await getAuthenticatedWorkosSession()
-
-    if (!authSession) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    // Fetch user's favorite models from Convex with authenticated client
-    const convex = getConvexClient()
-    convex.setAuth(authSession.accessToken)
     const user = await convex.query(api.users.getCurrent, {})
     const favoriteModels = user?.favoriteModels ?? []
     const normalizedFavoriteModels = resolveModelIds(favoriteModels)
@@ -100,4 +73,4 @@ export async function GET() {
       { status: 500 }
     )
   }
-}
+})

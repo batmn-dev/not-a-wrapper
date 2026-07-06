@@ -1,5 +1,23 @@
 import { resolve4, resolve6 } from "node:dns/promises"
 
+export class McpUrlValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "McpUrlValidationError"
+  }
+}
+
+export type ResolvedMcpAddress = {
+  address: string
+  family: 4 | 6
+}
+
+export type ResolvedMcpUrl = {
+  originalUrl: URL
+  hostname: string
+  addresses: ResolvedMcpAddress[]
+}
+
 /**
  * Check whether an IPv4 address falls in a private/reserved range.
  * Shared by both the pure URL validator and the async DNS resolution check.
@@ -138,74 +156,126 @@ export function validateServerUrl(url: string): string | null {
 }
 
 /**
- * Resolve a URL's hostname via DNS and verify none of the resolved IPs are
- * private. Prevents DNS rebinding attacks where a public domain resolves to
- * a private IP after passing the pure string-level validation.
+ * Resolve a URL's hostname via DNS and return the public IPs that future
+ * connection code must pin to. Prevents DNS rebinding attacks where a public
+ * domain resolves to a private IP after passing the pure string-level
+ * validation.
  *
- * Call this at connection time (in load-tools.ts), NOT as a replacement for
- * the pure validateServerUrl — that one runs in Convex too where DNS isn't
- * available.
+ * Call this at connection time, NOT as a replacement for the pure
+ * validateServerUrl — that one runs in Convex too where DNS isn't available.
  *
- * @returns Error message string if any resolved IP is private, null if safe
+ * @throws McpUrlValidationError with the specific rejection reason if the URL is disallowed.
  */
-export async function validateResolvedUrl(url: string): Promise<string | null> {
-  let parsed: URL
-  try {
-    parsed = new URL(url)
-  } catch {
-    return "Invalid URL format"
-  }
+export async function resolveMcpUrlForConnection(
+  url: string
+): Promise<ResolvedMcpUrl> {
+  const stringError = validateServerUrl(url)
+  if (stringError) throw new McpUrlValidationError(stringError)
 
+  const parsed = new URL(url)
   const hostname = parsed.hostname.toLowerCase()
 
-  // Check IPv6 literals — already handled by validateServerUrl, but
-  // defense-in-depth: catch them here too before attempting DNS resolution
   if (hostname.startsWith("[") && hostname.endsWith("]")) {
     const ipv6 = hostname.slice(1, -1)
     if (isPrivateIPv6(ipv6)) {
-      return "Private IPv6 addresses are not allowed"
+      throw new McpUrlValidationError("Private IPv6 addresses are not allowed")
     }
-    // It's a public IPv6 literal — no DNS resolution needed
-    return null
+
+    return {
+      originalUrl: parsed,
+      hostname,
+      addresses: [{ address: ipv6, family: 6 }],
+    }
   }
 
-  // Skip DNS check for literal private IPv4 — already handled by validateServerUrl
   if (isPrivateIP(hostname)) {
-    return "Private IP addresses are not allowed"
+    throw new McpUrlValidationError("Private IP addresses are not allowed")
   }
 
-  // If it's already a non-private IPv4 literal, no DNS needed
   const ipParts = hostname.split(".").map(Number)
   if (
     ipParts.length === 4 &&
     ipParts.every((n) => !isNaN(n) && n >= 0 && n <= 255)
   ) {
-    return null
+    return {
+      originalUrl: parsed,
+      hostname,
+      addresses: [{ address: hostname, family: 4 }],
+    }
   }
 
-  // Resolve hostname → IPs and check each one (both A and AAAA records).
-  // allSettled never rejects — individual failures (ENOTFOUND, etc.) are
-  // handled per-record-type so a missing AAAA record doesn't block IPv4.
   const [v4Result, v6Result] = await Promise.allSettled([
     resolve4(hostname),
     resolve6(hostname),
   ])
 
+  const addresses: ResolvedMcpAddress[] = []
+
   if (v4Result.status === "fulfilled") {
     for (const addr of v4Result.value) {
       if (isPrivateIP(addr)) {
-        return `Domain resolves to private IP (${addr}) — possible DNS rebinding`
+        throw new McpUrlValidationError(
+          `Domain resolves to private IP (${addr}) — possible DNS rebinding`
+        )
       }
+      addresses.push({ address: addr, family: 4 })
     }
   }
 
   if (v6Result.status === "fulfilled") {
     for (const addr of v6Result.value) {
       if (isPrivateIPv6(addr)) {
-        return `Domain resolves to private IPv6 (${addr}) — possible DNS rebinding`
+        throw new McpUrlValidationError(
+          `Domain resolves to private IPv6 (${addr}) — possible DNS rebinding`
+        )
       }
+      addresses.push({ address: addr, family: 6 })
     }
   }
 
-  return null
+  if (addresses.length === 0) {
+    throw new McpUrlValidationError(
+      "Domain could not be resolved to a public IP address"
+    )
+  }
+
+  return { originalUrl: parsed, hostname, addresses }
+}
+
+/**
+ * Resolve a URL's hostname via DNS and verify none of the resolved IPs are
+ * private. Prevents DNS rebinding attacks where a public domain resolves to
+ * a private IP after passing the pure string-level validation.
+ *
+ * Fails closed when neither A nor AAAA records can be validated. Single-family
+ * gaps are allowed: a missing AAAA record does not block a public A record, and
+ * vice versa.
+ *
+ * @returns Error message string if any resolved IP is private, null if safe
+ */
+export async function validateResolvedUrl(url: string): Promise<string | null> {
+  try {
+    await resolveMcpUrlForConnection(url)
+    return null
+  } catch (error) {
+    return error instanceof Error ? error.message : "URL DNS validation failed"
+  }
+}
+
+/**
+ * The single SSRF gate every outbound MCP connection must pass through.
+ *
+ * Combines the pure string check (`validateServerUrl`) with DNS resolution and
+ * throws on the first failure, so a caller cannot connect to a URL that skipped
+ * one layer. Connection callers should use `resolveMcpUrlForConnection`
+ * directly so they can also pin the transport to the vetted address.
+ *
+ * Requires a Node runtime (uses `node:dns`); do not call from the Convex
+ * runtime, which keeps its own mirrored string check.
+ *
+ * @throws McpUrlValidationError with the specific rejection reason if the URL
+ * is disallowed.
+ */
+export async function assertMcpUrlAllowed(url: string): Promise<void> {
+  await resolveMcpUrlForConnection(url)
 }

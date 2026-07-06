@@ -1,4 +1,5 @@
 import "server-only"
+import { redactSecretsInString } from "@/lib/observability/secret-patterns"
 import { scrubForAnalytics } from "@/lib/posthog/scrub"
 import * as ai from "ai"
 import {
@@ -18,8 +19,6 @@ const FALSEY_ENV_VALUES = new Set(["0", "false", "off", "no"])
 
 const SENSITIVE_KEY_RE =
   /(?:^|[_-])(?:api[_-]?key|authorization|bearer|byok|convex|cookie|credentials?|encryptedkey|id[_-]?token|password|refresh[_-]?token|secret|session|set[_-]?cookie|token)(?:$|[_-])/i
-const SECRET_VALUE_RE =
-  /\b(?:Bearer\s+)?(?:bt|gh[pousr]|sk|xox[baprs]?)-[A-Za-z0-9_-]{8,}\b/g
 
 const UNSAFE_IDENTIFIER_KEYS = new Set([
   "authuserid",
@@ -99,7 +98,7 @@ function isUnsafeIdentifierKey(key: string): boolean {
 }
 
 function scrubBraintrustString(value: string): string {
-  return scrubForAnalytics(value).replace(SECRET_VALUE_RE, REDACTED)
+  return redactSecretsInString(scrubForAnalytics(value))
 }
 
 function redactSensitiveKeys(value: unknown, depth = 0): unknown {

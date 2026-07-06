@@ -1,15 +1,7 @@
-import { generateCsrfToken } from "@/lib/csrf"
-import { cookies } from "next/headers"
+import { setCsrfCookie } from "@/lib/csrf"
 import { NextResponse } from "next/server"
 
 export async function GET() {
-  const token = generateCsrfToken()
-  const cookieStore = await cookies()
-  cookieStore.set("csrf_token", token, {
-    httpOnly: false,
-    secure: true,
-    path: "/",
-  })
-
+  await setCsrfCookie()
   return NextResponse.json({ ok: true })
 }

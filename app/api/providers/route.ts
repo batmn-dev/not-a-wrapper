@@ -1,21 +1,30 @@
-import { getWorkosSession } from "@/lib/auth/workos"
-import { Provider } from "@/lib/user-keys"
-import { NextRequest, NextResponse } from "next/server"
+import { authenticatedRoute } from "@/app/api/_lib/authenticated-route"
+import { internalServerError, jsonError } from "@/app/api/_lib/convex"
+import type { Provider } from "@/lib/user-keys"
+import { NextResponse } from "next/server"
 
 /**
- * Check if user has API key for a specific provider
- * Note: With Convex, this should be done client-side via userKeys queries
+ * Check whether the platform has an env key for a provider. Auth + CSRF via the
+ * seam; identity is the session's, never a client-supplied `userId`.
  */
-export async function POST(request: NextRequest) {
+export const POST = authenticatedRoute(async (request) => {
+  let parsedBody: unknown
   try {
-    const { provider, userId } = await request.json()
+    parsedBody = await request.json()
+  } catch {
+    return jsonError("Request body is not valid JSON", 400)
+  }
 
-    const { user: authUser } = await getWorkosSession()
-    const authUserId = authUser?.id
-    if (!authUserId || authUserId !== userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+  const provider =
+    parsedBody && typeof parsedBody === "object" && !Array.isArray(parsedBody)
+      ? (parsedBody as { provider?: unknown }).provider
+      : undefined
 
+  if (typeof provider !== "string" || !provider) {
+    return jsonError("Provider is required", 400)
+  }
+
+  try {
     // With Convex, key checking should be done client-side
     // Check if environment has a key for this provider
     const envKeyMap: Record<Provider, string | undefined> = {
@@ -37,9 +46,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("Error checking provider keys:", error)
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    )
+    return internalServerError()
   }
-}
+})
