@@ -4,6 +4,9 @@ import {
   CSRF_HEADER_NAME,
   generateCsrfToken,
 } from "@/lib/csrf"
+import type { User } from "@workos-inc/node"
+import { RequestCookiesAdapter } from "next/dist/server/web/spec-extension/adapters/request-cookies"
+import { RequestCookies } from "next/dist/server/web/spec-extension/cookies"
 import { cookies } from "next/headers"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { authenticatedRoute } from "./authenticated-route"
@@ -29,18 +32,38 @@ vi.mock("./convex", () => ({
     Response.json({ error: "Unauthorized" }, { status: 401 }),
 }))
 
+const mockWorkosUser: User = {
+  object: "user",
+  id: "user_123",
+  email: "user@example.test",
+  emailVerified: true,
+  profilePictureUrl: null,
+  name: "Test User",
+  firstName: "Test",
+  lastName: "User",
+  lastSignInAt: null,
+  locale: null,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  externalId: null,
+  metadata: {},
+}
+
 const mockSession = {
   accessToken: "test-access-token",
-  user: { id: "user_123" },
+  user: mockWorkosUser,
   userId: "user_123",
 }
 
 function mockCookieValue(value: string | undefined) {
-  vi.mocked(cookies).mockResolvedValue({
-    get: vi.fn((name: string) =>
-      name === CSRF_COOKIE_NAME && value ? { name, value } : undefined
-    ),
-  } as Awaited<ReturnType<typeof cookies>>)
+  const headers = new Headers()
+  if (value) {
+    headers.set("cookie", `${CSRF_COOKIE_NAME}=${value}`)
+  }
+
+  vi.mocked(cookies).mockResolvedValue(
+    RequestCookiesAdapter.seal(new RequestCookies(headers))
+  )
 }
 
 describe("authenticatedRoute", () => {
