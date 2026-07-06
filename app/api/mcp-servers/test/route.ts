@@ -1,6 +1,7 @@
 import { authenticatedRoute } from "@/app/api/_lib/authenticated-route"
 import { MCP_CONNECTION_TIMEOUT_MS } from "@/lib/config"
 import { loadMCPToolsFromURL } from "@/lib/mcp/load-mcp-from-url"
+import { McpUrlValidationError } from "@/lib/mcp/url-validation"
 import { NextResponse } from "next/server"
 
 /**
@@ -68,9 +69,16 @@ export const POST = authenticatedRoute(
         toolNames,
       })
     } catch (error) {
-      console.error("Error in POST /api/mcp-servers/test:", error)
       const message =
         error instanceof Error ? error.message : "Connection failed"
+      if (error instanceof McpUrlValidationError) {
+        return NextResponse.json(
+          { error: message, success: false },
+          { status: 400 }
+        )
+      }
+
+      console.error("Error in POST /api/mcp-servers/test:", error)
       return NextResponse.json(
         { error: message, success: false },
         { status: 500 }

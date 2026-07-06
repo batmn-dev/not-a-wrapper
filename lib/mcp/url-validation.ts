@@ -1,5 +1,12 @@
 import { resolve4, resolve6 } from "node:dns/promises"
 
+export class McpUrlValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "McpUrlValidationError"
+  }
+}
+
 /**
  * Check whether an IPv4 address falls in a private/reserved range.
  * Shared by both the pure URL validator and the async DNS resolution check.
@@ -231,12 +238,13 @@ export async function validateResolvedUrl(url: string): Promise<string | null> {
  * Requires a Node runtime (uses `node:dns` via `validateResolvedUrl`); do not
  * call from the Convex runtime, which keeps its own mirrored string check.
  *
- * @throws Error with the specific rejection reason if the URL is disallowed.
+ * @throws McpUrlValidationError with the specific rejection reason if the URL
+ * is disallowed.
  */
 export async function assertMcpUrlAllowed(url: string): Promise<void> {
   const stringError = validateServerUrl(url)
-  if (stringError) throw new Error(stringError)
+  if (stringError) throw new McpUrlValidationError(stringError)
 
   const dnsError = await validateResolvedUrl(url)
-  if (dnsError) throw new Error(dnsError)
+  if (dnsError) throw new McpUrlValidationError(dnsError)
 }

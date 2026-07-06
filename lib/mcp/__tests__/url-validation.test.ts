@@ -4,6 +4,7 @@ import {
   assertMcpUrlAllowed,
   isPrivateIP,
   isPrivateIPv6,
+  McpUrlValidationError,
   validateResolvedUrl,
   validateServerUrl,
 } from "../url-validation"
@@ -507,6 +508,9 @@ describe("assertMcpUrlAllowed", () => {
     await expect(
       assertMcpUrlAllowed("http://169.254.169.254/latest/meta-data/")
     ).rejects.toThrow(/Private IP/)
+    await expect(
+      assertMcpUrlAllowed("http://169.254.169.254/latest/meta-data/")
+    ).rejects.toBeInstanceOf(McpUrlValidationError)
   })
 
   it("throws on localhost and loopback", async () => {
