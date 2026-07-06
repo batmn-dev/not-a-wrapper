@@ -10,7 +10,7 @@ import {
   getLatestUserMessage,
   isDurableConvexChat,
   toDurableUiMessage,
-} from "./durable-runtime"
+} from "./durable-turn-runtime"
 
 vi.mock("convex/nextjs", () => ({
   fetchMutation: vi.fn(),
@@ -25,7 +25,10 @@ function createDeferred<T>() {
   return { promise, resolve }
 }
 
-describe("durable chat runtime helpers", () => {
+// The absorbed internals of the Durable turn runtime (was `durable-runtime.ts`):
+// the stateless helpers, the snapshot tracker, and the approval-persistence
+// transform. The interface-level behaviors live in durable-turn-runtime.test.ts.
+describe("durable turn runtime internals", () => {
   it("only enables Convex durability for authenticated Convex chats", () => {
     expect(
       isDurableConvexChat({
@@ -121,10 +124,16 @@ describe("durable chat runtime helpers", () => {
         runId: "run_1" as Id<"generationRuns">,
         assistantMessageId: "message_1" as Id<"messages">,
       },
-      runtimeApprovalByToolName: new Map([
-        ["send_email", { reason: "External write", riskClass: "write" }],
-      ]),
-      toolMetadataResolver: { source: () => "mcp" },
+      // The transform now reads reason/riskClass off ToolFacts.approvalFor
+      // (the map+resolver threading dissolved once the decision carried them).
+      toolFacts: {
+        metadata: { source: () => "mcp" },
+        approvalFor: (name: string) =>
+          name === "send_email"
+            ? { needsApproval: true, reason: "External write", riskClass: "write" }
+            : undefined,
+        toolApproval: undefined,
+      },
       approvalWritePromises,
       requestId: "request-1",
       persistApprovalRequest: async (args) => {
