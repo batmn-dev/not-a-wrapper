@@ -47,7 +47,7 @@ import {
 } from "./sidebar-window"
 
 // The bounded sidebar (ENABLE_PAGINATED_SIDEBAR) can only safely drop the full
-// list because full-history search exists (commit 3) to reach out-of-window
+// list because full-history search exists (ADR-0005) to reach out-of-window
 // chats. Referencing api.chats.searchByTitle here makes removing it a compile
 // error, so the sidebar can never be bounded without the search swap present.
 if (ENABLE_PAGINATED_SIDEBAR && !api.chats.searchByTitle) {

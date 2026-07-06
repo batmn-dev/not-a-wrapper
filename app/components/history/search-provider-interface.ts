@@ -7,12 +7,12 @@ import { useEffect, useMemo, useState } from "react"
 
 /**
  * The history-search seam. The search UI consumes `query -> results`, never "the
- * full chat array," so bounding the sidebar window (commit 8) cannot shrink what
+ * full chat array," so bounding the sidebar window cannot shrink what
  * search can reach. Search is title-only and server-side
  * (`convex/chats.ts` `searchByTitle`); the subscription exists ONLY while the
  * search UI is open and a non-empty term is present.
  *
- * See docs/sidebar-chat-list-streaming-plan.md commit 3.
+ * See docs/adr/0005-bounded-chat-list-window.md.
  */
 export type SearchProvider = {
   /** The live (un-debounced) search term bound to the input. */

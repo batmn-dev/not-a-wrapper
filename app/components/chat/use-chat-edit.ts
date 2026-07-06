@@ -2,7 +2,7 @@ import type {
   ChatTurnController,
   ChatTurnMessage,
   EditTurnResult,
-} from "@/app/components/chat/chat-turn"
+} from "@/lib/chat-turn/chat-turn-controller"
 import { useCallback } from "react"
 
 type UseChatEditProps = {

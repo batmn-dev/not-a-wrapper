@@ -2,6 +2,10 @@ import { api } from "@/convex/_generated/api"
 import type { Doc, Id } from "@/convex/_generated/dataModel"
 import { sanitizeModelHistoryMessages as sanitizeSemanticModelHistoryMessages } from "@/convex/domain/message_visibility"
 import { projectPersistedMessageMetadata } from "@/convex/lib/messageMetadata"
+import type {
+  ChatTurnEditRequest,
+  ChatTurnRegenerationRequest,
+} from "@/lib/chat-messages/chat-turn-contract"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import { durableStoredMessageToUiMessage } from "@/lib/chat-messages/ui-message-adapter"
@@ -42,34 +46,9 @@ import { extractErrorMessage, isConvexArgumentValidationError } from "./utils"
 
 export type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 
-/**
- * Server-owned edit: a durable Chat turn that rewrites a prior user message,
- * branching the selected path. Carries its own count guard
- * (`expectedChatVersion`) rather than the Selected path token.
- */
-export type ChatEditRequest = {
-  editedMessageId: string
-  editCutoffTimestamp: number
-  expectedChatVersion: number
-  replacementMessage: {
-    id: string
-    role: "user"
-    content: string
-    parts: MessageAISDK["parts"]
-  }
-  title?: string
-}
-
-/**
- * Server-owned regeneration: a durable Chat turn that produces a new assistant
- * branch for an existing user message. Carries its own count guard.
- */
-export type ChatRegenerationRequest = {
-  targetAssistantMessageId: string
-  targetAssistantCreatedAt: number
-  expectedChatVersion: number
-  precedingUserMessageId: string
-}
+// Edit/regeneration request shapes live on the Chat turn wire contract
+// (lib/chat-messages/chat-turn-contract.ts) — declared once for the client
+// builder and this consumer.
 
 /**
  * The durable-turn slice of the admitted Chat turn. Everything but `provider`
@@ -83,8 +62,8 @@ export type DurableTurnInput = {
   messages: MessageAISDK[]
   isAuthenticated: boolean
   convexToken: string | undefined
-  edit?: ChatEditRequest
-  regeneration?: ChatRegenerationRequest
+  edit?: ChatTurnEditRequest
+  regeneration?: ChatTurnRegenerationRequest
   expectedVisibleMessageCount?: number
   tailMessageId?: string
 }

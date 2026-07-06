@@ -68,7 +68,7 @@ function ProjectViewInner({ projectId }: ProjectViewProps) {
   })
 
   // The project shows ALL its chats via a dedicated owner-checked read, not the
-  // bounded sidebar window. See docs/sidebar-chat-list-streaming-plan.md commit 7.
+  // bounded sidebar window. See docs/adr/0005-bounded-chat-list-window.md.
   const { data: projectChats } = usePerUserQuery(
     api.chats.getProjectChatsForCurrentUser,
     { projectId: projectId as Id<"projects"> }

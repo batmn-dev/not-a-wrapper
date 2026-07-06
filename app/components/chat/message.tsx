@@ -6,7 +6,7 @@ import type { MessageBranchInfo } from "@/lib/chat-messages/branch"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { UIMessage as MessageType } from "@ai-sdk/react"
 import React, { useState } from "react"
-import type { EditTurnResult } from "./chat-turn"
+import type { EditTurnResult } from "@/lib/chat-turn/chat-turn-controller"
 import { MessageAssistant } from "./message-assistant"
 import { MessageUser } from "./message-user"
 

@@ -2645,7 +2645,7 @@ describe("generation run linkage validation", () => {
   })
 
   it("does not re-bump the chat's updatedAt when a run completes", async () => {
-    // Per docs/sidebar-chat-list-streaming-plan.md commit 1: a durable turn must
+    // Per ADR-0005: a durable turn must
     // bump chats.updatedAt exactly once, at turn start (chatRuntime.ts:1257). The
     // chat has already re-ordered to the top of the sidebar by completion time, so
     // the run-complete path must NOT bump it again.

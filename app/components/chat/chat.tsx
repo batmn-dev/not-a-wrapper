@@ -27,8 +27,8 @@ import {
   useActivityPanelOpen,
   useActivityPanelSelectedTurnId,
 } from "./activity/activity-panel-store"
+import { isRouteDurableChat } from "@/lib/chat-turn/chat-turn-controller"
 import { ChatStatusAnnouncer } from "./chat-announcer"
-import { isRouteDurableChat } from "./chat-turn"
 import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
 import { TurnContextProvider, useTurnContext } from "./turn-context"
 import { useActivityPanel } from "./use-activity-panel"

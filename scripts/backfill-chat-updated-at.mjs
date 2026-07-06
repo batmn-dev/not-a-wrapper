@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Defensive backfill for the chats.updatedAt optional→required narrowing
- * (docs/sidebar-chat-list-streaming-plan.md commit 5).
+ * (docs/adr/0005-bounded-chat-list-window.md).
  *
  * Invokes the internal mutation `chats:backfillUpdatedAt`, which sets
  * `updatedAt = _creationTime` for any chat missing it so the `by_user_updated`
@@ -11,7 +11,7 @@
  * and the required-schema push succeeds directly; this script is the fallback.
  * If a deployment DOES hold legacy rows, the required-schema push will be
  * rejected — in that case run this WHILE `updatedAt` is still optional (i.e.
- * before deploying commit 5's schema), then push the narrowed schema.
+ * before deploying the narrowed schema), then push the required schema.
  *
  * Usage:
  *   node scripts/backfill-chat-updated-at.mjs            # current deployment

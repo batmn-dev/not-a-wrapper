@@ -3,38 +3,46 @@ import {
   createOptimisticEditMessageId,
   createOptimisticMessageId,
 } from "@/lib/chat-store/identity"
+import { MESSAGE_MAX_LENGTH } from "@/lib/config"
+import type { Attachment } from "@/lib/file-handling"
 import {
   buildChatTurnRequestBody,
-  buildEditIntent,
+  buildEditRequest,
   buildSelectedPathToken,
   prepareEditTurnPlan,
   prepareRegenerationTurnPlan,
-  routePersistsChatMessages,
   type ChatTurnMessage,
-  type ChatTurnStore,
   type SendFilePart,
-} from "@/lib/chat-store/turns/chat-turn-service"
-import { MESSAGE_MAX_LENGTH } from "@/lib/config"
+} from "./turn-plans"
+import {
+  createChatTurnStore,
+  routePersistsChatMessages,
+  type ChatTurnStore,
+  type ChatTurnStoreAdapters,
+} from "./turn-store"
 
-export type { ChatTurnMessage } from "@/lib/chat-store/turns/chat-turn-service"
+// ---------------------------------------------------------------------------
+// Chat turn controller (CONTEXT.md): the client-side counterpart of the Chat
+// turn runtime — the single module that executes one client Chat turn behind
+// the adapters seam. It owns validation, optimistic frames, the async
+// sequence (auth → limits → chat creation → uploads → dispatch), plan/intent
+// building (turn-plans.ts), wire-contract body assembly, and guest/local
+// persistence routing (turn-store.ts, composed internally — the parent hook
+// never holds the store). use-chat-core.ts constructs the adapters from React
+// state and the AI SDK; everything below that seam is React-free.
+// ---------------------------------------------------------------------------
+
+export type { ChatTurnMessage } from "./turn-plans"
 
 const MESSAGE_TOO_LONG_ERROR = `The message you submitted was too long, please submit something shorter. (Max ${MESSAGE_MAX_LENGTH} characters)`
 
 type SetMessagesAction =
   ChatTurnMessage[] | ((messages: ChatTurnMessage[]) => ChatTurnMessage[])
 
-type OptimisticAttachment = {
-  name: string
-  contentType: string
-  url: string
-}
-
-type UploadedAttachment = {
-  name: string
-  contentType: string
-  url: string
-  attachmentId?: string
-}
+// The shared attachment shape (lib/file-handling.ts). An optimistic attachment
+// is the same minus the server-assigned id it does not have yet.
+type OptimisticAttachment = Omit<Attachment, "attachmentId">
+type UploadedAttachment = Attachment
 
 type SendMessageOptions = { body?: Record<string, unknown> }
 type RegenerateMessageOptions = SendMessageOptions & { messageId?: string }
@@ -81,7 +89,9 @@ export type ChatTurnAdapters = {
   setIsSubmitting: (isSubmitting: boolean) => void
   setHasSentFirstMessage: (hasSent: boolean) => void
   setMessages: (action: SetMessagesAction) => void
-  turnStore: ChatTurnStore
+  /** Persistence adapters — the controller composes its turn store from these
+   * internally; callers never build or hold the store. */
+  store: ChatTurnStoreAdapters
   resolveUserId: () => Promise<string | null>
   checkLimitsAndNotify: (userId: string) => Promise<boolean>
   ensureChatExists: (userId: string, input: string) => Promise<string | null>
@@ -99,12 +109,17 @@ export type ChatTurnAdapters = {
   reportError: (message: string, error: unknown) => void
 }
 
+/** The runners' view: the adapters plus the internally composed turn store. */
+type RunnerContext = Omit<ChatTurnAdapters, "store"> & {
+  turnStore: ChatTurnStore
+}
+
 export type SendTurnArgs = {
   text: string
   messages?: ChatTurnMessage[]
   submittedFiles?: File[]
   optimisticAttachments?: OptimisticAttachment[]
-  bodyExtras?: Record<string, unknown>
+  chatVersion?: number
   onSuccess?: (chatId: string) => void
   errorMessage?: string
 }
@@ -173,15 +188,23 @@ export function isRouteDurableChat(
 }
 
 export function createChatTurnController(adapters: ChatTurnAdapters) {
+  const turnStore = createChatTurnStore(adapters.store)
+  // Snapshot the adapters at CALL time, not construction time: callers (and
+  // the controller tests) may swap an adapter on the object they passed in,
+  // and the runners must see the live value — the pre-consolidation contract.
+  const context = (): RunnerContext => {
+    const { store: _store, ...runnerAdapters } = adapters
+    return { ...runnerAdapters, turnStore }
+  }
   return {
-    runSendTurn: (args: SendTurnArgs) => runSendTurn(adapters, args),
+    runSendTurn: (args: SendTurnArgs) => runSendTurn(context(), args),
     runSuggestionTurn: (args: SuggestionTurnArgs) =>
-      runSuggestionTurn(adapters, args),
-    runEditTurn: (args: EditTurnArgs) => runEditTurn(adapters, args),
+      runSuggestionTurn(context(), args),
+    runEditTurn: (args: EditTurnArgs) => runEditTurn(context(), args),
     runRegenerationTurn: (args: RegenerationTurnArgs) =>
-      runRegenerationTurn(adapters, args),
+      runRegenerationTurn(context(), args),
     finishChatTurn: (args: FinishChatTurnArgs) =>
-      finishChatTurn(adapters, args),
+      finishChatTurn(context(), args),
   }
 }
 
@@ -197,14 +220,14 @@ function isGenerationActive({
   return isSubmitting || status === "submitted" || status === "streaming"
 }
 
-export async function runSendTurn(
-  adapters: ChatTurnAdapters,
+async function runSendTurn(
+  adapters: RunnerContext,
   {
     text,
     messages = [],
     submittedFiles = [],
     optimisticAttachments = [],
-    bodyExtras = {},
+    chatVersion,
     onSuccess,
     errorMessage = "Failed to send message",
   }: SendTurnArgs
@@ -310,11 +333,10 @@ export async function runSendTurn(
           chatId: currentChatId,
           userId,
           selectedModel: snapshot.selectedModel,
-          isAuthenticated: snapshot.isAuthenticated,
           systemPrompt: snapshot.systemPrompt,
           enableSearch: snapshot.enableSearch,
+          chatVersion,
           selectedPathToken: buildSelectedPathToken(messages),
-          bodyExtras,
         }),
       }
     )
@@ -332,8 +354,8 @@ export async function runSendTurn(
   }
 }
 
-export async function runSuggestionTurn(
-  adapters: ChatTurnAdapters,
+async function runSuggestionTurn(
+  adapters: RunnerContext,
   args: SuggestionTurnArgs
 ) {
   // Delegates to the send runner, which reads the Turn context snapshot — so
@@ -342,15 +364,13 @@ export async function runSuggestionTurn(
   await runSendTurn(adapters, {
     text: args.text,
     messages: args.messages,
-    bodyExtras: {
-      chatVersion: args.chatVersion,
-    },
+    chatVersion: args.chatVersion,
     errorMessage: "Failed to send suggestion",
   })
 }
 
-export async function runEditTurn(
-  adapters: ChatTurnAdapters,
+async function runEditTurn(
+  adapters: RunnerContext,
   {
     chatId,
     messages,
@@ -484,11 +504,10 @@ export async function runEditTurn(
           chatId: currentChatId,
           userId,
           selectedModel: snapshot.selectedModel,
-          isAuthenticated: snapshot.isAuthenticated,
           systemPrompt: snapshot.systemPrompt,
           enableSearch: snapshot.enableSearch,
           chatVersion: editPlan.chatVersion,
-          edit: buildEditIntent(messageId, editPlan),
+          edit: buildEditRequest(messageId, editPlan),
         }),
       }
     )
@@ -508,8 +527,8 @@ export async function runEditTurn(
   }
 }
 
-export async function runRegenerationTurn(
-  adapters: ChatTurnAdapters,
+async function runRegenerationTurn(
+  adapters: RunnerContext,
   {
     chatId,
     messages,
@@ -569,7 +588,6 @@ export async function runRegenerationTurn(
         chatId,
         userId,
         selectedModel: snapshot.selectedModel,
-        isAuthenticated: snapshot.isAuthenticated,
         systemPrompt: snapshot.systemPrompt,
         enableSearch: snapshot.enableSearch,
         chatVersion,
@@ -582,8 +600,8 @@ export async function runRegenerationTurn(
   }
 }
 
-export async function finishChatTurn(
-  adapters: ChatTurnAdapters,
+async function finishChatTurn(
+  adapters: RunnerContext,
   {
     message,
     isAbort,

@@ -57,11 +57,13 @@ import {
 import { after } from "next/server"
 import { adaptHistoryForProvider } from "./adapters"
 import type { AdaptationContext, AdaptationWarning } from "./adapters/types"
+import type {
+  ChatTurnEditRequest,
+  ChatTurnRegenerationRequest,
+} from "@/lib/chat-messages/chat-turn-contract"
 import {
   createDurableTurnRuntime,
   isDurableConvexChat,
-  type ChatEditRequest,
-  type ChatRegenerationRequest,
   type DurableTurnRuntime,
 } from "./durable-turn-runtime"
 import {
@@ -91,19 +93,9 @@ import {
 // finalizes a failed run for the route's outer catch.
 // ---------------------------------------------------------------------------
 
-export type ChatRequest = {
-  messages: MessageAISDK[]
-  chatId: string
-  model: string
-  systemPrompt: string
-  enableSearch: boolean
-  chatVersion?: number
-  expectedVisibleMessageCount?: number
-  tailMessageId?: string
-  userId?: string // Client-provided userId (for anonymous users)
-  edit?: ChatEditRequest
-  regeneration?: ChatRegenerationRequest
-}
+// The wire shape (`ChatTurnWireRequest`) lives on the Chat turn wire contract
+// (lib/chat-messages/chat-turn-contract.ts), which the route parses through
+// `parseChatTurnRequest` before constructing `ChatTurnInput`.
 
 /**
  * The validated, admitted Chat turn the route hands to the runtime: parse,
@@ -114,13 +106,15 @@ export type ChatTurnInput = {
   messages: MessageAISDK[]
   chatId: string
   model: string
-  systemPrompt: string
+  // Optional: absent for a malformed request that passed shape validation;
+  // prepare() falls back to SYSTEM_PROMPT_DEFAULT.
+  systemPrompt?: string
   enableSearch: boolean
   chatVersion?: number
   expectedVisibleMessageCount?: number
   tailMessageId?: string
-  edit?: ChatEditRequest
-  regeneration?: ChatRegenerationRequest
+  edit?: ChatTurnEditRequest
+  regeneration?: ChatTurnRegenerationRequest
   requestId: string
   userId: string
   anonymousId: string | undefined

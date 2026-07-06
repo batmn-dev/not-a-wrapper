@@ -50,7 +50,7 @@ const seamMocks = vi.hoisted(() => ({
 
 // Only createChatTurnController (and types) are imported from this module in
 // the hook's graph; a plain factory avoids loading the real controller chain.
-vi.mock("./chat-turn", () => ({
+vi.mock("@/lib/chat-turn/chat-turn-controller", () => ({
   createChatTurnController: () => seamMocks.chatTurnController,
 }))
 

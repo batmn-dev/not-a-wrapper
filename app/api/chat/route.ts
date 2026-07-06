@@ -10,9 +10,9 @@ import {
   incrementServerSideUsage,
   validateAndTrackUsage,
 } from "./api"
+import { parseChatTurnRequest } from "@/lib/chat-messages/chat-turn-contract"
 import {
   createChatTurnRuntime,
-  type ChatRequest,
   type ChatTurnRuntime,
 } from "./chat-turn-runtime"
 import { createErrorResponse } from "./utils"
@@ -66,9 +66,9 @@ export async function POST(req: Request) {
     // A body that isn't valid JSON is a client error, not a server fault —
     // classify it as 400 INVALID_REQUEST instead of letting the SyntaxError
     // fall through to the generic 500 catch (which would page via Sentry).
-    let parsedBody: ChatRequest
+    let jsonBody: unknown
     try {
-      parsedBody = (await req.json()) as ChatRequest
+      jsonBody = await req.json()
     } catch {
       return new Response(
         JSON.stringify({
@@ -76,6 +76,37 @@ export async function POST(req: Request) {
           code: "INVALID_REQUEST",
         }),
         { status: 400 }
+      )
+    }
+
+    // Validate against the Chat turn wire contract — the one statement of the
+    // request shape, shared with the client builder
+    // (lib/chat-messages/chat-turn-contract.ts). Identity stays session-derived:
+    // the parser only uses `isAuthenticated` for the guest-id rule.
+    const parsed = parseChatTurnRequest(jsonBody, { isAuthenticated })
+    if (!parsed.ok) {
+      // Routine bad input (missing fields, malformed JSON, absent guest id) is
+      // an expected 400 and stays silent. An `unexpected` rejection is a
+      // client-contract violation our own client should never produce (e.g.
+      // edit+regeneration together), so capture it — this is the one
+      // validation 400 that carried a Sentry signal before the contract move.
+      if (parsed.unexpected) {
+        Sentry.captureException(new Error(parsed.error), {
+          tags: {
+            route: "api/chat",
+            chat_is_authenticated: String(isAuthenticated),
+            chat_failure_stage: "request_validation",
+          },
+          extra: { requestId, code: parsed.code },
+        })
+      }
+      return new Response(
+        JSON.stringify({
+          error: parsed.error,
+          code: parsed.code,
+          ...(parsed.details ? { details: parsed.details } : {}),
+        }),
+        { status: parsed.status }
       )
     }
     const {
@@ -90,7 +121,7 @@ export async function POST(req: Request) {
       userId: clientUserId,
       edit,
       regeneration,
-    } = parsedBody
+    } = parsed.request
     const model = resolveModelId(requestedModel)
     telemetryChatId = chatId
     telemetryModel = model
@@ -118,41 +149,8 @@ export async function POST(req: Request) {
       )
     }
 
-    if (!messages || !chatId || !model) {
-      return new Response(
-        JSON.stringify({
-          error: "Missing required fields",
-          code: "INVALID_REQUEST",
-          details: {
-            messages: !messages ? "required" : "ok",
-            chatId: !chatId ? "required" : "ok",
-            model: !model ? "required" : "ok",
-          },
-        }),
-        { status: 400 }
-      )
-    }
-
-    if (edit && regeneration) {
-      throw Object.assign(
-        new Error("Regeneration cannot be combined with edit generation"),
-        { statusCode: 400, code: "INVALID_REQUEST" }
-      )
-    }
-
-    // For anonymous users, require a guest ID for usage tracking. The client
-    // provides a stable guest ID (format: "guest_<uuid>") from localStorage.
-    if (!isAuthenticated && !clientUserId) {
-      return new Response(
-        JSON.stringify({
-          error: "Guest ID required for anonymous users",
-          code: "MISSING_GUEST_ID",
-        }),
-        { status: 400 }
-      )
-    }
-
-    // Use authenticated userId, or client-provided ID for anonymous users.
+    // Use authenticated userId, or client-provided ID for anonymous users
+    // (the wire contract guarantees a guest ID is present when unauthenticated).
     const userId = authUserId ?? clientUserId!
     // For anonymous users, use clientUserId for rate limiting.
     const anonymousId = !isAuthenticated ? clientUserId! : undefined
@@ -186,7 +184,7 @@ export async function POST(req: Request) {
         chatId,
         model,
         systemPrompt,
-        enableSearch,
+        enableSearch: enableSearch ?? false,
         chatVersion,
         expectedVisibleMessageCount,
         tailMessageId,

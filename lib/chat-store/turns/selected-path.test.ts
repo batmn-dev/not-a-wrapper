@@ -1,6 +1,6 @@
 import type { MessageBranchInfo } from "@/lib/chat-messages/branch"
 import { describe, expect, it } from "vitest"
-import type { ChatTurnMessage } from "./chat-turn-service"
+import type { ChatTurnMessage } from "@/lib/chat-turn/turn-plans"
 import {
   isSelectedPathDivergent,
   projectSelectedPath,

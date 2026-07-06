@@ -258,7 +258,6 @@ describe("useChatCore prompt query handling", () => {
           chatId: "chat-project",
           userId: "user-1",
           model: "openai/gpt-4.1-mini",
-          isAuthenticated: true,
           systemPrompt: "system prompt",
           enableSearch: false,
           chatVersion: 1,

@@ -1,4 +1,3 @@
-import { createChatTurnStore } from "@/lib/chat-store/turns/chat-turn-service"
 import { MESSAGE_MAX_LENGTH, SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
@@ -6,34 +5,8 @@ import {
   type ChatTurnAdapters,
   type ChatTurnMessage,
   type ChatTurnSnapshot,
-} from "./chat-turn"
-
-function userMessage(
-  id: string,
-  text: string,
-  createdAt = new Date("2026-01-01T00:00:00.000Z"),
-  extraParts: NonNullable<ChatTurnMessage["parts"]> = []
-): ChatTurnMessage {
-  return {
-    id,
-    role: "user",
-    createdAt,
-    parts: [{ type: "text", text }, ...extraParts],
-  }
-}
-
-function assistantMessage(
-  id: string,
-  text: string,
-  createdAt = new Date("2026-01-01T00:00:01.000Z")
-): ChatTurnMessage {
-  return {
-    id,
-    role: "assistant",
-    createdAt,
-    parts: [{ type: "text", text }],
-  }
-}
+} from "./chat-turn-controller"
+import { assistantMessage, userMessage } from "./fixtures"
 
 function createHarness() {
   let messages: ChatTurnMessage[] = []
@@ -150,7 +123,7 @@ function createHarness() {
     reportError: vi.fn((message) => {
       events.push(`reportError:${message}`)
     }),
-    turnStore: createChatTurnStore(storeAdapters),
+    store: storeAdapters,
   }
 
   return {
@@ -192,9 +165,7 @@ describe("chat turn controller", () => {
 
     await local.controller.runSendTurn({
       text: "Hello",
-      bodyExtras: {
-        chatVersion: 1,
-      },
+      chatVersion: 1,
       onSuccess,
     })
 
@@ -209,7 +180,6 @@ describe("chat turn controller", () => {
           chatId: "chat-1",
           userId: "user-1",
           model: "model-1",
-          isAuthenticated: false,
           systemPrompt: "custom system",
           enableSearch: true,
           chatVersion: 1,
@@ -373,7 +343,6 @@ describe("chat turn controller", () => {
           chatId: "chat-1",
           userId: "user-1",
           model: "model-1",
-          isAuthenticated: false,
           systemPrompt: SYSTEM_PROMPT_DEFAULT,
           // Suggestions now read the same Turn context snapshot as typed
           // sends, so enableSearch no longer silently diverges.
@@ -451,7 +420,6 @@ describe("chat turn controller", () => {
           chatId: "chat-1",
           userId: "user-1",
           model: "model-1",
-          isAuthenticated: true,
           systemPrompt: "custom system",
           enableSearch: true,
           chatVersion: 1,
@@ -563,7 +531,6 @@ describe("chat turn controller", () => {
           chatId: "chat-1",
           userId: "user-1",
           model: "model-1",
-          isAuthenticated: true,
           systemPrompt: "custom system",
           enableSearch: true,
           chatVersion: 1,
@@ -706,7 +673,6 @@ describe("chat turn controller", () => {
         chatId: "chat-1",
         userId: "user-1",
         model: "model-1",
-        isAuthenticated: true,
         systemPrompt: "custom system",
         // Regeneration reads the same Turn context snapshot as sends, so the
         // request now carries the search enablement uniformly.

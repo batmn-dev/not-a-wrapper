@@ -3,7 +3,7 @@
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
-import type { ChatTurnController } from "./chat-turn"
+import type { ChatTurnController } from "@/lib/chat-turn/chat-turn-controller"
 import { useChatEdit } from "./use-chat-edit"
 
 beforeAll(() => {

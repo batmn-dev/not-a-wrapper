@@ -12,7 +12,7 @@ import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import { cn } from "@/lib/utils"
 import { UIMessage as MessageType } from "@ai-sdk/react"
 import type { ReactNode } from "react"
-import type { EditTurnResult } from "./chat-turn"
+import type { EditTurnResult } from "@/lib/chat-turn/chat-turn-controller"
 import { Message } from "./message"
 import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
 import {

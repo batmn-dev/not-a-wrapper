@@ -45,7 +45,7 @@ function pickChat(
  * when present; otherwise falls back to a targeted `chats.getById` read (which
  * also closes a latent deep-link gap for chats not in the live list).
  *
- * See docs/sidebar-chat-list-streaming-plan.md commit 6.
+ * See docs/adr/0005-bounded-chat-list-window.md.
  */
 export function useChat(chatId: string | null | undefined): UseChatResult {
   const { getChatById } = useChats()
