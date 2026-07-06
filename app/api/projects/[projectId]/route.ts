@@ -64,9 +64,20 @@ export const GET = authenticatedRoute(
 
 export const PUT = authenticatedRoute(
   async (request, { session, convex }, { params }: ProjectRouteArg) => {
+    let name: string | undefined
+    try {
+      const body: unknown = await request.json()
+      const candidate =
+        body && typeof body === "object"
+          ? (body as { name?: unknown }).name
+          : undefined
+      name = typeof candidate === "string" ? candidate : undefined
+    } catch {
+      return jsonError("Invalid JSON body", 400)
+    }
+
     try {
       const { projectId } = await params
-      const { name } = await request.json()
 
       if (!name?.trim()) {
         return jsonError("Project name is required", 400)
