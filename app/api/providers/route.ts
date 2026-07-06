@@ -1,5 +1,6 @@
 import { authenticatedRoute } from "@/app/api/_lib/authenticated-route"
-import { Provider } from "@/lib/user-keys"
+import { internalServerError, jsonError } from "@/app/api/_lib/convex"
+import type { Provider } from "@/lib/user-keys"
 import { NextResponse } from "next/server"
 
 /**
@@ -7,9 +8,23 @@ import { NextResponse } from "next/server"
  * seam; identity is the session's, never a client-supplied `userId`.
  */
 export const POST = authenticatedRoute(async (request) => {
+  let parsedBody: unknown
   try {
-    const { provider } = await request.json()
+    parsedBody = await request.json()
+  } catch {
+    return jsonError("Request body is not valid JSON", 400)
+  }
 
+  const provider =
+    parsedBody && typeof parsedBody === "object" && !Array.isArray(parsedBody)
+      ? (parsedBody as { provider?: unknown }).provider
+      : undefined
+
+  if (typeof provider !== "string" || !provider) {
+    return jsonError("Provider is required", 400)
+  }
+
+  try {
     // With Convex, key checking should be done client-side
     // Check if environment has a key for this provider
     const envKeyMap: Record<Provider, string | undefined> = {
@@ -31,9 +46,6 @@ export const POST = authenticatedRoute(async (request) => {
     })
   } catch (error) {
     console.error("Error checking provider keys:", error)
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    )
+    return internalServerError()
   }
 })
