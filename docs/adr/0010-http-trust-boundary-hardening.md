@@ -64,11 +64,14 @@ where `node:dns` is unavailable.
 
 ### Per-identity rate limiting + security headers
 
-The seam takes an optional `rateLimit: {bucket, limit, windowMs}` enforced after
-auth via `convex/rateLimits.ts` (`consume`) — a fixed-window limiter keyed to
-`ctx.user` (never a client id), backed by the `apiRateLimits` table, distinct from
-the tool-scoped `toolLimits`. `/api/mcp-servers/test` uses it (10/min/user; each
-call opens an outbound socket), returning 429 + `Retry-After`.
+The seam takes an optional `rateLimit: {bucket}` enforced after auth via
+`convex/rateLimits.ts` (`consume`) — a fixed-window limiter keyed to `ctx.user`
+(never a client id), backed by the `apiRateLimits` table, distinct from the
+tool-scoped `toolLimits`. The bucket maps to a server-owned allowlisted policy in
+Convex, so a direct public mutation caller cannot choose a different
+`limit`/`windowMs` to reset allowance. `/api/mcp-servers/test` uses the `mcp_test`
+policy (10/min/user; each call opens an outbound socket), returning 429 +
+`Retry-After`.
 
 `next.config.ts` now sets baseline security headers on every route: a scoped CSP
 (`connect-src` limited to the env-derived Convex https/wss origins + PostHog;

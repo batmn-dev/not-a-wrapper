@@ -1,5 +1,5 @@
 import { authenticatedRoute } from "@/app/api/_lib/authenticated-route"
-import { MCP_CONNECTION_TIMEOUT_MS, MCP_TEST_RATE_LIMIT } from "@/lib/config"
+import { MCP_CONNECTION_TIMEOUT_MS } from "@/lib/config"
 import { loadMCPToolsFromURL } from "@/lib/mcp/load-mcp-from-url"
 import { NextResponse } from "next/server"
 
@@ -77,5 +77,5 @@ export const POST = authenticatedRoute(
       )
     }
   },
-  { rateLimit: { bucket: "mcp_test", ...MCP_TEST_RATE_LIMIT } }
+  { rateLimit: { bucket: "mcp_test" } }
 )

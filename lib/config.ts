@@ -139,12 +139,6 @@ export const MAX_MCP_SERVERS_PER_USER = 10
 export const MAX_TOOL_RESULT_SIZE = 100 * 1024 // 100KB
 export const MCP_CONNECTION_TIMEOUT_MS = 5000
 
-/**
- * Per-user throttle for the MCP "test connection" route. Each call opens an
- * outbound socket, so it is rate-limited by identity to bound resource use and
- * SSRF-probe volume. Interactive "Test" clicks stay well under this.
- */
-export const MCP_TEST_RATE_LIMIT = { limit: 10, windowMs: 60_000 } as const
 export const MCP_CIRCUIT_BREAKER_THRESHOLD = 3
 export const MCP_MAX_STEP_COUNT = 20
 export const MCP_MAX_TOOLS_PER_REQUEST = 50

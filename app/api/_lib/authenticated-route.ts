@@ -1,4 +1,5 @@
 import "server-only"
+import type { RateLimitBucket } from "@/convex/rateLimits"
 import { api } from "@/convex/_generated/api"
 import { getAuthenticatedWorkosSession } from "@/lib/auth/workos"
 import {
@@ -43,9 +44,10 @@ export type AuthedRouteContext = {
 /**
  * Declarative per-identity rate limit for a route. `bucket` names the limit so
  * separate routes don't share a counter. Enforced after auth (so the actor is
- * the resolved user) and before the handler body.
+ * the resolved user) and before the handler body. The bucket's limit/window
+ * policy is owned by the Convex mutation, not supplied by this HTTP caller.
  */
-export type RouteRateLimit = { bucket: string; limit: number; windowMs: number }
+export type RouteRateLimit = { bucket: RateLimitBucket }
 
 /**
  * Validate the CSRF double-submit for a state-changing request. Returns a 403
@@ -106,12 +108,10 @@ export function authenticatedRoute<Rest extends unknown[]>(
  */
 async function enforceRateLimit(
   convex: ReturnType<typeof createAuthenticatedConvexClient>,
-  { bucket, limit, windowMs }: RouteRateLimit
+  { bucket }: RouteRateLimit
 ): Promise<NextResponse | null> {
   const result = await convex.mutation(api.rateLimits.consume, {
     bucket,
-    limit,
-    windowMs,
   })
   if (result.allowed) return null
 

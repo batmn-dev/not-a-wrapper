@@ -11,10 +11,26 @@ import { authenticatedMutation } from "./lib/authedFunctions"
  * ceiling that can't be lifted by a client-supplied key.
  *
  * The actor key is derived from `ctx.user` (never a client argument), so a caller
- * cannot throttle-evade by spoofing an id. Windows are fixed buckets of
- * `windowMs`; stale buckets for this actor are swept opportunistically on write
- * so the table stays bounded without a cron.
+ * cannot throttle-evade by spoofing an id. Policy is resolved by allowlisted
+ * bucket on the server, so public mutation callers cannot reset allowance by
+ * choosing a different limit or window. Stale buckets for this actor are swept
+ * opportunistically on write so the table stays bounded without a cron.
  */
+
+export const API_RATE_LIMIT_POLICIES = {
+  mcp_test: { limit: 10, windowMs: 60_000 },
+} as const
+
+export type RateLimitBucket = keyof typeof API_RATE_LIMIT_POLICIES
+
+const rateLimitBucketValidator = v.literal("mcp_test")
+
+export function getRateLimitPolicy(bucket: RateLimitBucket): {
+  limit: number
+  windowMs: number
+} {
+  return API_RATE_LIMIT_POLICIES[bucket]
+}
 
 export type WindowBucket<Id> = {
   _id: Id
@@ -79,12 +95,11 @@ export function evaluateFixedWindow<Id>(
 
 export const consume = authenticatedMutation({
   args: {
-    bucket: v.string(),
-    limit: v.number(),
-    windowMs: v.number(),
+    bucket: rateLimitBucketValidator,
   },
-  handler: async (ctx, { bucket, limit, windowMs }) => {
+  handler: async (ctx, { bucket }) => {
     const actorKey = `user:${ctx.user._id}`
+    const { limit, windowMs } = getRateLimitPolicy(bucket)
 
     const buckets = await ctx.db
       .query("apiRateLimits")
