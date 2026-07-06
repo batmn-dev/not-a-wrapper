@@ -30,7 +30,7 @@ import {
   getServerMessageId,
 } from "@/lib/chat-messages/metadata"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
-import type { ChatTurnMessage } from "./chat-turn-service"
+import type { ChatTurnMessage } from "@/lib/chat-turn/turn-plans"
 
 function createdAtMs(value: unknown): number | undefined {
   return value instanceof Date ? value.getTime() : undefined

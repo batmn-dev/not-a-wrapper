@@ -1,7 +1,7 @@
 import {
   createChatTurnController,
   type ChatTurnMessage,
-} from "@/app/components/chat/chat-turn"
+} from "@/lib/chat-turn/chat-turn-controller"
 import { useChatEdit } from "@/app/components/chat/use-chat-edit"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
@@ -12,7 +12,6 @@ import {
   getMessagePersistenceMode,
   GUEST_CHAT_STORAGE_KEY,
 } from "@/lib/chat-store/identity"
-import { createChatTurnStore } from "@/lib/chat-store/turns/chat-turn-service"
 import { projectSelectedPath } from "@/lib/chat-store/turns/selected-path"
 import { API_ROUTE_CHAT } from "@/lib/routes"
 import type { UserProfile } from "@/lib/user/types"
@@ -310,35 +309,6 @@ export function useChatCore({
     [previousChatIdStore]
   )
 
-  const turnStore = useMemo(
-    () =>
-      createChatTurnStore({
-        isAuthenticated: () => isAuthenticated,
-        updateMessages,
-        cacheAndAddMessage,
-        updateTitle,
-        pendingEdit: {
-          stage: stagePendingEdit,
-          get: getPendingEdit,
-          clear: clearPendingEdit,
-        },
-        getStoredGuestChatId: () =>
-          typeof window !== "undefined"
-            ? localStorage.getItem(GUEST_CHAT_STORAGE_KEY)
-            : null,
-        reportError: (message, error) => console.error(message, error),
-      }),
-    [
-      isAuthenticated,
-      updateMessages,
-      cacheAndAddMessage,
-      updateTitle,
-      stagePendingEdit,
-      getPendingEdit,
-      clearPendingEdit,
-    ]
-  )
-
   const chatTurn = createChatTurnController({
     createOptimisticMessageId,
     getTurnSnapshot,
@@ -347,7 +317,24 @@ export function useChatCore({
     setIsSubmitting,
     setHasSentFirstMessage,
     setMessages: (action) => setMessages(action),
-    turnStore,
+    // The controller composes its turn store from these internally — this hook
+    // never builds or holds the store.
+    store: {
+      isAuthenticated: () => isAuthenticated,
+      updateMessages,
+      cacheAndAddMessage,
+      updateTitle,
+      pendingEdit: {
+        stage: stagePendingEdit,
+        get: getPendingEdit,
+        clear: clearPendingEdit,
+      },
+      getStoredGuestChatId: () =>
+        typeof window !== "undefined"
+          ? localStorage.getItem(GUEST_CHAT_STORAGE_KEY)
+          : null,
+      reportError: (message, error) => console.error(message, error),
+    },
     resolveUserId: () => getOrCreateGuestUserId(user),
     checkLimitsAndNotify,
     ensureChatExists,
@@ -507,9 +494,7 @@ export function useChatCore({
         messages,
         submittedFiles,
         optimisticAttachments,
-        bodyExtras: {
-          chatVersion: messages.length + 1, // current messages + 1 for the new message being sent
-        },
+        chatVersion: messages.length + 1, // current messages + 1 for the new message being sent
         onSuccess: (currentChatId) => {
           accepted = true
           if (messages.length > 0) {

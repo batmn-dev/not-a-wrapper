@@ -30,7 +30,7 @@ import {
 } from "@remixicon/react"
 import Image from "next/image"
 import React, { useEffect, useRef, useState } from "react"
-import type { EditTurnResult } from "./chat-turn"
+import type { EditTurnResult } from "@/lib/chat-turn/chat-turn-controller"
 import { MessageBranchControls } from "./message-branch-controls"
 
 // Attachment type for backward compatibility with v4 format
