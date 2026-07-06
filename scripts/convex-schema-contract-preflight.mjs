@@ -337,14 +337,18 @@ function runCli() {
     return
   }
 
+  const productionTarget = isProductionDeployment(options)
+
   if (
     shouldSkipSchemaContractionChecks({
-      productionTarget: isProductionDeployment(options),
+      productionTarget,
       dryRun: Boolean(options.dryRun),
     })
   ) {
     console.log(
-      "Convex schema contraction preflight: skipping disposable non-production target. Production deploy preflight remains active unless CONVEX_PROD_DB_DISPOSABLE=true."
+      productionTarget
+        ? "Convex schema contraction preflight: skipping explicitly disposable production target because CONVEX_PROD_DB_DISPOSABLE=true."
+        : "Convex schema contraction preflight: skipping disposable non-production target. Production deploy preflight remains active unless CONVEX_PROD_DB_DISPOSABLE=true."
     )
     return
   }

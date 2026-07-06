@@ -6,8 +6,8 @@ on:
   pull_request:
     branches: [main]
 
-# Least-privilege token; the deploy job authenticates via CONVEX_DEPLOY_KEY,
-# so nothing here needs write access.
+# The GitHub token stays read-only; Convex deploy/preflight auth uses
+# CONVEX_DEPLOY_KEY and CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY.
 permissions:
   contents: read
 
