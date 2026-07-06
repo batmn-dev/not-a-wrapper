@@ -98,7 +98,11 @@ export function decryptSecret(
   ivHex: string,
   binding: SecretBinding
 ): string {
-  const [version, encrypted, authTagHex] = encryptedData.split(":")
+  const parts = encryptedData.split(":")
+  if (parts.length !== 3) {
+    throw new Error("Unsupported or malformed ciphertext")
+  }
+  const [version, encrypted, authTagHex] = parts
   if (version !== VERSION || !encrypted || !authTagHex) {
     throw new Error("Unsupported or malformed ciphertext")
   }

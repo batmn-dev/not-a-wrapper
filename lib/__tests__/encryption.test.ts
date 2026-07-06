@@ -91,6 +91,13 @@ describe("encryptSecret / decryptSecret", () => {
     ).toThrow(/Unsupported or malformed/)
   })
 
+  it("rejects ciphertext with trailing envelope segments", () => {
+    const { encrypted, iv } = encryptSecret("secret", userKeyBinding)
+    expect(() =>
+      decryptSecret(`${encrypted}:trailing-data`, iv, userKeyBinding)
+    ).toThrow(/Unsupported or malformed/)
+  })
+
   // ---- Key rotation ----
 
   it("decrypts a value encrypted under a rotated-out key", async () => {
