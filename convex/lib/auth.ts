@@ -106,23 +106,37 @@ export async function requireOwnedChat(
   return { user, chat }
 }
 
+async function requireUserForOwnedResource(
+  ctx: ConvexCtx
+): Promise<Doc<"users">> {
+  const identity = await ctx.auth.getUserIdentity()
+  if (!identity) throw new Error("Not authenticated")
+
+  const user = await getUserByWorkosSubject(ctx, identity.subject)
+  if (!user) throw new Error("Not authorized")
+
+  return user
+}
+
 /**
- * Require the caller to own the chat a generation run belongs to. Fetches the
- * run (throws "Run not found" if absent), then resolves ownership transitively
- * through `run.chatId` via {@link requireOwnedChat}. Returns the owner-verified
- * user, chat, and run. Backs `ownedGenerationRunMutation`.
- *
- * Order matches the run-scoped mutation handlers this replaces: the run is
- * fetched before the auth check, so a racing terminal write on a vanished run
- * fails with "Run not found" exactly as it did before the seam existed.
+ * Require the caller to own a generation run without exposing whether another
+ * user's run exists. Auth is resolved before reading `generationRuns`, then
+ * missing, not-owned, and broken-link rows all collapse to "Run not found".
+ * Returns the owner-verified user, chat, and run. Backs
+ * `ownedGenerationRunMutation`.
  */
 export async function requireOwnedGenerationRun(
   ctx: ConvexCtx,
   runId: Id<"generationRuns">
 ): Promise<AuthenticatedRunOwner> {
+  const user = await requireUserForOwnedResource(ctx)
   const run = await ctx.db.get(runId)
   if (!run) throw new Error("Run not found")
-  const { user, chat } = await requireOwnedChat(ctx, run.chatId)
+  if (run.userId !== user._id) throw new Error("Run not found")
+
+  const chat = await ctx.db.get(run.chatId)
+  if (!chat || chat.userId !== user._id) throw new Error("Run not found")
+
   return { user, chat, run }
 }
 

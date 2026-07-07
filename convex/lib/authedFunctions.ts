@@ -168,12 +168,12 @@ export const ownedChatMutation = customMutation(
 )
 
 /**
- * A mutation on a generation run the caller owns. Fetches the run, resolves
- * ownership transitively through the run's chat, and injects owner-verified
- * `ctx.run`, `ctx.chat`, and `ctx.user`; throws "Run not found" /
- * "Not authenticated" / "Chat not found" / "Not authorized" — in that order,
- * before the handler body — so a racing terminal write on a vanished run fails
- * the same way it does today. Consumes a `runId` arg and passes it through.
+ * A mutation on a generation run the caller owns. Authenticates before reading
+ * the run row, then injects owner-verified `ctx.run`, `ctx.chat`, and
+ * `ctx.user`; throws "Not authenticated" for guests, "Not authorized" for
+ * authenticated callers without a synced user row, and "Run not found" for
+ * missing, not-owned, or inconsistent run rows. Consumes a `runId` arg and
+ * passes it through.
  *
  * Deriving the chat from `run.chatId` makes the old hand-written
  * `run.chatId !== args.chatId` cross-check structurally impossible to get wrong:

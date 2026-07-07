@@ -504,7 +504,7 @@ describe("Convex auth helpers", () => {
   describe("owned generation run requirement", () => {
     it.each([
       {
-        name: "rejects missing runs (behavior-preserving: run fetched first)",
+        name: "rejects missing runs for authenticated owners",
         identitySubject: "workos_owner",
         users: (owner: Doc<"users">) => [owner],
         includeRun: false,
@@ -525,14 +525,14 @@ describe("Convex auth helpers", () => {
         expectedError: "Not authorized",
       },
       {
-        name: "rejects wrong-owner run mutations",
+        name: "rejects wrong-owner run mutations as not found",
         identitySubject: "workos_other",
         users: (owner: Doc<"users">, otherUser: Doc<"users">) => [
           owner,
           otherUser,
         ],
         includeRun: true,
-        expectedError: "Not authorized",
+        expectedError: "Run not found",
       },
     ])(
       "$name",
@@ -553,6 +553,61 @@ describe("Convex auth helpers", () => {
         )
       }
     )
+
+    it("does not read the run row before authenticating run mutations", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const chat = createChat("chat_1", owner._id)
+      const run = createGenerationRun("run_1", chat._id, owner._id)
+      const dbGetCalls: string[] = []
+      const ctx = createCtx({
+        identitySubject: undefined,
+        users: [owner],
+        chats: [chat],
+        generationRuns: [run],
+        onDbGet: (id) => dbGetCalls.push(id),
+      })
+
+      await expect(requireOwnedGenerationRun(ctx, run._id)).rejects.toThrow(
+        "Not authenticated"
+      )
+      expect(dbGetCalls).toEqual([])
+    })
+
+    it("does not read the run row when the authenticated user row is missing", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const chat = createChat("chat_1", owner._id)
+      const run = createGenerationRun("run_1", chat._id, owner._id)
+      const dbGetCalls: string[] = []
+      const ctx = createCtx({
+        identitySubject: owner.workosUserId,
+        users: [],
+        chats: [chat],
+        generationRuns: [run],
+        onDbGet: (id) => dbGetCalls.push(id),
+      })
+
+      await expect(requireOwnedGenerationRun(ctx, run._id)).rejects.toThrow(
+        "Not authorized"
+      )
+      expect(dbGetCalls).toEqual([])
+    })
+
+    it("rejects generation runs whose chat linkage is inconsistent", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const otherUser = createUser("user_2", "workos_other")
+      const otherChat = createChat("chat_2", otherUser._id)
+      const run = createGenerationRun("run_1", otherChat._id, owner._id)
+      const ctx = createCtx({
+        identitySubject: owner.workosUserId,
+        users: [owner, otherUser],
+        chats: [otherChat],
+        generationRuns: [run],
+      })
+
+      await expect(requireOwnedGenerationRun(ctx, run._id)).rejects.toThrow(
+        "Run not found"
+      )
+    })
 
     it("resolves ownership transitively through the run's chat", async () => {
       const owner = createUser("user_1", "workos_owner")
