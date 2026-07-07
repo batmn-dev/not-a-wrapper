@@ -8,6 +8,15 @@ export type AuthenticatedChatOwner = {
   chat: Doc<"chats">
 }
 
+/**
+ * A chat owner plus the generation run the caller is acting on. Ownership is
+ * transitive: the run is reached through its `chatId`, so verifying the chat
+ * owner verifies the run. Injected by `ownedGenerationRunMutation`.
+ */
+export type AuthenticatedRunOwner = AuthenticatedChatOwner & {
+  run: Doc<"generationRuns">
+}
+
 async function getUserByWorkosSubject(ctx: ConvexCtx, subject: string) {
   return await ctx.db
     .query("users")
@@ -95,6 +104,26 @@ export async function requireOwnedChat(
   }
 
   return { user, chat }
+}
+
+/**
+ * Require the caller to own the chat a generation run belongs to. Fetches the
+ * run (throws "Run not found" if absent), then resolves ownership transitively
+ * through `run.chatId` via {@link requireOwnedChat}. Returns the owner-verified
+ * user, chat, and run. Backs `ownedGenerationRunMutation`.
+ *
+ * Order matches the run-scoped mutation handlers this replaces: the run is
+ * fetched before the auth check, so a racing terminal write on a vanished run
+ * fails with "Run not found" exactly as it did before the seam existed.
+ */
+export async function requireOwnedGenerationRun(
+  ctx: ConvexCtx,
+  runId: Id<"generationRuns">
+): Promise<AuthenticatedRunOwner> {
+  const run = await ctx.db.get(runId)
+  if (!run) throw new Error("Run not found")
+  const { user, chat } = await requireOwnedChat(ctx, run.chatId)
+  return { user, chat, run }
 }
 
 export async function requireOwnedProject(

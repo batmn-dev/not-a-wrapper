@@ -78,3 +78,29 @@ inference; hand-rolling it was the rejected alternative).
   chatAttachment backed by that id.
 - `mcpToolCallLog` was found dead (no references; the live module is
   `toolCallLog`) and is marked for removal.
+
+## Addendum (2026-07-06): run-scoped builder
+
+The seam was extended to the **Generation run** mutations, which the original
+pass left hand-rolled: `markGenerationRunCompleted`/`Failed`/`Aborted`,
+`updateAssistantSnapshot`, `createToolApprovalRequest`, and
+`recordToolInvocations` each repeated a `db.get(runId)` → existence-check →
+`requireChatOwner(run.chatId)` prologue. A new `ownedGenerationRunMutation`
+builder (over a new `requireOwnedGenerationRun` helper in `lib/auth.ts`) keys on
+`runId`, resolves ownership **transitively** through `run.chatId`, and injects
+`ctx.run`/`ctx.chat`/`ctx.user`. Handler bodies became auth-free logic cores
+taking the injected `AuthenticatedRunOwner`.
+
+The load-bearing win is the same one this ADR is about, one level deeper: two of
+those handlers hand-validated a client-supplied `chatId` against the run
+(`run.chatId !== args.chatId`). Deriving the chat from the run makes that
+cross-check **structurally unrepresentable** — there is no second id to
+disagree with — so the redundant `chatId` args were dropped from the mutations
+and their durable-runtime call sites. Behavior is preserved: the builder still
+throws `Run not found` before the auth check, matching the pre-seam handlers.
+
+The `requireChatOwner` delegating alias noted above was removed in this pass;
+`prepareGenerationForChat` (chat-scoped — it creates the run) now calls
+`requireOwnedChat` directly. `approveToolCall`/`denyToolCall` stay outside the
+builder: they own by `approval.userId`, a self-identity-match shape. Auth is
+covered once, at the `requireOwnedGenerationRun` helper tests, not per handler.
