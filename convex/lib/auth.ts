@@ -92,14 +92,11 @@ export async function requireOwnedChat(
   ctx: ConvexCtx,
   chatId: Id<"chats">
 ): Promise<AuthenticatedChatOwner> {
-  const identity = await ctx.auth.getUserIdentity()
-  if (!identity) throw new Error("Not authenticated")
-
-  const user = await getUserByWorkosSubject(ctx, identity.subject)
+  const user = await requireUserForOwnedResource(ctx)
   const chat = await ctx.db.get(chatId)
   if (!chat) throw new Error("Chat not found")
 
-  if (!user || chat.userId !== user._id) {
+  if (chat.userId !== user._id) {
     throw new Error("Not authorized")
   }
 
