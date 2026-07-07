@@ -374,7 +374,6 @@ function withSnapshotWriteTimeout<T>(write: Promise<T>): Promise<T> {
 type DurableSnapshotTrackerOptions = {
   convexToken: string
   runId: Id<"generationRuns">
-  chatId: Id<"chats">
   messageId: Id<"messages">
   order: number
   throttleMs?: number
@@ -428,7 +427,6 @@ export function createDurableSnapshotTracker(
           api.chatRuntime.updateAssistantSnapshot,
           {
             runId: options.runId,
-            chatId: options.chatId,
             messageId: options.messageId,
             order: options.order,
             sequence: currentSequence,
@@ -503,7 +501,6 @@ type RuntimeApprovalPersistenceRunState = {
 }
 
 type ToolApprovalRequestPersistenceArgs = {
-  chatId: Id<"chats">
   runId: Id<"generationRuns">
   assistantMessageId: Id<"messages">
   toolCallId: string
@@ -565,7 +562,6 @@ export function createRuntimeApprovalPersistenceTransform({
 
           const approvalWrite = (async () =>
             persist({
-              chatId: chatId as Id<"chats">,
               runId: durableRunState.runId,
               assistantMessageId: durableRunState.assistantMessageId,
               toolCallId: chunk.toolCall.toolCallId,
@@ -776,7 +772,6 @@ export function createConvexDurableTurn(args: {
       snapshotTracker = createDurableSnapshotTracker({
         convexToken,
         runId: generation.runId,
-        chatId: chatId as Id<"chats">,
         messageId: generation.assistantMessageId,
         order: generation.assistantOrder,
         fetchMutation,
@@ -888,7 +883,6 @@ export function createConvexDurableTurn(args: {
         api.chatRuntime.recordToolInvocations,
         {
           runId: currentRunId,
-          chatId: chatId as Id<"chats">,
           messageId: currentMessageId,
           stepNumber,
           invocations,

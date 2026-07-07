@@ -6,6 +6,7 @@ import {
   getCurrentUser,
   requireCurrentUser,
   requireOwnedChat,
+  requireOwnedGenerationRun,
   requireOwnedMcpServer,
   requireOwnedProject,
 } from "./auth"
@@ -14,9 +15,14 @@ type QueryBuilder = {
   eq: (fieldName: string, value: unknown) => QueryBuilder
 }
 
-function asId<Table extends "users" | "chats" | "projects" | "mcpServers">(
-  value: string
-): Id<Table> {
+function asId<
+  Table extends
+    | "users"
+    | "chats"
+    | "projects"
+    | "mcpServers"
+    | "generationRuns",
+>(value: string): Id<Table> {
   return value as Id<Table>
 }
 
@@ -66,12 +72,31 @@ function createMcpServer(id: string, userId: Id<"users">): Doc<"mcpServers"> {
   }
 }
 
+function createGenerationRun(
+  id: string,
+  chatId: Id<"chats">,
+  userId: Id<"users">
+): Doc<"generationRuns"> {
+  return {
+    _id: asId<"generationRuns">(id),
+    _creationTime: 1,
+    chatId,
+    userId,
+    requestId: `request_${id}`,
+    model: "gpt-5",
+    provider: "openai",
+    status: "running",
+    updatedAt: 1,
+  }
+}
+
 function createCtx({
   identitySubject,
   users = [],
   chats = [],
   projects = [],
   mcpServers = [],
+  generationRuns = [],
   onDbGet,
 }: {
   identitySubject?: string
@@ -79,6 +104,7 @@ function createCtx({
   chats?: Doc<"chats">[]
   projects?: Doc<"projects">[]
   mcpServers?: Doc<"mcpServers">[]
+  generationRuns?: Doc<"generationRuns">[]
   onDbGet?: (id: string) => void
 }) {
   const ctx = {
@@ -93,6 +119,7 @@ function createCtx({
           chats.find((chat) => chat._id === id) ??
           projects.find((project) => project._id === id) ??
           mcpServers.find((server) => server._id === id) ??
+          generationRuns.find((run) => run._id === id) ??
           null
         )
       },
@@ -470,6 +497,133 @@ describe("Convex auth helpers", () => {
       await expect(requireOwnedMcpServer(ctx, server._id)).resolves.toEqual({
         user: owner,
         server,
+      })
+    })
+  })
+
+  describe("owned generation run requirement", () => {
+    it.each([
+      {
+        name: "rejects missing runs for authenticated owners",
+        identitySubject: "workos_owner",
+        users: (owner: Doc<"users">) => [owner],
+        includeRun: false,
+        expectedError: "Run not found",
+      },
+      {
+        name: "rejects unauthenticated run mutations",
+        identitySubject: undefined,
+        users: (owner: Doc<"users">) => [owner],
+        includeRun: true,
+        expectedError: "Not authenticated",
+      },
+      {
+        name: "rejects run mutations when the authenticated user row is missing",
+        identitySubject: "workos_owner",
+        users: () => [],
+        includeRun: true,
+        expectedError: "Not authorized",
+      },
+      {
+        name: "rejects wrong-owner run mutations as not found",
+        identitySubject: "workos_other",
+        users: (owner: Doc<"users">, otherUser: Doc<"users">) => [
+          owner,
+          otherUser,
+        ],
+        includeRun: true,
+        expectedError: "Run not found",
+      },
+    ])(
+      "$name",
+      async ({ identitySubject, users, includeRun, expectedError }) => {
+        const owner = createUser("user_1", "workos_owner")
+        const otherUser = createUser("user_2", "workos_other")
+        const chat = createChat("chat_1", owner._id)
+        const run = createGenerationRun("run_1", chat._id, owner._id)
+        const ctx = createCtx({
+          identitySubject,
+          users: users(owner, otherUser),
+          chats: [chat],
+          generationRuns: includeRun ? [run] : [],
+        })
+
+        await expect(requireOwnedGenerationRun(ctx, run._id)).rejects.toThrow(
+          expectedError
+        )
+      }
+    )
+
+    it("does not read the run row before authenticating run mutations", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const chat = createChat("chat_1", owner._id)
+      const run = createGenerationRun("run_1", chat._id, owner._id)
+      const dbGetCalls: string[] = []
+      const ctx = createCtx({
+        identitySubject: undefined,
+        users: [owner],
+        chats: [chat],
+        generationRuns: [run],
+        onDbGet: (id) => dbGetCalls.push(id),
+      })
+
+      await expect(requireOwnedGenerationRun(ctx, run._id)).rejects.toThrow(
+        "Not authenticated"
+      )
+      expect(dbGetCalls).toEqual([])
+    })
+
+    it("does not read the run row when the authenticated user row is missing", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const chat = createChat("chat_1", owner._id)
+      const run = createGenerationRun("run_1", chat._id, owner._id)
+      const dbGetCalls: string[] = []
+      const ctx = createCtx({
+        identitySubject: owner.workosUserId,
+        users: [],
+        chats: [chat],
+        generationRuns: [run],
+        onDbGet: (id) => dbGetCalls.push(id),
+      })
+
+      await expect(requireOwnedGenerationRun(ctx, run._id)).rejects.toThrow(
+        "Not authorized"
+      )
+      expect(dbGetCalls).toEqual([])
+    })
+
+    it("rejects generation runs whose chat linkage is inconsistent", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const otherUser = createUser("user_2", "workos_other")
+      const otherChat = createChat("chat_2", otherUser._id)
+      const run = createGenerationRun("run_1", otherChat._id, owner._id)
+      const ctx = createCtx({
+        identitySubject: owner.workosUserId,
+        users: [owner, otherUser],
+        chats: [otherChat],
+        generationRuns: [run],
+      })
+
+      await expect(requireOwnedGenerationRun(ctx, run._id)).rejects.toThrow(
+        "Run not found"
+      )
+    })
+
+    it("resolves ownership transitively through the run's chat", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const chat = createChat("chat_1", owner._id)
+      const run = createGenerationRun("run_1", chat._id, owner._id)
+      const ctx = createCtx({
+        identitySubject: owner.workosUserId,
+        users: [owner],
+        chats: [chat],
+        generationRuns: [run],
+      })
+
+      await expect(requireOwnedGenerationRun(ctx, run._id)).resolves.toEqual({
+        user: owner,
+        chat,
+        run,
       })
     })
   })

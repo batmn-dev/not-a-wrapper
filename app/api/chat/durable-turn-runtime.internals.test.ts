@@ -217,7 +217,6 @@ describe("durable turn runtime internals", () => {
     const tracker = createDurableSnapshotTracker({
       convexToken: "token",
       runId: "run_1" as Id<"generationRuns">,
-      chatId: "chat_1" as Id<"chats">,
       messageId: "message_1" as Id<"messages">,
       order: 1,
       fetchMutation: injectedFetchMutation as unknown as typeof fetchMutation,
@@ -231,7 +230,6 @@ describe("durable turn runtime internals", () => {
       expect.anything(),
       expect.objectContaining({
         runId: "run_1",
-        chatId: "chat_1",
         messageId: "message_1",
         order: 1,
         sequence: 1,
@@ -249,7 +247,6 @@ describe("durable turn runtime internals", () => {
     const tracker = createDurableSnapshotTracker({
       convexToken: "token",
       runId: "run_1" as Id<"generationRuns">,
-      chatId: "chat_1" as Id<"chats">,
       messageId: "message_1" as Id<"messages">,
       order: 1,
     })
@@ -271,7 +268,6 @@ describe("durable turn runtime internals", () => {
     const tracker = createDurableSnapshotTracker({
       convexToken: "token",
       runId: "run_1" as Id<"generationRuns">,
-      chatId: "chat_1" as Id<"chats">,
       messageId: "message_1" as Id<"messages">,
       order: 1,
       throttleMs: 60_000,
@@ -324,7 +320,6 @@ describe("durable turn runtime internals", () => {
     const tracker = createDurableSnapshotTracker({
       convexToken: "token",
       runId: "run_1" as Id<"generationRuns">,
-      chatId: "chat_1" as Id<"chats">,
       messageId: "message_1" as Id<"messages">,
       order: 1,
       throttleMs: 60_000,
@@ -362,7 +357,6 @@ describe("durable turn runtime internals", () => {
       const tracker = createDurableSnapshotTracker({
         convexToken: "token",
         runId: "run_1" as Id<"generationRuns">,
-        chatId: "chat_1" as Id<"chats">,
         messageId: "message_1" as Id<"messages">,
         order: 1,
       })
@@ -405,7 +399,6 @@ describe("durable turn runtime internals", () => {
       const tracker = createDurableSnapshotTracker({
         convexToken: "token",
         runId: "run_1" as Id<"generationRuns">,
-        chatId: "chat_1" as Id<"chats">,
         messageId: "message_1" as Id<"messages">,
         order: 1,
       })

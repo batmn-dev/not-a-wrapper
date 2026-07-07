@@ -1,6 +1,7 @@
 import { v } from "convex/values"
 import type { Doc, Id } from "./_generated/dataModel"
 import { mutation, type MutationCtx, type QueryCtx } from "./_generated/server"
+import { ownedGenerationRunMutation } from "./lib/authedFunctions"
 import {
   isIgnoredSignal,
   isSupersedableGenerationRunStatus,
@@ -33,7 +34,12 @@ import {
   isVisibleChatMessage,
   projectModelHistoryMessages,
 } from "./domain/message_visibility"
-import { getCurrentUser, requireOwnedChat } from "./lib/auth"
+import {
+  getCurrentUser,
+  requireOwnedChat,
+  type AuthenticatedChatOwner,
+  type AuthenticatedRunOwner,
+} from "./lib/auth"
 import {
   vToolInvocationStreamMetadata,
   type PersistedMessageMetadata,
@@ -122,11 +128,6 @@ type CanonicalApprovalDecision = {
   reason?: string
 }
 
-type AuthenticatedOwner = {
-  user: Doc<"users">
-  chat: Doc<"chats">
-}
-
 const ACTIVE_RUN_SCAN_LIMIT = 50
 
 const terminalToolInvocationStatuses = new Set<
@@ -151,17 +152,6 @@ function truncatePreview(value: unknown): string | undefined {
 
 function nowMs(): number {
   return Date.now()
-}
-
-// The run-scoped owner check delegates to the shared requireOwnedChat so there
-// is a single owned-chat implementation. Most call sites here pass a chat id
-// derived from a fetched generation run (run.chatId), which is why this is a
-// helper rather than an ownedChatMutation builder.
-async function requireChatOwner(
-  ctx: QueryCtx | MutationCtx,
-  chatId: Id<"chats">
-): Promise<AuthenticatedOwner> {
-  return await requireOwnedChat(ctx, chatId)
 }
 
 function isAssistantMessageLinkedToRun(
@@ -611,7 +601,7 @@ type SelectedPathToken = {
 
 async function insertUserMessageForGeneration(
   ctx: MutationCtx,
-  owner: AuthenticatedOwner,
+  owner: AuthenticatedChatOwner,
   args: {
     chatId: Id<"chats">
     requestId: string
@@ -658,7 +648,7 @@ async function insertUserMessageForGeneration(
 // falsely rejected the first send following a reaped zombie run.
 async function selectOrInsertLatestUserMessageForGeneration(
   ctx: MutationCtx,
-  owner: AuthenticatedOwner,
+  owner: AuthenticatedChatOwner,
   args: {
     chatId: Id<"chats">
     requestId: string
@@ -718,7 +708,7 @@ async function selectOrInsertLatestUserMessageForGeneration(
 
 export async function applyRegenerationIntentForGeneration(
   ctx: MutationCtx,
-  owner: AuthenticatedOwner,
+  owner: AuthenticatedChatOwner,
   args: {
     chatId: Id<"chats">
     requestId: string
@@ -834,7 +824,7 @@ export async function applyRegenerationIntentForGeneration(
 
 export async function applyEditIntentForGeneration(
   ctx: MutationCtx,
-  owner: AuthenticatedOwner,
+  owner: AuthenticatedChatOwner,
   args: {
     chatId: Id<"chats">
     requestId: string
@@ -1092,7 +1082,7 @@ export async function denyPendingApprovalsForChat(
 
 export async function applyApprovalResponses(
   ctx: MutationCtx,
-  owner: AuthenticatedOwner,
+  owner: AuthenticatedChatOwner,
   responses: Array<{
     messageId: string
     approvalId: string
@@ -1230,7 +1220,7 @@ export async function prepareGenerationForChat(
   ctx: MutationCtx,
   args: PrepareGenerationForChatArgs
 ) {
-  const owner = await requireChatOwner(ctx, args.chatId)
+  const owner = await requireOwnedChat(ctx, args.chatId)
   const now = nowMs()
   const approvalResponses = args.approvalResponses ?? []
 
@@ -1421,10 +1411,8 @@ export const prepareGeneration = mutation({
   handler: async (ctx, args) => prepareGenerationForChat(ctx, args),
 })
 
-export const updateAssistantSnapshot = mutation({
+export const updateAssistantSnapshot = ownedGenerationRunMutation({
   args: {
-    runId: v.id("generationRuns"),
-    chatId: v.id("chats"),
     messageId: v.id("messages"),
     order: v.number(),
     stepOrder: v.optional(v.number()),
@@ -1434,14 +1422,18 @@ export const updateAssistantSnapshot = mutation({
     delta: v.optional(v.string()),
     payload: v.optional(v.any()),
   },
-  handler: async (ctx, args) => updateAssistantSnapshotForChat(ctx, args),
+  handler: async (ctx, args) =>
+    updateAssistantSnapshotForChat(
+      ctx,
+      { user: ctx.user, chat: ctx.chat, run: ctx.run },
+      args
+    ),
 })
 
 export async function updateAssistantSnapshotForChat(
   ctx: MutationCtx,
+  owner: AuthenticatedRunOwner,
   args: {
-    runId: Id<"generationRuns">
-    chatId: Id<"chats">
     messageId: Id<"messages">
     order: number
     stepOrder?: number
@@ -1452,9 +1444,7 @@ export async function updateAssistantSnapshotForChat(
     payload?: unknown
   }
 ) {
-  await requireChatOwner(ctx, args.chatId)
-  const run = await ctx.db.get(args.runId)
-  if (!run || run.chatId !== args.chatId) throw new Error("Run not found")
+  const { run } = owner
   const message = await requireAssistantMessageForRun(ctx, run, args.messageId)
 
   // A terminal run accepts no further snapshots. A streamer that lost the
@@ -1465,8 +1455,8 @@ export async function updateAssistantSnapshotForChat(
 
   const now = nowMs()
   const snapshotId = await ctx.db.insert("assistantMessageSnapshots", {
-    runId: args.runId,
-    chatId: args.chatId,
+    runId: run._id,
+    chatId: run.chatId,
     messageId: args.messageId,
     order: args.order,
     stepOrder: args.stepOrder ?? 0,
@@ -1481,7 +1471,7 @@ export async function updateAssistantSnapshotForChat(
 
   const latestSnapshot = await ctx.db
     .query("assistantMessageSnapshots")
-    .withIndex("by_run_sequence", (q) => q.eq("runId", args.runId))
+    .withIndex("by_run_sequence", (q) => q.eq("runId", run._id))
     .order("desc")
     .first()
   if (latestSnapshot?._id !== snapshotId) return
@@ -1493,16 +1483,15 @@ export async function updateAssistantSnapshotForChat(
       status: "streaming",
       updatedAt: now,
     })
-    await ctx.db.patch(args.runId, {
+    await ctx.db.patch(run._id, {
       status: "streaming",
       updatedAt: now,
     })
   }
 }
 
-export const markGenerationRunCompleted = mutation({
+export const markGenerationRunCompleted = ownedGenerationRunMutation({
   args: {
-    runId: v.id("generationRuns"),
     messageId: v.id("messages"),
     content: v.string(),
     parts: v.any(),
@@ -1512,13 +1501,18 @@ export const markGenerationRunCompleted = mutation({
     totalToolCalls: v.optional(v.number()),
     failedToolCalls: v.optional(v.number()),
   },
-  handler: async (ctx, args) => markGenerationRunCompletedForChat(ctx, args),
+  handler: async (ctx, args) =>
+    markGenerationRunCompletedForChat(
+      ctx,
+      { user: ctx.user, chat: ctx.chat, run: ctx.run },
+      args
+    ),
 })
 
 export async function markGenerationRunCompletedForChat(
   ctx: MutationCtx,
+  owner: AuthenticatedRunOwner,
   args: {
-    runId: Id<"generationRuns">
     messageId: Id<"messages">
     content: string
     parts: unknown
@@ -1533,9 +1527,7 @@ export async function markGenerationRunCompletedForChat(
     failedToolCalls?: number
   }
 ) {
-  const run = await ctx.db.get(args.runId)
-  if (!run) throw new Error("Run not found")
-  await requireChatOwner(ctx, run.chatId)
+  const { run } = owner
   // The first-terminal-wins guard and the completed-vs-awaiting_approval shape
   // live in the Generation run lifecycle's `complete` rule. `hasPendingApprovals`
   // is fact-gathering for it; the message payload (content/parts/metadata/usage)
@@ -1547,7 +1539,7 @@ export async function markGenerationRunCompletedForChat(
     (await ctx.db
       .query("toolApprovalRequests")
       .withIndex("by_run_status", (q) =>
-        q.eq("runId", args.runId).eq("status", "pending")
+        q.eq("runId", run._id).eq("status", "pending")
       )
       .first()) !== null
   const verdict = resolveGenerationRunTransition(
@@ -1568,7 +1560,7 @@ export async function markGenerationRunCompletedForChat(
     usage: args.usage,
     updatedAt: now,
   })
-  await ctx.db.patch(args.runId, {
+  await ctx.db.patch(run._id, {
     status: verdict.run.status,
     completedAt: verdict.run.settle ? now : undefined,
     updatedAt: now,
@@ -1581,26 +1573,28 @@ export async function markGenerationRunCompletedForChat(
   })
 }
 
-export const markGenerationRunFailed = mutation({
+export const markGenerationRunFailed = ownedGenerationRunMutation({
   args: {
-    runId: v.id("generationRuns"),
     messageId: v.optional(v.id("messages")),
     error: v.string(),
   },
-  handler: async (ctx, args) => markGenerationRunFailedForChat(ctx, args),
+  handler: async (ctx, args) =>
+    markGenerationRunFailedForChat(
+      ctx,
+      { user: ctx.user, chat: ctx.chat, run: ctx.run },
+      args
+    ),
 })
 
 export async function markGenerationRunFailedForChat(
   ctx: MutationCtx,
+  owner: AuthenticatedRunOwner,
   args: {
-    runId: Id<"generationRuns">
     messageId?: Id<"messages">
     error: string
   }
 ) {
-  const run = await ctx.db.get(args.runId)
-  if (!run) throw new Error("Run not found")
-  await requireChatOwner(ctx, run.chatId)
+  const { run } = owner
   const now = nowMs()
   // Failed may overwrite completed but never aborted — the Generation run
   // lifecycle's `fail` rule owns that convergence and the message half. Gate
@@ -1616,26 +1610,28 @@ export async function markGenerationRunFailedForChat(
   await applyLifecycleVerdict(ctx, run, verdict, resolved, now)
 }
 
-export const markGenerationRunAborted = mutation({
+export const markGenerationRunAborted = ownedGenerationRunMutation({
   args: {
-    runId: v.id("generationRuns"),
     messageId: v.optional(v.id("messages")),
     reason: v.optional(v.string()),
   },
-  handler: async (ctx, args) => markGenerationRunAbortedForChat(ctx, args),
+  handler: async (ctx, args) =>
+    markGenerationRunAbortedForChat(
+      ctx,
+      { user: ctx.user, chat: ctx.chat, run: ctx.run },
+      args
+    ),
 })
 
 export async function markGenerationRunAbortedForChat(
   ctx: MutationCtx,
+  owner: AuthenticatedRunOwner,
   args: {
-    runId: Id<"generationRuns">
     messageId?: Id<"messages">
     reason?: string
   }
 ) {
-  const run = await ctx.db.get(args.runId)
-  if (!run) throw new Error("Run not found")
-  await requireChatOwner(ctx, run.chatId)
+  const { run } = owner
   const now = nowMs()
   // First-terminal-wins and the empty-placeholder policy both live in the
   // Generation run lifecycle's `abort` rule. Gate before gathering: the ignore
@@ -1651,10 +1647,8 @@ export async function markGenerationRunAbortedForChat(
   await applyLifecycleVerdict(ctx, run, verdict, resolved, now)
 }
 
-export const createToolApprovalRequest = mutation({
+export const createToolApprovalRequest = ownedGenerationRunMutation({
   args: {
-    chatId: v.id("chats"),
-    runId: v.id("generationRuns"),
     assistantMessageId: v.id("messages"),
     toolCallId: v.string(),
     toolName: v.string(),
@@ -1664,14 +1658,18 @@ export const createToolApprovalRequest = mutation({
     inputPreview: v.optional(v.string()),
     approvalId: v.string(),
   },
-  handler: async (ctx, args) => createToolApprovalRequestForChat(ctx, args),
+  handler: async (ctx, args) =>
+    createToolApprovalRequestForChat(
+      ctx,
+      { user: ctx.user, chat: ctx.chat, run: ctx.run },
+      args
+    ),
 })
 
 export async function createToolApprovalRequestForChat(
   ctx: MutationCtx,
+  owner: AuthenticatedRunOwner,
   args: {
-    chatId: Id<"chats">
-    runId: Id<"generationRuns">
     assistantMessageId: Id<"messages">
     toolCallId: string
     toolName: string
@@ -1682,9 +1680,7 @@ export async function createToolApprovalRequestForChat(
     approvalId: string
   }
 ): Promise<Id<"toolApprovalRequests"> | null> {
-  const { user } = await requireChatOwner(ctx, args.chatId)
-  const run = await ctx.db.get(args.runId)
-  if (!run || run.chatId !== args.chatId) throw new Error("Run not found")
+  const { user, run } = owner
 
   const existing = await ctx.db
     .query("toolApprovalRequests")
@@ -1692,8 +1688,8 @@ export async function createToolApprovalRequestForChat(
     .unique()
   if (existing) {
     if (
-      existing.chatId !== args.chatId ||
-      existing.runId !== args.runId ||
+      existing.chatId !== run.chatId ||
+      existing.runId !== run._id ||
       existing.assistantMessageId !== args.assistantMessageId
     ) {
       throw new Error("Approval request does not belong to this run")
@@ -1719,8 +1715,8 @@ export async function createToolApprovalRequestForChat(
 
   const now = nowMs()
   const approvalRequestId = await ctx.db.insert("toolApprovalRequests", {
-    chatId: args.chatId,
-    runId: args.runId,
+    chatId: run.chatId,
+    runId: run._id,
     assistantMessageId: args.assistantMessageId,
     userId: user._id,
     toolCallId: args.toolCallId,
@@ -1734,7 +1730,7 @@ export async function createToolApprovalRequestForChat(
     createdAt: now,
   })
 
-  await ctx.db.patch(args.runId, {
+  await ctx.db.patch(run._id, {
     status: verdict.run.status,
     updatedAt: now,
   })
@@ -1802,10 +1798,8 @@ export const denyToolCall = mutation({
   },
 })
 
-export const recordToolInvocations = mutation({
+export const recordToolInvocations = ownedGenerationRunMutation({
   args: {
-    runId: v.id("generationRuns"),
-    chatId: v.id("chats"),
     messageId: v.id("messages"),
     stepNumber: v.optional(v.number()),
     invocations: v.array(
@@ -1821,14 +1815,18 @@ export const recordToolInvocations = mutation({
       })
     ),
   },
-  handler: async (ctx, args) => recordToolInvocationsForChat(ctx, args),
+  handler: async (ctx, args) =>
+    recordToolInvocationsForChat(
+      ctx,
+      { user: ctx.user, chat: ctx.chat, run: ctx.run },
+      args
+    ),
 })
 
 export async function recordToolInvocationsForChat(
   ctx: MutationCtx,
+  owner: AuthenticatedRunOwner,
   args: {
-    runId: Id<"generationRuns">
-    chatId: Id<"chats">
     messageId: Id<"messages">
     stepNumber?: number
     invocations: Array<{
@@ -1843,9 +1841,7 @@ export async function recordToolInvocationsForChat(
     }>
   }
 ) {
-  await requireChatOwner(ctx, args.chatId)
-  const run = await ctx.db.get(args.runId)
-  if (!run || run.chatId !== args.chatId) throw new Error("Run not found")
+  const { run } = owner
   await requireAssistantMessageForRun(ctx, run, args.messageId)
   const now = nowMs()
 
@@ -1853,7 +1849,7 @@ export async function recordToolInvocationsForChat(
     const existing = await ctx.db
       .query("toolInvocations")
       .withIndex("by_run_tool_call", (q) =>
-        q.eq("runId", args.runId).eq("toolCallId", invocation.toolCallId)
+        q.eq("runId", run._id).eq("toolCallId", invocation.toolCallId)
       )
       .unique()
 
@@ -1867,8 +1863,8 @@ export async function recordToolInvocationsForChat(
       : null
     if (approval) {
       if (
-        approval.chatId !== args.chatId ||
-        approval.runId !== args.runId ||
+        approval.chatId !== run.chatId ||
+        approval.runId !== run._id ||
         approval.assistantMessageId !== args.messageId
       ) {
         throw new Error("Approval request does not belong to this run")
@@ -1903,8 +1899,8 @@ export async function recordToolInvocationsForChat(
       await ctx.db.patch(existing._id, patch)
     } else {
       await ctx.db.insert("toolInvocations", {
-        runId: args.runId,
-        chatId: args.chatId,
+        runId: run._id,
+        chatId: run.chatId,
         toolCallId: invocation.toolCallId,
         createdAt: now,
         ...patch,

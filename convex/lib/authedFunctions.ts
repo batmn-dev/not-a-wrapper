@@ -35,6 +35,7 @@ import {
   requireCurrentUser,
   requireIdentity,
   requireOwnedChat,
+  requireOwnedGenerationRun,
   requireOwnedMcpServer,
   requireOwnedProject,
 } from "./auth"
@@ -162,6 +163,30 @@ export const ownedChatMutation = customMutation(
     input: async (ctx, { chatId }) => {
       const { user, chat } = await requireOwnedChat(ctx, chatId)
       return { ctx: { user, chat }, args: { chatId } }
+    },
+  })
+)
+
+/**
+ * A mutation on a generation run the caller owns. Authenticates before reading
+ * the run row, then injects owner-verified `ctx.run`, `ctx.chat`, and
+ * `ctx.user`; throws "Not authenticated" for guests, "Not authorized" for
+ * authenticated callers without a synced user row, and "Run not found" for
+ * missing, not-owned, or inconsistent run rows. Consumes a `runId` arg and
+ * passes it through.
+ *
+ * Deriving the chat from `run.chatId` makes the old hand-written
+ * `run.chatId !== args.chatId` cross-check structurally impossible to get wrong:
+ * there is no second chat id to disagree with. `prepareGeneration` stays on
+ * `ownedChatMutation` because it *creates* the run — there is none to key on yet.
+ */
+export const ownedGenerationRunMutation = customMutation(
+  mutation,
+  customCtxAndArgs({
+    args: { runId: v.id("generationRuns") },
+    input: async (ctx, { runId }) => {
+      const { user, chat, run } = await requireOwnedGenerationRun(ctx, runId)
+      return { ctx: { user, chat, run }, args: { runId } }
     },
   })
 )

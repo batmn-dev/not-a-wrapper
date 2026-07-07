@@ -13,6 +13,7 @@ import {
   updateAssistantSnapshotForChat,
 } from "./chatRuntime"
 import { getSelectedPathMessages } from "./domain/message_branches"
+import type { AuthenticatedRunOwner } from "./lib/auth"
 import { selectBranchForChat } from "./messages"
 
 type TableDocuments = {
@@ -193,6 +194,26 @@ function createMutationCtx(
   } as unknown as MutationCtx
 
   return { ctx, getCalls, patches, deletes, inserts, tables }
+}
+
+/**
+ * Build the `AuthenticatedRunOwner` a run-scoped core now receives — the same
+ * `{ user, chat, run }` bundle `ownedGenerationRunMutation` injects in
+ * production. Deriving all three from the run doc mirrors the builder's
+ * transitive ownership (run → chat → owner), so tests exercise the cores'
+ * logic without re-standing-up the auth path the builder is tested against once.
+ */
+async function runOwner(
+  ctx: MutationCtx,
+  runId: Id<"generationRuns">
+): Promise<AuthenticatedRunOwner> {
+  const run = await ctx.db.get(runId)
+  if (!run) throw new Error(`runOwner: generation run ${runId} not found`)
+  const chat = await ctx.db.get(run.chatId)
+  if (!chat) throw new Error(`runOwner: chat ${run.chatId} not found`)
+  const user = await ctx.db.get(chat.userId)
+  if (!user) throw new Error(`runOwner: user ${chat.userId} not found`)
+  return { user, chat, run }
 }
 
 function createOwnerFixture() {
@@ -2027,11 +2048,14 @@ describe("prepareGenerationForChat", () => {
     }
 
     const aborted = await prepareRegenerationRun()
-    await markGenerationRunAbortedForChat(aborted.ctx, {
-      runId: aborted.result.runId,
-      messageId: aborted.result.assistantMessageId,
-      reason: "stream aborted",
-    })
+    await markGenerationRunAbortedForChat(
+      aborted.ctx,
+      await runOwner(aborted.ctx, aborted.result.runId),
+      {
+        messageId: aborted.result.assistantMessageId,
+        reason: "stream aborted",
+      }
+    )
     expect(aborted.deletes).toEqual([aborted.result.assistantMessageId])
     expect(aborted.targetAssistant).toMatchObject({
       content: "old answer",
@@ -2041,11 +2065,14 @@ describe("prepareGenerationForChat", () => {
     })
 
     const failed = await prepareRegenerationRun()
-    await markGenerationRunFailedForChat(failed.ctx, {
-      runId: failed.result.runId,
-      messageId: failed.result.assistantMessageId,
-      error: "provider failed",
-    })
+    await markGenerationRunFailedForChat(
+      failed.ctx,
+      await runOwner(failed.ctx, failed.result.runId),
+      {
+        messageId: failed.result.assistantMessageId,
+        error: "provider failed",
+      }
+    )
     expect(failed.deletes).toEqual([failed.result.assistantMessageId])
     expect(failed.targetAssistant).toMatchObject({
       content: "old answer",
@@ -2116,8 +2143,7 @@ describe("prepareGenerationForChat", () => {
         precedingUserMessageId: "user-1",
       },
     })
-    await markGenerationRunAbortedForChat(ctx, {
-      runId: result.runId,
+    await markGenerationRunAbortedForChat(ctx, await runOwner(ctx, result.runId), {
       messageId: result.assistantMessageId,
       reason: "stream aborted",
     })
@@ -2188,8 +2214,7 @@ describe("prepareGenerationForChat", () => {
       createdAt: 1700000000000,
     })
 
-    await markGenerationRunAbortedForChat(ctx, {
-      runId: result.runId,
+    await markGenerationRunAbortedForChat(ctx, await runOwner(ctx, result.runId), {
       messageId: result.assistantMessageId,
       reason: "stream aborted",
     })
@@ -2254,8 +2279,7 @@ describe("prepareGenerationForChat", () => {
       generationRuns: [run],
     })
 
-    await markGenerationRunAbortedForChat(ctx, {
-      runId,
+    await markGenerationRunAbortedForChat(ctx, await runOwner(ctx, runId), {
       messageId: assistantMessageId,
       reason: "stream aborted",
     })
@@ -2317,8 +2341,7 @@ describe("prepareGenerationForChat", () => {
       generationRuns: [run],
     })
 
-    await markGenerationRunFailedForChat(ctx, {
-      runId,
+    await markGenerationRunFailedForChat(ctx, await runOwner(ctx, runId), {
       messageId: assistantMessageId,
       error: "invalid xai provider options",
     })
@@ -2342,8 +2365,7 @@ describe("prepareGenerationForChat", () => {
     fixture.run.activeStreamId = "not_a_message_id"
     const { ctx, getCalls } = createMutationCtx(fixture.tables)
 
-    await markGenerationRunFailedForChat(ctx, {
-      runId: fixture.runId,
+    await markGenerationRunFailedForChat(ctx, await runOwner(ctx, fixture.runId), {
       error: "provider failed",
     })
 
@@ -2405,17 +2427,23 @@ describe("prepareGenerationForChat", () => {
 
     // Order 1: failed lands first; the completed write must no-op.
     const first = makeFixture()
-    await markGenerationRunFailedForChat(first.ctx, {
-      runId: first.runId,
-      messageId: first.assistantMessageId,
-      error: "provider rejected",
-    })
-    await markGenerationRunCompletedForChat(first.ctx, {
-      runId: first.runId,
-      messageId: first.assistantMessageId,
-      content: "",
-      parts: [],
-    })
+    await markGenerationRunFailedForChat(
+      first.ctx,
+      await runOwner(first.ctx, first.runId),
+      {
+        messageId: first.assistantMessageId,
+        error: "provider rejected",
+      }
+    )
+    await markGenerationRunCompletedForChat(
+      first.ctx,
+      await runOwner(first.ctx, first.runId),
+      {
+        messageId: first.assistantMessageId,
+        content: "",
+        parts: [],
+      }
+    )
     expect(first.run).toMatchObject({
       status: "failed",
       error: "provider rejected",
@@ -2424,17 +2452,23 @@ describe("prepareGenerationForChat", () => {
 
     // Order 2: completed lands first; the failed write must overwrite it.
     const second = makeFixture()
-    await markGenerationRunCompletedForChat(second.ctx, {
-      runId: second.runId,
-      messageId: second.assistantMessageId,
-      content: "",
-      parts: [],
-    })
-    await markGenerationRunFailedForChat(second.ctx, {
-      runId: second.runId,
-      messageId: second.assistantMessageId,
-      error: "provider rejected",
-    })
+    await markGenerationRunCompletedForChat(
+      second.ctx,
+      await runOwner(second.ctx, second.runId),
+      {
+        messageId: second.assistantMessageId,
+        content: "",
+        parts: [],
+      }
+    )
+    await markGenerationRunFailedForChat(
+      second.ctx,
+      await runOwner(second.ctx, second.runId),
+      {
+        messageId: second.assistantMessageId,
+        error: "provider rejected",
+      }
+    )
     expect(second.run).toMatchObject({
       status: "failed",
       error: "provider rejected",
@@ -2443,16 +2477,22 @@ describe("prepareGenerationForChat", () => {
 
     // Aborted is settled: a late failure signal may not repaint a user Stop.
     const third = makeFixture()
-    await markGenerationRunAbortedForChat(third.ctx, {
-      runId: third.runId,
-      messageId: third.assistantMessageId,
-      reason: "stream aborted",
-    })
-    await markGenerationRunFailedForChat(third.ctx, {
-      runId: third.runId,
-      messageId: third.assistantMessageId,
-      error: "late failure",
-    })
+    await markGenerationRunAbortedForChat(
+      third.ctx,
+      await runOwner(third.ctx, third.runId),
+      {
+        messageId: third.assistantMessageId,
+        reason: "stream aborted",
+      }
+    )
+    await markGenerationRunFailedForChat(
+      third.ctx,
+      await runOwner(third.ctx, third.runId),
+      {
+        messageId: third.assistantMessageId,
+        error: "late failure",
+      }
+    )
     expect(third.run).toMatchObject({
       status: "aborted",
       error: "stream aborted",
@@ -2631,12 +2671,15 @@ describe("generation run linkage validation", () => {
     const { ctx, patches } = createMutationCtx(fixture.tables)
 
     await expect(
-      markGenerationRunCompletedForChat(ctx, {
-        runId: fixture.runId,
-        messageId: fixture.otherMessageId,
-        content: "done",
-        parts: [{ type: "text", text: "done" }],
-      })
+      markGenerationRunCompletedForChat(
+        ctx,
+        await runOwner(ctx, fixture.runId),
+        {
+          messageId: fixture.otherMessageId,
+          content: "done",
+          parts: [{ type: "text", text: "done" }],
+        }
+      )
     ).rejects.toThrow("Assistant message not found for run")
 
     expect(patches).toEqual([])
@@ -2652,12 +2695,15 @@ describe("generation run linkage validation", () => {
     const fixture = createGenerationRunLinkageFixture()
     const { ctx, patches } = createMutationCtx(fixture.tables)
 
-    await markGenerationRunCompletedForChat(ctx, {
-      runId: fixture.runId,
-      messageId: fixture.messageId,
-      content: "done",
-      parts: [{ type: "text", text: "done" }],
-    })
+    await markGenerationRunCompletedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        content: "done",
+        parts: [{ type: "text", text: "done" }],
+      }
+    )
 
     // No write to the chat row on the completion path (one bump per turn): its
     // updatedAt is left exactly as it was at turn start.
@@ -2675,16 +2721,18 @@ describe("generation run linkage validation", () => {
     const { ctx, inserts, patches } = createMutationCtx(fixture.tables)
 
     await expect(
-      createToolApprovalRequestForChat(ctx, {
-        chatId: fixture.chatId,
-        runId: fixture.runId,
-        assistantMessageId: fixture.otherMessageId,
-        toolCallId: "call_1",
-        toolName: "send_email",
-        source: "mcp",
-        riskClass: "destructive",
-        approvalId: "approval_1",
-      })
+      createToolApprovalRequestForChat(
+        ctx,
+        await runOwner(ctx, fixture.runId),
+        {
+          assistantMessageId: fixture.otherMessageId,
+          toolCallId: "call_1",
+          toolName: "send_email",
+          source: "mcp",
+          riskClass: "destructive",
+          approvalId: "approval_1",
+        }
+      )
     ).rejects.toThrow("Assistant message not found for run")
 
     expect(inserts).toEqual([])
@@ -2701,23 +2749,24 @@ describe("generation run linkage validation", () => {
     const fixture = createGenerationRunLinkageFixture()
     const { ctx } = createMutationCtx(fixture.tables)
 
-    await markGenerationRunAbortedForChat(ctx, {
-      runId: fixture.runId,
+    await markGenerationRunAbortedForChat(ctx, await runOwner(ctx, fixture.runId), {
       messageId: fixture.messageId,
       reason: "stream aborted",
     })
     expect(fixture.run.status).toBe("aborted")
 
-    const approvalRequestId = await createToolApprovalRequestForChat(ctx, {
-      chatId: fixture.chatId,
-      runId: fixture.runId,
-      assistantMessageId: fixture.messageId,
-      toolCallId: "call_late",
-      toolName: "send_email",
-      source: "mcp",
-      riskClass: "destructive",
-      approvalId: "approval_late",
-    })
+    const approvalRequestId = await createToolApprovalRequestForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        assistantMessageId: fixture.messageId,
+        toolCallId: "call_late",
+        toolName: "send_email",
+        source: "mcp",
+        riskClass: "destructive",
+        approvalId: "approval_late",
+      }
+    )
 
     expect(approvalRequestId).toBeNull()
     expect(fixture.tables.toolApprovalRequests).toEqual([])
@@ -2769,8 +2818,7 @@ describe("generation run linkage validation", () => {
         precedingUserMessageId: "user-1",
       },
     })
-    await markGenerationRunAbortedForChat(ctx, {
-      runId: result.runId,
+    await markGenerationRunAbortedForChat(ctx, await runOwner(ctx, result.runId), {
       messageId: result.assistantMessageId,
       reason: "stream aborted",
     })
@@ -2783,16 +2831,18 @@ describe("generation run linkage validation", () => {
 
     const insertCountBeforeApproval = inserts.length
     const patchCountBeforeApproval = patches.length
-    const approvalRequestId = await createToolApprovalRequestForChat(ctx, {
-      chatId,
-      runId: result.runId,
-      assistantMessageId: result.assistantMessageId,
-      toolCallId: "call_late",
-      toolName: "send_email",
-      source: "mcp",
-      riskClass: "destructive",
-      approvalId: "approval_late",
-    })
+    const approvalRequestId = await createToolApprovalRequestForChat(
+      ctx,
+      await runOwner(ctx, result.runId),
+      {
+        assistantMessageId: result.assistantMessageId,
+        toolCallId: "call_late",
+        toolName: "send_email",
+        source: "mcp",
+        riskClass: "destructive",
+        approvalId: "approval_late",
+      }
+    )
 
     const run = tables.generationRuns.find(
       (generationRun) => generationRun._id === result.runId
@@ -2817,9 +2867,7 @@ describe("generation run linkage validation", () => {
     const { ctx, inserts, patches } = createMutationCtx(fixture.tables)
 
     await expect(
-      recordToolInvocationsForChat(ctx, {
-        chatId: fixture.chatId,
-        runId: fixture.runId,
+      recordToolInvocationsForChat(ctx, await runOwner(ctx, fixture.runId), {
         messageId: fixture.otherMessageId,
         invocations: [
           {
@@ -2859,9 +2907,7 @@ describe("generation run linkage validation", () => {
     })
 
     await expect(
-      recordToolInvocationsForChat(ctx, {
-        chatId: fixture.chatId,
-        runId: fixture.runId,
+      recordToolInvocationsForChat(ctx, await runOwner(ctx, fixture.runId), {
         messageId: fixture.messageId,
         invocations: [
           {
@@ -2885,9 +2931,7 @@ describe("updateAssistantSnapshotForChat", () => {
     const fixture = createGenerationRunLinkageFixture()
     const { ctx, inserts } = createMutationCtx(fixture.tables)
 
-    await updateAssistantSnapshotForChat(ctx, {
-      runId: fixture.runId,
-      chatId: fixture.chatId,
+    await updateAssistantSnapshotForChat(ctx, await runOwner(ctx, fixture.runId), {
       messageId: fixture.messageId,
       order: 1,
       sequence: 1,
@@ -2906,9 +2950,7 @@ describe("updateAssistantSnapshotForChat", () => {
     const { ctx, inserts, patches } = createMutationCtx(fixture.tables)
 
     await expect(
-      updateAssistantSnapshotForChat(ctx, {
-        runId: fixture.runId,
-        chatId: fixture.chatId,
+      updateAssistantSnapshotForChat(ctx, await runOwner(ctx, fixture.runId), {
         messageId: fixture.otherMessageId,
         order: 2,
         sequence: 1,
@@ -2946,9 +2988,7 @@ describe("updateAssistantSnapshotForChat", () => {
     ]
     const { ctx, inserts, patches } = createMutationCtx(fixture.tables)
 
-    await updateAssistantSnapshotForChat(ctx, {
-      runId: fixture.runId,
-      chatId: fixture.chatId,
+    await updateAssistantSnapshotForChat(ctx, await runOwner(ctx, fixture.runId), {
       messageId: fixture.messageId,
       order: 1,
       sequence: 1,
@@ -2970,9 +3010,7 @@ describe("updateAssistantSnapshotForChat", () => {
     fixture.run.status = "aborted"
     const { ctx, inserts, patches } = createMutationCtx(fixture.tables)
 
-    await updateAssistantSnapshotForChat(ctx, {
-      runId: fixture.runId,
-      chatId: fixture.chatId,
+    await updateAssistantSnapshotForChat(ctx, await runOwner(ctx, fixture.runId), {
       messageId: fixture.messageId,
       order: 1,
       sequence: 2,

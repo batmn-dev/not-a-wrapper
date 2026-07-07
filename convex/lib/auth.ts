@@ -8,6 +8,15 @@ export type AuthenticatedChatOwner = {
   chat: Doc<"chats">
 }
 
+/**
+ * A chat owner plus the generation run the caller is acting on. Ownership is
+ * transitive: the run is reached through its `chatId`, so verifying the chat
+ * owner verifies the run. Injected by `ownedGenerationRunMutation`.
+ */
+export type AuthenticatedRunOwner = AuthenticatedChatOwner & {
+  run: Doc<"generationRuns">
+}
+
 async function getUserByWorkosSubject(ctx: ConvexCtx, subject: string) {
   return await ctx.db
     .query("users")
@@ -83,18 +92,49 @@ export async function requireOwnedChat(
   ctx: ConvexCtx,
   chatId: Id<"chats">
 ): Promise<AuthenticatedChatOwner> {
-  const identity = await ctx.auth.getUserIdentity()
-  if (!identity) throw new Error("Not authenticated")
-
-  const user = await getUserByWorkosSubject(ctx, identity.subject)
+  const user = await requireUserForOwnedResource(ctx)
   const chat = await ctx.db.get(chatId)
   if (!chat) throw new Error("Chat not found")
 
-  if (!user || chat.userId !== user._id) {
+  if (chat.userId !== user._id) {
     throw new Error("Not authorized")
   }
 
   return { user, chat }
+}
+
+async function requireUserForOwnedResource(
+  ctx: ConvexCtx
+): Promise<Doc<"users">> {
+  const identity = await ctx.auth.getUserIdentity()
+  if (!identity) throw new Error("Not authenticated")
+
+  const user = await getUserByWorkosSubject(ctx, identity.subject)
+  if (!user) throw new Error("Not authorized")
+
+  return user
+}
+
+/**
+ * Require the caller to own a generation run without exposing whether another
+ * user's run exists. Auth is resolved before reading `generationRuns`, then
+ * missing, not-owned, and broken-link rows all collapse to "Run not found".
+ * Returns the owner-verified user, chat, and run. Backs
+ * `ownedGenerationRunMutation`.
+ */
+export async function requireOwnedGenerationRun(
+  ctx: ConvexCtx,
+  runId: Id<"generationRuns">
+): Promise<AuthenticatedRunOwner> {
+  const user = await requireUserForOwnedResource(ctx)
+  const run = await ctx.db.get(runId)
+  if (!run) throw new Error("Run not found")
+  if (run.userId !== user._id) throw new Error("Run not found")
+
+  const chat = await ctx.db.get(run.chatId)
+  if (!chat || chat.userId !== user._id) throw new Error("Run not found")
+
+  return { user, chat, run }
 }
 
 export async function requireOwnedProject(
