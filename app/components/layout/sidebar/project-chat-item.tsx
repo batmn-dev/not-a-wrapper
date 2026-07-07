@@ -5,12 +5,14 @@ import { Icon } from "@/components/ui/icon"
 import { useSidebar } from "@/components/ui/sidebar"
 import { useInlineRename } from "@/hooks/use-inline-rename"
 import { useChats } from "@/lib/chat-store/chats/provider"
+import { useSidebarChatStatus } from "@/lib/chat-store/status/sidebar-chat-status"
 import { Chat } from "@/lib/chat-store/types"
 import { cn } from "@/lib/utils"
 import { RiChat3Line, RiCheckLine, RiCloseLine } from "@remixicon/react"
 import Link from "next/link"
 import { useCallback, useMemo } from "react"
 import { SidebarItemMenu } from "./sidebar-item-menu"
+import { SidebarChatStatusIndicator } from "./sidebar-item-status"
 
 type ProjectChatItemProps = {
   chat: Chat
@@ -21,6 +23,7 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
   const { updateTitle } = useChats()
   const { setOpenMobile } = useSidebar()
   const isMobile = useBreakpoint(768)
+  const status = useSidebarChatStatus(chat.id)
 
   const {
     isEditing,
@@ -126,14 +129,20 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
       </Link>
 
       <div
-        className="sidebar-row-action sidebar-row-trailing flex shrink-0 items-center justify-center pt-3 pr-3"
+        className="sidebar-row-trailing flex shrink-0 items-center pt-3 pr-3"
         key={chat.id}
       >
-        <SidebarItemMenu
-          chat={chat}
-          onStartEditing={start}
-          triggerAriaLabel={`Open chat actions for ${displayTitle}`}
+        <SidebarChatStatusIndicator
+          status={status}
+          className="sidebar-row-status"
         />
+        <div className="sidebar-row-action flex items-center justify-center">
+          <SidebarItemMenu
+            chat={chat}
+            onStartEditing={start}
+            triggerAriaLabel={`Open chat actions for ${displayTitle}`}
+          />
+        </div>
       </div>
     </div>
   )

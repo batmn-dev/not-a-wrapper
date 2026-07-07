@@ -3,12 +3,14 @@ import { Icon } from "@/components/ui/icon"
 import { useSidebar } from "@/components/ui/sidebar"
 import { useInlineRename } from "@/hooks/use-inline-rename"
 import { useChats } from "@/lib/chat-store/chats/provider"
+import { useSidebarChatStatus } from "@/lib/chat-store/status/sidebar-chat-status"
 import { Chat } from "@/lib/chat-store/types"
 import { cn } from "@/lib/utils"
 import { RiCheckLine, RiCloseLine } from "@remixicon/react"
 import Link from "next/link"
 import { useCallback, useMemo } from "react"
 import { SidebarItemMenu } from "./sidebar-item-menu"
+import { SidebarChatStatusIndicator } from "./sidebar-item-status"
 
 type SidebarItemProps = {
   chat: Chat
@@ -19,6 +21,7 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
   const { updateTitle } = useChats()
   const { setOpenMobile } = useSidebar()
   const isMobile = useBreakpoint(768)
+  const status = useSidebarChatStatus(chat.id)
 
   const {
     isEditing,
@@ -111,15 +114,25 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
             </span>
           </Link>
 
+          {/* Trailing slot (ChatGPT's dynamic right-hand slot). At rest it
+              shows the status indicator (spinner/dot); on hover/focus/menu-open
+              the indicator hides and the actions reveal in its place. Idle rows
+              show neither, so the title reclaims the full width. */}
           <div
-            className="sidebar-row-action sidebar-row-trailing flex h-full shrink-0 items-center justify-center pr-1"
+            className="sidebar-row-trailing flex h-full shrink-0 items-center pr-1"
             key={chat.id}
           >
-            <SidebarItemMenu
-              chat={chat}
-              onStartEditing={start}
-              triggerAriaLabel={`Open chat actions for ${displayTitle}`}
+            <SidebarChatStatusIndicator
+              status={status}
+              className="sidebar-row-status"
             />
+            <div className="sidebar-row-action flex h-full items-center justify-center">
+              <SidebarItemMenu
+                chat={chat}
+                onStartEditing={start}
+                triggerAriaLabel={`Open chat actions for ${displayTitle}`}
+              />
+            </div>
           </div>
         </>
       )}

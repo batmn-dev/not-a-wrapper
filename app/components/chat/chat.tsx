@@ -12,6 +12,7 @@ import { useChats } from "@/lib/chat-store/chats/provider"
 import { useChat } from "@/lib/chat-store/chats/use-chat"
 import { useMessages } from "@/lib/chat-store/messages/provider"
 import { useChatSession } from "@/lib/chat-store/session/provider"
+import { usePublishActiveChatStatus } from "@/lib/chat-store/status/sidebar-chat-status"
 import type { Chats } from "@/lib/chat-store/types"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { useUser } from "@/lib/user-store/provider"
@@ -146,6 +147,11 @@ function ChatInner({
     bumpChat,
     setComposerText,
   })
+
+  // Publish this (active) chat's live status to the sidebar so its row shows a
+  // rotating ring while generating. Front-end seam #1 — cross-chat/background
+  // status arrives later via a Convex subscription writing the same store.
+  usePublishActiveChatStatus(chatId, status)
 
   // The Activity panel store — the seam assistant rows use to reach the single
   // Chat-hosted panel surface (see CONTEXT.md "Activity panel"). Chat keeps the
