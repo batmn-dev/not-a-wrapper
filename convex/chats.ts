@@ -208,17 +208,27 @@ function stripOwnerStatus(chat: Doc<"chats">): Doc<"chats"> {
 }
 
 /**
+ * Project a readable chat for return: the owner sees the full doc; a non-owner
+ * (public/shared viewer) gets the owner-only status fields stripped. Pure — the
+ * testable core of getById's owner-only strip.
+ */
+export function projectChatForReader(
+  chat: Doc<"chats"> | null,
+  user: Doc<"users"> | null
+): Doc<"chats"> | null {
+  if (!chat) return null
+  const isOwner = user != null && chat.userId === user._id
+  return isOwner ? chat : stripOwnerStatus(chat)
+}
+
+/**
  * Get a single chat by ID. Returns the chat if it is public (no auth required)
  * or the authenticated caller owns it; otherwise null. Owner-only status
  * projection fields are stripped for non-owners (shared-chat viewers).
  */
 export const getById = readableChatQuery({
   args: {},
-  handler: async (ctx) => {
-    if (!ctx.chat) return null
-    const isOwner = ctx.user != null && ctx.chat.userId === ctx.user._id
-    return isOwner ? ctx.chat : stripOwnerStatus(ctx.chat)
-  },
+  handler: async (ctx) => projectChatForReader(ctx.chat, ctx.user),
 })
 
 /**

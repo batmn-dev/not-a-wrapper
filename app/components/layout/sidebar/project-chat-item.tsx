@@ -23,7 +23,7 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
   const { updateTitle } = useChats()
   const { setOpenMobile } = useSidebar()
   const isMobile = useBreakpoint(768)
-  const status = useSidebarChatStatus(chat.id)
+  const status = useSidebarChatStatus(chat)
 
   const {
     isEditing,

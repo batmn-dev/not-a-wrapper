@@ -3,6 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel"
 import {
   getPinnedForCurrentUserHandler,
   listForCurrentUserPaginatedHandler,
+  projectChatForReader,
 } from "./chats"
 
 type ChatQueryCtx = Parameters<typeof getPinnedForCurrentUserHandler>[0]
@@ -200,5 +201,61 @@ describe("listForCurrentUserPaginatedHandler", () => {
       )
     ).resolves.toEqual({ page: [], isDone: true, continueCursor: "" })
     expect(indexNames).toEqual([])
+  })
+})
+
+describe("projectChatForReader (owner-only status strip)", () => {
+  const OWNER_ONLY_FIELDS = [
+    "liveRunStatus",
+    "statusRunId",
+    "lastRunEndedAt",
+    "lastRunStatus",
+    "lastReadAt",
+  ] as const
+
+  function sharedChatWithStatus(): Doc<"chats"> {
+    return createChat({
+      _id: asId<"chats">("shared"),
+      userId: asId<"users">("owner"),
+      title: "shared",
+      public: true,
+      liveRunStatus: "streaming",
+      statusRunId: "run_1" as Id<"generationRuns">,
+      lastRunEndedAt: 200,
+      lastRunStatus: "completed",
+      lastReadAt: 100,
+    })
+  }
+
+  it("returns the full doc (owner-only fields intact) for the owner", () => {
+    const chat = sharedChatWithStatus()
+    const result = projectChatForReader(chat, createUser("owner"))
+    expect(result).toBe(chat)
+    for (const field of OWNER_ONLY_FIELDS) {
+      expect(result).toHaveProperty(field)
+    }
+  })
+
+  it("strips owner-only status fields for a non-owner (shared-chat viewer)", () => {
+    const result = projectChatForReader(
+      sharedChatWithStatus(),
+      createUser("viewer")
+    )
+    for (const field of OWNER_ONLY_FIELDS) {
+      expect(result).not.toHaveProperty(field)
+    }
+    // Non-status fields survive.
+    expect(result).toMatchObject({ public: true, title: "shared" })
+  })
+
+  it("strips for an unauthenticated public reader (no user)", () => {
+    const result = projectChatForReader(sharedChatWithStatus(), null)
+    for (const field of OWNER_ONLY_FIELDS) {
+      expect(result).not.toHaveProperty(field)
+    }
+  })
+
+  it("returns null when there is no chat", () => {
+    expect(projectChatForReader(null, createUser("viewer"))).toBeNull()
   })
 })

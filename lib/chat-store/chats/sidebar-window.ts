@@ -28,6 +28,7 @@ export function mapConvexChat(chat: Doc<"chats">): Chats {
     pinned_at: chat.pinnedAt ? new Date(chat.pinnedAt).toISOString() : null,
     created_at: new Date(chat._creationTime).toISOString(),
     updated_at: chat.updatedAt ? new Date(chat.updatedAt).toISOString() : null,
+    live_run_status: chat.liveRunStatus ?? null,
   }
 }
 

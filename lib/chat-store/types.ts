@@ -28,6 +28,10 @@ export type Chat = {
   pinned_at: string | null
   created_at: string | null
   updated_at: string | null
+  // Sidebar status projection — the current run's live phase mirrored onto the
+  // chat doc (docs/design/sidebar-status-backend-wiring.md). Absent on
+  // optimistic/local chats → derives `idle`. — Phase 1
+  live_run_status?: "streaming" | "awaiting" | null
 }
 
 /**
@@ -70,6 +74,7 @@ export function convexChatToChat(convexChat: ConvexChat): Chat {
     updated_at: convexChat.updatedAt
       ? new Date(convexChat.updatedAt).toISOString()
       : null,
+    live_run_status: convexChat.liveRunStatus ?? null,
   }
 }
 

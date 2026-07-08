@@ -2,9 +2,10 @@
 
 import * as React from "react"
 import { create } from "zustand"
+import type { Chat } from "../types"
 
 /**
- * Front-end status for a sidebar chat row's leading indicator slot — our take
+ * Front-end status for a sidebar chat row's trailing indicator slot — our take
  * on ChatGPT's "dynamic slot" model, where each conversation row can surface a
  * small indicator (or nothing) based on the chat's live state.
  *
@@ -13,14 +14,16 @@ import { create } from "zustand"
  * awaiting_approval/completed/aborted/failed…). That keeps the visual language
  * stable while the data feeding it evolves.
  *
- * Data sources, in order of arrival:
- *  1. Front-end, today — the *active* chat publishes its live `useChat` status
- *     (see `usePublishActiveChatStatus`, wired in `chat.tsx`). This lights up
- *     the row you're generating in.
- *  2. Backend, later — a Convex subscription over `generationRuns` (indexed
- *     `by_status` / `by_chat`) will hydrate *every* row's status regardless of
- *     which chat is open, and add the "unread / just finished" signal for
- *     background generations. It writes to this same store.
+ * How a row gets its status (docs/design/sidebar-status-backend-wiring.md):
+ *  - The generation lifecycle **projects** run state onto the `chats` doc
+ *    (`liveRunStatus`, plus the unread/error mirror). Each row already
+ *    subscribes to its chat, so it derives its indicator from the object it
+ *    already renders — no separate query, store, or hydrator.
+ *  - This store holds only the *active-tab* live override (seam #1): the chat
+ *    you are generating in publishes its `useChat` status here so its row lights
+ *    up instantly on send, before the backend transition is visible. A non-idle
+ *    override wins for that tab; an idle/ready override never lowers the backend
+ *    (a re-entered background run keeps its projected spinner).
  */
 export type SidebarChatStatus =
   | "idle" // no indicator; the slot collapses and the title uses full width
@@ -29,54 +32,85 @@ export type SidebarChatStatus =
   | "unread" // just finished / new, not yet opened — solid dot
   | "error" // last generation failed — destructive dot
 
+/** The active tab's live status for the chat it is generating in (or null). */
+export type LiveOverride = { chatId: string; status: SidebarChatStatus } | null
+
 type SidebarChatStatusState = {
-  statuses: Record<string, SidebarChatStatus>
-  /** Set (or, when `idle`, remove) a single chat's status. */
-  setChatStatus: (chatId: string, status: SidebarChatStatus) => void
-  /** Remove a single chat's status (equivalent to setting it `idle`). */
-  clearChatStatus: (chatId: string) => void
-  /** Drop every status (e.g. on sign-out). */
-  resetChatStatuses: () => void
+  liveOverride: LiveOverride
+  /** Publish (or clear, with `null`) the active tab's live override. */
+  setLiveOverride: (override: LiveOverride) => void
 }
 
 export const useSidebarChatStatusStore = create<SidebarChatStatusState>(
   (set) => ({
-    statuses: {},
-    setChatStatus: (chatId, status) =>
+    liveOverride: null,
+    setLiveOverride: (override) =>
       set((state) => {
-        if (status === "idle") {
-          if (!(chatId in state.statuses)) return state
-          const next = { ...state.statuses }
-          delete next[chatId]
-          return { statuses: next }
+        const prev = state.liveOverride
+        // Referentially stable no-op when nothing changed, so a row subscribed
+        // to its own override slice doesn't re-render on unrelated writes.
+        if (
+          prev === override ||
+          (prev?.chatId === override?.chatId &&
+            prev?.status === override?.status)
+        ) {
+          return state
         }
-        if (state.statuses[chatId] === status) return state
-        return { statuses: { ...state.statuses, [chatId]: status } }
+        return { liveOverride: override }
       }),
-    clearChatStatus: (chatId) =>
-      set((state) => {
-        if (!(chatId in state.statuses)) return state
-        const next = { ...state.statuses }
-        delete next[chatId]
-        return { statuses: next }
-      }),
-    resetChatStatuses: () => set({ statuses: {} }),
   })
 )
 
 /**
- * Subscribe a single row to its status. Returns `"idle"` when unset, so a row
- * that no source has touched renders no slot.
+ * Derive a row's indicator from its chat doc plus the active-tab override. Pure.
+ *
+ * A **non-idle override wins**: it is authoritative for the tab issuing the
+ * request, so a local `error` shows even while the backend's best-effort
+ * terminal write lags, and the active row spins instantly on send. A local
+ * idle/ready override never lowers the backend, so a re-entered background run
+ * (whose `useChat` reads `ready` after the nav remount) keeps its projected
+ * spinner. Optimistic/local chats carry no projection fields → `idle`.
  */
-export function useSidebarChatStatus(chatId: string): SidebarChatStatus {
-  return useSidebarChatStatusStore((state) => state.statuses[chatId] ?? "idle")
+export function deriveChatRowStatus(
+  chat: {
+    live_run_status?: "streaming" | "awaiting" | null
+    last_run_ended_at?: number | null
+    last_run_status?: "completed" | "failed" | null
+    last_read_at?: number | null
+  },
+  overrideStatus: SidebarChatStatus | null
+): SidebarChatStatus {
+  if (overrideStatus && overrideStatus !== "idle") return overrideStatus
+  if (chat.live_run_status === "streaming") return "streaming"
+  if (chat.live_run_status === "awaiting") return "awaiting"
+  if ((chat.last_run_ended_at ?? 0) > (chat.last_read_at ?? 0)) {
+    if (chat.last_run_status === "failed") return "error"
+    if (chat.last_run_status === "completed") return "unread"
+  }
+  return "idle"
+}
+
+/**
+ * Subscribe a single row to its status. Takes the `chat` the row already
+ * renders (reactive through the chat-list query) and derives the indicator. The
+ * store selector returns only THIS row's override slice, so a `liveOverride`
+ * change re-renders only the row it targets, not every subscribed row.
+ */
+export function useSidebarChatStatus(chat: Chat): SidebarChatStatus {
+  const overrideStatus = useSidebarChatStatusStore((state) =>
+    state.liveOverride?.chatId === chat.id ? state.liveOverride.status : null
+  )
+  return deriveChatRowStatus(chat, overrideStatus)
 }
 
 /**
  * Map the active chat's AI-SDK `useChat` status onto a sidebar slot status.
  * Only the states we can observe client-side are mapped; everything else falls
- * back to `idle`. Tool-approval ("awaiting") and "unread" arrive with the
- * backend subscription, not from `useChat`.
+ * back to `idle`. Tool-approval ("awaiting") and "unread" arrive via the
+ * backend projection on the chat doc, not from `useChat` — and a tool-approval
+ * pause reports `ready` here (the stream finishes; it auto-continues once the
+ * approval resolves), so the `idle` mapping lets the backend's `awaiting` dot
+ * show through even for the active row.
  */
 export function activeChatStatusToSidebarStatus(
   status: string
@@ -95,55 +129,32 @@ export function activeChatStatusToSidebarStatus(
 /**
  * Publish the active chat's live status into the store so its sidebar row shows
  * the right indicator while you generate. Clears on chat switch / unmount so a
- * stale ring never lingers on a row we're no longer generating in. Front-end
- * seam #1 — see the module docblock.
+ * stale ring never lingers on a row we're no longer the active tab for.
+ * Front-end seam #1 — see the module docblock.
  */
 export function usePublishActiveChatStatus(
   chatId: string | null,
   status: string
 ): void {
-  const setChatStatus = useSidebarChatStatusStore(
-    (state) => state.setChatStatus
+  const setLiveOverride = useSidebarChatStatusStore(
+    (state) => state.setLiveOverride
   )
 
   React.useEffect(() => {
-    if (!chatId) return
-    setChatStatus(chatId, activeChatStatusToSidebarStatus(status))
-  }, [chatId, status, setChatStatus])
+    if (!chatId) {
+      setLiveOverride(null)
+      return
+    }
+    setLiveOverride({
+      chatId,
+      status: activeChatStatusToSidebarStatus(status),
+    })
+  }, [chatId, status, setLiveOverride])
 
-  // Separate cleanup keyed only on chatId: fire on chat switch / unmount, not
-  // on every status transition (which would flash the slot to idle mid-stream).
+  // Separate cleanup keyed only on chatId: fire on chat switch / unmount, not on
+  // every status transition (which would flash the slot to idle mid-stream).
   React.useEffect(() => {
     if (!chatId) return
-    return () => useSidebarChatStatusStore.getState().clearChatStatus(chatId)
+    return () => useSidebarChatStatusStore.getState().setLiveOverride(null)
   }, [chatId])
-}
-
-/**
- * DEV/preview only. When the URL carries `?sidebarStatusPreview=1`, seed a
- * rotating set of demo statuses onto the first few chat rows so every indicator
- * variant is visible without any backend wiring. No-op otherwise, and it cleans
- * up its seeded rows on unmount / param change.
- */
-export function useSidebarChatStatusPreview(chatIds: string[]): void {
-  const setChatStatus = useSidebarChatStatusStore(
-    (state) => state.setChatStatus
-  )
-  const key = chatIds.join(",")
-
-  React.useEffect(() => {
-    if (typeof window === "undefined") return
-    const params = new URLSearchParams(window.location.search)
-    if (!params.has("sidebarStatusPreview")) return
-
-    const demo: SidebarChatStatus[] = [
-      "streaming",
-      "unread",
-      "awaiting",
-      "error",
-    ]
-    const seeded = key ? key.split(",").slice(0, demo.length) : []
-    seeded.forEach((id, index) => setChatStatus(id, demo[index]))
-    return () => seeded.forEach((id) => setChatStatus(id, "idle"))
-  }, [key, setChatStatus])
 }

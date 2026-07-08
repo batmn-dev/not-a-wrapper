@@ -37,7 +37,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useChats } from "@/lib/chat-store/chats/provider"
-import { useSidebarChatStatusPreview } from "@/lib/chat-store/status/sidebar-chat-status"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
 import {
@@ -295,16 +294,6 @@ function SidebarExpandedNav({
   const scrollRef = useRef<HTMLElement>(null)
   // Zero-rerender scroll tracking via data attributes
   useScrollAttributes(scrollRef)
-
-  // DEV preview: `?sidebarStatusPreview=1` seeds demo status indicators onto the
-  // first few rows so every slot variant is visible without a backend. No-op
-  // otherwise. Remove once real status sources (live + Convex) are wired.
-  const previewChatIds = useMemo(
-    () =>
-      [...data.pinnedChats, ...data.nonPinnedChats].map((chat) => chat.id),
-    [data.pinnedChats, data.nonPinnedChats]
-  )
-  useSidebarChatStatusPreview(previewChatIds)
 
   // Bounded sidebar (ENABLE_PAGINATED_SIDEBAR): load more window pages as the
   // user nears the bottom. No-op when the flag is off (canLoadMore is false).

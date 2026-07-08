@@ -21,7 +21,7 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
   const { updateTitle } = useChats()
   const { setOpenMobile } = useSidebar()
   const isMobile = useBreakpoint(768)
-  const status = useSidebarChatStatus(chat.id)
+  const status = useSidebarChatStatus(chat)
 
   const {
     isEditing,
@@ -119,7 +119,7 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
               the indicator hides and the actions reveal in its place. Idle rows
               show neither, so the title reclaims the full width. */}
           <div
-            className="sidebar-row-trailing flex h-full shrink-0 items-center pr-1"
+            className="sidebar-row-trailing flex h-full shrink-0 items-center"
             key={chat.id}
           >
             <SidebarChatStatusIndicator
