@@ -322,6 +322,25 @@ export const getPublicById = query({
 })
 
 /**
+ * Stamp the caller's read cursor on a chat they own, clearing its derived
+ * unread/error indicator (lastReadAt >= lastRunEndedAt → idle).
+ *
+ * Deliberately NOT ownedChatMutation: opening a *public* chat you don't own has
+ * a valid Convex id, and ownedChatMutation would THROW. Unread/error only exist
+ * for chats you own, so a non-owned (or missing) chat is a silent no-op. Guests
+ * / local-/optimistic ids never reach here — the client gates on isConvexId and
+ * this is an authenticatedMutation.
+ */
+export const markChatRead = authenticatedMutation({
+  args: { chatId: v.id("chats") },
+  handler: async (ctx, { chatId }) => {
+    const chat = await ctx.db.get(chatId)
+    if (!chat || chat.userId !== ctx.user._id) return // public / not-owned → no-op
+    await ctx.db.patch(chatId, { lastReadAt: Date.now() })
+  },
+})
+
+/**
  * Defensive backfill for the `updatedAt` optional→required narrowing
  * (docs/adr/0005-bounded-chat-list-window.md). Sets
  * `updatedAt = _creationTime` for any chat missing it, so recency indexes have
