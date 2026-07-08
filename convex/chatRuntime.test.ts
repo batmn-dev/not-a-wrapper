@@ -3413,7 +3413,7 @@ describe("chat status projection", () => {
     expect(fixture.chat.statusRunId).toBe(fixture.runId)
   })
 
-  it("clears the live phase when the owning run completes", async () => {
+  it("clears live and writes the completed mirror when the owning run completes", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1700000000000)
     const fixture = createGenerationRunLinkageFixture()
     fixture.chat.statusRunId = fixture.runId
@@ -3431,8 +3431,57 @@ describe("chat status projection", () => {
     )
 
     expect(fixture.chat.liveRunStatus).toBeUndefined()
+    expect(fixture.chat).toMatchObject({
+      lastRunStatus: "completed",
+      lastRunEndedAt: 1700000000000,
+    })
     // statusRunId is KEPT after a terminal so a same-run convergence still applies.
     expect(fixture.chat.statusRunId).toBe(fixture.runId)
+  })
+
+  it("writes the failed mirror when the owning run fails", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.chat.statusRunId = fixture.runId
+    fixture.chat.liveRunStatus = "streaming"
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunFailedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      { messageId: fixture.messageId, error: "provider rejected" }
+    )
+
+    expect(fixture.chat.liveRunStatus).toBeUndefined()
+    expect(fixture.chat).toMatchObject({
+      lastRunStatus: "failed",
+      lastRunEndedAt: 1700000000000,
+    })
+  })
+
+  it("leaves the mirror unchanged on abort (aborted carries no signal)", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.chat.statusRunId = fixture.runId
+    fixture.chat.liveRunStatus = "streaming"
+    // A prior, already-seen completed run left a mirror.
+    fixture.chat.lastRunEndedAt = 1699999999000
+    fixture.chat.lastRunStatus = "completed"
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunAbortedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      { messageId: fixture.messageId, reason: "stream aborted" }
+    )
+
+    // Only the live phase clears; the terminal mirror is untouched (a user Stop
+    // must not strand a stale unread, and it writes no new signal).
+    expect(fixture.chat.liveRunStatus).toBeUndefined()
+    expect(fixture.chat).toMatchObject({
+      lastRunEndedAt: 1699999999000,
+      lastRunStatus: "completed",
+    })
   })
 
   it("ignores a terminal projection from a run that no longer owns the slot (run-id guard)", async () => {

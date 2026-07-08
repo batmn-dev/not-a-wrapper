@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
 import type { Doc, Id } from "./_generated/dataModel"
+import type { MutationCtx } from "./_generated/server"
 import {
   getPinnedForCurrentUserHandler,
   listForCurrentUserPaginatedHandler,
+  markChatReadForOwner,
   projectChatForReader,
 } from "./chats"
 
@@ -257,5 +259,60 @@ describe("projectChatForReader (owner-only status strip)", () => {
 
   it("returns null when there is no chat", () => {
     expect(projectChatForReader(null, createUser("viewer"))).toBeNull()
+  })
+})
+
+describe("markChatReadForOwner", () => {
+  function createReadWriteCtx(chats: Doc<"chats">[]) {
+    const patches: Array<{ id: string; value: Record<string, unknown> }> = []
+    const ctx = {
+      db: {
+        get: async (id: string) =>
+          chats.find((chat) => chat._id === id) ?? null,
+        patch: async (id: string, value: Record<string, unknown>) => {
+          patches.push({ id, value })
+          const chat = chats.find((candidate) => candidate._id === id)
+          if (chat) Object.assign(chat, value)
+        },
+      },
+    } as unknown as Pick<MutationCtx, "db">
+    return { ctx, patches }
+  }
+
+  it("stamps lastReadAt for a chat the caller owns", async () => {
+    const owner = createUser("owner")
+    const chat = createChat({ _id: asId<"chats">("c1"), userId: owner._id })
+    const { ctx, patches } = createReadWriteCtx([chat])
+
+    await markChatReadForOwner(ctx, owner, chat._id)
+
+    expect(patches).toHaveLength(1)
+    expect(chat.lastReadAt).toBeTypeOf("number")
+  })
+
+  it("no-ops for a chat the caller does not own (opening a public chat)", async () => {
+    const owner = createUser("owner")
+    const viewer = createUser("viewer")
+    const chat = createChat({
+      _id: asId<"chats">("c1"),
+      userId: owner._id,
+      public: true,
+    })
+    const { ctx, patches } = createReadWriteCtx([chat])
+
+    await markChatReadForOwner(ctx, viewer, chat._id)
+
+    expect(patches).toEqual([])
+    expect(chat.lastReadAt).toBeUndefined()
+  })
+
+  it("no-ops for a missing chat", async () => {
+    const { ctx, patches } = createReadWriteCtx([])
+    await markChatReadForOwner(
+      ctx,
+      createUser("owner"),
+      asId<"chats">("missing")
+    )
+    expect(patches).toEqual([])
   })
 })

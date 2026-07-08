@@ -32,6 +32,12 @@ export type Chat = {
   // chat doc (docs/design/sidebar-status-backend-wiring.md). Absent on
   // optimistic/local chats → derives `idle`. — Phase 1
   live_run_status?: "streaming" | "awaiting" | null
+  // Last signaling terminal outcome + the owner's read cursor; a background run
+  // that finished unseen (last_run_ended_at > last_read_at) derives unread/error
+  // until opened. Owner-only (stripped from non-owner reads). — Phase 2
+  last_run_ended_at?: number | null
+  last_run_status?: "completed" | "failed" | null
+  last_read_at?: number | null
 }
 
 /**
@@ -75,6 +81,9 @@ export function convexChatToChat(convexChat: ConvexChat): Chat {
       ? new Date(convexChat.updatedAt).toISOString()
       : null,
     live_run_status: convexChat.liveRunStatus ?? null,
+    last_run_ended_at: convexChat.lastRunEndedAt ?? null,
+    last_run_status: convexChat.lastRunStatus ?? null,
+    last_read_at: convexChat.lastReadAt ?? null,
   }
 }
 

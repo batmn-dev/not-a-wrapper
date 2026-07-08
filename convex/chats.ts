@@ -1,7 +1,12 @@
 import { paginationOptsValidator, type PaginationOptions } from "convex/server"
 import { v } from "convex/values"
-import type { Doc } from "./_generated/dataModel"
-import { internalMutation, query, type QueryCtx } from "./_generated/server"
+import type { Doc, Id } from "./_generated/dataModel"
+import {
+  internalMutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server"
 import { requireOwnedProject } from "./lib/auth"
 import {
   authenticatedMutation,
@@ -322,6 +327,21 @@ export const getPublicById = query({
 })
 
 /**
+ * Stamp `user`'s read cursor on a chat they own; no-op for a missing or
+ * not-owned chat. The testable core of markChatRead (owner no-op is review #4's
+ * requirement: opening a public chat you don't own must not throw).
+ */
+export async function markChatReadForOwner(
+  ctx: Pick<MutationCtx, "db">,
+  user: Doc<"users">,
+  chatId: Id<"chats">
+): Promise<void> {
+  const chat = await ctx.db.get(chatId)
+  if (!chat || chat.userId !== user._id) return // public / not-owned → no-op
+  await ctx.db.patch(chatId, { lastReadAt: Date.now() })
+}
+
+/**
  * Stamp the caller's read cursor on a chat they own, clearing its derived
  * unread/error indicator (lastReadAt >= lastRunEndedAt → idle).
  *
@@ -333,11 +353,7 @@ export const getPublicById = query({
  */
 export const markChatRead = authenticatedMutation({
   args: { chatId: v.id("chats") },
-  handler: async (ctx, { chatId }) => {
-    const chat = await ctx.db.get(chatId)
-    if (!chat || chat.userId !== ctx.user._id) return // public / not-owned → no-op
-    await ctx.db.patch(chatId, { lastReadAt: Date.now() })
-  },
+  handler: async (ctx, { chatId }) => markChatReadForOwner(ctx, ctx.user, chatId),
 })
 
 /**

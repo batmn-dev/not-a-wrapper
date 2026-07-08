@@ -1,8 +1,10 @@
 "use client"
 
+import { api } from "@/convex/_generated/api"
+import { useConvexAuth, useMutation } from "convex/react"
 import * as React from "react"
 import { create } from "zustand"
-import type { Chat } from "../types"
+import { isConvexId, type Chat } from "../types"
 
 /**
  * Front-end status for a sidebar chat row's trailing indicator slot — our take
@@ -157,4 +159,43 @@ export function usePublishActiveChatStatus(
     if (!chatId) return
     return () => useSidebarChatStatusStore.getState().setLiveOverride(null)
   }, [chatId])
+}
+
+/**
+ * Clear a chat's unread/error by stamping `lastReadAt`: on open, and again
+ * whenever the ACTIVE chat's terminal mirror advances while viewing (covers a
+ * run that finished locally *and* one you re-entered and watched). Navigating
+ * away before completion leaves it unread. Backend-driven, independent of
+ * `useChat`.
+ *
+ * Gated on Convex auth to skip the common not-authenticated throw; a rarer "user
+ * not found" during WorkOS→Convex user-row sync can still reject and is caught.
+ * The tracking ref advances ONLY on success, so any failure retries on the next
+ * open / run-advance / auth-ready render. No-op for guest / local- / optimistic
+ * ids (isConvexId guard) — matching markChatRead's server-side owner no-op.
+ */
+export function useMarkChatReadOnView(
+  chatId: string | null,
+  lastRunEndedAt?: number | null
+): void {
+  const { isAuthenticated } = useConvexAuth()
+  const markChatRead = useMutation(api.chats.markChatRead)
+  const markedRef = React.useRef<{ chatId: string | null; endedAt: number }>({
+    chatId: null,
+    endedAt: 0,
+  })
+
+  React.useEffect(() => {
+    if (!chatId || !isConvexId(chatId) || !isAuthenticated) return
+    const ended = lastRunEndedAt ?? 0
+    const prev = markedRef.current
+    const switchedChat = prev.chatId !== chatId
+    const runAdvanced = !switchedChat && ended > prev.endedAt
+    if (!switchedChat && !runAdvanced) return
+    markChatRead({ chatId })
+      .then(() => {
+        markedRef.current = { chatId, endedAt: ended } // advance only on success
+      })
+      .catch(() => {}) // best-effort; ref unchanged → later render / auth-ready retries
+  }, [chatId, lastRunEndedAt, isAuthenticated, markChatRead])
 }
