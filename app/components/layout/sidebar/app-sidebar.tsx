@@ -311,13 +311,10 @@ function SidebarExpandedNav({
         aria-label="Chat history"
       >
         {/* === STICKY HEADER === */}
-        <div
-          className={cn(
-            "bg-sidebar sticky top-0 z-30",
-            // Shadow only on SHORT viewports where actions scroll away
-            "not-tall:group-data-[scrolled-from-top]/scrollport:shadow-[inset_0_-1px_0_0_var(--sidebar-border)]"
-          )}
-        >
+        {/* No scroll shadow: ChatGPT's header is a plain sticky surface
+            (sticky top-0 z-30 bg-surface). The seam is owned entirely by the
+            action-group mask below, on both tall and short viewports. */}
+        <div className="bg-sidebar sticky top-0 z-30">
           <div className="px-2">
             <div className="flex h-(--sidebar-header-height) items-center justify-between">
               <Link
@@ -360,7 +357,8 @@ function SidebarExpandedNav({
           className={cn(
             "bg-sidebar z-20 px-0 pt-(--sidebar-section-first-margin-top)",
             "tall:sticky tall:top-(--sidebar-header-height)",
-            "not-tall:relative"
+            "not-tall:relative",
+            "[--sticky-spacer:6px]"
           )}
         >
           <div className="flex w-full flex-col items-start gap-0">
@@ -402,11 +400,16 @@ function SidebarExpandedNav({
               <SignedOutSidebarSearchPopover />
             )}
           </div>
-          {/* Solid bg mask below sticky actions — hides scroll seam */}
+          {/* Solid bg mask + 1px seam below sticky actions.
+              Matches ChatGPT: on tall viewports the mask carries a scroll-
+              triggered sharp-edge shadow (transparent placeholder → hairline);
+              the bg fade covers the seam on both tall and short viewports. */}
           <div
             className={cn(
-              "pointer-events-none absolute inset-x-0 -bottom-1.5 h-1.5",
+              "pointer-events-none absolute inset-x-0 -bottom-(--sticky-spacer) h-(--sticky-spacer)",
               "bg-sidebar",
+              "tall:[box-shadow:var(--sharp-edge-top-shadow-placeholder)]",
+              "tall:group-data-[scrolled-from-top]/scrollport:[box-shadow:var(--sharp-edge-top-shadow)]",
               "opacity-0 will-change-[opacity]",
               "group-data-[scrolled-from-top]/scrollport:opacity-100"
             )}
@@ -464,31 +467,19 @@ function SidebarExpandedNav({
           </div>
         )}
 
-        {data.isLoggedIn && (
+        {/* === STICKY FOOTER === */}
+        {/* Scroll seam, mirroring the sticky action group's top seam: a 5%
+            hairline appears above the footer only while more history sits below
+            (scrolled-from-end), and clears at the bottom. Same sharp-edge line
+            as the header/actions, flipped to the footer's top edge. */}
+        {data.isLoggedIn ? (
           <div
             className={cn(
-              "pointer-events-none sticky z-40 flex shrink-0 flex-col justify-end",
-              "opacity-0 group-data-[scrolled-from-end]/scrollport:opacity-100",
-              "motion-safe:transition-opacity motion-safe:duration-150"
+              "bg-sidebar sticky bottom-0 z-30 px-2 py-1.5 empty:hidden",
+              "[box-shadow:var(--sharp-edge-bottom-shadow-placeholder)]",
+              "group-data-[scrolled-from-end]/scrollport:[box-shadow:var(--sharp-edge-bottom-shadow)]"
             )}
-            style={{
-              bottom: "calc(3.75rem - 1px)",
-              marginTop: "-4px",
-              height: "4px",
-              maskImage: "linear-gradient(to top, transparent 25%, white 75%)",
-            }}
-            aria-hidden="true"
           >
-            <div
-              className="bg-sidebar-border sticky w-full"
-              style={{ bottom: "3.75rem", height: "1px" }}
-            />
-          </div>
-        )}
-
-        {/* === STICKY FOOTER === */}
-        {data.isLoggedIn ? (
-          <div className="bg-sidebar sticky bottom-0 z-30 px-2 py-1.5 empty:hidden">
             <UserMenu variant="sidebar" />
           </div>
         ) : (

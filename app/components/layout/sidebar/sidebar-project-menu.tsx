@@ -12,6 +12,10 @@ import { Icon } from "@/components/ui/icon"
 import type { Id } from "@/convex/_generated/dataModel"
 import { RiDeleteBinLine, RiEditLine, RiMoreFill } from "@remixicon/react"
 import { useState } from "react"
+import {
+  trailingIconButtonClassName,
+  TrailingIconChip,
+} from "./trailing-icon-button"
 
 type Project = {
   _id: Id<"projects">
@@ -22,12 +26,14 @@ type SidebarProjectMenuProps = {
   project: Project
   onStartEditing: () => void
   onMenuOpenChange?: (open: boolean) => void
+  triggerAriaLabel?: string
 }
 
 export function SidebarProjectMenu({
   project,
   onStartEditing,
   onMenuOpenChange,
+  triggerAriaLabel,
 }: SidebarProjectMenuProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const isMobile = useBreakpoint(768)
@@ -42,12 +48,23 @@ export function SidebarProjectMenu({
         <DropdownMenuTrigger
           render={
             <button
-              className="hover:bg-secondary flex size-7 cursor-pointer items-center justify-center rounded-lg p-1"
-              onClick={(e) => e.stopPropagation()}
+              type="button"
+              className={trailingIconButtonClassName}
+              // Nested inside the row's <Link> now (no dead corners): cancel the
+              // anchor's navigation and keep the click off the row.
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+              }}
+              aria-label={triggerAriaLabel ?? "Open project options"}
             />
           }
         >
-          <Icon icon={RiMoreFill} slotSize={20} className="text-primary" />
+          {/* Inherits the trigger's currentColor (tertiary→foreground) and hosts
+              the keyboard focus ring on the inner chip. */}
+          <TrailingIconChip>
+            <Icon icon={RiMoreFill} slotSize={20} />
+          </TrailingIconChip>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
           <DropdownMenuItem

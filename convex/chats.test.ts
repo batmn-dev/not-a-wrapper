@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest"
 import type { Doc, Id } from "./_generated/dataModel"
+import type { MutationCtx } from "./_generated/server"
 import {
   getPinnedForCurrentUserHandler,
   listForCurrentUserPaginatedHandler,
+  markChatReadForOwner,
+  projectChatForReader,
 } from "./chats"
 
 type ChatQueryCtx = Parameters<typeof getPinnedForCurrentUserHandler>[0]
@@ -200,5 +203,163 @@ describe("listForCurrentUserPaginatedHandler", () => {
       )
     ).resolves.toEqual({ page: [], isDone: true, continueCursor: "" })
     expect(indexNames).toEqual([])
+  })
+})
+
+describe("projectChatForReader (owner-only status strip)", () => {
+  const OWNER_ONLY_FIELDS = [
+    "liveRunStatus",
+    "statusRunId",
+    "lastRunEndedAt",
+    "lastRunStatus",
+    "lastReadAt",
+  ] as const
+
+  function sharedChatWithStatus(): Doc<"chats"> {
+    return createChat({
+      _id: asId<"chats">("shared"),
+      userId: asId<"users">("owner"),
+      title: "shared",
+      public: true,
+      liveRunStatus: "streaming",
+      statusRunId: "run_1" as Id<"generationRuns">,
+      lastRunEndedAt: 200,
+      lastRunStatus: "completed",
+      lastReadAt: 100,
+    })
+  }
+
+  it("returns the full doc (owner-only fields intact) for the owner", () => {
+    const chat = sharedChatWithStatus()
+    const result = projectChatForReader(chat, createUser("owner"))
+    expect(result).toBe(chat)
+    for (const field of OWNER_ONLY_FIELDS) {
+      expect(result).toHaveProperty(field)
+    }
+  })
+
+  it("strips owner-only status fields for a non-owner (shared-chat viewer)", () => {
+    const result = projectChatForReader(
+      sharedChatWithStatus(),
+      createUser("viewer")
+    )
+    for (const field of OWNER_ONLY_FIELDS) {
+      expect(result).not.toHaveProperty(field)
+    }
+    // Non-status fields survive.
+    expect(result).toMatchObject({ public: true, title: "shared" })
+  })
+
+  it("strips for an unauthenticated public reader (no user)", () => {
+    const result = projectChatForReader(sharedChatWithStatus(), null)
+    for (const field of OWNER_ONLY_FIELDS) {
+      expect(result).not.toHaveProperty(field)
+    }
+  })
+
+  it("returns null when there is no chat", () => {
+    expect(projectChatForReader(null, createUser("viewer"))).toBeNull()
+  })
+})
+
+describe("markChatReadForOwner", () => {
+  function createReadWriteCtx(chats: Doc<"chats">[]) {
+    const patches: Array<{ id: string; value: Record<string, unknown> }> = []
+    const ctx = {
+      db: {
+        get: async (id: string) =>
+          chats.find((chat) => chat._id === id) ?? null,
+        patch: async (id: string, value: Record<string, unknown>) => {
+          patches.push({ id, value })
+          const chat = chats.find((candidate) => candidate._id === id)
+          if (chat) Object.assign(chat, value)
+        },
+      },
+    } as unknown as Pick<MutationCtx, "db">
+    return { ctx, patches }
+  }
+
+  it("stamps lastReadAt for a chat the caller owns", async () => {
+    const owner = createUser("owner")
+    const chat = createChat({
+      _id: asId<"chats">("c1"),
+      userId: owner._id,
+      lastRunEndedAt: 200,
+    })
+    const { ctx, patches } = createReadWriteCtx([chat])
+
+    await markChatReadForOwner(ctx, owner, chat._id, 200)
+
+    expect(patches).toHaveLength(1)
+    expect(chat.lastReadAt).toBe(200)
+  })
+
+  it("caps the read cursor at the current terminal mirror", async () => {
+    const owner = createUser("owner")
+    const chat = createChat({
+      _id: asId<"chats">("c1"),
+      userId: owner._id,
+      lastRunEndedAt: 200,
+    })
+    const { ctx, patches } = createReadWriteCtx([chat])
+
+    await markChatReadForOwner(ctx, owner, chat._id, 300)
+
+    expect(patches).toEqual([{ id: chat._id, value: { lastReadAt: 200 } }])
+    expect(chat.lastReadAt).toBe(200)
+  })
+
+  it("does not move lastReadAt backwards for a stale read-through", async () => {
+    const owner = createUser("owner")
+    const chat = createChat({
+      _id: asId<"chats">("c1"),
+      userId: owner._id,
+      lastRunEndedAt: 300,
+      lastReadAt: 250,
+    })
+    const { ctx, patches } = createReadWriteCtx([chat])
+
+    await markChatReadForOwner(ctx, owner, chat._id, 200)
+
+    expect(patches).toEqual([])
+    expect(chat.lastReadAt).toBe(250)
+  })
+
+  it("no-ops when the chat has no terminal mirror", async () => {
+    const owner = createUser("owner")
+    const chat = createChat({ _id: asId<"chats">("c1"), userId: owner._id })
+    const { ctx, patches } = createReadWriteCtx([chat])
+
+    await markChatReadForOwner(ctx, owner, chat._id, 200)
+
+    expect(patches).toEqual([])
+    expect(chat.lastReadAt).toBeUndefined()
+  })
+
+  it("no-ops for a chat the caller does not own (opening a public chat)", async () => {
+    const owner = createUser("owner")
+    const viewer = createUser("viewer")
+    const chat = createChat({
+      _id: asId<"chats">("c1"),
+      userId: owner._id,
+      public: true,
+    })
+    const { ctx, patches } = createReadWriteCtx([chat])
+
+    await markChatReadForOwner(ctx, viewer, chat._id, 200)
+
+    expect(patches).toEqual([])
+    expect(chat.lastReadAt).toBeUndefined()
+  })
+
+  it("no-ops for a missing chat", async () => {
+    const { ctx, patches } = createReadWriteCtx([])
+    await markChatReadForOwner(
+      ctx,
+      createUser("owner"),
+      asId<"chats">("missing"),
+      200
+    )
+    expect(patches).toEqual([])
   })
 })

@@ -15,7 +15,6 @@ import { useMessages } from "@/lib/chat-store/messages/provider"
 import { useChatSession } from "@/lib/chat-store/session/provider"
 import type { Chat } from "@/lib/chat-store/types"
 import { Pin, PinOff } from "@/lib/icons"
-import { cn } from "@/lib/utils"
 import {
   RiDeleteBinLine,
   RiEditLine,
@@ -29,6 +28,10 @@ import type React from "react"
 import { useState } from "react"
 import { SharePublishDrawer } from "./share-publish-drawer"
 import { DialogDeleteChat } from "./sidebar/dialog-delete-chat"
+import {
+  trailingIconButtonClassName,
+  TrailingIconChip,
+} from "./sidebar/trailing-icon-button"
 
 type ChatActionsMenuProps = {
   chat: Chat
@@ -100,8 +103,20 @@ export function ChatActionsMenu({
   const defaultTrigger = (
     <button
       type="button"
-      className="hover:bg-secondary focus-visible:ring-ring flex size-7 items-center justify-center rounded-md p-1 focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
-      onClick={(e) => e.stopPropagation()}
+      // ChatGPT's __menu-item-trailing-btn: a 34×36 hit area with NO background —
+      // only the icon color shifts (tertiary→foreground) and the keyboard focus
+      // ring lives on the inner chip (see TrailingIconChip). Shared with the pin
+      // quick-action so the pair matches. Used only by the sidebar/project rows;
+      // the header new-chat menu passes its own `trigger`, so it's unaffected.
+      className={trailingIconButtonClassName}
+      // The row is a single <a> (ChatGPT-style) with this button nested inside,
+      // so a bare click would trigger the anchor's navigation. preventDefault
+      // cancels that nav (and tells Next's Link to skip); stopPropagation keeps
+      // it off the row. The menu still opens — base-ui triggers on pointer-down.
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      }}
       aria-label={triggerAriaLabel ?? "Open chat actions"}
     />
   )
@@ -114,8 +129,13 @@ export function ChatActionsMenu({
         onOpenChange={onOpenChange}
       >
         <DropdownMenuTrigger render={trigger ?? defaultTrigger}>
+          {/* No color class: the glyph inherits the trigger's currentColor so it
+              tracks the tertiary→foreground hover shift (ChatGPT icon-color
+              reveal). Wrapped in the chip that hosts the keyboard focus ring. */}
           {!trigger && (
-            <Icon icon={RiMoreFill} slotSize={20} className="text-primary" />
+            <TrailingIconChip>
+              <Icon icon={RiMoreFill} slotSize={20} />
+            </TrailingIconChip>
           )}
         </DropdownMenuTrigger>
         <DropdownMenuContent

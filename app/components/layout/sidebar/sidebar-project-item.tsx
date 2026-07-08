@@ -1,6 +1,5 @@
 "use client"
 
-import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { Icon } from "@/components/ui/icon"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
@@ -30,7 +29,6 @@ type SidebarProjectItemProps = {
 
 export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const isMobile = useBreakpoint(768)
   const pathname = usePathname()
   const updateProjectName = useMutation(api.projects.updateName)
 
@@ -66,9 +64,14 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
   }, [])
 
   // Memoize computed values
+  const isCurrentProject = useMemo(
+    () => pathname.startsWith(`/p/${project._id}`),
+    [pathname, project._id]
+  )
+
   const isActive = useMemo(
-    () => pathname.startsWith(`/p/${project._id}`) || isEditing || isMenuOpen,
-    [pathname, project._id, isEditing, isMenuOpen]
+    () => isCurrentProject || isEditing || isMenuOpen,
+    [isCurrentProject, isEditing, isMenuOpen]
   )
 
   const displayName = useMemo(
@@ -79,30 +82,25 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
   const containerClassName = useMemo(
     () =>
       cn(
-        "menu-item-hoverable hover:bg-accent/80 hover:text-foreground group/project relative mx-1.5 h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer rounded-lg",
+        // Same recipe as the chat row (sidebar-item): hover == selected ==
+        // menu-open off the one translucent token; single flex row.
+        "sidebar-row menu-item-hoverable hover:bg-[var(--sidebar-row-active-background)] hover:text-foreground group/project relative mx-1.5 flex h-9 w-[calc(100%-var(--spacing)*3)] items-center rounded-lg pointer-coarse:h-auto",
         isActive &&
-          "bg-accent hover:bg-accent text-foreground group-data-[collapsible=icon]:bg-transparent"
+          "bg-[var(--sidebar-row-active-background)] hover:bg-[var(--sidebar-row-active-background)] text-foreground group-data-[collapsible=icon]:bg-transparent"
       ),
     [isActive]
   )
 
-  const menuClassName = useMemo(
-    () =>
-      cn(
-        "absolute top-0 right-1 flex h-full items-center justify-center opacity-0 group-hover/project:opacity-100",
-        isMobile && "opacity-100 group-hover/project:opacity-100"
-      ),
-    [isMobile]
-  )
-
-  return (
-    <div
-      className={containerClassName}
-      onClick={onContainerClick}
-      ref={containerRef}
-    >
-      {isEditing ? (
-        <div className="flex h-full items-center rounded-lg py-[3px] pr-1 pl-2">
+  // Rename mode keeps the plain <div> container (it needs containerRef for
+  // click-outside-commits and swaps the row for an input).
+  if (isEditing) {
+    return (
+      <div
+        className={containerClassName}
+        onClick={onContainerClick}
+        ref={containerRef}
+      >
+        <div className="flex h-full w-full items-center rounded-lg py-[3px] pr-1 pl-2">
           <Icon
             icon={RiFolderFill}
             slotSize={20}
@@ -130,35 +128,45 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
             </button>
           </div>
         </div>
-      ) : (
-        <>
-          <Link
-            href={`/p/${project._id}`}
-            className="block h-full w-full cursor-pointer"
-            prefetch
-            onClick={handleLinkClick}
-          >
-            <div
-              className="text-primary relative line-clamp-1 flex h-full w-full items-center gap-2 mask-r-from-80% mask-r-to-85% px-2.5 py-1.5 text-sm text-ellipsis whitespace-nowrap"
-              title={displayName}
-            >
-              <Icon
-                icon={isActive ? RiFolderFill : RiFolderLine}
-                slotSize={20}
-              />
-              {displayName}
-            </div>
-          </Link>
+      </div>
+    )
+  }
 
-          <div className={menuClassName} key={project._id}>
-            <SidebarProjectMenu
-              project={project}
-              onStartEditing={start}
-              onMenuOpenChange={handleMenuOpenChange}
-            />
-          </div>
-        </>
+  // Resting/nav mode: the <Link> IS the whole row (ChatGPT's single `<a>`), with
+  // the folder icon, name, and the trailing menu nested INSIDE it — no absolute
+  // sibling, no mask fade, no dead corners. The nested trigger stops propagation
+  // so activating it opens the menu without navigating, and the reveal-by-reflow
+  // action (globals.css) keeps the button visible while the menu is open.
+  return (
+    <Link
+      href={`/p/${project._id}`}
+      className={cn(
+        containerClassName,
+        "text-primary px-2.5 py-1.5 text-sm focus-visible:outline-none pointer-coarse:py-3"
       )}
-    </div>
+      prefetch
+      draggable={false}
+      onClick={handleLinkClick}
+      aria-current={isCurrentProject ? "page" : undefined}
+      title={displayName}
+    >
+      <div className="flex min-w-0 grow items-center gap-2">
+        <Icon
+          icon={isActive ? RiFolderFill : RiFolderLine}
+          slotSize={20}
+          className="shrink-0"
+        />
+        <span className="truncate">{displayName}</span>
+      </div>
+
+      <div className="sidebar-row-action flex h-full items-center" key={project._id}>
+        <SidebarProjectMenu
+          project={project}
+          onStartEditing={start}
+          onMenuOpenChange={handleMenuOpenChange}
+          triggerAriaLabel={`Open project options for ${displayName}`}
+        />
+      </div>
+    </Link>
   )
 }

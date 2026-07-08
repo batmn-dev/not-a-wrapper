@@ -39,6 +39,16 @@ describe("validateCsrfDoubleSubmit", () => {
     expect(validateCsrfDoubleSubmit(token, token)).toBe(true)
   })
 
+  it("accepts a pair when the header arrives URL-encoded but the cookie is decoded", () => {
+    // Models the real transport: the client attaches `document.cookie`'s raw,
+    // URL-encoded value as the header (the `:` delimiter becomes `%3A`), while the
+    // server reads the cookie via next/headers, which URL-decodes it. A regression
+    // here 403s every state-changing request.
+    const encodedHeader = encodeURIComponent(token)
+    expect(encodedHeader).not.toBe(token) // guard: the token really does encode
+    expect(validateCsrfDoubleSubmit(encodedHeader, token)).toBe(true)
+  })
+
   it("rejects when the header is missing", () => {
     expect(validateCsrfDoubleSubmit(null, token)).toBe(false)
     expect(validateCsrfDoubleSubmit(undefined, token)).toBe(false)

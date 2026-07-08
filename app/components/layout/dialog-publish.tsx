@@ -84,7 +84,7 @@ export function DialogPublish() {
   const trigger = (
     <Button
       variant="ghost"
-      className={`${headerActionButtonClassName} p-1.5`}
+      className={`${headerActionButtonClassName} px-2.5 py-1.5`}
       onClick={handlePublish}
       disabled={isLoading}
     >

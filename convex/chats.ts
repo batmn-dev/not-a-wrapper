@@ -1,7 +1,12 @@
 import { paginationOptsValidator, type PaginationOptions } from "convex/server"
 import { v } from "convex/values"
-import type { Doc } from "./_generated/dataModel"
-import { internalMutation, query, type QueryCtx } from "./_generated/server"
+import type { Doc, Id } from "./_generated/dataModel"
+import {
+  internalMutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server"
 import { requireOwnedProject } from "./lib/auth"
 import {
   authenticatedMutation,
@@ -185,13 +190,50 @@ export const searchByTitle = maybeAuthQuery({
   },
 })
 
+// The sidebar status-projection fields (docs/design/sidebar-status-backend-wiring.md)
+// are owner-only, but they ride the chat doc that public/shared reads return. Strip
+// them from any read that can hand a chat to a non-owner, so a shared-chat viewer
+// never receives the owner's read cursor or live/last-run state (nor reactive
+// updates to it). Owner-scoped list queries only ever return the caller's own
+// chats, so only the getById/getPublicById paths below need this.
+const OWNER_ONLY_STATUS_FIELDS = [
+  "liveRunStatus",
+  "statusRunId",
+  "lastRunEndedAt",
+  "lastRunStatus",
+  "lastReadAt",
+] as const
+
+function stripOwnerStatus(chat: Doc<"chats">): Doc<"chats"> {
+  const stripped = { ...chat }
+  for (const field of OWNER_ONLY_STATUS_FIELDS) {
+    delete (stripped as Record<string, unknown>)[field]
+  }
+  return stripped
+}
+
+/**
+ * Project a readable chat for return: the owner sees the full doc; a non-owner
+ * (public/shared viewer) gets the owner-only status fields stripped. Pure — the
+ * testable core of getById's owner-only strip.
+ */
+export function projectChatForReader(
+  chat: Doc<"chats"> | null,
+  user: Doc<"users"> | null
+): Doc<"chats"> | null {
+  if (!chat) return null
+  const isOwner = user != null && chat.userId === user._id
+  return isOwner ? chat : stripOwnerStatus(chat)
+}
+
 /**
  * Get a single chat by ID. Returns the chat if it is public (no auth required)
- * or the authenticated caller owns it; otherwise null.
+ * or the authenticated caller owns it; otherwise null. Owner-only status
+ * projection fields are stripped for non-owners (shared-chat viewers).
  */
 export const getById = readableChatQuery({
   args: {},
-  handler: async (ctx) => ctx.chat,
+  handler: async (ctx) => projectChatForReader(ctx.chat, ctx.user),
 })
 
 /**
@@ -279,8 +321,47 @@ export const getPublicById = query({
     // Only return if chat is public
     if (!chat.public) return null
 
-    return chat
+    // Pure-public read (no owner concept) — always strip owner-only fields.
+    return stripOwnerStatus(chat)
   },
+})
+
+/**
+ * Stamp `user`'s read cursor on a chat they own; no-op for a missing or
+ * not-owned chat. The testable core of markChatRead (owner no-op is review #4's
+ * requirement: opening a public chat you don't own must not throw).
+ */
+export async function markChatReadForOwner(
+  ctx: Pick<MutationCtx, "db">,
+  user: Doc<"users">,
+  chatId: Id<"chats">,
+  readThroughAt: number
+): Promise<void> {
+  const chat = await ctx.db.get(chatId)
+  if (!chat || chat.userId !== user._id) return // public / not-owned → no-op
+  if (typeof chat.lastRunEndedAt !== "number") return
+
+  const lastReadAt = chat.lastReadAt ?? 0
+  const safeReadThroughAt = Math.min(readThroughAt, chat.lastRunEndedAt)
+  if (safeReadThroughAt <= lastReadAt) return
+
+  await ctx.db.patch(chatId, { lastReadAt: safeReadThroughAt })
+}
+
+/**
+ * Stamp the caller's read cursor on a chat they own, clearing its derived
+ * unread/error indicator (lastReadAt >= lastRunEndedAt → idle).
+ *
+ * Deliberately NOT ownedChatMutation: opening a *public* chat you don't own has
+ * a valid Convex id, and ownedChatMutation would THROW. Unread/error only exist
+ * for chats you own, so a non-owned (or missing) chat is a silent no-op. Guests
+ * / local-/optimistic ids never reach here — the client gates on isConvexId and
+ * this is an authenticatedMutation.
+ */
+export const markChatRead = authenticatedMutation({
+  args: { chatId: v.id("chats"), readThroughAt: v.number() },
+  handler: async (ctx, { chatId, readThroughAt }) =>
+    markChatReadForOwner(ctx, ctx.user, chatId, readThroughAt),
 })
 
 /**

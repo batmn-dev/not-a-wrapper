@@ -77,7 +77,10 @@ export function CollapsibleSection({
           isSidebarVariant
             ? [
                 "w-full justify-start gap-0.5 px-4 py-1.5",
-                "text-foreground transition-none",
+                // Button is muted (ChatGPT: text-token-text-tertiary) so the
+                // chevron inherits the muted tint; the label overrides back to
+                // primary below.
+                "text-muted-foreground transition-none",
               ]
             : [
                 "w-full gap-1 px-2 py-1.5",
@@ -87,7 +90,7 @@ export function CollapsibleSection({
       >
         {icon && <span className="shrink-0">{icon}</span>}
         {isSidebarVariant ? (
-          <span className="__menu-label truncate text-sm font-semibold">
+          <span className="__menu-label text-foreground truncate text-sm font-semibold">
             {title}
           </span>
         ) : (

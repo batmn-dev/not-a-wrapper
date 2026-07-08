@@ -12,6 +12,10 @@ import { useChats } from "@/lib/chat-store/chats/provider"
 import { useChat } from "@/lib/chat-store/chats/use-chat"
 import { useMessages } from "@/lib/chat-store/messages/provider"
 import { useChatSession } from "@/lib/chat-store/session/provider"
+import {
+  useMarkChatReadOnView,
+  usePublishActiveChatStatus,
+} from "@/lib/chat-store/status/sidebar-chat-status"
 import type { Chats } from "@/lib/chat-store/types"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { useUser } from "@/lib/user-store/provider"
@@ -146,6 +150,15 @@ function ChatInner({
     bumpChat,
     setComposerText,
   })
+
+  // Publish this (active) chat's live status to the sidebar so its row shows a
+  // rotating ring while generating. Front-end seam #1 — cross-chat/background
+  // status is projected onto the chat doc and derived per-row.
+  usePublishActiveChatStatus(chatId, status)
+  // Clear this chat's unread/error on open, and again when its backend terminal
+  // mirror advances while viewing (a run you watched to completion counts as
+  // read). Passes the active chat's mirror timestamp; no-op for guest/local ids.
+  useMarkChatReadOnView(chatId, currentChat?.last_run_ended_at)
 
   // The Activity panel store — the seam assistant rows use to reach the single
   // Chat-hosted panel surface (see CONTEXT.md "Activity panel"). Chat keeps the

@@ -3335,3 +3335,203 @@ describe("denyPendingApprovalsForChat", () => {
     ])
   })
 })
+
+describe("chat status projection", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("claims the chat's status slot at run start (streaming + statusRunId)", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const messages: Doc<"messages">[] = [
+      createStoredMessage({
+        id: "message_user_1",
+        chatId,
+        userId,
+        orderId: 0,
+        clientMessageId: "user-1",
+        role: "user",
+        content: "prompt",
+        createdAt: 1000,
+      }),
+      createStoredMessage({
+        id: "message_assistant_1",
+        chatId,
+        orderId: 1,
+        role: "assistant",
+        content: "answer",
+        createdAt: 1001,
+      }),
+    ]
+    const { ctx } = createMutationCtx({ users: [user], chats: [chat], messages })
+
+    const result = await prepareGenerationForChat(ctx, {
+      chatId,
+      requestId: "request_followup",
+      model: "gpt-5",
+      provider: "openai",
+      expectedVisibleMessageCount: 2,
+      tailMessageId: "message_assistant_1",
+      latestUserMessage: {
+        id: "user-2",
+        role: "user",
+        content: "next prompt",
+        parts: [{ type: "text", text: "next prompt" }],
+      },
+    })
+
+    // Claimed AFTER the (no-op here) supersede pass, so the new run owns the slot.
+    expect(chat).toMatchObject({
+      liveRunStatus: "streaming",
+      statusRunId: result.runId,
+    })
+  })
+
+  it("projects awaiting when the owning run requests a tool approval", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const fixture = createGenerationRunLinkageFixture()
+    // Simulate the run-start claim: this run owns the chat's status slot.
+    fixture.chat.statusRunId = fixture.runId
+    fixture.chat.liveRunStatus = "streaming"
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await createToolApprovalRequestForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        assistantMessageId: fixture.messageId,
+        toolCallId: "call_1",
+        toolName: "send_email",
+        source: "mcp",
+        riskClass: "destructive",
+        approvalId: "approval_1",
+      }
+    )
+
+    expect(fixture.chat.liveRunStatus).toBe("awaiting")
+    expect(fixture.chat.statusRunId).toBe(fixture.runId)
+  })
+
+  it("clears live and writes the completed mirror when the owning run completes", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.chat.statusRunId = fixture.runId
+    fixture.chat.liveRunStatus = "streaming"
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunCompletedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        content: "done",
+        parts: [{ type: "text", text: "done" }],
+      }
+    )
+
+    expect(fixture.chat.liveRunStatus).toBeUndefined()
+    expect(fixture.chat).toMatchObject({
+      lastRunStatus: "completed",
+      lastRunEndedAt: 1700000000000,
+    })
+    // statusRunId is KEPT after a terminal so a same-run convergence still applies.
+    expect(fixture.chat.statusRunId).toBe(fixture.runId)
+  })
+
+  it("writes the failed mirror when the owning run fails", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.chat.statusRunId = fixture.runId
+    fixture.chat.liveRunStatus = "streaming"
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunFailedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      { messageId: fixture.messageId, error: "provider rejected" }
+    )
+
+    expect(fixture.chat.liveRunStatus).toBeUndefined()
+    expect(fixture.chat).toMatchObject({
+      lastRunStatus: "failed",
+      lastRunEndedAt: 1700000000000,
+    })
+  })
+
+  it("leaves the mirror unchanged on abort (aborted carries no signal)", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.chat.statusRunId = fixture.runId
+    fixture.chat.liveRunStatus = "streaming"
+    // A prior, already-seen completed run left a mirror.
+    fixture.chat.lastRunEndedAt = 1699999999000
+    fixture.chat.lastRunStatus = "completed"
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunAbortedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      { messageId: fixture.messageId, reason: "stream aborted" }
+    )
+
+    // Only the live phase clears; the terminal mirror is untouched (a user Stop
+    // must not strand a stale unread, and it writes no new signal).
+    expect(fixture.chat.liveRunStatus).toBeUndefined()
+    expect(fixture.chat).toMatchObject({
+      lastRunEndedAt: 1699999999000,
+      lastRunStatus: "completed",
+    })
+  })
+
+  it("ignores a terminal projection from a run that no longer owns the slot (run-id guard)", async () => {
+    // Race (review round 4, #1): run A completes, the user starts run B (which
+    // claims the slot and projects streaming), then A's late `fail` lands. The
+    // lifecycle lets fail overwrite completed, so A's run transition is real —
+    // but the guard must keep it from clobbering B's live row.
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const runAId = asId<"generationRuns">("run_a")
+    const runBId = asId<"generationRuns">("run_b")
+    const messageAId = asId<"messages">("message_a")
+    const runA = createGenerationRun({
+      id: runAId,
+      chatId,
+      userId,
+      assistantMessageId: messageAId,
+      status: "completed",
+    })
+    const messageA = createAssistantRuntimeMessage({
+      id: messageAId,
+      chatId,
+      runId: runAId,
+      orderId: 1,
+      status: "completed",
+      content: "A answer",
+      parts: [{ type: "text", text: "A answer" }],
+    })
+    // Run B has claimed the chat's status slot.
+    chat.statusRunId = runBId
+    chat.liveRunStatus = "streaming"
+    const { ctx } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages: [messageA],
+      generationRuns: [runA],
+    })
+
+    await markGenerationRunFailedForChat(ctx, await runOwner(ctx, runAId), {
+      messageId: messageAId,
+      error: "late failure",
+    })
+
+    // A's run itself transitions to failed (fail may overwrite completed)...
+    expect(runA.status).toBe("failed")
+    // ...but B still owns the row: the guard made A's projection a no-op.
+    expect(chat).toMatchObject({
+      liveRunStatus: "streaming",
+      statusRunId: runBId,
+    })
+    expect(chat.lastRunStatus).toBeUndefined()
+  })
+})

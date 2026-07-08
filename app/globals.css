@@ -303,6 +303,11 @@
   --color-border: var(--border);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive: var(--destructive);
+  /* Info/accent-blue: the one chromatic non-red in an otherwise neutral
+     system. Used by the sidebar "new / unread" status dot (ChatGPT's blue). */
+  --color-info: var(--info);
+  /* Warning/amber: "needs your attention" cue — sidebar "awaiting" status dot. */
+  --color-warning: var(--warning);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -341,9 +346,6 @@
 
   /* Sidebar spacing */
   --sidebar-section-first-margin-top: 0.5rem;
-  --sidebar-section-margin-top: 1rem;
-  --sidebar-collapsed-section-margin-bottom: 0.25rem;
-  --sidebar-expanded-section-margin-bottom: 0.5rem;
   --sidebar-item-gap: 0.375rem;
 
   /* Icon sizing: wrappers keep the layout slot while Remix SVG glyphs render 2px smaller. */
@@ -372,8 +374,19 @@
   --muted-foreground: oklch(0.552 0.016 285.938);
   --accent: oklch(0.967 0.001 286.375);
   --accent-foreground: oklch(0.21 0.006 285.885);
+  /* Muted control tone for the sidebar row's trailing icons at rest — mirrors
+     ChatGPT's --text-tertiary (#8f8f8f). Lighter/neutral vs --muted-foreground. */
+  --text-tertiary: #8f8f8f;
+  /* Translucent hover/selected surface for sidebar rows — mirrors ChatGPT's
+     --interactive-bg-secondary-hover/-selected (rgba(0,0,0,.05)). Composites over
+     the sidebar surface instead of the opaque --accent. */
+  --surface-hover: oklch(0 0 0 / 0.05);
   --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  /* Accent blue (~#2d7ff9), matching ChatGPT's "new" dot. */
+  --info: oklch(0.623 0.214 259.815);
+  /* Amber (~#f59e0b) — "needs your attention" cue. */
+  --warning: oklch(0.769 0.188 70.08);
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
   --ring: oklch(0.705 0.015 286.067);
@@ -438,6 +451,8 @@
   --composer-bg: var(--background);
   --sharp-edge-top-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
   --sharp-edge-top-shadow-placeholder: 0 1px 0 transparent;
+  --sharp-edge-bottom-shadow: 0 -1px 0 rgba(0, 0, 0, 0.05);
+  --sharp-edge-bottom-shadow-placeholder: 0 -1px 0 transparent;
   --sharp-edge-left-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.05);
   --activity-sheet-shadow:
     0 8px 12px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.62);
@@ -462,8 +477,15 @@
   --muted-foreground: oklch(0.705 0.015 286.067);
   --accent: oklch(100% 0 0 / 10.2%);
   --accent-foreground: oklch(0.985 0 0);
+  /* ChatGPT --text-tertiary (#afafaf) / hover surface (rgba(255,255,255,.10)). */
+  --text-tertiary: #afafaf;
+  --surface-hover: oklch(1 0 0 / 0.1);
   --destructive: oklch(0.6 0.18 15);
   --destructive-foreground: oklch(0.95 0.01 20);
+  /* Lighter blue-400 so it reads on the dark sidebar surface. */
+  --info: oklch(0.707 0.165 254.624);
+  /* Brighter amber-400 (~#fbbf24) for the dark sidebar surface. */
+  --warning: oklch(0.828 0.189 84.429);
   --border: oklch(100% 0 0 / 8%);
   --input: oklch(0.39 0.006 286.033);
   --ring: oklch(0.442 0.017 285.786);
@@ -530,6 +552,8 @@
   --composer-bg: oklch(27.5% 0 0);
   --sharp-edge-top-shadow: 0 1px 0 rgba(255, 255, 255, 0.05);
   --sharp-edge-top-shadow-placeholder: 0 1px 0 transparent;
+  --sharp-edge-bottom-shadow: 0 -1px 0 rgba(255, 255, 255, 0.05);
+  --sharp-edge-bottom-shadow-placeholder: 0 -1px 0 transparent;
   --sharp-edge-left-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.05);
   --activity-sheet-shadow:
     0 8px 12px rgba(0, 0, 0, 0.18), 0 0 1px rgba(255, 255, 255, 0.24);
@@ -566,7 +590,11 @@
   }
 
   .sidebar-row {
-    --sidebar-row-active-background: var(--accent);
+    /* Hover == selected == menu-open, one translucent token (ChatGPT uses the
+       same --interactive-bg-secondary value for all three). Composites over the
+       sidebar surface rather than painting the opaque --accent, so the light-mode
+       tint reads at the intended strength instead of a flat near-white. */
+    --sidebar-row-active-background: var(--surface-hover);
   }
 
   .sidebar-row-card {
@@ -577,9 +605,42 @@
     );
   }
 
+  /* Keyboard-only focus ring on the trailing button's inner 24×24 chip (pin +
+     options), mirroring ChatGPT: 1.5px, offset 2.5px, text-primary color — and
+     NOT on the button box or the row. Keyed off the button's :focus-visible so it
+     never shows on mouse/pointer focus. */
+  .sidebar-row-action button:focus-visible {
+    outline: none;
+  }
+
+  .sidebar-row-action button:focus-visible .trailing-icon-chip {
+    outline: 1.5px solid var(--foreground);
+    outline-offset: 2.5px;
+  }
+
+  /* Overlap the options button onto the pin by 10px so their 24px chips sit
+     adjacent (ChatGPT's touching pair). Keyed to a button preceded by another
+     button (`~`), NOT a sibling-index rule like -space-x / `+`: base-ui mounts
+     `position:fixed` focus-guard <span>s as siblings of the menu trigger, and
+     when the menu opens more of them mount — a sibling-index offset would shift
+     to a different child and jump the button 10px right on open. `~ button`
+     only ever matches the real options button, so opening the menu can't move it. */
+  .sidebar-row-action > button ~ button {
+    margin-inline-start: -0.625rem;
+  }
+
   .sidebar-row-action {
+    /* Collapsed to zero width at rest so the chat title spans the full row.
+       ChatGPT keeps the trailing buttons out of flow (absolute, 1px) until the
+       row is hovered/focused, then reflows them in-flow (static, ~44px) so the
+       title truncates shorter — there is no overlap and no fade mask. We mirror
+       that reflow by collapsing the in-flow action and revealing it on demand.
+       The reveal is instant (no width transition), matching ChatGPT. Buttons
+       stay in the DOM/focus order while collapsed and are surfaced by
+       :focus-within, so keyboard users can reach them. */
+    width: 0;
+    overflow: hidden;
     opacity: 0;
-    visibility: hidden;
     pointer-events: none;
   }
 
@@ -593,15 +654,48 @@
   .sidebar-row:where(:hover, :focus-within) .sidebar-row-action,
   .sidebar-row:has([data-popup-open]) .sidebar-row-action,
   .sidebar-row:has([data-pressed]) .sidebar-row-action {
+    width: auto;
+    overflow: visible;
     opacity: 1;
-    visibility: visible;
     pointer-events: auto;
+    /* ChatGPT's trailing button model: an 8px gap from the title (the <a>'s
+       `gap`), and a -10px end-margin so the button overflows the row's 10px
+       right padding back to the edge — flush, without the title losing width. */
+    margin-inline-start: 0.5rem;
+    margin-inline-end: -0.625rem;
+  }
+
+  /* Trailing status indicator (ChatGPT's dynamic slot): visible at rest so a
+     streaming/new chat shows its spinner/dot, then collapses out of the way the
+     moment the row reveals its action buttons (hover / focus / menu open). Idle
+     rows render no indicator at all, so nothing reserves space. Collapsed via
+     width/opacity (mirroring the action's reveal) rather than display so it
+     overrides the .size-4 utility on the indicator element itself. */
+  .sidebar-row-status {
+    /* 8px leading gap from the title so the dot/spinner doesn't butt against the
+       truncated text. Matches the action's reveal gap and ChatGPT's 8px `.__menu-item`
+       flex gap; with the 16px slot's centered 8px dot this lands the dot ~12px from
+       the title — the same inset as ChatGPT's revealed trailing glyph. Only present
+       when a status renders (idle rows omit the element), so idle titles keep full
+       width. Zeroed on reveal below so it can't stack with the action's own margin. */
+    margin-inline-start: 0.5rem;
+  }
+
+  .sidebar-row:where(:hover, :focus-within) .sidebar-row-status,
+  .sidebar-row:has([data-popup-open]) .sidebar-row-status,
+  .sidebar-row:has([data-pressed]) .sidebar-row-status {
+    width: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    margin-inline-start: 0;
   }
 
   @media (pointer: coarse) {
     .sidebar-row-action {
+      width: auto;
+      overflow: visible;
       opacity: 1;
-      visibility: visible;
       pointer-events: auto;
     }
   }
