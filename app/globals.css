@@ -382,7 +382,7 @@
      the sidebar surface instead of the opaque --accent. */
   --surface-hover: oklch(0 0 0 / 0.05);
   --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
   /* Accent blue (~#2d7ff9), matching ChatGPT's "new" dot. */
   --info: oklch(0.623 0.214 259.815);
   /* Amber (~#f59e0b) — "needs your attention" cue. */
@@ -609,11 +609,11 @@
      options), mirroring ChatGPT: 1.5px, offset 2.5px, text-primary color — and
      NOT on the button box or the row. Keyed off the button's :focus-visible so it
      never shows on mouse/pointer focus. */
-  .sidebar-row-trailing button:focus-visible {
+  .sidebar-row-action button:focus-visible {
     outline: none;
   }
 
-  .sidebar-row-trailing button:focus-visible .trailing-icon-chip {
+  .sidebar-row-action button:focus-visible .trailing-icon-chip {
     outline: 1.5px solid var(--foreground);
     outline-offset: 2.5px;
   }

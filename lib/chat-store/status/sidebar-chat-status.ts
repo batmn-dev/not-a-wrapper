@@ -162,11 +162,11 @@ export function usePublishActiveChatStatus(
 }
 
 /**
- * Clear a chat's unread/error by stamping `lastReadAt`: on open, and again
- * whenever the ACTIVE chat's terminal mirror advances while viewing (covers a
- * run that finished locally *and* one you re-entered and watched). Navigating
- * away before completion leaves it unread. Backend-driven, independent of
- * `useChat`.
+ * Clear a chat's unread/error by advancing `lastReadAt` to the observed
+ * terminal mirror: on open, and again whenever the ACTIVE chat's terminal
+ * mirror advances while viewing (covers a run that finished locally *and* one
+ * you re-entered and watched). Navigating away before completion leaves it
+ * unread. Backend-driven, independent of `useChat`.
  *
  * Gated on Convex auth to skip the common not-authenticated throw; a rarer "user
  * not found" during WorkOS→Convex user-row sync can still reject and is caught.
@@ -187,12 +187,14 @@ export function useMarkChatReadOnView(
 
   React.useEffect(() => {
     if (!chatId || !isConvexId(chatId) || !isAuthenticated) return
-    const ended = lastRunEndedAt ?? 0
+    if (typeof lastRunEndedAt !== "number") return
+
+    const ended = lastRunEndedAt
     const prev = markedRef.current
     const switchedChat = prev.chatId !== chatId
     const runAdvanced = !switchedChat && ended > prev.endedAt
     if (!switchedChat && !runAdvanced) return
-    markChatRead({ chatId })
+    markChatRead({ chatId, readThroughAt: ended })
       .then(() => {
         markedRef.current = { chatId, endedAt: ended } // advance only on success
       })

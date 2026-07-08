@@ -281,13 +281,59 @@ describe("markChatReadForOwner", () => {
 
   it("stamps lastReadAt for a chat the caller owns", async () => {
     const owner = createUser("owner")
+    const chat = createChat({
+      _id: asId<"chats">("c1"),
+      userId: owner._id,
+      lastRunEndedAt: 200,
+    })
+    const { ctx, patches } = createReadWriteCtx([chat])
+
+    await markChatReadForOwner(ctx, owner, chat._id, 200)
+
+    expect(patches).toHaveLength(1)
+    expect(chat.lastReadAt).toBe(200)
+  })
+
+  it("caps the read cursor at the current terminal mirror", async () => {
+    const owner = createUser("owner")
+    const chat = createChat({
+      _id: asId<"chats">("c1"),
+      userId: owner._id,
+      lastRunEndedAt: 200,
+    })
+    const { ctx, patches } = createReadWriteCtx([chat])
+
+    await markChatReadForOwner(ctx, owner, chat._id, 300)
+
+    expect(patches).toEqual([{ id: chat._id, value: { lastReadAt: 200 } }])
+    expect(chat.lastReadAt).toBe(200)
+  })
+
+  it("does not move lastReadAt backwards for a stale read-through", async () => {
+    const owner = createUser("owner")
+    const chat = createChat({
+      _id: asId<"chats">("c1"),
+      userId: owner._id,
+      lastRunEndedAt: 300,
+      lastReadAt: 250,
+    })
+    const { ctx, patches } = createReadWriteCtx([chat])
+
+    await markChatReadForOwner(ctx, owner, chat._id, 200)
+
+    expect(patches).toEqual([])
+    expect(chat.lastReadAt).toBe(250)
+  })
+
+  it("no-ops when the chat has no terminal mirror", async () => {
+    const owner = createUser("owner")
     const chat = createChat({ _id: asId<"chats">("c1"), userId: owner._id })
     const { ctx, patches } = createReadWriteCtx([chat])
 
-    await markChatReadForOwner(ctx, owner, chat._id)
+    await markChatReadForOwner(ctx, owner, chat._id, 200)
 
-    expect(patches).toHaveLength(1)
-    expect(chat.lastReadAt).toBeTypeOf("number")
+    expect(patches).toEqual([])
+    expect(chat.lastReadAt).toBeUndefined()
   })
 
   it("no-ops for a chat the caller does not own (opening a public chat)", async () => {
@@ -300,7 +346,7 @@ describe("markChatReadForOwner", () => {
     })
     const { ctx, patches } = createReadWriteCtx([chat])
 
-    await markChatReadForOwner(ctx, viewer, chat._id)
+    await markChatReadForOwner(ctx, viewer, chat._id, 200)
 
     expect(patches).toEqual([])
     expect(chat.lastReadAt).toBeUndefined()
@@ -311,7 +357,8 @@ describe("markChatReadForOwner", () => {
     await markChatReadForOwner(
       ctx,
       createUser("owner"),
-      asId<"chats">("missing")
+      asId<"chats">("missing"),
+      200
     )
     expect(patches).toEqual([])
   })

@@ -334,11 +334,18 @@ export const getPublicById = query({
 export async function markChatReadForOwner(
   ctx: Pick<MutationCtx, "db">,
   user: Doc<"users">,
-  chatId: Id<"chats">
+  chatId: Id<"chats">,
+  readThroughAt: number
 ): Promise<void> {
   const chat = await ctx.db.get(chatId)
   if (!chat || chat.userId !== user._id) return // public / not-owned → no-op
-  await ctx.db.patch(chatId, { lastReadAt: Date.now() })
+  if (typeof chat.lastRunEndedAt !== "number") return
+
+  const lastReadAt = chat.lastReadAt ?? 0
+  const safeReadThroughAt = Math.min(readThroughAt, chat.lastRunEndedAt)
+  if (safeReadThroughAt <= lastReadAt) return
+
+  await ctx.db.patch(chatId, { lastReadAt: safeReadThroughAt })
 }
 
 /**
@@ -352,8 +359,9 @@ export async function markChatReadForOwner(
  * this is an authenticatedMutation.
  */
 export const markChatRead = authenticatedMutation({
-  args: { chatId: v.id("chats") },
-  handler: async (ctx, { chatId }) => markChatReadForOwner(ctx, ctx.user, chatId),
+  args: { chatId: v.id("chats"), readThroughAt: v.number() },
+  handler: async (ctx, { chatId, readThroughAt }) =>
+    markChatReadForOwner(ctx, ctx.user, chatId, readThroughAt),
 })
 
 /**
