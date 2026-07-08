@@ -1,25 +1,44 @@
 # Implementation plan: sidebar chat-status ← backend state
 
 Companion to [`sidebar-status-backend-wiring.md`](./sidebar-status-backend-wiring.md).
-Executable, file-by-file, as **one PR of ordered commits** (not independently
-mergeable phases). Approach: **project status onto the `chats` doc** and derive each
-row's indicator from the chat object it already subscribes to — no separate query,
-no client store of backend statuses, no hydrator. Phase 1 lights up live status;
-Phase 2 adds unread/error. Each commit leaves the branch green.
+Executable, file-by-file. Approach: **project status onto the `chats` doc** and
+derive each row's indicator from the chat object it already subscribes to — no
+separate query, no client store of backend statuses, no hydrator.
 
-Grounding anchors (verified against current code):
+## Delivery: one PR, five ordered commits
+
+Ship this as **a single pull request of five ordered commits**, not multiple PRs.
+Each commit leaves the branch green (compiles + tests pass) and is independently
+reviewable; the "Phase" labels are just a logical grouping inside the one PR.
+
+| # | Commit | Steps | Green because |
+| --- | --- | --- | --- |
+| 1 | `schema: chat status-projection fields` | 1.1 + codegen | five additive `chats` fields; nothing writes or reads them yet |
+| 2 | `server: project run status onto chat + strip public reads` | 1.2, 1.6 | lifecycle writes the fields and public reads strip them; no client surface yet |
+| 3 | `client: live sidebar status from the chat doc` | 1.3, 1.4, 1.5, 1.7, 1.8 | rows render `streaming`/`awaiting` from the doc; preview retired; tests pass |
+| 4 | `server: markChatRead mutation` | 2.2 + codegen | mutation exists, unused by the client |
+| 5 | `client: unread/error + mark-read` | 2.3, 2.4, 2.5 | unread/error derive and clear on view |
+
+Commits 1–3 are Phase 1 (live status); 4–5 are Phase 2 (unread/error). All five
+land in the same PR and deploy together. Commit 3 is the only natural seam if the
+PR ever *had* to be split — but the intent is one PR. Because commits 2 and 5
+deploy atomically, the "mass-unread on a separate Phase-2 deploy" problem does not
+arise, so **no backfill is needed** (see 2.1).
+
+Grounding anchors (verified against current `chatRuntime.ts` unless noted):
 - Store + seam #1: `lib/chat-store/status/sidebar-chat-status.ts` (seam #1 wired in
   `app/components/chat/chat.tsx:154`)
 - Row consumers: `app/components/layout/sidebar/sidebar-item.tsx:24`,
-  `app/components/layout/sidebar/project-chat-item.tsx:26`
+  `app/components/layout/sidebar/project-chat-item.tsx:26` (both call
+  `useSidebarChatStatus(chat.id)` today — the only two callers of the store's API)
 - Chat type + mappers: `lib/chat-store/types.ts:19` (`Chat`), `:56`
   (`convexChatToChat`); `lib/chat-store/chats/sidebar-window.ts:18` (`mapConvexChat`)
-- Run lifecycle write points: `convex/chatRuntime.ts` — run insert `:1292`,
-  running→streaming + `chats.updatedAt` patch `:1373-1379`, snapshot patch `:1486`,
-  awaiting `:1733`, completed `:1563`, `applyLifecycleVerdict` `:452`,
-  `resolveApprovalResponses` `:1181`
-- Lifecycle brain: `convex/domain/generation_run_lifecycle.ts` (`transition` vs
-  `ignore` verdicts — the projection hooks only `transition`)
+- Run lifecycle: run-start patch `chatRuntime.ts:1379` (`ctx.db.patch(args.chatId,…)`);
+  the terminal/verdict choke point `applyLifecycleVerdict` at `:429` (patches the run
+  at `:452`); snapshot patch `:1486` (run/message docs, not `chats`). Older per-site
+  line numbers were stale — re-derive at implementation (1.2).
+- Lifecycle brain: `convex/domain/generation_run_lifecycle.ts` (`fail` may overwrite
+  `completed` — `:187` — which is *why* the run-id guard is required, 1.2).
 
 ---
 
@@ -40,67 +59,82 @@ in 1.2 patches a schema that already knows every key:
     // Live phase of the chat's current run; set at start/awaiting, cleared at
     // terminal. Projected by the generation lifecycle (1.2). — Phase 1
     liveRunStatus: v.optional(v.union(v.literal("streaming"), v.literal("awaiting"))),
-    // Last *signaling* terminal outcome + owner-only read cursor. — Phase 2
+    // Run that owns the chat's status slot — the run-scoped guard (1.2). — Phase 1
+    statusRunId: v.optional(v.id("generationRuns")),
+    // Last *signaling* terminal outcome + read cursor. — Phase 2
     lastRunEndedAt: v.optional(v.number()),
     lastRunStatus: v.optional(v.union(v.literal("completed"), v.literal("failed"))),
     lastReadAt: v.optional(v.number()),
 ```
 
-Expansion only — preflight-safe. `lastReadAt` is correct as a chat-doc field because
-chats are single-owner (`chats.userId`): the only viewer with a sidebar row for a
-chat is its owner.
+Expansion only — preflight-safe. Chats are single-owner (`chats.userId`), so a
+per-doc `lastReadAt` is semantically fine — **but** these five fields ride a doc that
+public reads return, so they must be stripped from non-owner reads (step 1.6). "On
+the doc" ≠ "private."
 
 ### 1.2 Server: project run transitions onto the chat
 
 `convex/chatRuntime.ts`. Add one helper near `applyLifecycleVerdict` (`:429`):
 
 ```ts
-// Maps a run status → the chat-doc projection patch. Applied ONLY on a real
-// lifecycle transition (never an "ignore" verdict), so a late terminal on an
-// already-settled run writes nothing and can't clear a newer run's live status.
-function chatStatusProjection(
-  status: GenerationRunStatus,
-  now: number
-): Partial<Doc<"chats">> {
+function chatStatusProjection(status: GenerationRunStatus, now: number): Partial<Doc<"chats">> {
   switch (status) {
     case "running":
-    case "streaming":
-      return { liveRunStatus: "streaming" }
-    case "awaiting_approval":
-      return { liveRunStatus: "awaiting" }
-    case "completed":
-      return { liveRunStatus: undefined, lastRunEndedAt: now, lastRunStatus: "completed" } // Phase 2 fields
-    case "failed":
-      return { liveRunStatus: undefined, lastRunEndedAt: now, lastRunStatus: "failed" }
-    case "aborted":
-      return { liveRunStatus: undefined } // user Stop / supersede — no signal
+    case "streaming":         return { liveRunStatus: "streaming" }
+    case "awaiting_approval": return { liveRunStatus: "awaiting" }
+    case "completed":         return { liveRunStatus: undefined, lastRunEndedAt: now, lastRunStatus: "completed" } // Phase 2 fields
+    case "failed":            return { liveRunStatus: undefined, lastRunEndedAt: now, lastRunStatus: "failed" }
+    case "aborted":           return { liveRunStatus: undefined } // user Stop / supersede — no signal
   }
+}
+
+// Run-scoped guard: only the run that OWNS the chat's status slot (statusRunId) may
+// project. statusRunId is kept after terminal, so a same-run completed→failed still
+// applies; an OLDER run's late terminal is a no-op.
+async function projectRunStatusToChat(
+  ctx: MutationCtx, run: Doc<"generationRuns">, status: GenerationRunStatus, now: number
+) {
+  const chat = await ctx.db.get(run.chatId)
+  if (!chat || chat.statusRunId !== run._id) return // a newer run owns the row → skip
+  await ctx.db.patch(run.chatId, chatStatusProjection(status, now))
 }
 ```
 
 The `completed`/`failed` arms write the Phase-2 mirror keys, which is why 1.1 lands
-all four fields — with them on the schema, this helper is written once and the
-mirror simply stays dormant (no reader) until Phase 2. Patching `liveRunStatus:
-undefined` removes the field (Convex `patch` semantics), which is the "clear."
+all fields — the helper is written once and the mirror stays dormant (no reader)
+until Phase 2. Patching `liveRunStatus: undefined` removes the field (Convex `patch`
+semantics), which is the "clear."
 
-Apply it at each transition site, where the chat id is in scope:
+Hook points (line numbers verified against current `chatRuntime.ts`):
 
-- **Run start** — `prepareGenerationForChat`, the running→streaming patch at
-  `:1373-1379` already sets `chats.updatedAt`; add `liveRunStatus: "streaming"` to
-  that same `ctx.db.patch(chat._id, …)`.
-- **Awaiting** — `createToolApprovalRequestForChat` (`:1733`):
-  `await ctx.db.patch(run.chatId, { liveRunStatus: "awaiting" })`.
-- **Terminal** — after each real run patch, `applyLifecycleVerdict` (`:452`),
-  `markGenerationRunCompletedForChat` (`:1563`), `resolveApprovalResponses`
-  (`:1181`):
-  ```ts
-  await ctx.db.patch(run.chatId, chatStatusProjection(verdict.run.status, now))
-  ```
-  These handlers already run only on a `transition` verdict (they early-return on
-  `ignore` via `isIgnoredSignal` / the verdict check), so the stale-clear is
-  structurally impossible — see the design doc.
+- **Run start (claim the slot)** — `prepareGenerationForChat` already patches
+  `args.chatId` at `:1379` (`ctx.db.patch(args.chatId, { updatedAt: now })`). Extend
+  it to `{ updatedAt: now, liveRunStatus: "streaming", statusRunId: runId }`. No
+  guard — claiming is the point. (This running→streaming patch is a direct write, not
+  a verdict, so it isn't covered by the choke point below.)
+- **Every verdict transition (awaiting/completed/failed/aborted/superseded)** —
+  `applyLifecycleVerdict(ctx, run, verdict, …)` at `:429` is the **single choke
+  point**: it patches `run._id` with `verdict.run.status` at `:452`. Add, right after
+  that patch, `await projectRunStatusToChat(ctx, run, verdict.run.status, now)`. One
+  hook covers all terminal transitions and the awaiting downgrade — no per-site list
+  to keep in sync.
+- **Verify at implementation:** confirm the tool-approval *request* path
+  (`createToolApprovalRequestForChat`, ~`:1669`) reaches `awaiting_approval` through
+  `applyLifecycleVerdict`; if it patches the run directly instead, add the projection
+  call there too. (The prior draft listed several now-stale line numbers — re-derive,
+  don't trust them.)
 
-`GenerationRunStatus`, `Doc`, `Id` are already imported in this file.
+**The run-id guard is required — an earlier draft wrongly claimed the guard was
+unnecessary ("only transition verdicts, so stale clears are impossible").** It is
+not: the lifecycle deliberately lets `fail` overwrite `completed`
+(`generation_run_lifecycle.ts:187`; test `chatRuntime.test.ts:2453`). Race: run A
+completes → user starts run B (B claims the slot, projects `streaming`) → A's late
+`fail` is a real `transition` and, unguarded, would patch `{ liveRunStatus:
+undefined, lastRunStatus: "failed" }`, clearing B's spinner and showing A's stale
+failure. The `statusRunId` guard makes A's projection a no-op. Convex mutations are
+transactional, so read-guard-then-patch is race-free.
+
+`GenerationRunStatus`, `Doc`, `Id`, `MutationCtx` are already imported in this file.
 
 ### 1.3 Surface `live_run_status` on the client `Chat` type
 
@@ -127,40 +161,39 @@ export type LiveOverride = { chatId: string; status: SidebarChatStatus } | null
 // store state: { liveOverride: LiveOverride, setLiveOverride(o) }  — drop `statuses`
 // and its setters; the preview hook goes too (1.6).
 
-const PRIORITY: Record<SidebarChatStatus, number> = {
-  streaming: 3, awaiting: 3, error: 2, unread: 1, idle: 0,
-}
-
+// A non-idle active-tab override WINS (not raise-only): it is authoritative for the
+// tab issuing the request, so a local `error` shows even while the backend still
+// projects `streaming` (best-effort terminal writes can lag). A local idle/ready
+// override never lowers the backend, so a re-entered background run keeps spinning.
 export function deriveChatRowStatus(
   chat: {
-    id: string
     live_run_status?: "streaming" | "awaiting" | null
     last_run_ended_at?: number | null // Phase 2
     last_run_status?: "completed" | "failed" | null // Phase 2
     last_read_at?: number | null // Phase 2
   },
-  override: LiveOverride
+  overrideStatus: SidebarChatStatus | null
 ): SidebarChatStatus {
-  let s: SidebarChatStatus = "idle"
-  if (chat.live_run_status === "streaming") s = "streaming"
-  else if (chat.live_run_status === "awaiting") s = "awaiting"
-  else if ((chat.last_run_ended_at ?? 0) > (chat.last_read_at ?? 0)) {
-    if (chat.last_run_status === "failed") s = "error"
-    else if (chat.last_run_status === "completed") s = "unread"
+  if (overrideStatus && overrideStatus !== "idle") return overrideStatus
+  if (chat.live_run_status === "streaming") return "streaming"
+  if (chat.live_run_status === "awaiting") return "awaiting"
+  if ((chat.last_run_ended_at ?? 0) > (chat.last_read_at ?? 0)) {
+    if (chat.last_run_status === "failed") return "error"
+    if (chat.last_run_status === "completed") return "unread"
   }
-  if (override && override.chatId === chat.id && override.status !== "idle" &&
-      PRIORITY[override.status] > PRIORITY[s]) {
-    s = override.status
-  }
-  return s
+  return "idle"
 }
 
-// PUBLIC CONTRACT CHANGE (justified): was `useSidebarChatStatus(chatId)` reading the
-// store; now takes the chat the row already renders. In Phase 1 the last_run_*/
-// last_read_at fields are absent → the unread/error branch is dead until Phase 2.
+// PUBLIC CONTRACT CHANGE (justified): was `useSidebarChatStatus(chatId)` reading a
+// store map; now takes the chat the row already renders. The selector returns only
+// THIS row's override slice, so a liveOverride change re-renders only the targeted
+// row (rows aren't React.memo'd — see risks). Phase 1: last_run_*/last_read_at are
+// absent → the unread/error branch is dead until Phase 2.
 export function useSidebarChatStatus(chat: Chat): SidebarChatStatus {
-  const override = useSidebarChatStatusStore((s) => s.liveOverride)
-  return React.useMemo(() => deriveChatRowStatus(chat, override), [chat, override])
+  const overrideStatus = useSidebarChatStatusStore((s) =>
+    s.liveOverride?.chatId === chat.id ? s.liveOverride.status : null
+  )
+  return deriveChatRowStatus(chat, overrideStatus)
 }
 ```
 
@@ -182,22 +215,50 @@ Nothing else in the rows changes — `SidebarChatStatusIndicator` still takes a
 status string. Because a row already subscribes to its `chat`, background updates
 arrive with no extra wiring.
 
-### 1.6 Retire the preview; codegen
+### 1.6 Strip owner-only fields from public reads
+
+The projection fields ride the chat doc, and public reads return the whole doc
+(`getAuthorizedChatForRead` returns `public` chats without owner filtering,
+`auth.ts:83`). Strip them for non-owners so a shared-chat viewer never receives the
+owner's `lastReadAt`/live state (nor reactive updates to it).
+
+`convex/chats.ts`:
+
+```ts
+const OWNER_ONLY = ["liveRunStatus", "statusRunId", "lastRunEndedAt", "lastRunStatus", "lastReadAt"] as const
+function stripOwnerStatus(chat: Doc<"chats">) {
+  const c = { ...chat }; for (const k of OWNER_ONLY) delete (c as Record<string, unknown>)[k]; return c
+}
+// getById (readableChatQuery — has ctx.chat + ctx.user):
+//   return ctx.chat && ctx.user && ctx.chat.userId === ctx.user._id ? ctx.chat : ctx.chat && stripOwnerStatus(ctx.chat)
+// getPublicById (pure public — no owner): return chat && stripOwnerStatus(chat)
+```
+
+Owner-scoped list queries (`getForCurrentUser`, `getRecentWindowForCurrentUser`,
+`getPinnedForCurrentUser`, `getProjectChatsForCurrentUser`) only return the caller's
+own chats, so they need no stripping. This is part of **commit 2** — `liveRunStatus`
+/ `statusRunId` are written from commit 2, so they must be stripped from that commit on.
+
+### 1.7 Retire the preview; codegen
 
 - Delete `useSidebarChatStatusPreview` and the `previewChatIds` memo +
   `useSidebarChatStatusPreview(...)` call in `app-sidebar.tsx:302-307`, plus the
   `?sidebarStatusPreview` docblock — the real projection supersedes it.
-- `bunx convex codegen` (or the running `convex dev`) so `chats.liveRunStatus`
-  typechecks through the mappers.
+- `bunx convex codegen` (or the running `convex dev`) so the new fields typecheck.
 
-### 1.7 Tests (Phase 1, lean)
+### 1.8 Tests (Phase 1, lean)
 
 - `convex/chatRuntime.test.ts`: after `prepareGeneration`, the chat has
-  `liveRunStatus: "streaming"`; after `createToolApprovalRequest`, `"awaiting"`;
-  after `markGenerationRunCompleted`, `liveRunStatus` is cleared.
+  `liveRunStatus: "streaming"` + `statusRunId`; after `createToolApprovalRequest`,
+  `"awaiting"`; after `markGenerationRunCompleted`, `liveRunStatus` is cleared.
+  **Run-id guard:** complete run A, start run B (B claims the slot), then apply A's
+  `fail` → the chat still shows B's `streaming` (A's projection is a no-op).
+- `convex/chats.test.ts`: `getById` on a public chat as a **non-owner** omits the
+  five owner-only fields; as the owner, returns them.
 - `lib/chat-store/status/sidebar-chat-status.test.ts` (new, pure): `deriveChatRowStatus`
-  — `live_run_status` maps through; `override` raises but never lowers, and only for
-  its own `chatId`; no fields → `idle`.
+  — `live_run_status` maps through; a **non-idle override wins** (local `error` beats
+  backend `streaming`); a local `idle` override does NOT lower backend `streaming`;
+  no fields → `idle`.
 
 ### Phase 1 acceptance
 Start a generation in chat A, navigate to B: A's row spins (projection). **Return to
@@ -220,13 +281,14 @@ finishing while viewing) clears it — across tabs and devices.
 `lastRunEndedAt`, `lastRunStatus`, and `lastReadAt` were added to `chats` in 1.1
 (dormant through Phase 1). Nothing to add here — Phase 2 just starts *reading* them.
 
-**Rollout backfill (do this in the Phase 2 commit).** The mirror
-(`lastRunEndedAt`) has been written since Phase 1, but `lastReadAt` is unset, so
-every previously-completed chat would read as `unread` the moment Phase 2 surfaces
-the fields. Ship a one-shot `internalMutation` that sets `lastReadAt = lastRunEndedAt`
-(or `Date.now()`) for chats that have `lastRunEndedAt` and no `lastReadAt`, so only
-completions *after* the Phase 2 deploy show a dot. (Moot if the deployment is
-genuinely pre-launch with no data — but cheap insurance.)
+**No backfill needed in the one-PR delivery.** The mirror (`lastRunEndedAt`) and its
+reader (commit 5) ship in the same PR and deploy atomically, so there is no window
+where `lastRunEndedAt` accumulates in production before `lastReadAt` exists — at
+deploy, no chat has `lastRunEndedAt` yet (it's a brand-new field). Only completions
+*after* deploy set it, and those correctly show a dot until opened. A one-shot
+`internalMutation` setting `lastReadAt = lastRunEndedAt` for chats missing the cursor
+is needed **only if** commits 1–3 are ever shipped to production ahead of 4–5 (the
+split this PR deliberately avoids).
 
 ### 2.2 Server: the terminal mirror is already written
 
@@ -279,9 +341,10 @@ import { isConvexId } from "@/lib/chat-store/types"
  * Clear a chat's unread/error by stamping lastReadAt: on open, and whenever the
  * ACTIVE chat's terminal mirror advances while viewing (covers a run that finished
  * locally *and* one you re-entered and watched). Backend-driven, independent of
- * useChat. Gated on Convex auth so it never fires into the auth-not-ready throw;
- * advances the tracking ref ONLY on success, so a transient failure can't suppress
- * the next attempt (review round 3, finding #2). No-op for guest/local/optimistic.
+ * useChat. Gated on Convex auth to skip the common not-authenticated throw; a rarer
+ * "user not found" during WorkOS→Convex user-row sync is still possible and is
+ * caught. The ref advances ONLY on success, so any failure retries on the next
+ * open / run-advance / auth-ready render. No-op for guest/local/optimistic.
  */
 export function useMarkChatReadOnView(
   chatId: string | null,
@@ -319,9 +382,10 @@ usePublishActiveChatStatus(chatId, status) // writes liveOverride
 useMarkChatReadOnView(chatId, currentChat?.last_run_ended_at) // NEW
 ```
 
-Gating on `isAuthenticated` is deliberate — the effect only fires once Convex auth
-is ready, so opening a chat during the auth-sync window doesn't throw, and the ref
-stays un-advanced until a mark actually succeeds.
+Gating on `isAuthenticated` skips the common not-authenticated throw; a rarer "user
+not found" during user-row sync can still reject, which the `.catch` absorbs. Either
+way the ref stays un-advanced until a mark actually succeeds, so the next
+open/advance/auth-ready render retries.
 
 ### 2.5 Codegen + tests
 
@@ -347,27 +411,43 @@ no dots, no `markChatRead` calls (network tab shows none).
 
 ## Sequencing, risks, rollback
 
-**Order:** 1.1 (all four fields) → 1.2 → 1.6 codegen → 1.3 → 1.4 → 1.5 → 1.7 → ship
-Phase 1. Then 2.2 (`markChatRead`) → 2.5 codegen → 2.3 → 2.4 → 2.5 tests → ship
-Phase 2. (Land all schema fields in 1.1 so the projection helper compiles once.)
+**Order (one PR, five commits — see the Commit plan at the top):**
+- **Commit 1** — 1.1 (all five `chats` fields) → codegen.
+- **Commit 2** — 1.2 (projection helper + hooks) + 1.6 (public-read strip).
+- **Commit 3** — 1.3 → 1.4 → 1.5 → 1.7 (retire preview) → 1.8 (tests).
+- **Commit 4** — 2.2 (`markChatRead`) → codegen.
+- **Commit 5** — 2.3 → 2.4 → 2.5 (tests).
+
+Run `bunx convex codegen` at the end of any commit that changed `convex/schema.ts`
+or added a function (commits 1 and 4) so the next commit typechecks. Each commit
+compiles and passes tests on its own; the whole PR merges together.
 
 **Risks & mitigations**
-- *Projection drift (the one new risk).* `liveRunStatus` mirrors run state; a dropped
-  "clear at terminal" write would strand a spinner. Small blast radius: the lifecycle's
-  first-terminal-wins prevents late clears, the projection only fires on real
-  transitions, and a stuck flag self-heals on the chat's next turn / supersede sweep.
-  Symmetric with the terminal mirror (`lastRunEndedAt`) already in play.
+- *Older-run clobber (review round 4, #1).* The run-id guard (`statusRunId`) is
+  load-bearing: without it, a completed run's late `fail` overwrites a newer run's
+  live row (the lifecycle allows `fail` over `completed`). The guard has a unit test
+  (1.8); don't remove it.
+- *Projection drift.* Even with the guard, a *dropped* "clear at terminal" write for
+  the owning run would strand a spinner. Small blast radius: it self-heals on the
+  chat's next turn / supersede sweep, and it's symmetric with the terminal mirror
+  (`lastRunEndedAt`) already in play.
 - *Chat-doc write frequency.* Patched at turn start (already), awaiting (rare),
   terminal (already), and on open (`lastReadAt`). Streaming snapshots patch the
-  run/message docs, NOT the chat doc → no per-750ms chat-list rerun. Rows are
-  memoized on their chat, so only the changed row re-renders.
+  run/message docs, NOT the chat doc → no per-750ms chat-list rerun. Accurate on
+  re-renders: rows are **not** `React.memo`'d, so a chat-list change re-renders the
+  list (cheap for a bounded window); a `liveOverride` change is row-scoped (selector
+  returns only the row's slice). Add `React.memo` only if a large window profiles hot.
+- *Public read exposure (review #2).* The five projection fields are stripped from
+  non-owner `getById`/`getPublicById` (1.6); owner-scoped list queries need no strip.
 - *Public / non-owned chats (review #4).* `markChatRead` no-ops unless the caller
   owns the chat — opening a public chat must not throw.
 - *Mark-read retry (review #2).* Gated on Convex auth; ref advances only on success,
   so a transient failure retries on the next open / run-advance / auth-ready.
 - *Public contract change.* `useSidebarChatStatus(chat)` replaces
-  `useSidebarChatStatus(chatId)` — two call sites (1.5) + the store's `statuses` map
-  and preview hook are deleted. Grep for other callers before landing.
+  `useSidebarChatStatus(chatId)`. Verified: `sidebar-item.tsx` and
+  `project-chat-item.tsx` are the **only** callers of the store's public API (no
+  other references to `useSidebarChatStatus`/`setChatStatus`/`clearChatStatus`/
+  `resetChatStatuses`), so this and the `statuses`-map removal are a two-file change.
 - *Delete-mid-generation (pre-existing, now orthogonal).* No `chatReads` to cascade;
   `lastReadAt` dies with the doc. The run/approval/snapshot orphan + the loud
   `finalize()` completion-write rejection (`durable-turn-runtime.ts:977`;
@@ -377,11 +457,11 @@ Phase 2. (Land all schema fields in 1.1 so the projection helper compiles once.)
   was deleted by the owner (still throwing on auth/not-owner). Fast-follow; no data
   corruption today.
 
-**Rollback:** Phase 2 reverts to Phase 1 by dropping `markChatRead` + the mark-read
-hook + the unread/error mapper fields (the `deriveChatRowStatus` unread branch goes
-dormant; schema fields are additive and can stay). Phase 1 reverts to seam-#1-only
-by restoring `useSidebarChatStatus(chatId)` + the store `statuses` map + the preview.
-No data migration either direction — every schema change is additive.
+**Rollback:** since it's one PR, the simplest rollback is `git revert` of the merge.
+For a partial back-out, the commits peel cleanly in reverse: reverting commit 5 (then
+4) drops unread/error and leaves live status working; reverting commit 3 returns to
+seam-#1-only. Commits 1–2 (schema fields + dormant server writes) are additive and
+harmless to leave. No data migration in either direction.
 
 **Follow-ups (separate):** delete-mid-generation hardening (above); approvals-index
 cross-check for `awaiting`; error-dot TTL cap; promoting this + the design doc to

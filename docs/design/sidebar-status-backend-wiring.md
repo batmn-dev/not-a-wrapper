@@ -56,29 +56,32 @@ already rendering:
 // convex/schema.ts — chats table
 // Live phase of the chat's current run (set at start/awaiting, cleared at terminal).
 liveRunStatus: v.optional(v.union(v.literal("streaming"), v.literal("awaiting"))),
+// The run that currently owns this chat's projected status. Set at run start; every
+// later projection (awaiting/terminal) only applies if the terminating run IS this
+// one — so an OLDER run's late terminal can't clobber a NEWER run's row (see below).
+statusRunId: v.optional(v.id("generationRuns")),
 // Last *signaling* terminal outcome — completed (→ unread) / failed (→ error).
 // aborted/superseded carry no signal, so they only CLEAR liveRunStatus.
 lastRunEndedAt: v.optional(v.number()),
 lastRunStatus: v.optional(v.union(v.literal("completed"), v.literal("failed"))),
-// Owner-only read cursor. Correct as a chat-doc field because chats are
-// single-owner: the only person with a sidebar row for a chat is its owner.
+// Read cursor. Semantically owner-only (chats are single-owner), BUT it lives on a
+// doc that public reads return — so it MUST be stripped from non-owner reads (see
+// "Public reads" below); do not treat "single-owner" as automatically private.
 lastReadAt: v.optional(v.number()),
 ```
 
 No `generationRuns.by_user_status` index and no `chatReads` table — the earlier
 design needed both; this one reads nothing but the chat doc rows already subscribe
-to. Deleting a chat removes `lastReadAt` for free (it's on the doc).
+to. Deleting a chat removes these fields for free (they're on the doc).
 
 ## Server — project run transitions onto the chat
 
-One helper, called at each real run-status transition in `convex/chatRuntime.ts`,
-where the chat id is already in scope:
+The projection is **run-scoped**. Run start claims the chat's status slot
+(`statusRunId = this run`); every later projection only applies if the terminating
+run still owns the slot, so an older run's late terminal can't overwrite a newer
+run's row.
 
 ```ts
-// Maps a generation-run status → the chat's status projection. Called ONLY on an
-// actual lifecycle transition (never on an "ignore" verdict), so the run
-// lifecycle's first-terminal-wins + supersede ordering guarantees a late terminal
-// on an already-settled run can't clear a newer run's live status.
 function chatStatusProjection(status: GenerationRunStatus, now: number) {
   switch (status) {
     case "running":
@@ -89,26 +92,37 @@ function chatStatusProjection(status: GenerationRunStatus, now: number) {
     case "aborted":           return { liveRunStatus: undefined } // user Stop / supersede — no signal
   }
 }
+
+// Guarded application: only the run that owns the slot may project. statusRunId is
+// KEPT after terminal, so a same-run completed→failed convergence still applies.
+async function projectRunStatusToChat(ctx, run, status, now) {
+  const chat = await ctx.db.get(run.chatId)
+  if (!chat || chat.statusRunId !== run._id) return // a newer run owns the row → skip
+  await ctx.db.patch(run.chatId, chatStatusProjection(status, now))
+}
 ```
 
-Write points (all already patch the chat doc, or are cheap additions):
+Write points (verified against current `chatRuntime.ts`):
 
-- **Run start** — `prepareGenerationForChat` (`chatRuntime.ts:1373-1379`) already
-  patches `chats.updatedAt` on the running→streaming transition; add
-  `liveRunStatus: "streaming"`.
-- **Awaiting approval** — `createToolApprovalRequestForChat` (`:1733`): set
-  `liveRunStatus: "awaiting"`.
-- **Terminal** — `markGenerationRunCompletedForChat` (`:1563`),
-  `applyLifecycleVerdict` (fail/abort/supersede, `:452`), and
-  `resolveApprovalResponses` (`:1181`): apply `chatStatusProjection(verdict.run.status, now)`.
+- **Run start (claim)** — `prepareGenerationForChat` already patches `args.chatId`
+  at `:1379`; add `liveRunStatus: "streaming", statusRunId: runId` there.
+- **Every verdict transition** — `applyLifecycleVerdict(ctx, run, verdict, …)` at
+  `:429` is the single choke point (it patches `run._id` with `verdict.run.status` at
+  `:452`); add `projectRunStatusToChat(ctx, run, verdict.run.status, now)` right
+  after. One hook covers awaiting/completed/failed/aborted/superseded — nothing to
+  keep in sync per-site. (Confirm the tool-approval-request path routes through
+  `applyLifecycleVerdict`; if it patches the run directly, project there too.)
 
-**Why the stale-clear can't happen:** the lifecycle's `resolveGenerationRunTransition`
-returns `ignore` for a terminal signal on an already-terminal run (e.g. a
-superseded run's late `onError` — `fail` may not overwrite `aborted`). We hook the
-projection only where the verdict is a real `transition`, so an ignored late
-terminal writes nothing and cannot clear a newer run's `liveRunStatus`. Supersede +
-create happen in one ordered mutation (`prepareGeneration`), so the old run's clear
-precedes the new run's set.
+**Why the run-id guard is required (an earlier draft claimed this was structurally
+impossible — it is not).** The lifecycle deliberately lets `fail` overwrite
+`completed` (`generation_run_lifecycle.ts:187`), so a terminal on an *older* run is
+a real `transition`, not an `ignore`. Concrete race: run A completes → the user
+starts run B (B claims the slot, projects `streaming`) → A's late `fail` lands. An
+unguarded terminal projection would patch the chat `{ liveRunStatus: undefined,
+lastRunStatus: "failed" }`, clearing B's spinner and showing A's stale failure. The
+`statusRunId` guard makes A's projection a no-op (`chat.statusRunId === B ≠ A`) while
+B's own completed→failed still applies (same id). Convex mutations are transactional,
+so the read-guard-then-patch is race-free.
 
 ## Client — derive from the chat object
 
@@ -120,40 +134,38 @@ else is derived per-row from the chat doc.
 export type LiveOverride = { chatId: string; status: SidebarChatStatus } | null
 // store: { liveOverride: LiveOverride, setLiveOverride }
 
-const PRIORITY: Record<SidebarChatStatus, number> = {
-  streaming: 3, awaiting: 3, error: 2, unread: 1, idle: 0,
-}
-
-/** Pure. Derive a row's indicator from its chat doc; the active-chat override can
- *  only RAISE it (instant spinner on send), never lower it. */
+/** Pure. `overrideStatus` is the active-tab live status for THIS row (or null). A
+ *  non-idle override WINS: it's authoritative for the tab issuing the request —
+ *  instant spinner on send, and a local `error` shows even if the backend's
+ *  best-effort terminal write lagged. A local idle/ready never lowers the backend,
+ *  so a re-entered background run keeps its projected spinner. */
 export function deriveChatRowStatus(
   chat: {
-    id: string
     live_run_status?: "streaming" | "awaiting" | null
     last_run_ended_at?: number | null
     last_run_status?: "completed" | "failed" | null
     last_read_at?: number | null
   },
-  override: LiveOverride
+  overrideStatus: SidebarChatStatus | null
 ): SidebarChatStatus {
-  let s: SidebarChatStatus = "idle"
-  if (chat.live_run_status === "streaming") s = "streaming"
-  else if (chat.live_run_status === "awaiting") s = "awaiting"
-  else if ((chat.last_run_ended_at ?? 0) > (chat.last_read_at ?? 0)) {
-    if (chat.last_run_status === "failed") s = "error"
-    else if (chat.last_run_status === "completed") s = "unread"
+  if (overrideStatus && overrideStatus !== "idle") return overrideStatus
+  if (chat.live_run_status === "streaming") return "streaming"
+  if (chat.live_run_status === "awaiting") return "awaiting"
+  if ((chat.last_run_ended_at ?? 0) > (chat.last_read_at ?? 0)) {
+    if (chat.last_run_status === "failed") return "error"
+    if (chat.last_run_status === "completed") return "unread"
   }
-  if (override && override.chatId === chat.id && override.status !== "idle" &&
-      PRIORITY[override.status] > PRIORITY[s]) {
-    s = override.status
-  }
-  return s
+  return "idle"
 }
 
-/** Public API — now takes the chat the row already has (was: a chatId + store read). */
+/** Public API — takes the chat the row already has. The selector returns only THIS
+ *  row's override slice, so a liveOverride change re-renders only the row it targets,
+ *  not every subscribed row. */
 export function useSidebarChatStatus(chat: Chat): SidebarChatStatus {
-  const override = useSidebarChatStatusStore((s) => s.liveOverride)
-  return React.useMemo(() => deriveChatRowStatus(chat, override), [chat, override])
+  const overrideStatus = useSidebarChatStatusStore((s) =>
+    s.liveOverride?.chatId === chat.id ? s.liveOverride.status : null
+  )
+  return deriveChatRowStatus(chat, overrideStatus)
 }
 ```
 
@@ -162,15 +174,23 @@ Rows change one line — `useSidebarChatStatus(chat)` instead of
 which already have `chat`. No hydrator, no leaf component, no store ownership, no
 unmount cleanup.
 
-### Reconciliation — seam #1 raises the active chat only
+Note on the merge: a **non-idle override wins** (not "raise-only"). The earlier
+draft's raise-only priority put `streaming` above `error`, which would keep the row
+spinning in the very tab whose `useChat` had errored — wrong, and worse because
+terminal failure writes are best-effort (`durable-turn-runtime.ts:904/994`). Making
+the active tab's live status authoritative fixes it, and still keeps a re-entered
+background run spinning (its local status is `idle`, so it doesn't win).
+
+### Reconciliation — active tab's live status wins
 
 The active chat has both a live `useChat` status and a projected `liveRunStatus`.
-`useChat` is authoritative only while it is *actually streaming in this tab*
-(sidebar/Link nav remounts `Chat` and does **not** resume the stream —
-`use-chat-core.ts:395`, ADR-0008 — so a re-entered background run reads `ready`).
-So seam #1 writes `liveOverride` and the derivation lets it only **raise** the
-row: instant spinner on send; a re-entered background run keeps the projected
-`streaming` even though local `useChat` is `ready`.
+`useChat` is authoritative for the tab issuing the request, but only when it *has* a
+request: sidebar/Link nav remounts `Chat` and does **not** resume the stream
+(`use-chat-core.ts:395`, ADR-0008), so a re-entered background run reads `ready`.
+Seam #1 writes the active chat's mapped status into `liveOverride`, and the
+derivation lets a **non-idle** override win outright (streaming, or `error`), while
+an `idle`/`ready` override never lowers the backend (the re-entered background run
+keeps its projected `streaming`).
 
 ### Mark-read — owner-only, retry-safe
 
@@ -188,9 +208,10 @@ export const markChatRead = authenticatedMutation({
 })
 ```
 
-Client hook (retry-safe — gate on Convex auth so it never fires into the throw, and
-advance the tracking ref **only on success** so a transient failure can't suppress
-the next attempt):
+Client hook (retry-safe — gate on Convex auth to skip the common not-authenticated
+throw; a rarer "user not found" during WorkOS→Convex user-row sync is still possible
+and is caught. The tracking ref advances **only on success**, so any failure retries
+on the next open / run-advance / auth-ready render):
 
 ```ts
 export function useMarkChatReadOnView(chatId: string | null, lastRunEndedAt?: number | null): void {
@@ -228,6 +249,35 @@ before completion leaves it unread. Backend-driven, independent of `useChat`.
 | `failed` | clear live + `lastRunStatus: "failed"` | `error` if `lastRunEndedAt > lastReadAt`, else `idle` |
 | `aborted` / superseded | clear live only | `idle` (user-initiated; no signal) |
 
+## Public reads — strip owner-only fields for non-owners
+
+The projection fields live on the chat doc, and **public reads return the whole
+doc**: `getAuthorizedChatForRead` returns a `public` chat without owner filtering
+(`auth.ts:83`), and `chats.getById` / `getPublicById` return `ctx.chat`. So without
+care, a non-owner opening someone's shared chat receives the owner's `lastReadAt`
+(and reactive updates when the owner reads it) plus their live/last-run state.
+
+The five projection fields (`liveRunStatus`, `statusRunId`, `lastRunEndedAt`,
+`lastRunStatus`, `lastReadAt`) are **owner-only**. Strip them from any read that can
+return a chat to a non-owner:
+
+```ts
+// convex/chats.ts — apply in getById (readableChatQuery: has ctx.chat + ctx.user)
+// and getPublicById (pure-public: always strip).
+const OWNER_ONLY = ["liveRunStatus", "statusRunId", "lastRunEndedAt", "lastRunStatus", "lastReadAt"] as const
+function stripOwnerStatus<T extends Doc<"chats">>(chat: T) {
+  const c = { ...chat }; for (const k of OWNER_ONLY) delete (c as any)[k]; return c
+}
+// getById: return isOwner ? ctx.chat : stripOwnerStatus(ctx.chat)
+```
+
+The owner's own sidebar/project rows come from **owner-scoped** list queries
+(`getForCurrentUser`, `getRecentWindowForCurrentUser`, `getPinnedForCurrentUser`,
+`getProjectChatsForCurrentUser`), which never return another user's chat — so
+stripping only affects the public `getById`/`getPublicById` path. The active chat's
+mark-read still works because you only mark read on chats you own (where the fields
+are present).
+
 ## Guests / local chats
 
 `local-`/`optimistic-` chats have no Convex doc, and guests have no synced identity:
@@ -262,9 +312,13 @@ before completion leaves it unread. Backend-driven, independent of `useChat`.
   raises the chat it is streaming).
 - **Reactivity cost.** The chat doc is patched at turn start (already), awaiting
   (rare), terminal (already, for the mirror), and on open (`lastReadAt`). Streaming
-  snapshots patch the run/message docs, **not** the chat doc, so there is **no**
-  per-750ms chat-list rerun. Rows are memoized on their chat, so only the changed
-  row re-renders. For a bounded window (ADR-0005) this is cheap.
+  snapshots patch the run/message docs, **not** the chat doc (`chatRuntime.ts:1479`),
+  so there is **no** per-750ms chat-list rerun. On row re-renders, be accurate: the
+  rows are **not** `React.memo`'d today and `mapConvexChat` returns new objects when
+  the list query updates, so a chat-list change re-renders the whole list (cheap for
+  a bounded window). What *is* row-scoped is `liveOverride`: the selector returns only
+  this row's slice, so an override change re-renders only the targeted row. Add
+  `React.memo` to the rows only if profiling a large window justifies it.
 
 ## Why this shape (trade-offs)
 
