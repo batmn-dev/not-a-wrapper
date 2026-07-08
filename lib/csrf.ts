@@ -22,6 +22,30 @@ function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(aBuf, bBuf)
 }
 
+/**
+ * Normalize a token to its decoded form before comparison.
+ *
+ * The double-submit's two copies of the token reach us through different
+ * cookie-encoding boundaries: the server-side cookie is read via `next/headers`
+ * `cookies()`, which URL-*decodes* it, while the client attaches the header by
+ * reading `document.cookie`, which returns the raw URL-*encoded* value. Any token
+ * character `encodeURIComponent` escapes — our `raw:sig` delimiter `:` becomes
+ * `%3A` — makes the header (`…%3A…`) and cookie (`…:…`) diverge, so a legitimate
+ * pair fails `safeEqual` and every state-changing request 403s. Decoding both to
+ * the canonical form makes the check encoding-agnostic. Decoding is a no-op on an
+ * already-decoded value (our tokens are hex + `:`, never a literal `%`), so this
+ * is safe regardless of which side arrives encoded.
+ */
+function normalizeToken(token: string): string {
+  try {
+    return decodeURIComponent(token)
+  } catch {
+    // Malformed percent-encoding: keep the raw value and let the equality and
+    // signature checks below reject it if it is a genuine mismatch.
+    return token
+  }
+}
+
 export function generateCsrfToken(): string {
   const raw = randomBytes(32).toString("hex")
   return `${raw}:${sign(raw)}`
@@ -47,8 +71,10 @@ export function validateCsrfDoubleSubmit(
   cookieToken: string | null | undefined
 ): boolean {
   if (!headerToken || !cookieToken) return false
-  if (!safeEqual(headerToken, cookieToken)) return false
-  return validateCsrfToken(headerToken)
+  const header = normalizeToken(headerToken)
+  const cookie = normalizeToken(cookieToken)
+  if (!safeEqual(header, cookie)) return false
+  return validateCsrfToken(header)
 }
 
 export async function setCsrfCookie() {
