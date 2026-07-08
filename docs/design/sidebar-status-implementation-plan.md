@@ -1,501 +1,388 @@
 # Implementation plan: sidebar chat-status ← backend state
 
 Companion to [`sidebar-status-backend-wiring.md`](./sidebar-status-backend-wiring.md).
-Executable, file-by-file, in two shippable phases. Phase 1 lights up cross-chat
-streaming; Phase 2 adds unread/error. Each phase is independently mergeable and
-leaves `main` green.
+Executable, file-by-file, as **one PR of ordered commits** (not independently
+mergeable phases). Approach: **project status onto the `chats` doc** and derive each
+row's indicator from the chat object it already subscribes to — no separate query,
+no client store of backend statuses, no hydrator. Phase 1 lights up live status;
+Phase 2 adds unread/error. Each commit leaves the branch green.
 
 Grounding anchors (verified against current code):
-- Store + seams: `lib/chat-store/status/sidebar-chat-status.ts`
-- Sidebar mount: `app/components/layout/sidebar/app-sidebar.tsx:307` (`SidebarExpandedNav`)
-- Reconciliation seam #1: `app/components/chat/chat.tsx:154` (`usePublishActiveChatStatus`)
-- Query template: `convex/chats.ts` (`maybeAuthQuery` + `by_user` index) via `usePerUserQuery`
-- Terminal settle patches: `convex/chatRuntime.ts:452` (`applyLifecycleVerdict`), `:1563` (`markGenerationRunCompletedForChat`), `:1181` (`resolveApprovalResponses`)
-- Chat mappers: `lib/chat-store/chats/sidebar-window.ts:18` (`mapConvexChat`), `lib/chat-store/types.ts:56` (`convexChatToChat`)
-- Guards: `isConvexId` (`types.ts:94`), `isLocalChatId` (`identity.ts:58`)
-
-Convention notes: all reactive reads go through `usePerUserQuery` (bare
-`useQuery` is ESLint-banned); per-user server functions take **no** `userId` arg
-(derive `ctx.user` via `maybeAuthQuery`); package manager is **bun**.
+- Store + seam #1: `lib/chat-store/status/sidebar-chat-status.ts` (seam #1 wired in
+  `app/components/chat/chat.tsx:154`)
+- Row consumers: `app/components/layout/sidebar/sidebar-item.tsx:24`,
+  `app/components/layout/sidebar/project-chat-item.tsx:26`
+- Chat type + mappers: `lib/chat-store/types.ts:19` (`Chat`), `:56`
+  (`convexChatToChat`); `lib/chat-store/chats/sidebar-window.ts:18` (`mapConvexChat`)
+- Run lifecycle write points: `convex/chatRuntime.ts` — run insert `:1292`,
+  running→streaming + `chats.updatedAt` patch `:1373-1379`, snapshot patch `:1486`,
+  awaiting `:1733`, completed `:1563`, `applyLifecycleVerdict` `:452`,
+  `resolveApprovalResponses` `:1181`
+- Lifecycle brain: `convex/domain/generation_run_lifecycle.ts` (`transition` vs
+  `ignore` verdicts — the projection hooks only `transition`)
 
 ---
 
-## Phase 1 — cross-chat streaming
+## Phase 1 — cross-chat live status
 
-Outcome: every sidebar row (not just the active chat) shows the spinner while its
-generation runs in the background, and the amber dot while awaiting approval —
-sourced from `generationRuns`, funneled through the existing store.
+Outcome: every visible row (sidebar + project view) shows `streaming`/`awaiting`
+from backend state, including background generations you navigated away from; the
+active chat still lights instantly via seam #1.
 
-### 1.1 Schema: add the per-user active-run index
+### 1.1 Schema: status-projection fields on `chats`
 
-`convex/schema.ts`, `generationRuns` table (currently ends at `:184`), add one index:
+`convex/schema.ts`, `chats` table. Land **all four** additive fields now (the
+Phase-2 ones stay dormant until Phase 2 writes/reads them) so the projection helper
+in 1.2 patches a schema that already knows every key:
 
 ```ts
-  .index("by_chat", ["chatId"])
-  .index("by_user", ["userId"])
-  .index("by_status", ["status"])
-  .index("by_chat_updated", ["chatId", "updatedAt"])
-  .index("by_user_status", ["userId", "status"]), // NEW
+    updatedAt: v.number(),
+    // Live phase of the chat's current run; set at start/awaiting, cleared at
+    // terminal. Projected by the generation lifecycle (1.2). — Phase 1
+    liveRunStatus: v.optional(v.union(v.literal("streaming"), v.literal("awaiting"))),
+    // Last *signaling* terminal outcome + owner-only read cursor. — Phase 2
+    lastRunEndedAt: v.optional(v.number()),
+    lastRunStatus: v.optional(v.union(v.literal("completed"), v.literal("failed"))),
+    lastReadAt: v.optional(v.number()),
 ```
 
-Index build only — no data migration. This is a schema **expansion**, so the
-production preflight contraction-guard passes. `userId` is optional on the table
-(anonymous runs use `anonymousId`); the index simply never matches a user `eq`
-for those rows, which is correct — guests get no cross-chat feed.
+Expansion only — preflight-safe. `lastReadAt` is correct as a chat-doc field because
+chats are single-owner (`chats.userId`): the only viewer with a sidebar row for a
+chat is its owner.
 
-### 1.2 New Convex module: the active-run query
+### 1.2 Server: project run transitions onto the chat
 
-`convex/sidebarStatus.ts` (new):
-
-```ts
-import { maybeAuthQuery } from "./lib/authedFunctions"
-
-// `queued` is intentionally absent — runs are inserted directly as `running`
-// (ADR-0008 removed the queued write path). `awaiting_approval` is active too:
-// it keeps activeStreamId and has not settled.
-const ACTIVE_RUN_STATUSES = ["running", "streaming", "awaiting_approval"] as const
-
-/**
- * The user's live runs, one row per chat (latest wins), mapped to the sidebar's
- * semantic status. Bounded by `by_user_status` to only non-terminal runs, so the
- * read stays cheap regardless of run history size. Seam #2 of the sidebar status
- * store (see lib/chat-store/status/sidebar-chat-status.ts).
- */
-export const getActiveRunStatuses = maybeAuthQuery({
-  args: {},
-  handler: async (ctx) => {
-    const user = ctx.user
-    if (!user) return [] // guests / signed-out: seam #1 still covers the active chat
-
-    const rows = (
-      await Promise.all(
-        ACTIVE_RUN_STATUSES.map((status) =>
-          ctx.db
-            .query("generationRuns")
-            .withIndex("by_user_status", (q) =>
-              q.eq("userId", user._id).eq("status", status)
-            )
-            .collect()
-        )
-      )
-    ).flat()
-
-    // A regeneration can briefly overlap the prior run for the same chat; the
-    // most-recently-updated active run is the one the row should reflect.
-    const byChat = new Map<string, { status: string; updatedAt: number }>()
-    for (const r of rows) {
-      const prev = byChat.get(r.chatId)
-      if (!prev || r.updatedAt > prev.updatedAt) {
-        byChat.set(r.chatId, { status: r.status, updatedAt: r.updatedAt })
-      }
-    }
-    return [...byChat].map(([chatId, v]) => ({
-      chatId,
-      status:
-        v.status === "awaiting_approval"
-          ? ("awaiting" as const)
-          : ("streaming" as const),
-    }))
-  },
-})
-```
-
-Returns a small, stable `{ chatId, status }[]` — the subscription only re-runs
-when the active set changes.
-
-### 1.3 Store module: pure merge fn + hydration hook
-
-`lib/chat-store/status/sidebar-chat-status.ts`. **No change to the store's public
-contract** (`setChatStatus`/`clearChatStatus`/`useSidebarChatStatus` unchanged).
-Add two exports. Write the pure fn in its Phase-2-complete form now (Phase 1
-simply passes empty `chats`/`reads`) so Phase 2 needs no rewrite:
+`convex/chatRuntime.ts`. Add one helper near `applyLifecycleVerdict` (`:429`):
 
 ```ts
-import { api } from "@/convex/_generated/api"
-import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
-import { useChats } from "@/lib/chat-store/chats/provider"
-
-export type SidebarStatusInputs = {
-  activeRuns: { chatId: string; status: "streaming" | "awaiting" }[]
-  chats: {
-    id: string
-    last_run_ended_at?: number | null
-    last_run_status?: "completed" | "failed" | "aborted" | null
-  }[]
-  reads: Record<string, number> // chatId -> lastReadAt (epoch ms)
-  activeChatId: string | null
-}
-
-/**
- * The reconciliation brain (pure, unit-tested). Precedence: a live run wins;
- * else an unseen terminal outcome (failed → error, completed → unread); else
- * idle. The active chat is owned by seam #1 (usePublishActiveChatStatus), so it
- * is never emitted here.
- */
-export function deriveSidebarStatuses(
-  input: SidebarStatusInputs
-): Record<string, SidebarChatStatus> {
-  const next: Record<string, SidebarChatStatus> = {}
-
-  for (const r of input.activeRuns) next[r.chatId] = r.status // live wins
-
-  for (const c of input.chats) {
-    if (next[c.id]) continue // an active run already owns this row
-    const ended = c.last_run_ended_at ?? 0
-    if (ended <= (input.reads[c.id] ?? 0)) continue // seen (or never ran) → idle
-    if (c.last_run_status === "failed") next[c.id] = "error"
-    else if (c.last_run_status === "completed") next[c.id] = "unread"
-    // aborted → idle (user-initiated Stop is not a failure)
+// Maps a run status → the chat-doc projection patch. Applied ONLY on a real
+// lifecycle transition (never an "ignore" verdict), so a late terminal on an
+// already-settled run writes nothing and can't clear a newer run's live status.
+function chatStatusProjection(
+  status: GenerationRunStatus,
+  now: number
+): Partial<Doc<"chats">> {
+  switch (status) {
+    case "running":
+    case "streaming":
+      return { liveRunStatus: "streaming" }
+    case "awaiting_approval":
+      return { liveRunStatus: "awaiting" }
+    case "completed":
+      return { liveRunStatus: undefined, lastRunEndedAt: now, lastRunStatus: "completed" } // Phase 2 fields
+    case "failed":
+      return { liveRunStatus: undefined, lastRunEndedAt: now, lastRunStatus: "failed" }
+    case "aborted":
+      return { liveRunStatus: undefined } // user Stop / supersede — no signal
   }
-
-  if (input.activeChatId) delete next[input.activeChatId] // seam #1 owns it
-  return next
-}
-
-/**
- * Seam #2: one Convex subscription → the store. Mounted once in the sidebar.
- * Reconciles against the previous backend-owned map with the existing setters,
- * so only genuinely-changed rows re-render (the store no-ops equal writes).
- */
-export function useHydrateSidebarChatStatuses(activeChatId: string | null): void {
-  const { data: activeRuns } = usePerUserQuery(api.sidebarStatus.getActiveRunStatuses)
-  // Phase 2 wires these two; Phase 1 leaves them empty.
-  const reads: Record<string, number> = {}
-  const chats: SidebarStatusInputs["chats"] = []
-  const prevRef = React.useRef<Record<string, SidebarChatStatus>>({})
-
-  React.useEffect(() => {
-    const next = deriveSidebarStatuses({
-      activeRuns: activeRuns ?? [],
-      chats,
-      reads,
-      activeChatId,
-    })
-    const store = useSidebarChatStatusStore.getState()
-    for (const [id, s] of Object.entries(next)) store.setChatStatus(id, s)
-    for (const id of Object.keys(prevRef.current)) {
-      if (!(id in next) && id !== activeChatId) store.clearChatStatus(id)
-    }
-    prevRef.current = next
-  }, [activeRuns, activeChatId])
 }
 ```
 
-Delete `useSidebarChatStatusPreview` (and its `?sidebarStatusPreview` docblock)
-once 1.4 lands — the real feed supersedes it.
+The `completed`/`failed` arms write the Phase-2 mirror keys, which is why 1.1 lands
+all four fields — with them on the schema, this helper is written once and the
+mirror simply stays dormant (no reader) until Phase 2. Patching `liveRunStatus:
+undefined` removes the field (Convex `patch` semantics), which is the "clear."
 
-### 1.4 Mount the hook; retire the preview
+Apply it at each transition site, where the chat id is in scope:
 
-`app/components/layout/sidebar/app-sidebar.tsx`, `SidebarExpandedNav` (~`:299-307`):
+- **Run start** — `prepareGenerationForChat`, the running→streaming patch at
+  `:1373-1379` already sets `chats.updatedAt`; add `liveRunStatus: "streaming"` to
+  that same `ctx.db.patch(chat._id, …)`.
+- **Awaiting** — `createToolApprovalRequestForChat` (`:1733`):
+  `await ctx.db.patch(run.chatId, { liveRunStatus: "awaiting" })`.
+- **Terminal** — after each real run patch, `applyLifecycleVerdict` (`:452`),
+  `markGenerationRunCompletedForChat` (`:1563`), `resolveApprovalResponses`
+  (`:1181`):
+  ```ts
+  await ctx.db.patch(run.chatId, chatStatusProjection(verdict.run.status, now))
+  ```
+  These handlers already run only on a `transition` verdict (they early-return on
+  `ignore` via `isIgnoredSignal` / the verdict check), so the stale-clear is
+  structurally impossible — see the design doc.
+
+`GenerationRunStatus`, `Doc`, `Id` are already imported in this file.
+
+### 1.3 Surface `live_run_status` on the client `Chat` type
+
+`lib/chat-store/types.ts` — extend `Chat` (`:19`) and `convexChatToChat` (`:56`);
+`lib/chat-store/chats/sidebar-window.ts` — same in `mapConvexChat` (`:18`):
 
 ```ts
-// remove:
-const previewChatIds = useMemo(...)
-useSidebarChatStatusPreview(previewChatIds)
-// replace with:
-useHydrateSidebarChatStatuses(data.currentChatId)
+// Chat type:
+  live_run_status?: "streaming" | "awaiting" | null
+// convexChatToChat / mapConvexChat:
+  live_run_status: convexChat.liveRunStatus ?? null,
 ```
 
-`data.currentChatId` is already on `AppSidebarData` (`app-sidebar.tsx:272`). The
-hook calls `useChats()` in Phase 2; `SidebarExpandedNav` is inside `ChatsProvider`
-already, so no provider move is needed.
+(Optimistic/local chats leave it `undefined` → `idle`.)
 
-### 1.5 Regenerate Convex types
+### 1.4 Store shrinks to `liveOverride`; derive from the chat; swap the public hook
 
+`lib/chat-store/status/sidebar-chat-status.ts`. The store no longer holds backend
+statuses — only the active-chat override. `useSidebarChatStatus` now takes the
+`chat` (the row already has it) and derives.
+
+```ts
+export type LiveOverride = { chatId: string; status: SidebarChatStatus } | null
+// store state: { liveOverride: LiveOverride, setLiveOverride(o) }  — drop `statuses`
+// and its setters; the preview hook goes too (1.6).
+
+const PRIORITY: Record<SidebarChatStatus, number> = {
+  streaming: 3, awaiting: 3, error: 2, unread: 1, idle: 0,
+}
+
+export function deriveChatRowStatus(
+  chat: {
+    id: string
+    live_run_status?: "streaming" | "awaiting" | null
+    last_run_ended_at?: number | null // Phase 2
+    last_run_status?: "completed" | "failed" | null // Phase 2
+    last_read_at?: number | null // Phase 2
+  },
+  override: LiveOverride
+): SidebarChatStatus {
+  let s: SidebarChatStatus = "idle"
+  if (chat.live_run_status === "streaming") s = "streaming"
+  else if (chat.live_run_status === "awaiting") s = "awaiting"
+  else if ((chat.last_run_ended_at ?? 0) > (chat.last_read_at ?? 0)) {
+    if (chat.last_run_status === "failed") s = "error"
+    else if (chat.last_run_status === "completed") s = "unread"
+  }
+  if (override && override.chatId === chat.id && override.status !== "idle" &&
+      PRIORITY[override.status] > PRIORITY[s]) {
+    s = override.status
+  }
+  return s
+}
+
+// PUBLIC CONTRACT CHANGE (justified): was `useSidebarChatStatus(chatId)` reading the
+// store; now takes the chat the row already renders. In Phase 1 the last_run_*/
+// last_read_at fields are absent → the unread/error branch is dead until Phase 2.
+export function useSidebarChatStatus(chat: Chat): SidebarChatStatus {
+  const override = useSidebarChatStatusStore((s) => s.liveOverride)
+  return React.useMemo(() => deriveChatRowStatus(chat, override), [chat, override])
+}
 ```
-bunx convex codegen   # or the running `convex dev` picks it up
+
+Seam #1 (`usePublishActiveChatStatus`) writes `liveOverride`
+(`setLiveOverride({ chatId, activeChatStatusToSidebarStatus(status) })`, `null` on
+unmount/no chat) — the same shape reached at the end of the prior review rounds. It
+no longer touches any `statuses` map (there isn't one).
+
+### 1.5 Update the two row consumers
+
+`sidebar-item.tsx:24` and `project-chat-item.tsx:26`:
+
+```ts
+// was: const status = useSidebarChatStatus(chat.id)
+const status = useSidebarChatStatus(chat)
 ```
 
-Makes `api.sidebarStatus.getActiveRunStatuses` typecheck.
+Nothing else in the rows changes — `SidebarChatStatusIndicator` still takes a
+status string. Because a row already subscribes to its `chat`, background updates
+arrive with no extra wiring.
 
-### 1.6 Tests (Phase 1)
+### 1.6 Retire the preview; codegen
 
-- `convex/sidebarStatus.test.ts` (new, `convex-test`): seed 2 chats with
-  `streaming` / `awaiting_approval` runs + one `completed` run for a third → assert
-  `getActiveRunStatuses` returns `streaming`/`awaiting` for the first two and omits
-  the third; assert latest-active-run-wins when two active runs share a chat.
-- `lib/chat-store/status/sidebar-chat-status.test.ts` (new): `deriveSidebarStatuses`
-  — active `streaming`/`awaiting` map through; `activeChatId` is excluded even when
-  it has an active run. (Unread/error cases arrive with Phase 2.)
+- Delete `useSidebarChatStatusPreview` and the `previewChatIds` memo +
+  `useSidebarChatStatusPreview(...)` call in `app-sidebar.tsx:302-307`, plus the
+  `?sidebarStatusPreview` docblock — the real projection supersedes it.
+- `bunx convex codegen` (or the running `convex dev`) so `chats.liveRunStatus`
+  typechecks through the mappers.
 
-Keep it to these — the pure fn is the risky surface; the query is a thin index read.
+### 1.7 Tests (Phase 1, lean)
+
+- `convex/chatRuntime.test.ts`: after `prepareGeneration`, the chat has
+  `liveRunStatus: "streaming"`; after `createToolApprovalRequest`, `"awaiting"`;
+  after `markGenerationRunCompleted`, `liveRunStatus` is cleared.
+- `lib/chat-store/status/sidebar-chat-status.test.ts` (new, pure): `deriveChatRowStatus`
+  — `live_run_status` maps through; `override` raises but never lowers, and only for
+  its own `chatId`; no fields → `idle`.
 
 ### Phase 1 acceptance
-Start a generation in chat A, navigate to chat B: A's row keeps spinning. Trigger
-a tool-approval in a background chat: its row shows the amber dot. Sign out: no
-errors, no indicators. The active chat's spinner still comes from seam #1 (no
-double-write — the hook excludes `activeChatId`).
+Start a generation in chat A, navigate to B: A's row spins (projection). **Return to
+A before it finishes: A still spins** (projection beats the remounted-`ready`
+override). A background tool-approval shows the amber dot. On a project page, a
+project chat generating in the background spins too. Sign out: no indicators.
+Sending in the active chat lights its spinner instantly (override), before the run
+doc is visible.
 
 ---
 
 ## Phase 2 — unread / error
 
-Outcome: a background generation that finishes while you're elsewhere leaves a
-blue "unread" dot until you open it; a background failure leaves a red "error"
-dot; opening (or finishing while viewing) clears it — across tabs and devices.
+Outcome: a background generation that finishes while you're elsewhere leaves a blue
+dot until you open the chat; a background failure leaves a red dot; opening (or
+finishing while viewing) clears it — across tabs and devices.
 
-### 2.1 Schema: completion mirror + read cursors
+### 2.1 Schema: already landed in 1.1
 
-`convex/schema.ts`.
+`lastRunEndedAt`, `lastRunStatus`, and `lastReadAt` were added to `chats` in 1.1
+(dormant through Phase 1). Nothing to add here — Phase 2 just starts *reading* them.
 
-`chats` table — add two fields (the "finished" side, riding the existing
-chat-list subscription):
+**Rollout backfill (do this in the Phase 2 commit).** The mirror
+(`lastRunEndedAt`) has been written since Phase 1, but `lastReadAt` is unset, so
+every previously-completed chat would read as `unread` the moment Phase 2 surfaces
+the fields. Ship a one-shot `internalMutation` that sets `lastReadAt = lastRunEndedAt`
+(or `Date.now()`) for chats that have `lastRunEndedAt` and no `lastReadAt`, so only
+completions *after* the Phase 2 deploy show a dot. (Moot if the deployment is
+genuinely pre-launch with no data — but cheap insurance.)
 
-```ts
-    updatedAt: v.number(),
-    // Sidebar unread/error mirror: the latest *terminal* run's settle time +
-    // outcome. Only completed/failed are written (aborted → no sidebar signal).
-    lastRunEndedAt: v.optional(v.number()),
-    lastRunStatus: v.optional(
-      v.union(v.literal("completed"), v.literal("failed"))
-    ),
-```
+### 2.2 Server: the terminal mirror is already written
 
-New `chatReads` table — the per-(user,chat) read cursor (the "read" side, kept off
-the chat-list subscription so opens don't re-run it):
-
-```ts
-  chatReads: defineTable({
-    userId: v.id("users"),
-    chatId: v.id("chats"),
-    lastReadAt: v.number(),
-  })
-    .index("by_user", ["userId"])
-    .index("by_user_chat", ["userId", "chatId"]),
-```
-
-Both are expansions — preflight-safe.
-
-### 2.2 Mirror `completedAt` onto the chat doc
-
-`convex/chatRuntime.ts`. Add one helper near `applyLifecycleVerdict` (`:429`):
+`chatStatusProjection` (1.2) already sets `lastRunEndedAt`/`lastRunStatus` on the
+`completed`/`failed` arms and writes nothing on `aborted` — and the fields exist from
+1.1 — so the mirror is already landing; Phase 2 only starts *reading* it. Add
+`markChatRead` to `convex/chats.ts`:
 
 ```ts
-// Mirror a terminal run outcome onto its chat so the sidebar can derive
-// unread/error without scanning runs. Only completed/failed carry a sidebar
-// signal (aborted/superseded is user-intent → idle), so this no-ops otherwise —
-// which makes it safe to call from every settle site, hit or miss.
-async function mirrorTerminalRunToChat(
-  ctx: MutationCtx,
-  chatId: Id<"chats">,
-  status: GenerationRunStatus,
-  now: number
-) {
-  if (status !== "completed" && status !== "failed") return
-  await ctx.db.patch(chatId, { lastRunEndedAt: now, lastRunStatus: status })
-}
-```
+import { authenticatedMutation } from "./lib/authedFunctions"
 
-Call it right after each terminal run patch (three sites; `run`/`runId` and the
-chat id are already in scope):
-
-- `applyLifecycleVerdict`, after the `ctx.db.patch(run._id, …)` at `:452-459`
-  (covers `fail`; abort/supersede no-op):
-  ```ts
-  await mirrorTerminalRunToChat(ctx, run.chatId, verdict.run.status, now)
-  ```
-- `markGenerationRunCompletedForChat`, after the patch at `:1563-1573`:
-  ```ts
-  await mirrorTerminalRunToChat(ctx, run.chatId, verdict.run.status, now)
-  ```
-- `resolveApprovalResponses`, after the patch at `:1181-1186` (`run` fetched at
-  `:1169`):
-  ```ts
-  await mirrorTerminalRunToChat(ctx, run.chatId, verdict.run.status, now)
-  ```
-
-`GenerationRunStatus`, `MutationCtx`, `Id`, `Doc` are already imported in this
-file. The `fail`-overwrites-`completed` race is harmless: whichever settles last
-mirrors last, matching the run's final status.
-
-### 2.3 Read-cursor query + mark-read mutation
-
-`convex/sidebarStatus.ts` — append:
-
-```ts
-import { ownedChatMutation } from "./lib/authedFunctions"
-
-export const getChatReads = maybeAuthQuery({
-  args: {},
-  handler: async (ctx) => {
-    const user = ctx.user
-    if (!user) return []
-    const rows = await ctx.db
-      .query("chatReads")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect()
-    return rows.map((r) => ({ chatId: r.chatId, lastReadAt: r.lastReadAt }))
-  },
-})
-
-// chatId is consumed + ownership-verified by the builder (injects ctx.chat/user).
-export const markChatRead = ownedChatMutation({
-  args: {},
-  handler: async (ctx) => {
-    const now = Date.now()
-    const existing = await ctx.db
-      .query("chatReads")
-      .withIndex("by_user_chat", (q) =>
-        q.eq("userId", ctx.user._id).eq("chatId", ctx.chat._id)
-      )
-      .unique()
-    if (existing) await ctx.db.patch(existing._id, { lastReadAt: now })
-    else
-      await ctx.db.insert("chatReads", {
-        userId: ctx.user._id,
-        chatId: ctx.chat._id,
-        lastReadAt: now,
-      })
+// NOT ownedChatMutation: opening a *public* chat you don't own has a valid Convex id
+// and ownedChatMutation would THROW. Unread only exists for chats you own → no-op.
+export const markChatRead = authenticatedMutation({
+  args: { chatId: v.id("chats") },
+  handler: async (ctx, { chatId }) => {
+    const chat = await ctx.db.get(chatId)
+    if (!chat || chat.userId !== ctx.user._id) return // public / not-owned → no-op
+    await ctx.db.patch(chatId, { lastReadAt: Date.now() })
   },
 })
 ```
 
-### 2.4 Surface the mirror fields on the client `Chat` type
+### 2.3 Surface the fields; extend the derivation
 
-`lib/chat-store/types.ts` — extend `Chat` (`:19`) and `convexChatToChat` (`:56`):
+`Chat` type + both mappers (`convexChatToChat`, `mapConvexChat`):
 
 ```ts
-export type Chat = {
-  // …existing…
   last_run_ended_at?: number | null
   last_run_status?: "completed" | "failed" | null
-}
-
-// in convexChatToChat(...):
-  last_run_ended_at: convexChat.lastRunEndedAt ?? null,
-  last_run_status: convexChat.lastRunStatus ?? null,
+  last_read_at?: number | null
+// mappers:
+  last_run_ended_at: c.lastRunEndedAt ?? null,
+  last_run_status: c.lastRunStatus ?? null,
+  last_read_at: c.lastReadAt ?? null,
 ```
 
-`lib/chat-store/chats/sidebar-window.ts` — same two lines in `mapConvexChat` (`:18`):
+`deriveChatRowStatus` (1.4) already reads these — its unread/error branch goes live
+the moment the fields are populated. No hook change.
+
+### 2.4 Mark-read on open + on backend completion (retry-safe)
+
+`lib/chat-store/status/sidebar-chat-status.ts` — add beside seam #1:
 
 ```ts
-    last_run_ended_at: chat.lastRunEndedAt ?? null,
-    last_run_status: chat.lastRunStatus ?? null,
-```
-
-(Optimistic/local chats simply leave these `undefined` → treated as "never ran".)
-
-### 2.5 Wire unread/error into the hydration hook
-
-`lib/chat-store/status/sidebar-chat-status.ts`, `useHydrateSidebarChatStatuses` —
-replace the Phase-1 stubs:
-
-```ts
-  const { data: activeRuns } = usePerUserQuery(api.sidebarStatus.getActiveRunStatuses)
-  const { data: readRows } = usePerUserQuery(api.sidebarStatus.getChatReads)
-  const { chats: allChats } = useChats()
-
-  const reads = React.useMemo(
-    () => Object.fromEntries((readRows ?? []).map((r) => [r.chatId, r.lastReadAt])),
-    [readRows]
-  )
-  // …effect deps: [activeRuns, readRows, allChats, activeChatId]
-  const next = deriveSidebarStatuses({
-    activeRuns: activeRuns ?? [],
-    chats: allChats,
-    reads,
-    activeChatId,
-  })
-```
-
-`useChats()` returns the full displayed union (`chats`) already carrying the mirror
-fields — no extra subscription.
-
-### 2.6 Mark-read on open and on active-chat completion
-
-`lib/chat-store/status/sidebar-chat-status.ts` — add a small hook beside seam #1:
-
-```ts
-import { useMutation } from "convex/react"
+import { useConvexAuth, useMutation } from "convex/react"
 import { isConvexId } from "@/lib/chat-store/types"
 
 /**
- * Clear a chat's unread/error by stamping lastReadAt: on open (chat becomes
- * active) and again when the active chat's stream finishes (so opening mid-stream
- * and staying counts as read). No-op for guest/local/optimistic ids.
+ * Clear a chat's unread/error by stamping lastReadAt: on open, and whenever the
+ * ACTIVE chat's terminal mirror advances while viewing (covers a run that finished
+ * locally *and* one you re-entered and watched). Backend-driven, independent of
+ * useChat. Gated on Convex auth so it never fires into the auth-not-ready throw;
+ * advances the tracking ref ONLY on success, so a transient failure can't suppress
+ * the next attempt (review round 3, finding #2). No-op for guest/local/optimistic.
  */
-export function useMarkChatReadOnView(chatId: string | null, status: string): void {
-  const markChatRead = useMutation(api.sidebarStatus.markChatRead)
-  const wasActiveRef = React.useRef(false)
+export function useMarkChatReadOnView(
+  chatId: string | null,
+  lastRunEndedAt?: number | null
+): void {
+  const { isAuthenticated } = useConvexAuth()
+  const markChatRead = useMutation(api.chats.markChatRead)
+  const markedRef = React.useRef<{ chatId: string | null; endedAt: number }>({
+    chatId: null,
+    endedAt: 0,
+  })
 
-  // On open / chat switch.
   React.useEffect(() => {
-    if (!chatId || !isConvexId(chatId)) return
-    void markChatRead({ chatId })
-  }, [chatId, markChatRead])
-
-  // On completion while viewing (streaming|submitted → ready).
-  React.useEffect(() => {
-    const active = status === "streaming" || status === "submitted"
-    if (active) wasActiveRef.current = true
-    else if (status === "ready" && wasActiveRef.current) {
-      wasActiveRef.current = false
-      if (chatId && isConvexId(chatId)) void markChatRead({ chatId })
-    }
-  }, [status, chatId, markChatRead])
+    if (!chatId || !isConvexId(chatId) || !isAuthenticated) return
+    const ended = lastRunEndedAt ?? 0
+    const prev = markedRef.current
+    const switchedChat = prev.chatId !== chatId
+    const runAdvanced = !switchedChat && ended > prev.endedAt
+    if (!switchedChat && !runAdvanced) return
+    markChatRead({ chatId })
+      .then(() => {
+        markedRef.current = { chatId, endedAt: ended } // advance only on success
+      })
+      .catch(() => {}) // best-effort; ref unchanged → later render / auth-ready retries
+  }, [chatId, lastRunEndedAt, isAuthenticated, markChatRead])
 }
 ```
 
-`app/components/chat/chat.tsx`, beside `usePublishActiveChatStatus(chatId, status)`
-(`:154`):
+`chat.tsx`, beside `usePublishActiveChatStatus(chatId, status)` (`:154`) — pass the
+active chat's mirror timestamp from `useChat(chatId)` / `currentChat` (carries
+`last_run_ended_at` after 2.3):
 
 ```ts
-usePublishActiveChatStatus(chatId, status)
-useMarkChatReadOnView(chatId, status) // NEW
+usePublishActiveChatStatus(chatId, status) // writes liveOverride
+useMarkChatReadOnView(chatId, currentChat?.last_run_ended_at) // NEW
 ```
 
-### 2.7 Regenerate types + tests
+Gating on `isAuthenticated` is deliberate — the effect only fires once Convex auth
+is ready, so opening a chat during the auth-sync window doesn't throw, and the ref
+stays un-advanced until a mark actually succeeds.
 
-```
-bunx convex codegen
-```
+### 2.5 Codegen + tests
 
-Tests (extend, keep lean):
-- `convex/sidebarStatus.test.ts`: `markChatRead` inserts then patches (upsert);
-  `getChatReads` returns the user's cursors only.
+- `bunx convex codegen`.
 - `convex/chatRuntime.test.ts`: after `markGenerationRunCompleted`, the chat has
-  `lastRunStatus: "completed"` + `lastRunEndedAt` set; after a failure, `"failed"`;
-  after an abort, **unchanged** (no sidebar signal). One assertion each.
-- `sidebar-chat-status.test.ts`: `deriveSidebarStatuses` — completed+unseen →
-  `unread`; failed+unseen → `error`; completed+seen (`ended <= read`) → idle;
-  aborted → idle; active run beats an unseen completion.
+  `lastRunStatus: "completed"` + `lastRunEndedAt` set and `liveRunStatus` cleared;
+  after a failure, `"failed"`; after an abort, the mirror is **unchanged** and only
+  `liveRunStatus` is cleared.
+- `convex/chats.test.ts`: `markChatRead` patches `lastReadAt` for an owned chat and
+  **no-ops for a chat the caller doesn't own** (review #4).
+- `sidebar-chat-status.test.ts`: `deriveChatRowStatus` — completed+unseen → `unread`;
+  failed+unseen → `error`; seen (`ended <= read`) → `idle`; aborted (no mirror) →
+  `idle`; live status beats an unseen completion.
 
 ### Phase 2 acceptance
 Two tabs, same account. Tab A on chat X; tab B starts a generation in chat Y, then
-tab B navigates away before it finishes → Y shows the blue dot in **both** tabs.
-Open Y in either tab → dot clears in both (reactive). Force a background failure →
-red dot until opened. Open a chat mid-stream and stay → no dot after it finishes.
-Guest session → no dots, no `markChatRead` calls (network tab shows none).
+navigates away before it finishes → Y shows the blue dot in **both** tabs. Open Y in
+either tab → clears in both (reactive). Force a background failure → red dot until
+opened. Open a chat mid-stream and stay → no dot after it finishes. Guest session →
+no dots, no `markChatRead` calls (network tab shows none).
 
 ---
 
 ## Sequencing, risks, rollback
 
-**Order:** 1.1 → 1.2 → 1.5 (codegen) → 1.3 → 1.4 → 1.6 → ship Phase 1. Then
-2.1 → 2.7(codegen) → 2.2 → 2.3 → 2.7(codegen) → 2.4 → 2.5 → 2.6 → 2.7 tests →
-ship Phase 2. (Codegen after every schema/function add so downstream edits
-typecheck.)
+**Order:** 1.1 (all four fields) → 1.2 → 1.6 codegen → 1.3 → 1.4 → 1.5 → 1.7 → ship
+Phase 1. Then 2.2 (`markChatRead`) → 2.5 codegen → 2.3 → 2.4 → 2.5 tests → ship
+Phase 2. (Land all schema fields in 1.1 so the projection helper compiles once.)
 
 **Risks & mitigations**
-- *Double-write flicker on the active chat.* Mitigated structurally: the hook
-  excludes `activeChatId`; seam #1 owns it. Verify the navigate-away handoff (row
-  A keeps spinning after leaving A).
-- *Chat-doc write amplification.* Completion now patches `chats` (a second patch
-  per turn, after the turn-start `updatedAt` bump). Rows are memoized + read status
-  from the store, so only changed rows re-render. If profiling ever shows churn,
-  the fallback is the dedicated `by_user_ended` index + query (design doc §"Trade-offs").
-- *Collapsed sidebar unmounts the hook.* `SidebarExpandedNav` unmount drops the
-  subscription; the store keeps last values (rows in the icon rail read them). Add
-  a `resetChatStatuses()` cleanup only if stale icons appear — otherwise leave it.
-- *`markChatRead` write rate.* One upsert per chat-open. User-paced, fine. Optional
-  later optimization: skip the call when the chat currently has no unread/error
-  signal in the store.
+- *Projection drift (the one new risk).* `liveRunStatus` mirrors run state; a dropped
+  "clear at terminal" write would strand a spinner. Small blast radius: the lifecycle's
+  first-terminal-wins prevents late clears, the projection only fires on real
+  transitions, and a stuck flag self-heals on the chat's next turn / supersede sweep.
+  Symmetric with the terminal mirror (`lastRunEndedAt`) already in play.
+- *Chat-doc write frequency.* Patched at turn start (already), awaiting (rare),
+  terminal (already), and on open (`lastReadAt`). Streaming snapshots patch the
+  run/message docs, NOT the chat doc → no per-750ms chat-list rerun. Rows are
+  memoized on their chat, so only the changed row re-renders.
+- *Public / non-owned chats (review #4).* `markChatRead` no-ops unless the caller
+  owns the chat — opening a public chat must not throw.
+- *Mark-read retry (review #2).* Gated on Convex auth; ref advances only on success,
+  so a transient failure retries on the next open / run-advance / auth-ready.
+- *Public contract change.* `useSidebarChatStatus(chat)` replaces
+  `useSidebarChatStatus(chatId)` — two call sites (1.5) + the store's `statuses` map
+  and preview hook are deleted. Grep for other callers before landing.
+- *Delete-mid-generation (pre-existing, now orthogonal).* No `chatReads` to cascade;
+  `lastReadAt` dies with the doc. The run/approval/snapshot orphan + the loud
+  `finalize()` completion-write rejection (`durable-turn-runtime.ts:977`;
+  `requireOwnedGenerationRun` throws once the run **or its chat** is gone,
+  `auth.ts:131-135`) is a **separate** hardening: cascade-delete run state in
+  `chats.remove` AND make terminal marks no-op when the target run **or its chat**
+  was deleted by the owner (still throwing on auth/not-owner). Fast-follow; no data
+  corruption today.
 
-**Rollback:** Phase 2 reverts cleanly to Phase 1 (drop 2.2–2.6; the schema
-additions are optional/unused and can stay). Phase 1 reverts to seam-#1-only by
-restoring the preview call (or mounting nothing). No data migration in either
-direction — every schema change is additive.
+**Rollback:** Phase 2 reverts to Phase 1 by dropping `markChatRead` + the mark-read
+hook + the unread/error mapper fields (the `deriveChatRowStatus` unread branch goes
+dormant; schema fields are additive and can stay). Phase 1 reverts to seam-#1-only
+by restoring `useSidebarChatStatus(chatId)` + the store `statuses` map + the preview.
+No data migration either direction — every schema change is additive.
 
-**Follow-ups (not in scope):** approvals-index cross-check for `awaiting`;
-error-dot TTL cap; `chatReads` pruning on chat delete (fold into `chats.remove`);
-promoting this doc + the design doc to ADR-0011 once shipped.
+**Follow-ups (separate):** delete-mid-generation hardening (above); approvals-index
+cross-check for `awaiting`; error-dot TTL cap; promoting this + the design doc to
+ADR-0011 once shipped.
