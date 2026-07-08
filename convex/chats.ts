@@ -185,13 +185,40 @@ export const searchByTitle = maybeAuthQuery({
   },
 })
 
+// The sidebar status-projection fields (docs/design/sidebar-status-backend-wiring.md)
+// are owner-only, but they ride the chat doc that public/shared reads return. Strip
+// them from any read that can hand a chat to a non-owner, so a shared-chat viewer
+// never receives the owner's read cursor or live/last-run state (nor reactive
+// updates to it). Owner-scoped list queries only ever return the caller's own
+// chats, so only the getById/getPublicById paths below need this.
+const OWNER_ONLY_STATUS_FIELDS = [
+  "liveRunStatus",
+  "statusRunId",
+  "lastRunEndedAt",
+  "lastRunStatus",
+  "lastReadAt",
+] as const
+
+function stripOwnerStatus(chat: Doc<"chats">): Doc<"chats"> {
+  const stripped = { ...chat }
+  for (const field of OWNER_ONLY_STATUS_FIELDS) {
+    delete (stripped as Record<string, unknown>)[field]
+  }
+  return stripped
+}
+
 /**
  * Get a single chat by ID. Returns the chat if it is public (no auth required)
- * or the authenticated caller owns it; otherwise null.
+ * or the authenticated caller owns it; otherwise null. Owner-only status
+ * projection fields are stripped for non-owners (shared-chat viewers).
  */
 export const getById = readableChatQuery({
   args: {},
-  handler: async (ctx) => ctx.chat,
+  handler: async (ctx) => {
+    if (!ctx.chat) return null
+    const isOwner = ctx.user != null && ctx.chat.userId === ctx.user._id
+    return isOwner ? ctx.chat : stripOwnerStatus(ctx.chat)
+  },
 })
 
 /**
@@ -279,7 +306,8 @@ export const getPublicById = query({
     // Only return if chat is public
     if (!chat.public) return null
 
-    return chat
+    // Pure-public read (no owner concept) — always strip owner-only fields.
+    return stripOwnerStatus(chat)
   },
 })
 

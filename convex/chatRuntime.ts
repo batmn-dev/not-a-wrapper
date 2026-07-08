@@ -26,6 +26,7 @@ import {
 import {
   isTerminalGenerationRunStatus,
   isTerminalMessageStatus,
+  type GenerationRunStatus,
 } from "./domain/message_contract"
 import { extractTextFromMessageParts } from "./domain/message_parts"
 import {
@@ -419,6 +420,62 @@ async function applyMessageResolution(
   }
 }
 
+// Sidebar status projection — mirror a run's lifecycle phase onto its chat doc
+// so every sidebar row derives its indicator from the chat it already subscribes
+// to, with no separate query/store/hydrator
+// (docs/design/sidebar-status-backend-wiring.md). These fields are owner-only;
+// chats.getById/getPublicById strip them from non-owner reads.
+//
+// `queued`/`running`/`streaming` map to the live spinner (only the run-start
+// claim ever writes them, inline below — `queued` is never persisted); the
+// terminal arms clear the live phase, and `completed`/`failed` also stamp the
+// Phase-2 mirror. Patching `liveRunStatus: undefined` removes the field (Convex
+// `patch` semantics) — that is the "clear."
+function chatStatusProjection(
+  status: GenerationRunStatus,
+  now: number
+): Partial<Doc<"chats">> {
+  switch (status) {
+    case "queued":
+    case "running":
+    case "streaming":
+      return { liveRunStatus: "streaming" }
+    case "awaiting_approval":
+      return { liveRunStatus: "awaiting" }
+    case "completed":
+      return {
+        liveRunStatus: undefined,
+        lastRunEndedAt: now,
+        lastRunStatus: "completed",
+      }
+    case "failed":
+      return {
+        liveRunStatus: undefined,
+        lastRunEndedAt: now,
+        lastRunStatus: "failed",
+      }
+    case "aborted":
+      // User Stop / supersede — no signal; only clear the live phase.
+      return { liveRunStatus: undefined }
+  }
+}
+
+// Run-scoped guard: only the run that OWNS the chat's status slot (statusRunId)
+// may project. statusRunId is KEPT after a terminal, so a same-run
+// completed→failed convergence still applies; an OLDER run's late terminal is a
+// no-op once a newer run has claimed the slot. Convex mutations are
+// transactional, so this read-guard-then-patch is race-free.
+async function projectRunStatusToChat(
+  ctx: MutationCtx,
+  run: Doc<"generationRuns">,
+  status: GenerationRunStatus,
+  now: number
+) {
+  const chat = await ctx.db.get(run.chatId)
+  if (!chat || chat.statusRunId !== run._id) return // a newer run owns the row → skip
+  await ctx.db.patch(run.chatId, chatStatusProjection(status, now))
+}
+
 // Applies a transition verdict for the terminal-close paths (fail/abort/
 // supersede): the message half (stamp / keep-stub / delete + reselect /
 // restore-completed), then the run's shared terminal field set. Returns the
@@ -457,6 +514,11 @@ async function applyLifecycleVerdict(
     ...(verdict.run.clearActiveStream ? { activeStreamId: undefined } : {}),
     assistantMessageId,
   })
+
+  // Mirror the terminal phase onto the chat row (fail/abort/supersede all reach
+  // here). Guarded by statusRunId, so a superseded/older run can't clear a newer
+  // run's live spinner.
+  await projectRunStatusToChat(ctx, run, verdict.run.status, now)
 
   return assistantMessageId
 }
@@ -1376,7 +1438,16 @@ export async function prepareGenerationForChat(
     activeStreamId: assistantMessageId,
     updatedAt: now,
   })
-  await ctx.db.patch(args.chatId, { updatedAt: now })
+  // Claim the chat's status slot for this run (run start → live spinner). This
+  // runs AFTER closeSupersededGenerationsForChat above, so the new run owns the
+  // slot; the run-scoped guard then makes any older run's late terminal a no-op.
+  // Direct write (not projectRunStatusToChat): claiming SETS statusRunId, so it
+  // must not be gated on already owning the slot.
+  await ctx.db.patch(args.chatId, {
+    updatedAt: now,
+    liveRunStatus: "streaming",
+    statusRunId: runId,
+  })
 
   const modelHistory =
     preparedModelHistory ??
@@ -1571,6 +1642,10 @@ export async function markGenerationRunCompletedForChat(
     failedToolCalls: args.failedToolCalls,
     activeStreamId: undefined,
   })
+  // Completion patches the run directly (not via applyLifecycleVerdict), so the
+  // projection is hooked here. verdict.run.status is "completed", or
+  // "awaiting_approval" when the finish still has pending approvals.
+  await projectRunStatusToChat(ctx, run, verdict.run.status, now)
 }
 
 export const markGenerationRunFailed = ownedGenerationRunMutation({
@@ -1738,6 +1813,9 @@ export async function createToolApprovalRequestForChat(
     status: verdict.message.status,
     updatedAt: now,
   })
+  // The approval-request pause patches the run directly (not via
+  // applyLifecycleVerdict), so project the awaiting phase here.
+  await projectRunStatusToChat(ctx, run, verdict.run.status, now)
 
   return approvalRequestId
 }
