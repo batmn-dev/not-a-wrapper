@@ -83,6 +83,27 @@ export default defineSchema({
     // hide chats from paginated history/sidebar windows). chats.create has
     // always set this; backfill: scripts/backfill-chat-updated-at.mjs.
     updatedAt: v.number(), // Unix timestamp — last activity (turn start)
+    // --- Sidebar status projection (docs/design/sidebar-status-backend-wiring.md)
+    // A few run-lifecycle fields mirrored onto the chat doc so each sidebar row
+    // derives its indicator from the chat it already subscribes to — no separate
+    // query/store/hydrator. All five are OWNER-ONLY: they ride a doc public reads
+    // return, so chats.getById/getPublicById strip them for non-owners.
+    // Live phase of the chat's current run; set at start/awaiting, cleared at the
+    // terminal transition. — Phase 1
+    liveRunStatus: v.optional(
+      v.union(v.literal("streaming"), v.literal("awaiting"))
+    ),
+    // The run that currently owns this chat's projected status. Set at run start;
+    // every later projection applies only if the terminating run IS this one, so
+    // an older run's late terminal can't clobber a newer run's row. — Phase 1
+    statusRunId: v.optional(v.id("generationRuns")),
+    // Last *signaling* terminal outcome (completed → unread / failed → error) and
+    // the owner's read cursor. aborted/superseded carry no signal. — Phase 2
+    lastRunEndedAt: v.optional(v.number()),
+    lastRunStatus: v.optional(
+      v.union(v.literal("completed"), v.literal("failed"))
+    ),
+    lastReadAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .index("by_user_pinned", ["userId", "pinned"])
