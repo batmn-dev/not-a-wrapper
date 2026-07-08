@@ -42,9 +42,9 @@ beforeAll(async () => {
     IS_REACT_ACT_ENVIRONMENT: true,
   })
 
-  const module = await import("./sidebar-chat-status")
-  deriveChatRowStatus = module.deriveChatRowStatus
-  useMarkChatReadOnView = module.useMarkChatReadOnView
+  const sidebarStatusModule = await import("./sidebar-chat-status")
+  deriveChatRowStatus = sidebarStatusModule.deriveChatRowStatus
+  useMarkChatReadOnView = sidebarStatusModule.useMarkChatReadOnView
 })
 
 afterAll(() => {
