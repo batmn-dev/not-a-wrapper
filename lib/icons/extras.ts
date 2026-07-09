@@ -8,7 +8,7 @@ import {
   RiExpandLeftLine,
   RiPushpinLine,
   RiStopFill,
-  RiUnpinLine,
+  RiUnpinFill,
   type RemixiconComponentType,
 } from "@remixicon/react"
 import { createElement, forwardRef } from "react"
@@ -48,7 +48,7 @@ const StopBulkRoundedIcon = createRemixIconAlias(
   RiStopFill,
   "StopBulkRoundedIcon"
 )
-const PinOff = createRemixIconAlias(RiUnpinLine, "PinOff")
+const PinOff = createRemixIconAlias(RiUnpinFill, "PinOff")
 const PinOffIcon = PinOff
 
 export {

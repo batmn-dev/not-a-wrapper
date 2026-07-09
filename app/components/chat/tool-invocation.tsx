@@ -10,7 +10,6 @@ import {
 } from "@/lib/tools/ui-metadata"
 import { cn } from "@/lib/utils"
 import {
-  RiArrowDownSLine,
   RiCheckLine,
   RiCloseLine,
   RiCodeLine,
@@ -24,8 +23,9 @@ import {
 } from "@remixicon/react"
 import type { ToolUIPart } from "ai"
 import { getStaticToolName } from "ai"
-import { AnimatePresence, motion } from "framer-motion"
 import { useMemo, useRef, useState } from "react"
+import { DisclosureCard } from "./disclosure-card"
+import { deriveToolChipStatus, StatusChip } from "./status-chip"
 
 type ToolInvocationProps = {
   toolInvocations: ToolUIPart[]
@@ -50,12 +50,6 @@ type ToolApprovalHandler = (
   approved: boolean,
   reason?: string
 ) => Promise<void> | void
-
-const TRANSITION = {
-  type: "spring",
-  duration: 0.2,
-  bounce: 0,
-} as const
 
 /** Maps built-in tool names to human-readable display names and icons */
 const BUILTIN_TOOL_DISPLAY: Record<
@@ -203,7 +197,6 @@ export function ToolInvocation({
   defaultOpen = false,
   onToolApproval,
 }: ToolInvocationProps) {
-  const [isExpanded, setIsExpanded] = useState(defaultOpen)
   const { byName, byCallId } = useMemo(
     () => getToolMetadataMaps(metadata),
     [metadata]
@@ -245,16 +238,10 @@ export function ToolInvocation({
 
   return (
     <div className="mb-10">
-      <div className="border-border flex flex-col gap-0 overflow-hidden rounded-md border">
-        <button
-          onClick={(e) => {
-            e.preventDefault()
-            setIsExpanded(!isExpanded)
-          }}
-          type="button"
-          className="hover:bg-accent flex w-full flex-row items-center rounded-t-md px-3 py-2 transition-colors"
-        >
-          <div className="flex flex-1 flex-row items-center gap-2 text-left text-base">
+      <DisclosureCard
+        defaultOpen={defaultOpen}
+        header={
+          <>
             <Icon
               icon={RiToolsLine}
               slotSize={16}
@@ -264,54 +251,29 @@ export function ToolInvocation({
             <div className="bg-secondary text-secondary-foreground rounded-full px-1.5 py-0.5 font-mono text-xs">
               {uniqueToolIds.length}
             </div>
-          </div>
-          <Icon
-            icon={RiArrowDownSLine}
-            slotSize={16}
-            className={cn(
-              "h-4 w-4 transition-transform",
-              isExpanded ? "rotate-180 transform" : ""
-            )}
-          />
-        </button>
+          </>
+        }
+      >
+        <div className="space-y-2">
+          {uniqueToolIds.map((toolId) => {
+            const toolInvocationsForId = groupedTools[toolId]
 
-        <AnimatePresence initial={false}>
-          {isExpanded && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={TRANSITION}
-              className="overflow-hidden"
-            >
-              <div className="px-3 pt-3 pb-3">
-                <div className="space-y-2">
-                  {uniqueToolIds.map((toolId) => {
-                    const toolInvocationsForId = groupedTools[toolId]
+            if (!toolInvocationsForId?.length) return null
 
-                    if (!toolInvocationsForId?.length) return null
-
-                    return (
-                      <div
-                        key={toolId}
-                        className="pb-2 last:border-0 last:pb-0"
-                      >
-                        <SingleToolView
-                          toolInvocations={toolInvocationsForId}
-                          metadataByName={byName}
-                          metadataByCallId={byCallId}
-                          turnActive={turnActive}
-                          onToolApproval={onToolApproval}
-                        />
-                      </div>
-                    )
-                  })}
-                </div>
+            return (
+              <div key={toolId} className="pb-2 last:border-0 last:pb-0">
+                <SingleToolView
+                  toolInvocations={toolInvocationsForId}
+                  metadataByName={byName}
+                  metadataByCallId={byCallId}
+                  turnActive={turnActive}
+                  onToolApproval={onToolApproval}
+                />
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+            )
+          })}
+        </div>
+      </DisclosureCard>
     </div>
   )
 }
@@ -437,7 +399,6 @@ function SingleToolCard({
   className?: string
   onToolApproval?: ToolApprovalHandler
 }) {
-  const [isExpanded, setIsExpanded] = useState(defaultOpen)
   const [isSubmittingApproval, setIsSubmittingApproval] = useState(false)
   const isSubmittingApprovalRef = useRef(false)
   const { state, toolCallId } = toolData
@@ -675,21 +636,11 @@ function SingleToolCard({
   }
 
   return (
-    <div
-      className={cn(
-        "border-border flex flex-col gap-0 overflow-hidden rounded-md border",
-        className
-      )}
-    >
-      <button
-        onClick={(e) => {
-          e.preventDefault()
-          setIsExpanded(!isExpanded)
-        }}
-        type="button"
-        className="hover:bg-accent flex w-full flex-row items-center rounded-t-md px-3 py-2 transition-colors"
-      >
-        <div className="flex flex-1 flex-row items-center gap-2 text-left text-base">
+    <DisclosureCard
+      defaultOpen={defaultOpen}
+      className={className}
+      header={
+        <>
           <ToolInvocationIcon
             iconId={iconId}
             size={16}
@@ -712,270 +663,177 @@ function SingleToolCard({
               </span>
             )}
           </div>
-          <AnimatePresence mode="popLayout" initial={false}>
-            {isAwaitingApproval ? (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
-                animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
-                exit={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
-                transition={{ duration: 0.15 }}
-                key="approval"
-              >
-                <div className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
-                  Review
-                </div>
-              </motion.div>
-            ) : isLoading ? (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
-                animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
-                exit={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
-                transition={{ duration: 0.15 }}
-                key="loading"
-              >
-                <div className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400">
-                  <Icon
-                    icon={RiLoader4Line}
-                    slotSize={12}
-                    className="mr-1 animate-spin"
-                  />
-                  Running
-                </div>
-              </motion.div>
-            ) : isStopped ? (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
-                animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
-                exit={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
-                transition={{ duration: 0.15 }}
-                key="stopped"
-              >
-                <div className="border-border bg-muted text-muted-foreground inline-flex items-center rounded-full border px-1.5 py-0.5 text-xs">
-                  Stopped
-                </div>
-              </motion.div>
-            ) : isError ? (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
-                animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
-                exit={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
-                transition={{ duration: 0.15 }}
-                key="error"
-              >
-                <div className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-xs text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
-                  <Icon icon={RiCloseLine} slotSize={12} className="mr-1" />
-                  Failed
-                </div>
-              </motion.div>
-            ) : isApprovalResponded && approvalResponse?.approved === false ? (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
-                animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
-                exit={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
-                transition={{ duration: 0.15 }}
-                key="denied"
-              >
-                <div className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-xs text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
-                  <Icon icon={RiCloseLine} slotSize={12} className="mr-1" />
-                  Denied
-                </div>
-              </motion.div>
-            ) : (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
-                animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
-                exit={{ opacity: 0, scale: 0.9, filter: "blur(2px)" }}
-                transition={{ duration: 0.15 }}
-                key="completed"
-              >
-                <div className="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-1.5 py-0.5 text-xs text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400">
-                  <Icon icon={RiCheckLine} slotSize={12} className="mr-1" />
-                  Completed
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-        <Icon
-          icon={RiArrowDownSLine}
-          slotSize={16}
-          className={cn(
-            "h-4 w-4 transition-transform",
-            isExpanded ? "rotate-180 transform" : ""
-          )}
-        />
-      </button>
+          <StatusChip
+            status={deriveToolChipStatus({
+              isAwaitingApproval,
+              isLoading,
+              isStopped,
+              isError,
+              isDenied: Boolean(
+                isApprovalResponded && approvalResponse?.approved === false
+              ),
+            })}
+          />
+        </>
+      }
+    >
+      <div className="space-y-3">
+        {/* Arguments section */}
+        {args && Object.keys(args).length > 0 && (
+          <div>
+            <div className="text-muted-foreground mb-1 text-xs font-medium">
+              Arguments
+            </div>
+            <div className="bg-background rounded border p-2 text-sm">
+              {formattedArgs}
+            </div>
+          </div>
+        )}
 
-      <AnimatePresence initial={false}>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={TRANSITION}
-            className="overflow-hidden"
-          >
-            <div className="space-y-3 px-3 pt-3 pb-3">
-              {/* Arguments section */}
-              {args && Object.keys(args).length > 0 && (
-                <div>
-                  <div className="text-muted-foreground mb-1 text-xs font-medium">
-                    Arguments
-                  </div>
-                  <div className="bg-background rounded border p-2 text-sm">
-                    {formattedArgs}
-                  </div>
-                </div>
-              )}
-
-              {isAwaitingApproval && approvalId && (
-                <div>
-                  <div className="text-muted-foreground mb-1 text-xs font-medium">
-                    Approval required
-                  </div>
-                  <div className="bg-background rounded border p-2 text-sm">
-                    <div className="text-muted-foreground mb-2">
-                      Review this tool call before it runs.
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        className="inline-flex h-8 items-center rounded-md border border-green-200 bg-green-50 px-3 text-sm font-medium text-green-700 transition-colors hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400 dark:hover:bg-green-950/50"
-                        disabled={!onToolApproval || isSubmittingApproval}
-                        onClick={(event) => {
-                          event.preventDefault()
-                          void submitToolApproval(true)
-                        }}
-                      >
-                        Approve
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex h-8 items-center rounded-md border border-red-200 bg-red-50 px-3 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50"
-                        disabled={!onToolApproval || isSubmittingApproval}
-                        onClick={(event) => {
-                          event.preventDefault()
-                          void submitToolApproval(false, "Denied by user")
-                        }}
-                      >
-                        Deny
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {isApprovalResponded && approvalResponse?.approved === false && (
-                <div>
-                  <div className="text-muted-foreground mb-1 text-xs font-medium">
-                    Approval denied
-                  </div>
-                  <div className="bg-background rounded border p-2 text-sm">
-                    {approvalResponse.reason || "Denied by user"}
-                  </div>
-                </div>
-              )}
-
-              {/* Result section */}
-              {isCompleted && (
-                <div>
-                  <div className="text-muted-foreground mb-1 text-xs font-medium">
-                    Result
-                  </div>
-                  <div className="bg-background max-h-60 overflow-auto rounded border p-2 text-sm">
-                    {parseError ? (
-                      <div className="text-red-500">{parseError}</div>
-                    ) : (
-                      renderResults()
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {(source ||
-                serviceName ||
-                typeof estimatedCostPer1k === "number" ||
-                typeof readOnly === "boolean" ||
-                typeof destructive === "boolean" ||
-                typeof idempotent === "boolean" ||
-                typeof openWorld === "boolean") && (
-                <div>
-                  <div className="text-muted-foreground mb-1 text-xs font-medium">
-                    Tool info
-                  </div>
-                  <div className="bg-background space-y-1 rounded border p-2 text-sm">
-                    {source && (
-                      <div>
-                        <span className="text-muted-foreground font-medium">
-                          Source:
-                        </span>{" "}
-                        {formatSource(source)}
-                      </div>
-                    )}
-                    {serviceName && (
-                      <div>
-                        <span className="text-muted-foreground font-medium">
-                          Service:
-                        </span>{" "}
-                        {serviceName}
-                      </div>
-                    )}
-                    {typeof estimatedCostPer1k === "number" && (
-                      <div>
-                        <span className="text-muted-foreground font-medium">
-                          Estimated cost:
-                        </span>{" "}
-                        ${estimatedCostPer1k.toFixed(2)} / 1k calls
-                      </div>
-                    )}
-                    {typeof readOnly === "boolean" && (
-                      <div>
-                        <span className="text-muted-foreground font-medium">
-                          Read-only:
-                        </span>{" "}
-                        {readOnly ? "Yes" : "No"}
-                      </div>
-                    )}
-                    {typeof destructive === "boolean" && (
-                      <div>
-                        <span className="text-muted-foreground font-medium">
-                          Destructive:
-                        </span>{" "}
-                        {destructive ? "Yes" : "No"}
-                      </div>
-                    )}
-                    {typeof idempotent === "boolean" && (
-                      <div>
-                        <span className="text-muted-foreground font-medium">
-                          Idempotent:
-                        </span>{" "}
-                        {idempotent ? "Yes" : "No"}
-                      </div>
-                    )}
-                    {typeof openWorld === "boolean" && (
-                      <div>
-                        <span className="text-muted-foreground font-medium">
-                          Open-world:
-                        </span>{" "}
-                        {openWorld ? "Yes" : "No"}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Tool call ID */}
-              <div className="text-muted-foreground flex items-center justify-between text-xs">
-                <div className="flex items-center">
-                  <Icon icon={RiCodeLine} slotSize={12} className="mr-1" />
-                  Tool Call ID:{" "}
-                  <span className="ml-1 font-mono">{toolCallId}</span>
-                </div>
+        {isAwaitingApproval && approvalId && (
+          <div>
+            <div className="text-muted-foreground mb-1 text-xs font-medium">
+              Approval required
+            </div>
+            <div className="bg-background rounded border p-2 text-sm">
+              <div className="text-muted-foreground mb-2">
+                Review this tool call before it runs.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center rounded-md border border-green-200 bg-green-50 px-3 text-sm font-medium text-green-700 transition-colors hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400 dark:hover:bg-green-950/50"
+                  disabled={!onToolApproval || isSubmittingApproval}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    void submitToolApproval(true)
+                  }}
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center rounded-md border border-red-200 bg-red-50 px-3 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50"
+                  disabled={!onToolApproval || isSubmittingApproval}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    void submitToolApproval(false, "Denied by user")
+                  }}
+                >
+                  Deny
+                </button>
               </div>
             </div>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
-    </div>
+
+        {isApprovalResponded && approvalResponse?.approved === false && (
+          <div>
+            <div className="text-muted-foreground mb-1 text-xs font-medium">
+              Approval denied
+            </div>
+            <div className="bg-background rounded border p-2 text-sm">
+              {approvalResponse.reason || "Denied by user"}
+            </div>
+          </div>
+        )}
+
+        {/* Result section */}
+        {isCompleted && (
+          <div>
+            <div className="text-muted-foreground mb-1 text-xs font-medium">
+              Result
+            </div>
+            <div className="bg-background max-h-60 overflow-auto rounded border p-2 text-sm">
+              {parseError ? (
+                <div className="text-red-500">{parseError}</div>
+              ) : (
+                renderResults()
+              )}
+            </div>
+          </div>
+        )}
+
+        {(source ||
+          serviceName ||
+          typeof estimatedCostPer1k === "number" ||
+          typeof readOnly === "boolean" ||
+          typeof destructive === "boolean" ||
+          typeof idempotent === "boolean" ||
+          typeof openWorld === "boolean") && (
+          <div>
+            <div className="text-muted-foreground mb-1 text-xs font-medium">
+              Tool info
+            </div>
+            <div className="bg-background space-y-1 rounded border p-2 text-sm">
+              {source && (
+                <div>
+                  <span className="text-muted-foreground font-medium">
+                    Source:
+                  </span>{" "}
+                  {formatSource(source)}
+                </div>
+              )}
+              {serviceName && (
+                <div>
+                  <span className="text-muted-foreground font-medium">
+                    Service:
+                  </span>{" "}
+                  {serviceName}
+                </div>
+              )}
+              {typeof estimatedCostPer1k === "number" && (
+                <div>
+                  <span className="text-muted-foreground font-medium">
+                    Estimated cost:
+                  </span>{" "}
+                  ${estimatedCostPer1k.toFixed(2)} / 1k calls
+                </div>
+              )}
+              {typeof readOnly === "boolean" && (
+                <div>
+                  <span className="text-muted-foreground font-medium">
+                    Read-only:
+                  </span>{" "}
+                  {readOnly ? "Yes" : "No"}
+                </div>
+              )}
+              {typeof destructive === "boolean" && (
+                <div>
+                  <span className="text-muted-foreground font-medium">
+                    Destructive:
+                  </span>{" "}
+                  {destructive ? "Yes" : "No"}
+                </div>
+              )}
+              {typeof idempotent === "boolean" && (
+                <div>
+                  <span className="text-muted-foreground font-medium">
+                    Idempotent:
+                  </span>{" "}
+                  {idempotent ? "Yes" : "No"}
+                </div>
+              )}
+              {typeof openWorld === "boolean" && (
+                <div>
+                  <span className="text-muted-foreground font-medium">
+                    Open-world:
+                  </span>{" "}
+                  {openWorld ? "Yes" : "No"}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Tool call ID */}
+        <div className="text-muted-foreground flex items-center justify-between text-xs">
+          <div className="flex items-center">
+            <Icon icon={RiCodeLine} slotSize={12} className="mr-1" />
+            Tool Call ID: <span className="ml-1 font-mono">{toolCallId}</span>
+          </div>
+        </div>
+      </div>
+    </DisclosureCard>
   )
 }

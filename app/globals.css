@@ -308,6 +308,10 @@
   --color-info: var(--info);
   /* Warning/amber: "needs your attention" cue — sidebar "awaiting" status dot. */
   --color-warning: var(--warning);
+  /* Readable dark-amber companion for warning TEXT (the fill token is too light). */
+  --color-warning-foreground: var(--warning-foreground);
+  /* Success/green: "done" cue — completed tool-call status chip. */
+  --color-success: var(--success);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -387,6 +391,10 @@
   --info: oklch(0.623 0.214 259.815);
   /* Amber (~#f59e0b) — "needs your attention" cue. */
   --warning: oklch(0.769 0.188 70.08);
+  /* Dark amber (~amber-700) for readable chip TEXT; --warning stays a fill. */
+  --warning-foreground: oklch(0.52 0.13 65);
+  /* Green (~#16a34a) — "done"/success cue, dark enough to read as chip text. */
+  --success: oklch(0.55 0.14 160);
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
   --ring: oklch(0.705 0.015 286.067);
@@ -486,6 +494,10 @@
   --info: oklch(0.707 0.165 254.624);
   /* Brighter amber-400 (~#fbbf24) for the dark sidebar surface. */
   --warning: oklch(0.828 0.189 84.429);
+  /* Light amber (~amber-400) chip text on the dark tint. */
+  --warning-foreground: oklch(0.85 0.16 84);
+  /* Lighter green (~green-400) so success text reads on the dark tint. */
+  --success: oklch(0.75 0.17 160);
   --border: oklch(100% 0 0 / 8%);
   --input: oklch(0.39 0.006 286.033);
   --ring: oklch(0.442 0.017 285.786);
