@@ -301,14 +301,13 @@ export function MessageUser({
         </MessageContent>
       )}
       <MessageActions className="flex gap-0">
-        {/* Hover/focus reveal shared with the assistant footer so both surfaces
-            behave identically (see messageFooterRevealClassName). Scoped to
+        {/* Sent-message copy/edit actions reveal on hover or focus. Scoped to
             copy/edit only: the branch nav must stay visible without hover, or a
             fresh regenerate/edit gives no cue that versions now exist. */}
         <div className={cn("flex gap-0", messageFooterRevealClassName)}>
           <MessageActionButton
-            label="Copy text"
-            tooltip={copied ? "Copied!" : "Copy text"}
+            label="Copy Message"
+            tooltip={copied ? "Copied!" : "Copy Message"}
             onClick={copyToClipboard}
             icon={
               copied ? (

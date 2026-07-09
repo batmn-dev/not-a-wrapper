@@ -100,6 +100,7 @@ type ConversationProps = {
     newText: string
   ) => Promise<EditTurnResult | void> | EditTurnResult | void
   onReload: (messageId: string) => void
+  retryModelId?: string
   onQuote?: (text: string, messageId: string) => void
   onSelectBranch?: (messageId: string) => void
   isDurableChat?: boolean
@@ -126,6 +127,7 @@ export function Conversation({
   onDelete,
   onEdit,
   onReload,
+  retryModelId,
   onQuote,
   onSelectBranch,
   isDurableChat,
@@ -200,6 +202,7 @@ export function Conversation({
               onDelete={onDelete}
               onEdit={onEdit}
               onReload={generationActive ? undefined : onReload}
+              retryModelId={retryModelId}
               onSelectBranch={onSelectBranch}
               branch={turnBranch}
               status={messageStatus}
@@ -276,6 +279,7 @@ export function Conversation({
             onDelete={onDelete}
             onEdit={onEdit}
             onReload={undefined}
+            retryModelId={retryModelId}
             onSelectBranch={onSelectBranch}
             status="submitted"
             onQuote={onQuote}

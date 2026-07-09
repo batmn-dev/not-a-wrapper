@@ -29,6 +29,7 @@ type BaseMessageProps = {
     newText: string
   ) => Promise<EditTurnResult | void> | EditTurnResult | void
   onReload?: (messageId: string) => void
+  retryModelId?: string
   onSelectBranch?: (messageId: string) => void
   /** Branch descriptor to render for this message's turn (anchored on the user
    * message in conversation.tsx). Undefined for assistant messages. */
@@ -109,6 +110,7 @@ function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
   if (prev.className !== next.className) return false
   if (prev.isDurableChat !== next.isDurableChat) return false
   if (Boolean(prev.onReload) !== Boolean(next.onReload)) return false
+  if (prev.retryModelId !== next.retryModelId) return false
   if (
     prev.variant === "assistant" &&
     prev.onToolApproval !== next.onToolApproval
@@ -148,6 +150,7 @@ function MessageInner({
   view,
   onEdit,
   onReload,
+  retryModelId,
   onSelectBranch,
   branch,
   status,
@@ -190,6 +193,7 @@ function MessageInner({
         copied={copied}
         copyToClipboard={copyToClipboard}
         onReload={onReload}
+        retryModelId={retryModelId}
         isLast={isLast}
         view={view}
         status={status}

@@ -23,7 +23,7 @@ import ReactMarkdown, { Components } from "react-markdown"
 import rehypeKatex from "rehype-katex"
 import remarkBreaks from "remark-breaks"
 import remarkGfm from "remark-gfm"
-import remarkMath from "remark-math"
+import remarkMath, { type Options as RemarkMathOptions } from "remark-math"
 import remarkParse from "remark-parse"
 import { unified } from "unified"
 import { ButtonCopy } from "../common/button-copy"
@@ -37,10 +37,14 @@ export type MarkdownProps = {
   components?: Partial<Components>
 }
 
+const REMARK_MATH_OPTIONS = {
+  singleDollarTextMath: false,
+} satisfies RemarkMathOptions
+
 const markdownProcessor = unified()
   .use(remarkParse)
   .use(remarkGfm)
-  .use(remarkMath)
+  .use(remarkMath, REMARK_MATH_OPTIONS)
 
 function parseMarkdownIntoBlocks(markdown: string): string[] {
   const tree = markdownProcessor.parse(markdown)
@@ -128,7 +132,7 @@ const MemoizedMarkdownBlock = memo(
         remarkPlugins={[
           remarkGfm,
           remarkBreaks,
-          remarkMath,
+          [remarkMath, REMARK_MATH_OPTIONS],
           remarkUnwrapLinkParens,
         ]}
         rehypePlugins={[rehypeKatex]}

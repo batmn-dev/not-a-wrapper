@@ -121,9 +121,8 @@ const MessageActions = ({
 )
 
 /**
- * Shared reveal styling for message footer action rows (assistant + user) so
- * the hover effect is identical across both surfaces. Compose it into a
- * footer's className alongside that surface's own layout classes.
+ * Hover/focus reveal styling for sent-message footer actions. Compose it into
+ * the user footer's className alongside that surface's own layout classes.
  *
  * The controls stay mounted and hit-testable — `pointer-events-auto` so the
  * cursor resolves to `pointer` the instant it's over a button — and fade in

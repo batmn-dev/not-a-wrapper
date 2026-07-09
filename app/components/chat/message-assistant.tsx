@@ -8,7 +8,6 @@ import {
   Message,
   MessageActions,
   MessageContent,
-  messageFooterRevealClassName,
 } from "@/components/ui/message"
 import { SystemMessage } from "@/components/ui/system-message"
 import {
@@ -19,9 +18,10 @@ import {
 } from "@/lib/chat-messages/assistant-turn"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { getDurableError } from "@/lib/chat-messages/metadata"
+import { getModelInfo } from "@/lib/models"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
-import { RiCheckLine, RiFileCopyLine, RiRefreshLine } from "@remixicon/react"
+import { RiCheckLine, RiFileCopyLine, RiLoopRightLine } from "@remixicon/react"
 import { useCallback, useRef, useState } from "react"
 import {
   useActivityPanelActions,
@@ -45,6 +45,7 @@ type MessageAssistantProps = {
   copied?: boolean
   copyToClipboard?: () => void
   onReload?: (messageId: string) => void
+  retryModelId?: string
   status?: DurableMessageStatus | "ready" | "error"
   className?: string
   messageId: string
@@ -67,6 +68,7 @@ export function MessageAssistant({
   copied,
   copyToClipboard,
   onReload,
+  retryModelId,
   status,
   className,
   messageId,
@@ -80,6 +82,8 @@ export function MessageAssistant({
   // Regeneration is a server-owned Chat turn, available only on a durable
   // chat. Matches the turn-controller precondition. See CONTEXT.md "Chat turn".
   const canRegenerate = Boolean(onReload) && Boolean(isDurableChat)
+  const retryModelName =
+    getModelInfo(retryModelId ?? "")?.name ?? retryModelId ?? "selected model"
 
   const contentNullOrEmpty = children === null || children === ""
   const isLastStreaming = status === "streaming" && isLast
@@ -332,24 +336,21 @@ export function MessageAssistant({
               <MessageActions
                 className={cn(
                   "-ml-2 min-h-8 gap-0 pointer-coarse:min-h-10",
-                  didStreamInSession
-                    ? [
-                        "pointer-events-auto",
-                        "[mask-image:linear-gradient(to_right,black_33%,transparent_66%)]",
-                        "[mask-size:300%_100%]",
-                        "motion-safe:[animation:mask-reveal_1.5s_ease_forwards]",
-                        "motion-reduce:[mask-image:none]",
-                      ]
-                    : // Shared hover reveal — identical to the user footer.
-                      messageFooterRevealClassName
+                  didStreamInSession && [
+                    "pointer-events-auto",
+                    "[mask-image:linear-gradient(to_right,black_33%,transparent_66%)]",
+                    "[mask-size:300%_100%]",
+                    "motion-safe:[animation:mask-reveal_1.5s_ease_forwards]",
+                    "motion-reduce:[mask-image:none]",
+                  ]
                 )}
               >
                 {/* Branch nav lives on the user message (the turn anchor); see
                     conversation.tsx + message-user.tsx. Assistant messages
                     intentionally render no branch control. */}
                 <MessageActionButton
-                  label="Copy text"
-                  tooltip={copied ? "Copied!" : "Copy text"}
+                  label="Copy Response"
+                  tooltip={copied ? "Copied!" : "Copy Response"}
                   onClick={copyToClipboard}
                   icon={
                     copied ? (
@@ -361,10 +362,18 @@ export function MessageAssistant({
                 />
                 {canRegenerate ? (
                   <MessageActionButton
-                    label="Regenerate"
+                    label={`Try again with ${retryModelName}`}
+                    tooltip={
+                      <span className="flex flex-col items-center text-center leading-tight">
+                        <span className="font-medium">Try again...</span>
+                        <span className="text-background/70">
+                          Using {retryModelName}
+                        </span>
+                      </span>
+                    }
                     delay={0}
                     onClick={() => onReload?.(messageId)}
-                    icon={<Icon icon={RiRefreshLine} slotSize={20} />}
+                    icon={<Icon icon={RiLoopRightLine} slotSize={20} />}
                   />
                 ) : null}
                 {/* Trailing sources badge (reference: last child of the

@@ -27,6 +27,7 @@ vi.mock("./message-assistant", () => ({
     children: React.ReactNode
     messageId: string
     onReload?: (messageId: string) => void
+    retryModelId?: string
     onToolApproval?: (
       approvalId: string,
       approved: boolean,
@@ -91,6 +92,7 @@ describe("Message memoization", () => {
   function renderMessage({
     onToolApproval = vi.fn(),
     onReload,
+    retryModelId,
   }: {
     onToolApproval?: (
       approvalId: string,
@@ -98,6 +100,7 @@ describe("Message memoization", () => {
       reason?: string
     ) => Promise<void> | void
     onReload?: (messageId: string) => void
+    retryModelId?: string
   } = {}) {
     if (!container) {
       container = document.createElement("div")
@@ -114,6 +117,7 @@ describe("Message memoization", () => {
           onDelete={() => {}}
           onEdit={() => {}}
           onReload={onReload}
+          retryModelId={retryModelId}
           onToolApproval={onToolApproval}
         >
           Approve this tool
@@ -176,6 +180,13 @@ describe("Message memoization", () => {
     })
 
     expect(secondReloadHandler).toHaveBeenCalledWith("assistant-1")
+  })
+
+  it("updates the assistant retry model when only the selected model changes", () => {
+    renderMessage({ retryModelId: "gpt-5.4-mini" })
+    renderMessage({ retryModelId: "gpt-5.5" })
+
+    expect(lastAssistantProps.current.retryModelId).toBe("gpt-5.5")
   })
 })
 

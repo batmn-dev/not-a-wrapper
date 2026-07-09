@@ -6,6 +6,14 @@ import { Provider } from "./openproviders/types"
 
 export type { Provider } from "./openproviders/types"
 
+export type ApiKeySource = "platform" | "byok"
+export type ToolKeyMode = ApiKeySource
+
+export type ProviderApiKeyResolution = {
+  apiKey?: string
+  source?: ApiKeySource
+}
+
 /**
  * Check if user has an API key for a provider via Convex
  * Returns true if a key exists, false otherwise
@@ -66,28 +74,40 @@ export async function getUserKeyFromConvex(
 }
 
 /**
- * Get the effective API key for a provider
- * Checks user's key first (via Convex), then falls back to environment variable
- *
- * @param provider - The AI provider to get key for
- * @param token - Optional Convex auth token for fetching user keys
+ * Resolve the effective API key and its authoritative billing source.
+ * User BYOK takes precedence over the platform environment key.
  */
-export async function getEffectiveApiKey(
+export async function getEffectiveProviderApiKey(
   provider: Provider,
   token?: string
-): Promise<string | null> {
+): Promise<ProviderApiKeyResolution> {
   // Try user key first if token is provided
   if (token) {
     const userKey = await getUserKeyFromConvex(provider, token)
     if (userKey) {
-      return userKey
+      return { apiKey: userKey, source: "byok" }
     }
   }
 
   // Fall back to the provider's platform env key. The env-var NAME is a static
   // provider-SDK fact owned by the provider strategy (the same fact the model
   // factory and the 401 preflight used to each restate); resolution stays here.
-  return process.env[getProviderStrategy(provider).envVarName] || null
+  const platformKey = process.env[getProviderStrategy(provider).envVarName]
+  return platformKey
+    ? { apiKey: platformKey, source: "platform" }
+    : { apiKey: undefined, source: undefined }
+}
+
+/**
+ * Backwards-compatible key-only accessor. New provider runtimes should prefer
+ * `getEffectiveProviderApiKey` so they do not reconstruct credential provenance
+ * from whether a key string happens to exist.
+ */
+export async function getEffectiveApiKey(
+  provider: Provider,
+  token?: string
+): Promise<string | null> {
+  return (await getEffectiveProviderApiKey(provider, token)).apiKey ?? null
 }
 
 /**
@@ -115,7 +135,6 @@ export async function getUserKey(
 /** Tool provider IDs that can be stored in userKeys */
 export const TOOL_PROVIDERS = ["exa", "firecrawl"] as const
 export type ToolProvider = (typeof TOOL_PROVIDERS)[number]
-export type ToolKeyMode = "platform" | "byok"
 
 /** Maps tool provider IDs to their environment variable names */
 const TOOL_ENV_MAP: Record<ToolProvider, string> = {
