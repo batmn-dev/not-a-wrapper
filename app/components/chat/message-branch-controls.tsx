@@ -1,7 +1,6 @@
 "use client"
 
 import { Icon } from "@/components/ui/icon"
-import { MessageAction } from "@/components/ui/message"
 import {
   getMessageBranchInfo,
   isNavigableBranch,
@@ -10,6 +9,7 @@ import {
 } from "@/lib/chat-messages/branch"
 import { cn } from "@/lib/utils"
 import { RiArrowLeftSLine, RiArrowRightSLine } from "@remixicon/react"
+import { MessageActionButton } from "./message-action-button"
 
 /**
  * Resolve the typed branch descriptor for a message's metadata, returning it
@@ -47,35 +47,27 @@ export function MessageBranchControls({
       )}
       aria-label={`Branch ${currentBranch} of ${branch.total}`}
     >
-      <MessageAction tooltip="Previous branch" side="bottom" delay={0}>
-        <button
-          className="disabled:text-muted-foreground/40 flex h-8 w-8 items-center justify-center rounded-md bg-transparent disabled:pointer-events-none pointer-coarse:h-10 pointer-coarse:w-10"
-          aria-label="Previous branch"
-          disabled={!previousSibling}
-          onClick={() => {
-            if (previousSibling) onSelectBranch(previousSibling.messageId)
-          }}
-          type="button"
-        >
-          <Icon icon={RiArrowLeftSLine} slotSize={20} />
-        </button>
-      </MessageAction>
+      <MessageActionButton
+        label="Previous branch"
+        delay={0}
+        disabled={!previousSibling}
+        onClick={() => {
+          if (previousSibling) onSelectBranch(previousSibling.messageId)
+        }}
+        icon={<Icon icon={RiArrowLeftSLine} slotSize={20} />}
+      />
       <span className="tabular-nums">
         {currentBranch} / {branch.total}
       </span>
-      <MessageAction tooltip="Next branch" side="bottom" delay={0}>
-        <button
-          className="disabled:text-muted-foreground/40 flex h-8 w-8 items-center justify-center rounded-md bg-transparent disabled:pointer-events-none pointer-coarse:h-10 pointer-coarse:w-10"
-          aria-label="Next branch"
-          disabled={!nextSibling}
-          onClick={() => {
-            if (nextSibling) onSelectBranch(nextSibling.messageId)
-          }}
-          type="button"
-        >
-          <Icon icon={RiArrowRightSLine} slotSize={20} />
-        </button>
-      </MessageAction>
+      <MessageActionButton
+        label="Next branch"
+        delay={0}
+        disabled={!nextSibling}
+        onClick={() => {
+          if (nextSibling) onSelectBranch(nextSibling.messageId)
+        }}
+        icon={<Icon icon={RiArrowRightSLine} slotSize={20} />}
+      />
     </div>
   )
 }

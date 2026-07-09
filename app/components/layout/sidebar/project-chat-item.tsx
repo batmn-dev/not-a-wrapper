@@ -110,7 +110,6 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
       onClick={handleLinkClick}
       prefetch
       draggable={false}
-      title={displayTitle}
     >
       <div className="min-w-0 grow p-3">
         <h3 className="truncate font-medium text-balance">{displayTitle}</h3>

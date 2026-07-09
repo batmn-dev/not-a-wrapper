@@ -11,7 +11,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
 import {
-  MessageAction,
   MessageActions,
   Message as MessageContainer,
   MessageContent,
@@ -19,6 +18,7 @@ import {
 } from "@/components/ui/message"
 import { useScrollRoot } from "@/components/ui/scroll-root"
 import type { MessageBranchInfo } from "@/lib/chat-messages/branch"
+import type { EditTurnResult } from "@/lib/chat-turn/chat-turn-controller"
 import { cn } from "@/lib/utils"
 import {
   RiCheckLine,
@@ -30,7 +30,7 @@ import {
 } from "@remixicon/react"
 import Image from "next/image"
 import React, { useEffect, useRef, useState } from "react"
-import type { EditTurnResult } from "@/lib/chat-turn/chat-turn-controller"
+import { MessageActionButton } from "./message-action-button"
 import { MessageBranchControls } from "./message-branch-controls"
 
 // Attachment type for backward compatibility with v4 format
@@ -306,42 +306,31 @@ export function MessageUser({
             copy/edit only: the branch nav must stay visible without hover, or a
             fresh regenerate/edit gives no cue that versions now exist. */}
         <div className={cn("flex gap-0", messageFooterRevealClassName)}>
-          <MessageAction
+          <MessageActionButton
+            label="Copy text"
             tooltip={copied ? "Copied!" : "Copy text"}
-            side="bottom"
-          >
-            <button
-              className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-md bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
-              aria-label="Copy text"
-              onClick={copyToClipboard}
-              type="button"
-            >
-              {copied ? (
+            onClick={copyToClipboard}
+            icon={
+              copied ? (
                 <Icon icon={RiCheckLine} slotSize={20} />
               ) : (
                 <Icon icon={RiFileCopyLine} slotSize={20} />
-              )}
-            </button>
-          </MessageAction>
+              )
+            }
+          />
           {isDurableChat && (
-            <MessageAction
-              tooltip={isEditing ? "Cancel edit" : "Edit message"}
-              side="bottom"
+            <MessageActionButton
+              label={isEditing ? "Cancel edit" : "Edit message"}
               delay={0}
-            >
-              <button
-                className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-md bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
-                aria-label={isEditing ? "Cancel edit" : "Edit message"}
-                onClick={isEditing ? handleEditCancel : handleEditStart}
-                type="button"
-              >
-                {isEditing ? (
+              onClick={isEditing ? handleEditCancel : handleEditStart}
+              icon={
+                isEditing ? (
                   <Icon icon={RiPencilLine} slotSize={20} />
                 ) : (
                   <Icon icon={RiEditLine} slotSize={20} />
-                )}
-              </button>
-            </MessageAction>
+                )
+              }
+            />
           )}
         </div>
         {/* Branch nav trails the copy/edit actions on user messages, matching

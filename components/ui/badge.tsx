@@ -25,6 +25,13 @@ const badgeVariants = cva(
         // icons), 13px medium secondary label that keeps its color on hover.
         source:
           "group/source-badge gap-1.5 rounded-md border-0 bg-transparent px-3 py-1.5 text-[13px] text-muted-foreground hover:bg-accent/60",
+        // Soft-tint status family (token-driven): a light fill + colored text +
+        // faint border, in one visual language. failed/denied share `danger`.
+        info: "border-info/20 bg-info/10 text-info",
+        warning: "border-warning/30 bg-warning/10 text-warning-foreground",
+        success: "border-success/25 bg-success/10 text-success",
+        danger: "border-destructive/20 bg-destructive/10 text-destructive",
+        neutral: "border-border bg-muted text-muted-foreground",
       },
       size: {
         default: "",

@@ -6,7 +6,6 @@ import {
 } from "@/components/ui/loader"
 import {
   Message,
-  MessageAction,
   MessageActions,
   MessageContent,
   messageFooterRevealClassName,
@@ -30,6 +29,7 @@ import {
   useIsActivityPanelTurnOpen,
 } from "./activity/activity-panel-store"
 import { ActivityPanelTrigger } from "./activity/activity-panel-trigger"
+import { MessageActionButton } from "./message-action-button"
 import { QuoteButton } from "./quote-button"
 import { SearchImages } from "./search-images"
 import { SourcesBadge } from "./sources-badge"
@@ -347,34 +347,25 @@ export function MessageAssistant({
                 {/* Branch nav lives on the user message (the turn anchor); see
                     conversation.tsx + message-user.tsx. Assistant messages
                     intentionally render no branch control. */}
-                <MessageAction
+                <MessageActionButton
+                  label="Copy text"
                   tooltip={copied ? "Copied!" : "Copy text"}
-                  side="bottom"
-                >
-                  <button
-                    className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-md bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
-                    aria-label="Copy text"
-                    onClick={copyToClipboard}
-                    type="button"
-                  >
-                    {copied ? (
+                  onClick={copyToClipboard}
+                  icon={
+                    copied ? (
                       <Icon icon={RiCheckLine} slotSize={20} />
                     ) : (
                       <Icon icon={RiFileCopyLine} slotSize={20} />
-                    )}
-                  </button>
-                </MessageAction>
+                    )
+                  }
+                />
                 {canRegenerate ? (
-                  <MessageAction tooltip="Regenerate" side="bottom" delay={0}>
-                    <button
-                      className="text-muted-foreground flex h-8 w-8 items-center justify-center rounded-md bg-transparent pointer-coarse:h-10 pointer-coarse:w-10"
-                      aria-label="Regenerate"
-                      onClick={() => onReload?.(messageId)}
-                      type="button"
-                    >
-                      <Icon icon={RiRefreshLine} slotSize={20} />
-                    </button>
-                  </MessageAction>
+                  <MessageActionButton
+                    label="Regenerate"
+                    delay={0}
+                    onClick={() => onReload?.(messageId)}
+                    icon={<Icon icon={RiRefreshLine} slotSize={20} />}
+                  />
                 ) : null}
                 {/* Trailing sources badge (reference: last child of the
                     response-actions row). Settled turns only — while the turn
