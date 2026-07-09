@@ -173,8 +173,16 @@ describe("chat turn controller", () => {
     expect(local.events.indexOf("setMessages")).toBeLessThan(
       local.events.indexOf("resolveUserId")
     )
+    const optimisticMessage = local.getMessages()[0]
+    expect(optimisticMessage?.createdAt).toBeInstanceOf(Date)
     expect(local.adapters.sendMessage).toHaveBeenCalledWith(
-      { text: "Hello", files: undefined },
+      {
+        id: "optimistic-message",
+        role: "user",
+        parts: [{ type: "text", text: "Hello" }],
+        createdAt: optimisticMessage?.createdAt,
+        messageId: "optimistic-message",
+      },
       {
         body: {
           chatId: "chat-1",
@@ -187,7 +195,10 @@ describe("chat turn controller", () => {
         },
       }
     )
-    expect(local.getMessages()).toEqual([])
+    // The SDK replaces this row by messageId instead of removing/appending it;
+    // the exact Date identity survives into the dispatched live message.
+    expect(local.snapshots).toEqual([["optimistic-message"]])
+    expect(local.getMessages()).toEqual([optimisticMessage])
     expect(local.storeAdapters.cacheAndAddMessage).toHaveBeenCalledTimes(1)
     expect(onSuccess).toHaveBeenCalledWith("chat-1")
 
@@ -223,6 +234,64 @@ describe("chat turn controller", () => {
     expect(adapters.cleanupOptimisticAttachments).toHaveBeenCalledWith([
       { url: "blob:local-image" },
     ])
+  })
+
+  it("atomically hands off the optimistic timestamp and uploaded attachment parts", async () => {
+    const { adapters, controller, getMessages, snapshots, storeAdapters } =
+      createHarness()
+    adapters.handleFileUploads = vi.fn(async () => [
+      {
+        name: "notes.pdf",
+        contentType: "application/pdf",
+        url: "https://files.test/notes.pdf",
+        attachmentId: "attachment-1",
+      },
+    ])
+
+    await controller.runSendTurn({
+      text: "Read this",
+      submittedFiles: [{} as File],
+      optimisticAttachments: [
+        {
+          name: "notes.pdf",
+          contentType: "application/pdf",
+          url: "blob:local-notes",
+        },
+      ],
+    })
+
+    const optimisticMessage = getMessages()[0]
+    const dispatchedMessage = vi.mocked(adapters.sendMessage).mock.calls[0]?.[0]
+    expect(snapshots).toEqual([["optimistic-message"], ["optimistic-message"]])
+    expect(dispatchedMessage).toEqual({
+      id: "optimistic-message",
+      role: "user",
+      createdAt: optimisticMessage?.createdAt,
+      messageId: "optimistic-message",
+      parts: [
+        { type: "text", text: "Read this" },
+        {
+          type: "file",
+          filename: "notes.pdf",
+          mediaType: "application/pdf",
+          url: "https://files.test/notes.pdf",
+          attachmentId: "attachment-1",
+        },
+      ],
+    })
+    expect(adapters.cleanupOptimisticAttachments).toHaveBeenCalledWith([
+      { url: "blob:local-notes" },
+    ])
+    expect(storeAdapters.cacheAndAddMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "optimistic-message",
+        createdAt: optimisticMessage?.createdAt,
+        parts: expect.arrayContaining([
+          expect.objectContaining({ url: "https://files.test/notes.pdf" }),
+        ]),
+      }),
+      "chat-1"
+    )
   })
 
   it("removes optimistic state when no user id resolves", async () => {
@@ -269,7 +338,13 @@ describe("chat turn controller", () => {
     })
 
     expect(adapters.sendMessage).toHaveBeenCalledWith(
-      { text: "next prompt", files: undefined },
+      expect.objectContaining({
+        id: "optimistic-message",
+        role: "user",
+        parts: [{ type: "text", text: "next prompt" }],
+        createdAt: expect.any(Date),
+        messageId: "optimistic-message",
+      }),
       {
         body: expect.objectContaining({
           expectedVisibleMessageCount: 2,
@@ -337,7 +412,13 @@ describe("chat turn controller", () => {
     })
 
     expect(adapters.sendMessage).toHaveBeenCalledWith(
-      { text: "Try this", files: undefined },
+      expect.objectContaining({
+        id: "optimistic-message",
+        role: "user",
+        parts: [{ type: "text", text: "Try this" }],
+        createdAt: expect.any(Date),
+        messageId: "optimistic-message",
+      }),
       {
         body: {
           chatId: "chat-1",
