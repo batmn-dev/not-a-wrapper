@@ -260,7 +260,7 @@ async function runSendTurn(
   const optimisticId = (
     adapters.createOptimisticMessageId ?? createOptimisticMessageId
   )()
-  const optimisticMessage: ChatTurnMessage = {
+  const optimisticMessage = {
     id: optimisticId,
     role: "user",
     createdAt: (adapters.now ?? (() => new Date()))(),
@@ -273,7 +273,7 @@ async function runSendTurn(
         url: attachment.url,
       })),
     ],
-  }
+  } satisfies ChatTurnMessage
 
   adapters.setMessages((prev) => [...prev, optimisticMessage])
 
@@ -329,13 +329,13 @@ async function runSendTurn(
       }
     }
 
-    const dispatchedMessage: ChatTurnMessage = {
+    const dispatchedMessage = {
       ...optimisticMessage,
       parts: [
         { type: "text", text },
         ...(convertAttachmentsToFiles(attachments) ?? []),
       ],
-    }
+    } satisfies ChatTurnMessage
 
     if (submittedFiles.length > 0) {
       // Upload completion changes only the attachment parts on the row that is
