@@ -101,7 +101,7 @@ export function ByokSection() {
             Add your own API keys to unlock access to models.
           </p>
           <p className="text-muted-foreground text-sm text-pretty">
-            Your keys are stored securely with end-to-end encryption.
+            Your keys are encrypted before being stored.
           </p>
         </>
       }
@@ -110,6 +110,7 @@ export function ByokSection() {
         <button
           key={provider.id}
           type="button"
+          aria-pressed={selected}
           onClick={onSelect}
           className={cn(
             "relative flex aspect-square min-w-28 flex-col items-center justify-center gap-2 rounded-lg border p-4",
@@ -118,6 +119,7 @@ export function ByokSection() {
         >
           {hasKey && (
             <span className="bg-secondary absolute top-1 right-1 rounded-sm border-[1px] p-1">
+              <span className="sr-only">Key configured</span>
               <Icon
                 icon={RiKeyLine}
                 slotSize={14}

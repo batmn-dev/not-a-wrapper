@@ -76,7 +76,7 @@ export function ToolKeys() {
             over platform defaults.
           </p>
           <p className="text-muted-foreground mt-0.5 text-sm text-pretty">
-            Keys are stored securely with end-to-end encryption.
+            Keys are encrypted before being stored.
           </p>
         </>
       }
@@ -86,6 +86,7 @@ export function ToolKeys() {
           key={provider.id}
           type="button"
           disabled={!provider.available}
+          aria-pressed={provider.available ? selected : undefined}
           onClick={onSelect}
           className={cn(
             "relative flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors",

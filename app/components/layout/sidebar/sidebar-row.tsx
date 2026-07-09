@@ -109,6 +109,7 @@ export function SidebarRow({
               onClick={onSaveClick}
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-lg p-1"
               type="button"
+              aria-label="Save rename"
             >
               <Icon icon={RiCheckLine} slotSize={16} />
             </button>
@@ -116,6 +117,7 @@ export function SidebarRow({
               onClick={onCancelClick}
               className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-lg p-1"
               type="button"
+              aria-label="Cancel rename"
             >
               <Icon icon={RiCloseLine} slotSize={16} />
             </button>

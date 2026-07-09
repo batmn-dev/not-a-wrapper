@@ -89,6 +89,16 @@ export function useProviderKeys({
       return next
     })
 
+  const runSideEffect = (sideEffect: () => void | Promise<void>) => {
+    try {
+      void Promise.resolve(sideEffect()).catch(() => {
+        // Caller-owned refresh failures should not leave local secret/UI state dirty.
+      })
+    } catch {
+      // Caller-owned refresh failures should not leave local secret/UI state dirty.
+    }
+  }
+
   const saveMutation = useMutation({
     mutationFn: async ({
       provider,
@@ -111,7 +121,7 @@ export function useProviderKeys({
           ? `Your ${nameOf(provider)} ${noun} has been saved.`
           : `Your ${nameOf(provider)} ${noun} has been updated.`,
       })
-      await onSaved?.(provider, result)
+      runSideEffect(() => onSaved?.(provider, result))
       clearDraft(provider) // reset the field back to its masked state
     },
     onError: (
@@ -139,7 +149,7 @@ export function useProviderKeys({
         title: `${noun} deleted`,
         description: `Your ${nameOf(provider)} ${noun} has been deleted.`,
       })
-      await onDeleted?.(provider)
+      runSideEffect(() => onDeleted?.(provider))
       clearDraft(provider)
       setDeleteDialogOpen(false)
       setProviderToDelete("")

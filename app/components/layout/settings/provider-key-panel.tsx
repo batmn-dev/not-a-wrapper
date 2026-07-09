@@ -149,11 +149,14 @@ export function ProviderKeyPanel<P extends ProviderKeyConfig>({
                   disabled={keys.saving || keys.deleting}
                 >
                   {keys.saving ? (
-                    <Icon
-                      icon={RiLoader4Line}
-                      slotSize={16}
-                      className="animate-spin"
-                    />
+                    <>
+                      <Icon
+                        icon={RiLoader4Line}
+                        slotSize={16}
+                        className="mr-2 animate-spin"
+                      />
+                      Saving
+                    </>
                   ) : (
                     "Save"
                   )}
