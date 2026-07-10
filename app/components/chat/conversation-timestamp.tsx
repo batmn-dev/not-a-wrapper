@@ -50,6 +50,13 @@ function daysAgo(date: Date, now: Date, timeZone?: string): number {
   return localDayNumber(now, timeZone) - localDayNumber(date, timeZone)
 }
 
+function localYear(date: Date, timeZone?: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    timeZone,
+  }).format(date)
+}
+
 function capitalizeRelativeLabel(
   value: string,
   formatter: Intl.RelativeTimeFormat
@@ -215,7 +222,7 @@ export function formatConversationDate(
     month: "short",
     day: "numeric",
     timeZone,
-    ...(date.getFullYear() === now.getFullYear()
+    ...(localYear(date, timeZone) === localYear(now, timeZone)
       ? {}
       : { year: "numeric" as const }),
   }).format(date)

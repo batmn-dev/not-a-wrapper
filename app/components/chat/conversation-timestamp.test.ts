@@ -251,6 +251,17 @@ describe("conversation timestamp formatting", () => {
       "Dec 31, 2025"
     )
   })
+
+  it("compares date-only years in the requested timezone", () => {
+    expect(
+      formatConversationDate(
+        new Date("2027-01-01T04:59:00.000Z"),
+        new Date("2027-01-03T05:01:00.000Z"),
+        "en-US",
+        "America/New_York"
+      )
+    ).toBe("Dec 31, 2026")
+  })
 })
 
 describe("canonical timestamp reconciliation thresholds", () => {

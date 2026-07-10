@@ -62,6 +62,26 @@ describe("normalizeChatError", () => {
     })
   })
 
+  it("preserves the actionable setup message for a missing API key", () => {
+    expect(
+      normalizeChatError(
+        {
+          statusCode: 401,
+          code: "MISSING_API_KEY",
+          message:
+            "No API key configured for OpenAI. Please add your OpenAI API key in settings.",
+        },
+        { provider: "openai" }
+      )
+    ).toEqual({
+      code: "AUTHENTICATION_ERROR",
+      message:
+        "No API key configured for OpenAI. Please add your OpenAI API key in settings.",
+      retryable: false,
+      provider: "openai",
+    })
+  })
+
   it("marks rate limits retryable and preserves authoritative attribution", () => {
     expect(
       normalizeChatError(
@@ -74,6 +94,21 @@ describe("normalizeChatError", () => {
       retryable: true,
       provider: "anthropic",
       credentialSource: "byok",
+    })
+  })
+
+  it("does not expose an unclassified provider message", () => {
+    expect(
+      normalizeChatError(
+        new Error("upstream request failed for account acct_internal_123"),
+        { provider: "openai", credentialSource: "platform" }
+      )
+    ).toEqual({
+      code: "PROVIDER_ERROR",
+      message: "An error occurred. Please try again.",
+      retryable: true,
+      provider: "openai",
+      credentialSource: "platform",
     })
   })
 

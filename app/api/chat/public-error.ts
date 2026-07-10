@@ -185,6 +185,15 @@ export function normalizeChatError(
       : {}),
   }
 
+  if (codes.includes("missing_api_key")) {
+    return {
+      ...base,
+      code: "AUTHENTICATION_ERROR",
+      message: messages[0] ?? authenticationMessage(context),
+      retryable: false,
+    }
+  }
+
   if (
     statuses.includes(401) ||
     includesAny(codes, ["authentication", "unauthorized", "invalid_api_key"]) ||
@@ -240,7 +249,7 @@ export function normalizeChatError(
     return {
       ...base,
       code: "PROVIDER_ERROR",
-      message: fallbackMessage,
+      message: "An error occurred. Please try again.",
       retryable: true,
     }
   }
