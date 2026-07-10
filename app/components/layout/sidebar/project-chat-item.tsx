@@ -1,14 +1,13 @@
 "use client"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
-import { Icon } from "@/components/ui/icon"
+import { InlineRenameInput } from "@/components/ui/inline-rename-input"
 import { useSidebar } from "@/components/ui/sidebar"
 import { useInlineRename } from "@/hooks/use-inline-rename"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useSidebarChatStatus } from "@/lib/chat-store/status/sidebar-chat-status"
 import { Chat } from "@/lib/chat-store/types"
 import { cn } from "@/lib/utils"
-import { RiChat3Line, RiCheckLine, RiCloseLine } from "@remixicon/react"
 import Link from "next/link"
 import { useCallback, useMemo } from "react"
 import { SidebarItemMenu } from "./sidebar-item-menu"
@@ -26,16 +25,8 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
   const isMobile = useBreakpoint(768)
   const status = useSidebarChatStatus(chat)
 
-  const {
-    isEditing,
-    start,
-    inputRef,
-    containerRef,
-    inputProps,
-    onContainerClick,
-    onSaveClick,
-    onCancelClick,
-  } = useInlineRename(chat.title || "", (next) => updateTitle(chat.id, next))
+  const { isEditing, start, containerRef, inputProps, onContainerClick } =
+    useInlineRename(chat.title || "", (next) => updateTitle(chat.id, next))
 
   const handleLinkClick = useCallback(
     (e: React.MouseEvent) => {
@@ -67,33 +58,12 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
         onClick={onContainerClick}
         ref={containerRef}
       >
-        <div className="flex w-full items-center p-3">
-          <Icon
-            icon={RiChat3Line}
-            slotSize={16}
-            className="text-muted-foreground mr-3 flex-shrink-0"
-          />
-          <input
-            ref={inputRef}
+        <div className="flex w-full items-center p-3 text-base font-medium">
+          <InlineRenameInput
             {...inputProps}
-            className="text-primary flex-1 bg-transparent text-base font-medium focus:outline-none"
+            aria-label="Chat title"
+            className="w-full"
           />
-          <div className="ml-2 flex gap-1">
-            <button
-              onClick={onSaveClick}
-              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-6 items-center justify-center rounded-lg p-1"
-              type="button"
-            >
-              <Icon icon={RiCheckLine} slotSize={12} />
-            </button>
-            <button
-              onClick={onCancelClick}
-              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-6 items-center justify-center rounded-lg p-1"
-              type="button"
-            >
-              <Icon icon={RiCloseLine} slotSize={12} />
-            </button>
-          </div>
         </div>
       </div>
     )
@@ -112,7 +82,9 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
       draggable={false}
     >
       <div className="min-w-0 grow p-3">
-        <h3 className="truncate font-medium text-balance">{displayTitle}</h3>
+        <h3 className="truncate text-base font-medium text-balance">
+          {displayTitle}
+        </h3>
         <p className="text-muted-foreground mt-1 text-sm">
           {chat.updated_at
             ? formatDate(chat.updated_at)

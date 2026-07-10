@@ -1,11 +1,14 @@
 "use client"
 
+import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import type { ReasoningView } from "@/lib/chat-messages/assistant-turn"
-import { useEffect, useState } from "react"
+import { toCompletedDurationSeconds } from "@/lib/format-duration"
+import { useState } from "react"
 
 export type ReasoningPhase = {
   phase: "idle" | "thinking" | "complete"
   reasoningText: string
+  durationMs: number | undefined
   durationSeconds: number | undefined
   isReasoningStreaming: boolean
   isOpaqueReasoning: boolean
@@ -27,8 +30,8 @@ type UseReasoningPhaseParams = {
 type TimerState = {
   turnKey: string | undefined
   phase: ReasoningView["phase"]
-  displaySeconds: number
-  frozenSeconds: number
+  displayMs: number
+  frozenMs: number
 }
 
 /**
@@ -51,17 +54,17 @@ export function useReasoningPhase({
 
   // Client-side timer.
   // React 19 render-sync pattern: reset timer state when entering thinking.
-  // The interval in useEffect ticks every second while shouldRunTimer is true.
+  // The browser layout-sync interval ticks while shouldRunTimer is true.
   // When phase leaves "thinking", the interval stops and freezes the final
   // value into the state used by the next resume.
   const [timerState, setTimerState] = useState<TimerState>(() => ({
     turnKey,
     phase,
-    displaySeconds: 0,
-    frozenSeconds: 0,
+    displayMs: 0,
+    frozenMs: 0,
   }))
 
-  const shouldRunTimer = isLast && phase === "thinking"
+  const shouldRunTimer = isLast && reasoning.isStreaming
 
   // React 19 render-sync: restart the timer on a turn handoff. The phase
   // transition below cannot catch every handoff — the swap may render before
@@ -72,52 +75,50 @@ export function useReasoningPhase({
     setTimerState({
       turnKey,
       phase,
-      displaySeconds: 0,
-      frozenSeconds: 0,
+      displayMs: 0,
+      frozenMs: 0,
     })
   } else if (phase !== timerState.phase) {
     // Reset timer state when entering thinking phase. This fires only on a
     // genuine phase transition into "thinking" (idle/complete → thinking),
     // e.g. a same-turn regenerate — never during an isLast bounce where the
     // phase stays "thinking".
-    const resetSeconds = phase === "thinking" && isLast
+    const resetElapsed = phase === "thinking" && isLast
     setTimerState({
       turnKey,
       phase,
-      displaySeconds: resetSeconds ? 0 : timerState.displaySeconds,
-      frozenSeconds: resetSeconds ? 0 : timerState.frozenSeconds,
+      displayMs: resetElapsed ? 0 : timerState.displayMs,
+      frozenMs: resetElapsed ? 0 : timerState.frozenMs,
     })
   }
 
-  const tickedSeconds =
-    timerState.turnKey === turnKey ? timerState.displaySeconds : 0
+  const tickedMs = timerState.turnKey === turnKey ? timerState.displayMs : 0
 
   // The elapsed time used to anchor a new interval changes only when the timer
   // stops/resumes or is synchronously reset. It does not change on every tick,
   // so it is safe to depend on without restarting the interval every second.
-  const frozenSeconds =
-    timerState.turnKey === turnKey ? timerState.frozenSeconds : 0
+  const frozenMs = timerState.turnKey === turnKey ? timerState.frozenMs : 0
 
   // Tick every second while thinking.
-  useEffect(() => {
+  useBrowserLayoutEffect(() => {
     if (!shouldRunTimer) return
 
     // R1: anchor the wall clock to the already-accumulated elapsed time so a
     // same-turn `isLast` true→false→true bounce (while the phase stays
     // "thinking") RESUMES the timer instead of restarting it from 0 —
-    // `tickedSeconds` must never regress mid-stream. On a fresh "thinking"
+    // elapsed milliseconds must never regress mid-stream. On a fresh "thinking"
     // entry or a turn handoff the render-sync resets above have already
-    // zeroed `frozenSeconds`, so `start` collapses to `Date.now()`.
+    // zeroed `frozenMs`, so `start` collapses to `Date.now()`.
     const activeTurnKey = turnKey
-    const start = Date.now() - frozenSeconds * 1000
+    const start = Date.now() - frozenMs
 
     const interval = setInterval(() => {
-      const elapsedSeconds = Math.round((Date.now() - start) / 1000)
+      const elapsedMs = Math.max(0, Date.now() - start)
       setTimerState((current) =>
         current.turnKey === activeTurnKey
           ? {
               ...current,
-              displaySeconds: elapsedSeconds,
+              displayMs: elapsedMs,
             }
           : current
       )
@@ -125,7 +126,7 @@ export function useReasoningPhase({
 
     return () => {
       clearInterval(interval)
-      const elapsedSeconds = Math.round((Date.now() - start) / 1000)
+      const elapsedMs = Math.max(0, Date.now() - start)
       // Same-turn stop/resume freezes elapsed time. A turn handoff has already
       // synchronously changed timerState.turnKey, so stale cleanup from the
       // previous turn is ignored without touching refs during render.
@@ -133,8 +134,8 @@ export function useReasoningPhase({
         current.turnKey === activeTurnKey
           ? {
               ...current,
-              displaySeconds: elapsedSeconds,
-              frozenSeconds: elapsedSeconds,
+              displayMs: elapsedMs,
+              frozenMs: elapsedMs,
             }
           : current
       )
@@ -143,31 +144,25 @@ export function useReasoningPhase({
     // (thinking→thinking swap) tears down the old turn's interval and
     // re-anchors — the render-sync reset alone can't stop a running interval
     // still anchored to the previous turn.
-  }, [frozenSeconds, shouldRunTimer, turnKey])
+  }, [frozenMs, shouldRunTimer, turnKey])
 
-  // Compute final durationSeconds.
-  // Priority: live timer (last message) > server-persisted duration (historical)
-  let durationSeconds: number | undefined
-
-  if (isLast && (phase === "thinking" || phase === "complete")) {
-    if (tickedSeconds > 0) {
-      durationSeconds = tickedSeconds
-    } else if (phase === "complete" && persistedDurationMs !== undefined) {
-      durationSeconds = Math.round(persistedDurationMs / 1000)
-    } else {
-      durationSeconds = undefined
-    }
-  } else if (persistedDurationMs !== undefined) {
-    durationSeconds = Math.round(persistedDurationMs / 1000)
-  } else {
-    durationSeconds = undefined
-  }
+  // Persisted duration is terminal authority. Before finish metadata arrives,
+  // retain the current session's monotonic handoff so settlement never flashes
+  // backward or loses its elapsed value.
+  const durationMs =
+    phase === "complete" && persistedDurationMs !== undefined
+      ? persistedDurationMs
+      : tickedMs > 0
+        ? tickedMs
+        : persistedDurationMs
+  const durationSeconds = toCompletedDurationSeconds(durationMs)
 
   return {
     phase,
     reasoningText,
+    durationMs,
     durationSeconds,
-    isReasoningStreaming: phase === "thinking",
+    isReasoningStreaming: reasoning.isStreaming,
     isOpaqueReasoning: isOpaque,
   }
 }

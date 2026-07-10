@@ -93,7 +93,7 @@ describe("MessageAssistant activity trigger", () => {
     container = null
   })
 
-  it("keeps the activity trigger for completed opaque reasoning", () => {
+  it("renders completed opaque reasoning as passive timing", () => {
     const store = makeStore({ panelTurnId: "assistant-1" })
     const parts = [
       { type: "reasoning", text: "", state: "done" },
@@ -113,23 +113,36 @@ describe("MessageAssistant activity trigger", () => {
       )
     })
 
-    const trigger = container?.querySelector(
-      'button[aria-label="Open activity: Thought for 2s"]'
-    ) as HTMLButtonElement | null
-
-    expect(trigger).toBeTruthy()
-    expect(trigger?.getAttribute("aria-expanded")).toBe("false")
-    expect(trigger?.getAttribute("aria-controls")).toBe("activity-panel")
-
-    act(() => {
-      trigger?.click()
-    })
-
-    expect(store.getState().open).toBe(true)
-    expect(store.getState().panelTurnId).toBe("assistant-1")
+    expect(container?.textContent).toContain("Thought for 2s")
+    expect(container?.querySelector("button[aria-expanded]")).toBeNull()
+    expect(store.getState().open).toBe(false)
   })
 
-  it("renders the activity trigger for submitted pre-stream state without duplicate loading UI", () => {
+  it("suppresses completed opaque reasoning below one second", () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+    const parts = [
+      { type: "reasoning", text: "", state: "done" },
+    ] as unknown as UIMessage["parts"]
+
+    act(() => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView(parts, "ready", { reasoningDurationMs: 999 })}
+            status="ready"
+          >
+            {""}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    expect(container?.textContent).not.toContain("Thought")
+    expect(container?.querySelector("button[aria-expanded]")).toBeNull()
+  })
+
+  it("renders passive Thinking for submitted pre-stream state", () => {
     const store = makeStore({ panelTurnId: "pending-assistant" })
 
     act(() => {
@@ -147,23 +160,12 @@ describe("MessageAssistant activity trigger", () => {
       )
     })
 
-    const trigger = container?.querySelector(
-      'button[aria-label="Open activity: Thinking"]'
-    ) as HTMLButtonElement | null
-
-    expect(trigger).toBeTruthy()
     expect(container?.textContent).toContain("Thinking")
     expect(container?.textContent).not.toContain("Generating")
-
-    act(() => {
-      trigger?.click()
-    })
-
-    expect(store.getState().open).toBe(true)
-    expect(store.getState().panelTurnId).toBe("pending-assistant")
+    expect(container?.querySelector("button[aria-expanded]")).toBeNull()
   })
 
-  it("shows ONLY the Thinking trigger while opaque reasoning streams (no Generating shimmer underneath)", () => {
+  it("shows only passive Thinking while opaque reasoning streams", () => {
     const store = makeStore({ panelTurnId: "assistant-1" })
     const parts = [
       { type: "reasoning", text: "", state: "streaming" },
@@ -184,9 +186,8 @@ describe("MessageAssistant activity trigger", () => {
       )
     })
 
-    expect(
-      container?.querySelector('button[aria-label="Open activity: Thinking"]')
-    ).toBeTruthy()
+    expect(container?.textContent).toContain("Thinking")
+    expect(container?.querySelector("button[aria-expanded]")).toBeNull()
     expect(container?.textContent).not.toContain("Generating")
   })
 
@@ -497,7 +498,7 @@ describe("MessageAssistant activity trigger", () => {
   it("renders the activity trigger before content and footer actions", async () => {
     const store = makeStore({ panelTurnId: "assistant-1" })
     const parts = [
-      { type: "reasoning", text: "", state: "done" },
+      { type: "reasoning", text: "Visible reasoning", state: "done" },
     ] as unknown as UIMessage["parts"]
 
     await act(async () => {

@@ -1,5 +1,9 @@
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
+import type {
+  ChatTurnEditRequest,
+  ChatTurnRegenerationRequest,
+} from "@/lib/chat-messages/chat-turn-contract"
 import {
   ANONYMOUS_MAX_STEP_COUNT,
   DEFAULT_MAX_STEP_COUNT,
@@ -57,10 +61,6 @@ import {
 import { after } from "next/server"
 import { adaptHistoryForProvider } from "./adapters"
 import type { AdaptationContext, AdaptationWarning } from "./adapters/types"
-import type {
-  ChatTurnEditRequest,
-  ChatTurnRegenerationRequest,
-} from "@/lib/chat-messages/chat-turn-contract"
 import {
   createDurableTurnRuntime,
   isDurableConvexChat,
@@ -72,6 +72,7 @@ import {
   createToolTraceLogSink,
 } from "./outcome-sinks"
 import { normalizeChatError, type PublicChatError } from "./public-error"
+import { createReasoningActivityTracker } from "./reasoning-activity-tracker"
 import {
   getTextFilePartReferences,
   prepareTextFilePartsForModelInput,
@@ -856,11 +857,7 @@ export function createChatTurnRuntime(args: {
     let stepCounter = 0
     let toolMetadataByCallId: ToolInvocationMetadataByCallId = {}
 
-    // Track reasoning timing for messageMetadata persistence. The first
-    // reasoning chunk records a start timestamp; when text-delta arrives
-    // (reasoning is done) or onEnd fires, we compute elapsed ms.
-    let reasoningStartMs: number | null = null
-    let reasoningDurationMs: number | null = null
+    const reasoningActivity = createReasoningActivityTracker()
     let firstChunkLatencyMs: number | null = null
     let lastChunkAtMs: number | null = null
     let lastProgressAtMs = streamStartMs
@@ -963,6 +960,7 @@ export function createChatTurnRuntime(args: {
     const handleRequestAbort = () => {
       if (abortCaptured || streamCompleted) return
       abortCaptured = true
+      reasoningActivity.close()
       resolvePostToolContinuation()
       captureChatLifecycleSignal("chat_client_abort")
     }
@@ -1056,21 +1054,16 @@ export function createChatTurnRuntime(args: {
           if (firstChunkLatencyMs === null) {
             firstChunkLatencyMs = now - streamStartMs
           }
-          if (chunk.type === "reasoning-delta" && reasoningStartMs === null) {
-            reasoningStartMs = now
-          }
-          // When text-delta arrives after reasoning, reasoning is done
-          if (
-            chunk.type === "text-delta" &&
-            reasoningStartMs !== null &&
-            reasoningDurationMs === null
-          ) {
-            reasoningDurationMs = now - reasoningStartMs
+          if (chunk.type === "reasoning-start") {
+            reasoningActivity.start(chunk.id)
+          } else if (chunk.type === "reasoning-end") {
+            reasoningActivity.end(chunk.id)
           }
         },
 
         onError: (err: unknown) => {
           streamCompleted = true
+          reasoningActivity.close()
           resolvePostToolContinuation()
           console.error("Streaming error occurred:", err)
           const publicError = normalizeTurnError(err)
@@ -1128,6 +1121,7 @@ export function createChatTurnRuntime(args: {
 
         onAbort: async () => {
           streamCompleted = true
+          reasoningActivity.close()
           resolvePostToolContinuation()
           // Flush the latest snapshot, then mark the run aborted (guest: inert).
           await durableTurn.onStreamAbort("stream aborted")
@@ -1135,6 +1129,7 @@ export function createChatTurnRuntime(args: {
 
         onEnd: async ({ text, usage, steps, finishReason }) => {
           streamCompleted = true
+          reasoningActivity.close()
           lastProgressAtMs = Date.now()
           resolvePostToolContinuation()
           if (steps) {
@@ -1148,12 +1143,6 @@ export function createChatTurnRuntime(args: {
               }
             }
             toolMetadataByCallId = resolvedByCallId
-          }
-
-          // Freeze reasoning duration if it wasn't already frozen by text-delta
-          // (e.g. reasoning-only responses with no text output, or errors)
-          if (reasoningStartMs !== null && reasoningDurationMs === null) {
-            reasoningDurationMs = Date.now() - reasoningStartMs
           }
 
           // Request-level Tool outcome aggregate — accumulated by the runtime as
@@ -1212,7 +1201,7 @@ export function createChatTurnRuntime(args: {
               inputTokens: usage?.inputTokens ?? null,
               outputTokens: usage?.outputTokens ?? null,
             },
-            reasoningDurationMs,
+            reasoningDurationMs: reasoningActivity.getDurationMs() ?? null,
           })
           Sentry.setTag("chat_finish_reason", finishReason ?? "unknown")
           Sentry.setTag("chat_error_type", "none")
@@ -1237,7 +1226,7 @@ export function createChatTurnRuntime(args: {
             budgetDeniedToolCalls,
             firstTokenLatencyMs: firstChunkLatencyMs,
             totalLatencyMs,
-            reasoningDurationMs,
+            reasoningDurationMs: reasoningActivity.getDurationMs() ?? null,
             inputTokens: usage?.inputTokens,
             outputTokens: usage?.outputTokens,
           })
@@ -1373,7 +1362,7 @@ export function createChatTurnRuntime(args: {
         if (part.type === "finish") {
           return buildFinishToolInvocationStreamMetadata({
             toolMetadataByCallId,
-            reasoningDurationMs,
+            reasoningDurationMs: reasoningActivity.getDurationMs() ?? null,
           })
         }
         return {}
@@ -1381,6 +1370,7 @@ export function createChatTurnRuntime(args: {
       onEnd: ({ responseMessage, isAborted, finishReason }) =>
         durableTurn.finalize({ responseMessage, isAborted, finishReason }),
       onError: (error: unknown) => {
+        reasoningActivity.close()
         console.error("Error forwarded to client:", error)
         const errorType = classifyChatError(error)
         Sentry.captureException(error, {

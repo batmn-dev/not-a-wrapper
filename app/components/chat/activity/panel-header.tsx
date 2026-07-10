@@ -68,7 +68,7 @@ export function TitleDurationCluster({
       <span id={titleId} className="text-muted-foreground truncate">
         {title}
       </span>
-      {durationSeconds !== undefined ? (
+      {durationSeconds !== undefined && durationSeconds > 0 ? (
         <>
           <span aria-hidden className="text-muted-foreground/70">
             ·

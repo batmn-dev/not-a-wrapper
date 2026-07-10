@@ -1,34 +1,26 @@
 "use client"
 
 import {
+  deriveAssistantActivityPresentation,
+  type AssistantActivitySection,
+} from "@/lib/chat-messages/assistant-activity"
+import {
+  deriveAssistantTurnPhase,
   deriveAssistantTurnView,
   IDLE_REASONING_VIEW,
 } from "@/lib/chat-messages/assistant-turn"
 import { getServerMessageId } from "@/lib/chat-messages/metadata"
 import type { UIMessage } from "@ai-sdk/react"
-import type { SourceUrlUIPart, ToolUIPart } from "ai"
-import { useReasoningPhase, type ReasoningPhase } from "./use-reasoning-phase"
+import { useReasoningPhase } from "./use-reasoning-phase"
 
 type ChatStatus = "streaming" | "ready" | "submitted" | "error"
 
 export const PENDING_ACTIVITY_TURN_ID = "__pending_activity_turn__"
 
-/**
- * Data the selector hands to `<ActivityPanel>` via `panelProps`.
- *
- * NOTE — `phase`, `steps`, and `isReasoningStreaming` are intentional
- * ChatGPT-replication scaffolding for an upcoming live-timeline pass; the panel
- * does not consume them yet (kept deliberately, not dead). See the annotated
- * `ActivityPanelProps` in `activity/activity-panel.tsx` and TODO.md.
- */
+/** Data the selector hands to `<ActivityPanel>` via `panelProps`. */
 export type ActivityPanelProps = {
-  phase: ReasoningPhase["phase"]
-  steps: ToolUIPart[]
-  sources: SourceUrlUIPart[]
+  sections: readonly AssistantActivitySection[]
   durationSeconds: number | undefined
-  reasoningText: string
-  isReasoningStreaming: boolean
-  isOpaqueReasoning: boolean
 }
 
 export type UseActivityPanelResult = {
@@ -42,6 +34,8 @@ export type UseActivityPanelResult = {
    * (branch switch, local delete) — Chat's signal to drop the stale selection
    * from the store instead of letting it linger and resurrect later. */
   selectedTurnPresent: boolean
+  /** Whether the selected/default turn has at least one inspectable section. */
+  panelCanOpen: boolean
   panelProps: ActivityPanelProps
 }
 
@@ -217,13 +211,7 @@ export function useActivityPanel({
       )
     : undefined
 
-  const {
-    phase,
-    reasoningText,
-    durationSeconds,
-    isReasoningStreaming,
-    isOpaqueReasoning,
-  } = useReasoningPhase({
+  const reasoningPhase = useReasoningPhase({
     reasoning: panelView?.reasoning ?? IDLE_REASONING_VIEW,
     isLast: Boolean(panelMessage) && isPanelDefaultTurn,
     // Turn identity for the timer: a panel re-target (default-follow onto a
@@ -232,24 +220,28 @@ export function useActivityPanel({
     turnKey: panelActivityTurnId,
   })
 
+  const panelPhase = panelView
+    ? deriveAssistantTurnPhase(panelView, {
+        status: isPanelDefaultTurn ? status : "ready",
+        isLast: isPanelDefaultTurn,
+      })
+    : ({ kind: "submitted" } as const)
+  const presentation = panelView
+    ? deriveAssistantActivityPresentation(panelView, panelPhase, {
+        durationMs: reasoningPhase.durationMs,
+      })
+    : ({ kind: "live-status" } as const)
+  const panelCanOpen = presentation.kind === "disclosure"
+
   const panelProps: ActivityPanelProps = isPendingActivityTurn
     ? {
-        phase: "thinking",
-        steps: [],
-        sources: [],
+        sections: [],
         durationSeconds: undefined,
-        reasoningText: "",
-        isReasoningStreaming: true,
-        isOpaqueReasoning: true,
       }
     : {
-        phase,
-        steps: panelView?.toolParts ?? [],
-        sources: panelView?.sources ?? [],
-        durationSeconds,
-        reasoningText,
-        isReasoningStreaming,
-        isOpaqueReasoning,
+        sections:
+          presentation.kind === "disclosure" ? presentation.sections : [],
+        durationSeconds: reasoningPhase.durationSeconds,
       }
 
   return {
@@ -257,6 +249,7 @@ export function useActivityPanel({
     panelActivityTurnId,
     isGenerationActive: generationActive,
     selectedTurnPresent,
+    panelCanOpen,
     panelProps,
   }
 }

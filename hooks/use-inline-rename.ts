@@ -1,5 +1,5 @@
 import useClickOutside from "@/hooks/useClickOutside"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 
 export type UseInlineRenameOptions = {
   /**
@@ -12,9 +12,9 @@ export type UseInlineRenameOptions = {
 
 /**
  * Owns the inline-rename lifecycle for a single editable label: edit toggling,
- * the draft buffer, focus/select on entry, Enter-to-commit / Escape-to-cancel,
- * click-outside-commits, and resyncing the draft when the persisted value
- * changes externally.
+ * the draft buffer, Enter-to-commit / Escape-to-cancel, click-outside-commits,
+ * and resyncing the draft when the persisted value changes externally. The
+ * rendered input owns focus behavior so it can select on every focus event.
  *
  * The hook is the home for the "should this commit?" rule: a draft is trimmed
  * before comparison and `onSave` is only called when the trimmed value is
@@ -30,17 +30,7 @@ export function useInlineRename(
   const [draft, setDraft] = useState(currentValue)
   const [prevValue, setPrevValue] = useState(currentValue)
 
-  const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
-
-  // Keep callbacks behind refs so the hook's own handlers stay referentially
-  // stable across renders even when callers pass inline `onSave`/`options`.
-  const onSaveRef = useRef(onSave)
-  const optionsRef = useRef(options)
-  useEffect(() => {
-    onSaveRef.current = onSave
-    optionsRef.current = options
-  })
 
   // React 19 pattern: resync the draft when the persisted value changes
   // externally, but only while not actively editing (don't clobber typing).
@@ -52,29 +42,22 @@ export function useInlineRename(
   const start = useCallback(() => {
     setIsEditing(true)
     setDraft(currentValue)
-
-    requestAnimationFrame(() => {
-      if (inputRef.current) {
-        inputRef.current.focus()
-        inputRef.current.select()
-      }
-    })
   }, [currentValue])
 
   const cancel = useCallback(() => {
     setDraft(currentValue)
     setIsEditing(false)
-    optionsRef.current?.onEditEnd?.()
-  }, [currentValue])
+    options?.onEditEnd?.()
+  }, [currentValue, options])
 
   const save = useCallback(async () => {
     const next = draft.trim()
     setIsEditing(false)
-    optionsRef.current?.onEditEnd?.()
+    options?.onEditEnd?.()
     // Skip no-op commits: empty or unchanged values never reach onSave.
     if (next.length === 0 || next === currentValue) return
-    await onSaveRef.current(next)
-  }, [draft, currentValue])
+    await onSave(next)
+  }, [draft, currentValue, onSave, options])
 
   const handleClickOutside = useCallback(() => {
     if (isEditing) save()
@@ -87,22 +70,6 @@ export function useInlineRename(
       if (isEditing) e.stopPropagation()
     },
     [isEditing]
-  )
-
-  const onSaveClick = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation()
-      save()
-    },
-    [save]
-  )
-
-  const onCancelClick = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation()
-      cancel()
-    },
-    [cancel]
   )
 
   const inputProps = {
@@ -123,14 +90,9 @@ export function useInlineRename(
 
   return {
     isEditing,
-    draft,
-    inputRef,
     containerRef,
     start,
-    cancel,
     inputProps,
     onContainerClick,
-    onSaveClick,
-    onCancelClick,
   }
 }

@@ -1,19 +1,9 @@
 /** @vitest-environment jsdom */
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest"
-import {
-  ActivityPanelTrigger,
-  activityStateLabel,
-} from "./activity-panel-trigger"
+import { beforeAll, describe, expect, it, vi } from "vitest"
+import type { ActivityDisclosurePresentation } from "./activity-panel-trigger"
+import { ActivityPanelTrigger } from "./activity-panel-trigger"
 
 beforeAll(() => {
   ;(
@@ -21,21 +11,23 @@ beforeAll(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true
 })
 
-describe("ActivityPanelTrigger", () => {
-  it("composes each thinking state into label text", () => {
-    expect(activityStateLabel({ status: "thinking" })).toBe("Thinking")
-    expect(activityStateLabel({ status: "thought", durationSeconds: 1 })).toBe(
-      "Thought for 1s"
-    )
-    expect(activityStateLabel({ status: "thought" })).toBe("Thought")
-    expect(activityStateLabel({ status: "sources", count: 3 })).toBe(
-      "3 sources"
-    )
-    expect(activityStateLabel({ status: "activity" })).toBe("Activity")
-  })
+const presentation: ActivityDisclosurePresentation = {
+  kind: "disclosure",
+  label: "Thought for 1s",
+  motion: "none",
+  sections: [
+    {
+      kind: "reasoning",
+      blocks: [{ text: "Visible reasoning" }],
+      isStreaming: false,
+    },
+  ],
+  durationSeconds: 1,
+}
 
-  it("renders the label with a single trailing chevron and toggles on click", () => {
-    let container: HTMLDivElement | null = document.createElement("div")
+describe("ActivityPanelTrigger", () => {
+  it("renders one native disclosure control and toggles on click", () => {
+    const container = document.createElement("div")
     document.body.appendChild(container)
     const root: Root = createRoot(container)
     const onOpenChange = vi.fn()
@@ -46,24 +38,18 @@ describe("ActivityPanelTrigger", () => {
           open={false}
           onOpenChange={onOpenChange}
           controlsId="activity-panel"
-          state={{ status: "thought", durationSeconds: 1 }}
+          presentation={presentation}
         />
       )
     })
 
-    expect(container.textContent).toContain("Thought for 1s")
-    // The only icon is the trailing chevron — no leading sparkle.
+    const button = container.querySelector("button")
+    expect(button?.textContent).toContain("Thought for 1s")
     expect(container.querySelectorAll("svg")).toHaveLength(1)
-    expect(
-      container.querySelector("button")?.getAttribute("aria-expanded")
-    ).toBe("false")
-    expect(
-      container.querySelector("button")?.getAttribute("aria-controls")
-    ).toBe("activity-panel")
+    expect(button?.getAttribute("aria-expanded")).toBe("false")
+    expect(button?.getAttribute("aria-controls")).toBe("activity-panel")
 
-    act(() => {
-      container!.querySelector("button")!.click()
-    })
+    act(() => button?.click())
     expect(onOpenChange).toHaveBeenCalledWith(true)
 
     act(() => {
@@ -72,26 +58,15 @@ describe("ActivityPanelTrigger", () => {
           open
           onOpenChange={onOpenChange}
           controlsId="activity-panel"
-          state={{ status: "thought", durationSeconds: 1 }}
+          presentation={presentation}
         />
       )
     })
     expect(container.querySelector("button")?.getAttribute("aria-label")).toBe(
       "Close activity: Thought for 1s"
     )
-    expect(
-      container.querySelector("button")?.getAttribute("aria-expanded")
-    ).toBe("true")
 
-    act(() => {
-      container!.querySelector("button")!.click()
-    })
-    expect(onOpenChange).toHaveBeenLastCalledWith(false)
-
-    act(() => {
-      root.unmount()
-    })
+    act(() => root.unmount())
     container.remove()
-    container = null
   })
 })

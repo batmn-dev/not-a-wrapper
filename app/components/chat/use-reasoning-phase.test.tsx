@@ -217,4 +217,42 @@ describe("useReasoningPhase", () => {
     expect(latest!.phase).toBe("complete")
     expect(latest!.reasoningText).toBe("partial then final")
   })
+
+  it("does not start a timer from inferred Thinking without literal streaming evidence", () => {
+    render({
+      parts: [{ type: "reasoning", text: "" }] as unknown as UIMessage["parts"],
+      status: "streaming",
+      isLast: true,
+      turnKey: "opaque-stored",
+    })
+    act(() => {
+      vi.advanceTimersByTime(5000)
+    })
+
+    expect(latest!.phase).toBe("thinking")
+    expect(latest!.isReasoningStreaming).toBe(false)
+    expect(latest!.durationMs).toBeUndefined()
+  })
+
+  it("uses persisted duration as terminal authority after a live handoff", () => {
+    render({
+      parts: reasoningPart("…", "streaming"),
+      status: "streaming",
+      isLast: true,
+      turnKey: "a",
+    })
+    act(() => {
+      vi.advanceTimersByTime(5000)
+    })
+    render({
+      parts: reasoningPart("done", "done"),
+      status: "ready",
+      isLast: true,
+      turnKey: "a",
+      persistedDurationMs: 1250,
+    })
+
+    expect(latest!.durationMs).toBe(1250)
+    expect(latest!.durationSeconds).toBe(1)
+  })
 })

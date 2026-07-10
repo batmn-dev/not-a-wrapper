@@ -41,6 +41,10 @@ export type ReasoningView = {
   phase: "idle" | "thinking" | "complete"
   /** Concatenated reasoning text across reasoning parts. */
   text: string
+  /** Ordered reasoning blocks whose original text contains visible content. */
+  displayableBlocks: ReadonlyArray<{ text: string }>
+  /** Any reasoning part or durable duration was observed, visible or opaque. */
+  hasObservedActivity: boolean
   /**
    * True only while a reasoning part is LITERALLY streaming (raw part state)
    * — deliberately not derived from `phase`. `phase` may infer "thinking"
@@ -58,6 +62,8 @@ export type ReasoningView = {
 export const IDLE_REASONING_VIEW: ReasoningView = {
   phase: "idle",
   text: "",
+  displayableBlocks: [],
+  hasObservedActivity: false,
   isStreaming: false,
   isOpaque: false,
   persistedDurationMs: undefined,
@@ -109,6 +115,8 @@ export function deriveReasoningView(
     return {
       phase: "complete",
       text: "",
+      displayableBlocks: [],
+      hasObservedActivity: true,
       isStreaming: false,
       isOpaque: true,
       persistedDurationMs,
@@ -155,6 +163,11 @@ export function deriveReasoningView(
   return {
     phase,
     text,
+    displayableBlocks: reasoningParts
+      .filter((part) => part.text.trim().length > 0)
+      .map((part) => ({ text: part.text })),
+    hasObservedActivity:
+      reasoningParts.length > 0 || persistedDurationMs !== undefined,
     isStreaming: isAnyStreaming,
     isOpaque: phase !== "idle" && !text.trim(),
     persistedDurationMs,
@@ -263,7 +276,6 @@ export type AssistantTurnPhase =
   | { kind: "generating-image" }
   | { kind: "tooling"; toolNames: string[] }
   | { kind: "awaiting-approval" }
-  | { kind: "generating" }
   | { kind: "responding" }
   | { kind: "settled" }
 
@@ -277,28 +289,6 @@ export type AssistantTurnPhase =
  * verdict immediately.
  */
 export type AssistantTurnRenderStatus = ChatStatus | DurableMessageStatus
-
-/**
- * The thinking states the activity trigger can display. Lives here (not in
- * the trigger component) because it is derived data: the indicator derivation
- * below produces it from the phase, and the trigger only renders it.
- */
-export type ActivityTriggerState =
-  | { status: "thinking" }
-  | { status: "running"; label: string }
-  | { status: "thought"; durationSeconds?: number }
-  | { status: "sources"; count: number }
-  | { status: "activity" }
-
-/**
- * Exactly one indicator per turn — the value the row's single indicator slot
- * renders. `generating` is the plain shimmer loader (a turn with no openable
- * activity); `trigger` is the activity panel trigger in one of its states.
- */
-export type AssistantTurnIndicator =
-  | { kind: "none" }
-  | { kind: "generating" }
-  | { kind: "trigger"; state: ActivityTriggerState }
 
 const IMAGE_GENERATION_TOOL_NAMES = new Set([
   "imageGeneration",
@@ -379,89 +369,13 @@ export function deriveAssistantTurnPhase(
 
   // Substance = anything of this turn already on screen (text, tool cards,
   // image results) or invisible-but-real activity (opaque reasoning that
-  // finished). With substance the turn reads as responding; without it the
-  // bare stream shows the generating shimmer.
+  // finished). A bare stream remains in the universal Thinking phase.
   const hasSubstance =
     view.text.length > 0 ||
     view.toolParts.length > 0 ||
     view.searchImageResults.length > 0 ||
     view.reasoning.phase !== "idle"
-  return hasSubstance ? { kind: "responding" } : { kind: "generating" }
-}
-
-function toolProgressLabel(toolNames: string[]): string {
-  if (toolNames.length !== 1) return "Running tools"
-  const toolName = toolNames[0]
-  switch (toolName) {
-    case "web_search":
-    case "google_search":
-      return "Searching the web"
-    case "imageGeneration":
-    case "image_generation":
-      return "Generating image"
-    default: {
-      const readableName = toolName
-        .replace(/_/g, " ")
-        .replace(/([a-z])([A-Z])/g, "$1 $2")
-        .trim()
-      return readableName.length > 0
-        ? `Running ${readableName.charAt(0).toUpperCase()}${readableName.slice(1)}`
-        : "Running tool"
-    }
-  }
-}
-
-/** The settled trigger label: reasoning wins, then sources, then generic
- * activity; a turn with none of them renders no trigger at all. */
-function settledTriggerState(
-  view: AssistantTurnView
-): ActivityTriggerState | null {
-  if (view.reasoning.phase !== "idle") {
-    return {
-      status: "thought",
-      durationSeconds:
-        view.reasoning.persistedDurationMs !== undefined
-          ? Math.round(view.reasoning.persistedDurationMs / 1000)
-          : undefined,
-    }
-  }
-  if (view.sources.length > 0) {
-    return { status: "sources", count: view.sources.length }
-  }
-  if (view.toolParts.length > 0) return { status: "activity" }
-  return null
-}
-
-/**
- * Map the phase to the ONE indicator the row's slot renders. Total over the
- * phase union (exhaustive switch), and single-valued by type — the
- * "two indicators at once" bug class is unrepresentable downstream of this.
- */
-export function deriveAssistantTurnIndicator(
-  phase: AssistantTurnPhase,
-  view: AssistantTurnView
-): AssistantTurnIndicator {
-  switch (phase.kind) {
-    case "submitted":
-    case "thinking":
-      return { kind: "trigger", state: { status: "thinking" } }
-    case "generating-image":
-      return {
-        kind: "trigger",
-        state: { status: "running", label: "Generating image" },
-      }
-    case "tooling":
-      return {
-        kind: "trigger",
-        state: { status: "running", label: toolProgressLabel(phase.toolNames) },
-      }
-    case "generating":
-      return { kind: "generating" }
-    case "awaiting-approval":
-    case "responding":
-    case "settled": {
-      const settled = settledTriggerState(view)
-      return settled ? { kind: "trigger", state: settled } : { kind: "none" }
-    }
-  }
+  return hasSubstance
+    ? { kind: "responding" }
+    : { kind: "thinking", visibility: "opaque" }
 }

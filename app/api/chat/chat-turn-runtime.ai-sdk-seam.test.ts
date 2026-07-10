@@ -162,14 +162,11 @@ function makeSlowTextModel() {
         chunks: [
           { type: "stream-start", warnings: [] },
           { type: "text-start", id: "t1" },
-          ...Array.from(
-            { length: 8 },
-            (_, i): LanguageModelV3StreamPart => ({
-              type: "text-delta",
-              id: "t1",
-              delta: `chunk-${i} `,
-            })
-          ),
+          ...Array.from({ length: 8 }, (_, i): LanguageModelV3StreamPart => ({
+            type: "text-delta",
+            id: "t1",
+            delta: `chunk-${i} `,
+          })),
           { type: "text-end", id: "t1" },
           {
             type: "finish",
@@ -178,6 +175,30 @@ function makeSlowTextModel() {
           },
         ],
         chunkDelayInMs: 30,
+      }),
+    }),
+  })
+}
+
+function makeReasoningModel() {
+  return new MockLanguageModelV3({
+    doStream: async () => ({
+      stream: simulateReadableStream<LanguageModelV3StreamPart>({
+        chunks: [
+          { type: "stream-start", warnings: [] },
+          { type: "reasoning-start", id: "r1" },
+          { type: "reasoning-delta", id: "r1", delta: "Check the facts." },
+          { type: "reasoning-end", id: "r1" },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "Final answer." },
+          { type: "text-end", id: "t1" },
+          {
+            type: "finish",
+            finishReason: { unified: "stop", raw: "end_turn" },
+            usage: STEP_USAGE,
+          },
+        ],
+        chunkDelayInMs: null,
       }),
     }),
   })
@@ -346,6 +367,27 @@ beforeEach(() => {
 })
 
 describe("chat turn runtime × real ai@7 streamText", () => {
+  it("forwards real reasoning lifecycle events into finite finish metadata", async () => {
+    const { loadResult } = makeMcpToolsFixture()
+    vi.mocked(loadUserMcpTools).mockResolvedValue(
+      loadResult as unknown as Awaited<ReturnType<typeof loadUserMcpTools>>
+    )
+    vi.mocked(createLanguageModel).mockReturnValue(
+      makeReasoningModel() as unknown as ReturnType<typeof createLanguageModel>
+    )
+    const runtime = createChatTurnRuntime({
+      input: makeInput({ requestId: "req-seam-reasoning" }),
+      deps: makeDeps(makeDurableFetchMutation()),
+    })
+
+    await runtime.prepare()
+    const sse = await runtime.toResponse(new AbortController().signal).text()
+
+    expect(sse).toContain("Check the facts.")
+    expect(sse).toContain("Final answer.")
+    expect(sse).toMatch(/"reasoningDurationMs":\d+/)
+  })
+
   it("runs a durable multi-step tool turn end-to-end: step hooks, sinks, ordered durable writes, streamed Response", async () => {
     const { loadResult, weatherExecute } = makeMcpToolsFixture()
     vi.mocked(loadUserMcpTools).mockResolvedValue(
@@ -412,7 +454,10 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     // invocation writes and snapshots in between, completion last.
     await vi.waitFor(() => {
       expect(
-        findCalls(durableFetchMutation, api.chatRuntime.markGenerationRunCompleted)
+        findCalls(
+          durableFetchMutation,
+          api.chatRuntime.markGenerationRunCompleted
+        )
       ).toHaveLength(1)
     })
     const orderedNames = durableFetchMutation.mock.calls.map((call) =>
@@ -430,7 +475,11 @@ describe("chat turn runtime × real ai@7 streamText", () => {
       api.chatRuntime.recordToolInvocations
     )
     expect(invocationWrites).toHaveLength(TOOL_STEPS)
-    expect(invocationWrites.map((call) => (call[1] as { stepNumber: number }).stepNumber)).toEqual([1, 2, 3, 4])
+    expect(
+      invocationWrites.map(
+        (call) => (call[1] as { stepNumber: number }).stepNumber
+      )
+    ).toEqual([1, 2, 3, 4])
     expect(invocationWrites[0][1]).toMatchObject({
       runId: "run1",
       messageId: "msg1",
@@ -521,7 +570,10 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     )[0]
     expect(abortWrite[1]).toMatchObject({ runId: "run1", messageId: "msg1" })
     expect(
-      findCalls(durableFetchMutation, api.chatRuntime.markGenerationRunCompleted)
+      findCalls(
+        durableFetchMutation,
+        api.chatRuntime.markGenerationRunCompleted
+      )
     ).toHaveLength(0)
     expect(
       findCalls(durableFetchMutation, api.chatRuntime.markGenerationRunFailed)

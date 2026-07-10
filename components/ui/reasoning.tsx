@@ -173,6 +173,8 @@ function ReasoningLabel({ className, title }: ReasoningLabelProps) {
       ? formatDuration(durationSeconds)
       : undefined
 
+  if (opaque && phase === "complete" && durationText === undefined) return null
+
   const labelText =
     title !== undefined ? (
       <>
@@ -213,15 +215,15 @@ function ReasoningLabel({ className, title }: ReasoningLabelProps) {
       <span className="text-muted-foreground font-normal">
         {durationSeconds !== undefined
           ? `Thought for ${formatDuration(durationSeconds)}`
-          : "Thoughts"}
+          : "Thought"}
       </span>
     )
 
   if (opaque) {
     return (
-      <div className={cn("flex items-center gap-1.5 text-base", className)}>
+      <span className={cn("flex items-center gap-1.5 text-base", className)}>
         {labelText}
-      </div>
+      </span>
     )
   }
 

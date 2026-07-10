@@ -1,0 +1,459 @@
+{
+  "projectName": "composable-thinking-activity",
+  "owner": "darknightdesigner",
+  "repo": "not-a-wrapper",
+  "specFile": null,
+  "workstream": null,
+  "problemStatement": "Assistant turns currently conflate observed provider reasoning, displayable reasoning, elapsed time, and inspectable Activity content. That makes metadata-only or empty reasoning render as an interactive empty panel and allows sub-second durations to become `Thought for 0s`; the fallback live state also still has a separate `Generating` shimmer with a blinking caret. The product convention is that every active assistant turn begins as `Thinking`, while the same composable status surface must be able to evolve into richer labels such as search, file, image, approval, and tool activity without making non-inspectable states interactive.",
+  "solutionSummary": "Introduce a provider-neutral assistant-activity presentation domain that separates reasoning evidence, displayable reasoning blocks, passive timing, live status copy, and non-empty disclosure sections. Keep `Thinking` as the universal pre-content live label, remove the `Generating` caret presentation, and allow the live label resolver to compose tool-aware status copy from normalized activity facts. Track server reasoning duration across start/end intervals, use a one-second floor policy, and preserve opaque provider metadata durably without exposing empty Reasoning sections. Render the normalized union through one composable indicator component so label, motion, interactivity, chevron, panel contents, and accessibility semantics cannot drift.",
+  "currentStateAnalysis": "`deriveReasoningView` reduces all reasoning parts to idle/thinking/complete plus an opaque boolean, while `deriveAssistantTurnIndicator` maps submitted and reasoning to an interactive Thinking trigger and maps an otherwise empty live stream to a separate Generating loader. Completed reasoning always wins the settled trigger, `Math.round` can create zero-second labels, and ActivityPanelTrigger always renders button/disclosure semantics. `useActivityPanel` passes raw reasoning/tool/source facts, but ActivityPanel independently creates an empty opaque Reasoning row and does not consume its `steps` prop. The server starts timing on the first reasoning delta, including Anthropic signature-only empty deltas, and stops at the first text delta rather than tracking multiple or interleaved reasoning intervals.",
+  "operationalConsiderations": {
+    "externalSystemAccess": "No new external system is introduced. The server continues consuming the existing AI SDK stream and persisting through the existing Convex durable-turn runtime; provider calls, credentials, and network access remain unchanged.",
+    "crossRuntimeContracts": "The server produces AI SDK UI-message parts plus message metadata and the browser consumes both. Patch 3 keeps the existing optional `reasoningDurationMs` wire key and number shape for backward compatibility while changing only how the value is measured; Patch 2 makes old, missing, zero, negative, and invalid values normalize safely, so historical records and in-flight records from either code version remain renderable. Opaque signed, encrypted, and redacted reasoning parts remain byte-for-byte available to the provider replay adapters.",
+    "failureBehavior": "Abort, stop, timeout, disconnect, and stream error close any active reasoning interval at the last observed terminal timestamp and then use the existing durable terminal path. Missing or malformed durations degrade to no duration label; incomplete or frozen reasoning parts settle from the client/durable terminal status and never keep a timer alive. If Activity contains no non-empty section, the presentation cannot construct a disclosure, preventing empty-panel recovery paths.",
+    "concurrencyAndIdempotency": "The reasoning interval tracker is request-local and idempotent for duplicate start/end events: duplicate starts for an active block and ends for unknown blocks are ignored, and overlapping active blocks are measured as the union of wall-clock intervals rather than double-counted. Client derivation remains pure per render because AI SDK parts mutate in place; selected-path reconciliation and historical panel targeting keep their existing identity and liveness contracts.",
+    "rollbackStrategy": "No schema migration or destructive data rewrite is required. `reasoningDurationMs` remains backward-compatible, so reverting the patches restores the old presentation without stranding records; newly measured values are still finite millisecond numbers that old clients can read. The gameplan is atomic and should be reverted as a unit if necessary."
+  },
+  "mergabilityStrategy": {
+    "featureFlagStrategy": "No feature flag. This is a correction to the canonical assistant-turn presentation contract, and running old and new derivations simultaneously would recreate inconsistent labels, panel sections, and accessibility semantics.",
+    "featureFlags": [],
+    "patchOrderingStrategy": "Patch 1 adds pending behavior tests. Patch 2 introduces and proves the pure normalized presentation domain without wiring production components. Patch 3 replaces server reasoning timing while preserving the wire shape. Patch 4 performs the single production cutover, removes the Generating caret path, renders the composable Thinking/Activity surface, updates fixtures/docs, and enables the remaining tests. The dependency graph is intentionally sequential because the patches touch shared reasoning contracts and must merge without semantic skew."
+  },
+  "requiredChanges": [
+    {
+      "file": "lib/chat-messages/assistant-turn.ts",
+      "line": 40,
+      "description": "Derive normalized reasoning evidence and canonical live turn phases without a Generating indicator state.",
+      "signature": "deriveReasoningView(parts: UIMessage['parts'] | undefined, status: ChatStatus, metadata?: unknown): ReasoningView"
+    },
+    {
+      "file": "lib/chat-messages/assistant-activity.ts",
+      "line": null,
+      "description": "New pure presentation domain for live status, passive timing, disclosure eligibility, labels, and non-empty Activity sections.",
+      "signature": "deriveAssistantActivityPresentation(view: AssistantTurnView, phase: AssistantTurnPhase): AssistantActivityPresentation"
+    },
+    {
+      "file": "lib/chat-messages/metadata.ts",
+      "line": 120,
+      "description": "Normalize persisted reasoning duration to finite non-negative milliseconds.",
+      "signature": "getReasoningDurationMs(metadata: unknown): number | undefined"
+    },
+    {
+      "file": "lib/format-duration.ts",
+      "line": 7,
+      "description": "Add the shared one-second threshold and floor-based completed-duration policy.",
+      "signature": "toCompletedDurationSeconds(durationMs: number | undefined): number | undefined"
+    },
+    {
+      "file": "app/api/chat/reasoning-activity-tracker.ts",
+      "line": null,
+      "description": "New request-local interval-union tracker for reasoning start/end lifecycle events.",
+      "signature": "createReasoningActivityTracker(now?: () => number): ReasoningActivityTracker"
+    },
+    {
+      "file": "app/api/chat/chat-turn-runtime.ts",
+      "line": 859,
+      "description": "Use the lifecycle tracker instead of first-reasoning-delta to first-text-delta timing.",
+      "signature": null
+    },
+    {
+      "file": "app/components/chat/assistant-activity-indicator.tsx",
+      "line": null,
+      "description": "New composable renderer for live, passive, and disclosure presentations.",
+      "signature": "AssistantActivityIndicator(props: AssistantActivityIndicatorProps): ReactNode"
+    },
+    {
+      "file": "app/components/chat/message-assistant.tsx",
+      "line": 107,
+      "description": "Replace the separate Generating loader and generic trigger branch with the normalized activity indicator.",
+      "signature": null
+    },
+    {
+      "file": "app/components/chat/use-reasoning-phase.ts",
+      "line": 40,
+      "description": "Limit the client timer to live observed reasoning and hand normalized milliseconds to presentation derivation.",
+      "signature": "useReasoningPhase(params: UseReasoningPhaseParams): ReasoningPhase"
+    },
+    {
+      "file": "app/components/chat/use-activity-panel.ts",
+      "line": 204,
+      "description": "Project normalized non-empty Activity sections for the selected turn instead of raw opacity flags.",
+      "signature": null
+    },
+    {
+      "file": "app/components/chat/activity/activity-panel-trigger.tsx",
+      "line": 32,
+      "description": "Restrict the trigger to disclosure presentations; passive and live non-inspectable states cannot instantiate it.",
+      "signature": null
+    },
+    {
+      "file": "app/components/chat/activity/activity-panel.tsx",
+      "line": 67,
+      "description": "Render only normalized non-empty reasoning, source, tool, approval, image/search, and error sections.",
+      "signature": null
+    },
+    {
+      "file": "CONTEXT.md",
+      "line": 109,
+      "description": "Document the normalized activity presentation source of truth and Thinking-only live convention.",
+      "signature": null
+    }
+  ],
+  "functionalChanges": [
+    {
+      "id": "FC-1",
+      "description": "Every submitted or otherwise content-empty live assistant turn displays `Thinking`; the `Generating` shimmer and blinking caret presentation no longer appear.",
+      "ownedBy": 4
+    },
+    {
+      "id": "FC-2",
+      "description": "The live thinking surface can replace its label with normalized activity-aware copy such as searching, generating an image, awaiting approval, or using a named tool without changing its renderer or accessibility contract.",
+      "ownedBy": 4
+    },
+    {
+      "id": "FC-3",
+      "description": "Completed opaque reasoning with no displayable text and less than one second of valid duration renders no reasoning label, chevron, focus target, or Reasoning panel section.",
+      "ownedBy": 4
+    },
+    {
+      "id": "FC-4",
+      "description": "Completed opaque reasoning with no displayable text and at least one second of valid duration renders a passive `Thought for Ns` label with no disclosure interaction or semantics.",
+      "ownedBy": 4
+    },
+    {
+      "id": "FC-5",
+      "description": "Visible reasoning remains inspectable during streaming and after completion, including stopped, aborted, failed, regenerated, reloaded, and historical turns.",
+      "ownedBy": 4
+    },
+    {
+      "id": "FC-6",
+      "description": "Meaningful sources, tool calls, approvals, image/search activity, and tool errors retain an interactive Activity affordance even when reasoning is absent, empty, opaque, or suppressed.",
+      "ownedBy": 4
+    },
+    {
+      "id": "FC-7",
+      "description": "Completed duration labels appear only after a full second and use floor semantics, so `Thought for 0s` is impossible and 1000-1999 ms displays as 1s.",
+      "ownedBy": 4
+    },
+    {
+      "id": "FC-8",
+      "description": "Persisted reasoning duration measures the union of reasoning start/end intervals across multiple and interleaved blocks instead of starting on metadata-only deltas and ending at the first text delta.",
+      "ownedBy": 3
+    },
+    {
+      "id": "FC-9",
+      "description": "Only presentations with at least one inspectable Activity section render as buttons with chevrons, focus behavior, `aria-expanded`, and `aria-controls`; passive labels render as ordinary text.",
+      "ownedBy": 4
+    },
+    {
+      "id": "FC-10",
+      "description": "Activity panels exclude empty Reasoning sections and expose the same normalized sections on live settlement and durable historical hydration.",
+      "ownedBy": 4
+    }
+  ],
+  "contextResources": [
+    {
+      "id": "assistant-turn-contract",
+      "kind": "contract",
+      "paths": ["CONTEXT.md", "lib/chat-messages/assistant-turn.ts", "app/components/chat/conversation.tsx", "lib/chat-store/turns/selected-path.ts"],
+      "why": "Defines the per-render assistant view, canonical phase, in-place AI SDK mutation rule, client-owned liveness, historical status handling, and durable selected-path reconciliation that all presentation patches must preserve.",
+      "consumedBy": [1, 2, 4]
+    },
+    {
+      "id": "current-activity-surface",
+      "kind": "predecessor",
+      "paths": ["app/components/chat/message-assistant.tsx", "app/components/chat/use-reasoning-phase.ts", "app/components/chat/use-activity-panel.ts", "app/components/chat/activity/activity-panel-trigger.tsx", "app/components/chat/activity/activity-panel.tsx", "app/components/chat/activity/panel-header.tsx", "components/ui/reasoning.tsx"],
+      "why": "These files currently split label, timer, interactivity, panel-section, and accessibility decisions; Patch 4 replaces that inference with one normalized presentation while preserving the existing Activity host/store behavior.",
+      "consumedBy": [1, 4]
+    },
+    {
+      "id": "reasoning-runtime-contract",
+      "kind": "existing-implementation",
+      "paths": ["app/api/chat/chat-turn-runtime.ts", "app/api/chat/durable-turn-runtime.ts", "lib/tools/ui-metadata.ts", "convex/lib/messageMetadata.ts"],
+      "why": "Defines AI SDK stream callbacks, finish metadata, durable persistence, and the backward-compatible `reasoningDurationMs` boundary Patch 3 must retain.",
+      "consumedBy": [1, 3]
+    },
+    {
+      "id": "focused-behavior-tests",
+      "kind": "test-or-static-check",
+      "paths": ["lib/chat-messages/assistant-turn.test.ts", "app/components/chat/use-reasoning-phase.test.tsx", "app/components/chat/message-assistant.test.tsx", "app/components/chat/use-activity-panel.test.tsx", "app/components/chat/activity/activity-panel-trigger.test.tsx", "app/components/chat/activity/activity-panel.test.tsx", "app/api/chat/chat-turn-runtime.ai-sdk-seam.test.ts", "app/components/chat/conversation.test.tsx", "app/components/chat/message.test.tsx", "app/test/thinking-states/page.tsx"],
+      "why": "These suites and fixtures encode current lifecycle, memoization, historical targeting, trigger, panel, and SDK seam behavior; Patch 1 must mark the new expectations and later patches must implement them without broad snapshots.",
+      "consumedBy": [1, 2, 3, 4]
+    },
+    {
+      "id": "ai-sdk-stream-protocol",
+      "kind": "external-reference",
+      "paths": ["https://ai-sdk.dev/docs/ai-sdk-ui/stream-protocol", "https://ai-sdk.dev/docs/reference/ai-sdk-core/stream-text"],
+      "why": "The official AI SDK start/delta/end protocol and onChunk contract constrain the request-local reasoning interval tracker and the UI-message part lifecycle.",
+      "consumedBy": [2, 3]
+    },
+    {
+      "id": "provider-reasoning-contracts",
+      "kind": "external-reference",
+      "paths": ["https://platform.claude.com/docs/en/build-with-claude/extended-thinking", "https://developers.openai.com/api/docs/guides/reasoning", "https://ai.google.dev/gemini-api/docs/generate-content/thinking", "https://docs.x.ai/developers/model-capabilities/text/reasoning", "https://openrouter.ai/docs/guides/best-practices/reasoning-tokens"],
+      "why": "Primary provider documentation establishes that visible summaries, encrypted/signed/redacted continuation metadata, and internal reasoning activity are distinct; normalization must remain provider-neutral and must not delete opaque replay data.",
+      "consumedBy": [2, 3, 4]
+    }
+  ],
+  "acceptanceCriteria": [
+    "No production assistant state renders the word `Generating` with a blinking or streaming caret; submitted and content-empty live turns render `Thinking`.",
+    "The live status renderer accepts normalized label data and can present Thinking, search, image, approval, and tool-aware statuses without provider-name branches or raw-part inspection.",
+    "Empty and whitespace-only reasoning under 1000 ms produces no completed reasoning UI.",
+    "Empty and whitespace-only reasoning at or above 1000 ms produces passive, non-focusable `Thought for Ns` text with no chevron or disclosure ARIA.",
+    "Visible reasoning produces an interactive disclosure with a non-empty Reasoning section regardless of duration availability.",
+    "Sources, tools, approvals, image/search activity, and tool failures remain inspectable independently of reasoning visibility.",
+    "A disclosure presentation is constructible only when its section list is non-empty, and ActivityPanel renders exactly those sections.",
+    "Completed duration uses finite non-negative milliseconds, a 1000 ms visibility threshold, and floor conversion; `Thought for 0s` cannot be rendered.",
+    "Live reasoning timing is monotonic and starts only on observed reasoning lifecycle evidence; submitted Thinking without reasoning evidence does not start a fake reasoning timer.",
+    "Server timing handles multiple, interleaved, duplicate, aborted, and unterminated reasoning blocks without counting overlapping intervals twice.",
+    "Signed, encrypted, redacted, and empty provider reasoning parts remain durable and replayable even when they are not presented.",
+    "Live settlement, stop, abort, failure, background completion, selected-path reconciliation, reload, regeneration, and branch switching derive the same terminal presentation from the same facts.",
+    "Passive states are absent from keyboard order and carry no `aria-expanded` or `aria-controls`; interactive states retain native button and focus-return behavior.",
+    "Reduced-motion users receive no shimmer or chevron motion while status text remains visible.",
+    "Focused unit, component, runtime seam, and browser fixture verification passes without modifying unrelated dirty files."
+  ],
+  "openQuestions": [],
+  "explicitOpinions": [
+    {
+      "opinion": "Thinking is the universal initial live assistant label; remove the Generating caret convention.",
+      "rationale": "This is the explicit product convention. It also avoids a noisy Thinking-to-Generating transition when the provider emits no visible reasoning. Thinking here names the assistant's active state, not proof that displayable chain-of-thought exists."
+    },
+    {
+      "opinion": "Model live status, passive timing, and inspectable disclosure as distinct presentation variants rendered by one composable component.",
+      "rationale": "A single renderer can evolve from Thinking to richer activity copy while the discriminated union prevents passive opaque reasoning from inheriting hover, focus, chevron, or disclosure semantics."
+    },
+    {
+      "opinion": "Preserve opaque reasoning parts and provider metadata; suppress them only in presentation.",
+      "rationale": "Anthropic, OpenAI, Gemini, xAI, and OpenRouter can use signed, encrypted, redacted, or summary-free reasoning for continuation and tool replay. UI cleanup must not corrupt durable model history."
+    },
+    {
+      "opinion": "Use a 1000 ms threshold with floor semantics for completed labels.",
+      "rationale": "The UI never claims a full second before one elapsed and can never render Thought for 0s. Visible reasoning remains inspectable below the threshold but omits duration copy."
+    },
+    {
+      "opinion": "Activity labels describe the work currently visible or inspectable, while provider identity remains outside presentation logic.",
+      "rationale": "Tool and source facts already normalize across providers. A data-driven label resolver can later add copy such as searching online for a query or checking files without adding provider conditionals to components."
+    }
+  ],
+  "patches": [
+    {
+      "number": 1,
+      "classification": "INFRA",
+      "complexity": 2,
+      "title": "Add pending lifecycle and accessibility behavior tests",
+      "files": [
+        {"path": "lib/chat-messages/assistant-turn.test.ts", "action": "modify", "description": "Add skipped table cases for reasoning evidence, duration boundaries, mixed Activity, and live Thinking fallback."},
+        {"path": "app/components/chat/use-reasoning-phase.test.tsx", "action": "modify", "description": "Add skipped monotonic timer, handoff, and persisted-duration precedence cases."},
+        {"path": "app/components/chat/message-assistant.test.tsx", "action": "modify", "description": "Add skipped production-row cases for Thinking-only live status, passive opaque labels, and mixed activity."},
+        {"path": "app/components/chat/use-activity-panel.test.tsx", "action": "modify", "description": "Add skipped normalized-section and historical hydration cases."},
+        {"path": "app/components/chat/activity/activity-panel-trigger.test.tsx", "action": "modify", "description": "Add skipped disclosure-only accessibility cases."},
+        {"path": "app/components/chat/activity/activity-panel.test.tsx", "action": "modify", "description": "Add skipped non-empty section rendering cases."},
+        {"path": "app/api/chat/chat-turn-runtime.ai-sdk-seam.test.ts", "action": "modify", "description": "Add skipped real AI SDK stream cases for metadata-only, visible, multiple, and interleaved reasoning."},
+        {"path": "app/components/chat/conversation.test.tsx", "action": "modify", "description": "Add skipped submitted placeholder and reload settlement cases."}
+      ],
+      "changes": [
+        "Add behavior-focused `.skip` tests marked `PENDING: Patch 2`, `PENDING: Patch 3`, or `PENDING: Patch 4`; do not rewrite existing snapshots.",
+        "Encode the full boundary table: missing, negative, 0, 1-499, 500-999, 1000, 1001-1499, 1500-1999, and multi-second durations.",
+        "Encode no-part, empty, whitespace, metadata-only, redacted, visible, multiple-block, and duration-only reasoning fixtures.",
+        "Encode submitted and empty streaming turns as live `Thinking` without a caret and without an openable empty panel.",
+        "Encode independent and mixed sources, tool calls, approvals, image/search output, tool errors, stop/abort/failure, reload, and historical selection behavior.",
+        "Assert semantics through DOM roles and attributes: passive text is not a button; disclosures have one chevron plus `aria-expanded`/`aria-controls`; empty sections do not mount."
+      ],
+      "requiredContext": ["assistant-turn-contract", "current-activity-surface", "reasoning-runtime-contract", "focused-behavior-tests"],
+      "testStubsIntroduced": [
+        "assistant activity derivation > duration and content decision matrix",
+        "assistant activity derivation > submitted and empty live turns stay Thinking",
+        "assistant activity derivation > mixed non-reasoning activity remains inspectable",
+        "reasoning activity tracker > measures interval union across metadata-only and interleaved blocks",
+        "MessageAssistant > renders Thinking without Generating caret",
+        "MessageAssistant > renders opaque completed reasoning as hidden or passive at the one-second boundary",
+        "Activity presentation > passive markup has no disclosure semantics and interactive markup controls non-empty sections",
+        "reasoning lifecycle > live settlement and durable hydration converge"
+      ],
+      "testStubsImplemented": null,
+      "spec": "module COMPOSABLE_THINKING_ACTIVITY_PATCH_1.\n\n> Patch 1 introduces pending tests only.\n> No production behavior changes.\n\nTestStub.\npending => TestStub.\n---\ntrue.\n",
+      "precedents": null
+    },
+    {
+      "number": 2,
+      "classification": "INFRA",
+      "complexity": 3,
+      "title": "Introduce the normalized assistant-activity presentation domain",
+      "files": [
+        {"path": "lib/chat-messages/assistant-activity.ts", "action": "create", "description": "Define presentation variants, Activity sections, label resolution, disclosure eligibility, and duration policy."},
+        {"path": "lib/chat-messages/assistant-turn.ts", "action": "modify", "description": "Expose normalized reasoning blocks/evidence and remove presentation inference from raw phase fields."},
+        {"path": "lib/chat-messages/metadata.ts", "action": "modify", "description": "Reject negative and non-finite reasoning durations."},
+        {"path": "lib/format-duration.ts", "action": "modify", "description": "Add shared threshold/floor helpers while keeping string formatting pure."},
+        {"path": "lib/chat-messages/assistant-turn.test.ts", "action": "modify", "description": "Implement the pure derivation matrix stubs from Patch 1."}
+      ],
+      "changes": [
+        "Represent reasoning evidence with ordered displayable blocks, raw observed activity, literal live state, and normalized persisted milliseconds; use trimmed text only to decide displayability while preserving original text for rendering.",
+        "Define `AssistantActivityPresentation` as a closed union of `none`, `live-status`, `passive`, and `disclosure`; disclosure carries a statically non-empty section tuple.",
+        "Define Activity section variants for visible reasoning, sources, tool steps, approvals, images/search results, and tool errors using already-normalized assistant-view facts.",
+        "Make the live-status variant data-driven: semantic kind, primary label, optional detail, motion intent, and optional non-empty inspectable sections. Default submitted/empty streaming label is `Thinking`.",
+        "Move tool progress copy out of the component path into a pure label resolver that prefers tool display metadata and supports richer future detail without accepting JSX or provider ids.",
+        "Normalize completed duration only when finite and non-negative; return floor(ms / 1000) only when ms >= 1000. Visible reasoning below threshold remains a disclosure labelled `Thought`; opaque reasoning below threshold becomes `none`.",
+        "Give meaningful non-reasoning sections disclosure priority over suppressed or passive opaque reasoning; never add an opaque Reasoning section.",
+        "Preserve phase/liveness rules for historical rows, stop/error settlement, in-place part mutation, and selected-path hydration.",
+        "Enable the three Patch 2 derivation stubs."
+      ],
+      "requiredContext": ["assistant-turn-contract", "focused-behavior-tests", "ai-sdk-stream-protocol", "provider-reasoning-contracts"],
+      "testStubsIntroduced": null,
+      "testStubsImplemented": [
+        "assistant activity derivation > duration and content decision matrix",
+        "assistant activity derivation > submitted and empty live turns stay Thinking",
+        "assistant activity derivation > mixed non-reasoning activity remains inspectable"
+      ],
+      "spec": "module COMPOSABLE_THINKING_ACTIVITY_PATCH_2.\n\nPresentation.\nnone => Presentation.\nlive-status => Presentation.\npassive => Presentation.\ndisclosure => Presentation.\n\nTurn.\nlive? t: Turn => Bool.\ndisplayable-reasoning? t: Turn => Bool.\nopaque-duration-ms t: Turn => Nat0.\ninspectable-section-count t: Turn => Nat0.\npresentation t: Turn => Presentation.\nduration-seconds t: Turn => Nat0.\n---\n> Every live turn has a status presentation rather than no presentation.\nall t: Turn, live? t | presentation t = live-status.\n\n> Disclosure is possible only with inspectable content.\nall t: Turn, presentation t = disclosure | inspectable-section-count t > 0.\n\n> Brief opaque reasoning is absent when nothing else is inspectable.\nall t: Turn, ~displayable-reasoning? t, opaque-duration-ms t < 1000, inspectable-section-count t = 0 | presentation t = none.\n\n> Completed displayed seconds never equal zero.\nall t: Turn, presentation t = passive | duration-seconds t > 0.\n",
+      "precedents": [
+        {
+          "kind": "pattern",
+          "name": "Discriminated union state modeling",
+          "url": null,
+          "whyApplicable": "Use mutually exclusive presentation variants so passive text cannot accidentally inherit disclosure props and a disclosure cannot exist without non-empty sections. Exhaustive switches should make new future activity statuses compiler-visible."
+        },
+        {
+          "kind": "documentation",
+          "name": "AI SDK UI stream start-delta-end protocol",
+          "url": "https://ai-sdk.dev/docs/ai-sdk-ui/stream-protocol",
+          "whyApplicable": "Reasoning evidence must distinguish lifecycle start/end, text deltas, and provider metadata rather than treating every reasoning part as displayable content."
+        }
+      ]
+    },
+    {
+      "number": 3,
+      "classification": "BEHAVIOR",
+      "complexity": 3,
+      "title": "Measure reasoning lifecycle intervals at the AI SDK seam",
+      "files": [
+        {"path": "app/api/chat/reasoning-activity-tracker.ts", "action": "create", "description": "Request-local interval-union state machine with injected clock."},
+        {"path": "app/api/chat/chat-turn-runtime.ts", "action": "modify", "description": "Feed reasoning start/delta/end and terminal events into the tracker and persist its duration."},
+        {"path": "app/api/chat/chat-turn-runtime.test.ts", "action": "modify", "description": "Add focused callback-level timing and terminal-path coverage."},
+        {"path": "app/api/chat/chat-turn-runtime.ai-sdk-seam.test.ts", "action": "modify", "description": "Implement the real AI SDK stream seam stub from Patch 1."}
+      ],
+      "changes": [
+        "Track active reasoning block ids; when the active set changes from empty to non-empty, open an interval, and when it returns to empty, add the elapsed interval. This measures overlapping blocks once.",
+        "Ignore duplicate starts and unknown ends. Close remaining active intervals on finish, abort, or error using the terminal timestamp.",
+        "Observe empty metadata-only deltas without using them as the timer start boundary; reasoning-start is the lifecycle boundary.",
+        "Support multiple reasoning phases before, between, and after tools without stopping at the first text delta or counting tool-only gaps.",
+        "Keep `reasoningDurationMs` optional and numeric; emit it only when reasoning lifecycle evidence was observed, including a valid zero for instantaneous opaque activity.",
+        "Do not remove or rewrite provider metadata, signatures, encrypted content, redacted parts, or final response parts.",
+        "Implement the Patch 3 tracker/seam test stub with an injected deterministic clock and a real `streamText` mock model."
+      ],
+      "requiredContext": ["reasoning-runtime-contract", "focused-behavior-tests", "ai-sdk-stream-protocol", "provider-reasoning-contracts"],
+      "testStubsIntroduced": null,
+      "testStubsImplemented": [
+        "reasoning activity tracker > measures interval union across metadata-only and interleaved blocks"
+      ],
+      "spec": "module COMPOSABLE_THINKING_ACTIVITY_PATCH_3.\n\nStream.\nBlock.\nactive? s: Stream, b: Block => Bool.\nobserved? s: Stream => Bool.\nduration-ms s: Stream => Nat0.\nactive-union-ms s: Stream => Nat0.\n---\n> Persisted duration is the union of active reasoning intervals.\nall s: Stream | duration-ms s = active-union-ms s.\n\n> No reasoning evidence produces no positive duration.\nall s: Stream, ~observed? s | duration-ms s = 0.\n",
+      "precedents": [
+        {
+          "kind": "pattern",
+          "name": "Union-of-active-intervals accounting",
+          "url": null,
+          "whyApplicable": "Maintain an active-id set and a single union interval anchor so overlapping reasoning blocks are not double-counted and gaps occupied by tools are excluded. Duplicate lifecycle events become idempotent set operations."
+        },
+        {
+          "kind": "documentation",
+          "name": "AI SDK streamText callback contract",
+          "url": "https://ai-sdk.dev/docs/reference/ai-sdk-core/stream-text",
+          "whyApplicable": "Use the actual onChunk reasoning-start/reasoning-end events and terminal callbacks exposed by the installed AI SDK rather than reconstructing lifecycle boundaries from text deltas."
+        }
+      ]
+    },
+    {
+      "number": 4,
+      "classification": "BEHAVIOR",
+      "complexity": 3,
+      "title": "Cut over to the composable Thinking and Activity presentation",
+      "files": [
+        {"path": "app/components/chat/assistant-activity-indicator.tsx", "action": "create", "description": "Render live status, passive timing, or interactive disclosure from the normalized union."},
+        {"path": "app/components/chat/message-assistant.tsx", "action": "modify", "description": "Use the new indicator and remove the Generating text-shimmer/caret branch."},
+        {"path": "app/components/chat/use-reasoning-phase.ts", "action": "modify", "description": "Return monotonic live elapsed milliseconds only for observed live reasoning."},
+        {"path": "app/components/chat/use-activity-panel.ts", "action": "modify", "description": "Project normalized sections and selected-turn presentation into panel props."},
+        {"path": "app/components/chat/activity/activity-panel-trigger.tsx", "action": "modify", "description": "Render disclosure variants only and consume precomputed label/accessibility data."},
+        {"path": "app/components/chat/activity/activity-panel.tsx", "action": "modify", "description": "Render the normalized non-empty section list, including the currently-unused tool steps."},
+        {"path": "app/components/chat/activity/panel-header.tsx", "action": "modify", "description": "Consume normalized optional duration display without independently formatting invalid/zero values."},
+        {"path": "components/ui/reasoning.tsx", "action": "modify", "description": "Align the demo primitive's passive/disclosure semantics with the canonical presentation without making it the production source of truth."},
+        {"path": "app/test/thinking-states/page.tsx", "action": "modify", "description": "Replace the Generating fixture with Thinking and add passive, disclosure, mixed, and rich-status examples."},
+        {"path": "CONTEXT.md", "action": "modify", "description": "Document the normalized presentation union, Thinking-only initial convention, duration policy, and non-empty-section invariant."},
+        {"path": "lib/chat-messages/assistant-turn.test.ts", "action": "modify", "description": "Update indicator expectations for the production cutover."},
+        {"path": "app/components/chat/use-reasoning-phase.test.tsx", "action": "modify", "description": "Implement timer and hydration convergence expectations."},
+        {"path": "app/components/chat/message-assistant.test.tsx", "action": "modify", "description": "Implement row status, passive/interactive, mixed-activity, and reduced-motion tests."},
+        {"path": "app/components/chat/use-activity-panel.test.tsx", "action": "modify", "description": "Implement normalized section and historical selection tests."},
+        {"path": "app/components/chat/activity/activity-panel-trigger.test.tsx", "action": "modify", "description": "Implement disclosure-only ARIA and keyboard tests."},
+        {"path": "app/components/chat/activity/activity-panel.test.tsx", "action": "modify", "description": "Implement non-empty reasoning/source/tool section tests."},
+        {"path": "app/components/chat/conversation.test.tsx", "action": "modify", "description": "Implement submitted Thinking and durable hydration convergence tests."},
+        {"path": "app/components/chat/message.test.tsx", "action": "modify", "description": "Preserve streaming in-place mutation and memoization coverage for the new presentation signature."}
+      ],
+      "changes": [
+        "Render `live-status` through a composable text/status component that always has visible copy, applies shimmer only under `motion-safe`, has no caret, and remains ordinary text until inspectable sections exist.",
+        "Remove the `generating` indicator kind and the `Loader variant=text-shimmer text=Generating showCaret` branch. Submitted and empty streaming phases derive `live-status` with label `Thinking`.",
+        "When normalized live tool/search/image/approval facts exist, replace the default Thinking copy with the derived status label; the renderer remains unchanged and may accept richer optional detail later.",
+        "Render `passive` as a non-focusable span with no hover, cursor, chevron, click handler, `aria-expanded`, or `aria-controls`.",
+        "Render `disclosure` through ActivityPanelTrigger only when it carries a non-empty section tuple. The trigger remains a native button and keeps focus-return, keyboard, and selected-turn expanded semantics.",
+        "Make ActivityPanel exhaustively render its section union. Visible reasoning gets a Reasoning section; opaque reasoning never does. Sources and tool-related activity remain available independently and tools no longer open an empty panel.",
+        "If opaque passive timing coexists with inspectable non-reasoning activity, render the passive timing as a separate semantic fragment adjacent to the disclosure action; only the action owns disclosure ARIA.",
+        "Use server duration as terminal authority when present; use the live client timer only while observed reasoning is active or as the current-session handoff until finish metadata arrives. Do not start the timer merely because the turn says Thinking.",
+        "Preserve historical selected-turn status=`ready`, client-owned last-turn liveness, stop/error settlement, branch switching, background completion, and per-render derivation under in-place part mutation.",
+        "Update the thinking-states fixture to demonstrate default Thinking, richer live status copy, hidden brief opaque reasoning, passive opaque timing, visible disclosure, mixed activity, and reduced motion. Remove the obsolete Generating-with-caret example.",
+        "Update CONTEXT.md and enable the five remaining Patch 4 stubs. Run the focused suites plus a browser smoke of the fixture at desktop and mobile widths."
+      ],
+      "requiredContext": ["assistant-turn-contract", "current-activity-surface", "focused-behavior-tests", "provider-reasoning-contracts"],
+      "testStubsIntroduced": null,
+      "testStubsImplemented": [
+        "MessageAssistant > renders Thinking without Generating caret",
+        "MessageAssistant > renders opaque completed reasoning as hidden or passive at the one-second boundary",
+        "Activity presentation > passive markup has no disclosure semantics and interactive markup controls non-empty sections",
+        "reasoning lifecycle > live settlement and durable hydration converge"
+      ],
+      "spec": "module COMPOSABLE_THINKING_ACTIVITY_PATCH_4.\n\nTurn.\nPresentation.\nnone => Presentation.\nlive-status => Presentation.\npassive => Presentation.\ndisclosure => Presentation.\n\nlive? t: Turn => Bool.\ngenerating-caret? t: Turn => Bool.\nlabel-thinking? t: Turn => Bool.\nfocusable? t: Turn => Bool.\nchevron? t: Turn => Bool.\ndisclosure-semantics? t: Turn => Bool.\nsection-count t: Turn => Nat0.\npresentation t: Turn => Presentation.\n---\n> Active empty turns use Thinking and never the old Generating caret.\nall t: Turn, live? t | label-thinking? t, ~generating-caret? t.\n\n> Passive timing is not interactive.\nall t: Turn, presentation t = passive | ~focusable? t, ~chevron? t, ~disclosure-semantics? t.\n\n> Disclosure semantics require real content.\nall t: Turn, presentation t = disclosure | focusable? t, chevron? t, disclosure-semantics? t, section-count t > 0.\n\n> Non-disclosures never expose disclosure semantics.\nall t: Turn, presentation t ~= disclosure | ~disclosure-semantics? t.\n",
+      "precedents": [
+        {
+          "kind": "documentation",
+          "name": "WAI-ARIA Authoring Practices disclosure pattern",
+          "url": "https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/",
+          "whyApplicable": "Apply `aria-expanded` and `aria-controls` only to the native button that actually reveals non-empty Activity content. Passive timing text must remain outside the disclosure pattern and keyboard order."
+        },
+        {
+          "kind": "pattern",
+          "name": "Presentational component over normalized state",
+          "url": null,
+          "whyApplicable": "AssistantActivityIndicator should exhaustively render a closed data union and never inspect raw AI SDK parts, provider metadata, duration, or panel contents. This keeps future rich status labels composable without duplicating interaction decisions."
+        }
+      ]
+    }
+  ],
+  "testMap": [
+    {"testName": "assistant activity derivation > duration and content decision matrix", "file": "lib/chat-messages/assistant-turn.test.ts", "stubPatch": 1, "implPatch": 2},
+    {"testName": "assistant activity derivation > submitted and empty live turns stay Thinking", "file": "lib/chat-messages/assistant-turn.test.ts", "stubPatch": 1, "implPatch": 2},
+    {"testName": "assistant activity derivation > mixed non-reasoning activity remains inspectable", "file": "lib/chat-messages/assistant-turn.test.ts", "stubPatch": 1, "implPatch": 2},
+    {"testName": "reasoning activity tracker > measures interval union across metadata-only and interleaved blocks", "file": "app/api/chat/chat-turn-runtime.ai-sdk-seam.test.ts", "stubPatch": 1, "implPatch": 3},
+    {"testName": "MessageAssistant > renders Thinking without Generating caret", "file": "app/components/chat/message-assistant.test.tsx", "stubPatch": 1, "implPatch": 4},
+    {"testName": "MessageAssistant > renders opaque completed reasoning as hidden or passive at the one-second boundary", "file": "app/components/chat/message-assistant.test.tsx", "stubPatch": 1, "implPatch": 4},
+    {"testName": "Activity presentation > passive markup has no disclosure semantics and interactive markup controls non-empty sections", "file": "app/components/chat/activity/activity-panel-trigger.test.tsx", "stubPatch": 1, "implPatch": 4},
+    {"testName": "reasoning lifecycle > live settlement and durable hydration converge", "file": "app/components/chat/conversation.test.tsx", "stubPatch": 1, "implPatch": 4}
+  ],
+  "dependencyGraph": [
+    {"patch": 1, "classification": "INFRA", "dependsOn": []},
+    {"patch": 2, "classification": "INFRA", "dependsOn": [1]},
+    {"patch": 3, "classification": "BEHAVIOR", "dependsOn": [2]},
+    {"patch": 4, "classification": "BEHAVIOR", "dependsOn": [3]}
+  ],
+  "mergabilityChecklist": {
+    "featureFlagStrategyDocumented": true,
+    "earlyPatchesNonFunctional": true,
+    "testStubsInInfraPatches": true,
+    "testImplsColocated": true,
+    "testMapComplete": true,
+    "testMapImplPatchMatchesCode": true,
+    "behaviorPatchesMinimal": true,
+    "dependencyGraphOrdered": true,
+    "behaviorPatchesJustified": true,
+    "functionalChangesOwnedByExactlyOnePatch": true,
+    "operationalConsiderationsSubstantive": true,
+    "gameplanIsAtomicAndAutonomous": true
+  },
+  "mergabilityInsight": "Two of four patches are non-functional infrastructure. The two behavior patches are sequential and narrowly separated by runtime responsibility versus presentation cutover; the complete gameplan is atomic, requires no flag flip or operator pause, and preserves the existing metadata wire shape.",
+  "finalStateSpec": "module COMPOSABLE_THINKING_ACTIVITY.\n\nTurn.\nPresentation.\nnone => Presentation.\nlive-status => Presentation.\npassive => Presentation.\ndisclosure => Presentation.\n\nlive? t: Turn => Bool.\ndisplayable-reasoning? t: Turn => Bool.\nopaque-duration-ms t: Turn => Nat0.\nduration-seconds t: Turn => Nat0.\ninspectable-section-count t: Turn => Nat0.\ngenerating-caret? t: Turn => Bool.\nlabel-thinking? t: Turn => Bool.\nfocusable? t: Turn => Bool.\nchevron? t: Turn => Bool.\ndisclosure-semantics? t: Turn => Bool.\npresentation t: Turn => Presentation.\n\nStream.\nobserved? s: Stream => Bool.\nduration-ms s: Stream => Nat0.\nactive-union-ms s: Stream => Nat0.\n---\n> Thinking is the universal initial live convention; Generating caret is forbidden.\nall t: Turn, live? t | presentation t = live-status, label-thinking? t, ~generating-caret? t.\n\n> Brief opaque reasoning is absent when there is no other activity.\nall t: Turn, ~displayable-reasoning? t, opaque-duration-ms t < 1000, inspectable-section-count t = 0, ~live? t | presentation t = none.\n\n> Passive completed reasoning always represents at least one full second.\nall t: Turn, presentation t = passive | duration-seconds t > 0, ~focusable? t, ~chevron? t, ~disclosure-semantics? t.\n\n> Every disclosure has real inspectable content and native interaction semantics.\nall t: Turn, presentation t = disclosure | inspectable-section-count t > 0, focusable? t, chevron? t, disclosure-semantics? t.\n\n> Non-disclosures expose no disclosure semantics.\nall t: Turn, presentation t ~= disclosure | ~disclosure-semantics? t.\n\n> Server duration equals the union of active reasoning intervals.\nall s: Stream | duration-ms s = active-union-ms s.\n\n> No observed reasoning creates no positive measured reasoning time.\nall s: Stream, ~observed? s | duration-ms s = 0.\n"
+}

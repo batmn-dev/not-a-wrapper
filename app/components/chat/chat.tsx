@@ -17,6 +17,7 @@ import {
   usePublishActiveChatStatus,
 } from "@/lib/chat-store/status/sidebar-chat-status"
 import type { Chats } from "@/lib/chat-store/types"
+import { isRouteDurableChat } from "@/lib/chat-turn/chat-turn-controller"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
@@ -31,7 +32,6 @@ import {
   useActivityPanelOpen,
   useActivityPanelSelectedTurnId,
 } from "./activity/activity-panel-store"
-import { isRouteDurableChat } from "@/lib/chat-turn/chat-turn-controller"
 import { ChatStatusAnnouncer } from "./chat-announcer"
 import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
 import { TurnContextProvider, useTurnContext } from "./turn-context"
@@ -175,6 +175,7 @@ function ChatInner({
     defaultActivityTurnId,
     panelActivityTurnId,
     selectedTurnPresent,
+    panelCanOpen,
     panelProps,
   } = useActivityPanel({
     messages,
@@ -215,12 +216,14 @@ function ChatInner({
     if (selectedActivityTurnId !== undefined && !selectedTurnPresent) {
       activityPanelStore.clearStaleSelection(selectedActivityTurnId)
     }
+    if (!panelCanOpen) activityPanelStore.setOpen(false)
   }, [
     activityPanelStore,
     panelActivityTurnId,
     defaultActivityTurnId,
     selectedActivityTurnId,
     selectedTurnPresent,
+    panelCanOpen,
   ])
 
   const handleActivityPanelOpenChange = useCallback(
