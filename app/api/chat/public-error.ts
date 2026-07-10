@@ -178,6 +178,17 @@ export function normalizeChatError(
     .filter(Boolean)
   if (typeof error === "string" && error.length > 0) messages.unshift(error)
   const normalizedMessages = messages.map((message) => message.toLowerCase())
+  const rootError = records[0]
+  const internalMissingApiKeyMessage =
+    rootError?.code === "MISSING_API_KEY" &&
+    [
+      rootError.statusCode,
+      rootError.status,
+    ].some((status) => parseStatus(status) === 401) &&
+    typeof rootError.message === "string" &&
+    rootError.message.length > 0
+      ? rootError.message
+      : null
   const base = {
     ...(context.provider ? { provider: context.provider } : {}),
     ...(context.credentialSource
@@ -189,7 +200,7 @@ export function normalizeChatError(
     return {
       ...base,
       code: "AUTHENTICATION_ERROR",
-      message: messages[0] ?? authenticationMessage(context),
+      message: internalMissingApiKeyMessage ?? authenticationMessage(context),
       retryable: false,
     }
   }

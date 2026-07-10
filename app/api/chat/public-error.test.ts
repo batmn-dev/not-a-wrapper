@@ -82,6 +82,29 @@ describe("normalizeChatError", () => {
     })
   })
 
+  it("does not expose an upstream missing-api-key message", () => {
+    expect(
+      normalizeChatError(
+        {
+          message: "Provider request failed",
+          cause: {
+            statusCode: 401,
+            code: "MISSING_API_KEY",
+            message: "Missing credential for account acct_internal_123",
+          },
+        },
+        { provider: "openai", credentialSource: "platform" }
+      )
+    ).toEqual({
+      code: "AUTHENTICATION_ERROR",
+      message:
+        "OpenAI authentication is temporarily unavailable. Try again later or add your own OpenAI API key in settings.",
+      retryable: false,
+      provider: "openai",
+      credentialSource: "platform",
+    })
+  })
+
   it("marks rate limits retryable and preserves authoritative attribution", () => {
     expect(
       normalizeChatError(
