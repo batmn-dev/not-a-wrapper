@@ -1,7 +1,7 @@
 import { api } from "@/convex/_generated/api"
 import { getAllModels } from "@/lib/models"
 import { prepareToolRuntime } from "@/lib/tools/runtime"
-import { getEffectiveApiKey } from "@/lib/user-keys"
+import { getEffectiveProviderApiKey } from "@/lib/user-keys"
 import * as Sentry from "@sentry/nextjs"
 import { convertToModelMessages, validateUIMessages } from "ai"
 import { getFunctionName } from "convex/server"
@@ -45,7 +45,7 @@ vi.mock("@/lib/openproviders/request-shaping", () => ({
 vi.mock("@/lib/openproviders/env", () => ({ env: {} }))
 
 vi.mock("@/lib/user-keys", () => ({
-  getEffectiveApiKey: vi.fn(),
+  getEffectiveProviderApiKey: vi.fn(),
 }))
 
 vi.mock("@/lib/tools/runtime", () => ({
@@ -251,7 +251,10 @@ beforeEach(() => {
   vi.mocked(getAllModels).mockResolvedValue([
     { id: "test-model", provider: "anthropic", tools: false },
   ] as unknown as Awaited<ReturnType<typeof getAllModels>>)
-  vi.mocked(getEffectiveApiKey).mockResolvedValue("byok-key")
+  vi.mocked(getEffectiveProviderApiKey).mockResolvedValue({
+    apiKey: "byok-key",
+    source: "byok",
+  })
   vi.mocked(prepareToolRuntime).mockResolvedValue(
     makeToolRuntime() as unknown as Awaited<
       ReturnType<typeof prepareToolRuntime>
@@ -283,7 +286,7 @@ beforeEach(() => {
 
 describe("createChatTurnRuntime — prepare()", () => {
   it("throws a 401 MISSING_API_KEY when neither a BYOK nor an env key exists", async () => {
-    vi.mocked(getEffectiveApiKey).mockResolvedValue(null)
+    vi.mocked(getEffectiveProviderApiKey).mockResolvedValue({})
     const harness = makeStreamHarness()
     const fetchMutation = makeFetchMutation()
     const runtime = createChatTurnRuntime({
@@ -295,6 +298,23 @@ describe("createChatTurnRuntime — prepare()", () => {
       statusCode: 401,
       code: "MISSING_API_KEY",
     })
+  })
+
+  it("passes authoritative platform key provenance to the Tool runtime", async () => {
+    vi.mocked(getEffectiveProviderApiKey).mockResolvedValue({
+      apiKey: "platform-key",
+      source: "platform",
+    })
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(makeStreamHarness(), makeFetchMutation()),
+    })
+
+    await runtime.prepare()
+
+    expect(prepareToolRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({ providerToolKeyMode: "platform" })
+    )
   })
 
   it("throws a 400 INVALID_REQUEST error when the model is unknown", async () => {
@@ -552,7 +572,7 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     }
   })
 
-  it("fail() finalizes the durable run as failed with the assistant message", async () => {
+  it("fail() persists one context-normalized error with the assistant message", async () => {
     // The route's outer catch path: a post-prepare error must reach
     // markGenerationRunFailed with the run AND its placeholder message id —
     // the durable layer keeps that placeholder as the turn's visible failed
@@ -565,7 +585,9 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     })
 
     await runtime.prepare()
-    await runtime.fail(new Error("provider exploded"))
+    const error = new Error("402 payment required")
+    error.stack = `${error.stack}\n    at googleTransport (server.js:1:1)`
+    await runtime.fail(error)
 
     const failed = findCall(
       fetchMutation,
@@ -574,7 +596,8 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     expect(failed?.[1]).toMatchObject({
       runId: "run1",
       messageId: "msg1",
-      error: "provider exploded",
+      error:
+        "Your Anthropic API account has insufficient credits or requires payment. Check Anthropic billing or update your API key in settings.",
     })
   })
 })

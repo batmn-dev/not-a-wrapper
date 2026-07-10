@@ -1,7 +1,10 @@
 import { api } from "@/convex/_generated/api"
-import { getEffectiveApiKey, getEffectiveToolKeyWithMode } from "@/lib/user-keys"
 import { loadUserMcpTools } from "@/lib/mcp/load-tools"
 import { createLanguageModel } from "@/lib/openproviders/create-language-model"
+import {
+  getEffectiveProviderApiKey,
+  getEffectiveToolKeyWithMode,
+} from "@/lib/user-keys"
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import { jsonSchema, streamText, tool } from "ai"
 import { MockLanguageModelV3, simulateReadableStream } from "ai/test"
@@ -54,7 +57,7 @@ vi.mock("@/lib/posthog", () => ({
 }))
 
 vi.mock("@/lib/user-keys", () => ({
-  getEffectiveApiKey: vi.fn(),
+  getEffectiveProviderApiKey: vi.fn(),
   getEffectiveToolKeyWithMode: vi.fn(),
 }))
 
@@ -325,7 +328,10 @@ function makeDeps(fetchMutation: ReturnType<typeof vi.fn>): ChatTurnDeps {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.spyOn(console, "log").mockImplementation(() => {})
-  vi.mocked(getEffectiveApiKey).mockResolvedValue("sk-test")
+  vi.mocked(getEffectiveProviderApiKey).mockResolvedValue({
+    apiKey: "sk-test",
+    source: "byok",
+  })
   vi.mocked(getEffectiveToolKeyWithMode).mockResolvedValue({
     key: undefined,
     keyMode: undefined,

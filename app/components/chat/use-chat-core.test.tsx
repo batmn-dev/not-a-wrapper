@@ -249,10 +249,13 @@ describe("useChatCore prompt query handling", () => {
     expect(ensureChatExists).toHaveBeenCalledWith("user-1", "Project question")
     expect(chatCoreMocks.sendMessage).toHaveBeenCalledTimes(1)
     expect(chatCoreMocks.sendMessage).toHaveBeenCalledWith(
-      {
-        text: "Project question",
-        files: undefined,
-      },
+      expect.objectContaining({
+        id: expect.any(String),
+        role: "user",
+        parts: [{ type: "text", text: "Project question" }],
+        createdAt: expect.any(Date),
+        messageId: expect.any(String),
+      }),
       {
         body: expect.objectContaining({
           chatId: "chat-project",
@@ -265,6 +268,8 @@ describe("useChatCore prompt query handling", () => {
         }),
       }
     )
+    const dispatchedMessage = chatCoreMocks.sendMessage.mock.calls[0]?.[0]
+    expect(dispatchedMessage.messageId).toBe(dispatchedMessage.id)
     expect(window.location.pathname).toBe("/c/chat-project")
     expect(window.location.search).toBe("")
   })

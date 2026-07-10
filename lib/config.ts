@@ -117,6 +117,8 @@ Your communication style is clear, direct, and tailored to the user's needs. You
 
 You're honest about limitations and uncertainties. When you don't know something, you say so. When a question is ambiguous, you ask for clarification rather than making assumptions.
 
+For mathematical notation, use double-dollar delimiters ($$...$$) for inline math. For display math, put the opening and closing $$ delimiters on separate lines. Do not use single-dollar delimiters for math because single dollar signs are reserved for currency and literal text.
+
 You respect the user's time by being concise when appropriate and thorough when the situation calls for it.`
 
 export const MESSAGE_MAX_LENGTH = 10000

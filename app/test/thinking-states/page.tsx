@@ -389,19 +389,28 @@ function CopyRegenActions() {
         "pointer-coarse:[mask-image:none]"
       )}
     >
-      <MessageAction tooltip="Copy text" side="bottom">
+      <MessageAction tooltip="Copy Response" side="bottom">
         <button
           className="hover:bg-accent/60 text-muted-foreground hover:text-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent transition pointer-coarse:h-10 pointer-coarse:w-10"
-          aria-label="Copy text"
+          aria-label="Copy Response"
           type="button"
         >
           <Icon icon={RiFileCopyLine} slotSize={20} />
         </button>
       </MessageAction>
-      <MessageAction tooltip="Regenerate" side="bottom" delay={0}>
+      <MessageAction
+        tooltip={
+          <span className="flex flex-col items-center text-center leading-tight">
+            <span className="font-medium">Try again...</span>
+            <span className="text-background/70">Using GPT-5.5</span>
+          </span>
+        }
+        side="bottom"
+        delay={0}
+      >
         <button
           className="hover:bg-accent/60 text-muted-foreground hover:text-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent transition pointer-coarse:h-10 pointer-coarse:w-10"
-          aria-label="Regenerate"
+          aria-label="Try again with GPT-5.5"
           type="button"
         >
           <Icon icon={RiRefreshLine} slotSize={20} />

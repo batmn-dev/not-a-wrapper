@@ -1,5 +1,10 @@
 "use client"
 
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import type { Chat } from "@/lib/chat-store/types"
 import { Pin, PinOff } from "@/lib/icons"
@@ -47,21 +52,35 @@ export function SidebarChatPinButton({
   title: string
 }) {
   const { togglePinned } = useChats()
+  const tooltipLabel = chat.pinned ? "Unpin Chat" : "Pin Chat"
 
   return (
-    <button
-      type="button"
-      className={trailingIconButtonClassName}
-      aria-label={chat.pinned ? `Unpin ${title}` : `Pin ${title}`}
-      onClick={(e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        togglePinned(chat.id, !chat.pinned)
-      }}
-    >
-      <TrailingIconChip>
-        {chat.pinned ? <PinOff slotSize={20} /> : <Pin slotSize={20} />}
-      </TrailingIconChip>
-    </button>
+    <Tooltip disableHoverablePopup>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            className={trailingIconButtonClassName}
+            aria-label={chat.pinned ? `Unpin ${title}` : `Pin ${title}`}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              togglePinned(chat.id, !chat.pinned)
+            }}
+          />
+        }
+      >
+        <TrailingIconChip>
+          {chat.pinned ? <PinOff slotSize={20} /> : <Pin slotSize={20} />}
+        </TrailingIconChip>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        sideOffset={-6}
+        className="bg-popover text-popover-foreground shadow-border-md"
+      >
+        {tooltipLabel}
+      </TooltipContent>
+    </Tooltip>
   )
 }

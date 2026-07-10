@@ -39,7 +39,7 @@ import {
   type ToolInvocationMetadataByCallId,
   type ToolInvocationMetadataByName,
 } from "@/lib/tools/ui-metadata"
-import type { Provider, ToolKeyMode } from "@/lib/user-keys"
+import type { ApiKeySource, Provider, ToolKeyMode } from "@/lib/user-keys"
 import * as Sentry from "@sentry/nextjs"
 import {
   consumeStream,
@@ -71,13 +71,13 @@ import {
   createToolCallLogSink,
   createToolTraceLogSink,
 } from "./outcome-sinks"
+import { normalizeChatError, type PublicChatError } from "./public-error"
 import {
   getTextFilePartReferences,
   prepareTextFilePartsForModelInput,
 } from "./text-file-parts"
 import {
   excludeSystemRoleMessages,
-  extractErrorMessage,
   hasProviderLinkedResponseIds,
   toPlainTextModelMessages,
 } from "./utils"
@@ -154,7 +154,7 @@ type ToolExecutionOutcome =
 type PreparedTurn = {
   aiModel: ReturnType<typeof createLanguageModel>
   modelConfig: ModelConfig
-  provider: string
+  provider: Provider
   normalizedChatVersion: number
   hasAnyTools: boolean
   shouldInjectSearch: boolean
@@ -353,7 +353,18 @@ export function createChatTurnRuntime(args: {
   // on a partial prepare (it is computed before the plan is assembled).
   let toolRuntime: ToolRuntime | null = null
   let openedMcpClientCount = 0
-  let provider: string | undefined
+  let provider: Provider | undefined
+  let credentialSource: ApiKeySource | undefined
+  let lastPublicError: PublicChatError | null = null
+
+  const normalizeTurnError = (error: unknown): PublicChatError => {
+    const normalized = normalizeChatError(error, {
+      provider,
+      credentialSource,
+    })
+    lastPublicError = normalized
+    return normalized
+  }
 
   // The full execution plan, assigned at the end of a successful prepare().
   let prepared: PreparedTurn | null = null
@@ -386,40 +397,26 @@ export function createChatTurnRuntime(args: {
     provider = resolvedProvider
     Sentry.setTag("chat_provider", resolvedProvider)
 
-    let apiKey: string | undefined
-    if (isAuthenticated && convexToken) {
-      const { getEffectiveApiKey } = await import("@/lib/user-keys")
-      apiKey =
-        (await getEffectiveApiKey(resolvedProvider as Provider, convexToken)) ||
-        undefined
-    }
+    const { getEffectiveProviderApiKey } = await import("@/lib/user-keys")
+    const keyResolution = await getEffectiveProviderApiKey(
+      resolvedProvider,
+      isAuthenticated ? convexToken : undefined
+    )
+    const apiKey = keyResolution.apiKey
+    credentialSource = keyResolution.source
 
-    // Pre-flight check: verify an API key is available before calling the provider.
-    // When apiKey is undefined, the AI SDK falls back to environment variables.
-    // If neither source has a valid key, the provider will reject with a 401.
-    if (!apiKey) {
-      const { env: providerEnv } = await import("@/lib/openproviders/env")
-      const envKeyMap: Record<string, string | undefined> = {
-        openai: providerEnv.OPENAI_API_KEY,
-        mistral: providerEnv.MISTRAL_API_KEY,
-        perplexity: providerEnv.PERPLEXITY_API_KEY,
-        google: providerEnv.GOOGLE_GENERATIVE_AI_API_KEY,
-        anthropic: providerEnv.ANTHROPIC_API_KEY,
-        xai: providerEnv.XAI_API_KEY,
-        openrouter: providerEnv.OPENROUTER_API_KEY,
-      }
-      const envKey = envKeyMap[resolvedProvider]
-      if (!envKey) {
-        const providerName = modelConfig.provider || resolvedProvider
-        throw Object.assign(
-          new Error(
-            `No API key configured for ${providerName}. Please add your ${providerName} API key in settings.`
-          ),
-          { statusCode: 401, code: "MISSING_API_KEY" }
-        )
-      }
+    // Resolve key and provenance together. If neither user BYOK nor the
+    // provider's platform env key exists, fail before constructing the SDK.
+    if (!apiKey || !credentialSource) {
+      const providerName = modelConfig.provider || resolvedProvider
+      throw Object.assign(
+        new Error(
+          `No API key configured for ${providerName}. Please add your ${providerName} API key in settings.`
+        ),
+        { statusCode: 401, code: "MISSING_API_KEY" }
+      )
     }
-    const providerToolKeyMode: ToolKeyMode = apiKey ? "byok" : "platform"
+    const providerToolKeyMode: ToolKeyMode = credentialSource
 
     // enableSearch is no longer passed to the model — it controls tool injection
     // below. All search is now provided via visible, auditable tool calls.
@@ -1076,7 +1073,8 @@ export function createChatTurnRuntime(args: {
           streamCompleted = true
           resolvePostToolContinuation()
           console.error("Streaming error occurred:", err)
-          const errorMessage = extractErrorMessage(err)
+          const publicError = normalizeTurnError(err)
+          const errorMessage = publicError.message
           const errorType = classifyChatError(err)
           // Mark the durable run failed (guest: inert). The parent already
           // computed `errorMessage` for its telemetry below — pass the string.
@@ -1405,7 +1403,7 @@ export function createChatTurnRuntime(args: {
             chatVersion: normalizedChatVersion,
           },
         })
-        return extractErrorMessage(error)
+        return (lastPublicError ?? normalizeTurnError(error)).message
       },
     })
 
@@ -1425,7 +1423,8 @@ export function createChatTurnRuntime(args: {
     // Finalize a failed durable run (guest: inert; pre-prepare: no-op). Legal at
     // any phase — the Generation run lifecycle's first-terminal-wins absorbs a
     // double terminal write. Never throws.
-    await durableTurn.fail(err)
+    const publicError = lastPublicError ?? normalizeTurnError(err)
+    await durableTurn.fail(publicError.message)
 
     const errorType = classifyChatError(err)
     Sentry.captureException(err, {

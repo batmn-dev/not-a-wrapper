@@ -464,7 +464,7 @@ describe("MessageAssistant activity trigger", () => {
 
     // Settled turn without sources: actions row renders, badge does not.
     expect(
-      container?.querySelector('button[aria-label="Copy text"]')
+      container?.querySelector('button[aria-label="Copy Response"]')
     ).toBeTruthy()
     expect(container?.querySelector('button[aria-label="Sources"]')).toBeNull()
 
@@ -527,7 +527,7 @@ describe("MessageAssistant activity trigger", () => {
     const trigger = container?.querySelector(
       'button[aria-label="Open activity: Thought for 2s"]'
     )
-    const copy = container?.querySelector('button[aria-label="Copy text"]')
+    const copy = container?.querySelector('button[aria-label="Copy Response"]')
 
     expect(answer).toBeTruthy()
     expect(trigger).toBeTruthy()
@@ -539,6 +539,103 @@ describe("MessageAssistant activity trigger", () => {
     expect(
       answer!.compareDocumentPosition(copy!) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
+  })
+
+  it("names the model the retry action will use", async () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+
+    await act(async () => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            isDurableChat
+            onReload={() => {}}
+            retryModelId="gpt-5.5"
+            view={makeView([], "ready")}
+            status="ready"
+          >
+            {"Assistant answer"}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    const retry = container?.querySelector(
+      'button[aria-label="Try again with GPT-5.5"]'
+    ) as HTMLButtonElement | null
+
+    expect(retry).toBeTruthy()
+
+    await act(async () => {
+      retry?.focus()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("Try again...")
+    expect(document.body.textContent).toContain("Using GPT-5.5")
+  })
+
+  it("keeps settled assistant actions visible without hover", async () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+
+    await act(async () => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            copied={false}
+            copyToClipboard={() => {}}
+            view={makeView([], "ready")}
+            status="ready"
+          >
+            {"Assistant answer"}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    const actions = container?.querySelector(
+      'button[aria-label="Copy Response"]'
+    )?.parentElement
+
+    expect(actions).toBeTruthy()
+    expect(actions?.className).not.toContain("[mask-position:100%_0%]")
+    expect(actions?.className).not.toContain(
+      "group-hover/turn-messages:[mask-position:0_0]"
+    )
+  })
+
+  it("preserves the one-time reveal for an assistant response streamed in this session", async () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+
+    await act(async () => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            copied={false}
+            copyToClipboard={() => {}}
+            finishReason="stop"
+            isLast
+            view={makeView([], "ready")}
+            status="ready"
+          >
+            {"Assistant answer"}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    const actions = container?.querySelector(
+      'button[aria-label="Copy Response"]'
+    )?.parentElement
+
+    expect(actions).toBeTruthy()
+    expect(actions?.className).toContain(
+      "motion-safe:[animation:mask-reveal_1.5s_ease_forwards]"
+    )
+    expect(actions?.className).not.toContain("[mask-position:100%_0%]")
   })
 
   it("keeps a Retry control on an aborted turn whose only preserved content is a tool card", async () => {

@@ -9,7 +9,7 @@ type MessageActionButtonProps = {
   /** The glyph (often state-dependent, e.g. copied ? check : copy). */
   icon: ReactNode
   onClick?: () => void
-  /** Tooltip text; defaults to `label` (copy uses "Copied!" vs "Copy text"). */
+  /** Tooltip text; defaults to `label` (copy actions use "Copied!" when done). */
   tooltip?: ReactNode
   disabled?: boolean
   side?: "top" | "bottom" | "left" | "right"

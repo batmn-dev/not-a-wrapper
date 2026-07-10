@@ -53,14 +53,15 @@ type SendMessage = (
         text: string
         files?: SendFilePart[]
       }
-    // The full-message form: the SDK appends it verbatim (keeping `id`), so a
-    // turn runner can control the live message's identity. The edit runner
-    // needs this — see runEditTurn.
+    // The full-message form: the SDK appends it verbatim (keeping `id`), or
+    // atomically replaces the optimistic row when `messageId` is present. Turn
+    // runners use this to preserve live identity and top-level `createdAt`.
     | {
         id: string
         role: "user"
         parts: ChatTurnMessage["parts"]
         createdAt?: Date
+        messageId?: string
       },
   options?: SendMessageOptions
 ) => void
@@ -81,6 +82,9 @@ export type ChatTurnSnapshot = {
 }
 
 export type ChatTurnAdapters = {
+  /** Clock seam for deterministic turn-lifecycle tests; production defaults
+   * to the browser clock and reads it exactly once per optimistic send. */
+  now?: () => Date
   createOptimisticMessageId?: () => string
   createOptimisticEditMessageId?: () => string
   getTurnSnapshot: () => ChatTurnSnapshot
@@ -256,10 +260,10 @@ async function runSendTurn(
   const optimisticId = (
     adapters.createOptimisticMessageId ?? createOptimisticMessageId
   )()
-  const optimisticMessage: ChatTurnMessage = {
+  const optimisticMessage = {
     id: optimisticId,
     role: "user",
-    createdAt: new Date(),
+    createdAt: (adapters.now ?? (() => new Date()))(),
     parts: [
       { type: "text", text },
       ...optimisticAttachments.map((attachment) => ({
@@ -269,7 +273,7 @@ async function runSendTurn(
         url: attachment.url,
       })),
     ],
-  }
+  } satisfies ChatTurnMessage
 
   adapters.setMessages((prev) => [...prev, optimisticMessage])
 
@@ -278,11 +282,15 @@ async function runSendTurn(
       ?.filter((part) => part.type === "file")
       .map((part) => ({ url: (part as { url?: string }).url })) || []
 
+  const cleanupOptimistic = () => {
+    adapters.cleanupOptimisticAttachments(getFileUrlsFromParts())
+  }
+
   const removeOptimistic = () => {
     adapters.setMessages((prev) =>
       prev.filter((message) => message.id !== optimisticId)
     )
-    adapters.cleanupOptimisticAttachments(getFileUrlsFromParts())
+    cleanupOptimistic()
   }
 
   try {
@@ -321,12 +329,33 @@ async function runSendTurn(
       }
     }
 
+    const dispatchedMessage = {
+      ...optimisticMessage,
+      parts: [
+        { type: "text", text },
+        ...(convertAttachmentsToFiles(attachments) ?? []),
+      ],
+    } satisfies ChatTurnMessage
+
+    if (submittedFiles.length > 0) {
+      // Upload completion changes only the attachment parts on the row that is
+      // already mounted. Keeping the optimistic id, role, and exact Date
+      // object here prevents an attachment-only intermediate message from
+      // losing its timestamp before the SDK performs the transport handoff.
+      adapters.setMessages((prev) =>
+        prev.map((message) =>
+          message.id === optimisticId ? dispatchedMessage : message
+        )
+      )
+    }
+
     adapters.sendMessage(
       {
-        text,
-        files: attachments?.length
-          ? convertAttachmentsToFiles(attachments)
-          : undefined,
+        ...dispatchedMessage,
+        // Replaces the already-rendered optimistic row synchronously inside
+        // the AI SDK. Its id and createdAt therefore survive the handoff, so
+        // render-derived grouping never appears a frame late.
+        messageId: optimisticId,
       },
       {
         body: buildChatTurnRequestBody({
@@ -342,8 +371,8 @@ async function runSendTurn(
     )
 
     adapters.setHasSentFirstMessage(true)
-    removeOptimistic()
-    void adapters.turnStore.persistTurnMessage(optimisticMessage, currentChatId)
+    cleanupOptimistic()
+    void adapters.turnStore.persistTurnMessage(dispatchedMessage, currentChatId)
     onSuccess?.(currentChatId)
   } catch {
     removeOptimistic()

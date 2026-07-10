@@ -23,7 +23,7 @@ import type {
 } from "ai"
 import { getStaticToolName, isStaticToolUIPart } from "ai"
 import { fetchMutation as defaultFetchMutation } from "convex/nextjs"
-import { extractErrorMessage, isConvexArgumentValidationError } from "./utils"
+import { isConvexArgumentValidationError } from "./utils"
 
 // ---------------------------------------------------------------------------
 // Durable turn runtime (CONTEXT.md): the deep module behind which ALL durable
@@ -185,7 +185,7 @@ export type DurableTurnRuntime = {
    * Legal at ANY phase: pre-prepare (no run → no-op), mid-stream, or after
    * `finalize()` (first-terminal-wins absorbs it). Never throws.
    */
-  fail(error: unknown): Promise<void>
+  fail(errorMessage: string): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
@@ -991,7 +991,7 @@ export function createConvexDurableTurn(args: {
       )
     },
 
-    async fail(error) {
+    async fail(errorMessage) {
       const currentRunId = runId
       const currentMessageId = assistantMessageId
       if (!currentRunId || !currentMessageId) return
@@ -1000,7 +1000,7 @@ export function createConvexDurableTurn(args: {
         {
           runId: currentRunId,
           messageId: currentMessageId,
-          error: extractErrorMessage(error),
+          error: errorMessage,
         },
         { token: convexToken }
       ).catch((writeError: unknown) => {

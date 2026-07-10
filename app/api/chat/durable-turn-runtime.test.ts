@@ -610,7 +610,7 @@ describe("durable turn runtime — guest inertness", () => {
         finishReason: "stop",
       })
     ).resolves.toBeUndefined()
-    await expect(guest.fail(new Error("nope"))).resolves.toBeUndefined()
+    await expect(guest.fail("nope")).resolves.toBeUndefined()
 
     expect(moduleFetchMutation).not.toHaveBeenCalled()
   })
@@ -623,7 +623,7 @@ describe("durable turn runtime — fail() at each phase", () => {
       makeInput() as DurableTurnInput & { convexToken: string },
       fetchMutation
     )
-    await expect(turn.fail(new Error("early"))).resolves.toBeUndefined()
+    await expect(turn.fail("early")).resolves.toBeUndefined()
     expect(fetchMutation).not.toHaveBeenCalled()
   })
 
@@ -634,7 +634,7 @@ describe("durable turn runtime — fail() at each phase", () => {
       fetchMutation
     )
     await turn.prepare({ provider: "anthropic" })
-    await turn.fail(new Error("provider exploded"))
+    await turn.fail("provider exploded")
 
     const failed = findCalls(
       fetchMutation,
@@ -664,7 +664,7 @@ describe("durable turn runtime — fail() at each phase", () => {
       )
       await turn.prepare({ provider: "anthropic" })
 
-      await expect(turn.fail(new Error("boom"))).resolves.toBeUndefined()
+      await expect(turn.fail("boom")).resolves.toBeUndefined()
       const warnLine = warn.mock.calls
         .map(([message]) => String(message))
         .find((message) => message.includes("durable_run_failed_write_failed"))

@@ -9,10 +9,14 @@ import {
   type DurableMessageStatus,
 } from "@/lib/chat-messages/durable-contract"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
+import type { EditTurnResult } from "@/lib/chat-turn/chat-turn-controller"
 import { cn } from "@/lib/utils"
 import { UIMessage as MessageType } from "@ai-sdk/react"
 import type { ReactNode } from "react"
-import type { EditTurnResult } from "@/lib/chat-turn/chat-turn-controller"
+import {
+  ConversationTimestamp,
+  deriveConversationTimestampHeaders,
+} from "./conversation-timestamp"
 import { Message } from "./message"
 import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
 import {
@@ -21,6 +25,10 @@ import {
 } from "./use-activity-panel"
 
 type MessageRenderStatus = DurableMessageStatus | "ready" | "error"
+
+type ConversationMessage = MessageType & {
+  createdAt?: Date
+}
 
 function isMessageRenderStatus(value: unknown): value is MessageRenderStatus {
   return value === "ready" || value === "error" || isDurableMessageStatus(value)
@@ -80,7 +88,10 @@ function TurnRow({
 }
 
 type ConversationProps = {
-  messages: MessageType[]
+  messages: ConversationMessage[]
+  /** Stable observation time for one render; injectable by deterministic
+   * lifecycle tests without mocking the global clock. */
+  now?: Date
   status?: "streaming" | "ready" | "submitted" | "error"
   isSubmitting?: boolean
   onDelete: (id: string) => void
@@ -89,6 +100,7 @@ type ConversationProps = {
     newText: string
   ) => Promise<EditTurnResult | void> | EditTurnResult | void
   onReload: (messageId: string) => void
+  retryModelId?: string
   onQuote?: (text: string, messageId: string) => void
   onSelectBranch?: (messageId: string) => void
   isDurableChat?: boolean
@@ -109,11 +121,13 @@ const PENDING_TURN_VIEW: AssistantTurnView = deriveAssistantTurnView(
 
 export function Conversation({
   messages,
+  now = new Date(),
   status = "ready",
   isSubmitting = false,
   onDelete,
   onEdit,
   onReload,
+  retryModelId,
   onQuote,
   onSelectBranch,
   isDurableChat,
@@ -126,9 +140,10 @@ export function Conversation({
   const generationActive = isGenerationActive(status, isSubmitting)
   const hasPendingAssistantTurn =
     generationActive && messages[messages.length - 1]?.role === "user"
+  const timestampHeaders = deriveConversationTimestampHeaders(messages, now)
 
   return (
-    <ScrollRootContent className="relative -mb-[var(--composer-overlap-px)] flex w-full flex-1 flex-col items-center pt-4 pb-[var(--thread-bottom-offset)] [--composer-overlap-px:28px] [--thread-bottom-offset:calc(var(--spacing-input-area)+env(safe-area-inset-bottom,0px))]">
+    <ScrollRootContent className="relative -mb-[var(--composer-overlap-px)] flex w-full flex-1 flex-col items-center pb-[var(--thread-bottom-offset)] [--composer-overlap-px:28px] [--thread-bottom-offset:calc(var(--spacing-input-area)+env(safe-area-inset-bottom,0px))]">
       <div
         aria-hidden="true"
         data-edge="top"
@@ -187,6 +202,7 @@ export function Conversation({
               onDelete={onDelete}
               onEdit={onEdit}
               onReload={generationActive ? undefined : onReload}
+              retryModelId={retryModelId}
               onSelectBranch={onSelectBranch}
               branch={turnBranch}
               status={messageStatus}
@@ -221,21 +237,31 @@ export function Conversation({
           )
         }
 
+        const timestampHeader = timestampHeaders[index]
+
         return (
-          <TurnRow
+          <div
             key={message.id}
-            className={cn(
-              `mx-auto w-full px-[var(--thread-content-margin,1rem)] text-base ${THREAD_GUTTER_VARS}`,
-              isUser &&
-                "scroll-mt-[var(--sticky-padding-top,var(--spacing-app-header))] pt-3",
-              isAssistant &&
-                "scroll-mt-[calc(var(--sticky-padding-top,var(--spacing-app-header))+min(200px,max(70px,20svh)))] pb-10"
-            )}
-            dataTurn={message.role}
-            dataTurnId={message.id}
+            className="w-full"
+            data-turn-id-container={message.id}
           >
-            {messageContent}
-          </TurnRow>
+            {timestampHeader && (
+              <ConversationTimestamp header={timestampHeader} now={now} />
+            )}
+            <TurnRow
+              className={cn(
+                `mx-auto w-full px-[var(--thread-content-margin,1rem)] text-base ${THREAD_GUTTER_VARS}`,
+                isUser &&
+                  "scroll-mt-[var(--sticky-padding-top,var(--spacing-app-header))] pt-3",
+                isAssistant &&
+                  "scroll-mt-[calc(var(--sticky-padding-top,var(--spacing-app-header))+min(200px,max(70px,20svh)))] pb-10"
+              )}
+              dataTurn={message.role}
+              dataTurnId={message.id}
+            >
+              {messageContent}
+            </TurnRow>
+          </div>
         )
       })}
       {hasPendingAssistantTurn && (
@@ -253,6 +279,7 @@ export function Conversation({
             onDelete={onDelete}
             onEdit={onEdit}
             onReload={undefined}
+            retryModelId={retryModelId}
             onSelectBranch={onSelectBranch}
             status="submitted"
             onQuote={onQuote}
