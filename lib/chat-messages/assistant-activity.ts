@@ -1,5 +1,6 @@
 import { getStaticToolName, type SourceUrlUIPart, type ToolUIPart } from "ai"
 import { formatDuration, toCompletedDurationSeconds } from "../format-duration"
+import { humanizeToolName } from "../tools/ui-metadata"
 import type {
   AssistantTurnPhase,
   AssistantTurnView,
@@ -9,6 +10,12 @@ import { getToolDisplayMetadataRecords } from "./metadata"
 
 export type NonEmptyTuple<T> = readonly [T, ...T[]]
 
+export type AssistantActivityToolEntry = {
+  id: string
+  label: string
+  description: string
+}
+
 export type AssistantActivitySection =
   | {
       kind: "reasoning"
@@ -16,10 +23,10 @@ export type AssistantActivitySection =
       isStreaming: boolean
     }
   | { kind: "sources"; sources: NonEmptyTuple<SourceUrlUIPart> }
-  | { kind: "tool-steps"; steps: NonEmptyTuple<ToolUIPart> }
-  | { kind: "approvals"; steps: NonEmptyTuple<ToolUIPart> }
+  | { kind: "tool-steps"; entries: NonEmptyTuple<AssistantActivityToolEntry> }
+  | { kind: "approvals"; entries: NonEmptyTuple<AssistantActivityToolEntry> }
   | { kind: "images"; results: NonEmptyTuple<SearchImageResult> }
-  | { kind: "tool-errors"; steps: NonEmptyTuple<ToolUIPart> }
+  | { kind: "tool-errors"; entries: NonEmptyTuple<AssistantActivityToolEntry> }
 
 export type ActivityMotionIntent = "none" | "shimmer"
 
@@ -65,6 +72,58 @@ function isErrorStep(step: ToolUIPart): boolean {
   )
 }
 
+function metadataDisplayName(
+  view: AssistantTurnView,
+  toolName: string,
+  toolCallId?: string
+): string | undefined {
+  const records = getToolDisplayMetadataRecords(view.metadata)
+  const candidate =
+    (toolCallId ? records.byCallId[toolCallId] : undefined) ??
+    records.byName[toolName]
+  if (typeof candidate !== "object" || candidate === null) return undefined
+  const displayName = (candidate as Record<string, unknown>).displayName
+  return typeof displayName === "string" && displayName.trim().length > 0
+    ? displayName.trim()
+    : undefined
+}
+
+function toolStepDescription(step: ToolUIPart): string {
+  switch (step.state) {
+    case "approval-requested":
+      return "Approval required before this tool can run."
+    case "approval-responded":
+      return step.approval.approved ? "Approved" : "Denied"
+    case "output-denied":
+      return step.approval.reason ? `Denied: ${step.approval.reason}` : "Denied"
+    case "output-error":
+      return step.errorText || "Failed"
+    case "input-streaming":
+    case "input-available":
+      return "In progress"
+    case "output-available":
+      return isErrorStep(step) ? "Tool reported an error" : "Completed"
+  }
+}
+
+function toToolEntries(
+  view: AssistantTurnView,
+  steps: NonEmptyTuple<ToolUIPart>
+): NonEmptyTuple<AssistantActivityToolEntry> {
+  const toEntry = (step: ToolUIPart): AssistantActivityToolEntry => {
+    const toolName = getStaticToolName(step)
+    return {
+      id: step.toolCallId,
+      label:
+        metadataDisplayName(view, toolName, step.toolCallId) ??
+        humanizeToolName(toolName),
+      description: toolStepDescription(step),
+    }
+  }
+  const [first, ...rest] = steps
+  return [toEntry(first), ...rest.map(toEntry)]
+}
+
 export function deriveAssistantActivitySections(
   view: AssistantTurnView
 ): AssistantActivitySection[] {
@@ -85,41 +144,32 @@ export function deriveAssistantActivitySections(
   if (images) sections.push({ kind: "images", results: images })
 
   const approvals = asNonEmpty(view.toolParts.filter(isApprovalStep))
-  if (approvals) sections.push({ kind: "approvals", steps: approvals })
+  if (approvals) {
+    sections.push({
+      kind: "approvals",
+      entries: toToolEntries(view, approvals),
+    })
+  }
 
   const errors = asNonEmpty(view.toolParts.filter(isErrorStep))
-  if (errors) sections.push({ kind: "tool-errors", steps: errors })
+  if (errors) {
+    sections.push({
+      kind: "tool-errors",
+      entries: toToolEntries(view, errors),
+    })
+  }
 
   const toolSteps = asNonEmpty(
     view.toolParts.filter((step) => !isApprovalStep(step) && !isErrorStep(step))
   )
-  if (toolSteps) sections.push({ kind: "tool-steps", steps: toolSteps })
+  if (toolSteps) {
+    sections.push({
+      kind: "tool-steps",
+      entries: toToolEntries(view, toolSteps),
+    })
+  }
 
   return sections
-}
-
-function metadataDisplayName(
-  view: AssistantTurnView,
-  toolName: string
-): string | undefined {
-  const candidate = getToolDisplayMetadataRecords(view.metadata).byName[
-    toolName
-  ]
-  if (typeof candidate !== "object" || candidate === null) return undefined
-  const displayName = (candidate as Record<string, unknown>).displayName
-  return typeof displayName === "string" && displayName.trim().length > 0
-    ? displayName.trim()
-    : undefined
-}
-
-function humanizeToolName(toolName: string): string {
-  const readable = toolName
-    .replace(/[_-]+/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .trim()
-  return readable.length > 0
-    ? `${readable.charAt(0).toUpperCase()}${readable.slice(1)}`
-    : "tool"
 }
 
 function resolveLiveStatus(

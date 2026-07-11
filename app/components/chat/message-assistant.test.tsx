@@ -56,16 +56,19 @@ function makeView(
 function makeStore({
   panelTurnId,
   defaultTurnId,
+  defaultDurationMs,
   open = false,
 }: {
   panelTurnId?: string
   defaultTurnId?: string
+  defaultDurationMs?: number
   open?: boolean
 }): ActivityPanelStore {
   const store = createActivityPanelStore()
-  store.setDerivedTurnIds({
+  store.setDerivedActivity({
     panelTurnId,
     defaultTurnId: defaultTurnId ?? panelTurnId,
+    defaultDurationMs,
   })
   if (open) store.setOpen(true)
   return store
@@ -116,6 +119,34 @@ describe("MessageAssistant activity trigger", () => {
     expect(container?.textContent).toContain("Thought for 2s")
     expect(container?.querySelector("button[aria-expanded]")).toBeNull()
     expect(store.getState().open).toBe(false)
+  })
+
+  it("preserves the current-session duration while finish metadata hydrates", () => {
+    const store = makeStore({
+      panelTurnId: "assistant-1",
+      defaultDurationMs: 2100,
+    })
+    const parts = [
+      { type: "reasoning", text: "", state: "done" },
+    ] as unknown as UIMessage["parts"]
+
+    act(() => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView(parts, "ready")}
+            status="ready"
+            isLast
+          >
+            {""}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    expect(container?.textContent).toContain("Thought for 2s")
+    expect(container?.querySelector("button[aria-expanded]")).toBeNull()
   })
 
   it("suppresses completed opaque reasoning below one second", () => {

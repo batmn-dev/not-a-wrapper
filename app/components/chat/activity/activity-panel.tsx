@@ -4,9 +4,10 @@ import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { Markdown } from "@/components/ui/markdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import type { AssistantActivitySection } from "@/lib/chat-messages/assistant-activity"
-import { humanizeToolName } from "@/lib/tools/ui-metadata"
-import { getStaticToolName, type ToolUIPart } from "ai"
+import type {
+  AssistantActivitySection,
+  AssistantActivityToolEntry,
+} from "@/lib/chat-messages/assistant-activity"
 import { useRef } from "react"
 import { createPortal } from "react-dom"
 import { useActivityPanelDockSlot } from "./activity-panel-host"
@@ -29,43 +30,23 @@ export type ActivityPanelProps = {
   sections: readonly AssistantActivitySection[]
 }
 
-function toolStepDescription(step: ToolUIPart): string | undefined {
-  switch (step.state) {
-    case "approval-requested":
-      return "Approval required before this tool can run."
-    case "approval-responded":
-      return step.approval.approved ? "Approved" : "Denied"
-    case "output-denied":
-      return step.approval.reason ? `Denied: ${step.approval.reason}` : "Denied"
-    case "output-error":
-      return step.errorText
-    case "input-streaming":
-    case "input-available":
-      return "In progress"
-    case "output-available":
-      return "Completed"
-  }
-}
-
 function ToolSection({
   heading,
-  steps,
+  entries,
 }: {
   heading: string
-  steps: readonly ToolUIPart[]
+  entries: readonly AssistantActivityToolEntry[]
 }) {
   return (
     <div className="px-3 pt-2 pb-2">
       <PanelSectionHeading title={heading} />
       <ActivityTimeline className="mt-3 flex flex-col">
-        {steps.map((step) => (
-          <ActivityStep key={step.toolCallId} leading="done" body="description">
-            <StepTitle>{humanizeToolName(getStaticToolName(step))}</StepTitle>
-            {toolStepDescription(step) ? (
-              <p className="text-muted-foreground text-sm leading-5">
-                {toolStepDescription(step)}
-              </p>
-            ) : null}
+        {entries.map((entry) => (
+          <ActivityStep key={entry.id} leading="done" body="description">
+            <StepTitle>{entry.label}</StepTitle>
+            <p className="text-muted-foreground text-sm leading-5">
+              {entry.description}
+            </p>
           </ActivityStep>
         ))}
       </ActivityTimeline>
@@ -151,7 +132,7 @@ function PanelBody({
               <ToolSection
                 key="approvals"
                 heading="Approvals"
-                steps={activitySection.steps}
+                entries={activitySection.entries}
               />
             )
           case "tool-errors":
@@ -159,7 +140,7 @@ function PanelBody({
               <ToolSection
                 key="tool-errors"
                 heading="Errors"
-                steps={activitySection.steps}
+                entries={activitySection.entries}
               />
             )
           case "tool-steps":
@@ -167,7 +148,7 @@ function PanelBody({
               <ToolSection
                 key="tool-steps"
                 heading="Activity"
-                steps={activitySection.steps}
+                entries={activitySection.entries}
               />
             )
         }

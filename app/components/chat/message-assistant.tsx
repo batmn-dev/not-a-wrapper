@@ -24,6 +24,7 @@ import { RiCheckLine, RiFileCopyLine, RiLoopRightLine } from "@remixicon/react"
 import { useCallback, useRef, useState } from "react"
 import {
   useActivityPanelActions,
+  useDefaultActivityDurationMs,
   useActivityPanelId,
   useIsActivityPanelTurnOpen,
 } from "./activity/activity-panel-store"
@@ -102,6 +103,10 @@ export function MessageAssistant({
     messageId,
     view.serverMessageId
   )
+  const currentSessionDurationMs = useDefaultActivityDurationMs(
+    messageId,
+    view.serverMessageId
+  )
 
   // The canonical phase feeds the normalized activity presentation. The row
   // renderer never inspects raw parts to choose label or interaction semantics.
@@ -109,7 +114,9 @@ export function MessageAssistant({
     status: status ?? "ready",
     isLast: isLast ?? false,
   })
-  const activityPresentation = deriveAssistantActivityPresentation(view, phase)
+  const activityPresentation = deriveAssistantActivityPresentation(view, phase, {
+    durationMs: currentSessionDurationMs,
+  })
   const turnActive = phase.kind !== "settled"
 
   const messageRef = useRef<HTMLDivElement>(null)

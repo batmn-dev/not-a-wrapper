@@ -2,7 +2,15 @@
 import type { UIMessage } from "@ai-sdk/react"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
 import {
   PENDING_ACTIVITY_TURN_ID,
   selectExplicitActivityTurnOnOpen,
@@ -291,6 +299,47 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.panelActivityTurnId).toBe("a1")
     expect(latest!.panelProps.durationSeconds).toBe(4)
     expect(projectedSourceUrls()).toContain("https://a.com")
+  })
+
+  it("keeps timing the live default while a historical panel is selected", () => {
+    vi.useFakeTimers()
+    try {
+      render({
+        messages: [
+          user("u1"),
+          assistant("a1", {
+            durationMs: 4000,
+            sourceUrl: "https://history.example",
+          }),
+          user("u2"),
+          assistant("a2", {
+            reasoningState: "streaming",
+            reasoningText: "",
+          }),
+        ],
+        status: "streaming",
+        isSubmitting: false,
+        selectedActivityTurnId: "a1",
+      })
+
+      act(() => {
+        vi.advanceTimersByTime(2000)
+      })
+
+      expect(latest!.panelActivityTurnId).toBe("a1")
+      expect(latest!.panelProps.durationSeconds).toBe(4)
+      expect(latest!.defaultActivityTurnId).toBe("a2")
+      expect(latest!.defaultActivityDurationMs).toBe(2000)
+    } finally {
+      const rootToUnmount = root
+      if (rootToUnmount) {
+        act(() => {
+          rootToUnmount.unmount()
+        })
+      }
+      root = null
+      vi.useRealTimers()
+    }
   })
 
   it("matches an explicit selected turn by server id and normalizes to the rendered message id", () => {

@@ -174,6 +174,7 @@ function ChatInner({
   const {
     defaultActivityTurnId,
     panelActivityTurnId,
+    defaultActivityDurationMs,
     selectedTurnPresent,
     panelCanOpen,
     panelProps,
@@ -205,9 +206,10 @@ function ChatInner({
   // be classified against a stale default — the misclassification this store
   // exists to prevent.
   useBrowserLayoutEffect(() => {
-    activityPanelStore.setDerivedTurnIds({
+    activityPanelStore.setDerivedActivity({
       panelTurnId: panelActivityTurnId,
       defaultTurnId: defaultActivityTurnId,
+      defaultDurationMs: defaultActivityDurationMs,
     })
     // An explicit selection whose turn left the rendered path (branch switch,
     // local delete) is dropped so it cannot resurrect on a later path change.
@@ -221,6 +223,7 @@ function ChatInner({
     activityPanelStore,
     panelActivityTurnId,
     defaultActivityTurnId,
+    defaultActivityDurationMs,
     selectedActivityTurnId,
     selectedTurnPresent,
     panelCanOpen,

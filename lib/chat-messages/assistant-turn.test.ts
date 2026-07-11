@@ -548,4 +548,38 @@ describe("deriveAssistantActivityPresentation", () => {
       passiveLabel: "Thought for 1s",
     })
   })
+
+  it("normalizes tool error copy and canonical display names upstream", () => {
+    const view = viewOf(
+      [
+        {
+          type: "tool-github_create_issue",
+          toolCallId: "t1",
+          state: "output-available",
+          input: {},
+          output: { isError: true },
+        },
+      ],
+      "ready"
+    )
+    const presentation = deriveAssistantActivityPresentation(view, {
+      kind: "settled",
+    })
+
+    expect(presentation).toMatchObject({
+      kind: "disclosure",
+      sections: [
+        {
+          kind: "tool-errors",
+          entries: [
+            {
+              id: "t1",
+              label: "Github Create Issue",
+              description: "Tool reported an error",
+            },
+          ],
+        },
+      ],
+    })
+  })
 })

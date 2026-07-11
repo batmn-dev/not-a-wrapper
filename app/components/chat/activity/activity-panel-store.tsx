@@ -23,7 +23,7 @@
  * Ownership: the store owns the USER state (open, explicit selection). The
  * authoritative selection derivation stays in `selectActivityPanelTarget`
  * (use-activity-panel.ts) — Chat runs it against messages/status and syncs
- * the result in via `setDerivedTurnIds`. `openTurn` sets `panelTurnId`
+ * the result in via `setDerivedActivity`. `openTurn` sets `panelTurnId`
  * optimistically (the clicked turn is by definition present), so the trigger's
  * aria-expanded flips in the same commit; the synced derivation corrects any
  * fallback case one commit later.
@@ -51,6 +51,8 @@ export type ActivityPanelStoreState = {
   panelTurnId: string | undefined
   /** The generation-following default turn id. */
   defaultTurnId: string | undefined
+  /** Current-session duration for the generation-following default turn. */
+  defaultDurationMs: number | undefined
   /**
    * One-shot section target set by `openTurn` (the sources badge opens "on
    * the Sources section"). The panel body consumes it — scrolls the section
@@ -68,9 +70,10 @@ export type ActivityPanelStore = {
    * into the store. Called from an effect in Chat whenever the derivation's
    * inputs (messages, status, selection) change.
    */
-  setDerivedTurnIds: (next: {
+  setDerivedActivity: (next: {
     panelTurnId: string | undefined
     defaultTurnId: string | undefined
+    defaultDurationMs?: number
   }) => void
   /**
    * Select a turn and open the panel. Explicit-vs-default classification runs
@@ -102,6 +105,7 @@ export function createActivityPanelStore(): ActivityPanelStore {
     selectedTurnId: undefined,
     panelTurnId: undefined,
     defaultTurnId: undefined,
+    defaultDurationMs: undefined,
     openSection: undefined,
   }
   let onOpen: (() => void) | null = null
@@ -114,6 +118,7 @@ export function createActivityPanelStore(): ActivityPanelStore {
       next.selectedTurnId === state.selectedTurnId &&
       next.panelTurnId === state.panelTurnId &&
       next.defaultTurnId === state.defaultTurnId &&
+      next.defaultDurationMs === state.defaultDurationMs &&
       next.openSection === state.openSection
     ) {
       return
@@ -130,8 +135,12 @@ export function createActivityPanelStore(): ActivityPanelStore {
         listeners.delete(listener)
       }
     },
-    setDerivedTurnIds: ({ panelTurnId, defaultTurnId }) => {
-      setState({ panelTurnId, defaultTurnId })
+    setDerivedActivity: ({
+      panelTurnId,
+      defaultTurnId,
+      defaultDurationMs,
+    }) => {
+      setState({ panelTurnId, defaultTurnId, defaultDurationMs })
     },
     clearStaleSelection: (staleTurnId) => {
       if (state.selectedTurnId !== staleTurnId) return
@@ -146,7 +155,7 @@ export function createActivityPanelStore(): ActivityPanelStore {
         }),
         // Optimistic: the clicked turn is the panel turn in the same commit;
         // the authoritative derivation confirms (or corrects a fallback) via
-        // setDerivedTurnIds on the next sync.
+        // setDerivedActivity on the next sync.
         panelTurnId: turnId,
         open: true,
         // Section-less opens clear a stale, unconsumed target.
@@ -238,6 +247,31 @@ export function useIsActivityPanelTurnOpen(
       )
     },
     () => false
+  )
+}
+
+/**
+ * Row subscription to the one chat-owned live reasoning timer. Only the
+ * generation-following row receives the changing duration snapshot; historical
+ * rows keep deriving their terminal duration from persisted metadata.
+ */
+export function useDefaultActivityDurationMs(
+  messageId: string,
+  serverMessageId?: string
+): number | undefined {
+  const store = useContext(ActivityPanelStoreContext)
+  return useSyncExternalStore(
+    store ? store.subscribe : noopSubscribe,
+    () => {
+      if (!store) return undefined
+      const state = store.getState()
+      const matchesDefault =
+        state.defaultTurnId === messageId ||
+        (serverMessageId !== undefined &&
+          state.defaultTurnId === serverMessageId)
+      return matchesDefault ? state.defaultDurationMs : undefined
+    },
+    () => undefined
   )
 }
 
