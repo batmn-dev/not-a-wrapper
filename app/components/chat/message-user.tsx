@@ -337,6 +337,11 @@ export function MessageUser({
             }
           />
         )}
+        {/* Branch nav reveals with the footer actions — deliberate ChatGPT-
+            reference parity (2026-07-11). This supersedes the earlier
+            always-visible rule ("a fresh regenerate/edit gives no cue that
+            versions exist"): the reference hides the pager at rest too, and
+            the row's hover reveal is the discovery affordance. */}
         <MessageBranchControls
           branch={branch}
           onSelectBranch={onSelectBranch}

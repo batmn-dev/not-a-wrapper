@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx } from "../_generated/server"
+import { getSelectedPathMessages } from "./message_branches"
 import { createMessageBranchWriter } from "./message_branch_writes"
 
 type ChatMessage = Doc<"messages">
@@ -116,25 +117,25 @@ function assistantInput(overrides: Record<string, unknown> = {}) {
 
 describe("Message branch writer", () => {
   it("writes a normal user and assistant sequence with one Selected path", async () => {
-    const { ctx } = createHarness()
+    const { ctx, messages } = createHarness()
     const branches = writer(ctx)
 
     const user = await branches.writeUserMessage(userInput())
     const assistant = await branches.writeAssistantPlaceholder(assistantInput())
 
-    expect(user.created).toBe(true)
-    expect(assistant.created).toBe(true)
-    expect(assistant.message).toMatchObject({
+    expect(assistant).toMatchObject({
       role: "assistant",
-      parentMessageId: user.message._id,
+      parentMessageId: user._id,
       branchIndex: 0,
       selected: true,
       status: "streaming",
       generationRunId: "run_1",
     })
-    expect(assistant.selectedPath.map((item) => item._id)).toEqual([
-      user.message._id,
-      assistant.message._id,
+    // Assert the Selected path from stored state — the same projection
+    // production reads — rather than a courtesy copy on the result.
+    expect(getSelectedPathMessages(messages).map((item) => item._id)).toEqual([
+      user._id,
+      assistant._id,
     ])
   })
 
@@ -152,7 +153,8 @@ describe("Message branch writer", () => {
 
     const result = await writer(ctx).writeUserMessage(userInput())
 
-    expect(result).toMatchObject({ created: false, message: { _id: "user_old" } })
+    expect(result._id).toBe("user_old")
+    // No insert happened — the repeated client id selected the existing row.
     expect(messages).toHaveLength(2)
     expect(messages.find((item) => item._id === "user_old")?.selected).toBe(true)
     expect(messages.find((item) => item._id === "user_new")?.selected).toBe(false)
@@ -174,15 +176,15 @@ describe("Message branch writer", () => {
       userInput({ clientMessageId: "client_edit", replaces: original._id })
     )
 
-    expect(result.message).toMatchObject({
+    expect(result).toMatchObject({
       parentMessageId: undefined,
       branchIndex: 1,
       selected: true,
     })
     expect(messages.find((item) => item._id === original._id)?.selected).toBe(false)
     expect(messages.find((item) => item._id === descendant._id)).toBeDefined()
-    expect(result.selectedPath.map((item) => item._id)).toEqual([
-      result.message._id,
+    expect(getSelectedPathMessages(messages).map((item) => item._id)).toEqual([
+      result._id,
     ])
   })
 
@@ -202,7 +204,7 @@ describe("Message branch writer", () => {
       assistantInput({ replaces: original._id })
     )
 
-    expect(result.message).toMatchObject({
+    expect(result).toMatchObject({
       parentMessageId: user._id,
       branchIndex: 1,
       regenerationSourceMessageId: original._id,
@@ -256,15 +258,17 @@ describe("Message branch writer", () => {
       branchIndex: 1,
       selected: true,
     })
-    const { ctx } = createHarness([user, oldAnswer, newAnswer])
+    const { ctx, messages } = createHarness([user, oldAnswer, newAnswer])
 
     const result = await writer(ctx).select(oldAnswer._id)
 
-    expect(result.selectedPath.map((item) => item._id)).toEqual([
+    const selectedPath = getSelectedPathMessages(messages)
+    expect(selectedPath.map((item) => item._id)).toEqual([
       user._id,
       oldAnswer._id,
     ])
-    expect(result.selectedPath.at(-1)?.selected).toBe(true)
+    expect(selectedPath.at(-1)?.selected).toBe(true)
+    expect(result._id).toBe(oldAnswer._id)
   })
 
   it("rejects missing, cross-chat, and role-mismatched targets without writes", async () => {

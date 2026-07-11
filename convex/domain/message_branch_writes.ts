@@ -12,10 +12,20 @@ import {
 
 type ChatMessage = Doc<"messages">
 
-type MessageBranchWriteResult = {
-  message: ChatMessage
-  created: boolean
-  selectedPath: ChatMessage[]
+/**
+ * A branch write's new-message payload before insertion — the stored shape
+ * minus the system columns Convex assigns at insert.
+ */
+type PlannedMessage = Omit<ChatMessage, "_id" | "_creationTime">
+
+/**
+ * The request/model/provider stamp every branch write carries onto its new
+ * message — which Generation run's request produced it.
+ */
+type WriteProvenance = {
+  requestId: string
+  model: string
+  provider: string
 }
 
 type MessageBranchWriterOptions = {
@@ -23,26 +33,41 @@ type MessageBranchWriterOptions = {
   now: number
 }
 
-type WriteUserMessageInput = {
+type WriteUserMessageInput = WriteProvenance & {
   clientMessageId: string
   userId: Id<"users">
   content: string
+  /**
+   * Opaque pass-through by contract: the writer never inspects parts, and the
+   * storage column is `v.any()` — `unknown` here is deliberately stricter
+   * than the schema, not a missing type.
+   */
   parts: unknown
-  requestId: string
-  model: string
-  provider: string
   replaces?: Id<"messages">
 }
 
-type WriteAssistantPlaceholderInput = {
+type WriteAssistantPlaceholderInput = WriteProvenance & {
   generationRunId: Id<"generationRuns">
-  requestId: string
-  model: string
-  provider: string
   replaces?: Id<"messages">
 }
 
+/**
+ * The one place a planned (not-yet-inserted) message enters the stored-shape
+ * planning pipeline. The planning helpers (message_branches.ts) are typed
+ * over stored docs, so the planned entry is simulated under a reserved id
+ * that can never collide with a real Convex id. The simulation never leaks:
+ * `applyPlannedBranchChanges` iterates only stored docs, so the simulated
+ * entry is never patched — its values reach the database through
+ * `db.insert(plannedMessage)` instead.
+ */
 const PLANNED_MESSAGE_ID = "__planned_message__" as Id<"messages">
+
+function asSimulatedDoc(
+  planned: PlannedMessage,
+  creationTime: number
+): ChatMessage {
+  return { _id: PLANNED_MESSAGE_ID, _creationTime: creationTime, ...planned }
+}
 
 function applyPatchToMessages(
   messages: ChatMessage[],
@@ -152,6 +177,12 @@ function nextMessageOrder(messages: ChatMessage[]) {
   )
 }
 
+/**
+ * Diff one message's planned branch fields against its stored state.
+ * Unchanged siblings return null and are not patched — so their `updatedAt`
+ * is deliberately NOT bumped: "touched" means a branch field actually
+ * changed, not "was considered by a plan".
+ */
 function branchPatch(
   before: ChatMessage,
   after: ChatMessage,
@@ -226,29 +257,24 @@ export function createMessageBranchWriter(
     }
   }
 
-  async function finish(
-    messageId: Id<"messages">,
-    created: boolean
-  ): Promise<MessageBranchWriteResult> {
+  /**
+   * Post-write validate-and-repair pass: reload, re-normalize, assert the
+   * target is reachable on the Selected path, and apply any repair patches.
+   * The second pass is deliberate (CONTEXT.md: post-write validation), not
+   * accidental rework — it proves the write left the chat in a legal state.
+   */
+  async function finish(messageId: Id<"messages">): Promise<ChatMessage> {
     const messages = await loadMessages()
     const normalized = planSelectedPathNormalization(messages)
     assertSelectedPathContains(normalized, messageId)
     await applyPlannedBranchChanges(messages, normalized)
 
-    const finalMessages = await loadMessages()
-    const message = finalMessages.find((candidate) => candidate._id === messageId)
+    const message = await ctx.db.get(messageId)
     if (!message) throw new Error("Selected message not found after branch write")
-
-    return {
-      message,
-      created,
-      selectedPath: getSelectedPathMessages(finalMessages),
-    }
+    return message
   }
 
-  async function select(
-    messageId: Id<"messages">
-  ): Promise<MessageBranchWriteResult> {
+  async function select(messageId: Id<"messages">): Promise<ChatMessage> {
     const target = await ctx.db.get(messageId)
     if (!target || target.chatId !== chatId) {
       throw new Error("Message not found")
@@ -266,12 +292,58 @@ export function createMessageBranchWriter(
     )
     assertSelectedPathContains(selected, target._id)
     await applyPlannedBranchChanges(messages, selected)
-    return await finish(target._id, false)
+    return await finish(target._id)
+  }
+
+  /**
+   * The shared branch-insert spine — the ordering invariant this module
+   * exists to own, stated once: load → normalize → resolve replacement →
+   * derive parent → deselect siblings → build the planned doc → normalize
+   * with the simulated entry → assert Selected-path reachability → apply
+   * branch patches → insert → validate-and-repair.
+   */
+  async function insertPlannedBranch(
+    role: "user" | "assistant",
+    replaces: Id<"messages"> | undefined,
+    buildPlanned: (facts: {
+      parentMessageId: Id<"messages"> | undefined
+      orderId: number
+      branchIndex: number
+      replacement: ChatMessage | undefined
+    }) => PlannedMessage
+  ): Promise<ChatMessage> {
+    const messages = await loadMessages()
+    const normalized = planSelectedPathNormalization(messages)
+    const replacement = replaces
+      ? normalized.find((message) => message._id === replaces)
+      : undefined
+    if (replaces && !replacement) throw new Error("Message not found")
+
+    const selectedPath = getSelectedPathMessages(normalized)
+    const parentMessageId = replacement
+      ? getEffectiveParentId(normalized, replacement)
+      : selectedPath.at(-1)?._id
+    const deselected = planSiblingDeselection(normalized, parentMessageId, role)
+    const plannedMessage = buildPlanned({
+      parentMessageId,
+      orderId: nextMessageOrder(deselected),
+      branchIndex: getNextBranchIndex(deselected, parentMessageId, role),
+      replacement,
+    })
+    const planned = planSelectedPathNormalization([
+      ...deselected,
+      asSimulatedDoc(plannedMessage, now),
+    ])
+    assertSelectedPathContains(planned, PLANNED_MESSAGE_ID)
+
+    await applyPlannedBranchChanges(messages, planned)
+    const messageId = await ctx.db.insert("messages", plannedMessage)
+    return await finish(messageId)
   }
 
   async function writeUserMessage(
     input: WriteUserMessageInput
-  ): Promise<MessageBranchWriteResult> {
+  ): Promise<ChatMessage> {
     if (input.replaces) await requireTarget(input.replaces, "user")
 
     const messages = await loadMessages()
@@ -282,33 +354,16 @@ export function createMessageBranchWriter(
     )
     if (existing) return await select(existing._id)
 
-    const normalized = planSelectedPathNormalization(messages)
-    const replacement = input.replaces
-      ? normalized.find((message) => message._id === input.replaces)
-      : undefined
-    if (input.replaces && !replacement) throw new Error("Message not found")
-
-    const selectedPath = getSelectedPathMessages(normalized)
-    const parentMessageId = replacement
-      ? getEffectiveParentId(normalized, replacement)
-      : selectedPath.at(-1)?._id
-    const deselected = planSiblingDeselection(
-      normalized,
-      parentMessageId,
-      "user"
-    )
-    const plannedMessage = {
-      _id: PLANNED_MESSAGE_ID,
-      _creationTime: now,
+    return await insertPlannedBranch("user", input.replaces, (facts) => ({
       chatId,
-      orderId: nextMessageOrder(deselected),
+      orderId: facts.orderId,
       clientMessageId: input.clientMessageId,
       userId: input.userId,
       role: "user" as const,
       content: input.content,
       parts: input.parts,
-      parentMessageId,
-      branchIndex: getNextBranchIndex(deselected, parentMessageId, "user"),
+      parentMessageId: facts.parentMessageId,
+      branchIndex: facts.branchIndex,
       selected: true,
       status: "completed" as const,
       requestId: input.requestId,
@@ -316,63 +371,24 @@ export function createMessageBranchWriter(
       provider: input.provider,
       createdAt: now,
       updatedAt: now,
-    } satisfies ChatMessage
-    const planned = planSelectedPathNormalization([
-      ...deselected,
-      plannedMessage,
-    ])
-    assertSelectedPathContains(planned, PLANNED_MESSAGE_ID)
-
-    await applyPlannedBranchChanges(messages, planned)
-    const {
-      _id: _plannedId,
-      _creationTime: _plannedCreationTime,
-      ...messageValue
-    } = plannedMessage
-    const messageId = await ctx.db.insert("messages", messageValue)
-    return await finish(messageId, true)
+    }))
   }
 
   async function writeAssistantPlaceholder(
     input: WriteAssistantPlaceholderInput
-  ): Promise<MessageBranchWriteResult> {
-    const replacement = input.replaces
-      ? await requireTarget(input.replaces, "assistant")
-      : undefined
-    const messages = await loadMessages()
-    const normalized = planSelectedPathNormalization(messages)
-    const normalizedReplacement = replacement
-      ? normalized.find((message) => message._id === replacement._id)
-      : undefined
-    if (replacement && !normalizedReplacement) {
-      throw new Error("Message not found")
-    }
+  ): Promise<ChatMessage> {
+    if (input.replaces) await requireTarget(input.replaces, "assistant")
 
-    const selectedPath = getSelectedPathMessages(normalized)
-    const parentMessageId = normalizedReplacement
-      ? getEffectiveParentId(normalized, normalizedReplacement)
-      : selectedPath.at(-1)?._id
-    const deselected = planSiblingDeselection(
-      normalized,
-      parentMessageId,
-      "assistant"
-    )
-    const plannedMessage = {
-      _id: PLANNED_MESSAGE_ID,
-      _creationTime: now,
+    return await insertPlannedBranch("assistant", input.replaces, (facts) => ({
       chatId,
-      orderId: nextMessageOrder(deselected),
+      orderId: facts.orderId,
       role: "assistant" as const,
       content: "",
       parts: [],
-      parentMessageId,
-      branchIndex: getNextBranchIndex(
-        deselected,
-        parentMessageId,
-        "assistant"
-      ),
+      parentMessageId: facts.parentMessageId,
+      branchIndex: facts.branchIndex,
       selected: true,
-      regenerationSourceMessageId: normalizedReplacement?._id,
+      regenerationSourceMessageId: facts.replacement?._id,
       status: "streaming" as const,
       requestId: input.requestId,
       generationRunId: input.generationRunId,
@@ -380,21 +396,7 @@ export function createMessageBranchWriter(
       provider: input.provider,
       createdAt: now,
       updatedAt: now,
-    } satisfies ChatMessage
-    const planned = planSelectedPathNormalization([
-      ...deselected,
-      plannedMessage,
-    ])
-    assertSelectedPathContains(planned, PLANNED_MESSAGE_ID)
-
-    await applyPlannedBranchChanges(messages, planned)
-    const {
-      _id: _plannedId,
-      _creationTime: _plannedCreationTime,
-      ...messageValue
-    } = plannedMessage
-    const messageId = await ctx.db.insert("messages", messageValue)
-    return await finish(messageId, true)
+    }))
   }
 
   return {

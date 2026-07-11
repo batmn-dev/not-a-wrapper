@@ -117,7 +117,8 @@ export function ModelsSettings() {
 
   // Wrapped models carry real vendor ids without registered icons (qwen,
   // z-ai, moonshotai, …) — getVendorIcon falls back to the OpenRouter icon.
-  const getProviderIcon = (model: ModelConfig) => getVendorIcon(model.baseProviderId)
+  const getModelVendorIcon = (model: ModelConfig) =>
+    getVendorIcon(model.baseProviderId)
 
   return (
     <div className="space-y-6">
@@ -142,7 +143,7 @@ export function ModelsSettings() {
               className="space-y-2"
             >
               {favoriteModels.map((model) => {
-                const ProviderIcon = getProviderIcon(model)
+                const VendorIcon = getModelVendorIcon(model)
 
                 return (
                   <Reorder.Item key={model.id} value={model} className="group">
@@ -153,8 +154,8 @@ export function ModelsSettings() {
                       </div>
 
                       {/* Provider Icon */}
-                      {ProviderIcon && (
-                        <ProviderIcon className="size-5 shrink-0" />
+                      {VendorIcon && (
+                        <VendorIcon className="size-5 shrink-0" />
                       )}
 
                       {/* Model Info */}
@@ -256,7 +257,7 @@ export function ModelsSettings() {
                       // OpenRouter-served model misstates who serves it).
                       const UnderlyingVendorIcon =
                         model.providerId === "openrouter"
-                          ? getVendorIcon(model.icon ?? "openrouter")
+                          ? getVendorIcon(model.icon)
                           : null
                       const viaLabel =
                         model.providerId === "openrouter"

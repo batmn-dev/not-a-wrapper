@@ -41,8 +41,12 @@ export const VENDOR_ICONS: Record<KnownVendorId, VendorIcon> = {
 /**
  * Icon for an open-set vendor id. Wrapped OpenRouter models carry real vendor
  * ids without registered icons (qwen, z-ai, moonshotai, …) — those fall back
- * to the OpenRouter icon (the Vendor entry's documented fallback).
+ * to the OpenRouter icon (the Vendor entry's documented fallback). Accepts
+ * undefined so callers with an optional icon field don't re-encode the
+ * fallback this module owns.
  */
-export function getVendorIcon(id: string): VendorIcon {
-  return isKnownVendorId(id) ? VENDOR_ICONS[id] : OpenRouterIcon
+export function getVendorIcon(id: string | undefined): VendorIcon {
+  return id !== undefined && isKnownVendorId(id)
+    ? VENDOR_ICONS[id]
+    : OpenRouterIcon
 }

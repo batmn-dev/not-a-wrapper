@@ -1953,6 +1953,103 @@ describe("prepareGenerationForChat", () => {
     )
   })
 
+  it("counts the edit version guard over the raw client view amid sparse branch state", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { user, chat, userId, chatId } = createOwnerFixture()
+
+    // A rapid regenerate leaves sparse branch state behind: the old answer is
+    // deselected while the regenerated sibling carries no branchIndex or
+    // selected stamp yet. The client's expectedChatVersion counts the RAW
+    // selected-path projection (the messages.ts read derivation). This pins
+    // the guard to that same raw view — a write-side normalization pass
+    // running BEFORE the guard (the pre-branch-writer shape) is the "edit
+    // falsely rejected after a rapid multi-branch session" bug class.
+    function sparseBranchMessages() {
+      return [
+        createStoredMessage({
+          id: "message_user_1",
+          chatId,
+          userId,
+          orderId: 0,
+          clientMessageId: "user-1",
+          role: "user",
+          content: "prompt",
+          createdAt: 1000,
+        }),
+        {
+          ...createStoredMessage({
+            id: "message_assistant_old",
+            chatId,
+            orderId: 1,
+            role: "assistant",
+            content: "old answer",
+            createdAt: 1001,
+          }),
+          parentMessageId: asId<"messages">("message_user_1"),
+          branchIndex: 0,
+          selected: false,
+        },
+        {
+          ...createStoredMessage({
+            id: "message_assistant_new",
+            chatId,
+            orderId: 2,
+            role: "assistant",
+            content: "regenerated answer",
+            createdAt: 1002,
+          }),
+          parentMessageId: asId<"messages">("message_user_1"),
+          // Sparse on purpose: no branchIndex, no selected stamp yet.
+        },
+      ]
+    }
+
+    function editIntent(expectedChatVersion: number) {
+      return {
+        editedMessageId: "user-1",
+        editCutoffTimestamp: 1000,
+        expectedChatVersion,
+        replacementMessage: {
+          id: "replacement-user",
+          role: "user" as const,
+          content: "edited prompt",
+          parts: [{ type: "text", text: "edited prompt" }],
+        },
+      }
+    }
+
+    // The raw projection renders [prompt, regenerated answer] → version 2.
+    const accepted = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages: sparseBranchMessages(),
+    })
+    const result = await prepareGenerationForChat(accepted.ctx, {
+      chatId,
+      requestId: "request_edit",
+      model: "gpt-5",
+      provider: "openai",
+      edit: editIntent(2),
+    })
+    expect(result.runId).toBeDefined()
+
+    // A genuinely stale count still rejects.
+    const rejected = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages: sparseBranchMessages(),
+    })
+    await expect(
+      prepareGenerationForChat(rejected.ctx, {
+        chatId,
+        requestId: "request_edit",
+        model: "gpt-5",
+        provider: "openai",
+        edit: editIntent(3),
+      })
+    ).rejects.toThrow("Chat changed since edit started")
+  })
+
   it("checks ownership before applying durable regeneration intent", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1700000000000)
     const { user, chat, userId, chatId } = createOwnerFixture()

@@ -142,7 +142,7 @@ export function ModelSelector({
 
   const renderModelItem = (model: ModelConfig) => {
     const isLocked = !isModelSelectableForAuthState(model, isUserAuthenticated)
-    const VendorIcon = getVendorIcon(model.icon ?? "openrouter")
+    const VendorIcon = getVendorIcon(model.icon)
     const routeLabel = getModelRouteLabel(model)
 
     return (
@@ -353,7 +353,7 @@ export function ModelSelector({
                     isUserAuthenticated
                   )
                   const isSelected = selectedModelId === model.id
-                  const VendorIcon = getVendorIcon(model.icon ?? "openrouter")
+                  const VendorIcon = getVendorIcon(model.icon)
                   const routeLabel = getModelRouteLabel(model)
 
                   return (

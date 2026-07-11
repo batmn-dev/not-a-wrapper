@@ -662,7 +662,7 @@ async function selectOrInsertLatestUserMessageForGeneration(
   latestUserMessage: StoredUserMessage,
   now: number
 ) {
-  const result = await createMessageBranchWriter(ctx, {
+  const message = await createMessageBranchWriter(ctx, {
     chatId: args.chatId,
     now,
   }).writeUserMessage({
@@ -676,7 +676,7 @@ async function selectOrInsertLatestUserMessageForGeneration(
     model: args.model,
     provider: args.provider,
   })
-  return result.message._id
+  return message._id
 }
 
 export async function applyRegenerationIntentForGeneration(
@@ -692,6 +692,11 @@ export async function applyRegenerationIntentForGeneration(
   },
   now: number
 ) {
+  // Guard contract: count the RAW projection — the same derivation the
+  // client read (messages.ts) rendered from — deliberately un-normalized.
+  // Normalization happens inside the Message branch writer AFTER this guard;
+  // a normalize-before-guard pass is the "falsely rejected after a rapid
+  // multi-branch session" bug class.
   const currentMessages = await listMessages(ctx, args.chatId)
   const selectedMessages = getVisibleSelectedMessages(currentMessages)
   if (selectedMessages.length !== args.regeneration.expectedChatVersion) {
@@ -750,7 +755,7 @@ export async function applyRegenerationIntentForGeneration(
     "auto-denied: new generation started"
   )
 
-  const branchWrite = await createMessageBranchWriter(ctx, {
+  const assistantMessage = await createMessageBranchWriter(ctx, {
     chatId: args.chatId,
     now,
   }).writeAssistantPlaceholder({
@@ -760,8 +765,8 @@ export async function applyRegenerationIntentForGeneration(
     provider: args.provider,
     replaces: targetMessage._id,
   })
-  const assistantMessageId = branchWrite.message._id
-  const assistantOrder = branchWrite.message.orderId
+  const assistantMessageId = assistantMessage._id
+  const assistantOrder = assistantMessage.orderId
 
   return {
     assistantMessageId,
@@ -784,6 +789,8 @@ export async function applyEditIntentForGeneration(
   },
   now: number
 ) {
+  // Same guard contract as the regeneration guard above: raw projection,
+  // matching the client's rendered count; never normalize before guarding.
   const currentMessages = await listMessages(ctx, args.chatId)
   const selectedMessages = getVisibleSelectedMessages(currentMessages)
   if (selectedMessages.length !== args.edit.expectedChatVersion) {
@@ -1259,7 +1266,7 @@ export async function prepareGenerationForChat(
       updatedAt: now,
     })
   } else {
-    const branchWrite = await createMessageBranchWriter(ctx, {
+    const assistantMessage = await createMessageBranchWriter(ctx, {
       chatId: args.chatId,
       now,
     }).writeAssistantPlaceholder({
@@ -1268,8 +1275,8 @@ export async function prepareGenerationForChat(
       model: args.model,
       provider: args.provider,
     })
-    assistantMessageId = branchWrite.message._id
-    assistantOrder = branchWrite.message.orderId
+    assistantMessageId = assistantMessage._id
+    assistantOrder = assistantMessage.orderId
   }
 
   await ctx.db.patch(runId, {

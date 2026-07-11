@@ -74,7 +74,12 @@ export function SidebarChatPinButton({
           {chat.pinned ? <PinOff slotSize={20} /> : <Pin slotSize={20} />}
         </TrailingIconChip>
       </TooltipTrigger>
-      <TooltipContent side="top" sideOffset={-6} variant="outline">
+      <TooltipContent
+        side="top"
+        sideOffset={-6}
+        variant="outline"
+        className="font-normal"
+      >
         {tooltipLabel}
       </TooltipContent>
     </Tooltip>
