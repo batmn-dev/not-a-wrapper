@@ -1,6 +1,7 @@
 "use client"
 
 import { MessageAction } from "@/components/ui/message"
+import { cn } from "@/lib/utils"
 import type { ReactNode } from "react"
 
 type MessageActionButtonProps = {
@@ -14,14 +15,15 @@ type MessageActionButtonProps = {
   disabled?: boolean
   side?: "top" | "bottom" | "left" | "right"
   delay?: number
+  size?: "default" | "branch"
 }
 
 /**
  * One message-footer action: the shared tooltip (MessageAction) around the
- * shared 32px icon-button box, with the touch-target sizing and muted tokens in
- * one place. Replaces six copy-pasted `<MessageAction><button>…</button>`
- * pairs (copy / edit / regenerate / branch prev+next). The `disabled:` classes
- * are inert unless `disabled`, so the non-branch buttons render unchanged.
+ * shared icon-button box, with ChatGPT-sized default and branch variants plus
+ * the touch-target sizing and muted tokens in one place. Replaces six
+ * copy-pasted `<MessageAction><button>…</button>` pairs (copy / edit /
+ * regenerate / branch prev+next).
  */
 export function MessageActionButton({
   label,
@@ -31,11 +33,17 @@ export function MessageActionButton({
   disabled,
   side = "bottom",
   delay,
+  size = "default",
 }: MessageActionButtonProps) {
   return (
     <MessageAction tooltip={tooltip ?? label} side={side} delay={delay}>
       <button
-        className="text-muted-foreground disabled:text-muted-foreground/40 flex h-8 w-8 items-center justify-center rounded-md bg-transparent disabled:pointer-events-none pointer-coarse:h-10 pointer-coarse:w-10"
+        className={cn(
+          "text-muted-foreground flex items-center justify-center rounded-md bg-transparent disabled:pointer-events-none disabled:opacity-50",
+          size === "branch"
+            ? "h-[30px] w-6 pointer-coarse:w-8"
+            : "h-8 w-8 pointer-coarse:w-10"
+        )}
         aria-label={label}
         onClick={onClick}
         disabled={disabled}

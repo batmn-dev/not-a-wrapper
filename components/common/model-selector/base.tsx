@@ -18,9 +18,11 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
+import { Kbd } from "@/components/ui/kbd"
 import {
   Tooltip,
   TooltipContent,
+  TooltipShortcut,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useModel } from "@/lib/model-store/provider"
@@ -79,7 +81,7 @@ export function ModelSelector({
     : null
 
   useKeyShortcut(
-    (e) => (e.key === "p" || e.key === "P") && e.metaKey && e.shiftKey,
+    (e) => (e.key === "m" || e.key === "M") && e.ctrlKey && e.shiftKey,
     () => {
       if (disabled) return
 
@@ -300,7 +302,11 @@ export function ModelSelector({
               <DropdownMenuTrigger render={trigger} />
             </TooltipTrigger>
             <TooltipContent side="bottom" hideArrow>
-              Select model
+              <TooltipShortcut label="Select model">
+                <Kbd label="Control">⌃</Kbd>
+                <Kbd label="Shift">⇧</Kbd>
+                <Kbd>M</Kbd>
+              </TooltipShortcut>
             </TooltipContent>
           </Tooltip>
         ) : (

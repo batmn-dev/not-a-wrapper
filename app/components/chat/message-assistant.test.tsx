@@ -641,6 +641,13 @@ describe("MessageAssistant activity trigger", () => {
     expect(actions?.className).not.toContain(
       "group-hover/turn-messages:[mask-position:0_0]"
     )
+    expect(actions?.className).not.toContain("opacity-0")
+    expect(actions?.className).not.toContain(
+      "group-hover/turn-messages:opacity-100"
+    )
+    expect(actions?.className).not.toContain(
+      "group-hover/turn-messages:delay-300"
+    )
   })
 
   it("preserves the one-time reveal for an assistant response streamed in this session", async () => {
@@ -673,6 +680,10 @@ describe("MessageAssistant activity trigger", () => {
       "motion-safe:[animation:mask-reveal_1.5s_ease_forwards]"
     )
     expect(actions?.className).not.toContain("[mask-position:100%_0%]")
+    expect(actions?.className).not.toContain("opacity-0")
+    expect(actions?.className).not.toContain(
+      "group-hover/turn-messages:opacity-100"
+    )
   })
 
   it("keeps a Retry control on an aborted turn whose only preserved content is a tool card", async () => {

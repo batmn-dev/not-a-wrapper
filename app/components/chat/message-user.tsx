@@ -14,7 +14,7 @@ import {
   MessageActions,
   Message as MessageContainer,
   MessageContent,
-  messageFooterRevealClassName,
+  userMessageFooterRevealClassName,
 } from "@/components/ui/message"
 import { useScrollRoot } from "@/components/ui/scroll-root"
 import type { MessageBranchInfo } from "@/lib/chat-messages/branch"
@@ -294,16 +294,22 @@ export function MessageUser({
         </div>
       ) : (
         <MessageContent
-          className="bg-accent relative max-w-[var(--user-chat-width,70%)] rounded-[18px] px-4 py-2.5 leading-6 whitespace-pre-wrap"
+          className="bg-accent relative max-w-[var(--user-chat-width,70%)] rounded-[22px] px-4 py-2.5 leading-6 whitespace-pre-wrap"
           ref={contentRef}
         >
           {children}
         </MessageContent>
       )}
       {/* Every sent-message control belongs to one composable action family:
-          it shares the same reveal behavior, button primitive, and sizing. */}
+          it shares the same reveal behavior and button primitive. */}
       <MessageActions
-        className={cn("flex gap-0", messageFooterRevealClassName)}
+        className={cn(
+          "-me-1 -mt-1 -ms-2.5 flex gap-0 p-1",
+          userMessageFooterRevealClassName
+        )}
+        aria-label="Your message actions"
+        role="group"
+        tabIndex={-1}
       >
         <MessageActionButton
           label="Copy Message"

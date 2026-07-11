@@ -34,6 +34,7 @@ import {
 import {
   Tooltip,
   TooltipContent,
+  TooltipShortcut,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useChats } from "@/lib/chat-store/chats/provider"
@@ -159,7 +160,13 @@ function DesktopAppSidebar() {
             activeIcon={<Icon icon={RiAddCircleFill} slotSize={20} />}
             label="New chat"
             href="/"
-            shortcut="⇧⌘O"
+            shortcut={
+              <>
+                <Kbd label="Shift">⇧</Kbd>
+                <Kbd label="Command">⌘</Kbd>
+                <Kbd>O</Kbd>
+              </>
+            }
             isActive={sidebarData.isNewChatActive}
           />
           {sidebarData.isLoggedIn ? (
@@ -169,7 +176,12 @@ function DesktopAppSidebar() {
                 <CollapsedMenuItem
                   icon={<Icon icon={RiSearchLine} slotSize={20} />}
                   label="Search"
-                  shortcut="⌘K"
+                  shortcut={
+                    <>
+                      <Kbd label="Command">⌘</Kbd>
+                      <Kbd>K</Kbd>
+                    </>
+                  }
                   isActive={sidebarData.isHistoryOpen}
                 />
               }
@@ -343,7 +355,11 @@ function SidebarExpandedNav({
                     }
                   />
                   <TooltipContent side="bottom" align="center">
-                    Close sidebar ⇧⌘S
+                    <TooltipShortcut label="Close sidebar">
+                      <Kbd label="Shift">⇧</Kbd>
+                      <Kbd label="Command">⌘</Kbd>
+                      <Kbd>S</Kbd>
+                    </TooltipShortcut>
                   </TooltipContent>
                 </Tooltip>
               )}
@@ -544,7 +560,13 @@ function CollapsedHeaderToggle() {
           className="absolute inset-0 m-auto opacity-0 transition-opacity group-hover/toggle:opacity-100 group-focus-visible/toggle:opacity-100"
         />
       </TooltipTrigger>
-      <TooltipContent side="right">Open sidebar ⇧⌘S</TooltipContent>
+      <TooltipContent side="right">
+        <TooltipShortcut label="Open sidebar">
+          <Kbd label="Shift">⇧</Kbd>
+          <Kbd label="Command">⌘</Kbd>
+          <Kbd>S</Kbd>
+        </TooltipShortcut>
+      </TooltipContent>
     </Tooltip>
   )
 }
@@ -567,7 +589,7 @@ function CollapsedMenuItem({
   label: string
   href?: string
   onClick?: () => void
-  shortcut?: string
+  shortcut?: React.ReactNode
   isActive?: boolean
 }) {
   const resolvedIcon = isActive && activeIcon ? activeIcon : icon
@@ -582,8 +604,6 @@ function CollapsedMenuItem({
     isActive && "text-foreground",
     "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
   )
-
-  const tooltipContent = shortcut ? `${label} ${shortcut}` : label
 
   return (
     <Tooltip disableHoverablePopup>
@@ -610,7 +630,13 @@ function CollapsedMenuItem({
       >
         {content}
       </TooltipTrigger>
-      <TooltipContent side="right">{tooltipContent}</TooltipContent>
+      <TooltipContent side="right">
+        {shortcut ? (
+          <TooltipShortcut label={label}>{shortcut}</TooltipShortcut>
+        ) : (
+          label
+        )}
+      </TooltipContent>
     </Tooltip>
   )
 }
@@ -663,22 +689,33 @@ function SignedOutCollapsedSearchPopover({
         onOpenChange?.(nextOpen)
       }}
     >
-      <PopoverTrigger
-        render={
-          <button
-            type="button"
-            className={className}
-            data-sidebar-item="true"
-            data-active={open ? "true" : undefined}
-            aria-label="Search"
-            title="Search ⌘K"
-          />
-        }
-      >
-        <div className="flex items-center justify-center">
-          <Icon icon={RiSearchLine} slotSize={20} />
-        </div>
-      </PopoverTrigger>
+      <Tooltip disableHoverablePopup>
+        <TooltipTrigger
+          render={
+            <PopoverTrigger
+              render={
+                <button
+                  type="button"
+                  className={className}
+                  data-sidebar-item="true"
+                  data-active={open ? "true" : undefined}
+                  aria-label="Search"
+                />
+              }
+            />
+          }
+        >
+          <div className="flex items-center justify-center">
+            <Icon icon={RiSearchLine} slotSize={20} />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="right">
+          <TooltipShortcut label="Search">
+            <Kbd label="Command">⌘</Kbd>
+            <Kbd>K</Kbd>
+          </TooltipShortcut>
+        </TooltipContent>
+      </Tooltip>
       <PopoverContentAuth side="right" align="start" sideOffset={8} />
     </Popover>
   )

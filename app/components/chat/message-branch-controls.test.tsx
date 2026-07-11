@@ -102,7 +102,7 @@ describe("MessageBranchControls", () => {
     const onSelectBranch = vi.fn()
     render(branch, onSelectBranch)
 
-    expect(container?.textContent).toContain("2 / 3")
+    expect(container?.textContent).toContain("2/3")
 
     const [prev, next] = Array.from(
       container?.querySelectorAll("button") ?? []
@@ -122,6 +122,24 @@ describe("MessageBranchControls", () => {
     ) as HTMLButtonElement[]
     expect(buttons[0].disabled).toBe(true)
     expect(buttons[1].disabled).toBe(false)
+  })
+
+  it("uses ChatGPT's compact branch sizing and counter spacing", () => {
+    render(branch, vi.fn())
+
+    const buttons = Array.from(
+      container?.querySelectorAll("button") ?? []
+    ) as HTMLButtonElement[]
+    expect(buttons).toHaveLength(2)
+    expect(buttons[0].className).toContain("h-[30px]")
+    expect(buttons[0].className).toContain("w-6")
+    expect(buttons[0].className).toContain("pointer-coarse:w-8")
+    expect(buttons[1].className).toBe(buttons[0].className)
+
+    const counter = container?.querySelector("span")
+    expect(counter?.className).toContain("px-0.5")
+    expect(counter?.className).toContain("text-sm")
+    expect(counter?.className).toContain("font-semibold")
   })
 
   it("renders nothing without a branch or handler", () => {

@@ -191,9 +191,6 @@ describe("MessageUser edits", () => {
     )
     const actionFamily = branchControls?.parentElement
 
-    expect(actionFamily?.className).toContain(
-      "group-hover/turn-messages:[mask-position:0_0]"
-    )
     expect(
       actionFamily?.querySelector('button[aria-label="Copy Message"]')
     ).toBeTruthy()
@@ -207,10 +204,64 @@ describe("MessageUser edits", () => {
       actionFamily?.querySelector('button[aria-label="Next branch"]')
     ).toBeTruthy()
 
-    const actionButtons = Array.from(
-      actionFamily?.querySelectorAll("button") ?? []
+    const copyButton = actionFamily?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Copy Message"]'
     )
-    expect(new Set(actionButtons.map((button) => button.className)).size).toBe(1)
+    const editButton = actionFamily?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Edit message"]'
+    )
+    const previousButton = actionFamily?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Previous branch"]'
+    )
+    const nextButton = actionFamily?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Next branch"]'
+    )
+
+    expect(copyButton?.className).toBe(editButton?.className)
+    expect(previousButton?.className).toBe(nextButton?.className)
+    expect(copyButton?.className).toContain("h-8 w-8")
+    expect(previousButton?.className).toContain("h-[30px] w-6")
+    expect(actionFamily?.className).toContain("-ms-2.5")
+    expect(actionFamily?.className).toContain("-me-1")
+    expect(actionFamily?.className).toContain("-mt-1")
+    expect(actionFamily?.className).toContain("p-1")
+    expect(actionFamily?.getAttribute("aria-label")).toBe(
+      "Your message actions"
+    )
+  })
+
+  it("matches ChatGPT's user-only delayed opacity reveal contract", () => {
+    renderEditableMessage()
+
+    const actions = container?.querySelector(
+      '[aria-label="Your message actions"]'
+    )
+    expect(actions).toBeTruthy()
+
+    const expectedClasses = [
+      "pointer-events-none",
+      "opacity-0",
+      "select-none",
+      "motion-safe:transition-opacity",
+      "duration-300",
+      "group-hover/turn-messages:delay-300",
+      "group-hover/turn-messages:pointer-events-auto",
+      "group-hover/turn-messages:opacity-100",
+      "group-focus-within/turn-messages:pointer-events-auto",
+      "group-focus-within/turn-messages:opacity-100",
+      "has-[[data-state=open]]:pointer-events-auto",
+      "has-[[data-state=open]]:opacity-100",
+      "focus-within:transition-none",
+      "hover:transition-none",
+      "pointer-coarse:pointer-events-auto",
+      "pointer-coarse:opacity-100",
+    ]
+
+    for (const className of expectedClasses) {
+      expect(actions?.className).toContain(className)
+    }
+    expect(actions?.className).not.toContain("mask-image")
+    expect(actions?.className).not.toContain("mask-position")
   })
 
   it("keeps edit mode open when onEdit returns a failed result", async () => {

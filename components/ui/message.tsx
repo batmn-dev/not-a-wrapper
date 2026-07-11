@@ -121,26 +121,28 @@ const MessageActions = ({
 )
 
 /**
- * Hover/focus reveal styling for sent-message footer actions. Compose it into
- * the user footer's className alongside that surface's own layout classes.
+ * ChatGPT-parity reveal contract for user-message actions only.
  *
- * The controls stay mounted and hit-testable — `pointer-events-auto` so the
- * cursor resolves to `pointer` the instant it's over a button — and fade in
- * via a quick 0.2s mask-position slide when the turn is hovered, focused, or
- * has an open menu. Touch devices (no hover) drop the mask and show the
- * controls outright; reduced-motion users get the reveal without the slide.
+ * Hover waits 300ms before fading the full action family in over 300ms, while
+ * focus and an open tooltip reveal it immediately. Leaving starts the 300ms
+ * fade-out immediately and disables hit testing at once. Coarse pointers keep
+ * the controls visible because hover is not a reliable interaction there.
+ *
+ * Assistant actions intentionally do not use this contract: their one-time
+ * streamed reveal and settled-visible behavior live in message-assistant.tsx.
  */
-const messageFooterRevealClassName = cn(
-  "pointer-events-auto",
-  "[mask-image:linear-gradient(to_right,black_33%,transparent_66%)]",
-  "[mask-size:300%_100%]",
-  "[mask-position:100%_0%]",
-  "motion-safe:transition-[mask-position]",
-  "duration-[0.2s]",
-  "group-hover/turn-messages:[mask-position:0_0]",
-  "group-focus-within/turn-messages:[mask-position:0_0]",
-  "has-[[data-state=open]]:[mask-position:0_0]",
-  "pointer-coarse:[mask-image:none]"
+const userMessageFooterRevealClassName = cn(
+  "pointer-events-none opacity-0 select-none",
+  "motion-safe:transition-opacity duration-300",
+  "group-hover/turn-messages:delay-300",
+  "group-hover/turn-messages:pointer-events-auto",
+  "group-hover/turn-messages:opacity-100",
+  "group-focus-within/turn-messages:pointer-events-auto",
+  "group-focus-within/turn-messages:opacity-100",
+  "has-[[data-state=open]]:pointer-events-auto",
+  "has-[[data-state=open]]:opacity-100",
+  "focus-within:transition-none hover:transition-none",
+  "pointer-coarse:pointer-events-auto pointer-coarse:opacity-100"
 )
 
 export type MessageActionProps = {
@@ -186,5 +188,5 @@ export {
   MessageContent,
   MessageActions,
   MessageAction,
-  messageFooterRevealClassName,
+  userMessageFooterRevealClassName,
 }
