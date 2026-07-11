@@ -2,7 +2,8 @@
 
 import { Switch } from "@/components/ui/switch"
 import { useModel } from "@/lib/model-store/provider"
-import { PROVIDERS } from "@/lib/providers"
+import { getVendorIcon } from "@/lib/provider-icons"
+import { getVendor } from "@/lib/provider-identity"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { useState } from "react"
 
@@ -114,15 +115,15 @@ export function ModelVisibilitySettings() {
       {/* Models grouped by icon/type */}
       <div className="space-y-6 pb-6">
         {Object.entries(modelsByProvider).map(([iconKey, modelsGroup]) => {
-          const firstModel = modelsGroup[0]
-          const provider = PROVIDERS.find((p) => p.id === firstModel.icon)
+          const vendor = getVendor(iconKey)
+          const GroupIcon = getVendorIcon(iconKey)
 
           return (
             <div key={iconKey} className="space-y-3">
               <div className="flex items-center gap-2">
-                {provider?.icon && <provider.icon className="size-5" />}
+                {vendor && <GroupIcon className="size-5" />}
                 <h4 className="font-medium text-balance">
-                  {provider?.name || iconKey}
+                  {vendor?.name || iconKey}
                 </h4>
                 <span className="text-muted-foreground text-sm">
                   ({modelsGroup.length} models)
@@ -143,10 +144,6 @@ export function ModelVisibilitySettings() {
 
               <div className="space-y-2 pl-7">
                 {modelsGroup.map((model) => {
-                  const modelProvider = PROVIDERS.find(
-                    (p) => p.id === model.provider
-                  )
-
                   return (
                     <div
                       key={model.id}
@@ -156,7 +153,7 @@ export function ModelVisibilitySettings() {
                         <div className="flex items-center gap-2">
                           <span className="text-sm">{model.name}</span>
                           <span className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 text-xs">
-                            via {modelProvider?.name || model.provider}
+                            via {model.provider}
                           </span>
                         </div>
                         {model.description && (

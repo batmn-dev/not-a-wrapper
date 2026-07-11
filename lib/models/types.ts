@@ -1,4 +1,4 @@
-import type { Provider } from "@/lib/provider-ids"
+import type { Provider } from "@/lib/provider-identity"
 import type { ToolCapabilities } from "@/lib/tools/types"
 
 export type ModelCatalogStatus = "visible" | "hidden" | "legacy"

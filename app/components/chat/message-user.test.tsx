@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 
+import type { MessageBranchInfo } from "@/lib/chat-messages/branch"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
@@ -170,6 +171,46 @@ describe("MessageUser edits", () => {
       'button[aria-label="Edit message"]'
     )
     expect(editButton).toBeNull()
+  })
+
+  it("composes branch navigation into the hover-revealed action family", () => {
+    const branch: MessageBranchInfo = {
+      messageId: "msg-client-123",
+      currentIndex: 1,
+      total: 3,
+      siblings: [
+        { messageId: "msg-client-122" },
+        { messageId: "msg-client-123" },
+        { messageId: "msg-client-124" },
+      ],
+    }
+    renderEditableMessage({ branch, onSelectBranch: vi.fn() })
+
+    const branchControls = container?.querySelector(
+      '[aria-label="Branch 2 of 3"]'
+    )
+    const actionFamily = branchControls?.parentElement
+
+    expect(actionFamily?.className).toContain(
+      "group-hover/turn-messages:[mask-position:0_0]"
+    )
+    expect(
+      actionFamily?.querySelector('button[aria-label="Copy Message"]')
+    ).toBeTruthy()
+    expect(
+      actionFamily?.querySelector('button[aria-label="Edit message"]')
+    ).toBeTruthy()
+    expect(
+      actionFamily?.querySelector('button[aria-label="Previous branch"]')
+    ).toBeTruthy()
+    expect(
+      actionFamily?.querySelector('button[aria-label="Next branch"]')
+    ).toBeTruthy()
+
+    const actionButtons = Array.from(
+      actionFamily?.querySelectorAll("button") ?? []
+    )
+    expect(new Set(actionButtons.map((button) => button.className)).size).toBe(1)
   })
 
   it("keeps edit mode open when onEdit returns a failed result", async () => {

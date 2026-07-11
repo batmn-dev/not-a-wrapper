@@ -354,7 +354,7 @@ export function MessageAssistant({
                     tooltip={
                       <span className="flex flex-col items-center text-center leading-tight">
                         <span className="font-medium">Try again...</span>
-                        <span className="text-background/70">
+                        <span className="text-[var(--text-tertiary)]">
                           Using {retryModelName}
                         </span>
                       </span>

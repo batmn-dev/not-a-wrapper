@@ -42,7 +42,7 @@ export function MessageBranchControls({
   return (
     <div
       className={cn(
-        "text-muted-foreground flex h-8 items-center gap-0.5 px-1 text-xs pointer-coarse:h-10",
+        "text-muted-foreground flex items-center gap-0 text-xs",
         className
       )}
       aria-label={`Branch ${currentBranch} of ${branch.total}`}
@@ -56,7 +56,7 @@ export function MessageBranchControls({
         }}
         icon={<Icon icon={RiArrowLeftSLine} slotSize={20} />}
       />
-      <span className="tabular-nums">
+      <span className="px-1 tabular-nums">
         {currentBranch} / {branch.total}
       </span>
       <MessageActionButton

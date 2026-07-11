@@ -403,7 +403,7 @@ function CopyRegenActions() {
         tooltip={
           <span className="flex flex-col items-center text-center leading-tight">
             <span className="font-medium">Try again...</span>
-            <span className="text-background/70">Using GPT-5.5</span>
+            <span className="text-[var(--text-tertiary)]">Using GPT-5.5</span>
           </span>
         }
         side="bottom"

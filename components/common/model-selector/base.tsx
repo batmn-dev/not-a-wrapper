@@ -18,6 +18,11 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { useModel } from "@/lib/model-store/provider"
 import {
   filterAndSortModels,
@@ -25,7 +30,7 @@ import {
 } from "@/lib/model-store/utils"
 import { getModelInfo } from "@/lib/models"
 import { ModelConfig } from "@/lib/models/types"
-import { PROVIDERS } from "@/lib/providers"
+import { getVendorIcon } from "@/lib/provider-icons"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
 import { RiArrowDownSLine, RiSearchLine, RiStarLine } from "@remixicon/react"
@@ -135,7 +140,7 @@ export function ModelSelector({
 
   const renderModelItem = (model: ModelConfig) => {
     const isLocked = !isModelSelectableForAuthState(model, isUserAuthenticated)
-    const provider = PROVIDERS.find((provider) => provider.id === model.icon)
+    const VendorIcon = getVendorIcon(model.icon ?? "openrouter")
     const routeLabel = getModelRouteLabel(model)
 
     return (
@@ -148,7 +153,7 @@ export function ModelSelector({
         onClick={() => handleSelect(model.id, isLocked)}
       >
         <div className="flex items-center gap-3">
-          {provider?.icon && <provider.icon className="size-5" />}
+          <VendorIcon className="size-5" />
           <div className="flex flex-col gap-0">
             <span className="text-sm">{model.name}</span>
             {/* Dual-route disambiguation: wrapped entries can share a name and
@@ -287,7 +292,20 @@ export function ModelSelector({
           }
         }}
       >
-        <DropdownMenuTrigger render={trigger} />
+        {isComposerVariant ? (
+          <Tooltip disableHoverablePopup>
+            <TooltipTrigger
+              render={<span className="inline-flex min-w-0" />}
+            >
+              <DropdownMenuTrigger render={trigger} />
+            </TooltipTrigger>
+            <TooltipContent side="bottom" hideArrow>
+              Select model
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <DropdownMenuTrigger render={trigger} />
+        )}
         <DropdownMenuContent
           className="w-[300px] overflow-hidden [--model-selector-fixed-height:3rem] [--model-selector-list-max-height:18rem]"
           align={isComposerVariant ? "end" : "start"}
@@ -329,9 +347,7 @@ export function ModelSelector({
                     isUserAuthenticated
                   )
                   const isSelected = selectedModelId === model.id
-                  const provider = PROVIDERS.find(
-                    (provider) => provider.id === model.icon
-                  )
+                  const VendorIcon = getVendorIcon(model.icon ?? "openrouter")
                   const routeLabel = getModelRouteLabel(model)
 
                   return (
@@ -344,9 +360,7 @@ export function ModelSelector({
                       onClick={() => handleSelect(model.id, isLocked)}
                     >
                       <div className="flex min-w-0 items-center gap-2">
-                        {provider?.icon && (
-                          <provider.icon className="size-5 shrink-0" />
-                        )}
+                        <VendorIcon className="size-5 shrink-0" />
                         <span className="truncate text-sm">{model.name}</span>
                         {/* Dual-route disambiguation: wrapped entries can share
                             a name and vendor icon with their direct sibling

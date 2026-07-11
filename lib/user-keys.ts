@@ -3,6 +3,7 @@ import { fetchQuery } from "convex/nextjs"
 import { decryptSecret } from "./encryption"
 import { getProviderStrategy } from "./openproviders/provider-strategy"
 import { Provider } from "./openproviders/types"
+import { TOOL_PROVIDER_IDENTITY, type ToolProvider } from "./provider-identity"
 
 export type { Provider } from "./openproviders/types"
 
@@ -129,18 +130,13 @@ export async function getUserKey(
 // Tool providers (Exa, Firecrawl) use the same encrypted key storage as
 // AI providers (userKeys table in Convex). The `provider` field is
 // already `v.string()` in the schema, so tool provider IDs are stored
-// alongside AI provider IDs without schema changes.
+// alongside AI provider IDs without schema changes. Their ids and static
+// facts (including the platform env-var name) live in the Provider
+// identity module; resolution stays here.
 // -----------------------------------------------------------------------
 
-/** Tool provider IDs that can be stored in userKeys */
-export const TOOL_PROVIDERS = ["exa", "firecrawl"] as const
-export type ToolProvider = (typeof TOOL_PROVIDERS)[number]
-
-/** Maps tool provider IDs to their environment variable names */
-const TOOL_ENV_MAP: Record<ToolProvider, string> = {
-  exa: "EXA_API_KEY",
-  firecrawl: "FIRECRAWL_API_KEY",
-}
+export { TOOL_PROVIDER_IDS as TOOL_PROVIDERS } from "./provider-identity"
+export type { ToolProvider } from "./provider-identity"
 
 /**
  * Get the effective API key for a tool provider.
@@ -178,7 +174,8 @@ export async function getEffectiveToolKeyWithMode(
   }
 
   // 2. Fall back to platform env var
-  const platformKey = process.env[TOOL_ENV_MAP[provider]] || undefined
+  const platformKey =
+    process.env[TOOL_PROVIDER_IDENTITY[provider].envVarName] || undefined
   if (platformKey) {
     return { key: platformKey, keyMode: "platform" }
   }

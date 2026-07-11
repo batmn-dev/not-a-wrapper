@@ -606,6 +606,11 @@ describe("MessageAssistant activity trigger", () => {
 
     expect(document.body.textContent).toContain("Try again...")
     expect(document.body.textContent).toContain("Using GPT-5.5")
+    expect(
+      Array.from(document.body.querySelectorAll("span"))
+        .find((element) => element.textContent === "Using GPT-5.5")
+        ?.classList.contains("text-[var(--text-tertiary)]")
+    ).toBe(true)
   })
 
   it("keeps settled assistant actions visible without hover", async () => {

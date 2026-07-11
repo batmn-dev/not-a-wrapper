@@ -378,6 +378,10 @@
   --muted-foreground: oklch(0.552 0.016 285.938);
   --accent: oklch(0.967 0.001 286.375);
   --accent-foreground: oklch(0.21 0.006 285.885);
+  /* ChatGPT reference tokens. Tooltips opt into the dark token scope in both themes. */
+  --text-primary: oklch(0.159 0 0);
+  --bg-tooltip: oklch(0 0 0);
+  --border-tooltip: oklch(0 0 0 / 0);
   /* Muted control tone for the sidebar row's trailing icons at rest — mirrors
      ChatGPT's --text-tertiary (#8f8f8f). Lighter/neutral vs --muted-foreground. */
   --text-tertiary: #8f8f8f;
@@ -485,6 +489,9 @@
   --muted-foreground: oklch(0.705 0.015 286.067);
   --accent: oklch(100% 0 0 / 10.2%);
   --accent-foreground: oklch(0.985 0 0);
+  --text-primary: oklch(1 0 0);
+  --bg-tooltip: oklch(0.222 0 0);
+  --border-tooltip: oklch(1 0 0 / 0.051);
   /* ChatGPT --text-tertiary (#afafaf) / hover surface (rgba(255,255,255,.10)). */
   --text-tertiary: #afafaf;
   --surface-hover: oklch(1 0 0 / 0.1);

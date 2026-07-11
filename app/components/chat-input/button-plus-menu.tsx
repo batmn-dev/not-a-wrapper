@@ -79,26 +79,26 @@ export function ButtonPlusMenu({
       <Popover>
         <Tooltip disableHoverablePopup>
           <TooltipTrigger
-            render={
-              <PopoverTrigger
-                render={
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className={plusTriggerClassName}
-                    type="button"
-                    id="composer-plus-btn"
-                    data-testid="composer-plus-btn"
-                    aria-label="Add files and more"
-                  />
-                }
-              />
-            }
+            render={<span className="inline-flex" />}
           >
-            {composerPlusIcon}
+            <PopoverTrigger
+              render={
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className={plusTriggerClassName}
+                  type="button"
+                  id="composer-plus-btn"
+                  data-testid="composer-plus-btn"
+                  aria-label="Add files and more"
+                />
+              }
+            >
+              {composerPlusIcon}
+            </PopoverTrigger>
           </TooltipTrigger>
           <TooltipContent side="bottom" hideArrow>
-            More options
+            Add files and more
           </TooltipContent>
         </Tooltip>
         <PopoverContentAuth />
@@ -127,26 +127,26 @@ export function ButtonPlusMenu({
       <DropdownMenu>
         <Tooltip disableHoverablePopup>
           <TooltipTrigger
-            render={
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className={authenticatedPlusTriggerClassName}
-                    type="button"
-                    id="composer-plus-btn"
-                    data-testid="composer-plus-btn"
-                    aria-label="Add files and more"
-                  />
-                }
-              />
-            }
+            render={<span className="inline-flex" />}
           >
-            {composerPlusIcon}
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className={authenticatedPlusTriggerClassName}
+                  type="button"
+                  id="composer-plus-btn"
+                  data-testid="composer-plus-btn"
+                  aria-label="Add files and more"
+                />
+              }
+            >
+              {composerPlusIcon}
+            </DropdownMenuTrigger>
           </TooltipTrigger>
           <TooltipContent side="bottom" hideArrow>
-            More options
+            Add files and more
           </TooltipContent>
         </Tooltip>
         <DropdownMenuContent

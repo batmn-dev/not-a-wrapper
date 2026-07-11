@@ -300,41 +300,37 @@ export function MessageUser({
           {children}
         </MessageContent>
       )}
-      <MessageActions className="flex gap-0">
-        {/* Sent-message copy/edit actions reveal on hover or focus. Scoped to
-            copy/edit only: the branch nav must stay visible without hover, or a
-            fresh regenerate/edit gives no cue that versions now exist. */}
-        <div className={cn("flex gap-0", messageFooterRevealClassName)}>
+      {/* Every sent-message control belongs to one composable action family:
+          it shares the same reveal behavior, button primitive, and sizing. */}
+      <MessageActions
+        className={cn("flex gap-0", messageFooterRevealClassName)}
+      >
+        <MessageActionButton
+          label="Copy Message"
+          tooltip={copied ? "Copied!" : "Copy Message"}
+          onClick={copyToClipboard}
+          icon={
+            copied ? (
+              <Icon icon={RiCheckLine} slotSize={20} />
+            ) : (
+              <Icon icon={RiFileCopyLine} slotSize={20} />
+            )
+          }
+        />
+        {isDurableChat && (
           <MessageActionButton
-            label="Copy Message"
-            tooltip={copied ? "Copied!" : "Copy Message"}
-            onClick={copyToClipboard}
+            label={isEditing ? "Cancel edit" : "Edit message"}
+            delay={0}
+            onClick={isEditing ? handleEditCancel : handleEditStart}
             icon={
-              copied ? (
-                <Icon icon={RiCheckLine} slotSize={20} />
+              isEditing ? (
+                <Icon icon={RiPencilLine} slotSize={20} />
               ) : (
-                <Icon icon={RiFileCopyLine} slotSize={20} />
+                <Icon icon={RiEditLine} slotSize={20} />
               )
             }
           />
-          {isDurableChat && (
-            <MessageActionButton
-              label={isEditing ? "Cancel edit" : "Edit message"}
-              delay={0}
-              onClick={isEditing ? handleEditCancel : handleEditStart}
-              icon={
-                isEditing ? (
-                  <Icon icon={RiPencilLine} slotSize={20} />
-                ) : (
-                  <Icon icon={RiEditLine} slotSize={20} />
-                )
-              }
-            />
-          )}
-        </div>
-        {/* Branch nav trails the copy/edit actions on user messages, matching
-            ChatGPT (the right-aligned user toolbar reads copy · edit · < n/m >).
-            On assistant messages it leads instead — see message-assistant.tsx. */}
+        )}
         <MessageBranchControls
           branch={branch}
           onSelectBranch={onSelectBranch}
