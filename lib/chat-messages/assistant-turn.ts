@@ -371,7 +371,7 @@ export function deriveAssistantTurnPhase(
   // image results) or invisible-but-real activity (opaque reasoning that
   // finished). A bare stream remains in the universal Thinking phase.
   const hasSubstance =
-    view.text.length > 0 ||
+    view.text.trim().length > 0 ||
     view.toolParts.length > 0 ||
     view.searchImageResults.length > 0 ||
     view.reasoning.phase !== "idle"

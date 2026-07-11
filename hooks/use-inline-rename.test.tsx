@@ -149,6 +149,23 @@ describe("useInlineRename", () => {
     expect(onSave).toHaveBeenCalledWith("World")
   })
 
+  it("handles rejected saves without leaking an unhandled promise", async () => {
+    const error = new Error("save failed")
+    const onSave = vi.fn().mockRejectedValue(error)
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+    render(<Harness value="Hello" onSave={onSave} />)
+    clickStart()
+    typeValue("World")
+
+    await act(async () => keyDown("Enter"))
+
+    expect(consoleError).toHaveBeenCalledWith(
+      "Inline rename save failed:",
+      error
+    )
+    consoleError.mockRestore()
+  })
+
   it("skips the commit when the value is unchanged", () => {
     const onSave = vi.fn()
     render(<Harness value="Hello" onSave={onSave} />)

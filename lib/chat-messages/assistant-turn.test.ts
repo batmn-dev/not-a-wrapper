@@ -252,6 +252,18 @@ describe("deriveAssistantTurnPhase", () => {
     expect(phase).toEqual({ kind: "thinking", visibility: "opaque" })
   })
 
+  it("keeps Thinking for whitespace-only text without changing the rendered text", () => {
+    const view = viewOf([{ type: "text", text: " \n" }])
+    const phase = deriveAssistantTurnPhase(view, liveCtx)
+
+    expect(view.text).toBe(" \n")
+    expect(phase).toEqual({ kind: "thinking", visibility: "opaque" })
+    expect(deriveAssistantActivityPresentation(view, phase)).toMatchObject({
+      kind: "live-status",
+      label: "Thinking",
+    })
+  })
+
   it("is thinking(opaque) while opaque reasoning streams — the dots+Thinking regression", () => {
     const phase = deriveAssistantTurnPhase(
       viewOf([{ type: "reasoning", text: "", state: "streaming" }]),

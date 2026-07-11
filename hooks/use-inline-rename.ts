@@ -18,8 +18,9 @@ export type UseInlineRenameOptions = {
  *
  * The hook is the home for the "should this commit?" rule: a draft is trimmed
  * before comparison and `onSave` is only called when the trimmed value is
- * non-empty AND differs from `currentValue`. Persistence and error handling
- * live entirely in the caller's `onSave`.
+ * non-empty AND differs from `currentValue`. Persistence and user-facing error
+ * handling live in the caller's `onSave`; the hook logs unexpected rejections
+ * so its event handlers cannot create unhandled promises.
  */
 export function useInlineRename(
   currentValue: string,
@@ -56,7 +57,11 @@ export function useInlineRename(
     options?.onEditEnd?.()
     // Skip no-op commits: empty or unchanged values never reach onSave.
     if (next.length === 0 || next === currentValue) return
-    await onSave(next)
+    try {
+      await onSave(next)
+    } catch (error) {
+      console.error("Inline rename save failed:", error)
+    }
   }, [draft, currentValue, onSave, options])
 
   const handleClickOutside = useCallback(() => {
