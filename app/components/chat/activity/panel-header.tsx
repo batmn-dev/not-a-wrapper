@@ -39,6 +39,7 @@ export function PanelCloseButton({
 
 export type TitleDurationClusterProps = {
   title: string
+  /** Display-ready whole seconds from `toCompletedDurationSeconds`; never 0. */
   durationSeconds?: number
   titleId?: string
   className?: string
@@ -68,7 +69,7 @@ export function TitleDurationCluster({
       <span id={titleId} className="text-muted-foreground truncate">
         {title}
       </span>
-      {durationSeconds !== undefined && durationSeconds > 0 ? (
+      {durationSeconds !== undefined ? (
         <>
           <span aria-hidden className="text-muted-foreground/70">
             ·

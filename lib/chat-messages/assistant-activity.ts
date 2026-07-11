@@ -6,7 +6,7 @@ import type {
   AssistantTurnView,
   SearchImageResult,
 } from "./assistant-turn"
-import { getToolDisplayMetadataRecords } from "./metadata"
+import { getToolDisplayName } from "./metadata"
 
 export type NonEmptyTuple<T> = readonly [T, ...T[]]
 
@@ -72,22 +72,6 @@ function isErrorStep(step: ToolUIPart): boolean {
   )
 }
 
-function metadataDisplayName(
-  view: AssistantTurnView,
-  toolName: string,
-  toolCallId?: string
-): string | undefined {
-  const records = getToolDisplayMetadataRecords(view.metadata)
-  const candidate =
-    (toolCallId ? records.byCallId[toolCallId] : undefined) ??
-    records.byName[toolName]
-  if (typeof candidate !== "object" || candidate === null) return undefined
-  const displayName = (candidate as Record<string, unknown>).displayName
-  return typeof displayName === "string" && displayName.trim().length > 0
-    ? displayName.trim()
-    : undefined
-}
-
 function toolStepDescription(step: ToolUIPart): string {
   switch (step.state) {
     case "approval-requested":
@@ -115,7 +99,7 @@ function toToolEntries(
     return {
       id: step.toolCallId,
       label:
-        metadataDisplayName(view, toolName, step.toolCallId) ??
+        getToolDisplayName(view.metadata, toolName, step.toolCallId) ??
         humanizeToolName(toolName),
       description: toolStepDescription(step),
     }
@@ -208,7 +192,7 @@ function resolveLiveStatus(
           motion: "shimmer",
         }
       }
-      const displayName = metadataDisplayName(view, toolName)
+      const displayName = getToolDisplayName(view.metadata, toolName)
       return {
         semanticKind: "tool",
         label: `Using ${displayName ?? humanizeToolName(toolName)}`,

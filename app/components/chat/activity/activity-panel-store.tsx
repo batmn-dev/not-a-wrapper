@@ -224,6 +224,16 @@ export function ActivityPanelStoreProvider({
 
 const noopSubscribe = () => () => {}
 
+/** A row matches a turn id by client id or, once persisted, server id. */
+function matchesTurn(
+  turnId: string | undefined,
+  messageId: string,
+  serverMessageId?: string
+): boolean {
+  if (turnId === undefined) return false
+  return turnId === messageId || turnId === serverMessageId
+}
+
 /**
  * Row subscription: "is this message the open panel turn?" Returns a single
  * boolean so useSyncExternalStore re-renders the row only when the answer
@@ -240,11 +250,8 @@ export function useIsActivityPanelTurnOpen(
     () => {
       if (!store) return false
       const state = store.getState()
-      if (!state.open || state.panelTurnId === undefined) return false
-      return (
-        state.panelTurnId === messageId ||
-        (serverMessageId !== undefined && state.panelTurnId === serverMessageId)
-      )
+      if (!state.open) return false
+      return matchesTurn(state.panelTurnId, messageId, serverMessageId)
     },
     () => false
   )
@@ -265,11 +272,9 @@ export function useDefaultActivityDurationMs(
     () => {
       if (!store) return undefined
       const state = store.getState()
-      const matchesDefault =
-        state.defaultTurnId === messageId ||
-        (serverMessageId !== undefined &&
-          state.defaultTurnId === serverMessageId)
-      return matchesDefault ? state.defaultDurationMs : undefined
+      return matchesTurn(state.defaultTurnId, messageId, serverMessageId)
+        ? state.defaultDurationMs
+        : undefined
     },
     () => undefined
   )

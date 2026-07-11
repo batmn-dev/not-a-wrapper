@@ -242,8 +242,8 @@ export function useActivityPanel({
     ? deriveAssistantActivityPresentation(panelView, panelPhase, {
         durationMs: panelDurationMs,
       })
-    : ({ kind: "live-status" } as const)
-  const panelCanOpen = presentation.kind === "disclosure"
+    : undefined
+  const panelCanOpen = presentation?.kind === "disclosure"
 
   const panelProps: ActivityPanelProps = isPendingActivityTurn
     ? {
@@ -252,7 +252,7 @@ export function useActivityPanel({
       }
     : {
         sections:
-          presentation.kind === "disclosure" ? presentation.sections : [],
+          presentation?.kind === "disclosure" ? presentation.sections : [],
         durationSeconds: toCompletedDurationSeconds(panelDurationMs),
       }
 

@@ -1,10 +1,10 @@
 "use client"
 
 import { Icon } from "@/components/ui/icon"
-import { TextShimmer } from "@/components/ui/text-shimmer"
 import type { AssistantActivityPresentation } from "@/lib/chat-messages/assistant-activity"
 import { cn } from "@/lib/utils"
 import { RiArrowRightSLine } from "@remixicon/react"
+import { StatusText } from "./status-text"
 
 export type ActivityDisclosurePresentation = Extract<
   AssistantActivityPresentation,
@@ -41,17 +41,11 @@ export function ActivityPanelTrigger({
         className
       )}
     >
-      {motion === "shimmer" ? (
-        <TextShimmer
-          duration={2}
-          spread={15}
-          className="text-base leading-6 font-normal motion-reduce:animate-none"
-        >
-          {label}
-        </TextShimmer>
-      ) : (
-        <span className="truncate">{label}</span>
-      )}
+      <StatusText
+        label={label}
+        shimmer={motion === "shimmer"}
+        className="truncate"
+      />
       <Icon
         icon={RiArrowRightSLine}
         slotSize={12}

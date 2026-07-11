@@ -147,8 +147,10 @@ const EMPTY_TOOL_DISPLAY_RECORDS: ToolDisplayMetadataRecords = Object.freeze({
 /**
  * Read the per-tool display-metadata records the chat turn runtime streams
  * into message metadata (`toolMetadataByName` / `toolMetadataByCallId`). This
- * module owns the KEY NAMES; entry-shape validation is the display layer's
- * concern (tool-invocation validates each record entry against its own type).
+ * module owns the KEY NAMES plus the cross-consumer `displayName` field
+ * ({@link getToolDisplayName}); validation of the richer entry shape is the
+ * display layer's concern (tool-invocation validates each record entry
+ * against its own type).
  */
 export function getToolDisplayMetadataRecords(
   metadata: unknown
@@ -160,6 +162,23 @@ export function getToolDisplayMetadataRecords(
     byName: isRecord(byName) ? byName : {},
     byCallId: isRecord(byCallId) ? byCallId : {},
   }
+}
+
+/** Resolve a tool's human display name, preferring the per-call record. */
+export function getToolDisplayName(
+  metadata: unknown,
+  toolName: string,
+  toolCallId?: string
+): string | undefined {
+  const records = getToolDisplayMetadataRecords(metadata)
+  const candidate =
+    (toolCallId ? records.byCallId[toolCallId] : undefined) ??
+    records.byName[toolName]
+  if (!isRecord(candidate)) return undefined
+  const displayName = candidate.displayName
+  return typeof displayName === "string" && displayName.trim().length > 0
+    ? displayName.trim()
+    : undefined
 }
 
 /** The stored-message fields {@link stampServerFields} projects into metadata. */

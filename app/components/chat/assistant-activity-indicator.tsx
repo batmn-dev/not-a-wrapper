@@ -1,9 +1,9 @@
 "use client"
 
-import { TextShimmer } from "@/components/ui/text-shimmer"
 import type { AssistantActivityPresentation } from "@/lib/chat-messages/assistant-activity"
 import { cn } from "@/lib/utils"
 import { ActivityPanelTrigger } from "./activity/activity-panel-trigger"
+import { StatusText } from "./activity/status-text"
 
 export type AssistantActivityIndicatorProps = {
   presentation: AssistantActivityPresentation
@@ -11,22 +11,6 @@ export type AssistantActivityIndicatorProps = {
   onOpenChange?: (open: boolean) => void
   controlsId?: string
   className?: string
-}
-
-function StatusText({ label, shimmer }: { label: string; shimmer: boolean }) {
-  return shimmer ? (
-    <TextShimmer
-      duration={2}
-      spread={15}
-      className="text-muted-foreground text-base leading-6 font-normal motion-reduce:animate-none"
-    >
-      {label}
-    </TextShimmer>
-  ) : (
-    <span className="text-muted-foreground text-base leading-6 font-normal">
-      {label}
-    </span>
-  )
 }
 
 /** Exhaustive renderer for live, passive, and inspectable assistant activity. */
@@ -46,6 +30,7 @@ export function AssistantActivityIndicator({
           <StatusText
             label={presentation.label}
             shimmer={presentation.motion === "shimmer"}
+            className="text-muted-foreground"
           />
         </div>
       )
@@ -83,6 +68,7 @@ export function AssistantActivityIndicator({
             <StatusText
               label={presentation.label}
               shimmer={presentation.motion === "shimmer"}
+              className="text-muted-foreground"
             />
           )}
         </div>
