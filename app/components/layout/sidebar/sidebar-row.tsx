@@ -1,11 +1,10 @@
 "use client"
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
-import { Icon } from "@/components/ui/icon"
+import { InlineRenameInput } from "@/components/ui/inline-rename-input"
 import { useSidebar } from "@/components/ui/sidebar"
 import { useInlineRename } from "@/hooks/use-inline-rename"
 import { cn } from "@/lib/utils"
-import { RiCheckLine, RiCloseLine } from "@remixicon/react"
 import Link from "next/link"
 import { useCallback, useMemo, type ReactNode } from "react"
 
@@ -18,6 +17,8 @@ type SidebarRowProps = {
   title: string
   /** Current persisted label the inline rename edits from. */
   renameValue: string
+  /** Accessible name for the title editor on this row type. */
+  renameLabel: string
   /** Persist + error handling live here — the shell only owns the edit UX. */
   onRename: (next: string) => void | Promise<void>
   /** Optional leading glyph, rendered in both resting and editing modes. */
@@ -45,6 +46,7 @@ export function SidebarRow({
   isActive,
   title,
   renameValue,
+  renameLabel,
   onRename,
   leading,
   trailing,
@@ -52,16 +54,8 @@ export function SidebarRow({
   const { setOpenMobile } = useSidebar()
   const isMobile = useBreakpoint(768)
 
-  const {
-    isEditing,
-    start,
-    inputRef,
-    containerRef,
-    inputProps,
-    onContainerClick,
-    onSaveClick,
-    onCancelClick,
-  } = useInlineRename(renameValue, onRename)
+  const { isEditing, start, containerRef, inputProps, onContainerClick } =
+    useInlineRename(renameValue, onRename)
 
   const handleLinkClick = useCallback(
     (e: React.MouseEvent) => {
@@ -79,9 +73,9 @@ export function SidebarRow({
   const containerClassName = useMemo(
     () =>
       cn(
-        "sidebar-row menu-item-hoverable hover:bg-[var(--sidebar-row-active-background)] hover:text-foreground group/row relative mx-1.5 flex h-9 w-[calc(100%-var(--spacing)*3)] items-center rounded-lg pointer-coarse:h-auto",
+        "sidebar-row menu-item-hoverable text-primary hover:bg-[var(--sidebar-row-active-background)] hover:text-foreground group/row relative mx-1.5 flex h-9 w-[calc(100%-var(--spacing)*3)] items-center rounded-lg text-sm pointer-coarse:h-auto",
         (isActive || isEditing) &&
-          "bg-[var(--sidebar-row-active-background)] hover:bg-[var(--sidebar-row-active-background)] text-foreground group-data-[collapsible=icon]:bg-transparent"
+          "bg-[var(--sidebar-row-active-background)] hover:bg-[var(--sidebar-row-active-background)] group-data-[collapsible=icon]:bg-transparent"
       ),
     [isActive, isEditing]
   )
@@ -95,33 +89,15 @@ export function SidebarRow({
         onClick={onContainerClick}
         ref={containerRef}
       >
-        <div className="flex h-full w-full items-center rounded-lg py-[3px] pr-1 pl-2">
+        <div className="flex h-full w-full items-center rounded-lg px-2.5 py-1.5">
           {leading && (
             <span className="mr-2 flex shrink-0 items-center">{leading}</span>
           )}
-          <input
-            ref={inputRef}
+          <InlineRenameInput
             {...inputProps}
-            className="text-primary max-h-full w-full bg-transparent text-base focus:outline-none"
+            aria-label={renameLabel}
+            className="max-h-full w-full"
           />
-          <div className="flex gap-0.5">
-            <button
-              onClick={onSaveClick}
-              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-lg p-1"
-              type="button"
-              aria-label="Save rename"
-            >
-              <Icon icon={RiCheckLine} slotSize={16} />
-            </button>
-            <button
-              onClick={onCancelClick}
-              className="hover:bg-secondary text-muted-foreground hover:text-primary flex size-7 cursor-pointer items-center justify-center rounded-lg p-1"
-              type="button"
-              aria-label="Cancel rename"
-            >
-              <Icon icon={RiCloseLine} slotSize={16} />
-            </button>
-          </div>
         </div>
       </div>
     )
@@ -142,7 +118,7 @@ export function SidebarRow({
         // padding, so the title truncates 10px from the row edge. The trailing
         // button overflows this padding back to the edge via a hover-only
         // negative end-margin (see `.sidebar-row-action` in globals.css).
-        "text-primary px-2.5 py-1.5 text-sm focus-visible:outline-none pointer-coarse:py-3"
+        "px-2.5 py-1.5 focus-visible:outline-none pointer-coarse:py-3"
       )}
       prefetch
       draggable={false}

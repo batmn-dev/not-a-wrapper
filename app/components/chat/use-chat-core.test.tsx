@@ -319,11 +319,17 @@ describe("useChatCore selected-path projection", () => {
     root = null
   })
 
-  function Harness({ initialMessages }: { initialMessages: UIMessage[] }) {
+  function Harness({
+    initialMessages,
+    chatId = "chat_projection",
+  }: {
+    initialMessages: UIMessage[]
+    chatId?: string | null
+  }) {
     useChatCore({
       initialMessages,
       cacheAndAddMessage: vi.fn(),
-      chatId: "chat_projection",
+      chatId,
       user: authenticatedUser,
       checkLimitsAndNotify: vi.fn(async () => true),
       ensureChatExists: vi.fn(async () => "chat_projection"),
@@ -332,9 +338,11 @@ describe("useChatCore selected-path projection", () => {
     return null
   }
 
-  function render(initialMessages: UIMessage[]) {
+  function render(initialMessages: UIMessage[], chatId?: string | null) {
     act(() => {
-      root?.render(<Harness initialMessages={initialMessages} />)
+      root?.render(
+        <Harness initialMessages={initialMessages} chatId={chatId} />
+      )
     })
   }
 
@@ -373,5 +381,70 @@ describe("useChatCore selected-path projection", () => {
     render(serverPath) // server update arrives mid-stream
 
     expect(chatCoreMocks.setMessages).not.toHaveBeenCalled()
+  })
+
+  it("preserves the optimistic user row when a fresh chat route hydrates before persistence", () => {
+    mount()
+    render([], null)
+
+    const optimisticMessages = [
+      {
+        id: "optimistic-user",
+        role: "user" as const,
+        parts: [{ type: "text" as const, text: "hello" }],
+      },
+    ] as unknown as UIMessage[]
+    chatCoreMocks.useChatState.messages = optimisticMessages
+    chatCoreMocks.useChatState.status = "streaming"
+    chatCoreMocks.setMessages.mockClear()
+
+    render([], "chat_projection")
+
+    expect(chatCoreMocks.setMessages).toHaveBeenCalledTimes(1)
+    const update = chatCoreMocks.setMessages.mock.calls[0]?.[0]
+    expect(update).toBeTypeOf("function")
+    expect(
+      (update as (messages: UIMessage[]) => UIMessage[])(optimisticMessages)
+    ).toBe(optimisticMessages)
+  })
+
+  it("preserves a live assistant when first hydration contains only the persisted user row", () => {
+    mount()
+    render([], null)
+
+    const liveMessages = [
+      {
+        id: "optimistic-user",
+        role: "user" as const,
+        parts: [{ type: "text" as const, text: "hello" }],
+      },
+      {
+        id: "assistant-streaming",
+        role: "assistant" as const,
+        parts: [{ type: "text" as const, text: "Hi" }],
+      },
+    ] as unknown as UIMessage[]
+    const userOnlyServerPath = [
+      {
+        ...liveMessages[0],
+        metadata: { serverMessageId: "server-user" },
+      },
+    ] as unknown as UIMessage[]
+    chatCoreMocks.useChatState.messages = liveMessages
+    chatCoreMocks.useChatState.status = "streaming"
+    chatCoreMocks.setMessages.mockClear()
+
+    render(userOnlyServerPath, "chat_projection")
+
+    expect(chatCoreMocks.setMessages).toHaveBeenCalledTimes(1)
+    const update = chatCoreMocks.setMessages.mock.calls[0]?.[0]
+    expect(update).toBeTypeOf("function")
+    const projected = (update as (messages: UIMessage[]) => UIMessage[])(
+      liveMessages
+    )
+    expect(projected.map((message) => message.id)).toEqual([
+      "optimistic-user",
+      "assistant-streaming",
+    ])
   })
 })

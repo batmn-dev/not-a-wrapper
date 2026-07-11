@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 
+import { InlineRenameInput } from "@/components/ui/inline-rename-input"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
@@ -12,23 +13,20 @@ type HarnessProps = {
 }
 
 function Harness({ value, onSave, onEditEnd }: HarnessProps) {
-  const {
-    isEditing,
-    draft,
-    inputRef,
-    containerRef,
-    start,
-    inputProps,
-    onContainerClick,
-  } = useInlineRename(value, onSave, onEditEnd ? { onEditEnd } : undefined)
+  const { isEditing, containerRef, start, inputProps, onContainerClick } =
+    useInlineRename(value, onSave, onEditEnd ? { onEditEnd } : undefined)
 
   return (
     <div ref={containerRef} onClick={onContainerClick}>
       {isEditing ? (
-        <input data-testid="input" ref={inputRef} {...inputProps} />
+        <InlineRenameInput
+          data-testid="input"
+          aria-label="Chat title"
+          {...inputProps}
+        />
       ) : (
         <button data-testid="start" onClick={start}>
-          {draft}
+          {value}
         </button>
       )}
     </div>
@@ -120,6 +118,26 @@ describe("useInlineRename", () => {
     expect(input()?.value).toBe("Hello")
   })
 
+  it("focuses the editor and selects the entire title on entry", () => {
+    render(<Harness value="Hello" onSave={vi.fn()} />)
+
+    clickStart()
+
+    expect(document.activeElement).toBe(input())
+    expect(input()?.selectionStart).toBe(0)
+    expect(input()?.selectionEnd).toBe(5)
+  })
+
+  it("uses the shared accessible title-editor contract", () => {
+    render(<Harness value="Hello" onSave={vi.fn()} />)
+
+    clickStart()
+
+    expect(input()?.type).toBe("text")
+    expect(input()?.name).toBe("title-editor")
+    expect(input()?.getAttribute("aria-label")).toBe("Chat title")
+  })
+
   it("commits a trimmed, changed value", () => {
     const onSave = vi.fn()
     render(<Harness value="Hello" onSave={onSave} />)
@@ -129,6 +147,23 @@ describe("useInlineRename", () => {
 
     expect(onSave).toHaveBeenCalledTimes(1)
     expect(onSave).toHaveBeenCalledWith("World")
+  })
+
+  it("handles rejected saves without leaking an unhandled promise", async () => {
+    const error = new Error("save failed")
+    const onSave = vi.fn().mockRejectedValue(error)
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+    render(<Harness value="Hello" onSave={onSave} />)
+    clickStart()
+    typeValue("World")
+
+    await act(async () => keyDown("Enter"))
+
+    expect(consoleError).toHaveBeenCalledWith(
+      "Inline rename save failed:",
+      error
+    )
+    consoleError.mockRestore()
   })
 
   it("skips the commit when the value is unchanged", () => {
@@ -160,6 +195,23 @@ describe("useInlineRename", () => {
 
     expect(onSave).not.toHaveBeenCalled()
     expect(startButton()?.textContent).toBe("Hello")
+  })
+
+  it("commits a changed value when clicking outside", () => {
+    const onSave = vi.fn()
+    render(<Harness value="Hello" onSave={onSave} />)
+    clickStart()
+    typeValue("World")
+
+    act(() =>
+      document.body.dispatchEvent(
+        new MouseEvent("mousedown", { bubbles: true })
+      )
+    )
+
+    expect(onSave).toHaveBeenCalledTimes(1)
+    expect(onSave).toHaveBeenCalledWith("World")
+    expect(startButton()).not.toBeNull()
   })
 
   it("fires onEditEnd on both commit and cancel", () => {

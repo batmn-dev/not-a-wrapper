@@ -17,6 +17,7 @@ import {
   usePublishActiveChatStatus,
 } from "@/lib/chat-store/status/sidebar-chat-status"
 import type { Chats } from "@/lib/chat-store/types"
+import { isRouteDurableChat } from "@/lib/chat-turn/chat-turn-controller"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
@@ -31,7 +32,6 @@ import {
   useActivityPanelOpen,
   useActivityPanelSelectedTurnId,
 } from "./activity/activity-panel-store"
-import { isRouteDurableChat } from "@/lib/chat-turn/chat-turn-controller"
 import { ChatStatusAnnouncer } from "./chat-announcer"
 import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
 import { TurnContextProvider, useTurnContext } from "./turn-context"
@@ -174,7 +174,9 @@ function ChatInner({
   const {
     defaultActivityTurnId,
     panelActivityTurnId,
+    defaultActivityDurationMs,
     selectedTurnPresent,
+    panelCanOpen,
     panelProps,
   } = useActivityPanel({
     messages,
@@ -204,9 +206,10 @@ function ChatInner({
   // be classified against a stale default — the misclassification this store
   // exists to prevent.
   useBrowserLayoutEffect(() => {
-    activityPanelStore.setDerivedTurnIds({
+    activityPanelStore.setDerivedActivity({
       panelTurnId: panelActivityTurnId,
       defaultTurnId: defaultActivityTurnId,
+      defaultDurationMs: defaultActivityDurationMs,
     })
     // An explicit selection whose turn left the rendered path (branch switch,
     // local delete) is dropped so it cannot resurrect on a later path change.
@@ -215,12 +218,15 @@ function ChatInner({
     if (selectedActivityTurnId !== undefined && !selectedTurnPresent) {
       activityPanelStore.clearStaleSelection(selectedActivityTurnId)
     }
+    if (!panelCanOpen) activityPanelStore.setOpen(false)
   }, [
     activityPanelStore,
     panelActivityTurnId,
     defaultActivityTurnId,
+    defaultActivityDurationMs,
     selectedActivityTurnId,
     selectedTurnPresent,
+    panelCanOpen,
   ])
 
   const handleActivityPanelOpenChange = useCallback(

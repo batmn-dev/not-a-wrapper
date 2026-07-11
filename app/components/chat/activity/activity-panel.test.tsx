@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import type { SourceUrlUIPart, ToolUIPart } from "ai"
+import type { SourceUrlUIPart } from "ai"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import {
@@ -47,13 +47,16 @@ function panelProps(sourceCount: number) {
 
   return {
     title: "Activity",
-    phase: "complete" as const,
     durationSeconds: 5,
-    steps: [] as ToolUIPart[],
-    sources,
-    reasoningText: "",
-    isReasoningStreaming: false,
-    isOpaqueReasoning: false,
+    sections:
+      sources.length > 0
+        ? [
+            {
+              kind: "sources" as const,
+              sources: sources as [SourceUrlUIPart, ...SourceUrlUIPart[]],
+            },
+          ]
+        : [],
   }
 }
 
@@ -220,7 +223,7 @@ describe("ActivityPanel coexistence (R6)", () => {
     }
   })
 
-  it("renders an opaque reasoning step when reasoning text is hidden", () => {
+  it("renders only a non-empty visible reasoning section", () => {
     act(() => {
       root?.render(
         <ActivityPanelHostProvider>
@@ -229,7 +232,13 @@ describe("ActivityPanel coexistence (R6)", () => {
             open
             onOpenChange={() => {}}
             {...panelProps(0)}
-            isOpaqueReasoning
+            sections={[
+              {
+                kind: "reasoning",
+                blocks: [{ text: "Visible reasoning" }],
+                isStreaming: false,
+              },
+            ]}
           />
         </ActivityPanelHostProvider>
       )
@@ -237,6 +246,7 @@ describe("ActivityPanel coexistence (R6)", () => {
 
     expect(document.body.textContent).toContain("Thinking")
     expect(document.body.textContent).toContain("Reasoning")
+    expect(document.body.textContent).toContain("Visible reasoning")
     expect(document.body.textContent).toContain("Activity")
   })
 
@@ -291,7 +301,12 @@ describe("ActivityPanel coexistence (R6)", () => {
               open
               onOpenChange={() => {}}
               {...panelProps(0)}
-              sources={sources}
+              sections={[
+                {
+                  kind: "sources",
+                  sources: sources as [SourceUrlUIPart, ...SourceUrlUIPart[]],
+                },
+              ]}
             />
           </ActivityPanelHostProvider>
         )

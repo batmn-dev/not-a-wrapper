@@ -10,3 +10,24 @@ export function formatDuration(seconds: number): string {
   const secs = seconds % 60
   return `${mins}m ${secs}s`
 }
+
+export const COMPLETED_DURATION_THRESHOLD_MS = 1000
+
+/**
+ * Convert a completed millisecond duration into displayable whole seconds.
+ * A full second must have elapsed before the UI makes a duration claim, and
+ * floor semantics avoid rounding 1000-1999ms up to two seconds.
+ */
+export function toCompletedDurationSeconds(
+  durationMs: number | undefined
+): number | undefined {
+  if (
+    durationMs === undefined ||
+    !Number.isFinite(durationMs) ||
+    durationMs < COMPLETED_DURATION_THRESHOLD_MS
+  ) {
+    return undefined
+  }
+
+  return Math.floor(durationMs / 1000)
+}

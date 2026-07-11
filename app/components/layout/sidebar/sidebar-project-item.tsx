@@ -35,6 +35,7 @@ export function SidebarProjectItem({ project }: SidebarProjectItemProps) {
       isActive={isActive}
       title={displayName}
       renameValue={project.name || ""}
+      renameLabel="Project title"
       onRename={async (next) => {
         try {
           await updateProjectName({ projectId: project._id, name: next })

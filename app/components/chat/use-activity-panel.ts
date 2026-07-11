@@ -1,34 +1,27 @@
 "use client"
 
 import {
+  deriveAssistantActivityPresentation,
+  type AssistantActivitySection,
+} from "@/lib/chat-messages/assistant-activity"
+import {
+  deriveAssistantTurnPhase,
   deriveAssistantTurnView,
   IDLE_REASONING_VIEW,
 } from "@/lib/chat-messages/assistant-turn"
 import { getServerMessageId } from "@/lib/chat-messages/metadata"
+import { toCompletedDurationSeconds } from "@/lib/format-duration"
 import type { UIMessage } from "@ai-sdk/react"
-import type { SourceUrlUIPart, ToolUIPart } from "ai"
-import { useReasoningPhase, type ReasoningPhase } from "./use-reasoning-phase"
+import { useReasoningPhase } from "./use-reasoning-phase"
 
 type ChatStatus = "streaming" | "ready" | "submitted" | "error"
 
 export const PENDING_ACTIVITY_TURN_ID = "__pending_activity_turn__"
 
-/**
- * Data the selector hands to `<ActivityPanel>` via `panelProps`.
- *
- * NOTE — `phase`, `steps`, and `isReasoningStreaming` are intentional
- * ChatGPT-replication scaffolding for an upcoming live-timeline pass; the panel
- * does not consume them yet (kept deliberately, not dead). See the annotated
- * `ActivityPanelProps` in `activity/activity-panel.tsx` and TODO.md.
- */
+/** Data the selector hands to `<ActivityPanel>` via `panelProps`. */
 export type ActivityPanelProps = {
-  phase: ReasoningPhase["phase"]
-  steps: ToolUIPart[]
-  sources: SourceUrlUIPart[]
+  sections: readonly AssistantActivitySection[]
   durationSeconds: number | undefined
-  reasoningText: string
-  isReasoningStreaming: boolean
-  isOpaqueReasoning: boolean
 }
 
 export type UseActivityPanelResult = {
@@ -36,18 +29,23 @@ export type UseActivityPanelResult = {
   defaultActivityTurnId: string | undefined
   /** The turn whose content is currently projected into the panel. */
   panelActivityTurnId: string | undefined
+  /** Current-session reasoning duration for the generation-following turn. */
+  defaultActivityDurationMs: number | undefined
   /** True while a generation is in flight (covers the pre-stream submitted state). */
   isGenerationActive: boolean
   /** False when an explicit selection no longer resolves to a rendered turn
    * (branch switch, local delete) — Chat's signal to drop the stale selection
    * from the store instead of letting it linger and resurrect later. */
   selectedTurnPresent: boolean
+  /** Whether the selected/default turn has at least one inspectable section. */
+  panelCanOpen: boolean
   panelProps: ActivityPanelProps
 }
 
 export type ActivityPanelTarget = {
   defaultActivityTurnId: string | undefined
   panelActivityTurnId: string | undefined
+  defaultMessage: UIMessage | undefined
   panelMessage: UIMessage | undefined
   isGenerationActive: boolean
   isPendingActivityTurn: boolean
@@ -153,6 +151,7 @@ export function selectActivityPanelTarget({
   return {
     defaultActivityTurnId,
     panelActivityTurnId,
+    defaultMessage,
     panelMessage: selectedMessage ?? defaultMessage,
     isGenerationActive: generationActive,
     isPendingActivityTurn: panelActivityTurnId === PENDING_ACTIVITY_TURN_ID,
@@ -190,6 +189,7 @@ export function useActivityPanel({
   const {
     defaultActivityTurnId,
     panelActivityTurnId,
+    defaultMessage,
     panelMessage,
     isGenerationActive: generationActive,
     isPendingActivityTurn,
@@ -201,62 +201,68 @@ export function useActivityPanel({
     selectedActivityTurnId,
   })
 
-  // The reasoning hook runs once for the panel target. The live timer only runs
-  // for the default generation turn; historical selections remain stable while a
-  // newer generation streams elsewhere in the thread.
+  // The reasoning timer belongs to the generation-following default turn, not
+  // the currently selected panel turn. A historical panel selection must not
+  // pause timing for the live row; this single timer feeds both the default row
+  // and the panel whenever the panel follows that row.
   const isPanelDefaultTurn =
     panelActivityTurnId !== undefined &&
     panelActivityTurnId === defaultActivityTurnId
 
-  // One derivation for the panel target — the same Assistant turn view the
-  // message row derives, so the trigger and the panel can never disagree.
-  const panelView = panelMessage
-    ? deriveAssistantTurnView(
-        panelMessage,
-        isPanelDefaultTurn ? status : "ready"
-      )
+  const defaultView = defaultMessage
+    ? deriveAssistantTurnView(defaultMessage, status)
     : undefined
 
-  const {
-    phase,
-    reasoningText,
-    durationSeconds,
-    isReasoningStreaming,
-    isOpaqueReasoning,
-  } = useReasoningPhase({
-    reasoning: panelView?.reasoning ?? IDLE_REASONING_VIEW,
-    isLast: Boolean(panelMessage) && isPanelDefaultTurn,
-    // Turn identity for the timer: a panel re-target (default-follow onto a
-    // new generation, explicit selection) must restart the tick from 0, never
-    // inherit the previous turn's frozen duration.
-    turnKey: panelActivityTurnId,
+  // One derivation for the panel target — the same Assistant turn view the
+  // message row derives, so the trigger and the panel can never disagree.
+  const panelView = isPanelDefaultTurn
+    ? defaultView
+    : panelMessage
+      ? deriveAssistantTurnView(panelMessage, "ready")
+      : undefined
+
+  const defaultReasoningPhase = useReasoningPhase({
+    reasoning: defaultView?.reasoning ?? IDLE_REASONING_VIEW,
+    isLast: Boolean(defaultMessage),
+    // Turn identity for the timer: a new generation or branch default must
+    // restart from zero and never inherit the previous turn's frozen duration.
+    turnKey: defaultActivityTurnId,
   })
+
+  const panelPhase = panelView
+    ? deriveAssistantTurnPhase(panelView, {
+        status: isPanelDefaultTurn ? status : "ready",
+        isLast: isPanelDefaultTurn,
+      })
+    : ({ kind: "submitted" } as const)
+  const panelDurationMs = isPanelDefaultTurn
+    ? defaultReasoningPhase.durationMs
+    : panelView?.reasoning.persistedDurationMs
+  const presentation = panelView
+    ? deriveAssistantActivityPresentation(panelView, panelPhase, {
+        durationMs: panelDurationMs,
+      })
+    : undefined
+  const panelCanOpen = presentation?.kind === "disclosure"
 
   const panelProps: ActivityPanelProps = isPendingActivityTurn
     ? {
-        phase: "thinking",
-        steps: [],
-        sources: [],
+        sections: [],
         durationSeconds: undefined,
-        reasoningText: "",
-        isReasoningStreaming: true,
-        isOpaqueReasoning: true,
       }
     : {
-        phase,
-        steps: panelView?.toolParts ?? [],
-        sources: panelView?.sources ?? [],
-        durationSeconds,
-        reasoningText,
-        isReasoningStreaming,
-        isOpaqueReasoning,
+        sections:
+          presentation?.kind === "disclosure" ? presentation.sections : [],
+        durationSeconds: toCompletedDurationSeconds(panelDurationMs),
       }
 
   return {
     defaultActivityTurnId,
     panelActivityTurnId,
+    defaultActivityDurationMs: defaultReasoningPhase.durationMs,
     isGenerationActive: generationActive,
     selectedTurnPresent,
+    panelCanOpen,
     panelProps,
   }
 }

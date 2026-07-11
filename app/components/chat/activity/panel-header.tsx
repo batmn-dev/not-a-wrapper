@@ -39,6 +39,7 @@ export function PanelCloseButton({
 
 export type TitleDurationClusterProps = {
   title: string
+  /** Display-ready whole seconds from `toCompletedDurationSeconds`; never 0. */
   durationSeconds?: number
   titleId?: string
   className?: string

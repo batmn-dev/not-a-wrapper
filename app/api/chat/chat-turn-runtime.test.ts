@@ -602,6 +602,63 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
   })
 })
 
+describe("createChatTurnRuntime — reasoning lifecycle timing", () => {
+  it("persists the union of explicit reasoning intervals and ignores deltas as starts", async () => {
+    const dateNow = vi.spyOn(Date, "now").mockReturnValue(0)
+    try {
+      const harness = makeStreamHarness()
+      const runtime = createChatTurnRuntime({
+        input: makeInput(),
+        deps: makeDeps(harness, makeFetchMutation()),
+      })
+
+      await runtime.prepare()
+      runtime.toResponse(notAbortedSignal())
+
+      dateNow.mockReturnValue(50)
+      harness.captured.streamOpts.onChunk({
+        chunk: { type: "reasoning-delta", id: "metadata-only", delta: "" },
+      })
+
+      dateNow.mockReturnValue(100)
+      harness.captured.streamOpts.onChunk({
+        chunk: { type: "reasoning-start", id: "a" },
+      })
+      dateNow.mockReturnValue(200)
+      harness.captured.streamOpts.onChunk({
+        chunk: { type: "reasoning-start", id: "b" },
+      })
+      dateNow.mockReturnValue(300)
+      harness.captured.streamOpts.onChunk({
+        chunk: { type: "reasoning-end", id: "a" },
+      })
+      dateNow.mockReturnValue(500)
+      harness.captured.streamOpts.onChunk({
+        chunk: { type: "reasoning-end", id: "b" },
+      })
+      dateNow.mockReturnValue(700)
+      harness.captured.streamOpts.onChunk({
+        chunk: { type: "reasoning-start", id: "c" },
+      })
+      dateNow.mockReturnValue(900)
+      await harness.captured.streamOpts.onEnd({
+        text: "done",
+        usage: {},
+        steps: [],
+        finishReason: "stop",
+      })
+
+      expect(
+        harness.captured.responseOpts.messageMetadata({
+          part: { type: "finish" },
+        })
+      ).toMatchObject({ reasoningDurationMs: 600 })
+    } finally {
+      dateNow.mockRestore()
+    }
+  })
+})
+
 describe("createChatTurnRuntime — abort telemetry", () => {
   it("passes the request abort signal into streamText", async () => {
     const harness = makeStreamHarness()

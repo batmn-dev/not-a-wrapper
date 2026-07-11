@@ -1,8 +1,8 @@
 import type { UIMessage } from "ai"
 import { describe, expect, it } from "vitest"
+import { deriveAssistantActivityPresentation } from "./assistant-activity"
 import {
   assistantTurnViewsEqual,
-  deriveAssistantTurnIndicator,
   deriveAssistantTurnPhase,
   deriveAssistantTurnView,
   deriveReasoningView,
@@ -247,9 +247,21 @@ function viewOf(
 }
 
 describe("deriveAssistantTurnPhase", () => {
-  it("is generating for a bare live stream with nothing else signaled", () => {
+  it("is thinking for a bare live stream with nothing else signaled", () => {
     const phase = deriveAssistantTurnPhase(viewOf([]), liveCtx)
-    expect(phase).toEqual({ kind: "generating" })
+    expect(phase).toEqual({ kind: "thinking", visibility: "opaque" })
+  })
+
+  it("keeps Thinking for whitespace-only text without changing the rendered text", () => {
+    const view = viewOf([{ type: "text", text: " \n" }])
+    const phase = deriveAssistantTurnPhase(view, liveCtx)
+
+    expect(view.text).toBe(" \n")
+    expect(phase).toEqual({ kind: "thinking", visibility: "opaque" })
+    expect(deriveAssistantActivityPresentation(view, phase)).toMatchObject({
+      kind: "live-status",
+      label: "Thinking",
+    })
   })
 
   it("is thinking(opaque) while opaque reasoning streams — the dots+Thinking regression", () => {
@@ -444,92 +456,78 @@ describe("deriveAssistantTurnPhase", () => {
   })
 })
 
-describe("deriveAssistantTurnIndicator", () => {
-  it("maps every live phase to exactly one indicator", () => {
-    const emptyView = viewOf([])
-    expect(
-      deriveAssistantTurnIndicator({ kind: "submitted" }, emptyView)
-    ).toEqual({ kind: "trigger", state: { status: "thinking" } })
-    expect(
-      deriveAssistantTurnIndicator(
-        { kind: "thinking", visibility: "opaque" },
-        emptyView
+describe("deriveAssistantActivityPresentation", () => {
+  it.each([
+    [undefined, "none", undefined],
+    [-1, "none", undefined],
+    [0, "none", undefined],
+    [1, "none", undefined],
+    [499, "none", undefined],
+    [500, "none", undefined],
+    [999, "none", undefined],
+    [1000, "passive", "Thought for 1s"],
+    [1001, "passive", "Thought for 1s"],
+    [1499, "passive", "Thought for 1s"],
+    [1500, "passive", "Thought for 1s"],
+    [1999, "passive", "Thought for 1s"],
+    [2000, "passive", "Thought for 2s"],
+  ] as const)(
+    "normalizes opaque duration %s to %s",
+    (durationMs, kind, label) => {
+      const view = viewOf(
+        [{ type: "reasoning", text: "   ", state: "done" }],
+        "ready",
+        durationMs === undefined
+          ? undefined
+          : { reasoningDurationMs: durationMs }
       )
-    ).toEqual({ kind: "trigger", state: { status: "thinking" } })
-    expect(
-      deriveAssistantTurnIndicator(
-        { kind: "tooling", toolNames: ["web_search"] },
-        emptyView
-      )
-    ).toEqual({
-      kind: "trigger",
-      state: { status: "running", label: "Searching the web" },
-    })
-    expect(
-      deriveAssistantTurnIndicator({ kind: "generating-image" }, emptyView)
-    ).toEqual({
-      kind: "trigger",
-      state: { status: "running", label: "Generating image" },
-    })
-    expect(
-      deriveAssistantTurnIndicator({ kind: "generating" }, emptyView)
-    ).toEqual({ kind: "generating" })
-  })
+      const presentation = deriveAssistantActivityPresentation(view, {
+        kind: "settled",
+      })
+      expect(presentation.kind).toBe(kind)
+      if (label && presentation.kind === "passive") {
+        expect(presentation.label).toBe(label)
+      }
+    }
+  )
 
-  it("labels multi-tool and custom-tool progress", () => {
-    const emptyView = viewOf([])
-    expect(
-      deriveAssistantTurnIndicator(
-        { kind: "tooling", toolNames: ["web_search", "extract_content"] },
-        emptyView
-      )
-    ).toEqual({
-      kind: "trigger",
-      state: { status: "running", label: "Running tools" },
-    })
-    expect(
-      deriveAssistantTurnIndicator(
-        { kind: "tooling", toolNames: ["fetchWeather"] },
-        emptyView
-      )
-    ).toEqual({
-      kind: "trigger",
-      state: { status: "running", label: "Running Fetch Weather" },
-    })
-  })
-
-  it("settles to thought > sources > activity > none", () => {
-    const settled = { kind: "settled" } as const
-
-    // Duration metadata without a stored reasoning part still reads as
-    // thought — the adopted durable snapshot must keep the live turn's label.
-    const durationOnly = viewOf([], "ready", { reasoningDurationMs: 3000 })
-    expect(deriveAssistantTurnIndicator(settled, durationOnly)).toEqual({
-      kind: "trigger",
-      state: { status: "thought", durationSeconds: 3 },
-    })
-
-    const withReasoning = viewOf(
-      [{ type: "reasoning", text: "t", state: "done" }],
+  it("keeps visible reasoning inspectable below the duration threshold", () => {
+    const view = viewOf(
+      [{ type: "reasoning", text: "Visible reasoning", state: "done" }],
       "ready",
-      { reasoningDurationMs: 2000 }
+      { reasoningDurationMs: 1 }
     )
-    expect(deriveAssistantTurnIndicator(settled, withReasoning)).toEqual({
-      kind: "trigger",
-      state: { status: "thought", durationSeconds: 2 },
+    const presentation = deriveAssistantActivityPresentation(view, {
+      kind: "settled",
     })
+    expect(presentation.kind).toBe("disclosure")
+    if (presentation.kind === "disclosure") {
+      expect(presentation.label).toBe("Thought")
+      expect(presentation.sections.map((section) => section.kind)).toEqual([
+        "reasoning",
+      ])
+    }
+  })
 
-    const withSources = viewOf(
-      [{ type: "source-url", sourceId: "s1", url: "https://example.com" }],
-      "ready"
-    )
-    expect(deriveAssistantTurnIndicator(settled, withSources)).toEqual({
-      kind: "trigger",
-      state: { status: "sources", count: 1 },
-    })
+  it("uses Thinking for submitted and content-empty live turns", () => {
+    const emptyView = viewOf([])
+    for (const phase of [
+      { kind: "submitted" } as const,
+      { kind: "thinking", visibility: "opaque" } as const,
+    ]) {
+      expect(
+        deriveAssistantActivityPresentation(emptyView, phase)
+      ).toMatchObject({
+        kind: "live-status",
+        label: "Thinking",
+      })
+    }
+  })
 
-    const withTools = viewOf(
+  it("keeps mixed non-reasoning activity inspectable beside passive timing", () => {
+    const view = viewOf(
       [
+        { type: "reasoning", text: "", state: "done" },
         {
           type: "tool-web_search",
           toolCallId: "t1",
@@ -538,73 +536,50 @@ describe("deriveAssistantTurnIndicator", () => {
           output: {},
         },
       ],
-      "ready"
+      "ready",
+      { reasoningDurationMs: 1600 }
     )
-    expect(deriveAssistantTurnIndicator(settled, withTools)).toEqual({
-      kind: "trigger",
-      state: { status: "activity" },
+    const presentation = deriveAssistantActivityPresentation(view, {
+      kind: "settled",
     })
-
-    expect(deriveAssistantTurnIndicator(settled, viewOf([], "ready"))).toEqual({
-      kind: "none",
+    expect(presentation).toMatchObject({
+      kind: "disclosure",
+      label: "Activity",
+      passiveLabel: "Thought for 1s",
     })
   })
 
-  it("never yields more than one indicator across a sweep of turn states", () => {
-    // The closed-by-construction property: for any (parts × status × isLast)
-    // combination, the derivation is total and single-valued.
-    const partVariants: unknown[] = [
-      [],
-      [{ type: "reasoning", text: "", state: "streaming" }],
-      [{ type: "reasoning", text: "visible", state: "streaming" }],
-      [{ type: "reasoning", text: "", state: "done" }],
-      [{ type: "text", text: "answer" }],
+  it("normalizes tool error copy and canonical display names upstream", () => {
+    const view = viewOf(
       [
         {
-          type: "tool-web_search",
+          type: "tool-github_create_issue",
           toolCallId: "t1",
-          state: "input-available",
+          state: "output-available",
           input: {},
+          output: { isError: true },
         },
       ],
-      [
-        { type: "reasoning", text: "…", state: "streaming" },
+      "ready"
+    )
+    const presentation = deriveAssistantActivityPresentation(view, {
+      kind: "settled",
+    })
+
+    expect(presentation).toMatchObject({
+      kind: "disclosure",
+      sections: [
         {
-          type: "tool-imageGeneration",
-          toolCallId: "t2",
-          state: "input-streaming",
-          input: {},
+          kind: "tool-errors",
+          entries: [
+            {
+              id: "t1",
+              label: "Github Create Issue",
+              description: "Tool reported an error",
+            },
+          ],
         },
-        { type: "text", text: "partial" },
       ],
-    ]
-    const statuses: AssistantTurnRenderStatus[] = [
-      "submitted",
-      "streaming",
-      "ready",
-      "error",
-      "completed",
-      "aborted",
-      "failed",
-      "awaiting_approval",
-    ]
-    const kinds = new Set<string>()
-    for (const p of partVariants) {
-      for (const status of statuses) {
-        for (const isLast of [true, false]) {
-          const view = viewOf(
-            p,
-            status === "streaming" || status === "submitted"
-              ? (status as "streaming" | "submitted")
-              : "ready"
-          )
-          const phase = deriveAssistantTurnPhase(view, { status, isLast })
-          const indicator = deriveAssistantTurnIndicator(phase, view)
-          kinds.add(indicator.kind)
-          expect(["none", "generating", "trigger"]).toContain(indicator.kind)
-        }
-      }
-    }
-    expect(kinds.size).toBeGreaterThan(1)
+    })
   })
 })

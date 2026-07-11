@@ -25,7 +25,7 @@ beforeAll(() => {
 describe("activity panel store — explicit-vs-default classification", () => {
   it("classifies against the CURRENT default at call time (stale-closure regression)", () => {
     const store = createActivityPanelStore()
-    store.setDerivedTurnIds({ panelTurnId: "a1", defaultTurnId: "a1" })
+    store.setDerivedActivity({ panelTurnId: "a1", defaultTurnId: "a1" })
 
     // Rows hold onto action references for their whole lifetime — capture once.
     const openTurn = store.openTurn
@@ -39,7 +39,7 @@ describe("activity panel store — explicit-vs-default classification", () => {
     // A new generation moves the default. Under the old prop-threaded controls
     // object, a memo-blocked row kept an onOpenTurn closure over the OLD
     // default and misclassified this click as "follow the default".
-    store.setDerivedTurnIds({
+    store.setDerivedActivity({
       panelTurnId: "pending",
       defaultTurnId: "pending",
     })
@@ -52,7 +52,7 @@ describe("activity panel store — explicit-vs-default classification", () => {
 
   it("clears the explicit selection on close and re-points at the default", () => {
     const store = createActivityPanelStore()
-    store.setDerivedTurnIds({ panelTurnId: "a2", defaultTurnId: "a2" })
+    store.setDerivedActivity({ panelTurnId: "a2", defaultTurnId: "a2" })
     store.openTurn("a1")
     expect(store.getState().selectedTurnId).toBe("a1")
 
@@ -64,7 +64,7 @@ describe("activity panel store — explicit-vs-default classification", () => {
 
   it("carries the one-shot section target through openTurn and clears it on consume, re-open, and close", () => {
     const store = createActivityPanelStore()
-    store.setDerivedTurnIds({ panelTurnId: "a1", defaultTurnId: "a1" })
+    store.setDerivedActivity({ panelTurnId: "a1", defaultTurnId: "a1" })
 
     // The sources badge opens with a section target.
     store.openTurn("a1", { section: "sources" })
@@ -100,7 +100,7 @@ describe("activity panel store — explicit-vs-default classification", () => {
 
   it("clearStaleSelection drops only the named selection, never a newer one", () => {
     const store = createActivityPanelStore()
-    store.setDerivedTurnIds({ panelTurnId: "a2", defaultTurnId: "a2" })
+    store.setDerivedActivity({ panelTurnId: "a2", defaultTurnId: "a2" })
     store.openTurn("a1")
     expect(store.getState().selectedTurnId).toBe("a1")
 
@@ -155,7 +155,7 @@ describe("activity panel store — row subscription precision", () => {
     const MemoRow = React.memo(Row)
 
     const store = createActivityPanelStore()
-    store.setDerivedTurnIds({ panelTurnId: "a1", defaultTurnId: "a1" })
+    store.setDerivedActivity({ panelTurnId: "a1", defaultTurnId: "a1" })
     store.setOpen(true)
 
     act(() => {
@@ -202,7 +202,7 @@ describe("activity panel store — row subscription precision", () => {
     }
 
     const store = createActivityPanelStore()
-    store.setDerivedTurnIds({
+    store.setDerivedActivity({
       panelTurnId: "server-1",
       defaultTurnId: "server-1",
     })

@@ -1,6 +1,5 @@
 import { Icon } from "@/components/ui/icon"
 import {
-  Loader,
   StreamingCaret,
   type StreamingIndicatorVariant,
 } from "@/components/ui/loader"
@@ -10,8 +9,8 @@ import {
   MessageContent,
 } from "@/components/ui/message"
 import { SystemMessage } from "@/components/ui/system-message"
+import { deriveAssistantActivityPresentation } from "@/lib/chat-messages/assistant-activity"
 import {
-  deriveAssistantTurnIndicator,
   deriveAssistantTurnPhase,
   hasPreservedResponseContent,
   type AssistantTurnView,
@@ -25,10 +24,11 @@ import { RiCheckLine, RiFileCopyLine, RiLoopRightLine } from "@remixicon/react"
 import { useCallback, useRef, useState } from "react"
 import {
   useActivityPanelActions,
+  useDefaultActivityDurationMs,
   useActivityPanelId,
   useIsActivityPanelTurnOpen,
 } from "./activity/activity-panel-store"
-import { ActivityPanelTrigger } from "./activity/activity-panel-trigger"
+import { AssistantActivityIndicator } from "./assistant-activity-indicator"
 import { MessageActionButton } from "./message-action-button"
 import { QuoteButton } from "./quote-button"
 import { SearchImages } from "./search-images"
@@ -103,15 +103,20 @@ export function MessageAssistant({
     messageId,
     view.serverMessageId
   )
+  const currentSessionDurationMs = useDefaultActivityDurationMs(
+    messageId,
+    view.serverMessageId
+  )
 
-  // The canonical turn phase and its single indicator — every loading
-  // affordance on this row is a presentation of `phase`. See CONTEXT.md
-  // "Assistant turn view" and the derivation in lib/chat-messages.
+  // The canonical phase feeds the normalized activity presentation. The row
+  // renderer never inspects raw parts to choose label or interaction semantics.
   const phase = deriveAssistantTurnPhase(view, {
     status: status ?? "ready",
     isLast: isLast ?? false,
   })
-  const indicator = deriveAssistantTurnIndicator(phase, view)
+  const activityPresentation = deriveAssistantActivityPresentation(view, phase, {
+    durationMs: currentSessionDurationMs,
+  })
   const turnActive = phase.kind !== "settled"
 
   const messageRef = useRef<HTMLDivElement>(null)
@@ -211,31 +216,14 @@ export function MessageAssistant({
           <SearchImages results={searchImageResults} />
         )}
 
-        {/* The single indicator slot — renders the one presentation of the
-            turn phase. Mutually exclusive by construction: `indicator` is a
-            single discriminated value, so this slot can never stack a loader
-            under a live trigger the way the old per-affordance gates could. */}
-        {indicator.kind === "generating" && (
-          <Loader
-            variant="text-shimmer"
-            text="Generating"
-            showCaret
-            streamingIndicatorVariant={STREAMING_INDICATOR_VARIANT}
-          />
-        )}
-
-        {indicator.kind === "trigger" && panelActions && (
-          <div className="flex items-center justify-between">
-            <div className="flex min-w-0 items-center">
-              <ActivityPanelTrigger
-                open={isPanelTurnOpen}
-                onOpenChange={handleActivityTriggerOpenChange}
-                controlsId={panelId}
-                state={indicator.state}
-              />
-            </div>
-          </div>
-        )}
+        <AssistantActivityIndicator
+          presentation={activityPresentation}
+          open={isPanelTurnOpen}
+          onOpenChange={
+            panelActions ? handleActivityTriggerOpenChange : undefined
+          }
+          controlsId={panelId}
+        />
 
         {contentNullOrEmpty ? null : (
           <MessageContent

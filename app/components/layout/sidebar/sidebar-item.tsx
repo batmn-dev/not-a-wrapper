@@ -26,6 +26,7 @@ export function SidebarItem({ chat, currentChatId }: SidebarItemProps) {
       isActive={chat.id === currentChatId}
       title={displayTitle}
       renameValue={chat.title || ""}
+      renameLabel="Chat title"
       onRename={(next) => updateTitle(chat.id, next)}
       trailing={({ startRename }) => (
         // Trailing slot (ChatGPT's dynamic right-hand slot). At rest it shows the

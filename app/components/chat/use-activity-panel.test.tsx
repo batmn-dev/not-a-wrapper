@@ -2,7 +2,15 @@
 import type { UIMessage } from "@ai-sdk/react"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
 import {
   PENDING_ACTIVITY_TURN_ID,
   selectExplicitActivityTurnOnOpen,
@@ -125,6 +133,15 @@ describe("useActivityPanel ownership", () => {
     })
   }
 
+  function projectedSourceUrls(): string[] {
+    const section = latest!.panelProps.sections.find(
+      (candidate) => candidate.kind === "sources"
+    )
+    return section?.kind === "sources"
+      ? section.sources.map((source) => source.url)
+      : []
+  }
+
   it("owns the last assistant in the rendered path and follows a branch switch (id + duration + sources)", () => {
     render({
       messages: [
@@ -137,7 +154,7 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.defaultActivityTurnId).toBe("a2")
     expect(latest!.panelActivityTurnId).toBe("a2")
     expect(latest!.panelProps.durationSeconds).toBe(4)
-    expect(latest!.panelProps.sources[0].url).toBe("https://a.com")
+    expect(projectedSourceUrls()).toContain("https://a.com")
 
     // Branch switch / regenerate: the projected path now ends with a different
     // assistant turn — ownership and its persisted state must follow.
@@ -152,7 +169,7 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.defaultActivityTurnId).toBe("a9")
     expect(latest!.panelActivityTurnId).toBe("a9")
     expect(latest!.panelProps.durationSeconds).toBe(9)
-    expect(latest!.panelProps.sources[0].url).toBe("https://b.com")
+    expect(projectedSourceUrls()).toContain("https://b.com")
     expect(latest!.selectedTurnPresent).toBe(true)
 
     // An explicit selection referencing the branch that left the rendered
@@ -187,9 +204,9 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.defaultActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.panelActivityTurnId).toBe("a1")
     expect(latest!.isGenerationActive).toBe(true)
-    expect(latest!.panelProps.phase).toBe("complete")
     expect(latest!.panelProps.durationSeconds).toBe(4)
-    expect(latest!.panelProps.sources[0].url).toBe("https://a.com")
+    expect(projectedSourceUrls()).toContain("https://a.com")
+    expect(latest!.panelCanOpen).toBe(true)
   })
 
   it("keeps an explicit historical opaque reasoning panel complete while a newer assistant streams", () => {
@@ -210,9 +227,8 @@ describe("useActivityPanel ownership", () => {
 
     expect(latest!.defaultActivityTurnId).toBe("a2")
     expect(latest!.panelActivityTurnId).toBe("a1")
-    expect(latest!.panelProps.phase).toBe("complete")
-    expect(latest!.panelProps.isReasoningStreaming).toBe(false)
-    expect(latest!.panelProps.isOpaqueReasoning).toBe(true)
+    expect(latest!.panelProps.sections).toEqual([])
+    expect(latest!.panelCanOpen).toBe(false)
   })
 
   it("keeps a default-opened panel following the next pending generation", () => {
@@ -244,7 +260,8 @@ describe("useActivityPanel ownership", () => {
 
     expect(latest!.defaultActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.panelActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
-    expect(latest!.panelProps.phase).toBe("thinking")
+    expect(latest!.panelProps.sections).toEqual([])
+    expect(latest!.panelCanOpen).toBe(false)
   })
 
   it("keeps a historical-opened panel pinned while the next generation is pending", () => {
@@ -280,9 +297,49 @@ describe("useActivityPanel ownership", () => {
 
     expect(latest!.defaultActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.panelActivityTurnId).toBe("a1")
-    expect(latest!.panelProps.phase).toBe("complete")
     expect(latest!.panelProps.durationSeconds).toBe(4)
-    expect(latest!.panelProps.sources[0].url).toBe("https://a.com")
+    expect(projectedSourceUrls()).toContain("https://a.com")
+  })
+
+  it("keeps timing the live default while a historical panel is selected", () => {
+    vi.useFakeTimers()
+    try {
+      render({
+        messages: [
+          user("u1"),
+          assistant("a1", {
+            durationMs: 4000,
+            sourceUrl: "https://history.example",
+          }),
+          user("u2"),
+          assistant("a2", {
+            reasoningState: "streaming",
+            reasoningText: "",
+          }),
+        ],
+        status: "streaming",
+        isSubmitting: false,
+        selectedActivityTurnId: "a1",
+      })
+
+      act(() => {
+        vi.advanceTimersByTime(2000)
+      })
+
+      expect(latest!.panelActivityTurnId).toBe("a1")
+      expect(latest!.panelProps.durationSeconds).toBe(4)
+      expect(latest!.defaultActivityTurnId).toBe("a2")
+      expect(latest!.defaultActivityDurationMs).toBe(2000)
+    } finally {
+      const rootToUnmount = root
+      if (rootToUnmount) {
+        act(() => {
+          rootToUnmount.unmount()
+        })
+      }
+      root = null
+      vi.useRealTimers()
+    }
   })
 
   it("matches an explicit selected turn by server id and normalizes to the rendered message id", () => {
@@ -303,7 +360,7 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.defaultActivityTurnId).toBe("client-a1")
     expect(latest!.panelActivityTurnId).toBe("client-a1")
     expect(latest!.panelProps.durationSeconds).toBe(3)
-    expect(latest!.panelProps.sources[0].url).toBe("https://server-id.example")
+    expect(projectedSourceUrls()).toContain("https://server-id.example")
   })
 
   it("owns the pending assistant turn for submitted user-tail state", () => {
@@ -316,9 +373,8 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.defaultActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.panelActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.isGenerationActive).toBe(true)
-    expect(latest!.panelProps.phase).toBe("thinking")
-    expect(latest!.panelProps.isReasoningStreaming).toBe(true)
-    expect(latest!.panelProps.isOpaqueReasoning).toBe(true)
+    expect(latest!.panelProps.sections).toEqual([])
+    expect(latest!.panelCanOpen).toBe(false)
   })
 
   it("owns the pending assistant turn during submit preflight before status flips", () => {
@@ -331,8 +387,7 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.defaultActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.panelActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.isGenerationActive).toBe(true)
-    expect(latest!.panelProps.phase).toBe("thinking")
-    expect(latest!.panelProps.isReasoningStreaming).toBe(true)
-    expect(latest!.panelProps.isOpaqueReasoning).toBe(true)
+    expect(latest!.panelProps.sections).toEqual([])
+    expect(latest!.panelCanOpen).toBe(false)
   })
 })

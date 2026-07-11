@@ -1,6 +1,7 @@
 "use client"
 
 import { Composer } from "@/app/components/chat-input/composer"
+import { AssistantActivityIndicator } from "@/app/components/chat/assistant-activity-indicator"
 import { SourcesList } from "@/app/components/chat/sources-list"
 import {
   THREAD_GUTTER_VARS,
@@ -528,7 +529,7 @@ export default function ThinkingStatesTestPage() {
                 Fallback when <code>durationSeconds</code> is undefined — either
                 the timer never ticked (non-last message loaded from history) or
                 <code>metadata.reasoningDurationMs</code> wasn&apos;t persisted.
-                The label shows &quot;Reasoned&quot; without a time. Same toggle
+                The label shows &quot;Thought&quot; without a time. Same toggle
                 behavior.
               </StateAnnotation>
             </AssistantShell>
@@ -545,7 +546,7 @@ export default function ThinkingStatesTestPage() {
               <StateAnnotation title="Reasoning — complete (opaque)">
                 The finished state for opaque-reasoning models (o1/o3). Shows
                 &quot;Thought for 8s&quot; but no chevron or expandable content.
-                Rendered as a static <code>&lt;div&gt;</code> instead of a{" "}
+                Rendered as a static <code>&lt;span&gt;</code> instead of a{" "}
                 <code>&lt;button&gt;</code> since there&apos;s nothing to
                 toggle.
               </StateAnnotation>
@@ -553,20 +554,59 @@ export default function ThinkingStatesTestPage() {
 
             {/* ─── Loader states ─── */}
             <AssistantShell>
-              <Loader
-                variant="text-shimmer"
-                text="Thinking"
-                showCaret
-                streamingIndicatorVariant={STREAMING_INDICATOR_VARIANT}
+              <AssistantActivityIndicator
+                presentation={{
+                  kind: "live-status",
+                  semanticKind: "thinking",
+                  label: "Thinking",
+                  motion: "shimmer",
+                }}
+                open={false}
               />
-              <StateAnnotation title='Loader — "Generating" (text-shimmer + caret)'>
-                Shown when <code>status === &quot;streaming&quot;</code>,{" "}
-                <code>isLast</code> is true, content is still empty, and
-                there&apos;s no visible reasoning or tool output. Controlled by{" "}
-                <code>useLoadingState</code> → <code>showDots</code>. Disappears
-                as soon as the first text part arrives. The caret variant is set
-                by <code>STREAMING_INDICATOR_VARIANT</code> in{" "}
-                <code>message-assistant.tsx</code>.
+              <StateAnnotation title='Assistant activity — "Thinking" (no caret)'>
+                The canonical content-empty live state. It uses the normalized
+                <code>live-status</code> presentation, has visible status copy,
+                and does not create disclosure semantics until inspectable
+                Activity sections exist.
+              </StateAnnotation>
+            </AssistantShell>
+
+            <AssistantShell>
+              <AssistantActivityIndicator
+                presentation={{
+                  kind: "passive",
+                  label: "Thought for 1s",
+                  durationSeconds: 1,
+                }}
+                open={false}
+              />
+              <StateAnnotation title="Assistant activity — passive opaque timing">
+                Opaque completed reasoning at or above one second is ordinary
+                text: no focus target, chevron, or disclosure ARIA.
+              </StateAnnotation>
+            </AssistantShell>
+
+            <AssistantShell>
+              <AssistantActivityIndicator
+                presentation={{
+                  kind: "disclosure",
+                  label: "Searching the web",
+                  motion: "shimmer",
+                  sections: [
+                    {
+                      kind: "sources",
+                      sources: [MOCK_SOURCES[0]!],
+                    },
+                  ],
+                }}
+                open={false}
+                onOpenChange={noop}
+                controlsId="thinking-states-activity"
+              />
+              <StateAnnotation title="Assistant activity — rich live disclosure">
+                The same renderer composes search, image, approval, and named
+                tool labels while keeping the action tied to a non-empty
+                normalized section list.
               </StateAnnotation>
             </AssistantShell>
 

@@ -442,7 +442,17 @@ export function useChatCore({
     const isNewChat = hydratedChatIdRef.current !== chatId
     if (isNewChat) {
       hydratedChatIdRef.current = chatId
-      applyMessages(initialMessages)
+      // A fresh conversation acquires its durable route before the messages
+      // query is guaranteed to contain the optimistic user row (or the
+      // assistant stream that may already have started). Route first entry
+      // through the same selected-path seam as later snapshots so an empty or
+      // partial server path cannot erase live turn state during that lag.
+      applyMessages((live) =>
+        projectSelectedPath(
+          live as ChatTurnMessage[],
+          initialMessages as ChatTurnMessage[]
+        )
+      )
       return
     }
 
