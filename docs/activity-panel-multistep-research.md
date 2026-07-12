@@ -23,8 +23,8 @@ sdk_snapshot: Historical AI SDK v6 dependency snapshot from 2026-06-30; the repo
 > **Historical SDK snapshot.** Package versions and SDK behavior in this document
 > describe the 2026-06-30 research environment. The repository now resolves
 > `ai@7.0.15`, `@ai-sdk/react@4.0.16`, `@ai-sdk/provider@4.0.2`, and provider
-> packages on their current lines, including the OpenRouter V3 compatibility
-> surface. Re-verify SDK-specific claims against the installed v7 source and
+> packages on their current lines, including OpenRouter's V4 provider. Re-verify
+> SDK-specific claims against the installed v7 source and
 > types before using this document for implementation. Snapshot paths and the
 > former gap-analysis/polish inputs below are historical provenance; several
 > were removed or moved after implementation, so current code and accepted ADRs

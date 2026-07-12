@@ -167,12 +167,11 @@ async function smokeModel(
     if (!usage.outputTokens || usage.outputTokens <= 0) {
       problems.push("no output-token usage reported")
     }
-    // The V3-shim seam: construction-time reasoning config must actually
-    // produce reasoning deltas (ai@7's unified per-call reasoning option is
-    // silently ignored by the V3 OpenRouter provider — provider-strategy.ts).
+    // Construction-time reasoning config must actually produce reasoning
+    // deltas through the V4 OpenRouter provider — provider-strategy.ts.
     if (config.reasoning && !sawReasoningDelta) {
       problems.push(
-        "construction-time reasoning configured but no reasoning-delta arrived (V3 shim seam regression?)"
+        "construction-time reasoning configured but no reasoning-delta arrived (OpenRouter V4 regression?)"
       )
     }
 

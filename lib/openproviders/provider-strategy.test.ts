@@ -71,9 +71,11 @@ describe("provider strategy registry", () => {
       .languageModel("openrouter:openai/gpt-oss-120b:free") as {
       modelId?: string
       provider?: string
+      specificationVersion?: string
     }
     expect(model.provider).toBe("openrouter")
     expect(model.modelId).toBe("openai/gpt-oss-120b:free")
+    expect(model.specificationVersion).toBe("v4")
   })
 
   // Construction settings: the OpenRouter strategy maps the neutral shape to

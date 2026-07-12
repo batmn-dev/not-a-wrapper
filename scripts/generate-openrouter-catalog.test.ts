@@ -71,7 +71,7 @@ describe("generate-openrouter-catalog invariants", () => {
     const [reasoner, plain] = buildCatalog(snapshot, allowlist)
 
     // Reasoning derivation ON: live `reasoning` param → capability flag +
-    // construction-time config (the V3-shim seam needs it at construction).
+    // construction-time config (the OpenRouter V4 provider expects it there).
     expect(reasoner).toMatchObject({
       id: "openrouter:vendor/reasoner",
       providerId: "openrouter",

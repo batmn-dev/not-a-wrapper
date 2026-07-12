@@ -15,9 +15,6 @@
   secret plus a pending-approval deployment strategy. Replace
   `result.toUIMessageStream(...)` in `chat-turn-runtime.ts` with the standalone
   AI SDK 7 converter before the next major removes the compatibility helper.
-- **AI SDK compatibility debt:** rename the legacy `.agents/skills/ai-sdk-v6/`
-  directory when a coordinated path migration is safe, and move OpenRouter off
-  its V3 model/`ai@6` peer surface when its provider package ships V4 support.
 - **Edit/regeneration freshness:** replace the selected-message count proxy with
   a server-issued revision or equivalent identity-bearing token. The unresolved
   drift scenario and verification requirements live in
@@ -26,6 +23,3 @@
   and one `extract_content` turn. The current stored key was rejected by Exa.
 - **Model presentation:** centralize route labels and icon precedence currently
   duplicated across model selectors and settings.
-- **Sidebar rows:** consolidate chat, project-chat, and project rows around the
-  existing `SidebarRow` and trailing-button primitives without changing their
-  single-link, focus-guard, or reveal behavior.

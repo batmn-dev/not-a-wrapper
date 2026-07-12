@@ -9,8 +9,7 @@ Non-goal: this is not an implementation plan and does not prescribe sequencing
 > gathered against `ai@6.0.78` and the matching provider packages. The repository
 > now resolves `ai@7.0.15`, `@ai-sdk/react@4.0.16`, `@ai-sdk/provider@4.0.2`,
 > first-party provider packages on major 4, and
-> `@openrouter/ai-sdk-provider@2.10.0` through the SDK's V3 compatibility
-> surface. Treat every use of
+> `@openrouter/ai-sdk-provider@3.0.0` on its V4 model interface. Treat every use of
 > "current," "today," or "installed" below as referring to the 2026-06-28
 > research snapshot unless a paragraph explicitly says otherwise. Re-verify all
 > SDK/provider behavior before turning these findings into implementation guidance.

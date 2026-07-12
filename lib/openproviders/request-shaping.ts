@@ -78,8 +78,8 @@ function resolveProviderOptions(
     // Catalogued Grok 4 models reason unconditionally and reject the
     // grok-3-mini reasoning-effort option.
     //
-    // OpenRouter reasoning is construction-time provider state. Its V3 model
-    // ignores AI SDK 7's normalized per-call reasoning option.
+    // OpenRouter reasoning remains construction-time provider state in its V4
+    // provider API; the catalog setting is mapped in provider-strategy.ts.
     default:
       return {}
   }

@@ -121,7 +121,9 @@ export function buildSnapshot(
   allowlist: readonly OpenRouterAllowlistEntry[],
   retrievedAt: string
 ): OpenRouterSnapshot {
-  const liveById = new Map(liveModels.map((model) => [model.id as string, model]))
+  const liveById = new Map(
+    liveModels.map((model) => [model.id as string, model])
+  )
   const missing = allowlist
     .map((entry) => entry.slug)
     .filter((slug) => !liveById.has(slug))
@@ -135,25 +137,25 @@ export function buildSnapshot(
 
   const models = allowlist
     .map((entry) => liveById.get(entry.slug) as Record<string, any>)
-    .map(
-      (live): OpenRouterSnapshotModel => ({
-        id: live.id,
-        name: live.name,
-        created: live.created,
-        context_length: live.context_length,
-        top_provider: {
-          max_completion_tokens: live.top_provider?.max_completion_tokens ?? null,
-        },
-        pricing: {
-          prompt: live.pricing?.prompt ?? "0",
-          completion: live.pricing?.completion ?? "0",
-        },
-        supported_parameters: [...(live.supported_parameters ?? [])].sort(),
-        architecture: {
-          input_modalities: [...(live.architecture?.input_modalities ?? [])].sort(),
-        },
-      })
-    )
+    .map((live): OpenRouterSnapshotModel => ({
+      id: live.id,
+      name: live.name,
+      created: live.created,
+      context_length: live.context_length,
+      top_provider: {
+        max_completion_tokens: live.top_provider?.max_completion_tokens ?? null,
+      },
+      pricing: {
+        prompt: live.pricing?.prompt ?? "0",
+        completion: live.pricing?.completion ?? "0",
+      },
+      supported_parameters: [...(live.supported_parameters ?? [])].sort(),
+      architecture: {
+        input_modalities: [
+          ...(live.architecture?.input_modalities ?? []),
+        ].sort(),
+      },
+    }))
     .sort((a, b) => a.id.localeCompare(b.id))
 
   return { endpoint: MODELS_ENDPOINT, retrievedAt, models }
@@ -167,9 +169,8 @@ export function buildModelConfig(
 ): ModelConfig {
   // Reasoning is machine-derived (live `supported_parameters`) with an
   // editorial opt-OUT only — the allowlist can never opt in without the
-  // parameter. Configured entries get construction-time settings because the
-  // OpenRouter provider is spec-V3: per-call unified reasoning is ignored
-  // (lib/openproviders/provider-strategy.ts).
+  // parameter. Configured entries get the construction-time settings expected
+  // by the OpenRouter V4 provider (lib/openproviders/provider-strategy.ts).
   const reasoningSupported =
     snapshotModel.supported_parameters.includes("reasoning") &&
     !entry.reasoningOptOut

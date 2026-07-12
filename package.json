@@ -42,7 +42,7 @@
     "@convex-dev/agent": "0.6.4",
     "@convex-dev/workos-authkit": "^0.2.7",
     "@hookform/resolvers": "^5.4.0",
-    "@openrouter/ai-sdk-provider": "^2.10.0",
+    "@openrouter/ai-sdk-provider": "^3.0.0",
     "@remixicon/react": "^4.9.0",
     "@sentry/nextjs": "^10.63.0",
     "@tanstack/react-query": "^5.101.2",
