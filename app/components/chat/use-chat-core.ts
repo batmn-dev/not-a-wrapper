@@ -1,7 +1,3 @@
-import {
-  createChatTurnController,
-  type ChatTurnMessage,
-} from "@/lib/chat-turn/chat-turn-controller"
 import { useChatEdit } from "@/app/components/chat/use-chat-edit"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
@@ -13,6 +9,10 @@ import {
   GUEST_CHAT_STORAGE_KEY,
 } from "@/lib/chat-store/identity"
 import { projectSelectedPath } from "@/lib/chat-store/turns/selected-path"
+import {
+  createChatTurnController,
+  type ChatTurnMessage,
+} from "@/lib/chat-turn/chat-turn-controller"
 import { API_ROUTE_CHAT } from "@/lib/routes"
 import type { UserProfile } from "@/lib/user/types"
 import type { UIMessage } from "@ai-sdk/react"
@@ -409,20 +409,8 @@ export function useChatCore({
     return () => clearTimeout(timeout)
   }, [status])
 
-  // Handle chat transitions WITHIN a mounted Chat: stop the active stream,
-  // reset state. This only governs pushState-driven chatId changes (the
-  // null→id handoff when a fresh conversation acquires its route, and
-  // popstate back to home) — sidebar/Link navigation swaps the route segment
-  // and REMOUNTS Chat, so this effect never sees it. That is deliberate
-  // nav-survival: a Link navigation leaves the request running, the server
-  // keeps streaming durable snapshots and finalizes the run, and returning to
-  // the chat converges on the durable content via the selected-path
-  // projection (shouldAdoptServerParts). Do not "fix" Link navigation to
-  // abort here — killing a paid-for generation on navigation is the wrong
-  // product behavior and resumable generation is the roadmap direction
-  // (TODO.md "Better in-progress conversation view").
-  // IMPORTANT: This effect MUST run before the hydration effect below so a
-  // mounted transition stops the old stream before new messages install.
+  // Mounted chat-id transitions stop the old stream before hydration. Link
+  // navigation remounts Chat and intentionally leaves durable streaming alive.
   useEffect(() => {
     const prevChatId = previousChatIdStore.get()
     previousChatIdStore.set(chatId)
@@ -587,10 +575,7 @@ export function useChatCore({
     [chatTurn, messages]
   )
 
-  // Handle reload (v6: renamed to regenerate). Reads the live turn array at
-  // call time (getMessages) for the same reason as submitEdit: the memoized
-  // assistant row holds this callback across re-renders, and the regeneration
-  // guard compares the target's server-adopted createdAt.
+  // Read live messages because memoized assistant rows retain this callback.
   const handleReload = useCallback(
     async (messageId: string) => {
       const currentMessages = getMessages()

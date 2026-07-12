@@ -1,58 +1,26 @@
 "use client"
 
 /**
- * ThreadScrollEdge — the thread's tail elements and scroll lifecycle,
- * reproducing the captured reference behavior at the source level:
- *
- *  1. The 1px bottom sentinel. An IntersectionObserver with
- *     `rootMargin: "0px 0px 72px"` toggles `data-scroll-from-end` on the
- *     scroll root when the sentinel is NOT intersecting. That attribute is
- *     the whole "away from bottom" signal — the scroll pill shows/hides via
- *     pure CSS group variants on it; no React state, no scroll math.
- *
- *  2. The trailing gutter. A permanent IntersectionObserver on the gutter
- *     itself (101 thresholds), root = scroll root, writes
- *     `rootRect.bottom − gutterRect.top` (unclamped) into
- *     `--gutter-remaining-height` on every ratio change. Its `min-height`
- *     therefore self-regulates toward "fill the viewport below the content"
- *     in ALL states: it reserves the visible response space while streaming
- *     (the stream-height class wins whenever it is larger), decays live as
- *     the answer consumes it, freezes naturally at settle, keeps short
- *     threads at exactly one viewport, and absorbs branch-switch height
- *     deltas. Negative writes are intentional — an invalid min-height is
- *     ignored by CSS (the reference writes them raw; observed `-2474.84px`).
- *
- *  3. Answer-start pinning through a rAF-and-retry pipeline: clear
- *     `data-scroll-from-end`, `scrollIntoView({ block: "end" })` on
- *     `[data-turn-id="…"]`; if the turn is not mounted yet, retry from a
- *     childList MutationObserver with a timeout cap. Their `behavior` is
- *     feature-flagged instant-vs-smooth; the flag serves `instant` (measured
- *     live), so instant is hardcoded here.
- *
- *  4. Load restore — once per conversation, instant, before paint. The gutter
- *     needs no help: its observer sizes it at mount.
+ * Owns the thread tail's four coupled behaviors: bottom-distance state, a
+ * self-sizing response gutter, answer-start pinning with a bounded mount retry,
+ * and once-per-conversation scroll restoration. The gutter writes its raw
+ * remaining height intentionally; negative CSS min-height values are ignored.
  */
-
 import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { useCallback, useEffect, useRef } from "react"
 
-/** Sentinel observer margin below the scrollport (desktop mode). */
 const SCROLL_FROM_END_ROOT_MARGIN = "0px 0px 72px"
-/** Gutter observer thresholds — every percent of visibility. */
 const GUTTER_THRESHOLDS = Array.from({ length: 101 }, (_, i) => i / 100)
-/** Retry cap for a pin whose turn has not mounted yet (their `Btt`). */
 const PIN_RETRY_TIMEOUT_MS = 10_000
 
 function closestScrollRoot(el: Element | null): HTMLElement | null {
   return el?.closest<HTMLElement>("[data-scroll-root]") ?? null
 }
 
-/** Set the pill's visibility attribute on the scroll root. */
 function setScrollFromEnd(root: HTMLElement, scrolledFromEnd: boolean) {
   root.toggleAttribute("data-scroll-from-end", scrolledFromEnd)
 }
 
-/** Resolve the turn and pin it; false when not mounted yet. */
 function pinTurn(root: HTMLElement, turnId: string): boolean {
   const turn = root.querySelector<HTMLElement>(
     `[data-turn-id="${CSS.escape(turnId)}"]`
@@ -63,7 +31,6 @@ function pinTurn(root: HTMLElement, turnId: string): boolean {
   return true
 }
 
-/** Retry the pin as the turn mounts, capped by a timeout. */
 function pinTurnWhenMounted(root: HTMLElement, turnId: string): () => void {
   const observer = new MutationObserver(() => {
     if (pinTurn(root, turnId)) {
@@ -155,10 +122,10 @@ export function ThreadScrollEdge({
         root.getBoundingClientRect().bottom - el.getBoundingClientRect().top
       el.style.setProperty("--gutter-remaining-height", `${remaining}px`)
     }
-    const observer = new IntersectionObserver(
-      updateRemainingHeight,
-      { root, threshold: GUTTER_THRESHOLDS }
-    )
+    const observer = new IntersectionObserver(updateRemainingHeight, {
+      root,
+      threshold: GUTTER_THRESHOLDS,
+    })
     observer.observe(el)
     const resizeObserver = new ResizeObserver(updateRemainingHeight)
     resizeObserver.observe(root)

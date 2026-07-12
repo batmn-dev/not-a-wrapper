@@ -1,21 +1,9 @@
 import type { Doc, Id } from "@/convex/_generated/dataModel"
 
-// ============================================================================
-// Convex Types
-// ============================================================================
-
 export type ConvexChat = Doc<"chats">
 export type ConvexMessage = Doc<"messages">
 
-// ============================================================================
-// Unified Types (used throughout the app)
-// These types provide a consistent interface for the rest of the application
-// ============================================================================
-
-/**
- * Unified Chat type used throughout the application
- * Uses snake_case for compatibility with existing code
- */
+/** App-facing chat shape; snake_case is retained for existing consumers. */
 export type Chat = {
   id: string
   user_id: string
@@ -28,21 +16,14 @@ export type Chat = {
   pinned_at: string | null
   created_at: string | null
   updated_at: string | null
-  // Sidebar status projection — the current run's live phase mirrored onto the
-  // chat doc (docs/design/sidebar-status-backend-wiring.md). Absent on
-  // optimistic/local chats → derives `idle`. — Phase 1
+  // Absent on optimistic/local chats, which derive an idle sidebar status.
   live_run_status?: "streaming" | "awaiting" | null
-  // Last signaling terminal outcome + the owner's read cursor; a background run
-  // that finished unseen (last_run_ended_at > last_read_at) derives unread/error
-  // until opened. Owner-only (stripped from non-owner reads). — Phase 2
+  // Owner-only cursor used to derive unread/error for completed background runs.
   last_run_ended_at?: number | null
   last_run_status?: "completed" | "failed" | null
   last_read_at?: number | null
 }
 
-/**
- * Unified Message type used throughout the application
- */
 export type Message = {
   id: string | number
   chat_id: string
@@ -53,16 +34,9 @@ export type Message = {
   created_at?: string | null
 }
 
-// Alias for backward compatibility
+/** Compatibility alias for existing consumers. */
 export type Chats = Chat
 
-// ============================================================================
-// Conversion Helpers
-// ============================================================================
-
-/**
- * Convert Convex chat to unified Chat type
- */
 export function convexChatToChat(convexChat: ConvexChat): Chat {
   return {
     id: convexChat._id,
@@ -87,9 +61,6 @@ export function convexChatToChat(convexChat: ConvexChat): Chat {
   }
 }
 
-/**
- * Convert Convex message to unified Message type
- */
 export function convexMessageToMessage(convexMessage: ConvexMessage): Message {
   return {
     id: convexMessage._id,
@@ -102,10 +73,6 @@ export function convexMessageToMessage(convexMessage: ConvexMessage): Message {
   }
 }
 
-/**
- * Type guard to check if a chat ID is a Convex ID
- */
 export function isConvexId(id: string): id is Id<"chats"> {
-  // Convex IDs are typically longer strings with specific format
   return id.length > 20 && !id.includes("-")
 }

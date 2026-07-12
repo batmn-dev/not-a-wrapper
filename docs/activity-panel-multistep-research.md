@@ -15,10 +15,21 @@ authoritative_sources:
   - docs/activity-panel-implementation-plan.md
   - polish-acitivity-panel-and-page.md
 precedence: Where this document and the GA (docs/activity-panel-gap-analysis.md) disagree, the GA wins. Such conflicts are flagged inline as "GA-WINS".
+sdk_snapshot: Historical AI SDK v6 dependency snapshot from 2026-06-30; the repository now runs AI SDK v7.
 ---
 
 # Activity Panel — Live Multi-Step Timeline: Research & Discovery
 
+> **Historical SDK snapshot.** Package versions and SDK behavior in this document
+> describe the 2026-06-30 research environment. The repository now resolves
+> `ai@7.0.15`, `@ai-sdk/react@4.0.16`, `@ai-sdk/provider@4.0.2`, and provider
+> packages on their current lines, including OpenRouter's V4 provider. Re-verify
+> SDK-specific claims against the installed v7 source and
+> types before using this document for implementation. Snapshot paths and the
+> former gap-analysis/polish inputs below are historical provenance; several
+> were removed or moved after implementation, so current code and accepted ADRs
+> win.
+>
 > **Deliverable scope.** This is a _research and discovery_ document only. It does not propose
 > commits, write feature code, or open an implementation plan. Its job is to give the next person
 > enough evidence-cited insight to write a high-quality plan without re-running the discovery.
@@ -34,9 +45,11 @@ precedence: Where this document and the GA (docs/activity-panel-gap-analysis.md)
   live at the **sibling** path `/Users/andresgonzalez/Github/Projects/reference-ui/ChatGPT/`, one
   level above `not-a-wrapper`. `git ls-files | grep reference-ui` → 0 hits; the tree is untracked
   and external. `exact`. The future plan must reference them by absolute/sibling path.
-- **AI SDK generation.** `@ai-sdk/react ^3.0.80`, `@ai-sdk/provider ^3.0.8`, provider packages
-  `@ai-sdk/{anthropic,google,openai,mistral,perplexity,xai}@3` (`package.json`). The "AI SDK v6"
-  framing in the prompt maps to these `@ai-sdk/*@3` packages and the UIMessage `parts` model. `exact`
+- **AI SDK generation at the research date.** `@ai-sdk/react ^3.0.80`,
+  `@ai-sdk/provider ^3.0.8`, and provider packages
+  `@ai-sdk/{anthropic,google,openai,mistral,perplexity,xai}@3` (`package.json` at
+  the time). The "AI SDK v6" framing in the original prompt maps to those
+  historical package majors and the UIMessage `parts` model. `exact`
 - **The reference panel capture is a _settled, completed_ turn** ("Activity · 5m 42s", "Thought for
   5m 42s"). There is **no live/streaming capture** anywhere in the reference set — this is the root
   cause of the `phase` uncertainty (§6.1).
@@ -600,7 +613,7 @@ should re-baseline against the current branch, not the polish doc's snapshot. `e
 
 ## §7. Best-practices findings (cited)
 
-### 7.1 AI SDK v6 UIMessage `parts`
+### 7.1 AI SDK v6 UIMessage `parts` (historical snapshot)
 
 - `UIMessage.parts` is "the source of truth for application state"; render via a `switch(part.type)`
   (`https://ai-sdk.dev/docs/reference/ai-sdk-core/ui-message`, `exact`). `TextUIPart` and

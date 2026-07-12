@@ -97,15 +97,24 @@ migration discipline.
 
 ## Required Project Patterns (MUST When Applicable)
 
-### Streaming Responses (AI SDK v6)
+### Streaming Responses (AI SDK v7)
 
 ```typescript
-return result.toUIMessageStreamResponse({
-  sendReasoning: true,
-  sendSources: true,
-  onError: (error) => extractErrorMessage(error),
+return createUIMessageStreamResponse({
+  stream: toUIMessageStream({
+    stream: result.stream,
+    sendReasoning: true,
+    sendSources: true,
+    onError: (error) => extractErrorMessage(error),
+  }),
 })
 ```
+
+The `StreamTextResult` instance helpers (`result.toUIMessageStream(...)` and
+`result.toUIMessageStreamResponse(...)`) are deprecated in AI SDK v7 and are
+removed in the next major. Pass `result.stream` to the standalone
+`toUIMessageStream(...)` converter, then use
+`createUIMessageStreamResponse(...)`.
 
 ### Convex Auth Pattern
 
@@ -142,7 +151,6 @@ try {
 Load only when needed:
 
 - `.agents/skills/`
-- `.agents/troubleshooting/`
 - `README.md` and `INSTALL.md`
 - `docs/convex-access.md` — **read before querying Convex** (MCP/CLI/dashboard).
   The app's data lives only in the deployment `NEXT_PUBLIC_CONVEX_URL` /

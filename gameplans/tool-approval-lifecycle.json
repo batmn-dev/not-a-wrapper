@@ -1,0 +1,436 @@
+{
+  "projectName": "tool-approval-lifecycle",
+  "owner": "darknightdesigner",
+  "repo": "not-a-wrapper",
+  "specFile": null,
+  "workstream": null,
+  "problemStatement": "Tool approval behavior is spread across request creation, direct user decisions, Chat turn continuation, new-turn auto-denial, Generation run completion, message-part projection, and Tool invocation projection in convex/chatRuntime.ts. The current direct decision mutations are last-write-wins, so a later conflicting click or retry can make the stored request disagree with the client response or with already-projected durable state. The extraction must improve locality without weakening three distinct authorization shapes or duplicating the accepted Generation run lifecycle rules.",
+  "solutionSummary": "Introduce a mutation-scoped Tool approval lifecycle module with five caller-first operations: request, recordDecision, hasPendingForRun, applyContinuation, and denyPendingForNewTurn. Preserve current behavior while migrating all lifecycle-related reads and writes, then make decisions first-write-wins in one small behavior patch: same-outcome retries are idempotent and retain the original reason, while opposite outcomes fail. Keep Generation run transition legality in the existing pure lifecycle module, keep general Tool invocation recording outside the new module, and use MutationCtx directly rather than inventing a storage port. Document the prepare-only atomic ordering of auto-denial and the same-transaction continuation-target claim in the interface and CONTEXT.md.",
+  "currentStateAnalysis": "convex/chatRuntime.ts currently owns applyApprovalResponseToParts, resolveCanonicalApprovalDecision, denyPendingApprovalsForChat, applyApprovalResponses, createToolApprovalRequestForChat, approveToolCall, denyToolCall, and the markGenerationRunCompletedForChat pending-request query. The direct mutations patch approved or denied unconditionally; applyApprovalResponses later treats the stored row as canonical and can reject the entire prepare transaction if it no longer matches the client response. denyPendingApprovalsForChat intentionally does not project an old run's terminal state to the chat because both callers are inside prepareGenerationForChat and atomically claim the status slot for the imminent replacement run. applyApprovalResponses temporarily marks the continuation message streaming before prepare binds it to the new run, but Convex transaction atomicity prevents that intermediate state from becoming externally visible. recordToolInvocationsForChat also reads toolApprovalRequests only to validate a foreign-key-like linkage; it remains outside the lifecycle module because general Tool invocation recording is explicitly not lifecycle ownership.",
+  "operationalConsiderations": {
+    "externalSystemAccess": "No new external system or runtime capability is introduced. All work runs inside existing Convex mutations using the same database, indexes, authentication context, and Next.js-to-Convex calls already used by the Durable turn runtime.",
+    "crossRuntimeContracts": "The browser records a user decision through approveToolCall or denyToolCall and then appends the same approval response to the AI SDK message; the next POST /api/chat request carries that response into Durable turn runtime and prepareGeneration. This gameplan does not change request fields, Convex mutation arguments, schema validators, AI SDK ToolUIPart shapes, or stored status literals. The new module must preserve the current producer/consumer sequence while making the stored decision immutable after its first resolution.",
+    "failureBehavior": "All lifecycle writes stay within the caller's Convex transaction, so linkage errors, canonical-decision mismatches, opposite re-decisions, or later prepare failures roll back the full mutation. Missing and cross-user decision targets retain the indistinguishable `Approval not found` error; pending and expired continuation errors retain their existing messages; an opposite re-decision adds stable `Approval already resolved`. The browser already records the local response only after the mutation succeeds and already surfaces failures through the existing toast, so no new UI recovery path is required.",
+    "concurrencyAndIdempotency": "Convex retries mutations transactionally. approvalId remains the request idempotency key: exact request replays are no-ops and linkage collisions fail. Decision resolution becomes first-write-wins under transaction retry: pending may transition once to approved or denied; a same-outcome retry returns success without changing resolvedAt, resolvedByUserId, or reason; an opposite outcome fails. Continuation groups responses by paused Generation run and sends one approvals-resolved signal per run; new-turn closure groups pending requests and relies on the Generation run lifecycle to ignore already-terminal races.",
+    "rollbackStrategy": "No schema or data migration is required; existing pending, approved, denied, and expired rows remain valid. Reverting the gameplan restores the old implementation and last-write-wins behavior without unreadable data, although reverting after relying on first-write-wins would re-open the race rather than require a backfill. The gameplan should therefore be reverted as a unit if necessary; no compensating data write is needed."
+  },
+  "mergabilityStrategy": {
+    "featureFlagStrategy": "No feature flag. Patch 2 is a behavior-preserving extraction and Patch 3 is a narrow correctness hardening at the canonical decision write. Running old and new decision semantics simultaneously would make concurrency behavior depend on which call path executed and would defeat the invariant.",
+    "featureFlags": [],
+    "patchOrderingStrategy": "Patch 1 adds pending interface-level test stubs. Patch 2 introduces the deep module, shared Generation run status projection helper, and all behavior-preserving caller migrations, then implements the extraction tests. Patch 3 enables first-write-wins, implements the decision-race tests, and records the accepted Tool approval lifecycle vocabulary. The dependency graph is sequential because Patch 3 must change the single decision implementation introduced by Patch 2."
+  },
+  "requiredChanges": [
+    {
+      "file": "convex/domain/tool_approval_lifecycle.ts",
+      "line": null,
+      "description": "Create the mutation-scoped Tool approval lifecycle module, its five-operation interface, private resolution engine, canonical decision rules, association logic, and ordering contracts.",
+      "signature": "createToolApprovalLifecycle(ctx: MutationCtx): ToolApprovalLifecycle"
+    },
+    {
+      "file": "convex/domain/generation_run_status_projection.ts",
+      "line": null,
+      "description": "Move guarded Generation run-to-chat status projection out of chatRuntime so both the lifecycle module and existing run terminal writers consume one implementation.",
+      "signature": "projectRunStatusToChat(ctx: MutationCtx, run: Doc<\"generationRuns\">, status: GenerationRunStatus, now: number): Promise<void>"
+    },
+    {
+      "file": "convex/chatRuntime.ts",
+      "line": 847,
+      "description": "Replace approval helpers and the completion-time pending query with calls to the Tool approval lifecycle; retain public Convex mutation names and argument validators as thin adapters.",
+      "signature": null
+    },
+    {
+      "file": "convex/domain/tool_approval_lifecycle.test.ts",
+      "line": null,
+      "description": "Test request, decision, pending-query, continuation, and new-turn closure behavior only through the new interface.",
+      "signature": null
+    },
+    {
+      "file": "convex/testing/chat_runtime_fixture.ts",
+      "line": null,
+      "description": "Extract the existing in-memory MutationCtx and approval/run/message fixture builders needed by both chatRuntime orchestration tests and lifecycle interface tests.",
+      "signature": null
+    },
+    {
+      "file": "convex/chatRuntime.test.ts",
+      "line": 1,
+      "description": "Retain only caller orchestration, authorization-adapter, Generation run completion, and transaction-ordering assertions after approval behavior moves to the module test surface.",
+      "signature": null
+    },
+    {
+      "file": "CONTEXT.md",
+      "line": 44,
+      "description": "Define Tool approval lifecycle, its five operations, first-write-wins decision rule, atomic prepare ordering, ownership exclusions, and implemented status.",
+      "signature": null
+    }
+  ],
+  "functionalChanges": [
+    {
+      "id": "FC-1",
+      "description": "The first committed approved or denied Tool approval decision is immutable; a same-outcome retry succeeds idempotently without changing the original reason or resolution metadata, while an opposite outcome is rejected with `Approval already resolved`.",
+      "ownedBy": 3
+    }
+  ],
+  "contextResources": [
+    {
+      "id": "approval-predecessor",
+      "kind": "predecessor",
+      "paths": [
+        "convex/chatRuntime.ts",
+        "convex/schema.ts",
+        "app/components/chat/use-chat-core.ts",
+        "app/api/chat/durable-turn-runtime.ts"
+      ],
+      "why": "These files define the current five lifecycle touchpoints, direct decision flow, stored table/index shapes, continuation response extraction, UI success-before-local-update order, and same-transaction prepare behavior that the extraction must preserve.",
+      "consumedBy": [1, 2, 3]
+    },
+    {
+      "id": "generation-run-contract",
+      "kind": "contract",
+      "paths": [
+        "CONTEXT.md",
+        "convex/domain/generation_run_lifecycle.ts",
+        "docs/adr/0009-durable-turn-runtime.md"
+      ],
+      "why": "The Generation run lifecycle remains the sole authority for approval-requested, approvals-resolved, abort, first-terminal-wins, and message status transition legality. The Tool approval lifecycle may gather facts and apply verdicts but may not duplicate this table.",
+      "consumedBy": [1, 2, 3]
+    },
+    {
+      "id": "auth-contract",
+      "kind": "contract",
+      "paths": [
+        "convex/lib/auth.ts",
+        "convex/lib/authedFunctions.ts",
+        "docs/adr/0003-authenticated-handler-seam.md"
+      ],
+      "why": "Request creation is run-owned, continuation and new-turn closure are chat-owned, and direct approve/deny mutations are self-identity-match. The module receives verified authority facts and must not collapse these shapes into a caller-constructible union.",
+      "consumedBy": [2, 3]
+    },
+    {
+      "id": "approval-test-contract",
+      "kind": "test-or-static-check",
+      "paths": [
+        "convex/chatRuntime.test.ts",
+        "convex/domain/generation_run_lifecycle.test.ts",
+        "app/api/chat/durable-turn-runtime.test.ts",
+        "app/components/chat/use-chat-core.test.tsx"
+      ],
+      "why": "These suites encode late-Stop handling, all-approved/any-denied continuation, cumulative message-part projection, auto-denial cascades, completion pending checks, durable prepare sequencing, and client mutation-before-local-response behavior.",
+      "consumedBy": [1, 2, 3]
+    },
+    {
+      "id": "repository-rules",
+      "kind": "reference-doc",
+      "paths": [
+        "AGENTS.md",
+        "CONTEXT.md"
+      ],
+      "why": "Defines pre-launch schema policy, security/auth expectations, architecture vocabulary, scope verification, and the requirement to record a newly accepted deep module in the domain glossary.",
+      "consumedBy": [2, 3]
+    }
+  ],
+  "acceptanceCriteria": [
+    "convex/domain/tool_approval_lifecycle.ts exports a mutation-scoped factory with exactly the five approved operations: request, recordDecision, hasPendingForRun, applyContinuation, and denyPendingForNewTurn.",
+    "The request operation preserves approvalId idempotency, full run/message linkage validation, late-settled-run no-op behavior, request insertion ordering, awaiting message/run writes, and guarded chat status projection.",
+    "markGenerationRunCompletedForChat obtains hasPendingApprovals through hasPendingForRun after its existing early terminal guard and no longer queries toolApprovalRequests directly.",
+    "recordDecision preserves the self-identity-match authorization shape and the indistinguishable `Approval not found` result for missing and cross-user rows.",
+    "A pending decision transitions once to approved or denied; same-outcome retries do not alter reason, resolvedAt, or resolvedByUserId; opposite-outcome retries fail with `Approval already resolved`.",
+    "applyContinuation treats stored decisions as canonical, cumulatively rewrites multiple responses on one message, projects matching Tool invocations, sends one approvals-resolved signal per prior Generation run, and never repaints a run already settled by Stop.",
+    "applyContinuation returns a narrow ContinuationTarget and documents that prepareGenerationForChat must bind it to the imminent Generation run within the same Convex transaction before commit.",
+    "denyPendingForNewTurn owns the fixed `auto-denied: new generation started` reason, closes only the authenticated owner's pending requests and related nonterminal state, and documents that it is prepare-only and must be followed by the replacement run's status-slot claim in the same transaction.",
+    "Regeneration target/version validation still occurs before auto-denial, so a stale regeneration request cannot destroy valid pending approvals.",
+    "projectRunStatusToChat has one shared implementation consumed by existing terminal writers and Tool approval request creation; the pure Generation run lifecycle remains free of MutationCtx and database access.",
+    "recordToolInvocationsForChat remains outside the lifecycle module and retains only its narrow approval-link validation read; the plan does not claim general Tool invocation persistence as Tool approval lifecycle ownership.",
+    "The public Convex mutation names, validators, return compatibility, stored schema, AI SDK message shapes, and Durable turn runtime wire calls remain backward-compatible.",
+    "CONTEXT.md records Tool approval lifecycle only after the implementation and focused tests pass.",
+    "Focused Vitest suites, TypeScript checking for touched modules, Biome checks for touched files, git diff --check, intended-path diff review, and final git status all pass without modifying unrelated files."
+  ],
+  "openQuestions": [],
+  "explicitOpinions": [
+    {
+      "opinion": "Use the caller-first five-operation interface rather than a generic event union.",
+      "rationale": "The operations represent genuinely different authorization facts, timing, return values, and lifecycle outcomes. A generic command union would make invalid authority combinations representable and force callers to learn implementation vocabulary."
+    },
+    {
+      "opinion": "Make Tool approval decisions first-write-wins, including the reason and resolution metadata.",
+      "rationale": "Last-write-wins can make durable state disagree with the client response before continuation or with already-projected message and Tool invocation state after continuation. Convex transaction retry makes immutable resolution deterministic."
+    },
+    {
+      "opinion": "Use MutationCtx directly and do not introduce a ToolApprovalStore port.",
+      "rationale": "Convex is the single production persistence adapter and the existing in-memory MutationCtx is already the local test stand-in. A new port would re-declare generated database behavior without a second production adapter."
+    },
+    {
+      "opinion": "Keep Generation run transition legality in generation_run_lifecycle.ts and share only the guarded database projection helper.",
+      "rationale": "The accepted lifecycle table already owns approval-requested, approvals-resolved, abort, and race rules. The new module should gather approval facts and apply verdicts, not create a competing transition table."
+    },
+    {
+      "opinion": "Keep denyPendingForNewTurn prepare-only instead of adding an independent old-run chat projection.",
+      "rationale": "Both valid callers atomically create and claim a replacement run in the same Convex transaction; any later failure rolls back the denial. A standalone close operation would have different projection semantics and should be introduced only with a real caller."
+    },
+    {
+      "opinion": "Keep general Tool invocation recording outside the Tool approval lifecycle even though it validates an approval request link.",
+      "rationale": "Recording inputs, outputs, step numbers, and terminal results is Tool invocation behavior. Its narrow referential lookup does not make it an owner of approval decision or lifecycle transitions."
+    },
+    {
+      "opinion": "Do not add expiry behavior.",
+      "rationale": "The expired schema literal has no producer. Adding an expiry operation before a real caller exists would widen the interface with hypothetical behavior."
+    }
+  ],
+  "patches": [
+    {
+      "number": 1,
+      "classification": "INFRA",
+      "complexity": 2,
+      "title": "Add pending Tool approval lifecycle interface tests",
+      "files": [
+        {
+          "path": "convex/domain/tool_approval_lifecycle.test.ts",
+          "action": "create",
+          "description": "Add skipped scenario stubs with complete fixture setup comments for request, pending query, decision races, continuation, and new-turn closure. Avoid importing the not-yet-created module so the INFRA patch remains green."
+        },
+        {
+          "path": "convex/chatRuntime.test.ts",
+          "action": "modify",
+          "description": "Add skipped orchestration stubs for regeneration validation-before-denial and same-transaction continuation binding/status claim."
+        }
+      ],
+      "changes": [
+        "Declare every interface-level scenario before implementation using Vitest skip markers and `PENDING: Patch 2` or `PENDING: Patch 3` comments.",
+        "Specify fixture rows and expected request/message/Tool invocation/Generation run/chat outcomes inside each skipped test so implementation agents cannot weaken assertions while enabling them.",
+        "Keep the current suite passing: no production imports or behavior changes in this patch."
+      ],
+      "requiredContext": [
+        "approval-predecessor",
+        "generation-run-contract",
+        "approval-test-contract"
+      ],
+      "testStubsIntroduced": [
+        "Tool approval lifecycle > request is idempotent, validates linkage, and ignores a late settled run",
+        "Tool approval lifecycle > hasPendingForRun answers from the run-status index without widening completion policy",
+        "Tool approval lifecycle > applyContinuation projects canonical responses cumulatively and settles each prior run once",
+        "Tool approval lifecycle > denyPendingForNewTurn closes only related pending state and preserves terminal state",
+        "Chat runtime approval orchestration > validates regeneration before denial and atomically claims the replacement run",
+        "Tool approval lifecycle > same-decision retry preserves the first reason and resolution metadata",
+        "Tool approval lifecycle > opposite-decision retry fails without changing durable projections"
+      ],
+      "testStubsImplemented": null,
+      "spec": "module TOOL_APPROVAL_LIFECYCLE_PATCH_1.\n\nScenario.\npending-test? s: Scenario => Bool.\n---\n> Patch 1 introduces reviewable pending scenarios only.\nall s: Scenario, pending-test? s | pending-test? s.\n",
+      "precedents": null
+    },
+    {
+      "number": 2,
+      "classification": "INFRA",
+      "complexity": 3,
+      "title": "Extract and migrate the behavior-preserving Tool approval lifecycle",
+      "files": [
+        {
+          "path": "convex/domain/tool_approval_lifecycle.ts",
+          "action": "create",
+          "description": "Implement the five-operation factory, private lookup/projection/grouping helpers, current decision behavior, and explicit atomic ordering contracts."
+        },
+        {
+          "path": "convex/domain/generation_run_status_projection.ts",
+          "action": "create",
+          "description": "Host chatStatusProjection and guarded projectRunStatusToChat without moving transition legality out of the pure lifecycle module."
+        },
+        {
+          "path": "convex/chatRuntime.ts",
+          "action": "modify",
+          "description": "Migrate all five lifecycle callers, keep public mutations as thin auth/validation adapters, remove replaced helpers, and import the shared status projection."
+        },
+        {
+          "path": "convex/testing/chat_runtime_fixture.ts",
+          "action": "create",
+          "description": "Move the existing table-aware in-memory MutationCtx and approval/run/message fixture builders into a test-only shared module without changing their semantics."
+        },
+        {
+          "path": "convex/domain/tool_approval_lifecycle.test.ts",
+          "action": "modify",
+          "description": "Replace Patch 1 skips for behavior-preserving operations with interface-level tests using the shared fixture."
+        },
+        {
+          "path": "convex/chatRuntime.test.ts",
+          "action": "modify",
+          "description": "Use the shared fixture, delete redundant helper-level approval tests, retain public adapter and prepare orchestration coverage, and enable the Patch 2 orchestration stub."
+        }
+      ],
+      "changes": [
+        "Define ToolApprovalLifecycle with request, recordDecision, hasPendingForRun, applyContinuation, and denyPendingForNewTurn; capture MutationCtx at factory construction and pass the verified run owner, chat owner, or user required by each operation.",
+        "Move request idempotency, preview truncation for approval requests, assistant-message/run linkage, approval-part rewriting, canonical stored-decision validation, pending selection, Tool invocation approval projection, per-message accumulation, and per-run grouping behind the seam.",
+        "Keep recordDecision behavior-preserving in this patch, including the existing public mutation return id and reason fallback; Patch 3 alone owns the observable first-write-wins change.",
+        "Implement hasPendingForRun as an indexed existence read over by_run_status and call it only after markGenerationRunCompletedForChat's existing isIgnoredSignal fast guard.",
+        "Make applyContinuation return `{ assistantMessageId, assistantOrder } | null`, not a complete message document. Document that a non-null target is pre-claimed as streaming and must be linked to the imminent new run within the same prepare transaction.",
+        "Make denyPendingForNewTurn own the fixed auto-denial reason. Document and test that it is legal only inside prepare after request validation and before the replacement run status-slot claim; do not independently project the old run to the chat.",
+        "Use resolveGenerationRunTransition for approval-requested, approvals-resolved, and abort signals. Never copy status legality into the new module.",
+        "Move chatStatusProjection/projectRunStatusToChat to one shared module and update existing completion/fail/abort/supersede paths to import it, preserving the statusRunId guard and direct new-run claim semantics.",
+        "Leave recordToolInvocationsForChat in chatRuntime, including its narrow toolApprovalRequests lookup for run/message linkage, and state this ownership exclusion in module documentation.",
+        "Preserve public Convex function names, validators, errors, return compatibility, schema, Durable turn runtime calls, and client behavior.",
+        "Move only reusable test harness code to convex/testing/chat_runtime_fixture.ts; keep production-only and scenario-specific fixture logic near its tests.",
+        "Enable the four Patch 2 lifecycle/orchestration tests and remove superseded direct tests of applyApprovalResponses, denyPendingApprovalsForChat, resolveCanonicalApprovalDecision, and createToolApprovalRequestForChat only after equivalent interface coverage exists."
+      ],
+      "requiredContext": [
+        "approval-predecessor",
+        "generation-run-contract",
+        "auth-contract",
+        "approval-test-contract",
+        "repository-rules"
+      ],
+      "testStubsIntroduced": null,
+      "testStubsImplemented": [
+        "Tool approval lifecycle > request is idempotent, validates linkage, and ignores a late settled run",
+        "Tool approval lifecycle > hasPendingForRun answers from the run-status index without widening completion policy",
+        "Tool approval lifecycle > applyContinuation projects canonical responses cumulatively and settles each prior run once",
+        "Tool approval lifecycle > denyPendingForNewTurn closes only related pending state and preserves terminal state",
+        "Chat runtime approval orchestration > validates regeneration before denial and atomically claims the replacement run"
+      ],
+      "spec": "module TOOL_APPROVAL_LIFECYCLE_PATCH_2.\n\nApproval.\nRun.\nMessage.\nInvocation.\nChat.\npending? a: Approval => Bool.\nbelongs-to a: Approval, r: Run => Bool.\nmessage-of a: Approval => Message.\nrequest-idempotent? a: Approval => Bool.\nhas-pending r: Run => Bool.\ncontinuation-target m: Message => Bool.\nreplacement-claimed c: Chat => Bool.\nauto-denied a: Approval => Bool.\n---\n> Request replay preserves one approval identity.\nall a: Approval | request-idempotent? a.\n\n> Pending queries report exactly pending approvals belonging to the run.\nall r: Run | has-pending r <-> (some a: Approval | pending? a and belongs-to a r).\n\n> A continuation target is committed only with its replacement claim.\nall m: Message, continuation-target m | some c: Chat | replacement-claimed c.\n\n> Auto-denial acts only on pending approvals.\nall a: Approval, auto-denied a | pending? a.\n",
+      "precedents": [
+        {
+          "kind": "pattern",
+          "name": "Transactional idempotency key",
+          "url": null,
+          "whyApplicable": "Keep approvalId as the stable request idempotency key inside the same Convex transaction; exact replays reuse the existing row while a key collision with different run/message linkage fails."
+        }
+      ]
+    },
+    {
+      "number": 3,
+      "classification": "BEHAVIOR",
+      "complexity": 3,
+      "title": "Make Tool approval decisions first-write-wins and document the module",
+      "files": [
+        {
+          "path": "convex/domain/tool_approval_lifecycle.ts",
+          "action": "modify",
+          "description": "Enforce immutable approved/denied resolution, same-outcome idempotency with first-reason preservation, and opposite-outcome rejection."
+        },
+        {
+          "path": "convex/domain/tool_approval_lifecycle.test.ts",
+          "action": "modify",
+          "description": "Implement the Patch 3 concurrency, idempotency, reason-retention, and no-projection-drift tests."
+        },
+        {
+          "path": "convex/chatRuntime.test.ts",
+          "action": "modify",
+          "description": "Retain thin public approve/deny adapter tests proving auth and return/error compatibility under the immutable decision rule."
+        },
+        {
+          "path": "app/components/chat/use-chat-core.test.tsx",
+          "action": "modify",
+          "description": "Prove the client appends the local approval response only after mutation success and retains the existing failure toast when a conflicting decision is rejected."
+        },
+        {
+          "path": "CONTEXT.md",
+          "action": "modify",
+          "description": "Add the accepted Tool approval lifecycle definition, first-write-wins rule, five-operation interface responsibility, atomic ordering, exclusions, and implemented status."
+        }
+      ],
+      "changes": [
+        "In recordDecision, allow only pending to transition to approved or denied. Set resolvedAt, resolvedByUserId, and reason once on that transition.",
+        "When an already-resolved row receives the same outcome, return the existing request id without patching any field; specifically preserve the first reason and original resolution metadata.",
+        "When an already-resolved row receives the opposite outcome, throw stable `Approval already resolved` before writing. Keep pending/expired handling explicit and do not add expiry production behavior.",
+        "Preserve `Approval not found` for absent and cross-user targets so ownership is not disclosed.",
+        "Verify that a conflicting late decision cannot alter request provenance, message parts, Tool invocation status, or Generation run status already produced by continuation.",
+        "Keep approveToolCall and denyToolCall as separate client-facing mutations that adapt to recordDecision; do not change the browser mutation names or arguments.",
+        "Update CONTEXT.md only after the focused lifecycle, chatRuntime, durable-runtime, and client tests pass."
+      ],
+      "requiredContext": [
+        "approval-predecessor",
+        "generation-run-contract",
+        "auth-contract",
+        "approval-test-contract",
+        "repository-rules"
+      ],
+      "testStubsIntroduced": null,
+      "testStubsImplemented": [
+        "Tool approval lifecycle > same-decision retry preserves the first reason and resolution metadata",
+        "Tool approval lifecycle > opposite-decision retry fails without changing durable projections"
+      ],
+      "spec": "module TOOL_APPROVAL_LIFECYCLE_PATCH_3.\n\nApproval.\nOutcome.\npending? a: Approval => Bool.\ndecided? a: Approval => Bool.\noutcome a: Approval => Outcome.\nreason a: Approval => String.\nresolved-at a: Approval => Nat0.\nstable-provenance? a: Approval => Bool.\nopposite-rejected? a: Approval => Bool.\napproved => Outcome.\ndenied => Outcome.\n---\n> A decision leaves pending exactly once.\nall a: Approval, pending? a | ~decided? a.\n\n> Decided approvals have one immutable outcome.\nall a: Approval, decided? a | outcome a = approved or outcome a = denied.\n\n> Same-outcome retry preserves provenance.\nall a: Approval, decided? a | stable-provenance? a.\n\n> Opposite re-decisions are rejected.\nall a: Approval, decided? a | opposite-rejected? a.\n\n> Opposite outcomes cannot both be durable.\nall a: Approval | ~(outcome a = approved and outcome a = denied).\n",
+      "precedents": [
+        {
+          "kind": "pattern",
+          "name": "First-writer-wins compare-and-set",
+          "url": null,
+          "whyApplicable": "Treat pending as the only mutable state and rely on Convex transaction retry to re-read the committed status. Same-value retries become idempotent; conflicting writes fail without overwriting provenance."
+        }
+      ]
+    }
+  ],
+  "testMap": [
+    {
+      "testName": "Tool approval lifecycle > request is idempotent, validates linkage, and ignores a late settled run",
+      "file": "convex/domain/tool_approval_lifecycle.test.ts",
+      "stubPatch": 1,
+      "implPatch": 2
+    },
+    {
+      "testName": "Tool approval lifecycle > hasPendingForRun answers from the run-status index without widening completion policy",
+      "file": "convex/domain/tool_approval_lifecycle.test.ts",
+      "stubPatch": 1,
+      "implPatch": 2
+    },
+    {
+      "testName": "Tool approval lifecycle > applyContinuation projects canonical responses cumulatively and settles each prior run once",
+      "file": "convex/domain/tool_approval_lifecycle.test.ts",
+      "stubPatch": 1,
+      "implPatch": 2
+    },
+    {
+      "testName": "Tool approval lifecycle > denyPendingForNewTurn closes only related pending state and preserves terminal state",
+      "file": "convex/domain/tool_approval_lifecycle.test.ts",
+      "stubPatch": 1,
+      "implPatch": 2
+    },
+    {
+      "testName": "Chat runtime approval orchestration > validates regeneration before denial and atomically claims the replacement run",
+      "file": "convex/chatRuntime.test.ts",
+      "stubPatch": 1,
+      "implPatch": 2
+    },
+    {
+      "testName": "Tool approval lifecycle > same-decision retry preserves the first reason and resolution metadata",
+      "file": "convex/domain/tool_approval_lifecycle.test.ts",
+      "stubPatch": 1,
+      "implPatch": 3
+    },
+    {
+      "testName": "Tool approval lifecycle > opposite-decision retry fails without changing durable projections",
+      "file": "convex/domain/tool_approval_lifecycle.test.ts",
+      "stubPatch": 1,
+      "implPatch": 3
+    }
+  ],
+  "dependencyGraph": [
+    {
+      "patch": 1,
+      "classification": "INFRA",
+      "dependsOn": []
+    },
+    {
+      "patch": 2,
+      "classification": "INFRA",
+      "dependsOn": [1]
+    },
+    {
+      "patch": 3,
+      "classification": "BEHAVIOR",
+      "dependsOn": [2]
+    }
+  ],
+  "mergabilityChecklist": {
+    "featureFlagStrategyDocumented": true,
+    "earlyPatchesNonFunctional": true,
+    "testStubsInInfraPatches": true,
+    "testImplsColocated": true,
+    "testMapComplete": true,
+    "testMapImplPatchMatchesCode": true,
+    "behaviorPatchesMinimal": true,
+    "dependencyGraphOrdered": true,
+    "behaviorPatchesJustified": true,
+    "functionalChangesOwnedByExactlyOnePatch": true,
+    "operationalConsiderationsSubstantive": true,
+    "gameplanIsAtomicAndAutonomous": true
+  },
+  "mergabilityInsight": "Two of three patches are INFRA and preserve observable behavior; the only BEHAVIOR patch is the approved first-write-wins decision hardening. The sequence is intentionally linear because the behavior patch targets the canonical decision implementation introduced by the extraction, but the complete gameplan remains autonomous and atomic with no schema migration, flag activation, or human checkpoint.",
+  "finalStateSpec": "module TOOL_APPROVAL_LIFECYCLE_FINAL.\n\nApproval.\nRun.\nMessage.\nChat.\nOutcome.\npending? a: Approval => Bool.\ndecided? a: Approval => Bool.\nbelongs-to a: Approval, r: Run => Bool.\nhas-pending r: Run => Bool.\nrequest-idempotent? a: Approval => Bool.\ncontinuation-target m: Message => Bool.\nreplacement-claimed c: Chat => Bool.\nauto-denied a: Approval => Bool.\noutcome a: Approval => Outcome.\nreason a: Approval => String.\nresolved-at a: Approval => Nat0.\nstable-provenance? a: Approval => Bool.\nopposite-rejected? a: Approval => Bool.\napproved => Outcome.\ndenied => Outcome.\n---\n> Request identity is idempotent.\nall a: Approval | request-idempotent? a.\n\n> Pending-run fact gathering is exact.\nall r: Run | has-pending r <-> (some a: Approval | pending? a and belongs-to a r).\n\n> Continuation targets commit only with the replacement run claim.\nall m: Message, continuation-target m | some c: Chat | replacement-claimed c.\n\n> Auto-denial closes only pending approvals.\nall a: Approval, auto-denied a | pending? a.\n\n> Pending and decided are disjoint.\nall a: Approval, pending? a | ~decided? a.\n\n> Every durable decision is approved or denied.\nall a: Approval, decided? a | outcome a = approved or outcome a = denied.\n\n> Opposite outcomes cannot both be durable.\nall a: Approval | ~(outcome a = approved and outcome a = denied).\n\n> Same-outcome retries preserve resolution provenance.\nall a: Approval, decided? a | stable-provenance? a.\n\n> Opposite re-decisions are rejected.\nall a: Approval, decided? a | opposite-rejected? a.\n"
+}

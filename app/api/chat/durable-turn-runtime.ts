@@ -13,36 +13,21 @@ import { isServerChatId } from "@/lib/chat-store/identity"
 import type { ToolSource } from "@/lib/tools/types"
 import * as Sentry from "@sentry/nextjs"
 import type {
+  UIMessage as MessageAISDK,
   StreamTextTransform,
   TextStreamPart,
   ToolApprovalStatus,
   ToolSet,
   ToolUIPart,
   UIMessage,
-  UIMessage as MessageAISDK,
 } from "ai"
 import { getStaticToolName, isStaticToolUIPart } from "ai"
 import { fetchMutation as defaultFetchMutation } from "convex/nextjs"
 import { isConvexArgumentValidationError } from "./utils"
 
-// ---------------------------------------------------------------------------
-// Durable turn runtime (CONTEXT.md): the deep module behind which ALL durable
-// knowledge for one Chat turn lives — the second internal seam the Chat turn
-// runtime composes (beside the Tool runtime). It owns durable-prepare, the UI
-// stream identity answers, the streamText extras (approval gating + the
-// approval-persistence transform), the write timeline (throttled snapshots,
-// per-step tool-invocation upserts, terminal marks with the settle-approvals →
-// flush → mark ordering), the finish handoff (captureFinish → finalize,
-// replacing the three loose `durableFinal*` cells — a missed handoff is LOUD),
-// and fail() legal at any phase. Two production adapters behind one selecting
-// factory (`createDurableTurnRuntime`) that internalizes `isDurableConvexChat`:
-// the Convex adapter and the inert guest adapter. The Convex wire is a directly
-// injected `fetchMutation` (no store port); the Tool runtime crosses through the
-// `ToolFacts` port; AI SDK shapes cross unwrapped. Composed INSIDE
-// `toResponse()`'s single closure — both onEnd layers still share it (ADR-0006
-// intact); the module names the handoff, it does not split it.
-// See `docs/adr/0009-durable-turn-runtime.md`.
-// ---------------------------------------------------------------------------
+// Owns durable preparation, snapshots, tool invocations, approvals, terminal
+// writes, and the typed handoff between model-stream and UI-stream completion.
+// Guest turns use an inert adapter (ADR-0009).
 
 export type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 
@@ -86,9 +71,10 @@ export type DurableTurnDeps = {
  */
 export type ToolFacts = {
   metadata: { source(toolName: string): ToolSource }
-  approvalFor(toolName: string):
-    | { needsApproval?: boolean; reason?: string; riskClass?: string }
-    | undefined
+  approvalFor(
+    toolName: string
+  ):
+    { needsApproval?: boolean; reason?: string; riskClass?: string } | undefined
   toolApproval: Record<string, ToolApprovalStatus> | undefined
 }
 
@@ -188,11 +174,6 @@ export type DurableTurnRuntime = {
   fail(errorMessage: string): Promise<void>
 }
 
-// ---------------------------------------------------------------------------
-// Absorbed vocabulary (was `durable-runtime.ts`) — now module-internal unless a
-// test drives it directly.
-// ---------------------------------------------------------------------------
-
 export type DurableUiMessage = UIMessage & {
   content: string
   createdAt: Date
@@ -216,8 +197,8 @@ export function isDurableConvexChat(options: {
 }): boolean {
   return Boolean(
     options.isAuthenticated &&
-      options.convexToken &&
-      isServerChatId(options.chatId)
+    options.convexToken &&
+    isServerChatId(options.chatId)
   )
 }
 
@@ -346,8 +327,7 @@ function getStringField(
 // ---------------------------------------------------------------------------
 
 type SnapshotPart =
-  | { type: "text"; text: string }
-  | { type: "reasoning"; text: string }
+  { type: "text"; text: string } | { type: "reasoning"; text: string }
 
 const SNAPSHOT_WRITE_TIMEOUT_MS = 10_000
 
@@ -818,23 +798,25 @@ export function createConvexDurableTurn(args: {
       if (facts.toolApproval) {
         extras.toolApproval = facts.toolApproval
       }
-      extras.experimental_transform = createRuntimeApprovalPersistenceTransform({
-        chatId,
-        convexToken,
-        durableRunState: {
-          runId: currentRunId,
-          assistantMessageId: currentMessageId,
-        },
-        toolFacts: facts,
-        approvalWritePromises,
-        requestId,
-        persistApprovalRequest: (approvalArgs) =>
-          fetchMutation(
-            api.chatRuntime.createToolApprovalRequest,
-            approvalArgs,
-            { token: convexToken }
-          ),
-      })
+      extras.experimental_transform = createRuntimeApprovalPersistenceTransform(
+        {
+          chatId,
+          convexToken,
+          durableRunState: {
+            runId: currentRunId,
+            assistantMessageId: currentMessageId,
+          },
+          toolFacts: facts,
+          approvalWritePromises,
+          requestId,
+          persistApprovalRequest: (approvalArgs) =>
+            fetchMutation(
+              api.chatRuntime.createToolApprovalRequest,
+              approvalArgs,
+              { token: convexToken }
+            ),
+        }
+      )
       return extras
     },
 

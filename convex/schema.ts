@@ -37,33 +37,27 @@ const toolApprovalStatus = v.union(
 
 export default defineSchema({
   users: defineTable({
-    // Identity
     workosUserId: v.string(),
     email: v.string(),
     displayName: v.optional(v.string()),
     profileImage: v.optional(v.string()),
 
-    // Status
     anonymous: v.optional(v.boolean()),
     premium: v.optional(v.boolean()),
 
-    // Usage tracking - regular models
     messageCount: v.optional(v.number()),
     dailyMessageCount: v.optional(v.number()),
     dailyReset: v.optional(v.number()), // Unix timestamp
 
-    // Usage tracking - pro models
     dailyProMessageCount: v.optional(v.number()),
     dailyProReset: v.optional(v.number()), // Unix timestamp
 
-    // Activity
     lastActiveAt: v.optional(v.number()), // Unix timestamp
     lastSyncedFromWorkOSAt: v.optional(v.number()), // Unix timestamp
     workosUpdatedAt: v.optional(v.string()), // ISO timestamp from WorkOS
     deletedAt: v.optional(v.number()), // Unix timestamp
     disabledAt: v.optional(v.number()), // Unix timestamp
 
-    // Preferences stored directly on user
     favoriteModels: v.optional(v.array(v.string())),
     systemPrompt: v.optional(v.string()),
   })
@@ -88,17 +82,13 @@ export default defineSchema({
     // derives its indicator from the chat it already subscribes to — no separate
     // query/store/hydrator. All five are OWNER-ONLY: they ride a doc public reads
     // return, so chats.getById/getPublicById strip them for non-owners.
-    // Live phase of the chat's current run; set at start/awaiting, cleared at the
-    // terminal transition. — Phase 1
+    // Live phase of the current run; cleared at its terminal transition.
     liveRunStatus: v.optional(
       v.union(v.literal("streaming"), v.literal("awaiting"))
     ),
-    // The run that currently owns this chat's projected status. Set at run start;
-    // every later projection applies only if the terminating run IS this one, so
-    // an older run's late terminal can't clobber a newer run's row. — Phase 1
+    // Guards the projection so a late terminal event cannot clobber a newer run.
     statusRunId: v.optional(v.id("generationRuns")),
-    // Last *signaling* terminal outcome (completed → unread / failed → error) and
-    // the owner's read cursor. aborted/superseded carry no signal. — Phase 2
+    // Only completed and failed runs signal unread/error to the owner.
     lastRunEndedAt: v.optional(v.number()),
     lastRunStatus: v.optional(
       v.union(v.literal("completed"), v.literal("failed"))
@@ -409,9 +399,7 @@ export default defineSchema({
     durationMs: v.optional(v.number()),
     error: v.optional(v.string()),
     createdAt: v.number(),
-    // Tool source discriminator — identifies which layer produced the tool call.
-    // REQUIRED (not optional) — clean break, no existing data to migrate.
-    // "unknown" covers calls whose tool name no layer's metadata resolves.
+    // "unknown" audits calls that cannot be resolved to a tool layer.
     source: v.union(
       v.literal("builtin"),
       v.literal("third-party"),
@@ -419,26 +407,19 @@ export default defineSchema({
       v.literal("platform"),
       v.literal("unknown")
     ),
-    // Service name for display and filtering (e.g., "OpenAI", "Exa", "my-mcp-server")
     serviceName: v.optional(v.string()),
 
-    // --- Phase C: Observability enrichment (all optional, backward compatible) ---
-
-    // Step number within the streaming response (1-indexed).
-    // Enables ordering tool calls chronologically within a single generation.
+    // One-indexed for chronological ordering within a generation.
     stepNumber: v.optional(v.number()),
 
-    // Token usage for the step that produced this tool call.
-    // Captured from onStepFinish usage — NOT per-tool, but per-step.
+    // Step-level usage, not usage attributable to an individual tool.
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
 
-    // Original result size in bytes before truncation.
-    // Helps identify tools that consistently return large results.
+    // Original size before result truncation.
     resultSizeBytes: v.optional(v.number()),
 
-    // Request-level correlation ID (crypto.randomUUID() from the chat route).
-    // Enables joining tool calls, PostHog events, and console logs for a single request.
+    // Correlates tool logs with request analytics and diagnostics.
     requestId: v.optional(v.string()),
     // Policy denial enrichment (optional). Present when a wrapper denies a call
     // due to budget controls before execution.
@@ -449,7 +430,6 @@ export default defineSchema({
     ),
     budgetDenied: v.optional(v.boolean()),
 
-    // Payment guardrail observability (Phase 6)
     intentClass: v.optional(v.string()),
     policyDecision: v.optional(v.string()),
     chatVersion: v.optional(v.number()),

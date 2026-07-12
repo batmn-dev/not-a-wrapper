@@ -5,7 +5,7 @@ import { createGoogle, google } from "@ai-sdk/google"
 import { createMistral, mistral } from "@ai-sdk/mistral"
 import { createOpenAI, openai } from "@ai-sdk/openai"
 import { createPerplexity, perplexity } from "@ai-sdk/perplexity"
-import type { LanguageModelV3, LanguageModelV4 } from "@ai-sdk/provider"
+import type { LanguageModelV4 } from "@ai-sdk/provider"
 import { createXai, xai } from "@ai-sdk/xai"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import type { ToolSet } from "ai"
@@ -65,26 +65,12 @@ function asSearchTool(tool: unknown): ToolSet[string] {
 }
 
 /**
- * The concrete model shapes our providers produce: the first-party @ai-sdk
- * v4-generation providers implement `LanguageModelV4`; the community
- * OpenRouter provider still implements `LanguageModelV3` (ai@7 accepts both
- * spec versions). Widening past this union — e.g. a provider handing back a
- * V2 model — should fail compilation rather than silently regress.
- *
- * What the V3 path silently degrades (ai@7's V3→V4 shim is a thin proxy that
- * only fakes `specificationVersion` — V4-only call options pass through and
- * are ignored by the model):
- *   - the unified `reasoning` effort call option ('minimal'…'xhigh') — do NOT
- *     use it to configure OpenRouter models; their reasoning knob is a
- *     construction-time provider setting (`.chat(id, { reasoning })`), not a
- *     per-call option (see request-shaping.ts)
- *   - V4-only content shapes (custom content parts, reasoning-file parts)
- *
- * TODO(openrouter-v4): when @openrouter/ai-sdk-provider ships a v4-spec
- * release (peer `ai ^7`), bump it, delete `LanguageModelV3` from this union,
- * and let the compiler surface every place that tolerated the V3 shape.
+ * Every provider used by this registry implements AI SDK 7's
+ * `LanguageModelV4` interface. Widening the boundary to an older model spec
+ * should fail compilation rather than silently reintroduce a compatibility
+ * shim.
  */
-export type ProviderLanguageModel = LanguageModelV4 | LanguageModelV3
+export type ProviderLanguageModel = LanguageModelV4
 
 /**
  * A provider's @ai-sdk client, constructed once from a resolved API key and
@@ -254,13 +240,11 @@ const STRATEGIES: Record<Provider, ProviderStrategy> = {
     id: "openrouter",
     envVarName: "OPENROUTER_API_KEY",
     instance(apiKey) {
-      // OpenRouter is the documented irregular: no callable default singleton,
-      // self-resolved env fallback (the SDK does not read it), `.chat()` to
-      // produce a LanguageModelV3 (the community provider has no v4-spec
-      // release; ai@7 accepts V3 models), the `openrouter:` prefix strip, and
-      // the construction-settings mapping (reasoning is a `.chat()` setting —
-      // the V3 model silently ignores ai@7's unified per-call `reasoning`).
-      // All five stay body-internal — they never widen the shared interface.
+      // OpenRouter is the documented irregular: use a configured factory for
+      // explicit BYOK/env key selection, `.chat()` to produce its V4 chat
+      // model, strip the `openrouter:` prefix, and map construction settings
+      // (reasoning remains a `.chat()` setting in the provider API). These
+      // choices stay body-internal — they never widen the shared interface.
       const provider = createOpenRouter({
         apiKey: apiKey || process.env.OPENROUTER_API_KEY,
         compatibility: "strict",

@@ -6,7 +6,7 @@
 
 ## Mission
 
-You are a senior software engineer performing a **deep concurrency audit of the chat streaming and persistence subsystem** of this app (Next.js App Router + AI SDK v6/v7 + Convex). Your job has two phases:
+You are a senior software engineer performing a **deep concurrency audit of the chat streaming and persistence subsystem** of this app (Next.js App Router + AI SDK v7 + Convex). Your job has two phases:
 
 1. **Investigate**: build a complete, evidence-backed model of every concurrent interleaving in the generation lifecycle — send, stream, snapshot persistence, stop/abort, error, navigation, edit, regenerate, branch-switch, and the zombie-run sweep — and identify where the current design is fragile, racy, or merely patched.
 2. **Fix**: resolve the known open bug (below) and any confirmed defects you find. When choosing how to fix, **lean toward composable, mature, industry-standard designs — including an architectural refactor if one is genuinely warranted**. This app is pre-launch with **no users and a disposable dev database** (see `AGENTS.md`, "The Database Is Disposable"), so schema changes, protocol changes, and structural refactors are cheap right now and expensive later. Do not refactor for its own sake; do refactor when the honest answer to "what would a mature system do here?" is structurally different from what exists.
@@ -28,7 +28,13 @@ Treat the count-based version guard itself with suspicion: comparing two indepen
 
 These were verified live in early July 2026; the code may have moved. Confirm each before relying on it.
 
-**Server runtime**: `app/api/chat/route.ts` → `chat-turn-runtime.ts` → `durable-runtime.ts` (+ `outcome-sinks.ts`, `lib/chat-store/turns/chat-turn-service.ts`). Convex side: `convex/chatRuntime.ts` (prepareGeneration, applyEditIntentForGeneration, markGenerationRun{Completed,Aborted,Failed}, updateAssistantSnapshot, closeSupersededGenerationsForChat), shared visibility in `convex/domain/message_visibility.ts`.
+**Server runtime**: `app/api/chat/route.ts` → `chat-turn-runtime.ts` →
+`durable-turn-runtime.ts` (+ `outcome-sinks.ts`). Client turn orchestration lives
+under `lib/chat-turn/`. Convex side: `convex/chatRuntime.ts`
+(prepareGeneration, applyEditIntentForGeneration,
+markGenerationRun{Completed,Aborted,Failed}, updateAssistantSnapshot,
+closeSupersededGenerationsForChat), with shared visibility in
+`convex/domain/message_visibility.ts`.
 
 **Abort chain** (sound end-to-end — do not re-litigate): `useChat().stop()` aborts the fetch → Next dev fires `req.signal` ~1s after disconnect → `streamText` forwards into the provider fetch → `onAbort` fires ~30ms later. On Stop, **both** `streamText.onAbort` and response-level `onFinish(isAborted)` flush the snapshot tracker ~200ms apart — dual-flush overlap is a known hazard class. A past livelock (boolean `pending` flag re-armed by concurrent force loops, blocking `markGenerationRunAborted` forever and OCC-starving the next `prepareGeneration`) was fixed with content-versioned dirtiness in `createDurableSnapshotTracker` plus a terminal-run guard in `updateAssistantSnapshot`. Evaluate whether those fixes are point-patches on a structurally fragile flush design.
 

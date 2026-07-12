@@ -1,11 +1,11 @@
 # Not A Wrapper Installation Guide
 
-Not A Wrapper is a Next.js AI chat app with Convex persistence, WorkOS AuthKit, BYOK provider keys, and Vercel AI SDK v6 streaming.
+Not A Wrapper is a Next.js AI chat app with Convex persistence, WorkOS AuthKit, BYOK provider keys, and Vercel AI SDK v7 streaming.
 
 ## Prerequisites
 
 - Bun 1.3.1 or later.
-- Node 22.11.0 or later.
+- Node 22.13.0 or later.
 - Git.
 - WorkOS project.
 - Convex project.
@@ -121,16 +121,6 @@ bun run dev:next
 bun run dev:convex
 bun run dev:clean
 ```
-
-## AI Tool Skills
-
-For AI coding tools that use this repo's local skills, run:
-
-```bash
-./.agents/skills/sync-agent-skills/scripts/sync-skills.sh
-```
-
-The script creates gitignored symlinks for supported tools and keeps `.agents/skills/` as the canonical source.
 
 ## Verification
 

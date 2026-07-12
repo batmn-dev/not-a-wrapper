@@ -13,19 +13,9 @@ import type { ReactNode } from "react"
 import { PanelCloseButton, TitleDurationCluster } from "./panel-header"
 
 /**
- * Breakpoint scrim (GA §C3, §6.2, §7 R7): mobile black/30, NO blur, instant;
- * tablet (sm) gray/50 (light) or black/50 (dark) with a 1px blur and a 250ms
- * fade. This is the ONLY behavior that needs the additive `overlayClassName`.
- *
- * The Sheet primitive's overlay applies `supports-backdrop-filter:backdrop-blur-xs`
- * unconditionally; the reference mobile sheet has no blur. We can't edit the
- * primitive (compose-don't-mutate), so the per-breakpoint blur is set with `!`
- * over disjoint media queries: `max-sm` forces it off, `sm` pins 1px — neither
- * relies on cascade order against the primitive's base. `max-sm:transition-none`
- * makes the mobile entrance instant; `motion-reduce:transition-none!` suppresses
- * the tablet fade — it needs `!` because the `sm:transition-opacity` we add here
- * sorts AFTER the plain motion-reduce rule at equal specificity and would
- * otherwise win under prefers-reduced-motion at >=640px.
+ * Override the shared Sheet overlay per breakpoint: mobile has no blur or
+ * transition; tablet has a 1px blur and fade. Important modifiers beat the
+ * primitive and keep reduced motion authoritative after Tailwind sorting.
  */
 const OVERLAY_CLASSNAME = cn(
   // Mobile: flat scrim, no blur, instant (force the primitive's blur off).
@@ -47,17 +37,7 @@ export type ContentSheetShellProps = {
   className?: string
 }
 
-/**
- * ContentSheetShell — the `<lg` Activity panel shell, composed entirely over the
- * existing Sheet public API (plan §5 commit 2, GA §7 R2). Mobile: a bottom sheet
- * with a drag handle and a hidden close (dismiss via the handle/backdrop).
- * Tablet (`sm`): a centered card with the close button shown.
- *
- * The ONLY primitive change is the additive `overlayClassName`; sheet.tsx
- * defaults stay byte-identical. Per fix-overlay-bleedthrough discipline the
- * surface stays opaque (the primitive's `bg-popover`) — the scrim is applied to
- * the backdrop only, never retinted onto the surface.
- */
+/** Mobile bottom sheet and tablet centered card over the shared Sheet API. */
 export function ContentSheetShell({
   panelId,
   open,

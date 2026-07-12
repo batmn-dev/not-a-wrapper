@@ -70,21 +70,12 @@ function createUsageCheckApiError(
   })
 }
 
-/**
- * Check if a model is a "pro" model (requires more stringent limits)
- */
+/** Whether the model uses the stricter usage tier. */
 export function isProModel(modelId: string): boolean {
   return !FREE_MODELS_IDS.includes(resolveModelId(modelId))
 }
 
-/**
- * Server-side usage check using Convex with authenticated token
- * This enforces rate limits before allowing the request to proceed
- *
- * @param token - Convex auth token (undefined for anonymous users)
- * @param modelId - The model being used
- * @param anonymousId - Client-generated ID for anonymous users (required if no token)
- */
+/** Enforce the Convex-backed usage limit before model execution. */
 export async function checkServerSideUsage(
   token: string | undefined,
   modelId: string,
@@ -118,14 +109,7 @@ export async function checkServerSideUsage(
   }
 }
 
-/**
- * Server-side usage increment using Convex with authenticated token
- * This is called after successful validation to track usage
- *
- * @param token - Convex auth token (undefined for anonymous users)
- * @param modelId - The model being used
- * @param anonymousId - Client-generated ID for anonymous users (required if no token)
- */
+/** Record admitted usage after request validation. */
 export async function incrementServerSideUsage(
   token: string | undefined,
   modelId: string,
@@ -140,10 +124,7 @@ export async function incrementServerSideUsage(
   )
 }
 
-/**
- * Validate user access to model and check for required API keys
- * Note: Usage rate-limiting is now enforced via checkServerSideUsage
- */
+/** Validate authentication and BYOK access; usage limits are checked separately. */
 export async function validateAndTrackUsage({
   userId,
   model,
@@ -152,9 +133,7 @@ export async function validateAndTrackUsage({
 }: ChatApiParams): Promise<null> {
   const resolvedModel = resolveModelId(model)
 
-  // Check if user is authenticated
   if (!isAuthenticated) {
-    // For unauthenticated users, only allow specific models
     if (!NON_AUTH_ALLOWED_MODELS.includes(resolvedModel)) {
       throw Object.assign(
         new Error(
@@ -164,13 +143,8 @@ export async function validateAndTrackUsage({
       )
     }
   } else {
-    // For authenticated users, check API key requirements
     const provider = getProviderForModel(resolvedModel)
-
-    // Check if user has their own API key for this provider
     const hasKey = await hasUserKey(provider, token)
-
-    // If no API key and model is not in free list, deny access
     if (!hasKey && !FREE_MODELS_IDS.includes(resolvedModel)) {
       throw Object.assign(
         new Error(

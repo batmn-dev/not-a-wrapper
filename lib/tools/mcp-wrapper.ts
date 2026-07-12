@@ -1,11 +1,3 @@
-// lib/tools/mcp-wrapper.ts
-//
-// Unified MCP tool wrapper — handles timing, timeout, truncation, and envelope
-// in a single execute() body. Follows the Exa gold standard pattern from
-// lib/tools/third-party.ts:82-119.
-//
-// Replaces wrapToolsWithTruncation(mcpTools) in route.ts:300-302.
-
 import {
   MAX_TOOL_RESULT_SIZE,
   MCP_CIRCUIT_BREAKER_THRESHOLD,
@@ -26,7 +18,7 @@ import {
   truncateToolResult,
 } from "./utils"
 
-// Re-export trace types for backward compatibility (route.ts imports from here)
+// Compatibility exports for existing consumers.
 export { ToolTraceCollector, type ToolTrace }
 export { ToolTimeoutError }
 
@@ -42,42 +34,20 @@ function isTransientCircuitFailure(
   )
 }
 
-// ── Configuration ──────────────────────────────────────────
-
 type WrapMcpToolsConfig = {
-  /** Map of namespaced tool names → server info for display names and audit */
   toolServerMap: Map<string, ServerInfo>
-  /** Trace collector — shared with onStepFinish/onFinish in route.ts */
   traceCollector: ToolTraceCollector
-  /** Request-scoped correlation ID for grouping tool traces */
   requestId?: string
-  /** Per-tool timeout in ms. Default: MCP_TOOL_EXECUTION_TIMEOUT_MS (30s) */
   timeoutMs?: number
-  /** Max result size in bytes. Default: MAX_TOOL_RESULT_SIZE (100KB) */
   maxResultBytes?: number
-  /** Optional centralized budget enforcement hook */
   enforceToolBudget?: (toolName: string) => Promise<void>
 }
-
-// ── Wrapper ────────────────────────────────────────────────
 
 /**
  * Wrap MCP tools with timeout, timing, truncation, and envelope.
  *
- * Follows the Exa gold standard (third-party.ts:82-119):
- * all concerns handled in a single execute() body.
- *
- * Replaces wrapToolsWithTruncation(mcpTools) at route.ts:300-302.
- *
- * Error behavior: throws on failure (does NOT envelope errors).
- * This preserves the AI SDK's isError detection in the step-end
- * outcome recording for audit logs and PostHog events. The SDK passes the error message
- * to the model as a tool result — the model can still explain
- * "tool X failed" without the app crashing.
- *
- * @param tools - MCP ToolSet from loadUserMcpTools()
- * @param config - Wrapper configuration
- * @returns Wrapped ToolSet with timeout, timing, truncation, envelope
+ * Failures remain thrown so the AI SDK records tool errors correctly; successful
+ * results are enveloped and truncated.
  */
 export function wrapMcpTools(
   tools: ToolSet,
@@ -100,9 +70,7 @@ export function wrapMcpTools(
   for (const [name, t] of Object.entries(tools)) {
     const original = t as Record<string, unknown>
 
-    // Tools without execute (e.g., provider tools with providerExecuted: true)
-    // pass through unchanged. This is a safety net — MCP tools should always
-    // have execute, but we check to avoid runtime errors.
+    // Provider-executed tools have no local execute function.
     if (typeof original.execute !== "function") {
       wrapped[name] = original
       continue

@@ -16,8 +16,12 @@
 
 import type { UserProfile } from "@/lib/user/types"
 import type { UIMessage } from "@ai-sdk/react"
-import { createUIMessageStreamResponse, streamText } from "ai"
-import { MockLanguageModelV3, simulateReadableStream } from "ai/test"
+import {
+  createUIMessageStreamResponse,
+  streamText,
+  toUIMessageStream,
+} from "ai"
+import { MockLanguageModelV4, simulateReadableStream } from "ai/test"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import {
@@ -145,7 +149,7 @@ function makeUiMessageSseResponse(options: {
   chunkDelayInMs: number | null
 }) {
   const result = streamText({
-    model: new MockLanguageModelV3({
+    model: new MockLanguageModelV4({
       doStream: async () => ({
         stream: simulateReadableStream({
           chunks: [
@@ -169,7 +173,9 @@ function makeUiMessageSseResponse(options: {
     }),
     prompt: "hi",
   })
-  return createUIMessageStreamResponse({ stream: result.toUIMessageStream() })
+  return createUIMessageStreamResponse({
+    stream: toUIMessageStream({ stream: result.stream }),
+  })
 }
 
 /**

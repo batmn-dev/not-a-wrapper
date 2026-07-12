@@ -1,28 +1,48 @@
-# To Do Items
+# To Do
 
-A list of tasks we should eventually implement when the time is right
-
-- Chat side panel (ChatGPT-style): expose reasoning, sources, and other turn metadata without cluttering the main thread.
-  - Activity-panel live multi-step timeline. Scaffolding is already in place and kept INTENTIONALLY (do not "clean up" as dead code):
-    - `ActivityPanel` carries `steps` / `phase` / `isReasoningStreaming` via `panelProps` but does not render them yet (`app/components/chat/activity/activity-panel.tsx` — see the annotated `ActivityPanelProps`).
-    - `ActivityTimeline` keeps the `globe` / `bullet` markers and the `chips` body cva variants for the multi-step view (`activity/activity-timeline.tsx`); today only `done` / `description` render.
-    - `DockedFlyoutShell.viewportRef` is wired to the ScrollArea for auto-scroll-on-stream but is not passed yet.
-    - `components/ui/badge.tsx` `variant="source"` now styles the settled-turn sources badge (`app/components/chat/sources-badge.tsx`); the panel's timeline source chips can compose or extend it when the multi-step view lands.
-    - Reference grounding (checked against `reference-ui/ChatGPT`): `steps` + the three markers + chip bodies are SUPPORTED (the capture shows 40 steps); `isReasoningStreaming` + panel auto-scroll are PARTIAL (animation + reserved slot present, live behavior not captured); `phase` ("thinking"/"complete") is NOT-FOUND in the captures (settled-state only) — speculative, re-verify against a live "still thinking" capture before wiring.
-- Dictation in the chat composer: voice input to text for message entry.
-- In-chat image generation: prompt-to-image in the conversation flow, similar to ChatGPT.
-- Interactive response widgets: richer agent UX for structured outputs (weather, stock charts, link/image previews, etc.).
-- Agent file library: a durable file system or library the agent can browse and reference across chats.
-- Connectors: integrate external apps and data sources the agent can use during conversations.
-- Admin controls: user management, feature access, token usage, and potential billing controls.
-- Design system for new UI: build reusable components and document components and design patterns for agents to follow.
-- Better in-progress conversation view: investigate and replicate a richer streaming/thinking state. Leaving a chat tab while the model is thinking and returning shows an empty thinking state — no progress indicator, no sign of where the model currently is. Persist and surface in-progress status so returning to the tab shows live progress.
-- AI SDK deprecated-alias watch (no action possible yet; re-checked 2026-07-04 against ai@7.0.15): `experimental_transform` still has no stable rename (upstream is adding stable twins progressively — `telemetry`, `onStart`, `include` have them; `transform` does not) — migrate when one ships. The Anthropic `pause_turn` search-downgrade workaround in `lib/openproviders/request-shaping.ts` is still required: `@ai-sdk/anthropic@4.0.8` maps `pause_turn` → `"stop"` with no continuation. `experimental_toolApprovalSecret` (HMAC-signed approval tokens) stays unadopted on purpose: it needs a stable cross-instance secret AND a drain story for approvals already pending at deploy time (missing signature → `InvalidToolApprovalSignatureError`).
-- Exa search re-verify (blocked on the user's Exa key, NOT on code — verified 2026-07-04): the full Layer-2 path is proven live on Mistral Large: both Exa tools inject, the model calls `web_search`, execution reaches Exa with the BYOK key (`keyMode: "byok"` — no `EXA_API_KEY` in env), the error surface works (`output-error` part, `errorCode: "auth"` in toolCallLog, model degrades gracefully, turn completes). Exa's API rejects the stored key ("Invalid API key"). After re-saving a valid Exa key in Settings → Tools, re-run one search turn (sources should render) and one `extract_content` turn ("read this URL…"). The key-save route now trims pasted whitespace (`app/api/user-keys/route.ts`), which was a plausible cause; re-saving the same key may be enough.
-- Activity panel: failed tool calls are invisible (observed 2026-07-04): a turn whose only tool call errored (`tool-web_search` part with `state: "output-error"`) renders an EMPTY Activity panel — the user sees the model claim "I can't search" with no trace of the attempted call. Matches the known scaffolding state (only `done`/`description` render today); when the multi-step timeline lands, failed steps need a rendered error state.
-- Centralize model route-labelling/icon logic (flagged in the 2026-07-05 catalog-expansion review; consolidation deferred to avoid scope creep): the "which vendor / which route" derivation for a `ModelConfig` is duplicated across three sites that can drift — the selector rows (`components/common/model-selector/base.tsx`, both the mobile `renderModelItem` and the desktop dropdown carry their own `providerId === "openrouter"` label + icon lookup), the settings available-models badge and favorites row (`app/components/layout/settings/models/models-settings.tsx` — `getProviderIcon` resolves by `baseProviderId` with an OpenRouter fallback while other rows key off `model.icon`), and the settings section grouping. Extract `getModelRouteLabel(model)` (returns "OpenRouter" for wrapped entries, else the provider name) and `getModelIcon(model)` (the `baseProviderId` → `icon` → openrouter-fallback precedence, written once) into `lib/providers` or `lib/models`, and have all sites consume them; ideally fold the two selector renderers into one shared `ModelRow`. No behavior change today — the three expressions currently agree only because the generator emits `icon` values that shadow the `baseProviderId` mapping.
-- Sidebar row items are duplicated, not composable (flagged 2026-07-07 after a ChatGPT-fidelity fix on the trailing button had to be applied three times and initially skipped one copy). The chat row (`app/components/layout/sidebar/sidebar-item.tsx`), the project-chat card (`app/components/layout/sidebar/project-chat-item.tsx`), and the project row (`app/components/layout/sidebar/sidebar-project-item.tsx`) each hand-roll the same structure: the `.sidebar-row` container className (hover == selected == menu-open tint via `--sidebar-row-active-background`, `menu-item-hoverable`, sizing), the `useInlineRename` editing/rename mode (`<div>` + input + save/cancel buttons), the `<Link>`-wraps-trailing single-anchor / no-dead-corners structure, and the `.sidebar-row-action` reveal slot. Because it is copy-paste rather than compose, a shared fix drifts across copies. Investigate (write up options first — do NOT bulk-apply):
-  - Refactor: extract a composable `<SidebarRow>` primitive with `leading` (icon) / `title`+`subtitle` / `trailing` (status + actions) slots that owns the container className, the single-anchor Link, and the editing mode; the three row components become thin configs over it.
-  - Rename/prune the naming zoo (`sidebar-item` vs `sidebar-menu-item` vs `sidebar-project-item` vs `project-chat-item`, and `sidebar-item-menu` vs `sidebar-project-menu`); read `sidebar-menu-item.tsx` / `sidebar-list.tsx` / `app-sidebar.tsx` first to map what each does; consolidate `ChatActionsMenu` and `SidebarProjectMenu` if they can share a menu primitive.
-  - Refine: fold the duplicated editing-mode markup and the container-className builder into the primitive so a future style change lands in exactly one place.
-  - Build on (do NOT undo) the pieces already shared: `app/components/layout/sidebar/trailing-icon-button.tsx` (`trailingIconButtonClassName` / `TrailingIconChip` / `SidebarChatPinButton`) and the `.sidebar-row*` rules in `app/globals.css` (reveal-by-reflow, the tint token, the `.trailing-icon-chip` focus ring, and the `.sidebar-row-action > button ~ button` chip-overlap that is intentionally NOT `-space-x` — it must survive the `position:fixed` focus-guard `<span>`s base-ui injects around the menu trigger, which otherwise shift the button on menu-open). Flag anything that touches the shared design tokens or the shared `defaultTrigger`.
+- **Chat side panel:** finish the live multi-step timeline. Preserve the
+  intentional `ActivityPanel`, `ActivityTimeline`, and
+  `DockedFlyoutShell.viewportRef` scaffolding; re-verify live thinking behavior
+  against a current reference before wiring speculative `phase` behavior.
+- **Better in-progress conversation view:** persist and surface active progress
+  when a user leaves and returns to a streaming chat.
+  - **Assistant message highlighting:** Add to chat
+- **Add chat-composer dictation**
+- **Voice Mode:** Using Eleven Labs
+- **Image generation:** Nano banna and state of the art image gen tools (Using Vercel's SDK Framework)
+- **Video generation:** Using Vercel's SDK framework
+- **Assistant Response UI Widgets:** Image Carousels, Image Previews, Weather, Stock UI, Charts (maybe), editable markdown (maybe)
+- **Monetization:** Setup Usage-based monthly pricing using Stripe or better option
+- **Admin Portal:** A way to manage users, controls, features, etc...
+- **Agent-first file library:** Create a computer-like environment where agents can easily discover files?
+- **Connectors:** Integrations with Google, YouTube, Figma, and personal tools
+- **Agentic Design System:** A customizable design system that helps agents ship consistent and high quality UI
+- **AI SDK stable approval-persistence hook:** retain the Durable turn runtime's
+  `experimental_transform` while it is the only released pre-callback,
+  backpressure-preserving seam for persisting approval requests before forwarding
+  them. Exit when a stable released API preserves ordering, abort propagation,
+  multi-step behavior, and approval-settle -> snapshot-flush -> terminal-write
+  ordering without moving durable ownership out of ADR-0009.
+- **Anthropic `pause_turn` continuation:** retain the catalog-scoped fixed-thinking
+  search workaround only for Claude 4.6 models that still accept `budget_tokens`;
+  never apply it to adaptive-only models. Measure production incidence of raw
+  `pause_turn` by model and search configuration before changing terminal
+  semantics. Exit when a released AI SDK or Anthropic provider correctly replays
+  paused assistant content with the same tools, bounded continuation, abort
+  propagation, deduplicated parts, and exact aggregate usage—or after a fully
+  tested provider-specific continuation adapter provides those guarantees.
+- **Signed tool approvals:** defer `experimental_toolApprovalSecret` until the
+  coherent AI SDK patch line preserves signatures end to end and the deployment
+  has a shared-secret, unsigned-pending-approval, and rotation strategy. Reassess
+  adoption when the API is stable or the application begins trusting
+  noncanonical client history. Do not introduce application-owned signing while
+  Convex remains the canonical authenticated approval authority without a
+  demonstrated threat gap.
+- **Edit/regeneration freshness:** replace the selected-message count proxy with
+  a server-issued revision or equivalent identity-bearing token. The unresolved
+  drift scenario and verification requirements live in
+  `docs/streaming-persistence-concurrency-audit-prompt.md`.
+- **Exa verification:** after saving a valid BYOK Exa key, verify one search turn
+  and one `extract_content` turn. The current stored key was rejected by Exa.
+- **Model presentation:** centralize route labels and icon precedence currently
+  duplicated across model selectors and settings.

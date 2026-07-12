@@ -1,6 +1,6 @@
 # Not A Wrapper
 
-**Not A Wrapper** is an open-source, multi-AI chat platform with a unified interface for 30+ configured models across major providers. Bring your own API keys, connect MCP tools, upload files, and organize conversations into projects — all from a single, clean interface.
+**Not A Wrapper** is an open-source, multi-AI chat platform with a unified interface across major providers. Bring your own API keys, connect MCP tools, upload files, and organize conversations into projects.
 
 Forked from [Zola](https://github.com/ibelick/zola) and rebuilt with Convex, WorkOS AuthKit, and the Vercel AI SDK.
 
@@ -35,17 +35,9 @@ Forked from [Zola](https://github.com/ibelick/zola) and rebuilt with Convex, Wor
 
 ## Supported AI Providers
 
-| Provider       | Notable Models                            | Capabilities                          |
-| -------------- | ----------------------------------------- | ------------------------------------- |
-| **OpenAI**     | GPT-5.4, GPT-5.4 Pro, GPT-5 Mini          | Vision, Tools, Web Search             |
-| **Anthropic**  | Claude Opus 4.6, Sonnet 4.6, Haiku 4.5    | Extended thinking, Vision, Web Search |
-| **Google**     | Gemini 2.5 Pro, 2.5 Flash, 2.5 Flash-Lite | Vision, Multimodal, Web Search        |
-| **Mistral**    | Mistral Large, Mistral Small, Codestral   | Vision, Code                          |
-| **xAI**        | Grok 4.1 Fast, Grok Code Fast             | Vision, Reasoning                     |
-| **Perplexity** | Sonar, Sonar Reasoning Pro                | Built-in web search                   |
-| **OpenRouter** | DeepSeek R1, Llama 3.3 8B Instruct        | Aggregator, BYOK                      |
-
-> Models are regularly updated. The full list is configured in `lib/models/`.
+The configured catalog includes OpenAI, Anthropic, Google, Mistral, xAI,
+Perplexity, and OpenRouter-hosted models. Because model availability changes
+frequently, `lib/models/` is the source of truth.
 
 ## Quick Start
 
@@ -70,7 +62,7 @@ The current Convex setup uses the official WorkOS AuthKit component for webhook-
 | Framework     | [Next.js 16](https://nextjs.org/) (App Router), React 19, TypeScript                                                                                                                 |
 | Database      | [Convex](https://convex.dev) — Real-time reactive database with file storage and WorkOS webhook-backed user sync                                                                     |
 | Auth          | [WorkOS AuthKit](https://workos.com/authkit) — Hosted authentication with guest access preserved                                                                                     |
-| AI            | [Vercel AI SDK v6](https://sdk.vercel.ai/) — Multi-provider streaming, tool calling                                                                                                  |
+| AI            | [Vercel AI SDK v7](https://ai-sdk.dev/) — Multi-provider streaming, tool calling                                                                                                     |
 | State         | Zustand + TanStack Query                                                                                                                                                             |
 | UI            | [Base UI](https://base-ui.com/) + [Tailwind CSS 4](https://tailwindcss.com/)                                                                                                         |
 | Observability | [Sentry](https://sentry.io/) for app/error tracing, [PostHog](https://posthog.com/) for product and LLM analytics, [Braintrust](https://www.braintrust.dev/) for AI traces and evals |
@@ -84,9 +76,9 @@ app/                        # Next.js App Router
 ├── c/[chatId]/             # Chat pages
 ├── p/[projectId]/          # Project pages
 ├── share/[chatId]/         # Public share pages
-	└── components/
-	    ├── chat/               # Chat UI, message rendering, tool invocations
-	    ├── layout/             # Sidebar, settings, dialogs
+└── components/
+    ├── chat/               # Chat UI, message rendering, tool invocations
+    ├── layout/             # Sidebar, settings, dialogs
     └── history/            # Chat history
 
 lib/                        # Shared logic

@@ -1,5 +1,3 @@
-// lib/tools/third-party.ts
-
 import {
   EXA_CONTENT_FRESHNESS_MAX_AGE_HOURS,
   THIRD_PARTY_EXTRACTION_CACHE_MAX_ENTRIES,
@@ -22,10 +20,7 @@ import {
   truncateToolResult,
 } from "./utils"
 
-// ── Content Extraction Cache ────────────────────────────────
-// Process-level LRU cache for content extraction results.
-// Same URL in multi-turn conversations avoids re-fetching from Exa.
-// TTL: 15 min. Max entries: 500. Shared across requests (public URLs only).
+// Process-level cache shared only for public URL content.
 
 type CachedExtraction = { url: string; title?: string; content?: string }
 
@@ -58,11 +53,6 @@ function setCachedExtraction(inputUrl: string, data: CachedExtraction): void {
   extractionCache.set(normalizeUrl(inputUrl), data)
 }
 
-// ── Search Result Cache ─────────────────────────────────────
-// Process-level LRU cache for search results.
-// Same query in multi-turn conversations avoids re-fetching from Exa.
-// TTL: 15 min. Max entries: 500. Shared across requests.
-
 type CachedSearchResult = {
   title?: string
   url: string
@@ -88,32 +78,13 @@ function setCachedSearch(query: string, data: CachedSearchResult[]): void {
   searchCache.set(normalizeQuery(query), data)
 }
 
-/**
- * Configuration for third-party tool loading.
- * The coordinator (route.ts) determines which capabilities to skip
- * based on what Layer 1 (built-in provider tools) already provides.
- * Route.ts only calls getThirdPartyTools when Layer 1 didn't provide search.
- */
 export type ThirdPartyToolOptions = {
-  /**
-   * Skip loading search tools.
-   * Set to true when Layer 1 already provides a search tool for this provider.
-   * In practice, route.ts only calls getThirdPartyTools when Layer 1 didn't
-   * provide search, so this will typically be false when called.
-   * Kept for future extensibility (e.g., skip search but load other tools).
-   */
+  /** Omit search when another tool layer already provides it. */
   skipSearch?: boolean
 
   /**
-   * Resolved Exa API key.
-   * Key resolution order (handled by caller in route.ts):
-   *   1. User BYOK key from Convex userKeys (Phase 5)
-   *   2. Platform env var: process.env.EXA_API_KEY
-   *   3. undefined (no key → skip Exa tools)
-   *
-   * The exa-js SDK requires an explicit key in its constructor —
-   * it does not read from process.env. This is intentional: it ensures
-   * BYOK keys are passed directly without env var manipulation.
+   * Resolved Exa key passed explicitly so BYOK never mutates process state.
+   * Undefined disables Exa tools.
    */
   exaKey?: string
 }
@@ -125,9 +96,8 @@ export type ThirdPartyToolOptions = {
  * @exalabs/ai-sdk, because the latter reads API keys from env vars only
  * and does not support explicit key passthrough needed for BYOK.
  *
- * This module is intentionally decoupled from Layer 1 (provider tools).
- * It does not know or check which providers have built-in search.
- * The `skipSearch` flag is set by the coordinator (route.ts).
+ * Provider capability policy belongs to the caller; this module obeys
+ * `skipSearch` without inspecting provider-native tools.
  *
  * @param options - Configuration for which tools to load and with which keys
  * @returns A ToolSet with third-party tools, or empty object
@@ -179,7 +149,7 @@ export async function getThirdPartyTools(
               query: "latest federal reserve interest rate decision summary",
             },
           },
-          { input: { query: "vercel ai sdk 6 tool calling docs" } },
+          { input: { query: "vercel ai sdk 7 tool calling docs" } },
         ],
         execute: async ({ query }, options) => {
           const startMs = Date.now()

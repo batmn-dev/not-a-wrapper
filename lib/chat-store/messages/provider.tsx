@@ -190,9 +190,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
       const effectiveChatId = overrideChatId || chatId
       if (!effectiveChatId) return
 
-      // Ensure createdAt exists for correct cache sort order (AI SDK v6
-      // UIMessages don't include createdAt; without it the message sorts to
-      // epoch-0 in the IndexedDB cache).
+      // The cache requires createdAt; SDK messages without it sort at epoch 0.
       const messageToCache: ExtendedUIMessage = message.createdAt
         ? message
         : { ...message, createdAt: new Date() }
@@ -341,19 +339,17 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     [chatId, selectBranchMutation]
   )
 
-  // setMessages for backward compatibility - updates optimistic messages
+  // Callers may replace only optimistic rows; server rows remain query-owned.
   const setMessages = useCallback(
     (action: React.SetStateAction<ExtendedUIMessage[]>) => {
       if (typeof action === "function") {
         updateOptimisticMessages((prev) => {
           const allMessages = [...serverMessages, ...prev]
           const newMessages = action(allMessages)
-          // Keep only messages not in server data
           const serverIds = new Set(serverMessages.map((m) => m.id))
           return newMessages.filter((m) => !serverIds.has(m.id))
         })
       } else {
-        // Direct set - keep only messages not in server data
         const serverIds = new Set(serverMessages.map((m) => m.id))
         updateOptimisticMessages(() =>
           action.filter((m) => !serverIds.has(m.id))
