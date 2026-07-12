@@ -6,9 +6,13 @@
   against a current reference before wiring speculative `phase` behavior.
 - **Better in-progress conversation view:** persist and surface active progress
   when a user leaves and returns to a streaming chat.
-- Add chat-composer dictation, in-chat image generation, interactive response
-  widgets, an agent file library, connectors, admin controls, and a documented
-  design system.
+- **Add chat-composer dictation**
+- **Image generation**
+- **Assistant Response UI Widgets:** Image Carousels, Image Previews, Weather, Stock UI, Charts (maybe), editable markdown (maybe)
+- **Agent-first file library**
+- **Connectors:** Integrations with Google, YouTube, Figma, and personal tools
+- **Agentic Design System:** A customizable design system that helps agents ship consistent and high quality UI
+- **Admin Portal:** A way to manage users, controls, features, etc...
 - **AI SDK follow-up:** migrate `experimental_transform` when a stable alias
   ships. Keep the Anthropic `pause_turn` workaround until the provider supports
   continuation, and adopt signed approval tokens only with a cross-instance
