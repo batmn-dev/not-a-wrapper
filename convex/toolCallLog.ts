@@ -1,5 +1,6 @@
 import { paginationOptsValidator } from "convex/server"
 import { v } from "convex/values"
+import { redactSecretsInString } from "../lib/observability/secret-patterns"
 import { authenticatedMutation, maybeAuthQuery } from "./lib/authedFunctions"
 
 const MAX_PREVIEW_LENGTH = 500
@@ -7,10 +8,13 @@ const MAX_PREVIEW_LENGTH = 500
 /**
  * Store bounded previews to limit persistence of sensitive tool data.
  */
-function truncatePreview(text: string | undefined): string | undefined {
+function preparePreviewForPersistence(
+  text: string | undefined
+): string | undefined {
   if (!text) return undefined
-  if (text.length <= MAX_PREVIEW_LENGTH) return text
-  return text.slice(0, MAX_PREVIEW_LENGTH) + "…"
+  const redacted = redactSecretsInString(text)
+  if (redacted.length <= MAX_PREVIEW_LENGTH) return redacted
+  return redacted.slice(0, MAX_PREVIEW_LENGTH) + "…"
 }
 
 /**
@@ -69,11 +73,11 @@ export const log = authenticatedMutation({
       serverId: args.serverId,
       toolName: args.toolName,
       toolCallId: args.toolCallId,
-      inputPreview: truncatePreview(args.inputPreview),
-      outputPreview: truncatePreview(args.outputPreview),
+      inputPreview: preparePreviewForPersistence(args.inputPreview),
+      outputPreview: preparePreviewForPersistence(args.outputPreview),
       success: args.success,
       durationMs: args.durationMs,
-      error: args.error ? truncatePreview(args.error) : undefined,
+      error: preparePreviewForPersistence(args.error),
       source: args.source,
       serviceName: args.serviceName,
       stepNumber: args.stepNumber,

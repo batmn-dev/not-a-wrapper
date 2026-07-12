@@ -6,13 +6,17 @@
   against a current reference before wiring speculative `phase` behavior.
 - **Better in-progress conversation view:** persist and surface active progress
   when a user leaves and returns to a streaming chat.
+  - **Assistant message highlighting:** Add to chat
 - **Add chat-composer dictation**
-- **Image generation**
+- **Voice Mode:** Using Eleven Labs
+- **Image generation:** Nano banna and state of the art image gen tools (Using Vercel's SDK Framework)
+- **Video generation:** Using Vercel's SDK framework
 - **Assistant Response UI Widgets:** Image Carousels, Image Previews, Weather, Stock UI, Charts (maybe), editable markdown (maybe)
-- **Agent-first file library**
+- **Monetization:** Setup Usage-based monthly pricing using Stripe or better option
+- **Admin Portal:** A way to manage users, controls, features, etc...
+- **Agent-first file library:** Create a computer-like environment where agents can easily discover files?
 - **Connectors:** Integrations with Google, YouTube, Figma, and personal tools
 - **Agentic Design System:** A customizable design system that helps agents ship consistent and high quality UI
-- **Admin Portal:** A way to manage users, controls, features, etc...
 - **AI SDK stable approval-persistence hook:** retain the Durable turn runtime's
   `experimental_transform` while it is the only released pre-callback,
   backpressure-preserving seam for persisting approval requests before forwarding

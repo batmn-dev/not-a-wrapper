@@ -1130,10 +1130,11 @@ export function createChatTurnRuntime(args: {
                   searchToolsActive: shouldInjectSearch,
                 },
               })
-            } catch {
+            } catch (captureErr) {
               // Analytics is observational and must never break stream finalization.
               console.error(
-                "[PostHog] Failed to capture anthropic_pause_turn event"
+                "[PostHog] Failed to capture anthropic_pause_turn event:",
+                captureErr
               )
             }
           }

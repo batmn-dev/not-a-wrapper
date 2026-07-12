@@ -765,9 +765,10 @@ describe("createChatTurnRuntime — Anthropic pause_turn telemetry", () => {
 
   it("does not let a telemetry capture failure break stream completion", async () => {
     const harness = makeStreamHarness()
+    const captureError = new Error("analytics unavailable")
     const capture = vi.fn((event: { event: string }) => {
       if (event.event === "anthropic_pause_turn") {
-        throw new Error("analytics unavailable")
+        throw captureError
       }
     })
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
@@ -792,7 +793,8 @@ describe("createChatTurnRuntime — Anthropic pause_turn telemetry", () => {
         })
       ).resolves.toBeUndefined()
       expect(consoleError).toHaveBeenCalledWith(
-        "[PostHog] Failed to capture anthropic_pause_turn event"
+        "[PostHog] Failed to capture anthropic_pause_turn event:",
+        captureError
       )
     } finally {
       consoleError.mockRestore()
