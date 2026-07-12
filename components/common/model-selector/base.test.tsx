@@ -237,7 +237,7 @@ describe("ModelSelector", () => {
     return onSelect
   }
 
-  it("matches ChatGPT's Control-Shift-M model shortcut", () => {
+  it("supports the Control-Shift-M model shortcut", () => {
     renderSelector({ isUserAuthenticated: false })
 
     const matchesShortcut = useKeyShortcutMock.mock.calls.at(-1)?.[0] as
@@ -254,7 +254,8 @@ describe("ModelSelector", () => {
     ).toBe(true)
     expect(
       matchesShortcut?.({
-        key: "p",
+        key: "m",
+        ctrlKey: false,
         metaKey: true,
         shiftKey: true,
       } as KeyboardEvent)

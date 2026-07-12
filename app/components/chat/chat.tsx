@@ -322,7 +322,7 @@ function ChatInner({
 
   const showOnboarding = !chatId && messages.length === 0
 
-  // ChatGPT parity: the sticky composer stack's measured footprint becomes
+  // The sticky composer stack's measured footprint becomes
   // `--sticky-padding-bottom` (inline on the scroll root), the value the whole
   // scroll-margin/gutter system derives its bottom inset from. Disabled during
   // onboarding, where the container grows to center the composer.
@@ -342,7 +342,7 @@ function ChatInner({
         // bleed to the thread edge and never under the docked panel. The named
         // `/main` tier queries pass through untouched.
         className="group/thread @container/thread flex min-h-full flex-1 flex-col"
-        // ChatGPT parity: the thread exposes its context-keep fraction as an
+        // The thread exposes its context-keep fraction as an
         // inline knob (theirs is React-set the same way; `.threadScrollVars`
         // consumes it with the same 1/3 fallback).
         style={{ "--thread-show-context-pct": "1/3" } as React.CSSProperties}

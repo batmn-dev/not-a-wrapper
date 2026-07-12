@@ -10,7 +10,7 @@ type TooltipShortcutProps = Omit<React.ComponentProps<"span">, "children"> & {
 }
 
 /**
- * ChatGPT-style tooltip label + keyboard shortcut composition.
+ * Tooltip label + keyboard shortcut composition.
  * Shortcut keys stay unboxed, inherit the tooltip's tertiary token, and use
  * cap-height trimming so modifier glyphs align with the label text.
  */
@@ -37,7 +37,7 @@ function TooltipShortcut({
         <span>{label}</span>
         <span
           data-slot="tooltip-shortcut-keys"
-          // The 1em key slots come from ChatGPT's sidebar-hint kbd markup,
+          // The 1em key slots follow the reference sidebar-hint markup,
           // where trailing slack is invisible. Inside a bordered tooltip a
           // narrow final glyph (S, K…) would leave its slack reading as extra
           // right padding, so the LAST key ink-fits instead.

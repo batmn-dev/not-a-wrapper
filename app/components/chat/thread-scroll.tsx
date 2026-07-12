@@ -2,9 +2,7 @@
 
 /**
  * ThreadScrollEdge — the thread's tail elements and scroll lifecycle,
- * replicating ChatGPT's implementation at the source level (their
- * `conversation-small-*.js` chunk was extracted and mirrored on 2026-07-11 —
- * see docs/chatgpt-scroll-architecture-audit.md §10):
+ * reproducing the captured reference behavior at the source level:
  *
  *  1. The 1px bottom sentinel. An IntersectionObserver with
  *     `rootMargin: "0px 0px 72px"` toggles `data-scroll-from-end` on the
@@ -22,9 +20,9 @@
  *     the answer consumes it, freezes naturally at settle, keeps short
  *     threads at exactly one viewport, and absorbs branch-switch height
  *     deltas. Negative writes are intentional — an invalid min-height is
- *     ignored by CSS (ChatGPT writes them raw; observed `-2474.84px`).
+ *     ignored by CSS (the reference writes them raw; observed `-2474.84px`).
  *
- *  3. Answer-start pinning, ChatGPT's `Att`/`jtt`/`Mtt` pipeline: rAF, clear
+ *  3. Answer-start pinning through a rAF-and-retry pipeline: clear
  *     `data-scroll-from-end`, `scrollIntoView({ block: "end" })` on
  *     `[data-turn-id="…"]`; if the turn is not mounted yet, retry from a
  *     childList MutationObserver with a timeout cap. Their `behavior` is
@@ -38,9 +36,9 @@
 import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { useCallback, useEffect, useRef } from "react"
 
-/** ChatGPT: sentinel observer margin below the scrollport (desktop mode). */
+/** Sentinel observer margin below the scrollport (desktop mode). */
 const SCROLL_FROM_END_ROOT_MARGIN = "0px 0px 72px"
-/** ChatGPT: gutter observer thresholds — every percent of visibility. */
+/** Gutter observer thresholds — every percent of visibility. */
 const GUTTER_THRESHOLDS = Array.from({ length: 101 }, (_, i) => i / 100)
 /** Retry cap for a pin whose turn has not mounted yet (their `Btt`). */
 const PIN_RETRY_TIMEOUT_MS = 10_000
@@ -49,12 +47,12 @@ function closestScrollRoot(el: Element | null): HTMLElement | null {
   return el?.closest<HTMLElement>("[data-scroll-root]") ?? null
 }
 
-/** ChatGPT `fT`: the pill's visibility attribute, on the scroll root. */
+/** Set the pill's visibility attribute on the scroll root. */
 function setScrollFromEnd(root: HTMLElement, scrolledFromEnd: boolean) {
   root.toggleAttribute("data-scroll-from-end", scrolledFromEnd)
 }
 
-/** ChatGPT `Mtt`: resolve the turn and pin it; false when not mounted yet. */
+/** Resolve the turn and pin it; false when not mounted yet. */
 function pinTurn(root: HTMLElement, turnId: string): boolean {
   const turn = root.querySelector<HTMLElement>(
     `[data-turn-id="${CSS.escape(turnId)}"]`
@@ -65,7 +63,7 @@ function pinTurn(root: HTMLElement, turnId: string): boolean {
   return true
 }
 
-/** ChatGPT `jtt`: retry the pin as the turn mounts, capped by a timeout. */
+/** Retry the pin as the turn mounts, capped by a timeout. */
 function pinTurnWhenMounted(root: HTMLElement, turnId: string): () => void {
   const observer = new MutationObserver(() => {
     if (pinTurn(root, turnId)) {
@@ -87,7 +85,7 @@ function pinTurnWhenMounted(root: HTMLElement, turnId: string): () => void {
 type ThreadScrollEdgeProps = {
   chatId: string | null
   /** A turn is in flight (submitted or streaming) — mirrored onto the scroll
-   * root as ChatGPT's `data-stream-active`. */
+   * root as `data-stream-active`. */
   streamActive: boolean
   /** The user turn to pin near the top of the viewport, set at answer-start
    * (Conversation withholds it until the response's first text). */
@@ -121,7 +119,7 @@ export function ThreadScrollEdge({
     chatKeyRef.current = chatId
   }, [chatId])
 
-  // (1) The at-end sentinel (ChatGPT verbatim): `data-scroll-from-end` on the
+  // (1) The at-end sentinel: `data-scroll-from-end` on the
   // root whenever the sentinel is not within 72px below the scrollport.
   const sentinelCleanupRef = useRef<(() => void) | null>(null)
   const sentinelRef = useCallback((el: HTMLDivElement | null) => {
@@ -144,7 +142,7 @@ export function ThreadScrollEdge({
     }
   }, [])
 
-  // (2) The self-regulating gutter (ChatGPT verbatim): min-height tracks the
+  // (2) The self-regulating gutter: min-height tracks the
   // viewport space below the gutter's own top edge, unclamped, in all states.
   const gutterCleanupRef = useRef<(() => void) | null>(null)
   const gutterRef = useCallback((el: HTMLDivElement | null) => {
@@ -184,7 +182,7 @@ export function ThreadScrollEdge({
     }
   }, [])
 
-  // (4) Answer-start pinning through ChatGPT's rAF + retry pipeline.
+  // (4) Answer-start pinning through the rAF + retry pipeline.
   useEffect(() => {
     if (!pinTurnId) return
     const rootEl = rootRef.current

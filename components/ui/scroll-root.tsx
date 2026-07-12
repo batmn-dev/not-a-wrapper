@@ -1,8 +1,8 @@
 "use client"
 
 /**
- * ScrollRoot — the single thread scroll container, replicating ChatGPT's
- * `group/scroll-root` contract (docs/chatgpt-scroll-architecture-audit.md).
+ * ScrollRoot — the single thread scroll container and owner of the
+ * `group/scroll-root` contract.
  *
  * There is deliberately NO JS stick-to-bottom controller here. At rest, native
  * CSS scroll anchoring (`overflow-anchor: auto`, the default) keeps the
@@ -27,7 +27,7 @@
  * — the browser does all the math.
  *
  * Runtime state the thread writes onto this element as attributes (consumed by
- * pure CSS group variants, ChatGPT-style — no React state):
+ * pure CSS group variants, without React state):
  *   data-stream-active     while a turn is in flight
  *   data-scroll-from-end   while the bottom sentinel is out of view
  */
@@ -103,9 +103,9 @@ function useScrollRoot() {
 /**
  * Measures the sticky composer stack (#thread-bottom-container) and writes its
  * footprint inline on the scroll root as `--sticky-padding-bottom` — the value
- * ChatGPT sets the same way (a ResizeObserver writing
- * `getBoundingClientRect().height` inline; extracted from their composer
- * chunk). Everything downstream (safe-area height, response height, the
+ * The value is set by a ResizeObserver writing
+ * `getBoundingClientRect().height` inline. Everything downstream (safe-area
+ * height, response height, the
  * bottom sentinel's offset) derives from it in CSS.
  *
  * Returns a ref callback for the sticky bottom container. Pass

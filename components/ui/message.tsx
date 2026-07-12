@@ -121,7 +121,7 @@ const MessageActions = ({
 )
 
 /**
- * ChatGPT-parity reveal contract for user-message actions only.
+ * Delayed reveal contract for user-message actions only.
  *
  * Hover waits 300ms before fading the full action family in over 300ms, while
  * focus and an open tooltip reveal it immediately. Leaving starts the 300ms

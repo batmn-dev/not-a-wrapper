@@ -124,7 +124,7 @@ describe("MessageBranchControls", () => {
     expect(buttons[1].disabled).toBe(false)
   })
 
-  it("uses ChatGPT's 24×30 stepper metrics distinct from the 32px actions", () => {
+  it("uses 24×30 stepper metrics distinct from the 32px actions", () => {
     // Live-measured 2026-07-11: branch prev/next are h-[30px] w-[24px]
     // rounded-md while standard message actions are h-8 w-8 rounded-lg.
     render(branch, vi.fn())

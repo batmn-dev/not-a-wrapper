@@ -15,12 +15,11 @@ export type ScrollButtonProps = {
 } & React.ButtonHTMLAttributes<HTMLButtonElement>
 
 /**
- * The scroll-to-bottom pill. Visibility is pure CSS, ChatGPT-verbatim
- * (extracted from their conversation chunk): shown whenever the scroll root
+ * The scroll-to-bottom pill. Visibility is pure CSS: shown whenever the scroll root
  * carries `data-scroll-from-end` (a 300ms-delayed 300ms entrance), hidden
  * otherwise (fast 100ms exit, scaled down and nudged toward the composer).
  * The sentinel in ThreadScrollEdge owns the attribute; no React state here.
- * Like ChatGPT's, the pill is a pointer convenience hidden from the
+ * The pill is a pointer convenience hidden from the
  * accessibility tree — keyboard users scroll the log directly.
  */
 function ScrollButton({

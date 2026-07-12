@@ -76,7 +76,7 @@ export type CodeBlockProps = {
 } & React.HTMLProps<HTMLDivElement>
 
 function CodeBlock({ children, className, ...props }: CodeBlockProps) {
-  // ChatGPT code-block box (2026-07-11): 24px-radius bordered surface with
+  // Captured code-block box (2026-07-11): 24px-radius bordered surface with
   // 1rem top / 0.25rem bottom flow margins (their pre mt-2 collapsed with the
   // inner wrapper's mt-4/mb-1). Their --code-block-surface equals the page
   // background in dark mode; our card token is the same mapping.
@@ -84,7 +84,7 @@ function CodeBlock({ children, className, ...props }: CodeBlockProps) {
     <div
       className={cn(
         "not-prose relative mt-4 mb-1 flex w-full flex-col overflow-clip border",
-        // rounded-[24px] literal: ChatGPT's rounded-3xl resolves to 24px;
+        // rounded-[24px] literal: the reference radius resolves to 24px;
         // our --radius-derived 3xl token is 22px, so the byte value is pinned.
         "border-border bg-card text-card-foreground rounded-[24px]",
         className
@@ -141,7 +141,7 @@ function CodeBlockCode({
     }
   }, [code, language, appTheme])
 
-  // ChatGPT code text metrics: 14px / 24px (0.875em at 1.71429), 20px inline
+  // Captured code text metrics: 14px / 24px (0.875em at 1.71429), 20px inline
   // padding, 12px block padding; the container's card surface shows through.
   const classNames = cn(
     "w-full overflow-x-auto text-sm leading-6 [&>pre]:px-5 [&>pre]:py-3 [&>pre]:!bg-transparent",

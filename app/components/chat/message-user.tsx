@@ -188,7 +188,7 @@ export function MessageUser({
       tabIndex={-1}
     >
       <h5 className="sr-only">You said:</h5>
-      {/* ChatGPT turn anatomy (box-chain verified 2026-07-11): a gap-4 content
+      {/* Captured turn anatomy (box-chain verified 2026-07-11): a gap-4 content
           wrapper groups the `text-message` block(s); the action row is a
           ZERO-GAP column-level sibling, so the buttons sit p-1 (4px) under
           the bubble. */}
@@ -339,8 +339,8 @@ export function MessageUser({
               }
             />
           )}
-          {/* Branch nav reveals with the footer actions — deliberate ChatGPT-
-            reference parity (2026-07-11). This supersedes the earlier
+          {/* Branch nav reveals with the footer actions to match the captured
+            reference (2026-07-11). This supersedes the earlier
             always-visible rule ("a fresh regenerate/edit gives no cue that
             versions exist"): the reference hides the pager at rest too, and
             the row's hover reveal is the discovery affordance. */}

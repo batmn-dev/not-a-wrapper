@@ -214,7 +214,7 @@ describe("MessageUser edits", () => {
     expect(previousButton?.className).toBe(nextButton?.className)
     expect(copyButton?.className).toContain("h-8")
     expect(copyButton?.className).toContain("w-8")
-    // ChatGPT branch steppers (live-measured 2026-07-11): 24×30, distinct
+    // Reference branch steppers (live-measured 2026-07-11): 24×30, distinct
     // from the 32px action buttons.
     expect(previousButton?.className).toContain("h-[30px]")
     expect(previousButton?.className).toContain("w-[24px]")
@@ -226,7 +226,7 @@ describe("MessageUser edits", () => {
     )
   })
 
-  it("matches ChatGPT's user-only delayed opacity reveal contract", () => {
+  it("matches the user-only delayed opacity reveal contract", () => {
     renderEditableMessage()
 
     const actions = container?.querySelector(

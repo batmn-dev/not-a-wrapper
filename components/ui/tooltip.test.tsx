@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest"
 import { TooltipShortcut } from "./tooltip"
 
 describe("TooltipShortcut", () => {
-  it("composes ChatGPT-style unboxed shortcut keys from shared primitives", () => {
+  it("composes unboxed shortcut keys from shared primitives", () => {
     const markup = renderToStaticMarkup(
       <TooltipShortcut label="Select model">
         <Kbd label="Control">⌃</Kbd>

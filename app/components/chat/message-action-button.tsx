@@ -20,7 +20,7 @@ type MessageActionButtonProps = {
 
 /**
  * One message-footer action: the shared tooltip (MessageAction) around the
- * shared icon-button box, with ChatGPT-sized default and branch variants plus
+ * shared icon-button box, with reference-sized default and branch variants plus
  * the touch-target sizing and muted tokens in one place. Replaces six
  * copy-pasted `<MessageAction><button>…</button>` pairs (copy / edit /
  * regenerate / branch prev+next).
@@ -40,7 +40,7 @@ export function MessageActionButton({
       <button
         className={cn(
           "text-muted-foreground flex items-center justify-center bg-transparent disabled:pointer-events-none disabled:opacity-50",
-          // ChatGPT metrics: standard actions 32×32 / 8px radius; branch-pager
+          // Reference metrics: standard actions 32×32 / 8px radius; branch-pager
           // steppers 24×30 / 6px radius. Radii are pinned literals — their
           // rounded-lg/rounded-md resolve to 8/6px, ours to 10/8px.
           size === "branch"

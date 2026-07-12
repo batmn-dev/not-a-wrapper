@@ -197,7 +197,7 @@ export function MessageAssistant({
       tabIndex={-1}
     >
       <h6 className="sr-only">Assistant said:</h6>
-      {/* ChatGPT turn anatomy (box-chain verified 2026-07-11): a gap-4 content
+      {/* Captured turn anatomy (box-chain verified 2026-07-11): a gap-4 content
           wrapper groups the `text-message` block(s); the action row is a
           ZERO-GAP column-level sibling — its p-1/-mt-1 metrics put the
           buttons ~8px under the prose. Parts flow in a gap-1 column. */}

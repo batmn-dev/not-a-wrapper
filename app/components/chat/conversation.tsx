@@ -161,7 +161,7 @@ export function Conversation({
   const hasPendingAssistantTurn =
     generationActive && lastMessage?.role === "user"
   // The turn to pin near the viewport top — at ANSWER-START, not at send
-  // (measured ChatGPT behavior, 2026-07-11): the viewport stays where the user
+  // (measured reference behavior, 2026-07-11): the viewport stays where the user
   // left it (their message visible above the composer, thinking indicator
   // below) until the response's first text token, then jumps to the pinned
   // position in one step. Branch switches and load hydration never satisfy
@@ -183,7 +183,7 @@ export function Conversation({
             index === messages.length - 1 &&
             !hasPendingAssistantTurn &&
             status !== "submitted"
-          // ChatGPT reserves the 40px turn tail on the LAST turn only; settled
+          // The reference reserves the 40px turn tail on the LAST turn only; settled
           // older turns end at their action row (verified live 2026-07-11).
           const isLastTurnRow =
             index === messages.length - 1 && !hasPendingAssistantTurn
@@ -291,7 +291,7 @@ export function Conversation({
                     "scroll-mt-[var(--sticky-padding-top,var(--spacing-app-header))]",
                   isAssistant &&
                     "scroll-mt-[calc(var(--header-height)+min(200px,max(70px,20svh)))]",
-                  // ChatGPT pads only the thread's FIRST turn (pt-3); later
+                  // Only the thread's FIRST turn is padded (pt-3); later
                   // user turns get their spacing from the preceding action
                   // row / timestamp (verified live 2026-07-11).
                   index === 0 && "pt-3",

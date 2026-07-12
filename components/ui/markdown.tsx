@@ -74,7 +74,7 @@ const INITIAL_COMPONENTS: Partial<Components> = {
       props.node?.position?.start.line === props.node?.position?.end.line
 
     if (isInline) {
-      // ChatGPT inline code (their `.prose code` rule verbatim): 0.875em /
+      // Captured inline-code metrics: 0.875em /
       // 500, 4px radius, 0.15rem × 0.3rem padding; their gray-100/gray-700
       // surface maps onto our secondary token.
       return (
@@ -92,7 +92,7 @@ const INITIAL_COMPONENTS: Partial<Components> = {
 
     const language = extractLanguage(className)
 
-    // ChatGPT code-block header: one sticky 48px row (language label left,
+    // Code-block header: one sticky 48px row (language label left,
     // actions right) that rides the scroll under the app header, with a 1px
     // divider that sticks along; the code scrolls beneath both, clipped by
     // the rounded container.
@@ -125,7 +125,7 @@ const INITIAL_COMPONENTS: Partial<Components> = {
   pre: function PreComponent({ children }) {
     return <>{children}</>
   },
-  // ChatGPT table architecture: the container breaks out of the centered
+  // Reference table architecture: the container breaks out of the centered
   // content column to the full thread width and owns the horizontal scroll;
   // the wrapper re-indents the table to the content edge (globals.css
   // `.markdown-table-container` / `.markdown-table-wrapper`, their formula).
