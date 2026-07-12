@@ -31,10 +31,9 @@ export function getSources(parts: UIMessage["parts"]): SourceUrlUIPart[] {
     ?.filter((part) => part.type === "source-url" || isStaticToolUIPart(part))
     .map((part) => {
       if (part.type === "source-url") {
-        return part // In v6, the source-url part IS the source object
+        return part
       }
 
-      // v6: Tool parts use flat properties - use part.state, part.output, etc.
       if (isStaticToolUIPart(part) && part.state === "output-available") {
         const result = part.output as unknown
         const toolName = getStaticToolName(part)

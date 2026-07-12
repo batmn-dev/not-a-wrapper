@@ -67,13 +67,10 @@ export type OpenRouterAllowlistEntry = {
   reasoningOptOut?: boolean
 }
 
-// Note on webSearch: the previous hand-authored Llama entry carried
-// `webSearch: true` by mistake — OpenRouter exposes no native search tool on
-// this path, so the generator emits `webSearch: false` for every wrapped
-// entry (deliberate correction, 2026-07-05).
+// OpenRouter exposes no native search tool on this path; generated entries
+// therefore keep `webSearch` disabled.
 export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
-  // ——— Free tier (also see FREE_MODELS_IDS in lib/config.ts — membership
-  // there is a Phase 6 / owner decision, not something this file controls) ———
+  // Free-model product policy remains separate in lib/config.ts.
   {
     slug: "openai/gpt-oss-120b:free",
     name: "GPT-OSS 120B",

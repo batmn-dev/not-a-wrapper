@@ -28,7 +28,6 @@ type UserContextType = {
   user: UserProfile | null
   isLoading: boolean
   updateUser: (updates: Partial<UserProfile>) => Promise<void>
-  // Note: refreshUser was removed - use Convex real-time queries or ModelProvider.favoriteModels instead
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined)

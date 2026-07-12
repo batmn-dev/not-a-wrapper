@@ -21,16 +21,8 @@ import {
   type ChatTurnStoreAdapters,
 } from "./turn-store"
 
-// ---------------------------------------------------------------------------
-// Chat turn controller (CONTEXT.md): the client-side counterpart of the Chat
-// turn runtime — the single module that executes one client Chat turn behind
-// the adapters seam. It owns validation, optimistic frames, the async
-// sequence (auth → limits → chat creation → uploads → dispatch), plan/intent
-// building (turn-plans.ts), wire-contract body assembly, and guest/local
-// persistence routing (turn-store.ts, composed internally — the parent hook
-// never holds the store). use-chat-core.ts constructs the adapters from React
-// state and the AI SDK; everything below that seam is React-free.
-// ---------------------------------------------------------------------------
+// React-free client turn orchestration behind the adapters seam. It owns
+// validation, optimistic frames, dispatch planning, and persistence routing.
 
 export type { ChatTurnMessage } from "./turn-plans"
 
@@ -66,14 +58,7 @@ type SendMessage = (
   options?: SendMessageOptions
 ) => void
 
-/**
- * The Turn context snapshot every turn runner reads AT RUN TIME through
- * `adapters.getTurnSnapshot` — never from arguments captured in a render-time
- * closure. This is what keeps the model in the picker and the model in the
- * request structurally identical, and what gives suggestion/regeneration
- * turns the same systemPrompt/enableSearch inputs as plain sends (they
- * previously diverged silently). See CONTEXT.md "Turn context".
- */
+/** Read at execution time so every turn kind uses the current picker context. */
 export type ChatTurnSnapshot = {
   selectedModel: string
   isAuthenticated: boolean
@@ -193,9 +178,7 @@ export function isRouteDurableChat(
 
 export function createChatTurnController(adapters: ChatTurnAdapters) {
   const turnStore = createChatTurnStore(adapters.store)
-  // Snapshot the adapters at CALL time, not construction time: callers (and
-  // the controller tests) may swap an adapter on the object they passed in,
-  // and the runners must see the live value — the pre-consolidation contract.
+  // Read adapters at call time because callers may replace the injected seams.
   const context = (): RunnerContext => {
     const { store: _store, ...runnerAdapters } = adapters
     return { ...runnerAdapters, turnStore }
@@ -238,11 +221,7 @@ async function runSendTurn(
 ) {
   if (adapters.getIsSending()) return
 
-  // Validate the payload before ANY side effect. This guard once lived after
-  // ensureChatExists, so a rejected new-chat send had already created, titled
-  // (from the rejected text), and navigated to an empty orphan chat. A
-  // rejected turn must leave no trace: no chat, no navigation, no optimistic
-  // bubble — the Composer restores the payload and the user fixes it in place.
+  // Rejected payloads must create no chat, navigation, or optimistic row.
   if (text.length > MESSAGE_MAX_LENGTH) {
     if (optimisticAttachments.length > 0) {
       adapters.cleanupOptimisticAttachments(optimisticAttachments)
@@ -387,9 +366,6 @@ async function runSuggestionTurn(
   adapters: RunnerContext,
   args: SuggestionTurnArgs
 ) {
-  // Delegates to the send runner, which reads the Turn context snapshot — so
-  // suggestions carry the same systemPrompt/enableSearch as typed sends
-  // (previously omitted, silently diverging).
   await runSendTurn(adapters, {
     text: args.text,
     messages: args.messages,
@@ -513,14 +489,8 @@ async function runEditTurn(
 
     adapters.setMessages(editPlan.trimmedMessages)
 
-    // Send the replacement as a full message so the SDK appends it with the
-    // optimistic edit id — the same id the edit intent tells the server to
-    // record as the replacement's clientMessageId. Live and persisted message
-    // then share an identity key, so the selected-path projection RECONCILES
-    // the edited turn like a send/regenerate instead of detecting divergence
-    // and swapping wholesale — a swap that discarded the streamed assistant
-    // metadata (e.g. the live reasoningDurationMs) in favor of a durable
-    // snapshot that lags the final flush. See selected-path.ts identityKeys.
+    // Preserve one identity across the optimistic row, SDK replacement, and
+    // persisted branch so projection can reconcile without losing live metadata.
     adapters.sendMessage(
       {
         id: editPlan.optimisticEditedMessage.id,

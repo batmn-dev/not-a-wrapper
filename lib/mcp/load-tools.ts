@@ -275,32 +275,11 @@ function updateConnectionStatus(
 }
 
 // =============================================================================
-// Main Orchestrator
-// =============================================================================
-
 /**
  * Load MCP tools for a user's enabled servers.
  *
- * This is the core orchestration layer for Phase 3 of MCP integration.
- * Called once per chat request when MCP is enabled.
- *
- * **Flow**:
- * 1. Fetch user's enabled server configs + tool approvals from Convex (parallel)
- * 2. Create MCP clients in parallel with per-server timeout
- * 3. Collect and namespace tools from successful connections
- * 4. Filter by approval status (v1: default auto-approved)
- * 5. Enforce per-request tool limit
- *
- * **Latency**: ~500ms-2s depending on server count and responsiveness.
- * Total = max(Convex query, max(individual server connections)).
- *
- * **Error handling**: Failed servers are skipped gracefully. If ALL servers
- * fail, returns empty tools (the chat proceeds without tool capabilities).
- *
- * **Cleanup**: Callers MUST close returned clients after streaming via `after()`.
- *
- * @param convexToken - Convex auth token for user identity resolution
- * @param options - Optional configuration overrides
+ * Server failures are isolated; all returned clients must be closed after the
+ * stream. Namespacing and approval filtering precede the per-request tool cap.
  */
 export async function loadUserMcpTools(
   convexToken: string,

@@ -83,16 +83,9 @@ import {
   toPlainTextModelMessages,
 } from "./utils"
 
-// ---------------------------------------------------------------------------
-// Chat turn runtime (CONTEXT.md): the server-side execution of one Chat turn
-// for one HTTP request, prepared once and alive for the whole stream. The chat
-// route (`route.ts`) is a thin HTTP adapter over this module — see
-// `docs/adr/0006-chat-turn-runtime.md`. Two-phase: `prepare()` resolves the
-// execution plan and may throw status-coded errors before any model call;
-// `toResponse(signal)` invokes streamText, owns the stream-lifecycle state and
-// both `onEnd` layers, and returns the streaming Response; `fail(error)`
-// finalizes a failed run for the route's outer catch.
-// ---------------------------------------------------------------------------
+// Request-scoped execution behind the route's HTTP adapter. `prepare()` may
+// fail before model execution; `toResponse()` owns the stream lifecycle; and
+// `fail()` persists setup failures (ADR-0006).
 
 // The wire shape (`ChatTurnWireRequest`) lives on the Chat turn wire contract
 // (lib/chat-messages/chat-turn-contract.ts), which the route parses through
@@ -170,8 +163,6 @@ type PreparedTurn = {
   braintrustMetadata: BraintrustChatMetadata
   phClient: ReturnType<typeof getPostHogClient>
 }
-
-// --- module-level pure helpers (moved verbatim from route.ts) ---------------
 
 function normalizeChatVersion(
   chatVersion: unknown,
@@ -419,11 +410,9 @@ export function createChatTurnRuntime(args: {
     }
     const providerToolKeyMode: ToolKeyMode = credentialSource
 
-    // enableSearch is no longer passed to the model — it controls tool injection
-    // below. All search is now provided via visible, auditable tool calls.
+    // Search is provided only through visible, auditable tool calls.
     const aiModel = createLanguageModel(modelConfig, apiKey)
 
-    // Check if PostHog is configured for LLM analytics
     const phClient = deps.getPostHogClient()
     const normalizedChatVersion = normalizeChatVersion(chatVersion, messages)
 
@@ -515,21 +504,13 @@ export function createChatTurnRuntime(args: {
       chatId,
     })
 
-    // Durable-prepare crosses into the Durable turn runtime: it runs
-    // `prepareGeneration` (approval-response extraction, the regeneration×
-    // approvals 400, latest-user-message selection, the argument-validation →
-    // 400 mapping) and returns THE canonical model history — sanitized server
-    // history for durable turns, sanitized input for guests. The parent's second
-    // unconditional sanitize is gone: both adapters return canonical history.
+    // Durable prepare returns canonical history and rejects invalid turn input.
     let canonicalMessages = await durableTurn.prepare({
       provider: resolvedProvider,
     })
 
-    // ai@7 rejects system-role messages inside `messages` mid-stream
-    // (InvalidPromptError; `allowSystemInMessages` defaults to false). The
-    // system prompt already rides streamText's `instructions`, so any
-    // system-role history message is excluded from model input here — the one
-    // seam both durable and guest histories flow through.
+    // History system messages are untrusted artifacts; trusted instructions use
+    // streamText's separate `instructions` input.
     const systemRoleExclusion = excludeSystemRoleMessages(canonicalMessages)
     if (systemRoleExclusion.excludedCount > 0) {
       console.warn(
@@ -984,9 +965,8 @@ export function createChatTurnRuntime(args: {
         tools: tool.tools,
         stopWhen: isStepCount(maxSteps),
         abortSignal: signal,
-        // ai@7 telemetry has no per-call metadata field; the request dimensions
-        // that used to ride here (provider, model, auth, tools…) are already
-        // attached as Sentry tags/context in onEnd and the error paths.
+        // Request dimensions use Sentry because AI SDK 7 telemetry has no
+        // per-call metadata field.
         telemetry: {
           isEnabled: true,
           functionId: "api.chat.streamText",
@@ -1344,13 +1324,9 @@ export function createChatTurnRuntime(args: {
       runGeneration
     )
 
-    // Stream shaping and HTTP envelope are split on purpose (the deprecated
-    // result.toUIMessageStreamResponse fused them and is removed in ai@8):
-    // toUIMessageStream owns the UI-message semantics — including the
-    // envelope-onEnd half of the finish handoff (`finalize`) — while
-    // createUIMessageStreamResponse owns only SSE + Response construction. Both
-    // onEnd layers remain in this one closure (ADR-0006); they call into the
-    // Durable turn runtime, which names the handoff instead of splitting it.
+    // Stream conversion owns UI-message completion; response construction owns
+    // the HTTP envelope. Both completion callbacks share this closure (ADR-0006).
+    // The instance converter is deprecated in AI SDK 7 and remains migration debt.
     const uiMessageStream = result.toUIMessageStream({
       ...durableTurn.uiStreamIdentity(validatedMessages),
       sendReasoning: true,

@@ -1,7 +1,4 @@
-// DEAD CODE: legacy duplicate of convex/toolCallLog.ts. No client/server
-// references (the chat route's outcome sinks call api.toolCallLog.log). Kept
-// only until removal is approved; migrated to the auth seam so it doesn't trip
-// the raw-getUserIdentity guard in the meantime.
+// Legacy duplicate with no callers; retained pending approved file deletion.
 
 import { paginationOptsValidator } from "convex/server"
 import { v } from "convex/values"

@@ -13,30 +13,16 @@ export type DockedFlyoutShellProps = {
   onClose: () => void
   children: ReactNode
   /**
-   * Forwarded to the scroll viewport for auto-scroll on stream. Intentional
-   * scaffolding — `ActivityPanel` does not pass it yet (kept, not dead). Ref
-   * grounding: PARTIAL — the scroll container + trailing `scroll-mb-4` spacer
-   * exist, but live scroll-to-bottom-on-stream is not observable in the static
-   * capture. See TODO.md ("Chat side panel").
+   * Intentional auto-scroll scaffolding; `ActivityPanel` does not pass it yet.
    */
   viewportRef?: RefObject<HTMLDivElement | null>
   className?: string
 }
 
 /**
- * DockedFlyoutShell — the ≥lg in-flow panel (plan §5 commit 4, GA §A2, §7 R9).
- * A landmark `<section>` labelled by the visible panel title, NOT a dialog: no
- * backdrop, no focus trap, no scroll-lock, ESC inert. It pushes the conversation
- * (width lives on the layout dock slot) and is opaque (`bg-card`) so nothing
- * bleeds through. Reuses the shipped `Button(ghost, icon-sm)` close (via
- * PanelHeader) and a ScrollArea body with a trailing scroll spacer.
- *
- * The shell is pinned to a FIXED `--activity-panel-width` (it does NOT fill the
- * animating slot): the slot's `overflow-hidden` clips it while the slot width
- * animates `0 <-> --activity-panel-width`, so the content slides/clips and never
- * re-wraps mid-animation (matches the reference's fixed-width clipped flyout).
- * The start seam is a sharp-edge shadow instead of a physical border, so it
- * matches the conversation header edge without changing the panel box metrics.
+ * In-flow landmark rather than a dialog: no backdrop, focus trap, or scroll
+ * lock. Its fixed width is clipped by the animating dock slot so content never
+ * reflows during open/close.
  */
 export function DockedFlyoutShell({
   panelId,

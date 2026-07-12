@@ -10,21 +10,12 @@ import {
 import { cva, type VariantProps } from "class-variance-authority"
 import React from "react"
 
-/**
- * Leading markers for an Activity step. Mirrors `LEADING_MARKERS` in
- * `components/ui/chain-of-thought.tsx:18-30` (scoped down to the reference's
- * bullet dot 6px and globe/done glyphs 15px)
- * WITHOUT editing that shared primitive (plan §5 commit 1, GA §D4). Glyphs
- * render through `Icon` (`currentColor`), tinted by semantic text tokens — the
- * sprite-id hashes from the reference are intentionally ignored (GA §4 rows
- * 20-22).
- */
+/** Activity markers use semantic colors and preserve the reference dimensions. */
 const STEP_MARKERS = {
   bullet: {
     icon: RiCheckboxBlankCircleFill,
     slotSize: 6,
     glyphSize: 6,
-    // Reference bullet dot is a muted tertiary-icon gray, not full foreground.
     className: "text-muted-foreground fill-current",
   },
   globe: {
@@ -37,8 +28,6 @@ const STEP_MARKERS = {
     icon: RiCheckLine,
     slotSize: 15,
     glyphSize: 15,
-    // Reference terminal/"done" glyph inherits the row's secondary text tone
-    // (#5d5d5d), not full-strength foreground.
     className: "text-muted-foreground",
   },
 } as const
@@ -46,19 +35,8 @@ const STEP_MARKERS = {
 export type ActivityStepLeading = keyof typeof STEP_MARKERS
 
 /**
- * `stepVariants` — the documented cva axes for a step (GA §D4): `leading`
- * selects the marker glyph, `body` selects how the content column is laid out
- * (chips vs. prose description). Mirrors the `button.tsx` cva idiom; the
- * `leading` axis is style-neutral here because the marker glyph is resolved via
- * `STEP_MARKERS`, but the axis is preserved for the documented API + the
- * reference variant matrix (globe⇒chips, bullet/done⇒description).
- *
- * NOTE — intentional scaffolding (do not trim as unused): production today
- * renders only `leading="done" body="description"` (the single Reasoning step).
- * The `globe`/`bullet` markers and the `chips` body are kept for the upcoming
- * multi-step timeline and are SUPPORTED by the ChatGPT reference — the capture
- * shows 40 steps using all three markers, with chip bodies on globe (browse)
- * steps. See TODO.md ("Chat side panel").
+ * Marker/body variants are intentional scaffolding for the planned multi-step
+ * timeline; production currently renders only the completed description form.
  */
 const stepVariants = cva("min-w-0 pb-5 group-data-[last=true]:pb-0", {
   variants: {
@@ -83,10 +61,7 @@ export type StepLeadingIndicatorProps = {
   className?: string
 }
 
-/**
- * StepLeadingIndicator — the marker glyph in a fixed 16px box, reusing the
- * exact `Icon` call shape from `chain-of-thought.tsx:98-102`.
- */
+/** Marker glyph in a fixed-width rail. */
 export function StepLeadingIndicator({
   leading = "bullet",
   className,
@@ -95,8 +70,6 @@ export function StepLeadingIndicator({
   return (
     <span
       className={cn(
-        // 20px-tall × 16px-wide marker slot (reference: h-5 box in a w-4 rail),
-        // so the glyph centers against the step title's first line.
         "relative inline-flex h-5 w-4 shrink-0 items-center justify-center",
         className
       )}
@@ -116,10 +89,6 @@ export type StepTitleProps = {
   className?: string
 }
 
-/**
- * StepTitle — the always-visible step title (`text-foreground`, 14px). Always
- * rendered (non-collapsible timeline), unlike the inline ChainOfThought trigger.
- */
 export function StepTitle({ children, className }: StepTitleProps) {
   return (
     <div className={cn("text-foreground text-sm leading-[21px]", className)}>
@@ -137,15 +106,7 @@ export type ActivityStepProps = {
   index?: number
 } & VariantProps<typeof stepVariants>
 
-/**
- * ActivityStep — a single non-collapsible timeline step: a marker + a
- * continuous rail in the leading column, and the title/body content in the
- * trailing column. Mirrors `ChainOfThoughtStep` (`chain-of-thought.tsx:174-192`)
- * — `group` wrapper, `data-last`, `bg-border w-px` rail hidden via
- * `group-data-[last=true]:hidden` — but uses a full-height rail (no fixed `h-4`)
- * because the body is always visible and multi-line. The rail keeps the page
- * hairline token strategy; no stronger border tier exists for the panel.
- */
+/** A non-collapsible timeline step with a full-height connector rail. */
 export const ActivityStep = ({
   children,
   className,
@@ -161,7 +122,6 @@ export const ActivityStep = ({
   >
     <div className="relative flex flex-col items-center">
       <StepLeadingIndicator leading={leading ?? "bullet"} />
-      {/* Connector sits flush under the marker box (reference has no top gap). */}
       <div className="bg-border w-px flex-1 group-data-[last=true]:hidden" />
     </div>
     <div className={cn(stepVariants({ leading, body }), className)}>
@@ -175,13 +135,7 @@ export type ActivityTimelineProps = {
   className?: string
 }
 
-/**
- * ActivityTimeline — maps `ActivityStep` children, injecting `isLast` (last
- * step omits its connector) and an ascending `index` so each step's rail
- * stacks above the previous inside a `relative isolate` context (GA §5 Step B
- * "Animations"). Mirrors the `cloneElement` mapper at
- * `chain-of-thought.tsx:148-166`.
- */
+/** Inject connector termination and stacking order into each timeline step. */
 export function ActivityTimeline({
   children,
   className,

@@ -44,39 +44,13 @@ export function shapeRequest(
 }
 
 /**
- * Provider-specific options to enable reasoning/thinking when the model
- * advertises support (reasoningText: true).
+ * Enable reasoning according to the selected model's catalog metadata.
  *
- * Anthropic thinking configuration is context-aware:
- *   - Models with thinkingMode: "adaptive" (Opus 4.6+) use Anthropic's
- *     adaptive allocation — the recommended mode per Anthropic's docs.
- *     "enabled" with budget_tokens is deprecated on Opus 4.6.
- *   - Other models use "enabled" with the model's declared thinkingBudget
- *     (falling back to DEFAULT_THINKING_BUDGET_TOKENS).
- *
- * SDK LIMITATION (still present in ai@7.0.15 / @ai-sdk/anthropic@4.0.8 —
- * map-anthropic-stop-reason.ts maps "pause_turn" to "stop"):
- * When adaptive thinking is used with server-side tools (web search), the
- * Anthropic API may return stop_reason: "pause_turn" — indicating the model
- * needs a follow-up request to continue generating text. The AI SDK maps
- * "pause_turn" to the same unified finishReason as "end_turn" ("stop") and
- * the step continuation logic does not re-send the conversation. This
- * results in responses with reasoning + tool results but zero text content.
- *
- * WORKAROUND: When search tools are active, fall back to "enabled" thinking
- * with a conservative budget. This produces a complete response in a single
- * API call (no pause_turn). For non-search requests, adaptive thinking works
- * correctly and is preferred. Delete this downgrade once the SDK handles
- * pause_turn continuation.
- *
- * The downgrade is CATALOG-DRIVEN via `searchThinkingDowngrade` (set on
- * exactly the 4.6-generation adaptive models, where `budget_tokens` is
- * deprecated but functional). On Opus 4.8/Sonnet 5/Fable 5 the parameter is
- * removed upstream — sending it is an immediate HTTP 400, and Fable 5 rejects
- * every non-adaptive thinking config — so unflagged adaptive models send
- * {type: "adaptive"} unconditionally, search tools or not. If pause_turn
- * zero-text responses recur on those models, fix it at the SDK level; do not
- * resurrect the budget downgrade for 4.7+/5-generation models.
+ * AI SDK 7 currently maps Anthropic `pause_turn` to `stop` without continuing
+ * the request. Catalogued models with `searchThinkingDowngrade` therefore use
+ * fixed-budget thinking while search is active to avoid a reasoning-only
+ * response. Never apply that workaround to later models that reject fixed
+ * budgets; fix renewed `pause_turn` failures at the SDK continuation layer.
  */
 function resolveProviderOptions(
   modelConfig: ModelConfig,
@@ -101,34 +75,17 @@ function resolveProviderOptions(
       return { google: { thinkingConfig: { includeThoughts: true } } }
     case "openai":
       return { openai: { reasoningEffort: "medium", reasoningSummary: "auto" } }
-    // xai: deliberately no options. Grok 4-family reasoning models reason
-    // unconditionally — xAI's reasoning_effort knob applies only to
-    // grok-3-mini-class models, so any value sent for the cataloged Groks
-    // is rejected (the pre-fix "invalid xai provider options" 503).
+    // Catalogued Grok 4 models reason unconditionally and reject the
+    // grok-3-mini reasoning-effort option.
     //
-    // openrouter: unreachable from here by design. Its reasoning knob is a
-    // construction-time provider setting (`.chat(id, { reasoning })` on the
-    // spec-V3 provider), not a per-call providerOptions namespace — it rides
-    // the Provider strategy's construction-settings seam instead
-    // (ModelConfig.reasoning → ModelConstructionSettings; see
-    // provider-strategy.ts), never a case here. ai@7's unified `reasoning`
-    // call option is NOT a substitute: the V3 model silently ignores it (see
-    // the ProviderLanguageModel note in provider-strategy.ts).
+    // OpenRouter reasoning is construction-time provider state. Its V3 model
+    // ignores AI SDK 7's normalized per-call reasoning option.
     default:
       return {}
   }
 }
 
-/**
- * Anthropic Token-Efficient Tool Use: when an Anthropic model has tools
- * injected, the token-efficient beta header reduces tool definition token
- * consumption. Request-scoped via streamText({ headers }) — only affects
- * Anthropic requests that actually include tools. Safe to apply:
- * @ai-sdk/anthropic@4.0.8 comma-merges user and inferred betas
- * (getBetasFromHeaders + Array.from(betas).join(",")).
- *
- * Disable with ANTHROPIC_TOKEN_EFFICIENT_TOOLS=false.
- */
+/** Add Anthropic's token-efficient-tools beta only to requests with tools. */
 function resolveHeaders(
   modelConfig: ModelConfig,
   ctx: RequestShapingContext

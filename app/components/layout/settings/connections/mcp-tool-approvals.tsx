@@ -48,9 +48,7 @@ export function McpToolApprovals({ serverId }: McpToolApprovalsProps) {
   }
 
   if (isLoading) {
-    // Loading is its own state — rendering nothing here made the section pop
-    // in as if it had resolved empty. Same Skeleton strategy as the tab's
-    // section bodies (DESIGN.md states guidance).
+    // Keep loading distinct from a resolved empty section.
     return (
       <div className="mt-2" role="status" aria-label="Loading tools">
         <Skeleton aria-hidden="true" className="h-3 w-56 max-w-full" />

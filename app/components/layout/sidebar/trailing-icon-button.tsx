@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/tooltip"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import type { Chat } from "@/lib/chat-store/types"
-import { Pin, PinOff } from "@/lib/icons"
+import { Pin, PinFilled, PinOff, PinOffOutline } from "@/lib/icons"
 import type { ReactNode } from "react"
 
 /**
@@ -21,7 +21,7 @@ import type { ReactNode } from "react"
  * lives on the inner chip via a `:focus-visible` CSS rule in globals.css.
  */
 export const trailingIconButtonClassName =
-  "text-[var(--text-tertiary)] hover:text-foreground/90 data-popup-open:text-foreground/90 flex h-9 w-[34px] shrink-0 items-center justify-center outline-none"
+  "group/pin text-[var(--text-tertiary)] hover:text-foreground/90 data-popup-open:text-foreground/90 flex h-9 w-[34px] shrink-0 items-center justify-center outline-none"
 
 /**
  * The inner 24×24 chip that hosts the keyboard-only focus ring — ChatGPT outlines
@@ -32,7 +32,7 @@ export const trailingIconButtonClassName =
  */
 export function TrailingIconChip({ children }: { children: ReactNode }) {
   return (
-    <span className="trailing-icon-chip flex size-6 items-center justify-center rounded-md">
+    <span className="trailing-icon-chip relative flex size-6 items-center justify-center rounded-md">
       {children}
     </span>
   )
@@ -71,14 +71,36 @@ export function SidebarChatPinButton({
         }
       >
         <TrailingIconChip>
-          {chat.pinned ? <PinOff slotSize={20} /> : <Pin slotSize={20} />}
+          {chat.pinned ? (
+            <>
+              <PinOffOutline
+                slotSize={20}
+                className="absolute group-hover/pin:opacity-0 group-focus-visible/pin:opacity-0"
+              />
+              <PinOff
+                slotSize={20}
+                className="absolute opacity-0 group-hover/pin:opacity-100 group-focus-visible/pin:opacity-100"
+              />
+            </>
+          ) : (
+            <>
+              <Pin
+                slotSize={20}
+                className="absolute group-hover/pin:opacity-0 group-focus-visible/pin:opacity-0"
+              />
+              <PinFilled
+                slotSize={20}
+                className="absolute opacity-0 group-hover/pin:opacity-100 group-focus-visible/pin:opacity-100"
+              />
+            </>
+          )}
         </TrailingIconChip>
       </TooltipTrigger>
       <TooltipContent
         side="top"
         sideOffset={-6}
         variant="outline"
-        className="font-normal"
+        className="text-sm font-normal"
       >
         {tooltipLabel}
       </TooltipContent>

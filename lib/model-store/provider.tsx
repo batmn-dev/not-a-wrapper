@@ -166,11 +166,8 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
     }
   }, [fetchModels])
 
-  // User key status is now reactive via Convex useQuery
-  // This function is kept for API compatibility but is a no-op
   const refreshUserKeyStatus = useCallback(async () => {
-    // Convex queries are reactive - no manual refresh needed
-    // userKeyStatus updates automatically when userKeys changes
+    // Compatibility no-op; the Convex query updates key status reactively.
   }, [])
 
   const refreshFavoriteModels = useCallback(async () => {

@@ -58,10 +58,7 @@ export function cleanMessagesForTools(
   return cleanedMessages
 }
 
-/**
- * Check if a message contains tool-related content
- * In v5, tool parts have types starting with 'tool-' in the parts array
- */
+/** Return whether a message contains a tool role or tool part. */
 export function messageHasToolContent(message: MessageAISDK): boolean {
   return (
     (message as { role: string }).role === "tool" ||
@@ -76,9 +73,8 @@ export function messageHasToolContent(message: MessageAISDK): boolean {
  * For other providers, replaying those internal parts can cause responses API
  * validation errors when required paired items are missing.
  *
- * @deprecated Phase 7 cleanup: `app/api/chat/route.ts` now always uses
- * `adaptHistoryForProvider()`. Keep this only as a test/reference shim until
- * adapter parity tests are fully retired.
+ * @deprecated Compatibility shim; the request path uses
+ * `adaptHistoryForProvider()`.
  */
 export function sanitizeMessagesForProvider(
   messages: MessageAISDK[],
@@ -130,22 +126,15 @@ export function sanitizeMessagesForProvider(
  */
 export function isConvexArgumentValidationError(error: unknown): boolean {
   return (
-    error instanceof Error &&
-    error.message.includes("ArgumentValidationError")
+    error instanceof Error && error.message.includes("ArgumentValidationError")
   )
 }
 
 /**
- * Exclude system-role messages from model-input history. ai@7 rejects
- * system-role messages inside `messages` (`allowSystemInMessages` defaults to
- * false; the system prompt rides streamText's `instructions`), where ai@6
- * forwarded them to the provider. A system-role message in this app's history
- * is never a real instruction — it is a legacy `data`-role artifact (the UI
- * message adapter maps data/unknown stored roles to "system") or arrived
- * client-supplied on a guest chat — so model input drops it rather than
- * restoring the v6 behavior via `allowSystemInMessages: true`, which would
- * hand user-controllable history system-level privilege. Returns the input
- * array unchanged (same reference) when nothing is excluded.
+ * Drop system-role history rather than enabling `allowSystemInMessages`.
+ * These entries are legacy or client-controlled artifacts, not trusted
+ * instructions; promoting them would cross a privilege boundary. Returns the
+ * original array when no entry is excluded.
  */
 export function excludeSystemRoleMessages(messages: MessageAISDK[]): {
   messages: MessageAISDK[]

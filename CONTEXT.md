@@ -27,7 +27,16 @@ One user action that changes a conversation and may produce an assistant respons
 _Avoid_: submission, send flow, message lifecycle
 
 **Chat turn runtime**:
-The single server-side module that executes one **Chat turn** for one HTTP request, prepared once and alive for the whole stream — the backend counterpart to the client-side Chat turn, and the deep module the chat route (`app/api/chat/route.ts`) is a thin HTTP adapter over. Two-phase. `prepare()` resolves model/key, builds the **Tool runtime**, delegates durable-prepare (the optimistic-concurrency guard plus generation-run creation) to the **Durable turn runtime**, adapts history (**Provider strategy** sibling seams) and shapes the request, and throws status-coded errors — missing key → 401, durable concurrency → 4xx — that the route maps to HTTP responses _before any model call_. `toResponse(signal)` invokes `streamText`, owns request-level stream-lifecycle state and **both** `onEnd` layers (the `streamText` callback and the UI message stream envelope — `result.toUIMessageStream` shapes the stream, `createUIMessageStreamResponse` builds the SSE Response — share one closure), and returns the streaming Response. It wires durable facts through that shared closure without owning them: stream `onEnd` calls `durableTurn.captureFinish(...)`, envelope `onEnd` calls `durableTurn.finalize(...)`, and the **Durable turn runtime** owns snapshot throttling, tool-invocation upserts, approval-request backpressure, terminal write ordering, the loud missed-handoff fallback, and `fail(error)` persistence. The Chat turn runtime keeps abort/stall telemetry and non-durable response shaping in one closure so an abort single-counts; the route's outer catch can still call `fail(error)` when the stream never started. The convex token crosses once into the **Durable turn runtime** at construction; the abort signal crosses into `toResponse`; `after()` crosses as an injected registrar. The **Tool runtime** and **Durable turn runtime** are internal seams it composes, not part of its route interface. The route keeps only HTTP concerns: parse, cookie→token, usage admission, validation 400/401, and returning the Response. See `docs/adr/0006-chat-turn-runtime.md`.
+The request-scoped server module that executes one **Chat turn**. `prepare()`
+resolves the model and key, adapts history, prepares tools, and asks the
+**Durable turn runtime** to enforce concurrency and create the generation run
+before any model call. `toResponse(signal)` owns `streamText`, response shaping,
+abort telemetry, and both stream-completion callbacks in one closure; durable
+snapshot, approval, and terminal-write policy remain in the **Durable turn
+runtime**. The route is only the HTTP adapter. The implementation still uses
+the deprecated `result.toUIMessageStream(...)` instance helper; new work should
+use standalone `toUIMessageStream({ stream: result.stream, ... })`. See
+`docs/adr/0006-chat-turn-runtime.md`.
 _Avoid_: chat handler, stream pipeline, request orchestrator (too vague); session (collides with the client `ChatSessionProvider` and the WorkOS auth session); Tool runtime (that is the composed sub-module, not this)
 
 **Durable turn runtime**:

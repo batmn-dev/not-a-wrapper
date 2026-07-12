@@ -161,20 +161,14 @@ export const MCP_TRUSTED_RETRY_SERVER_ALLOWLIST = (
   .map((entry) => entry.trim().toLowerCase())
   .filter((entry) => entry.length > 0)
 
-/** Timeout for MCP tool executions (in milliseconds).
- * MCP tools connect to arbitrary user-configured servers that can hang.
- * Enforced via Promise.race in wrapMcpTools(). On timeout, the AI SDK
- * receives a thrown ToolTimeoutError and gracefully returns a tool-error
- * to the model, which can acknowledge the failure and continue.
- * 30s is conservative — aligns with MCP RFC #1492 direction (60s proposed).
- */
+/** Bounds calls to arbitrary user-configured MCP servers. */
 export const MCP_TOOL_EXECUTION_TIMEOUT_MS = 30_000
 
 // ============================================================================
 // Tool Infrastructure
 // ============================================================================
 
-/** Max steps when no tools are available (currently hardcoded as 10 in route.ts:213) */
+/** Maximum generation steps when no tools are available. */
 export const DEFAULT_MAX_STEP_COUNT = 10
 
 /**
@@ -193,15 +187,7 @@ export const ANONYMOUS_MAX_STEP_COUNT = 5
  */
 export const PREPARE_STEP_THRESHOLD = 3
 
-/**
- * Timeout for individual third-party tool executions (in milliseconds).
- * Provider tools (Layer 1) are server-side and have their own timeouts.
- * Third-party tools (Layer 2) make outbound HTTP requests that could hang.
- * This timeout is enforced via AbortSignal in custom tool() wrappers.
- *
- * Not yet enforced — reserved for Phase 7 when custom tool() wrappers
- * with AbortSignal support are added for third-party tools.
- */
+/** Timeout for third-party HTTP tools; provider-native tools set their own. */
 export const TOOL_EXECUTION_TIMEOUT_MS = 15_000
 
 /**

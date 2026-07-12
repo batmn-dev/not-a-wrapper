@@ -1,9 +1,19 @@
 # Model Thinking States Research
 
 Date: 2026-06-28
-Status: research document (rev. 3 — incorporated a second independent verification pass: narrowed the live text-embedded leak to Perplexity only (OpenRouter deepseek-r1 emits structured reasoning, not inline `<think>`), reconciled the terminal-status security gate across body/Addendum/blocking-list and promoted it to Technical #12, stated durable-write sanitization + terminal-status gating as a required pair, disambiguated the occurrence-detection vs disclosure-source fallback precedences, and fixed citation drift (pause_turn, `delta: part.text`, version pins). rev. 2 — incorporated an adversarial review pass: corrected the catalog/pipeline guard scope, pinned all SDK claims to `ai@6.0.78`, marked v7/out-of-catalog facts forward-looking, made the text-embedded safety boundary durable-first, and softened the Addendum from decisions to findings)
+Status: historical research snapshot (rev. 3 — SDK-specific findings remain pinned to the 2026-06-28 AI SDK v6 environment; the repository now runs AI SDK v7)
 Scope: model thinking/reasoning capability, streaming semantics, durable chat lifecycle, and display eligibility in Not A Wrapper
 Non-goal: this is not an implementation plan and does not prescribe sequencing
+
+> **Superseded SDK baseline.** This document intentionally preserves evidence
+> gathered against `ai@6.0.78` and the matching provider packages. The repository
+> now resolves `ai@7.0.15`, `@ai-sdk/react@4.0.16`, `@ai-sdk/provider@4.0.2`,
+> first-party provider packages on major 4, and
+> `@openrouter/ai-sdk-provider@2.10.0` through the SDK's V3 compatibility
+> surface. Treat every use of
+> "current," "today," or "installed" below as referring to the 2026-06-28
+> research snapshot unless a paragraph explicitly says otherwise. Re-verify all
+> SDK/provider behavior before turning these findings into implementation guidance.
 
 ## Recommended Mental Model
 
@@ -34,12 +44,17 @@ The UI should not infer "Thinking" from a pending assistant response alone. It s
 ## How To Read This Document
 
 - **Findings vs decisions.** A _finding_ describes what is true now or what is provably wrong; a _decision_ chooses among open options. Findings can be stated plainly; decisions belong in Open Questions, not in declarative "must" form. If a sentence picks a field name, an API shape, or a sequence, it has crossed from research into planning and should be reworded or moved to Open Questions.
-- **Pinned versions.** All SDK claims are pinned to this repo's installed packages: `ai@6.0.78`, `@ai-sdk/anthropic@3.0.41`, `@ai-sdk/google@3.0.24`, `@ai-sdk/openai@3.0.26`, `@ai-sdk/xai@3.0.46`, `@ai-sdk/perplexity@3.0.17`, `@ai-sdk/mistral@3.0.18`, `@openrouter/ai-sdk-provider@2.1.1`, `@ai-sdk/react@3.0.80`. A behavior verified only against `vercel/ai` `main` (the v7 line) is **not** verified for this repo; such claims are flagged inline.
+- **Pinned versions.** All SDK claims are pinned to the packages installed when
+  this research was conducted: `ai@6.0.78`, `@ai-sdk/anthropic@3.0.41`,
+  `@ai-sdk/google@3.0.24`, `@ai-sdk/openai@3.0.26`, `@ai-sdk/xai@3.0.46`,
+  `@ai-sdk/perplexity@3.0.17`, `@ai-sdk/mistral@3.0.18`,
+  `@openrouter/ai-sdk-provider@2.1.1`, and `@ai-sdk/react@3.0.80`. These are
+  historical evidence pins, not the repository's current dependency versions.
 - **Catalog snapshot.** Statements about specific models are pinned to the current catalog (`lib/models/data/*`, `lastVerifiedAt: 2026-03-08`), whose newest Claude is Opus/Sonnet 4.6 and whose Grok entries are `grok-4-0709` / `grok-4-1-*` / `grok-code-fast-1`. Provider facts about models not yet in the catalog are marked **forward-looking**.
 
 ## Official Source Findings
 
-### AI SDK v6
+### AI SDK v6 (historical snapshot)
 
 Relevant official docs:
 
@@ -49,13 +64,19 @@ Relevant official docs:
 
 Research findings:
 
-- `streamText(...)` is the correct server primitive for streaming text and tool-using responses in this repo's AI SDK v6 setup.
+- `streamText(...)` was the correct server primitive for streaming text and
+  tool-using responses in the repo's AI SDK v6 setup and remains the current v7
+  primitive; v7-specific options must be verified separately.
 - `toUIMessageStreamResponse(...)` can forward reasoning and sources into UI message streams through options such as `sendReasoning` and `sendSources`.
 - The UI message stream protocol has explicit reasoning events: `reasoning-start`, `reasoning-delta`, and `reasoning-end`.
 - The UI stream protocol also has source parts and tool parts. Those are separate from reasoning and should stay separate in the product taxonomy.
 - AI SDK has multiple reasoning-related surfaces: stream transport to the client, provider options that control model behavior, UI message parts, and usage metadata. These should not be collapsed into one concept named "reasoning."
 - AI SDK stream parts are normalized enough to let the app render provider-agnostic UI message parts, but they do not by themselves prove that hidden reasoning happened. Hidden reasoning needs send-time request policy, provider metadata, usage fields, or provider-specific evidence.
-- AI SDK v6 mutates message parts during streaming. Existing tests and comments already account for this in the activity-panel and message memoization work; future state derivation must not rely on stable `parts` array identity during active streams.
+- Both the historical AI SDK v6 snapshot and the currently installed AI SDK v7
+  mutate message parts during streaming. Existing tests and comments already
+  account for this in the activity-panel and message memoization work; future
+  state derivation must not rely on stable `parts` array identity during active
+  streams.
 
 Implication for planning:
 
@@ -1051,11 +1072,11 @@ It remains a research artifact, not an implementation plan: no sequencing, no fi
 
 These three details are load-bearing. They define the current risk profile for reload, persistence, abort, and failure behavior.
 
-1. **`reasoningDurationMs` is durably persisted and survives reload for completed turns.** The "client-transient" framing is only true relative to the _server-owned-projection_ writers (`stampServerFields` / `adoptServerOwned` in `lib/chat-messages/metadata.ts`), which do not own that field. In reality it is a first-class field of `vToolInvocationStreamMetadata` ([convex/lib/messageMetadata.ts:45](convex/lib/messageMetadata.ts)), the `messages.metadata` column is narrowed to that validator ([convex/schema.ts:145](convex/schema.ts)), it is written on completion via `projectPersistedMessageMetadata` ([messageMetadata.ts:131](convex/lib/messageMetadata.ts)), and the reload adapter preserves it because `clearServerOwnedMetadata` deletes only its own 8 keys ([metadata.ts:132-136](lib/chat-messages/metadata.ts)). A reloaded completed turn can therefore show duration-derived copy. Anyone planning the durable layer should not "add" duration persistence as if it were absent; the gap is occurrence/exposure semantics.
+1. **`reasoningDurationMs` is durably persisted and survives reload for completed turns.** The "client-transient" framing is only true relative to the _server-owned-projection_ writers (`stampServerFields` / `adoptServerOwned` in `lib/chat-messages/metadata.ts`), which do not own that field. In reality it is a first-class field of `vToolInvocationStreamMetadata` ([convex/lib/messageMetadata.ts:45](../convex/lib/messageMetadata.ts)), the `messages.metadata` column is narrowed to that validator ([convex/schema.ts:145](../convex/schema.ts)), it is written on completion via `projectPersistedMessageMetadata` ([messageMetadata.ts:131](../convex/lib/messageMetadata.ts)), and the reload adapter preserves it because `clearServerOwnedMetadata` deletes only its own 8 keys ([metadata.ts:132-136](../lib/chat-messages/metadata.ts)). A reloaded completed turn can therefore show duration-derived copy. Anyone planning the durable layer should not "add" duration persistence as if it were absent; the gap is occurrence/exposure semantics.
 
-2. **Reasoning _text_ persists verbatim and reconstructs on reload.** `messages.parts` is `v.any()` ([convex/schema.ts:126](convex/schema.ts)) and `onFinish` writes `responseMessage.parts` wholesale; because `sendReasoning: true` ([chat-turn-runtime.ts:1590](app/api/chat/chat-turn-runtime.ts)), reasoning parts are _in_ that array. Source-level check of the installed SDK confirms the reducer accumulates reasoning parts into `responseMessage.parts`. So a reloaded completed reasoning turn reconstructs its summary text from `parts`, not just its duration. The reload story is **better than the body fears** for completed turns; the real fragility is abort/fail and hidden-no-text (below).
+2. **Reasoning _text_ persists verbatim and reconstructs on reload.** `messages.parts` is `v.any()` ([convex/schema.ts:126](../convex/schema.ts)) and `onFinish` writes `responseMessage.parts` wholesale; because `sendReasoning: true` ([chat-turn-runtime.ts:1590](../app/api/chat/chat-turn-runtime.ts)), reasoning parts are _in_ that array. Source-level check of the installed SDK confirms the reducer accumulates reasoning parts into `responseMessage.parts`. So a reloaded completed reasoning turn reconstructs its summary text from `parts`, not just its duration. The reload story is **better than the body fears** for completed turns; the real fragility is abort/fail and hidden-no-text (below).
 
-3. **Reasoning evidence is genuinely lost on abort/fail.** The terminal mutations route through `applyTerminalAssistantOutcome`, which patches **only** `status` + `error` ([convex/chatRuntime.ts:353-357](convex/chatRuntime.ts)), and the UI-stream `onFinish` returns early on `isAborted` _before_ the only metadata-writing path ([chat-turn-runtime.ts:1611-1614](app/api/chat/chat-turn-runtime.ts)). So `reasoningDurationMs` — even though it was computed — is never persisted on a stopped/failed turn. Partial reasoning _text_ may survive via the last throttled snapshot flush into `parts`; the duration does not. This is the concrete mechanism behind the abort open questions.
+3. **Reasoning evidence is genuinely lost on abort/fail.** The terminal mutations route through `applyTerminalAssistantOutcome`, which patches **only** `status` + `error` ([convex/chatRuntime.ts:353-357](../convex/chatRuntime.ts)), and the UI-stream `onFinish` returns early on `isAborted` _before_ the only metadata-writing path ([chat-turn-runtime.ts:1611-1614](../app/api/chat/chat-turn-runtime.ts)). So `reasoningDurationMs` — even though it was computed — is never persisted on a stopped/failed turn. Partial reasoning _text_ may survive via the last throttled snapshot flush into `parts`; the duration does not. This is the concrete mechanism behind the abort open questions.
 
 ## Verified facts (adversarial pass)
 
@@ -1077,9 +1098,16 @@ Each row was checked against the code (and, where noted, the installed SDK). "Ve
 
 **Incidental observations (migration/cleanup — out of research scope).** Two further checks surfaced during the pass are not reasoning-state semantics and are kept here only for completeness: (12) live event handling is provider-agnostic except one dev-only `console.log` in `onFinish` (cosmetic); (13) the schema-narrowing of `messages.metadata` is not guarded by the expand/migrate/contract tooling (a migration-readiness concern — out of scope per the "no migration plan" Non-Goal; if pursued, frame as an open question, not a finding).
 
-**The headline defect, restated precisely:** the thinking affordance is gated on _parts-presence + `"submitted"`_, never on capability. `isSubmittedPending = status==="submitted" && isLast` drives `activityState = {status:"thinking"}` ([message-assistant.tsx:162-169](app/components/chat/message-assistant.tsx)), and the pending placeholder hard-codes `phase:"thinking", isReasoningStreaming:true` ([use-activity-panel.ts:239-248](app/components/chat/use-activity-panel.ts)). Both fire for non-reasoning models. The capability input the body asks for simply does not reach the presentation layer today.
+**The headline defect, restated precisely:** the thinking affordance is gated on _parts-presence + `"submitted"`_, never on capability. `isSubmittedPending = status==="submitted" && isLast` drives `activityState = {status:"thinking"}` ([message-assistant.tsx:162-169](../app/components/chat/message-assistant.tsx)), and the pending placeholder hard-codes `phase:"thinking", isReasoningStreaming:true` ([use-activity-panel.ts:239-248](../app/components/chat/use-activity-panel.ts)). Both fire for non-reasoning models. The capability input the body asks for simply does not reach the presentation layer today.
 
-## AI SDK v6 — precise semantics & footguns (source-verified)
+## AI SDK v6 — precise semantics & footguns (historical, source-verified)
+
+> **Current v7 follow-up (2026-07-12).** Installed types confirm that
+> `ai@7.0.15` exposes the normalized `reasoning` option,
+> `@ai-sdk/anthropic@4.0.8` exposes adaptive-thinking `display`, and
+> `@ai-sdk/google@4.0.8` exposes `thinkingSummaries`. The SDK-version blockers
+> identified below are therefore resolved. Provider/model behavior and product
+> policy were not re-researched as part of the documentation refresh.
 
 The body's AI SDK section is directionally right but omits the exact shapes that prevent real bugs. Verified against `ai-sdk.dev` docs **and the installed `ai@6.0.78` dist** (`node_modules/ai/dist`). Where an earlier draft cited `vercel/ai` `main`/v7 file paths, those have been re-checked against the pin; v6-vs-v7 discrepancies are flagged inline below.
 
@@ -1088,7 +1116,7 @@ The body's AI SDK section is directionally right but omits the exact shapes that
 - **Field-name footgun (will bite normalization code):** in `fullStream`, the reasoning-delta content field is **`.text`**; on the UI-message **wire** protocol the same chunk uses **`.delta`** (the mapper does `delta: part.text`). Published _types_ once asserted `.delta` for `fullStream` while runtime emits `.text` ([issue #8756](https://github.com/vercel/ai/issues/8756)). Treat `.text` as correct for `fullStream`.
 - **`ReasoningUIPart` exact shape:** `{ type: "reasoning"; text: string; state?: "streaming" | "done"; providerMetadata?: ProviderMetadata }`, living inside `UIMessage.parts[]` (the v4 top-level `message.reasoning` was removed; the field was renamed `reasoning`→`text`). Multiple reasoning blocks ⇒ multiple parts interleaved with text parts; key by `id`, don't assume a single block.
 - **`usage.reasoningTokens` is SDK-normalized**, but two caveats matter for the pin: (1) in `ai@6.0.78` the **top-level `usage.reasoningTokens` is `@deprecated`** in favor of `usage.outputTokenDetails.reasoningTokens` (both populated); (2) it is on the `fullStream` finish part / `result.usage` but **not on the UI-message wire finish chunk** (which carries only `finishReason` + optional `messageMetadata`) — so it must be read **server-side** (`onFinish`/`fullStream`), not from the client stream. It is the candidate "reasoning happened" signal for hidden-no-text turns, but "normalized cross-provider" ≠ "every provider populates it" — gather per-provider evidence (open Q #5). Anthropic also exposes native `usage.output_tokens_details.thinking_tokens` as a cross-check.
-- **Portable `reasoning` request param** (`"none"|"minimal"|"low"|"medium"|"high"|"xhigh"`) is a **v7-only** normalized effort knob — it is **absent from the pinned `ai@6.0.78`** (no `xhigh`/`minimal` anywhere in `node_modules/ai/dist`). Exposing a portable user effort control would require an SDK upgrade; today only provider-native `providerOptions` effort knobs exist.
+- **Portable `reasoning` request param** (`"none"|"minimal"|"low"|"medium"|"high"|"xhigh"`) was a **v7-only** normalized effort knob and was **absent from the pinned `ai@6.0.78`** (no `xhigh`/`minimal` anywhere in the snapshot's `node_modules/ai/dist`). The repository's current `ai@7.0.15` types now expose this option, so the old SDK-upgrade blocker is resolved; provider behavior still requires verification.
 - **`extractReasoningMiddleware({ tagName: "think" })`** is exported by `ai@6.0.78` and re-exposes inline `<think>`-tagged reasoning (DeepSeek/Perplexity-style) as proper reasoning parts. It is a _candidate_ seam, not a proven fix: it is **not installed** today, and the safety question is **layer placement** — it must intercept **upstream of the durable text-delta accumulator** (`durable-runtime.ts`) so stripped `<think>` never reaches `messages.content` (which the public share path reads); render-time use does not stop the public leak. Open: migration story for already-persisted `<think>` content, and non-destructiveness for legitimate user text containing the literal token.
 - **Resumable streams** (`useChat({ resume: true })` + `createResumableStreamContext`) are documented, and **`resume` and `stop()`/abort are mutually exclusive**. For this repo they are effectively unavailable: `createResumableStreamContext` is **not exported by the installed `ai` package** and the `resumable-stream` dependency is not installed. The app is not resumable client-side: `consumeStream` keeps the _server_ writing durable snapshots after disconnect, and the client re-hydrates the frozen durable snapshot on reload. Any "resume the live thinking stream" idea collides with the existing stop/abort behavior and would require a new dependency.
 
@@ -1111,7 +1139,7 @@ The body's per-provider sections are good summaries; these are the _load-bearing
 
 ## A catalog-vs-pipeline reasoning mismatch (research finding + open question)
 
-**Finding.** The catalog can mark a model `reasoningText: true` while request shaping emits no reasoning options for it, so the UI would promise a thinking affordance the pipeline never produces. **Corrected scope (this contradicted an earlier draft and the body):** of the catalog's reasoning concerns, only **OpenRouter** actually exhibits this divergence — its two `reasoningText: true` entries ([openrouter.ts](lib/models/data/openrouter.ts)) hit `default: {}` because `providerId "openrouter"` is not a switch case in `resolveProviderOptions` ([request-shaping.ts:77-96](lib/openproviders/request-shaping.ts)). **Mistral and Perplexity do NOT exhibit it**: every Mistral and Perplexity catalog entry is `reasoningText: false`, so they short-circuit at `request-shaping.ts:75` and never reach `default: {}` (consistent with the body, which states this correctly). The providers that emit reasoning options are exactly the non-`default` switch cases: anthropic / google / openai / xai. (The `reasoningText: true` mistral case in `request-shaping.test.ts` is a synthetic test fixture, not a catalog entry — likely the source of the earlier over-generalization.)
+**Finding.** The catalog can mark a model `reasoningText: true` while request shaping emits no reasoning options for it, so the UI would promise a thinking affordance the pipeline never produces. **Corrected scope (this contradicted an earlier draft and the body):** of the catalog's reasoning concerns, only **OpenRouter** actually exhibits this divergence — its two `reasoningText: true` entries ([openrouter.ts](../lib/models/data/openrouter.ts)) hit `default: {}` because `providerId "openrouter"` is not a switch case in `resolveProviderOptions` ([request-shaping.ts:77-96](../lib/openproviders/request-shaping.ts)). **Mistral and Perplexity do NOT exhibit it**: every Mistral and Perplexity catalog entry is `reasoningText: false`, so they short-circuit at `request-shaping.ts:75` and never reach `default: {}` (consistent with the body, which states this correctly). The providers that emit reasoning options are exactly the non-`default` switch cases: anthropic / google / openai / xai. (The `reasoningText: true` mistral case in `request-shaping.test.ts` is a synthetic test fixture, not a catalog entry — likely the source of the earlier over-generalization.)
 
 **Open question (not a prescribed test).** How should the capability layer reconcile catalog reasoning claims against what request shaping actually emits — and where should that check live? One candidate is a static contract test (does every `reasoningText: true` model resolve to a non-`default` switch case?), which against today's catalog would flag OpenRouter only. The divergence is **deterministic per model** (computable from catalog + switch cases), so it does not by itself justify a per-turn durable "effective policy" field; the only genuinely per-request variation is the Anthropic search-active `adaptive → enabled` downgrade. (Function names like `capability.surfacesReasoning` are illustrative, not a prescribed API.)
 
@@ -1142,16 +1170,20 @@ These extend the body's Open Questions; they're new or sharper.
 
 Official sources gathered during this pass, organized by topic. Each was fetched/verified on 2026-06-28.
 
-**AI SDK (the normalized layer) — repo pins `ai@6.0.78`; `ai-sdk.dev` docs default to the v7 "Latest" line, so confirm each behavior against the installed dist:**
+**AI SDK (historical normalized-layer snapshot) — research pinned to
+`ai@6.0.78`; the repo now runs `ai@7.0.15`:**
 
-- [Reasoning (portable param, precedence, provider support)](https://ai-sdk.dev/docs/ai-sdk-core/reasoning) — **v7 page**; the portable `reasoning` effort enum it documents is NOT in pinned v6.0.78.
+- [Reasoning (portable param, precedence, provider support)](https://ai-sdk.dev/docs/ai-sdk-core/reasoning) — **v7 page**; the portable `reasoning` effort enum was not in the v6.0.78 research pin and is now available in the current v7 types.
 - [streamText reference (fullStream parts, onFinish, usage, toUIMessageStreamResponse options)](https://ai-sdk.dev/docs/reference/ai-sdk-core/stream-text)
 - [UI stream protocol (reasoning-start/delta/end wire shapes)](https://ai-sdk.dev/docs/ai-sdk-ui/stream-protocol)
 - [UIMessage reference (ReasoningUIPart shape)](https://ai-sdk.dev/docs/reference/ai-sdk-core/ui-message)
 - [Chatbot Resume Streams](https://ai-sdk.dev/docs/ai-sdk-ui/chatbot-resume-streams) · [Troubleshooting: abort breaks resumable streams](https://ai-sdk.dev/docs/troubleshooting/abort-breaks-resumable-streams) — note `createResumableStreamContext` is not exported by the installed `ai`, and `resumable-stream` is not a repo dependency.
 - [AI Elements: Reasoning component (the intended display surface)](https://elements.ai-sdk.dev/components/reasoning)
 - [Migration 4.x→5.0 (`.reasoning`→`.reasoningText`, reasoning moved into parts[])](https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0)
-- **Pinned-version source of truth** (preferred over `vercel/ai` `main`/v7 paths): installed `node_modules/ai/dist/index.mjs` — `sendReasoning = true` default at `:7275`, `delta: part.text` wire mapping at `:7337`. (The v7 module `to-ui-message-chunk.ts` does not exist in v6.) · [issue #8756](https://github.com/vercel/ai/issues/8756) (`.text` vs `.delta` footgun)
+- **Historical pinned-version source of truth:** the snapshot's installed
+  `node_modules/ai/dist/index.mjs` — `sendReasoning = true` default at `:7275`,
+  `delta: part.text` wire mapping at `:7337`. These line numbers do not apply to
+  the current v7 install. · [issue #8756](https://github.com/vercel/ai/issues/8756) (`.text` vs `.delta` footgun)
 
 **Anthropic (summary-not-raw; display omitted/summarized; encryption):**
 

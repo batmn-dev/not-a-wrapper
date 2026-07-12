@@ -1,20 +1,11 @@
-// convex/toolCallLog.ts
-// Renamed from convex/mcpToolCallLog.ts — now logs all tool sources (builtin, third-party, mcp).
-
 import { paginationOptsValidator } from "convex/server"
 import { v } from "convex/values"
 import { authenticatedMutation, maybeAuthQuery } from "./lib/authedFunctions"
 
-// =============================================================================
-// Helpers
-// =============================================================================
-
 const MAX_PREVIEW_LENGTH = 500
 
 /**
- * Truncate a string to MAX_PREVIEW_LENGTH chars.
- * Intentionally stores only truncated previews — avoids persisting sensitive
- * data (PII, tokens) that tools may process.
+ * Store bounded previews to limit persistence of sensitive tool data.
  */
 function truncatePreview(text: string | undefined): string | undefined {
   if (!text) return undefined
@@ -22,22 +13,15 @@ function truncatePreview(text: string | undefined): string | undefined {
   return text.slice(0, MAX_PREVIEW_LENGTH) + "…"
 }
 
-// =============================================================================
-// Mutations
-// =============================================================================
-
 /**
  * Log a tool call for audit purposes.
  *
- * Called from the chat route's onFinish callback.
- * Supports all tool sources: builtin, third-party, and MCP.
- * serverId is optional — only provided for MCP tool calls.
- * userId is set from auth context — never from client input.
+ * User identity comes from auth; clients cannot select the audit owner.
  */
 export const log = authenticatedMutation({
   args: {
     chatId: v.optional(v.id("chats")),
-    serverId: v.optional(v.id("mcpServers")), // Only for MCP tools
+    serverId: v.optional(v.id("mcpServers")),
     toolName: v.string(),
     toolCallId: v.string(),
     inputPreview: v.optional(v.string()),
@@ -45,9 +29,7 @@ export const log = authenticatedMutation({
     success: v.boolean(),
     durationMs: v.optional(v.number()),
     error: v.optional(v.string()),
-    // REQUIRED — clean break, no backward compat needed.
-    // "unknown" covers calls whose tool name no layer's metadata resolves —
-    // they are audited rather than silently skipped.
+    // Unresolved tool names are audited instead of silently skipped.
     source: v.union(
       v.literal("builtin"),
       v.literal("third-party"),
@@ -56,7 +38,6 @@ export const log = authenticatedMutation({
       v.literal("unknown")
     ),
     serviceName: v.optional(v.string()),
-    // Phase C: Observability enrichment
     stepNumber: v.optional(v.number()),
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
@@ -68,7 +49,6 @@ export const log = authenticatedMutation({
       v.union(v.literal("platform"), v.literal("byok"))
     ),
     budgetDenied: v.optional(v.boolean()),
-    // Payment guardrail observability (Phase 6)
     intentClass: v.optional(v.string()),
     policyDecision: v.optional(v.string()),
     chatVersion: v.optional(v.number()),
@@ -76,7 +56,6 @@ export const log = authenticatedMutation({
     stateMutationKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // Verify chat ownership if chatId is provided
     if (args.chatId) {
       const chat = await ctx.db.get(args.chatId)
       if (!chat || chat.userId !== ctx.user._id) {
@@ -97,7 +76,6 @@ export const log = authenticatedMutation({
       error: args.error ? truncatePreview(args.error) : undefined,
       source: args.source,
       serviceName: args.serviceName,
-      // Phase C: Observability enrichment
       stepNumber: args.stepNumber,
       inputTokens: args.inputTokens,
       outputTokens: args.outputTokens,
@@ -107,7 +85,6 @@ export const log = authenticatedMutation({
       retryAfterSeconds: args.retryAfterSeconds,
       budgetKeyMode: args.budgetKeyMode,
       budgetDenied: args.budgetDenied,
-      // Payment guardrail observability (Phase 6)
       intentClass: args.intentClass,
       policyDecision: args.policyDecision,
       chatVersion: args.chatVersion,
@@ -118,21 +95,13 @@ export const log = authenticatedMutation({
   },
 })
 
-// =============================================================================
-// Queries
-// =============================================================================
-
-/**
- * Get the audit trail for a specific conversation.
- * Returns all tool call log entries for the given chat, ordered by creation time.
- */
+/** Return a conversation's newest-first tool audit trail to its owner. */
 export const listByChat = maybeAuthQuery({
   args: { chatId: v.id("chats") },
   handler: async (ctx, { chatId }) => {
     const user = ctx.user
     if (!user) return []
 
-    // Verify chat ownership
     const chat = await ctx.db.get(chatId)
     if (!chat || chat.userId !== user._id) return []
 
@@ -144,10 +113,7 @@ export const listByChat = maybeAuthQuery({
   },
 })
 
-/**
- * Get the user's tool call history (paginated).
- * Returns most recent entries first.
- */
+/** Return the current user's newest-first paginated tool history. */
 export const listByUser = maybeAuthQuery({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
