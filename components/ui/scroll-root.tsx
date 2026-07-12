@@ -77,9 +77,9 @@ function ScrollRoot({ children, className, ...props }: ScrollRootProps) {
         className={cn(
           "group/scroll-root relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip overflow-y-auto [scrollbar-gutter:stable]",
           "data-stream-active:[overflow-anchor:none]",
-          "scroll-pt-(--header-height) [--sticky-padding-top:var(--header-height)] [--sticky-padding-bottom:0px]",
+          "scroll-pt-(--header-height) [--sticky-padding-top:var(--header-height)] [--sticky-padding-bottom:env(safe-area-inset-bottom,0px)]",
           "[--scroll-root-safe-area-inset-top:calc(var(--sticky-padding-top)+env(safe-area-inset-top,0px))]",
-          "[--scroll-root-safe-area-inset-bottom:calc(var(--sticky-padding-bottom)+var(--screen-keyboard-height,0px)+env(safe-area-inset-bottom,0px))]",
+          "[--scroll-root-safe-area-inset-bottom:calc(var(--sticky-padding-bottom)+var(--screen-keyboard-height,0px))]",
           "[--scroll-root-safe-area-height:calc(100lvh-var(--scroll-root-safe-area-inset-top)-var(--scroll-root-safe-area-inset-bottom))]",
           "has-data-[fixed-header=less-than-xl]:@7xl/main:scroll-pt-0 has-data-[fixed-header=less-than-xl]:@7xl/main:[--sticky-padding-top:0px]",
           className
@@ -131,7 +131,10 @@ function useStickyPaddingBottom(enabled: boolean) {
       write()
       const observer = new ResizeObserver(write)
       observer.observe(node)
-      cleanupRef.current = () => observer.disconnect()
+      cleanupRef.current = () => {
+        observer.disconnect()
+        root.style.removeProperty("--sticky-padding-bottom")
+      }
     },
     [enabled]
   )

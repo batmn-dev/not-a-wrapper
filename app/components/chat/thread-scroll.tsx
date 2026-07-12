@@ -150,21 +150,27 @@ export function ThreadScrollEdge({
     gutterCleanupRef.current = null
     const root = closestScrollRoot(el)
     if (!el || !root) return
+    const updateRemainingHeight = () => {
+      const remaining =
+        root.getBoundingClientRect().bottom - el.getBoundingClientRect().top
+      el.style.setProperty("--gutter-remaining-height", `${remaining}px`)
+    }
     const observer = new IntersectionObserver(
-      () => {
-        const remaining =
-          root.getBoundingClientRect().bottom - el.getBoundingClientRect().top
-        el.style.setProperty("--gutter-remaining-height", `${remaining}px`)
-      },
+      updateRemainingHeight,
       { root, threshold: GUTTER_THRESHOLDS }
     )
     observer.observe(el)
-    gutterCleanupRef.current = () => observer.disconnect()
+    const resizeObserver = new ResizeObserver(updateRemainingHeight)
+    resizeObserver.observe(root)
+    gutterCleanupRef.current = () => {
+      observer.disconnect()
+      resizeObserver.disconnect()
+    }
   }, [])
 
   // (3) Stream lifecycle: `data-stream-active` on the root gives the gutter
   // its reserved-space height class and disables native scroll anchoring
-  // (both pure CSS). The gutter's observer handles everything else.
+  // (both pure CSS). The gutter's observers handle everything else.
   useBrowserLayoutEffect(() => {
     const rootEl = rootRef.current
     if (!rootEl) return
@@ -184,12 +190,15 @@ export function ThreadScrollEdge({
 
   // (4) Answer-start pinning through the rAF + retry pipeline.
   useEffect(() => {
-    if (!pinTurnId) return
+    if (!pinTurnId) {
+      pinnedTurnRef.current = null
+      return
+    }
     const rootEl = rootRef.current
     if (!rootEl || pinnedTurnRef.current === pinTurnId) return
-    pinnedTurnRef.current = pinTurnId
     let cancelRetry: (() => void) | null = null
     const frame = requestAnimationFrame(() => {
+      pinnedTurnRef.current = pinTurnId
       if (!pinTurn(rootEl, pinTurnId)) {
         cancelRetry = pinTurnWhenMounted(rootEl, pinTurnId)
       }

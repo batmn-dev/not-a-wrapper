@@ -23,7 +23,14 @@ import {
 } from "ai"
 import { useConvex, useMutation } from "convex/react"
 import { useSearchParams } from "next/navigation"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { useTurnContext } from "./turn-context"
 import {
   cleanupOptimisticAttachments,
@@ -262,7 +269,7 @@ export function useChatCore({
   const messagesRef = useRef(messages)
   const statusRef = useRef(status)
   const isSubmittingRef = useRef(isSubmitting)
-  useEffect(() => {
+  useLayoutEffect(() => {
     messagesRef.current = messages
     statusRef.current = status
     isSubmittingRef.current = isSubmitting
