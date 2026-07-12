@@ -37,17 +37,25 @@ function TooltipShortcut({
         <span>{label}</span>
         <span
           data-slot="tooltip-shortcut-keys"
-          className="inline-flex whitespace-pre [text-box:trim-both_text] text-[var(--text-tertiary)] font-medium pointer-coarse:hidden [&_kbd]:min-w-0 [&_kbd]:[align-items:normal] [&_kbd]:justify-normal [&_kbd]:text-xs [&_kbd]:[font-family:inherit] [&_kbd>span]:min-w-[1em]"
+          // The 1em key slots come from ChatGPT's sidebar-hint kbd markup,
+          // where trailing slack is invisible. Inside a bordered tooltip a
+          // narrow final glyph (S, K…) would leave its slack reading as extra
+          // right padding, so the LAST key ink-fits instead.
+          className="inline-flex font-medium whitespace-pre text-[var(--text-tertiary)] [text-box:trim-both_text] pointer-coarse:hidden [&_kbd]:min-w-0 [&_kbd]:[align-items:normal] [&_kbd]:justify-normal [&_kbd]:[font-family:inherit] [&_kbd]:text-xs [&_kbd:last-child>span]:min-w-0 [&_kbd>span]:min-w-[1em]"
         >
           {children}
         </span>
       </span>
-      <span
-        data-slot="tooltip-shortcut-detail"
-        className="text-[var(--text-tertiary)] font-medium"
-      >
-        {detail}
-      </span>
+      {/* Rendered only when present: the root's gap-2 would otherwise add a
+          phantom 8px of trailing space for an empty detail slot. */}
+      {detail != null && (
+        <span
+          data-slot="tooltip-shortcut-detail"
+          className="font-medium text-[var(--text-tertiary)]"
+        >
+          {detail}
+        </span>
+      )}
     </span>
   )
 }
