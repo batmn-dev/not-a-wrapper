@@ -8,6 +8,7 @@ import { Conversation } from "@/app/components/chat/conversation"
 import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { useGlobalPromptFocus } from "@/app/hooks/use-global-prompt-focus"
 import { ScrollButton } from "@/components/ui/scroll-button"
+import { useStickyPaddingBottom } from "@/components/ui/scroll-root"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useChat } from "@/lib/chat-store/chats/use-chat"
 import { useMessages } from "@/lib/chat-store/messages/provider"
@@ -164,8 +165,7 @@ function ChatInner({
   // Chat-hosted panel surface (see CONTEXT.md "Activity panel"). Chat keeps the
   // selection derivation (useActivityPanel) and syncs its output into the
   // store; rows subscribe through per-row selectors instead of a controls
-  // object threaded down the tree. The provider wires the scroll-anchoring
-  // release on open (the panel module's own quirk).
+  // object threaded down the tree.
   const [activityPanelStore] = useState(() => createActivityPanelStore())
   const activityPanelOpen = useActivityPanelOpen(activityPanelStore)
   const selectedActivityTurnId =
@@ -258,6 +258,8 @@ function ChatInner({
       messages,
       status,
       isSubmitting,
+      chatId,
+      hasSentFirstMessage,
       onDelete: handleDelete,
       onEdit: submitEdit,
       onReload: handleReload,
@@ -272,6 +274,8 @@ function ChatInner({
       messages,
       status,
       isSubmitting,
+      chatId,
+      hasSentFirstMessage,
       handleDelete,
       submitEdit,
       handleReload,
@@ -318,12 +322,31 @@ function ChatInner({
 
   const showOnboarding = !chatId && messages.length === 0
 
+  // The sticky composer stack's measured footprint becomes
+  // `--sticky-padding-bottom` (inline on the scroll root), the value the whole
+  // scroll-margin/gutter system derives its bottom inset from. Disabled during
+  // onboarding, where the container grows to center the composer.
+  const threadBottomRef = useStickyPaddingBottom(!showOnboarding)
+
   return (
     <ActivityPanelStoreProvider
       store={activityPanelStore}
       panelId={activityPanelId}
     >
-      <div id="thread" className="group/thread flex min-h-full flex-1 flex-col">
+      <div
+        id="thread"
+        // `@container/thread` scopes cqw units to the SCROLL COLUMN (unlike
+        // `@container/main`, which deliberately spans the activity dock — see
+        // layout-app.tsx). The markdown table breakout (globals.css
+        // `.markdown-table-container`) measures 100cqw against it, so tables
+        // bleed to the thread edge and never under the docked panel. The named
+        // `/main` tier queries pass through untouched.
+        className="group/thread @container/thread flex min-h-full flex-1 flex-col"
+        // The thread exposes its context-keep fraction as an
+        // inline knob (theirs is React-set the same way; `.threadScrollVars`
+        // consumes it with the same 1/3 fallback).
+        style={{ "--thread-show-context-pct": "1/3" } as React.CSSProperties}
+      >
         <ChatStatusAnnouncer status={status} isSubmitting={isSubmitting} />
         <DialogAuth open={hasDialogAuth} setOpen={setHasDialogAuth} />
 
@@ -370,6 +393,7 @@ function ChatInner({
 
           <div
             id="thread-bottom-container"
+            ref={threadBottomRef}
             className={cn(
               `group/thread-bottom-container sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col px-[var(--thread-content-margin,1rem)] pb-[env(safe-area-inset-bottom,0px)] ${THREAD_GUTTER_VARS}`,
               showOnboarding ? "sm:grow" : "content-fade"

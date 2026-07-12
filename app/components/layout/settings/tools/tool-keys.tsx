@@ -2,6 +2,11 @@
 
 import { Icon } from "@/components/ui/icon"
 import { useModel } from "@/lib/model-store/provider"
+import {
+  TOOL_PROVIDER_IDENTITY,
+  TOOL_PROVIDER_IDS,
+  type ToolProvider,
+} from "@/lib/provider-identity"
 import { cn } from "@/lib/utils"
 import {
   RiKeyLine,
@@ -12,36 +17,32 @@ import {
 import { ProviderKeyPanel } from "../provider-key-panel"
 import type { ProviderKeyConfig } from "../use-provider-keys"
 
-type ToolProvider = ProviderKeyConfig & {
+type ToolProviderTile = ProviderKeyConfig & {
   description: string
   costEstimate: string
   icon: RemixiconComponentType
 }
 
-const TOOL_PROVIDERS: ToolProvider[] = [
-  {
-    id: "exa",
-    name: "Exa",
-    description:
-      "AI-native web search. Powers search for models without built-in search (Mistral, OpenRouter, Perplexity).",
-    placeholder: "exa-...",
-    getKeyUrl: "https://dashboard.exa.ai/api-keys",
-    costEstimate: "~$0.005 per search",
-    icon: RiSearchLine,
-    available: true,
-  },
-  {
-    id: "firecrawl",
-    name: "Firecrawl",
-    description:
-      "Web scraping and content extraction. Enables structured data extraction from web pages.",
-    placeholder: "fc-...",
-    getKeyUrl: "https://www.firecrawl.dev/app/api-keys",
-    costEstimate: "~$0.001 per page",
-    icon: RiWrenchLine,
-    available: false, // Not yet integrated — Phase 7
-  },
-]
+// Presentation chrome stays adapter-local: tool tiles use generic Remix
+// glyphs, not vendor identity.
+const TOOL_GLYPHS: Record<ToolProvider, RemixiconComponentType> = {
+  exa: RiSearchLine,
+  firecrawl: RiWrenchLine,
+}
+
+// Thin adapter over the Provider identity module's tool-provider facts.
+const TOOL_PROVIDERS: ToolProviderTile[] = TOOL_PROVIDER_IDS.map((id) => {
+  const identity = TOOL_PROVIDER_IDENTITY[id]
+  return {
+    id,
+    name: identity.name,
+    description: identity.description,
+    costEstimate: identity.costEstimate,
+    available: identity.available,
+    icon: TOOL_GLYPHS[id],
+    ...identity.keySetup,
+  }
+})
 
 function StatusBadge({ hasKey }: { hasKey: boolean }) {
   return hasKey ? (

@@ -27,6 +27,10 @@ import {
   type OpenRouterAllowlistEntry,
 } from "@/lib/models/data/openrouter.allowlist"
 import type { ModelConfig } from "@/lib/models/types"
+import {
+  isKnownVendorId,
+  MODEL_PROVIDER_IDENTITY,
+} from "@/lib/provider-identity"
 import prettier from "prettier"
 
 const MODELS_ENDPOINT = "https://openrouter.ai/api/v1/models"
@@ -171,11 +175,22 @@ export function buildModelConfig(
     !entry.reasoningOptOut
   const maxCompletionTokens = snapshotModel.top_provider.max_completion_tokens
 
+  // `icon` must resolve in the Vendor registry — an unregistered vendor id
+  // belongs in `baseProviderId` (open set) with icon "openrouter", not here.
+  if (!isKnownVendorId(entry.icon)) {
+    throw new Error(
+      `Allowlist entry "${entry.slug}" has icon "${entry.icon}", which is not ` +
+        `in the Vendor registry (lib/provider-identity.ts). Use a registered ` +
+        `vendor id, or "openrouter" when the vendor has no own icon.`
+    )
+  }
+
   return {
     id: `openrouter:${entry.slug}`,
     name: entry.name,
-    provider: "OpenRouter",
-    providerId: "openrouter",
+    // Provider identity owns the display name; the generator never restates it.
+    provider: MODEL_PROVIDER_IDENTITY.openrouter.name,
+    providerId: MODEL_PROVIDER_IDENTITY.openrouter.id,
     catalogStatus: "visible",
     idKind: "wrapped",
     verifiedAgainst: entry.slug,

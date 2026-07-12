@@ -77,7 +77,8 @@ export function SidebarChatPinButton({
       <TooltipContent
         side="top"
         sideOffset={-6}
-        className="bg-popover text-popover-foreground shadow-border-md"
+        variant="outline"
+        className="font-normal"
       >
         {tooltipLabel}
       </TooltipContent>

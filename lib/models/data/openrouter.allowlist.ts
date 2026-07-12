@@ -45,11 +45,13 @@ export type OpenRouterAllowlistEntry = {
   tags: string[]
   modelFamily: string
   /**
-   * Real underlying vendor. When it has no icon in `lib/providers/index.ts`,
-   * settings icon lookups fall back to the OpenRouter icon.
+   * Real underlying vendor id. This open-set value does not control icon
+   * lookup: the generator copies `entry.icon` to `model.icon`, which callers
+   * pass to `getVendorIcon`. Use "openrouter" for `icon` when the vendor has
+   * no registered icon.
    */
   baseProviderId: string
-  /** PROVIDERS icon key; "openrouter" when the vendor has no own icon. */
+  /** Vendor-registry icon key; "openrouter" when the vendor has no own icon. */
   icon: string
   speed: NonNullable<ModelConfig["speed"]>
   intelligence: NonNullable<ModelConfig["intelligence"]>

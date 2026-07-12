@@ -53,3 +53,15 @@ export const THREAD_GUTTER_VARS =
  */
 export const THREAD_MAXWIDTH_VARS =
   "[--thread-content-max-width:40rem] @[64rem]/main:[--thread-content-max-width:48rem]"
+
+/**
+ * Per-turn scroll-margin-bottom contract. `.threadScrollVars`
+ * (globals.css) derives `--thread-response-height` from the scroll root's
+ * safe-area variables; with this margin, `scrollIntoView({ block: "end" })`
+ * on a just-sent user turn lands it with exactly
+ * `--thread-stream-context-height` of prior conversation visible above and
+ * the full response space reserved below. Applied to EVERY turn so any
+ * programmatic scroll-to-turn inherits the policy.
+ */
+export const TURN_SCROLL_MARGIN_BOTTOM =
+  "threadScrollVars scroll-mb-[calc(var(--scroll-root-safe-area-inset-bottom,0px)+var(--thread-response-height))]"

@@ -18,6 +18,7 @@ type KbdProps = {
 export function Kbd({ children, label, className }: KbdProps) {
   return (
     <kbd
+      data-slot="kbd"
       aria-label={label}
       className={cn(
         "inline-flex min-w-[1em] items-center justify-center font-sans text-sm",
@@ -47,6 +48,7 @@ type KbdGroupProps = {
 export function KbdGroup({ children, className }: KbdGroupProps) {
   return (
     <div
+      data-slot="kbd-group"
       className={cn(
         "text-muted-foreground inline-flex whitespace-pre pointer-coarse:hidden",
         className

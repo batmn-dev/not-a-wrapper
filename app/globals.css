@@ -48,11 +48,14 @@
 
 @theme {
   --font-mono: var(--font-geist-mono);
-  --spacing-app-header: 52px;
-  /* Resting composer-stack footprint (input ~68px + disclaimer ~32px), matching
-     ChatGPT's flat 100px thread bottom reservation (pb-25). The carrier reserves
-     this as pb and the sticky composer overlaps the bottom 28px (--composer-overlap-px). */
-  --spacing-input-area: 100px;
+  /* Captured header token (3.25rem = 52px). The scroll root's sticky-padding
+     and scroll-padding derive from it; --spacing-app-header aliases it so the
+     existing h-app-header utility stays in lockstep. */
+  --header-height: 3.25rem;
+  --spacing-app-header: var(--header-height);
+  /* Captured assistant-prose line-height token: 26px body rhythm
+     for the thread's `.markdown` container. */
+  --text-body-regular--line-height: 1.625rem;
   --activity-panel-width: 25rem;
   --spacing-panel-header: 56px;
   --animate-collapsible-down: collapsible-down 200ms ease-out;
@@ -378,6 +381,10 @@
   --muted-foreground: oklch(0.552 0.016 285.938);
   --accent: oklch(0.967 0.001 286.375);
   --accent-foreground: oklch(0.21 0.006 285.885);
+  /* Reference tokens. Tooltips opt into the dark token scope in both themes. */
+  --text-primary: oklch(0.159 0 0);
+  --bg-tooltip: oklch(0 0 0);
+  --border-tooltip: oklch(0 0 0 / 0);
   /* Muted control tone for the sidebar row's trailing icons at rest — mirrors
      ChatGPT's --text-tertiary (#8f8f8f). Lighter/neutral vs --muted-foreground. */
   --text-tertiary: #8f8f8f;
@@ -485,6 +492,9 @@
   --muted-foreground: oklch(0.705 0.015 286.067);
   --accent: oklch(100% 0 0 / 10.2%);
   --accent-foreground: oklch(0.985 0 0);
+  --text-primary: oklch(1 0 0);
+  --bg-tooltip: oklch(0.222 0 0);
+  --border-tooltip: oklch(1 0 0 / 0.051);
   /* ChatGPT --text-tertiary (#afafaf) / hover surface (rgba(255,255,255,.10)). */
   --text-tertiary: #afafaf;
   --surface-hover: oklch(1 0 0 / 0.1);
@@ -858,11 +868,213 @@ code {
   text-decoration: none;
 }
 
-[data-scroll-anchor="false"] {
-  overflow-anchor: none;
+/* Captured `.markdown` thread prose metrics (2026-07-11). Values for margins,
+   sizes, weights, and radii are preserved; colors map onto our tokens. Applied
+   on top of `.prose` so these element selectors (0,1,1) outweigh the
+   typography plugin's `.prose :where(el)` (0,1,0). */
+.markdown {
+  max-width: unset;
+  font-size: 1rem;
+  line-height: var(--text-body-regular--line-height);
+  /* Their --border-light / --border-medium hierarchy, mapped to our palette. */
+  --markdown-border-light: var(--border);
+  --markdown-border-medium: color-mix(
+    in oklab,
+    var(--foreground) 15%,
+    transparent
+  );
 }
-[data-scroll-anchor="true"] {
-  overflow-anchor: auto;
+
+.markdown p {
+  margin-top: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.markdown p:first-child {
+  margin-top: 0;
+}
+.markdown p + p {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+.markdown h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 600;
+  letter-spacing: normal;
+}
+.markdown h2,
+.markdown h3 {
+  margin: 1rem 0 0.25rem;
+  font-weight: 600;
+}
+.markdown h2 {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+}
+.markdown h3 {
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+}
+.markdown h4 {
+  margin: 1rem 0 0;
+  font-size: 1rem;
+  line-height: 1.5rem;
+  font-weight: 600;
+}
+.markdown h4 + p,
+.markdown hr + * {
+  margin-top: 0;
+}
+.markdown h5,
+.markdown h6 {
+  font-weight: 600;
+}
+.markdown :is(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
+}
+.markdown :is(ul, ol) + :is(h1, h2, h3, h4, h5, h6) {
+  margin-top: 1rem;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 0;
+  padding-inline-start: 1.625em;
+}
+.markdown li {
+  margin: 0;
+  padding-inline-start: 0.375em;
+}
+.markdown li::marker {
+  font-weight: 700;
+  color: currentcolor;
+}
+/* The li trims are :where-wrapped (as in their build) so the multi-paragraph
+   rule below outranks them — a two-paragraph list item keeps its 1rem block
+   margins on the second paragraph (verified computed). */
+.markdown :is(ol, ul) > li > :where(:first-child) {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.markdown :is(ol, ul) > li > :where(:last-child) {
+  margin-bottom: 0;
+}
+.markdown li p + p {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+.markdown p + :is(ol, ul) {
+  margin-top: 0;
+}
+
+.markdown blockquote {
+  position: relative;
+  margin: 0 0 0.5rem;
+  border-width: 0;
+  padding-block: 0.5rem;
+  padding-inline-start: 1.5rem;
+  line-height: 1.5rem;
+  font-style: normal;
+  font-weight: 500;
+}
+.markdown blockquote::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  width: 4px;
+  border-radius: 2px;
+  background-color: var(--markdown-border-medium);
+}
+.markdown blockquote > p {
+  margin: 0;
+  font-weight: 400;
+}
+.markdown blockquote > p::before,
+.markdown blockquote > p::after {
+  display: none;
+}
+
+.markdown hr {
+  margin-block: 1.75rem;
+  border-color: var(--markdown-border-medium);
+  clear: both;
+}
+
+.markdown strong {
+  font-weight: 600;
+}
+
+.markdown.markdown > :last-child {
+  margin-bottom: 0.25rem;
+}
+
+/* Reference table layout: the container breaks out of the centered content column to
+   the full thread width (100cqw against the `thread` inline-size container on
+   #thread) and scrolls horizontally; the wrapper re-indents the table to the
+   content edge. Their formula verbatim. */
+.markdown-table-container {
+  --thread-content-width: min(
+    calc(100cqw - 2 * var(--thread-content-margin, 0px)),
+    var(--thread-content-max-width, 40rem)
+  );
+  --thread-gutter-size: calc((100cqw - var(--thread-content-width)) / 2);
+  width: 100cqw;
+  margin-inline: calc(-1 * var(--thread-gutter-size));
+  scrollbar-width: thin;
+  overflow-x: auto;
+}
+.markdown-table-wrapper {
+  margin-inline: var(--thread-gutter-size) var(--thread-content-margin, 0px);
+  pointer-events: auto;
+}
+.markdown table {
+  margin: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.875em;
+  line-height: 1.71429;
+}
+.markdown th {
+  padding-block: 0.5rem;
+  line-height: 1rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--markdown-border-medium);
+}
+.markdown th:not(:last-child) {
+  padding-inline-end: 1.5rem;
+}
+.markdown th:last-child {
+  padding-inline-end: 2.5rem;
+}
+.markdown td {
+  padding-block: 0.625rem;
+}
+.markdown td:not(:last-child) {
+  padding-inline-end: 1.5rem;
+}
+.markdown tr:not(:last-child) td {
+  border-bottom: 1px solid var(--markdown-border-light);
+}
+.markdown tr:last-child td {
+  padding-bottom: 1.5rem;
+}
+
+/* Thread scroll variables applied to every turn section and to the trailing gutter.
+   --thread-stream-context-height — how much prior conversation stays visible
+   above a just-sent message: 1/3 of the usable viewport, floor 5.5rem.
+   --thread-response-height — the space reserved below it for the response. */
+.threadScrollVars {
+  --thread-stream-context-height: max(
+    22 * var(--spacing),
+    var(--thread-show-context-pct, 1/3) * var(--scroll-root-safe-area-height)
+  );
+  --thread-response-height: calc(
+    var(--scroll-root-safe-area-height) - var(--thread-stream-context-height)
+  );
 }
 
 /* sonner toast */

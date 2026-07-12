@@ -1,14 +1,12 @@
 "use client"
 
-import ClaudeIcon from "@/components/icons/claude"
-import GoogleIcon from "@/components/icons/google"
-import MistralIcon from "@/components/icons/mistral"
-import OpenAIIcon from "@/components/icons/openai"
-import OpenRouterIcon from "@/components/icons/openrouter"
-import PerplexityIcon from "@/components/icons/perplexity"
-import XaiIcon from "@/components/icons/xai"
 import { Icon } from "@/components/ui/icon"
 import { useModel } from "@/lib/model-store/provider"
+import { getVendorIcon } from "@/lib/provider-icons"
+import {
+  MODEL_PROVIDER_IDENTITY,
+  MODEL_PROVIDER_IDS,
+} from "@/lib/provider-identity"
 import { cn } from "@/lib/utils"
 import { RiAddLine, RiKeyLine } from "@remixicon/react"
 import { useQueryClient } from "@tanstack/react-query"
@@ -20,64 +18,17 @@ type ModelProvider = ProviderKeyConfig & {
   icon: ComponentType<{ className?: string }>
 }
 
-const MODEL_PROVIDERS: ModelProvider[] = [
-  {
-    id: "openrouter",
-    name: "OpenRouter",
-    icon: OpenRouterIcon,
-    placeholder: "sk-or-v1-...",
-    getKeyUrl: "https://openrouter.ai/settings/keys",
-    maskHint: "sk-or-v1-............",
-  },
-  {
-    id: "openai",
-    name: "OpenAI",
-    icon: OpenAIIcon,
-    placeholder: "sk-...",
-    getKeyUrl: "https://platform.openai.com/api-keys",
-    maskHint: "sk-............",
-  },
-  {
-    id: "mistral",
-    name: "Mistral",
-    icon: MistralIcon,
-    placeholder: "...",
-    getKeyUrl: "https://console.mistral.ai/api-keys/",
-    maskHint: "............",
-  },
-  {
-    id: "google",
-    name: "Google",
-    icon: GoogleIcon,
-    placeholder: "AIza...",
-    getKeyUrl: "https://ai.google.dev/gemini-api/docs/api-key",
-    maskHint: "AIza............",
-  },
-  {
-    id: "perplexity",
-    name: "Perplexity",
-    icon: PerplexityIcon,
-    placeholder: "pplx-...",
-    getKeyUrl: "https://docs.perplexity.ai/guides/getting-started",
-    maskHint: "pplx-............",
-  },
-  {
-    id: "xai",
-    name: "XAI",
-    icon: XaiIcon,
-    placeholder: "xai-...",
-    getKeyUrl: "https://console.x.ai/",
-    maskHint: "xai-............",
-  },
-  {
-    id: "anthropic",
-    name: "Claude",
-    icon: ClaudeIcon,
-    placeholder: "sk-ant-...",
-    getKeyUrl: "https://console.anthropic.com/settings/keys",
-    maskHint: "sk-ant-............",
-  },
-]
+// Thin adapter over the Provider identity module: tiles show the company
+// identity (name + company vendor icon), never the product brand.
+const MODEL_PROVIDERS: ModelProvider[] = MODEL_PROVIDER_IDS.map((id) => {
+  const identity = MODEL_PROVIDER_IDENTITY[id]
+  return {
+    id,
+    name: identity.name,
+    icon: getVendorIcon(identity.vendorId),
+    ...identity.keySetup,
+  }
+})
 
 export function ByokSection() {
   const queryClient = useQueryClient()

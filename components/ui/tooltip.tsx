@@ -3,6 +3,63 @@
 import { cn } from "@/lib/utils"
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 
+type TooltipShortcutProps = Omit<React.ComponentProps<"span">, "children"> & {
+  label: React.ReactNode
+  children: React.ReactNode
+  detail?: React.ReactNode
+}
+
+/**
+ * Tooltip label + keyboard shortcut composition.
+ * Shortcut keys stay unboxed, inherit the tooltip's tertiary token, and use
+ * cap-height trimming so modifier glyphs align with the label text.
+ */
+function TooltipShortcut({
+  label,
+  children,
+  detail,
+  className,
+  ...props
+}: TooltipShortcutProps) {
+  return (
+    <span
+      data-slot="tooltip-shortcut"
+      className={cn(
+        "inline-flex items-center gap-2 whitespace-nowrap",
+        className
+      )}
+      {...props}
+    >
+      <span
+        data-slot="tooltip-shortcut-action"
+        className="inline-flex items-center gap-2 whitespace-nowrap"
+      >
+        <span>{label}</span>
+        <span
+          data-slot="tooltip-shortcut-keys"
+          // The 1em key slots follow the reference sidebar-hint markup,
+          // where trailing slack is invisible. Inside a bordered tooltip a
+          // narrow final glyph (S, K…) would leave its slack reading as extra
+          // right padding, so the LAST key ink-fits instead.
+          className="inline-flex font-medium whitespace-pre text-[var(--text-tertiary)] [text-box:trim-both_text] pointer-coarse:hidden [&_kbd]:min-w-0 [&_kbd]:[align-items:normal] [&_kbd]:justify-normal [&_kbd]:[font-family:inherit] [&_kbd]:text-xs [&_kbd:last-child>span]:min-w-0 [&_kbd>span]:min-w-[1em]"
+        >
+          {children}
+        </span>
+      </span>
+      {/* Rendered only when present: the root's gap-2 would otherwise add a
+          phantom 8px of trailing space for an empty detail slot. */}
+      {detail != null && (
+        <span
+          data-slot="tooltip-shortcut-detail"
+          className="font-medium text-[var(--text-tertiary)]"
+        >
+          {detail}
+        </span>
+      )}
+    </span>
+  )
+}
+
 function TooltipProvider({
   delay = 0,
   ...props
@@ -50,6 +107,7 @@ function TooltipContent({
   alignOffset = 0,
   children,
   hideArrow = true,
+  variant = "default",
   ...props
 }: TooltipPrimitive.Popup.Props &
   Pick<
@@ -57,6 +115,7 @@ function TooltipContent({
     "align" | "alignOffset" | "side" | "sideOffset"
   > & {
     hideArrow?: boolean
+    variant?: "default" | "outline"
   }) {
   return (
     <TooltipPrimitive.Portal>
@@ -70,14 +129,24 @@ function TooltipContent({
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           className={cn(
-            "bg-foreground text-background z-50 inline-flex w-fit max-w-xs items-center gap-1.5 rounded-md px-2 py-1 text-sm has-data-[slot=kbd]:pr-1.5 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm",
+            "z-50 inline-flex w-fit max-w-xs items-center gap-2 rounded-[8px] px-2 py-1 [font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,'Segoe_UI',Helvetica,'Apple_Color_Emoji',Arial,sans-serif,'Segoe_UI_Emoji','Segoe_UI_Symbol'] text-xs leading-4 font-semibold transition-opacity",
+            variant === "default"
+              ? "dark border border-[var(--border-tooltip)] bg-[var(--bg-tooltip)] text-[var(--text-primary)] shadow-none"
+              : "bg-popover text-popover-foreground shadow-border-md",
             className
           )}
           {...props}
         >
           {children}
           {!hideArrow && (
-            <TooltipPrimitive.Arrow className="bg-foreground fill-foreground z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5" />
+            <TooltipPrimitive.Arrow
+              className={cn(
+                "z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5",
+                variant === "default"
+                  ? "bg-[var(--bg-tooltip)] fill-[var(--bg-tooltip)]"
+                  : "fill-popover bg-popover"
+              )}
+            />
           )}
         </TooltipPrimitive.Popup>
       </TooltipPrimitive.Positioner>
@@ -85,4 +154,10 @@ function TooltipContent({
   )
 }
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
+export {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+  TooltipShortcut,
+}

@@ -3,7 +3,8 @@
 import { Icon } from "@/components/ui/icon"
 import { useModel } from "@/lib/model-store/provider"
 import { ModelConfig } from "@/lib/models/types"
-import { PROVIDERS } from "@/lib/providers"
+import { getVendorIcon } from "@/lib/provider-icons"
+import { getVendor } from "@/lib/provider-identity"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import {
   RiAddLine,
@@ -114,14 +115,10 @@ export function ModelsSettings() {
     updateFavoriteModels(newIds)
   }
 
-  const getProviderIcon = (model: ModelConfig) => {
-    const provider = PROVIDERS.find((p) => p.id === model.baseProviderId)
-    if (provider) return provider.icon
-    // Wrapped models carry real vendor ids without registered icons (qwen,
-    // z-ai, moonshotai, …) — fall back to the OpenRouter icon instead of
-    // rendering nothing.
-    return PROVIDERS.find((p) => p.id === "openrouter")?.icon
-  }
+  // Wrapped models carry real vendor ids without registered icons (qwen,
+  // z-ai, moonshotai, …) — getVendorIcon falls back to the OpenRouter icon.
+  const getModelVendorIcon = (model: ModelConfig) =>
+    getVendorIcon(model.baseProviderId)
 
   return (
     <div className="space-y-6">
@@ -146,7 +143,7 @@ export function ModelsSettings() {
               className="space-y-2"
             >
               {favoriteModels.map((model) => {
-                const ProviderIcon = getProviderIcon(model)
+                const VendorIcon = getModelVendorIcon(model)
 
                 return (
                   <Reorder.Item key={model.id} value={model} className="group">
@@ -157,8 +154,8 @@ export function ModelsSettings() {
                       </div>
 
                       {/* Provider Icon */}
-                      {ProviderIcon && (
-                        <ProviderIcon className="size-5 shrink-0" />
+                      {VendorIcon && (
+                        <VendorIcon className="size-5 shrink-0" />
                       )}
 
                       {/* Model Info */}
@@ -236,15 +233,16 @@ export function ModelsSettings() {
         <div className="space-y-6 pb-6">
           {Object.entries(availableModelsByProvider).map(
             ([iconKey, modelsGroup]) => {
-              // Use the group key to find the provider (handles OpenRouter section correctly)
-              const provider = PROVIDERS.find((p) => p.id === iconKey)
+              // The group key is a vendor id (handles the OpenRouter section correctly)
+              const vendor = getVendor(iconKey)
+              const GroupIcon = getVendorIcon(iconKey)
 
               return (
                 <div key={iconKey} className="space-y-3">
                   <div className="flex items-center gap-2">
-                    {provider?.icon && <provider.icon className="size-5" />}
+                    {vendor && <GroupIcon className="size-5" />}
                     <h4 className="font-medium text-balance">
-                      {provider?.name || iconKey}
+                      {vendor?.name || iconKey}
                     </h4>
                     <span className="text-muted-foreground text-sm">
                       ({modelsGroup.length} models)
@@ -257,9 +255,9 @@ export function ModelsSettings() {
                       // underlying vendor — keep the vendor icon for identity,
                       // but label the route accurately ("via Gemini" on an
                       // OpenRouter-served model misstates who serves it).
-                      const underlyingProvider =
+                      const UnderlyingVendorIcon =
                         model.providerId === "openrouter"
-                          ? PROVIDERS.find((p) => p.id === model.icon)
+                          ? getVendorIcon(model.icon)
                           : null
                       const viaLabel =
                         model.providerId === "openrouter"
@@ -278,11 +276,10 @@ export function ModelsSettings() {
                         >
                           <div className="flex flex-col">
                             <div className="flex items-center gap-2">
-                              {/* Show underlying provider icon for OpenRouter models */}
-                              {model.providerId === "openrouter" &&
-                                underlyingProvider?.icon && (
-                                  <underlyingProvider.icon className="size-4 shrink-0" />
-                                )}
+                              {/* Show underlying vendor icon for OpenRouter models */}
+                              {UnderlyingVendorIcon && (
+                                <UnderlyingVendorIcon className="size-4 shrink-0" />
+                              )}
                               <span className="text-sm">{model.name}</span>
                               <span className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 text-xs">
                                 via {viaLabel}

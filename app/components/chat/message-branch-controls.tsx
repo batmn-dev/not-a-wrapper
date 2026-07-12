@@ -42,7 +42,7 @@ export function MessageBranchControls({
   return (
     <div
       className={cn(
-        "text-muted-foreground flex h-8 items-center gap-0.5 px-1 text-xs pointer-coarse:h-10",
+        "text-muted-foreground flex items-center justify-center",
         className
       )}
       aria-label={`Branch ${currentBranch} of ${branch.total}`}
@@ -50,18 +50,20 @@ export function MessageBranchControls({
       <MessageActionButton
         label="Previous branch"
         delay={0}
+        size="branch"
         disabled={!previousSibling}
         onClick={() => {
           if (previousSibling) onSelectBranch(previousSibling.messageId)
         }}
         icon={<Icon icon={RiArrowLeftSLine} slotSize={20} />}
       />
-      <span className="tabular-nums">
-        {currentBranch} / {branch.total}
+      <span className="px-0.5 text-sm font-semibold tabular-nums">
+        {currentBranch}/{branch.total}
       </span>
       <MessageActionButton
         label="Next branch"
         delay={0}
+        size="branch"
         disabled={!nextSibling}
         onClick={() => {
           if (nextSibling) onSelectBranch(nextSibling.messageId)

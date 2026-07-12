@@ -1,4 +1,4 @@
-export type { Provider } from "@/lib/provider-ids"
+export type { Provider } from "@/lib/provider-identity"
 
 export type OpenAIModel =
   | "o1"

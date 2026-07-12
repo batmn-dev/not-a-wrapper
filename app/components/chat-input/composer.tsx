@@ -24,6 +24,7 @@ import { useChatDraft } from "@/app/hooks/use-chat-draft"
 import { ModelSelector } from "@/components/common/model-selector/base"
 import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
+import { Kbd } from "@/components/ui/kbd"
 import {
   PromptInput,
   PromptInputAction,
@@ -31,6 +32,7 @@ import {
   PromptInputFooter,
   PromptInputTextarea,
 } from "@/components/ui/prompt-input"
+import { TooltipShortcut } from "@/components/ui/tooltip"
 import { StopBulkRoundedIcon } from "@/lib/icons"
 import { getModelInfo } from "@/lib/models"
 import { useUser } from "@/lib/user-store/provider"
@@ -456,7 +458,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 </div>
                 <div className="cant-hover:gap-1.5 ms-auto flex items-center gap-2">
                   {/* TODO: Add dictation here when the app exposes a local voice input capability. */}
-                  <PromptInputAction tooltip={primaryAction.tooltip}>
+                  <PromptInputAction
+                    disabled={primaryAction.disabled}
+                    tooltip={
+                      primaryAction.mode === "send" ? (
+                        <TooltipShortcut label={primaryAction.tooltip}>
+                          <Kbd label="Enter">↵</Kbd>
+                        </TooltipShortcut>
+                      ) : (
+                        primaryAction.tooltip
+                      )
+                    }
+                  >
                     <Button
                       size="sm"
                       className="size-9 rounded-full p-0 transition-colors duration-150 ease-out"

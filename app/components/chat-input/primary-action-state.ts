@@ -39,6 +39,6 @@ export function resolveComposerPrimaryActionState({
     intent: "send",
     disabled: !canSend,
     ariaLabel: "Send message",
-    tooltip: "Send",
+    tooltip: "Send prompt",
   }
 }

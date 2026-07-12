@@ -1,4 +1,4 @@
-import type { Provider } from "@/lib/provider-ids"
+import type { Provider } from "@/lib/provider-identity"
 import type { ApiKeySource } from "@/lib/user-keys"
 
 export type PublicChatErrorCode =

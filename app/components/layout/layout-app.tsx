@@ -34,7 +34,7 @@ export function LayoutApp({ children }: { children: React.ReactNode }) {
               @w-lg/512px flip; ours holds at all widths by construction). */}
           <div className="@container/main relative flex min-w-0 flex-1">
             <div className="relative flex min-w-0 flex-1 flex-col">
-              <ScrollRoot className="min-w-0 scroll-pt-[var(--sticky-padding-top)] [scrollbar-gutter:stable] [--sticky-padding-top:var(--spacing-app-header)] @[40rem]/main:[scrollbar-gutter:stable_both-edges] @7xl/main:[--sticky-padding-top:0px] print:overflow-visible pointer-coarse:[scrollbar-width:none]">
+              <ScrollRoot className="@[40rem]/main:[scrollbar-gutter:stable_both-edges] print:overflow-visible pointer-coarse:[scrollbar-width:none]">
                 <Header hasSidebar={hasSidebar} />
                 <main id="main" className="min-h-0 flex-1">
                   {children}

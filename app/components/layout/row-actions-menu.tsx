@@ -5,11 +5,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Icon } from "@/components/ui/icon"
 import { RiLoader4Line, RiMoreFill } from "@remixicon/react"
-import type { ReactElement, ReactNode } from "react"
+import { Fragment, type ReactElement, type ReactNode } from "react"
 import {
   trailingIconButtonClassName,
   TrailingIconChip,
@@ -24,6 +25,7 @@ export type RowActionItem = {
   variant?: "default" | "destructive"
   loading?: boolean
   disabled?: boolean
+  separatorBefore?: boolean
 }
 
 type RowActionsMenuProps = {
@@ -92,26 +94,28 @@ export function RowActionsMenu({
         animated={false}
       >
         {items.map((item) => (
-          <DropdownMenuItem
-            key={item.key}
-            variant={item.variant}
-            disabled={item.disabled}
-            onClick={(e) => {
-              e.stopPropagation()
-              item.onSelect()
-            }}
-          >
-            {item.loading ? (
-              <Icon
-                icon={RiLoader4Line}
-                slotSize={20}
-                className="animate-spin"
-              />
-            ) : (
-              item.icon
-            )}
-            {item.label}
-          </DropdownMenuItem>
+          <Fragment key={item.key}>
+            {item.separatorBefore && <DropdownMenuSeparator />}
+            <DropdownMenuItem
+              variant={item.variant}
+              disabled={item.disabled}
+              onClick={(e) => {
+                e.stopPropagation()
+                item.onSelect()
+              }}
+            >
+              {item.loading ? (
+                <Icon
+                  icon={RiLoader4Line}
+                  slotSize={20}
+                  className="animate-spin"
+                />
+              ) : (
+                item.icon
+              )}
+              {item.label}
+            </DropdownMenuItem>
+          </Fragment>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

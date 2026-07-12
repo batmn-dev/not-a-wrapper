@@ -23,7 +23,14 @@ import {
 } from "ai"
 import { useConvex, useMutation } from "convex/react"
 import { useSearchParams } from "next/navigation"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { useTurnContext } from "./turn-context"
 import {
   cleanupOptimisticAttachments,
@@ -262,13 +269,23 @@ export function useChatCore({
   const messagesRef = useRef(messages)
   const statusRef = useRef(status)
   const isSubmittingRef = useRef(isSubmitting)
-  useEffect(() => {
+  useLayoutEffect(() => {
     messagesRef.current = messages
     statusRef.current = status
     isSubmittingRef.current = isSubmitting
   })
   const getStatus = useCallback(() => statusRef.current, [])
   const getIsSubmitting = useCallback(() => isSubmittingRef.current, [])
+  // Call-time read of the live turn array for the edit/regeneration runners.
+  // Their plans validate against a specific message's server-adopted state
+  // (createdAt cutoff, visible count), and the message rows holding these
+  // callbacks are memoized with comparators that ignore callback identity — a
+  // render-time `messages` closure goes stale there and dispatches
+  // pre-adoption timestamps the server guards reject.
+  const getMessages = useCallback(
+    () => messagesRef.current as ChatTurnMessage[],
+    []
+  )
 
   const updateMessages = useCallback(
     (action: Parameters<typeof setMessages>[0]) => {
@@ -553,7 +570,7 @@ export function useChatCore({
   const { submitEdit } = useChatEdit({
     chatTurn,
     chatId,
-    messages,
+    getMessages,
     getStatus,
     getIsSubmitting,
   })
@@ -570,19 +587,23 @@ export function useChatCore({
     [chatTurn, messages]
   )
 
-  // Handle reload (v6: renamed to regenerate)
+  // Handle reload (v6: renamed to regenerate). Reads the live turn array at
+  // call time (getMessages) for the same reason as submitEdit: the memoized
+  // assistant row holds this callback across re-renders, and the regeneration
+  // guard compares the target's server-adopted createdAt.
   const handleReload = useCallback(
     async (messageId: string) => {
+      const currentMessages = getMessages()
       await chatTurn.runRegenerationTurn({
         chatId,
-        messages,
+        messages: currentMessages,
         targetAssistantMessageId: messageId,
-        chatVersion: messages.length, // same count since we're regenerating, not adding
+        chatVersion: currentMessages.length, // same count since we're regenerating, not adding
         isSubmitting: getIsSubmitting(),
         status: getStatus(),
       })
     },
-    [chatTurn, chatId, messages, getIsSubmitting, getStatus]
+    [chatTurn, chatId, getMessages, getIsSubmitting, getStatus]
   )
 
   return {

@@ -14,6 +14,10 @@ import {
   vi,
 } from "vitest"
 
+const { useKeyShortcutMock } = vi.hoisted(() => ({
+  useKeyShortcutMock: vi.fn(),
+}))
+
 vi.mock("server-only", () => ({}))
 
 let ModelSelector: typeof import("./base").ModelSelector
@@ -92,7 +96,7 @@ vi.mock("@/app/hooks/use-breakpoint", () => ({
 }))
 
 vi.mock("@/app/hooks/use-key-shortcut", () => ({
-  useKeyShortcut: () => {},
+  useKeyShortcut: useKeyShortcutMock,
 }))
 
 vi.mock("@/lib/model-store/provider", () => ({
@@ -189,6 +193,7 @@ describe("ModelSelector", () => {
     container = null
     root = null
     modelSelectorMocks.isModelHidden.mockClear()
+    useKeyShortcutMock.mockClear()
   })
 
   function renderSelector({
@@ -231,6 +236,31 @@ describe("ModelSelector", () => {
 
     return onSelect
   }
+
+  it("supports the Control-Shift-M model shortcut", () => {
+    renderSelector({ isUserAuthenticated: false })
+
+    const matchesShortcut = useKeyShortcutMock.mock.calls.at(-1)?.[0] as
+      | ((event: KeyboardEvent) => boolean)
+      | undefined
+
+    expect(matchesShortcut).toBeTypeOf("function")
+    expect(
+      matchesShortcut?.({
+        key: "m",
+        ctrlKey: true,
+        shiftKey: true,
+      } as KeyboardEvent)
+    ).toBe(true)
+    expect(
+      matchesShortcut?.({
+        key: "m",
+        ctrlKey: false,
+        metaKey: true,
+        shiftKey: true,
+      } as KeyboardEvent)
+    ).toBe(false)
+  })
 
   function getModelOption(name: string) {
     const option = Array.from(

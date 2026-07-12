@@ -74,10 +74,13 @@ const INITIAL_COMPONENTS: Partial<Components> = {
       props.node?.position?.start.line === props.node?.position?.end.line
 
     if (isInline) {
+      // Captured inline-code metrics: 0.875em /
+      // 500, 4px radius, 0.15rem × 0.3rem padding; their gray-100/gray-700
+      // surface maps onto our secondary token.
       return (
         <span
           className={cn(
-            "bg-primary-foreground rounded-sm px-1 font-mono text-sm",
+            "bg-secondary rounded-[0.25rem] px-[0.3rem] py-[0.15rem] font-mono text-[0.875em] font-medium",
             className
           )}
           {...props}
@@ -89,17 +92,22 @@ const INITIAL_COMPONENTS: Partial<Components> = {
 
     const language = extractLanguage(className)
 
+    // Code-block header: one sticky 48px row (language label left,
+    // actions right) that rides the scroll under the app header, with a 1px
+    // divider that sticks along; the code scrolls beneath both, clipped by
+    // the rounded container.
     return (
       <CodeBlock className={className}>
-        <CodeBlockGroup className="flex h-9 items-center justify-between px-4">
-          <div className="text-muted-foreground py-1 pr-2 font-mono text-xs">
-            {language}
-          </div>
-        </CodeBlockGroup>
-        <div className="sticky top-16 lg:top-0">
-          <div className="absolute right-0 bottom-0 flex h-9 items-center pr-1.5">
-            <ButtonCopy code={children as string} />
-          </div>
+        <div className="sticky top-[var(--sticky-padding-top,0px)] z-[2] select-none">
+          <CodeBlockGroup className="bg-card flex h-12 w-full items-center justify-between py-1.5 ps-4 pe-1.5 font-sans md:ps-5">
+            <div className="flex max-w-[75%] min-w-0 cursor-default items-center text-sm font-medium">
+              {language}
+            </div>
+            <div className="flex flex-row items-center gap-0.5">
+              <ButtonCopy code={children as string} />
+            </div>
+          </CodeBlockGroup>
+          <div className="bg-border h-px" />
         </div>
         <CodeBlockCode code={children as string} language={language} />
       </CodeBlock>
@@ -116,6 +124,24 @@ const INITIAL_COMPONENTS: Partial<Components> = {
   },
   pre: function PreComponent({ children }) {
     return <>{children}</>
+  },
+  // Reference table architecture: the container breaks out of the centered
+  // content column to the full thread width and owns the horizontal scroll;
+  // the wrapper re-indents the table to the content edge (globals.css
+  // `.markdown-table-container` / `.markdown-table-wrapper`, their formula).
+  table: function TableComponent({ children, ...props }) {
+    return (
+      <div className="markdown-table-container">
+        <div className="markdown-table-wrapper flex w-fit flex-col-reverse">
+          <table
+            className="w-fit min-w-[var(--thread-content-width)]"
+            {...props}
+          >
+            {children}
+          </table>
+        </div>
+      </div>
+    )
   },
 }
 

@@ -6,10 +6,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server"
-import {
-  normalizeSelectedBranchPathForMutation,
-  selectMessageSiblingForMutation,
-} from "./domain/message_branch_writes"
+import { createMessageBranchWriter } from "./domain/message_branch_writes"
 import {
   getBranchInfoForMessage,
   getSelectedPathMessages,
@@ -158,20 +155,8 @@ export async function selectBranchForChat(
     throw new Error("Message not found")
   }
 
-  let messages = await ctx.db
-    .query("messages")
-    .withIndex("by_chat_order", (q) => q.eq("chatId", chatId))
-    .collect()
   const now = Date.now()
-
-  messages = await normalizeSelectedBranchPathForMutation(ctx, messages, now)
-  messages = await selectMessageSiblingForMutation(
-    ctx,
-    messages,
-    targetMessage,
-    now
-  )
-  await normalizeSelectedBranchPathForMutation(ctx, messages, now)
+  await createMessageBranchWriter(ctx, { chatId, now }).select(targetMessage._id)
 
   await ctx.db.patch(chatId, { updatedAt: now })
   return targetMessage._id

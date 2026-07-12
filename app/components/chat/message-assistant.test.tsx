@@ -606,6 +606,11 @@ describe("MessageAssistant activity trigger", () => {
 
     expect(document.body.textContent).toContain("Try again...")
     expect(document.body.textContent).toContain("Using GPT-5.5")
+    expect(
+      Array.from(document.body.querySelectorAll("span"))
+        .find((element) => element.textContent === "Using GPT-5.5")
+        ?.classList.contains("text-[var(--text-tertiary)]")
+    ).toBe(true)
   })
 
   it("keeps settled assistant actions visible without hover", async () => {
@@ -635,6 +640,13 @@ describe("MessageAssistant activity trigger", () => {
     expect(actions?.className).not.toContain("[mask-position:100%_0%]")
     expect(actions?.className).not.toContain(
       "group-hover/turn-messages:[mask-position:0_0]"
+    )
+    expect(actions?.className).not.toContain("opacity-0")
+    expect(actions?.className).not.toContain(
+      "group-hover/turn-messages:opacity-100"
+    )
+    expect(actions?.className).not.toContain(
+      "group-hover/turn-messages:delay-300"
     )
   })
 
@@ -668,6 +680,10 @@ describe("MessageAssistant activity trigger", () => {
       "motion-safe:[animation:mask-reveal_1.5s_ease_forwards]"
     )
     expect(actions?.className).not.toContain("[mask-position:100%_0%]")
+    expect(actions?.className).not.toContain("opacity-0")
+    expect(actions?.className).not.toContain(
+      "group-hover/turn-messages:opacity-100"
+    )
   })
 
   it("keeps a Retry control on an aborted turn whose only preserved content is a tool card", async () => {

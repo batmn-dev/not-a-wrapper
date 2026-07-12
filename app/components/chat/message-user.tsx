@@ -14,9 +14,8 @@ import {
   MessageActions,
   Message as MessageContainer,
   MessageContent,
-  messageFooterRevealClassName,
+  userMessageFooterRevealClassName,
 } from "@/components/ui/message"
-import { useScrollRoot } from "@/components/ui/scroll-root"
 import type { MessageBranchInfo } from "@/lib/chat-messages/branch"
 import type { EditTurnResult } from "@/lib/chat-turn/chat-turn-controller"
 import { cn } from "@/lib/utils"
@@ -119,12 +118,10 @@ export function MessageUser({
   const [editError, setEditError] = useState<string | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const savedScrollTopRef = useRef<number | null>(null)
   // Bubble width captured at edit start — the editor keeps the bubble's
   // footprint. Must be read BEFORE the isEditing flip: MessageContent unmounts
   // with it, so reading offsetWidth at render time always yields null.
   const editWidthRef = useRef<number | null>(null)
-  const { stopScroll, scrollRef } = useScrollRoot()
 
   const handleEditCancel = () => {
     setIsEditing(false)
@@ -159,7 +156,6 @@ export function MessageUser({
 
   const handleEditStart = () => {
     editWidthRef.current = contentRef.current?.offsetWidth ?? null
-    savedScrollTopRef.current = scrollRef.current?.scrollTop ?? null
     setIsEditing(true)
     setEditInput(children)
     setEditError(null)
@@ -174,137 +170,149 @@ export function MessageUser({
     editTextarea.style.height = `${editTextarea.scrollHeight}px`
   }, [editInput, isEditing])
 
-  // Focus textarea and preserve scroll position when entering edit mode
+  // Focus the textarea when entering edit mode. No scroll handling: native
+  // scroll anchoring absorbs the bubble→editor swap, and focus is told not to
+  // scroll.
   useEffect(() => {
     if (!isEditing) return
-    requestAnimationFrame(() => {
-      textareaRef.current?.focus({ preventScroll: true })
-      stopScroll()
-      const scrollEl = scrollRef.current
-      if (scrollEl && savedScrollTopRef.current !== null) {
-        scrollEl.scrollTop = savedScrollTopRef.current
-        savedScrollTopRef.current = null
-      }
-    })
-  }, [isEditing, stopScroll, scrollRef])
+    textareaRef.current?.focus({ preventScroll: true })
+  }, [isEditing])
 
   return (
     <MessageContainer
       as="div"
-      className={cn("flex min-h-8 w-full flex-col items-end gap-1", className)}
+      className={cn("flex max-w-full flex-col gap-0", className)}
       data-turn="user"
       data-message-id={id}
       data-message-author-role="user"
-      data-scroll-anchor="false"
       tabIndex={-1}
     >
       <h5 className="sr-only">You said:</h5>
-      {attachments?.map((attachment, index) => (
-        <div
-          className="flex flex-row gap-2"
-          key={`${attachment.name}-${index}`}
-        >
-          {attachment.contentType?.startsWith("image") ? (
-            <MorphingDialog
-              transition={{
-                type: "spring",
-                stiffness: 280,
-                damping: 18,
-                mass: 0.3,
-              }}
-            >
-              <MorphingDialogTrigger className="z-10">
-                <Image
-                  className="mb-1 w-40 rounded-md"
-                  key={attachment.name}
-                  src={attachment.url}
-                  alt={attachment.name || "Attachment"}
-                  width={160}
-                  height={120}
+      {/* Captured turn anatomy (box-chain verified 2026-07-11): a gap-4 content
+          wrapper groups the `text-message` block(s); the action row is a
+          ZERO-GAP column-level sibling, so the buttons sit p-1 (4px) under
+          the bubble. */}
+      <div className="flex max-w-full grow flex-col gap-4">
+        <div className="text-message relative flex min-h-8 w-full flex-col items-end gap-2 text-start break-words whitespace-normal">
+          <div className="flex w-full flex-col items-end gap-1 empty:hidden">
+            {attachments?.map((attachment, index) => (
+              <div
+                className="flex flex-row gap-2"
+                key={`${attachment.name}-${index}`}
+              >
+                {attachment.contentType?.startsWith("image") ? (
+                  <MorphingDialog
+                    transition={{
+                      type: "spring",
+                      stiffness: 280,
+                      damping: 18,
+                      mass: 0.3,
+                    }}
+                  >
+                    <MorphingDialogTrigger className="z-10">
+                      <Image
+                        className="mb-1 w-40 rounded-md"
+                        key={attachment.name}
+                        src={attachment.url}
+                        alt={attachment.name || "Attachment"}
+                        width={160}
+                        height={120}
+                      />
+                    </MorphingDialogTrigger>
+                    <MorphingDialogContainer>
+                      <MorphingDialogContent className="relative rounded-lg">
+                        <MorphingDialogImage
+                          src={attachment.url}
+                          alt={attachment.name || ""}
+                          className="max-h-[90vh] max-w-[90vw] object-contain"
+                        />
+                      </MorphingDialogContent>
+                      <MorphingDialogClose className="text-primary" />
+                    </MorphingDialogContainer>
+                  </MorphingDialog>
+                ) : (
+                  <AttachmentFileCard attachment={attachment} />
+                )}
+              </div>
+            ))}
+            {isEditing ? (
+              <div
+                className="bg-accent relative flex w-full max-w-full min-w-[180px] flex-col gap-2 rounded-[18px] px-4 py-2.5"
+                style={{
+                  width: editWidthRef.current ?? undefined,
+                }}
+              >
+                <textarea
+                  ref={textareaRef}
+                  className="w-full resize-none bg-transparent outline-none"
+                  value={editInput}
+                  onChange={(e) => {
+                    setEditInput(e.target.value)
+                    if (editError) setEditError(null)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault()
+                      handleSave()
+                    }
+                    if (e.key === "Escape") {
+                      handleEditCancel()
+                    }
+                  }}
+                  style={{
+                    maxHeight: "50vh",
+                    overflowY: "auto",
+                  }}
+                  disabled={isSavingEdit}
                 />
-              </MorphingDialogTrigger>
-              <MorphingDialogContainer>
-                <MorphingDialogContent className="relative rounded-lg">
-                  <MorphingDialogImage
-                    src={attachment.url}
-                    alt={attachment.name || ""}
-                    className="max-h-[90vh] max-w-[90vw] object-contain"
-                  />
-                </MorphingDialogContent>
-                <MorphingDialogClose className="text-primary" />
-              </MorphingDialogContainer>
-            </MorphingDialog>
-          ) : (
-            <AttachmentFileCard attachment={attachment} />
-          )}
-        </div>
-      ))}
-      {isEditing ? (
-        <div
-          className="bg-accent relative flex w-full max-w-full min-w-[180px] flex-col gap-2 rounded-[18px] px-4 py-2.5"
-          style={{
-            width: editWidthRef.current ?? undefined,
-          }}
-        >
-          <textarea
-            ref={textareaRef}
-            className="w-full resize-none bg-transparent outline-none"
-            value={editInput}
-            onChange={(e) => {
-              setEditInput(e.target.value)
-              if (editError) setEditError(null)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault()
-                handleSave()
-              }
-              if (e.key === "Escape") {
-                handleEditCancel()
-              }
-            }}
-            style={{
-              maxHeight: "50vh",
-              overflowY: "auto",
-            }}
-            disabled={isSavingEdit}
-          />
-          {editError && (
-            <p className="text-destructive text-sm" role="alert">
-              {editError}
-            </p>
-          )}
-          <div className="flex justify-end gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={handleEditCancel}
-              disabled={isSavingEdit}
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={isSavingEdit || !editInput.trim()}
-            >
-              Send
-            </Button>
+                {editError && (
+                  <p className="text-destructive text-sm" role="alert">
+                    {editError}
+                  </p>
+                )}
+                <div className="flex justify-end gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleEditCancel}
+                    disabled={isSavingEdit}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleSave}
+                    disabled={isSavingEdit || !editInput.trim()}
+                  >
+                    Send
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <MessageContent
+                className="bg-accent relative max-w-[var(--user-chat-width,70%)] min-w-0 overflow-hidden rounded-[22px] px-4 py-2.5 leading-6"
+                ref={contentRef}
+              >
+                <div className="max-w-full min-w-0 [overflow-wrap:anywhere] whitespace-pre-wrap">
+                  {children}
+                </div>
+              </MessageContent>
+            )}
           </div>
         </div>
-      ) : (
-        <MessageContent
-          className="bg-accent relative max-w-[var(--user-chat-width,70%)] rounded-[18px] px-4 py-2.5 leading-6 whitespace-pre-wrap"
-          ref={contentRef}
+      </div>
+      {/* Every sent-message control belongs to one composable action family:
+          it shares the same reveal behavior and button primitive. */}
+      <div className="z-0 flex justify-end">
+        <MessageActions
+          className={cn(
+            "-ms-2.5 -me-1 flex-wrap items-center gap-0 gap-y-4 p-1 select-none",
+            userMessageFooterRevealClassName
+          )}
+          aria-label="Your message actions"
+          role="group"
+          tabIndex={-1}
         >
-          {children}
-        </MessageContent>
-      )}
-      <MessageActions className="flex gap-0">
-        {/* Sent-message copy/edit actions reveal on hover or focus. Scoped to
-            copy/edit only: the branch nav must stay visible without hover, or a
-            fresh regenerate/edit gives no cue that versions now exist. */}
-        <div className={cn("flex gap-0", messageFooterRevealClassName)}>
           <MessageActionButton
             label="Copy Message"
             tooltip={copied ? "Copied!" : "Copy Message"}
@@ -331,15 +339,17 @@ export function MessageUser({
               }
             />
           )}
-        </div>
-        {/* Branch nav trails the copy/edit actions on user messages, matching
-            ChatGPT (the right-aligned user toolbar reads copy · edit · < n/m >).
-            On assistant messages it leads instead — see message-assistant.tsx. */}
-        <MessageBranchControls
-          branch={branch}
-          onSelectBranch={onSelectBranch}
-        />
-      </MessageActions>
+          {/* Branch nav reveals with the footer actions to match the captured
+            reference (2026-07-11). This supersedes the earlier
+            always-visible rule ("a fresh regenerate/edit gives no cue that
+            versions exist"): the reference hides the pager at rest too, and
+            the row's hover reveal is the discovery affordance. */}
+          <MessageBranchControls
+            branch={branch}
+            onSelectBranch={onSelectBranch}
+          />
+        </MessageActions>
+      </div>
     </MessageContainer>
   )
 }

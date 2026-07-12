@@ -28,11 +28,9 @@
  * aria-expanded flips in the same commit; the synced derivation corrects any
  * fallback case one commit later.
  */
-import { ScrollRootContext } from "@/components/ui/scroll-root"
 import {
   createContext,
   useContext,
-  useEffect,
   useMemo,
   useSyncExternalStore,
   type ReactNode,
@@ -94,9 +92,6 @@ export type ActivityPanelStore = {
    */
   clearStaleSelection: (staleTurnId: string) => void
   setOpen: (open: boolean) => void
-  /** Wire the side effect fired when a turn opens the panel (e.g. scroll-lock
-   * release). The provider owns this wiring — see below. */
-  setOnOpen: (onOpen: (() => void) | null) => void
 }
 
 export function createActivityPanelStore(): ActivityPanelStore {
@@ -108,7 +103,6 @@ export function createActivityPanelStore(): ActivityPanelStore {
     defaultDurationMs: undefined,
     openSection: undefined,
   }
-  let onOpen: (() => void) | null = null
   const listeners = new Set<() => void>()
 
   const setState = (partial: Partial<ActivityPanelStoreState>) => {
@@ -147,7 +141,6 @@ export function createActivityPanelStore(): ActivityPanelStore {
       setState({ selectedTurnId: undefined })
     },
     openTurn: (turnId, options) => {
-      onOpen?.()
       setState({
         selectedTurnId: selectExplicitActivityTurnOnOpen({
           requestedTurnId: turnId,
@@ -180,9 +173,6 @@ export function createActivityPanelStore(): ActivityPanelStore {
         openSection: undefined,
       })
     },
-    setOnOpen: (next) => {
-      onOpen = next
-    },
   }
 }
 
@@ -198,21 +188,11 @@ export function ActivityPanelStoreProvider({
   panelId?: string
   children: ReactNode
 }) {
-  // Opening the docked panel narrows the thread column, which reflows the
-  // conversation taller. `use-stick-to-bottom` would read that positive resize
-  // as "follow new content" and animate to the bottom — but clicking a
-  // thinking trigger must leave the scroll position untouched. Releasing the
-  // lock (same lever the user-message edit uses) makes the resize a no-op, so
-  // native scroll anchoring holds the view in place. The provider owns this
-  // wiring so the scroll quirk stays internal to the panel module. Read
-  // defensively: the provider may mount outside a ScrollRoot in tests.
-  const scrollRoot = useContext(ScrollRootContext)
-  const stopScroll = scrollRoot?.stopScroll
-  useEffect(() => {
-    store.setOnOpen(stopScroll ? () => stopScroll() : null)
-    return () => store.setOnOpen(null)
-  }, [store, stopScroll])
-
+  // Opening the docked panel narrows the thread column and reflows the
+  // conversation taller. No scroll handling is needed for that: at rest the
+  // thread has no JS scroll controller, and native scroll anchoring
+  // (overflow-anchor, enabled outside streaming) holds the view in place
+  // through the reflow.
   return (
     <ActivityPanelStoreContext.Provider value={store}>
       <ActivityPanelIdContext.Provider value={panelId}>
