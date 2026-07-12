@@ -233,7 +233,8 @@ function findCall(fetchMutation: ReturnType<typeof vi.fn>, ref: unknown) {
 
 function makeDeps(
   harness: StreamHarness,
-  fetchMutation: ReturnType<typeof vi.fn>
+  fetchMutation: ReturnType<typeof vi.fn>,
+  overrides: Partial<ChatTurnDeps> = {}
 ) {
   return {
     streamText: harness.streamText as unknown as ChatTurnDeps["streamText"],
@@ -242,6 +243,7 @@ function makeDeps(
     after: vi.fn() as unknown as ChatTurnDeps["after"],
     getPostHogClient: (() =>
       null) as unknown as ChatTurnDeps["getPostHogClient"],
+    ...overrides,
   }
 }
 
@@ -662,6 +664,138 @@ describe("createChatTurnRuntime — reasoning lifecycle timing", () => {
       ).toMatchObject({ reasoningDurationMs: 600 })
     } finally {
       dateNow.mockRestore()
+    }
+  })
+})
+
+describe("createChatTurnRuntime — Anthropic pause_turn telemetry", () => {
+  it("captures one content-free event with model and search dimensions", async () => {
+    const harness = makeStreamHarness()
+    const fetchMutation = makeFetchMutation()
+    const capture = vi.fn()
+    const toolRuntime = makeToolRuntime()
+    toolRuntime.policySummary.searchInjected = true
+    vi.mocked(prepareToolRuntime).mockResolvedValue(
+      toolRuntime as unknown as Awaited<ReturnType<typeof prepareToolRuntime>>
+    )
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(harness, fetchMutation, {
+        getPostHogClient: (() =>
+          ({ capture })) as unknown as ChatTurnDeps["getPostHogClient"],
+      }),
+    })
+
+    await runtime.prepare()
+    runtime.toResponse(notAbortedSignal())
+    await harness.captured.streamOpts.onEnd({
+      text: "private generated content",
+      usage: {},
+      steps: [{ rawFinishReason: "pause_turn", toolCalls: [] }],
+      finishReason: "stop",
+    })
+    await harness.captured.responseOpts.onEnd({
+      responseMessage: {
+        id: "msg1",
+        role: "assistant",
+        parts: [{ type: "text", text: "private generated content" }],
+        metadata: {},
+      },
+      isAborted: false,
+      finishReason: "stop",
+    })
+
+    const pauseTurnEvents = capture.mock.calls.filter(
+      ([event]) => event.event === "anthropic_pause_turn"
+    )
+    expect(pauseTurnEvents).toEqual([
+      [
+        {
+          distinctId: "chat-runtime",
+          event: "anthropic_pause_turn",
+          properties: {
+            provider: "anthropic",
+            model: "test-model",
+            searchToolsActive: true,
+          },
+        },
+      ],
+    ])
+    expect(
+      findCall(fetchMutation, api.chatRuntime.markGenerationRunCompleted)?.[1]
+    ).toMatchObject({
+      runId: "run1",
+      messageId: "msg1",
+      finishReason: "stop",
+    })
+    expect(
+      findCall(fetchMutation, api.chatRuntime.markGenerationRunAborted)
+    ).toBeUndefined()
+    expect(
+      findCall(fetchMutation, api.chatRuntime.markGenerationRunFailed)
+    ).toBeUndefined()
+  })
+
+  it("does not capture an event for a normal Anthropic end_turn", async () => {
+    const harness = makeStreamHarness()
+    const capture = vi.fn()
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(harness, makeFetchMutation(), {
+        getPostHogClient: (() =>
+          ({ capture })) as unknown as ChatTurnDeps["getPostHogClient"],
+      }),
+    })
+
+    await runtime.prepare()
+    runtime.toResponse(notAbortedSignal())
+    await harness.captured.streamOpts.onEnd({
+      text: "done",
+      usage: {},
+      steps: [{ rawFinishReason: "end_turn", toolCalls: [] }],
+      finishReason: "stop",
+    })
+
+    expect(
+      capture.mock.calls.filter(
+        ([event]) => event.event === "anthropic_pause_turn"
+      )
+    ).toHaveLength(0)
+  })
+
+  it("does not let a telemetry capture failure break stream completion", async () => {
+    const harness = makeStreamHarness()
+    const capture = vi.fn((event: { event: string }) => {
+      if (event.event === "anthropic_pause_turn") {
+        throw new Error("analytics unavailable")
+      }
+    })
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+    try {
+      const runtime = createChatTurnRuntime({
+        input: makeInput(),
+        deps: makeDeps(harness, makeFetchMutation(), {
+          getPostHogClient: (() =>
+            ({ capture })) as unknown as ChatTurnDeps["getPostHogClient"],
+        }),
+      })
+
+      await runtime.prepare()
+      runtime.toResponse(notAbortedSignal())
+
+      await expect(
+        harness.captured.streamOpts.onEnd({
+          text: "done",
+          usage: {},
+          steps: [{ rawFinishReason: "pause_turn", toolCalls: [] }],
+          finishReason: "stop",
+        })
+      ).resolves.toBeUndefined()
+      expect(consoleError).toHaveBeenCalledWith(
+        "[PostHog] Failed to capture anthropic_pause_turn event"
+      )
+    } finally {
+      consoleError.mockRestore()
     }
   })
 })

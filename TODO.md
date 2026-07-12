@@ -13,10 +13,27 @@
 - **Connectors:** Integrations with Google, YouTube, Figma, and personal tools
 - **Agentic Design System:** A customizable design system that helps agents ship consistent and high quality UI
 - **Admin Portal:** A way to manage users, controls, features, etc...
-- **AI SDK follow-up:** migrate `experimental_transform` when a stable alias
-  ships. Keep the Anthropic `pause_turn` workaround until the provider supports
-  continuation, and adopt signed approval tokens only with a cross-instance
-  secret plus a pending-approval deployment strategy.
+- **AI SDK stable approval-persistence hook:** retain the Durable turn runtime's
+  `experimental_transform` while it is the only released pre-callback,
+  backpressure-preserving seam for persisting approval requests before forwarding
+  them. Exit when a stable released API preserves ordering, abort propagation,
+  multi-step behavior, and approval-settle -> snapshot-flush -> terminal-write
+  ordering without moving durable ownership out of ADR-0009.
+- **Anthropic `pause_turn` continuation:** retain the catalog-scoped fixed-thinking
+  search workaround only for Claude 4.6 models that still accept `budget_tokens`;
+  never apply it to adaptive-only models. Measure production incidence of raw
+  `pause_turn` by model and search configuration before changing terminal
+  semantics. Exit when a released AI SDK or Anthropic provider correctly replays
+  paused assistant content with the same tools, bounded continuation, abort
+  propagation, deduplicated parts, and exact aggregate usage—or after a fully
+  tested provider-specific continuation adapter provides those guarantees.
+- **Signed tool approvals:** defer `experimental_toolApprovalSecret` until the
+  coherent AI SDK patch line preserves signatures end to end and the deployment
+  has a shared-secret, unsigned-pending-approval, and rotation strategy. Reassess
+  adoption when the API is stable or the application begins trusting
+  noncanonical client history. Do not introduce application-owned signing while
+  Convex remains the canonical authenticated approval authority without a
+  demonstrated threat gap.
 - **Edit/regeneration freshness:** replace the selected-message count proxy with
   a server-issued revision or equivalent identity-bearing token. The unresolved
   drift scenario and verification requirements live in

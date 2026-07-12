@@ -1113,6 +1113,31 @@ export function createChatTurnRuntime(args: {
           reasoningActivity.close()
           lastProgressAtMs = Date.now()
           resolvePostToolContinuation()
+          const rawFinishReason = steps?.[steps.length - 1]?.rawFinishReason
+
+          if (
+            resolvedProvider === "anthropic" &&
+            rawFinishReason === "pause_turn" &&
+            phClient
+          ) {
+            try {
+              phClient.capture({
+                distinctId: "chat-runtime",
+                event: "anthropic_pause_turn",
+                properties: {
+                  provider: resolvedProvider,
+                  model,
+                  searchToolsActive: shouldInjectSearch,
+                },
+              })
+            } catch {
+              // Analytics is observational and must never break stream finalization.
+              console.error(
+                "[PostHog] Failed to capture anthropic_pause_turn event"
+              )
+            }
+          }
+
           if (steps) {
             const resolvedByCallId: ToolInvocationMetadataByCallId = {}
             for (const step of steps) {
@@ -1252,10 +1277,9 @@ export function createChatTurnRuntime(args: {
             // Log both unified and raw finish reasons. The raw reason reveals
             // provider-specific signals (e.g. Anthropic's "pause_turn" vs
             // "end_turn") that the unified reason collapses into "stop".
-            const rawReason = steps?.[steps.length - 1]?.rawFinishReason
             console.log(
               `[chat] finishReason: ${finishReason}` +
-                `${rawReason && rawReason !== finishReason ? ` (raw: ${rawReason})` : ""}, ` +
+                `${rawFinishReason && rawFinishReason !== finishReason ? ` (raw: ${rawFinishReason})` : ""}, ` +
                 `model: ${model}, ` +
                 `tokens: ${usage?.inputTokens ?? "?"}in/${usage?.outputTokens ?? "?"}out, ` +
                 `text: ${text?.length ?? 0} chars`
