@@ -5,9 +5,9 @@ import {
   getEffectiveProviderApiKey,
   getEffectiveToolKeyWithMode,
 } from "@/lib/user-keys"
-import type { LanguageModelV3StreamPart } from "@ai-sdk/provider"
+import type { LanguageModelV4StreamPart } from "@ai-sdk/provider"
 import { jsonSchema, streamText, tool } from "ai"
-import { MockLanguageModelV3, simulateReadableStream } from "ai/test"
+import { MockLanguageModelV4, simulateReadableStream } from "ai/test"
 import { fetchMutation as convexNextjsFetchMutation } from "convex/nextjs"
 import { getFunctionName } from "convex/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -24,7 +24,7 @@ import {
 // and the real Tool runtime. The unit suite (chat-turn-runtime.test.ts) fakes
 // streamText, so a callback the SDK renamed or silently dropped is invisible
 // there; here only true externals are mocked:
-//   - the provider model (MockLanguageModelV3 at the createLanguageModel seam),
+//   - the provider model (MockLanguageModelV4 at the createLanguageModel seam),
 //   - Convex (deps.fetchMutation for durable writes; convex/nextjs for the
 //     budget store and audit sink), MCP servers (loadUserMcpTools),
 //   - key resolution, Sentry/PostHog/Braintrust.
@@ -90,7 +90,7 @@ const MODEL_ID = "claude-haiku-4-5-20251001"
 const convexBoundaryMutation =
   convexNextjsFetchMutation as unknown as ReturnType<typeof vi.fn>
 
-// v3-spec usage for each mock step; streamText aggregates across steps.
+// v4-spec usage for each mock step; streamText aggregates across steps.
 const STEP_USAGE = {
   inputTokens: {
     total: 10,
@@ -103,7 +103,7 @@ const STEP_USAGE = {
 
 const TOOL_STEPS = 4 // crosses PREPARE_STEP_THRESHOLD (3) on the final step
 
-function makeToolCallStepChunks(step: number): LanguageModelV3StreamPart[] {
+function makeToolCallStepChunks(step: number): LanguageModelV4StreamPart[] {
   return [
     { type: "stream-start" as const, warnings: [] },
     {
@@ -120,7 +120,7 @@ function makeToolCallStepChunks(step: number): LanguageModelV3StreamPart[] {
   ]
 }
 
-function makeFinalTextStepChunks(): LanguageModelV3StreamPart[] {
+function makeFinalTextStepChunks(): LanguageModelV4StreamPart[] {
   return [
     { type: "stream-start" as const, warnings: [] },
     { type: "text-start" as const, id: "t1" },
@@ -138,7 +138,7 @@ function makeFinalTextStepChunks(): LanguageModelV3StreamPart[] {
 /** A model that answers with TOOL_STEPS tool-call steps, then a text step. */
 function makeToolLoopModel() {
   let call = 0
-  return new MockLanguageModelV3({
+  return new MockLanguageModelV4({
     doStream: async () => {
       call += 1
       return {
@@ -156,13 +156,13 @@ function makeToolLoopModel() {
 
 /** A model that streams text slowly enough for the request to abort mid-way. */
 function makeSlowTextModel() {
-  return new MockLanguageModelV3({
+  return new MockLanguageModelV4({
     doStream: async () => ({
-      stream: simulateReadableStream<LanguageModelV3StreamPart>({
+      stream: simulateReadableStream<LanguageModelV4StreamPart>({
         chunks: [
           { type: "stream-start", warnings: [] },
           { type: "text-start", id: "t1" },
-          ...Array.from({ length: 8 }, (_, i): LanguageModelV3StreamPart => ({
+          ...Array.from({ length: 8 }, (_, i): LanguageModelV4StreamPart => ({
             type: "text-delta",
             id: "t1",
             delta: `chunk-${i} `,
@@ -181,9 +181,9 @@ function makeSlowTextModel() {
 }
 
 function makeReasoningModel() {
-  return new MockLanguageModelV3({
+  return new MockLanguageModelV4({
     doStream: async () => ({
-      stream: simulateReadableStream<LanguageModelV3StreamPart>({
+      stream: simulateReadableStream<LanguageModelV4StreamPart>({
         chunks: [
           { type: "stream-start", warnings: [] },
           { type: "reasoning-start", id: "r1" },

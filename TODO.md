@@ -12,9 +12,7 @@
 - **AI SDK follow-up:** migrate `experimental_transform` when a stable alias
   ships. Keep the Anthropic `pause_turn` workaround until the provider supports
   continuation, and adopt signed approval tokens only with a cross-instance
-  secret plus a pending-approval deployment strategy. Replace
-  `result.toUIMessageStream(...)` in `chat-turn-runtime.ts` with the standalone
-  AI SDK 7 converter before the next major removes the compatibility helper.
+  secret plus a pending-approval deployment strategy.
 - **Edit/regeneration freshness:** replace the selected-message count proxy with
   a server-issued revision or equivalent identity-bearing token. The unresolved
   drift scenario and verification requirements live in

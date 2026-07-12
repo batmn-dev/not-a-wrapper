@@ -51,6 +51,7 @@ import {
   createUIMessageStreamResponse,
   isStepCount,
   UIMessage as MessageAISDK,
+  toUIMessageStream,
   validateUIMessages,
   type ModelMessage,
 } from "ai"
@@ -1326,8 +1327,8 @@ export function createChatTurnRuntime(args: {
 
     // Stream conversion owns UI-message completion; response construction owns
     // the HTTP envelope. Both completion callbacks share this closure (ADR-0006).
-    // The instance converter is deprecated in AI SDK 7 and remains migration debt.
-    const uiMessageStream = result.toUIMessageStream({
+    const uiMessageStream = toUIMessageStream({
+      stream: result.stream,
       ...durableTurn.uiStreamIdentity(validatedMessages),
       sendReasoning: true,
       sendSources: true,

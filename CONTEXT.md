@@ -33,10 +33,10 @@ resolves the model and key, adapts history, prepares tools, and asks the
 before any model call. `toResponse(signal)` owns `streamText`, response shaping,
 abort telemetry, and both stream-completion callbacks in one closure; durable
 snapshot, approval, and terminal-write policy remain in the **Durable turn
-runtime**. The route is only the HTTP adapter. The implementation still uses
-the deprecated `result.toUIMessageStream(...)` instance helper; new work should
-use standalone `toUIMessageStream({ stream: result.stream, ... })`. See
-`docs/adr/0006-chat-turn-runtime.md`.
+runtime**. The route is only the HTTP adapter. The implementation uses
+the standalone `toUIMessageStream({ stream: result.stream, ... })` converter,
+while `createUIMessageStreamResponse(...)` retains ownership of the HTTP
+envelope. See `docs/adr/0006-chat-turn-runtime.md`.
 _Avoid_: chat handler, stream pipeline, request orchestrator (too vague); session (collides with the client `ChatSessionProvider` and the WorkOS auth session); Tool runtime (that is the composed sub-module, not this)
 
 **Durable turn runtime**:

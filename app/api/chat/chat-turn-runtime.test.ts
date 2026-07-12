@@ -3,7 +3,11 @@ import { getAllModels } from "@/lib/models"
 import { prepareToolRuntime } from "@/lib/tools/runtime"
 import { getEffectiveProviderApiKey } from "@/lib/user-keys"
 import * as Sentry from "@sentry/nextjs"
-import { convertToModelMessages, validateUIMessages } from "ai"
+import {
+  convertToModelMessages,
+  toUIMessageStream,
+  validateUIMessages,
+} from "ai"
 import { getFunctionName } from "convex/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { adaptHistoryForProvider } from "./adapters"
@@ -93,6 +97,7 @@ vi.mock("ai", async (importActual) => {
       async ({ messages }: { messages: unknown[] }) => messages
     ),
     convertToModelMessages: vi.fn(async () => []),
+    toUIMessageStream: vi.fn(actual.toUIMessageStream),
   }
 })
 
@@ -168,20 +173,22 @@ type StreamHarness = {
 
 function makeStreamHarness(): StreamHarness {
   const captured: { streamOpts?: any; responseOpts?: any } = {}
+  vi.mocked(toUIMessageStream).mockImplementation((responseOpts: any) => {
+    captured.responseOpts = responseOpts
+    return new ReadableStream({
+      start(controller) {
+        controller.close()
+      },
+    })
+  })
   const streamText = vi.fn((opts: any) => {
     captured.streamOpts = opts
     return {
-      // The runtime shapes the UI message stream here (responseOpts carries
-      // the response-level onEnd) and builds the Response via the real
-      // createUIMessageStreamResponse — an empty closed stream keeps it inert.
-      toUIMessageStream: (responseOpts: any) => {
-        captured.responseOpts = responseOpts
-        return new ReadableStream({
-          start(controller) {
-            controller.close()
-          },
-        })
-      },
+      // The runtime passes this raw model stream to the standalone UI-message
+      // converter above, then builds the Response through the real
+      // createUIMessageStreamResponse. The converter's inert stream keeps the
+      // HTTP envelope side-effect free while exposing its lifecycle options.
+      stream: new ReadableStream(),
     }
   })
   return { streamText, captured }
