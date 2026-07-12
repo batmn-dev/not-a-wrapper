@@ -2,6 +2,7 @@
 
 import React, { act } from "react"
 import { createRoot, Root } from "react-dom/client"
+import { renderToStaticMarkup } from "react-dom/server"
 import {
   afterEach,
   beforeAll,
@@ -19,6 +20,10 @@ const promptInputMockCalls: Array<{
   maxHeight?: number | string
   value?: string
   onValueChange?: (value: string) => void
+}> = []
+const promptInputActionMockCalls: Array<{
+  disabled?: boolean
+  tooltip: React.ReactNode
 }> = []
 
 // Controllable module state for the Composer's internal seams.
@@ -136,10 +141,16 @@ vi.mock("@/components/ui/prompt-input", () => ({
   },
   PromptInputAction: ({
     children,
+    disabled,
+    tooltip,
   }: {
+    disabled?: boolean
     tooltip: React.ReactNode
     children: React.ReactNode
-  }) => <div>{children}</div>,
+  }) => {
+    promptInputActionMockCalls.push({ disabled, tooltip })
+    return <div>{children}</div>
+  },
   PromptInputActions: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -174,6 +185,7 @@ describe("Composer primary action", () => {
 
   beforeEach(() => {
     promptInputMockCalls.length = 0
+    promptInputActionMockCalls.length = 0
     composerMocks.draftValue = ""
     composerMocks.draftById.clear()
     composerMocks.setDraftFns.clear()
@@ -263,6 +275,22 @@ describe("Composer primary action", () => {
 
     expect(stop).toHaveBeenCalledTimes(1)
     expect(onTurn).not.toHaveBeenCalled()
+  })
+
+  it("shows the Enter shortcut tooltip only when Send is active", () => {
+    renderComposer({ isSubmitting: false, status: "ready" })
+
+    expect(promptInputActionMockCalls.at(-1)?.disabled).toBe(true)
+
+    changeComposerValue("Ready to send")
+
+    const activeAction = promptInputActionMockCalls.at(-1)
+    expect(activeAction?.disabled).toBe(false)
+
+    const tooltipMarkup = renderToStaticMarkup(<>{activeAction?.tooltip}</>)
+    expect(tooltipMarkup).toContain("Send prompt")
+    expect(tooltipMarkup).toContain('aria-label="Enter"')
+    expect(tooltipMarkup).toContain("↵")
   })
 
   it("stays compact when empty; expands for hard newlines and attached files", () => {

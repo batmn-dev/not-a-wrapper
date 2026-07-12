@@ -40,11 +40,8 @@ vi.mock("@/lib/chat-store/messages/api", () => ({
   getCachedMessages: vi.fn(async () => []),
 }))
 
-vi.mock("@/components/ui/scroll-root", () => ({
-  ScrollRootContent: ({
-    children,
-    ...props
-  }: React.HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
+vi.mock("./thread-scroll", () => ({
+  ThreadScrollEdge: () => null,
 }))
 
 vi.mock("@/components/ui/thinking-bar", () => ({

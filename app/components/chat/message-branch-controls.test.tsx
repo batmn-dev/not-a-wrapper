@@ -124,7 +124,9 @@ describe("MessageBranchControls", () => {
     expect(buttons[1].disabled).toBe(false)
   })
 
-  it("uses ChatGPT's compact branch sizing and counter spacing", () => {
+  it("uses ChatGPT's 24×30 stepper metrics distinct from the 32px actions", () => {
+    // Live-measured 2026-07-11: branch prev/next are h-[30px] w-[24px]
+    // rounded-md while standard message actions are h-8 w-8 rounded-lg.
     render(branch, vi.fn())
 
     const buttons = Array.from(
@@ -132,7 +134,8 @@ describe("MessageBranchControls", () => {
     ) as HTMLButtonElement[]
     expect(buttons).toHaveLength(2)
     expect(buttons[0].className).toContain("h-[30px]")
-    expect(buttons[0].className).toContain("w-6")
+    expect(buttons[0].className).toContain("w-[24px]")
+    expect(buttons[0].className).toContain("rounded-[6px]")
     expect(buttons[0].className).toContain("pointer-coarse:w-8")
     expect(buttons[1].className).toBe(buttons[0].className)
 

@@ -85,19 +85,6 @@ describe("activity panel store — explicit-vs-default classification", () => {
     expect(store.getState().openSection).toBeUndefined()
   })
 
-  it("fires the wired onOpen side effect on every turn open", () => {
-    const onOpen = vi.fn()
-    const store = createActivityPanelStore()
-    store.setOnOpen(onOpen)
-    store.openTurn("a1")
-    store.openTurn("a2")
-    expect(onOpen).toHaveBeenCalledTimes(2)
-
-    store.setOnOpen(null)
-    store.openTurn("a1")
-    expect(onOpen).toHaveBeenCalledTimes(2)
-  })
-
   it("clearStaleSelection drops only the named selection, never a newer one", () => {
     const store = createActivityPanelStore()
     store.setDerivedActivity({ panelTurnId: "a2", defaultTurnId: "a2" })

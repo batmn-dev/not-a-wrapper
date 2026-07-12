@@ -6,13 +6,6 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { MessageUser } from "./message-user"
 
-vi.mock("@/components/ui/scroll-root", () => ({
-  useScrollRoot: () => ({
-    stopScroll: vi.fn(),
-    scrollRef: { current: null },
-  }),
-}))
-
 vi.mock("next/image", () => ({
   default: () => null,
 }))
@@ -219,11 +212,14 @@ describe("MessageUser edits", () => {
 
     expect(copyButton?.className).toBe(editButton?.className)
     expect(previousButton?.className).toBe(nextButton?.className)
-    expect(copyButton?.className).toContain("h-8 w-8")
-    expect(previousButton?.className).toContain("h-[30px] w-6")
+    expect(copyButton?.className).toContain("h-8")
+    expect(copyButton?.className).toContain("w-8")
+    // ChatGPT branch steppers (live-measured 2026-07-11): 24×30, distinct
+    // from the 32px action buttons.
+    expect(previousButton?.className).toContain("h-[30px]")
+    expect(previousButton?.className).toContain("w-[24px]")
     expect(actionFamily?.className).toContain("-ms-2.5")
     expect(actionFamily?.className).toContain("-me-1")
-    expect(actionFamily?.className).toContain("-mt-1")
     expect(actionFamily?.className).toContain("p-1")
     expect(actionFamily?.getAttribute("aria-label")).toBe(
       "Your message actions"

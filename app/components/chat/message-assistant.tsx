@@ -24,8 +24,8 @@ import { RiCheckLine, RiFileCopyLine, RiLoopRightLine } from "@remixicon/react"
 import { useCallback, useRef, useState } from "react"
 import {
   useActivityPanelActions,
-  useDefaultActivityDurationMs,
   useActivityPanelId,
+  useDefaultActivityDurationMs,
   useIsActivityPanelTurnOpen,
 } from "./activity/activity-panel-store"
 import { AssistantActivityIndicator } from "./assistant-activity-indicator"
@@ -114,9 +114,13 @@ export function MessageAssistant({
     status: status ?? "ready",
     isLast: isLast ?? false,
   })
-  const activityPresentation = deriveAssistantActivityPresentation(view, phase, {
-    durationMs: currentSessionDurationMs,
-  })
+  const activityPresentation = deriveAssistantActivityPresentation(
+    view,
+    phase,
+    {
+      durationMs: currentSessionDurationMs,
+    }
+  )
   const turnActive = phase.kind !== "settled"
 
   const messageRef = useRef<HTMLDivElement>(null)
@@ -185,82 +189,81 @@ export function MessageAssistant({
   return (
     <Message
       as="div"
-      className={cn("flex w-full flex-col gap-2", className)}
+      className={cn("flex max-w-full flex-col gap-0", className)}
       data-turn="assistant"
       data-turn-phase={phase.kind}
       data-message-id={messageId}
       data-message-author-role="assistant"
-      data-scroll-anchor={isLast ? "true" : "false"}
       tabIndex={-1}
     >
       <h6 className="sr-only">Assistant said:</h6>
-      <div
-        ref={messageRef}
-        className={cn(
-          "relative flex min-w-full flex-col gap-2",
-          isLast && "pb-8"
-        )}
-        // Inner data-message-id for quote selection — closest() finds this before the outer article
-        data-message-id={messageId}
-      >
-        {toolParts.length > 0 && preferences.showToolInvocations && (
-          <ToolInvocation
-            toolInvocations={toolParts}
-            metadata={view.metadata}
-            turnActive={turnActive}
-            onToolApproval={onToolApproval}
-          />
-        )}
-
-        {searchImageResults.length > 0 && (
-          <SearchImages results={searchImageResults} />
-        )}
-
-        <AssistantActivityIndicator
-          presentation={activityPresentation}
-          open={isPanelTurnOpen}
-          onOpenChange={
-            panelActions ? handleActivityTriggerOpenChange : undefined
-          }
-          controlsId={panelId}
-        />
-
-        {contentNullOrEmpty ? null : (
-          <MessageContent
-            className={cn(
-              "prose relative min-w-full bg-transparent p-0",
-              "prose-h1:scroll-m-20 prose-h1:text-2xl prose-h1:font-semibold prose-h2:mt-8 prose-h2:scroll-m-20 prose-h2:text-xl prose-h2:mb-3 prose-h2:font-medium prose-h3:scroll-m-20 prose-h3:text-base prose-h3:font-medium prose-h4:scroll-m-20 prose-h5:scroll-m-20 prose-h6:scroll-m-20 prose-strong:font-medium prose-table:block prose-table:overflow-y-auto"
+      {/* ChatGPT turn anatomy (box-chain verified 2026-07-11): a gap-4 content
+          wrapper groups the `text-message` block(s); the action row is a
+          ZERO-GAP column-level sibling — its p-1/-mt-1 metrics put the
+          buttons ~8px under the prose. Parts flow in a gap-1 column. */}
+      <div className="flex max-w-full grow flex-col gap-4">
+        <div
+          ref={messageRef}
+          className="text-message relative flex min-h-8 w-full flex-col gap-2 text-start break-words whitespace-normal"
+          // Inner data-message-id for quote selection — closest() finds this before the outer article
+          data-message-id={messageId}
+        >
+          <div className="flex w-full flex-col gap-1 empty:hidden">
+            {toolParts.length > 0 && preferences.showToolInvocations && (
+              <ToolInvocation
+                toolInvocations={toolParts}
+                metadata={view.metadata}
+                turnActive={turnActive}
+                onToolApproval={onToolApproval}
+              />
             )}
-            markdown={true}
-          >
-            {children}
-          </MessageContent>
-        )}
 
-        {finishReason === "length" && status !== "streaming" && (
-          <SystemMessage
-            variant="warning"
-            fill
-            cta={
-              canRegenerate
-                ? {
-                    label: "Regenerate",
-                    onClick: () => onReload?.(messageId),
-                  }
-                : undefined
-            }
-          >
-            Response may be incomplete due to output length limits.
-          </SystemMessage>
-        )}
+            {searchImageResults.length > 0 && (
+              <SearchImages results={searchImageResults} />
+            )}
 
-        {status === "awaiting_approval" && (
-          <SystemMessage variant="action" fill>
-            Waiting for approval before running the tool.
-          </SystemMessage>
-        )}
+            <AssistantActivityIndicator
+              presentation={activityPresentation}
+              open={isPanelTurnOpen}
+              onOpenChange={
+                panelActions ? handleActivityTriggerOpenChange : undefined
+              }
+              controlsId={panelId}
+            />
 
-        {/* Terminal aborted/failed states are durable data (the message row's
+            {contentNullOrEmpty ? null : (
+              <MessageContent
+                className="markdown prose relative w-full bg-transparent p-0"
+                markdown={true}
+              >
+                {children}
+              </MessageContent>
+            )}
+
+            {finishReason === "length" && status !== "streaming" && (
+              <SystemMessage
+                variant="warning"
+                fill
+                cta={
+                  canRegenerate
+                    ? {
+                        label: "Regenerate",
+                        onClick: () => onReload?.(messageId),
+                      }
+                    : undefined
+                }
+              >
+                Response may be incomplete due to output length limits.
+              </SystemMessage>
+            )}
+
+            {status === "awaiting_approval" && (
+              <SystemMessage variant="action" fill>
+                Waiting for approval before running the tool.
+              </SystemMessage>
+            )}
+
+            {/* Terminal aborted/failed states are durable data (the message row's
             status + error), not transient client state: a turn that died
             before producing content renders as a first-class stub with a
             retry (regeneration) affordance instead of vanishing behind a
@@ -268,130 +271,132 @@ export function MessageAssistant({
             banner hosts Retry exactly when the text footer (which carries the
             regenerate action) is absent — gate on text, not on preserved
             content, so tool-only turns keep a retry control. */}
-        {status === "aborted" && (
-          <SystemMessage
-            variant="warning"
-            fill
-            cta={
-              !hasContent && canRegenerate
-                ? {
-                    label: "Retry",
-                    onClick: () => onReload?.(messageId),
-                  }
-                : undefined
-            }
-          >
-            {preservedResponse
-              ? "Generation stopped. Partial response preserved."
-              : "Generation stopped."}
-          </SystemMessage>
-        )}
-
-        {status === "failed" && (
-          <SystemMessage
-            variant="error"
-            fill
-            cta={
-              canRegenerate
-                ? {
-                    label: "Retry",
-                    onClick: () => onReload?.(messageId),
-                  }
-                : undefined
-            }
-          >
-            {durableError
-              ? `Generation failed: ${durableError}`
-              : "Generation failed."}
-            {preservedResponse ? " Partial response preserved." : ""}
-          </SystemMessage>
-        )}
-
-        {showFooterSlot && (
-          <div className="relative min-h-8 pointer-coarse:min-h-10">
-            {showFooterCaret && (
-              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center">
-                <StreamingCaret
-                  visible={contentCaretPhase === "visible"}
-                  variant={STREAMING_INDICATOR_VARIANT}
-                  className="ml-px"
-                  onFadeOutComplete={() => setContentCaretPhase("hidden")}
-                />
-              </div>
+            {status === "aborted" && (
+              <SystemMessage
+                variant="warning"
+                fill
+                cta={
+                  !hasContent && canRegenerate
+                    ? {
+                        label: "Retry",
+                        onClick: () => onReload?.(messageId),
+                      }
+                    : undefined
+                }
+              >
+                {preservedResponse
+                  ? "Generation stopped. Partial response preserved."
+                  : "Generation stopped."}
+              </SystemMessage>
             )}
 
-            {showFooterActions && (
-              <MessageActions
-                className={cn(
-                  "-ml-2 min-h-8 gap-0 pointer-coarse:min-h-10",
-                  didStreamInSession && [
-                    "pointer-events-auto",
-                    "[mask-image:linear-gradient(to_right,black_33%,transparent_66%)]",
-                    "[mask-size:300%_100%]",
-                    "motion-safe:[animation:mask-reveal_1.5s_ease_forwards]",
-                    "motion-reduce:[mask-image:none]",
-                  ]
-                )}
+            {status === "failed" && (
+              <SystemMessage
+                variant="error"
+                fill
+                cta={
+                  canRegenerate
+                    ? {
+                        label: "Retry",
+                        onClick: () => onReload?.(messageId),
+                      }
+                    : undefined
+                }
               >
-                {/* Branch nav lives on the user message (the turn anchor); see
+                {durableError
+                  ? `Generation failed: ${durableError}`
+                  : "Generation failed."}
+                {preservedResponse ? " Partial response preserved." : ""}
+              </SystemMessage>
+            )}
+          </div>
+
+          {selectionInfo && selectionInfo.messageId && (
+            <QuoteButton
+              mousePosition={selectionInfo.position}
+              onQuote={handleQuoteBtnClick}
+              messageContainerRef={messageRef}
+              onDismiss={clearSelection}
+            />
+          )}
+        </div>
+      </div>
+
+      {showFooterSlot && (
+        <div className="relative z-0 flex min-h-[46px] justify-start">
+          {showFooterCaret && (
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center">
+              <StreamingCaret
+                visible={contentCaretPhase === "visible"}
+                variant={STREAMING_INDICATOR_VARIANT}
+                className="ml-px"
+                onFadeOutComplete={() => setContentCaretPhase("hidden")}
+              />
+            </div>
+          )}
+
+          {showFooterActions && (
+            <MessageActions
+              className={cn(
+                "-ms-2.5 -me-1 -mt-1 w-[calc(100%+0.625rem)] flex-wrap items-center gap-0 gap-y-4 p-1 select-none",
+                didStreamInSession && [
+                  "pointer-events-auto",
+                  "[mask-image:linear-gradient(to_right,black_33%,transparent_66%)]",
+                  "[mask-size:300%_100%]",
+                  "motion-safe:[animation:mask-reveal_1.5s_ease_forwards]",
+                  "motion-reduce:[mask-image:none]",
+                ]
+              )}
+            >
+              {/* Branch nav lives on the user message (the turn anchor); see
                     conversation.tsx + message-user.tsx. Assistant messages
                     intentionally render no branch control. */}
+              <MessageActionButton
+                label="Copy Response"
+                tooltip={copied ? "Copied!" : "Copy Response"}
+                onClick={copyToClipboard}
+                icon={
+                  copied ? (
+                    <Icon icon={RiCheckLine} slotSize={20} />
+                  ) : (
+                    <Icon icon={RiFileCopyLine} slotSize={20} />
+                  )
+                }
+              />
+              {canRegenerate ? (
                 <MessageActionButton
-                  label="Copy Response"
-                  tooltip={copied ? "Copied!" : "Copy Response"}
-                  onClick={copyToClipboard}
-                  icon={
-                    copied ? (
-                      <Icon icon={RiCheckLine} slotSize={20} />
-                    ) : (
-                      <Icon icon={RiFileCopyLine} slotSize={20} />
-                    )
-                  }
-                />
-                {canRegenerate ? (
-                  <MessageActionButton
-                    label={`Try again with ${retryModelName}`}
-                    tooltip={
-                      <span className="flex flex-col items-center text-center leading-tight">
-                        <span className="font-medium">Try again...</span>
-                        <span className="text-[var(--text-tertiary)]">
-                          Using {retryModelName}
-                        </span>
+                  label={`Try again with ${retryModelName}`}
+                  tooltip={
+                    <span className="flex flex-col items-center text-center leading-tight">
+                      <span className="font-medium">Try again...</span>
+                      <span className="text-[var(--text-tertiary)]">
+                        Using {retryModelName}
                       </span>
-                    }
-                    delay={0}
-                    onClick={() => onReload?.(messageId)}
-                    icon={<Icon icon={RiLoopRightLine} slotSize={20} />}
-                  />
-                ) : null}
-                {/* Trailing sources badge (reference: last child of the
+                    </span>
+                  }
+                  delay={0}
+                  onClick={() => onReload?.(messageId)}
+                  icon={<Icon icon={RiLoopRightLine} slotSize={20} />}
+                />
+              ) : null}
+              {/* Trailing sources badge (reference: last child of the
                     response-actions row). Settled turns only — while the turn
                     is live, source deltas stay panel-owned and this row's memo
                     deliberately ignores them; the settle re-render (status
                     flip / metadata adoption) is what reveals the badge with
                     the final deduped sources. */}
-                {!turnActive && panelActions && (
-                  <SourcesBadge
-                    sources={view.sources}
-                    open={isPanelTurnOpen}
-                    onOpen={handleSourcesBadgeOpen}
-                    controlsId={panelId}
-                  />
-                )}
-              </MessageActions>
-            )}
-          </div>
-        )}
-
-        {selectionInfo && selectionInfo.messageId && (
-          <QuoteButton
-            mousePosition={selectionInfo.position}
-            onQuote={handleQuoteBtnClick}
-            messageContainerRef={messageRef}
-            onDismiss={clearSelection}
-          />
-        )}
-      </div>
+              {!turnActive && panelActions && (
+                <SourcesBadge
+                  sources={view.sources}
+                  open={isPanelTurnOpen}
+                  onOpen={handleSourcesBadgeOpen}
+                  controlsId={panelId}
+                />
+              )}
+            </MessageActions>
+          )}
+        </div>
+      )}
     </Message>
   )
 }

@@ -13,6 +13,7 @@ describe("resolveComposerPrimaryActionState", () => {
       mode: "send",
       intent: "send",
       disabled: false,
+      tooltip: "Send prompt",
     })
   })
 

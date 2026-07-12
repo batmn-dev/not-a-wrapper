@@ -44,6 +44,7 @@ export function SidebarProjectMenu({
             icon: <Icon icon={RiDeleteBinLine} slotSize={20} />,
             label: "Delete",
             variant: "destructive",
+            separatorBefore: true,
             onSelect: () => setIsDeleteDialogOpen(true),
           },
         ]}

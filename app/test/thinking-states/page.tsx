@@ -28,7 +28,6 @@ import {
   ReasoningLabel,
 } from "@/components/ui/reasoning"
 import { ScrollButton } from "@/components/ui/scroll-button"
-import { ScrollRootContent } from "@/components/ui/scroll-root"
 import { SystemMessage } from "@/components/ui/system-message"
 import { ThinkingBar } from "@/components/ui/thinking-bar"
 import { MessagesProvider } from "@/lib/chat-store/messages/provider"
@@ -41,8 +40,7 @@ import { useCallback, useEffect, useId, useState } from "react"
 
 const STREAMING_INDICATOR_VARIANT: StreamingIndicatorVariant = "caret"
 
-const PROSE_CLASSES =
-  "prose relative min-w-full bg-transparent p-0 prose-h1:scroll-m-20 prose-h1:text-2xl prose-h1:font-semibold prose-h2:mt-8 prose-h2:scroll-m-20 prose-h2:text-xl prose-h2:mb-3 prose-h2:font-medium prose-h3:scroll-m-20 prose-h3:text-base prose-h3:font-medium prose-h4:scroll-m-20 prose-h5:scroll-m-20 prose-h6:scroll-m-20 prose-strong:font-medium prose-table:block prose-table:overflow-y-auto"
+const PROSE_CLASSES = "markdown prose relative w-full bg-transparent p-0"
 
 const SAMPLE_REASONING = `The user is asking about quantum computing fundamentals. Let me break this down step by step.
 
@@ -320,18 +318,25 @@ function UserBubble({ children }: { children: string }) {
     <ArticleWrapper role="user">
       <Message
         as="div"
-        className="flex min-h-8 w-full flex-col items-end gap-1"
+        className="flex max-w-full flex-col gap-0"
         data-turn="user"
-        data-scroll-anchor="false"
         tabIndex={-1}
       >
         <h5 className="sr-only">You said:</h5>
-        <MessageContent
-          className="bg-accent prose relative max-w-[var(--user-chat-width,70%)] rounded-[18px] px-4 py-2.5 leading-6"
-          markdown={false}
-        >
-          {children}
-        </MessageContent>
+        <div className="flex max-w-full grow flex-col gap-4">
+          <div className="text-message relative flex min-h-8 w-full flex-col items-end gap-2 text-start break-words whitespace-normal">
+            <div className="flex w-full flex-col items-end gap-1 empty:hidden">
+              <MessageContent
+                className="bg-accent prose relative max-w-[var(--user-chat-width,70%)] min-w-0 overflow-hidden rounded-[22px] px-4 py-2.5 leading-6"
+                markdown={false}
+              >
+                <div className="max-w-full min-w-0 [overflow-wrap:anywhere] whitespace-pre-wrap">
+                  {children}
+                </div>
+              </MessageContent>
+            </div>
+          </div>
+        </div>
       </Message>
     </ArticleWrapper>
   )
@@ -339,7 +344,6 @@ function UserBubble({ children }: { children: string }) {
 
 function AssistantShell({
   children,
-  isLast = false,
 }: {
   children: React.ReactNode
   isLast?: boolean
@@ -349,20 +353,18 @@ function AssistantShell({
     <ArticleWrapper role="assistant">
       <Message
         as="div"
-        className="flex w-full flex-col gap-2"
+        className="flex max-w-full flex-col gap-0"
         data-turn="assistant"
         data-message-id={msgId}
-        data-scroll-anchor={isLast ? "true" : "false"}
         tabIndex={-1}
       >
         <h6 className="sr-only">Assistant said:</h6>
-        <div
-          className={cn(
-            "relative flex min-w-full flex-col gap-2",
-            isLast && "pb-8"
-          )}
-        >
-          {children}
+        <div className="flex max-w-full grow flex-col gap-4">
+          <div className="text-message relative flex min-h-8 w-full flex-col gap-2 text-start break-words whitespace-normal">
+            <div className="flex w-full flex-col gap-1 empty:hidden">
+              {children}
+            </div>
+          </div>
         </div>
       </Message>
     </ArticleWrapper>
@@ -433,7 +435,7 @@ export default function ThinkingStatesTestPage() {
       <LayoutApp>
         <div className="relative flex min-h-0 flex-1 flex-col items-center">
           {/* ━━━ Conversation ━━━ */}
-          <ScrollRootContent className="relative -mb-[var(--composer-overlap-px)] flex w-full flex-1 flex-col items-center pt-4 pb-[var(--thread-bottom-offset)] [--composer-overlap-px:28px] [--thread-bottom-offset:calc(var(--spacing-input-area)+env(safe-area-inset-bottom,0px))]">
+          <div className="relative -mb-(--composer-overlap-px) flex w-full grow basis-auto flex-col items-center pt-4 pb-(--composer-overlap-px) [--composer-overlap-px:28px]">
             {/* ─── User message ─── */}
             <UserBubble>This is a test chat thread</UserBubble>
 
@@ -956,7 +958,7 @@ export default function ThinkingStatesTestPage() {
 
               <CopyRegenActions />
             </AssistantShell>
-          </ScrollRootContent>
+          </div>
 
           {/* ━━━ Composer ━━━ */}
           <div

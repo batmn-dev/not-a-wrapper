@@ -39,10 +39,13 @@ export function MessageActionButton({
     <MessageAction tooltip={tooltip ?? label} side={side} delay={delay}>
       <button
         className={cn(
-          "text-muted-foreground flex items-center justify-center rounded-md bg-transparent disabled:pointer-events-none disabled:opacity-50",
+          "text-muted-foreground flex items-center justify-center bg-transparent disabled:pointer-events-none disabled:opacity-50",
+          // ChatGPT metrics: standard actions 32×32 / 8px radius; branch-pager
+          // steppers 24×30 / 6px radius. Radii are pinned literals — their
+          // rounded-lg/rounded-md resolve to 8/6px, ours to 10/8px.
           size === "branch"
-            ? "h-[30px] w-6 pointer-coarse:w-8"
-            : "h-8 w-8 pointer-coarse:w-10"
+            ? "h-[30px] w-[24px] rounded-[6px] pointer-coarse:w-8"
+            : "h-8 w-8 rounded-[8px] pointer-coarse:w-10"
         )}
         aria-label={label}
         onClick={onClick}
