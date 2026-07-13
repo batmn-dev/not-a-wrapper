@@ -131,8 +131,9 @@ describe("ActivityPanel coexistence (R6)", () => {
     expect(
       document.querySelectorAll('[data-testid="close-button"]')
     ).toHaveLength(1)
-    // Three visible search chips plus all five result rows.
-    expect(document.querySelectorAll("img")).toHaveLength(8)
+    // Three visible search chips, the overflow toggle's two-favicon stack
+    // (both hidden sources), plus all five result rows.
+    expect(document.querySelectorAll("img")).toHaveLength(10)
   })
 
   it("collapses the slot on close but keeps the shell mounted until the width transition ends", () => {
@@ -290,7 +291,7 @@ describe("ActivityPanel coexistence (R6)", () => {
     const header = document.querySelector<HTMLElement>(
       'section[aria-label="Reasoning details"] > div'
     )
-    expect(header?.className).toContain("spacing-app-header")
+    expect(header?.className).toContain("h-app-header")
     expect(header?.className).toContain("sharp-edge-top-shadow")
     expect(header?.className).not.toContain("sharp-edge-left-shadow")
     expect(header?.hasAttribute("data-scrolled")).toBe(false)
@@ -306,7 +307,7 @@ describe("ActivityPanel coexistence (R6)", () => {
     expect(closeButton?.getAttribute("aria-controls")).toBeNull()
   })
 
-  it("propagates timeline position through the entry wrapper", () => {
+  it("renders connector rails below each non-terminal entry icon", () => {
     act(() => {
       root?.render(
         <ActivityPanelHostProvider>
@@ -319,11 +320,17 @@ describe("ActivityPanel coexistence (R6)", () => {
     const steps = Array.from(
       document.querySelectorAll<HTMLElement>("[data-activity-step]")
     )
+    expect(steps).toHaveLength(2)
     expect(steps.map((step) => step.getAttribute("data-last"))).toEqual([
       "false",
       "true",
     ])
-    expect(steps.map((step) => step.style.zIndex)).toEqual(["1", "2"])
+    expect(steps.map((step) => step.style.zIndex)).toEqual(["0", "1"])
+    expect(
+      steps.map((step) =>
+        Boolean(step.querySelector("[data-activity-connector]"))
+      )
+    ).toEqual([true, false])
   })
 
   it("expands N more sources inline with disclosure semantics and resets on reopen", () => {
@@ -344,15 +351,31 @@ describe("ActivityPanel coexistence (R6)", () => {
     const more = document.querySelector<HTMLButtonElement>(
       'button[aria-expanded="false"]'
     )
+    // Collapsed: favicon-stack preview of the hidden sources + "N more".
     expect(more?.textContent).toBe("2 more")
     expect(more?.getAttribute("aria-controls")).toBeTruthy()
-    expect(document.querySelectorAll("img")).toHaveLength(8)
+    expect(more?.querySelectorAll("img")).toHaveLength(2)
+    expect(document.querySelectorAll("img")).toHaveLength(10)
 
     act(() => more?.click())
+    // Expanded: all chips inline plus a text-only "Show less" toggle.
     expect(document.body.textContent).not.toContain("2 more")
+    const less = document.querySelector<HTMLButtonElement>(
+      'button[aria-expanded="true"]'
+    )
+    expect(less?.textContent).toBe("Show less")
+    expect(less?.querySelectorAll("img")).toHaveLength(0)
     // Five inline chips plus five Sources gallery rows.
     expect(document.querySelectorAll("img")).toHaveLength(10)
 
+    // The toggle round-trips freely.
+    act(() => less?.click())
+    expect(
+      document.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')
+        ?.textContent
+    ).toBe("2 more")
+
+    act(() => less?.click())
     act(() => root?.render(<Harness open={false} />))
     act(() => root?.render(<Harness open />))
     expect(

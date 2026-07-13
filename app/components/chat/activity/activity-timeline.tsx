@@ -76,11 +76,7 @@ const STEP_MARKERS = {
 
 export type ActivityStepLeading = keyof typeof STEP_MARKERS
 
-/**
- * Marker/body variants are intentional scaffolding for the planned multi-step
- * timeline; production currently renders only the completed description form.
- */
-const stepVariants = cva("min-w-0 pb-5 group-data-[last=true]:pb-0", {
+const stepVariants = cva("w-full min-w-0 mb-3 group-data-[last=true]:mb-0", {
   variants: {
     leading: {
       search: "",
@@ -109,7 +105,7 @@ export type StepLeadingIndicatorProps = {
   className?: string
 }
 
-/** Marker glyph in a fixed-width rail. */
+/** Marker glyph in a fixed-width icon slot. */
 export function StepLeadingIndicator({
   leading = "bullet",
   className,
@@ -148,13 +144,13 @@ export function StepTitle({ children, className }: StepTitleProps) {
 export type ActivityStepProps = {
   children: React.ReactNode
   className?: string
-  /** Injected by `ActivityTimeline`; hides the trailing rail on the last step. */
+  /** Injected by `ActivityTimeline`; the final row has no trailing connector. */
   isLast?: boolean
-  /** Injected by `ActivityTimeline`; ascending z-index so rails overlap. */
+  /** Injected by `ActivityTimeline`; matches the reference row stacking order. */
   index?: number
 } & VariantProps<typeof stepVariants>
 
-/** A non-collapsible timeline step whose rail reaches the next marker center. */
+/** A timeline row whose connector begins below its fixed-height icon slot. */
 export const ActivityStep = ({
   children,
   className,
@@ -164,17 +160,24 @@ export const ActivityStep = ({
   body = "description",
 }: ActivityStepProps) => (
   <div
-    className="group relative grid animate-[show_150ms_ease-in] grid-cols-[min-content_minmax(0,1fr)] gap-x-2 motion-reduce:animate-none"
+    className="group mb-2 flex animate-[show_150ms_ease-in] motion-reduce:animate-none"
     data-activity-step
     data-last={isLast}
-    style={{ zIndex: index + 1 }}
+    style={{ zIndex: index }}
   >
-    <div className="relative flex flex-col items-center">
-      <StepLeadingIndicator leading={leading ?? "bullet"} />
-      <div className="bg-border absolute top-2.5 bottom-[-10px] left-1/2 w-px -translate-x-1/2 group-data-[last=true]:hidden" />
-    </div>
-    <div className={cn(stepVariants({ leading, body }), className)}>
-      {children}
+    <div className="relative flex w-full items-start gap-2 overflow-clip">
+      <div className="flex h-full w-4 shrink-0 flex-col items-center">
+        <StepLeadingIndicator leading={leading ?? "bullet"} />
+        {!isLast ? (
+          <div
+            data-activity-connector
+            className="h-full w-px rounded-full bg-[var(--border-heavy)]"
+          />
+        ) : null}
+      </div>
+      <div className={cn(stepVariants({ leading, body }), className)}>
+        {children}
+      </div>
     </div>
   </div>
 )
@@ -184,7 +187,6 @@ export type ActivityTimelineProps = {
   className?: string
 }
 
-/** Inject connector termination and stacking order into each timeline step. */
 export function ActivityTimeline({
   children,
   className,
@@ -192,7 +194,7 @@ export function ActivityTimeline({
   const childrenArray = React.Children.toArray(children)
 
   return (
-    <div className={cn("relative isolate", className)}>
+    <div className={cn("relative isolate flex flex-col", className)}>
       {childrenArray.map((child, index) => (
         <React.Fragment key={index}>
           {React.isValidElement(child) &&

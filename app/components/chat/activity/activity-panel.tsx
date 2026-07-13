@@ -142,7 +142,7 @@ function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
   const sources = entry.sources
   if (sources.length === 0) return null
   const visible = expanded ? sources : sources.slice(0, VISIBLE_SOURCE_CHIPS)
-  const remaining = sources.length - visible.length
+  const hiddenSources = sources.slice(VISIBLE_SOURCE_CHIPS)
 
   return (
     <div
@@ -193,15 +193,44 @@ function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
           )
         })}
       </span>
-      {remaining > 0 ? (
+      {hiddenSources.length > 0 ? (
+        // The reference overflow control is a free toggle (measured
+        // 2026-07-13): collapsed, an "N more" chip leads with a stacked
+        // favicon preview of the first three hidden sources; expanded, a
+        // text-only "Show less" chip collapses back. ChatGPT ships neither
+        // state with disclosure ARIA; we keep it.
         <button
           type="button"
           aria-expanded={expanded}
           aria-controls={chipGroupId}
-          onClick={() => setExpanded(true)}
-          className="bg-muted text-muted-foreground hover:bg-foreground hover:text-background focus-visible:ring-ring inline-flex h-[25px] items-center rounded-full px-3 text-xs outline-none focus-visible:ring-2"
+          onClick={() => setExpanded((value) => !value)}
+          className="group bg-muted text-muted-foreground hover:bg-foreground hover:text-background focus-visible:ring-ring inline-flex h-[25px] max-w-full items-center gap-1 overflow-hidden rounded-full px-3 text-xs outline-none focus-visible:ring-2"
         >
-          {remaining} more
+          {expanded ? (
+            "Show less"
+          ) : (
+            <>
+              {hiddenSources.slice(0, 3).map((source) => (
+                <span
+                  key={`${source.sourceId}:${source.url}`}
+                  className="border-muted bg-background group-hover:border-foreground -ms-3 box-content size-3 shrink-0 overflow-hidden rounded-full border first:-ms-1"
+                >
+                  <Image
+                    alt=""
+                    src={`https://www.google.com/s2/favicons?sz=32&domain_url=${encodeURIComponent(source.url)}`}
+                    width={12}
+                    height={12}
+                    loading="lazy"
+                    decoding="async"
+                    className="size-3"
+                  />
+                </span>
+              ))}
+              <span className="max-w-32 truncate">
+                {hiddenSources.length} more
+              </span>
+            </>
+          )}
         </button>
       ) : null}
     </div>

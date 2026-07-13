@@ -403,6 +403,7 @@
   /* Green (~#16a34a) — "done"/success cue, dark enough to read as chip text. */
   --success: oklch(0.55 0.14 160);
   --border: oklch(0.92 0.004 286.32);
+  --border-heavy: oklch(0 0 0 / 15%);
   --input: oklch(0.92 0.004 286.32);
   --ring: oklch(0.705 0.015 286.067);
   --chart-1: oklch(0.646 0.222 41.116);
@@ -511,6 +512,7 @@
   /* Lighter green (~green-400) so success text reads on the dark tint. */
   --success: oklch(0.75 0.17 160);
   --border: oklch(100% 0 0 / 8%);
+  --border-heavy: oklch(100% 0 0 / 15%);
   --input: oklch(0.39 0.006 286.033);
   --ring: oklch(0.442 0.017 285.786);
   --chart-1: oklch(0.488 0.243 264.376);
