@@ -5,7 +5,7 @@ import {
   normalizeFileMimeType,
 } from "../lib/file/policy"
 import { internal } from "./_generated/api"
-import type { Id } from "./_generated/dataModel"
+import type { Doc, Id } from "./_generated/dataModel"
 import {
   internalMutation,
   type MutationCtx,
@@ -206,6 +206,68 @@ export const getUrl = authenticatedQuery({
   },
 })
 
+type SaveStagedAttachmentCtx = MutationCtx & {
+  user: Doc<"users">
+}
+
+type SaveStagedAttachmentArgs = {
+  storageId: Id<"_storage">
+  fileName?: string
+  fileType?: string
+  fileSize?: number
+}
+
+export async function saveStagedAttachmentHandler(
+  ctx: SaveStagedAttachmentCtx,
+  args: SaveStagedAttachmentArgs
+) {
+  const user = ctx.user
+
+  const metadata = await ctx.db.system.get("_storage", args.storageId)
+  const storedType = normalizeFileMimeType(metadata?.contentType)
+  if (!metadata || !isStoredFileMetadataValid(metadata, args.fileType)) {
+    // The storage id is caller-supplied and has no owner-verified attachment
+    // record yet. Leave it unreferenced; cleanup requires a trusted ownership
+    // signal so this mutation cannot delete another user's file.
+    throw new Error("Stored file failed server validation")
+  }
+
+  // Re-check daily upload limit to prevent bypass via pre-fetched upload URLs.
+  if (getFileUploadLimit(user) !== null) {
+    const todayCount = await getTodayUploadCount(ctx, user._id)
+
+    if (isFileUploadLimitExceeded(user, todayCount)) {
+      // NOTE: We intentionally do NOT delete args.storageId here because we cannot
+      // verify it belongs to this user. Deleting without ownership verification would
+      // allow an attacker to delete other users' files by passing their storageId.
+      // Orphaned files should be cleaned up by a scheduled background job.
+      return null
+    }
+  }
+
+  // Get the public URL
+  const fileUrl = await ctx.storage.getUrl(args.storageId)
+  if (!fileUrl) throw new Error("Failed to get file URL")
+
+  const attachmentId = await ctx.db.insert("chatAttachments", {
+    userId: user._id,
+    storageId: args.storageId,
+    fileUrl,
+    fileName: args.fileName,
+    fileType: storedType,
+    fileSize: metadata.size,
+    stagedAt: Date.now(),
+  })
+
+  await ctx.scheduler.runAfter(
+    STAGED_ATTACHMENT_TTL_MS,
+    internal.files.cleanupStagedAttachment,
+    { attachmentId }
+  )
+
+  return attachmentId
+}
+
 /** Save an uploaded file as a user-owned staged attachment. */
 export const saveStagedAttachment = authenticatedMutation({
   args: {
@@ -214,53 +276,7 @@ export const saveStagedAttachment = authenticatedMutation({
     fileType: v.optional(v.string()),
     fileSize: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
-    const user = ctx.user
-
-    const metadata = await ctx.db.system.get("_storage", args.storageId)
-    const storedType = normalizeFileMimeType(metadata?.contentType)
-    if (!metadata || !isStoredFileMetadataValid(metadata, args.fileType)) {
-      // The storage id is caller-supplied and has no owner-verified attachment
-      // record yet. Leave it unreferenced; cleanup requires a trusted ownership
-      // signal so this mutation cannot delete another user's file.
-      throw new Error("Stored file failed server validation")
-    }
-
-    // Re-check daily upload limit to prevent bypass via pre-fetched upload URLs.
-    if (getFileUploadLimit(user) !== null) {
-      const todayCount = await getTodayUploadCount(ctx, user._id)
-
-      if (isFileUploadLimitExceeded(user, todayCount)) {
-        // NOTE: We intentionally do NOT delete args.storageId here because we cannot
-        // verify it belongs to this user. Deleting without ownership verification would
-        // allow an attacker to delete other users' files by passing their storageId.
-        // Orphaned files should be cleaned up by a scheduled background job.
-        return null
-      }
-    }
-
-    // Get the public URL
-    const fileUrl = await ctx.storage.getUrl(args.storageId)
-    if (!fileUrl) throw new Error("Failed to get file URL")
-
-    const attachmentId = await ctx.db.insert("chatAttachments", {
-      userId: user._id,
-      storageId: args.storageId,
-      fileUrl,
-      fileName: args.fileName,
-      fileType: storedType,
-      fileSize: metadata.size,
-      stagedAt: Date.now(),
-    })
-
-    await ctx.scheduler.runAfter(
-      STAGED_ATTACHMENT_TTL_MS,
-      internal.files.cleanupStagedAttachment,
-      { attachmentId }
-    )
-
-    return attachmentId
-  },
+  handler: saveStagedAttachmentHandler,
 })
 
 /**

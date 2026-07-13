@@ -6,7 +6,7 @@ import {
   getFileUploadLimitStatus,
   isFileUploadLimitExceeded,
   isStoredFileMetadataValid,
-  saveStagedAttachment,
+  saveStagedAttachmentHandler,
   selectTrustedTextAttachmentsForModelInput,
 } from "./files"
 
@@ -106,15 +106,8 @@ describe("stored file validation", () => {
   it("does not delete caller-supplied storage on validation failure", async () => {
     const deleteStoredFile = vi.fn()
     const ctx = {
-      auth: {
-        getUserIdentity: vi.fn().mockResolvedValue({ subject: "workos-1" }),
-      },
+      user: { _id: userId },
       db: {
-        query: vi.fn().mockReturnValue({
-          withIndex: vi.fn().mockReturnValue({
-            unique: vi.fn().mockResolvedValue({ _id: userId }),
-          }),
-        }),
         system: {
           get: vi.fn().mockResolvedValue({
             size: 42,
@@ -123,10 +116,10 @@ describe("stored file validation", () => {
         },
       },
       storage: { delete: deleteStoredFile },
-    } as unknown as Parameters<typeof saveStagedAttachment._handler>[0]
+    } as unknown as Parameters<typeof saveStagedAttachmentHandler>[0]
 
     await expect(
-      saveStagedAttachment._handler(ctx, {
+      saveStagedAttachmentHandler(ctx, {
         storageId,
         fileType: "image/png",
       })
