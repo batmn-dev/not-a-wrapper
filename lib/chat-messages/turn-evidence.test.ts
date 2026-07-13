@@ -19,7 +19,7 @@ describe("tool lifecycle × liveness resolution", () => {
       { state: "approval-requested", input: {}, approval: { id: "a1" } },
       "awaiting-approval",
       "approval",
-      "approval",
+      "stopped",
     ],
     [
       {

@@ -53,8 +53,12 @@ export const useFilePickerState = ({
   uploadGeneratedPastes,
 }: FilePickerOptions) => {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
+  const [lockedAttachmentIds, setLockedAttachmentIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set())
   const [announcement, setAnnouncement] = useState("")
   const attachmentsRef = useRef<PendingAttachment[]>([])
+  const lockedAttachmentIdsRef = useRef<ReadonlySet<string>>(new Set())
   const activeUploadsRef = useRef(new Map<string, ActiveUpload>())
   const generatedPasteSequenceRef = useRef(0)
 
@@ -257,6 +261,7 @@ export const useFilePickerState = ({
 
   const handleFileRemove = useCallback(
     (attachment: PendingAttachment) => {
+      if (lockedAttachmentIdsRef.current.has(attachment.id)) return false
       const active = activeUploadsRef.current.get(attachment.id)
       if (active) {
         activeUploadsRef.current.delete(attachment.id)
@@ -273,9 +278,29 @@ export const useFilePickerState = ({
           ? `${attachment.file.name} upload cancelled and removed.`
           : `${attachment.file.name} removed.`
       )
+      return true
     },
     [convex, updateAttachments]
   )
+
+  /** Lock one submitted snapshot before its async turn dispatch can yield. */
+  const lockAttachments = useCallback((ids: readonly string[]) => {
+    if (ids.some((id) => lockedAttachmentIdsRef.current.has(id))) return false
+    if (ids.length === 0) return true
+    const next = new Set(lockedAttachmentIdsRef.current)
+    ids.forEach((id) => next.add(id))
+    lockedAttachmentIdsRef.current = next
+    setLockedAttachmentIds(next)
+    return true
+  }, [])
+
+  const unlockAttachments = useCallback((ids: readonly string[]) => {
+    if (ids.length === 0) return
+    const next = new Set(lockedAttachmentIdsRef.current)
+    ids.forEach((id) => next.delete(id))
+    lockedAttachmentIdsRef.current = next
+    setLockedAttachmentIds(next)
+  }, [])
 
   const retryAttachment = useCallback(
     (attachment: PendingAttachment) => {
@@ -314,11 +339,14 @@ export const useFilePickerState = ({
 
   return {
     attachments,
+    lockedAttachmentIds,
     announcement,
     announce: setAnnouncement,
     handleFileUpload,
     handleLargePaste,
     handleFileRemove,
+    lockAttachments,
+    unlockAttachments,
     retryAttachment,
     consumeAttachments,
   }

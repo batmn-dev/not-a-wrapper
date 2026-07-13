@@ -33,6 +33,8 @@ type SetMessagesAction =
 // is the same minus the server-assigned id it does not have yet.
 type OptimisticAttachment = Omit<Attachment, "attachmentId">
 type UploadedAttachment = Attachment
+export type StagedAttachmentReference = Pick<Attachment, "attachmentId"> &
+  Partial<Omit<Attachment, "attachmentId">>
 
 type SendMessageOptions = { body?: Record<string, unknown> }
 type RegenerateMessageOptions = SendMessageOptions & { messageId?: string }
@@ -105,7 +107,7 @@ export type SendTurnArgs = {
   text: string
   messages?: ChatTurnMessage[]
   submittedFiles?: File[]
-  submittedAttachments?: UploadedAttachment[]
+  submittedAttachments?: StagedAttachmentReference[]
   optimisticAttachments?: OptimisticAttachment[]
   chatVersion?: number
   onSuccess?: (chatId: string) => void
@@ -269,18 +271,23 @@ async function runSendTurn(
 
     adapters.setPreviousChatId(currentChatId)
 
-    let attachments: UploadedAttachment[] | null = submittedAttachments
+    let attachments: UploadedAttachment[] | null = []
     const attachmentIds = submittedAttachments.flatMap((attachment) =>
       attachment.attachmentId ? [attachment.attachmentId] : []
     )
-    if (attachmentIds.length !== submittedAttachments.length) return
+    if (attachmentIds.length !== submittedAttachments.length) {
+      adapters.toastError(errorMessage)
+      return
+    }
     if (attachmentIds.length > 0) {
       attachments = await adapters.attachStagedFiles(
         currentChatId,
         attachmentIds
       )
-      if (attachments === null || attachments.length !== attachmentIds.length)
+      if (attachments === null || attachments.length !== attachmentIds.length) {
+        adapters.toastError(errorMessage)
         return
+      }
     }
 
     optimisticId = (

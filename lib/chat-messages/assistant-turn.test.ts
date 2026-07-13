@@ -373,7 +373,7 @@ describe("deriveAssistantActivityModel chronology", () => {
   })
 
   it.each([
-    ["approval-requested", "approval"],
+    ["approval-requested", "stopped"],
     ["input-available", "stopped"],
     ["output-error", "error"],
     ["output-denied", "denied"],
@@ -413,6 +413,32 @@ describe("deriveAssistantActivityModel chronology", () => {
       kind: "settled",
     })
     expect(activity?.entries[0]?.status).toBe(expected)
+    if (state === "approval-requested") {
+      expect(activity?.entries[0]).not.toHaveProperty("tool.approvalId")
+    }
+  })
+
+  it("exposes an approval id only while the approval turn is live", () => {
+    const view = viewOf(
+      [
+        {
+          type: "tool-delete_file",
+          toolCallId: "call-1",
+          state: "approval-requested",
+          input: { path: "/tmp/a" },
+          approval: { id: "approval-1" },
+        },
+      ],
+      "streaming"
+    )
+
+    const activity = deriveAssistantActivityModel(view, {
+      kind: "awaiting-approval",
+    })
+    expect(activity?.entries[0]).toMatchObject({
+      status: "approval",
+      tool: { approvalId: "approval-1" },
+    })
   })
 })
 

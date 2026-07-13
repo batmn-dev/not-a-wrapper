@@ -64,6 +64,14 @@ export function isStoredFileMetadataValid(
   )
 }
 
+export function assertAttachmentCanBeDeletedIndependently(attachment: {
+  chatId?: Id<"chats">
+}): void {
+  if (attachment.chatId) {
+    throw new Error("Attached files cannot be deleted independently")
+  }
+}
+
 export function isFileUploadLimitExceeded(
   user: FileUploadLimitUser,
   todayCount: number
@@ -212,7 +220,9 @@ export const saveStagedAttachment = authenticatedMutation({
     const metadata = await ctx.db.system.get("_storage", args.storageId)
     const storedType = normalizeFileMimeType(metadata?.contentType)
     if (!metadata || !isStoredFileMetadataValid(metadata, args.fileType)) {
-      if (metadata) await ctx.storage.delete(args.storageId)
+      // The storage id is caller-supplied and has no owner-verified attachment
+      // record yet. Leave it unreferenced; cleanup requires a trusted ownership
+      // signal so this mutation cannot delete another user's file.
       throw new Error("Stored file failed server validation")
     }
 
@@ -402,6 +412,8 @@ export const deleteFile = authenticatedMutation({
     if (attachment.userId !== ctx.user._id) {
       throw new Error("Not authorized")
     }
+
+    assertAttachmentCanBeDeletedIndependently(attachment)
 
     // Delete from storage
     if (attachment.storageId) {

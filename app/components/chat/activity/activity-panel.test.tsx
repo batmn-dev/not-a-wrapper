@@ -503,7 +503,7 @@ describe("ActivityPanel coexistence (R6)", () => {
     }
   })
 
-  it("copies normalized tool code and exposes temporary completion feedback", () => {
+  it("copies normalized tool code and exposes temporary completion feedback", async () => {
     vi.useFakeTimers()
     const writeText = vi.fn().mockResolvedValue(undefined)
     const originalClipboard = Object.getOwnPropertyDescriptor(
@@ -549,7 +549,7 @@ describe("ActivityPanel coexistence (R6)", () => {
       const copyButton = document.querySelector<HTMLButtonElement>(
         'button[aria-label="Copy"]'
       )
-      act(() => copyButton?.click())
+      await act(async () => copyButton?.click())
       expect(writeText).toHaveBeenCalledWith("python -m pytest -q")
       expect(copyButton?.getAttribute("aria-label")).toBe("Copied")
 
@@ -563,5 +563,134 @@ describe("ActivityPanel coexistence (R6)", () => {
       }
       vi.useRealTimers()
     }
+  })
+
+  it("keeps copy feedback idle when clipboard writing is unavailable or fails", async () => {
+    const originalClipboard = Object.getOwnPropertyDescriptor(
+      navigator,
+      "clipboard"
+    )
+
+    try {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: undefined,
+      })
+      act(() => {
+        root?.render(
+          <ActivityPanelHostProvider>
+            <ActivityPanelDockSlot />
+            <ActivityPanel
+              open
+              onOpenChange={() => {}}
+              activity={{
+                entries: [
+                  {
+                    id: "tool-code",
+                    kind: "tool",
+                    title: "Ran tests",
+                    status: "complete",
+                    tool: {
+                      toolName: "python",
+                      displayName: "Python",
+                      code: "python -m pytest -q",
+                    },
+                  },
+                ],
+                sourceResults: [],
+                imageResults: [],
+              }}
+            />
+          </ActivityPanelHostProvider>
+        )
+      })
+
+      const copyButton = document.querySelector<HTMLButtonElement>(
+        'button[aria-label="Copy"]'
+      )
+      await act(async () => copyButton?.click())
+      expect(copyButton?.getAttribute("aria-label")).toBe("Copy")
+
+      const writeText = vi.fn().mockRejectedValue(new Error("denied"))
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText },
+      })
+      await act(async () => copyButton?.click())
+      expect(writeText).toHaveBeenCalledWith("python -m pytest -q")
+      expect(copyButton?.getAttribute("aria-label")).toBe("Copy")
+    } finally {
+      if (originalClipboard) {
+        Object.defineProperty(navigator, "clipboard", originalClipboard)
+      } else {
+        Reflect.deleteProperty(navigator, "clipboard")
+      }
+    }
+  })
+
+  it("prevents duplicate approval submissions while a request is pending", async () => {
+    let settleApproval: (() => void) | undefined
+    const approvalRequest = new Promise<void>((resolve) => {
+      settleApproval = resolve
+    })
+    const onToolApproval = vi.fn(() => approvalRequest)
+    const renderApproval = (handler?: typeof onToolApproval) => {
+      root?.render(
+        <ActivityPanelHostProvider>
+          <ActivityPanelDockSlot />
+          <ActivityPanel
+            open
+            onOpenChange={() => {}}
+            onToolApproval={handler}
+            activity={{
+              entries: [
+                {
+                  id: "tool-approval",
+                  kind: "tool",
+                  title: "Review Python",
+                  status: "approval",
+                  tool: {
+                    toolName: "python",
+                    displayName: "Python",
+                    approvalId: "approval-1",
+                  },
+                },
+              ],
+              sourceResults: [],
+              imageResults: [],
+            }}
+          />
+        </ActivityPanelHostProvider>
+      )
+    }
+
+    act(() => renderApproval())
+    const buttons = Array.from(
+      document.querySelectorAll<HTMLButtonElement>("button")
+    )
+    const approve = buttons.find((button) => button.textContent === "Approve")
+    const deny = buttons.find((button) => button.textContent === "Deny")
+    expect(approve?.disabled).toBe(true)
+    expect(deny?.disabled).toBe(true)
+
+    act(() => renderApproval(onToolApproval))
+    expect(approve?.disabled).toBe(false)
+    expect(deny?.disabled).toBe(false)
+
+    act(() => {
+      approve?.click()
+      deny?.click()
+    })
+    expect(onToolApproval).toHaveBeenCalledOnce()
+    expect(onToolApproval).toHaveBeenCalledWith("approval-1", true, undefined)
+    expect(approve?.disabled).toBe(true)
+    expect(deny?.disabled).toBe(true)
+
+    await act(async () => {
+      settleApproval?.()
+      await approvalRequest
+    })
+    expect(approve?.disabled).toBe(false)
+    expect(deny?.disabled).toBe(false)
   })
 })

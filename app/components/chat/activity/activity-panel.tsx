@@ -14,6 +14,7 @@ import type {
 } from "@/lib/chat-messages/assistant-activity"
 import { parseSafeExternalUrl } from "@/lib/url-safety"
 import { RiCheckLine, RiCodeLine, RiFileCopyLine } from "@remixicon/react"
+import Image from "next/image"
 import { useId, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { useActivityPanelDockSlot } from "./activity-panel-host"
@@ -52,14 +53,36 @@ function ActivityToolCard({
   onToolApproval?: ToolApprovalHandler
 }) {
   const [copied, setCopied] = useState(false)
+  const [isSubmittingApproval, setIsSubmittingApproval] = useState(false)
+  const isSubmittingApprovalRef = useRef(false)
   const code = entry.tool.code
   const approvalId =
     entry.status === "approval" ? entry.tool.approvalId : undefined
-  const copy = () => {
-    if (!code) return
-    void navigator.clipboard?.writeText(code)
+  const copy = async () => {
+    if (!code || !navigator.clipboard) return
+
+    try {
+      await navigator.clipboard.writeText(code)
+    } catch {
+      return
+    }
+
     setCopied(true)
     setTimeout(() => setCopied(false), 1000)
+  }
+  const submitToolApproval = async (approved: boolean, reason?: string) => {
+    if (!onToolApproval || !approvalId || isSubmittingApprovalRef.current) {
+      return
+    }
+
+    isSubmittingApprovalRef.current = true
+    setIsSubmittingApproval(true)
+    try {
+      await onToolApproval(approvalId, approved, reason)
+    } finally {
+      isSubmittingApprovalRef.current = false
+      setIsSubmittingApproval(false)
+    }
   }
 
   return (
@@ -89,18 +112,16 @@ function ActivityToolCard({
         <div className="flex flex-wrap gap-2 px-4 pb-4">
           <button
             type="button"
-            disabled={!onToolApproval}
-            onClick={() => void onToolApproval?.(approvalId, true)}
+            disabled={!onToolApproval || isSubmittingApproval}
+            onClick={() => void submitToolApproval(true)}
             className="bg-foreground text-background h-8 rounded-full px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
           >
             Approve
           </button>
           <button
             type="button"
-            disabled={!onToolApproval}
-            onClick={() =>
-              void onToolApproval?.(approvalId, false, "Denied by user")
-            }
+            disabled={!onToolApproval || isSubmittingApproval}
+            onClick={() => void submitToolApproval(false, "Denied by user")}
             className="hover:bg-foreground/[0.07] h-8 rounded-full px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
           >
             Deny
@@ -135,13 +156,14 @@ function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
           const domain = sourceDomain(source.url)
           const content = (
             <>
-              {/* eslint-disable-next-line @next/next/no-img-element -- dynamic external favicon */}
-              <img
+              <Image
                 alt=""
                 src={`https://www.google.com/s2/favicons?sz=32&domain_url=${encodeURIComponent(source.url)}`}
-                className="size-3 shrink-0 rounded-full"
                 width={12}
                 height={12}
+                loading="lazy"
+                decoding="async"
+                className="size-3 shrink-0 rounded-full"
               />
               <span className="max-w-32 truncate">{domain}</span>
             </>
@@ -326,10 +348,12 @@ function PanelBody({
                   rel="noopener noreferrer"
                   className="focus-visible:ring-ring block overflow-hidden rounded-xl outline-none focus-visible:ring-2"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element -- provider image result */}
-                  <img
+                  <Image
                     src={result.imageUrl}
                     alt={result.title}
+                    width={512}
+                    height={512}
+                    unoptimized
                     className="aspect-square w-full object-cover"
                   />
                 </a>

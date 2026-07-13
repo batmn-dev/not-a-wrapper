@@ -5,10 +5,13 @@ import type { PendingAttachment } from "./pending-attachment"
 
 type FileListProps = {
   attachments: PendingAttachment[]
+  lockedAttachmentIds?: ReadonlySet<string>
   onFileRemove: (attachment: PendingAttachment) => void
   onRestoreLargePaste: (attachment: PendingAttachment) => void
   onRetry: (attachment: PendingAttachment) => void
 }
+
+const NO_LOCKED_ATTACHMENTS: ReadonlySet<string> = new Set()
 
 const TRANSITION = {
   type: "spring",
@@ -18,6 +21,7 @@ const TRANSITION = {
 
 export const FileList = memo(function FileList({
   attachments,
+  lockedAttachmentIds = NO_LOCKED_ATTACHMENTS,
   onFileRemove,
   onRestoreLargePaste,
   onRetry,
@@ -79,6 +83,7 @@ export const FileList = memo(function FileList({
                   <FileTile
                     attachment={attachment}
                     index={index}
+                    isLocked={lockedAttachmentIds.has(attachment.id)}
                     onRemove={onFileRemove}
                     onRestoreLargePaste={onRestoreLargePaste}
                     onRetry={onRetry}

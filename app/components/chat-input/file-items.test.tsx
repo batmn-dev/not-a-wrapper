@@ -50,11 +50,16 @@ describe("FileTile family", () => {
     return container
   }
 
-  function renderItem(attachment: PendingAttachment, index = 0) {
+  function renderItem(
+    attachment: PendingAttachment,
+    index = 0,
+    isLocked = false
+  ) {
     return render(
       <FileTile
         attachment={attachment}
         index={index}
+        isLocked={isLocked}
         onRemove={onRemove}
         onRestoreLargePaste={onRestore}
         onRetry={onRetry}
@@ -190,6 +195,20 @@ describe("FileTile family", () => {
     expect(remove.getAttribute("data-slot")).toBe("tooltip-trigger")
     act(() => remove.click())
     expect(onRemove).toHaveBeenCalledWith(attachment)
+  })
+
+  it("disables removal while a ready attachment is being sent", () => {
+    const attachment = readyFile(
+      new File(["image"], "sending.webp", { type: "image/webp" })
+    )
+    renderItem(attachment, 0, true)
+
+    const remove = container.querySelector(
+      'button[aria-label="Sending file 1: sending.webp"]'
+    ) as HTMLButtonElement
+    expect(remove.disabled).toBe(true)
+    act(() => remove.click())
+    expect(onRemove).not.toHaveBeenCalled()
   })
 
   it("renders uploading and failed states and emits an attachment-specific retry", () => {

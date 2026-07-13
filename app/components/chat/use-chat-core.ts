@@ -12,8 +12,9 @@ import { projectSelectedPath } from "@/lib/chat-store/turns/selected-path"
 import {
   createChatTurnController,
   type ChatTurnMessage,
+  type StagedAttachmentReference,
 } from "@/lib/chat-turn/chat-turn-controller"
-import { attachStagedFilesToChat, type Attachment } from "@/lib/file-handling"
+import { attachStagedFilesToChat } from "@/lib/file-handling"
 import { API_ROUTE_CHAT } from "@/lib/routes"
 import type { UserProfile } from "@/lib/user/types"
 import type { UIMessage } from "@ai-sdk/react"
@@ -38,7 +39,7 @@ import { useTurnContext } from "./turn-context"
 export type ChatTurnPayload = {
   text: string
   files: File[]
-  attachments: Attachment[]
+  attachments: StagedAttachmentReference[]
 }
 
 type UseChatCoreProps = {
@@ -544,11 +545,9 @@ export function useChatCore({
 
     void (async () => {
       try {
-        const attachments = await attachStagedFilesToChat(
-          convex,
-          chatId,
-          handoffAttachmentIds
-        )
+        const attachments = handoffAttachmentIds.map((attachmentId) => ({
+          attachmentId,
+        }))
         const accepted = await submit({ text: prompt, files: [], attachments })
         if (!accepted) {
           autoSubmittedPromptRef.current = null
@@ -571,7 +570,6 @@ export function useChatCore({
     })()
   }, [
     chatId,
-    convex,
     handoffAttachmentIds,
     prompt,
     shouldAutoSubmitPrompt,

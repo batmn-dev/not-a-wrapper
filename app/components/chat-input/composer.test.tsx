@@ -39,6 +39,8 @@ const composerMocks = vi.hoisted(() => ({
   setDraftValue: vi.fn(),
   clearDraft: vi.fn(),
   handleFileRemove: vi.fn(),
+  lockAttachments: vi.fn(() => true),
+  unlockAttachments: vi.fn(),
   retryAttachment: vi.fn(),
   consumeAttachments: vi.fn(),
   announce: vi.fn(),
@@ -125,11 +127,14 @@ vi.mock("@/app/hooks/use-chat-draft", () => ({
 vi.mock("@/app/components/chat/use-file-upload", () => ({
   useFilePickerState: () => ({
     attachments: composerMocks.attachments,
+    lockedAttachmentIds: new Set<string>(),
     announcement: "",
     announce: composerMocks.announce,
     handleFileUpload: composerMocks.handleFileUpload,
     handleLargePaste: composerMocks.handleLargePaste,
     handleFileRemove: composerMocks.handleFileRemove,
+    lockAttachments: composerMocks.lockAttachments,
+    unlockAttachments: composerMocks.unlockAttachments,
     retryAttachment: composerMocks.retryAttachment,
     consumeAttachments: composerMocks.consumeAttachments,
   }),
@@ -529,6 +534,12 @@ describe("Composer primary action", () => {
     })
     expect(composerMocks.clearDraft).toHaveBeenCalledTimes(1)
     expect(composerMocks.consumeAttachments).toHaveBeenCalledWith([
+      "attachment-1",
+    ])
+    expect(composerMocks.lockAttachments).toHaveBeenCalledWith([
+      "attachment-1",
+    ])
+    expect(composerMocks.unlockAttachments).toHaveBeenCalledWith([
       "attachment-1",
     ])
     // Display cleared at handoff (the controlled value the input renders).

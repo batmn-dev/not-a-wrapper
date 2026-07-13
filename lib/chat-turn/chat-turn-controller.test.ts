@@ -251,9 +251,6 @@ describe("chat turn controller", () => {
       submittedFiles: [{} as File],
       submittedAttachments: [
         {
-          name: "notes.pdf",
-          contentType: "application/pdf",
-          url: "/api/files/attachment-1/preview",
           attachmentId: "attachment-1",
         },
       ],
@@ -301,33 +298,74 @@ describe("chat turn controller", () => {
     )
   })
 
-  it("dispatches no optimistic row or partial turn when staged binding fails", async () => {
+  it("reports and rejects an attachment without a staged attachment id", async () => {
     const { adapters, controller, getMessages } = createHarness()
-    adapters.attachStagedFiles = vi.fn(async () => null)
 
     await controller.runSendTurn({
-      text: "Read both",
-      submittedFiles: [{} as File, {} as File],
+      text: "Read this",
+      submittedFiles: [{} as File],
       submittedAttachments: [
         {
-          name: "one.pdf",
+          name: "notes.pdf",
           contentType: "application/pdf",
-          url: "/api/files/one/preview",
-          attachmentId: "one",
-        },
-        {
-          name: "two.pdf",
-          contentType: "application/pdf",
-          url: "/api/files/two/preview",
-          attachmentId: "two",
+          url: "/api/files/notes/preview",
         },
       ],
     })
 
+    expect(adapters.toastError).toHaveBeenCalledWith("Failed to send message")
+    expect(adapters.attachStagedFiles).not.toHaveBeenCalled()
     expect(getMessages()).toEqual([])
     expect(adapters.setMessages).not.toHaveBeenCalled()
     expect(adapters.sendMessage).not.toHaveBeenCalled()
   })
+
+  it.each([
+    { outcome: "null", bindingResult: null },
+    {
+      outcome: "partial",
+      bindingResult: [
+        {
+          name: "one.pdf",
+          contentType: "application/pdf",
+          url: "https://files.test/one.pdf",
+          attachmentId: "one",
+        },
+      ],
+    },
+  ])(
+    "reports and rejects staged binding when the result is $outcome",
+    async ({ bindingResult }) => {
+      const { adapters, controller, getMessages } = createHarness()
+      adapters.attachStagedFiles = vi.fn(async () => bindingResult)
+
+      await controller.runSendTurn({
+        text: "Read both",
+        submittedFiles: [{} as File, {} as File],
+        submittedAttachments: [
+          {
+            name: "one.pdf",
+            contentType: "application/pdf",
+            url: "/api/files/one/preview",
+            attachmentId: "one",
+          },
+          {
+            name: "two.pdf",
+            contentType: "application/pdf",
+            url: "/api/files/two/preview",
+            attachmentId: "two",
+          },
+        ],
+      })
+
+      expect(adapters.toastError).toHaveBeenCalledWith(
+        "Failed to send message"
+      )
+      expect(getMessages()).toEqual([])
+      expect(adapters.setMessages).not.toHaveBeenCalled()
+      expect(adapters.sendMessage).not.toHaveBeenCalled()
+    }
+  )
 
   it("creates no optimistic state when no user id resolves", async () => {
     // The Composer restores the payload on a rejected turn — a lingering

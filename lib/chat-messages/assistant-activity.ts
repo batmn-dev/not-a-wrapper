@@ -422,7 +422,7 @@ export function deriveAssistantActivityModel(
       })
       continue
     }
-    if (item.lifecycle.kind === "awaiting-approval") {
+    if (item.lifecycle.kind === "awaiting-approval" && status === "approval") {
       entries.push({
         id: item.id,
         kind: "tool",
@@ -438,8 +438,9 @@ export function deriveAssistantActivityModel(
       kind: "tool",
       title: toolActionTitle(label, item.input, status),
       detail: errorDetail(item.lifecycle),
-      // Safe: awaiting-approval is the only lifecycle resolveEntryStatus maps
-      // to "approval", and that arm was handled above.
+      // Safe: live awaiting-approval is the only lifecycle resolveEntryStatus
+      // maps to "approval", and that arm was handled above. Settled approval
+      // requests resolve to "stopped" and intentionally carry no approval id.
       status: status as Exclude<ActivityEntryStatus, "approval">,
       tool: toolDetail(item),
     })

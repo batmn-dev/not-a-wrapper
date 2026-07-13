@@ -230,6 +230,32 @@ describe("useFilePickerState immediate upload lifecycle", () => {
     expect(controls().attachments).toEqual([])
   })
 
+  it("locks a submitted attachment against removal until dispatch settles", async () => {
+    act(() => controls().handleFileUpload([file("sent.txt")]))
+    await flush()
+    await act(async () => {
+      uploadCalls[0]?.resolve({ fileUrl: "/sent", attachmentId: "sent" })
+      await Promise.resolve()
+    })
+    const ready = controls().attachments[0]!
+
+    act(() => {
+      expect(controls().lockAttachments([ready.id])).toBe(true)
+    })
+    expect(controls().lockedAttachmentIds.has(ready.id)).toBe(true)
+    expect(controls().handleFileRemove(ready)).toBe(false)
+    expect(controls().attachments).toEqual([ready])
+    expect(deleteUploadedAttachment).not.toHaveBeenCalled()
+
+    act(() => controls().unlockAttachments([ready.id]))
+    expect(controls().lockedAttachmentIds.has(ready.id)).toBe(false)
+    act(() => {
+      expect(controls().handleFileRemove(ready)).toBe(true)
+    })
+    expect(deleteUploadedAttachment).toHaveBeenCalledWith(convex, "sent")
+    expect(controls().attachments).toEqual([])
+  })
+
   it("rejects an exact metadata duplicate but accepts the same filename with different contents", async () => {
     const original = file("same.txt", "a", 10)
     act(() => controls().handleFileUpload([original]))

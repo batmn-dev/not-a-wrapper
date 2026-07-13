@@ -224,11 +224,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // immediately and hands only ready metadata to the Chat turn.
     const {
       attachments,
+      lockedAttachmentIds,
       announcement: attachmentAnnouncement,
       announce: setAttachmentAnnouncement,
       handleFileUpload,
       handleLargePaste,
       handleFileRemove,
+      lockAttachments,
+      unlockAttachments,
       retryAttachment,
       consumeAttachments,
     } = useFilePickerState({
@@ -305,12 +308,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         text,
         attachments: submittedAttachments,
       })
+      if (!lockAttachments(submittedAttachmentIds)) return
       // Clear the display at handoff; the persisted draft survives until the
       // turn reports success. Clearing through applyValue also empties the
       // ref synchronously, so a second Enter in the same commit cannot
       // re-send the old text.
       applyValue("")
-      const accepted = await onTurn(turnPayload)
+      let accepted: boolean
+      try {
+        accepted = await onTurn(turnPayload)
+      } finally {
+        unlockAttachments(submittedAttachmentIds)
+      }
       if (accepted === true) {
         consumeAttachments(submittedAttachmentIds)
         if (submittedAttachments.length > 0) {
@@ -338,6 +347,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       applyValue,
       attachments,
       consumeAttachments,
+      lockAttachments,
+      unlockAttachments,
       onTurn,
       debouncedSetDraftValue,
       clearDraft,
@@ -445,8 +456,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const handleRestoreLargePaste = useCallback(
       (attachment: PendingAttachment) => {
         if (attachment.kind !== "generated-large-paste") return
+        if (!handleFileRemove(attachment)) return
         const restored = restoreLargePasteText(valueRef.current, attachment)
-        handleFileRemove(attachment)
         handleValueChange(restored.text)
         setAttachmentAnnouncement(`${attachment.file.name} restored.`)
         requestAnimationFrame(() => {
@@ -550,6 +561,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               <div className="min-w-0 [grid-area:header]">
                 <FileList
                   attachments={attachments}
+                  lockedAttachmentIds={lockedAttachmentIds}
                   onFileRemove={handleAttachmentRemove}
                   onRestoreLargePaste={handleRestoreLargePaste}
                   onRetry={handleAttachmentRetry}

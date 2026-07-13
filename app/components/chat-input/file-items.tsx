@@ -44,6 +44,7 @@ type FileTileSurfaceProps = {
   primaryAction?: { label: string; onClick: () => void }
   primaryActionRef?: Ref<HTMLButtonElement>
   secondaryAction?: { label: string; onClick: () => void }
+  isLocked?: boolean
   onRemove: () => void
   onRetry?: () => void
 }
@@ -64,6 +65,7 @@ function FileTileSurface({
   primaryAction,
   primaryActionRef,
   secondaryAction,
+  isLocked = false,
   onRemove,
   onRetry,
 }: FileTileSurfaceProps) {
@@ -244,16 +246,21 @@ function FileTileSurface({
           render={
             <button
               type="button"
-              className="attachment-remove-button focus-visible:ring-ring absolute top-1.5 right-1.5 z-30 inline-flex size-4 items-center justify-center rounded-full bg-[#0d0d0d] text-white hover:bg-[#0d0d0d]/80 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none"
+              className="attachment-remove-button focus-visible:ring-ring absolute top-1.5 right-1.5 z-30 inline-flex size-4 items-center justify-center rounded-full bg-[#0d0d0d] text-white hover:bg-[#0d0d0d]/80 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={isLocked}
               onClick={onRemove}
-              aria-label={`${status === "uploading" ? "Cancel upload" : "Remove file"} ${index + 1}: ${label}`}
+              aria-label={`${isLocked ? "Sending file" : status === "uploading" ? "Cancel upload" : "Remove file"} ${index + 1}: ${label}`}
             />
           }
         >
           <Icon icon={RiCloseLine} slotSize={16} glyphSize={16} />
         </TooltipTrigger>
         <TooltipContent side="top" sideOffset={4} hideArrow>
-          {status === "uploading" ? "Cancel upload" : "Remove file"}
+          {isLocked
+            ? "Sending file"
+            : status === "uploading"
+              ? "Cancel upload"
+              : "Remove file"}
         </TooltipContent>
       </Tooltip>
     </div>
@@ -263,6 +270,7 @@ function FileTileSurface({
 type FileTileProps = {
   attachment: PendingAttachment
   index: number
+  isLocked?: boolean
   onRemove: (attachment: PendingAttachment) => void
   onRestoreLargePaste: (attachment: PendingAttachment) => void
   onRetry: (attachment: PendingAttachment) => void
@@ -271,6 +279,7 @@ type FileTileProps = {
 export function FileTile({
   attachment,
   index,
+  isLocked = false,
   onRemove,
   onRestoreLargePaste,
   onRetry,
@@ -314,10 +323,12 @@ export function FileTile({
   }
   const primaryAction =
     attachment.kind === "generated-large-paste"
-      ? {
-          label: `Show pasted text: ${label}`,
-          onClick: () => onRestoreLargePaste(attachment),
-        }
+      ? isLocked
+        ? undefined
+        : {
+            label: `Show pasted text: ${label}`,
+            onClick: () => onRestoreLargePaste(attachment),
+          }
       : canPreview
         ? {
             label:
@@ -344,13 +355,14 @@ export function FileTile({
         primaryAction={primaryAction}
         primaryActionRef={primaryActionRef}
         secondaryAction={
-          attachment.kind === "generated-large-paste"
+          attachment.kind === "generated-large-paste" && !isLocked
             ? {
                 label: "Show in text field",
                 onClick: () => onRestoreLargePaste(attachment),
               }
             : undefined
         }
+        isLocked={isLocked}
         onRemove={() => onRemove(attachment)}
         onRetry={
           attachment.status !== "failed" || attachment.retryable

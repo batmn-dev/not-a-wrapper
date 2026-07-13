@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import type { Id } from "./_generated/dataModel"
 import {
+  assertAttachmentCanBeDeletedIndependently,
   getFileUploadLimit,
   getFileUploadLimitStatus,
   isFileUploadLimitExceeded,
   isStoredFileMetadataValid,
+  saveStagedAttachment,
   selectTrustedTextAttachmentsForModelInput,
 } from "./files"
 
@@ -99,6 +101,46 @@ describe("stored file validation", () => {
         "application/octet-stream"
       )
     ).toBe(false)
+  })
+
+  it("does not delete caller-supplied storage on validation failure", async () => {
+    const deleteStoredFile = vi.fn()
+    const ctx = {
+      auth: {
+        getUserIdentity: vi.fn().mockResolvedValue({ subject: "workos-1" }),
+      },
+      db: {
+        query: vi.fn().mockReturnValue({
+          withIndex: vi.fn().mockReturnValue({
+            unique: vi.fn().mockResolvedValue({ _id: userId }),
+          }),
+        }),
+        system: {
+          get: vi.fn().mockResolvedValue({
+            size: 42,
+            contentType: "application/pdf",
+          }),
+        },
+      },
+      storage: { delete: deleteStoredFile },
+    } as unknown as Parameters<typeof saveStagedAttachment._handler>[0]
+
+    await expect(
+      saveStagedAttachment._handler(ctx, {
+        storageId,
+        fileType: "image/png",
+      })
+    ).rejects.toThrow("Stored file failed server validation")
+    expect(deleteStoredFile).not.toHaveBeenCalled()
+  })
+})
+
+describe("attachment deletion", () => {
+  it("allows staged cleanup but rejects deletion after chat binding", () => {
+    expect(() => assertAttachmentCanBeDeletedIndependently({})).not.toThrow()
+    expect(() =>
+      assertAttachmentCanBeDeletedIndependently({ chatId })
+    ).toThrow("Attached files cannot be deleted independently")
   })
 })
 

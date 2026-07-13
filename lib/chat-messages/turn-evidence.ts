@@ -192,9 +192,9 @@ export type ResolvedEntryStatus =
  * The one place liveness meets lifecycle: part states freeze in place on
  * stop/abort/error, so an in-flight lifecycle on a settled turn reads
  * "stopped" and a frozen streaming reasoning part reads "complete".
- * Errored/denied/approval/succeeded are settled-invariant — a frozen
- * approval request still renders as an approval, matching the panel's
- * historical treatment.
+ * Errored/denied/succeeded are settled-invariant. Awaiting approval is still
+ * actionable work, so a frozen approval request on a settled turn reads
+ * "stopped" instead of exposing a stale action.
  *
  * The overloads narrow per item kind so consumers inherit each variant's
  * legal status subset from this algebra instead of casting.
@@ -225,7 +225,7 @@ export function resolveEntryStatus(
         case "errored":
           return "error"
         case "awaiting-approval":
-          return "approval"
+          return settled ? "stopped" : "approval"
         case "denied":
           return "denied"
         case "succeeded":
