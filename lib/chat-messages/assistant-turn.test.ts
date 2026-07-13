@@ -1,6 +1,11 @@
 import type { UIMessage } from "ai"
 import { describe, expect, it } from "vitest"
-import { deriveAssistantActivityPresentation } from "./assistant-activity"
+import {
+  deriveAssistantActivityModel,
+  deriveAssistantActivityPresentation,
+  type AssistantActivityModel,
+  type AssistantActivityTimelineEntry,
+} from "./assistant-activity"
 import {
   assistantTurnViewsEqual,
   deriveAssistantTurnPhase,
@@ -75,6 +80,368 @@ describe("deriveReasoningView", () => {
   })
 })
 
+describe("deriveAssistantActivityModel chronology", () => {
+  it("preserves reasoning/tool/search execution order and attaches sources to the search", () => {
+    const view = viewOf(
+      [
+        { type: "reasoning", text: "**Planning**\nFirst step", state: "done" },
+        {
+          type: "tool-python",
+          toolCallId: "code-1",
+          state: "output-available",
+          input: { command: "print(1)" },
+          output: "1",
+        },
+        {
+          type: "tool-web_search",
+          toolCallId: "search-1",
+          state: "output-available",
+          input: { query: "pixel accurate activity panels" },
+          output: {},
+        },
+        {
+          type: "source-url",
+          sourceId: "source-1",
+          url: "https://example.com/activity",
+          title: "Activity reference",
+        },
+        { type: "reasoning", text: "**Reviewing**\nLast step", state: "done" },
+      ],
+      "ready",
+      { reasoningDurationMs: 4200 }
+    )
+
+    const activity = deriveAssistantActivityModel(view, { kind: "settled" })
+    expect(activity?.entries.map(({ id, kind }) => ({ id, kind }))).toEqual([
+      { id: "reasoning-0-0", kind: "reasoning" },
+      { id: "tool-code-1", kind: "tool" },
+      { id: "tool-search-1", kind: "search" },
+      { id: "reasoning-4-0", kind: "reasoning" },
+    ])
+    const searchEntry = activity?.entries[2]
+    expect(
+      searchEntry?.kind === "search"
+        ? searchEntry.sources.map((source) => source.sourceId)
+        : undefined
+    ).toEqual(["source-1"])
+    expect(activity?.completion).toMatchObject({
+      title: "Worked for 4s",
+      detail: "Done",
+    })
+  })
+
+  it("keeps tool identity stable while streaming state enriches in place", () => {
+    const running = viewOf(
+      [
+        {
+          type: "tool-python",
+          toolCallId: "call-1",
+          state: "input-available",
+          input: { command: "print(1)" },
+        },
+      ],
+      "streaming"
+    )
+    const complete = viewOf(
+      [
+        {
+          type: "tool-python",
+          toolCallId: "call-1",
+          state: "output-available",
+          input: { command: "print(1)" },
+          output: "1",
+        },
+      ],
+      "ready"
+    )
+
+    const runningModel = deriveAssistantActivityModel(running, {
+      kind: "tooling",
+      toolNames: ["python"],
+    })
+    const completeModel = deriveAssistantActivityModel(complete, {
+      kind: "settled",
+    })
+    expect(runningModel?.entries[0]).toMatchObject({
+      id: "tool-call-1",
+      status: "running",
+      tool: {
+        displayName: "Python",
+        code: "print(1)",
+      },
+    })
+    expect(completeModel?.entries[0]).toMatchObject({
+      id: "tool-call-1",
+      status: "complete",
+    })
+  })
+
+  it("keeps interleaved searches independent across delayed and streamed source updates", () => {
+    const view = viewOf(
+      [
+        {
+          type: "tool-web_search",
+          toolCallId: "search-a",
+          state: "output-available",
+          input: { query: "first query" },
+          output: {
+            sources: [
+              {
+                url: "https://shared.example/result",
+                title: "First search title",
+                snippet: "First search snippet",
+              },
+            ],
+          },
+        },
+        {
+          type: "reasoning",
+          text: "**Comparing**\nInterleaved",
+          state: "done",
+        },
+        {
+          type: "tool-web_search",
+          toolCallId: "search-b",
+          state: "output-available",
+          input: {},
+          output: {
+            action: { query: "second query" },
+            sources: [
+              {
+                url: "https://shared.example/result",
+                title: "Second search title",
+              },
+              {
+                url: "https://second.example/result",
+                title: "Second unique result",
+              },
+            ],
+          },
+        },
+        {
+          type: "source-url",
+          sourceId: "delayed-a",
+          url: "https://first.example/delayed",
+          title: "Delayed first result",
+          toolCallId: "search-a",
+        },
+        {
+          type: "source-url",
+          sourceId: "nearest-b",
+          url: "https://second.example/nearest",
+          title: "Nearest second result",
+        },
+      ],
+      "ready"
+    )
+
+    const activity = deriveAssistantActivityModel(view, { kind: "settled" })
+    const searches = activity?.entries.filter(
+      (entry) => entry.kind === "search"
+    )
+    expect(searches?.map((entry) => entry.id)).toEqual([
+      "tool-search-a",
+      "tool-search-b",
+    ])
+    expect(searches?.map((entry) => entry.title)).toEqual([
+      "Searching for first query",
+      "Searching for second query",
+    ])
+    expect(searches?.[0]?.sources?.map((source) => source.url)).toEqual([
+      "https://shared.example/result",
+      "https://first.example/delayed",
+    ])
+    expect(searches?.[0]?.sources?.[0]).toMatchObject({
+      title: "First search title",
+      description: "First search snippet",
+    })
+    expect(searches?.[1]?.sources?.map((source) => source.url)).toEqual([
+      "https://shared.example/result",
+      "https://second.example/result",
+      "https://second.example/nearest",
+    ])
+    // Turn-level gallery dedupes duplicate URLs while per-search context does not leak.
+    expect(activity?.sourceResults.map((source) => source.url)).toEqual([
+      "https://shared.example/result",
+      "https://second.example/result",
+      "https://first.example/delayed",
+      "https://second.example/nearest",
+    ])
+  })
+
+  it("enriches a partial search call at the same stable row id", () => {
+    const partial = deriveAssistantActivityModel(
+      viewOf([
+        {
+          type: "tool-web_search",
+          toolCallId: "search-stream",
+          state: "input-streaming",
+          input: { query: "activity" },
+        },
+      ]),
+      { kind: "tooling", toolNames: ["web_search"] }
+    )
+    const enriched = deriveAssistantActivityModel(
+      viewOf(
+        [
+          {
+            type: "tool-web_search",
+            toolCallId: "search-stream",
+            state: "output-available",
+            input: { query: "activity timeline" },
+            output: {
+              sources: [{ url: "https://example.com/activity" }],
+            },
+          },
+        ],
+        "ready"
+      ),
+      { kind: "settled" }
+    )
+
+    expect(partial?.entries[0]).toMatchObject({
+      id: "tool-search-stream",
+      status: "running",
+    })
+    expect(enriched?.entries[0]).toMatchObject({
+      id: "tool-search-stream",
+      status: "complete",
+      title: "Searching for activity timeline",
+    })
+    const enrichedSearch = enriched?.entries[0]
+    expect(
+      enrichedSearch?.kind === "search" ? enrichedSearch.sources : undefined
+    ).toHaveLength(1)
+  })
+
+  it("presents browse actions as page reads, never bare tool rows", () => {
+    const activity = deriveAssistantActivityModel(
+      viewOf(
+        [
+          {
+            type: "tool-web_search",
+            toolCallId: "browse-1",
+            state: "output-available",
+            input: {},
+            output: {
+              action: { type: "findInPage", url: "https://apnews.com/", pattern: "Latest" },
+            },
+          },
+        ],
+        "ready"
+      ),
+      { kind: "settled" }
+    )
+    expect(activity?.entries[0]).toMatchObject({
+      id: "tool-browse-1",
+      kind: "search",
+      title: "Read apnews.com",
+      detail: "Finding “Latest”",
+      status: "complete",
+    })
+    const browse = activity?.entries[0]
+    expect(
+      browse?.kind === "search" ? browse.sources.map((s) => s.url) : undefined
+    ).toEqual(["https://apnews.com/"])
+  })
+
+  it("marks only the incrementally streaming reasoning part as running", () => {
+    const view = viewOf(
+      [
+        { type: "reasoning", text: "**Planned**\nDone", state: "done" },
+        {
+          type: "reasoning",
+          text: "**Checking**\nStill working",
+          state: "streaming",
+        },
+      ],
+      "streaming"
+    )
+
+    const activity = deriveAssistantActivityModel(view, {
+      kind: "thinking",
+      visibility: "visible",
+    })
+    expect(activity?.entries.map((entry) => entry.status)).toEqual([
+      "complete",
+      "running",
+    ])
+    expect(activity?.entries.map((entry) => entry.id)).toEqual([
+      "reasoning-0-0",
+      "reasoning-1-0",
+    ])
+  })
+
+  it.each([
+    ["approval-requested", "stopped"],
+    ["input-available", "stopped"],
+    ["output-error", "error"],
+    ["output-denied", "denied"],
+  ] as const)("normalizes %s as %s on a settled turn", (state, expected) => {
+    const part =
+      state === "approval-requested"
+        ? {
+            type: "tool-delete_file",
+            toolCallId: "call-1",
+            state,
+            input: { path: "/tmp/a" },
+            approval: { id: "approval-1" },
+          }
+        : state === "output-denied"
+          ? {
+              type: "tool-delete_file",
+              toolCallId: "call-1",
+              state,
+              input: { path: "/tmp/a" },
+              approval: { id: "approval-1", approved: false, reason: "No" },
+            }
+          : state === "output-error"
+            ? {
+                type: "tool-delete_file",
+                toolCallId: "call-1",
+                state,
+                input: { path: "/tmp/a" },
+                errorText: "Could not delete",
+              }
+            : {
+                type: "tool-delete_file",
+                toolCallId: "call-1",
+                state,
+                input: { path: "/tmp/a" },
+              }
+    const activity = deriveAssistantActivityModel(viewOf([part], "ready"), {
+      kind: "settled",
+    })
+    expect(activity?.entries[0]?.status).toBe(expected)
+    if (state === "approval-requested") {
+      expect(activity?.entries[0]).not.toHaveProperty("tool.approvalId")
+    }
+  })
+
+  it("exposes an approval id only while the approval turn is live", () => {
+    const view = viewOf(
+      [
+        {
+          type: "tool-delete_file",
+          toolCallId: "call-1",
+          state: "approval-requested",
+          input: { path: "/tmp/a" },
+          approval: { id: "approval-1" },
+        },
+      ],
+      "streaming"
+    )
+
+    const activity = deriveAssistantActivityModel(view, {
+      kind: "awaiting-approval",
+    })
+    expect(activity?.entries[0]).toMatchObject({
+      status: "approval",
+      tool: { approvalId: "approval-1" },
+    })
+  })
+})
+
 describe("deriveAssistantTurnView", () => {
   it("derives text, tools, sources, and identity in one pass", () => {
     const message = {
@@ -140,6 +507,34 @@ describe("deriveAssistantTurnView", () => {
       "https://other.dev/b",
     ])
     expect(view.sources[0].title).toBe("Releasebot")
+  })
+
+  it("preserves search-result snippets for the Activity sources gallery", () => {
+    const view = deriveAssistantTurnView(
+      {
+        parts: parts([
+          {
+            type: "tool-web_search",
+            toolCallId: "search-1",
+            state: "output-available",
+            input: { query: "accessible timelines" },
+            output: [
+              {
+                url: "https://example.com/activity",
+                title: "Activity reference",
+                snippet: "A concise result description for the source card.",
+              },
+            ],
+          },
+        ]),
+      },
+      "ready"
+    )
+
+    expect(view.sources[0]).toMatchObject({
+      title: "Activity reference",
+      description: "A concise result description for the source card.",
+    })
   })
 
   it("observes in-place part mutation across derivations (no memoization)", () => {
@@ -231,6 +626,38 @@ describe("assistantTurnViewsEqual (the R3 memo contract)", () => {
       "streaming"
     )
     expect(assistantTurnViewsEqual(a, withMetadata)).toBe(false)
+  })
+})
+
+describe("closed activity entry algebra (compile-time)", () => {
+  it("makes illegal entries unrepresentable", () => {
+    // Runtime no-op: the assertions are the @ts-expect-error probes below —
+    // each line fails the suite via typecheck if the closure ever loosens.
+    const probes: ReadonlyArray<AssistantActivityTimelineEntry | undefined> = [
+      // @ts-expect-error a reasoning row has no failure vocabulary
+      { id: "r", kind: "reasoning", title: "t", status: "error" },
+      // @ts-expect-error a search row owns its sources
+      { id: "s", kind: "search", title: "t", status: "complete" },
+      // @ts-expect-error a tool row carries its tool detail
+      { id: "t", kind: "tool", title: "t", status: "running" },
+      {
+        id: "t",
+        kind: "tool",
+        title: "t",
+        status: "approval",
+        // @ts-expect-error an approval row must carry the id its buttons submit
+        tool: { toolName: "x", displayName: "X" },
+      },
+    ]
+    const model: AssistantActivityModel = {
+      entries: [
+        // @ts-expect-error the completion row lives on the model, not in entries
+        { id: "completion", kind: "completion", title: "t", detail: "Done", status: "complete" },
+      ],
+      sourceResults: [],
+      imageResults: [],
+    }
+    expect(probes.length + model.entries.length).toBeGreaterThan(0)
   })
 })
 
@@ -503,9 +930,12 @@ describe("deriveAssistantActivityPresentation", () => {
     expect(presentation.kind).toBe("disclosure")
     if (presentation.kind === "disclosure") {
       expect(presentation.label).toBe("Thought")
-      expect(presentation.sections.map((section) => section.kind)).toEqual([
+      expect(presentation.activity.entries.map((entry) => entry.kind)).toEqual([
         "reasoning",
       ])
+      expect(presentation.activity.completion).toMatchObject({
+        status: "complete",
+      })
     }
   })
 
@@ -544,7 +974,7 @@ describe("deriveAssistantActivityPresentation", () => {
     })
     expect(presentation).toMatchObject({
       kind: "disclosure",
-      label: "Activity",
+      label: "Worked for 1s",
       passiveLabel: "Thought for 1s",
     })
   })
@@ -568,18 +998,23 @@ describe("deriveAssistantActivityPresentation", () => {
 
     expect(presentation).toMatchObject({
       kind: "disclosure",
-      sections: [
-        {
-          kind: "tool-errors",
-          entries: [
-            {
-              id: "t1",
-              label: "Github Create Issue",
-              description: "Tool reported an error",
-            },
-          ],
+      activity: {
+        entries: [
+          {
+            id: "tool-t1",
+            kind: "tool",
+            title: "Github Create Issue failed",
+            detail: "Tool reported an error",
+            status: "error",
+          },
+        ],
+        completion: {
+          id: "completion",
+          kind: "completion",
+          title: "Run failed",
+          status: "error",
         },
-      ],
+      },
     })
   })
 })

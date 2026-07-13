@@ -121,11 +121,6 @@ type ConversationProps = {
   onSelectBranch?: (messageId: string) => void
   isDurableChat?: boolean
   lastFinishReason?: string
-  onToolApproval?: (
-    approvalId: string,
-    approved: boolean,
-    reason?: string
-  ) => Promise<void> | void
 }
 
 /** The pending placeholder's view: no parts yet, generation submitted. Module
@@ -150,7 +145,6 @@ export function Conversation({
   onSelectBranch,
   isDurableChat,
   lastFinishReason,
-  onToolApproval,
 }: ConversationProps) {
   if (!messages || messages.length === 0)
     return <div className="w-full flex-1"></div>
@@ -242,7 +236,6 @@ export function Conversation({
                 onQuote={onQuote}
                 isDurableChat={isDurableChat}
                 finishReason={isLast ? lastFinishReason : undefined}
-                onToolApproval={onToolApproval}
               >
                 {view.text}
               </Message>
@@ -265,7 +258,6 @@ export function Conversation({
                 onQuote={onQuote}
                 isDurableChat={isDurableChat}
                 finishReason={isLast ? lastFinishReason : undefined}
-                onToolApproval={onToolApproval}
               >
                 {getMessageText(message)}
               </Message>
@@ -330,7 +322,6 @@ export function Conversation({
               status="submitted"
               onQuote={onQuote}
               isDurableChat={isDurableChat}
-              onToolApproval={onToolApproval}
             >
               {""}
             </Message>

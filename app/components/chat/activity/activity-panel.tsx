@@ -2,13 +2,20 @@
 
 import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
+import { Icon } from "@/components/ui/icon"
 import { Markdown } from "@/components/ui/markdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type {
-  AssistantActivitySection,
+  ActivityEntryStatus,
+  AssistantActivityEntry,
+  AssistantActivityModel,
+  AssistantActivitySearchEntry,
   AssistantActivityToolEntry,
 } from "@/lib/chat-messages/assistant-activity"
-import { useRef } from "react"
+import { parseSafeExternalUrl } from "@/lib/url-safety"
+import { RiCheckLine, RiCodeLine, RiFileCopyLine } from "@remixicon/react"
+import Image from "next/image"
+import { useId, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { useActivityPanelDockSlot } from "./activity-panel-host"
 import { useActivityPanelSectionTarget } from "./activity-panel-store"
@@ -20,6 +27,13 @@ import { SourcesGallery } from "./sources-gallery"
 import { useDockedPanelCollapse } from "./use-docked-panel-collapse"
 
 const LG_BREAKPOINT = 1024
+const VISIBLE_SOURCE_CHIPS = 3
+
+type ToolApprovalHandler = (
+  approvalId: string,
+  approved: boolean,
+  reason?: string
+) => Promise<void> | void
 
 export type ActivityPanelProps = {
   panelId?: string
@@ -27,132 +41,332 @@ export type ActivityPanelProps = {
   onOpenChange: (open: boolean) => void
   title?: string
   durationSeconds?: number
-  sections: readonly AssistantActivitySection[]
+  activity?: AssistantActivityModel
+  onToolApproval?: ToolApprovalHandler
 }
 
-function ToolSection({
-  heading,
-  entries,
+function ActivityToolCard({
+  entry,
+  onToolApproval,
 }: {
-  heading: string
-  entries: readonly AssistantActivityToolEntry[]
+  entry: AssistantActivityToolEntry
+  onToolApproval?: ToolApprovalHandler
 }) {
+  const [copied, setCopied] = useState(false)
+  const [isSubmittingApproval, setIsSubmittingApproval] = useState(false)
+  const isSubmittingApprovalRef = useRef(false)
+  const code = entry.tool.code
+  const approvalId =
+    entry.status === "approval" ? entry.tool.approvalId : undefined
+  const copy = async () => {
+    if (!code || !navigator.clipboard) return
+
+    try {
+      await navigator.clipboard.writeText(code)
+    } catch {
+      return
+    }
+
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1000)
+  }
+  const submitToolApproval = async (approved: boolean, reason?: string) => {
+    if (!onToolApproval || !approvalId || isSubmittingApprovalRef.current) {
+      return
+    }
+
+    isSubmittingApprovalRef.current = true
+    setIsSubmittingApproval(true)
+    try {
+      await onToolApproval(approvalId, approved, reason)
+    } finally {
+      isSubmittingApprovalRef.current = false
+      setIsSubmittingApproval(false)
+    }
+  }
+
   return (
-    <div className="px-3 pt-2 pb-2">
-      <PanelSectionHeading title={heading} />
-      <ActivityTimeline className="mt-3 flex flex-col">
-        {entries.map((entry) => (
-          <ActivityStep key={entry.id} leading="done" body="description">
-            <StepTitle>{entry.label}</StepTitle>
-            <p className="text-muted-foreground text-sm leading-5">
-              {entry.description}
-            </p>
-          </ActivityStep>
-        ))}
-      </ActivityTimeline>
+    <div className="bg-muted border-foreground/5 mt-3 overflow-hidden rounded-[24px] border">
+      <div className="flex h-12 items-center gap-2 px-4">
+        <Icon icon={RiCodeLine} slotSize={16} className="shrink-0" />
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+          {entry.tool.displayName}
+        </span>
+        {code ? (
+          <button
+            type="button"
+            aria-label={copied ? "Copied" : "Copy"}
+            onClick={copy}
+            className="hover:bg-foreground/[0.07] focus-visible:ring-ring inline-flex size-9 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2"
+          >
+            <Icon icon={copied ? RiCheckLine : RiFileCopyLine} slotSize={18} />
+          </button>
+        ) : null}
+      </div>
+      {code ? (
+        <pre className="overflow-x-auto rounded-[6px] px-5 pb-3 text-[12.25px] leading-5">
+          <code>{code}</code>
+        </pre>
+      ) : null}
+      {approvalId ? (
+        <div className="flex flex-wrap gap-2 px-4 pb-4">
+          <button
+            type="button"
+            disabled={!onToolApproval || isSubmittingApproval}
+            onClick={() => void submitToolApproval(true)}
+            className="bg-foreground text-background h-8 rounded-full px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Approve
+          </button>
+          <button
+            type="button"
+            disabled={!onToolApproval || isSubmittingApproval}
+            onClick={() => void submitToolApproval(false, "Denied by user")}
+            className="hover:bg-foreground/[0.07] h-8 rounded-full px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Deny
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }
 
-function PanelBody({
-  sections,
+function sourceDomain(url: string): string {
+  return parseSafeExternalUrl(url)?.hostname ?? url
+}
+
+function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
+  const [expanded, setExpanded] = useState(false)
+  const chipGroupId = useId()
+  const sources = entry.sources
+  if (sources.length === 0) return null
+  const visible = expanded ? sources : sources.slice(0, VISIBLE_SOURCE_CHIPS)
+  const remaining = sources.length - visible.length
+
+  return (
+    <div
+      role="group"
+      aria-label={`Sources for ${entry.title}`}
+      className="mt-1.5 flex flex-wrap gap-1"
+    >
+      <span id={chipGroupId} className="contents">
+        {visible.map((source) => {
+          const safeUrl = parseSafeExternalUrl(source.url)
+          const domain = sourceDomain(source.url)
+          const content = (
+            <>
+              <Image
+                alt=""
+                src={`https://www.google.com/s2/favicons?sz=32&domain_url=${encodeURIComponent(source.url)}`}
+                width={12}
+                height={12}
+                loading="lazy"
+                decoding="async"
+                className="size-3 shrink-0 rounded-full"
+              />
+              <span className="max-w-32 truncate">{domain}</span>
+            </>
+          )
+          const className =
+            "bg-muted text-muted-foreground inline-flex h-[25px] max-w-full items-center gap-1 overflow-hidden rounded-full px-3 text-xs"
+          if (!safeUrl) {
+            return (
+              <span
+                key={`${source.sourceId}:${source.url}`}
+                className={className}
+              >
+                {content}
+              </span>
+            )
+          }
+          return (
+            <a
+              key={`${source.sourceId}:${source.url}`}
+              href={safeUrl.toString()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`${className} hover:bg-foreground hover:text-background focus-visible:ring-ring outline-none focus-visible:ring-2`}
+            >
+              {content}
+            </a>
+          )
+        })}
+      </span>
+      {remaining > 0 ? (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={chipGroupId}
+          onClick={() => setExpanded(true)}
+          className="bg-muted text-muted-foreground hover:bg-foreground hover:text-background focus-visible:ring-ring inline-flex h-[25px] items-center rounded-full px-3 text-xs outline-none focus-visible:ring-2"
+        >
+          {remaining} more
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+function statusMarker(
+  status: ActivityEntryStatus
+): "approval" | "error" | "stopped" | undefined {
+  switch (status) {
+    case "approval":
+      return "approval"
+    case "error":
+    case "denied":
+      return "error"
+    case "stopped":
+      return "stopped"
+    case "running":
+    case "complete":
+      return undefined
+  }
+}
+
+/**
+ * Exhaustive status/kind-to-marker mapping shared by every Activity row.
+ * The closed entry algebra makes the invariants structural: only the
+ * completion row can reach the completedRun checkmark, and a reasoning row
+ * has no failure status to take a status marker from.
+ */
+export function activityEntryMarker(entry: AssistantActivityEntry) {
+  if (entry.kind === "completion") {
+    return entry.status === "complete"
+      ? ("completedRun" as const)
+      : entry.status === "error"
+        ? ("error" as const)
+        : ("stopped" as const)
+  }
+  switch (entry.kind) {
+    case "reasoning":
+      return "reasoning" as const
+    case "search":
+      return statusMarker(entry.status) ?? ("search" as const)
+    case "tool":
+      return statusMarker(entry.status) ?? ("code" as const)
+    case "image":
+      return statusMarker(entry.status) ?? ("image" as const)
+  }
+}
+
+function ActivityEntryRow({
+  entry,
+  onToolApproval,
+  isLast,
+  index,
 }: {
-  sections: readonly AssistantActivitySection[]
+  entry: AssistantActivityEntry
+  onToolApproval?: ToolApprovalHandler
+  isLast?: boolean
+  index?: number
+}) {
+  return (
+    <ActivityStep
+      leading={activityEntryMarker(entry)}
+      body="description"
+      isLast={isLast}
+      index={index}
+    >
+      <StepTitle>{entry.title}</StepTitle>
+      {entry.detail ? (
+        entry.kind === "reasoning" ? (
+          <Markdown className="text-muted-foreground text-sm leading-5">
+            {entry.detail}
+          </Markdown>
+        ) : (
+          <p className="text-muted-foreground text-sm leading-5">
+            {entry.detail}
+          </p>
+        )
+      ) : null}
+      {entry.kind === "search" ? <SearchSourceChips entry={entry} /> : null}
+      {entry.kind === "tool" ? (
+        <ActivityToolCard entry={entry} onToolApproval={onToolApproval} />
+      ) : null}
+    </ActivityStep>
+  )
+}
+
+function PanelBody({
+  activity,
+  onToolApproval,
+}: {
+  activity?: AssistantActivityModel
+  onToolApproval?: ToolApprovalHandler
 }) {
   const { section, consume } = useActivityPanelSectionTarget()
   const sourcesSectionRef = useRef<HTMLDivElement>(null)
+  const scrollToSources = () =>
+    sourcesSectionRef.current?.scrollIntoView({ block: "start" })
   useBrowserLayoutEffect(() => {
     if (section !== "sources") return
-    sourcesSectionRef.current?.scrollIntoView({ block: "start" })
+    scrollToSources()
     consume()
   }, [section, consume])
 
+  if (!activity) return null
+  const sources = activity.sourceResults.map((source) => ({
+    sourceId: source.sourceId,
+    href: source.url,
+    title: source.title ?? source.url,
+    description: source.description,
+    siteName: source.siteName,
+    faviconDomain: source.faviconDomain,
+  }))
+
   return (
-    <div className="space-y-4">
-      {sections.map((activitySection) => {
-        switch (activitySection.kind) {
-          case "reasoning":
-            return (
-              <div key="reasoning" className="px-3 pt-2 pb-2">
-                <PanelSectionHeading title="Thinking" />
-                <ActivityTimeline className="mt-3 flex flex-col">
-                  {activitySection.blocks.map((block, index) => (
-                    <ActivityStep
-                      key={index}
-                      leading={activitySection.isStreaming ? "bullet" : "done"}
-                      body="description"
-                    >
-                      <StepTitle>Reasoning</StepTitle>
-                      <Markdown className="text-muted-foreground text-sm leading-5">
-                        {block.text}
-                      </Markdown>
-                    </ActivityStep>
-                  ))}
-                </ActivityTimeline>
-              </div>
-            )
-          case "sources": {
-            const sources = activitySection.sources.map((source) => ({
-              sourceId: source.sourceId,
-              href: source.url,
-              title: source.title ?? source.url,
-            }))
-            return (
-              <div
-                key="sources"
-                ref={sourcesSectionRef}
-                className="scroll-mt-3"
-              >
-                <SourcesGallery sources={sources} />
-              </div>
-            )
-          }
-          case "images":
-            return (
-              <div key="images" className="px-3 pt-2 pb-2">
-                <PanelSectionHeading title="Images" />
-                <ul className="mt-3 space-y-2">
-                  {activitySection.results.map((result) => (
-                    <li key={`${result.imageUrl}:${result.sourceUrl}`}>
-                      <a
-                        className="text-foreground text-sm underline-offset-4 hover:underline"
-                        href={result.sourceUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {result.title}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )
-          case "approvals":
-            return (
-              <ToolSection
-                key="approvals"
-                heading="Approvals"
-                entries={activitySection.entries}
-              />
-            )
-          case "tool-errors":
-            return (
-              <ToolSection
-                key="tool-errors"
-                heading="Errors"
-                entries={activitySection.entries}
-              />
-            )
-          case "tool-steps":
-            return (
-              <ToolSection
-                key="tool-steps"
-                heading="Activity"
-                entries={activitySection.entries}
-              />
-            )
-        }
-      })}
+    <div>
+      <div className="px-3 pt-2 pb-4">
+        <PanelSectionHeading title="Thinking" className="mb-3" />
+        <ActivityTimeline className="flex flex-col">
+          {activity.entries.map((entry) => (
+            <ActivityEntryRow
+              key={entry.id}
+              entry={entry}
+              onToolApproval={onToolApproval}
+            />
+          ))}
+          {activity.completion ? (
+            <ActivityEntryRow
+              key={activity.completion.id}
+              entry={activity.completion}
+            />
+          ) : null}
+        </ActivityTimeline>
+      </div>
+      {activity.imageResults.length > 0 ? (
+        <div className="px-3 pt-3 pb-4">
+          <PanelSectionHeading title="Images" className="mb-3" />
+          <ul className="grid grid-cols-2 gap-2">
+            {activity.imageResults.map((result) => (
+              <li key={`${result.imageUrl}:${result.sourceUrl}`}>
+                <a
+                  href={result.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="focus-visible:ring-ring block overflow-hidden rounded-xl outline-none focus-visible:ring-2"
+                >
+                  <Image
+                    src={result.imageUrl}
+                    alt={result.title}
+                    width={512}
+                    height={512}
+                    unoptimized
+                    className="aspect-square w-full object-cover"
+                  />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {sources.length > 0 ? (
+        <div ref={sourcesSectionRef} className="scroll-mt-3 pt-3">
+          <SourcesGallery sources={sources} />
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -163,12 +377,19 @@ export function ActivityPanel({
   onOpenChange,
   title = "Activity",
   durationSeconds,
-  sections,
+  activity,
+  onToolApproval,
 }: ActivityPanelProps) {
   const isBelowLg = useBreakpoint(LG_BREAKPOINT)
   const slotElement = useActivityPanelDockSlot()
   const close = () => onOpenChange(false)
-  const body = <PanelBody sections={sections} />
+  const body = (
+    <PanelBody
+      key={open ? "open" : "closed"}
+      activity={activity}
+      onToolApproval={onToolApproval}
+    />
+  )
   const dockedExpanded = open && !isBelowLg
   const sheetActive = isBelowLg
   const { dockedPresent, onDockedContentRef } = useDockedPanelCollapse({

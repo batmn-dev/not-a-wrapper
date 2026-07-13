@@ -279,7 +279,7 @@ describe("MessageAssistant activity trigger", () => {
     })
 
     const trigger = container?.querySelector(
-      'button[aria-label="Open activity: Thought for 2s"]'
+      'button[aria-label="Open activity: Worked for 2s"]'
     ) as HTMLButtonElement | null
 
     expect(trigger).toBeTruthy()
@@ -322,8 +322,8 @@ describe("MessageAssistant activity trigger", () => {
     expect(triggers).toHaveLength(2)
     expect(triggers[0]?.getAttribute("aria-expanded")).toBe("false")
     expect(triggers[1]?.getAttribute("aria-expanded")).toBe("true")
-    expect(container?.textContent).toContain("Thought for 1s")
-    expect(container?.textContent).toContain("Thought for 2s")
+    expect(container?.textContent).toContain("Worked for 1s")
+    expect(container?.textContent).toContain("Worked for 2s")
   })
 
   it("retargets the open panel when a different trigger is clicked", () => {
@@ -351,7 +351,7 @@ describe("MessageAssistant activity trigger", () => {
     })
 
     const trigger = container?.querySelector(
-      'button[aria-label="Open activity: Thought for 2s"]'
+      'button[aria-label="Open activity: Worked for 2s"]'
     ) as HTMLButtonElement | null
 
     act(() => {
@@ -390,7 +390,7 @@ describe("MessageAssistant activity trigger", () => {
     })
 
     const trigger = container?.querySelector(
-      'button[aria-label="Close activity: Thought for 2s"]'
+      'button[aria-label="Close activity: Worked for 2s"]'
     ) as HTMLButtonElement | null
     expect(trigger?.getAttribute("aria-expanded")).toBe("true")
 
@@ -557,7 +557,7 @@ describe("MessageAssistant activity trigger", () => {
         element.textContent?.trim() === "Assistant answer"
     )
     const trigger = container?.querySelector(
-      'button[aria-label="Open activity: Thought for 2s"]'
+      'button[aria-label="Open activity: Worked for 2s"]'
     )
     const copy = container?.querySelector('button[aria-label="Copy Response"]')
 

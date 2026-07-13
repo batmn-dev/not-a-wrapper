@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
 import { formatDuration } from "@/lib/format-duration"
 import { cn } from "@/lib/utils"
-import { RiCloseLine } from "@remixicon/react"
+import { RiCloseLargeLine } from "@remixicon/react"
 import type { ComponentProps } from "react"
 
 const CLOSE_HOVER_TINT =
@@ -21,7 +21,7 @@ const CLOSE_HOVER_TINT =
  */
 export function PanelCloseButton({
   className,
-  children = <Icon icon={RiCloseLine} slotSize={20} />,
+  children = <Icon icon={RiCloseLargeLine} slotSize={20} />,
   ...props
 }: ComponentProps<typeof Button>) {
   return (
@@ -87,7 +87,6 @@ export type PanelHeaderProps = {
   title: string
   durationSeconds?: number
   titleId?: string
-  panelId?: string
   onClose: () => void
   className?: string
 }
@@ -105,14 +104,13 @@ export function PanelHeader({
   title,
   durationSeconds,
   titleId,
-  panelId,
   onClose,
   className,
 }: PanelHeaderProps) {
   return (
     <div
       className={cn(
-        "bg-card h-app-header flex shrink-0 items-center justify-between gap-2 px-4 [box-shadow:var(--sharp-edge-top-shadow),var(--sharp-edge-left-shadow)]",
+        "flex h-[calc(var(--spacing-app-header)+1px)] shrink-0 items-center justify-between gap-2 bg-[var(--activity-panel-surface)] px-4 [box-shadow:var(--sharp-edge-top-shadow)]",
         className
       )}
     >
@@ -124,8 +122,6 @@ export function PanelHeader({
       <PanelCloseButton
         data-testid="close-button"
         className="-me-2.5 rounded-md"
-        aria-controls={panelId}
-        aria-expanded={true}
         onClick={onClose}
       />
     </div>

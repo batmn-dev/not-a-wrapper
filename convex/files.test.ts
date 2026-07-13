@@ -1,9 +1,12 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import type { Id } from "./_generated/dataModel"
 import {
+  assertAttachmentCanBeDeletedIndependently,
   getFileUploadLimit,
   getFileUploadLimitStatus,
   isFileUploadLimitExceeded,
+  isStoredFileMetadataValid,
+  saveStagedAttachmentHandler,
   selectTrustedTextAttachmentsForModelInput,
 } from "./files"
 
@@ -69,6 +72,68 @@ describe("file upload limits", () => {
       limit: 5,
       canUpload: false,
     })
+  })
+})
+
+describe("stored file validation", () => {
+  it("accepts only allowed matching server metadata within the size limit", () => {
+    expect(
+      isStoredFileMetadataValid(
+        { size: 42, contentType: "application/pdf" },
+        "application/pdf"
+      )
+    ).toBe(true)
+    expect(
+      isStoredFileMetadataValid(
+        { size: 42, contentType: "application/pdf" },
+        "image/png"
+      )
+    ).toBe(false)
+    expect(
+      isStoredFileMetadataValid(
+        { size: 11 * 1024 * 1024, contentType: "application/pdf" },
+        "application/pdf"
+      )
+    ).toBe(false)
+    expect(
+      isStoredFileMetadataValid(
+        { size: 42, contentType: "application/octet-stream" },
+        "application/octet-stream"
+      )
+    ).toBe(false)
+  })
+
+  it("does not delete caller-supplied storage on validation failure", async () => {
+    const deleteStoredFile = vi.fn()
+    const ctx = {
+      user: { _id: userId },
+      db: {
+        system: {
+          get: vi.fn().mockResolvedValue({
+            size: 42,
+            contentType: "application/pdf",
+          }),
+        },
+      },
+      storage: { delete: deleteStoredFile },
+    } as unknown as Parameters<typeof saveStagedAttachmentHandler>[0]
+
+    await expect(
+      saveStagedAttachmentHandler(ctx, {
+        storageId,
+        fileType: "image/png",
+      })
+    ).rejects.toThrow("Stored file failed server validation")
+    expect(deleteStoredFile).not.toHaveBeenCalled()
+  })
+})
+
+describe("attachment deletion", () => {
+  it("allows staged cleanup but rejects deletion after chat binding", () => {
+    expect(() => assertAttachmentCanBeDeletedIndependently({})).not.toThrow()
+    expect(() =>
+      assertAttachmentCanBeDeletedIndependently({ chatId })
+    ).toThrow("Attached files cannot be deleted independently")
   })
 })
 

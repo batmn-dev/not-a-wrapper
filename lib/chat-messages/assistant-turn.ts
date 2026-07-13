@@ -22,20 +22,18 @@
  *    activity panel owns that state; the trigger's source count settles on
  *    the status flip). Message text is compared by the row's `children` prop.
  */
-import type { SourceUrlUIPart, ToolUIPart, UIMessage } from "ai"
-import { getStaticToolName, isStaticToolUIPart } from "ai"
+import type { ToolUIPart, UIMessage } from "ai"
+import { isStaticToolUIPart } from "ai"
 import type { DurableMessageStatus } from "./durable-contract"
 import { getReasoningDurationMs, getServerMessageId } from "./metadata"
 import { extractTextFromMessageParts, getToolRenderSignature } from "./parts"
-import { getSources } from "./sources"
+import type { AssistantSourceResult } from "./sources"
+import { deriveTurnEvidence, type ToolCallEvidence } from "./turn-evidence"
+
+export type { SearchImageResult } from "./turn-evidence"
+import type { SearchImageResult } from "./turn-evidence"
 
 type ChatStatus = "streaming" | "ready" | "submitted" | "error"
-
-export type SearchImageResult = {
-  title: string
-  imageUrl: string
-  sourceUrl: string
-}
 
 export type ReasoningView = {
   phase: "idle" | "thinking" | "complete"
@@ -70,14 +68,20 @@ export const IDLE_REASONING_VIEW: ReasoningView = {
 }
 
 export type AssistantTurnView = {
+  /**
+   * Original message-part order, retained as the normalized chronology seam.
+   * Activity presentation derives from this array once; renderers must not
+   * rebuild ordering from the type-specific projections below.
+   */
+  orderedParts: UIMessage["parts"]
   /** Ordered text content across all text parts. */
   text: string
-  /** Static tool parts, for inline tool rendering and the panel timeline. */
+  /** Static tool parts, for phase detection and non-timeline result rendering. */
   toolParts: ToolUIPart[]
   /** Immutable snapshot of rendered tool input/output for memo comparison. */
   toolRenderSignature: string
   /** Normalized sources across source-url parts and tool outputs. */
-  sources: SourceUrlUIPart[]
+  sources: AssistantSourceResult[]
   /** Image-search results extracted from tool outputs. */
   searchImageResults: SearchImageResult[]
   reasoning: ReasoningView
@@ -174,23 +178,6 @@ export function deriveReasoningView(
   }
 }
 
-function getSearchImageResults(toolParts: ToolUIPart[]): SearchImageResult[] {
-  return toolParts
-    .filter(
-      (part) =>
-        part.state === "output-available" &&
-        getStaticToolName(part) === "imageSearch" &&
-        (part.output as { content?: Array<{ type: string }> })?.content?.[0]
-          ?.type === "images"
-    )
-    .flatMap((part) => {
-      const output = part.output as {
-        content?: Array<{ type: string; results?: SearchImageResult[] }>
-      }
-      return output?.content?.[0]?.results ?? []
-    })
-}
-
 export function deriveAssistantTurnView(
   message: MessageLike,
   status: ChatStatus
@@ -198,13 +185,15 @@ export function deriveAssistantTurnView(
   const parts = message.parts
   const toolParts =
     parts?.filter((part): part is ToolUIPart => isStaticToolUIPart(part)) ?? []
+  const evidence = deriveTurnEvidence(parts)
 
   return {
+    orderedParts: parts ?? [],
     text: extractTextFromMessageParts(parts),
     toolParts,
     toolRenderSignature: getToolRenderSignature(parts),
-    sources: getSources(parts ?? []),
-    searchImageResults: getSearchImageResults(toolParts),
+    sources: [...evidence.sources],
+    searchImageResults: [...evidence.searchImageResults],
     reasoning: deriveReasoningView(parts, status, message.metadata),
     serverMessageId: getServerMessageId(message.metadata),
     metadata: message.metadata,
@@ -290,29 +279,6 @@ export type AssistantTurnPhase =
  */
 export type AssistantTurnRenderStatus = ChatStatus | DurableMessageStatus
 
-const IMAGE_GENERATION_TOOL_NAMES = new Set([
-  "imageGeneration",
-  "image_generation",
-])
-
-/**
- * Tool part states that mean "work is in flight". Approval states are
- * deliberately excluded: `approval-requested` is the paused awaiting-approval
- * phase (rendering it as "Running" contradicted the Review chip), and a
- * denied `approval-responded` will never run. An approved response is
- * in flight — the tool is about to execute.
- */
-function isInFlightToolPart(part: ToolUIPart): boolean {
-  if (part.state === "input-streaming" || part.state === "input-available") {
-    return true
-  }
-  return (
-    part.state === "approval-responded" &&
-    "approval" in part &&
-    (part as { approval?: { approved?: boolean } }).approval?.approved === true
-  )
-}
-
 /**
  * Derive the canonical turn phase. A first-match ladder over one liveness
  * fact: only the last turn, while THIS client's stream is submitted/streaming,
@@ -339,24 +305,29 @@ export function deriveAssistantTurnPhase(
 
   if (status === "submitted") return { kind: "submitted" }
 
-  if (view.toolParts.some((part) => part.state === "approval-requested")) {
+  // Only the live row reaches this point, so the evidence walk never runs
+  // for historical rows. Approval exclusions live in the lifecycle algebra:
+  // awaiting-approval is a pause and denied will never run, so neither is
+  // in flight; an approved response is — the tool is about to execute.
+  const toolCalls = deriveTurnEvidence(view.orderedParts).timeline.filter(
+    (item): item is ToolCallEvidence => item.kind === "tool"
+  )
+  if (toolCalls.some((call) => call.lifecycle.kind === "awaiting-approval")) {
     return { kind: "awaiting-approval" }
   }
 
-  const inFlightToolParts = view.toolParts.filter(isInFlightToolPart)
+  const inFlightCalls = toolCalls.filter(
+    (call) => call.lifecycle.kind === "in-flight"
+  )
   if (
-    inFlightToolParts.some((part) =>
-      IMAGE_GENERATION_TOOL_NAMES.has(getStaticToolName(part))
-    )
+    inFlightCalls.some((call) => call.classification === "image-generation")
   ) {
     return { kind: "generating-image" }
   }
-  if (inFlightToolParts.length > 0) {
+  if (inFlightCalls.length > 0) {
     return {
       kind: "tooling",
-      toolNames: Array.from(
-        new Set(inFlightToolParts.map((part) => getStaticToolName(part)))
-      ),
+      toolNames: Array.from(new Set(inFlightCalls.map((call) => call.toolName))),
     }
   }
 

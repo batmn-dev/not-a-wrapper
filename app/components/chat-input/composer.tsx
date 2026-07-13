@@ -18,7 +18,7 @@
  * toast must not fire over an emptied box.
  */
 import { useTurnContext } from "@/app/components/chat/turn-context"
-import { useFileUpload } from "@/app/components/chat/use-file-upload"
+import { useFilePickerState } from "@/app/components/chat/use-file-upload"
 import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { useChatDraft } from "@/app/hooks/use-chat-draft"
 import { ModelSelector } from "@/components/common/model-selector/base"
@@ -32,12 +32,18 @@ import {
   PromptInputFooter,
   PromptInputTextarea,
 } from "@/components/ui/prompt-input"
+import { toast } from "@/components/ui/toast"
 import { TooltipShortcut } from "@/components/ui/tooltip"
+import {
+  ACCEPTED_FILE_PICKER_TYPES,
+  type Attachment,
+} from "@/lib/file-handling"
 import { StopBulkRoundedIcon } from "@/lib/icons"
 import { getModelInfo } from "@/lib/models"
 import { useUser } from "@/lib/user-store/provider"
 import { debounce } from "@/lib/utils"
 import { RiArrowUpLine } from "@remixicon/react"
+import { useConvex } from "convex/react"
 import {
   forwardRef,
   useCallback,
@@ -51,11 +57,18 @@ import { PromptSystem } from "../suggestions/prompt-system"
 import { ButtonPlusMenu } from "./button-plus-menu"
 import { FileList } from "./file-list"
 import { InputDropZone } from "./input-drop-zone"
+import { coordinateComposerPaste } from "./large-paste-policy"
+import {
+  assembleComposerTurnPayload,
+  restoreLargePasteText,
+  type PendingAttachment,
+} from "./pending-attachment"
 import { resolveComposerPrimaryActionState } from "./primary-action-state"
 
 export type ComposerTurnPayload = {
   text: string
   files: File[]
+  attachments: Attachment[]
 }
 
 export type ComposerHandle = {
@@ -84,6 +97,9 @@ type ComposerProps = {
   /** Draft-persistence scope when there is no chat id (e.g. `project-<id>`),
    * so surface drafts don't bleed into the home composer's "new chat" draft. */
   draftScopeId?: string
+  /** Project handoff and anonymous chat cannot use authenticated storage, so
+   * generated pastes cross those seams as ordinary turn text. */
+  largePasteDelivery?: "upload" | "inline"
 }
 
 const isOnlyWhitespace = (text: string) => !/[^\s]/.test(text)
@@ -180,11 +196,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       hasSuggestions,
       onLockedGuestModelSelect,
       draftScopeId,
+      largePasteDelivery,
     },
     ref
   ) {
     const { user } = useUser()
     const isUserAuthenticated = !!user?.id
+    const convex = useConvex()
     const { selectedModel, handleModelChange, enableSearch, setEnableSearch } =
       useTurnContext()
 
@@ -197,16 +215,36 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       selectModelConfig?.webSearch === false
     const isFileUploadAvailable = Boolean(selectModelConfig?.vision)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
-    // Pending attachments — Composer-owned; uploaded at turn time from the
-    // payload, not from shared state.
+    const shouldUploadGeneratedPastes =
+      (largePasteDelivery ?? "upload") === "upload" && isUserAuthenticated
+
+    // One Composer-owned picker lifecycle. It stages authenticated files
+    // immediately and hands only ready metadata to the Chat turn.
     const {
-      files,
+      attachments,
+      lockedAttachmentIds,
+      announcement: attachmentAnnouncement,
+      announce: setAttachmentAnnouncement,
       handleFileUpload,
+      handleLargePaste,
       handleFileRemove,
-      clearFiles,
-      restoreFiles,
-    } = useFileUpload()
+      lockAttachments,
+      unlockAttachments,
+      retryAttachment,
+      consumeAttachments,
+    } = useFilePickerState({
+      convex,
+      uploadGeneratedPastes: shouldUploadGeneratedPastes,
+    })
+
+    const handleAttachmentUpload = useCallback(
+      (newFiles: File[]) => {
+        handleFileUpload(newFiles)
+      },
+      [handleFileUpload]
+    )
 
     // Draft: display state here, persistence per chat (or per scope) in
     // localStorage via useChatDraft, debounced per keystroke. Scoped no-chat
@@ -254,15 +292,41 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
 
     const handleSend = useCallback(async () => {
       const text = valueRef.current
-      const submittedFiles = files
+      const submittedAttachments = attachments
+      const submittedAttachmentIds = submittedAttachments.map(
+        (attachment) => attachment.id
+      )
+      if (
+        submittedAttachments.some((attachment) => attachment.status !== "ready")
+      ) {
+        setAttachmentAnnouncement(
+          "Wait for every attachment to finish uploading, or remove failed files."
+        )
+        return
+      }
+      const turnPayload = assembleComposerTurnPayload({
+        text,
+        attachments: submittedAttachments,
+      })
+      if (!lockAttachments(submittedAttachmentIds)) return
       // Clear the display at handoff; the persisted draft survives until the
       // turn reports success. Clearing through applyValue also empties the
       // ref synchronously, so a second Enter in the same commit cannot
       // re-send the old text.
       applyValue("")
-      const fileRestoreToken = clearFiles()
-      const accepted = await onTurn({ text, files: submittedFiles })
+      let accepted: boolean
+      try {
+        accepted = await onTurn(turnPayload)
+      } finally {
+        unlockAttachments(submittedAttachmentIds)
+      }
       if (accepted === true) {
+        consumeAttachments(submittedAttachmentIds)
+        if (submittedAttachments.length > 0) {
+          setAttachmentAnnouncement(
+            `${submittedAttachments.length} attachment${submittedAttachments.length === 1 ? "" : "s"} sent.`
+          )
+        }
         debouncedSetDraftValue.cancel()
         clearDraft()
         return
@@ -274,16 +338,22 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       if (text && valueRef.current === "") {
         applyValue(text)
       }
-      restoreFiles(submittedFiles, fileRestoreToken)
+      if (submittedAttachments.length > 0) {
+        setAttachmentAnnouncement(
+          "Send failed. Ready attachments were preserved."
+        )
+      }
     }, [
       applyValue,
-      files,
-      clearFiles,
-      restoreFiles,
+      attachments,
+      consumeAttachments,
+      lockAttachments,
+      unlockAttachments,
       onTurn,
       debouncedSetDraftValue,
       clearDraft,
       valueRef,
+      setAttachmentAnnouncement,
     ])
 
     const primaryAction = useMemo(
@@ -291,9 +361,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         resolveComposerPrimaryActionState({
           isStreaming: status === "streaming",
           isAbortable: status === "streaming",
-          canSend: !isSubmitting && !isOnlyWhitespace(localValue),
+          canSend:
+            !isSubmitting &&
+            attachments.every((attachment) => attachment.status === "ready") &&
+            (!isOnlyWhitespace(localValue) || attachments.length > 0),
         }),
-      [isSubmitting, localValue, status]
+      [attachments, isSubmitting, localValue, status]
     )
 
     const handlePrimaryActionClick = useCallback(() => {
@@ -328,43 +401,89 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     )
 
     const handlePaste = useCallback(
-      async (e: React.ClipboardEvent) => {
+      (e: React.ClipboardEvent) => {
         const items = e.clipboardData?.items
         if (!items) return
 
-        const hasImageContent = Array.from(items).some((item) =>
-          item.type.startsWith("image/")
-        )
+        const imageFiles: File[] = []
+        for (const [index, item] of Array.from(items).entries()) {
+          if (item.type.startsWith("image/")) {
+            const file = item.getAsFile()
+            if (file) {
+              imageFiles.push(
+                new File(
+                  [file],
+                  `pasted-image-${Date.now()}-${index + 1}.${file.type.split("/")[1]}`,
+                  { type: file.type }
+                )
+              )
+            }
+          }
+        }
 
-        if (!isUserAuthenticated && hasImageContent) {
-          e.preventDefault()
+        const decision = coordinateComposerPaste({
+          text: e.clipboardData.getData("text/plain"),
+          imageFiles,
+          isAuthenticated: isUserAuthenticated,
+        })
+
+        if (decision.type === "allow-native-text") return
+
+        e.preventDefault()
+        if (decision.type === "reject") {
+          toast({ title: decision.message, status: "error" })
+          setAttachmentAnnouncement(decision.message)
+          return
+        }
+        if (decision.type === "attach-images") {
+          handleAttachmentUpload(decision.files)
           return
         }
 
-        if (isUserAuthenticated && hasImageContent) {
-          const imageFiles: File[] = []
-
-          for (const item of Array.from(items)) {
-            if (item.type.startsWith("image/")) {
-              const file = item.getAsFile()
-              if (file) {
-                const newFile = new File(
-                  [file],
-                  `pasted-image-${Date.now()}.${file.type.split("/")[1]}`,
-                  { type: file.type }
-                )
-                imageFiles.push(newFile)
-              }
-            }
-          }
-
-          if (imageFiles.length > 0) {
-            handleFileUpload(imageFiles)
-          }
-        }
-        // Text pasting will work by default for everyone
+        const attachment = handleLargePaste(decision.text)
+        setAttachmentAnnouncement(
+          `${attachment.file.name} attached. ${attachment.characterCount.toLocaleString()} characters.`
+        )
       },
-      [isUserAuthenticated, handleFileUpload]
+      [
+        isUserAuthenticated,
+        handleAttachmentUpload,
+        handleLargePaste,
+        setAttachmentAnnouncement,
+      ]
+    )
+
+    const handleRestoreLargePaste = useCallback(
+      (attachment: PendingAttachment) => {
+        if (attachment.kind !== "generated-large-paste") return
+        if (!handleFileRemove(attachment)) return
+        const restored = restoreLargePasteText(valueRef.current, attachment)
+        handleValueChange(restored.text)
+        setAttachmentAnnouncement(`${attachment.file.name} restored.`)
+        requestAnimationFrame(() => {
+          const textarea = textareaRef.current
+          textarea?.focus()
+          textarea?.setSelectionRange(
+            restored.selectionStart,
+            restored.selectionEnd
+          )
+        })
+      },
+      [handleFileRemove, handleValueChange, setAttachmentAnnouncement, valueRef]
+    )
+
+    const handleAttachmentRemove = useCallback(
+      (attachment: PendingAttachment) => {
+        handleFileRemove(attachment)
+      },
+      [handleFileRemove]
+    )
+
+    const handleAttachmentRetry = useCallback(
+      (attachment: PendingAttachment) => {
+        retryAttachment(attachment)
+      },
+      [retryAttachment]
     )
 
     useImperativeHandle(
@@ -403,7 +522,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           />
         )}
         <InputDropZone
-          onFileUpload={handleFileUpload}
+          onFileUpload={handleAttachmentUpload}
           disabled={!isUserAuthenticated || !isFileUploadAvailable}
         >
           <div
@@ -412,13 +531,41 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           >
             <PromptInput
               className="relative z-10"
-              expanded={files.length > 0 || localValue.includes("\n")}
+              expanded={localValue.includes("\n")}
               maxHeight="max(30svh, 5rem)"
               value={localValue}
               onValueChange={handleValueChange}
+              formControls={
+                isUserAuthenticated ? (
+                  <div className="hidden">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept={ACCEPTED_FILE_PICKER_TYPES}
+                      aria-hidden
+                      tabIndex={-1}
+                      onChange={(event) => {
+                        if (event.target.files?.length) {
+                          handleAttachmentUpload(
+                            Array.from(event.target.files)
+                          )
+                          event.target.value = ""
+                        }
+                      }}
+                    />
+                  </div>
+                ) : null
+              }
             >
               <div className="min-w-0 [grid-area:header]">
-                <FileList files={files} onFileRemove={handleFileRemove} />
+                <FileList
+                  attachments={attachments}
+                  lockedAttachmentIds={lockedAttachmentIds}
+                  onFileRemove={handleAttachmentRemove}
+                  onRestoreLargePaste={handleRestoreLargePaste}
+                  onRetry={handleAttachmentRetry}
+                />
               </div>
               <PromptInputActions
                 className="h-9 justify-start self-center [grid-area:leading]"
@@ -426,7 +573,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 onClick={(e) => e.stopPropagation()}
               >
                 <ButtonPlusMenu
-                  onFileUpload={handleFileUpload}
+                  onOpenFilePicker={() => fileInputRef.current?.click()}
                   isUserAuthenticated={isUserAuthenticated}
                   isFileUploadAvailable={isFileUploadAvailable}
                   enableSearch={enableSearch}
@@ -490,6 +637,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 </div>
               </PromptInputActions>
             </PromptInput>
+            <p className="sr-only" role="status" aria-live="polite">
+              {attachmentAnnouncement}
+            </p>
           </div>
         </InputDropZone>
       </div>

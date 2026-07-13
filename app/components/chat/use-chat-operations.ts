@@ -18,6 +18,7 @@ type UseChatOperationsProps = {
   ) => Promise<Chats | undefined>
   navigateToChat?: (chatId: string) => void
   setHasDialogAuth: (value: boolean) => void
+  allocatedChatIdRef?: { current: string | null }
 }
 
 export function useChatOperations({
@@ -28,7 +29,11 @@ export function useChatOperations({
   createNewChat,
   navigateToChat,
   setHasDialogAuth,
+  allocatedChatIdRef = { current: null },
 }: UseChatOperationsProps) {
+  // A failed first turn may leave the newly allocated route in place. Reuse it
+  // on retry instead of creating another empty chat from the same mounted
+  // composer closure.
   const checkLimitsAndNotify = async (uid: string): Promise<boolean> => {
     try {
       const rateData = await checkRateLimits(uid, isAuthenticated)
@@ -65,6 +70,7 @@ export function useChatOperations({
 
   const ensureChatExists = async (userId: string, input: string) => {
     if (chatId) return chatId
+    if (allocatedChatIdRef.current) return allocatedChatIdRef.current
 
     try {
       const newChat = await createNewChat(
@@ -76,6 +82,7 @@ export function useChatOperations({
       )
 
       if (!newChat) return null
+      allocatedChatIdRef.current = newChat.id
       if (!isAuthenticated) {
         localStorage.setItem(GUEST_CHAT_STORAGE_KEY, newChat.id)
       }

@@ -104,6 +104,7 @@ function ChatInner({
   const navigateToChat = useCallback((nextChatId: string) => {
     window.history.pushState(null, "", `/c/${nextChatId}`)
   }, [])
+  const allocatedChatIdRef = useRef<string | null>(null)
 
   // The Composer's imperative handle — quote insertion, ?prompt= hydration,
   // and global focus are commands into the Composer, not state threaded
@@ -125,6 +126,7 @@ function ChatInner({
     createNewChat,
     navigateToChat,
     setHasDialogAuth,
+    allocatedChatIdRef,
   })
 
   // Core chat functionality (initialization + state + actions)
@@ -268,7 +270,6 @@ function ChatInner({
       onSelectBranch: selectMessageBranch,
       isDurableChat,
       lastFinishReason,
-      onToolApproval: handleToolApproval,
     }),
     [
       messages,
@@ -284,7 +285,6 @@ function ChatInner({
       selectMessageBranch,
       isDurableChat,
       lastFinishReason,
-      handleToolApproval,
     ]
   )
 
@@ -354,6 +354,7 @@ function ChatInner({
           panelId={activityPanelId}
           open={activityPanelOpen}
           onOpenChange={handleActivityPanelOpenChange}
+          onToolApproval={handleToolApproval}
           {...panelProps}
         />
 

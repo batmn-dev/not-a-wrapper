@@ -2,7 +2,7 @@
 
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import { useId, useRef, type ReactNode, type RefObject } from "react"
+import { useRef, type ReactNode, type RefObject } from "react"
 import { PanelHeader } from "./panel-header"
 
 export type DockedFlyoutShellProps = {
@@ -34,7 +34,6 @@ export function DockedFlyoutShell({
   viewportRef,
   className,
 }: DockedFlyoutShellProps) {
-  const titleId = useId()
   const internalViewportRef = useRef<HTMLDivElement>(null)
   const scrollViewportRef = viewportRef ?? internalViewportRef
 
@@ -42,19 +41,17 @@ export function DockedFlyoutShell({
     <section
       id={panelId}
       data-testid="screen-threadFlyOut"
-      aria-labelledby={titleId}
+      aria-label="Reasoning details"
       aria-hidden={active ? undefined : true}
       inert={active ? undefined : true}
       className={cn(
-        "bg-card text-foreground flex h-full w-[var(--activity-panel-width)] flex-col [box-shadow:var(--sharp-edge-left-shadow)]",
+        "text-foreground border-foreground/5 flex h-full w-[var(--activity-panel-width)] flex-col border-s bg-[var(--activity-panel-surface)]",
         className
       )}
     >
       <PanelHeader
         title={title}
         durationSeconds={durationSeconds}
-        titleId={titleId}
-        panelId={panelId}
         onClose={onClose}
       />
       <ScrollArea viewportRef={scrollViewportRef} className="min-h-0 flex-1">

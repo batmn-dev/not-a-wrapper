@@ -297,13 +297,16 @@ export default defineSchema({
 
   // File attachments tracking
   chatAttachments: defineTable({
-    chatId: v.id("chats"),
+    // Files are staged against the authenticated user before a chat exists,
+    // then atomically bound to a chat at turn dispatch.
+    chatId: v.optional(v.id("chats")),
     userId: v.id("users"),
     storageId: v.optional(v.id("_storage")), // Convex storage reference
     fileUrl: v.string(), // Public URL
     fileName: v.optional(v.string()),
     fileType: v.optional(v.string()),
     fileSize: v.optional(v.number()),
+    stagedAt: v.optional(v.number()),
   })
     .index("by_chat", ["chatId"])
     .index("by_user", ["userId"]),

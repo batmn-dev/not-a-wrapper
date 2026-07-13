@@ -1,20 +1,12 @@
 import * as fileType from "file-type"
+import {
+  ALLOWED_FILE_TYPES,
+  isAllowedFileMimeType,
+  MAX_FILE_SIZE,
+  normalizeFileMimeType,
+} from "./policy"
 
-export const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
-
-export const ALLOWED_FILE_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "application/pdf",
-  "text/plain",
-  "text/markdown",
-  "application/json",
-  "text/csv",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-]
+export { ALLOWED_FILE_TYPES, MAX_FILE_SIZE } from "./policy"
 
 const TEXT_FILE_TYPES = new Set([
   "text/plain",
@@ -57,10 +49,6 @@ export type FileValidationResult = {
   error?: string
 }
 
-function normalizeMimeType(mimeType: string): string {
-  return mimeType.split(";")[0]?.trim().toLowerCase() ?? ""
-}
-
 function isLikelyText(header: Uint8Array): boolean {
   return header.every(
     (byte) => byte === 0x09 || byte === 0x0a || byte === 0x0d || byte >= 0x20
@@ -78,11 +66,11 @@ export async function validateFile(file: File): Promise<FileValidationResult> {
   const header = new Uint8Array(await file.slice(0, 4100).arrayBuffer())
   const type = await fileType.fileTypeFromBuffer(header)
 
-  if (type && ALLOWED_FILE_TYPES.includes(type.mime)) {
+  if (type && isAllowedFileMimeType(type.mime)) {
     return { isValid: true }
   }
 
-  const declaredMimeType = normalizeMimeType(file.type)
+  const declaredMimeType = normalizeFileMimeType(file.type)
   const canUseTextFallback =
     !type && TEXT_FILE_TYPES.has(declaredMimeType) && isLikelyText(header)
 

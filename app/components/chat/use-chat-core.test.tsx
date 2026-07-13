@@ -17,6 +17,15 @@ let useChatCore: (typeof import("./use-chat-core"))["useChatCore"]
 
 const chatCoreMocks = vi.hoisted(() => ({
   addToolApprovalResponse: vi.fn(),
+  attachStagedFilesToChat: vi.fn(
+    async (_convex: unknown, _chatId: string, attachmentIds: string[]) =>
+      attachmentIds.map((attachmentId) => ({
+        name: "project-notes.pdf",
+        contentType: "application/pdf",
+        url: `/api/files/${attachmentId}/preview`,
+        attachmentId,
+      }))
+  ),
   bumpChat: vi.fn(),
   convexMutation: vi.fn(),
   regenerate: vi.fn(),
@@ -94,6 +103,10 @@ vi.mock("@/lib/api", () => ({
   getOrCreateGuestUserId: vi.fn(async (user: { id?: string } | null) =>
     user?.id ? user.id : "guest_1"
   ),
+}))
+
+vi.mock("@/lib/file-handling", () => ({
+  attachStagedFilesToChat: chatCoreMocks.attachStagedFilesToChat,
 }))
 
 vi.mock("@/lib/chat-store/chats/provider", () => ({
@@ -271,6 +284,38 @@ describe("useChatCore prompt query handling", () => {
     const dispatchedMessage = chatCoreMocks.sendMessage.mock.calls[0]?.[0]
     expect(dispatchedMessage.messageId).toBe(dispatchedMessage.id)
     expect(window.location.pathname).toBe("/c/chat-project")
+    expect(window.location.search).toBe("")
+  })
+
+  it("binds transferred project attachments exactly once", async () => {
+    const ensureChatExists = vi.fn(async () => "chat-project")
+
+    renderCore({
+      search:
+        "?prompt=Project%20question&autoSubmit=1&attachment=attachment-1",
+      ensureChatExists,
+    })
+    await flushAsyncWork()
+
+    expect(chatCoreMocks.attachStagedFilesToChat).toHaveBeenCalledTimes(1)
+    expect(chatCoreMocks.attachStagedFilesToChat).toHaveBeenCalledWith(
+      expect.any(Object),
+      "chat-project",
+      ["attachment-1"]
+    )
+    expect(chatCoreMocks.sendMessage).toHaveBeenCalledTimes(1)
+    expect(chatCoreMocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: [
+          { type: "text", text: "Project question" },
+          expect.objectContaining({
+            type: "file",
+            filename: "project-notes.pdf",
+          }),
+        ],
+      }),
+      expect.any(Object)
+    )
     expect(window.location.search).toBe("")
   })
 

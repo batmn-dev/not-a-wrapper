@@ -8,6 +8,9 @@
  *   - Removes redundant `TooltipProvider` wrapper in `PromptInputAction`
  *   - Not A Wrapper uses app-level TooltipProvider for consistency and smaller bundle
  *   - Upstream uses useLayoutEffect; Not A Wrapper uses standard useEffect for SSR safety
+ *   - ChatGPT-parity editor layout: a grid/alignment wrapper contains a
+ *     separate capped overflow scroller, while the textarea uses native
+ *     `field-sizing: content` instead of an imperative pixel height
  *   - Layout-loop hardening in PromptInputTextarea: the expansion decision is
  *     a pure function of (value, derived compact width) — it must not read
  *     layout that `textareaExpanded` itself influences; the passive effect
@@ -71,6 +74,7 @@ type PromptInputProps = {
   onSubmit?: () => void
   disabled?: boolean
   children: React.ReactNode
+  formControls?: React.ReactNode
   className?: string
 }
 
@@ -84,6 +88,7 @@ function PromptInput({
   onSubmit,
   disabled = false,
   children,
+  formControls,
 }: PromptInputProps) {
   const [internalValue, setInternalValue] = useState(value || "")
   const [textareaExpanded, setTextareaExpanded] = useState(false)
@@ -118,15 +123,18 @@ function PromptInput({
           onSubmit?.()
         }}
       >
-        <div
-          data-composer-surface="true"
-          data-slot="prompt-input-surface"
-          className="shadow-composer relative grid min-h-[84px] cursor-text grid-cols-[auto_1fr_auto] grid-rows-[auto_minmax(38px,auto)_36px] overflow-clip rounded-[28px] border-0 border-black/5 bg-[var(--composer-bg)] bg-clip-padding py-[5px] ps-[7px] pe-2 contain-inline-size [grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] group-data-[expanded]/composer:grid-rows-[auto_minmax(38px,auto)_36px] group-data-[expanded]/composer:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out sm:min-h-[52px] sm:grid-rows-[auto_minmax(42px,auto)_0px] sm:[grid-template-areas:'header_header_header'_'leading_primary_trailing'_'._footer_.'] sm:group-data-[expanded]/composer:min-h-[102px] sm:group-data-[expanded]/composer:grid-rows-[auto_minmax(56px,auto)_36px] dark:border-white/5"
-          onClick={() => {
-            textareaRef.current?.focus()
-          }}
-        >
-          {children}
+        {formControls}
+        <div className="relative">
+          <div
+            data-composer-surface="true"
+            data-slot="prompt-input-surface"
+            className="shadow-composer relative grid cursor-text grid-cols-[auto_1fr_auto] overflow-clip rounded-[28px] border-0 border-black/5 bg-[var(--composer-bg)] bg-clip-padding px-2 py-[9px] contain-inline-size [grid-template-areas:'header_header_header'_'leading_primary_trailing'_'._footer_.'] group-not-data-[expanded]/composer:min-h-[52px] group-not-data-[expanded]/composer:py-[5px] group-data-[expanded]/composer:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] max-sm:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out dark:border-white/5"
+            onClick={() => {
+              textareaRef.current?.focus()
+            }}
+          >
+            {children}
+          </div>
         </div>
       </form>
     </PromptInputContext.Provider>
@@ -155,16 +163,16 @@ function getCompactTextareaWidth(textarea: HTMLTextAreaElement) {
   const surface = textarea.closest<HTMLElement>(
     '[data-composer-surface="true"]'
   )
-  const scroller = textarea.closest<HTMLElement>(
-    '[data-composer-editor-scroller="true"]'
+  const wrapper = textarea.closest<HTMLElement>(
+    '[data-composer-editor-wrapper="true"]'
   )
 
-  if (!surface || !scroller) {
+  if (!surface || !wrapper) {
     return textarea.getBoundingClientRect().width
   }
 
   const surfaceStyle = getComputedStyle(surface)
-  const scrollerStyle = getComputedStyle(scroller)
+  const wrapperStyle = getComputedStyle(wrapper)
   const contentWidth =
     surface.getBoundingClientRect().width -
     readPixels(surfaceStyle.paddingLeft) -
@@ -183,8 +191,8 @@ function getCompactTextareaWidth(textarea: HTMLTextAreaElement) {
     contentWidth -
       leadingWidth -
       trailingWidth -
-      readPixels(scrollerStyle.paddingLeft) -
-      readPixels(scrollerStyle.paddingRight)
+      readPixels(wrapperStyle.paddingLeft) -
+      readPixels(wrapperStyle.paddingRight)
   )
 }
 
@@ -266,7 +274,10 @@ function PromptInputTextarea({
         return
       }
 
-      textarea.style.height = "auto"
+      // Native field sizing keeps the live editor matched to its rendered
+      // lines. Clear a stale imperative height left by an older render/HMR;
+      // the nested scroller below, not the textarea, owns the height cap.
+      textarea.style.removeProperty("height")
 
       const collapsedHeight = getCollapsedTextareaHeight(textarea)
       const compactWidth = getCompactTextareaWidth(textarea)
@@ -287,7 +298,6 @@ function PromptInputTextarea({
         nextValue.length > 0 &&
         (nextValue.includes("\n") || compactScrollHeight > collapsedHeight + 1)
 
-      textarea.style.height = `${Math.max(collapsedHeight, textarea.scrollHeight)}px`
       setTextareaExpanded(shouldExpand)
     },
     [disableAutosize, setTextareaExpanded]
@@ -335,34 +345,40 @@ function PromptInputTextarea({
 
   return (
     <div
-      data-composer-editor-scroller="true"
-      data-slot="prompt-input-editor-scroller"
+      data-composer-editor-wrapper="true"
+      data-slot="prompt-input-editor-wrapper"
       className={cn(
-        "flex min-h-[38px] min-w-0 [scrollbar-width:thin] items-center overflow-x-hidden overflow-y-auto px-1.5 group-data-[expanded]/composer:min-h-14 group-data-[expanded]/composer:px-2.5 sm:-my-2.5 sm:min-h-14 sm:group-data-[expanded]/composer:my-0 sm:group-data-[expanded]/composer:min-h-14",
+        "-my-2.5 flex min-h-14 min-w-0 items-center overflow-x-hidden ps-1.75 pe-1.5 group-data-[expanded]/composer:mb-0 group-data-[expanded]/composer:px-2.5",
         containerClassName
       )}
-      style={{ maxHeight: maxHeightStyle }}
     >
-      <Textarea
-        ref={setTextareaRefs}
-        autoFocus
-        value={value}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        className={cn(
-          "text-primary block min-h-[38px] resize-none overflow-y-visible rounded-none border-none bg-transparent px-0 pt-1 pb-2 text-base leading-[26px] shadow-none transition-none focus-visible:ring-0 focus-visible:ring-offset-0 sm:min-h-10 sm:pt-[6px] sm:pb-2 dark:bg-transparent",
-          className
-        )}
-        style={{
-          ...style,
-          lineHeight: "26px",
-          overflowY: "hidden",
-          whiteSpace: "break-spaces",
-        }}
-        rows={1}
-        disabled={disabled}
-        {...props}
-      />
+      <div
+        data-composer-editor-scroller="true"
+        data-slot="prompt-input-editor-scroller"
+        className="min-w-0 flex-1 overflow-auto [scrollbar-width:thin]"
+        style={{ maxHeight: maxHeightStyle }}
+      >
+        <Textarea
+          ref={setTextareaRefs}
+          autoFocus
+          value={value}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          className={cn(
+            "text-primary mt-4 block min-h-[42px] resize-none overflow-y-visible rounded-none border-none bg-transparent px-0 pt-0 pb-4 text-base leading-[26px] shadow-none transition-none focus-visible:ring-0 focus-visible:ring-offset-0 dark:bg-transparent",
+            className
+          )}
+          style={{
+            ...style,
+            lineHeight: "26px",
+            overflowY: "hidden",
+            whiteSpace: "break-spaces",
+          }}
+          rows={1}
+          disabled={disabled}
+          {...props}
+        />
+      </div>
     </div>
   )
 }

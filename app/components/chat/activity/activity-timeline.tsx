@@ -3,9 +3,15 @@
 import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 import {
+  RiBrain2Line,
   RiCheckboxBlankCircleFill,
-  RiCheckLine,
-  RiGlobeLine,
+  RiCheckboxCircleLine,
+  RiCloseCircleLine,
+  RiCodeLine,
+  RiGlobalLine,
+  RiImageLine,
+  RiQuestionLine,
+  RiStopCircleLine,
 } from "@remixicon/react"
 import { cva, type VariantProps } from "class-variance-authority"
 import React from "react"
@@ -18,14 +24,50 @@ const STEP_MARKERS = {
     glyphSize: 6,
     className: "text-muted-foreground fill-current",
   },
-  globe: {
-    icon: RiGlobeLine,
+  search: {
+    icon: RiGlobalLine,
     slotSize: 15,
     glyphSize: 15,
     className: "text-muted-foreground",
   },
-  done: {
-    icon: RiCheckLine,
+  code: {
+    icon: RiCodeLine,
+    slotSize: 15,
+    glyphSize: 15,
+    className: "text-muted-foreground",
+  },
+  reasoning: {
+    icon: RiBrain2Line,
+    slotSize: 15,
+    glyphSize: 15,
+    className: "text-muted-foreground",
+  },
+  image: {
+    icon: RiImageLine,
+    slotSize: 15,
+    glyphSize: 15,
+    className: "text-muted-foreground",
+  },
+  approval: {
+    icon: RiQuestionLine,
+    slotSize: 15,
+    glyphSize: 15,
+    className: "text-amber-600 dark:text-amber-400",
+  },
+  error: {
+    icon: RiCloseCircleLine,
+    slotSize: 15,
+    glyphSize: 15,
+    className: "text-destructive",
+  },
+  stopped: {
+    icon: RiStopCircleLine,
+    slotSize: 15,
+    glyphSize: 15,
+    className: "text-muted-foreground",
+  },
+  completedRun: {
+    icon: RiCheckboxCircleLine,
     slotSize: 15,
     glyphSize: 15,
     className: "text-muted-foreground",
@@ -41,9 +83,15 @@ export type ActivityStepLeading = keyof typeof STEP_MARKERS
 const stepVariants = cva("min-w-0 pb-5 group-data-[last=true]:pb-0", {
   variants: {
     leading: {
-      globe: "",
+      search: "",
+      code: "",
+      reasoning: "",
+      image: "",
+      approval: "",
+      error: "",
+      stopped: "",
       bullet: "",
-      done: "",
+      completedRun: "",
     },
     body: {
       chips: "space-y-1.5",
@@ -106,7 +154,7 @@ export type ActivityStepProps = {
   index?: number
 } & VariantProps<typeof stepVariants>
 
-/** A non-collapsible timeline step with a full-height connector rail. */
+/** A non-collapsible timeline step whose rail reaches the next marker center. */
 export const ActivityStep = ({
   children,
   className,
@@ -117,12 +165,13 @@ export const ActivityStep = ({
 }: ActivityStepProps) => (
   <div
     className="group relative grid animate-[show_150ms_ease-in] grid-cols-[min-content_minmax(0,1fr)] gap-x-2 motion-reduce:animate-none"
+    data-activity-step
     data-last={isLast}
     style={{ zIndex: index + 1 }}
   >
     <div className="relative flex flex-col items-center">
       <StepLeadingIndicator leading={leading ?? "bullet"} />
-      <div className="bg-border w-px flex-1 group-data-[last=true]:hidden" />
+      <div className="bg-border absolute top-2.5 bottom-[-10px] left-1/2 w-px -translate-x-1/2 group-data-[last=true]:hidden" />
     </div>
     <div className={cn(stepVariants({ leading, body }), className)}>
       {children}

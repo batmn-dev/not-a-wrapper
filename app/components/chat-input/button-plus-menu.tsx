@@ -14,7 +14,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { ACCEPTED_FILE_PICKER_TYPES } from "@/lib/file-handling"
 import { cn } from "@/lib/utils"
 import {
   RiAddLargeLine,
@@ -22,11 +21,10 @@ import {
   RiCheckLine,
   RiGlobalLine,
 } from "@remixicon/react"
-import { useRef } from "react"
 import { PopoverContentAuth } from "./popover-content-auth"
 
 const composerPlusIcon = (
-  <Icon icon={RiAddLargeLine} slotSize={18} glyphInset={0} />
+  <Icon icon={RiAddLargeLine} slotSize={20} glyphInset={0} />
 )
 
 const plusTriggerClassName =
@@ -49,7 +47,7 @@ const composerPlusMenuItemClassName =
   "mx-1.5 h-9 rounded-[10px] px-2.5 py-1.5 text-sm leading-5 hover:bg-black/5 focus:bg-black/5 data-[highlighted]:bg-black/5 dark:hover:bg-white/10 dark:focus:bg-white/10 dark:data-[highlighted]:bg-white/10"
 
 type ButtonPlusMenuProps = {
-  onFileUpload: (files: File[]) => void
+  onOpenFilePicker: () => void
   isUserAuthenticated: boolean
   isFileUploadAvailable: boolean
   enableSearch: boolean
@@ -62,7 +60,7 @@ type ButtonPlusMenuProps = {
 }
 
 export function ButtonPlusMenu({
-  onFileUpload,
+  onOpenFilePicker,
   isUserAuthenticated,
   isFileUploadAvailable,
   enableSearch,
@@ -71,8 +69,6 @@ export function ButtonPlusMenu({
   fileUploadDisabledMessage,
   searchDisabledMessage,
 }: ButtonPlusMenuProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
   // Unauthenticated: show auth popover instead of dropdown
   if (!isUserAuthenticated) {
     return (
@@ -108,22 +104,6 @@ export function ButtonPlusMenu({
 
   return (
     <>
-      {/* Hidden file input for programmatic file selection */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        accept={ACCEPTED_FILE_PICKER_TYPES}
-        className="hidden"
-        aria-hidden
-        tabIndex={-1}
-        onChange={(e) => {
-          if (e.target.files?.length) {
-            onFileUpload(Array.from(e.target.files))
-            e.target.value = "" // allow re-selecting the same file
-          }
-        }}
-      />
       <DropdownMenu>
         <Tooltip disableHoverablePopup>
           <TooltipTrigger
@@ -167,7 +147,7 @@ export function ButtonPlusMenu({
                   )}
                   onClick={() => {
                     if (!isFileUploadAvailable) return
-                    fileInputRef.current?.click()
+                    onOpenFilePicker()
                   }}
                 />
               }

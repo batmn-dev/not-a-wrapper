@@ -148,9 +148,8 @@ const EMPTY_TOOL_DISPLAY_RECORDS: ToolDisplayMetadataRecords = Object.freeze({
  * Read the per-tool display-metadata records the chat turn runtime streams
  * into message metadata (`toolMetadataByName` / `toolMetadataByCallId`). This
  * module owns the KEY NAMES plus the cross-consumer `displayName` field
- * ({@link getToolDisplayName}); validation of the richer entry shape is the
- * display layer's concern (tool-invocation validates each record entry
- * against its own type).
+ * ({@link getToolDisplayName}); validation of any richer entry shape is a
+ * display-layer concern for whichever consumer needs more than the name.
  */
 export function getToolDisplayMetadataRecords(
   metadata: unknown

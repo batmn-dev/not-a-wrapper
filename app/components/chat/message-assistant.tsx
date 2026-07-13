@@ -18,7 +18,6 @@ import {
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { getDurableError } from "@/lib/chat-messages/metadata"
 import { getModelInfo } from "@/lib/models"
-import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
 import { RiCheckLine, RiFileCopyLine, RiLoopRightLine } from "@remixicon/react"
 import { useCallback, useRef, useState } from "react"
@@ -33,7 +32,6 @@ import { MessageActionButton } from "./message-action-button"
 import { QuoteButton } from "./quote-button"
 import { SearchImages } from "./search-images"
 import { SourcesBadge } from "./sources-badge"
-import { ToolInvocation } from "./tool-invocation"
 import { useAssistantMessageSelection } from "./useAssistantMessageSelection"
 
 type MessageAssistantProps = {
@@ -52,11 +50,6 @@ type MessageAssistantProps = {
   onQuote?: (text: string, messageId: string) => void
   isDurableChat?: boolean
   finishReason?: string
-  onToolApproval?: (
-    approvalId: string,
-    approved: boolean,
-    reason?: string
-  ) => Promise<void> | void
 }
 
 const STREAMING_INDICATOR_VARIANT: StreamingIndicatorVariant = "caret"
@@ -75,10 +68,8 @@ export function MessageAssistant({
   onQuote,
   isDurableChat,
   finishReason,
-  onToolApproval,
 }: MessageAssistantProps) {
-  const { preferences } = useUserPreferences()
-  const { toolParts, searchImageResults } = view
+  const { searchImageResults } = view
   // Regeneration is a server-owned Chat turn, available only on a durable
   // chat. Matches the turn-controller precondition. See CONTEXT.md "Chat turn".
   const canRegenerate = Boolean(onReload) && Boolean(isDurableChat)
@@ -119,6 +110,7 @@ export function MessageAssistant({
     phase,
     {
       durationMs: currentSessionDurationMs,
+      status: status ?? "ready",
     }
   )
   const turnActive = phase.kind !== "settled"
@@ -209,15 +201,6 @@ export function MessageAssistant({
           data-message-id={messageId}
         >
           <div className="flex w-full flex-col gap-1 empty:hidden">
-            {toolParts.length > 0 && preferences.showToolInvocations && (
-              <ToolInvocation
-                toolInvocations={toolParts}
-                metadata={view.metadata}
-                turnActive={turnActive}
-                onToolApproval={onToolApproval}
-              />
-            )}
-
             {searchImageResults.length > 0 && (
               <SearchImages results={searchImageResults} />
             )}

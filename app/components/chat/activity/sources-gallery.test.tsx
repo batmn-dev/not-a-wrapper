@@ -114,4 +114,27 @@ describe("SourcesGallery (R8 favicon perf)", () => {
       consoleError.mockRestore()
     }
   })
+
+  it("renders normalized source snippets in the measured result-card shape", () => {
+    act(() => {
+      root?.render(
+        <SourcesGallery
+          sources={[
+            {
+              sourceId: "source-with-description",
+              href: "https://example.com/activity",
+              title: "Activity reference",
+              siteName: "Example",
+              description: "A result snippet preserved from tool output.",
+            },
+          ]}
+        />
+      )
+    })
+
+    const link = container!.querySelector("a")
+    expect(link?.textContent).toContain("A result snippet preserved")
+    expect(link?.className).toContain("rounded-[12px]")
+    expect(link?.className).toContain("hover:bg-foreground/[0.07]")
+  })
 })

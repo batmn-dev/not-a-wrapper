@@ -1,13 +1,17 @@
 "use client"
 
 import { Composer } from "@/app/components/chat-input/composer"
+import { ActivityPanel } from "@/app/components/chat/activity/activity-panel"
+import {
+  ActivityPanelStoreProvider,
+  createActivityPanelStore,
+} from "@/app/components/chat/activity/activity-panel-store"
 import { AssistantActivityIndicator } from "@/app/components/chat/assistant-activity-indicator"
 import { SourcesList } from "@/app/components/chat/sources-list"
 import {
   THREAD_GUTTER_VARS,
   THREAD_MAXWIDTH_VARS,
 } from "@/app/components/chat/thread-bounds"
-import { ToolInvocation } from "@/app/components/chat/tool-invocation"
 import { TurnContextProvider } from "@/app/components/chat/turn-context"
 import { LayoutApp } from "@/app/components/layout/layout-app"
 import { Icon } from "@/components/ui/icon"
@@ -35,6 +39,10 @@ import { cn } from "@/lib/utils"
 import { RiFileCopyLine, RiRefreshLine } from "@remixicon/react"
 import type { SourceUrlUIPart, ToolUIPart } from "ai"
 import { useCallback, useEffect, useId, useState } from "react"
+import {
+  ACTIVITY_PANEL_FIXTURES,
+  type ActivityFixtureKey,
+} from "./fixtures/activity.fixture"
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -155,57 +163,6 @@ The quadratic formula is $x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$.
 That covers all the major markdown formatting elements!`
 
 // ─── Mock data for tool & source components ──────────────────────────────────
-
-const MOCK_TOOL_RUNNING = {
-  type: "tool-web_search",
-  toolCallId: "call_search_001",
-  state: "input-available",
-  input: { query: "quantum computing recent advances 2025" },
-} as unknown as ToolUIPart
-
-const MOCK_TOOL_COMPLETED = {
-  type: "tool-web_search",
-  toolCallId: "call_search_002",
-  state: "output-available",
-  input: { query: "quantum computing recent advances 2025" },
-  output: [
-    {
-      url: "https://example.com/quantum-computing",
-      title: "Advances in Quantum Computing",
-      snippet:
-        "Recent breakthroughs in quantum error correction have brought us closer to fault-tolerant quantum computation.",
-    },
-    {
-      url: "https://arxiv.org/abs/2401.12345",
-      title: "Topological Quantum Error Correction",
-      snippet:
-        "A novel approach to fault-tolerant quantum computation using topological qubits.",
-    },
-    {
-      url: "https://nature.com/articles/quantum-2025",
-      title: "Nature: Quantum Computing Review 2025",
-      snippet:
-        "A comprehensive review of progress in quantum computing hardware and algorithms.",
-    },
-  ],
-} as unknown as ToolUIPart
-
-const MOCK_TOOL_GENERIC = {
-  type: "tool-my_github_server_create_issue",
-  toolCallId: "call_github_003",
-  state: "output-available",
-  input: {
-    title: "Fix quantum entanglement module",
-    body: "The entanglement fidelity drops below threshold under load.",
-    labels: ["bug", "quantum"],
-  },
-  output: {
-    title: "Issue #42 created",
-    html_url: "https://github.com/example/quantum-repo/issues/42",
-  },
-} as unknown as ToolUIPart
-
-const MOCK_MULTI_TOOLS = [MOCK_TOOL_COMPLETED, MOCK_TOOL_GENERIC]
 
 const MOCK_SOURCES: SourceUrlUIPart[] = [
   {
@@ -427,13 +384,65 @@ function CopyRegenActions() {
 
 export default function ThinkingStatesTestPage() {
   const liveSeconds = useLiveTimer()
+  const [activityFixtureStore] = useState(() => createActivityPanelStore())
+  const [activityFixtureKey, setActivityFixtureKey] =
+    useState<ActivityFixtureKey>("completed")
+  const [activityOpen, setActivityOpen] = useState(true)
+  const activityFixture = ACTIVITY_PANEL_FIXTURES[activityFixtureKey]
 
   const noop = useCallback(() => {}, [])
 
   return (
     <MessagesProvider>
       <LayoutApp>
+        <ActivityPanelStoreProvider
+          store={activityFixtureStore}
+          panelId="thinking-states-activity-panel"
+        >
+          <ActivityPanel
+            panelId="thinking-states-activity-panel"
+            open={activityOpen}
+            onOpenChange={setActivityOpen}
+            title="Activity"
+            durationSeconds={activityFixture.durationSeconds}
+            activity={activityFixture.activity}
+            onToolApproval={
+              activityFixture.approvalActionsEnabled ? noop : undefined
+            }
+          />
+        </ActivityPanelStoreProvider>
         <div className="relative flex min-h-0 flex-1 flex-col items-center">
+          <div className="border-border bg-card text-muted-foreground mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs">
+            <label className="flex items-center gap-2">
+              Activity fixture
+              <select
+                aria-label="Activity fixture"
+                value={activityFixtureKey}
+                onChange={(event) =>
+                  setActivityFixtureKey(
+                    event.target.value as ActivityFixtureKey
+                  )
+                }
+                className="text-foreground rounded-md bg-transparent text-sm outline-none"
+              >
+                {Object.entries(ACTIVITY_PANEL_FIXTURES).map(
+                  ([key, fixture]) => (
+                    <option key={key} value={key}>
+                      {fixture.label}
+                    </option>
+                  )
+                )}
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={activityOpen}
+              onClick={() => setActivityOpen(true)}
+              className="text-foreground rounded-md px-2 py-1 disabled:opacity-40"
+            >
+              Open Activity
+            </button>
+          </div>
           {/* ━━━ Conversation ━━━ */}
           <div className="relative -mb-(--composer-overlap-px) flex w-full grow basis-auto flex-col items-center pt-4 pb-(--composer-overlap-px) [--composer-overlap-px:28px]">
             {/* ─── User message ─── */}
@@ -594,12 +603,19 @@ export default function ThinkingStatesTestPage() {
                   kind: "disclosure",
                   label: "Searching the web",
                   motion: "shimmer",
-                  sections: [
-                    {
-                      kind: "sources",
-                      sources: [MOCK_SOURCES[0]!],
-                    },
-                  ],
+                  activity: {
+                    entries: [
+                      {
+                        id: "search-fixture",
+                        kind: "search",
+                        title: "Searching the web",
+                        status: "running",
+                        sources: [MOCK_SOURCES[0]!],
+                      },
+                    ],
+                    sourceResults: [MOCK_SOURCES[0]!],
+                    imageResults: [],
+                  },
                 }}
                 open={false}
                 onOpenChange={noop}
@@ -608,7 +624,7 @@ export default function ThinkingStatesTestPage() {
               <StateAnnotation title="Assistant activity — rich live disclosure">
                 The same renderer composes search, image, approval, and named
                 tool labels while keeping the action tied to a non-empty
-                normalized section list.
+                chronological activity model.
               </StateAnnotation>
             </AssistantShell>
 
@@ -690,62 +706,6 @@ export default function ThinkingStatesTestPage() {
                 <code>onReload</code>. Only shown on the last message in the
                 conversation. Rendered at the end of the assistant message,
                 above the action buttons.
-              </StateAnnotation>
-            </AssistantShell>
-
-            {/* ─── Tool Invocations ─── */}
-            <AssistantShell>
-              <ToolInvocation toolInvocations={[MOCK_TOOL_RUNNING]} />
-              <StateAnnotation title="ToolInvocation — single tool, running">
-                Shown when a tool part has{" "}
-                <code>state === &quot;input-available&quot;</code> (or
-                <code>&quot;input-streaming&quot;</code> for partial args). The
-                card displays a &quot;Running&quot; badge with a spinner, the
-                tool name resolved by
-                <code>getStaticToolName()</code> from the <code>type</code>{" "}
-                field (e.g.,
-                <code>tool-web_search</code> → <code>Web Search</code>), and the
-                input arguments. Rendered by <code>tool-invocation.tsx</code> →{" "}
-                <code>SingleToolCard</code>. Expandable to show the arguments
-                section. Built-in tool names (web_search, google_search) get
-                human-readable display names and icons via{" "}
-                <code>BUILTIN_TOOL_DISPLAY</code>.
-              </StateAnnotation>
-            </AssistantShell>
-
-            <AssistantShell>
-              <ToolInvocation
-                toolInvocations={[MOCK_TOOL_COMPLETED]}
-                defaultOpen
-              />
-              <StateAnnotation title="ToolInvocation — single tool, completed (expanded)">
-                When <code>state === &quot;output-available&quot;</code>, the
-                badge transitions to a green &quot;Completed&quot; pill via{" "}
-                <code>AnimatePresence</code> with a blur/scale morph. The result
-                section appears below the arguments. Search results (arrays with{" "}
-                <code>url</code>/<code>title</code>/<code>snippet</code>) get
-                rich link formatting; other results fall back to JSON.{" "}
-                <code>defaultOpen</code> starts the card expanded. Rendered
-                conditionally by
-                <code>message-assistant.tsx</code> only when
-                <code>preferences.showToolInvocations</code> is true.
-              </StateAnnotation>
-            </AssistantShell>
-
-            <AssistantShell>
-              <ToolInvocation toolInvocations={MOCK_MULTI_TOOLS} />
-              <StateAnnotation title="ToolInvocation — multi-tool group">
-                When multiple tool invocations have different{" "}
-                <code>toolCallId</code>s,
-                <code>ToolInvocation</code> renders a grouped container with a
-                &quot;Tools executed&quot; header, a count badge, and a
-                collapsible list of individual tool cards. Each card inside uses{" "}
-                <code>SingleToolView</code>. Common during multi-step agent
-                workflows where the model calls web_search + code_execution +
-                custom tools in parallel. MCP tool names appear namespaced
-                (e.g.,
-                <code>my_github_server_create_issue</code>) and display in
-                monospace.
               </StateAnnotation>
             </AssistantShell>
 
