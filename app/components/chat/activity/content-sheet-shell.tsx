@@ -81,7 +81,7 @@ export function ContentSheetShell({
           aria-hidden
           className="bg-muted mx-auto mt-1.5 h-1 w-12 shrink-0 rounded-full sm:hidden"
         />
-        <section className="flex max-h-[calc(100svh_-_max(env(safe-area-inset-top),6px)_-_16px)] min-h-0 min-w-0 flex-col overflow-hidden">
+        <section className="flex h-[80vh] max-h-[calc(100svh_-_max(env(safe-area-inset-top),6px)_-_16px)] min-h-0 min-w-0 flex-col overflow-hidden sm:h-auto">
           {/* The cluster IS the dialog's accessible name; the `·` span is
               aria-hidden, so the name reads "Activity 5m 42s". */}
           <header className="grid min-h-[var(--spacing-panel-header)] grid-cols-[minmax(0,1fr)_min-content] items-center gap-3 ps-6 pe-4 pt-4 pb-2 select-none">

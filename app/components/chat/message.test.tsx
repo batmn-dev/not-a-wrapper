@@ -28,24 +28,13 @@ vi.mock("./message-assistant", () => ({
     messageId: string
     onReload?: (messageId: string) => void
     retryModelId?: string
-    onToolApproval?: (
-      approvalId: string,
-      approved: boolean,
-      reason?: string
-    ) => Promise<void> | void
   }) => {
     messageAssistantSpy()
     lastAssistantProps.current = props
-    const { children, messageId, onReload, onToolApproval } = props
+    const { children, messageId, onReload } = props
     return (
       <div>
-        <button
-          data-testid="approval"
-          type="button"
-          onClick={() => onToolApproval?.("approval-1", true)}
-        >
-          {children}
-        </button>
+        <div>{children}</div>
         <button
           data-can-reload={Boolean(onReload)}
           data-testid="reload"
@@ -90,15 +79,9 @@ describe("Message memoization", () => {
   })
 
   function renderMessage({
-    onToolApproval = vi.fn(),
     onReload,
     retryModelId,
   }: {
-    onToolApproval?: (
-      approvalId: string,
-      approved: boolean,
-      reason?: string
-    ) => Promise<void> | void
     onReload?: (messageId: string) => void
     retryModelId?: string
   } = {}) {
@@ -118,34 +101,12 @@ describe("Message memoization", () => {
           onEdit={() => {}}
           onReload={onReload}
           retryModelId={retryModelId}
-          onToolApproval={onToolApproval}
         >
           Approve this tool
         </Message>
       )
     })
   }
-
-  it("updates the assistant tool approval handler when only the callback changes", () => {
-    const firstApprovalHandler = vi.fn()
-    const secondApprovalHandler = vi.fn()
-
-    renderMessage({ onToolApproval: firstApprovalHandler })
-    renderMessage({ onToolApproval: secondApprovalHandler })
-
-    const button = container?.querySelector(
-      '[data-testid="approval"]'
-    ) as HTMLButtonElement | null
-
-    expect(button).toBeTruthy()
-
-    act(() => {
-      button?.click()
-    })
-
-    expect(firstApprovalHandler).not.toHaveBeenCalled()
-    expect(secondApprovalHandler).toHaveBeenCalledWith("approval-1", true)
-  })
 
   it("updates assistant reload availability when only the callback presence changes", () => {
     const firstReloadHandler = vi.fn()

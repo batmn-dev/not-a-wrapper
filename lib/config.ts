@@ -121,7 +121,6 @@ For mathematical notation, use double-dollar delimiters ($$...$$) for inline mat
 
 You respect the user's time by being concise when appropriate and thorough when the situation calls for it.`
 
-export const MESSAGE_MAX_LENGTH = 10000
 
 // ============================================================================
 // Context Management (Anthropic Best Practices)

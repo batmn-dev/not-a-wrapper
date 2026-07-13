@@ -15,12 +15,14 @@ import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { convexChatToChat } from "@/lib/chat-store/types"
-import { MESSAGE_MAX_LENGTH } from "@/lib/config"
+import { evaluatePromptSize } from "@/lib/chat-turn/prompt-size-policy"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
+import { attachStagedFilesToChat } from "@/lib/file-handling"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
 import { RiChat3Line } from "@remixicon/react"
 import { useQuery } from "@tanstack/react-query"
+import { useConvex } from "convex/react"
 import { motion } from "motion/react"
 import { useRouter } from "next/navigation"
 import { useCallback, useMemo, useState } from "react"
@@ -51,6 +53,7 @@ export function ProjectView({ projectId }: ProjectViewProps) {
 
 function ProjectViewInner({ projectId }: ProjectViewProps) {
   const router = useRouter()
+  const convex = useConvex()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { user } = useUser()
   const { createNewChat } = useChats()
@@ -81,28 +84,16 @@ function ProjectViewInner({ projectId }: ProjectViewProps) {
   const shouldShowEmptyState = chats !== undefined && chats.length === 0
 
   const handleTurn = useCallback(
-    async ({ text, files }: ComposerTurnPayload): Promise<boolean> => {
+    async ({
+      text,
+      files,
+      attachments,
+    }: ComposerTurnPayload): Promise<boolean> => {
       if (isSubmitting) return false
-      if (!/[^\s]/.test(text)) return false
+      if (!/[^\s]/.test(text) && attachments.length === 0) return false
 
       if (!user?.id) {
         toast({ title: "Please sign in and try again.", status: "error" })
-        return false
-      }
-
-      if (files.length > 0) {
-        toast({
-          title: "Open the project chat before attaching files.",
-          status: "error",
-        })
-        return false
-      }
-
-      if (text.length > MESSAGE_MAX_LENGTH) {
-        toast({
-          title: `The message you submitted was too long, please submit something shorter. (Max ${MESSAGE_MAX_LENGTH} characters)`,
-          status: "error",
-        })
         return false
       }
 
@@ -111,6 +102,16 @@ function ProjectViewInner({ projectId }: ProjectViewProps) {
         // Read turn inputs at run time from the Turn context snapshot — never
         // from a render-time closure.
         const turnSnapshot = getTurnSnapshot()
+        const promptSize = evaluatePromptSize({
+          modelId: turnSnapshot.selectedModel,
+          systemPrompt: turnSnapshot.systemPrompt,
+          nextText: text,
+          submittedFiles: files,
+        })
+        if (!promptSize.ok) {
+          toast({ title: promptSize.message, status: "error" })
+          return false
+        }
         const newChat = await createNewChat(
           user.id,
           text,
@@ -121,10 +122,32 @@ function ProjectViewInner({ projectId }: ProjectViewProps) {
         )
         if (!newChat) return false
 
+        const attachmentIds = attachments.flatMap((attachment) =>
+          attachment.attachmentId ? [attachment.attachmentId] : []
+        )
+        if (attachmentIds.length !== attachments.length) {
+          toast({ title: "An attachment is not ready.", status: "error" })
+          return false
+        }
+        if (attachmentIds.length > 0) {
+          const bound = await attachStagedFilesToChat(
+            convex,
+            newChat.id,
+            attachmentIds
+          )
+          if (bound.length !== attachmentIds.length) {
+            toast({ title: "Failed to attach every file.", status: "error" })
+            return false
+          }
+        }
+
         const chatParams = new URLSearchParams({
           prompt: text,
           autoSubmit: "1",
         })
+        attachmentIds.forEach((attachmentId) =>
+          chatParams.append("attachment", attachmentId)
+        )
         router.push(`/c/${newChat.id}?${chatParams.toString()}`)
         return true
       } catch (error) {
@@ -143,7 +166,15 @@ function ProjectViewInner({ projectId }: ProjectViewProps) {
         setIsSubmitting(false)
       }
     },
-    [createNewChat, getTurnSnapshot, isSubmitting, projectId, router, user?.id]
+    [
+      convex,
+      createNewChat,
+      getTurnSnapshot,
+      isSubmitting,
+      projectId,
+      router,
+      user?.id,
+    ]
   )
 
   const formatDate = (dateString: string) => {
@@ -202,6 +233,7 @@ function ProjectViewInner({ projectId }: ProjectViewProps) {
           onTurn={handleTurn}
           isSubmitting={isSubmitting}
           status="ready"
+          largePasteDelivery="inline"
         />
       </motion.div>
 

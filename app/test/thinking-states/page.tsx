@@ -1,6 +1,11 @@
 "use client"
 
 import { Composer } from "@/app/components/chat-input/composer"
+import { ActivityPanel } from "@/app/components/chat/activity/activity-panel"
+import {
+  ActivityPanelStoreProvider,
+  createActivityPanelStore,
+} from "@/app/components/chat/activity/activity-panel-store"
 import { AssistantActivityIndicator } from "@/app/components/chat/assistant-activity-indicator"
 import { SourcesList } from "@/app/components/chat/sources-list"
 import {
@@ -35,6 +40,10 @@ import { cn } from "@/lib/utils"
 import { RiFileCopyLine, RiRefreshLine } from "@remixicon/react"
 import type { SourceUrlUIPart, ToolUIPart } from "ai"
 import { useCallback, useEffect, useId, useState } from "react"
+import {
+  ACTIVITY_PANEL_FIXTURES,
+  type ActivityFixtureKey,
+} from "./fixtures/activity.fixture"
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -427,13 +436,65 @@ function CopyRegenActions() {
 
 export default function ThinkingStatesTestPage() {
   const liveSeconds = useLiveTimer()
+  const [activityFixtureStore] = useState(() => createActivityPanelStore())
+  const [activityFixtureKey, setActivityFixtureKey] =
+    useState<ActivityFixtureKey>("completed")
+  const [activityOpen, setActivityOpen] = useState(true)
+  const activityFixture = ACTIVITY_PANEL_FIXTURES[activityFixtureKey]
 
   const noop = useCallback(() => {}, [])
 
   return (
     <MessagesProvider>
       <LayoutApp>
+        <ActivityPanelStoreProvider
+          store={activityFixtureStore}
+          panelId="thinking-states-activity-panel"
+        >
+          <ActivityPanel
+            panelId="thinking-states-activity-panel"
+            open={activityOpen}
+            onOpenChange={setActivityOpen}
+            title="Activity"
+            durationSeconds={activityFixture.durationSeconds}
+            activity={activityFixture.activity}
+            onToolApproval={
+              activityFixture.approvalActionsEnabled ? noop : undefined
+            }
+          />
+        </ActivityPanelStoreProvider>
         <div className="relative flex min-h-0 flex-1 flex-col items-center">
+          <div className="border-border bg-card text-muted-foreground mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs">
+            <label className="flex items-center gap-2">
+              Activity fixture
+              <select
+                aria-label="Activity fixture"
+                value={activityFixtureKey}
+                onChange={(event) =>
+                  setActivityFixtureKey(
+                    event.target.value as ActivityFixtureKey
+                  )
+                }
+                className="text-foreground rounded-md bg-transparent text-sm outline-none"
+              >
+                {Object.entries(ACTIVITY_PANEL_FIXTURES).map(
+                  ([key, fixture]) => (
+                    <option key={key} value={key}>
+                      {fixture.label}
+                    </option>
+                  )
+                )}
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={activityOpen}
+              onClick={() => setActivityOpen(true)}
+              className="text-foreground rounded-md px-2 py-1 disabled:opacity-40"
+            >
+              Open Activity
+            </button>
+          </div>
           {/* ━━━ Conversation ━━━ */}
           <div className="relative -mb-(--composer-overlap-px) flex w-full grow basis-auto flex-col items-center pt-4 pb-(--composer-overlap-px) [--composer-overlap-px:28px]">
             {/* ─── User message ─── */}
@@ -594,12 +655,19 @@ export default function ThinkingStatesTestPage() {
                   kind: "disclosure",
                   label: "Searching the web",
                   motion: "shimmer",
-                  sections: [
-                    {
-                      kind: "sources",
-                      sources: [MOCK_SOURCES[0]!],
-                    },
-                  ],
+                  activity: {
+                    entries: [
+                      {
+                        id: "search-fixture",
+                        kind: "search",
+                        title: "Searching the web",
+                        status: "running",
+                        sources: [MOCK_SOURCES[0]!],
+                      },
+                    ],
+                    sourceResults: [MOCK_SOURCES[0]!],
+                    imageResults: [],
+                  },
                 }}
                 open={false}
                 onOpenChange={noop}
@@ -608,7 +676,7 @@ export default function ThinkingStatesTestPage() {
               <StateAnnotation title="Assistant activity — rich live disclosure">
                 The same renderer composes search, image, approval, and named
                 tool labels while keeping the action tied to a non-empty
-                normalized section list.
+                chronological activity model.
               </StateAnnotation>
             </AssistantShell>
 

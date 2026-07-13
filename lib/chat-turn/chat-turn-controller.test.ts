@@ -1,4 +1,4 @@
-import { MESSAGE_MAX_LENGTH, SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
+import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   createChatTurnController,
@@ -101,8 +101,8 @@ function createHarness() {
     cleanupOptimisticAttachments: vi.fn(() => {
       events.push("cleanupOptimisticAttachments")
     }),
-    handleFileUploads: vi.fn(async () => {
-      events.push("handleFileUploads")
+    attachStagedFiles: vi.fn(async () => {
+      events.push("attachStagedFiles")
       return []
     }),
     sendMessage: vi.fn(() => {
@@ -155,7 +155,7 @@ describe("chat turn controller", () => {
     vi.clearAllMocks()
   })
 
-  it("runs a new send turn with optimistic state before checks and local persistence only for local routes", async () => {
+  it("creates optimistic state only after admission and local persistence only for local routes", async () => {
     const local = createHarness()
     const onSuccess = vi.fn((chatId) => {
       local.events.push(`onSuccess:${chatId}`)
@@ -170,8 +170,8 @@ describe("chat turn controller", () => {
     })
 
     expect(local.snapshots[0]).toEqual(["optimistic-message"])
-    expect(local.events.indexOf("setMessages")).toBeLessThan(
-      local.events.indexOf("resolveUserId")
+    expect(local.events.indexOf("setMessages")).toBeGreaterThan(
+      local.events.indexOf("ensureChatExists")
     )
     const optimisticMessage = local.getMessages()[0]
     expect(optimisticMessage?.createdAt).toBeInstanceOf(Date)
@@ -214,7 +214,7 @@ describe("chat turn controller", () => {
     expect(durable.storeAdapters.cacheAndAddMessage).not.toHaveBeenCalled()
   })
 
-  it("removes optimistic state and cleans optimistic attachment URLs when send is limit-denied", async () => {
+  it("creates no optimistic state when send is limit-denied", async () => {
     const { adapters, controller, getMessages } = createHarness()
     adapters.checkLimitsAndNotify = vi.fn(async () => false)
 
@@ -231,15 +231,13 @@ describe("chat turn controller", () => {
 
     expect(getMessages()).toEqual([])
     expect(adapters.sendMessage).not.toHaveBeenCalled()
-    expect(adapters.cleanupOptimisticAttachments).toHaveBeenCalledWith([
-      { url: "blob:local-image" },
-    ])
+    expect(adapters.cleanupOptimisticAttachments).not.toHaveBeenCalled()
   })
 
   it("atomically hands off the optimistic timestamp and uploaded attachment parts", async () => {
     const { adapters, controller, getMessages, snapshots, storeAdapters } =
       createHarness()
-    adapters.handleFileUploads = vi.fn(async () => [
+    adapters.attachStagedFiles = vi.fn(async () => [
       {
         name: "notes.pdf",
         contentType: "application/pdf",
@@ -251,6 +249,14 @@ describe("chat turn controller", () => {
     await controller.runSendTurn({
       text: "Read this",
       submittedFiles: [{} as File],
+      submittedAttachments: [
+        {
+          name: "notes.pdf",
+          contentType: "application/pdf",
+          url: "/api/files/attachment-1/preview",
+          attachmentId: "attachment-1",
+        },
+      ],
       optimisticAttachments: [
         {
           name: "notes.pdf",
@@ -262,7 +268,10 @@ describe("chat turn controller", () => {
 
     const optimisticMessage = getMessages()[0]
     const dispatchedMessage = vi.mocked(adapters.sendMessage).mock.calls[0]?.[0]
-    expect(snapshots).toEqual([["optimistic-message"], ["optimistic-message"]])
+    expect(snapshots).toEqual([["optimistic-message"]])
+    expect(adapters.attachStagedFiles).toHaveBeenCalledWith("chat-1", [
+      "attachment-1",
+    ])
     expect(dispatchedMessage).toEqual({
       id: "optimistic-message",
       role: "user",
@@ -279,9 +288,7 @@ describe("chat turn controller", () => {
         },
       ],
     })
-    expect(adapters.cleanupOptimisticAttachments).toHaveBeenCalledWith([
-      { url: "blob:local-notes" },
-    ])
+    expect(adapters.cleanupOptimisticAttachments).not.toHaveBeenCalled()
     expect(storeAdapters.cacheAndAddMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "optimistic-message",
@@ -294,7 +301,35 @@ describe("chat turn controller", () => {
     )
   })
 
-  it("removes optimistic state when no user id resolves", async () => {
+  it("dispatches no optimistic row or partial turn when staged binding fails", async () => {
+    const { adapters, controller, getMessages } = createHarness()
+    adapters.attachStagedFiles = vi.fn(async () => null)
+
+    await controller.runSendTurn({
+      text: "Read both",
+      submittedFiles: [{} as File, {} as File],
+      submittedAttachments: [
+        {
+          name: "one.pdf",
+          contentType: "application/pdf",
+          url: "/api/files/one/preview",
+          attachmentId: "one",
+        },
+        {
+          name: "two.pdf",
+          contentType: "application/pdf",
+          url: "/api/files/two/preview",
+          attachmentId: "two",
+        },
+      ],
+    })
+
+    expect(getMessages()).toEqual([])
+    expect(adapters.setMessages).not.toHaveBeenCalled()
+    expect(adapters.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it("creates no optimistic state when no user id resolves", async () => {
     // The Composer restores the payload on a rejected turn — a lingering
     // optimistic bubble would show the text twice (and leak its blob: URLs).
     const { adapters, controller, getMessages } = createHarness()
@@ -313,9 +348,7 @@ describe("chat turn controller", () => {
 
     expect(getMessages()).toEqual([])
     expect(adapters.sendMessage).not.toHaveBeenCalled()
-    expect(adapters.cleanupOptimisticAttachments).toHaveBeenCalledWith([
-      { url: "blob:local-image" },
-    ])
+    expect(adapters.cleanupOptimisticAttachments).not.toHaveBeenCalled()
   })
 
   it("sends normal turns with the rendered selected-path server tail", async () => {
@@ -354,30 +387,23 @@ describe("chat turn controller", () => {
     )
   })
 
-  it("rejects an over-limit send before any side effect — no chat creation, no optimistic bubble, no flags", async () => {
+  it("does not reject direct text solely because it exceeds 10,000 characters", async () => {
     const { adapters, controller } = createHarness()
     const onSuccess = vi.fn()
 
     await controller.runSendTurn({
-      text: "x".repeat(MESSAGE_MAX_LENGTH + 1),
+      text: "x".repeat(10_001),
       onSuccess,
     })
 
-    expect(adapters.toastError).toHaveBeenCalledWith(
-      `The message you submitted was too long, please submit something shorter. (Max ${MESSAGE_MAX_LENGTH} characters)`
-    )
-    // A rejected payload must leave no trace: previously the guard ran after
-    // ensureChatExists, so a too-long new-chat send created, titled, and
-    // navigated to an empty orphan chat before rejecting.
-    expect(adapters.ensureChatExists).not.toHaveBeenCalled()
-    expect(adapters.setMessages).not.toHaveBeenCalled()
-    expect(adapters.sendMessage).not.toHaveBeenCalled()
-    expect(adapters.setIsSending).not.toHaveBeenCalled()
-    expect(onSuccess).not.toHaveBeenCalled()
+    expect(adapters.toastError).not.toHaveBeenCalled()
+    expect(adapters.sendMessage).toHaveBeenCalled()
+    expect(onSuccess).toHaveBeenCalledWith("chat-1")
   })
 
-  it("cleans optimistic attachment URLs when an over-limit send is rejected", async () => {
-    const { adapters, controller } = createHarness()
+  it("rejects against the selected model's effective input budget before side effects", async () => {
+    const { adapters, controller, setSnapshot } = createHarness()
+    setSnapshot({ selectedModel: "gemma-3-27b-it" })
     const optimisticAttachments = [
       {
         name: "image.png",
@@ -387,10 +413,13 @@ describe("chat turn controller", () => {
     ]
 
     await controller.runSendTurn({
-      text: "x".repeat(MESSAGE_MAX_LENGTH + 1),
+      text: "x".repeat(30_000),
       optimisticAttachments,
     })
 
+    expect(adapters.toastError).toHaveBeenCalledWith(
+      "This prompt is too long for Gemma 3 27B. Shorten the message or remove attachments."
+    )
     expect(adapters.cleanupOptimisticAttachments).toHaveBeenCalledWith(
       optimisticAttachments
     )
@@ -522,6 +551,35 @@ describe("chat turn controller", () => {
       "chat-1"
     )
     expect(adapters.bumpChat).toHaveBeenCalledWith("chat-1")
+  })
+
+  it("does not reject a user-message edit solely because it exceeds 10,000 characters", async () => {
+    const {
+      adapters,
+      controller,
+      setMessagesState,
+      setRoutePersistsMessages,
+      setSnapshot,
+    } = createHarness()
+    setRoutePersistsMessages(true)
+    setSnapshot({ isAuthenticated: true })
+    const messages = [
+      userMessage("user-1", "old text", new Date("2026-01-02T00:00:00Z")),
+      assistantMessage("assistant-1", "old answer"),
+    ]
+    setMessagesState(messages)
+
+    const result = await controller.runEditTurn({
+      chatId: "chat-existing",
+      messages,
+      messageId: "user-1",
+      newContent: "x".repeat(10_001),
+      isSubmitting: false,
+      status: "ready",
+    })
+
+    expect(result).toEqual({ ok: true })
+    expect(adapters.sendMessage).toHaveBeenCalled()
   })
 
   it("restores visible messages when edit resend dispatch throws", async () => {

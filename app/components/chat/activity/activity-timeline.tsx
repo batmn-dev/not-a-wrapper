@@ -5,7 +5,11 @@ import { cn } from "@/lib/utils"
 import {
   RiCheckboxBlankCircleFill,
   RiCheckLine,
+  RiCloseCircleLine,
+  RiCodeLine,
   RiGlobeLine,
+  RiImageLine,
+  RiQuestionLine,
 } from "@remixicon/react"
 import { cva, type VariantProps } from "class-variance-authority"
 import React from "react"
@@ -23,6 +27,30 @@ const STEP_MARKERS = {
     slotSize: 15,
     glyphSize: 15,
     className: "text-muted-foreground",
+  },
+  code: {
+    icon: RiCodeLine,
+    slotSize: 15,
+    glyphSize: 15,
+    className: "text-muted-foreground",
+  },
+  image: {
+    icon: RiImageLine,
+    slotSize: 15,
+    glyphSize: 15,
+    className: "text-muted-foreground",
+  },
+  approval: {
+    icon: RiQuestionLine,
+    slotSize: 15,
+    glyphSize: 15,
+    className: "text-amber-600 dark:text-amber-400",
+  },
+  error: {
+    icon: RiCloseCircleLine,
+    slotSize: 15,
+    glyphSize: 15,
+    className: "text-destructive",
   },
   done: {
     icon: RiCheckLine,
@@ -42,6 +70,10 @@ const stepVariants = cva("min-w-0 pb-5 group-data-[last=true]:pb-0", {
   variants: {
     leading: {
       globe: "",
+      code: "",
+      image: "",
+      approval: "",
+      error: "",
       bullet: "",
       done: "",
     },
@@ -117,6 +149,7 @@ export const ActivityStep = ({
 }: ActivityStepProps) => (
   <div
     className="group relative grid animate-[show_150ms_ease-in] grid-cols-[min-content_minmax(0,1fr)] gap-x-2 motion-reduce:animate-none"
+    data-activity-step
     data-last={isLast}
     style={{ zIndex: index + 1 }}
   >

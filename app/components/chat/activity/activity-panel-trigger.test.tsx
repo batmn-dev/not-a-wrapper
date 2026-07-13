@@ -15,13 +15,19 @@ const presentation: ActivityDisclosurePresentation = {
   kind: "disclosure",
   label: "Thought for 1s",
   motion: "none",
-  sections: [
-    {
-      kind: "reasoning",
-      blocks: [{ text: "Visible reasoning" }],
-      isStreaming: false,
-    },
-  ],
+  activity: {
+    entries: [
+      {
+        id: "reasoning-0",
+        kind: "reasoning",
+        title: "Thinking",
+        detail: "Visible reasoning",
+        status: "complete",
+      },
+    ],
+    sourceResults: [],
+    imageResults: [],
+  },
   durationSeconds: 1,
 }
 

@@ -4,6 +4,7 @@ import {
   getFileUploadLimit,
   getFileUploadLimitStatus,
   isFileUploadLimitExceeded,
+  isStoredFileMetadataValid,
   selectTrustedTextAttachmentsForModelInput,
 } from "./files"
 
@@ -69,6 +70,35 @@ describe("file upload limits", () => {
       limit: 5,
       canUpload: false,
     })
+  })
+})
+
+describe("stored file validation", () => {
+  it("accepts only allowed matching server metadata within the size limit", () => {
+    expect(
+      isStoredFileMetadataValid(
+        { size: 42, contentType: "application/pdf" },
+        "application/pdf"
+      )
+    ).toBe(true)
+    expect(
+      isStoredFileMetadataValid(
+        { size: 42, contentType: "application/pdf" },
+        "image/png"
+      )
+    ).toBe(false)
+    expect(
+      isStoredFileMetadataValid(
+        { size: 11 * 1024 * 1024, contentType: "application/pdf" },
+        "application/pdf"
+      )
+    ).toBe(false)
+    expect(
+      isStoredFileMetadataValid(
+        { size: 42, contentType: "application/octet-stream" },
+        "application/octet-stream"
+      )
+    ).toBe(false)
   })
 })
 

@@ -496,7 +496,7 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
           ensureChatExists: vi.fn(async () => "chat-durable"),
           setPreviousChatId: vi.fn(),
           cleanupOptimisticAttachments: vi.fn(),
-          handleFileUploads: () => uploadGate.promise,
+          attachStagedFiles: () => uploadGate.promise,
           sendMessage: chat.sendMessage,
           regenerate: chat.regenerate,
           toastError: vi.fn(),
@@ -532,6 +532,14 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
             new File(["fixture"], "notes.pdf", {
               type: "application/pdf",
             }),
+          ],
+          submittedAttachments: [
+            {
+              attachmentId: "attachment-1",
+              contentType: "application/pdf",
+              name: "notes.pdf",
+              url: "/api/files/attachment-1/preview",
+            },
           ],
           text: "New prompt",
         })
@@ -631,6 +639,27 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
       sendPromise = api().send()
     })
 
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(
+      api().messages.some((message) => message.id === "optimistic-user")
+    ).toBe(false)
+
+    await act(async () => {
+      lifecycle.authGate.resolve("fixture-user")
+      await Promise.resolve()
+      lifecycle.uploadGate.resolve([
+        {
+          attachmentId: "attachment-1",
+          contentType: "application/pdf",
+          name: "notes.pdf",
+          url: "https://fixtures.invalid/notes.pdf",
+        },
+      ])
+      await sendPromise
+    })
     await waitFor(() =>
       expect(
         api().messages.some((message) => message.id === "optimistic-user")
@@ -658,19 +687,6 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
     expect(pendingAssistant?.querySelector('[role="separator"]')).toBeNull()
     expect(pendingAssistant?.closest("[data-turn-id-container]")).toBeNull()
 
-    await act(async () => {
-      lifecycle.authGate.resolve("fixture-user")
-      await Promise.resolve()
-      lifecycle.uploadGate.resolve([
-        {
-          attachmentId: "attachment-1",
-          contentType: "application/pdf",
-          name: "notes.pdf",
-          url: "https://fixtures.invalid/notes.pdf",
-        },
-      ])
-      await sendPromise
-    })
     await waitFor(() => expect(api().status).toBe("submitted"))
     assertLifecycleFrame(api(), qualifies ? 1 : 0, originalWrapper)
     assertStableDomIdentity()

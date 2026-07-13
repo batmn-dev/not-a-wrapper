@@ -1,6 +1,16 @@
 import { v } from "convex/values"
+import {
+  isAllowedFileMimeType,
+  MAX_FILE_SIZE,
+  normalizeFileMimeType,
+} from "../lib/file/policy"
+import { internal } from "./_generated/api"
 import type { Id } from "./_generated/dataModel"
-import type { MutationCtx, QueryCtx } from "./_generated/server"
+import {
+  internalMutation,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server"
 import {
   authenticatedMutation,
   authenticatedQuery,
@@ -31,13 +41,27 @@ type TrustedTextAttachmentReference = {
 
 type TrustedTextAttachmentCandidate = {
   _id: Id<"chatAttachments">
-  chatId: Id<"chats">
+  chatId?: Id<"chats">
   userId: Id<"users">
   storageId?: Id<"_storage">
   fileUrl: string
   fileName?: string
   fileType?: string
   fileSize?: number
+}
+
+const STAGED_ATTACHMENT_TTL_MS = 24 * 60 * 60 * 1000
+
+export function isStoredFileMetadataValid(
+  metadata: { size: number; contentType?: string | null } | null,
+  declaredType: string | undefined
+): boolean {
+  if (!metadata || metadata.size > MAX_FILE_SIZE) return false
+  const storedType = normalizeFileMimeType(metadata.contentType)
+  return (
+    isAllowedFileMimeType(storedType) &&
+    storedType === normalizeFileMimeType(declaredType)
+  )
 }
 
 export function isFileUploadLimitExceeded(
@@ -144,9 +168,7 @@ export const generateUploadUrl = authenticatedMutation({
       const todayCount = await getTodayUploadCount(ctx, user._id)
 
       if (isFileUploadLimitExceeded(user, todayCount)) {
-        throw new Error(
-          `Daily file upload limit reached (${DAILY_FILE_UPLOAD_LIMIT} files per day)`
-        )
+        return null
       }
     }
 
@@ -176,10 +198,8 @@ export const getUrl = authenticatedQuery({
   },
 })
 
-/**
- * Save file metadata after upload
- */
-export const saveAttachment = ownedChatMutation({
+/** Save an uploaded file as a user-owned staged attachment. */
+export const saveStagedAttachment = authenticatedMutation({
   args: {
     storageId: v.id("_storage"),
     fileName: v.optional(v.string()),
@@ -188,6 +208,13 @@ export const saveAttachment = ownedChatMutation({
   },
   handler: async (ctx, args) => {
     const user = ctx.user
+
+    const metadata = await ctx.db.system.get("_storage", args.storageId)
+    const storedType = normalizeFileMimeType(metadata?.contentType)
+    if (!metadata || !isStoredFileMetadataValid(metadata, args.fileType)) {
+      if (metadata) await ctx.storage.delete(args.storageId)
+      throw new Error("Stored file failed server validation")
+    }
 
     // Re-check daily upload limit to prevent bypass via pre-fetched upload URLs.
     if (getFileUploadLimit(user) !== null) {
@@ -198,9 +225,7 @@ export const saveAttachment = ownedChatMutation({
         // verify it belongs to this user. Deleting without ownership verification would
         // allow an attacker to delete other users' files by passing their storageId.
         // Orphaned files should be cleaned up by a scheduled background job.
-        throw new Error(
-          `Daily file upload limit reached (${DAILY_FILE_UPLOAD_LIMIT} files per day)`
-        )
+        return null
       }
     }
 
@@ -208,15 +233,97 @@ export const saveAttachment = ownedChatMutation({
     const fileUrl = await ctx.storage.getUrl(args.storageId)
     if (!fileUrl) throw new Error("Failed to get file URL")
 
-    return await ctx.db.insert("chatAttachments", {
-      chatId: ctx.chat._id,
+    const attachmentId = await ctx.db.insert("chatAttachments", {
       userId: user._id,
       storageId: args.storageId,
       fileUrl,
       fileName: args.fileName,
-      fileType: args.fileType,
-      fileSize: args.fileSize,
+      fileType: storedType,
+      fileSize: metadata.size,
+      stagedAt: Date.now(),
     })
+
+    await ctx.scheduler.runAfter(
+      STAGED_ATTACHMENT_TTL_MS,
+      internal.files.cleanupStagedAttachment,
+      { attachmentId }
+    )
+
+    return attachmentId
+  },
+})
+
+/**
+ * Bind a complete staged set to one owned chat. Every row is validated before
+ * any patch, so callers never receive or dispatch a partial subset.
+ */
+export const attachStagedFiles = ownedChatMutation({
+  args: { attachmentIds: v.array(v.id("chatAttachments")) },
+  handler: async (ctx, { attachmentIds }) => {
+    const uniqueIds = new Set(attachmentIds)
+    if (uniqueIds.size !== attachmentIds.length) {
+      throw new Error("Duplicate attachment reference")
+    }
+
+    const attachments = await Promise.all(
+      attachmentIds.map((attachmentId) => ctx.db.get(attachmentId))
+    )
+    for (const attachment of attachments) {
+      if (!attachment || attachment.userId !== ctx.user._id) {
+        throw new Error("Attachment not found")
+      }
+      if (attachment.chatId && attachment.chatId !== ctx.chat._id) {
+        throw new Error("Attachment belongs to another chat")
+      }
+      if (!attachment.storageId) {
+        throw new Error("Attachment is not ready")
+      }
+    }
+
+    for (const attachment of attachments) {
+      if (attachment?.chatId === ctx.chat._id) continue
+      await ctx.db.patch(attachment!._id, {
+        chatId: ctx.chat._id,
+        stagedAt: undefined,
+      })
+    }
+
+    return attachments.map((attachment) => ({
+      name: attachment!.fileName ?? "File",
+      contentType: attachment!.fileType ?? "application/octet-stream",
+      url: attachment!.fileUrl,
+      attachmentId: attachment!._id,
+    }))
+  },
+})
+
+/** Resolve an owner-verified preview source for the same-origin proxy. */
+export const getAttachmentPreview = authenticatedQuery({
+  args: { attachmentId: v.id("chatAttachments") },
+  handler: async (ctx, { attachmentId }) => {
+    const attachment = await ctx.db.get(attachmentId)
+    if (!attachment || attachment.userId !== ctx.user._id) return null
+    if (!attachment.storageId) return null
+    const url = await ctx.storage.getUrl(attachment.storageId)
+    if (!url) return null
+    return {
+      url,
+      fileName: attachment.fileName ?? "File",
+      fileType: attachment.fileType ?? "application/octet-stream",
+      fileSize: attachment.fileSize,
+    }
+  },
+})
+
+/** Best-effort server cleanup for abandoned staged rows. */
+export const cleanupStagedAttachment = internalMutation({
+  args: { attachmentId: v.id("chatAttachments") },
+  handler: async (ctx, { attachmentId }) => {
+    const attachment = await ctx.db.get(attachmentId)
+    if (!attachment?.stagedAt || attachment.chatId) return
+    if (Date.now() - attachment.stagedAt < STAGED_ATTACHMENT_TTL_MS) return
+    if (attachment.storageId) await ctx.storage.delete(attachment.storageId)
+    await ctx.db.delete(attachmentId)
   },
 })
 

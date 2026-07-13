@@ -44,6 +44,7 @@ function assistant(
     reasoningText?: string
     sourceUrl?: string
     serverMessageId?: string
+    messageStatus?: "aborted" | "failed" | "completed" | "awaiting_approval"
   } = {}
 ): UIMessage {
   const reasoningPart: { type: "reasoning"; text: string; state?: string } = {
@@ -67,6 +68,7 @@ function assistant(
     id,
     role: "assistant",
     parts,
+    status: opts.messageStatus,
     metadata:
       opts.durationMs !== undefined || opts.serverMessageId !== undefined
         ? {
@@ -134,12 +136,10 @@ describe("useActivityPanel ownership", () => {
   }
 
   function projectedSourceUrls(): string[] {
-    const section = latest!.panelProps.sections.find(
-      (candidate) => candidate.kind === "sources"
+    return (
+      latest!.panelProps.activity?.sourceResults.map((source) => source.url) ??
+      []
     )
-    return section?.kind === "sources"
-      ? section.sources.map((source) => source.url)
-      : []
   }
 
   it("owns the last assistant in the rendered path and follows a branch switch (id + duration + sources)", () => {
@@ -227,8 +227,32 @@ describe("useActivityPanel ownership", () => {
 
     expect(latest!.defaultActivityTurnId).toBe("a2")
     expect(latest!.panelActivityTurnId).toBe("a1")
-    expect(latest!.panelProps.sections).toEqual([])
+    expect(latest!.panelProps.activity).toBeUndefined()
     expect(latest!.panelCanOpen).toBe(false)
+  })
+
+  it("keeps a historical stopped turn terminal while a newer turn streams", () => {
+    render({
+      messages: [
+        user("u1"),
+        assistant("a1", {
+          messageStatus: "aborted",
+          reasoningText: "**Checking state**\nThe run stopped here.",
+        }),
+        user("u2"),
+        assistant("a2", { reasoningState: "streaming" }),
+      ],
+      status: "streaming",
+      isSubmitting: false,
+      selectedActivityTurnId: "a1",
+    })
+
+    expect(latest!.panelActivityTurnId).toBe("a1")
+    expect(latest!.panelProps.activity?.entries.at(-1)).toMatchObject({
+      kind: "completion",
+      title: "Generation stopped",
+      status: "stopped",
+    })
   })
 
   it("keeps a default-opened panel following the next pending generation", () => {
@@ -260,7 +284,7 @@ describe("useActivityPanel ownership", () => {
 
     expect(latest!.defaultActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.panelActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
-    expect(latest!.panelProps.sections).toEqual([])
+    expect(latest!.panelProps.activity).toBeUndefined()
     expect(latest!.panelCanOpen).toBe(false)
   })
 
@@ -373,7 +397,7 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.defaultActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.panelActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.isGenerationActive).toBe(true)
-    expect(latest!.panelProps.sections).toEqual([])
+    expect(latest!.panelProps.activity).toBeUndefined()
     expect(latest!.panelCanOpen).toBe(false)
   })
 
@@ -387,7 +411,7 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.defaultActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.panelActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.isGenerationActive).toBe(true)
-    expect(latest!.panelProps.sections).toEqual([])
+    expect(latest!.panelProps.activity).toBeUndefined()
     expect(latest!.panelCanOpen).toBe(false)
   })
 })

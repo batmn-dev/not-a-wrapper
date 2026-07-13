@@ -13,6 +13,16 @@ type SourceLike = {
   url: string
   title?: string
   sourceId?: string
+  description?: string
+  snippet?: string
+  siteName?: string
+  faviconDomain?: string
+}
+
+export type AssistantSourceResult = SourceUrlUIPart & {
+  description?: string
+  siteName?: string
+  faviconDomain?: string
 }
 
 // Type guard to check if an object is a valid source
@@ -26,7 +36,7 @@ function isValidSource(source: unknown): source is SourceLike {
   )
 }
 
-export function getSources(parts: UIMessage["parts"]): SourceUrlUIPart[] {
+export function getSources(parts: UIMessage["parts"]): AssistantSourceResult[] {
   const sources = parts
     ?.filter((part) => part.type === "source-url" || isStaticToolUIPart(part))
     .map((part) => {
@@ -58,11 +68,14 @@ export function getSources(parts: UIMessage["parts"]): SourceUrlUIPart[] {
   // Filter and convert to SourceUrlUIPart format
   const validSources = (sources || [])
     .filter(isValidSource)
-    .map((source): SourceUrlUIPart => ({
+    .map((source): AssistantSourceResult => ({
       type: "source-url",
       sourceId: source.sourceId || source.url,
       url: source.url,
       title: source.title || source.url,
+      description: source.description || source.snippet,
+      siteName: source.siteName,
+      faviconDomain: source.faviconDomain,
     }))
 
   // Dedupe by URL, keeping the first occurrence. Providers cite the same URL

@@ -22,12 +22,12 @@
  *    activity panel owns that state; the trigger's source count settles on
  *    the status flip). Message text is compared by the row's `children` prop.
  */
-import type { SourceUrlUIPart, ToolUIPart, UIMessage } from "ai"
+import type { ToolUIPart, UIMessage } from "ai"
 import { getStaticToolName, isStaticToolUIPart } from "ai"
 import type { DurableMessageStatus } from "./durable-contract"
 import { getReasoningDurationMs, getServerMessageId } from "./metadata"
 import { extractTextFromMessageParts, getToolRenderSignature } from "./parts"
-import { getSources } from "./sources"
+import { getSources, type AssistantSourceResult } from "./sources"
 
 type ChatStatus = "streaming" | "ready" | "submitted" | "error"
 
@@ -70,14 +70,20 @@ export const IDLE_REASONING_VIEW: ReasoningView = {
 }
 
 export type AssistantTurnView = {
+  /**
+   * Original message-part order, retained as the normalized chronology seam.
+   * Activity presentation derives from this array once; renderers must not
+   * rebuild ordering from the type-specific projections below.
+   */
+  orderedParts: UIMessage["parts"]
   /** Ordered text content across all text parts. */
   text: string
-  /** Static tool parts, for inline tool rendering and the panel timeline. */
+  /** Static tool parts, for phase detection and non-timeline result rendering. */
   toolParts: ToolUIPart[]
   /** Immutable snapshot of rendered tool input/output for memo comparison. */
   toolRenderSignature: string
   /** Normalized sources across source-url parts and tool outputs. */
-  sources: SourceUrlUIPart[]
+  sources: AssistantSourceResult[]
   /** Image-search results extracted from tool outputs. */
   searchImageResults: SearchImageResult[]
   reasoning: ReasoningView
@@ -200,6 +206,7 @@ export function deriveAssistantTurnView(
     parts?.filter((part): part is ToolUIPart => isStaticToolUIPart(part)) ?? []
 
   return {
+    orderedParts: parts ?? [],
     text: extractTextFromMessageParts(parts),
     toolParts,
     toolRenderSignature: getToolRenderSignature(parts),

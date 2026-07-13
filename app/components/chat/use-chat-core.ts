@@ -13,6 +13,7 @@ import {
   createChatTurnController,
   type ChatTurnMessage,
 } from "@/lib/chat-turn/chat-turn-controller"
+import { attachStagedFilesToChat, type Attachment } from "@/lib/file-handling"
 import { API_ROUTE_CHAT } from "@/lib/routes"
 import type { UserProfile } from "@/lib/user/types"
 import type { UIMessage } from "@ai-sdk/react"
@@ -32,16 +33,12 @@ import {
   useState,
 } from "react"
 import { useTurnContext } from "./turn-context"
-import {
-  cleanupOptimisticAttachments,
-  createOptimisticAttachments,
-  uploadFiles,
-} from "./use-file-upload"
 
 /** One send-type Chat turn's inputs, assembled by the Composer. */
 export type ChatTurnPayload = {
   text: string
   files: File[]
+  attachments: Attachment[]
 }
 
 type UseChatCoreProps = {
@@ -176,6 +173,10 @@ export function useChatCore({
   const searchParams = useSearchParams()
   const prompt = searchParams.get("prompt")
   const shouldAutoSubmitPrompt = searchParams.get("autoSubmit") === "1"
+  const handoffAttachmentIds = useMemo(
+    () => searchParams.getAll("attachment"),
+    [searchParams]
+  )
 
   // Chats operations
   const { updateTitle } = useChats()
@@ -356,9 +357,9 @@ export function useChatCore({
     checkLimitsAndNotify,
     ensureChatExists,
     setPreviousChatId,
-    cleanupOptimisticAttachments,
-    handleFileUploads: (currentChatId, files) =>
-      uploadFiles(convex, files, currentChatId),
+    cleanupOptimisticAttachments: () => undefined,
+    attachStagedFiles: (currentChatId, attachmentIds) =>
+      attachStagedFilesToChat(convex, currentChatId, attachmentIds),
     sendMessage,
     regenerate,
     toastError: (title) => toast({ title, status: "error" }),
@@ -498,9 +499,7 @@ export function useChatCore({
   // whether the turn was accepted (dispatched), so the Composer knows whether
   // to clear its persisted draft.
   const submit = useCallback(
-    async ({ text, files }: ChatTurnPayload): Promise<boolean> => {
-      const optimisticAttachments =
-        files.length > 0 ? createOptimisticAttachments(files) : []
+    async ({ text, files, attachments }: ChatTurnPayload): Promise<boolean> => {
       const submittedFiles = [...files]
 
       let accepted = false
@@ -508,7 +507,7 @@ export function useChatCore({
         text,
         messages,
         submittedFiles,
-        optimisticAttachments,
+        submittedAttachments: attachments,
         chatVersion: messages.length + 1, // current messages + 1 for the new message being sent
         onSuccess: (currentChatId) => {
           accepted = true
@@ -539,21 +538,46 @@ export function useChatCore({
     // hydration commit.
     if (!turnContextHydrated) return
 
-    const autoSubmitKey = `${chatId}:${prompt}`
+    const autoSubmitKey = `${chatId}:${prompt}:${handoffAttachmentIds.join(",")}`
     if (autoSubmittedPromptRef.current === autoSubmitKey) return
     autoSubmittedPromptRef.current = autoSubmitKey
 
-    const nextUrl = new URL(window.location.href)
-    nextUrl.searchParams.delete("prompt")
-    nextUrl.searchParams.delete("autoSubmit")
-    window.history.replaceState(
-      window.history.state,
-      "",
-      `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`
-    )
+    void (async () => {
+      try {
+        const attachments = await attachStagedFilesToChat(
+          convex,
+          chatId,
+          handoffAttachmentIds
+        )
+        const accepted = await submit({ text: prompt, files: [], attachments })
+        if (!accepted) {
+          autoSubmittedPromptRef.current = null
+          return
+        }
 
-    void submit({ text: prompt, files: [] })
-  }, [chatId, prompt, shouldAutoSubmitPrompt, turnContextHydrated, submit])
+        const nextUrl = new URL(window.location.href)
+        nextUrl.searchParams.delete("prompt")
+        nextUrl.searchParams.delete("autoSubmit")
+        nextUrl.searchParams.delete("attachment")
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`
+        )
+      } catch {
+        autoSubmittedPromptRef.current = null
+        toast({ title: "Failed to prepare attachments.", status: "error" })
+      }
+    })()
+  }, [
+    chatId,
+    convex,
+    handoffAttachmentIds,
+    prompt,
+    shouldAutoSubmitPrompt,
+    turnContextHydrated,
+    submit,
+  ])
 
   const { submitEdit } = useChatEdit({
     chatTurn,

@@ -48,15 +48,29 @@ function panelProps(sourceCount: number) {
   return {
     title: "Activity",
     durationSeconds: 5,
-    sections:
+    activity:
       sources.length > 0
-        ? [
-            {
-              kind: "sources" as const,
-              sources: sources as [SourceUrlUIPart, ...SourceUrlUIPart[]],
-            },
-          ]
-        : [],
+        ? {
+            entries: [
+              {
+                id: "search",
+                kind: "search" as const,
+                title: "Searching the web",
+                status: "complete" as const,
+                sources,
+              },
+              {
+                id: "completion",
+                kind: "completion" as const,
+                title: "Worked for 5s",
+                detail: "Done",
+                status: "complete" as const,
+              },
+            ] as const,
+            sourceResults: sources,
+            imageResults: [],
+          }
+        : undefined,
   }
 }
 
@@ -99,13 +113,12 @@ describe("ActivityPanel coexistence (R6)", () => {
       )
     })
 
-    const regions = document.querySelectorAll("section[aria-labelledby]")
+    const regions = document.querySelectorAll(
+      'section[aria-label="Reasoning details"]'
+    )
     expect(regions).toHaveLength(1)
-
-    const titleId = regions[0]?.getAttribute("aria-labelledby")
-    expect(titleId).toBeTruthy()
-    expect(document.getElementById(titleId ?? "")?.textContent).toBe("Activity")
-    expect(regions[0]?.getAttribute("aria-label")).toBeNull()
+    expect(regions[0]?.getAttribute("aria-labelledby")).toBeNull()
+    expect(regions[0]?.textContent).toContain("Activity")
     expect(
       document.querySelectorAll('[data-slot="sheet-content"]')
     ).toHaveLength(0)
@@ -118,7 +131,8 @@ describe("ActivityPanel coexistence (R6)", () => {
     expect(
       document.querySelectorAll('[data-testid="close-button"]')
     ).toHaveLength(1)
-    expect(document.querySelectorAll("img")).toHaveLength(5)
+    // Three visible search chips plus all five result rows.
+    expect(document.querySelectorAll("img")).toHaveLength(8)
   })
 
   it("collapses the slot on close but keeps the shell mounted until the width transition ends", () => {
@@ -147,7 +161,7 @@ describe("ActivityPanel coexistence (R6)", () => {
     )
     expect(stage?.getAttribute("data-state")).toBe("open")
     const openShell = document.querySelector<HTMLElement>(
-      "section[aria-labelledby]"
+      'section[aria-label="Reasoning details"]'
     )
     expect(openShell).toBeTruthy()
     expect(openShell?.getAttribute("aria-hidden")).toBeNull()
@@ -160,7 +174,7 @@ describe("ActivityPanel coexistence (R6)", () => {
     })
     expect(stage?.getAttribute("data-state")).toBe("closed")
     const closingShell = document.querySelector<HTMLElement>(
-      "section[aria-labelledby]"
+      'section[aria-label="Reasoning details"]'
     )
     expect(closingShell).toBeTruthy()
     expect(closingShell?.getAttribute("aria-hidden")).toBe("true")
@@ -174,9 +188,9 @@ describe("ActivityPanel coexistence (R6)", () => {
         })
       )
     })
-    expect(document.querySelectorAll("section[aria-labelledby]")).toHaveLength(
-      0
-    )
+    expect(
+      document.querySelectorAll('section[aria-label="Reasoning details"]')
+    ).toHaveLength(0)
   })
 
   it("falls back if the docked close transition end is skipped", () => {
@@ -232,13 +246,26 @@ describe("ActivityPanel coexistence (R6)", () => {
             open
             onOpenChange={() => {}}
             {...panelProps(0)}
-            sections={[
-              {
-                kind: "reasoning",
-                blocks: [{ text: "Visible reasoning" }],
-                isStreaming: false,
-              },
-            ]}
+            activity={{
+              entries: [
+                {
+                  id: "reasoning-0",
+                  kind: "reasoning",
+                  title: "Reasoning",
+                  detail: "Visible reasoning",
+                  status: "complete",
+                },
+                {
+                  id: "completion",
+                  kind: "completion",
+                  title: "Worked for 5s",
+                  detail: "Done",
+                  status: "complete",
+                },
+              ],
+              sourceResults: [],
+              imageResults: [],
+            }}
           />
         </ActivityPanelHostProvider>
       )
@@ -261,18 +288,22 @@ describe("ActivityPanel coexistence (R6)", () => {
     })
 
     const header = document.querySelector<HTMLElement>(
-      "section[aria-labelledby] > div"
+      'section[aria-label="Reasoning details"] > div'
     )
-    expect(header?.className).toContain("h-app-header")
+    expect(header?.className).toContain("spacing-app-header")
     expect(header?.className).toContain("sharp-edge-top-shadow")
-    expect(header?.className).toContain("sharp-edge-left-shadow")
+    expect(header?.className).not.toContain("sharp-edge-left-shadow")
     expect(header?.hasAttribute("data-scrolled")).toBe(false)
 
     const shell = document.querySelector<HTMLElement>(
-      "section[aria-labelledby]"
+      'section[aria-label="Reasoning details"]'
     )
-    expect(shell?.className).toContain("sharp-edge-left-shadow")
-    expect(shell?.className).not.toContain("border-s")
+    expect(shell?.className).not.toContain("sharp-edge-left-shadow")
+    expect(shell?.className).toContain("border-s")
+
+    const closeButton = shell?.querySelector('button[aria-label="Close"]')
+    expect(closeButton?.getAttribute("aria-expanded")).toBeNull()
+    expect(closeButton?.getAttribute("aria-controls")).toBeNull()
   })
 
   it("preserves source identity for duplicate URLs", () => {
@@ -301,12 +332,19 @@ describe("ActivityPanel coexistence (R6)", () => {
               open
               onOpenChange={() => {}}
               {...panelProps(0)}
-              sections={[
-                {
-                  kind: "sources",
-                  sources: sources as [SourceUrlUIPart, ...SourceUrlUIPart[]],
-                },
-              ]}
+              activity={{
+                entries: [
+                  {
+                    id: "search",
+                    kind: "search",
+                    title: "Searching the web",
+                    status: "complete",
+                    sources,
+                  },
+                ],
+                sourceResults: sources,
+                imageResults: [],
+              }}
             />
           </ActivityPanelHostProvider>
         )
@@ -317,6 +355,68 @@ describe("ActivityPanel coexistence (R6)", () => {
       expect(consoleError).not.toHaveBeenCalled()
     } finally {
       consoleError.mockRestore()
+    }
+  })
+
+  it("copies normalized tool code and exposes temporary completion feedback", () => {
+    vi.useFakeTimers()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    const originalClipboard = Object.getOwnPropertyDescriptor(
+      navigator,
+      "clipboard"
+    )
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+
+    try {
+      act(() => {
+        root?.render(
+          <ActivityPanelHostProvider>
+            <ActivityPanelDockSlot />
+            <ActivityPanel
+              open
+              onOpenChange={() => {}}
+              {...panelProps(0)}
+              activity={{
+                entries: [
+                  {
+                    id: "tool-copy",
+                    kind: "tool",
+                    title: "Checking tests",
+                    status: "complete",
+                    tool: {
+                      toolName: "python",
+                      displayName: "Python",
+                      code: "python -m pytest -q",
+                    },
+                  },
+                ],
+                sourceResults: [],
+                imageResults: [],
+              }}
+            />
+          </ActivityPanelHostProvider>
+        )
+      })
+
+      const copyButton = document.querySelector<HTMLButtonElement>(
+        'button[aria-label="Copy"]'
+      )
+      act(() => copyButton?.click())
+      expect(writeText).toHaveBeenCalledWith("python -m pytest -q")
+      expect(copyButton?.getAttribute("aria-label")).toBe("Copied")
+
+      act(() => vi.advanceTimersByTime(1000))
+      expect(copyButton?.getAttribute("aria-label")).toBe("Copy")
+    } finally {
+      if (originalClipboard) {
+        Object.defineProperty(navigator, "clipboard", originalClipboard)
+      } else {
+        Reflect.deleteProperty(navigator, "clipboard")
+      }
+      vi.useRealTimers()
     }
   })
 })

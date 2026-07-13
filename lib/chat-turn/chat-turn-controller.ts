@@ -3,8 +3,8 @@ import {
   createOptimisticEditMessageId,
   createOptimisticMessageId,
 } from "@/lib/chat-store/identity"
-import { MESSAGE_MAX_LENGTH } from "@/lib/config"
 import type { Attachment } from "@/lib/file-handling"
+import { evaluatePromptSize } from "./prompt-size-policy"
 import {
   buildChatTurnRequestBody,
   buildEditRequest,
@@ -25,8 +25,6 @@ import {
 // validation, optimistic frames, dispatch planning, and persistence routing.
 
 export type { ChatTurnMessage } from "./turn-plans"
-
-const MESSAGE_TOO_LONG_ERROR = `The message you submitted was too long, please submit something shorter. (Max ${MESSAGE_MAX_LENGTH} characters)`
 
 type SetMessagesAction =
   ChatTurnMessage[] | ((messages: ChatTurnMessage[]) => ChatTurnMessage[])
@@ -86,9 +84,9 @@ export type ChatTurnAdapters = {
   ensureChatExists: (userId: string, input: string) => Promise<string | null>
   setPreviousChatId: (chatId: string) => void
   cleanupOptimisticAttachments: (attachments?: Array<{ url?: string }>) => void
-  handleFileUploads: (
+  attachStagedFiles: (
     chatId: string,
-    files: File[]
+    attachmentIds: string[]
   ) => Promise<UploadedAttachment[] | null>
   sendMessage: SendMessage
   regenerate: (options?: RegenerateMessageOptions) => void | Promise<void>
@@ -107,6 +105,7 @@ export type SendTurnArgs = {
   text: string
   messages?: ChatTurnMessage[]
   submittedFiles?: File[]
+  submittedAttachments?: UploadedAttachment[]
   optimisticAttachments?: OptimisticAttachment[]
   chatVersion?: number
   onSuccess?: (chatId: string) => void
@@ -213,6 +212,7 @@ async function runSendTurn(
     text,
     messages = [],
     submittedFiles = [],
+    submittedAttachments = [],
     optimisticAttachments = [],
     chatVersion,
     onSuccess,
@@ -221,112 +221,85 @@ async function runSendTurn(
 ) {
   if (adapters.getIsSending()) return
 
+  // Read the Turn context at run time — never from a render-time closure.
+  const snapshot = adapters.getTurnSnapshot()
+
   // Rejected payloads must create no chat, navigation, or optimistic row.
-  if (text.length > MESSAGE_MAX_LENGTH) {
+  const promptSize = evaluatePromptSize({
+    modelId: snapshot.selectedModel,
+    systemPrompt: snapshot.systemPrompt,
+    messages,
+    nextText: text,
+    submittedFiles,
+  })
+  if (!promptSize.ok) {
     if (optimisticAttachments.length > 0) {
       adapters.cleanupOptimisticAttachments(optimisticAttachments)
     }
-    adapters.toastError(MESSAGE_TOO_LONG_ERROR)
+    adapters.toastError(promptSize.message)
     return
   }
 
   adapters.setIsSending(true)
   adapters.setIsSubmitting(true)
-
-  // Read the Turn context at run time — never from a render-time closure.
-  const snapshot = adapters.getTurnSnapshot()
-
-  const optimisticId = (
-    adapters.createOptimisticMessageId ?? createOptimisticMessageId
-  )()
-  const optimisticMessage = {
-    id: optimisticId,
-    role: "user",
-    createdAt: (adapters.now ?? (() => new Date()))(),
-    parts: [
-      { type: "text", text },
-      ...optimisticAttachments.map((attachment) => ({
-        type: "file" as const,
-        filename: attachment.name,
-        mediaType: attachment.contentType,
-        url: attachment.url,
-      })),
-    ],
-  } satisfies ChatTurnMessage
-
-  adapters.setMessages((prev) => [...prev, optimisticMessage])
-
-  const getFileUrlsFromParts = () =>
-    optimisticMessage.parts
-      ?.filter((part) => part.type === "file")
-      .map((part) => ({ url: (part as { url?: string }).url })) || []
-
-  const cleanupOptimistic = () => {
-    adapters.cleanupOptimisticAttachments(getFileUrlsFromParts())
-  }
+  let optimisticId: string | null = null
+  let optimisticMessage: (ChatTurnMessage & { role: "user" }) | null = null
 
   const removeOptimistic = () => {
-    adapters.setMessages((prev) =>
-      prev.filter((message) => message.id !== optimisticId)
-    )
-    cleanupOptimistic()
+    if (!optimisticId) return
+    const id = optimisticId
+    adapters.setMessages((prev) => prev.filter((message) => message.id !== id))
   }
 
   try {
     const userId = await adapters.resolveUserId()
     if (!userId) {
-      // Same cleanup as every other rejected path: drop the optimistic bubble
-      // and revoke its blob: URLs — the Composer restores the payload on the
-      // rejected turn, so leaving the bubble would show the text twice.
-      removeOptimistic()
       return
     }
 
     const allowed = await adapters.checkLimitsAndNotify(userId)
     if (!allowed) {
-      removeOptimistic()
       return
     }
 
     const currentChatId = await adapters.ensureChatExists(userId, text)
     if (!currentChatId) {
-      removeOptimistic()
       return
     }
 
     adapters.setPreviousChatId(currentChatId)
 
-    let attachments: UploadedAttachment[] | null = []
-    if (submittedFiles.length > 0) {
-      attachments = await adapters.handleFileUploads(
+    let attachments: UploadedAttachment[] | null = submittedAttachments
+    const attachmentIds = submittedAttachments.flatMap((attachment) =>
+      attachment.attachmentId ? [attachment.attachmentId] : []
+    )
+    if (attachmentIds.length !== submittedAttachments.length) return
+    if (attachmentIds.length > 0) {
+      attachments = await adapters.attachStagedFiles(
         currentChatId,
-        submittedFiles
+        attachmentIds
       )
-      if (attachments === null) {
-        removeOptimistic()
+      if (attachments === null || attachments.length !== attachmentIds.length)
         return
-      }
     }
 
-    const dispatchedMessage = {
-      ...optimisticMessage,
+    optimisticId = (
+      adapters.createOptimisticMessageId ?? createOptimisticMessageId
+    )()
+    optimisticMessage = {
+      id: optimisticId,
+      role: "user",
+      createdAt: (adapters.now ?? (() => new Date()))(),
       parts: [
         { type: "text", text },
         ...(convertAttachmentsToFiles(attachments) ?? []),
       ],
-    } satisfies ChatTurnMessage
-
-    if (submittedFiles.length > 0) {
-      // Upload completion changes only the attachment parts on the row that is
-      // already mounted. Keeping the optimistic id, role, and exact Date
-      // object here prevents an attachment-only intermediate message from
-      // losing its timestamp before the SDK performs the transport handoff.
-      adapters.setMessages((prev) =>
-        prev.map((message) =>
-          message.id === optimisticId ? dispatchedMessage : message
-        )
-      )
     }
+    adapters.setMessages((prev) => [...prev, optimisticMessage!])
+
+    const dispatchedMessage = {
+      ...optimisticMessage,
+    } satisfies ChatTurnMessage
 
     adapters.sendMessage(
       {
@@ -350,7 +323,6 @@ async function runSendTurn(
     )
 
     adapters.setHasSentFirstMessage(true)
-    cleanupOptimistic()
     void adapters.turnStore.persistTurnMessage(dispatchedMessage, currentChatId)
     onSuccess?.(currentChatId)
   } catch {
@@ -445,13 +417,19 @@ async function runEditTurn(
     return reject("missing-message-timestamp", message)
   }
 
-  if (newContent.length > MESSAGE_MAX_LENGTH) {
-    adapters.toastError(MESSAGE_TOO_LONG_ERROR)
-    return reject("message-too-long", MESSAGE_TOO_LONG_ERROR)
-  }
-
   if (!editPlan.ok) {
     return reject("plan-rejected", "Unable to prepare edit.")
+  }
+
+  const promptSize = evaluatePromptSize({
+    modelId: snapshot.selectedModel,
+    systemPrompt: snapshot.systemPrompt,
+    messages: editPlan.trimmedMessages,
+    nextText: newContent,
+  })
+  if (!promptSize.ok) {
+    adapters.toastError(promptSize.message)
+    return reject("message-too-long", promptSize.message)
   }
 
   try {

@@ -39,11 +39,6 @@ type BaseMessageProps = {
   onQuote?: (text: string, messageId: string) => void
   isDurableChat?: boolean
   finishReason?: string
-  onToolApproval?: (
-    approvalId: string,
-    approved: boolean,
-    reason?: string
-  ) => Promise<void> | void
 }
 
 type AssistantMessageProps = BaseMessageProps & {
@@ -111,11 +106,6 @@ function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
   if (prev.isDurableChat !== next.isDurableChat) return false
   if (Boolean(prev.onReload) !== Boolean(next.onReload)) return false
   if (prev.retryModelId !== next.retryModelId) return false
-  if (
-    prev.variant === "assistant" &&
-    prev.onToolApproval !== next.onToolApproval
-  )
-    return false
   if (prev.onSelectBranch !== next.onSelectBranch) return false
   if (!branchesEqual(prev.branch, next.branch)) return false
 
@@ -158,7 +148,6 @@ function MessageInner({
   onQuote,
   isDurableChat,
   finishReason,
-  onToolApproval,
 }: MessageProps) {
   const [copied, setCopied] = useState(false)
 
@@ -202,7 +191,6 @@ function MessageInner({
         onQuote={onQuote}
         isDurableChat={isDurableChat}
         finishReason={finishReason}
-        onToolApproval={onToolApproval}
       >
         {children}
       </MessageAssistant>

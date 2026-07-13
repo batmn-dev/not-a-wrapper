@@ -2,12 +2,13 @@
 
 import {
   deriveAssistantActivityPresentation,
-  type AssistantActivitySection,
+  type AssistantActivityModel,
 } from "@/lib/chat-messages/assistant-activity"
 import {
   deriveAssistantTurnPhase,
   deriveAssistantTurnView,
   IDLE_REASONING_VIEW,
+  type AssistantTurnRenderStatus,
 } from "@/lib/chat-messages/assistant-turn"
 import { getServerMessageId } from "@/lib/chat-messages/metadata"
 import { toCompletedDurationSeconds } from "@/lib/format-duration"
@@ -16,11 +17,30 @@ import { useReasoningPhase } from "./use-reasoning-phase"
 
 type ChatStatus = "streaming" | "ready" | "submitted" | "error"
 
+const DURABLE_RENDER_STATUSES = new Set<AssistantTurnRenderStatus>([
+  "submitted",
+  "streaming",
+  "ready",
+  "error",
+  "aborted",
+  "failed",
+  "completed",
+  "awaiting_approval",
+])
+
+function messageRenderStatus(message: UIMessage | undefined) {
+  const candidate = (message as { status?: unknown } | undefined)?.status
+  return typeof candidate === "string" &&
+    DURABLE_RENDER_STATUSES.has(candidate as AssistantTurnRenderStatus)
+    ? (candidate as AssistantTurnRenderStatus)
+    : "ready"
+}
+
 export const PENDING_ACTIVITY_TURN_ID = "__pending_activity_turn__"
 
 /** Data the selector hands to `<ActivityPanel>` via `panelProps`. */
 export type ActivityPanelProps = {
-  sections: readonly AssistantActivitySection[]
+  activity: AssistantActivityModel | undefined
   durationSeconds: number | undefined
 }
 
@@ -229,9 +249,13 @@ export function useActivityPanel({
     turnKey: defaultActivityTurnId,
   })
 
+  const panelStatus: AssistantTurnRenderStatus =
+    isPanelDefaultTurn && generationActive
+      ? status
+      : messageRenderStatus(panelMessage)
   const panelPhase = panelView
     ? deriveAssistantTurnPhase(panelView, {
-        status: isPanelDefaultTurn ? status : "ready",
+        status: panelStatus,
         isLast: isPanelDefaultTurn,
       })
     : ({ kind: "submitted" } as const)
@@ -241,18 +265,21 @@ export function useActivityPanel({
   const presentation = panelView
     ? deriveAssistantActivityPresentation(panelView, panelPhase, {
         durationMs: panelDurationMs,
+        status: panelStatus,
       })
     : undefined
   const panelCanOpen = presentation?.kind === "disclosure"
 
   const panelProps: ActivityPanelProps = isPendingActivityTurn
     ? {
-        sections: [],
+        activity: undefined,
         durationSeconds: undefined,
       }
     : {
-        sections:
-          presentation?.kind === "disclosure" ? presentation.sections : [],
+        activity:
+          presentation?.kind === "disclosure"
+            ? presentation.activity
+            : undefined,
         durationSeconds: toCompletedDurationSeconds(panelDurationMs),
       }
 

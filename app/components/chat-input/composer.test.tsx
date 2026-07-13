@@ -15,6 +15,7 @@ import {
 
 let Composer: (typeof import("./composer"))["Composer"]
 type ComposerHandle = import("./composer").ComposerHandle
+type PendingAttachment = import("./pending-attachment").PendingAttachment
 const promptInputMockCalls: Array<{
   expanded?: boolean
   maxHeight?: number | string
@@ -34,9 +35,26 @@ const composerMocks = vi.hoisted(() => ({
   clearDraftFns: new Map<string | null, () => void>(),
   setDraftValueById: [] as Array<{ draftId: string | null; value: string }>,
   clearDraftById: [] as Array<string | null>,
-  files: [] as File[],
+  attachments: [] as PendingAttachment[],
   setDraftValue: vi.fn(),
   clearDraft: vi.fn(),
+  handleFileRemove: vi.fn(),
+  retryAttachment: vi.fn(),
+  consumeAttachments: vi.fn(),
+  announce: vi.fn(),
+  handleFileUpload: vi.fn(),
+  handleLargePaste: vi.fn((text: string) => ({
+    id: "generated-paste",
+    kind: "generated-large-paste" as const,
+    status: "ready" as const,
+    file: new File([text], "Pasted text 1.txt", { type: "text/plain" }),
+    signature: `paste-${text.length}`,
+    text,
+    characterCount: text.length,
+    preview: text.slice(0, 20),
+    delivery: "inline" as const,
+    uploaded: null,
+  })),
 }))
 
 beforeAll(async () => {
@@ -67,6 +85,10 @@ vi.mock("@/app/components/chat/turn-context", () => ({
 
 vi.mock("@/lib/user-store/provider", () => ({
   useUser: () => ({ user: { id: "user-1" } }),
+}))
+
+vi.mock("convex/react", () => ({
+  useConvex: () => ({}),
 }))
 
 vi.mock("@/app/hooks/use-chat-draft", () => ({
@@ -101,12 +123,15 @@ vi.mock("@/app/hooks/use-chat-draft", () => ({
 }))
 
 vi.mock("@/app/components/chat/use-file-upload", () => ({
-  useFileUpload: () => ({
-    files: composerMocks.files,
-    handleFileUpload: vi.fn(),
-    handleFileRemove: vi.fn(),
-    clearFiles: vi.fn(),
-    restoreFiles: vi.fn(),
+  useFilePickerState: () => ({
+    attachments: composerMocks.attachments,
+    announcement: "",
+    announce: composerMocks.announce,
+    handleFileUpload: composerMocks.handleFileUpload,
+    handleLargePaste: composerMocks.handleLargePaste,
+    handleFileRemove: composerMocks.handleFileRemove,
+    retryAttachment: composerMocks.retryAttachment,
+    consumeAttachments: composerMocks.consumeAttachments,
   }),
 }))
 
@@ -192,7 +217,7 @@ describe("Composer primary action", () => {
     composerMocks.clearDraftFns.clear()
     composerMocks.setDraftValueById.length = 0
     composerMocks.clearDraftById.length = 0
-    composerMocks.files = []
+    composerMocks.attachments = []
     vi.clearAllMocks()
   })
 
@@ -293,7 +318,7 @@ describe("Composer primary action", () => {
     expect(tooltipMarkup).toContain("↵")
   })
 
-  it("stays compact when empty; expands for hard newlines and attached files", () => {
+  it("stays compact for empty and attachment-only states; expands for hard newlines", () => {
     const unmountCurrent = () => {
       const mountedRoot = root
       if (mountedRoot) {
@@ -317,11 +342,66 @@ describe("Composer primary action", () => {
 
     unmountCurrent()
     composerMocks.draftValue = ""
-    composerMocks.files = [
-      new File(["hello"], "hello.txt", { type: "text/plain" }),
+    composerMocks.attachments = [
+      {
+        id: "attachment-1",
+        kind: "selected-file",
+        status: "ready",
+        file: new File(["hello"], "hello.txt", { type: "text/plain" }),
+        signature: "hello",
+        uploaded: {
+          name: "hello.txt",
+          contentType: "text/plain",
+          url: "/api/files/attachment-1/preview",
+          attachmentId: "attachment-1",
+        },
+      },
     ]
     renderComposer({ isSubmitting: false, status: "ready" })
-    expect(promptInputMockCalls.at(-1)?.expanded).toBe(true)
+    expect(promptInputMockCalls.at(-1)?.expanded).toBe(false)
+  })
+
+  it("keeps Send disabled while an attachment is uploading or failed", () => {
+    const source = {
+      id: "attachment-1",
+      kind: "selected-file" as const,
+      file: new File(["hello"], "hello.txt", { type: "text/plain" }),
+      signature: "hello",
+    }
+    composerMocks.draftValue = "Read this"
+    composerMocks.attachments = [
+      { ...source, status: "uploading", attemptId: 1 },
+    ]
+    let mounted = renderComposer({ isSubmitting: false, status: "ready" })
+    expect(
+      (
+        mounted.querySelector(
+          '[data-testid="send-button"]'
+        ) as HTMLButtonElement
+      ).disabled
+    ).toBe(true)
+
+    act(() => root?.unmount())
+    container?.remove()
+    root = null
+    container = null
+    composerMocks.attachments = [
+      {
+        ...source,
+        status: "failed",
+        attemptId: 1,
+        error: "offline",
+        retryable: true,
+      },
+    ]
+    mounted = renderComposer({ isSubmitting: false, status: "ready" })
+    expect(
+      (
+        mounted.querySelector(
+          '[data-testid="send-button"]'
+        ) as HTMLButtonElement
+      ).disabled
+    ).toBe(true)
   })
 
   it("does not leak the previous scoped draft when the project scope changes", () => {
@@ -402,7 +482,21 @@ describe("Composer primary action", () => {
   it("emits one turn payload on send and clears the draft only on success", async () => {
     const attachment = new File(["hello"], "hello.txt", { type: "text/plain" })
     composerMocks.draftValue = "hello there"
-    composerMocks.files = [attachment]
+    composerMocks.attachments = [
+      {
+        id: "attachment-1",
+        kind: "selected-file",
+        status: "ready",
+        file: attachment,
+        signature: "hello-signature",
+        uploaded: {
+          name: "hello.txt",
+          contentType: "text/plain",
+          url: "/api/files/attachment-1/preview",
+          attachmentId: "attachment-1",
+        },
+      },
+    ]
 
     const onTurn = vi.fn(async () => true)
     const mounted = renderComposer({
@@ -424,8 +518,19 @@ describe("Composer primary action", () => {
     expect(onTurn).toHaveBeenCalledWith({
       text: "hello there",
       files: [attachment],
+      attachments: [
+        {
+          name: "hello.txt",
+          contentType: "text/plain",
+          url: "/api/files/attachment-1/preview",
+          attachmentId: "attachment-1",
+        },
+      ],
     })
     expect(composerMocks.clearDraft).toHaveBeenCalledTimes(1)
+    expect(composerMocks.consumeAttachments).toHaveBeenCalledWith([
+      "attachment-1",
+    ])
     // Display cleared at handoff (the controlled value the input renders).
     expect(promptInputMockCalls.at(-1)?.value).toBe("")
   })
@@ -454,6 +559,26 @@ describe("Composer primary action", () => {
     // The rejection toast must not fire over an emptied composer: the typed
     // text comes back so the user can fix and resend.
     expect(promptInputMockCalls.at(-1)?.value).toBe("rejected send")
+  })
+
+  it("restores the same generated attachment after a rejected send", async () => {
+    const generated = composerMocks.handleLargePaste("x".repeat(10_000))
+    composerMocks.attachments = [generated]
+    const mounted = renderComposer({
+      onTurn: vi.fn(async () => false),
+      isSubmitting: false,
+      status: "ready",
+    })
+
+    const send = mounted.querySelector(
+      '[data-testid="send-button"]'
+    ) as HTMLButtonElement | null
+    await act(async () => {
+      send?.click()
+      await Promise.resolve()
+    })
+
+    expect(composerMocks.consumeAttachments).not.toHaveBeenCalled()
   })
 
   it("insertQuote persists into the draft; setText is display-only", async () => {
