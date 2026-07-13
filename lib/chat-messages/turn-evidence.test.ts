@@ -218,9 +218,112 @@ describe("source provenance", () => {
     ])
     const [search] = evidence.timeline as [ToolCallEvidence]
     expect(search.lifecycle.kind).toBe("succeeded")
-    expect(search.searchQuery).toBe("final")
+    expect(search.webActivity).toMatchObject({
+      kind: "searched",
+      query: "final",
+    })
     expect(search.sources.map((s) => s.url)).toEqual(["https://result.example"])
   })
+
+  it("keeps unattributed citations off browse actions — nearest-preceding narrows to searches", () => {
+    // The observed defect: a trailing citation must reach the search, not the
+    // page-read that happens to be the most recent search-classified call.
+    const evidence = deriveTurnEvidence(
+      parts([
+        {
+          type: "tool-web_search",
+          toolCallId: "searched",
+          state: "output-available",
+          input: {},
+          output: { action: { type: "search", query: "news today" } },
+        },
+        {
+          type: "tool-web_search",
+          toolCallId: "browsed",
+          state: "output-available",
+          input: {},
+          output: { action: { type: "openPage", url: "https://www.theguardian.com/us" } },
+        },
+        {
+          type: "source-url",
+          sourceId: "citation",
+          url: "https://apnews.com/",
+          title: "AP",
+        },
+      ])
+    )
+    const [searched, browsed] = evidence.timeline as [
+      ToolCallEvidence,
+      ToolCallEvidence,
+    ]
+    expect(searched.sources.map((s) => s.url)).toEqual(["https://apnews.com/"])
+    expect(browsed.sources).toEqual([])
+    expect(browsed.webActivity).toEqual({
+      kind: "opened-page",
+      url: "https://www.theguardian.com/us",
+    })
+  })
+
+  it("attaches explicitly-attributed citations to browse actions — explicit beats category", () => {
+    const evidence = deriveTurnEvidence(
+      parts([
+        {
+          type: "tool-web_search",
+          toolCallId: "browsed",
+          state: "output-available",
+          input: {},
+          output: { action: { type: "open_page", url: "https://apnews.com/" } },
+        },
+        {
+          type: "source-url",
+          sourceId: "explicit",
+          url: "https://apnews.com/article",
+          title: "AP article",
+          toolCallId: "browsed",
+        },
+      ])
+    )
+    const [browsed] = evidence.timeline as [ToolCallEvidence]
+    expect(browsed.webActivity?.kind).toBe("opened-page")
+    expect(browsed.sources.map((s) => s.url)).toEqual([
+      "https://apnews.com/article",
+    ])
+  })
+
+  it.each([
+    [
+      { action: { type: "findInPage", url: "https://apnews.com/", pattern: "Latest" } },
+      { kind: "found-in-page", url: "https://apnews.com/", pattern: "Latest" },
+    ],
+    [
+      { action: { type: "search", query: "q1", queries: ["q1", "q2"] } },
+      { kind: "searched", query: "q1", queries: ["q1", "q2"] },
+    ],
+    [
+      { action: { type: "somethingNew", url: "https://x.example" } },
+      { kind: "unknown" },
+    ],
+    [
+      { action: { type: "openPage" } }, // browse without a url is not a browse
+      { kind: "unknown" },
+    ],
+  ] as const)(
+    "interprets web activity output %o as %o",
+    (output, expected) => {
+      const [item] = deriveTurnEvidence(
+        parts([
+          {
+            type: "tool-web_search",
+            toolCallId: "c1",
+            state: "output-available",
+            input: {},
+            output,
+          },
+        ])
+      ).timeline as [ToolCallEvidence]
+      expect(item.webActivity).toEqual(expected)
+    }
+  )
 
   it("derives turn-level sources identically to getSources", () => {
     const fixture = parts([

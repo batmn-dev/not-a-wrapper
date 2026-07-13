@@ -12,7 +12,6 @@ import {
   THREAD_GUTTER_VARS,
   THREAD_MAXWIDTH_VARS,
 } from "@/app/components/chat/thread-bounds"
-import { ToolInvocation } from "@/app/components/chat/tool-invocation"
 import { TurnContextProvider } from "@/app/components/chat/turn-context"
 import { LayoutApp } from "@/app/components/layout/layout-app"
 import { Icon } from "@/components/ui/icon"
@@ -164,57 +163,6 @@ The quadratic formula is $x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$.
 That covers all the major markdown formatting elements!`
 
 // ─── Mock data for tool & source components ──────────────────────────────────
-
-const MOCK_TOOL_RUNNING = {
-  type: "tool-web_search",
-  toolCallId: "call_search_001",
-  state: "input-available",
-  input: { query: "quantum computing recent advances 2025" },
-} as unknown as ToolUIPart
-
-const MOCK_TOOL_COMPLETED = {
-  type: "tool-web_search",
-  toolCallId: "call_search_002",
-  state: "output-available",
-  input: { query: "quantum computing recent advances 2025" },
-  output: [
-    {
-      url: "https://example.com/quantum-computing",
-      title: "Advances in Quantum Computing",
-      snippet:
-        "Recent breakthroughs in quantum error correction have brought us closer to fault-tolerant quantum computation.",
-    },
-    {
-      url: "https://arxiv.org/abs/2401.12345",
-      title: "Topological Quantum Error Correction",
-      snippet:
-        "A novel approach to fault-tolerant quantum computation using topological qubits.",
-    },
-    {
-      url: "https://nature.com/articles/quantum-2025",
-      title: "Nature: Quantum Computing Review 2025",
-      snippet:
-        "A comprehensive review of progress in quantum computing hardware and algorithms.",
-    },
-  ],
-} as unknown as ToolUIPart
-
-const MOCK_TOOL_GENERIC = {
-  type: "tool-my_github_server_create_issue",
-  toolCallId: "call_github_003",
-  state: "output-available",
-  input: {
-    title: "Fix quantum entanglement module",
-    body: "The entanglement fidelity drops below threshold under load.",
-    labels: ["bug", "quantum"],
-  },
-  output: {
-    title: "Issue #42 created",
-    html_url: "https://github.com/example/quantum-repo/issues/42",
-  },
-} as unknown as ToolUIPart
-
-const MOCK_MULTI_TOOLS = [MOCK_TOOL_COMPLETED, MOCK_TOOL_GENERIC]
 
 const MOCK_SOURCES: SourceUrlUIPart[] = [
   {
@@ -758,62 +706,6 @@ export default function ThinkingStatesTestPage() {
                 <code>onReload</code>. Only shown on the last message in the
                 conversation. Rendered at the end of the assistant message,
                 above the action buttons.
-              </StateAnnotation>
-            </AssistantShell>
-
-            {/* ─── Tool Invocations ─── */}
-            <AssistantShell>
-              <ToolInvocation toolInvocations={[MOCK_TOOL_RUNNING]} />
-              <StateAnnotation title="ToolInvocation — single tool, running">
-                Shown when a tool part has{" "}
-                <code>state === &quot;input-available&quot;</code> (or
-                <code>&quot;input-streaming&quot;</code> for partial args). The
-                card displays a &quot;Running&quot; badge with a spinner, the
-                tool name resolved by
-                <code>getStaticToolName()</code> from the <code>type</code>{" "}
-                field (e.g.,
-                <code>tool-web_search</code> → <code>Web Search</code>), and the
-                input arguments. Rendered by <code>tool-invocation.tsx</code> →{" "}
-                <code>SingleToolCard</code>. Expandable to show the arguments
-                section. Built-in tool names (web_search, google_search) get
-                human-readable display names and icons via{" "}
-                <code>BUILTIN_TOOL_DISPLAY</code>.
-              </StateAnnotation>
-            </AssistantShell>
-
-            <AssistantShell>
-              <ToolInvocation
-                toolInvocations={[MOCK_TOOL_COMPLETED]}
-                defaultOpen
-              />
-              <StateAnnotation title="ToolInvocation — single tool, completed (expanded)">
-                When <code>state === &quot;output-available&quot;</code>, the
-                badge transitions to a green &quot;Completed&quot; pill via{" "}
-                <code>AnimatePresence</code> with a blur/scale morph. The result
-                section appears below the arguments. Search results (arrays with{" "}
-                <code>url</code>/<code>title</code>/<code>snippet</code>) get
-                rich link formatting; other results fall back to JSON.{" "}
-                <code>defaultOpen</code> starts the card expanded. Rendered
-                conditionally by
-                <code>message-assistant.tsx</code> only when
-                <code>preferences.showToolInvocations</code> is true.
-              </StateAnnotation>
-            </AssistantShell>
-
-            <AssistantShell>
-              <ToolInvocation toolInvocations={MOCK_MULTI_TOOLS} />
-              <StateAnnotation title="ToolInvocation — multi-tool group">
-                When multiple tool invocations have different{" "}
-                <code>toolCallId</code>s,
-                <code>ToolInvocation</code> renders a grouped container with a
-                &quot;Tools executed&quot; header, a count badge, and a
-                collapsible list of individual tool cards. Each card inside uses{" "}
-                <code>SingleToolView</code>. Common during multi-step agent
-                workflows where the model calls web_search + code_execution +
-                custom tools in parallel. MCP tool names appear namespaced
-                (e.g.,
-                <code>my_github_server_create_issue</code>) and display in
-                monospace.
               </StateAnnotation>
             </AssistantShell>
 

@@ -9,6 +9,8 @@ import type {
   ActivityEntryStatus,
   AssistantActivityEntry,
   AssistantActivityModel,
+  AssistantActivitySearchEntry,
+  AssistantActivityToolEntry,
 } from "@/lib/chat-messages/assistant-activity"
 import { parseSafeExternalUrl } from "@/lib/url-safety"
 import { RiCheckLine, RiCodeLine, RiFileCopyLine } from "@remixicon/react"
@@ -46,12 +48,13 @@ function ActivityToolCard({
   entry,
   onToolApproval,
 }: {
-  entry: AssistantActivityEntry
+  entry: AssistantActivityToolEntry
   onToolApproval?: ToolApprovalHandler
 }) {
   const [copied, setCopied] = useState(false)
-  const code = entry.tool?.code
-  const approvalId = entry.tool?.approvalId
+  const code = entry.tool.code
+  const approvalId =
+    entry.status === "approval" ? entry.tool.approvalId : undefined
   const copy = () => {
     if (!code) return
     void navigator.clipboard?.writeText(code)
@@ -64,7 +67,7 @@ function ActivityToolCard({
       <div className="flex h-12 items-center gap-2 px-4">
         <Icon icon={RiCodeLine} slotSize={16} className="shrink-0" />
         <span className="min-w-0 flex-1 truncate text-sm font-medium">
-          {entry.tool?.displayName ?? entry.title}
+          {entry.tool.displayName}
         </span>
         {code ? (
           <button
@@ -112,10 +115,10 @@ function sourceDomain(url: string): string {
   return parseSafeExternalUrl(url)?.hostname ?? url
 }
 
-function SearchSourceChips({ entry }: { entry: AssistantActivityEntry }) {
+function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
   const [expanded, setExpanded] = useState(false)
   const chipGroupId = useId()
-  const sources = entry.sources ?? []
+  const sources = entry.sources
   if (sources.length === 0) return null
   const visible = expanded ? sources : sources.slice(0, VISIBLE_SOURCE_CHIPS)
   const remaining = sources.length - visible.length
@@ -183,35 +186,46 @@ function SearchSourceChips({ entry }: { entry: AssistantActivityEntry }) {
   )
 }
 
-const STATUS_MARKERS: Record<
-  Exclude<ActivityEntryStatus, "complete" | "running">,
-  "approval" | "error" | "stopped"
-> = {
-  approval: "approval",
-  error: "error",
-  denied: "error",
-  stopped: "stopped",
+function statusMarker(
+  status: ActivityEntryStatus
+): "approval" | "error" | "stopped" | undefined {
+  switch (status) {
+    case "approval":
+      return "approval"
+    case "error":
+    case "denied":
+      return "error"
+    case "stopped":
+      return "stopped"
+    case "running":
+    case "complete":
+      return undefined
+  }
 }
 
-/** Exhaustive status/kind-to-marker mapping shared by every Activity row. */
+/**
+ * Exhaustive status/kind-to-marker mapping shared by every Activity row.
+ * The closed entry algebra makes the invariants structural: only the
+ * completion row can reach the completedRun checkmark, and a reasoning row
+ * has no failure status to take a status marker from.
+ */
 export function activityEntryMarker(entry: AssistantActivityEntry) {
-  if (entry.kind === "completion" && entry.status === "complete") {
-    return "completedRun" as const
-  }
-  if (entry.status !== "complete" && entry.status !== "running") {
-    return STATUS_MARKERS[entry.status]
+  if (entry.kind === "completion") {
+    return entry.status === "complete"
+      ? ("completedRun" as const)
+      : entry.status === "error"
+        ? ("error" as const)
+        : ("stopped" as const)
   }
   switch (entry.kind) {
     case "reasoning":
       return "reasoning" as const
     case "search":
-      return "search" as const
+      return statusMarker(entry.status) ?? ("search" as const)
     case "tool":
-      return "code" as const
+      return statusMarker(entry.status) ?? ("code" as const)
     case "image":
-      return "image" as const
-    case "completion":
-      return "bullet" as const
+      return statusMarker(entry.status) ?? ("image" as const)
   }
 }
 
@@ -246,7 +260,7 @@ function ActivityEntryRow({
         )
       ) : null}
       {entry.kind === "search" ? <SearchSourceChips entry={entry} /> : null}
-      {entry.kind === "tool" && entry.tool ? (
+      {entry.kind === "tool" ? (
         <ActivityToolCard entry={entry} onToolApproval={onToolApproval} />
       ) : null}
     </ActivityStep>
@@ -292,6 +306,12 @@ function PanelBody({
               onToolApproval={onToolApproval}
             />
           ))}
+          {activity.completion ? (
+            <ActivityEntryRow
+              key={activity.completion.id}
+              entry={activity.completion}
+            />
+          ) : null}
         </ActivityTimeline>
       </div>
       {activity.imageResults.length > 0 ? (

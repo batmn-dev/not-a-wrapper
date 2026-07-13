@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest"
 import {
   deriveAssistantActivityModel,
   deriveAssistantActivityPresentation,
+  type AssistantActivityModel,
+  type AssistantActivityTimelineEntry,
 } from "./assistant-activity"
 import {
   assistantTurnViewsEqual,
@@ -115,12 +117,14 @@ describe("deriveAssistantActivityModel chronology", () => {
       { id: "tool-code-1", kind: "tool" },
       { id: "tool-search-1", kind: "search" },
       { id: "reasoning-4-0", kind: "reasoning" },
-      { id: "completion", kind: "completion" },
     ])
+    const searchEntry = activity?.entries[2]
     expect(
-      activity?.entries[2]?.sources?.map((source) => source.sourceId)
+      searchEntry?.kind === "search"
+        ? searchEntry.sources.map((source) => source.sourceId)
+        : undefined
     ).toEqual(["source-1"])
-    expect(activity?.entries.at(-1)).toMatchObject({
+    expect(activity?.completion).toMatchObject({
       title: "Worked for 4s",
       detail: "Done",
     })
@@ -304,7 +308,41 @@ describe("deriveAssistantActivityModel chronology", () => {
       status: "complete",
       title: "Searching for activity timeline",
     })
-    expect(enriched?.entries[0]?.sources).toHaveLength(1)
+    const enrichedSearch = enriched?.entries[0]
+    expect(
+      enrichedSearch?.kind === "search" ? enrichedSearch.sources : undefined
+    ).toHaveLength(1)
+  })
+
+  it("presents browse actions as page reads, never bare tool rows", () => {
+    const activity = deriveAssistantActivityModel(
+      viewOf(
+        [
+          {
+            type: "tool-web_search",
+            toolCallId: "browse-1",
+            state: "output-available",
+            input: {},
+            output: {
+              action: { type: "findInPage", url: "https://apnews.com/", pattern: "Latest" },
+            },
+          },
+        ],
+        "ready"
+      ),
+      { kind: "settled" }
+    )
+    expect(activity?.entries[0]).toMatchObject({
+      id: "tool-browse-1",
+      kind: "search",
+      title: "Read apnews.com",
+      detail: "Finding “Latest”",
+      status: "complete",
+    })
+    const browse = activity?.entries[0]
+    expect(
+      browse?.kind === "search" ? browse.sources.map((s) => s.url) : undefined
+    ).toEqual(["https://apnews.com/"])
   })
 
   it("marks only the incrementally streaming reasoning part as running", () => {
@@ -562,6 +600,38 @@ describe("assistantTurnViewsEqual (the R3 memo contract)", () => {
       "streaming"
     )
     expect(assistantTurnViewsEqual(a, withMetadata)).toBe(false)
+  })
+})
+
+describe("closed activity entry algebra (compile-time)", () => {
+  it("makes illegal entries unrepresentable", () => {
+    // Runtime no-op: the assertions are the @ts-expect-error probes below —
+    // each line fails the suite via typecheck if the closure ever loosens.
+    const probes: ReadonlyArray<AssistantActivityTimelineEntry | undefined> = [
+      // @ts-expect-error a reasoning row has no failure vocabulary
+      { id: "r", kind: "reasoning", title: "t", status: "error" },
+      // @ts-expect-error a search row owns its sources
+      { id: "s", kind: "search", title: "t", status: "complete" },
+      // @ts-expect-error a tool row carries its tool detail
+      { id: "t", kind: "tool", title: "t", status: "running" },
+      {
+        id: "t",
+        kind: "tool",
+        title: "t",
+        status: "approval",
+        // @ts-expect-error an approval row must carry the id its buttons submit
+        tool: { toolName: "x", displayName: "X" },
+      },
+    ]
+    const model: AssistantActivityModel = {
+      entries: [
+        // @ts-expect-error the completion row lives on the model, not in entries
+        { id: "completion", kind: "completion", title: "t", detail: "Done", status: "complete" },
+      ],
+      sourceResults: [],
+      imageResults: [],
+    }
+    expect(probes.length + model.entries.length).toBeGreaterThan(0)
   })
 })
 
@@ -836,8 +906,10 @@ describe("deriveAssistantActivityPresentation", () => {
       expect(presentation.label).toBe("Thought")
       expect(presentation.activity.entries.map((entry) => entry.kind)).toEqual([
         "reasoning",
-        "completion",
       ])
+      expect(presentation.activity.completion).toMatchObject({
+        status: "complete",
+      })
     }
   })
 
@@ -909,13 +981,13 @@ describe("deriveAssistantActivityPresentation", () => {
             detail: "Tool reported an error",
             status: "error",
           },
-          {
-            id: "completion",
-            kind: "completion",
-            title: "Run failed",
-            status: "error",
-          },
         ],
+        completion: {
+          id: "completion",
+          kind: "completion",
+          title: "Run failed",
+          status: "error",
+        },
       },
     })
   })

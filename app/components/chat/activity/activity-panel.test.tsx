@@ -59,14 +59,14 @@ function panelProps(sourceCount: number) {
                 status: "complete" as const,
                 sources,
               },
-              {
-                id: "completion",
-                kind: "completion" as const,
-                title: "Worked for 5s",
-                detail: "Done",
-                status: "complete" as const,
-              },
             ] as const,
+            completion: {
+              id: "completion" as const,
+              kind: "completion" as const,
+              title: "Worked for 5s",
+              detail: "Done",
+              status: "complete" as const,
+            },
             sourceResults: sources,
             imageResults: [],
           }
@@ -255,14 +255,14 @@ describe("ActivityPanel coexistence (R6)", () => {
                   detail: "Visible reasoning",
                   status: "complete",
                 },
-                {
-                  id: "completion",
-                  kind: "completion",
-                  title: "Worked for 5s",
-                  detail: "Done",
-                  status: "complete",
-                },
               ],
+              completion: {
+                id: "completion",
+                kind: "completion",
+                title: "Worked for 5s",
+                detail: "Done",
+                status: "complete",
+              },
               sourceResults: [],
               imageResults: [],
             }}
@@ -361,28 +361,55 @@ describe("ActivityPanel coexistence (R6)", () => {
     ).toBe("2 more")
   })
 
-  it("uses one exhaustive semantic marker mapping", () => {
-    const marker = (
-      kind: "reasoning" | "search" | "tool" | "image" | "completion",
-      status:
-        "running" | "complete" | "approval" | "error" | "denied" | "stopped"
-    ) =>
+  it("maps chosen marker glyphs over the closed entry algebra", () => {
+    // Exhaustiveness and illegal kind×status pairs are compiler-enforced by
+    // the closed entry variants; this pins only the chosen glyph per legal
+    // shape (status marker beats kind marker; denied collapses to error).
+    const python = { toolName: "python", displayName: "Python" }
+    expect(
       activityEntryMarker({
-        id: `${kind}-${status}`,
-        kind,
-        status,
-        title: "Marker",
+        id: "r",
+        kind: "reasoning",
+        title: "t",
+        status: "complete",
       })
-
-    expect(marker("reasoning", "running")).toBe("reasoning")
-    expect(marker("reasoning", "complete")).toBe("reasoning")
-    expect(marker("search", "complete")).toBe("search")
-    expect(marker("tool", "running")).toBe("code")
-    expect(marker("tool", "approval")).toBe("approval")
-    expect(marker("completion", "complete")).toBe("completedRun")
-    expect(marker("tool", "error")).toBe("error")
-    expect(marker("tool", "denied")).toBe("error")
-    expect(marker("tool", "stopped")).toBe("stopped")
+    ).toBe("reasoning")
+    expect(
+      activityEntryMarker({
+        id: "s",
+        kind: "search",
+        title: "t",
+        status: "running",
+        sources: [],
+      })
+    ).toBe("search")
+    expect(
+      activityEntryMarker({
+        id: "t",
+        kind: "tool",
+        title: "t",
+        status: "denied",
+        tool: python,
+      })
+    ).toBe("error")
+    expect(
+      activityEntryMarker({
+        id: "t",
+        kind: "tool",
+        title: "t",
+        status: "approval",
+        tool: { ...python, approvalId: "a1" },
+      })
+    ).toBe("approval")
+    expect(
+      activityEntryMarker({
+        id: "completion",
+        kind: "completion",
+        title: "Worked for 5s",
+        detail: "Done",
+        status: "complete",
+      })
+    ).toBe("completedRun")
   })
 
   it("renders unsafe search sources as passive chips", () => {

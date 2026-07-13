@@ -248,7 +248,7 @@ describe("useActivityPanel ownership", () => {
     })
 
     expect(latest!.panelActivityTurnId).toBe("a1")
-    expect(latest!.panelProps.activity?.entries.at(-1)).toMatchObject({
+    expect(latest!.panelProps.activity?.completion).toMatchObject({
       kind: "completion",
       title: "Generation stopped",
       status: "stopped",

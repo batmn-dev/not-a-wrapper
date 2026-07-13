@@ -147,8 +147,8 @@ export type ToolCallEvidence = {
   lifecycle: ToolLifecycle
   /** Raw input passthrough for presentation copy; never interpreted here. */
   input: unknown
-  /** input.query, else output.action.query once output is available. */
-  searchQuery: string | undefined
+  /** Present exactly for search-classified calls: what the call actually did. */
+  webActivity: WebActivityAction | undefined
   /**
    * Sources this call owns: its own tool-output sources plus standalone
    * source-url parts attributed to it. Search classification only; deduped
@@ -195,7 +195,22 @@ export type ResolvedEntryStatus =
  * Errored/denied/approval/succeeded are settled-invariant — a frozen
  * approval request still renders as an approval, matching the panel's
  * historical treatment.
+ *
+ * The overloads narrow per item kind so consumers inherit each variant's
+ * legal status subset from this algebra instead of casting.
  */
+export function resolveEntryStatus(
+  item: ReasoningEvidence | ImpliedSearchEvidence,
+  settled: boolean
+): "running" | "complete"
+export function resolveEntryStatus(
+  item: ToolCallEvidence,
+  settled: boolean
+): ResolvedEntryStatus
+export function resolveEntryStatus(
+  item: TurnEvidenceItem,
+  settled: boolean
+): ResolvedEntryStatus
 export function resolveEntryStatus(
   item: TurnEvidenceItem,
   settled: boolean
@@ -236,6 +251,77 @@ function recoverSearchQuery(part: ToolUIPart): string | undefined {
   const output = part.output
   if (typeof output !== "object" || output === null) return undefined
   return trimmedQuery((output as { action?: unknown }).action)
+}
+
+/**
+ * What one web-activity call actually did. Providers (observed: OpenAI native
+ * web search) emit one tool call per action, discriminated by
+ * `output.action.type` — a "search" call may really be a page read. A call
+ * with no action data (streaming, or providers without an action shape)
+ * defaults to `searched` with plain query recovery, preserving the pre-action
+ * behavior byte-for-byte. Unrecognized action types degrade to `unknown`
+ * rather than impersonating a search.
+ */
+export type WebActivityAction =
+  | {
+      kind: "searched"
+      query: string | undefined
+      queries: readonly string[] | undefined
+    }
+  | { kind: "opened-page"; url: string }
+  | { kind: "found-in-page"; url: string; pattern: string | undefined }
+  | { kind: "unknown" }
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined
+}
+
+function stringArray(value: unknown): readonly string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const strings = value.filter(
+    (entry): entry is string => typeof entry === "string" && entry.trim() !== ""
+  )
+  return strings.length > 0 ? strings : undefined
+}
+
+function interpretWebActivity(part: ToolUIPart): WebActivityAction {
+  const output = part.state === "output-available" ? part.output : undefined
+  const action =
+    typeof output === "object" && output !== null && !Array.isArray(output)
+      ? (output as { action?: unknown }).action
+      : undefined
+  if (typeof action !== "object" || action === null) {
+    return {
+      kind: "searched",
+      query: recoverSearchQuery(part),
+      queries: undefined,
+    }
+  }
+  const record = action as Record<string, unknown>
+  const url = nonEmptyString(record.url)
+  // Tolerate provider spelling drift: the wire has shown camelCase; the
+  // OpenAI API documents snake_case. An action with NO type at all is a
+  // search when a query is recoverable (the pre-action provider shapes);
+  // `unknown` is reserved for a present-but-unrecognized type.
+  switch (record.type) {
+    case "search":
+    case undefined:
+      return {
+        kind: "searched",
+        query: recoverSearchQuery(part),
+        queries: stringArray(record.queries),
+      }
+    case "openPage":
+    case "open_page":
+      return url ? { kind: "opened-page", url } : { kind: "unknown" }
+    case "findInPage":
+    case "find_in_page":
+      return url
+        ? { kind: "found-in-page", url, pattern: nonEmptyString(record.pattern) }
+        : { kind: "unknown" }
+    default:
+      return { kind: "unknown" }
+  }
 }
 
 function collectSearchImageResults(
@@ -336,8 +422,8 @@ export function deriveTurnEvidence(
       classification,
       lifecycle: getToolLifecycle(part),
       input: "input" in part ? part.input : undefined,
-      searchQuery:
-        classification === "search" ? recoverSearchQuery(part) : undefined,
+      webActivity:
+        classification === "search" ? interpretWebActivity(part) : undefined,
       sources: classification === "search" ? getPartSources(part) : [],
     }
     const existingIndex = toolItemIndexes.get(part.toolCallId)
@@ -353,10 +439,17 @@ export function deriveTurnEvidence(
       timeline[existingIndex] = item
     }
     if (classification === "search") {
-      latestSearchIndex = itemIndex
+      // Explicit producer ids attach wherever they point — provider-declared
+      // provenance beats category, so a citation tied to a page read belongs
+      // on it. The nearest-preceding FALLBACK below narrows to searched
+      // actions only: heuristic attribution must never guess that a browse
+      // produced a citation.
       searchItemIndexes.set(part.toolCallId, itemIndex)
       mergeItemSources(itemIndex, pendingSources.get(part.toolCallId) ?? [])
       pendingSources.delete(part.toolCallId)
+      if (item.webActivity?.kind === "searched") {
+        latestSearchIndex = itemIndex
+      }
     }
   })
 

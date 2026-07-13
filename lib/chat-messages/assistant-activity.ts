@@ -6,8 +6,9 @@ import type {
   AssistantTurnView,
   SearchImageResult,
 } from "./assistant-turn"
+import { parseSafeExternalUrl } from "../url-safety"
 import { getToolDisplayName } from "./metadata"
-import type { AssistantSourceResult } from "./sources"
+import { dedupeSources, type AssistantSourceResult } from "./sources"
 import {
   classifyToolName,
   deriveTurnEvidence,
@@ -15,35 +16,106 @@ import {
   type ResolvedEntryStatus,
   type ToolCallEvidence,
   type ToolLifecycle,
+  type WebActivityAction,
 } from "./turn-evidence"
 
 export type NonEmptyTuple<T> = readonly [T, ...T[]]
 
 export type ActivityEntryStatus = ResolvedEntryStatus
 
+/**
+ * The entry algebra is closed: one variant per timeline row shape, each
+ * carrying exactly the fields the Activity panel renders for it and exactly
+ * the statuses its Turn evidence arm can resolve to. Illegal rows — a
+ * reasoning step with an approval marker, a tool card without its detail, an
+ * approval row without the id its buttons need — are unrepresentable.
+ */
 export type AssistantActivityToolDetail = {
   toolName: string
   displayName: string
   code?: string
-  approvalId?: string
-  approvalReason?: string
-  approved?: boolean
 }
 
-export type AssistantActivityEntry = {
+type ActivityEntryBase = {
   /** Stable across streaming updates: part index for reasoning, call id for tools. */
   id: string
-  kind: "reasoning" | "tool" | "search" | "image" | "completion"
   title: string
-  detail?: string
-  status: ActivityEntryStatus
-  tool?: AssistantActivityToolDetail
-  /** Sources remain attached to the search step that produced them. */
-  sources?: readonly AssistantSourceResult[]
 }
 
+/** The only variant whose detail renders as Markdown. */
+export type AssistantActivityReasoningEntry = ActivityEntryBase & {
+  kind: "reasoning"
+  status: "running" | "complete"
+  detail?: string
+}
+
+/**
+ * Tool-backed and implied searches share one presentation variant — the
+ * panel renders them identically. An implied search only ever constructs
+ * running|complete; a search awaiting approval renders its marker but no
+ * actions (approval controls live on the tool variant only).
+ */
+export type AssistantActivitySearchEntry = ActivityEntryBase & {
+  kind: "search"
+  status: ActivityEntryStatus
+  detail?: string
+  /** Sources remain attached to the search step that produced them. */
+  sources: readonly AssistantSourceResult[]
+}
+
+export type AssistantActivityImageEntry = ActivityEntryBase & {
+  kind: "image"
+  status: ActivityEntryStatus
+  detail?: string
+}
+
+/**
+ * The only variant that renders the tool card. Discriminated a second time
+ * on status: an approval row must carry the approvalId its Approve/Deny
+ * buttons submit; every other status cannot carry one.
+ */
+export type AssistantActivityToolEntry = ActivityEntryBase & {
+  kind: "tool"
+  detail?: string
+} & (
+    | {
+        status: "approval"
+        tool: AssistantActivityToolDetail & { approvalId: string }
+      }
+    | {
+        status: Exclude<ActivityEntryStatus, "approval">
+        tool: AssistantActivityToolDetail & { approvalId?: undefined }
+      }
+  )
+
+/** Chronological evidence rows — the completion row is not a member. */
+export type AssistantActivityTimelineEntry =
+  | AssistantActivityReasoningEntry
+  | AssistantActivitySearchEntry
+  | AssistantActivityImageEntry
+  | AssistantActivityToolEntry
+
+/** The terminal row: at most one per model, structurally last. */
+export type AssistantActivityCompletion = {
+  kind: "completion"
+  id: "completion"
+  status: "complete" | "error" | "stopped"
+  title: string
+  detail: string
+}
+
+/** What a single Activity panel row can receive. */
+export type AssistantActivityEntry =
+  | AssistantActivityTimelineEntry
+  | AssistantActivityCompletion
+
 export type AssistantActivityModel = {
-  entries: NonEmptyTuple<AssistantActivityEntry>
+  entries: NonEmptyTuple<AssistantActivityTimelineEntry>
+  /**
+   * Present exactly when the run has an outcome to report. Uniqueness, last
+   * position, and never-without-evidence are structural, not conventions.
+   */
+  completion?: AssistantActivityCompletion
   /** Full results shown after the timeline, matching the reference hierarchy. */
   sourceResults: readonly AssistantSourceResult[]
   imageResults: readonly SearchImageResult[]
@@ -87,23 +159,10 @@ function toolCode(input: unknown): string | undefined {
 }
 
 function toolDetail(item: ToolCallEvidence): AssistantActivityToolDetail {
-  const { lifecycle } = item
   return {
     toolName: item.toolName,
     displayName: humanizeToolName(item.toolName),
     code: toolCode(item.input),
-    approvalId:
-      lifecycle.kind === "awaiting-approval" ? lifecycle.approvalId : undefined,
-    approvalReason:
-      lifecycle.kind === "denied" && lifecycle.via === "output-denied"
-        ? lifecycle.reason
-        : undefined,
-    approved:
-      lifecycle.kind === "in-flight" && lifecycle.via === "approval-approved"
-        ? true
-        : lifecycle.kind === "denied" && lifecycle.via === "approval-responded"
-          ? false
-          : undefined,
   }
 }
 
@@ -128,6 +187,40 @@ function toolActionTitle(
   if (status === "denied") return `${label} denied`
   if (status === "stopped") return `${label} stopped`
   return status === "running" ? `Using ${label}` : `Used ${label}`
+}
+
+function browsedDomain(url: string): string {
+  return parseSafeExternalUrl(url)?.hostname ?? url
+}
+
+/**
+ * The page a browse action visited, presented through the same chip idiom as
+ * search sources. Fabricated at presentation — the evidence keeps action
+ * facts and citation sources distinct.
+ */
+function browsedPageSource(url: string): AssistantSourceResult {
+  return {
+    type: "source-url",
+    sourceId: url,
+    url,
+    title: browsedDomain(url),
+  }
+}
+
+type BrowseAction = Extract<
+  WebActivityAction,
+  { kind: "opened-page" | "found-in-page" }
+>
+
+/**
+ * Browse-row copy is a local product decision pending a settled ChatGPT
+ * exemplar (see research/chatgpt-activity-timeline-2026-07-12.md): the
+ * reference's live idiom is "Reading {domain}", and its settled panels never
+ * show a bare generic tool row.
+ */
+function browseTitle(action: BrowseAction, status: ActivityEntryStatus): string {
+  const domain = browsedDomain(action.url)
+  return status === "running" ? `Reading ${domain}` : `Read ${domain}`
 }
 
 /** Fallback copy over lifecycle facts — English stays out of the evidence. */
@@ -196,11 +289,11 @@ function reasoningSteps(
   return [{ title: "Thinking", detail: trimmed }]
 }
 
-function completionEntry(
-  entries: readonly AssistantActivityEntry[],
+function deriveCompletion(
+  entries: readonly AssistantActivityTimelineEntry[],
   durationSeconds: number | undefined,
   status: AssistantTurnRenderStatus | undefined
-): AssistantActivityEntry {
+): AssistantActivityCompletion {
   const hasError = entries.some(
     (entry) => entry.status === "error" || entry.status === "denied"
   )
@@ -251,7 +344,7 @@ export function deriveAssistantActivityModel(
 ): AssistantActivityModel | undefined {
   const settled = phase.kind === "settled"
   const evidence = deriveTurnEvidence(view.orderedParts)
-  const entries: AssistantActivityEntry[] = []
+  const entries: AssistantActivityTimelineEntry[] = []
 
   for (const item of evidence.timeline) {
     if (item.kind === "reasoning") {
@@ -283,40 +376,89 @@ export function deriveAssistantActivityModel(
     const label =
       getToolDisplayName(view.metadata, item.toolName, item.toolCallId) ??
       humanizeToolName(item.toolName)
-    const kind =
-      item.classification === "search"
-        ? "search"
-        : item.classification === "image-generation"
-          ? "image"
-          : "tool"
+    if (item.classification === "search") {
+      const activity = item.webActivity
+      if (
+        activity &&
+        (activity.kind === "opened-page" || activity.kind === "found-in-page")
+      ) {
+        entries.push({
+          id: item.id,
+          kind: "search",
+          title: browseTitle(activity, status),
+          detail:
+            errorDetail(item.lifecycle) ??
+            (activity.kind === "found-in-page" && activity.pattern
+              ? `Finding “${activity.pattern}”`
+              : undefined),
+          status,
+          sources: dedupeSources([
+            browsedPageSource(activity.url),
+            ...item.sources,
+          ]),
+        })
+        continue
+      }
+      const query = activity?.kind === "searched" ? activity.query : undefined
+      entries.push({
+        id: item.id,
+        kind: "search",
+        title: query
+          ? `Searching for ${query}`
+          : toolActionTitle(label, item.input, status),
+        detail: errorDetail(item.lifecycle),
+        status,
+        sources: item.sources,
+      })
+      continue
+    }
+    if (item.classification === "image-generation") {
+      entries.push({
+        id: item.id,
+        kind: "image",
+        title: toolActionTitle(label, item.input, status),
+        detail: errorDetail(item.lifecycle),
+        status,
+      })
+      continue
+    }
+    if (item.lifecycle.kind === "awaiting-approval") {
+      entries.push({
+        id: item.id,
+        kind: "tool",
+        title: toolActionTitle(label, item.input, "approval"),
+        detail: errorDetail(item.lifecycle),
+        status: "approval",
+        tool: { ...toolDetail(item), approvalId: item.lifecycle.approvalId },
+      })
+      continue
+    }
     entries.push({
       id: item.id,
-      kind,
-      title:
-        kind === "search" && item.searchQuery
-          ? `Searching for ${item.searchQuery}`
-          : toolActionTitle(label, item.input, status),
+      kind: "tool",
+      title: toolActionTitle(label, item.input, status),
       detail: errorDetail(item.lifecycle),
-      status,
+      // Safe: awaiting-approval is the only lifecycle resolveEntryStatus maps
+      // to "approval", and that arm was handled above.
+      status: status as Exclude<ActivityEntryStatus, "approval">,
       tool: toolDetail(item),
-      sources: kind === "search" ? item.sources : undefined,
     })
-  }
-
-  const durationSeconds = toCompletedDurationSeconds(
-    options?.durationMs ?? view.reasoning.persistedDurationMs
-  )
-  if (
-    entries.length > 0 &&
-    (phase.kind === "settled" || phase.kind === "responding")
-  ) {
-    entries.push(completionEntry(entries, durationSeconds, options?.status))
   }
 
   const nonEmptyEntries = asNonEmpty(entries)
   if (!nonEmptyEntries) return undefined
+
+  const durationSeconds = toCompletedDurationSeconds(
+    options?.durationMs ?? view.reasoning.persistedDurationMs
+  )
+  const completion =
+    phase.kind === "settled" || phase.kind === "responding"
+      ? deriveCompletion(nonEmptyEntries, durationSeconds, options?.status)
+      : undefined
+
   return {
     entries: nonEmptyEntries,
+    completion,
     sourceResults: view.sources,
     imageResults: view.searchImageResults,
   }
