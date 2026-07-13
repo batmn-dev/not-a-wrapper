@@ -62,10 +62,14 @@ function CaptureHarness({
 }: {
   onFollower: (follower: ActivityPanelScrollFollow) => void
 }) {
-  onFollower(
-    useActivityPanelScrollFollow({ turnKey: "turn-1", startAtEnd: true })
-  )
-  return null
+  const follower = useActivityPanelScrollFollow({
+    turnKey: "turn-1",
+    startAtEnd: true,
+  })
+  const captureRef: RefCallback<HTMLDivElement> = (node) => {
+    if (node !== null) onFollower(follower)
+  }
+  return <div ref={captureRef} />
 }
 
 function attach<T>(ref: RefCallback<T>, node: T): () => void {

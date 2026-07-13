@@ -1,15 +1,11 @@
 "use client"
 
-import {
-  useCallback,
-  useEffectEvent,
-  useMemo,
-  type RefCallback,
-} from "react"
+import { useMemo, useRef, type RefCallback } from "react"
 
 const DEFAULT_BOTTOM_THRESHOLD_PX = 24
 
 type ActivityScrollFollowState = {
+  turnKey: string | undefined
   viewport: HTMLDivElement | null
   content: HTMLElement | null
   pinned: boolean
@@ -30,8 +26,11 @@ export type ActivityPanelScrollFollow = {
   contentRef: RefCallback<HTMLElement>
 }
 
-function createScrollFollowState(): ActivityScrollFollowState {
+function createScrollFollowState(
+  turnKey: string | undefined
+): ActivityScrollFollowState {
   return {
+    turnKey,
     viewport: null,
     content: null,
     pinned: false,
@@ -74,31 +73,33 @@ export function useActivityPanelScrollFollow({
   startAtEnd,
   bottomThresholdPx = DEFAULT_BOTTOM_THRESHOLD_PX,
 }: ActivityPanelScrollFollowOptions): ActivityPanelScrollFollow {
-  const readOptions = useEffectEvent(() => ({
-    startAtEnd,
-    bottomThresholdPx,
-  }))
-  const state = useMemo(createScrollFollowState, [turnKey])
+  const stateRef = useRef<ActivityScrollFollowState | null>(null)
 
-  const viewportRef = useCallback<RefCallback<HTMLDivElement>>(
-    (node) => {
+  return useMemo(() => {
+    const readState = () => {
+      if (stateRef.current?.turnKey === turnKey) return stateRef.current
+
+      const state = createScrollFollowState(turnKey)
+      stateRef.current = state
+      return state
+    }
+
+    const viewportRef: RefCallback<HTMLDivElement> = (node) => {
       if (node === null) return
 
+      const state = readState()
       state.viewport = node
       state.wasOverflowing = isOverflowing(node)
-      const options = readOptions()
       state.pinned =
-        options.startAtEnd ||
-        distanceFromEnd(node) <= options.bottomThresholdPx
+        startAtEnd || distanceFromEnd(node) <= bottomThresholdPx
 
       const onScroll = () => {
         if (state.viewport !== node) return
-        state.pinned =
-          distanceFromEnd(node) <= readOptions().bottomThresholdPx
+        state.pinned = distanceFromEnd(node) <= bottomThresholdPx
       }
       node.addEventListener("scroll", onScroll, { passive: true })
 
-      if (options.startAtEnd) scheduleEndAlignment(state)
+      if (startAtEnd) scheduleEndAlignment(state)
 
       return () => {
         node.removeEventListener("scroll", onScroll)
@@ -106,14 +107,12 @@ export function useActivityPanelScrollFollow({
         cancelScheduledAlignment(state)
         state.viewport = null
       }
-    },
-    [state]
-  )
+    }
 
-  const contentRef = useCallback<RefCallback<HTMLElement>>(
-    (node) => {
+    const contentRef: RefCallback<HTMLElement> = (node) => {
       if (node === null) return
 
+      const state = readState()
       state.content = node
       const observer = new ResizeObserver(() => {
         if (state.content !== node) return
@@ -131,9 +130,8 @@ export function useActivityPanelScrollFollow({
         observer.disconnect()
         if (state.content === node) state.content = null
       }
-    },
-    [state]
-  )
+    }
 
-  return { viewportRef, contentRef }
+    return { viewportRef, contentRef }
+  }, [bottomThresholdPx, startAtEnd, turnKey])
 }

@@ -1,7 +1,6 @@
 # ChatGPT Activity source-chip overflow — corrected reference (2026-07-13)
 
-Re-measured in the logged-in reference conversation
-(`https://chatgpt.com/c/6a543d4d-cda4-83ea-b03e-2cc08bb344f0`), light mode,
+Re-measured in a logged-in reference conversation (URL redacted), light mode,
 ~1681×1200. Supersedes the 2026-07-12 observation that activation replaced the
 overflow button one-shot — that capture missed the expanded state's trailing
 control.
