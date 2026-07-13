@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
 import { formatDuration } from "@/lib/format-duration"
 import { cn } from "@/lib/utils"
-import { RiCloseLine } from "@remixicon/react"
+import { RiCloseLargeLine } from "@remixicon/react"
 import type { ComponentProps } from "react"
 
 const CLOSE_HOVER_TINT =
@@ -21,7 +21,7 @@ const CLOSE_HOVER_TINT =
  */
 export function PanelCloseButton({
   className,
-  children = <Icon icon={RiCloseLine} slotSize={20} />,
+  children = <Icon icon={RiCloseLargeLine} slotSize={20} />,
   ...props
 }: ComponentProps<typeof Button>) {
   return (

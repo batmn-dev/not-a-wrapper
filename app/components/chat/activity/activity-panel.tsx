@@ -6,12 +6,13 @@ import { Icon } from "@/components/ui/icon"
 import { Markdown } from "@/components/ui/markdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type {
+  ActivityEntryStatus,
   AssistantActivityEntry,
   AssistantActivityModel,
 } from "@/lib/chat-messages/assistant-activity"
 import { parseSafeExternalUrl } from "@/lib/url-safety"
 import { RiCheckLine, RiCodeLine, RiFileCopyLine } from "@remixicon/react"
-import { useRef, useState } from "react"
+import { useId, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { useActivityPanelDockSlot } from "./activity-panel-host"
 import { useActivityPanelSectionTarget } from "./activity-panel-store"
@@ -111,47 +112,68 @@ function sourceDomain(url: string): string {
   return parseSafeExternalUrl(url)?.hostname ?? url
 }
 
-function SearchSourceChips({
-  entry,
-  onMore,
-}: {
-  entry: AssistantActivityEntry
-  onMore: () => void
-}) {
+function SearchSourceChips({ entry }: { entry: AssistantActivityEntry }) {
+  const [expanded, setExpanded] = useState(false)
+  const chipGroupId = useId()
   const sources = entry.sources ?? []
   if (sources.length === 0) return null
-  const visible = sources.slice(0, VISIBLE_SOURCE_CHIPS)
+  const visible = expanded ? sources : sources.slice(0, VISIBLE_SOURCE_CHIPS)
   const remaining = sources.length - visible.length
 
   return (
-    <div className="mt-1.5 flex flex-wrap gap-1">
-      {visible.map((source) => {
-        const safeUrl = parseSafeExternalUrl(source.url)
-        const domain = sourceDomain(source.url)
-        return (
-          <a
-            key={source.sourceId}
-            href={safeUrl?.toString()}
-            target={safeUrl ? "_blank" : undefined}
-            rel={safeUrl ? "noopener noreferrer" : undefined}
-            className="bg-muted text-muted-foreground hover:bg-foreground hover:text-background focus-visible:ring-ring inline-flex h-[25px] max-w-full items-center gap-1 overflow-hidden rounded-full px-3 text-xs outline-none focus-visible:ring-2"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element -- dynamic external favicon */}
-            <img
-              alt=""
-              src={`https://www.google.com/s2/favicons?sz=32&domain_url=${encodeURIComponent(source.url)}`}
-              className="size-3 shrink-0 rounded-full"
-              width={12}
-              height={12}
-            />
-            <span className="max-w-32 truncate">{domain}</span>
-          </a>
-        )
-      })}
+    <div
+      role="group"
+      aria-label={`Sources for ${entry.title}`}
+      className="mt-1.5 flex flex-wrap gap-1"
+    >
+      <span id={chipGroupId} className="contents">
+        {visible.map((source) => {
+          const safeUrl = parseSafeExternalUrl(source.url)
+          const domain = sourceDomain(source.url)
+          const content = (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element -- dynamic external favicon */}
+              <img
+                alt=""
+                src={`https://www.google.com/s2/favicons?sz=32&domain_url=${encodeURIComponent(source.url)}`}
+                className="size-3 shrink-0 rounded-full"
+                width={12}
+                height={12}
+              />
+              <span className="max-w-32 truncate">{domain}</span>
+            </>
+          )
+          const className =
+            "bg-muted text-muted-foreground inline-flex h-[25px] max-w-full items-center gap-1 overflow-hidden rounded-full px-3 text-xs"
+          if (!safeUrl) {
+            return (
+              <span
+                key={`${source.sourceId}:${source.url}`}
+                className={className}
+              >
+                {content}
+              </span>
+            )
+          }
+          return (
+            <a
+              key={`${source.sourceId}:${source.url}`}
+              href={safeUrl.toString()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`${className} hover:bg-foreground hover:text-background focus-visible:ring-ring outline-none focus-visible:ring-2`}
+            >
+              {content}
+            </a>
+          )
+        })}
+      </span>
       {remaining > 0 ? (
         <button
           type="button"
-          onClick={onMore}
+          aria-expanded={expanded}
+          aria-controls={chipGroupId}
+          onClick={() => setExpanded(true)}
           className="bg-muted text-muted-foreground hover:bg-foreground hover:text-background focus-visible:ring-ring inline-flex h-[25px] items-center rounded-full px-3 text-xs outline-none focus-visible:ring-2"
         >
           {remaining} more
@@ -161,27 +183,56 @@ function SearchSourceChips({
   )
 }
 
-function entryLeading(entry: AssistantActivityEntry) {
-  if (entry.status === "error" || entry.status === "stopped") return "error"
-  if (entry.status === "approval") return "approval"
-  if (entry.kind === "search") return "globe"
-  if (entry.kind === "tool") return "code"
-  if (entry.kind === "image") return "image"
-  if (entry.kind === "completion") return "done"
-  return entry.status === "running" ? "bullet" : "done"
+const STATUS_MARKERS: Record<
+  Exclude<ActivityEntryStatus, "complete" | "running">,
+  "approval" | "error" | "stopped"
+> = {
+  approval: "approval",
+  error: "error",
+  denied: "error",
+  stopped: "stopped",
+}
+
+/** Exhaustive status/kind-to-marker mapping shared by every Activity row. */
+export function activityEntryMarker(entry: AssistantActivityEntry) {
+  if (entry.kind === "completion" && entry.status === "complete") {
+    return "completedRun" as const
+  }
+  if (entry.status !== "complete" && entry.status !== "running") {
+    return STATUS_MARKERS[entry.status]
+  }
+  switch (entry.kind) {
+    case "reasoning":
+      return "reasoning" as const
+    case "search":
+      return "search" as const
+    case "tool":
+      return "code" as const
+    case "image":
+      return "image" as const
+    case "completion":
+      return "bullet" as const
+  }
 }
 
 function ActivityEntryRow({
   entry,
-  onSourcesMore,
   onToolApproval,
+  isLast,
+  index,
 }: {
   entry: AssistantActivityEntry
-  onSourcesMore: () => void
   onToolApproval?: ToolApprovalHandler
+  isLast?: boolean
+  index?: number
 }) {
   return (
-    <ActivityStep leading={entryLeading(entry)} body="description">
+    <ActivityStep
+      leading={activityEntryMarker(entry)}
+      body="description"
+      isLast={isLast}
+      index={index}
+    >
       <StepTitle>{entry.title}</StepTitle>
       {entry.detail ? (
         entry.kind === "reasoning" ? (
@@ -194,9 +245,7 @@ function ActivityEntryRow({
           </p>
         )
       ) : null}
-      {entry.kind === "search" ? (
-        <SearchSourceChips entry={entry} onMore={onSourcesMore} />
-      ) : null}
+      {entry.kind === "search" ? <SearchSourceChips entry={entry} /> : null}
       {entry.kind === "tool" && entry.tool ? (
         <ActivityToolCard entry={entry} onToolApproval={onToolApproval} />
       ) : null}
@@ -240,7 +289,6 @@ function PanelBody({
             <ActivityEntryRow
               key={entry.id}
               entry={entry}
-              onSourcesMore={scrollToSources}
               onToolApproval={onToolApproval}
             />
           ))}
@@ -291,7 +339,13 @@ export function ActivityPanel({
   const isBelowLg = useBreakpoint(LG_BREAKPOINT)
   const slotElement = useActivityPanelDockSlot()
   const close = () => onOpenChange(false)
-  const body = <PanelBody activity={activity} onToolApproval={onToolApproval} />
+  const body = (
+    <PanelBody
+      key={open ? "open" : "closed"}
+      activity={activity}
+      onToolApproval={onToolApproval}
+    />
+  )
   const dockedExpanded = open && !isBelowLg
   const sheetActive = isBelowLg
   const { dockedPresent, onDockedContentRef } = useDockedPanelCollapse({

@@ -36,10 +36,10 @@ describe("ActivityTimeline", () => {
     act(() => {
       root?.render(
         <ActivityTimeline>
-          <ActivityStep leading="globe" body="chips">
+          <ActivityStep leading="search" body="chips">
             <StepTitle>Searching</StepTitle>
           </ActivityStep>
-          <ActivityStep leading="done">
+          <ActivityStep leading="completedRun">
             <StepTitle>Reasoning</StepTitle>
           </ActivityStep>
         </ActivityTimeline>
@@ -53,5 +53,6 @@ describe("ActivityTimeline", () => {
     expect(steps[0]?.getAttribute("data-last")).toBe("false")
     expect(steps[1]?.getAttribute("data-last")).toBe("true")
     expect(steps[0]?.className).toContain("animate-[show_150ms_ease-in]")
+    expect(steps[0]?.querySelector(".bottom-\\[-10px\\]")).toBeTruthy()
   })
 })

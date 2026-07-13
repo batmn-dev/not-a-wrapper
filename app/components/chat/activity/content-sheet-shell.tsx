@@ -8,7 +8,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
-import { RiCloseLine } from "@remixicon/react"
+import { RiCloseLargeLine } from "@remixicon/react"
 import type { ReactNode } from "react"
 import { PanelCloseButton, TitleDurationCluster } from "./panel-header"
 
@@ -104,7 +104,7 @@ export function ContentSheetShell({
                 />
               }
             >
-              <Icon icon={RiCloseLine} slotSize={20} />
+              <Icon icon={RiCloseLargeLine} slotSize={20} />
             </SheetClose>
           </header>
           {children}

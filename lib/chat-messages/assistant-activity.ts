@@ -1,9 +1,3 @@
-import {
-  getStaticToolName,
-  isStaticToolUIPart,
-  type SourceUrlUIPart,
-  type ToolUIPart,
-} from "ai"
 import { formatDuration, toCompletedDurationSeconds } from "../format-duration"
 import { humanizeToolName } from "../tools/ui-metadata"
 import type {
@@ -14,11 +8,18 @@ import type {
 } from "./assistant-turn"
 import { getToolDisplayName } from "./metadata"
 import type { AssistantSourceResult } from "./sources"
+import {
+  classifyToolName,
+  deriveTurnEvidence,
+  resolveEntryStatus,
+  type ResolvedEntryStatus,
+  type ToolCallEvidence,
+  type ToolLifecycle,
+} from "./turn-evidence"
 
 export type NonEmptyTuple<T> = readonly [T, ...T[]]
 
-export type ActivityEntryStatus =
-  "running" | "complete" | "approval" | "error" | "stopped"
+export type ActivityEntryStatus = ResolvedEntryStatus
 
 export type AssistantActivityToolDetail = {
   toolName: string
@@ -38,7 +39,7 @@ export type AssistantActivityEntry = {
   status: ActivityEntryStatus
   tool?: AssistantActivityToolDetail
   /** Sources remain attached to the search step that produced them. */
-  sources?: readonly SourceUrlUIPart[]
+  sources?: readonly AssistantSourceResult[]
 }
 
 export type AssistantActivityModel = {
@@ -73,47 +74,6 @@ function asNonEmpty<T>(values: readonly T[]): NonEmptyTuple<T> | undefined {
   return values.length > 0 ? (values as NonEmptyTuple<T>) : undefined
 }
 
-function isApprovalStep(step: ToolUIPart): boolean {
-  return (
-    step.state === "approval-requested" ||
-    step.state === "approval-responded" ||
-    step.state === "output-denied"
-  )
-}
-
-function isErrorStep(step: ToolUIPart): boolean {
-  if (step.state === "output-error") return true
-  if (step.state !== "output-available") return false
-  return (
-    typeof step.output === "object" &&
-    step.output !== null &&
-    "isError" in step.output &&
-    (step.output as { isError?: unknown }).isError === true
-  )
-}
-
-function isSearchTool(toolName: string): boolean {
-  return toolName === "web_search" || toolName === "google_search"
-}
-
-function isImageTool(toolName: string): boolean {
-  return toolName === "imageGeneration" || toolName === "image_generation"
-}
-
-function toolStatus(
-  step: ToolUIPart,
-  phase: AssistantTurnPhase
-): ActivityEntryStatus {
-  if (isErrorStep(step)) return "error"
-  if (isApprovalStep(step)) {
-    if (step.state === "approval-requested") return "approval"
-    if (step.state === "output-denied") return "error"
-    return step.approval?.approved ? "running" : "error"
-  }
-  if (step.state === "output-available") return "complete"
-  return phase.kind === "settled" ? "stopped" : "running"
-}
-
 function toolCode(input: unknown): string | undefined {
   if (typeof input === "string") return input
   if (typeof input !== "object" || input === null) return undefined
@@ -126,30 +86,25 @@ function toolCode(input: unknown): string | undefined {
     : undefined
 }
 
-function toolDetail(
-  step: ToolUIPart,
-  toolName: string
-): AssistantActivityToolDetail {
-  const input = "input" in step ? step.input : undefined
+function toolDetail(item: ToolCallEvidence): AssistantActivityToolDetail {
+  const { lifecycle } = item
   return {
-    toolName,
-    displayName: humanizeToolName(toolName),
-    code: toolCode(input),
+    toolName: item.toolName,
+    displayName: humanizeToolName(item.toolName),
+    code: toolCode(item.input),
     approvalId:
-      step.state === "approval-requested" ? step.approval.id : undefined,
+      lifecycle.kind === "awaiting-approval" ? lifecycle.approvalId : undefined,
     approvalReason:
-      step.state === "output-denied" ? step.approval.reason : undefined,
+      lifecycle.kind === "denied" && lifecycle.via === "output-denied"
+        ? lifecycle.reason
+        : undefined,
     approved:
-      step.state === "approval-responded" ? step.approval.approved : undefined,
+      lifecycle.kind === "in-flight" && lifecycle.via === "approval-approved"
+        ? true
+        : lifecycle.kind === "denied" && lifecycle.via === "approval-responded"
+          ? false
+          : undefined,
   }
-}
-
-function inputQuery(input: unknown): string | undefined {
-  if (typeof input !== "object" || input === null || !("query" in input)) {
-    return undefined
-  }
-  const query = (input as { query?: unknown }).query
-  return typeof query === "string" && query.trim() ? query.trim() : undefined
 }
 
 function inputAction(input: unknown): string | undefined {
@@ -170,16 +125,22 @@ function toolActionTitle(
   if (action) return action
   if (status === "approval") return `Review ${label}`
   if (status === "error") return `${label} failed`
+  if (status === "denied") return `${label} denied`
   if (status === "stopped") return `${label} stopped`
   return status === "running" ? `Using ${label}` : `Used ${label}`
 }
 
-function errorDetail(step: ToolUIPart): string | undefined {
-  if (step.state === "output-error") return step.errorText || "Tool failed"
-  if (step.state === "output-denied") {
-    return step.approval.reason || "Approval denied"
+/** Fallback copy over lifecycle facts — English stays out of the evidence. */
+function errorDetail(lifecycle: ToolLifecycle): string | undefined {
+  if (lifecycle.kind === "errored") {
+    return lifecycle.via === "output-error"
+      ? lifecycle.message || "Tool failed"
+      : "Tool reported an error"
   }
-  return isErrorStep(step) ? "Tool reported an error" : undefined
+  if (lifecycle.kind === "denied") {
+    return lifecycle.reason || "Approval denied"
+  }
+  return undefined
 }
 
 /**
@@ -240,7 +201,9 @@ function completionEntry(
   durationSeconds: number | undefined,
   status: AssistantTurnRenderStatus | undefined
 ): AssistantActivityEntry {
-  const hasError = entries.some((entry) => entry.status === "error")
+  const hasError = entries.some(
+    (entry) => entry.status === "error" || entry.status === "denied"
+  )
   const hasStopped = entries.some((entry) => entry.status === "stopped")
   if (hasError || status === "error" || status === "failed") {
     return {
@@ -273,10 +236,10 @@ function completionEntry(
 }
 
 /**
- * The single chronological activity derivation. It walks the normalized turn
- * exactly once, updates repeated tool-call states in place, and never buckets
- * entries by type. Streaming therefore enriches existing rows without moving
- * them or duplicating call ids.
+ * The single chronological activity derivation: a presentation mapping over
+ * the Turn evidence timeline. Chronology, stable call-id identity, and source
+ * attribution are the evidence walk's invariants; this function owns only
+ * copy (titles, details, markers' status vocabulary) and the completion row.
  */
 export function deriveAssistantActivityModel(
   view: AssistantTurnView,
@@ -286,80 +249,59 @@ export function deriveAssistantActivityModel(
     status?: AssistantTurnRenderStatus
   }
 ): AssistantActivityModel | undefined {
+  const settled = phase.kind === "settled"
+  const evidence = deriveTurnEvidence(view.orderedParts)
   const entries: AssistantActivityEntry[] = []
-  const toolEntryIndexes = new Map<string, number>()
-  let latestSearchIndex: number | undefined
 
-  view.orderedParts.forEach((part, partIndex) => {
-    if (part.type === "reasoning") {
-      reasoningSteps(part.text).forEach((step, stepIndex) => {
-        const isPartStreaming =
-          phase.kind !== "settled" &&
-          (part as { state?: string }).state === "streaming"
+  for (const item of evidence.timeline) {
+    if (item.kind === "reasoning") {
+      const status = resolveEntryStatus(item, settled)
+      reasoningSteps(item.text).forEach((step, stepIndex) => {
         entries.push({
-          id: `reasoning-${partIndex}-${stepIndex}`,
+          id: `reasoning-${item.partIndex}-${stepIndex}`,
           kind: "reasoning",
           title: step.title,
           detail: step.detail,
-          status: isPartStreaming ? "running" : "complete",
+          status,
         })
       })
-      return
+      continue
     }
 
-    if (part.type === "source-url") {
-      if (latestSearchIndex === undefined) {
-        latestSearchIndex = entries.length
-        entries.push({
-          id: `search-sources-${partIndex}`,
-          kind: "search",
-          title: "Searching the web",
-          status: phase.kind === "settled" ? "complete" : "running",
-          sources: [part],
-        })
-      } else {
-        const searchEntry = entries[latestSearchIndex]
-        searchEntry.sources = [...(searchEntry.sources ?? []), part]
-      }
-      return
+    if (item.kind === "implied-search") {
+      entries.push({
+        id: item.id,
+        kind: "search",
+        title: "Searching the web",
+        status: resolveEntryStatus(item, settled),
+        sources: item.sources,
+      })
+      continue
     }
 
-    if (!isStaticToolUIPart(part)) return
-    const toolName = getStaticToolName(part)
+    const status = resolveEntryStatus(item, settled)
     const label =
-      getToolDisplayName(view.metadata, toolName, part.toolCallId) ??
-      humanizeToolName(toolName)
-    const query = inputQuery("input" in part ? part.input : undefined)
-    const kind = isSearchTool(toolName)
-      ? "search"
-      : isImageTool(toolName)
-        ? "image"
-        : "tool"
-    const status = toolStatus(part, phase)
-    const input = "input" in part ? part.input : undefined
-    const entry: AssistantActivityEntry = {
-      id: `tool-${part.toolCallId}`,
+      getToolDisplayName(view.metadata, item.toolName, item.toolCallId) ??
+      humanizeToolName(item.toolName)
+    const kind =
+      item.classification === "search"
+        ? "search"
+        : item.classification === "image-generation"
+          ? "image"
+          : "tool"
+    entries.push({
+      id: item.id,
       kind,
       title:
-        kind === "search" && query
-          ? `Searching for ${query}`
-          : toolActionTitle(label, input, status),
-      detail: errorDetail(part),
+        kind === "search" && item.searchQuery
+          ? `Searching for ${item.searchQuery}`
+          : toolActionTitle(label, item.input, status),
+      detail: errorDetail(item.lifecycle),
       status,
-      tool: toolDetail(part, toolName),
-    }
-    const existingIndex = toolEntryIndexes.get(part.toolCallId)
-    if (existingIndex === undefined) {
-      const index = entries.length
-      toolEntryIndexes.set(part.toolCallId, index)
-      entries.push(entry)
-      if (kind === "search") latestSearchIndex = index
-    } else {
-      entry.sources = entries[existingIndex].sources
-      entries[existingIndex] = entry
-      if (kind === "search") latestSearchIndex = existingIndex
-    }
-  })
+      tool: toolDetail(item),
+      sources: kind === "search" ? item.sources : undefined,
+    })
+  }
 
   const durationSeconds = toCompletedDurationSeconds(
     options?.durationMs ?? view.reasoning.persistedDurationMs
@@ -409,7 +351,7 @@ function resolveLiveStatus(
         }
       }
       const toolName = phase.toolNames[0]
-      if (isSearchTool(toolName)) {
+      if (classifyToolName(toolName) === "search") {
         return {
           semanticKind: "search",
           label: "Searching the web",

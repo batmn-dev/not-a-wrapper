@@ -76,6 +76,33 @@ const ACTIVITY_SOURCES = [
   },
 ] satisfies AssistantSourceResult[]
 
+const SECOND_SEARCH_SOURCES = [
+  {
+    type: "source-url",
+    sourceId: "fixture-source-9",
+    url: "https://react.dev/learn/accessibility",
+    title: "Accessible React interfaces",
+    siteName: "react.dev",
+    description: "Semantic interaction patterns for React applications.",
+  },
+  {
+    type: "source-url",
+    sourceId: "fixture-source-10",
+    url: "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Attributes/aria-expanded",
+    title: "ARIA expanded state",
+    siteName: "developer.mozilla.org",
+    description: "How disclosure controls expose expanded and collapsed state.",
+  },
+  {
+    type: "source-url",
+    sourceId: "fixture-source-11",
+    url: "https://www.w3.org/WAI/WCAG22/Understanding/focus-visible.html",
+    title: "Focus visible",
+    siteName: "www.w3.org",
+    description: "Requirements for a visible keyboard focus indicator.",
+  },
+] satisfies AssistantSourceResult[]
+
 const COMPLETED_ACTIVITY = {
   entries: [
     {
@@ -104,6 +131,20 @@ const COMPLETED_ACTIVITY = {
       sources: ACTIVITY_SOURCES,
     },
     {
+      id: "fixture-reasoning-interleaved",
+      kind: "reasoning",
+      title: "Comparing source interactions",
+      detail: "I’m checking expansion, wrapping, and keyboard behavior.",
+      status: "complete",
+    },
+    {
+      id: "fixture-search-secondary",
+      kind: "search",
+      title: "Searching for disclosure accessibility guidance",
+      status: "complete",
+      sources: SECOND_SEARCH_SOURCES,
+    },
+    {
       id: "completion",
       kind: "completion",
       title: "Worked for 42s",
@@ -111,7 +152,7 @@ const COMPLETED_ACTIVITY = {
       status: "complete",
     },
   ],
-  sourceResults: ACTIVITY_SOURCES,
+  sourceResults: [...ACTIVITY_SOURCES, ...SECOND_SEARCH_SOURCES],
   imageResults: [],
 } satisfies AssistantActivityModel
 
@@ -193,7 +234,7 @@ const DENIED_ACTIVITY = {
       kind: "tool",
       title: "Delete File failed",
       detail: "Approval denied by the user.",
-      status: "error",
+      status: "denied",
       tool: {
         toolName: "delete_file",
         displayName: "Delete File",

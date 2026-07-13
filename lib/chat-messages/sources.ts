@@ -6,7 +6,7 @@
  * importing from the component tree.
  */
 import type { SourceUrlUIPart, UIMessage } from "ai"
-import { getStaticToolName, isStaticToolUIPart } from "ai"
+import { isStaticToolUIPart } from "ai"
 
 // Source type for validation
 type SourceLike = {
@@ -17,12 +17,93 @@ type SourceLike = {
   snippet?: string
   siteName?: string
   faviconDomain?: string
+  toolCallId?: string
+  tool_call_id?: string
+  callId?: string
+  searchId?: string
+  providerMetadata?: Record<string, unknown>
 }
 
 export type AssistantSourceResult = SourceUrlUIPart & {
   description?: string
   siteName?: string
   faviconDomain?: string
+  /** Explicit producer identity when the provider/tool output supplies one. */
+  toolCallId?: string
+}
+
+function sourceToolCallId(source: SourceLike): string | undefined {
+  const direct =
+    source.toolCallId ?? source.tool_call_id ?? source.callId ?? source.searchId
+  if (direct) return direct
+  for (const metadata of Object.values(source.providerMetadata ?? {})) {
+    if (metadata === null || typeof metadata !== "object") continue
+    const record = metadata as Record<string, unknown>
+    for (const key of ["toolCallId", "tool_call_id", "callId", "searchId"]) {
+      if (typeof record[key] === "string") return record[key]
+    }
+  }
+  return undefined
+}
+
+function normalizeSource(source: SourceLike): AssistantSourceResult {
+  return {
+    type: "source-url",
+    sourceId: source.sourceId || source.url,
+    url: source.url,
+    title: source.title || source.url,
+    description: source.description || source.snippet,
+    siteName: source.siteName,
+    faviconDomain: source.faviconDomain,
+    toolCallId: sourceToolCallId(source),
+  }
+}
+
+function sourceCandidates(value: unknown): SourceLike[] {
+  if (Array.isArray(value)) return value.flatMap(sourceCandidates)
+  if (isValidSource(value)) return [value]
+  if (value === null || typeof value !== "object") return []
+
+  const record = value as Record<string, unknown>
+  return ["sources", "results", "citations", "content", "result"].flatMap(
+    (key) => sourceCandidates(record[key])
+  )
+}
+
+export function dedupeSources(
+  sources: readonly AssistantSourceResult[]
+): AssistantSourceResult[] {
+  const result: AssistantSourceResult[] = []
+  const indexes = new Map<string, number>()
+  for (const source of sources) {
+    const existingIndex = indexes.get(source.url)
+    if (existingIndex === undefined) {
+      indexes.set(source.url, result.length)
+      result.push(source)
+      continue
+    }
+    const existing = result[existingIndex]
+    result[existingIndex] = {
+      ...source,
+      ...existing,
+      description: existing.description ?? source.description,
+      siteName: existing.siteName ?? source.siteName,
+      faviconDomain: existing.faviconDomain ?? source.faviconDomain,
+      toolCallId: existing.toolCallId ?? source.toolCallId,
+    }
+  }
+  return result
+}
+
+/** Sources owned by one chronological part, before turn-level deduplication. */
+export function getPartSources(
+  part: UIMessage["parts"][number]
+): AssistantSourceResult[] {
+  if (part.type === "source-url") {
+    return [normalizeSource(part as SourceLike)]
+  }
+  if (!isStaticToolUIPart(part) || part.state !== "output-available") return []
+  return dedupeSources(sourceCandidates(part.output).map(normalizeSource))
 }
 
 // Type guard to check if an object is a valid source
@@ -37,55 +118,5 @@ function isValidSource(source: unknown): source is SourceLike {
 }
 
 export function getSources(parts: UIMessage["parts"]): AssistantSourceResult[] {
-  const sources = parts
-    ?.filter((part) => part.type === "source-url" || isStaticToolUIPart(part))
-    .map((part) => {
-      if (part.type === "source-url") {
-        return part
-      }
-
-      if (isStaticToolUIPart(part) && part.state === "output-available") {
-        const result = part.output as unknown
-        const toolName = getStaticToolName(part)
-
-        // Handle summarizeSources tool which returns citations
-        if (toolName === "summarizeSources") {
-          const typedResult = result as
-            { result?: Array<{ citations?: unknown[] }> } | undefined
-          if (typedResult?.result?.[0]?.citations) {
-            return typedResult.result.flatMap((item) => item.citations || [])
-          }
-        }
-
-        return Array.isArray(result) ? result.flat() : result
-      }
-
-      return null
-    })
-    .filter(Boolean)
-    .flat()
-
-  // Filter and convert to SourceUrlUIPart format
-  const validSources = (sources || [])
-    .filter(isValidSource)
-    .map((source): AssistantSourceResult => ({
-      type: "source-url",
-      sourceId: source.sourceId || source.url,
-      url: source.url,
-      title: source.title || source.url,
-      description: source.description || source.snippet,
-      siteName: source.siteName,
-      faviconDomain: source.faviconDomain,
-    }))
-
-  // Dedupe by URL, keeping the first occurrence. Providers cite the same URL
-  // across multiple source parts / tool steps; this derivation feeds every
-  // consumer (gallery rows, "Sources · N" labels, trigger counts), so the
-  // dedupe lives here rather than in any one renderer.
-  const seenUrls = new Set<string>()
-  return validSources.filter((source) => {
-    if (seenUrls.has(source.url)) return false
-    seenUrls.add(source.url)
-    return true
-  })
+  return dedupeSources(parts.flatMap(getPartSources))
 }

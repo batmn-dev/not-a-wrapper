@@ -11,7 +11,7 @@ import {
   it,
   vi,
 } from "vitest"
-import { ActivityPanel } from "./activity-panel"
+import { activityEntryMarker, ActivityPanel } from "./activity-panel"
 import {
   ActivityPanelDockSlot,
   ActivityPanelHostProvider,
@@ -304,6 +304,124 @@ describe("ActivityPanel coexistence (R6)", () => {
     const closeButton = shell?.querySelector('button[aria-label="Close"]')
     expect(closeButton?.getAttribute("aria-expanded")).toBeNull()
     expect(closeButton?.getAttribute("aria-controls")).toBeNull()
+  })
+
+  it("propagates timeline position through the entry wrapper", () => {
+    act(() => {
+      root?.render(
+        <ActivityPanelHostProvider>
+          <ActivityPanelDockSlot />
+          <ActivityPanel open onOpenChange={() => {}} {...panelProps(5)} />
+        </ActivityPanelHostProvider>
+      )
+    })
+
+    const steps = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-activity-step]")
+    )
+    expect(steps.map((step) => step.getAttribute("data-last"))).toEqual([
+      "false",
+      "true",
+    ])
+    expect(steps.map((step) => step.style.zIndex)).toEqual(["1", "2"])
+  })
+
+  it("expands N more sources inline with disclosure semantics and resets on reopen", () => {
+    function Harness({ open }: { open: boolean }) {
+      return (
+        <ActivityPanelHostProvider>
+          <ActivityPanelDockSlot />
+          <ActivityPanel
+            open={open}
+            onOpenChange={() => {}}
+            {...panelProps(5)}
+          />
+        </ActivityPanelHostProvider>
+      )
+    }
+
+    act(() => root?.render(<Harness open />))
+    const more = document.querySelector<HTMLButtonElement>(
+      'button[aria-expanded="false"]'
+    )
+    expect(more?.textContent).toBe("2 more")
+    expect(more?.getAttribute("aria-controls")).toBeTruthy()
+    expect(document.querySelectorAll("img")).toHaveLength(8)
+
+    act(() => more?.click())
+    expect(document.body.textContent).not.toContain("2 more")
+    // Five inline chips plus five Sources gallery rows.
+    expect(document.querySelectorAll("img")).toHaveLength(10)
+
+    act(() => root?.render(<Harness open={false} />))
+    act(() => root?.render(<Harness open />))
+    expect(
+      document.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')
+        ?.textContent
+    ).toBe("2 more")
+  })
+
+  it("uses one exhaustive semantic marker mapping", () => {
+    const marker = (
+      kind: "reasoning" | "search" | "tool" | "image" | "completion",
+      status:
+        "running" | "complete" | "approval" | "error" | "denied" | "stopped"
+    ) =>
+      activityEntryMarker({
+        id: `${kind}-${status}`,
+        kind,
+        status,
+        title: "Marker",
+      })
+
+    expect(marker("reasoning", "running")).toBe("reasoning")
+    expect(marker("reasoning", "complete")).toBe("reasoning")
+    expect(marker("search", "complete")).toBe("search")
+    expect(marker("tool", "running")).toBe("code")
+    expect(marker("tool", "approval")).toBe("approval")
+    expect(marker("completion", "complete")).toBe("completedRun")
+    expect(marker("tool", "error")).toBe("error")
+    expect(marker("tool", "denied")).toBe("error")
+    expect(marker("tool", "stopped")).toBe("stopped")
+  })
+
+  it("renders unsafe search sources as passive chips", () => {
+    act(() => {
+      root?.render(
+        <ActivityPanelHostProvider>
+          <ActivityPanelDockSlot />
+          <ActivityPanel
+            open
+            onOpenChange={() => {}}
+            {...panelProps(0)}
+            activity={{
+              entries: [
+                {
+                  id: "unsafe-search",
+                  kind: "search",
+                  title: "Searching safely",
+                  status: "complete",
+                  sources: [
+                    {
+                      type: "source-url",
+                      sourceId: "unsafe",
+                      url: "javascript:alert(1)",
+                      title: "Unsafe",
+                    },
+                  ],
+                },
+              ],
+              sourceResults: [],
+              imageResults: [],
+            }}
+          />
+        </ActivityPanelHostProvider>
+      )
+    })
+
+    const group = document.querySelector('[role="group"][aria-label]')
+    expect(group?.querySelector("a")).toBeNull()
+    expect(group?.textContent).toContain("javascript:alert(1)")
   })
 
   it("preserves source identity for duplicate URLs", () => {
