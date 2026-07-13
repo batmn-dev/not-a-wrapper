@@ -2,7 +2,7 @@
 
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import { useRef, type ReactNode, type RefObject } from "react"
+import { useRef, type ReactNode, type Ref } from "react"
 import { PanelHeader } from "./panel-header"
 
 export type DockedFlyoutShellProps = {
@@ -12,10 +12,7 @@ export type DockedFlyoutShellProps = {
   active: boolean
   onClose: () => void
   children: ReactNode
-  /**
-   * Intentional auto-scroll scaffolding; `ActivityPanel` does not pass it yet.
-   */
-  viewportRef?: RefObject<HTMLDivElement | null>
+  viewportRef?: Ref<HTMLDivElement>
   className?: string
 }
 

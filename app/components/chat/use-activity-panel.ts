@@ -42,6 +42,8 @@ export const PENDING_ACTIVITY_TURN_ID = "__pending_activity_turn__"
 export type ActivityPanelProps = {
   activity: AssistantActivityModel | undefined
   durationSeconds: number | undefined
+  turnKey: string | undefined
+  followLatest: boolean
 }
 
 export type UseActivityPanelResult = {
@@ -274,6 +276,8 @@ export function useActivityPanel({
     ? {
         activity: undefined,
         durationSeconds: undefined,
+        turnKey: panelActivityTurnId,
+        followLatest: false,
       }
     : {
         activity:
@@ -281,6 +285,8 @@ export function useActivityPanel({
             ? presentation.activity
             : undefined,
         durationSeconds: toCompletedDurationSeconds(panelDurationMs),
+        turnKey: panelActivityTurnId,
+        followLatest: isPanelDefaultTurn && generationActive,
       }
 
   return {

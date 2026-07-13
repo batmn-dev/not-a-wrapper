@@ -7,6 +7,16 @@
 - **Better in-progress conversation view:** persist and surface active progress
   when a user leaves and returns to a streaming chat.
   - **Assistant message highlighting:** Add to chat
+- **Automatic conversation context management:** replace the current
+  context-limit hard stop with model-aware input budgeting that reserves space
+  for instructions, tool schemas, attachments, and output. Before the selected
+  path exceeds its budget, derive a versioned summary checkpoint for older
+  completed turns while retaining recent turns verbatim and preserving the full
+  canonical transcript, branch/edit/regeneration semantics, tool outcomes, and
+  source provenance. Make compaction idempotent, observable, and visible to the
+  user; fall back to an explicit hard stop when safe compaction cannot fit. Cover
+  authenticated and guest chats, model switches, attachments, and multi-step
+  tool turns with cross-provider tests and token/compaction telemetry.
 - **Add chat-composer dictation**
 - **Voice Mode:** Using Eleven Labs
 - **Image generation:** Nano banna and state of the art image gen tools (Using Vercel's SDK Framework)

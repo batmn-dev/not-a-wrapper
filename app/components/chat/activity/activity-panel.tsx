@@ -15,7 +15,7 @@ import type {
 import { parseSafeExternalUrl } from "@/lib/url-safety"
 import { RiCheckLine, RiCodeLine, RiFileCopyLine } from "@remixicon/react"
 import Image from "next/image"
-import { useId, useRef, useState } from "react"
+import { useId, useRef, useState, type RefCallback } from "react"
 import { createPortal } from "react-dom"
 import { useActivityPanelDockSlot } from "./activity-panel-host"
 import { useActivityPanelSectionTarget } from "./activity-panel-store"
@@ -24,6 +24,7 @@ import { ContentSheetShell } from "./content-sheet-shell"
 import { DockedFlyoutShell } from "./docked-flyout-shell"
 import { PanelSectionHeading } from "./panel-section-heading"
 import { SourcesGallery } from "./sources-gallery"
+import { useActivityPanelScrollFollow } from "./use-activity-panel-scroll-follow"
 import { useDockedPanelCollapse } from "./use-docked-panel-collapse"
 
 const LG_BREAKPOINT = 1024
@@ -43,6 +44,8 @@ export type ActivityPanelProps = {
   durationSeconds?: number
   activity?: AssistantActivityModel
   onToolApproval?: ToolApprovalHandler
+  turnKey?: string
+  followLatest?: boolean
 }
 
 function ActivityToolCard({
@@ -321,9 +324,11 @@ function ActivityEntryRow({
 function PanelBody({
   activity,
   onToolApproval,
+  contentRef,
 }: {
   activity?: AssistantActivityModel
   onToolApproval?: ToolApprovalHandler
+  contentRef: RefCallback<HTMLElement>
 }) {
   const { section, consume } = useActivityPanelSectionTarget()
   const sourcesSectionRef = useRef<HTMLDivElement>(null)
@@ -346,7 +351,7 @@ function PanelBody({
   }))
 
   return (
-    <div>
+    <div ref={contentRef}>
       <div className="px-3 pt-2 pb-4">
         <PanelSectionHeading title="Thinking" className="mb-3" />
         <ActivityTimeline className="flex flex-col">
@@ -408,15 +413,23 @@ export function ActivityPanel({
   durationSeconds,
   activity,
   onToolApproval,
+  turnKey,
+  followLatest = false,
 }: ActivityPanelProps) {
   const isBelowLg = useBreakpoint(LG_BREAKPOINT)
   const slotElement = useActivityPanelDockSlot()
+  const { section } = useActivityPanelSectionTarget()
+  const { viewportRef, contentRef } = useActivityPanelScrollFollow({
+    turnKey,
+    startAtEnd: followLatest && section === undefined,
+  })
   const close = () => onOpenChange(false)
   const body = (
     <PanelBody
-      key={open ? "open" : "closed"}
+      key={`${open ? "open" : "closed"}:${turnKey ?? "none"}`}
       activity={activity}
       onToolApproval={onToolApproval}
+      contentRef={contentRef}
     />
   )
   const dockedExpanded = open && !isBelowLg
@@ -441,6 +454,7 @@ export function ActivityPanel({
                 durationSeconds={durationSeconds}
                 active={dockedExpanded}
                 onClose={close}
+                viewportRef={dockedExpanded ? viewportRef : undefined}
               >
                 {body}
               </DockedFlyoutShell>
@@ -459,6 +473,7 @@ export function ActivityPanel({
           <ScrollArea
             role="region"
             aria-label="Activity details"
+            viewportRef={open ? viewportRef : undefined}
             className="min-h-0 flex-1"
           >
             <div className="px-6 pb-4">{body}</div>

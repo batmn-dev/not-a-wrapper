@@ -416,7 +416,10 @@ export function deriveAssistantActivityModel(
       entries.push({
         id: item.id,
         kind: "image",
-        title: toolActionTitle(label, item.input, status),
+        title:
+          status === "running"
+            ? (inputAction(item.input) ?? "Generating image")
+            : toolActionTitle(label, item.input, status),
         detail: errorDetail(item.lifecycle),
         status,
       })
@@ -467,11 +470,30 @@ export function deriveAssistantActivityModel(
 
 function resolveLiveStatus(
   view: AssistantTurnView,
-  phase: AssistantTurnPhase
+  phase: AssistantTurnPhase,
+  activity: AssistantActivityModel | undefined
 ): Omit<
   Extract<AssistantActivityPresentation, { kind: "live-status" }>,
   "kind"
 > {
+  const active = activity?.entries.findLast(
+    (entry) => entry.status === "running" || entry.status === "approval"
+  )
+  if (active) {
+    if (active.status === "approval") {
+      return {
+        semanticKind: "approval",
+        label: active.title,
+        motion: "none",
+      }
+    }
+    return {
+      semanticKind: active.kind === "reasoning" ? "thinking" : active.kind,
+      label: active.title,
+      motion: "shimmer",
+    }
+  }
+
   switch (phase.kind) {
     case "generating-image":
       return {
@@ -536,7 +558,7 @@ export function deriveAssistantActivityPresentation(
   const isLive = phase.kind !== "settled" && phase.kind !== "responding"
 
   if (isLive) {
-    const status = resolveLiveStatus(view, phase)
+    const status = resolveLiveStatus(view, phase, activity)
     if (activity) {
       return {
         kind: "disclosure",

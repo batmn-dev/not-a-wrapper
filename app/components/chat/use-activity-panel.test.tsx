@@ -153,6 +153,8 @@ describe("useActivityPanel ownership", () => {
     })
     expect(latest!.defaultActivityTurnId).toBe("a2")
     expect(latest!.panelActivityTurnId).toBe("a2")
+    expect(latest!.panelProps.turnKey).toBe("a2")
+    expect(latest!.panelProps.followLatest).toBe(false)
     expect(latest!.panelProps.durationSeconds).toBe(4)
     expect(projectedSourceUrls()).toContain("https://a.com")
 
@@ -168,6 +170,7 @@ describe("useActivityPanel ownership", () => {
     })
     expect(latest!.defaultActivityTurnId).toBe("a9")
     expect(latest!.panelActivityTurnId).toBe("a9")
+    expect(latest!.panelProps.turnKey).toBe("a9")
     expect(latest!.panelProps.durationSeconds).toBe(9)
     expect(projectedSourceUrls()).toContain("https://b.com")
     expect(latest!.selectedTurnPresent).toBe(true)
@@ -186,6 +189,7 @@ describe("useActivityPanel ownership", () => {
       selectedActivityTurnId: "a2",
     })
     expect(latest!.panelActivityTurnId).toBe("a9")
+    expect(latest!.panelProps.turnKey).toBe("a9")
     expect(latest!.selectedTurnPresent).toBe(false)
   })
 
@@ -203,6 +207,7 @@ describe("useActivityPanel ownership", () => {
 
     expect(latest!.defaultActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.panelActivityTurnId).toBe("a1")
+    expect(latest!.panelProps.followLatest).toBe(false)
     expect(latest!.isGenerationActive).toBe(true)
     expect(latest!.panelProps.durationSeconds).toBe(4)
     expect(projectedSourceUrls()).toContain("https://a.com")
@@ -227,6 +232,7 @@ describe("useActivityPanel ownership", () => {
 
     expect(latest!.defaultActivityTurnId).toBe("a2")
     expect(latest!.panelActivityTurnId).toBe("a1")
+    expect(latest!.panelProps.followLatest).toBe(false)
     expect(latest!.panelProps.activity).toBeUndefined()
     expect(latest!.panelCanOpen).toBe(false)
   })
@@ -253,6 +259,7 @@ describe("useActivityPanel ownership", () => {
       title: "Generation stopped",
       status: "stopped",
     })
+    expect(latest!.panelProps.followLatest).toBe(false)
   })
 
   it("keeps a default-opened panel following the next pending generation", () => {
@@ -285,6 +292,8 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.defaultActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.panelActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.panelProps.activity).toBeUndefined()
+    expect(latest!.panelProps.turnKey).toBe(PENDING_ACTIVITY_TURN_ID)
+    expect(latest!.panelProps.followLatest).toBe(false)
     expect(latest!.panelCanOpen).toBe(false)
   })
 
@@ -321,6 +330,7 @@ describe("useActivityPanel ownership", () => {
 
     expect(latest!.defaultActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.panelActivityTurnId).toBe("a1")
+    expect(latest!.panelProps.followLatest).toBe(false)
     expect(latest!.panelProps.durationSeconds).toBe(4)
     expect(projectedSourceUrls()).toContain("https://a.com")
   })
@@ -383,6 +393,8 @@ describe("useActivityPanel ownership", () => {
 
     expect(latest!.defaultActivityTurnId).toBe("client-a1")
     expect(latest!.panelActivityTurnId).toBe("client-a1")
+    expect(latest!.panelProps.turnKey).toBe("client-a1")
+    expect(latest!.panelProps.followLatest).toBe(false)
     expect(latest!.panelProps.durationSeconds).toBe(3)
     expect(projectedSourceUrls()).toContain("https://server-id.example")
   })
@@ -398,6 +410,7 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.panelActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.isGenerationActive).toBe(true)
     expect(latest!.panelProps.activity).toBeUndefined()
+    expect(latest!.panelProps.followLatest).toBe(false)
     expect(latest!.panelCanOpen).toBe(false)
   })
 
@@ -412,6 +425,74 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.panelActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
     expect(latest!.isGenerationActive).toBe(true)
     expect(latest!.panelProps.activity).toBeUndefined()
+    expect(latest!.panelProps.followLatest).toBe(false)
     expect(latest!.panelCanOpen).toBe(false)
   })
+
+  it("follows only the default streaming turn and changes its turn key", () => {
+    render({
+      messages: [
+        user("u1"),
+        assistant("a1", {
+          reasoningState: "streaming",
+          reasoningText: "**Checking**\nFirst turn",
+        }),
+      ],
+      status: "streaming",
+      isSubmitting: false,
+    })
+
+    expect(latest!.panelActivityTurnId).toBe("a1")
+    expect(latest!.panelProps).toMatchObject({
+      turnKey: "a1",
+      followLatest: true,
+    })
+
+    render({
+      messages: [
+        user("u1"),
+        assistant("a1"),
+        user("u2"),
+        assistant("a2", {
+          reasoningState: "streaming",
+          reasoningText: "**Checking**\nSecond turn",
+        }),
+      ],
+      status: "streaming",
+      isSubmitting: false,
+    })
+
+    expect(latest!.panelActivityTurnId).toBe("a2")
+    expect(latest!.panelProps).toMatchObject({
+      turnKey: "a2",
+      followLatest: true,
+    })
+  })
+
+  it.each(["failed", "awaiting_approval"] as const)(
+    "never follows an explicitly selected historical %s turn",
+    (messageStatus) => {
+      render({
+        messages: [
+          user("u1"),
+          assistant("a1", {
+            messageStatus,
+            reasoningText: "**Historical work**\nSaved detail",
+          }),
+          user("u2"),
+          assistant("a2", {
+            reasoningState: "streaming",
+            reasoningText: "**Live work**\nStill running",
+          }),
+        ],
+        status: "streaming",
+        isSubmitting: false,
+        selectedActivityTurnId: "a1",
+      })
+
+      expect(latest!.panelActivityTurnId).toBe("a1")
+      expect(latest!.panelProps.turnKey).toBe("a1")
+      expect(latest!.panelProps.followLatest).toBe(false)
+    }
+  )
 })

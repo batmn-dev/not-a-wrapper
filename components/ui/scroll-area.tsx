@@ -6,7 +6,7 @@ import * as React from "react"
 
 type ScrollAreaProps = ScrollAreaPrimitive.Root.Props & {
   /** Optional ref to access the scroll viewport element */
-  viewportRef?: React.RefObject<HTMLDivElement | null>
+  viewportRef?: React.Ref<HTMLDivElement>
 }
 
 function ScrollArea({

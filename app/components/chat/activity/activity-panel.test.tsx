@@ -16,6 +16,18 @@ import {
   ActivityPanelDockSlot,
   ActivityPanelHostProvider,
 } from "./activity-panel-host"
+import {
+  ActivityPanelStoreProvider,
+  createActivityPanelStore,
+} from "./activity-panel-store"
+
+type FrameCallback = (time: number) => void
+
+class ResizeObserverStub {
+  disconnect = vi.fn()
+  observe = vi.fn()
+  unobserve = vi.fn()
+}
 
 // useBreakpoint reads window.innerWidth + window.matchMedia; stub a desktop
 // (≥lg) viewport so the docked shell is the active one.
@@ -35,6 +47,11 @@ function stubDesktopViewport() {
     removeListener: () => {},
     dispatchEvent: () => false,
   })) as unknown as typeof window.matchMedia
+}
+
+function stubMobileViewport() {
+  stubDesktopViewport()
+  window.innerWidth = 390
 }
 
 function panelProps(sourceCount: number) {
@@ -83,9 +100,43 @@ beforeAll(() => {
 describe("ActivityPanel coexistence (R6)", () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
+  let frames: Map<number, FrameCallback>
+  let nextFrameId: number
+  let scroll: ReturnType<typeof vi.fn>
+  let originalScroll: PropertyDescriptor | undefined
+  let originalGetAnimations: PropertyDescriptor | undefined
 
   beforeEach(() => {
     stubDesktopViewport()
+    frames = new Map()
+    nextFrameId = 0
+    scroll = vi.fn()
+    originalScroll = Object.getOwnPropertyDescriptor(Element.prototype, "scroll")
+    originalGetAnimations = Object.getOwnPropertyDescriptor(
+      Element.prototype,
+      "getAnimations"
+    )
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub)
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((callback: FrameCallback) => {
+        const id = ++nextFrameId
+        frames.set(id, callback)
+        return id
+      })
+    )
+    vi.stubGlobal(
+      "cancelAnimationFrame",
+      vi.fn((id: number) => frames.delete(id))
+    )
+    Object.defineProperty(Element.prototype, "scroll", {
+      configurable: true,
+      value: scroll,
+    })
+    Object.defineProperty(Element.prototype, "getAnimations", {
+      configurable: true,
+      value: () => [],
+    })
     container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
@@ -101,7 +152,30 @@ describe("ActivityPanel coexistence (R6)", () => {
     container?.remove()
     root = null
     container = null
+    if (originalScroll) {
+      Object.defineProperty(Element.prototype, "scroll", originalScroll)
+    } else {
+      Reflect.deleteProperty(Element.prototype, "scroll")
+    }
+    if (originalGetAnimations) {
+      Object.defineProperty(
+        Element.prototype,
+        "getAnimations",
+        originalGetAnimations
+      )
+    } else {
+      Reflect.deleteProperty(Element.prototype, "getAnimations")
+    }
+    vi.unstubAllGlobals()
   })
+
+  function flushFrames() {
+    const pending = [...frames.values()]
+    frames.clear()
+    act(() => {
+      for (const callback of pending) callback(0)
+    })
+  }
 
   it("renders the body into exactly one shell at ≥lg — one landmark, favicons == N, no sheet", () => {
     act(() => {
@@ -334,13 +408,20 @@ describe("ActivityPanel coexistence (R6)", () => {
   })
 
   it("expands N more sources inline with disclosure semantics and resets on reopen", () => {
-    function Harness({ open }: { open: boolean }) {
+    function Harness({
+      open,
+      turnKey = "turn-1",
+    }: {
+      open: boolean
+      turnKey?: string
+    }) {
       return (
         <ActivityPanelHostProvider>
           <ActivityPanelDockSlot />
           <ActivityPanel
             open={open}
             onOpenChange={() => {}}
+            turnKey={turnKey}
             {...panelProps(5)}
           />
         </ActivityPanelHostProvider>
@@ -376,6 +457,17 @@ describe("ActivityPanel coexistence (R6)", () => {
     ).toBe("2 more")
 
     act(() => less?.click())
+    act(() => root?.render(<Harness open turnKey="turn-2" />))
+    expect(
+      document.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')
+        ?.textContent
+    ).toBe("2 more")
+
+    act(() =>
+      document
+        .querySelector<HTMLButtonElement>('button[aria-expanded="false"]')
+        ?.click()
+    )
     act(() => root?.render(<Harness open={false} />))
     act(() => root?.render(<Harness open />))
     expect(
@@ -715,5 +807,147 @@ describe("ActivityPanel coexistence (R6)", () => {
     })
     expect(approve?.disabled).toBe(false)
     expect(deny?.disabled).toBe(false)
+  })
+
+  it("attaches the live follower to the desktop viewport", () => {
+    act(() => {
+      root?.render(
+        <ActivityPanelHostProvider>
+          <ActivityPanelDockSlot />
+          <ActivityPanel
+            open
+            onOpenChange={() => {}}
+            turnKey="turn-1"
+            followLatest
+            {...panelProps(5)}
+          />
+        </ActivityPanelHostProvider>
+      )
+    })
+    const viewport = document.querySelector<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]'
+    )
+
+    flushFrames()
+
+    expect(viewport).toBeTruthy()
+    expect(scroll).toHaveBeenCalledOnce()
+    expect(scroll.mock.instances[0]).toBe(viewport)
+  })
+
+  it("attaches the same live follower contract only to the mobile viewport", () => {
+    stubMobileViewport()
+    act(() => {
+      root?.render(
+        <ActivityPanelHostProvider>
+          <ActivityPanelDockSlot />
+          <ActivityPanel
+            open
+            onOpenChange={() => {}}
+            turnKey="turn-1"
+            followLatest
+            {...panelProps(5)}
+          />
+        </ActivityPanelHostProvider>
+      )
+    })
+
+    const viewports = document.querySelectorAll<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]'
+    )
+    flushFrames()
+
+    expect(viewports).toHaveLength(1)
+    expect(
+      document.querySelectorAll('[data-slot="sheet-content"]')
+    ).toHaveLength(1)
+    expect(scroll).toHaveBeenCalledOnce()
+    expect(scroll.mock.instances[0]).toBe(viewports[0])
+  })
+
+  it("cancels a queued live write on close and re-aligns on reopen", () => {
+    function Harness({ open }: { open: boolean }) {
+      return (
+        <ActivityPanelHostProvider>
+          <ActivityPanelDockSlot />
+          <ActivityPanel
+            open={open}
+            onOpenChange={() => {}}
+            turnKey="turn-1"
+            followLatest
+            {...panelProps(5)}
+          />
+        </ActivityPanelHostProvider>
+      )
+    }
+
+    act(() => root?.render(<Harness open />))
+    act(() => root?.render(<Harness open={false} />))
+    flushFrames()
+    expect(scroll).not.toHaveBeenCalled()
+
+    act(() => root?.render(<Harness open />))
+    flushFrames()
+    expect(scroll).toHaveBeenCalledOnce()
+  })
+
+  it("keeps historical open-at-top behavior", () => {
+    act(() => {
+      root?.render(
+        <ActivityPanelHostProvider>
+          <ActivityPanelDockSlot />
+          <ActivityPanel
+            open
+            onOpenChange={() => {}}
+            turnKey="historical"
+            followLatest={false}
+            {...panelProps(5)}
+          />
+        </ActivityPanelHostProvider>
+      )
+    })
+
+    flushFrames()
+
+    expect(scroll).not.toHaveBeenCalled()
+  })
+
+  it("gives a pending Sources target priority over initial end alignment", () => {
+    const store = createActivityPanelStore()
+    store.setDerivedActivity({
+      panelTurnId: "turn-1",
+      defaultTurnId: "turn-1",
+    })
+    store.openTurn("turn-1", { section: "sources" })
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    })
+
+    try {
+      act(() => {
+        root?.render(
+          <ActivityPanelStoreProvider store={store}>
+            <ActivityPanelHostProvider>
+              <ActivityPanelDockSlot />
+              <ActivityPanel
+                open
+                onOpenChange={() => {}}
+                turnKey="turn-1"
+                followLatest
+                {...panelProps(5)}
+              />
+            </ActivityPanelHostProvider>
+          </ActivityPanelStoreProvider>
+        )
+      })
+      flushFrames()
+
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" })
+      expect(scroll).not.toHaveBeenCalled()
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView")
+    }
   })
 })
