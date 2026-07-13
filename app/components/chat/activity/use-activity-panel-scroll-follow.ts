@@ -77,7 +77,10 @@ export function useActivityPanelScrollFollow({
 
   return useMemo(() => {
     const readState = () => {
-      if (stateRef.current?.turnKey === turnKey) return stateRef.current
+      const currentState = stateRef.current
+      if (currentState !== null && currentState.turnKey === turnKey) {
+        return currentState
+      }
 
       const state = createScrollFollowState(turnKey)
       stateRef.current = state
