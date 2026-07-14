@@ -1,12 +1,8 @@
 # To Do
 
-- **Chat side panel:** finish the live multi-step timeline. Preserve the
-  intentional `ActivityPanel`, `ActivityTimeline`, and
-  `DockedFlyoutShell.viewportRef` scaffolding; re-verify live thinking behavior
-  against a current reference before wiring speculative `phase` behavior.
 - **Better in-progress conversation view:** persist and surface active progress
   when a user leaves and returns to a streaming chat.
-  - **Assistant message highlighting:** Add to chat
+- **Assistant message highlighting:** When highlighting text from an asssitant response, add a clear "Add to chat" button that adds it to the chat composer.
 - **Automatic conversation context management:** replace the current
   context-limit hard stop with model-aware input budgeting that reserves space
   for instructions, tool schemas, attachments, and output. Before the selected
