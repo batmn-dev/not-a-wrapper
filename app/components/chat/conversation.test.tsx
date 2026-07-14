@@ -50,27 +50,26 @@ vi.mock("@/components/ui/thinking-bar", () => ({
 
 vi.mock("./message", () => ({
   Message: ({
-    id,
+    model,
     onReload,
-    status,
-    view,
-    children,
   }: {
-    id: string
+    model: {
+      id: string
+      text: string
+      status?: string
+      view?: { reasoning?: { phase?: string } }
+    }
     onReload?: (messageId: string) => void
-    status?: string
-    view?: { reasoning?: { phase?: string } }
-    children: React.ReactNode
   }) => (
     <button
       data-can-reload={Boolean(onReload)}
-      data-reasoning-phase={view?.reasoning?.phase}
-      data-status={status}
-      data-testid={`message-${id}`}
-      onClick={() => onReload?.(id)}
+      data-reasoning-phase={model.view?.reasoning?.phase}
+      data-status={model.status}
+      data-testid={`message-${model.id}`}
+      onClick={() => onReload?.(model.id)}
       type="button"
     >
-      {children}
+      {model.text}
     </button>
   ),
 }))
@@ -141,7 +140,6 @@ describe("Conversation regeneration availability", () => {
           messages={messages}
           status={status}
           isSubmitting={isSubmitting}
-          onDelete={vi.fn()}
           onEdit={vi.fn()}
           onReload={onReload}
           isDurableChat
@@ -214,7 +212,6 @@ describe("Conversation regeneration availability", () => {
           messages={userTail}
           status="submitted"
           isSubmitting
-          onDelete={vi.fn()}
           onEdit={vi.fn()}
           onReload={vi.fn()}
           isDurableChat
@@ -248,7 +245,6 @@ describe("Conversation regeneration availability", () => {
           messages={userTail}
           status="ready"
           isSubmitting
-          onDelete={vi.fn()}
           onEdit={vi.fn()}
           onReload={vi.fn()}
           isDurableChat
@@ -303,7 +299,6 @@ describe("Conversation regeneration availability", () => {
         <Conversation
           messages={opaqueReasoningMessages}
           status="streaming"
-          onDelete={vi.fn()}
           onEdit={vi.fn()}
           onReload={vi.fn()}
           isDurableChat
@@ -350,7 +345,6 @@ describe("Conversation timestamp integration", () => {
       root?.render(
         <Conversation
           messages={messages}
-          onDelete={vi.fn()}
           onEdit={vi.fn()}
           onReload={vi.fn()}
           isDurableChat
@@ -568,7 +562,6 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
           isSubmitting={isSubmitting}
           messages={chat.messages}
           now={now}
-          onDelete={vi.fn()}
           onEdit={vi.fn()}
           onReload={vi.fn()}
           status={chat.status}

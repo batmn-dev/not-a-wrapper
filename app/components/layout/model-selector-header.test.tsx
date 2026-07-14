@@ -51,6 +51,7 @@ const modelSelectorHeaderMocks = {
   latestModelSelectorProps: null as ModelSelectorProps | null,
   setLastUsedModel: vi.fn(),
   updateChatModel: vi.fn(() => Promise.resolve()),
+  user: { id: "user_123" } as { id: string } | null,
   models: [
     {
       id: "gpt-5-mini",
@@ -118,6 +119,9 @@ vi.mock("@/lib/chat-store/chats/use-chat", () => ({
 vi.mock("@/lib/chat-store/session/provider", () => ({
   useChatSession: () => ({
     chatId: modelSelectorHeaderMocks.chatId,
+    selectedModelOverride: null,
+    setSelectedModelOverride: vi.fn(),
+    clearSelectedModelOverride: vi.fn(),
   }),
 }))
 
@@ -127,12 +131,13 @@ vi.mock("@/lib/model-store/provider", () => ({
     lastUsedModel: "gpt-5-mini",
     setLastUsedModel: modelSelectorHeaderMocks.setLastUsedModel,
     favoriteModels: ["gpt-5.4"],
+    modelPrefsHydrated: true,
   }),
 }))
 
 vi.mock("@/lib/user-store/provider", () => ({
   useUser: () => ({
-    user: { id: "user_123" },
+    user: modelSelectorHeaderMocks.user,
   }),
 }))
 
@@ -172,6 +177,7 @@ describe("ModelSelectorHeader", () => {
       isLoading: false,
     }
     modelSelectorHeaderMocks.latestModelSelectorProps = null
+    modelSelectorHeaderMocks.user = { id: "user_123" }
     modelSelectorHeaderMocks.setLastUsedModel.mockClear()
     modelSelectorHeaderMocks.updateChatModel.mockClear()
   })
@@ -245,6 +251,29 @@ describe("ModelSelectorHeader", () => {
     )
     expect(modelSelectorHeaderMocks.updateChatModel).toHaveBeenCalledWith(
       "chat_123",
+      "gpt-5.4"
+    )
+  })
+
+  it("persists guest selections for an active local chat", () => {
+    modelSelectorHeaderMocks.user = null
+    modelSelectorHeaderMocks.chatId = "local-chat_123"
+    modelSelectorHeaderMocks.chatResult = {
+      chat: { model: "gpt-5-mini" },
+      isLoading: false,
+    }
+
+    const props = renderHeader()
+
+    act(() => {
+      props.setSelectedModelId("gpt-5.4")
+    })
+
+    expect(modelSelectorHeaderMocks.setLastUsedModel).toHaveBeenCalledWith(
+      "gpt-5.4"
+    )
+    expect(modelSelectorHeaderMocks.updateChatModel).toHaveBeenCalledWith(
+      "local-chat_123",
       "gpt-5.4"
     )
   })

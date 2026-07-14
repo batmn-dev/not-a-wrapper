@@ -17,12 +17,10 @@ import { useChats } from "@/lib/chat-store/chats/provider"
 import { convexChatToChat } from "@/lib/chat-store/types"
 import { evaluatePromptSize } from "@/lib/chat-turn/prompt-size-policy"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
-import { attachStagedFilesToChat } from "@/lib/file-handling"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
 import { RiChat3Line } from "@remixicon/react"
 import { useQuery } from "@tanstack/react-query"
-import { useConvex } from "convex/react"
 import { motion } from "motion/react"
 import { useRouter } from "next/navigation"
 import { useCallback, useMemo, useState } from "react"
@@ -53,7 +51,6 @@ export function ProjectView({ projectId }: ProjectViewProps) {
 
 function ProjectViewInner({ projectId }: ProjectViewProps) {
   const router = useRouter()
-  const convex = useConvex()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { user } = useUser()
   const { createNewChat } = useChats()
@@ -112,6 +109,15 @@ function ProjectViewInner({ projectId }: ProjectViewProps) {
           toast({ title: promptSize.message, status: "error" })
           return false
         }
+
+        const attachmentIds = attachments.flatMap((attachment) =>
+          attachment.attachmentId ? [attachment.attachmentId] : []
+        )
+        if (attachmentIds.length !== attachments.length) {
+          toast({ title: "An attachment is not ready.", status: "error" })
+          return false
+        }
+
         const newChat = await createNewChat(
           user.id,
           text,
@@ -121,25 +127,6 @@ function ProjectViewInner({ projectId }: ProjectViewProps) {
           projectId
         )
         if (!newChat) return false
-
-        const attachmentIds = attachments.flatMap((attachment) =>
-          attachment.attachmentId ? [attachment.attachmentId] : []
-        )
-        if (attachmentIds.length !== attachments.length) {
-          toast({ title: "An attachment is not ready.", status: "error" })
-          return false
-        }
-        if (attachmentIds.length > 0) {
-          const bound = await attachStagedFilesToChat(
-            convex,
-            newChat.id,
-            attachmentIds
-          )
-          if (bound.length !== attachmentIds.length) {
-            toast({ title: "Failed to attach every file.", status: "error" })
-            return false
-          }
-        }
 
         const chatParams = new URLSearchParams({
           prompt: text,
@@ -167,7 +154,6 @@ function ProjectViewInner({ projectId }: ProjectViewProps) {
       }
     },
     [
-      convex,
       createNewChat,
       getTurnSnapshot,
       isSubmitting,

@@ -1,5 +1,8 @@
 import { authenticatedRoute } from "@/app/api/_lib/authenticated-route"
+import { api } from "@/convex/_generated/api"
+import type { Id } from "@/convex/_generated/dataModel"
 import { MCP_CONNECTION_TIMEOUT_MS } from "@/lib/config"
+import { buildStoredMcpAuthHeaders } from "@/lib/mcp/auth-headers"
 import { loadMCPToolsFromURL } from "@/lib/mcp/load-mcp-from-url"
 import { McpUrlValidationError } from "@/lib/mcp/url-validation"
 import { NextResponse } from "next/server"
@@ -10,6 +13,7 @@ type TestMCPServerRequestBody = {
   authType?: string
   authValue?: string
   headerName?: string
+  serverId?: string
 }
 
 /**
@@ -25,7 +29,7 @@ type TestMCPServerRequestBody = {
  * user-supplied URL is SSRF-gated inside `loadMCPToolsFromURL`.
  */
 export const POST = authenticatedRoute(
-  async (request) => {
+  async (request, { session, convex }) => {
     try {
       let body: TestMCPServerRequestBody
       try {
@@ -40,7 +44,7 @@ export const POST = authenticatedRoute(
         throw error
       }
 
-      const { url, transport, authType, authValue, headerName } = body
+      const { url, transport, authType, authValue, headerName, serverId } = body
 
       if (!url?.trim()) {
         return NextResponse.json(
@@ -55,6 +59,51 @@ export const POST = authenticatedRoute(
         headers = { Authorization: `Bearer ${authValue}` }
       } else if (authType === "header" && headerName && authValue) {
         headers = { [headerName]: authValue }
+      } else if (serverId && (authType === "bearer" || authType === "header")) {
+        const storedServer = await convex.query(api.mcpServers.get, {
+          serverId: serverId as Id<"mcpServers">,
+        })
+        if (!storedServer) {
+          return NextResponse.json(
+            { error: "Server not found", success: false },
+            { status: 404 }
+          )
+        }
+        if (!storedServer.encryptedAuthValue || !storedServer.authIv) {
+          return NextResponse.json(
+            {
+              error:
+                "Cannot load MCP auth headers: missing encrypted credential",
+              success: false,
+            },
+            { status: 400 }
+          )
+        }
+        if (url.trim() !== storedServer.url.trim()) {
+          return NextResponse.json(
+            {
+              error:
+                "Stored credentials can only be tested against the saved server URL",
+              success: false,
+            },
+            { status: 400 }
+          )
+        }
+        if (
+          authType !== storedServer.authType ||
+          (authType === "header" &&
+            headerName?.trim() !== storedServer.headerName?.trim())
+        ) {
+          return NextResponse.json(
+            {
+              error:
+                "Stored credentials can only be tested with the saved authentication settings",
+              success: false,
+            },
+            { status: 400 }
+          )
+        }
+        headers = buildStoredMcpAuthHeaders(storedServer, session.userId)
       }
 
       // Attempt connection with timeout

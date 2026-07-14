@@ -15,6 +15,7 @@ const turnMocks = vi.hoisted(() => ({
   modelPrefsHydrated: true,
   modelStoreLoading: false,
   preferencesLoading: false,
+  isChatLoading: false,
 }))
 
 vi.mock("@/lib/user-store/provider", () => ({
@@ -92,7 +93,11 @@ describe("TurnContextProvider snapshot contract", () => {
     function mount() {
       act(() => {
         root?.render(
-          <TurnContextProvider chatId={null} currentChat={null}>
+          <TurnContextProvider
+            chatId={null}
+            currentChat={null}
+            isChatLoading={turnMocks.isChatLoading}
+          >
             <Probe />
           </TurnContextProvider>
         )
@@ -107,6 +112,7 @@ describe("TurnContextProvider snapshot contract", () => {
     turnMocks.modelPrefsHydrated = false
     turnMocks.modelStoreLoading = true
     turnMocks.preferencesLoading = true
+    turnMocks.isChatLoading = true
     mount()
 
     expect(seen.at(-1)?.snapshot.selectedModel).toBe("model-a")
@@ -132,6 +138,14 @@ describe("TurnContextProvider snapshot contract", () => {
 
     // Every async-hydrating snapshot input settled: submit-safe.
     turnMocks.preferencesLoading = false
+    mount()
+
+    expect(seen.at(-1)?.snapshot.isHydrated).toBe(false)
+    expect(seen.at(-1)?.reactiveHydrated).toBe(false)
+
+    // An out-of-window chat can resolve after the catalog and preferences.
+    // Auto-submit must still wait for its persisted model.
+    turnMocks.isChatLoading = false
     mount()
 
     const last = seen.at(-1)

@@ -94,16 +94,16 @@ describe("Message memoization", () => {
     act(() => {
       root?.render(
         <Message
-          id="assistant-1"
-          variant="assistant"
-          view={EMPTY_VIEW}
-          onDelete={() => {}}
+          model={{
+            id: "assistant-1",
+            kind: "assistant",
+            text: "Approve this tool",
+            view: EMPTY_VIEW,
+            retryModelId,
+          }}
           onEdit={() => {}}
           onReload={onReload}
-          retryModelId={retryModelId}
-        >
-          Approve this tool
-        </Message>
+        />
       )
     })
   }
@@ -149,6 +149,29 @@ describe("Message memoization", () => {
 
     expect(lastAssistantProps.current.retryModelId).toBe("gpt-5.5")
   })
+
+  it("intentionally omits unsupported message roles", () => {
+    if (!container) {
+      container = document.createElement("div")
+      document.body.appendChild(container)
+      root = createRoot(container)
+    }
+
+    act(() => {
+      root?.render(
+        <Message
+          model={{
+            id: "system-1",
+            kind: "unsupported",
+            text: "System-only context",
+          }}
+          onEdit={() => {}}
+        />
+      )
+    })
+
+    expect(container?.innerHTML).toBe("")
+  })
 })
 
 describe("Message body memo contract (R3)", () => {
@@ -192,16 +215,16 @@ describe("Message body memo contract (R3)", () => {
     act(() => {
       root?.render(
         <Message
-          id="assistant-1"
-          variant="assistant"
-          isLast={props.isLast}
-          status={props.status}
-          view={view}
-          onDelete={() => {}}
+          model={{
+            id: "assistant-1",
+            kind: "assistant",
+            text: props.children ?? "",
+            isLast: props.isLast,
+            status: props.status,
+            view,
+          }}
           onEdit={() => {}}
-        >
-          {props.children ?? ""}
-        </Message>
+        />
       )
     })
   }

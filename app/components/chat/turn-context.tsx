@@ -78,10 +78,12 @@ function createSnapshotStore(initial: TurnSnapshot) {
 export function TurnContextProvider({
   chatId,
   currentChat,
+  isChatLoading = false,
   children,
 }: {
   chatId: string | null
   currentChat: Chats | null
+  isChatLoading?: boolean
   children: ReactNode
 }) {
   const { user } = useUser()
@@ -98,6 +100,7 @@ export function TurnContextProvider({
     user,
     updateChatModel,
     chatId,
+    isChatLoading,
   })
 
   const enableSearch = resolveWebSearchEnabled(preferences.webSearchEnabled)
@@ -115,7 +118,10 @@ export function TurnContextProvider({
   // SSR-seeded (systemPrompt has no async gap), and preferencesLoading is
   // false for guests, so the gate cannot deadlock unauthenticated loads.
   const isHydrated =
-    modelPrefsHydrated && !modelStoreLoading && !preferencesLoading
+    modelPrefsHydrated &&
+    !modelStoreLoading &&
+    !preferencesLoading &&
+    !isChatLoading
 
   const snapshot: TurnSnapshot = {
     selectedModel,

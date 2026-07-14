@@ -411,14 +411,14 @@ export function ChatsProvider({
             op.id === id &&
             op.changes.model === normalizedModel
         )
-      } catch {
+      } catch (error) {
         removeOp(
           (op) =>
             op.type === "update" &&
             op.id === id &&
             op.changes.model === normalizedModel
         )
-        toast({ title: "Failed to update model", status: "error" })
+        throw error
       }
     },
     [chats, updateModelMutation, removeOp]
