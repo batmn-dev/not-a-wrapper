@@ -251,7 +251,7 @@ describe("MessageAssistant activity trigger", () => {
 
     expect(
       container?.querySelector(
-        'button[aria-label="Open activity: Searching the web"]'
+        'button[aria-label="Open activity: Searching for q"]'
       )
     ).toBeTruthy()
     expect(container?.textContent).not.toContain("Generating")

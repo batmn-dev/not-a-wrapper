@@ -32,17 +32,20 @@ class ResizeObserverStub {
 function Harness({
   turnKey,
   startAtEnd,
+  initialTargetPending = false,
   scrollHeight = 1000,
   clientHeight = 400,
 }: {
   turnKey: string
   startAtEnd: boolean
+  initialTargetPending?: boolean
   scrollHeight?: number
   clientHeight?: number
 }) {
   const { viewportRef, contentRef } = useActivityPanelScrollFollow({
     turnKey,
     startAtEnd,
+    initialTargetPending,
   })
 
   return (
@@ -187,6 +190,23 @@ describe("useActivityPanelScrollFollow", () => {
 
     expect(scroll).toHaveBeenCalledOnce()
     expect(scroll).toHaveBeenCalledWith({ top: 1000, behavior: "instant" })
+  })
+
+  it("preserves a pending section target when consuming it enables following", () => {
+    render({
+      turnKey: "turn-1",
+      startAtEnd: false,
+      initialTargetPending: true,
+    })
+
+    render({
+      turnKey: "turn-1",
+      startAtEnd: true,
+      initialTargetPending: false,
+    })
+    flushFrames()
+
+    expect(scroll).not.toHaveBeenCalled()
   })
 
   it("follows pinned content growth and coalesces notifications per frame", () => {

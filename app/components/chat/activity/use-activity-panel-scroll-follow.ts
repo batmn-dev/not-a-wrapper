@@ -12,12 +12,15 @@ type ActivityScrollFollowState = {
   /** Overflow guard: the viewport overflowed before the latest growth. */
   wasOverflowing: boolean
   frameId: number | null
+  suppressNextStartAtEnd: boolean
 }
 
 export type ActivityPanelScrollFollowOptions = {
   turnKey?: string
   /** Align to the end on attach (live default turn without a section target). */
   startAtEnd: boolean
+  /** Preserve a pending section target through its consume-triggered reattach. */
+  initialTargetPending?: boolean
   bottomThresholdPx?: number
 }
 
@@ -36,6 +39,7 @@ function createScrollFollowState(
     pinned: false,
     wasOverflowing: false,
     frameId: null,
+    suppressNextStartAtEnd: false,
   }
 }
 
@@ -71,6 +75,7 @@ function scheduleEndAlignment(state: ActivityScrollFollowState): void {
 export function useActivityPanelScrollFollow({
   turnKey,
   startAtEnd,
+  initialTargetPending = false,
   bottomThresholdPx = DEFAULT_BOTTOM_THRESHOLD_PX,
 }: ActivityPanelScrollFollowOptions): ActivityPanelScrollFollow {
   const stateRef = useRef<ActivityScrollFollowState | null>(null)
@@ -91,10 +96,14 @@ export function useActivityPanelScrollFollow({
       if (node === null) return
 
       const state = readState()
+      if (initialTargetPending) state.suppressNextStartAtEnd = true
+      const shouldStartAtEnd =
+        startAtEnd && !state.suppressNextStartAtEnd
+      if (startAtEnd) state.suppressNextStartAtEnd = false
       state.viewport = node
       state.wasOverflowing = isOverflowing(node)
       state.pinned =
-        startAtEnd || distanceFromEnd(node) <= bottomThresholdPx
+        shouldStartAtEnd || distanceFromEnd(node) <= bottomThresholdPx
 
       const onScroll = () => {
         if (state.viewport !== node) return
@@ -102,7 +111,7 @@ export function useActivityPanelScrollFollow({
       }
       node.addEventListener("scroll", onScroll, { passive: true })
 
-      if (startAtEnd) scheduleEndAlignment(state)
+      if (shouldStartAtEnd) scheduleEndAlignment(state)
 
       return () => {
         node.removeEventListener("scroll", onScroll)
@@ -136,5 +145,5 @@ export function useActivityPanelScrollFollow({
     }
 
     return { viewportRef, contentRef }
-  }, [bottomThresholdPx, startAtEnd, turnKey])
+  }, [bottomThresholdPx, initialTargetPending, startAtEnd, turnKey])
 }

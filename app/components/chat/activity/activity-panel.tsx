@@ -422,6 +422,7 @@ export function ActivityPanel({
   const { viewportRef, contentRef } = useActivityPanelScrollFollow({
     turnKey,
     startAtEnd: followLatest && section === undefined,
+    initialTargetPending: section !== undefined,
   })
   const close = () => onOpenChange(false)
   const body = (
