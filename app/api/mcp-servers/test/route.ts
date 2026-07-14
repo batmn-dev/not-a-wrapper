@@ -59,10 +59,7 @@ export const POST = authenticatedRoute(
         headers = { Authorization: `Bearer ${authValue}` }
       } else if (authType === "header" && headerName && authValue) {
         headers = { [headerName]: authValue }
-      } else if (
-        serverId &&
-        (authType === "bearer" || authType === "header")
-      ) {
+      } else if (serverId && (authType === "bearer" || authType === "header")) {
         const storedServer = await convex.query(api.mcpServers.get, {
           serverId: serverId as Id<"mcpServers">,
         })
@@ -70,6 +67,16 @@ export const POST = authenticatedRoute(
           return NextResponse.json(
             { error: "Server not found", success: false },
             { status: 404 }
+          )
+        }
+        if (!storedServer.encryptedAuthValue || !storedServer.authIv) {
+          return NextResponse.json(
+            {
+              error:
+                "Cannot load MCP auth headers: missing encrypted credential",
+              success: false,
+            },
+            { status: 400 }
           )
         }
         headers = buildStoredMcpAuthHeaders(

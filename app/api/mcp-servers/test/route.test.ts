@@ -160,4 +160,29 @@ describe("/api/mcp-servers/test route", () => {
     expect(routeMocks.buildStoredMcpAuthHeaders).not.toHaveBeenCalled()
     expect(loadMCPToolsFromURL).not.toHaveBeenCalled()
   })
+
+  it("returns 400 when an edited server has no stored credential to reuse", async () => {
+    routeMocks.query.mockResolvedValue({
+      encryptedAuthValue: undefined,
+      authIv: undefined,
+      headerName: undefined,
+    })
+
+    const response = await POST(
+      makeRequest({
+        serverId: "server-1",
+        url: "https://mcp.example.com",
+        authType: "bearer",
+      })
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: "Cannot load MCP auth headers: missing encrypted credential",
+      success: false,
+    })
+    expect(routeMocks.buildStoredMcpAuthHeaders).not.toHaveBeenCalled()
+    expect(loadMCPToolsFromURL).not.toHaveBeenCalled()
+    expect(consoleErrorSpy).not.toHaveBeenCalled()
+  })
 })
