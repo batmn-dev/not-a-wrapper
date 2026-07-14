@@ -87,3 +87,59 @@ describe("Markdown math delimiters", () => {
     expect(body.querySelector(".katex-error")).toBeNull()
   })
 })
+
+describe("Markdown response controls and semantics", () => {
+  it("keeps inline code semantic without leaking the parser node", () => {
+    const body = renderMarkdown("Use `src/components/Button.tsx:42`.")
+    const code = body.querySelector("code")
+
+    expect(code?.textContent).toBe("src/components/Button.tsx:42")
+    expect(code?.hasAttribute("node")).toBe(false)
+  })
+
+  it("renders markdown links as semantic decorated links", () => {
+    const body = renderMarkdown("[Visit Example](https://example.com)")
+    const link = body.querySelector("a")
+
+    expect(link?.textContent).toBe("Visit Example")
+    expect(link?.getAttribute("href")).toBe("https://example.com")
+    expect(link?.getAttribute("target")).toBe("_blank")
+    expect(link?.hasAttribute("node")).toBe(false)
+    expect(link?.querySelector("img")).toBeNull()
+    expect(link?.querySelector('[aria-hidden="true"]')).not.toBeNull()
+  })
+
+  it("preserves heading hierarchy and native GFM task-list semantics", () => {
+    const body = renderMarkdown(
+      "##### Heading 5\n\n###### Heading 6\n\n- [x] Done\n- [ ] Pending"
+    )
+    const checkboxes = body.querySelectorAll<HTMLInputElement>(
+      '.contains-task-list input[type="checkbox"]'
+    )
+
+    expect(body.querySelector("h5")?.textContent).toBe("Heading 5")
+    expect(body.querySelector("h6")?.textContent).toBe("Heading 6")
+    expect(checkboxes).toHaveLength(2)
+    expect(checkboxes[0]?.checked).toBe(true)
+    expect(checkboxes[1]?.checked).toBe(false)
+    expect(Array.from(checkboxes).every((input) => input.disabled)).toBe(true)
+  })
+
+  it("adds an accessible copy action to tables", () => {
+    const body = renderMarkdown("| A | B |\n| --- | --- |\n| 1 | 2 |")
+    const table = body.querySelector("table")
+
+    expect(table).not.toBeNull()
+    expect(table?.hasAttribute("node")).toBe(false)
+    expect(body.querySelector('button[aria-label="Copy table"]')).not.toBeNull()
+  })
+
+  it("uses friendly code language labels and hides plaintext labels", () => {
+    const syntax = renderMarkdown("```javascript\nconst ready = true\n```")
+    const plaintext = renderMarkdown("```text\nReady\n```")
+
+    expect(syntax.textContent).toContain("JavaScript")
+    expect(plaintext.textContent).not.toContain("plaintext")
+    expect(plaintext.textContent).not.toContain("textCopy")
+  })
+})
