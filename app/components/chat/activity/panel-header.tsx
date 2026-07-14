@@ -110,7 +110,7 @@ export function PanelHeader({
   return (
     <div
       className={cn(
-        "flex h-[calc(var(--spacing-app-header)+1px)] shrink-0 items-center justify-between gap-2 bg-[var(--activity-panel-surface)] px-4 [box-shadow:var(--sharp-edge-top-shadow)]",
+        "h-app-header flex shrink-0 items-center justify-between gap-2 bg-[var(--activity-panel-surface)] px-4 [box-shadow:var(--sharp-edge-top-shadow)]",
         className
       )}
     >

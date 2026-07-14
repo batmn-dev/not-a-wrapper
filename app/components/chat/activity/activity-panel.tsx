@@ -15,7 +15,7 @@ import type {
 import { parseSafeExternalUrl } from "@/lib/url-safety"
 import { RiCheckLine, RiCodeLine, RiFileCopyLine } from "@remixicon/react"
 import Image from "next/image"
-import { useId, useRef, useState } from "react"
+import { useId, useRef, useState, type RefCallback } from "react"
 import { createPortal } from "react-dom"
 import { useActivityPanelDockSlot } from "./activity-panel-host"
 import { useActivityPanelSectionTarget } from "./activity-panel-store"
@@ -24,6 +24,7 @@ import { ContentSheetShell } from "./content-sheet-shell"
 import { DockedFlyoutShell } from "./docked-flyout-shell"
 import { PanelSectionHeading } from "./panel-section-heading"
 import { SourcesGallery } from "./sources-gallery"
+import { useActivityPanelScrollFollow } from "./use-activity-panel-scroll-follow"
 import { useDockedPanelCollapse } from "./use-docked-panel-collapse"
 
 const LG_BREAKPOINT = 1024
@@ -43,6 +44,8 @@ export type ActivityPanelProps = {
   durationSeconds?: number
   activity?: AssistantActivityModel
   onToolApproval?: ToolApprovalHandler
+  turnKey?: string
+  followLatest?: boolean
 }
 
 function ActivityToolCard({
@@ -142,7 +145,7 @@ function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
   const sources = entry.sources
   if (sources.length === 0) return null
   const visible = expanded ? sources : sources.slice(0, VISIBLE_SOURCE_CHIPS)
-  const remaining = sources.length - visible.length
+  const hiddenSources = sources.slice(VISIBLE_SOURCE_CHIPS)
 
   return (
     <div
@@ -193,15 +196,44 @@ function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
           )
         })}
       </span>
-      {remaining > 0 ? (
+      {hiddenSources.length > 0 ? (
+        // The reference overflow control is a free toggle (measured
+        // 2026-07-13): collapsed, an "N more" chip leads with a stacked
+        // favicon preview of the first three hidden sources; expanded, a
+        // text-only "Show less" chip collapses back. ChatGPT ships neither
+        // state with disclosure ARIA; we keep it.
         <button
           type="button"
           aria-expanded={expanded}
           aria-controls={chipGroupId}
-          onClick={() => setExpanded(true)}
-          className="bg-muted text-muted-foreground hover:bg-foreground hover:text-background focus-visible:ring-ring inline-flex h-[25px] items-center rounded-full px-3 text-xs outline-none focus-visible:ring-2"
+          onClick={() => setExpanded((value) => !value)}
+          className="group bg-muted text-muted-foreground hover:bg-foreground hover:text-background focus-visible:ring-ring inline-flex h-[25px] max-w-full items-center gap-1 overflow-hidden rounded-full px-3 text-xs outline-none focus-visible:ring-2"
         >
-          {remaining} more
+          {expanded ? (
+            "Show less"
+          ) : (
+            <>
+              {hiddenSources.slice(0, 3).map((source) => (
+                <span
+                  key={`${source.sourceId}:${source.url}`}
+                  className="border-muted bg-background group-hover:border-foreground -ms-3 box-content size-3 shrink-0 overflow-hidden rounded-full border first:-ms-1"
+                >
+                  <Image
+                    alt=""
+                    src={`https://www.google.com/s2/favicons?sz=32&domain_url=${encodeURIComponent(source.url)}`}
+                    width={12}
+                    height={12}
+                    loading="lazy"
+                    decoding="async"
+                    className="size-3"
+                  />
+                </span>
+              ))}
+              <span className="max-w-32 truncate">
+                {hiddenSources.length} more
+              </span>
+            </>
+          )}
         </button>
       ) : null}
     </div>
@@ -292,9 +324,11 @@ function ActivityEntryRow({
 function PanelBody({
   activity,
   onToolApproval,
+  contentRef,
 }: {
   activity?: AssistantActivityModel
   onToolApproval?: ToolApprovalHandler
+  contentRef: RefCallback<HTMLElement>
 }) {
   const { section, consume } = useActivityPanelSectionTarget()
   const sourcesSectionRef = useRef<HTMLDivElement>(null)
@@ -317,7 +351,7 @@ function PanelBody({
   }))
 
   return (
-    <div>
+    <div ref={contentRef}>
       <div className="px-3 pt-2 pb-4">
         <PanelSectionHeading title="Thinking" className="mb-3" />
         <ActivityTimeline className="flex flex-col">
@@ -379,15 +413,24 @@ export function ActivityPanel({
   durationSeconds,
   activity,
   onToolApproval,
+  turnKey,
+  followLatest = false,
 }: ActivityPanelProps) {
   const isBelowLg = useBreakpoint(LG_BREAKPOINT)
   const slotElement = useActivityPanelDockSlot()
+  const { section } = useActivityPanelSectionTarget()
+  const { viewportRef, contentRef } = useActivityPanelScrollFollow({
+    turnKey,
+    startAtEnd: followLatest && section === undefined,
+    initialTargetPending: section !== undefined,
+  })
   const close = () => onOpenChange(false)
   const body = (
     <PanelBody
-      key={open ? "open" : "closed"}
+      key={`${open ? "open" : "closed"}:${turnKey ?? "none"}`}
       activity={activity}
       onToolApproval={onToolApproval}
+      contentRef={contentRef}
     />
   )
   const dockedExpanded = open && !isBelowLg
@@ -412,6 +455,7 @@ export function ActivityPanel({
                 durationSeconds={durationSeconds}
                 active={dockedExpanded}
                 onClose={close}
+                viewportRef={dockedExpanded ? viewportRef : undefined}
               >
                 {body}
               </DockedFlyoutShell>
@@ -430,6 +474,7 @@ export function ActivityPanel({
           <ScrollArea
             role="region"
             aria-label="Activity details"
+            viewportRef={open ? viewportRef : undefined}
             className="min-h-0 flex-1"
           >
             <div className="px-6 pb-4">{body}</div>

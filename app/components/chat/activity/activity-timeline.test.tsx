@@ -32,7 +32,7 @@ describe("ActivityTimeline", () => {
     container = null
   })
 
-  it("injects terminal state and uses the inspected show animation on steps", () => {
+  it("starts each connector below its icon and omits it on the last row", () => {
     act(() => {
       root?.render(
         <ActivityTimeline>
@@ -47,12 +47,21 @@ describe("ActivityTimeline", () => {
     })
 
     const steps = Array.from(
-      container!.querySelectorAll<HTMLElement>("[data-last]")
+      container!.querySelectorAll<HTMLElement>("[data-activity-step]")
     )
     expect(steps).toHaveLength(2)
+    expect(steps[0]?.className).toContain("animate-[show_150ms_ease-in]")
     expect(steps[0]?.getAttribute("data-last")).toBe("false")
     expect(steps[1]?.getAttribute("data-last")).toBe("true")
-    expect(steps[0]?.className).toContain("animate-[show_150ms_ease-in]")
-    expect(steps[0]?.querySelector(".bottom-\\[-10px\\]")).toBeTruthy()
+    expect(steps[0]?.style.zIndex).toBe("0")
+    expect(steps[1]?.style.zIndex).toBe("1")
+    expect(
+      steps[0]?.querySelector("[data-activity-connector]")
+        ?.previousElementSibling
+    ).toBeTruthy()
+    expect(
+      steps[0]?.querySelector("[data-activity-connector]")?.className
+    ).toContain("bg-[var(--border-heavy)]")
+    expect(steps[1]?.querySelector("[data-activity-connector]")).toBeNull()
   })
 })

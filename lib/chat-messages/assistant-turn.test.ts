@@ -884,6 +884,205 @@ describe("deriveAssistantTurnPhase", () => {
 })
 
 describe("deriveAssistantActivityPresentation", () => {
+  it("uses the latest active chronological entry for live disclosure copy", () => {
+    const view = viewOf([
+      {
+        type: "tool-python",
+        toolCallId: "tool-1",
+        state: "input-available",
+        input: { description: "Checking local data" },
+      },
+      {
+        type: "tool-web_search",
+        toolCallId: "search-1",
+        state: "input-available",
+        input: { query: "weather today" },
+      },
+    ])
+
+    expect(
+      deriveAssistantActivityPresentation(view, {
+        kind: "tooling",
+        toolNames: ["python", "web_search"],
+      })
+    ).toMatchObject({
+      kind: "disclosure",
+      label: "Searching for weather today",
+      motion: "shimmer",
+    })
+  })
+
+  it("keeps a completed search while the next search supplies the live title", () => {
+    const view = viewOf([
+      {
+        type: "tool-web_search",
+        toolCallId: "search-1",
+        state: "output-available",
+        input: { query: "New York weather" },
+        output: {},
+      },
+      {
+        type: "tool-web_search",
+        toolCallId: "search-2",
+        state: "input-available",
+        input: { query: "London weather" },
+      },
+    ])
+    const presentation = deriveAssistantActivityPresentation(view, {
+      kind: "tooling",
+      toolNames: ["web_search"],
+    })
+
+    expect(presentation).toMatchObject({
+      kind: "disclosure",
+      label: "Searching for London weather",
+      activity: {
+        entries: [
+          { title: "Searching for New York weather", status: "complete" },
+          { title: "Searching for London weather", status: "running" },
+        ],
+      },
+    })
+  })
+
+  it("uses an ordinary tool action as the live title", () => {
+    const view = viewOf([
+      {
+        type: "tool-python",
+        toolCallId: "tool-1",
+        state: "input-available",
+        input: { description: "Calculating the comparison" },
+      },
+    ])
+
+    expect(
+      deriveAssistantActivityPresentation(view, {
+        kind: "tooling",
+        toolNames: ["python"],
+      })
+    ).toMatchObject({
+      kind: "disclosure",
+      label: "Calculating the comparison",
+    })
+  })
+
+  it("keeps the image entry and live title on the Generating image fallback", () => {
+    const view = viewOf([
+      {
+        type: "tool-imageGeneration",
+        toolCallId: "image-1",
+        state: "input-available",
+        input: {},
+      },
+    ])
+    const presentation = deriveAssistantActivityPresentation(view, {
+      kind: "generating-image",
+    })
+
+    expect(presentation).toMatchObject({
+      kind: "disclosure",
+      label: "Generating image",
+      activity: {
+        entries: [
+          { kind: "image", title: "Generating image", status: "running" },
+        ],
+      },
+    })
+  })
+
+  it("uses approval entry copy without shimmer", () => {
+    const view = viewOf([
+      {
+        type: "tool-delete_file",
+        toolCallId: "tool-1",
+        state: "approval-requested",
+        input: {},
+        approval: { id: "approval-1" },
+      },
+    ])
+
+    expect(
+      deriveAssistantActivityPresentation(view, {
+        kind: "awaiting-approval",
+      })
+    ).toMatchObject({
+      kind: "disclosure",
+      label: "Review Delete File",
+      motion: "none",
+    })
+  })
+
+  it("lets approval status beat search classification for motion", () => {
+    const view = viewOf([
+      {
+        type: "tool-web_search",
+        toolCallId: "search-1",
+        state: "approval-requested",
+        input: { query: "sensitive query" },
+        approval: { id: "approval-1" },
+      },
+    ])
+
+    expect(
+      deriveAssistantActivityPresentation(view, {
+        kind: "awaiting-approval",
+      })
+    ).toMatchObject({
+      kind: "disclosure",
+      label: "Searching for sensitive query",
+      motion: "none",
+    })
+  })
+
+  it("keeps a stale running implied search as the active label", () => {
+    const view = viewOf([
+      {
+        type: "source-url",
+        sourceId: "source-1",
+        url: "https://example.com",
+        title: "Example",
+      },
+      {
+        type: "tool-python",
+        toolCallId: "tool-1",
+        state: "output-available",
+        input: { description: "Checking the result" },
+        output: {},
+      },
+    ])
+
+    expect(
+      deriveAssistantActivityPresentation(view, {
+        kind: "thinking",
+        visibility: "opaque",
+      })
+    ).toMatchObject({
+      kind: "disclosure",
+      label: "Searching the web",
+    })
+  })
+
+  it("uses the active reasoning title for visible reasoning", () => {
+    const view = viewOf([
+      {
+        type: "reasoning",
+        text: "**Comparing sources**\nReviewing the results",
+        state: "streaming",
+      },
+    ])
+
+    expect(
+      deriveAssistantActivityPresentation(view, {
+        kind: "thinking",
+        visibility: "visible",
+      })
+    ).toMatchObject({
+      kind: "disclosure",
+      label: "Comparing sources",
+      motion: "shimmer",
+    })
+  })
+
   it.each([
     [undefined, "none", undefined],
     [-1, "none", undefined],
@@ -1013,6 +1212,36 @@ describe("deriveAssistantActivityPresentation", () => {
           kind: "completion",
           title: "Run failed",
           status: "error",
+        },
+      },
+    })
+  })
+
+  it("keeps completion present while the answer is responding", () => {
+    const view = viewOf([
+      {
+        type: "tool-python",
+        toolCallId: "tool-1",
+        state: "output-available",
+        input: { description: "Checking the result" },
+        output: {},
+      },
+      { type: "text", text: "The result is ready." },
+    ])
+    const presentation = deriveAssistantActivityPresentation(view, {
+      kind: "responding",
+    })
+
+    expect(presentation).toMatchObject({
+      kind: "disclosure",
+      label: "Activity",
+      motion: "none",
+      activity: {
+        completion: {
+          kind: "completion",
+          title: "Finished",
+          detail: "Done",
+          status: "complete",
         },
       },
     })
