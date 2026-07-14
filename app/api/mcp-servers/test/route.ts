@@ -79,17 +79,31 @@ export const POST = authenticatedRoute(
             { status: 400 }
           )
         }
-        headers = buildStoredMcpAuthHeaders(
-          {
-            ...storedServer,
-            authType,
-            headerName:
-              authType === "header"
-                ? (headerName ?? storedServer.headerName)
-                : storedServer.headerName,
-          },
-          session.userId
-        )
+        if (url.trim() !== storedServer.url.trim()) {
+          return NextResponse.json(
+            {
+              error:
+                "Stored credentials can only be tested against the saved server URL",
+              success: false,
+            },
+            { status: 400 }
+          )
+        }
+        if (
+          authType !== storedServer.authType ||
+          (authType === "header" &&
+            headerName?.trim() !== storedServer.headerName?.trim())
+        ) {
+          return NextResponse.json(
+            {
+              error:
+                "Stored credentials can only be tested with the saved authentication settings",
+              success: false,
+            },
+            { status: 400 }
+          )
+        }
+        headers = buildStoredMcpAuthHeaders(storedServer, session.userId)
       }
 
       // Attempt connection with timeout

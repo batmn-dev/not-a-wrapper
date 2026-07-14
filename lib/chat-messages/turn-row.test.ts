@@ -1,6 +1,6 @@
+import { describe, expect, it } from "vitest"
 import { deriveAssistantTurnView } from "./assistant-turn"
 import { turnRowModelsEqual, type TurnRowModel } from "./turn-row"
-import { describe, expect, it } from "vitest"
 
 describe("turnRowModelsEqual", () => {
   it("compares rendered user attachment and branch facts", () => {
@@ -8,9 +8,7 @@ describe("turnRowModelsEqual", () => {
       kind: "user",
       id: "user-1",
       text: "hello",
-      attachments: [
-        { name: "a.txt", contentType: "text/plain", url: "/a" },
-      ],
+      attachments: [{ name: "a.txt", contentType: "text/plain", url: "/a" }],
       branch: {
         messageId: "user-1",
         currentIndex: 0,
@@ -23,9 +21,7 @@ describe("turnRowModelsEqual", () => {
     expect(
       turnRowModelsEqual(base, {
         ...structuredClone(base),
-        attachments: [
-          { name: "b.txt", contentType: "text/plain", url: "/a" },
-        ],
+        attachments: [{ name: "b.txt", contentType: "text/plain", url: "/a" }],
       })
     ).toBe(false)
     expect(
@@ -59,5 +55,54 @@ describe("turnRowModelsEqual", () => {
     }
 
     expect(turnRowModelsEqual(first, next)).toBe(true)
+  })
+
+  it("compares every assistant row fact and rejects kind changes", () => {
+    const assistant: TurnRowModel = {
+      kind: "assistant",
+      id: "assistant-1",
+      text: "hello",
+      status: "ready",
+      isLast: true,
+      retryModelId: "gpt-5.4",
+      finishReason: "stop",
+      view: deriveAssistantTurnView({ parts: [] }, "ready"),
+    }
+
+    expect(turnRowModelsEqual(assistant, structuredClone(assistant))).toBe(true)
+
+    for (const changed of [
+      { ...assistant, status: "error" as const },
+      { ...assistant, isLast: false },
+      { ...assistant, retryModelId: "claude-sonnet-4-6" },
+      { ...assistant, finishReason: "length" },
+    ]) {
+      expect(turnRowModelsEqual(assistant, changed)).toBe(false)
+    }
+
+    expect(
+      turnRowModelsEqual(assistant, {
+        kind: "unsupported",
+        id: assistant.id,
+        text: assistant.text,
+      })
+    ).toBe(false)
+  })
+
+  it("compares unsupported rows by their shared rendered facts", () => {
+    const unsupported: TurnRowModel = {
+      kind: "unsupported",
+      id: "system-1",
+      text: "context",
+      className: "hidden",
+      isDurableChat: true,
+    }
+
+    expect(turnRowModelsEqual(unsupported, structuredClone(unsupported))).toBe(
+      true
+    )
+    expect(
+      turnRowModelsEqual(unsupported, { ...unsupported, text: "changed" })
+    ).toBe(false)
   })
 })

@@ -71,13 +71,14 @@ function currentChat(): Chats {
   }
 }
 
-function ModelSurfaces() {
+function ModelSurfaces({ isChatLoading = false }: { isChatLoading?: boolean }) {
   const chatId = modelMocks.pathname.split("/").at(-1) ?? null
   const props = {
     currentChat: currentChat(),
     user: { id: "user_123" } as UserProfile,
     updateChatModel: modelMocks.updateChatModel,
     chatId,
+    isChatLoading,
   }
   // These are intentionally separate hook instances: the first represents the
   // app-shell header and the second the per-chat Turn context.
@@ -120,7 +121,7 @@ describe("session selected-model ownership", () => {
     modelMocks.updateChatModel.mockReset()
   })
 
-  function renderSurfaces() {
+  function renderSurfaces({ isChatLoading = false } = {}) {
     if (!container) {
       container = document.createElement("div")
       document.body.appendChild(container)
@@ -129,7 +130,7 @@ describe("session selected-model ownership", () => {
     act(() => {
       root?.render(
         <ChatSessionProvider>
-          <ModelSurfaces />
+          <ModelSurfaces isChatLoading={isChatLoading} />
         </ChatSessionProvider>
       )
     })
@@ -197,5 +198,22 @@ describe("session selected-model ownership", () => {
       title: "Failed to update chat model",
       status: "error",
     })
+  })
+
+  it("ignores model changes until the current chat finishes loading", () => {
+    renderSurfaces({ isChatLoading: true })
+
+    act(() => {
+      ;(container?.querySelector("#header-model") as HTMLButtonElement).click()
+    })
+
+    expect(container?.querySelector("#header-model")?.textContent).toBe(
+      "claude-sonnet-4-6"
+    )
+    expect(container?.querySelector("#turn-model")?.textContent).toBe(
+      "claude-sonnet-4-6"
+    )
+    expect(modelMocks.setLastUsedModel).not.toHaveBeenCalled()
+    expect(modelMocks.updateChatModel).not.toHaveBeenCalled()
   })
 })

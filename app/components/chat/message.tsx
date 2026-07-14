@@ -2,8 +2,8 @@ import {
   turnRowModelsEqual,
   type TurnRowModel,
 } from "@/lib/chat-messages/turn-row"
-import React, { useState } from "react"
 import type { EditTurnResult } from "@/lib/chat-turn/chat-turn-controller"
+import React, { useState } from "react"
 import { MessageAssistant } from "./message-assistant"
 import { MessageUser } from "./message-user"
 
@@ -83,6 +83,12 @@ function MessageInner({
         {model.text}
       </MessageAssistant>
     )
+  }
+
+  if (model.kind === "unsupported") {
+    // Conversation retains non-chat roles in its row model, but the chat UI
+    // intentionally renders only user and assistant turns.
+    return null
   }
 
   return null

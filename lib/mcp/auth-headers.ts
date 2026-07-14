@@ -25,6 +25,9 @@ export function buildStoredMcpAuthHeaders(
       "Cannot load MCP auth headers: missing encrypted credential"
     )
   }
+  if (server.authType === "header" && !server.headerName) {
+    throw new Error("Cannot load MCP auth headers: missing header name")
+  }
 
   try {
     const decryptedValue = decryptSecret(
@@ -35,7 +38,7 @@ export function buildStoredMcpAuthHeaders(
     if (server.authType === "bearer") {
       return { Authorization: `Bearer ${decryptedValue}` }
     }
-    if (server.authType === "header" && server.headerName) {
+    if (server.authType === "header") {
       return { [server.headerName]: decryptedValue }
     }
   } catch (error) {
@@ -45,6 +48,4 @@ export function buildStoredMcpAuthHeaders(
     )
     throw new Error("Failed to decrypt MCP auth headers")
   }
-
-  throw new Error("Cannot load MCP auth headers: missing header name")
 }

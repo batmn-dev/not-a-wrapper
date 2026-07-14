@@ -105,6 +105,8 @@ describe("/api/mcp-servers/test route", () => {
 
   it("tests an edited server with its owner-checked stored credential", async () => {
     routeMocks.query.mockResolvedValue({
+      url: "https://mcp.example.com",
+      authType: "bearer",
       encryptedAuthValue: "encrypted",
       authIv: "iv",
       headerName: undefined,
@@ -131,7 +133,10 @@ describe("/api/mcp-servers/test route", () => {
       serverId: "server-1",
     })
     expect(routeMocks.buildStoredMcpAuthHeaders).toHaveBeenCalledWith(
-      expect.objectContaining({ authType: "bearer" }),
+      expect.objectContaining({
+        url: "https://mcp.example.com",
+        authType: "bearer",
+      }),
       "user-1"
     )
     expect(loadMCPToolsFromURL).toHaveBeenCalledWith(
@@ -139,6 +144,34 @@ describe("/api/mcp-servers/test route", () => {
         headers: { Authorization: "Bearer stored-token" },
       })
     )
+  })
+
+  it("does not send a stored credential to an edited server URL", async () => {
+    routeMocks.query.mockResolvedValue({
+      url: "https://saved.example.com/mcp",
+      authType: "bearer",
+      encryptedAuthValue: "encrypted",
+      authIv: "iv",
+      headerName: undefined,
+    })
+
+    const response = await POST(
+      makeRequest({
+        serverId: "server-1",
+        url: "https://edited.example.com/mcp",
+        authType: "bearer",
+      })
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error:
+        "Stored credentials can only be tested against the saved server URL",
+      success: false,
+    })
+    expect(routeMocks.buildStoredMcpAuthHeaders).not.toHaveBeenCalled()
+    expect(loadMCPToolsFromURL).not.toHaveBeenCalled()
+    expect(consoleErrorSpy).not.toHaveBeenCalled()
   })
 
   it("does not reveal or test a stored server the caller cannot read", async () => {
@@ -163,6 +196,8 @@ describe("/api/mcp-servers/test route", () => {
 
   it("returns 400 when an edited server has no stored credential to reuse", async () => {
     routeMocks.query.mockResolvedValue({
+      url: "https://mcp.example.com",
+      authType: "bearer",
       encryptedAuthValue: undefined,
       authIv: undefined,
       headerName: undefined,

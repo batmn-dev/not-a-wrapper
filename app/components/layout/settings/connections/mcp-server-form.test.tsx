@@ -17,7 +17,9 @@ vi.mock("convex/react", () => ({
 vi.mock("@/components/ui/toast", () => ({ toast: vi.fn() }))
 vi.mock("@/components/ui/icon", () => ({ Icon: () => null }))
 vi.mock("@/components/ui/badge", () => ({
-  Badge: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
+  Badge: ({ children }: { children: React.ReactNode }) => (
+    <span>{children}</span>
+  ),
 }))
 vi.mock("@/components/ui/button", () => ({
   Button: ({
@@ -40,23 +42,47 @@ vi.mock("@/components/ui/input", () => ({
   ),
 }))
 vi.mock("@/components/ui/label", () => ({
-  Label: ({ children, htmlFor }: { children: React.ReactNode; htmlFor?: string }) => (
-    <label htmlFor={htmlFor}>{children}</label>
-  ),
+  Label: ({
+    children,
+    htmlFor,
+  }: {
+    children: React.ReactNode
+    htmlFor?: string
+  }) => <label htmlFor={htmlFor}>{children}</label>,
 }))
 vi.mock("@/components/ui/dialog", () => ({
-  Dialog: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
-  DialogFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
+  Dialog: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DialogContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DialogDescription: ({ children }: { children: React.ReactNode }) => (
+    <p>{children}</p>
+  ),
+  DialogFooter: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DialogHeader: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DialogTitle: ({ children }: { children: React.ReactNode }) => (
+    <h2>{children}</h2>
+  ),
 }))
 vi.mock("@/components/ui/select", () => ({
-  Select: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SelectItem: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SelectTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Select: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SelectContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SelectItem: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SelectTrigger: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
   SelectValue: () => null,
 }))
 
@@ -79,15 +105,18 @@ describe("McpServerForm test provenance", () => {
   })
 
   it("passes the edit server id to testing and refuses stale tool approvals", async () => {
+    let resolveTest:
+      | ((response: { ok: boolean; json: () => Promise<unknown> }) => void)
+      | null = null
+    const pendingTest = new Promise<{
+      ok: boolean
+      json: () => Promise<unknown>
+    }>((resolve) => {
+      resolveTest = resolve
+    })
+
     formMocks.fetchClient
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          success: true,
-          toolCount: 1,
-          toolNames: ["search"],
-        }),
-      })
+      .mockImplementationOnce(() => pendingTest)
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true }),
@@ -139,6 +168,18 @@ describe("McpServerForm test provenance", () => {
       )?.set
       valueSetter?.call(urlInput, "https://b.example.com/mcp")
       urlInput.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+
+    await act(async () => {
+      resolveTest?.({
+        ok: true,
+        json: async () => ({
+          success: true,
+          toolCount: 1,
+          toolNames: ["search"],
+        }),
+      })
+      await pendingTest
     })
 
     await act(async () => {
