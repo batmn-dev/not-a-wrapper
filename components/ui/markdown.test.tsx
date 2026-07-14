@@ -97,16 +97,210 @@ describe("Markdown response controls and semantics", () => {
     expect(code?.hasAttribute("node")).toBe(false)
   })
 
-  it("renders markdown links as semantic decorated links", () => {
+  it("renders a standalone labeled external link as a favicon pill", () => {
     const body = renderMarkdown("[Visit Example](https://example.com)")
     const link = body.querySelector("a")
 
     expect(link?.textContent).toBe("Visit Example")
     expect(link?.getAttribute("href")).toBe("https://example.com")
     expect(link?.getAttribute("target")).toBe("_blank")
+    expect(link?.getAttribute("rel")).toBe("noopener noreferrer")
+    expect(link?.dataset.linkPresentation).toBe("pill")
+    expect(link?.dataset.external).toBe("true")
     expect(link?.hasAttribute("node")).toBe(false)
-    expect(link?.querySelector("img")).toBeNull()
+    expect(link?.querySelector('[data-slot="external-link-icon"]')).toBeNull()
+    expect(
+      link?.querySelector('[data-slot="favicon-placeholder"]')
+    ).not.toBeNull()
+
     expect(link?.querySelector('[aria-hidden="true"]')).not.toBeNull()
+  })
+
+  it("renders a standalone autolink as a pill with the clean domain", () => {
+    const body = renderMarkdown("https://www.example.com/a/long/path")
+    const link = body.querySelector("a")
+
+    expect(link?.dataset.linkPresentation).toBe("pill")
+    expect(link?.textContent).toBe("example.com")
+    expect(link?.getAttribute("href")).toBe(
+      "https://www.example.com/a/long/path"
+    )
+  })
+
+  it("renders an external link embedded in prose as inline text with a decorative icon", () => {
+    const body = renderMarkdown(
+      "A sample factual statement. [Example Source](https://example.com/source)"
+    )
+    const link = body.querySelector("a")
+    const icon = link?.querySelector('[data-slot="external-link-icon"]')
+
+    expect(body.querySelector("p")?.textContent).toBe(
+      "A sample factual statement. Example Source"
+    )
+    expect(link?.dataset.linkPresentation).toBe("inline")
+    expect(link?.dataset.external).toBe("true")
+    expect(link?.getAttribute("target")).toBe("_blank")
+    expect(icon?.getAttribute("aria-hidden")).toBe("true")
+    expect(icon?.querySelector("svg")?.getAttribute("focusable")).toBe("false")
+  })
+
+  it("preserves surrounding text and punctuation for inline external links", () => {
+    const body = renderMarkdown(
+      "Before [Example](https://example.com), during, and after."
+    )
+
+    expect(body.querySelector("p")?.textContent).toBe(
+      "Before Example, during, and after."
+    )
+    expect(body.querySelector("a")?.dataset.linkPresentation).toBe("inline")
+  })
+
+  it("treats a link followed by a period as inline", () => {
+    const body = renderMarkdown("[Example](https://example.com).")
+
+    expect(body.querySelector("a")?.dataset.linkPresentation).toBe("inline")
+    expect(body.querySelector("p")?.textContent).toBe("Example.")
+  })
+
+  it("treats two links in one paragraph as inline", () => {
+    const body = renderMarkdown(
+      "[One](https://one.example) [Two](https://two.example)"
+    )
+    const links = Array.from(body.querySelectorAll<HTMLAnchorElement>("a"))
+
+    expect(links).toHaveLength(2)
+    expect(links.every((link) => link.dataset.linkPresentation === "inline"))
+      .toBe(true)
+    expect(
+      links.every((link) =>
+        link.querySelector('[data-slot="external-link-icon"]')
+      )
+    ).toBe(true)
+  })
+
+  it("renders a terminal parenthesized citation in a list item as a pill", () => {
+    const body = renderMarkdown(
+      "- U.S. military activity raised wider regional concerns. ([apnews.com](https://apnews.com/article/example))"
+    )
+    const link = body.querySelector<HTMLAnchorElement>("li a")
+
+    expect(body.querySelector("li")?.textContent).toBe(
+      "U.S. military activity raised wider regional concerns. apnews.com"
+    )
+    expect(link?.dataset.linkPresentation).toBe("pill")
+    expect(link?.querySelector('[data-slot="external-link-icon"]')).toBeNull()
+    expect(link?.querySelector('[data-slot="favicon-placeholder"]')).not.toBeNull()
+  })
+
+  it("keeps a parenthesized external link within prose inline", () => {
+    const body = renderMarkdown(
+      "See ([the documentation](https://example.com/docs)) for details."
+    )
+    const link = body.querySelector("a")
+
+    expect(body.querySelector("p")?.textContent).toBe(
+      "See the documentation for details."
+    )
+    expect(link?.dataset.linkPresentation).toBe("inline")
+    expect(
+      link?.querySelector('[data-slot="external-link-icon"]')
+    ).not.toBeNull()
+  })
+
+  it("keeps a standalone relative internal link inline and same-tab", () => {
+    const body = renderMarkdown("[Settings](/settings)")
+    const link = body.querySelector("a")
+
+    expect(link?.dataset.linkPresentation).toBe("inline")
+    expect(link?.hasAttribute("data-external")).toBe(false)
+    expect(link?.hasAttribute("target")).toBe(false)
+    expect(link?.hasAttribute("rel")).toBe(false)
+    expect(link?.querySelector('[data-slot="external-link-icon"]')).toBeNull()
+  })
+
+  it.each([
+    ["hash", "[Section](#section)"],
+    ["query-only", "[Billing](?tab=billing)"],
+    ["mailto", "[Email](mailto:hello@example.com)"],
+    ["tel", "[Call](tel:+15551234567)"],
+  ])("keeps %s links inline without an external icon", (_, markdown) => {
+    const body = renderMarkdown(markdown)
+    const link = body.querySelector("a")
+
+    expect(link?.dataset.linkPresentation).toBe("inline")
+    expect(link?.querySelector('[data-slot="external-link-icon"]')).toBeNull()
+    expect(link?.hasAttribute("target")).toBe(false)
+  })
+
+  it("treats a protocol-relative web link as external", () => {
+    const body = renderMarkdown("See [Example](//example.com/source) here.")
+    const link = body.querySelector("a")
+
+    expect(link?.dataset.linkPresentation).toBe("inline")
+    expect(link?.dataset.external).toBe("true")
+    expect(link?.getAttribute("target")).toBe("_blank")
+    expect(link?.getAttribute("rel")).toBe("noopener noreferrer")
+    expect(
+      link?.querySelector('[data-slot="external-link-icon"]')
+    ).not.toBeNull()
+  })
+
+  it.each([
+    ["list item", "- [Example](https://example.com)", "li"],
+    ["heading", "## [Example](https://example.com)", "h2"],
+    ["blockquote", "> [Example](https://example.com)", "blockquote"],
+    [
+      "table cell",
+      "| Source |\n| --- |\n| [Example](https://example.com) |",
+      "td",
+    ],
+  ])("keeps a link inside a %s inline", (_, markdown, container) => {
+    const body = renderMarkdown(markdown)
+    const link = body.querySelector<HTMLAnchorElement>(`${container} a`)
+
+    expect(link?.dataset.linkPresentation).toBe("inline")
+    expect(
+      link?.querySelector('[data-slot="external-link-icon"]')
+    ).not.toBeNull()
+  })
+
+  it("does not convert an image-only link into a text pill", () => {
+    const body = renderMarkdown(
+      "[![Example logo](https://example.com/logo.png)](https://example.com)"
+    )
+    const link = body.querySelector("a")
+
+    expect(link?.dataset.linkPresentation).toBe("inline")
+    expect(link?.querySelector("img")?.getAttribute("alt")).toBe(
+      "Example logo"
+    )
+  })
+
+  it("preserves nested formatting inside an inline link", () => {
+    const body = renderMarkdown(
+      "Read [the **important** `documentation`](https://example.com/docs) now."
+    )
+    const link = body.querySelector("a")
+
+    expect(link?.dataset.linkPresentation).toBe("inline")
+    expect(link?.querySelector("strong")?.textContent).toBe("important")
+    expect(link?.querySelector("code")?.textContent).toBe("documentation")
+  })
+
+  it.each([
+    "*[Visit Example](https://example.com)*",
+    "**[Visit Example](https://example.com)**",
+    "~~[Visit Example](https://example.com)~~",
+  ])("classifies a standalone link through transparent formatting: %s", (md) => {
+    const body = renderMarkdown(md)
+
+    expect(body.querySelector("a")?.dataset.linkPresentation).toBe("pill")
+    expect(body.querySelector("a")?.textContent).toBe("Visit Example")
+  })
+
+  it("renders incomplete streaming Markdown without throwing", () => {
+    expect(() => renderMarkdown("See [Example](https://example.com")).not.toThrow()
+    expect(() => renderMarkdown("Trailing [Example](")).not.toThrow()
   })
 
   it("preserves heading hierarchy and native GFM task-list semantics", () => {

@@ -16,11 +16,15 @@
  *   - Keep parsing and rendering on the same remark-based pipeline
  *   - Verify INITIAL_COMPONENTS customizations are not overwritten
  */
+import { remarkLinkPresentation } from "@/lib/markdown/remark-link-presentation"
 import { remarkUnwrapLinkParens } from "@/lib/markdown/remark-unwrap-link-parens"
 import { cn } from "@/lib/utils"
 import { RiCodeLine } from "@remixicon/react"
 import { memo, useId, useMemo, useRef } from "react"
-import ReactMarkdown, { Components } from "react-markdown"
+import ReactMarkdown, {
+  Components,
+  defaultUrlTransform,
+} from "react-markdown"
 import rehypeKatex from "rehype-katex"
 import remarkBreaks from "remark-breaks"
 import remarkGfm from "remark-gfm"
@@ -67,6 +71,10 @@ function extractLanguage(className?: string): string {
   if (!className) return "plaintext"
   const match = className.match(/language-(\w+)/)
   return match ? match[1] : "plaintext"
+}
+
+function markdownUrlTransform(url: string): string {
+  return /^tel:/i.test(url) ? url : defaultUrlTransform(url)
 }
 
 const LANGUAGE_LABELS: Record<string, string | null> = {
@@ -164,8 +172,18 @@ const INITIAL_COMPONENTS: Partial<Components> = {
   a: function AComponent({ href, children, node: _, ...props }) {
     if (!href) return <span {...props}>{children}</span>
 
+    const annotatedPresentation = (
+      props as typeof props & Record<string, unknown>
+    )["data-link-presentation"]
+    const presentation =
+      annotatedPresentation === "pill" ? "pill" : "inline"
+
     return (
-      <LinkMarkdown href={href} {...props}>
+      <LinkMarkdown
+        href={href}
+        presentation={presentation}
+        {...props}
+      >
         {children}
       </LinkMarkdown>
     )
@@ -217,9 +235,11 @@ const MemoizedMarkdownBlock = memo(
           remarkGfm,
           remarkBreaks,
           [remarkMath, REMARK_MATH_OPTIONS],
+          remarkLinkPresentation,
           remarkUnwrapLinkParens,
         ]}
         rehypePlugins={[rehypeKatex]}
+        urlTransform={markdownUrlTransform}
         components={components}
       >
         {content}

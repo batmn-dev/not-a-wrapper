@@ -41,4 +41,32 @@ describe("Favicon", () => {
     expect(renderFaviconSrc("data:text/plain,hello")).toBeNull()
     expect(renderFaviconSrc("ftp://example.com/file")).toBeNull()
   })
+
+  it("renders caller-provided fallback content", () => {
+    const markup = renderToStaticMarkup(
+      <Favicon
+        url="https://example.com"
+        fallback={<span data-testid="favicon-placeholder" />}
+      />
+    )
+
+    expect(markup).toContain('data-testid="favicon-placeholder"')
+  })
+
+  it("uses the same-origin endpoint when missing favicons need a fallback", () => {
+    const markup = renderToStaticMarkup(
+      <Favicon
+        url="https://example.com/path"
+        fallbackOnMissing
+      />
+    )
+
+    expect(markup).toContain('src="/api/favicon?domain=example.com"')
+  })
+
+  it("opts embedded favicons out of document prose styles", () => {
+    const markup = renderToStaticMarkup(<Favicon url="https://example.com" />)
+
+    expect(markup).toMatch(/<span\b[^>]*\bclass="[^"]*\bnot-prose\b[^"]*"/)
+  })
 })
