@@ -5,10 +5,10 @@ import {
   MCP_MAX_TOOLS_PER_REQUEST,
   MCP_TRUSTED_RETRY_SERVER_ALLOWLIST,
 } from "@/lib/config"
-import { decryptSecret } from "@/lib/encryption"
 import { createMCPClient } from "@ai-sdk/mcp"
 import { fetchMutation, fetchQuery } from "convex/nextjs"
 import { isCircuitOpen, recordFailure, recordSuccess } from "./circuit-breaker"
+import { buildStoredMcpAuthHeaders } from "./auth-headers"
 import { createPinnedMcpFetch } from "./pinned-fetch"
 import { resolveMcpUrlForConnection } from "./url-validation"
 
@@ -182,56 +182,6 @@ function isRetrySafetyTrustedServer(server: RetryTrustServer): boolean {
 }
 
 /**
- * Build auth headers for an MCP server connection.
- * Decrypts the stored auth value using AES-256-GCM (same pattern as BYOK keys).
- */
-function buildAuthHeaders(
-  server: {
-    authType?: "none" | "bearer" | "header"
-    encryptedAuthValue?: string
-    authIv?: string
-    headerName?: string
-  },
-  ownerId?: string
-): Record<string, string> | undefined {
-  if (!server.authType || server.authType === "none") return undefined
-
-  if (!ownerId) {
-    throw new Error("Cannot load MCP auth headers: missing owner identity")
-  }
-
-  if (!server.encryptedAuthValue || !server.authIv) {
-    throw new Error(
-      "Cannot load MCP auth headers: missing encrypted credential"
-    )
-  }
-
-  try {
-    const decryptedValue = decryptSecret(
-      server.encryptedAuthValue,
-      server.authIv,
-      { kind: "mcpAuth", ownerId }
-    )
-
-    if (server.authType === "bearer") {
-      return { Authorization: `Bearer ${decryptedValue}` }
-    }
-
-    if (server.authType === "header" && server.headerName) {
-      return { [server.headerName]: decryptedValue }
-    }
-  } catch (error) {
-    console.error(
-      "[MCP] Failed to decrypt auth for server:",
-      error instanceof Error ? error.message : error
-    )
-    throw new Error("Failed to decrypt MCP auth headers")
-  }
-
-  throw new Error("Cannot load MCP auth headers: missing header name")
-}
-
-/**
  * Translate an MCP connection failure into the message stored as the server's
  * `lastError` (shown in MCP settings). Most errors pass through verbatim; a
  * redirect rejection is rewritten because the raw fetch error ("fetch failed"
@@ -350,7 +300,7 @@ export async function loadUserMcpTools(
       // diverge between check and use.
       const resolvedUrl = await resolveMcpUrlForConnection(server.url)
 
-      const headers = buildAuthHeaders(server, ownerId)
+      const headers = buildStoredMcpAuthHeaders(server, ownerId)
 
       // Hold a reference to the client promise so we can clean up orphaned
       // connections when the timeout wins the race (prevents resource leaks).

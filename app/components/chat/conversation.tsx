@@ -8,6 +8,7 @@ import {
   type DurableMessageStatus,
 } from "@/lib/chat-messages/durable-contract"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
+import type { TurnRowModel } from "@/lib/chat-messages/turn-row"
 import type { EditTurnResult } from "@/lib/chat-turn/chat-turn-controller"
 import { cn } from "@/lib/utils"
 import { UIMessage as MessageType } from "@ai-sdk/react"
@@ -110,7 +111,6 @@ type ConversationProps = {
   /** True when this conversation was started in this session — the scroll
    * position came from send-time pinning, so the load restore must not run. */
   hasSentFirstMessage?: boolean
-  onDelete: (id: string) => void
   onEdit: (
     id: string,
     newText: string
@@ -137,7 +137,6 @@ export function Conversation({
   isSubmitting = false,
   chatId = null,
   hasSentFirstMessage = false,
-  onDelete,
   onEdit,
   onReload,
   retryModelId,
@@ -209,7 +208,7 @@ export function Conversation({
                 ? status
                 : "ready"
 
-          let messageContent: ReactNode
+          let rowModel: TurnRowModel
           if (message.role === "assistant") {
             // The single per-render derivation of everything the assistant row
             // renders (see CONTEXT.md "Assistant turn view"). Derived fresh each
@@ -220,49 +219,44 @@ export function Conversation({
               isLast ? status : "ready"
             )
 
-            messageContent = (
-              <Message
-                id={message.id}
-                variant="assistant"
-                isLast={isLast}
-                view={view}
-                onDelete={onDelete}
-                onEdit={onEdit}
-                onReload={generationActive ? undefined : onReload}
-                retryModelId={retryModelId}
-                onSelectBranch={onSelectBranch}
-                branch={turnBranch}
-                status={messageStatus}
-                onQuote={onQuote}
-                isDurableChat={isDurableChat}
-                finishReason={isLast ? lastFinishReason : undefined}
-              >
-                {view.text}
-              </Message>
-            )
+            rowModel = {
+              kind: "assistant",
+              id: message.id,
+              text: view.text,
+              view,
+              isLast,
+              retryModelId,
+              status: messageStatus,
+              isDurableChat,
+              finishReason: isLast ? lastFinishReason : undefined,
+            }
+          } else if (message.role === "user") {
+            rowModel = {
+              kind: "user",
+              id: message.id,
+              text: getMessageText(message),
+              attachments: getMessageAttachments(message),
+              branch: turnBranch,
+              isDurableChat,
+            }
           } else {
-            messageContent = (
-              <Message
-                id={message.id}
-                variant={message.role}
-                attachments={
-                  isUser ? getMessageAttachments(message) : undefined
-                }
-                isLast={isLast}
-                onDelete={onDelete}
-                onEdit={onEdit}
-                onReload={generationActive ? undefined : onReload}
-                onSelectBranch={onSelectBranch}
-                branch={turnBranch}
-                status={messageStatus}
-                onQuote={onQuote}
-                isDurableChat={isDurableChat}
-                finishReason={isLast ? lastFinishReason : undefined}
-              >
-                {getMessageText(message)}
-              </Message>
-            )
+            rowModel = {
+              kind: "unsupported",
+              id: message.id,
+              text: getMessageText(message),
+              isDurableChat,
+            }
           }
+
+          const messageContent = (
+            <Message
+              model={rowModel}
+              onEdit={onEdit}
+              onReload={generationActive ? undefined : onReload}
+              onSelectBranch={onSelectBranch}
+              onQuote={onQuote}
+            />
+          )
 
           const timestampHeader = timestampHeaders[index]
 
@@ -310,21 +304,21 @@ export function Conversation({
             dataTestId={`conversation-turn-${messages.length + 1}`}
           >
             <Message
-              id={PENDING_ACTIVITY_TURN_ID}
-              variant="assistant"
-              isLast
-              view={PENDING_TURN_VIEW}
-              onDelete={onDelete}
+              model={{
+                kind: "assistant",
+                id: PENDING_ACTIVITY_TURN_ID,
+                text: "",
+                isLast: true,
+                view: PENDING_TURN_VIEW,
+                retryModelId,
+                status: "submitted",
+                isDurableChat,
+              }}
               onEdit={onEdit}
               onReload={undefined}
-              retryModelId={retryModelId}
               onSelectBranch={onSelectBranch}
-              status="submitted"
               onQuote={onQuote}
-              isDurableChat={isDurableChat}
-            >
-              {""}
-            </Message>
+            />
           </TurnRow>
         )}
         <ThreadScrollEdge

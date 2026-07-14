@@ -3,11 +3,23 @@ import { McpUrlValidationError } from "@/lib/mcp/url-validation"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { POST } from "./route"
 
+const routeMocks = vi.hoisted(() => ({
+  buildStoredMcpAuthHeaders: vi.fn(),
+  query: vi.fn(),
+}))
+
 vi.mock("@/app/api/_lib/authenticated-route", () => ({
   authenticatedRoute:
     (handler: (req: Request, ctx: unknown) => Promise<Response> | Response) =>
     (req: Request) =>
-      handler(req, {}),
+      handler(req, {
+        session: { userId: "user-1" },
+        convex: { query: routeMocks.query },
+      }),
+}))
+
+vi.mock("@/lib/mcp/auth-headers", () => ({
+  buildStoredMcpAuthHeaders: routeMocks.buildStoredMcpAuthHeaders,
 }))
 
 vi.mock("@/lib/config", () => ({
@@ -89,5 +101,63 @@ describe("/api/mcp-servers/test route", () => {
       "Error in POST /api/mcp-servers/test:",
       error
     )
+  })
+
+  it("tests an edited server with its owner-checked stored credential", async () => {
+    routeMocks.query.mockResolvedValue({
+      encryptedAuthValue: "encrypted",
+      authIv: "iv",
+      headerName: undefined,
+    })
+    routeMocks.buildStoredMcpAuthHeaders.mockReturnValue({
+      Authorization: "Bearer stored-token",
+    })
+    vi.mocked(loadMCPToolsFromURL).mockResolvedValue({
+      tools: { search: {} },
+      close: vi.fn(async () => {}),
+    } as never)
+
+    const response = await POST(
+      makeRequest({
+        serverId: "server-1",
+        url: "https://mcp.example.com",
+        transport: "http",
+        authType: "bearer",
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(routeMocks.query).toHaveBeenCalledWith(expect.anything(), {
+      serverId: "server-1",
+    })
+    expect(routeMocks.buildStoredMcpAuthHeaders).toHaveBeenCalledWith(
+      expect.objectContaining({ authType: "bearer" }),
+      "user-1"
+    )
+    expect(loadMCPToolsFromURL).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: { Authorization: "Bearer stored-token" },
+      })
+    )
+  })
+
+  it("does not reveal or test a stored server the caller cannot read", async () => {
+    routeMocks.query.mockResolvedValue(null)
+
+    const response = await POST(
+      makeRequest({
+        serverId: "server-other",
+        url: "https://mcp.example.com",
+        authType: "bearer",
+      })
+    )
+
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toEqual({
+      error: "Server not found",
+      success: false,
+    })
+    expect(routeMocks.buildStoredMcpAuthHeaders).not.toHaveBeenCalled()
+    expect(loadMCPToolsFromURL).not.toHaveBeenCalled()
   })
 })

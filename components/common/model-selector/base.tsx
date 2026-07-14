@@ -54,6 +54,110 @@ function getModelRouteLabel(model: ModelConfig | null | undefined) {
   return model?.providerId === "openrouter" ? "OpenRouter" : null
 }
 
+function ModelOptionContent({
+  model,
+  isLocked,
+}: {
+  model: ModelConfig
+  isLocked: boolean
+}) {
+  const routeLabel = getModelRouteLabel(model)
+
+  return (
+    <>
+      <div className="flex min-w-0 items-center gap-2">
+        <Icon
+          icon={getVendorIcon(model.icon)}
+          slotSize={20}
+          className="shrink-0"
+        />
+        <span className="truncate text-sm">{model.name}</span>
+        {routeLabel && (
+          <span className="text-muted-foreground shrink-0 text-xs">
+            {routeLabel}
+          </span>
+        )}
+      </div>
+      {isLocked ? (
+        <div className="border-input bg-accent text-muted-foreground flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
+          <Icon icon={RiStarLine} slotSize={8} />
+          <span>Locked</span>
+        </div>
+      ) : null}
+    </>
+  )
+}
+
+function ModelSelectorList({
+  models,
+  isLoading,
+  isMobile,
+  isUserAuthenticated,
+  selectedModelId,
+  onSelect,
+}: {
+  models: ModelConfig[]
+  isLoading: boolean
+  isMobile: boolean
+  isUserAuthenticated: boolean
+  selectedModelId: string | null
+  onSelect: (modelId: string, isLocked: boolean) => void
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center p-6 text-center">
+        <p className="text-muted-foreground mb-2 text-sm">Loading models...</p>
+      </div>
+    )
+  }
+
+  if (models.length === 0) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center p-6 text-center">
+        <p className="text-muted-foreground mb-1 text-sm">No results found.</p>
+        <a
+          href="https://github.com/batmn-dev/not-a-wrapper/issues/new?title=Model%20Request%3A%20"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-muted-foreground text-sm underline"
+        >
+          Request a new model
+        </a>
+      </div>
+    )
+  }
+
+  return models.map((model) => {
+    const isLocked = !isModelSelectableForAuthState(model, isUserAuthenticated)
+    const className = cn(
+      "flex w-full items-center justify-between gap-2",
+      isMobile ? "px-3 py-2" : "px-2",
+      selectedModelId === model.id && "bg-accent"
+    )
+    const content = <ModelOptionContent model={model} isLocked={isLocked} />
+
+    return isMobile ? (
+      <button
+        key={model.id}
+        type="button"
+        data-testid="model-option"
+        className={className}
+        onClick={() => onSelect(model.id, isLocked)}
+      >
+        {content}
+      </button>
+    ) : (
+      <DropdownMenuItem
+        key={model.id}
+        className={className}
+        onClick={() => onSelect(model.id, isLocked)}
+      >
+        {content}
+      </DropdownMenuItem>
+    )
+  })
+}
+
 export function ModelSelector({
   className,
   isUserAuthenticated = true,
@@ -99,11 +203,9 @@ export function ModelSelector({
     if (isLocked) {
       setSelectedProModel(modelId)
       if (!isUserAuthenticated) {
-        if (isMobile) {
-          setIsDrawerOpen(false)
-        } else {
-          setIsDropdownOpen(false)
-        }
+        setIsDrawerOpen(false)
+        setIsDropdownOpen(false)
+        setSearchQuery("")
         onLockedGuestModelSelect?.(modelId)
         return
       }
@@ -113,11 +215,9 @@ export function ModelSelector({
     }
 
     setSelectedModelId(modelId)
-    if (isMobile) {
-      setIsDrawerOpen(false)
-    } else {
-      setIsDropdownOpen(false)
-    }
+    setIsDrawerOpen(false)
+    setIsDropdownOpen(false)
+    setSearchQuery("")
   }
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -139,43 +239,6 @@ export function ModelSelector({
     searchQuery,
     isUserAuthenticated ? isModelHidden : () => false
   )
-
-  const renderModelItem = (model: ModelConfig) => {
-    const isLocked = !isModelSelectableForAuthState(model, isUserAuthenticated)
-    const VendorIcon = getVendorIcon(model.icon)
-    const routeLabel = getModelRouteLabel(model)
-
-    return (
-      <div
-        key={model.id}
-        className={cn(
-          "flex w-full items-center justify-between px-3 py-2",
-          selectedModelId === model.id && "bg-accent"
-        )}
-        onClick={() => handleSelect(model.id, isLocked)}
-      >
-        <div className="flex items-center gap-3">
-          <VendorIcon className="size-5" />
-          <div className="flex flex-col gap-0">
-            <span className="text-sm">{model.name}</span>
-            {/* Dual-route disambiguation: wrapped entries can share a name and
-                vendor icon with their direct sibling (e.g. GPT-5.5). */}
-            {routeLabel && (
-              <span className="text-muted-foreground text-xs">
-                {routeLabel}
-              </span>
-            )}
-          </div>
-        </div>
-        {isLocked && (
-          <div className="border-input bg-accent text-muted-foreground flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
-            <Icon icon={RiStarLine} slotSize={8} />
-            <span>Locked</span>
-          </div>
-        )}
-      </div>
-    )
-  }
 
   const trigger = (
     <Button
@@ -220,6 +283,7 @@ export function ModelSelector({
           onOpenChange={(open) => {
             if (disabled && open) return
             setIsDrawerOpen(open)
+            if (!open) setSearchQuery("")
           }}
         >
           <DrawerTrigger render={trigger} />
@@ -245,29 +309,14 @@ export function ModelSelector({
               </div>
             </div>
             <div className="flex h-full flex-col space-y-0 overflow-y-auto px-4 pb-6">
-              {isLoadingModels ? (
-                <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-                  <p className="text-muted-foreground mb-2 text-sm">
-                    Loading models...
-                  </p>
-                </div>
-              ) : filteredModels.length > 0 ? (
-                filteredModels.map((model) => renderModelItem(model))
-              ) : (
-                <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-                  <p className="text-muted-foreground mb-2 text-sm">
-                    No results found.
-                  </p>
-                  <a
-                    href="https://github.com/batmn-dev/not-a-wrapper/issues/new?title=Model%20Request%3A%20"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-muted-foreground text-sm underline"
-                  >
-                    Request a new model
-                  </a>
-                </div>
-              )}
+              <ModelSelectorList
+                models={filteredModels}
+                isLoading={isLoadingModels}
+                isMobile
+                isUserAuthenticated={isUserAuthenticated}
+                selectedModelId={selectedModelId}
+                onSelect={handleSelect}
+              />
             </div>
           </DrawerContent>
         </Drawer>
@@ -296,9 +345,7 @@ export function ModelSelector({
       >
         {isComposerVariant ? (
           <Tooltip disableHoverablePopup>
-            <TooltipTrigger
-              render={<span className="inline-flex min-w-0" />}
-            >
+            <TooltipTrigger render={<span className="inline-flex min-w-0" />}>
               <DropdownMenuTrigger render={trigger} />
             </TooltipTrigger>
             <TooltipContent side="bottom" hideArrow>
@@ -340,67 +387,14 @@ export function ModelSelector({
           </div>
           <div className="before:from-popover after:from-popover relative mt-[2px] rounded-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-3 before:bg-gradient-to-b before:to-transparent before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:z-10 after:h-4 after:bg-gradient-to-t after:to-transparent after:content-['']">
             <div className="[&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 max-h-[min(var(--model-selector-list-max-height),max(0px,calc(var(--available-height)-var(--model-selector-fixed-height))))] scroll-py-2 [scrollbar-width:thin] [scrollbar-color:color-mix(in_oklab,var(--muted-foreground)_35%,transparent)_transparent] [scrollbar-gutter:stable] overflow-x-hidden overflow-y-auto overscroll-contain py-1 pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent">
-              {isLoadingModels ? (
-                <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-                  <p className="text-muted-foreground mb-2 text-sm">
-                    Loading models...
-                  </p>
-                </div>
-              ) : filteredModels.length > 0 ? (
-                filteredModels.map((model) => {
-                  const isLocked = !isModelSelectableForAuthState(
-                    model,
-                    isUserAuthenticated
-                  )
-                  const isSelected = selectedModelId === model.id
-                  const VendorIcon = getVendorIcon(model.icon)
-                  const routeLabel = getModelRouteLabel(model)
-
-                  return (
-                    <DropdownMenuItem
-                      key={model.id}
-                      className={cn(
-                        "flex w-full items-center justify-between gap-2 px-2",
-                        isSelected && "bg-accent"
-                      )}
-                      onClick={() => handleSelect(model.id, isLocked)}
-                    >
-                      <div className="flex min-w-0 items-center gap-2">
-                        <VendorIcon className="size-5 shrink-0" />
-                        <span className="truncate text-sm">{model.name}</span>
-                        {/* Dual-route disambiguation: wrapped entries can share
-                            a name and vendor icon with their direct sibling
-                            (e.g. GPT-5.5). */}
-                        {routeLabel && (
-                          <span className="text-muted-foreground shrink-0 text-xs">
-                            {routeLabel}
-                          </span>
-                        )}
-                      </div>
-                      {isLocked ? (
-                        <div className="border-input bg-accent text-muted-foreground flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
-                          <Icon icon={RiStarLine} slotSize={8} />
-                          <span>Locked</span>
-                        </div>
-                      ) : null}
-                    </DropdownMenuItem>
-                  )
-                })
-              ) : (
-                <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-                  <p className="text-muted-foreground mb-1 text-sm">
-                    No results found.
-                  </p>
-                  <a
-                    href="https://github.com/batmn-dev/not-a-wrapper/issues/new?title=Model%20Request%3A%20"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-muted-foreground text-sm underline"
-                  >
-                    Request a new model
-                  </a>
-                </div>
-              )}
+              <ModelSelectorList
+                models={filteredModels}
+                isLoading={isLoadingModels}
+                isMobile={false}
+                isUserAuthenticated={isUserAuthenticated}
+                selectedModelId={selectedModelId}
+                onSelect={handleSelect}
+              />
             </div>
           </div>
         </DropdownMenuContent>

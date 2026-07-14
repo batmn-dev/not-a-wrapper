@@ -47,6 +47,33 @@ type TestResult = {
   toolCount?: number
   toolNames?: string[]
   error?: string
+  fingerprint?: string
+}
+
+type McpConnectionDetails = {
+  url: string
+  transport: "http" | "sse"
+  authType: "none" | "bearer" | "header"
+  authValue: string
+  headerName: string
+  serverId?: string
+}
+
+/** Exact provenance key for one tested connection configuration. It remains
+ * client-local and is never logged or sent to the server. */
+function connectionFingerprint(details: McpConnectionDetails): string {
+  return JSON.stringify({
+    url: details.url.trim(),
+    transport: details.transport,
+    authType: details.authType,
+    authValue:
+      details.authType === "bearer" || details.authType === "header"
+        ? details.authValue
+        : "",
+    headerName:
+      details.authType === "header" ? details.headerName.trim() : "",
+    serverId: details.serverId ?? "",
+  })
 }
 
 type McpServerFormProps = {
@@ -87,6 +114,15 @@ export function McpServerForm({
   // Convex mutation for bulk-approving discovered tools
   const bulkApprove = useMutation(api.mcpToolApprovals.bulkApprove)
 
+  const getConnectionDetails = (): McpConnectionDetails => ({
+    url,
+    transport,
+    authType,
+    authValue,
+    headerName,
+    serverId: server?._id,
+  })
+
   const resetForm = useCallback(() => {
     setName(server?.name ?? "")
     setUrl(server?.url ?? "")
@@ -109,6 +145,8 @@ export function McpServerForm({
   const handleTestConnection = async () => {
     if (!url.trim()) return
 
+    const details = getConnectionDetails()
+    const fingerprint = connectionFingerprint(details)
     setIsTesting(true)
     setTestResult(null)
 
@@ -116,16 +154,18 @@ export function McpServerForm({
       const res = await fetchClient("/api/mcp-servers/test", {
         method: "POST",
         body: JSON.stringify({
-          url: url.trim(),
-          transport,
-          authType,
-          authValue: authValue || undefined,
-          headerName: authType === "header" ? headerName : undefined,
+          url: details.url.trim(),
+          transport: details.transport,
+          authType: details.authType,
+          authValue: details.authValue || undefined,
+          headerName:
+            details.authType === "header" ? details.headerName : undefined,
+          serverId: details.serverId,
         }),
       })
 
       const data = (await res.json()) as TestResult
-      setTestResult(data)
+      setTestResult({ ...data, fingerprint })
 
       if (data.success) {
         toast({
@@ -141,7 +181,7 @@ export function McpServerForm({
       }
     } catch (error) {
       console.error("Failed to test MCP connection:", error)
-      setTestResult({ success: false, error: "Network error" })
+      setTestResult({ success: false, error: "Network error", fingerprint })
       toast({
         title: "Connection failed",
         description: "Could not reach the test endpoint.",
@@ -163,6 +203,7 @@ export function McpServerForm({
     }
 
     setIsSaving(true)
+    const fingerprint = connectionFingerprint(getConnectionDetails())
 
     try {
       const body: Record<string, unknown> = {
@@ -203,6 +244,7 @@ export function McpServerForm({
       const servIdForApproval = isEditMode ? server?._id : data.serverId
       if (
         testResult?.success &&
+        testResult.fingerprint === fingerprint &&
         testResult.toolNames?.length &&
         servIdForApproval
       ) {
@@ -269,7 +311,10 @@ export function McpServerForm({
               type="url"
               placeholder="https://mcp.example.com/mcp"
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={(e) => {
+                setUrl(e.target.value)
+                setTestResult(null)
+              }}
               disabled={isSaving}
             />
             <p className="text-muted-foreground text-xs">
@@ -282,7 +327,10 @@ export function McpServerForm({
             <Label>Transport</Label>
             <Select
               value={transport}
-              onValueChange={(v) => setTransport(v as "http" | "sse")}
+              onValueChange={(v) => {
+                setTransport(v as "http" | "sse")
+                setTestResult(null)
+              }}
               disabled={isSaving}
             >
               <SelectTrigger className="w-full">
@@ -300,9 +348,10 @@ export function McpServerForm({
             <Label>Authentication</Label>
             <Select
               value={authType}
-              onValueChange={(v) =>
+              onValueChange={(v) => {
                 setAuthType(v as "none" | "bearer" | "header")
-              }
+                setTestResult(null)
+              }}
               disabled={isSaving}
             >
               <SelectTrigger className="w-full">
@@ -324,7 +373,10 @@ export function McpServerForm({
                 id="mcp-header-name"
                 placeholder="X-API-Key"
                 value={headerName}
-                onChange={(e) => setHeaderName(e.target.value)}
+                onChange={(e) => {
+                  setHeaderName(e.target.value)
+                  setTestResult(null)
+                }}
                 disabled={isSaving}
               />
             </div>
@@ -352,7 +404,10 @@ export function McpServerForm({
                     : "Enter token or key"
                 }
                 value={authValue}
-                onChange={(e) => setAuthValue(e.target.value)}
+                onChange={(e) => {
+                  setAuthValue(e.target.value)
+                  setTestResult(null)
+                }}
                 disabled={isSaving}
               />
               {hasExistingAuth && (

@@ -1,16 +1,18 @@
 import { toast } from "@/components/ui/toast"
+import { useChatSession } from "@/lib/chat-store/session/provider"
 import { Chats } from "@/lib/chat-store/types"
 import { useModel as useModelProvider } from "@/lib/model-store/provider"
 import { resolvePreferredModelId } from "@/lib/model-store/utils"
 import { resolveModelId } from "@/lib/models/model-id-migration"
 import type { UserProfile } from "@/lib/user/types"
-import { useCallback, useState } from "react"
+import { useCallback } from "react"
 
 type UseModelProps = {
   currentChat: Chats | null
   user: UserProfile | null
   updateChatModel?: (chatId: string, model: string) => Promise<void>
   chatId: string | null
+  isChatLoading?: boolean
 }
 
 /**
@@ -27,6 +29,7 @@ export function useModel({
   user,
   updateChatModel,
   chatId,
+  isChatLoading = false,
 }: UseModelProps) {
   // Get favorite models and last-used model from ModelProvider
   const {
@@ -36,6 +39,11 @@ export function useModel({
     modelPrefsHydrated,
     setLastUsedModel,
   } = useModelProvider()
+  const {
+    selectedModelOverride,
+    setSelectedModelOverride,
+    clearSelectedModelOverride,
+  } = useChatSession()
 
   // Calculate the effective model based on priority: chat model > accessible
   // last used > accessible favorite > tier default.
@@ -57,64 +65,43 @@ export function useModel({
     user?.id,
   ])
 
-  // Use local state only for temporary overrides, derive base value from props
-  const [localSelectedModel, setLocalSelectedModel] = useState<string | null>(
-    null
-  )
-
-  // Clear local override on chat navigation to prevent model bleed between chats.
-  // Tracks previous chatId as state (React 19 recommended pattern for adjusting
-  // state when a prop changes — avoids both useEffect cascading renders and
-  // ref access during render, both flagged by the React Compiler).
-  const [prevChatId, setPrevChatId] = useState(chatId)
-  if (prevChatId !== chatId) {
-    setPrevChatId(chatId)
-    setLocalSelectedModel(null)
-  }
-
-  // The actual selected model: local override or computed effective model
-  const selectedModel = localSelectedModel || getEffectiveModel()
+  // Header and Turn context share this session-owned override. It remains the
+  // current route's source of truth while persistence catches up.
+  const selectedModel = selectedModelOverride || getEffectiveModel()
 
   // Function to handle model changes with proper validation and error handling
   const handleModelChange = useCallback(
     async (newModel: string) => {
+      if (isChatLoading) return
+
       // Persist as the user's last-used model (survives new chats and sessions)
       setLastUsedModel(newModel)
-
-      // For authenticated users without a chat, we can't persist yet
-      // but we still allow the model selection for when they create a chat
-      if (!user?.id && !chatId) {
-        // For unauthenticated users without chat, just update local state
-        setLocalSelectedModel(newModel)
-        return
-      }
+      setSelectedModelOverride(newModel)
 
       // For an active chat, let the chat provider choose local cache vs Convex.
       if (chatId && updateChatModel) {
-        // Optimistically update the state
-        setLocalSelectedModel(newModel)
-
         try {
           await updateChatModel(chatId, newModel)
-          // Clear local override since it's now persisted in the chat
-          setLocalSelectedModel(null)
         } catch (err) {
-          // Revert on error
-          setLocalSelectedModel(null)
+          // Roll back only this failed selection. A newer selection may already
+          // be in flight and must remain authoritative.
+          clearSelectedModelOverride(newModel)
           console.error("Failed to update chat model:", err)
           toast({
             title: "Failed to update chat model",
             status: "error",
           })
-          throw err
         }
-      } else if (user?.id) {
-        // Authenticated user but no chat yet - just update local state
-        // The model will be used when creating a new chat
-        setLocalSelectedModel(newModel)
       }
     },
-    [chatId, updateChatModel, user?.id, setLastUsedModel]
+    [
+      chatId,
+      clearSelectedModelOverride,
+      isChatLoading,
+      setLastUsedModel,
+      setSelectedModelOverride,
+      updateChatModel,
+    ]
   )
 
   return {

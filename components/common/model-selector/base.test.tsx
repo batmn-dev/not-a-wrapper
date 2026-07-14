@@ -14,7 +14,8 @@ import {
   vi,
 } from "vitest"
 
-const { useKeyShortcutMock } = vi.hoisted(() => ({
+const { breakpointMocks, useKeyShortcutMock } = vi.hoisted(() => ({
+  breakpointMocks: { isMobile: false },
   useKeyShortcutMock: vi.fn(),
 }))
 
@@ -92,7 +93,7 @@ const modelSelectorMocks = {
 }
 
 vi.mock("@/app/hooks/use-breakpoint", () => ({
-  useBreakpoint: () => false,
+  useBreakpoint: () => breakpointMocks.isMobile,
 }))
 
 vi.mock("@/app/hooks/use-key-shortcut", () => ({
@@ -193,6 +194,7 @@ describe("ModelSelector", () => {
     container = null
     root = null
     modelSelectorMocks.isModelHidden.mockClear()
+    breakpointMocks.isMobile = false
     useKeyShortcutMock.mockClear()
   })
 
@@ -303,6 +305,23 @@ describe("ModelSelector", () => {
     expect(
       document.body.querySelector('[data-testid="pro-model-dialog"]')
     ).toBeNull()
+  })
+
+  it("uses the same model list and selection rules in the mobile drawer", () => {
+    breakpointMocks.isMobile = true
+    const onSelect = renderSelector({ isUserAuthenticated: false })
+
+    expect(document.body.textContent).toContain("GPT-5 Mini")
+    expect(document.body.textContent).toContain("OpenRouter")
+    expect(
+      document.body.querySelector('[data-testid="drawer-trigger"]')
+    ).toBeTruthy()
+
+    act(() => {
+      getModelOption("GPT-5 Mini").click()
+    })
+
+    expect(onSelect).toHaveBeenCalledWith("gpt-5-mini")
   })
 
   it("keeps OpenRouter route labels in options, not the selected trigger", () => {

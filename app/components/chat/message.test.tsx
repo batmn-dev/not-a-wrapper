@@ -94,16 +94,16 @@ describe("Message memoization", () => {
     act(() => {
       root?.render(
         <Message
-          id="assistant-1"
-          variant="assistant"
-          view={EMPTY_VIEW}
-          onDelete={() => {}}
+          model={{
+            id: "assistant-1",
+            kind: "assistant",
+            text: "Approve this tool",
+            view: EMPTY_VIEW,
+            retryModelId,
+          }}
           onEdit={() => {}}
           onReload={onReload}
-          retryModelId={retryModelId}
-        >
-          Approve this tool
-        </Message>
+        />
       )
     })
   }
@@ -192,16 +192,16 @@ describe("Message body memo contract (R3)", () => {
     act(() => {
       root?.render(
         <Message
-          id="assistant-1"
-          variant="assistant"
-          isLast={props.isLast}
-          status={props.status}
-          view={view}
-          onDelete={() => {}}
+          model={{
+            id: "assistant-1",
+            kind: "assistant",
+            text: props.children ?? "",
+            isLast: props.isLast,
+            status: props.status,
+            view,
+          }}
           onEdit={() => {}}
-        >
-          {props.children ?? ""}
-        </Message>
+        />
       )
     })
   }

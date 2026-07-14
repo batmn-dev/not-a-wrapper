@@ -58,7 +58,11 @@ export function Chat() {
   const { chat: currentChat, isLoading: isChatLoading } = useChat(chatId)
 
   return (
-    <TurnContextProvider chatId={chatId} currentChat={currentChat || null}>
+    <TurnContextProvider
+      chatId={chatId}
+      currentChat={currentChat || null}
+      isChatLoading={isChatLoading}
+    >
       <ChatInner
         chatId={chatId}
         currentChat={currentChat || null}
@@ -132,7 +136,6 @@ function ChatInner({
   // Core chat functionality (initialization + state + actions)
   const {
     messages,
-    setMessages,
     status,
     stop,
     hasSentFirstMessage,
@@ -236,14 +239,6 @@ function ChatInner({
     [activityPanelStore]
   )
 
-  // Local delete handler — filters a message from the local array
-  const handleDelete = useCallback(
-    (id: string) => {
-      setMessages((prev) => prev.filter((message) => message.id !== id))
-    },
-    [setMessages]
-  )
-
   // Auto-focus chat textarea when user types a printable character anywhere
   const focusTextareaRef = useRef<(() => void) | null>(null)
   useGlobalPromptFocus(focusTextareaRef)
@@ -262,7 +257,6 @@ function ChatInner({
       isSubmitting,
       chatId,
       hasSentFirstMessage,
-      onDelete: handleDelete,
       onEdit: submitEdit,
       onReload: handleReload,
       retryModelId: selectedModel,
@@ -277,7 +271,6 @@ function ChatInner({
       isSubmitting,
       chatId,
       hasSentFirstMessage,
-      handleDelete,
       submitEdit,
       handleReload,
       selectedModel,

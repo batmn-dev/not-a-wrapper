@@ -1,6 +1,11 @@
 import { cn } from "@/lib/utils"
 import type { RemixiconComponentType } from "@remixicon/react"
-import type { CSSProperties, HTMLAttributes } from "react"
+import type {
+  ComponentType,
+  CSSProperties,
+  HTMLAttributes,
+  SVGProps,
+} from "react"
 import { forwardRef } from "react"
 
 type IconLength = number | string
@@ -15,8 +20,12 @@ type IconSpanProps = Omit<HTMLAttributes<HTMLSpanElement>, "children"> & {
   "data-slot"?: string
 }
 
+type SvgIconComponentType = ComponentType<
+  SVGProps<SVGSVGElement> & { size?: number | string }
+>
+
 type IconProps = IconSpanProps & {
-  icon: RemixiconComponentType
+  icon: RemixiconComponentType | SvgIconComponentType
   size?: IconLength
   slotSize?: IconLength
   glyphSize?: IconLength
