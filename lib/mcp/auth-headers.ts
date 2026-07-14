@@ -16,6 +16,9 @@ export function buildStoredMcpAuthHeaders(
   server: McpAuthConfiguration,
   ownerId?: string
 ): Record<string, string> | undefined {
+  const headerName =
+    server.authType === "header" ? server.headerName : undefined
+
   if (!server.authType || server.authType === "none") return undefined
   if (!ownerId) {
     throw new Error("Cannot load MCP auth headers: missing owner identity")
@@ -25,7 +28,7 @@ export function buildStoredMcpAuthHeaders(
       "Cannot load MCP auth headers: missing encrypted credential"
     )
   }
-  if (server.authType === "header" && !server.headerName) {
+  if (server.authType === "header" && !headerName) {
     throw new Error("Cannot load MCP auth headers: missing header name")
   }
 
@@ -38,8 +41,8 @@ export function buildStoredMcpAuthHeaders(
     if (server.authType === "bearer") {
       return { Authorization: `Bearer ${decryptedValue}` }
     }
-    if (server.authType === "header") {
-      return { [server.headerName]: decryptedValue }
+    if (headerName) {
+      return { [headerName]: decryptedValue }
     }
   } catch (error) {
     console.error(
