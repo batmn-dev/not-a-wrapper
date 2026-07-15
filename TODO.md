@@ -45,9 +45,9 @@
   Convex remains the canonical authenticated approval authority without a
   demonstrated threat gap.
 - **Edit/regeneration freshness:** replace the selected-message count proxy with
-  a server-issued revision or equivalent identity-bearing token. The unresolved
-  drift scenario and verification requirements live in
-  `docs/streaming-persistence-concurrency-audit-prompt.md`.
+  a server-issued revision or equivalent identity-bearing token. Verify that a
+  rapid regenerate → branch-switch → send → regenerate sequence cannot
+  falsely reject a subsequent in-session edit as stale.
 - **Exa verification:** after saving a valid BYOK Exa key, verify one search turn
   and one `extract_content` turn. The current stored key was rejected by Exa.
 - **Model presentation:** centralize route labels and icon precedence currently

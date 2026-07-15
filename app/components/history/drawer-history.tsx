@@ -108,7 +108,7 @@ export function DrawerHistory({
       <div key={chat.id}>
         <div className="space-y-1.5">
           {editingId === chat.id ? (
-            <div className="bg-accent flex items-center justify-between rounded-lg px-2 py-2.5">
+            <div className="bg-interactive-selected flex items-center justify-between rounded-lg px-2 py-2.5">
               <form
                 className="flex w-full items-center justify-between"
                 onSubmit={(e) => {
@@ -150,7 +150,7 @@ export function DrawerHistory({
               </form>
             </div>
           ) : deletingId === chat.id ? (
-            <div className="bg-accent flex items-center justify-between rounded-lg px-2 py-2.5">
+            <div className="bg-interactive-selected flex items-center justify-between rounded-lg px-2 py-2.5">
               <form
                 onSubmit={(e) => {
                   e.preventDefault()

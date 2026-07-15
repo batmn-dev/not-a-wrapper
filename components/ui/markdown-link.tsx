@@ -3,12 +3,7 @@ import { Icon } from "@/components/ui/icon"
 import { isExternalHttpHref } from "@/lib/markdown/remark-link-presentation"
 import { cn } from "@/lib/utils"
 import { RiArrowRightUpLine, RiGlobalLine } from "@remixicon/react"
-import {
-  Children,
-  cloneElement,
-  isValidElement,
-  type ReactNode,
-} from "react"
+import { Children, cloneElement, isValidElement, type ReactNode } from "react"
 
 export type LinkMarkdownPresentation = "inline" | "pill"
 
@@ -164,7 +159,7 @@ export function LinkMarkdown({
         data-link-presentation="pill"
         data-external={isExternal ? "true" : undefined}
         className={cn(
-          "bg-muted text-muted-foreground hover:bg-muted-foreground/30 hover:text-primary focus-visible:ring-ring/50 inline-flex h-5 max-w-48 items-center gap-1 overflow-hidden rounded-full py-0 pr-2 pl-0.5 text-xs leading-none text-ellipsis whitespace-nowrap no-underline outline-none focus-visible:ring-3",
+          "bg-muted text-muted-foreground hover:bg-muted-bg-hover hover:text-foreground focus-visible:ring-focus-ring inline-flex h-5 max-w-48 items-center gap-1 overflow-hidden rounded-full py-0 pr-2 pl-0.5 text-xs leading-none text-ellipsis whitespace-nowrap no-underline outline-none focus-visible:ring-3",
           className
         )}
       >
@@ -188,7 +183,7 @@ export function LinkMarkdown({
             />
           </span>
         )}
-        <span className="overflow-hidden text-ellipsis whitespace-nowrap font-normal leading-4">
+        <span className="overflow-hidden leading-4 font-normal text-ellipsis whitespace-nowrap">
           {isUrlLike && domain ? domain : children}
         </span>
       </a>
@@ -204,7 +199,7 @@ export function LinkMarkdown({
       data-link-presentation="inline"
       data-external={isExternal ? "true" : undefined}
       className={cn(
-        "text-foreground decoration-[var(--text-tertiary)] hover:decoration-foreground focus-visible:ring-ring/50 rounded-sm [font-weight:inherit] underline decoration-dotted underline-offset-2 outline-none hover:decoration-solid focus-visible:ring-3",
+        "text-foreground decoration-foreground/60 hover:text-link hover:decoration-link focus-visible:ring-focus-ring rounded-sm [font-weight:inherit] underline decoration-dotted underline-offset-2 outline-none hover:decoration-solid focus-visible:ring-3",
         className
       )}
     >

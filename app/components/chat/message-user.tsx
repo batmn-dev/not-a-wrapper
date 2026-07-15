@@ -51,8 +51,8 @@ function AttachmentFileCard({ attachment }: { attachment: MessageAttachment }) {
   const isText = attachment.contentType.startsWith("text/")
   const icon = isText ? RiFileTextLine : RiFileLine
   const content = (
-    <div className="border-border bg-background text-foreground hover:bg-accent/50 mb-1 flex w-64 max-w-[min(16rem,calc(100vw-3rem))] items-center gap-3 rounded-md border px-3 py-2 text-left transition">
-      <span className="bg-accent text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center rounded-md">
+    <div className="border-border-subtle bg-background text-foreground hover:bg-interactive-hover mb-1 flex w-64 max-w-[min(16rem,calc(100vw-3rem))] items-center gap-3 rounded-md border px-3 py-2 text-left transition">
+      <span className="bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center rounded-md">
         <Icon icon={icon} slotSize={20} />
       </span>
       <span className="min-w-0 flex-1">
@@ -237,7 +237,7 @@ export function MessageUser({
             ))}
             {isEditing ? (
               <div
-                className="bg-accent relative flex w-full max-w-full min-w-[180px] flex-col gap-2 rounded-[18px] px-4 py-2.5"
+                className="bg-user-message relative flex w-full max-w-full min-w-[180px] flex-col gap-2 rounded-[18px] px-4 py-2.5"
                 style={{
                   width: editWidthRef.current ?? undefined,
                 }}
@@ -290,7 +290,7 @@ export function MessageUser({
               </div>
             ) : (
               <MessageContent
-                className="bg-accent relative max-w-[var(--user-chat-width,70%)] min-w-0 overflow-hidden rounded-[22px] px-4 py-2.5 leading-6"
+                className="bg-user-message relative max-w-[var(--user-chat-width,70%)] min-w-0 overflow-hidden rounded-[22px] px-4 py-2.5 leading-6"
                 ref={contentRef}
               >
                 <div className="max-w-full min-w-0 [overflow-wrap:anywhere] whitespace-pre-wrap">

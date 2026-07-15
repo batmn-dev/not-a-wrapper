@@ -165,7 +165,7 @@ const MessageAction = ({
     props: mergeProps<"button">(
       {
         className:
-          "cursor-pointer hover:bg-accent/60 hover:text-foreground disabled:cursor-not-allowed aria-disabled:cursor-not-allowed data-disabled:cursor-not-allowed",
+          "cursor-pointer hover:bg-interactive-hover hover:text-foreground active:bg-interactive-pressed disabled:cursor-not-allowed aria-disabled:cursor-not-allowed data-disabled:cursor-not-allowed",
         type: "button",
       },
       {}

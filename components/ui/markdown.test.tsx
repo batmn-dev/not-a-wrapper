@@ -144,6 +144,19 @@ describe("Markdown response controls and semantics", () => {
     expect(icon?.querySelector("svg")?.getAttribute("focusable")).toBe("false")
   })
 
+  it("keeps inline links in prose color until hover", () => {
+    const body = renderMarkdown(
+      "See [Example](https://example.com) for more details."
+    )
+    const link = body.querySelector("a")
+
+    expect(link?.classList.contains("text-foreground")).toBe(true)
+    expect(link?.classList.contains("decoration-foreground/60")).toBe(true)
+    expect(link?.classList.contains("hover:text-link")).toBe(true)
+    expect(link?.classList.contains("hover:decoration-link")).toBe(true)
+    expect(link?.classList.contains("text-link")).toBe(false)
+  })
+
   it("preserves surrounding text and punctuation for inline external links", () => {
     const body = renderMarkdown(
       "Before [Example](https://example.com), during, and after."
@@ -169,8 +182,9 @@ describe("Markdown response controls and semantics", () => {
     const links = Array.from(body.querySelectorAll<HTMLAnchorElement>("a"))
 
     expect(links).toHaveLength(2)
-    expect(links.every((link) => link.dataset.linkPresentation === "inline"))
-      .toBe(true)
+    expect(
+      links.every((link) => link.dataset.linkPresentation === "inline")
+    ).toBe(true)
     expect(
       links.every((link) =>
         link.querySelector('[data-slot="external-link-icon"]')
@@ -189,7 +203,9 @@ describe("Markdown response controls and semantics", () => {
     )
     expect(link?.dataset.linkPresentation).toBe("pill")
     expect(link?.querySelector('[data-slot="external-link-icon"]')).toBeNull()
-    expect(link?.querySelector('[data-slot="favicon-placeholder"]')).not.toBeNull()
+    expect(
+      link?.querySelector('[data-slot="favicon-placeholder"]')
+    ).not.toBeNull()
   })
 
   it("keeps a parenthesized external link within prose inline", () => {
@@ -271,9 +287,7 @@ describe("Markdown response controls and semantics", () => {
     const link = body.querySelector("a")
 
     expect(link?.dataset.linkPresentation).toBe("inline")
-    expect(link?.querySelector("img")?.getAttribute("alt")).toBe(
-      "Example logo"
-    )
+    expect(link?.querySelector("img")?.getAttribute("alt")).toBe("Example logo")
   })
 
   it("preserves nested formatting inside an inline link", () => {
@@ -291,15 +305,20 @@ describe("Markdown response controls and semantics", () => {
     "*[Visit Example](https://example.com)*",
     "**[Visit Example](https://example.com)**",
     "~~[Visit Example](https://example.com)~~",
-  ])("classifies a standalone link through transparent formatting: %s", (md) => {
-    const body = renderMarkdown(md)
+  ])(
+    "classifies a standalone link through transparent formatting: %s",
+    (md) => {
+      const body = renderMarkdown(md)
 
-    expect(body.querySelector("a")?.dataset.linkPresentation).toBe("pill")
-    expect(body.querySelector("a")?.textContent).toBe("Visit Example")
-  })
+      expect(body.querySelector("a")?.dataset.linkPresentation).toBe("pill")
+      expect(body.querySelector("a")?.textContent).toBe("Visit Example")
+    }
+  )
 
   it("renders incomplete streaming Markdown without throwing", () => {
-    expect(() => renderMarkdown("See [Example](https://example.com")).not.toThrow()
+    expect(() =>
+      renderMarkdown("See [Example](https://example.com")
+    ).not.toThrow()
     expect(() => renderMarkdown("Trailing [Example](")).not.toThrow()
   })
 

@@ -98,7 +98,7 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
                 aria-haspopup="menu"
                 aria-expanded={isMenuOpen}
                 data-testid="accounts-profile-button"
-                className="group/menu-item hover:bg-accent flex h-12 w-full items-center gap-2 rounded-xl px-1.5 text-left text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                className="group/menu-item hover:bg-sidebar-row active:bg-sidebar-row flex h-12 w-full items-center gap-2 rounded-xl px-1.5 text-left text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
               />
             }
           >
@@ -150,7 +150,7 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
                       aria-haspopup="menu"
                       aria-expanded={isMenuOpen}
                       data-testid="accounts-profile-button"
-                      className="hover:bg-accent mx-auto flex h-10 w-10 items-center justify-center rounded-md focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                      className="hover:bg-sidebar-row active:bg-sidebar-row mx-auto flex h-10 w-10 items-center justify-center rounded-md focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                     />
                   }
                 />

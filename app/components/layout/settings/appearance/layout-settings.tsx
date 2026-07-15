@@ -254,7 +254,7 @@ export function LayoutSettings() {
             "rounded-lg border p-3 text-left transition-colors",
             preferences.layout === "sidebar"
               ? "border-primary ring-primary/30 ring-2"
-              : "border-border hover:bg-muted/50"
+              : "border-border hover:bg-interactive-hover"
           )}
         >
           <LayoutSidebar className="h-full w-full" />
@@ -267,7 +267,7 @@ export function LayoutSettings() {
             "rounded-lg border p-3 text-left transition-colors",
             preferences.layout === "fullscreen"
               ? "border-primary ring-primary/30 ring-2"
-              : "border-border hover:bg-muted/50"
+              : "border-border hover:bg-interactive-hover"
           )}
         >
           <LayoutFullscreen className="h-full w-full" />

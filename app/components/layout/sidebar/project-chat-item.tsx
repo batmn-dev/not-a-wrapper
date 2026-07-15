@@ -45,8 +45,8 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
   const containerClassName = useMemo(
     () =>
       cn(
-        "sidebar-row sidebar-row-card border-border hover:bg-accent/50 group/chat relative flex items-start rounded-lg border",
-        isEditing ? "bg-accent/50" : ""
+        "sidebar-row sidebar-row-card border-border-subtle hover:bg-interactive-hover group/chat relative flex items-start rounded-lg border",
+        isEditing ? "bg-interactive-selected" : ""
       ),
     [isEditing]
   )

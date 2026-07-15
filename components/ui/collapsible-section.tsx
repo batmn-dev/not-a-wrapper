@@ -73,14 +73,14 @@ export function CollapsibleSection({
     >
       <CollapsibleTrigger
         className={cn(
-          "focus-visible:ring-ring flex items-center rounded-md focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
+          "focus-visible:ring-focus-ring flex items-center rounded-md focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
           isSidebarVariant
             ? [
                 "w-full justify-start gap-0.5 px-4 py-1.5",
                 // Button is muted (ChatGPT: text-token-text-tertiary) so the
                 // chevron inherits the muted tint; the label overrides back to
                 // primary below.
-                "text-muted-foreground transition-none",
+                "text-[var(--text-tertiary)] transition-none",
               ]
             : [
                 "w-full gap-1 px-2 py-1.5",

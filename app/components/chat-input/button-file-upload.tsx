@@ -135,7 +135,7 @@ export function ButtonFileUpload({
         </TooltipContent>
       </Tooltip>
       <FileUploadContent>
-        <div className="border-input bg-background flex flex-col items-center rounded-lg border border-dashed p-8">
+        <div className="border-input-border bg-input-bg flex flex-col items-center rounded-lg border border-dashed p-8">
           <Icon
             icon={RiUpload2Line}
             slotSize={32}

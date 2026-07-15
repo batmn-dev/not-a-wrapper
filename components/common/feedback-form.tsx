@@ -80,11 +80,11 @@ export function FeedbackForm({ authUserId, onClose }: FeedbackFormProps) {
             exit={{ opacity: 0, y: 10, filter: "blur(2px)" }}
             transition={TRANSITION_CONTENT}
           >
-            <div className="rounded-full bg-green-500/10 p-1">
+            <div className="bg-status-success-bg rounded-full p-1">
               <Icon
                 icon={RiVerifiedBadgeLine}
                 slotSize={24}
-                className="text-green-500"
+                className="text-status-success-foreground"
               />
             </div>
             <p className="text-foreground mt-3 mb-1 text-center text-sm font-medium">

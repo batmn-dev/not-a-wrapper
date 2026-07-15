@@ -181,19 +181,22 @@ function ReasoningLabel({ className, title }: ReasoningLabelProps) {
         <span className="text-muted-foreground font-normal">{title}</span>
         {durationText && (
           <>
-            <span aria-hidden className="text-muted-foreground/70 font-normal">
+            <span
+              aria-hidden
+              className="font-normal text-[var(--text-tertiary)]"
+            >
               ·
             </span>
             {phase === "thinking" ? (
               <TextShimmer
                 duration={2}
                 spread={15}
-                className="text-muted-foreground/70 text-base font-normal whitespace-nowrap"
+                className="text-base font-normal whitespace-nowrap text-[var(--text-tertiary)]"
               >
                 {durationText}
               </TextShimmer>
             ) : (
-              <span className="text-muted-foreground/70 font-normal whitespace-nowrap">
+              <span className="font-normal whitespace-nowrap text-[var(--text-tertiary)]">
                 {durationText}
               </span>
             )}

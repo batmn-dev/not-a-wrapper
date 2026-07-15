@@ -16,9 +16,9 @@ const systemMessageVariants = cva(
   {
     variants: {
       variant: {
-        action: "text-zinc-700 dark:text-zinc-300",
-        error: "text-red-700 dark:text-red-800",
-        warning: "text-amber-700 dark:text-amber-700",
+        action: "text-foreground",
+        error: "text-destructive",
+        warning: "text-warning-foreground",
       },
       fill: {
         true: "bg-background",
@@ -29,32 +29,32 @@ const systemMessageVariants = cva(
       {
         variant: "action",
         fill: true,
-        class: "bg-zinc-100 dark:bg-zinc-900 border-transparent",
+        class: "bg-muted border-transparent",
       },
       {
         variant: "error",
         fill: true,
-        class: "bg-red-100 dark:bg-red-900/20 border-transparent",
+        class: "bg-destructive/10 border-transparent",
       },
       {
         variant: "warning",
         fill: true,
-        class: "bg-amber-100 dark:bg-amber-900/20 border-transparent",
+        class: "bg-warning/10 border-transparent",
       },
       {
         variant: "action",
         fill: false,
-        class: "border-zinc-200 dark:border-zinc-800",
+        class: "border-border-default",
       },
       {
         variant: "error",
         fill: false,
-        class: "border-red-600 dark:border-red-900",
+        class: "border-destructive",
       },
       {
         variant: "warning",
         fill: false,
-        class: "border-amber-600 dark:border-amber-900",
+        class: "border-warning",
       },
     ],
     defaultVariants: {

@@ -100,7 +100,7 @@ function ActivityToolCard({
             type="button"
             aria-label={copied ? "Copied" : "Copy"}
             onClick={copy}
-            className="hover:bg-foreground/[0.07] focus-visible:ring-ring inline-flex size-9 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2"
+            className="hover:bg-interactive-hover active:bg-interactive-pressed focus-visible:ring-focus-ring inline-flex size-9 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2"
           >
             <Icon icon={copied ? RiCheckLine : RiFileCopyLine} slotSize={18} />
           </button>
@@ -125,7 +125,7 @@ function ActivityToolCard({
             type="button"
             disabled={!onToolApproval || isSubmittingApproval}
             onClick={() => void submitToolApproval(false, "Denied by user")}
-            className="hover:bg-foreground/[0.07] h-8 rounded-full px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+            className="hover:bg-interactive-hover active:bg-interactive-pressed disabled:text-disabled-foreground h-8 rounded-full px-3 text-sm font-medium disabled:cursor-not-allowed"
           >
             Deny
           </button>
@@ -189,7 +189,7 @@ function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
               href={safeUrl.toString()}
               target="_blank"
               rel="noopener noreferrer"
-              className={`${className} hover:bg-foreground hover:text-background focus-visible:ring-ring outline-none focus-visible:ring-2`}
+              className={`${className} hover:bg-interactive-hover hover:text-foreground active:bg-interactive-pressed focus-visible:ring-focus-ring outline-none focus-visible:ring-2`}
             >
               {content}
             </a>
@@ -207,7 +207,7 @@ function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
           aria-expanded={expanded}
           aria-controls={chipGroupId}
           onClick={() => setExpanded((value) => !value)}
-          className="group bg-muted text-muted-foreground hover:bg-foreground hover:text-background focus-visible:ring-ring inline-flex h-[25px] max-w-full items-center gap-1 overflow-hidden rounded-full px-3 text-xs outline-none focus-visible:ring-2"
+          className="group bg-muted text-muted-foreground hover:bg-interactive-hover hover:text-foreground active:bg-interactive-pressed focus-visible:ring-focus-ring inline-flex h-[25px] max-w-full items-center gap-1 overflow-hidden rounded-full px-3 text-xs outline-none focus-visible:ring-2"
         >
           {expanded ? (
             "Show less"
@@ -380,7 +380,7 @@ function PanelBody({
                   href={result.sourceUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="focus-visible:ring-ring block overflow-hidden rounded-xl outline-none focus-visible:ring-2"
+                  className="focus-visible:ring-focus-ring block overflow-hidden rounded-xl outline-none focus-visible:ring-2"
                 >
                   <Image
                     src={result.imageUrl}

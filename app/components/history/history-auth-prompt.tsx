@@ -24,12 +24,12 @@ export function HistoryAuthPrompt({ className }: HistoryAuthPromptProps) {
         </p>
       </div>
       <div className="mt-5 flex flex-col gap-3">
-        <AuthModalTrigger className="h-[58px] w-full rounded-full bg-[#0d0d0d] text-base text-white shadow-none hover:bg-[#2f2f2f] dark:bg-white dark:text-black dark:hover:bg-white/90">
+        <AuthModalTrigger className="bg-primary text-primary-foreground hover:bg-primary-bg-hover h-[58px] w-full rounded-full text-base shadow-none">
           Log in
         </AuthModalTrigger>
         <AuthModalTrigger
           variant="outline"
-          className="border-border bg-background hover:bg-muted/50 h-[58px] w-full rounded-full border text-base font-medium shadow-none"
+          className="border-border bg-background hover:bg-interactive-hover h-[58px] w-full rounded-full border text-base font-medium shadow-none"
         >
           Create account
         </AuthModalTrigger>

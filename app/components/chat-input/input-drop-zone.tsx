@@ -31,7 +31,7 @@ export function InputDropZone({
     >
       {children}
       <FileUploadContent>
-        <div className="border-input bg-background flex flex-col items-center rounded-lg border border-dashed p-8 text-center">
+        <div className="border-input-border bg-input-bg flex flex-col items-center rounded-lg border border-dashed p-8 text-center">
           <div className="relative mb-6 h-20 w-36" aria-hidden="true">
             <div className="absolute top-5 left-1 flex size-12 -rotate-12 items-center justify-center rounded-lg bg-green-100 text-green-700">
               <Icon icon={RiImageCircleFill} slotSize={28} />

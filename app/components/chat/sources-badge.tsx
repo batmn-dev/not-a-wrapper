@@ -66,7 +66,7 @@ export function SourcesBadge({
         {[...cluster].reverse().map((source) => (
           <span
             key={source.sourceId}
-            className="border-background bg-background group-hover/source-badge:border-accent/60 relative -ms-1.5 flex items-center overflow-clip rounded-full border-2 first:me-0"
+            className="border-background bg-background group-hover/source-badge:border-border-default relative -ms-1.5 flex items-center overflow-clip rounded-full border-2 first:me-0"
           >
             <Favicon
               url={source.url}
