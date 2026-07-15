@@ -2,6 +2,9 @@
 
 - **Better in-progress conversation view:** persist and surface active progress
   when a user leaves and returns to a streaming chat.
+- **Fix orphaned completed chat turns:** prevent expired request auth from losing
+  answers, leaving runs streaming, or showing false success; follow the
+  [incident remediation plan](docs/chat-turn-token-expiry-orphaned-run-incident-2026-07-14.md).
 - **Remember conversation scroll position:** restore each chat thread to its
   previous scroll position when navigating away and returning.
 - **Assistant message highlighting:** When highlighting text from an asssitant response, add a clear "Add to chat" button that adds it to the chat composer.
