@@ -59,7 +59,7 @@ function NavigationMenuItem({
 }
 
 const navigationMenuTriggerStyle = cva(
-  "group inline-flex h-9 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-50 data-[open]:hover:bg-accent data-[open]:text-accent-foreground data-[open]:focus:bg-accent data-[open]:bg-accent/50 focus-visible:ring-ring/50 outline-none transition-shadow focus-visible:ring-[3px] focus-visible:outline-1"
+  "group inline-flex h-9 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-sm font-medium hover:bg-interactive-hover hover:text-foreground focus:bg-interactive-selected focus:text-foreground active:bg-interactive-pressed disabled:pointer-events-none disabled:opacity-50 data-[open]:hover:bg-interactive-hover data-[open]:text-foreground data-[open]:focus:bg-interactive-selected data-[open]:bg-interactive-selected focus-visible:ring-focus-ring outline-none transition-shadow focus-visible:ring-[3px] focus-visible:outline-1"
 )
 
 function NavigationMenuTrigger({
@@ -134,7 +134,7 @@ function NavigationMenuLink({
     <NavigationMenuPrimitive.Link
       data-slot="navigation-menu-link"
       className={cn(
-        "data-[active]:focus:bg-accent data-[active]:hover:bg-accent data-[active]:bg-accent/50 data-[active]:text-accent-foreground hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus-visible:ring-ring/50 [&_svg:not([class*='text-'])]:text-muted-foreground flex flex-col gap-1 rounded-sm p-2 text-sm transition-shadow outline-none focus-visible:ring-[3px] focus-visible:outline-1 [&_svg:not([class*='size-'])]:size-4",
+        "data-[active]:focus:bg-interactive-selected data-[active]:hover:bg-interactive-hover data-[active]:bg-interactive-selected data-[active]:text-foreground hover:bg-interactive-hover hover:text-foreground focus:bg-interactive-selected focus:text-foreground active:bg-interactive-pressed focus-visible:ring-focus-ring [&_svg:not([class*='text-'])]:text-muted-foreground flex flex-col gap-1 rounded-sm p-2 text-sm transition-shadow outline-none focus-visible:ring-[3px] focus-visible:outline-1 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}

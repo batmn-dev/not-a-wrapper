@@ -1,12 +1,18 @@
 # To Do
 
-- **Chat side panel:** finish the live multi-step timeline. Preserve the
-  intentional `ActivityPanel`, `ActivityTimeline`, and
-  `DockedFlyoutShell.viewportRef` scaffolding; re-verify live thinking behavior
-  against a current reference before wiring speculative `phase` behavior.
 - **Better in-progress conversation view:** persist and surface active progress
   when a user leaves and returns to a streaming chat.
-  - **Assistant message highlighting:** Add to chat
+- **Fix orphaned completed chat turns:** prevent expired request auth from losing
+  answers, leaving runs streaming, or showing false success; follow the
+  [incident remediation plan](docs/chat-turn-token-expiry-orphaned-run-incident-2026-07-14.md).
+- **Remember conversation scroll position:** restore each chat thread to its
+  previous scroll position when navigating away and returning.
+- **Assistant message highlighting:** When highlighting text from an asssitant response, add a clear "Add to chat" button that adds it to the chat composer.
+- **Dynamic Activity-panel source presentation:** adapt each source item to the
+  metadata available instead of forcing every source into one fixed layout.
+  Prefer a readable headline when available; include useful supporting details
+  such as a publication date or description when provided; and fall back to the
+  URL when richer metadata is missing.
 - **Automatic conversation context management:** replace the current
   context-limit hard stop with model-aware input budgeting that reserves space
   for instructions, tool schemas, attachments, and output. Before the selected
@@ -49,9 +55,9 @@
   Convex remains the canonical authenticated approval authority without a
   demonstrated threat gap.
 - **Edit/regeneration freshness:** replace the selected-message count proxy with
-  a server-issued revision or equivalent identity-bearing token. The unresolved
-  drift scenario and verification requirements live in
-  `docs/streaming-persistence-concurrency-audit-prompt.md`.
+  a server-issued revision or equivalent identity-bearing token. Verify that a
+  rapid regenerate → branch-switch → send → regenerate sequence cannot
+  falsely reject a subsequent in-session edit as stale.
 - **Exa verification:** after saving a valid BYOK Exa key, verify one search turn
   and one `extract_content` turn. The current stored key was rejected by Exa.
 - **Model presentation:** centralize route labels and icon precedence currently

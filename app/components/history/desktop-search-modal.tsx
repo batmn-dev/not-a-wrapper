@@ -240,8 +240,8 @@ export function DesktopSearchModal({
                   aria-label="Close"
                   className={cn(
                     "ms-4 inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent",
-                    "text-muted-foreground hover:bg-accent hover:text-foreground",
-                    "focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none"
+                    "text-muted-foreground hover:bg-interactive-hover hover:text-foreground active:bg-interactive-pressed",
+                    "focus-visible:ring-focus-ring focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none"
                   )}
                 >
                   <RiCloseLargeLine className="size-5" aria-hidden="true" />
@@ -341,8 +341,8 @@ export function DesktopSearchModal({
                   aria-label="Close"
                   className={cn(
                     "inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent",
-                    "text-muted-foreground hover:bg-accent hover:text-foreground",
-                    "focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none"
+                    "text-muted-foreground hover:bg-interactive-hover hover:text-foreground active:bg-interactive-pressed",
+                    "focus-visible:ring-focus-ring focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none"
                   )}
                 >
                   <RiCloseLargeLine className="size-5" aria-hidden="true" />
@@ -392,8 +392,8 @@ function SearchRow({
       <div
         className={cn(
           "group text-foreground relative flex items-center rounded-xl px-4 py-3",
-          "hover:bg-accent hover:text-accent-foreground",
-          active && "bg-accent text-accent-foreground"
+          "hover:bg-interactive-hover hover:text-foreground active:bg-interactive-pressed",
+          active && "bg-interactive-selected text-foreground"
         )}
       >
         {icon}

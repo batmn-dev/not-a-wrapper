@@ -8,7 +8,7 @@ import { RiCloseLargeLine } from "@remixicon/react"
 import type { ComponentProps } from "react"
 
 const CLOSE_HOVER_TINT =
-  "hover:bg-foreground/[0.07] dark:hover:bg-foreground/[0.07]"
+  "hover:bg-interactive-hover active:bg-interactive-pressed"
 
 /**
  * PanelCloseButton — the shared ghost-icon close affordance for both panel
@@ -71,10 +71,10 @@ export function TitleDurationCluster({
       </span>
       {durationSeconds !== undefined ? (
         <>
-          <span aria-hidden className="text-muted-foreground/70">
+          <span aria-hidden className="text-[var(--text-tertiary)]">
             ·
           </span>
-          <span className="text-muted-foreground/70 whitespace-nowrap">
+          <span className="whitespace-nowrap text-[var(--text-tertiary)]">
             {formatDuration(durationSeconds)}
           </span>
         </>

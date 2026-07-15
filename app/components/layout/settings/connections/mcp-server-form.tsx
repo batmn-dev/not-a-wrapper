@@ -70,8 +70,7 @@ function connectionFingerprint(details: McpConnectionDetails): string {
       details.authType === "bearer" || details.authType === "header"
         ? details.authValue
         : "",
-    headerName:
-      details.authType === "header" ? details.headerName.trim() : "",
+    headerName: details.authType === "header" ? details.headerName.trim() : "",
     serverId: details.serverId ?? "",
   })
 }
@@ -441,7 +440,7 @@ export function McpServerForm({
             </Button>
             {testResult && (
               <span
-                className={`text-xs ${testResult.success ? "text-green-600 dark:text-green-400" : "text-destructive"}`}
+                className={`text-xs ${testResult.success ? "text-status-success-foreground" : "text-destructive"}`}
               >
                 {testResult.success
                   ? `${testResult.toolCount} tool${testResult.toolCount !== 1 ? "s" : ""} discovered`

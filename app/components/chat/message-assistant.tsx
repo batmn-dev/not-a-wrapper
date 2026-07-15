@@ -114,6 +114,13 @@ export function MessageAssistant({
     }
   )
   const turnActive = phase.kind !== "settled"
+  const showMessageBody =
+    searchImageResults.length > 0 ||
+    hasContent ||
+    (finishReason === "length" && status !== "streaming") ||
+    status === "awaiting_approval" ||
+    status === "aborted" ||
+    status === "failed"
 
   const messageRef = useRef<HTMLDivElement>(null)
   const { selectionInfo, clearSelection } = useAssistantMessageSelection(
@@ -189,64 +196,65 @@ export function MessageAssistant({
       tabIndex={-1}
     >
       <h6 className="sr-only">Assistant said:</h6>
-      {/* Captured turn anatomy (box-chain verified 2026-07-11): a gap-4 content
-          wrapper groups the `text-message` block(s); the action row is a
+      {/* Captured turn anatomy (box-chain verified 2026-07-14): activity and
+          the `text-message` block are gap-4 siblings; the action row is a
           ZERO-GAP column-level sibling — its p-1/-mt-1 metrics put the
-          buttons ~8px under the prose. Parts flow in a gap-1 column. */}
+          buttons ~8px under the prose. Message parts flow in a gap-1 column. */}
       <div className="flex max-w-full grow flex-col gap-4">
-        <div
-          ref={messageRef}
-          className="text-message relative flex min-h-8 w-full flex-col gap-2 text-start break-words whitespace-normal"
-          // Inner data-message-id for quote selection — closest() finds this before the outer article
-          data-message-id={messageId}
-        >
-          <div className="flex w-full flex-col gap-1 empty:hidden">
-            {searchImageResults.length > 0 && (
-              <SearchImages results={searchImageResults} />
-            )}
+        <AssistantActivityIndicator
+          presentation={activityPresentation}
+          open={isPanelTurnOpen}
+          onOpenChange={
+            panelActions ? handleActivityTriggerOpenChange : undefined
+          }
+          controlsId={panelId}
+        />
 
-            <AssistantActivityIndicator
-              presentation={activityPresentation}
-              open={isPanelTurnOpen}
-              onOpenChange={
-                panelActions ? handleActivityTriggerOpenChange : undefined
-              }
-              controlsId={panelId}
-            />
+        {showMessageBody ? (
+          <div
+            ref={messageRef}
+            className="text-message relative flex min-h-8 w-full flex-col gap-2 text-start break-words whitespace-normal"
+            // Inner data-message-id for quote selection — closest() finds this before the outer article
+            data-message-id={messageId}
+          >
+            <div className="flex w-full flex-col gap-1 empty:hidden">
+              {searchImageResults.length > 0 && (
+                <SearchImages results={searchImageResults} />
+              )}
 
-            {contentNullOrEmpty ? null : (
-              <MessageContent
-                className="markdown prose relative w-full bg-transparent p-0"
-                markdown={true}
-              >
-                {children}
-              </MessageContent>
-            )}
+              {contentNullOrEmpty ? null : (
+                <MessageContent
+                  className="markdown prose relative w-full bg-transparent p-0"
+                  markdown={true}
+                >
+                  {children}
+                </MessageContent>
+              )}
 
-            {finishReason === "length" && status !== "streaming" && (
-              <SystemMessage
-                variant="warning"
-                fill
-                cta={
-                  canRegenerate
-                    ? {
-                        label: "Regenerate",
-                        onClick: () => onReload?.(messageId),
-                      }
-                    : undefined
-                }
-              >
-                Response may be incomplete due to output length limits.
-              </SystemMessage>
-            )}
+              {finishReason === "length" && status !== "streaming" && (
+                <SystemMessage
+                  variant="warning"
+                  fill
+                  cta={
+                    canRegenerate
+                      ? {
+                          label: "Regenerate",
+                          onClick: () => onReload?.(messageId),
+                        }
+                      : undefined
+                  }
+                >
+                  Response may be incomplete due to output length limits.
+                </SystemMessage>
+              )}
 
-            {status === "awaiting_approval" && (
-              <SystemMessage variant="action" fill>
-                Waiting for approval before running the tool.
-              </SystemMessage>
-            )}
+              {status === "awaiting_approval" && (
+                <SystemMessage variant="action" fill>
+                  Waiting for approval before running the tool.
+                </SystemMessage>
+              )}
 
-            {/* Terminal aborted/failed states are durable data (the message row's
+              {/* Terminal aborted/failed states are durable data (the message row's
             status + error), not transient client state: a turn that died
             before producing content renders as a first-class stub with a
             retry (regeneration) affordance instead of vanishing behind a
@@ -254,55 +262,56 @@ export function MessageAssistant({
             banner hosts Retry exactly when the text footer (which carries the
             regenerate action) is absent — gate on text, not on preserved
             content, so tool-only turns keep a retry control. */}
-            {status === "aborted" && (
-              <SystemMessage
-                variant="warning"
-                fill
-                cta={
-                  !hasContent && canRegenerate
-                    ? {
-                        label: "Retry",
-                        onClick: () => onReload?.(messageId),
-                      }
-                    : undefined
-                }
-              >
-                {preservedResponse
-                  ? "Generation stopped. Partial response preserved."
-                  : "Generation stopped."}
-              </SystemMessage>
-            )}
+              {status === "aborted" && (
+                <SystemMessage
+                  variant="warning"
+                  fill
+                  cta={
+                    !hasContent && canRegenerate
+                      ? {
+                          label: "Retry",
+                          onClick: () => onReload?.(messageId),
+                        }
+                      : undefined
+                  }
+                >
+                  {preservedResponse
+                    ? "Generation stopped. Partial response preserved."
+                    : "Generation stopped."}
+                </SystemMessage>
+              )}
 
-            {status === "failed" && (
-              <SystemMessage
-                variant="error"
-                fill
-                cta={
-                  canRegenerate
-                    ? {
-                        label: "Retry",
-                        onClick: () => onReload?.(messageId),
-                      }
-                    : undefined
-                }
-              >
-                {durableError
-                  ? `Generation failed: ${durableError}`
-                  : "Generation failed."}
-                {preservedResponse ? " Partial response preserved." : ""}
-              </SystemMessage>
+              {status === "failed" && (
+                <SystemMessage
+                  variant="error"
+                  fill
+                  cta={
+                    canRegenerate
+                      ? {
+                          label: "Retry",
+                          onClick: () => onReload?.(messageId),
+                        }
+                      : undefined
+                  }
+                >
+                  {durableError
+                    ? `Generation failed: ${durableError}`
+                    : "Generation failed."}
+                  {preservedResponse ? " Partial response preserved." : ""}
+                </SystemMessage>
+              )}
+            </div>
+
+            {selectionInfo && selectionInfo.messageId && (
+              <QuoteButton
+                mousePosition={selectionInfo.position}
+                onQuote={handleQuoteBtnClick}
+                messageContainerRef={messageRef}
+                onDismiss={clearSelection}
+              />
             )}
           </div>
-
-          {selectionInfo && selectionInfo.messageId && (
-            <QuoteButton
-              mousePosition={selectionInfo.position}
-              onQuote={handleQuoteBtnClick}
-              messageContainerRef={messageRef}
-              onDismiss={clearSelection}
-            />
-          )}
-        </div>
+        ) : null}
       </div>
 
       {showFooterSlot && (

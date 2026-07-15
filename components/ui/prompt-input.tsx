@@ -128,7 +128,7 @@ function PromptInput({
           <div
             data-composer-surface="true"
             data-slot="prompt-input-surface"
-            className="shadow-composer relative grid cursor-text grid-cols-[auto_1fr_auto] overflow-clip rounded-[28px] border-0 border-black/5 bg-[var(--composer-bg)] bg-clip-padding px-2 py-[9px] contain-inline-size [grid-template-areas:'header_header_header'_'leading_primary_trailing'_'._footer_.'] group-not-data-[expanded]/composer:min-h-[52px] group-not-data-[expanded]/composer:py-[5px] group-data-[expanded]/composer:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] max-sm:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out dark:border-white/5"
+            className="shadow-composer border-border-subtle relative grid cursor-text grid-cols-[auto_1fr_auto] overflow-clip rounded-[28px] border-0 bg-[var(--composer-bg)] bg-clip-padding px-2 py-[9px] contain-inline-size [grid-template-areas:'header_header_header'_'leading_primary_trailing'_'._footer_.'] group-not-data-[expanded]/composer:min-h-[52px] group-not-data-[expanded]/composer:py-[5px] group-data-[expanded]/composer:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out max-sm:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing']"
             onClick={() => {
               textareaRef.current?.focus()
             }}
@@ -355,7 +355,7 @@ function PromptInputTextarea({
       <div
         data-composer-editor-scroller="true"
         data-slot="prompt-input-editor-scroller"
-        className="min-w-0 flex-1 overflow-auto [scrollbar-width:thin]"
+        className="min-w-0 flex-1 [scrollbar-width:thin] overflow-auto"
         style={{ maxHeight: maxHeightStyle }}
       >
         <Textarea
@@ -365,7 +365,7 @@ function PromptInputTextarea({
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           className={cn(
-            "text-primary mt-4 block min-h-[42px] resize-none overflow-y-visible rounded-none border-none bg-transparent px-0 pt-0 pb-4 text-base leading-[26px] shadow-none transition-none focus-visible:ring-0 focus-visible:ring-offset-0 dark:bg-transparent",
+            "text-foreground mt-4 block min-h-[42px] resize-none overflow-y-visible rounded-none border-none bg-transparent px-0 pt-0 pb-4 text-base leading-[26px] shadow-none transition-none focus-visible:ring-0 focus-visible:ring-offset-0 dark:bg-transparent",
             className
           )}
           style={{

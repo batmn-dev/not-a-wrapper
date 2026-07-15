@@ -28,11 +28,11 @@ const composerPlusIcon = (
 )
 
 const plusTriggerClassName =
-  "composer-btn size-9 min-w-9 rounded-full p-0 hover:bg-black/5 dark:hover:bg-white/10"
+  "composer-btn size-9 min-w-9 rounded-full p-0 hover:bg-interactive-hover active:bg-interactive-pressed"
 
 const authenticatedPlusTriggerClassName = cn(
   plusTriggerClassName,
-  "aria-expanded:bg-black/5 dark:aria-expanded:bg-white/10"
+  "aria-expanded:bg-interactive-selected"
 )
 
 const composerPlusMenuContentClassName =
@@ -44,7 +44,7 @@ const composerPlusMenuStyle = {
 }
 
 const composerPlusMenuItemClassName =
-  "mx-1.5 h-9 rounded-[10px] px-2.5 py-1.5 text-sm leading-5 hover:bg-black/5 focus:bg-black/5 data-[highlighted]:bg-black/5 dark:hover:bg-white/10 dark:focus:bg-white/10 dark:data-[highlighted]:bg-white/10"
+  "mx-1.5 h-9 rounded-[10px] px-2.5 py-1.5 text-sm leading-5 hover:bg-interactive-hover focus:bg-interactive-selected data-[highlighted]:bg-interactive-selected active:bg-interactive-pressed"
 
 type ButtonPlusMenuProps = {
   onOpenFilePicker: () => void
@@ -74,9 +74,7 @@ export function ButtonPlusMenu({
     return (
       <Popover>
         <Tooltip disableHoverablePopup>
-          <TooltipTrigger
-            render={<span className="inline-flex" />}
-          >
+          <TooltipTrigger render={<span className="inline-flex" />}>
             <PopoverTrigger
               render={
                 <Button
@@ -106,9 +104,7 @@ export function ButtonPlusMenu({
     <>
       <DropdownMenu>
         <Tooltip disableHoverablePopup>
-          <TooltipTrigger
-            render={<span className="inline-flex" />}
-          >
+          <TooltipTrigger render={<span className="inline-flex" />}>
             <DropdownMenuTrigger
               render={
                 <Button

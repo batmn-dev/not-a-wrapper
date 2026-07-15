@@ -81,7 +81,7 @@ export function VerificationForm({ email }: VerificationFormProps) {
         </div>
 
         <Button
-          className="h-[52px] w-full rounded-full bg-[#0d0d0d] text-base text-white shadow-none hover:bg-[#2f2f2f] dark:bg-white dark:text-black dark:hover:bg-white/90"
+          className="bg-primary text-primary-foreground hover:bg-primary-bg-hover h-[52px] w-full rounded-full text-base shadow-none"
           disabled={isVerifyPending}
           type="submit"
         >

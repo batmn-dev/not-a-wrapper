@@ -194,6 +194,7 @@ describe("MessageAssistant activity trigger", () => {
     expect(container?.textContent).toContain("Thinking")
     expect(container?.textContent).not.toContain("Generating")
     expect(container?.querySelector("button[aria-expanded]")).toBeNull()
+    expect(container?.querySelector(".text-message")).toBeNull()
   })
 
   it("shows only passive Thinking while opaque reasoning streams", () => {
@@ -560,10 +561,17 @@ describe("MessageAssistant activity trigger", () => {
       'button[aria-label="Open activity: Worked for 2s"]'
     )
     const copy = container?.querySelector('button[aria-label="Copy Response"]')
+    const activity = trigger?.closest(
+      '[data-activity-presentation="disclosure"]'
+    )
+    const messageBody = answer?.closest(".text-message")
 
     expect(answer).toBeTruthy()
     expect(trigger).toBeTruthy()
     expect(copy).toBeTruthy()
+    expect(activity?.parentElement).toBe(messageBody?.parentElement)
+    expect(activity?.nextElementSibling).toBe(messageBody)
+    expect(activity?.parentElement?.classList.contains("gap-4")).toBe(true)
     expect(
       trigger!.compareDocumentPosition(answer!) &
         Node.DOCUMENT_POSITION_FOLLOWING

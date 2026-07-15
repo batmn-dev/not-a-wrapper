@@ -42,12 +42,12 @@ const baseClassName = cn(
   "gap-(--sidebar-item-gap) px-2.5 py-1.5 pointer-coarse:py-3",
   // Native buttons default to cursor: default; sidebar rows should feel clickable.
   "cursor-pointer",
-  "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-primary",
-  "aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-transparent aria-disabled:hover:text-primary",
+  "disabled:cursor-not-allowed disabled:hover:bg-transparent",
+  "aria-disabled:cursor-not-allowed aria-disabled:hover:bg-transparent",
   // Colors (instant hover — no transition)
-  "text-primary hover:bg-accent/80 hover:text-foreground",
+  "text-foreground hover:bg-sidebar-row hover:text-foreground active:bg-sidebar-row",
   // Focus states
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2"
 )
 
 /**
@@ -89,7 +89,7 @@ export const SidebarMenuItem = forwardRef<
         <span className="truncate">{label}</span>
       </div>
       {trailing && (
-        <div className="text-muted-foreground shrink-0 opacity-0 group-hover/menu-item:opacity-100">
+        <div className="shrink-0 text-[var(--text-tertiary)] opacity-0 group-hover/menu-item:opacity-100">
           {trailing}
         </div>
       )}
@@ -100,7 +100,7 @@ export const SidebarMenuItem = forwardRef<
     baseClassName,
     hasTrailing && "justify-between",
     isActive &&
-      "bg-accent text-foreground hover:bg-accent group-data-[collapsible=icon]:bg-transparent",
+      "bg-sidebar-row text-foreground hover:bg-sidebar-row group-data-[collapsible=icon]:bg-transparent",
     className
   )
 

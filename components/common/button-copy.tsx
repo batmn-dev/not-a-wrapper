@@ -1,17 +1,31 @@
 "use client"
 
-import React, { useState } from "react"
-import { TextMorph } from "../motion-primitives/text-morph"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
+import { RiCheckLine, RiFileCopyLine } from "@remixicon/react"
+import { useState } from "react"
+import { Icon } from "../ui/icon"
 
 type ButtonCopyProps = {
-  code: string
+  code: string | (() => string)
+  label?: string
+  variant?: "code" | "table"
 }
 
-export function ButtonCopy({ code }: ButtonCopyProps) {
+export function ButtonCopy({
+  code,
+  label = "Copy",
+  variant = "code",
+}: ButtonCopyProps) {
   const [hasCopyLabel, setHasCopyLabel] = useState(false)
 
   const onCopy = () => {
-    navigator.clipboard.writeText(code)
+    const value = typeof code === "function" ? code() : code
+    void navigator.clipboard.writeText(value)
     setHasCopyLabel(true)
 
     setTimeout(() => {
@@ -20,12 +34,30 @@ export function ButtonCopy({ code }: ButtonCopyProps) {
   }
 
   return (
-    <button
-      onClick={onCopy}
-      type="button"
-      className="text-muted-foreground hover:bg-muted inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1 text-xs"
-    >
-      <TextMorph as="span">{hasCopyLabel ? "Copied" : "Copy"}</TextMorph>
-    </button>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            onClick={onCopy}
+            type="button"
+            aria-label={hasCopyLabel ? "Copied" : label}
+            className={cn(
+              "code-copy-button inline-flex cursor-pointer items-center justify-center bg-transparent",
+              variant === "code"
+                ? "text-foreground pointer-events-auto size-9 rounded-full p-2"
+                : "pointer-events-none relative z-10 my-1 size-7 rounded-[4px] p-1 text-[var(--text-secondary)] opacity-0 transition-opacity group-focus-within/markdown-table:pointer-events-auto group-focus-within/markdown-table:opacity-100 group-hover/markdown-table:pointer-events-auto group-hover/markdown-table:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100"
+            )}
+          />
+        }
+      >
+        <Icon
+          icon={hasCopyLabel ? RiCheckLine : RiFileCopyLine}
+          slotSize={20}
+        />
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        {hasCopyLabel ? "Copied" : label}
+      </TooltipContent>
+    </Tooltip>
   )
 }

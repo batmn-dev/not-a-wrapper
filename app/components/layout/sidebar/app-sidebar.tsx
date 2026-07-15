@@ -102,10 +102,7 @@ function DesktopAppSidebar() {
     <Sidebar
       collapsible="icon"
       variant="sidebar"
-      className={cn(
-        "border-border/40 border-r",
-        isCollapsed ? "bg-background" : "bg-sidebar"
-      )}
+      className="bg-sidebar border-sidebar-border border-r"
     >
       {/* 
         Dual-layer structure:
@@ -245,6 +242,7 @@ function MobileAppSidebarDrawer() {
         data-mobile="true"
         side="left"
         showCloseButton={false}
+        overlayClassName="bg-scrim-sidebar supports-backdrop-filter:backdrop-blur-none"
         className="bg-sidebar text-sidebar-foreground h-full min-w-0 gap-0 overflow-hidden p-0"
         style={{ width: "100dvw", maxWidth: "none" }}
       >
@@ -332,7 +330,7 @@ function SidebarExpandedNav({
               <Link
                 href="/"
                 onClick={onMobileClose}
-                className="hover:bg-accent flex h-9 w-9 items-center justify-center rounded-lg"
+                className="hover:bg-sidebar-row active:bg-sidebar-row flex h-9 w-9 items-center justify-center rounded-lg"
                 data-sidebar-item="true"
                 aria-label="Home"
               >
@@ -342,7 +340,7 @@ function SidebarExpandedNav({
                 <button
                   type="button"
                   onClick={onMobileClose}
-                  className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex size-9 items-center justify-center rounded-md bg-transparent focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                  className="hover:text-foreground hover:bg-sidebar-row active:bg-sidebar-row inline-flex size-9 items-center justify-center rounded-md bg-transparent text-[var(--text-tertiary)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                   aria-label="Close sidebar"
                 >
                   <Icon icon={RiCloseLine} slotSize={20} />
@@ -543,7 +541,7 @@ function CollapsedHeaderToggle() {
           <button
             type="button"
             onClick={toggleSidebar}
-            className="group/toggle hover:bg-accent relative flex h-9 w-9 cursor-e-resize items-center justify-center rounded-lg focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none rtl:cursor-w-resize"
+            className="group/toggle hover:bg-sidebar-row active:bg-sidebar-row relative flex h-9 w-9 cursor-e-resize items-center justify-center rounded-lg focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none rtl:cursor-w-resize"
             aria-label="Open sidebar"
             aria-expanded={false}
             aria-controls={SIDEBAR_CONTAINER_ID}
@@ -600,7 +598,7 @@ function CollapsedMenuItem({
   const className = cn(
     "menu-item-hoverable flex h-9 w-10 items-center justify-center rounded-lg",
     "cursor-pointer",
-    "hover:bg-accent",
+    "hover:bg-sidebar-row active:bg-sidebar-row",
     isActive && "text-foreground",
     "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
   )
@@ -676,7 +674,7 @@ function SignedOutCollapsedSearchPopover({
   const className = cn(
     "menu-item-hoverable flex h-9 w-10 items-center justify-center rounded-lg",
     "cursor-pointer",
-    "hover:bg-accent",
+    "hover:bg-sidebar-row active:bg-sidebar-row",
     open && "text-foreground",
     "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
   )
@@ -769,9 +767,9 @@ function SignedOutCollapsedAccountPopover({
             data-sidebar-item="true"
             data-testid="accounts-profile-button"
             className={cn(
-              "menu-item-hoverable text-primary mx-auto flex h-10 w-10 items-center justify-center rounded-xl",
-              "hover:bg-accent focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
-              open && "bg-accent"
+              "menu-item-hoverable text-foreground mx-auto flex h-10 w-10 items-center justify-center rounded-xl",
+              "hover:bg-sidebar-row active:bg-sidebar-row focus-visible:ring-focus-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
+              open && "bg-sidebar-row"
             )}
           />
         }
@@ -879,8 +877,8 @@ function SignedOutHelpPopover() {
           <button
             type="button"
             className={cn(
-              "menu-item-hoverable group/help text-primary hover:bg-accent/80 hover:text-foreground focus-visible:ring-ring relative mx-1.5 inline-flex h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none pointer-coarse:h-auto pointer-coarse:py-3",
-              open && "bg-accent/80 text-foreground"
+              "menu-item-hoverable group/help text-foreground hover:bg-sidebar-row hover:text-foreground active:bg-sidebar-row focus-visible:ring-focus-ring relative mx-1.5 inline-flex h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none pointer-coarse:h-auto pointer-coarse:py-3",
+              open && "bg-sidebar-row text-foreground"
             )}
             data-sidebar-item="true"
             aria-label="Help"
@@ -959,7 +957,7 @@ function SignedOutPopoverItem({
     <button
       type="button"
       onClick={onClick}
-      className="menu-item-hoverable group/help-popover-item text-primary hover:bg-accent/80 hover:text-foreground focus-visible:bg-accent/80 focus-visible:text-foreground focus-visible:ring-ring inline-flex h-9 w-full cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset pointer-coarse:h-auto pointer-coarse:py-3"
+      className="menu-item-hoverable group/help-popover-item text-foreground hover:bg-sidebar-row hover:text-foreground active:bg-sidebar-row focus-visible:bg-sidebar-row focus-visible:text-foreground focus-visible:ring-focus-ring inline-flex h-9 w-full cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset pointer-coarse:h-auto pointer-coarse:py-3"
     >
       <div className="flex shrink-0 items-center justify-center">{icon}</div>
       <div className="flex min-w-0 grow items-center gap-(--sidebar-item-gap)">

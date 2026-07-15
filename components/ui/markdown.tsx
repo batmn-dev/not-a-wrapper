@@ -1,3 +1,5 @@
+"use client"
+
 /**
  * @component Markdown
  * @source prompt-kit
@@ -16,10 +18,19 @@
  *   - Keep parsing and rendering on the same remark-based pipeline
  *   - Verify INITIAL_COMPONENTS customizations are not overwritten
  */
+import {
+  CODE_BLOCK_ATTRIBUTE,
+  remarkCodeBlockAnnotation,
+} from "@/lib/markdown/remark-code-block-annotation"
+import { remarkLinkPresentation } from "@/lib/markdown/remark-link-presentation"
 import { remarkUnwrapLinkParens } from "@/lib/markdown/remark-unwrap-link-parens"
 import { cn } from "@/lib/utils"
-import { memo, useId, useMemo } from "react"
-import ReactMarkdown, { Components } from "react-markdown"
+import { RiCodeLine } from "@remixicon/react"
+import { memo, useId, useMemo, useRef } from "react"
+import ReactMarkdown, {
+  Components,
+  defaultUrlTransform,
+} from "react-markdown"
 import rehypeKatex from "rehype-katex"
 import remarkBreaks from "remark-breaks"
 import remarkGfm from "remark-gfm"
@@ -28,6 +39,7 @@ import remarkParse from "remark-parse"
 import { unified } from "unified"
 import { ButtonCopy } from "../common/button-copy"
 import { CodeBlock, CodeBlockCode, CodeBlockGroup } from "./code-block"
+import { Icon } from "./icon"
 import { LinkMarkdown } from "./markdown-link"
 
 export type MarkdownProps = {
@@ -67,57 +79,118 @@ function extractLanguage(className?: string): string {
   return match ? match[1] : "plaintext"
 }
 
-const INITIAL_COMPONENTS: Partial<Components> = {
-  code: function CodeComponent({ className, children, ...props }) {
-    const isInline =
-      !props.node?.position?.start.line ||
-      props.node?.position?.start.line === props.node?.position?.end.line
+function markdownUrlTransform(url: string): string {
+  return /^tel:/i.test(url) ? url : defaultUrlTransform(url)
+}
 
-    if (isInline) {
+const LANGUAGE_LABELS: Record<string, string | null> = {
+  plaintext: null,
+  text: null,
+  js: "JavaScript",
+  javascript: "JavaScript",
+  ts: "TypeScript",
+  typescript: "TypeScript",
+  json: "JSON",
+  sh: "Bash",
+  shell: "Bash",
+  bash: "Bash",
+  diff: "Diff",
+}
+
+function formatLanguageLabel(language: string): string | null {
+  return Object.hasOwn(LANGUAGE_LABELS, language)
+    ? LANGUAGE_LABELS[language]
+    : language
+}
+
+function getTableText(table: HTMLTableElement | null): string {
+  if (!table) return ""
+
+  return Array.from(table.rows)
+    .map((row) =>
+      Array.from(row.cells)
+        .map((cell) => cell.innerText.trim())
+        .join("\t")
+    )
+    .join("\n")
+}
+
+const INITIAL_COMPONENTS: Partial<Components> = {
+  code: function CodeComponent({ className, children, node: _, ...props }) {
+    const isBlock =
+      (props as typeof props & Record<string, unknown>)[
+        CODE_BLOCK_ATTRIBUTE
+      ] === "true"
+
+    if (!isBlock) {
       // Captured inline-code metrics: 0.875em /
-      // 500, 4px radius, 0.15rem × 0.3rem padding; their gray-100/gray-700
-      // surface maps onto our secondary token.
+      // 500, 4px radius, 0.15rem × 0.3rem padding, and the reference's
+      // dedicated inline-code surface.
       return (
-        <span
+        <code
           className={cn(
-            "bg-secondary rounded-[0.25rem] px-[0.3rem] py-[0.15rem] font-mono text-[0.875em] font-medium",
+            "rounded-[0.25rem] bg-[var(--inline-code-surface)] px-[0.3rem] py-[0.15rem] text-[0.875em] font-medium before:content-none after:content-none",
             className
           )}
           {...props}
         >
           {children}
-        </span>
+        </code>
       )
     }
 
     const language = extractLanguage(className)
+    const languageLabel = formatLanguageLabel(language)
+    const hasHeader = languageLabel !== null
 
-    // Code-block header: one sticky 48px row (language label left,
-    // actions right) that rides the scroll under the app header, with a 1px
-    // divider that sticks along; the code scrolls beneath both, clipped by
-    // the rounded container.
+    // Named code blocks use the reference's sticky 48px language/action row.
+    // Plain-text blocks keep only the overlaid copy action, leaving the code
+    // surface compact. In both cases the code scrolls inside the rounded box.
     return (
-      <CodeBlock className={className}>
-        <div className="sticky top-[var(--sticky-padding-top,0px)] z-[2] select-none">
-          <CodeBlockGroup className="bg-card flex h-12 w-full items-center justify-between py-1.5 ps-4 pe-1.5 font-sans md:ps-5">
-            <div className="flex max-w-[75%] min-w-0 cursor-default items-center text-sm font-medium">
-              {language}
-            </div>
-            <div className="flex flex-row items-center gap-0.5">
-              <ButtonCopy code={children as string} />
-            </div>
-          </CodeBlockGroup>
-          <div className="bg-border h-px" />
-        </div>
-        <CodeBlockCode code={children as string} language={language} />
+      <CodeBlock className={cn("markdown-code-block", className)}>
+        {hasHeader ? (
+          <div className="sticky top-[var(--sticky-padding-top,0px)] z-[2] select-none">
+            <CodeBlockGroup className="flex h-12 w-full items-center justify-between bg-[var(--code-block-surface)] py-1.5 ps-4 pe-1.5 font-sans md:ps-5">
+              <div className="flex max-w-[75%] min-w-0 cursor-default items-center gap-2 text-sm font-medium">
+                <Icon icon={RiCodeLine} slotSize={20} />
+                {languageLabel}
+              </div>
+              <div className="flex flex-row items-center gap-0.5">
+                <ButtonCopy code={children as string} />
+              </div>
+            </CodeBlockGroup>
+          </div>
+        ) : (
+          <div className="pointer-events-none absolute end-[5px] top-[3px] z-[2] md:end-[7px]">
+            <ButtonCopy code={children as string} />
+          </div>
+        )}
+        <CodeBlockCode
+          className={cn(
+            "markdown-code-block-code leading-5",
+            !hasHeader && "pt-3"
+          )}
+          code={children as string}
+          language={language}
+        />
       </CodeBlock>
     )
   },
-  a: function AComponent({ href, children, ...props }) {
+  a: function AComponent({ href, children, node: _, ...props }) {
     if (!href) return <span {...props}>{children}</span>
 
+    const annotatedPresentation = (
+      props as typeof props & Record<string, unknown>
+    )["data-link-presentation"]
+    const presentation =
+      annotatedPresentation === "pill" ? "pill" : "inline"
+
     return (
-      <LinkMarkdown href={href} {...props}>
+      <LinkMarkdown
+        href={href}
+        presentation={presentation}
+        {...props}
+      >
         {children}
       </LinkMarkdown>
     )
@@ -129,16 +202,26 @@ const INITIAL_COMPONENTS: Partial<Components> = {
   // content column to the full thread width and owns the horizontal scroll;
   // the wrapper re-indents the table to the content edge (globals.css
   // `.markdown-table-container` / `.markdown-table-wrapper`, their formula).
-  table: function TableComponent({ children, ...props }) {
+  table: function TableComponent({ children, node: _, ...props }) {
+    const tableRef = useRef<HTMLTableElement>(null)
+
     return (
       <div className="markdown-table-container">
-        <div className="markdown-table-wrapper flex w-fit flex-col-reverse">
+        <div className="markdown-table-wrapper group/markdown-table relative flex w-fit flex-col-reverse">
           <table
+            ref={tableRef}
             className="w-fit min-w-[var(--thread-content-width)]"
             {...props}
           >
             {children}
           </table>
+          <div className="absolute end-0 top-0 flex h-[33px] items-center">
+            <ButtonCopy
+              code={() => getTableText(tableRef.current)}
+              label="Copy table"
+              variant="table"
+            />
+          </div>
         </div>
       </div>
     )
@@ -159,9 +242,12 @@ const MemoizedMarkdownBlock = memo(
           remarkGfm,
           remarkBreaks,
           [remarkMath, REMARK_MATH_OPTIONS],
+          remarkCodeBlockAnnotation,
+          remarkLinkPresentation,
           remarkUnwrapLinkParens,
         ]}
         rehypePlugins={[rehypeKatex]}
+        urlTransform={markdownUrlTransform}
         components={components}
       >
         {content}

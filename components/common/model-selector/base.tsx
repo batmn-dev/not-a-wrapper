@@ -79,7 +79,7 @@ function ModelOptionContent({
         )}
       </div>
       {isLocked ? (
-        <div className="border-input bg-accent text-muted-foreground flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
+        <div className="border-input-border bg-muted text-muted-foreground flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
           <Icon icon={RiStarLine} slotSize={8} />
           <span>Locked</span>
         </div>
@@ -132,7 +132,7 @@ function ModelSelectorList({
     const className = cn(
       "flex w-full items-center justify-between gap-2",
       isMobile ? "px-3 py-2" : "px-2",
-      selectedModelId === model.id && "bg-accent"
+      selectedModelId === model.id && "bg-interactive-selected"
     )
     const content = <ModelOptionContent model={model} isLocked={isLocked} />
 
@@ -246,7 +246,7 @@ export function ModelSelector({
       className={cn(
         "min-w-0 shrink overflow-hidden font-normal",
         isComposerVariant
-          ? "cant-hover:ps-4 text-muted-foreground h-9 max-w-none justify-start gap-1.5 rounded-full py-0 ps-3.5 pe-3 text-sm active:scale-100 active:bg-black/5 aria-expanded:bg-black/5 dark:active:bg-white/10 dark:aria-expanded:bg-white/10 pointer-fine:hover:bg-black/5 dark:pointer-fine:hover:bg-white/10"
+          ? "cant-hover:ps-4 text-muted-foreground active:bg-interactive-pressed aria-expanded:bg-interactive-selected pointer-fine:hover:bg-interactive-hover h-9 max-w-none justify-start gap-1.5 rounded-full py-0 ps-3.5 pe-3 text-sm active:scale-100"
           : "max-w-full justify-between rounded-lg text-lg",
         className
       )}
@@ -376,7 +376,7 @@ export function ModelSelector({
               <Input
                 ref={searchInputRef}
                 placeholder="Search models..."
-                className="border-input/60 bg-muted/60 dark:border-input dark:bg-muted/40 h-9 rounded-xl border pl-8 shadow-none focus-visible:ring-0"
+                className="border-input-border bg-input-bg h-9 rounded-xl border pl-8 shadow-none focus-visible:ring-0"
                 value={searchQuery}
                 onChange={handleSearchChange}
                 onClick={(e) => e.stopPropagation()}

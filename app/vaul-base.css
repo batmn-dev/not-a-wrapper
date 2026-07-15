@@ -160,8 +160,8 @@
 [data-vaul-handle] {
   display: block;
   position: relative;
-  opacity: 0.7;
-  background: #e2e2e4;
+  opacity: 1;
+  background: var(--drawer-handle-bg);
   margin-left: auto;
   margin-right: auto;
   height: 5px;

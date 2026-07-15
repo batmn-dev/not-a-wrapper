@@ -208,7 +208,7 @@ function MorphingPopoverContent({
             role="dialog"
             aria-modal="true"
             className={cn(
-              "bg-popover text-popover-foreground border-input absolute overflow-hidden rounded-md p-2 shadow-md backdrop-blur-xl",
+              "bg-popover text-popover-foreground border-input-border absolute overflow-hidden rounded-md p-2 shadow-md backdrop-blur-xl",
               className
             )}
             initial="initial"

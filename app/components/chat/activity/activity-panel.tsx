@@ -29,6 +29,9 @@ import { useDockedPanelCollapse } from "./use-docked-panel-collapse"
 
 const LG_BREAKPOINT = 1024
 const VISIBLE_SOURCE_CHIPS = 3
+const ACTIVITY_PANEL_RAISED_STYLE = {
+  backgroundColor: "var(--activity-panel-raised-surface)",
+} as const
 
 type ToolApprovalHandler = (
   approvalId: string,
@@ -89,7 +92,10 @@ function ActivityToolCard({
   }
 
   return (
-    <div className="bg-muted border-foreground/5 mt-3 overflow-hidden rounded-[24px] border">
+    <div
+      className="mt-3 overflow-hidden rounded-[24px]"
+      style={ACTIVITY_PANEL_RAISED_STYLE}
+    >
       <div className="flex h-12 items-center gap-2 px-4">
         <Icon icon={RiCodeLine} slotSize={16} className="shrink-0" />
         <span className="min-w-0 flex-1 truncate text-sm font-medium">
@@ -100,7 +106,7 @@ function ActivityToolCard({
             type="button"
             aria-label={copied ? "Copied" : "Copy"}
             onClick={copy}
-            className="hover:bg-foreground/[0.07] focus-visible:ring-ring inline-flex size-9 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2"
+            className="hover:bg-interactive-hover active:bg-interactive-pressed focus-visible:ring-focus-ring inline-flex size-9 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2"
           >
             <Icon icon={copied ? RiCheckLine : RiFileCopyLine} slotSize={18} />
           </button>
@@ -125,7 +131,7 @@ function ActivityToolCard({
             type="button"
             disabled={!onToolApproval || isSubmittingApproval}
             onClick={() => void submitToolApproval(false, "Denied by user")}
-            className="hover:bg-foreground/[0.07] h-8 rounded-full px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+            className="hover:bg-interactive-hover active:bg-interactive-pressed disabled:text-disabled-foreground h-8 rounded-full px-3 text-sm font-medium disabled:cursor-not-allowed"
           >
             Deny
           </button>
@@ -172,12 +178,13 @@ function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
             </>
           )
           const className =
-            "bg-muted text-muted-foreground inline-flex h-[25px] max-w-full items-center gap-1 overflow-hidden rounded-full px-3 text-xs"
+            "text-muted-foreground inline-flex h-[25px] max-w-full items-center gap-1 overflow-hidden rounded-full px-3 text-xs"
           if (!safeUrl) {
             return (
               <span
                 key={`${source.sourceId}:${source.url}`}
                 className={className}
+                style={ACTIVITY_PANEL_RAISED_STYLE}
               >
                 {content}
               </span>
@@ -189,7 +196,8 @@ function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
               href={safeUrl.toString()}
               target="_blank"
               rel="noopener noreferrer"
-              className={`${className} hover:bg-foreground hover:text-background focus-visible:ring-ring outline-none focus-visible:ring-2`}
+              className={`${className} hover:bg-interactive-hover! hover:text-foreground active:bg-interactive-pressed! focus-visible:ring-focus-ring outline-none focus-visible:ring-2`}
+              style={ACTIVITY_PANEL_RAISED_STYLE}
             >
               {content}
             </a>
@@ -207,7 +215,8 @@ function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
           aria-expanded={expanded}
           aria-controls={chipGroupId}
           onClick={() => setExpanded((value) => !value)}
-          className="group bg-muted text-muted-foreground hover:bg-foreground hover:text-background focus-visible:ring-ring inline-flex h-[25px] max-w-full items-center gap-1 overflow-hidden rounded-full px-3 text-xs outline-none focus-visible:ring-2"
+          className="group text-muted-foreground hover:bg-interactive-hover! hover:text-foreground active:bg-interactive-pressed! focus-visible:ring-focus-ring inline-flex h-[25px] max-w-full items-center gap-1 overflow-hidden rounded-full px-3 text-xs outline-none focus-visible:ring-2"
+          style={ACTIVITY_PANEL_RAISED_STYLE}
         >
           {expanded ? (
             "Show less"
@@ -380,7 +389,7 @@ function PanelBody({
                   href={result.sourceUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="focus-visible:ring-ring block overflow-hidden rounded-xl outline-none focus-visible:ring-2"
+                  className="focus-visible:ring-focus-ring block overflow-hidden rounded-xl outline-none focus-visible:ring-2"
                 >
                   <Image
                     src={result.imageUrl}

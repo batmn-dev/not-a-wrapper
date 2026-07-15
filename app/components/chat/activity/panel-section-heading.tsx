@@ -29,7 +29,7 @@ export function PanelSectionHeading({
     >
       <span className="min-w-0 truncate">{title}</span>
       {trailing != null ? (
-        <span className="text-muted-foreground/70 shrink-0 font-normal whitespace-nowrap">
+        <span className="shrink-0 font-normal whitespace-nowrap text-[var(--text-tertiary)]">
           {trailing}
         </span>
       ) : null}

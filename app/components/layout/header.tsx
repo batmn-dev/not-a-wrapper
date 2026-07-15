@@ -58,12 +58,12 @@ export function Header({ hasSidebar }: { hasSidebar: boolean }) {
         </div>
 
         {/* CENTER SECTION - flex-1 to fill remaining space */}
-        <div className="pointer-events-auto flex min-w-0 flex-1 items-center">
+        <div className="flex min-w-0 flex-1 items-center [&>*]:pointer-events-auto">
           <ModelSelectorHeader />
         </div>
 
         {/* RIGHT SECTION - natural width, not flex-1 */}
-        <div className="pointer-events-auto flex shrink-0 items-center justify-end gap-0">
+        <div className="flex shrink-0 items-center justify-end gap-0 [&>*]:pointer-events-auto">
           {!isLoggedIn ? (
             <div className="flex items-center gap-2">
               <AuthModalTrigger variant="outline">Log in</AuthModalTrigger>

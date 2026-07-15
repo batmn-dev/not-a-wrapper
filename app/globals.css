@@ -303,7 +303,18 @@
   --color-chart-1: var(--chart-1);
   --color-ring: var(--ring);
   --color-input: var(--input);
+  --color-primary-bg-hover: var(--primary-bg-hover);
+  --color-secondary-bg-hover: var(--secondary-bg-hover);
+  --color-input-bg: var(--input-bg);
+  --color-input-bg-hover: var(--input-bg-hover);
+  --color-input-border: var(--input-border);
+  --color-popover-bg-hover: var(--popover-bg-hover);
+  --color-muted-bg-hover: var(--muted-bg-hover);
+  --color-control-track: var(--control-track-bg);
   --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive: var(--destructive);
   /* Info/accent-blue: the one chromatic non-red in an otherwise neutral
@@ -315,6 +326,20 @@
   --color-warning-foreground: var(--warning-foreground);
   /* Success/green: "done" cue — completed tool-call status chip. */
   --color-success: var(--success);
+  --color-status-success-bg: var(--status-success-bg);
+  --color-status-success-foreground: var(--status-success-foreground);
+  --color-link: var(--link);
+  --color-link-hover: var(--link-hover);
+  --color-disabled-foreground: var(--text-disabled);
+  --color-interactive-hover: var(--interactive-bg-hover);
+  --color-interactive-selected: var(--interactive-bg-selected);
+  --color-interactive-pressed: var(--interactive-bg-pressed);
+  --color-sidebar-row: var(--sidebar-row-bg);
+  --color-activity-panel-border: var(--activity-panel-border);
+  --color-user-message: var(--user-message-bg);
+  --color-focus-ring: var(--focus-ring);
+  --color-scrim-modal: var(--scrim-modal);
+  --color-scrim-sidebar: var(--scrim-sidebar);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -367,59 +392,88 @@
   /* Sticky header z-index */
   --header-z-index: 20;
 
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.141 0.005 285.823);
+  --background: oklch(0.991 0 0);
+  --foreground: oklch(0.159 0 0);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
+  --card-foreground: var(--foreground);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.21 0.006 285.885);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0 0 0);
+  --primary-foreground: oklch(1 0 0);
+  --primary-bg-hover: oklch(0.31 0 0);
+  --secondary: oklch(0.931 0 0);
+  --secondary-foreground: var(--foreground);
+  --secondary-bg-hover: oklch(0.89 0 0);
+  --muted: oklch(0.964 0 0);
+  --muted-foreground: var(--text-secondary);
+  --accent: var(--interactive-bg-selected);
+  --accent-foreground: var(--foreground);
+
+  /* Text hierarchy. Disabled text is a UI-only color, not body copy. */
+  --text-primary: var(--foreground);
+  --text-secondary: oklch(0.478 0 0);
+  --text-tertiary: oklch(0.65 0 0);
+  --text-disabled: oklch(0.65 0 0);
+  --link: oklch(0.501 0.127 254.712);
+  --link-hover: oklch(0.419 0.106 255.109);
+
+  /* Interactive states remain translucent so they composite with their surface. */
+  --interactive-bg-hover: oklch(0 0 0 / 0.05);
+  --interactive-bg-selected: oklch(0 0 0 / 0.05);
+  --interactive-bg-pressed: oklch(0 0 0 / 0.1);
+  --sidebar-row-bg: oklch(0 0 0 / 0.05);
+  --surface-hover: var(--interactive-bg-hover);
+  --popover-bg-hover: oklch(0.964 0 0);
+  --muted-bg-hover: oklch(0.931 0 0);
+
   /* Reference tokens. Tooltips opt into the dark token scope in both themes. */
-  --text-primary: oklch(0.159 0 0);
   --bg-tooltip: oklch(0 0 0);
   --border-tooltip: oklch(0 0 0 / 0);
-  /* Muted control tone for the sidebar row's trailing icons at rest — mirrors
-     ChatGPT's --text-tertiary (#8f8f8f). Lighter/neutral vs --muted-foreground. */
-  --text-tertiary: #8f8f8f;
-  /* Translucent hover/selected surface for sidebar rows — mirrors ChatGPT's
-     --interactive-bg-secondary-hover/-selected (rgba(0,0,0,.05)). Composites over
-     the sidebar surface instead of the opaque --accent. */
-  --surface-hover: oklch(0 0 0 / 0.05);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  /* Accent blue (~#2d7ff9), matching ChatGPT's "new" dot. */
-  --info: oklch(0.623 0.214 259.815);
+  /* Accent blue, matching ChatGPT's informational/file accent. */
+  --info: oklch(0.626 0.188 259.456);
   /* Amber (~#f59e0b) — "needs your attention" cue. */
   --warning: oklch(0.769 0.188 70.08);
   /* Dark amber (~amber-700) for readable chip TEXT; --warning stays a fill. */
   --warning-foreground: oklch(0.52 0.13 65);
-  /* Green (~#16a34a) — "done"/success cue, dark enough to read as chip text. */
-  --success: oklch(0.55 0.14 160);
-  --border: oklch(0.92 0.004 286.32);
-  --border-heavy: oklch(0 0 0 / 15%);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.705 0.015 286.067);
+  --status-success-bg: oklch(0.945 0.029 156.629);
+  --status-success-foreground: oklch(0.38 0.085 146.171);
+  --success: var(--status-success-foreground);
+
+  /* Effect strengths and form-control roles. */
+  --border-subtle: oklch(0 0 0 / 0.05);
+  --border-default: oklch(0 0 0 / 0.1);
+  --border-strong: oklch(0 0 0 / 0.15);
+  --border: var(--border-subtle);
+  --border-heavy: var(--border-strong);
+  --input-bg: transparent;
+  --input-bg-hover: var(--interactive-bg-hover);
+  --input-border: var(--border-default);
+  --input: var(--input-border);
+  --focus-ring: var(--foreground);
+  --ring: var(--focus-ring);
+  --scrim-modal: oklch(0.916 0 0 / 0.5);
+  --scrim-sidebar: oklch(0.982 0 0 / 0.5);
+  --control-track-bg: var(--secondary);
+  --drawer-handle-bg: var(--secondary);
+
+  /* Message surfaces are not generic interaction states. */
+  --user-message-bg: oklch(0.934 0 0 / 0.502);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-primary: oklch(0.21 0.006 285.885);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.705 0.015 286.067);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--interactive-bg-selected);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border-subtle);
+  --sidebar-ring: var(--focus-ring);
   /* Shadow borders compose a theme-aware optical edge with realistic depth. */
   --shadow-border-value: var(--shadow-border-sm-value);
   --shadow-border-hover-value:
@@ -464,7 +518,7 @@
     rgba(0, 0, 0, 0.04) 0px 52px 73.54px -3px;
 
   /* Composer surface */
-  --composer-bg: var(--background);
+  --composer-bg: oklch(1 0 0);
   --sharp-edge-top-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
   --sharp-edge-top-shadow-placeholder: 0 1px 0 transparent;
   --sharp-edge-bottom-shadow: 0 -1px 0 rgba(0, 0, 0, 0.05);
@@ -474,60 +528,88 @@
     0 8px 12px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.62);
   /* ChatGPT desktop Activity flyout is a measured #fcfcfc, not pure white. */
   --activity-panel-surface: oklch(0.991 0 0);
+  --activity-panel-border: oklch(0 0 0 / 0.05);
+  --activity-panel-raised-surface: var(--muted);
 
   /* Activity panel overlay scrim — mobile black/30, tablet gray/50 */
-  --overlay-scrim-mobile: oklch(0 0 0 / 0.3);
+  --overlay-scrim-mobile: var(--scrim-modal);
   --overlay-scrim-tablet: oklch(0.92 0.004 286 / 0.5);
 }
 
 .dark {
-  --background: oklch(21.34% 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(21.34% 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(32% 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.3 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(100% 0 0 / 10.2%);
-  --accent-foreground: oklch(0.985 0 0);
-  --text-primary: oklch(1 0 0);
+  --background: oklch(0 0 0);
+  --foreground: oklch(1 0 0);
+  --card: oklch(0.248 0 0);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.222 0 0);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(1 0 0);
+  --primary-foreground: oklch(0.159 0 0);
+  --primary-bg-hover: oklch(0.922 0 0);
+  --secondary: oklch(0.309 0 0);
+  --secondary-foreground: var(--foreground);
+  --secondary-bg-hover: oklch(0.375 0 0);
+  --muted: oklch(0.309 0 0);
+  --muted-foreground: var(--text-secondary);
+  --accent: var(--interactive-bg-selected);
+  --accent-foreground: var(--foreground);
+  --text-primary: var(--foreground);
+  --text-secondary: oklch(0.848 0 0);
+  --text-tertiary: oklch(0.754 0 0);
+  --text-disabled: oklch(1 0 0 / 0.412);
+  --link: oklch(0.767 0.122 253.354);
+  /* Preserve AA contrast on every dark raised surface; hover is also conveyed
+     by the link decoration, rather than by lowering the link's lightness. */
+  --link-hover: var(--link);
+  --interactive-bg-hover: oklch(1 0 0 / 0.1);
+  --interactive-bg-selected: oklch(1 0 0 / 0.1);
+  --interactive-bg-pressed: oklch(1 0 0 / 0.15);
+  --sidebar-row-bg: oklch(1 0 0 / 0.1);
+  --surface-hover: var(--interactive-bg-hover);
+  --popover-bg-hover: oklch(0.309 0 0);
+  --muted-bg-hover: oklch(0.375 0 0);
   --bg-tooltip: oklch(0.222 0 0);
   --border-tooltip: oklch(1 0 0 / 0.051);
-  /* ChatGPT --text-tertiary (#afafaf) / hover surface (rgba(255,255,255,.10)). */
-  --text-tertiary: #afafaf;
-  --surface-hover: oklch(1 0 0 / 0.1);
   --destructive: oklch(0.6 0.18 15);
   --destructive-foreground: oklch(0.95 0.01 20);
-  /* Lighter blue-400 so it reads on the dark sidebar surface. */
-  --info: oklch(0.707 0.165 254.624);
+  /* Lighter blue so it reads on the dark sidebar surface. */
+  --info: oklch(0.72 0.137 253.307);
   /* Brighter amber-400 (~#fbbf24) for the dark sidebar surface. */
   --warning: oklch(0.828 0.189 84.429);
   /* Light amber (~amber-400) chip text on the dark tint. */
   --warning-foreground: oklch(0.85 0.16 84);
-  /* Lighter green (~green-400) so success text reads on the dark tint. */
-  --success: oklch(0.75 0.17 160);
-  --border: oklch(100% 0 0 / 8%);
-  --border-heavy: oklch(100% 0 0 / 15%);
-  --input: oklch(0.39 0.006 286.033);
-  --ring: oklch(0.442 0.017 285.786);
+  --status-success-bg: oklch(0.38 0.085 146.171);
+  --status-success-foreground: oklch(0.975 0.015 158.255);
+  --success: var(--status-success-foreground);
+  --border-subtle: oklch(1 0 0 / 0.05);
+  --border-default: oklch(1 0 0 / 0.15);
+  --border-strong: oklch(1 0 0 / 0.2);
+  --border: var(--border-subtle);
+  --border-heavy: var(--border-default);
+  --input-bg: oklch(0.309 0 0);
+  --input-bg-hover: oklch(0.375 0 0);
+  --input-border: var(--border-default);
+  --input: var(--input-border);
+  --focus-ring: var(--foreground);
+  --ring: var(--focus-ring);
+  --scrim-modal: oklch(0 0 0 / 0.5);
+  --scrim-sidebar: oklch(0 0 0 / 0.5);
+  --control-track-bg: var(--secondary);
+  --drawer-handle-bg: var(--secondary);
+  --user-message-bg: oklch(0.317 0 0 / 0.851);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(19% 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(26.45% 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(100% 0 0 / 8%);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.274 0.006 286.033);
-  --sidebar-ring: oklch(0.705 0.015 286.067);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--interactive-bg-selected);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: oklch(1 0 0 / 0.1);
+  --sidebar-ring: var(--focus-ring);
   --shadow-border-value: var(--shadow-border-sm-value);
   --shadow-border-hover-value:
     inset 0 0 1px color-mix(in oklab, var(--foreground) 32%, transparent),
@@ -575,7 +657,7 @@
     rgba(0, 0, 0, 0.12) 0px 52px 73.54px -3px;
 
   /* Composer surface */
-  --composer-bg: #212121;
+  --composer-bg: oklch(0.248 0 0);
   --sharp-edge-top-shadow: 0 1px 0 rgba(255, 255, 255, 0.05);
   --sharp-edge-top-shadow-placeholder: 0 1px 0 transparent;
   --sharp-edge-bottom-shadow: 0 -1px 0 rgba(255, 255, 255, 0.05);
@@ -583,16 +665,18 @@
   --sharp-edge-left-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.05);
   --activity-sheet-shadow:
     0 8px 12px rgba(0, 0, 0, 0.18), 0 0 1px rgba(255, 255, 255, 0.24);
-  --activity-panel-surface: var(--card);
+  --activity-panel-surface: var(--background);
+  --activity-panel-border: oklch(0.248 0 0);
+  --activity-panel-raised-surface: var(--card);
 
   /* Activity panel overlay scrim — mobile black/30, tablet black/50 */
-  --overlay-scrim-mobile: oklch(0 0 0 / 0.3);
+  --overlay-scrim-mobile: var(--scrim-modal);
   --overlay-scrim-tablet: oklch(0 0 0 / 0.5);
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
   button:not(:disabled):not([aria-disabled="true"]):not([data-disabled]),
   [role="button"]:not([aria-disabled="true"]):not([data-disabled]) {
@@ -616,20 +700,29 @@
     background-clip: padding-box;
   }
 
+  .menu-item-hoverable:where(
+    :disabled,
+    [aria-disabled="true"],
+    [data-disabled]
+  ) {
+    color: var(--text-tertiary);
+  }
+
+  .menu-item-hoverable:where(:disabled, [aria-disabled="true"], [data-disabled])
+    > :first-child {
+    opacity: 0.5;
+  }
+
   .sidebar-row {
     /* Hover == selected == menu-open, one translucent token (ChatGPT uses the
        same --interactive-bg-secondary value for all three). Composites over the
        sidebar surface rather than painting the opaque --accent, so the light-mode
        tint reads at the intended strength instead of a flat near-white. */
-    --sidebar-row-active-background: var(--surface-hover);
+    --sidebar-row-active-background: var(--sidebar-row-bg);
   }
 
   .sidebar-row-card {
-    --sidebar-row-active-background: color-mix(
-      in oklab,
-      var(--accent) 50%,
-      transparent
-    );
+    --sidebar-row-active-background: var(--sidebar-row-bg);
   }
 
   /* Keyboard-only focus ring on the trailing button's inner 24×24 chip (pin +
@@ -823,11 +916,11 @@ code {
 .prose {
   --tw-prose-body: var(--foreground);
   --tw-prose-headings: var(--foreground);
-  --tw-prose-lead: var(--muted-foreground);
+  --tw-prose-lead: var(--foreground);
   --tw-prose-links: var(--foreground);
   --tw-prose-bold: var(--foreground);
-  --tw-prose-counters: var(--muted-foreground);
-  --tw-prose-bullets: var(--muted-foreground);
+  --tw-prose-counters: var(--foreground);
+  --tw-prose-bullets: var(--foreground);
   --tw-prose-hr: var(--border);
   --tw-prose-quotes: var(--foreground);
   --tw-prose-quote-borders: var(--border);
@@ -893,12 +986,29 @@ code {
   font-size: 1rem;
   line-height: var(--text-body-regular--line-height);
   /* Their --border-light / --border-medium hierarchy, mapped to our palette. */
-  --markdown-border-light: var(--border);
+  --markdown-border-light: color-mix(
+    in srgb,
+    var(--foreground) 5%,
+    transparent
+  );
   --markdown-border-medium: color-mix(
     in oklab,
     var(--foreground) 15%,
     transparent
   );
+  --code-block-surface: #f3f3f3;
+  --inline-code-surface: #ececec;
+  --markdown-task-checkbox-accent: #1f4e94;
+  --markdown-task-checkbox-border: #9b9b9b;
+  --markdown-task-checkbox-background: var(--background);
+  --markdown-code-font:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+}
+
+.dark .markdown {
+  --code-block-surface: var(--card);
+  --inline-code-surface: var(--secondary);
 }
 
 .markdown p {
@@ -945,7 +1055,17 @@ code {
 }
 .markdown h5,
 .markdown h6 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.625rem;
+  letter-spacing: normal;
+  color: inherit;
+}
+.markdown h5 {
   font-weight: 600;
+}
+.markdown h6 {
+  font-weight: 400;
 }
 .markdown :is(h1, h2, h3, h4, h5, h6):first-child {
   margin-top: 0;
@@ -985,6 +1105,34 @@ code {
   margin-top: 0;
 }
 
+/* GFM emits native disabled inputs; keep the reference treatment scoped to
+   those renderer-owned controls instead of changing application checkboxes. */
+.markdown .contains-task-list input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  border: 1px solid var(--markdown-task-checkbox-border);
+  border-radius: 0;
+  appearance: none;
+  background-color: var(--markdown-task-checkbox-background);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  color: var(--markdown-task-checkbox-accent);
+  vertical-align: middle;
+  cursor: default;
+  opacity: 1;
+}
+.markdown .contains-task-list input[type="checkbox"]:checked {
+  border-color: transparent;
+  background-color: var(--markdown-task-checkbox-accent);
+  background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+}
+.markdown .contains-task-list input[type="checkbox"]:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
 .markdown blockquote {
   position: relative;
   margin: 0 0 0.5rem;
@@ -1006,7 +1154,7 @@ code {
   background-color: var(--markdown-border-medium);
 }
 .markdown blockquote > p {
-  margin: 0;
+  margin: 0 0 0.25rem;
   font-weight: 400;
 }
 .markdown blockquote > p::before,
@@ -1022,6 +1170,31 @@ code {
 
 .markdown strong {
   font-weight: 600;
+}
+
+.markdown code,
+.markdown pre {
+  font-family: var(--markdown-code-font);
+}
+
+.markdown .markdown-code-block {
+  border-color: var(--markdown-border-light);
+  background: var(--code-block-surface);
+}
+
+.markdown .markdown-code-block-code > pre {
+  padding: 0 1.25rem 0.75rem;
+  line-height: 1.25rem;
+}
+
+.markdown .markdown-code-block-code code {
+  display: block;
+  font-size: 0.875em;
+  line-height: 1.25rem;
+}
+
+.markdown .code-copy-button:hover {
+  background: var(--surface-hover);
 }
 
 .markdown.markdown > :last-child {

@@ -73,7 +73,7 @@ export function SidebarRow({
   const containerClassName = useMemo(
     () =>
       cn(
-        "sidebar-row menu-item-hoverable text-primary hover:bg-[var(--sidebar-row-active-background)] hover:text-foreground group/row relative mx-1.5 flex h-9 w-[calc(100%-var(--spacing)*3)] items-center rounded-lg text-sm pointer-coarse:h-auto",
+        "sidebar-row menu-item-hoverable text-foreground hover:bg-[var(--sidebar-row-active-background)] hover:text-foreground group/row relative mx-1.5 flex h-9 w-[calc(100%-var(--spacing)*3)] items-center rounded-lg text-sm pointer-coarse:h-auto",
         (isActive || isEditing) &&
           "bg-[var(--sidebar-row-active-background)] hover:bg-[var(--sidebar-row-active-background)] group-data-[collapsible=icon]:bg-transparent"
       ),

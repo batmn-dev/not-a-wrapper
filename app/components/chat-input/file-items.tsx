@@ -89,12 +89,11 @@ function FileTileSurface({
           ref={primaryActionRef}
           type="button"
           className={cn(
-            "focus-visible:ring-ring absolute inset-0 z-0 rounded-[12px] border border-black/10 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none dark:border-white/10",
+            "border-border-default focus-visible:ring-focus-ring absolute inset-0 z-0 rounded-[12px] border focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none",
             isImage
               ? "overflow-hidden transition-[filter] hover:brightness-105 focus-visible:brightness-95 active:brightness-95"
-              : "transition-colors hover:bg-black/[0.035] active:bg-black/[0.06] dark:hover:bg-white/[0.05]",
-            status === "failed" &&
-              "border-destructive/60 bg-destructive/5"
+              : "hover:bg-interactive-hover active:bg-interactive-pressed transition-colors",
+            status === "failed" && "border-destructive/60 bg-destructive/5"
           )}
           onClick={primaryAction.onClick}
           aria-label={primaryAction.label}
@@ -103,10 +102,9 @@ function FileTileSurface({
         <div
           aria-hidden="true"
           className={cn(
-            "absolute inset-0 z-0 rounded-[12px] border border-black/10 dark:border-white/10",
+            "border-border-default absolute inset-0 z-0 rounded-[12px] border",
             isImage && "overflow-hidden",
-            status === "failed" &&
-              "border-destructive/60 bg-destructive/5"
+            status === "failed" && "border-destructive/60 bg-destructive/5"
           )}
         />
       )}
@@ -135,10 +133,10 @@ function FileTileSurface({
               className={cn(
                 "flex size-10 shrink-0 items-center justify-center rounded-[8px] text-white",
                 isGeneratedText
-                  ? "bg-[#3a83f7]"
+                  ? "bg-info"
                   : isPdf
-                    ? "bg-[#fa423e]"
-                    : "bg-muted-foreground"
+                    ? "bg-destructive"
+                    : "bg-[var(--text-tertiary)]"
               )}
             >
               {status === "uploading" ? (
@@ -215,7 +213,7 @@ function FileTileSurface({
       {secondaryAction && status !== "failed" ? (
         <button
           type="button"
-          className="focus-visible:ring-ring absolute bottom-1.5 left-14 z-20 inline-flex h-5 max-w-[calc(100%-4.25rem)] items-center gap-0.5 rounded-md px-0.5 text-xs leading-4 text-[#8f8f8f] underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:outline-none"
+          className="focus-visible:ring-focus-ring absolute bottom-1.5 left-14 z-20 inline-flex h-5 max-w-[calc(100%-4.25rem)] items-center gap-0.5 rounded-md px-0.5 text-xs leading-4 text-[var(--text-tertiary)] underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:outline-none"
           onClick={secondaryAction.onClick}
           aria-label={secondaryAction.label}
         >
@@ -228,7 +226,7 @@ function FileTileSurface({
         <button
           type="button"
           className={cn(
-            "text-destructive focus-visible:ring-ring absolute z-20 inline-flex items-center justify-center rounded-md text-xs font-medium hover:underline focus-visible:ring-2 focus-visible:outline-none",
+            "text-destructive focus-visible:ring-focus-ring absolute z-20 inline-flex items-center justify-center rounded-md text-xs font-medium hover:underline focus-visible:ring-2 focus-visible:outline-none",
             isImage
               ? "bg-background/90 bottom-1 left-1 size-6"
               : "right-2 bottom-1.5 h-5 gap-1 px-0.5"
@@ -246,7 +244,7 @@ function FileTileSurface({
           render={
             <button
               type="button"
-              className="attachment-remove-button focus-visible:ring-ring absolute top-1.5 right-1.5 z-30 inline-flex size-4 items-center justify-center rounded-full bg-[#0d0d0d] text-white hover:bg-[#0d0d0d]/80 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              className="attachment-remove-button bg-primary text-primary-foreground focus-visible:ring-focus-ring absolute top-1.5 right-1.5 z-30 inline-flex size-4 items-center justify-center rounded-full hover:opacity-80 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
               disabled={isLocked}
               onClick={onRemove}
               aria-label={`${isLocked ? "Sending file" : status === "uploading" ? "Cancel upload" : "Remove file"} ${index + 1}: ${label}`}
@@ -414,7 +412,7 @@ export function FilePreviewModal({
             render={
               <button
                 type="button"
-                className="focus-visible:ring-ring shrink-0 rounded-md px-2 py-1 text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
+                className="focus-visible:ring-focus-ring shrink-0 rounded-md px-2 py-1 text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
               />
             }
           >

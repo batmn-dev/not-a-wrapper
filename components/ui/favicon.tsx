@@ -1,6 +1,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { cva, type VariantProps } from "class-variance-authority"
+import type { ReactNode } from "react"
 
 /**
  * Resolves a Google s2 favicon URL from a source URL (full href) or bare
@@ -8,7 +9,10 @@ import { cva, type VariantProps } from "class-variance-authority"
  * `markdown-link.tsx`, `source.tsx`, and `sources-list.tsx`, canonicalized at
  * `sz=64` for crisp rendering at small display sizes.
  */
-function resolveFaviconSrc(input: string | null | undefined): string | null {
+function resolveFaviconSrc(
+  input: string | null | undefined,
+  fallbackOnMissing = false
+): string | null {
   if (!input) return null
   const value = input.trim()
   if (!value) return null
@@ -24,6 +28,9 @@ function resolveFaviconSrc(input: string | null | undefined): string | null {
     }
   }
   if (!hostname) return null
+  if (fallbackOnMissing) {
+    return `/api/favicon?domain=${encodeURIComponent(hostname)}`
+  }
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=64`
 }
 
@@ -49,6 +56,10 @@ export type FaviconProps = {
   url: string | null | undefined
   alt?: string
   className?: string
+  /** Optional decorative content shown when the favicon cannot load. */
+  fallback?: ReactNode
+  /** Route missing upstream favicons through the supplied fallback. */
+  fallbackOnMissing?: boolean
   /** Native `<img loading>` hint, forwarded through `AvatarImage`. */
   loading?: "lazy" | "eager"
   /** Native `<img decoding>` hint, forwarded through `AvatarImage`. */
@@ -68,15 +79,21 @@ export function Favicon({
   shape,
   overlap,
   className,
+  fallback,
+  fallbackOnMissing,
   loading,
   decoding,
 }: FaviconProps) {
-  const src = resolveFaviconSrc(url)
+  const src = resolveFaviconSrc(url, fallbackOnMissing)
   const radius = shape === "rounded" ? "rounded-sm" : "rounded-full"
 
   return (
     <Avatar
-      className={cn("size-4", faviconVariants({ shape, overlap }), className)}
+      className={cn(
+        "not-prose size-4",
+        faviconVariants({ shape, overlap }),
+        className
+      )}
     >
       {src ? (
         <AvatarImage
@@ -87,7 +104,7 @@ export function Favicon({
           className={radius}
         />
       ) : null}
-      <AvatarFallback className={radius} />
+      <AvatarFallback className={radius}>{fallback}</AvatarFallback>
     </Avatar>
   )
 }

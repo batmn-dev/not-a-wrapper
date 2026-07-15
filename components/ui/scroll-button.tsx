@@ -38,9 +38,9 @@ function ScrollButton({
       variant={variant}
       size={size}
       className={cn(
-        "bg-popover/90 hover:bg-accent/90 dark:bg-popover/75 dark:hover:bg-accent/90 h-9 w-9 rounded-full backdrop-blur-md pointer-coarse:h-10 pointer-coarse:w-10",
+        "bg-popover hover:bg-popover-bg-hover active:bg-interactive-pressed h-9 w-9 rounded-full backdrop-blur-md pointer-coarse:h-10 pointer-coarse:w-10",
         "motion-safe:transition-all motion-safe:delay-300 motion-safe:duration-300",
-        "group-[:not([data-scroll-from-end])]/scroll-root:pointer-events-none group-[:not([data-scroll-from-end])]/scroll-root:translate-y-2 group-[:not([data-scroll-from-end])]/scroll-root:scale-50 group-[:not([data-scroll-from-end])]/scroll-root:opacity-0 group-[:not([data-scroll-from-end])]/scroll-root:duration-100 group-[:not([data-scroll-from-end])]/scroll-root:delay-0",
+        "group-[:not([data-scroll-from-end])]/scroll-root:pointer-events-none group-[:not([data-scroll-from-end])]/scroll-root:translate-y-2 group-[:not([data-scroll-from-end])]/scroll-root:scale-50 group-[:not([data-scroll-from-end])]/scroll-root:opacity-0 group-[:not([data-scroll-from-end])]/scroll-root:delay-0 group-[:not([data-scroll-from-end])]/scroll-root:duration-100",
         className
       )}
       onClick={() => scrollToBottom("smooth")}

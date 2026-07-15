@@ -200,7 +200,7 @@ export function SourcesGalleryItem({
       href={safeHref}
       target={safeHref ? "_blank" : undefined}
       rel={safeHref ? "noopener noreferrer" : undefined}
-      className="hover:bg-foreground/[0.07] focus-visible:ring-ring flex flex-col gap-0.5 rounded-[12px] px-3 py-2.5 outline-none focus-visible:ring-2"
+      className="hover:bg-interactive-hover active:bg-interactive-pressed focus-visible:ring-focus-ring flex flex-col gap-0.5 rounded-[12px] px-3 py-2.5 outline-none focus-visible:ring-2"
     >
       <div className="flex h-6 items-center gap-2 text-xs">
         {/* eslint-disable-next-line @next/next/no-img-element -- Dynamic external favicon, optimization not beneficial */}

@@ -310,7 +310,7 @@ function SidebarTrigger({
       <PanelLeft
         size={20}
         glyphInset={0}
-        className="size-5 opacity-50 group-hover/button:opacity-100"
+        className="group-hover/button:text-foreground size-5 text-[var(--text-tertiary)]"
       />
       <span className="sr-only">{open ? "Close sidebar" : "Open sidebar"}</span>
     </Button>
@@ -522,7 +522,7 @@ const sidebarMenuButtonVariants = cva(
       variant: {
         default: "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         outline:
-          "bg-background shadow-[0_0_0_1px_hsl(var(--sidebar-border))] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_hsl(var(--sidebar-accent))]",
+          "bg-background shadow-[0_0_0_1px_var(--sidebar-border)] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_var(--sidebar-accent)]",
       },
       size: {
         default: "h-8 text-sm",
