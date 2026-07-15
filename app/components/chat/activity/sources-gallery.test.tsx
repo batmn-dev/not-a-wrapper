@@ -135,6 +135,6 @@ describe("SourcesGallery (R8 favicon perf)", () => {
     const link = container!.querySelector("a")
     expect(link?.textContent).toContain("A result snippet preserved")
     expect(link?.className).toContain("rounded-[12px]")
-    expect(link?.className).toContain("hover:bg-foreground/[0.07]")
+    expect(link?.className).toContain("hover:bg-interactive-hover")
   })
 })
