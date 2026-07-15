@@ -9,6 +9,7 @@ function request(domain?: string): Request {
 
 describe("/api/favicon route", () => {
   afterEach(() => {
+    vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 
@@ -50,6 +51,27 @@ describe("/api/favicon route", () => {
 
     const response = await GET(request("example.com"))
 
+    expect(response.status).toBe(204)
+    await expect(response.text()).resolves.toBe("")
+  })
+
+  it("bounds upstream requests and handles timeouts as unavailable", async () => {
+    const timeoutSignal = new AbortController().signal
+    const timeoutSpy = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockReturnValue(timeoutSignal)
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValue(new DOMException("The operation timed out", "TimeoutError"))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const response = await GET(request("example.com"))
+
+    expect(timeoutSpy).toHaveBeenCalledWith(5_000)
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(URL),
+      expect.objectContaining({ signal: timeoutSignal })
+    )
     expect(response.status).toBe(204)
     await expect(response.text()).resolves.toBe("")
   })

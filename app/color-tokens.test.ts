@@ -41,6 +41,9 @@ const themedTokens = [
   "interactive-bg-pressed",
   "sidebar-row-bg",
   "sidebar-border",
+  "activity-panel-surface",
+  "activity-panel-border",
+  "activity-panel-raised-surface",
   "popover-bg-hover",
   "muted-bg-hover",
   "input-bg",
@@ -80,6 +83,7 @@ const tailwindMappings = [
   "interactive-selected",
   "interactive-pressed",
   "sidebar-row",
+  "activity-panel-border",
   "user-message",
   "focus-ring",
   "scrim-modal",
@@ -117,6 +121,12 @@ describe("color token contract", () => {
   it("keeps the sidebar divider aligned to each theme's optical edge", () => {
     expect(root).toContain("--sidebar-border: var(--border-subtle);")
     expect(dark).toContain("--sidebar-border: oklch(1 0 0 / 0.1);")
+  })
+
+  it("keeps the dark activity panel on the canvas with an opaque optical edge", () => {
+    expect(dark).toContain("--activity-panel-surface: var(--background);")
+    expect(dark).toContain("--activity-panel-border: oklch(0.248 0 0);")
+    expect(dark).toContain("--activity-panel-raised-surface: var(--card);")
   })
 
   it("exposes disabled text only through the semantic utility name", () => {

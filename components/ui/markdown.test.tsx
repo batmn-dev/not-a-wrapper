@@ -97,6 +97,26 @@ describe("Markdown response controls and semantics", () => {
     expect(code?.hasAttribute("node")).toBe(false)
   })
 
+  it("keeps multiline code spans inline", () => {
+    const body = renderMarkdown("Before `first\nsecond` after.")
+    const paragraph = body.querySelector("p")
+    const code = paragraph?.querySelector("code")
+
+    expect(body.querySelector(".markdown-code-block")).toBeNull()
+    expect(paragraph?.textContent).toBe("Before first second after.")
+    expect(code?.textContent).toBe("first second")
+  })
+
+  it("renders one-line indented code as a block", () => {
+    const body = renderMarkdown("    const answer = 42")
+    const codeBlock = body.querySelector(".markdown-code-block")
+
+    expect(codeBlock).not.toBeNull()
+    expect(codeBlock?.querySelector("pre code")?.textContent).toBe(
+      "const answer = 42\n"
+    )
+  })
+
   it("renders a standalone labeled external link as a favicon pill", () => {
     const body = renderMarkdown("[Visit Example](https://example.com)")
     const link = body.querySelector("a")
@@ -341,10 +361,13 @@ describe("Markdown response controls and semantics", () => {
   it("adds an accessible copy action to tables", () => {
     const body = renderMarkdown("| A | B |\n| --- | --- |\n| 1 | 2 |")
     const table = body.querySelector("table")
+    const copyButton = body.querySelector('button[aria-label="Copy table"]')
 
     expect(table).not.toBeNull()
     expect(table?.hasAttribute("node")).toBe(false)
-    expect(body.querySelector('button[aria-label="Copy table"]')).not.toBeNull()
+    expect(copyButton).not.toBeNull()
+    expect(copyButton?.className).toContain("pointer-coarse:pointer-events-auto")
+    expect(copyButton?.className).toContain("pointer-coarse:opacity-100")
   })
 
   it("uses friendly code language labels and hides plaintext labels", () => {

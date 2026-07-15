@@ -19,6 +19,7 @@ export async function GET(request: Request): Promise<Response> {
   try {
     const upstream = await fetch(upstreamUrl, {
       next: { revalidate: 604800 },
+      signal: AbortSignal.timeout(5_000),
     })
     const contentType = upstream.headers.get("content-type")
 

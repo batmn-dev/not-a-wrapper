@@ -42,7 +42,7 @@ export function DockedFlyoutShell({
       aria-hidden={active ? undefined : true}
       inert={active ? undefined : true}
       className={cn(
-        "text-foreground border-foreground/5 flex h-full w-[var(--activity-panel-width)] flex-col border-s bg-[var(--activity-panel-surface)]",
+        "text-foreground border-activity-panel-border flex h-full w-[var(--activity-panel-width)] flex-col border-s bg-[var(--activity-panel-surface)]",
         className
       )}
     >

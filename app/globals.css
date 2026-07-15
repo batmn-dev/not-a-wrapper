@@ -335,6 +335,7 @@
   --color-interactive-selected: var(--interactive-bg-selected);
   --color-interactive-pressed: var(--interactive-bg-pressed);
   --color-sidebar-row: var(--sidebar-row-bg);
+  --color-activity-panel-border: var(--activity-panel-border);
   --color-user-message: var(--user-message-bg);
   --color-focus-ring: var(--focus-ring);
   --color-scrim-modal: var(--scrim-modal);
@@ -527,6 +528,8 @@
     0 8px 12px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.62);
   /* ChatGPT desktop Activity flyout is a measured #fcfcfc, not pure white. */
   --activity-panel-surface: oklch(0.991 0 0);
+  --activity-panel-border: oklch(0 0 0 / 0.05);
+  --activity-panel-raised-surface: var(--muted);
 
   /* Activity panel overlay scrim — mobile black/30, tablet gray/50 */
   --overlay-scrim-mobile: var(--scrim-modal);
@@ -662,7 +665,9 @@
   --sharp-edge-left-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.05);
   --activity-sheet-shadow:
     0 8px 12px rgba(0, 0, 0, 0.18), 0 0 1px rgba(255, 255, 255, 0.24);
-  --activity-panel-surface: var(--card);
+  --activity-panel-surface: var(--background);
+  --activity-panel-border: oklch(0.248 0 0);
+  --activity-panel-raised-surface: var(--card);
 
   /* Activity panel overlay scrim — mobile black/30, tablet black/50 */
   --overlay-scrim-mobile: var(--scrim-modal);

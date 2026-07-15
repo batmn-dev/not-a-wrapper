@@ -1,3 +1,5 @@
+"use client"
+
 /**
  * @component Markdown
  * @source prompt-kit
@@ -16,6 +18,10 @@
  *   - Keep parsing and rendering on the same remark-based pipeline
  *   - Verify INITIAL_COMPONENTS customizations are not overwritten
  */
+import {
+  CODE_BLOCK_ATTRIBUTE,
+  remarkCodeBlockAnnotation,
+} from "@/lib/markdown/remark-code-block-annotation"
 import { remarkLinkPresentation } from "@/lib/markdown/remark-link-presentation"
 import { remarkUnwrapLinkParens } from "@/lib/markdown/remark-unwrap-link-parens"
 import { cn } from "@/lib/utils"
@@ -110,12 +116,13 @@ function getTableText(table: HTMLTableElement | null): string {
 }
 
 const INITIAL_COMPONENTS: Partial<Components> = {
-  code: function CodeComponent({ className, children, node, ...props }) {
-    const isInline =
-      !node?.position?.start.line ||
-      node?.position?.start.line === node?.position?.end.line
+  code: function CodeComponent({ className, children, node: _, ...props }) {
+    const isBlock =
+      (props as typeof props & Record<string, unknown>)[
+        CODE_BLOCK_ATTRIBUTE
+      ] === "true"
 
-    if (isInline) {
+    if (!isBlock) {
       // Captured inline-code metrics: 0.875em /
       // 500, 4px radius, 0.15rem × 0.3rem padding, and the reference's
       // dedicated inline-code surface.
@@ -235,6 +242,7 @@ const MemoizedMarkdownBlock = memo(
           remarkGfm,
           remarkBreaks,
           [remarkMath, REMARK_MATH_OPTIONS],
+          remarkCodeBlockAnnotation,
           remarkLinkPresentation,
           remarkUnwrapLinkParens,
         ]}

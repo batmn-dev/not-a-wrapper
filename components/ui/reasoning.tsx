@@ -191,7 +191,7 @@ function ReasoningLabel({ className, title }: ReasoningLabelProps) {
               <TextShimmer
                 duration={2}
                 spread={15}
-                className="text-base font-normal whitespace-nowrap text-[var(--text-tertiary)]"
+                className="text-base font-normal whitespace-nowrap"
               >
                 {durationText}
               </TextShimmer>
