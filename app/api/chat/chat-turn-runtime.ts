@@ -697,6 +697,7 @@ export function createChatTurnRuntime(args: {
     // If conversion output still contains provider-linked response IDs
     // (msg_/rs_/ws_), fall back to a plain-text transcript to avoid
     // pairing invariant failures on follow-up turns.
+    // TODO: Preserve multimodal parts in OpenAI replay fallback; see docs/openai-image-attachment-replay-fallback-investigation.md.
     if (
       resolvedProvider === "openai" &&
       hasProviderLinkedResponseIds(modelMessages)

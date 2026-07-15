@@ -1,6 +1,5 @@
 "use client"
 
-import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import {
   Dialog,
   DialogContent,
@@ -10,6 +9,7 @@ import {
 import { Drawer, DrawerContent } from "@/components/ui/drawer"
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { Icon } from "@/components/ui/icon"
+import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { RiSettings3Line } from "@remixicon/react"
 import { SettingsContent } from "./settings-content"
 

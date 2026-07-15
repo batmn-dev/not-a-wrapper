@@ -1,6 +1,5 @@
 "use client"
 
-import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { useKeyShortcut } from "@/app/hooks/use-key-shortcut"
 import { Button } from "@/components/ui/button"
 import {
@@ -25,6 +24,7 @@ import {
   TooltipShortcut,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { useModel } from "@/lib/model-store/provider"
 import {
   filterAndSortModels,

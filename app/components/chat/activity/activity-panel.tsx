@@ -1,10 +1,10 @@
 "use client"
 
-import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { Icon } from "@/components/ui/icon"
 import { Markdown } from "@/components/ui/markdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { useBreakpoint } from "@/hooks/use-breakpoint"
 import type {
   ActivityEntryStatus,
   AssistantActivityEntry,

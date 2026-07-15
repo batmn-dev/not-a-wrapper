@@ -57,6 +57,15 @@ if (ENABLE_PAGINATED_SIDEBAR && !api.chats.searchByTitle) {
 
 const SIDEBAR_WINDOW_PAGE_SIZE = 25
 
+export type CreateNewChatInput = {
+  title?: string
+  model?: string
+  systemPrompt?: string
+  projectId?: string
+  /** Stable local identity used only when auth has settled signed out. */
+  guestUserId?: string
+}
+
 type ChatsContextType = {
   chats: Chats[]
   isLoading: boolean
@@ -70,14 +79,7 @@ type ChatsContextType = {
     currentChatId?: string,
     redirect?: () => void
   ) => Promise<void>
-  createNewChat: (
-    userId: string,
-    title?: string,
-    model?: string,
-    isAuthenticated?: boolean,
-    systemPrompt?: string,
-    projectId?: string
-  ) => Promise<Chats | undefined>
+  createNewChat: (input: CreateNewChatInput) => Promise<Chats | undefined>
   resetChats: () => Promise<void>
   getChatById: (id: string) => Chats | undefined
   updateChatModel: (id: string, model: string) => Promise<void>
@@ -253,22 +255,30 @@ export function ChatsProvider({
   )
 
   const createNewChat = useCallback(
-    async (
-      userId: string,
-      title?: string,
-      model?: string,
-      isAuthenticated?: boolean,
-      systemPrompt?: string,
-      projectId?: string
-    ): Promise<Chats | undefined> => {
-      if (!userId) return
+    async ({
+      title,
+      model,
+      systemPrompt,
+      projectId,
+      guestUserId,
+    }: CreateNewChatInput): Promise<Chats | undefined> => {
+      // The server-seeded app user is the durable-intent fact. It becomes
+      // available before Convex finishes confirming the JWT, so never use the
+      // transient Convex readiness boolean to downgrade that user to a guest.
+      const authenticatedUserId = userId
+      const shouldCreateDurableChat = Boolean(authenticatedUserId)
       const normalizedModel = resolveModelId(
-        model || getDefaultModelForUser(!!isAuthenticated)
+        model || getDefaultModelForUser(shouldCreateDurableChat)
       )
 
-      // For guest users, create a local-only chat (not persisted to Convex)
-      // This allows unauthenticated users to send messages without database errors
-      if (!isAuthenticated) {
+      if (!authenticatedUserId) {
+        // While Convex is still resolving auth (or reports an authenticated JWT
+        // without the server-seeded app user), fail closed instead of creating a
+        // local chat that would split an authenticated user's history.
+        if (isConvexAuthLoading || isConvexAuthenticated || !guestUserId) {
+          return
+        }
+
         const localChatId = createLocalChatId()
         const localChat: Chats = {
           id: localChatId,
@@ -276,7 +286,7 @@ export function ChatsProvider({
           created_at: new Date().toISOString(),
           model: normalizedModel,
           system_prompt: systemPrompt || SYSTEM_PROMPT_DEFAULT,
-          user_id: userId,
+          user_id: guestUserId,
           public: false,
           updated_at: new Date().toISOString(),
           project_id: null,
@@ -290,14 +300,6 @@ export function ChatsProvider({
         return localChat
       }
 
-      // For authenticated users, ensure Convex auth is ready before calling mutations
-      // This prevents "Not authenticated" errors due to AuthKit to Convex auth sync delay
-      if (isAuthenticated && !isConvexAuthenticated && !isConvexAuthLoading) {
-        console.warn("createNewChat: Convex auth not ready yet, waiting...")
-        // Wait a bit for auth to sync
-        await new Promise((resolve) => setTimeout(resolve, 500))
-      }
-
       const optimisticId = createOptimisticChatId()
       const optimisticChat: Chats = {
         id: optimisticId,
@@ -305,10 +307,10 @@ export function ChatsProvider({
         created_at: new Date().toISOString(),
         model: normalizedModel,
         system_prompt: systemPrompt || SYSTEM_PROMPT_DEFAULT,
-        user_id: userId,
+        user_id: authenticatedUserId,
         public: false,
         updated_at: new Date().toISOString(),
-        project_id: null,
+        project_id: projectId ?? null,
         pinned: false,
         pinned_at: null,
       }
@@ -353,7 +355,13 @@ export function ChatsProvider({
         return undefined
       }
     },
-    [createChatMutation, removeOp, isConvexAuthenticated, isConvexAuthLoading]
+    [
+      createChatMutation,
+      removeOp,
+      isConvexAuthenticated,
+      isConvexAuthLoading,
+      userId,
+    ]
   )
 
   const resetChats = useCallback(async () => {

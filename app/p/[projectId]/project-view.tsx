@@ -17,23 +17,19 @@ import { useChats } from "@/lib/chat-store/chats/provider"
 import { convexChatToChat } from "@/lib/chat-store/types"
 import { evaluatePromptSize } from "@/lib/chat-turn/prompt-size-policy"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
-import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
 import { RiChat3Line } from "@remixicon/react"
-import { useQuery } from "@tanstack/react-query"
 import { motion } from "motion/react"
 import { useRouter } from "next/navigation"
 import { useCallback, useMemo, useState } from "react"
 
-type Project = {
+export type AuthorizedProjectView = {
   id: string
   name: string
-  user_id: string
-  created_at: string
 }
 
 type ProjectViewProps = {
-  projectId: string
+  project: AuthorizedProjectView
 }
 
 /**
@@ -41,37 +37,25 @@ type ProjectViewProps = {
  * with chatId null) so the Composer's picker and search toggle read the same
  * module the chat surface uses.
  */
-export function ProjectView({ projectId }: ProjectViewProps) {
+export function ProjectView({ project }: ProjectViewProps) {
   return (
     <TurnContextProvider chatId={null} currentChat={null}>
-      <ProjectViewInner projectId={projectId} />
+      <ProjectViewInner project={project} />
     </TurnContextProvider>
   )
 }
 
-function ProjectViewInner({ projectId }: ProjectViewProps) {
+function ProjectViewInner({ project }: ProjectViewProps) {
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const { user } = useUser()
   const { createNewChat } = useChats()
   const { getTurnSnapshot } = useTurnContext()
-
-  const { data: project } = useQuery<Project>({
-    queryKey: ["project", projectId],
-    queryFn: async () => {
-      const response = await fetch(`/api/projects/${projectId}`)
-      if (!response.ok) {
-        throw new Error("Failed to fetch project")
-      }
-      return response.json()
-    },
-  })
 
   // The project shows ALL its chats via a dedicated owner-checked read, not the
   // bounded sidebar window. See docs/adr/0005-bounded-chat-list-window.md.
   const { data: projectChats } = usePerUserQuery(
     api.chats.getProjectChatsForCurrentUser,
-    { projectId: projectId as Id<"projects"> }
+    { projectId: project.id as Id<"projects"> }
   )
   const chats = useMemo(
     () => projectChats?.map(convexChatToChat),
@@ -88,11 +72,6 @@ function ProjectViewInner({ projectId }: ProjectViewProps) {
     }: ComposerTurnPayload): Promise<boolean> => {
       if (isSubmitting) return false
       if (!/[^\s]/.test(text) && attachments.length === 0) return false
-
-      if (!user?.id) {
-        toast({ title: "Please sign in and try again.", status: "error" })
-        return false
-      }
 
       setIsSubmitting(true)
       try {
@@ -118,14 +97,12 @@ function ProjectViewInner({ projectId }: ProjectViewProps) {
           return false
         }
 
-        const newChat = await createNewChat(
-          user.id,
-          text,
-          turnSnapshot.selectedModel,
-          true,
-          turnSnapshot.systemPrompt,
-          projectId
-        )
+        const newChat = await createNewChat({
+          title: text,
+          model: turnSnapshot.selectedModel,
+          systemPrompt: turnSnapshot.systemPrompt,
+          projectId: project.id,
+        })
         if (!newChat) return false
 
         const chatParams = new URLSearchParams({
@@ -153,14 +130,7 @@ function ProjectViewInner({ projectId }: ProjectViewProps) {
         setIsSubmitting(false)
       }
     },
-    [
-      createNewChat,
-      getTurnSnapshot,
-      isSubmitting,
-      projectId,
-      router,
-      user?.id,
-    ]
+    [createNewChat, getTurnSnapshot, isSubmitting, project.id, router]
   )
 
   const formatDate = (dateString: string) => {
@@ -198,7 +168,7 @@ function ProjectViewInner({ projectId }: ProjectViewProps) {
             className="text-muted-foreground"
           />
           <h1 className="text-center text-3xl font-medium tracking-tight text-balance">
-            {project?.name || ""}
+            {project.name}
           </h1>
         </div>
       </motion.div>
@@ -215,7 +185,7 @@ function ProjectViewInner({ projectId }: ProjectViewProps) {
       >
         <Composer
           chatId={null}
-          draftScopeId={`project-${projectId}`}
+          draftScopeId={`project-${project.id}`}
           onTurn={handleTurn}
           isSubmitting={isSubmitting}
           status="ready"

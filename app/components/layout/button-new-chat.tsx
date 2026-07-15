@@ -2,10 +2,10 @@
 
 import { ChatActionsMenu } from "@/app/components/layout/chat-actions-menu"
 import { headerActionButtonClassName } from "@/app/components/layout/header-action-button"
-import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { useKeyShortcut } from "@/app/hooks/use-key-shortcut"
 import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
+import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { useChat } from "@/lib/chat-store/chats/use-chat"
 import { useChatSession } from "@/lib/chat-store/session/provider"
 import { RiMoreFill } from "@remixicon/react"

@@ -76,7 +76,10 @@ export default async function Page({ params }: Props) {
   return (
     <MessagesProvider>
       <LayoutApp>
-        <ProjectView projectId={projectId} key={projectId} />
+        <ProjectView
+          project={{ id: project._id, name: project.name }}
+          key={projectId}
+        />
       </LayoutApp>
     </MessagesProvider>
   )

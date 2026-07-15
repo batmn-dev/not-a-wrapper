@@ -41,8 +41,8 @@ vi.mock("@/lib/model-store/provider", () => ({
   }),
 }))
 
-vi.mock("@/app/components/chat/use-model", () => ({
-  useModel: () => ({
+vi.mock("@/lib/model-store/use-session-model", () => ({
+  useSessionModel: () => ({
     selectedModel: turnMocks.selectedModel,
     handleModelChange: vi.fn(),
   }),

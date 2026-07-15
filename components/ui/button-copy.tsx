@@ -8,7 +8,7 @@ import {
 import { cn } from "@/lib/utils"
 import { RiCheckLine, RiFileCopyLine } from "@remixicon/react"
 import { useState } from "react"
-import { Icon } from "../ui/icon"
+import { Icon } from "./icon"
 
 type ButtonCopyProps = {
   code: string | (() => string)

@@ -1,8 +1,8 @@
 "use client"
 
 import { headerActionButtonClassName } from "@/app/components/layout/header-action-button"
-import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { Icon } from "@/components/ui/icon"
+import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { cn } from "@/lib/utils"
 import { RiSearchLine } from "@remixicon/react"
 import {

@@ -48,12 +48,6 @@ vi.mock("@/lib/convex/use-per-user-query", () => ({
 vi.mock("@/lib/file-handling", () => ({
   attachStagedFilesToChat: projectMocks.attachStagedFilesToChat,
 }))
-vi.mock("@/lib/user-store/provider", () => ({
-  useUser: () => ({ user: { id: "user-1" } }),
-}))
-vi.mock("@tanstack/react-query", () => ({
-  useQuery: () => ({ data: { name: "Project" } }),
-}))
 vi.mock("motion/react", () => ({
   motion: { div: ({ children }: { children: React.ReactNode }) => <div>{children}</div> },
 }))
@@ -86,8 +80,12 @@ describe("Project Chat turn handoff", () => {
     root = createRoot(container)
 
     await act(async () => {
-      root?.render(<ProjectView projectId="project-1" />)
+      root?.render(
+        <ProjectView project={{ id: "project-1", name: "Project" }} />
+      )
     })
+
+    expect(container?.querySelector("h1")?.textContent).toBe("Project")
 
     let accepted = false
     await act(async () => {
@@ -101,14 +99,12 @@ describe("Project Chat turn handoff", () => {
 
     expect(accepted).toBe(true)
     expect(projectMocks.attachStagedFilesToChat).not.toHaveBeenCalled()
-    expect(projectMocks.createNewChat).toHaveBeenCalledWith(
-      "user-1",
-      "Project question",
-      "gpt-5-mini",
-      true,
-      "system",
-      "project-1"
-    )
+    expect(projectMocks.createNewChat).toHaveBeenCalledWith({
+      title: "Project question",
+      model: "gpt-5-mini",
+      systemPrompt: "system",
+      projectId: "project-1",
+    })
     expect(projectMocks.push).toHaveBeenCalledWith(
       "/c/chat-1?prompt=Project+question&autoSubmit=1&attachment=attachment-1"
     )

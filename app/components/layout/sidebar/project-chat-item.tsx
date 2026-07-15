@@ -1,8 +1,8 @@
 "use client"
 
-import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { InlineRenameInput } from "@/components/ui/inline-rename-input"
 import { useSidebar } from "@/components/ui/sidebar"
+import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { useInlineRename } from "@/hooks/use-inline-rename"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useSidebarChatStatus } from "@/lib/chat-store/status/sidebar-chat-status"

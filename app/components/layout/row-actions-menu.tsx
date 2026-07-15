@@ -1,6 +1,5 @@
 "use client"
 
-import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Icon } from "@/components/ui/icon"
+import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { RiLoader4Line, RiMoreFill } from "@remixicon/react"
 import { Fragment, type ReactElement, type ReactNode } from "react"
 import {
