@@ -3,8 +3,8 @@ import { redirect } from "next/navigation"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import Page from "./page"
 
-vi.mock("@/app/components/chat/chat-container", () => ({
-  ChatContainer: () => <div data-testid="chat-container" />,
+vi.mock("@/app/components/chat/chat", () => ({
+  Chat: () => <div data-testid="chat" />,
 }))
 
 vi.mock("@/app/components/layout/layout-app", () => ({

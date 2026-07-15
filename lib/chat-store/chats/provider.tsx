@@ -33,7 +33,6 @@ import {
   getCachedChatsHydratedSnapshot,
   getCachedChatsServerSnapshot,
   getCachedChatsSnapshot,
-  hydrateCachedChats,
   resetCachedChatsSnapshot,
   subscribeCachedChats,
 } from "./api"
@@ -60,7 +59,6 @@ const SIDEBAR_WINDOW_PAGE_SIZE = 25
 
 type ChatsContextType = {
   chats: Chats[]
-  refresh: () => Promise<void>
   isLoading: boolean
   /** Load the next page of the bounded sidebar window (no-op when the flag is off). */
   loadMore: () => void
@@ -72,7 +70,6 @@ type ChatsContextType = {
     currentChatId?: string,
     redirect?: () => void
   ) => Promise<void>
-  setChats: React.Dispatch<React.SetStateAction<Chats[]>>
   createNewChat: (
     userId: string,
     title?: string,
@@ -193,14 +190,6 @@ export function ChatsProvider({
     },
     []
   )
-
-  const refresh = async () => {
-    if (shouldUseLocalChats) {
-      await hydrateCachedChats()
-    }
-    // With Convex, data is real-time, so refresh is a no-op
-    // The useQuery hook automatically updates when data changes
-  }
 
   const updateTitle = useCallback(
     async (id: string, title: string) => {
@@ -505,26 +494,12 @@ export function ChatsProvider({
   const canLoadMore =
     ENABLE_PAGINATED_SIDEBAR && recentWindow.status === "CanLoadMore"
 
-  // setChats is kept for backward compatibility but now manages optimistic ops
-  const setChats = useCallback((action: React.SetStateAction<Chats[]>) => {
-    // For direct sets, clear optimistic ops and let server be source of truth
-    if (typeof action === "function") {
-      // Can't easily support functional updates with optimistic ops
-      // Just clear ops and let Convex handle it
-      setOptimisticOps([])
-    } else {
-      setOptimisticOps([])
-    }
-  }, [])
-
   return (
     <ChatsContext.Provider
       value={{
         chats,
-        refresh,
         updateTitle,
         deleteChat,
-        setChats,
         createNewChat,
         resetChats,
         getChatById,

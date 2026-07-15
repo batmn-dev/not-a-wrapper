@@ -42,8 +42,6 @@ type MessagesContextType = {
   messages: ExtendedUIMessage[]
   isLoading: boolean
   setMessages: React.Dispatch<React.SetStateAction<ExtendedUIMessage[]>>
-  refresh: () => Promise<void>
-  saveAllMessages: (messages: ExtendedUIMessage[]) => Promise<void>
   /** Cache message locally and persist to Convex. Pass overrideChatId to handle stale closures during chat creation. */
   cacheAndAddMessage: (
     message: ExtendedUIMessage,
@@ -86,7 +84,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
 
   // Convex mutations
   const addMessageMutation = useMutation(api.messages.add)
-  const addBatchMutation = useMutation(api.messages.addBatch)
   const clearMessagesMutation = useMutation(api.messages.clearForChat)
   const selectBranchMutation = useMutation(api.messages.selectBranch)
 
@@ -180,10 +177,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     [chatId]
   )
 
-  const refresh = useCallback(async () => {
-    // With Convex, data is real-time, so refresh is a no-op
-  }, [])
-
   const cacheAndAddMessage = useCallback(
     async (message: ExtendedUIMessage, overrideChatId?: string) => {
       // Use overrideChatId to handle stale closures during chat creation flow
@@ -245,52 +238,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
       }
     },
     [chatId, updateOptimisticMessages, addMessageMutation]
-  )
-
-  const saveAllMessages = useCallback(
-    async (newMessages: ExtendedUIMessage[]) => {
-      if (!chatId) return
-
-      if (getMessagePersistenceMode(chatId) === "localOnly") {
-        await cacheMessages(chatId, newMessages)
-        return
-      }
-
-      try {
-        // Find new messages that need to be saved
-        const existingIds = new Set(serverMessages.map((m) => m.id))
-        const messagesToSave = newMessages.filter((m) => !existingIds.has(m.id))
-
-        if (messagesToSave.length > 0) {
-          await addBatchMutation({
-            chatId: chatId as Id<"chats">,
-            messages: messagesToSave.map((msg) => {
-              const textContent =
-                extractTextFromMessageParts(msg.parts) || msg.content || ""
-
-              return {
-                clientMessageId: msg.id,
-                role: msg.role as "user" | "assistant" | "system",
-                content: textContent,
-                parts: msg.parts,
-              }
-            }),
-          })
-        }
-
-        // Update optimistic messages to match what was saved
-        updateOptimisticMessages(() =>
-          newMessages.filter((m) => !existingIds.has(m.id))
-        )
-
-        // Also cache locally
-        await cacheMessages(chatId, newMessages)
-      } catch (error) {
-        console.error("Failed to save messages:", error)
-        toast({ title: "Failed to save messages", status: "error" })
-      }
-    },
-    [chatId, serverMessages, addBatchMutation, updateOptimisticMessages]
   )
 
   const deleteMessages = useCallback(async () => {
@@ -365,8 +312,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
         messages,
         isLoading,
         setMessages,
-        refresh,
-        saveAllMessages,
         cacheAndAddMessage,
         resetMessages,
         deleteMessages,

@@ -1,4 +1,4 @@
-import { ChatContainer } from "@/app/components/chat/chat-container"
+import { Chat } from "@/app/components/chat/chat"
 import { LayoutApp } from "@/app/components/layout/layout-app"
 import { getAuthenticatedWorkosSession } from "@/lib/auth/workos"
 import { isLocalChatId } from "@/lib/chat-store/identity"
@@ -24,7 +24,7 @@ export default async function Page({ params }: Props) {
   return (
     <MessagesProvider>
       <LayoutApp>
-        <ChatContainer />
+        <Chat />
       </LayoutApp>
     </MessagesProvider>
   )
