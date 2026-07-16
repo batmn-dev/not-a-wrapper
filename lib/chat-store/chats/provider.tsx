@@ -14,6 +14,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useLayoutEffect,
   useMemo,
   useState,
   useSyncExternalStore,
@@ -56,6 +57,60 @@ if (ENABLE_PAGINATED_SIDEBAR && !api.chats.searchByTitle) {
 }
 
 const SIDEBAR_WINDOW_PAGE_SIZE = 25
+const CONVEX_AUTH_READY_TIMEOUT_MS = 5_000
+
+function createConvexAuthReadinessGate() {
+  let isReady = false
+  const waiters = new Set<() => void>()
+
+  return {
+    wait(timeoutMs = CONVEX_AUTH_READY_TIMEOUT_MS) {
+      if (isReady) return Promise.resolve(true)
+
+      return new Promise<boolean>((resolve) => {
+        let settled = false
+
+        const settle = (isReady: boolean) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timeoutId)
+          waiters.delete(markReady)
+          resolve(isReady)
+        }
+        const markReady = () => settle(true)
+        const timeoutId = setTimeout(() => settle(false), timeoutMs)
+
+        waiters.add(markReady)
+      })
+    },
+    markReady() {
+      isReady = true
+      const pendingWaiters = Array.from(waiters)
+      waiters.clear()
+      for (const markReady of pendingWaiters) markReady()
+    },
+    markNotReady() {
+      isReady = false
+    },
+  }
+}
+
+function ConvexAuthReadySignal({
+  onReady,
+  onNotReady,
+}: {
+  onReady: () => void
+  onNotReady: () => void
+}) {
+  // This component only mounts once Convex has confirmed the JWT. Its layout
+  // synchronization releases sends that began during the external auth window
+  // before another user action can start a competing chat creation.
+  useLayoutEffect(() => {
+    onReady()
+    return onNotReady
+  }, [onReady, onNotReady])
+  return null
+}
 
 export type CreateNewChatInput = {
   title?: string
@@ -107,6 +162,15 @@ export function ChatsProvider({
     isAuthenticated: isConvexAuthenticated,
     isLoading: isConvexAuthLoading,
   } = useConvexAuth()
+  const [authReadinessGate] = useState(createConvexAuthReadinessGate)
+  const markConvexAuthReady = useCallback(
+    () => authReadinessGate.markReady(),
+    [authReadinessGate]
+  )
+  const markConvexAuthNotReady = useCallback(
+    () => authReadinessGate.markNotReady(),
+    [authReadinessGate]
+  )
 
   // Sidebar reads. Both code paths' hooks are always called (rules of hooks);
   // the inactive path passes "skip" so it never subscribes. Flag OFF: the full
@@ -276,6 +340,7 @@ export function ChatsProvider({
         // without the server-seeded app user), fail closed instead of creating a
         // local chat that would split an authenticated user's history.
         if (isConvexAuthLoading || isConvexAuthenticated || !guestUserId) {
+          toast({ title: "Failed to create chat", status: "error" })
           return
         }
 
@@ -298,6 +363,14 @@ export function ChatsProvider({
         await cacheChat(localChat)
 
         return localChat
+      }
+
+      if (!isConvexAuthenticated) {
+        const authBecameReady = await authReadinessGate.wait()
+        if (!authBecameReady) {
+          toast({ title: "Failed to create chat", status: "error" })
+          return
+        }
       }
 
       const optimisticId = createOptimisticChatId()
@@ -357,6 +430,7 @@ export function ChatsProvider({
     },
     [
       createChatMutation,
+      authReadinessGate,
       removeOp,
       isConvexAuthenticated,
       isConvexAuthLoading,
@@ -503,24 +577,32 @@ export function ChatsProvider({
     ENABLE_PAGINATED_SIDEBAR && recentWindow.status === "CanLoadMore"
 
   return (
-    <ChatsContext.Provider
-      value={{
-        chats,
-        updateTitle,
-        deleteChat,
-        createNewChat,
-        resetChats,
-        getChatById,
-        updateChatModel,
-        bumpChat,
-        isLoading,
-        togglePinned,
-        pinnedChats,
-        loadMore,
-        canLoadMore,
-      }}
-    >
-      {children}
-    </ChatsContext.Provider>
+    <>
+      {isConvexAuthenticated ? (
+        <ConvexAuthReadySignal
+          onReady={markConvexAuthReady}
+          onNotReady={markConvexAuthNotReady}
+        />
+      ) : null}
+      <ChatsContext.Provider
+        value={{
+          chats,
+          updateTitle,
+          deleteChat,
+          createNewChat,
+          resetChats,
+          getChatById,
+          updateChatModel,
+          bumpChat,
+          isLoading,
+          togglePinned,
+          pinnedChats,
+          loadMore,
+          canLoadMore,
+        }}
+      >
+        {children}
+      </ChatsContext.Provider>
+    </>
   )
 }

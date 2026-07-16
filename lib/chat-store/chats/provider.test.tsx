@@ -163,6 +163,7 @@ describe("ChatsProvider guest local chats", () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     const mountedRoot = root
     if (mountedRoot) {
       act(() => {
@@ -182,6 +183,13 @@ describe("ChatsProvider guest local chats", () => {
     document.body.appendChild(container)
     root = createRoot(container)
 
+    rerenderProvider(captureRef, userId)
+  }
+
+  function rerenderProvider(
+    captureRef: { current: ReturnType<typeof useChats> | null },
+    userId?: string
+  ) {
     act(() => {
       root?.render(
         <ChatsProvider userId={userId}>
@@ -312,7 +320,7 @@ describe("ChatsProvider guest local chats", () => {
     )
   })
 
-  it("keeps WorkOS-authenticated creation durable while Convex auth is loading", async () => {
+  it("waits for Convex auth before creating a WorkOS-authenticated chat", async () => {
     convexMocks.isAuthenticated = false
     convexMocks.isLoading = true
     convexMocks.mutationFn.mockResolvedValue("chat-auth-sync")
@@ -323,12 +331,24 @@ describe("ChatsProvider guest local chats", () => {
     renderProvider(capture, "user-1")
     await flushPromises()
 
-    let created: Chats | undefined
-    await act(async () => {
-      created = await capture.current?.createNewChat({
+    let creationPromise: Promise<Chats | undefined> | undefined
+    act(() => {
+      creationPromise = capture.current?.createNewChat({
         guestUserId: "guest-should-be-ignored",
         title: "During auth sync",
       })
+    })
+
+    expect(convexMocks.mutationFn).not.toHaveBeenCalled()
+    expect(persistMocks.writeToIndexedDB).not.toHaveBeenCalled()
+
+    convexMocks.isAuthenticated = true
+    convexMocks.isLoading = false
+    rerenderProvider(capture, "user-1")
+
+    let created: Chats | undefined
+    await act(async () => {
+      created = await creationPromise
     })
 
     expect(created).toMatchObject({
@@ -337,6 +357,36 @@ describe("ChatsProvider guest local chats", () => {
     })
     expect(convexMocks.mutationFn).toHaveBeenCalledTimes(1)
     expect(persistMocks.writeToIndexedDB).not.toHaveBeenCalled()
+  })
+
+  it("fails a durable creation after Convex auth readiness times out", async () => {
+    vi.useFakeTimers()
+    convexMocks.isAuthenticated = false
+    convexMocks.isLoading = true
+    const capture: { current: ReturnType<typeof useChats> | null } = {
+      current: null,
+    }
+
+    renderProvider(capture, "user-1")
+    await flushPromises()
+
+    let creationPromise: Promise<Chats | undefined> | undefined
+    act(() => {
+      creationPromise = capture.current?.createNewChat({
+        title: "During stalled auth sync",
+      })
+    })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000)
+    })
+
+    await expect(creationPromise).resolves.toBeUndefined()
+    expect(convexMocks.mutationFn).not.toHaveBeenCalled()
+    expect(convexMocks.toast).toHaveBeenCalledWith({
+      title: "Failed to create chat",
+      status: "error",
+    })
   })
 
   it("does not create a local chat while auth is unresolved without an app user", async () => {
@@ -353,6 +403,10 @@ describe("ChatsProvider guest local chats", () => {
     ).resolves.toBeUndefined()
     expect(convexMocks.mutationFn).not.toHaveBeenCalled()
     expect(persistMocks.writeToIndexedDB).not.toHaveBeenCalled()
+    expect(convexMocks.toast).toHaveBeenCalledWith({
+      title: "Failed to create chat",
+      status: "error",
+    })
   })
 
   it("preserves project association and authenticated default-model selection", async () => {
