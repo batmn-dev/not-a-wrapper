@@ -1,4 +1,3 @@
-import { validateFile, type FileValidationResult } from "@/lib/file/validation"
 import type { ConvexReactClient } from "convex/react"
 
 export { ACCEPTED_FILE_PICKER_TYPES, validateFile } from "@/lib/file/validation"
@@ -20,21 +19,6 @@ export type UploadFileOptions = {
   signal?: AbortSignal
   onProgress?: (progress: FileUploadProgress) => void
   uploadBinary?: typeof uploadBinaryWithProgress
-}
-
-export type ProcessFileValidationIssue = {
-  file: File
-  validation: FileValidationResult
-}
-
-export type ProcessFileUploadIssue = {
-  file: File
-  error: unknown
-}
-
-export type ProcessFilesOptions = {
-  onValidationError?: (issue: ProcessFileValidationIssue) => void
-  onUploadError?: (issue: ProcessFileUploadIssue) => void
 }
 
 // ============================================================================
@@ -162,87 +146,6 @@ export async function deleteUploadedAttachment(
     attachmentId:
       attachmentId as unknown as typeof api.files.deleteFile._args.attachmentId,
   })
-}
-
-/** Compatibility helper for turn-time callers while they migrate to staging. */
-export async function uploadFileToConvex(
-  convex: ConvexReactClient,
-  file: File,
-  chatId: string,
-  options: UploadFileOptions = {}
-): Promise<{ fileUrl: string; attachmentId: string }> {
-  const staged = await uploadStagedFile(convex, file, options)
-  const [attached] = await attachStagedFilesToChat(convex, chatId, [
-    staged.attachmentId,
-  ])
-  if (!attached?.attachmentId) throw new Error("Failed to attach uploaded file")
-  return { fileUrl: attached.url, attachmentId: attached.attachmentId }
-}
-
-// ============================================================================
-// Common Operations
-// ============================================================================
-
-export function createAttachment(
-  file: File,
-  url: string,
-  attachmentId?: string
-): Attachment {
-  return {
-    name: file.name,
-    contentType: file.type,
-    url,
-    ...(attachmentId ? { attachmentId } : {}),
-  }
-}
-
-/**
- * Process files for upload using Convex
- * @param files Files to process
- * @param chatId Chat ID for attaching files
- * @param convex Convex client for uploads
- */
-export async function processFiles(
-  files: File[],
-  chatId: string,
-  convex: ConvexReactClient,
-  options: ProcessFilesOptions = {}
-): Promise<Attachment[]> {
-  const attachments: Attachment[] = []
-
-  for (const file of files) {
-    let validation: FileValidationResult
-    try {
-      validation = await validateFile(file)
-    } catch {
-      options.onValidationError?.({
-        file,
-        validation: {
-          isValid: false,
-          error: "Failed to read file for validation",
-        },
-      })
-      continue
-    }
-
-    if (!validation.isValid) {
-      options.onValidationError?.({ file, validation })
-      continue
-    }
-
-    try {
-      const { fileUrl, attachmentId } = await uploadFileToConvex(
-        convex,
-        file,
-        chatId
-      )
-      attachments.push(createAttachment(file, fileUrl, attachmentId))
-    } catch (error) {
-      options.onUploadError?.({ file, error })
-    }
-  }
-
-  return attachments
 }
 
 export class FileUploadLimitError extends Error {

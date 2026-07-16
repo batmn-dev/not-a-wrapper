@@ -7,7 +7,7 @@ import { resolveModelId } from "@/lib/models/model-id-migration"
 import type { UserProfile } from "@/lib/user/types"
 import { useCallback } from "react"
 
-type UseModelProps = {
+type UseSessionModelProps = {
   currentChat: Chats | null
   user: UserProfile | null
   updateChatModel?: (chatId: string, model: string) => Promise<void>
@@ -24,13 +24,13 @@ type UseModelProps = {
  * @param chatId - The current chat ID
  * @returns Object containing selected model and handler function
  */
-export function useModel({
+export function useSessionModel({
   currentChat,
   user,
   updateChatModel,
   chatId,
   isChatLoading = false,
-}: UseModelProps) {
+}: UseSessionModelProps) {
   // Get favorite models and last-used model from ModelProvider
   const {
     models,

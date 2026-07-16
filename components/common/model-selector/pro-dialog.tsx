@@ -1,6 +1,5 @@
 "use client"
 
-import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -16,6 +15,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { api } from "@/convex/_generated/api"
+import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { APP_NAME } from "@/lib/config"
 import { useUser } from "@/lib/user-store/provider"
 import { useMutation as useTanstackMutation } from "@tanstack/react-query"

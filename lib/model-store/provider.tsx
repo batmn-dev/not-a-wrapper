@@ -47,9 +47,6 @@ type ModelContextType = {
   modelPrefsHydrated: boolean
   setLastUsedModel: (model: string) => void
   isLoading: boolean
-  refreshModels: () => Promise<void>
-  refreshUserKeyStatus: () => Promise<void>
-  refreshFavoriteModels: () => Promise<void>
   refreshFavoriteModelsSilent: () => Promise<void>
   refreshAll: () => Promise<void>
 }
@@ -157,28 +154,6 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const refreshModels = useCallback(async () => {
-    setIsLoading(true)
-    try {
-      await fetchModels()
-    } finally {
-      setIsLoading(false)
-    }
-  }, [fetchModels])
-
-  const refreshUserKeyStatus = useCallback(async () => {
-    // Compatibility no-op; the Convex query updates key status reactively.
-  }, [])
-
-  const refreshFavoriteModels = useCallback(async () => {
-    setIsLoading(true)
-    try {
-      await fetchFavoriteModels()
-    } finally {
-      setIsLoading(false)
-    }
-  }, [fetchFavoriteModels])
-
   const refreshFavoriteModelsSilent = useCallback(async () => {
     try {
       await fetchFavoriteModels()
@@ -258,9 +233,6 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
         modelPrefsHydrated,
         setLastUsedModel,
         isLoading,
-        refreshModels,
-        refreshUserKeyStatus,
-        refreshFavoriteModels,
         refreshFavoriteModelsSilent,
         refreshAll,
       }}

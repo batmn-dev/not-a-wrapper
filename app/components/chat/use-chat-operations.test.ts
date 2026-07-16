@@ -84,13 +84,12 @@ describe("useChatOperations", () => {
     const chatId = await ensureChatExists("guest_1", "Question")
 
     expect(chatId).toBe("local-fresh")
-    expect(createNewChat).toHaveBeenCalledWith(
-      "guest_1",
-      "Question",
-      "openai/gpt-5-mini",
-      false,
-      "system"
-    )
+    expect(createNewChat).toHaveBeenCalledWith({
+      title: "Question",
+      model: "openai/gpt-5-mini",
+      systemPrompt: "system",
+      guestUserId: "guest_1",
+    })
     expect(localStorage.getItem(GUEST_CHAT_STORAGE_KEY)).toBe("local-fresh")
     expect(navigateToChat).toHaveBeenCalledWith("local-fresh")
   })

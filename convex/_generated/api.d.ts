@@ -24,7 +24,6 @@ import type * as lib_authedFunctions from "../lib/authedFunctions.js";
 import type * as lib_messageMetadata from "../lib/messageMetadata.js";
 import type * as mcpServers from "../mcpServers.js";
 import type * as mcpToolApprovals from "../mcpToolApprovals.js";
-import type * as mcpToolCallLog from "../mcpToolCallLog.js";
 import type * as messages from "../messages.js";
 import type * as projects from "../projects.js";
 import type * as rateLimits from "../rateLimits.js";
@@ -60,7 +59,6 @@ declare const fullApi: ApiFromModules<{
   "lib/messageMetadata": typeof lib_messageMetadata;
   mcpServers: typeof mcpServers;
   mcpToolApprovals: typeof mcpToolApprovals;
-  mcpToolCallLog: typeof mcpToolCallLog;
   messages: typeof messages;
   projects: typeof projects;
   rateLimits: typeof rateLimits;

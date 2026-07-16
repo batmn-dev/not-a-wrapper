@@ -92,7 +92,7 @@ const modelSelectorMocks = {
   ] satisfies ModelConfig[],
 }
 
-vi.mock("@/app/hooks/use-breakpoint", () => ({
+vi.mock("@/hooks/use-breakpoint", () => ({
   useBreakpoint: () => breakpointMocks.isMobile,
 }))
 

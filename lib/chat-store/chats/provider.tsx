@@ -14,6 +14,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useLayoutEffect,
   useMemo,
   useState,
   useSyncExternalStore,
@@ -33,7 +34,6 @@ import {
   getCachedChatsHydratedSnapshot,
   getCachedChatsServerSnapshot,
   getCachedChatsSnapshot,
-  hydrateCachedChats,
   resetCachedChatsSnapshot,
   subscribeCachedChats,
 } from "./api"
@@ -57,10 +57,72 @@ if (ENABLE_PAGINATED_SIDEBAR && !api.chats.searchByTitle) {
 }
 
 const SIDEBAR_WINDOW_PAGE_SIZE = 25
+const CONVEX_AUTH_READY_TIMEOUT_MS = 5_000
+
+function createConvexAuthReadinessGate() {
+  let isReady = false
+  const waiters = new Set<() => void>()
+
+  return {
+    wait(timeoutMs = CONVEX_AUTH_READY_TIMEOUT_MS) {
+      if (isReady) return Promise.resolve(true)
+
+      return new Promise<boolean>((resolve) => {
+        let settled = false
+
+        const settle = (isReady: boolean) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timeoutId)
+          waiters.delete(markReady)
+          resolve(isReady)
+        }
+        const markReady = () => settle(true)
+        const timeoutId = setTimeout(() => settle(false), timeoutMs)
+
+        waiters.add(markReady)
+      })
+    },
+    markReady() {
+      isReady = true
+      const pendingWaiters = Array.from(waiters)
+      waiters.clear()
+      for (const markReady of pendingWaiters) markReady()
+    },
+    markNotReady() {
+      isReady = false
+    },
+  }
+}
+
+function ConvexAuthReadySignal({
+  onReady,
+  onNotReady,
+}: {
+  onReady: () => void
+  onNotReady: () => void
+}) {
+  // This component only mounts once Convex has confirmed the JWT. Its layout
+  // synchronization releases sends that began during the external auth window
+  // before another user action can start a competing chat creation.
+  useLayoutEffect(() => {
+    onReady()
+    return onNotReady
+  }, [onReady, onNotReady])
+  return null
+}
+
+export type CreateNewChatInput = {
+  title?: string
+  model?: string
+  systemPrompt?: string
+  projectId?: string
+  /** Stable local identity used only when auth has settled signed out. */
+  guestUserId?: string
+}
 
 type ChatsContextType = {
   chats: Chats[]
-  refresh: () => Promise<void>
   isLoading: boolean
   /** Load the next page of the bounded sidebar window (no-op when the flag is off). */
   loadMore: () => void
@@ -72,15 +134,7 @@ type ChatsContextType = {
     currentChatId?: string,
     redirect?: () => void
   ) => Promise<void>
-  setChats: React.Dispatch<React.SetStateAction<Chats[]>>
-  createNewChat: (
-    userId: string,
-    title?: string,
-    model?: string,
-    isAuthenticated?: boolean,
-    systemPrompt?: string,
-    projectId?: string
-  ) => Promise<Chats | undefined>
+  createNewChat: (input: CreateNewChatInput) => Promise<Chats | undefined>
   resetChats: () => Promise<void>
   getChatById: (id: string) => Chats | undefined
   updateChatModel: (id: string, model: string) => Promise<void>
@@ -108,6 +162,15 @@ export function ChatsProvider({
     isAuthenticated: isConvexAuthenticated,
     isLoading: isConvexAuthLoading,
   } = useConvexAuth()
+  const [authReadinessGate] = useState(createConvexAuthReadinessGate)
+  const markConvexAuthReady = useCallback(
+    () => authReadinessGate.markReady(),
+    [authReadinessGate]
+  )
+  const markConvexAuthNotReady = useCallback(
+    () => authReadinessGate.markNotReady(),
+    [authReadinessGate]
+  )
 
   // Sidebar reads. Both code paths' hooks are always called (rules of hooks);
   // the inactive path passes "skip" so it never subscribes. Flag OFF: the full
@@ -194,14 +257,6 @@ export function ChatsProvider({
     []
   )
 
-  const refresh = async () => {
-    if (shouldUseLocalChats) {
-      await hydrateCachedChats()
-    }
-    // With Convex, data is real-time, so refresh is a no-op
-    // The useQuery hook automatically updates when data changes
-  }
-
   const updateTitle = useCallback(
     async (id: string, title: string) => {
       const changes = { title, updated_at: new Date().toISOString() }
@@ -264,22 +319,31 @@ export function ChatsProvider({
   )
 
   const createNewChat = useCallback(
-    async (
-      userId: string,
-      title?: string,
-      model?: string,
-      isAuthenticated?: boolean,
-      systemPrompt?: string,
-      projectId?: string
-    ): Promise<Chats | undefined> => {
-      if (!userId) return
+    async ({
+      title,
+      model,
+      systemPrompt,
+      projectId,
+      guestUserId,
+    }: CreateNewChatInput): Promise<Chats | undefined> => {
+      // The server-seeded app user is the durable-intent fact. It becomes
+      // available before Convex finishes confirming the JWT, so never use the
+      // transient Convex readiness boolean to downgrade that user to a guest.
+      const authenticatedUserId = userId
+      const shouldCreateDurableChat = Boolean(authenticatedUserId)
       const normalizedModel = resolveModelId(
-        model || getDefaultModelForUser(!!isAuthenticated)
+        model || getDefaultModelForUser(shouldCreateDurableChat)
       )
 
-      // For guest users, create a local-only chat (not persisted to Convex)
-      // This allows unauthenticated users to send messages without database errors
-      if (!isAuthenticated) {
+      if (!authenticatedUserId) {
+        // While Convex is still resolving auth (or reports an authenticated JWT
+        // without the server-seeded app user), fail closed instead of creating a
+        // local chat that would split an authenticated user's history.
+        if (isConvexAuthLoading || isConvexAuthenticated || !guestUserId) {
+          toast({ title: "Failed to create chat", status: "error" })
+          return
+        }
+
         const localChatId = createLocalChatId()
         const localChat: Chats = {
           id: localChatId,
@@ -287,7 +351,7 @@ export function ChatsProvider({
           created_at: new Date().toISOString(),
           model: normalizedModel,
           system_prompt: systemPrompt || SYSTEM_PROMPT_DEFAULT,
-          user_id: userId,
+          user_id: guestUserId,
           public: false,
           updated_at: new Date().toISOString(),
           project_id: null,
@@ -301,12 +365,12 @@ export function ChatsProvider({
         return localChat
       }
 
-      // For authenticated users, ensure Convex auth is ready before calling mutations
-      // This prevents "Not authenticated" errors due to AuthKit to Convex auth sync delay
-      if (isAuthenticated && !isConvexAuthenticated && !isConvexAuthLoading) {
-        console.warn("createNewChat: Convex auth not ready yet, waiting...")
-        // Wait a bit for auth to sync
-        await new Promise((resolve) => setTimeout(resolve, 500))
+      if (!isConvexAuthenticated) {
+        const authBecameReady = await authReadinessGate.wait()
+        if (!authBecameReady) {
+          toast({ title: "Failed to create chat", status: "error" })
+          return
+        }
       }
 
       const optimisticId = createOptimisticChatId()
@@ -316,10 +380,10 @@ export function ChatsProvider({
         created_at: new Date().toISOString(),
         model: normalizedModel,
         system_prompt: systemPrompt || SYSTEM_PROMPT_DEFAULT,
-        user_id: userId,
+        user_id: authenticatedUserId,
         public: false,
         updated_at: new Date().toISOString(),
-        project_id: null,
+        project_id: projectId ?? null,
         pinned: false,
         pinned_at: null,
       }
@@ -364,7 +428,14 @@ export function ChatsProvider({
         return undefined
       }
     },
-    [createChatMutation, removeOp, isConvexAuthenticated, isConvexAuthLoading]
+    [
+      createChatMutation,
+      authReadinessGate,
+      removeOp,
+      isConvexAuthenticated,
+      isConvexAuthLoading,
+      userId,
+    ]
   )
 
   const resetChats = useCallback(async () => {
@@ -505,39 +576,33 @@ export function ChatsProvider({
   const canLoadMore =
     ENABLE_PAGINATED_SIDEBAR && recentWindow.status === "CanLoadMore"
 
-  // setChats is kept for backward compatibility but now manages optimistic ops
-  const setChats = useCallback((action: React.SetStateAction<Chats[]>) => {
-    // For direct sets, clear optimistic ops and let server be source of truth
-    if (typeof action === "function") {
-      // Can't easily support functional updates with optimistic ops
-      // Just clear ops and let Convex handle it
-      setOptimisticOps([])
-    } else {
-      setOptimisticOps([])
-    }
-  }, [])
-
   return (
-    <ChatsContext.Provider
-      value={{
-        chats,
-        refresh,
-        updateTitle,
-        deleteChat,
-        setChats,
-        createNewChat,
-        resetChats,
-        getChatById,
-        updateChatModel,
-        bumpChat,
-        isLoading,
-        togglePinned,
-        pinnedChats,
-        loadMore,
-        canLoadMore,
-      }}
-    >
-      {children}
-    </ChatsContext.Provider>
+    <>
+      {isConvexAuthenticated ? (
+        <ConvexAuthReadySignal
+          onReady={markConvexAuthReady}
+          onNotReady={markConvexAuthNotReady}
+        />
+      ) : null}
+      <ChatsContext.Provider
+        value={{
+          chats,
+          updateTitle,
+          deleteChat,
+          createNewChat,
+          resetChats,
+          getChatById,
+          updateChatModel,
+          bumpChat,
+          isLoading,
+          togglePinned,
+          pinnedChats,
+          loadMore,
+          canLoadMore,
+        }}
+      >
+        {children}
+      </ChatsContext.Provider>
+    </>
   )
 }

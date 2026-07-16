@@ -1,12 +1,12 @@
 "use client"
 
-import { useBreakpoint } from "@/app/hooks/use-breakpoint"
+import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { FeedbackForm } from "@/components/common/feedback-form"
 import {
   MorphingPopover,
   MorphingPopoverContent,
   MorphingPopoverTrigger,
-} from "@/components/motion-primitives/morphing-popover"
+} from "@/components/ui/morphing-popover"
 import { Icon } from "@/components/ui/icon"
 import { RiQuestionLine } from "@remixicon/react"
 import { motion } from "motion/react"
@@ -46,10 +46,6 @@ export function FeedbackWidget({ authUserId }: FeedbackWidgetProps) {
           className="border-border bg-background text-foreground hover:bg-secondary flex size-6 items-center justify-center rounded-full border shadow-md"
           style={{
             transformOrigin: "bottom right",
-            originX: "right",
-            originY: "bottom",
-            scaleX: 1,
-            scaleY: 1,
           }}
         >
           <span className="sr-only">Help</span>

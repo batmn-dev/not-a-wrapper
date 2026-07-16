@@ -1,5 +1,6 @@
 import { toast } from "@/components/ui/toast"
 import { checkRateLimits } from "@/lib/api"
+import type { CreateNewChatInput } from "@/lib/chat-store/chats/provider"
 import { GUEST_CHAT_STORAGE_KEY } from "@/lib/chat-store/identity"
 import type { Chats } from "@/lib/chat-store/types"
 import { REMAINING_QUERY_ALERT_THRESHOLD } from "@/lib/config"
@@ -9,13 +10,7 @@ type UseChatOperationsProps = {
   chatId: string | null
   selectedModel: string
   systemPrompt: string
-  createNewChat: (
-    userId: string,
-    title?: string,
-    model?: string,
-    isAuthenticated?: boolean,
-    systemPrompt?: string
-  ) => Promise<Chats | undefined>
+  createNewChat: (input: CreateNewChatInput) => Promise<Chats | undefined>
   navigateToChat?: (chatId: string) => void
   setHasDialogAuth: (value: boolean) => void
   allocatedChatIdRef?: { current: string | null }
@@ -73,13 +68,12 @@ export function useChatOperations({
     if (allocatedChatIdRef.current) return allocatedChatIdRef.current
 
     try {
-      const newChat = await createNewChat(
-        userId,
-        input,
-        selectedModel,
-        isAuthenticated,
-        systemPrompt
-      )
+      const newChat = await createNewChat({
+        title: input,
+        model: selectedModel,
+        systemPrompt,
+        ...(isAuthenticated ? {} : { guestUserId: userId }),
+      })
 
       if (!newChat) return null
       allocatedChatIdRef.current = newChat.id

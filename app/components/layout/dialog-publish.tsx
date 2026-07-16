@@ -1,7 +1,6 @@
 "use client"
 
 import { headerActionButtonClassName } from "@/app/components/layout/header-action-button"
-import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import XIcon from "@/components/icons/x"
 import { Button } from "@/components/ui/button"
 import {
@@ -22,6 +21,7 @@ import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
+import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { useChatSession } from "@/lib/chat-store/session/provider"
 import { APP_DOMAIN } from "@/lib/config"
 import {

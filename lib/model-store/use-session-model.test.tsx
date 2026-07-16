@@ -6,7 +6,7 @@ import type { UserProfile } from "@/lib/user/types"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
-import { useModel } from "./use-model"
+import { useSessionModel } from "./use-session-model"
 
 const modelMocks = vi.hoisted(() => ({
   pathname: "/c/chat_123",
@@ -82,8 +82,8 @@ function ModelSurfaces({ isChatLoading = false }: { isChatLoading?: boolean }) {
   }
   // These are intentionally separate hook instances: the first represents the
   // app-shell header and the second the per-chat Turn context.
-  const headerModel = useModel(props)
-  const turnModel = useModel(props)
+  const headerModel = useSessionModel(props)
+  const turnModel = useSessionModel(props)
 
   return (
     <>

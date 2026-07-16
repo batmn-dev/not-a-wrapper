@@ -7,7 +7,7 @@ import {
   MorphingDialogContent,
   MorphingDialogImage,
   MorphingDialogTrigger,
-} from "@/components/motion-primitives/morphing-dialog"
+} from "@/components/ui/morphing-dialog"
 import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
 import {

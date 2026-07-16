@@ -1,6 +1,5 @@
 "use client"
 
-import { useBreakpoint } from "@/app/hooks/use-breakpoint"
 import {
   Dialog,
   DialogContent,
@@ -17,6 +16,7 @@ import {
 } from "@/components/ui/drawer"
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { Icon } from "@/components/ui/icon"
+import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { APP_NAME } from "@/lib/config"
 import { RiInformationLine } from "@remixicon/react"
 import Image from "next/image"

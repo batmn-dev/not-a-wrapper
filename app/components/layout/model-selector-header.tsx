@@ -1,11 +1,11 @@
 "use client"
 
 import { AuthModal } from "@/app/auth/_components/auth-modal"
-import { useModel as useSelectedModel } from "@/app/components/chat/use-model"
 import { ModelSelector } from "@/components/common/model-selector/base"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useChat } from "@/lib/chat-store/chats/use-chat"
 import { useChatSession } from "@/lib/chat-store/session/provider"
+import { useSessionModel } from "@/lib/model-store/use-session-model"
 import { useUser } from "@/lib/user-store/provider"
 import { useState } from "react"
 
@@ -27,7 +27,7 @@ export function ModelSelectorHeader() {
   const isResolvingCurrentChat = !!chatId && isChatLoading
 
   const isAuthenticated = !!user?.id
-  const { selectedModel, handleModelChange } = useSelectedModel({
+  const { selectedModel, handleModelChange } = useSessionModel({
     currentChat: currentChat ?? null,
     user,
     updateChatModel,

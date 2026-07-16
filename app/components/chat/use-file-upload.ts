@@ -5,7 +5,6 @@ import {
   deleteUploadedAttachment,
   FileUploadLimitError,
   uploadStagedFile,
-  type Attachment,
 } from "@/lib/file-handling"
 import { validateFile } from "@/lib/file/validation"
 import type { ConvexReactClient } from "convex/react"
@@ -350,13 +349,4 @@ export const useFilePickerState = ({
     retryAttachment,
     consumeAttachments,
   }
-}
-
-/** @deprecated Turn-time uploading is retained only for older callers. */
-export async function uploadFiles(
-  _convex: ConvexReactClient,
-  _files: File[],
-  _chatId: string
-): Promise<Attachment[] | null> {
-  throw new Error("Files must be staged before Send")
 }

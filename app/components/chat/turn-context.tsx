@@ -5,8 +5,8 @@
  * kind needs at run time: selected model, web-search enablement, and system
  * prompt. See CONTEXT.md "Turn context".
  *
- * Before this module the same inputs were owned in three layers (the useModel
- * hook's logic, Chat's orchestration, and the input's pass-through props) and
+ * Before this module the same inputs were owned in three layers (session model
+ * selection, Chat's orchestration, and the input's pass-through props) and
  * captured in submit-callback closures — so the model shown in the picker and
  * the model a stale closure submitted could diverge, and the `?prompt=`
  * auto-submit could fire before model prefs hydrated and send to the tier
@@ -22,11 +22,11 @@
  *    even an effect-driven turn (the `?prompt=` auto-submit) reads the values
  *    of its own commit, not the previous one.
  */
-import { useModel } from "@/app/components/chat/use-model"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import type { Chats } from "@/lib/chat-store/types"
 import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { useModel as useModelStore } from "@/lib/model-store/provider"
+import { useSessionModel } from "@/lib/model-store/use-session-model"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { resolveWebSearchEnabled } from "@/lib/user-preference-store/web-search"
 import { useUser } from "@/lib/user-store/provider"
@@ -95,7 +95,7 @@ export function TurnContextProvider({
   } = useUserPreferences()
   const { modelPrefsHydrated, isLoading: modelStoreLoading } = useModelStore()
 
-  const { selectedModel, handleModelChange } = useModel({
+  const { selectedModel, handleModelChange } = useSessionModel({
     currentChat,
     user,
     updateChatModel,
