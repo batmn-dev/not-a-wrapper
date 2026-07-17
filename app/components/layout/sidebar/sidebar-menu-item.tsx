@@ -41,11 +41,9 @@ type SidebarMenuItemProps = Omit<
 }
 
 const baseClassName = cn(
-  "menu-item-hoverable group/menu-item relative inline-flex w-[calc(100%-var(--spacing)*3)] items-center rounded-lg bg-transparent text-sm mx-1.5",
-  // Explicit height for consistency with collapsed state (h-9 = 36px)
-  "h-9 pointer-coarse:h-auto",
+  "sidebar-menu-row sidebar-row-content menu-item-hoverable group/menu-item relative inline-flex items-center bg-transparent text-sm",
   // Spacing using CSS variables
-  "gap-(--sidebar-item-gap) px-2.5 py-1.5 pointer-coarse:py-3",
+  "gap-(--sidebar-item-gap)",
   // Native buttons default to cursor: default; sidebar rows should feel clickable.
   "cursor-pointer",
   "disabled:cursor-not-allowed disabled:hover:bg-transparent",
@@ -86,7 +84,7 @@ export const SidebarMenuItem = forwardRef<
   const hasTrailing = Boolean(trailing)
   const resolvedIcon = isActive && activeIcon ? activeIcon : icon
 
-  const content = (
+  const primaryContent = (
     <>
       {/* Icon wrapper for consistent alignment */}
       <div className="flex shrink-0 items-center justify-center">
@@ -95,19 +93,20 @@ export const SidebarMenuItem = forwardRef<
       <div className="flex min-w-0 grow items-center gap-(--sidebar-item-gap)">
         <span className="truncate">{label}</span>
       </div>
-      {trailing && (
-        <div
-          className={cn(
-            "shrink-0 text-[var(--text-tertiary)] opacity-0 group-hover/menu-item:opacity-100",
-            trailingInteractive &&
-              "group-focus-within/menu-item:opacity-100 pointer-coarse:opacity-100"
-          )}
-        >
-          {trailing}
-        </div>
-      )}
     </>
   )
+
+  const trailingContent = trailing ? (
+    <div
+      className={cn(
+        "shrink-0 text-[var(--text-tertiary)] opacity-0 group-hover/menu-item:opacity-100",
+        trailingInteractive &&
+          "group-focus-within/menu-item:opacity-100 pointer-coarse:opacity-100"
+      )}
+    >
+      {trailing}
+    </div>
+  ) : null
 
   const combinedClassName = cn(
     baseClassName,
@@ -116,6 +115,30 @@ export const SidebarMenuItem = forwardRef<
       "bg-sidebar-row text-foreground hover:bg-sidebar-row group-data-[collapsible=icon]:bg-transparent",
     className
   )
+
+  if (href && trailingInteractive) {
+    return (
+      <div
+        className={cn(combinedClassName, "gap-0")}
+        data-active={isActive ? "true" : undefined}
+      >
+        <Link
+          ref={ref as Ref<HTMLAnchorElement>}
+          href={href}
+          onClick={onClick as MouseEventHandler<HTMLAnchorElement> | undefined}
+          className="sidebar-row-primary-control flex h-full min-w-0 grow items-center gap-(--sidebar-item-gap) rounded-lg focus-visible:outline-none"
+          data-testid={testId}
+          data-sidebar-item="true"
+          data-active={isActive ? "true" : undefined}
+          aria-current={isActive ? "page" : undefined}
+          prefetch
+        >
+          {primaryContent}
+        </Link>
+        {trailingContent}
+      </div>
+    )
+  }
 
   const itemElement = href ? (
     <Link
@@ -129,7 +152,8 @@ export const SidebarMenuItem = forwardRef<
       aria-current={isActive ? "page" : undefined}
       prefetch
     >
-      {content}
+      {primaryContent}
+      {trailingContent}
     </Link>
   ) : (
     <button
@@ -142,7 +166,8 @@ export const SidebarMenuItem = forwardRef<
       data-sidebar-item="true"
       data-active={isActive ? "true" : undefined}
     >
-      {content}
+      {primaryContent}
+      {trailingContent}
     </button>
   )
 

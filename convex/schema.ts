@@ -97,6 +97,10 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_pinned", ["userId", "pinned"])
+    // Sidebar grouping needs one recency-ordered source that can include both
+    // project and non-project chats. Keeping projectId out of this index lets
+    // the UI derive either grouping without N+1 project subscriptions.
+    .index("by_user_pinned_updated", ["userId", "pinned", "updatedAt"])
     .index("by_user_updated", ["userId", "updatedAt"])
     // The history drawer's browse mode: pinned + non-pinned non-project chats
     // newest-first. Project chats are hidden from browse mode and must not
@@ -114,6 +118,11 @@ export default defineSchema({
       "updatedAt",
     ])
     .index("by_project", ["projectId"])
+    // One owner-scoped sidebar query reads the five newest chats for every
+    // project. Recency belongs in the index so a project outside the global
+    // chat window still receives a complete preview without a client-side
+    // subscription per project.
+    .index("by_project_updated", ["projectId", "updatedAt"])
     // Title-only full-history search, scoped per user via the userId filter
     // field. Lets history search reach chats outside the bounded sidebar window
     // (docs/adr/0005-bounded-chat-list-window.md).

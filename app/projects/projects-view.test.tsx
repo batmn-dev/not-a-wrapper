@@ -22,9 +22,6 @@ const mocks = vi.hoisted(() => ({
   perUserQuery: { data: undefined, isLoading: true } as PerUserQueryState,
   mutationCalls: [] as Array<{ name: string; args: unknown }>,
   rejectedMutations: new Set<string>(),
-  createNewChat: vi.fn(async ({ projectId }: { projectId?: string }) => ({
-    id: `chat-${projectId}`,
-  })),
   push: vi.fn(),
   replace: vi.fn(),
   searchParams: new URLSearchParams(),
@@ -53,24 +50,6 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mocks.push, replace: mocks.replace }),
   usePathname: () => "/projects",
   useSearchParams: () => mocks.searchParams,
-}))
-vi.mock("@/lib/chat-store/chats/provider", () => ({
-  useChats: () => ({ createNewChat: mocks.createNewChat }),
-}))
-vi.mock("next/link", () => ({
-  default: ({
-    href,
-    prefetch: _prefetch,
-    children,
-    ...props
-  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
-    href: string
-    prefetch?: boolean
-  }) => (
-    <a href={href} {...props}>
-      {children}
-    </a>
-  ),
 }))
 vi.mock("@/components/ui/toast", () => ({ toast: mocks.toast }))
 vi.mock("@/lib/user-preference-store/provider", () => ({
@@ -211,7 +190,6 @@ describe("ProjectsView", () => {
     mocks.mutationCalls = []
     mocks.rejectedMutations.clear()
     mocks.searchParams = new URLSearchParams()
-    mocks.createNewChat.mockResolvedValue({ id: "chat-project" })
   })
 
   afterEach(() => {
@@ -233,68 +211,67 @@ describe("ProjectsView", () => {
     ])
     expect(container.querySelector('[role="rowgroup"]')).toBeTruthy()
 
-    const rows = [...container.querySelectorAll('a[role="row"]')]
-    expect(rows.map((row) => row.getAttribute("href"))).toEqual([
-      "/p/p2",
-      "/p/p1",
-    ])
+    const rows = [
+      ...container.querySelectorAll<HTMLElement>(
+        '[data-project-row="true"]'
+      ),
+    ]
+    expect(rows.map((row) => row.dataset.projectId)).toEqual(["p2", "p1"])
+    expect(rows.every((row) => row.tabIndex === 0)).toBe(true)
     expect(
       container.querySelector('[aria-label="Open project options for Alpha"]')
     ).toBeTruthy()
-    expect(
-      container.querySelector('[aria-label="New chat in Alpha"]')
-    ).toBeTruthy()
+    expect(container.querySelector('[data-project-new-chat="true"]')).toBeNull()
     expect(container.querySelector('[aria-label="Pin Alpha"]')).toBeTruthy()
+    expect(container.querySelector('[data-sort-column]')).toBeNull()
   })
 
-  it("keeps one grid tab stop and moves it with arrows, Home, and End", async () => {
+  it("keeps every row tabbable and traverses cells and rows with arrows", async () => {
     await render()
 
     const rows = [
       ...container.querySelectorAll<HTMLElement>('[data-project-row="true"]'),
     ]
-    const tabbableGridTargets = () => [
+    const tabbableGridTargets = [
       ...container.querySelectorAll<HTMLElement>(
         '[role="grid"] [tabindex="0"]'
       ),
     ]
 
-    expect(tabbableGridTargets()).toEqual([rows[0]])
+    expect(tabbableGridTargets).toEqual(rows)
     rows[0].focus()
     await act(async () => {
       rows[0].dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })
+      )
+    })
+    expect(document.activeElement?.getAttribute("role")).toBe("gridcell")
+    expect(document.activeElement?.textContent).toContain("Beta")
+
+    await act(async () => {
+      document.activeElement?.dispatchEvent(
         new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })
       )
     })
-    expect(document.activeElement).toBe(rows[1])
-    expect(tabbableGridTargets()).toEqual([rows[1]])
+    expect(document.activeElement?.textContent).toContain("Alpha")
 
     await act(async () => {
-      rows[1].dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Home", bubbles: true })
-      )
-    })
-    expect(document.activeElement).toBe(rows[0])
-
-    await act(async () => {
-      rows[0].dispatchEvent(
-        new KeyboardEvent("keydown", { key: "End", bubbles: true })
-      )
-    })
-    expect(document.activeElement).toBe(rows[1])
-
-    await act(async () => {
-      rows[1].dispatchEvent(
+      document.activeElement?.dispatchEvent(
         new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true })
       )
-      rows[0].dispatchEvent(
+      document.activeElement?.dispatchEvent(
         new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true })
       )
     })
-    expect(document.activeElement?.getAttribute("data-sort-column")).toBe(
-      "modified"
-    )
-    expect(tabbableGridTargets()).toEqual([document.activeElement])
+    expect(document.activeElement?.getAttribute("role")).toBe("columnheader")
+    expect(document.activeElement?.textContent?.trim()).toBe("Name")
+
+    await act(async () => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })
+      )
+    })
+    expect(document.activeElement?.textContent).toContain("Beta")
   })
 
   it("navigates focused rows with Enter/Space but not from row actions", async () => {
@@ -315,11 +292,11 @@ describe("ProjectsView", () => {
     expect(mocks.push).toHaveBeenCalledWith("/p/p2")
 
     mocks.push.mockClear()
-    const newChat = firstRow.querySelector<HTMLElement>(
-      '[data-project-new-chat="true"]'
+    const menuTrigger = firstRow.querySelector<HTMLElement>(
+      '[data-project-menu-trigger="true"]'
     )!
     await act(async () => {
-      newChat.dispatchEvent(
+      menuTrigger.dispatchEvent(
         new KeyboardEvent("keydown", {
           key: "Enter",
           bubbles: true,
@@ -342,8 +319,15 @@ describe("ProjectsView", () => {
         new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })
       )
     })
-    expect(document.activeElement?.getAttribute("data-project-new-chat")).toBe(
-      "true"
+    expect(document.activeElement?.getAttribute("role")).toBe("gridcell")
+
+    await act(async () => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })
+      )
+    })
+    expect(document.activeElement).toBe(
+      firstRow.querySelectorAll('[role="gridcell"]')[1]
     )
 
     await act(async () => {
@@ -367,31 +351,19 @@ describe("ProjectsView", () => {
     expect(document.activeElement).toBe(firstRow)
   })
 
-  it("sorts Name and Modified in both directions with aria-sort", async () => {
+  it("renders non-interactive reference headers without sorting affordances", async () => {
     await render()
 
-    const rowNames = () =>
-      [
-        ...container.querySelectorAll<HTMLElement>('[data-project-row="true"]'),
-      ].map((row) => row.dataset.projectId)
-    const nameHeader = container.querySelector<HTMLButtonElement>(
-      '[data-sort-column="name"]'
-    )!
-    const nameColumn = nameHeader.closest('[role="columnheader"]')!
-    const modifiedColumn = container
-      .querySelector('[data-sort-column="modified"]')!
-      .closest('[role="columnheader"]')!
-
-    expect(modifiedColumn.getAttribute("aria-sort")).toBe("descending")
-    expect(nameColumn.getAttribute("aria-sort")).toBe("none")
-
-    await act(async () => void click(nameHeader))
-    expect(rowNames()).toEqual(["p1", "p2"])
-    expect(nameColumn.getAttribute("aria-sort")).toBe("ascending")
-
-    await act(async () => void click(nameHeader))
-    expect(rowNames()).toEqual(["p2", "p1"])
-    expect(nameColumn.getAttribute("aria-sort")).toBe("descending")
+    const headers = [
+      ...container.querySelectorAll<HTMLElement>('[role="columnheader"]'),
+    ]
+    expect(headers.map((header) => header.getAttribute("aria-sort"))).toEqual([
+      null,
+      null,
+      null,
+    ])
+    expect(headers.every((header) => header.tabIndex === -1)).toBe(true)
+    expect(container.querySelector('[data-sort-column]')).toBeNull()
   })
 
   it("does not flash an empty state while the query loads", async () => {
@@ -409,16 +381,53 @@ describe("ProjectsView", () => {
       "#projects-page-search"
     )!
     await act(async () => setInputValue(search, "alp"))
-    expect(container.querySelectorAll('a[role="row"]')).toHaveLength(1)
+    expect(container.querySelectorAll('[data-project-row="true"]')).toHaveLength(
+      1
+    )
     expect(byText("Alpha")).toBeTruthy()
 
     await act(async () => setInputValue(search, "zzz"))
-    expect(container.querySelectorAll('a[role="row"]')).toHaveLength(0)
+    expect(container.querySelectorAll('[data-project-row="true"]')).toHaveLength(
+      0
+    )
     expect(byText("No matching projects")).toBeTruthy()
     expect(byText("Try a different search or tab.")).toBeTruthy()
+    expect(container.querySelector('[data-testid="project-folder-icon"]')).toBeTruthy()
   })
 
-  it("restores tab, search, and sort from the URL", async () => {
+  it("shows the search outline only when keyboard modality led into focus", async () => {
+    await render()
+
+    const search = container.querySelector<HTMLInputElement>(
+      "#projects-page-search"
+    )!
+    await act(async () => {
+      document.dispatchEvent(new Event("pointerdown", { bubbles: true }))
+      search.focus()
+    })
+    expect(search.getAttribute("data-keyboard-focused")).toBeNull()
+
+    await act(async () => {
+      search.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "a", bubbles: true })
+      )
+    })
+    expect(search.getAttribute("data-keyboard-focused")).toBeNull()
+
+    await act(async () => {
+      search.blur()
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Tab", bubbles: true })
+      )
+      search.focus()
+    })
+    expect(search.getAttribute("data-keyboard-focused")).toBe("true")
+
+    await act(async () => search.blur())
+    expect(search.getAttribute("data-keyboard-focused")).toBeNull()
+  })
+
+  it("restores tab and search from the URL while ignoring obsolete sort state", async () => {
     mocks.searchParams = new URLSearchParams("tab=created&q=alp&sort=name-desc")
     await render()
 
@@ -429,12 +438,7 @@ describe("ProjectsView", () => {
     expect(
       container.querySelector<HTMLInputElement>("#projects-page-search")?.value
     ).toBe("alp")
-    expect(
-      container
-        .querySelector('[data-sort-column="name"]')
-        ?.closest('[role="columnheader"]')
-        ?.getAttribute("aria-sort")
-    ).toBe("descending")
+    expect(container.querySelector('[data-sort-column]')).toBeNull()
     expect(
       container
         .querySelector("button[aria-current='page']")
@@ -446,15 +450,21 @@ describe("ProjectsView", () => {
     await render()
 
     await act(async () => void click(byText("Created by you", "button")!))
-    expect(container.querySelectorAll('a[role="row"]')).toHaveLength(2)
+    expect(container.querySelectorAll('[data-project-row="true"]')).toHaveLength(
+      2
+    )
 
     await act(async () => void click(byText("Shared with you", "button")!))
-    expect(container.querySelectorAll('a[role="row"]')).toHaveLength(0)
-    expect(byText("Nothing shared with you")).toBeTruthy()
-    expect(byText("Project sharing isn't available yet.")).toBeTruthy()
+    expect(container.querySelectorAll('[data-project-row="true"]')).toHaveLength(
+      0
+    )
+    expect(byText("No matching projects")).toBeTruthy()
+    expect(byText("Try a different search or tab.")).toBeTruthy()
 
     await act(async () => void click(byText("All", "button")!))
-    expect(container.querySelectorAll('a[role="row"]')).toHaveLength(2)
+    expect(container.querySelectorAll('[data-project-row="true"]')).toHaveLength(
+      2
+    )
   })
 
   it("creates a project through the existing mutation and navigates to it", async () => {
@@ -468,6 +478,8 @@ describe("ProjectsView", () => {
     const nameInput = container.querySelector<HTMLInputElement>(
       'input[placeholder="Project name"]'
     )!
+    expect(nameInput.classList.contains("focus-visible:ring-0")).toBe(true)
+    expect(nameInput.classList.contains("focus-visible:ring-3")).toBe(false)
     await act(async () => setInputValue(nameInput, "My project"))
     await act(async () => {
       nameInput
@@ -482,39 +494,16 @@ describe("ProjectsView", () => {
     expect(mocks.push).toHaveBeenCalledWith("/p/new-project-id")
   })
 
-  it("renames inline through the shared rename mutation", async () => {
+  it("omits the non-reference Rename action from directory menus", async () => {
     await render()
 
-    const firstRow = container.querySelector('a[role="row"]')! // Beta (newest)
-    const renameItem = [
-      ...firstRow.querySelectorAll('[data-menu-item="rename"]'),
-    ][0]
-    await act(async () => void click(renameItem))
-
-    const editor = container.querySelector<HTMLInputElement>(
-      'input[aria-label="Project title"]'
-    )!
-    await act(async () => setInputValue(editor, "Beta renamed"))
-    await act(async () => {
-      editor.dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: "Enter",
-          bubbles: true,
-          cancelable: true,
-        })
-      )
-    })
-
-    expect(mocks.mutationCalls).toContainEqual({
-      name: "projects:updateName",
-      args: { projectId: "p2", name: "Beta renamed" },
-    })
+    expect(container.querySelector('[data-menu-item="rename"]')).toBeNull()
   })
 
   it("deletes only after confirmation via the existing mutation", async () => {
     await render()
 
-    const firstRow = container.querySelector('a[role="row"]')!
+    const firstRow = container.querySelector('[data-project-row="true"]')!
     const deleteItem = firstRow.querySelector('[data-menu-item="delete"]')!
     await act(async () => void click(deleteItem))
     expect(mocks.mutationCalls).toHaveLength(0)
@@ -546,24 +535,20 @@ describe("ProjectsView", () => {
     expect(navigationDefaultAllowed).toBe(false)
   })
 
-  it("creates a new chat through the existing project path without row navigation", async () => {
+  it("clears search without exposing a directory new-chat action", async () => {
     await render()
 
-    const quickAction = container.querySelector(
-      '[aria-label="New chat in Beta"]'
+    const search = container.querySelector<HTMLInputElement>(
+      "#projects-page-search"
     )!
-    let defaultAllowed = true
-    await act(async () => {
-      defaultAllowed = quickAction.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true })
-      )
-      await Promise.resolve()
-    })
-
-    expect(defaultAllowed).toBe(false)
-    expect(mocks.createNewChat).toHaveBeenCalledWith({ projectId: "p2" })
-    expect(mocks.push).toHaveBeenCalledWith("/c/chat-project")
-    expect(mocks.push).not.toHaveBeenCalledWith("/p/p2")
+    await act(async () => setInputValue(search, "beta"))
+    const clear = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Clear search"]'
+    )!
+    expect(clear).toBeTruthy()
+    await act(async () => void click(clear))
+    expect(search.value).toBe("")
+    expect(container.querySelector('[data-project-new-chat="true"]')).toBeNull()
   })
 
   it("pins optimistically, sorts pinned first, and calls the owned mutation", async () => {

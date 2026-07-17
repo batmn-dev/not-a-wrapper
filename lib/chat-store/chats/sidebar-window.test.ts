@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 import type { Chats } from "../types"
-import { applyOptimisticOps, type OptimisticOperation } from "./sidebar-window"
+import {
+  applyOptimisticOps,
+  deriveSidebarLoading,
+  partitionSidebarChats,
+  type OptimisticOperation,
+} from "./sidebar-window"
 
 function makeChat(overrides: Partial<Chats> & Pick<Chats, "id">): Chats {
   return {
@@ -48,5 +53,50 @@ describe("applyOptimisticOps over the bounded window", () => {
     expect(applyOptimisticOps(window, ops).map((c) => c.id)).toEqual([
       "in-window",
     ])
+  })
+})
+
+describe("partitionSidebarChats", () => {
+  it("retains project membership for sidebar composition", () => {
+    const projectChat = makeChat({ id: "project", project_id: "project-1" })
+    const pinnedProjectChat = makeChat({
+      id: "pinned-project",
+      project_id: "project-1",
+      pinned: true,
+      pinned_at: "2026-06-02T00:00:00.000Z",
+    })
+
+    const result = partitionSidebarChats([projectChat, pinnedProjectChat])
+
+    expect(result.nonPinned.map(({ id }) => id)).toEqual(["project"])
+    expect(result.pinned.map(({ id }) => id)).toEqual(["pinned-project"])
+  })
+})
+
+describe("deriveSidebarLoading", () => {
+  it("keeps the paginated sidebar loading until every first-page read is ready", () => {
+    expect(
+      deriveSidebarLoading({
+        isConvexAuthLoading: false,
+        isConvexAuthenticated: true,
+        paginated: true,
+        fullListPending: false,
+        firstPagePending: true,
+        shouldUseLocalChats: false,
+        cachedChatsHydrated: true,
+      })
+    ).toBe(true)
+
+    expect(
+      deriveSidebarLoading({
+        isConvexAuthLoading: false,
+        isConvexAuthenticated: true,
+        paginated: true,
+        fullListPending: false,
+        firstPagePending: false,
+        shouldUseLocalChats: false,
+        cachedChatsHydrated: true,
+      })
+    ).toBe(false)
   })
 })

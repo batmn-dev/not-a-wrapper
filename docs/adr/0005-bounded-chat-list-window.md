@@ -39,14 +39,13 @@ removed; the chat already re-orders at turn start. `chats.updatedAt` now means
 **2. Bound the read; split full-history access onto dedicated reads.**
 
 - **Chat list window** — the sidebar reads a paginated recency window of
-  **non-pinned, non-project** chats (`chats.getRecentWindowForCurrentUser` over a
-  composite `by_user_pinned_project_updated` index, via `usePerUserPaginatedQuery`)
-  plus a small live pinned **non-project** read (`chats.getPinnedForCurrentUser`
-  over the same composite index prefix). Excluding pinned/project at the index
-  level keeps every page full of chats the sidebar actually renders, so
-  pinned/project chats never consume a window slot or pinned subscription. A chat
-  write now invalidates only the window, not the whole collection. (Browse-all in
-  the history drawer uses a separate non-project paginated read,
+  **non-pinned** chats (`chats.getRecentWindowForCurrentUser` over
+  `by_user_pinned_updated`, via `usePerUserPaginatedQuery`) plus a small live
+  pinned read (`chats.getPinnedForCurrentUser` over the same index prefix).
+  Project membership remains in both reads so one source can derive the two
+  sidebar grouping modes. A chat write now invalidates only the window, not the
+  whole collection. (Browse-all in the history drawer uses a separate
+  non-project paginated read,
   `chats.listForCurrentUserPaginated` over `by_user_project_updated`, because
   project chats are hidden while browsing.)
 - **History search** is a server query (`chats.searchByTitle` over a `by_title`
@@ -58,8 +57,14 @@ removed; the chat already re-orders at turn start. `chats.updatedAt` now means
 - **Per-chat access** is `useChat(chatId)`: the in-window chat synchronously, else
   a targeted `chats.getById` read — which also closed a latent deep-link gap (a
   deep-link to an out-of-window chat used to redirect home).
-- **Project chats** come from a dedicated owner-checked `getProjectChatsForCurrentUser`
-  over `by_project`, so a project shows all its chats.
+- **Project pages** get their complete histories from the dedicated
+  owner-checked `getProjectChatsForCurrentUser` over `by_project`. The bounded
+  sidebar window retains recent project chats so the combined Recents list can
+  interleave them. Project-row previews use one additional owner-scoped
+  `getSidebarProjectPreviewsForCurrentUser` subscription: it resolves the
+  caller's projects, then reads five newest chats plus one `hasMore` sentinel
+  per project over `by_project_updated`. A project outside the global recency
+  window therefore still has a complete preview.
 
 `updatedAt` was narrowed to required and the recency indexes added so paginated
 reads never sort null keys to the tail; safe because the DB is disposable
@@ -84,6 +89,14 @@ without full-history search present.
   single activity field; "last message at" is derived from the latest message.
 - Message-content search — a separate, larger index on `messages`; search is
   title-only.
+- One client subscription per project — creates N+1 live subscriptions and
+  makes visual rows own data. The chosen aggregate query keeps one client
+  subscription while performing bounded, indexed server reads for the owned
+  project set.
+- The active route still uses the existing targeted `useChat(chatId)` fallback
+  to resolve project membership. That keeps an active project expanded even
+  when its active chat is older than the five-row preview, without adding a
+  subscription per project.
 
 ## Consequences
 
@@ -92,8 +105,10 @@ without full-history search present.
   `chats` — drops from the whole collection to the window.
 - The optimistic overlay is unchanged in shape: it is an id-keyed overlay applied
   to whatever list a surface holds. On the bounded sidebar, ops targeting an
-  out-of-window chat are **no-ops by design** — the surface that shows that chat
-  (history drawer / project view) reflects it via its own read.
+  out-of-window global chat are **no-ops by design**. Project previews apply the
+  same overlay to their independent five-row lists, so rename, delete, create,
+  and pin operations remain optimistic even when that project chat is outside
+  the global window.
 - `isLoading` from the chats store now means **"first page ready,"** not "all
   chats loaded." The sidebar is the only consumer of the chat list; per-chat
   consumers use `useChat`, which carries its own fallback `isLoading`.

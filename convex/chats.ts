@@ -19,6 +19,7 @@ import {
 // Upper bound on title-search results. The history search UI renders a flat
 // list, so a bounded read is plenty and keeps the search subscription cheap.
 const CHAT_SEARCH_RESULT_LIMIT = 50
+export const SIDEBAR_PROJECT_PREVIEW_LIMIT = 5
 
 /**
  * Get all chats for the current user
@@ -49,11 +50,10 @@ export const getForCurrentUser = maybeAuthQuery({
 })
 
 /**
- * The current user's pinned, non-project chats over the composite sidebar
- * index — a small, live read rendered as its own sidebar section alongside the
- * paginated recency window (ADR-0005). Kept separate so pinned chats stay
- * visible even when they fall outside the bounded window, while project chats
- * stay owned by the project view.
+ * The current user's pinned chats over the composite sidebar index — a small,
+ * live read rendered as its own sidebar section alongside the paginated
+ * recency window (ADR-0005). Project membership is retained so the sidebar can
+ * derive either grouping mode from the same authoritative source.
  */
 type MaybeUserChatQueryCtx = Pick<QueryCtx, "db"> & {
   user: Doc<"users"> | null
@@ -67,9 +67,10 @@ export async function getPinnedForCurrentUserHandler(
 
   return await ctx.db
     .query("chats")
-    .withIndex("by_user_pinned_project_updated", (q) =>
-      q.eq("userId", user._id).eq("pinned", true).eq("projectId", undefined)
+    .withIndex("by_user_pinned_updated", (q) =>
+      q.eq("userId", user._id).eq("pinned", true)
     )
+    .order("desc")
     .collect()
 }
 
@@ -112,30 +113,79 @@ export const listForCurrentUserPaginated = maybeAuthQuery({
 })
 
 /**
- * The bounded sidebar "Chats" window: the current user's non-pinned, non-project
- * chats newest-first. Pinned/project exclusion is done at the index level
- * (`by_user_pinned_project_updated`), not client-side, so each page is full of
- * chats the sidebar actually renders — pinned/project chats never consume a
- * window slot. Pinned chats are read separately (`getPinnedForCurrentUser`);
- * project chats live in the project view (`getProjectChatsForCurrentUser`). See
- * docs/adr/0005-bounded-chat-list-window.md.
+ * The bounded sidebar recency window: all of the current user's non-pinned
+ * chats newest-first. Project membership stays in the result so "In one list"
+ * can interleave every chat and "By project" can derive project previews from
+ * the same window. Pinned chats are read separately
+ * (`getPinnedForCurrentUser`). See docs/adr/0005-bounded-chat-list-window.md.
  */
 export const getRecentWindowForCurrentUser = maybeAuthQuery({
   args: { paginationOpts: paginationOptsValidator },
-  handler: async (ctx, { paginationOpts }) => {
-    const user = ctx.user
-    if (!user) {
-      return { page: [], isDone: true, continueCursor: "" }
-    }
+  handler: async (ctx, { paginationOpts }) =>
+    getRecentWindowForCurrentUserHandler(ctx, paginationOpts),
+})
 
-    return await ctx.db
+export async function getRecentWindowForCurrentUserHandler(
+  ctx: MaybeUserChatQueryCtx,
+  paginationOpts: PaginationOptions
+) {
+  const user = ctx.user
+  if (!user) {
+    return { page: [], isDone: true, continueCursor: "" }
+  }
+
+  return await ctx.db
+    .query("chats")
+    .withIndex("by_user_pinned_updated", (q) =>
+      q.eq("userId", user._id).eq("pinned", false)
+    )
+    .order("desc")
+    .paginate(paginationOpts)
+}
+
+/**
+ * Complete project previews for the current user's sidebar, independent of the
+ * bounded global recency window. The client owns one live subscription; this
+ * handler first resolves the caller's owned projects, then performs bounded,
+ * indexed reads for each project. Returning one extra row provides an exact
+ * `hasMore` signal without shipping full project histories to the sidebar.
+ */
+export async function getSidebarProjectPreviewsForCurrentUserHandler(
+  ctx: MaybeUserChatQueryCtx
+) {
+  const user = ctx.user
+  if (!user) return []
+
+  const projects = await ctx.db
+    .query("projects")
+    .withIndex("by_user", (q) => q.eq("userId", user._id))
+    .collect()
+  const previews: Array<{
+    projectId: Id<"projects">
+    chats: Doc<"chats">[]
+    hasMore: boolean
+  }> = []
+
+  for (const project of projects) {
+    const chats = await ctx.db
       .query("chats")
-      .withIndex("by_user_pinned_project_updated", (q) =>
-        q.eq("userId", user._id).eq("pinned", false).eq("projectId", undefined)
-      )
+      .withIndex("by_project_updated", (q) => q.eq("projectId", project._id))
       .order("desc")
-      .paginate(paginationOpts)
-  },
+      .take(SIDEBAR_PROJECT_PREVIEW_LIMIT + 1)
+
+    previews.push({
+      projectId: project._id,
+      chats: chats.slice(0, SIDEBAR_PROJECT_PREVIEW_LIMIT),
+      hasMore: chats.length > SIDEBAR_PROJECT_PREVIEW_LIMIT,
+    })
+  }
+
+  return previews
+}
+
+export const getSidebarProjectPreviewsForCurrentUser = maybeAuthQuery({
+  args: {},
+  handler: async (ctx) => getSidebarProjectPreviewsForCurrentUserHandler(ctx),
 })
 
 /**

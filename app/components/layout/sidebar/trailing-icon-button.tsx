@@ -40,9 +40,9 @@ export function TrailingIconChip({ children }: { children: ReactNode }) {
 
 /**
  * Standalone pin/unpin quick-action, revealed alongside the options menu so the
- * trailing slot mirrors ChatGPT's pin + options pair. Lives inside the row's
- * single `<Link>`, so it cancels the anchor's navigation (preventDefault) and
- * keeps the click off the row (stopPropagation) before toggling.
+ * trailing slot mirrors ChatGPT's pin + options pair. The shared action rail
+ * renders it as a sibling of the primary link; event cancellation remains a
+ * harmless guard for adapters that also use it inside clickable containers.
  */
 export function SidebarChatPinButton({
   chat,
@@ -60,7 +60,7 @@ export function SidebarChatPinButton({
         render={
           <button
             type="button"
-            className={trailingIconButtonClassName}
+            className={`${trailingIconButtonClassName} sidebar-chat-pin-action`}
             aria-label={chat.pinned ? `Unpin ${title}` : `Pin ${title}`}
             onClick={(e) => {
               e.preventDefault()

@@ -27,12 +27,8 @@ import {
   type ProjectsDirectoryTab,
 } from "./project-filter-tabs"
 import { ProjectSearch } from "./project-search"
-import {
-  ProjectsGrid,
-  type DirectoryProject,
-  type ProjectSortColumn,
-  type ProjectSortDirection,
-} from "./projects-grid"
+import { ProjectsGrid, type DirectoryProject } from "./projects-grid"
+import { ProjectIcon } from "./project-icon"
 
 /**
  * Front-end-only boundary: `shared` has no backend yet (no sharing tables or
@@ -50,41 +46,24 @@ const NO_SHARED_PROJECTS: DirectoryProject[] = []
 type DirectoryViewState = {
   tab: ProjectsDirectoryTab
   query: string
-  sortColumn: ProjectSortColumn
-  sortDirection: ProjectSortDirection
 }
 
 const DEFAULT_DIRECTORY_STATE: DirectoryViewState = {
   tab: "all",
   query: "",
-  sortColumn: "modified",
-  sortDirection: "desc",
 }
 
 const projectNewButtonClassName =
-  "border border-transparent bg-[#0d0d0d] hover:bg-[#2f2f2f] dark:bg-white dark:hover:bg-[#e8e8e8] motion-reduce:transition-none motion-reduce:active:scale-100"
+  "border border-transparent bg-[#0d0d0d] hover:bg-[#2f2f2f] focus-visible:ring-0 focus-visible:outline-[1.5px] focus-visible:outline-offset-[2.5px] focus-visible:outline-foreground focus-visible:[outline-style:solid] dark:bg-white dark:hover:bg-[#e8e8e8] motion-reduce:transition-none motion-reduce:active:scale-100"
 
 function parseDirectoryViewState(searchParams: URLSearchParams) {
   const tabParam = searchParams.get("tab")
   const tab: ProjectsDirectoryTab =
     tabParam === "created" || tabParam === "shared" ? tabParam : "all"
-  const [sortParamColumn, sortParamDirection] = (
-    searchParams.get("sort") ?? ""
-  ).split("-")
-  const sortColumn: ProjectSortColumn =
-    sortParamColumn === "name" || sortParamColumn === "modified"
-      ? sortParamColumn
-      : DEFAULT_DIRECTORY_STATE.sortColumn
-  const sortDirection: ProjectSortDirection =
-    sortParamDirection === "asc" || sortParamDirection === "desc"
-      ? sortParamDirection
-      : DEFAULT_DIRECTORY_STATE.sortDirection
 
   return {
     tab,
     query: searchParams.get("q") ?? "",
-    sortColumn,
-    sortDirection,
   }
 }
 
@@ -107,7 +86,7 @@ function useProjectsDirectory(isPinned: (project: PinnableProject) => boolean) {
     setViewState(parsedUrlState)
   }
 
-  const { tab, query, sortColumn, sortDirection } = viewState
+  const { tab, query } = viewState
 
   const { data: ownedProjects, isLoading: isOwnedLoading } = usePerUserQuery(
     api.projects.getForCurrentUser
@@ -136,17 +115,9 @@ function useProjectsDirectory(isPinned: (project: PinnableProject) => boolean) {
       const pinOrder = Number(Boolean(b.pinned)) - Number(Boolean(a.pinned))
       if (pinOrder !== 0) return pinOrder
 
-      const comparison =
-        sortColumn === "name"
-          ? (a.name || "Untitled Project").localeCompare(
-              b.name || "Untitled Project",
-              undefined,
-              { sensitivity: "base" }
-            )
-          : a._creationTime - b._creationTime
-      return sortDirection === "asc" ? comparison : -comparison
+      return b._creationTime - a._creationTime
     })
-  }, [isPinned, normalizedQuery, sortColumn, sortDirection, tabSource])
+  }, [isPinned, normalizedQuery, tabSource])
 
   const updateUrl = (
     nextState: DirectoryViewState,
@@ -158,18 +129,7 @@ function useProjectsDirectory(isPinned: (project: PinnableProject) => boolean) {
 
     if (nextState.query) nextParams.set("q", nextState.query)
     else nextParams.delete("q")
-
-    if (
-      nextState.sortColumn === DEFAULT_DIRECTORY_STATE.sortColumn &&
-      nextState.sortDirection === DEFAULT_DIRECTORY_STATE.sortDirection
-    ) {
-      nextParams.delete("sort")
-    } else {
-      nextParams.set(
-        "sort",
-        `${nextState.sortColumn}-${nextState.sortDirection}`
-      )
-    }
+    nextParams.delete("sort")
 
     const nextQueryString = nextParams.toString()
     const href = nextQueryString ? `${pathname}?${nextQueryString}` : pathname
@@ -186,26 +146,8 @@ function useProjectsDirectory(isPinned: (project: PinnableProject) => boolean) {
     const nextState = { ...viewState, query: nextQuery }
     setViewState(nextState)
     // Search updates are replace-only so typing does not create one history
-    // entry per character; tab/sort transitions remain back-button navigable.
+    // entry per character; tab transitions remain back-button navigable.
     updateUrl(nextState, "replace")
-  }
-
-  const setSortColumn = (nextColumn: ProjectSortColumn) => {
-    const nextDirection: ProjectSortDirection =
-      nextColumn === sortColumn
-        ? sortDirection === "asc"
-          ? "desc"
-          : "asc"
-        : nextColumn === "modified"
-          ? "desc"
-          : "asc"
-    const nextState = {
-      ...viewState,
-      sortColumn: nextColumn,
-      sortDirection: nextDirection,
-    }
-    setViewState(nextState)
-    updateUrl(nextState, "push")
   }
 
   return {
@@ -213,9 +155,6 @@ function useProjectsDirectory(isPinned: (project: PinnableProject) => boolean) {
     setTab,
     query,
     setQuery,
-    sortColumn,
-    sortDirection,
-    setSortColumn,
     isLoading,
     hasQuery: normalizedQuery.length > 0,
     visibleProjects,
@@ -231,8 +170,9 @@ function DirectoryEmptyState({
 }) {
   return (
     <div className="px-0 py-16 text-center md:px-6">
+      <ProjectIcon empty />
       <p className="text-foreground text-base/6 font-medium">{title}</p>
-      <p className="text-muted-foreground mt-1 text-sm/5">{description}</p>
+      <p className="text-muted-foreground mt-2 text-sm/5">{description}</p>
     </div>
   )
 }
@@ -320,9 +260,6 @@ export function ProjectsView() {
     listContent = (
       <ProjectsGrid
         projects={directory.visibleProjects}
-        sortColumn={directory.sortColumn}
-        sortDirection={directory.sortDirection}
-        onSort={directory.setSortColumn}
         onTogglePinned={projectPinning.togglePinned}
         isPinPending={projectPinning.isPinPending}
       />
@@ -337,8 +274,8 @@ export function ProjectsView() {
   } else if (directory.tab === "shared") {
     listContent = (
       <DirectoryEmptyState
-        title="Nothing shared with you"
-        description="Project sharing isn't available yet."
+        title="No matching projects"
+        description="Try a different search or tab."
       />
     )
   } else {

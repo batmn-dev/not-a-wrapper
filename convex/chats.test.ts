@@ -3,6 +3,8 @@ import type { Doc, Id } from "./_generated/dataModel"
 import type { MutationCtx } from "./_generated/server"
 import {
   getPinnedForCurrentUserHandler,
+  getRecentWindowForCurrentUserHandler,
+  getSidebarProjectPreviewsForCurrentUserHandler,
   listForCurrentUserPaginatedHandler,
   markChatReadForOwner,
   projectChatForReader,
@@ -39,6 +41,15 @@ function createChat(
     pinnedAt: 1,
     updatedAt: 1,
     ...overrides,
+  }
+}
+
+function createProject(id: string, userId: Id<"users">): Doc<"projects"> {
+  return {
+    _id: asId<"projects">(id),
+    _creationTime: 1,
+    userId,
+    name: id,
   }
 }
 
@@ -102,7 +113,7 @@ function createCtx({
 }
 
 describe("getPinnedForCurrentUserHandler", () => {
-  it("reads pinned non-project chats through the sidebar composite index", async () => {
+  it("reads pinned project and non-project chats through the sidebar index", async () => {
     const user = createUser("user-1")
     const otherUser = createUser("user-2")
     const indexNames: string[] = []
@@ -132,8 +143,8 @@ describe("getPinnedForCurrentUserHandler", () => {
       })
     )
 
-    expect(indexNames).toEqual(["by_user_pinned_project_updated"])
-    expect(result.map((chat) => chat._id)).toEqual(["personal"])
+    expect(indexNames).toEqual(["by_user_pinned_updated"])
+    expect(result.map((chat) => chat._id)).toEqual(["personal", "project"])
   })
 
   it("returns an empty list without subscribing when signed out", async () => {
@@ -141,6 +152,165 @@ describe("getPinnedForCurrentUserHandler", () => {
 
     await expect(
       getPinnedForCurrentUserHandler(createCtx({ user: null, indexNames }))
+    ).resolves.toEqual([])
+    expect(indexNames).toEqual([])
+  })
+})
+
+describe("getRecentWindowForCurrentUserHandler", () => {
+  it("paginates project and non-project chats in one recency window", async () => {
+    const user = createUser("user-1")
+    const indexNames: string[] = []
+
+    const result = await getRecentWindowForCurrentUserHandler(
+      createCtx({
+        user,
+        indexNames,
+        chats: [
+          createChat({
+            _id: asId<"chats">("personal"),
+            userId: user._id,
+            pinned: false,
+            updatedAt: 1,
+          }),
+          createChat({
+            _id: asId<"chats">("project"),
+            userId: user._id,
+            pinned: false,
+            projectId: asId<"projects">("project-1"),
+            updatedAt: 2,
+          }),
+          createChat({
+            _id: asId<"chats">("pinned"),
+            userId: user._id,
+            pinned: true,
+            updatedAt: 3,
+          }),
+        ],
+      }),
+      { numItems: 10, cursor: null }
+    )
+
+    expect(indexNames).toEqual(["by_user_pinned_updated"])
+    expect(result.page.map((chat) => chat._id)).toEqual(["project", "personal"])
+  })
+})
+
+describe("getSidebarProjectPreviewsForCurrentUserHandler", () => {
+  function createPreviewCtx({
+    user,
+    projects,
+    chats,
+    indexNames,
+  }: {
+    user: Doc<"users"> | null
+    projects: Doc<"projects">[]
+    chats: Doc<"chats">[]
+    indexNames: string[]
+  }): Parameters<typeof getSidebarProjectPreviewsForCurrentUserHandler>[0] {
+    return {
+      user,
+      db: {
+        query: (tableName: "projects" | "chats") => ({
+          withIndex: (
+            indexName: string,
+            buildQuery: (query: QueryBuilder) => unknown
+          ) => {
+            indexNames.push(indexName)
+            const filters = new Map<string, unknown>()
+            const query: QueryBuilder = {
+              eq: (fieldName, value) => {
+                filters.set(fieldName, value)
+                return query
+              },
+            }
+            buildQuery(query)
+
+            const records = tableName === "projects" ? projects : chats
+            const results = records.filter((record) => {
+              const values = record as unknown as Record<string, unknown>
+              return [...filters].every(
+                ([fieldName, value]) => values[fieldName] === value
+              )
+            })
+            const resultApi = {
+              collect: async () => results,
+              order: (direction: "asc" | "desc") => {
+                results.sort((a, b) => {
+                  const aTime =
+                    "updatedAt" in a ? (a.updatedAt as number) : a._creationTime
+                  const bTime =
+                    "updatedAt" in b ? (b.updatedAt as number) : b._creationTime
+                  return direction === "desc" ? bTime - aTime : aTime - bTime
+                })
+                return resultApi
+              },
+              take: async (count: number) => results.slice(0, count),
+            }
+            return resultApi
+          },
+        }),
+      },
+    } as unknown as Parameters<
+      typeof getSidebarProjectPreviewsForCurrentUserHandler
+    >[0]
+  }
+
+  it("returns five newest chats and an exact hasMore flag per owned project", async () => {
+    const user = createUser("user-1")
+    const otherUser = createUser("user-2")
+    const alpha = createProject("alpha", user._id)
+    const empty = createProject("empty", user._id)
+    const foreign = createProject("foreign", otherUser._id)
+    const indexNames: string[] = []
+    const chats = Array.from({ length: 6 }, (_, index) =>
+      createChat({
+        _id: asId<"chats">(`alpha-${index}`),
+        userId: user._id,
+        projectId: alpha._id,
+        updatedAt: index + 1,
+      })
+    )
+
+    const result = await getSidebarProjectPreviewsForCurrentUserHandler(
+      createPreviewCtx({
+        user,
+        projects: [alpha, empty, foreign],
+        chats,
+        indexNames,
+      })
+    )
+
+    expect(indexNames).toEqual([
+      "by_user",
+      "by_project_updated",
+      "by_project_updated",
+    ])
+    expect(result).toHaveLength(2)
+    expect(result[0]?.projectId).toBe(alpha._id)
+    expect(result[0]?.chats.map((chat) => chat.updatedAt)).toEqual([
+      6, 5, 4, 3, 2,
+    ])
+    expect(result[0]?.hasMore).toBe(true)
+    expect(result[1]).toMatchObject({
+      projectId: empty._id,
+      chats: [],
+      hasMore: false,
+    })
+  })
+
+  it("does not touch project or chat indexes while signed out", async () => {
+    const indexNames: string[] = []
+
+    await expect(
+      getSidebarProjectPreviewsForCurrentUserHandler(
+        createPreviewCtx({
+          user: null,
+          projects: [],
+          chats: [],
+          indexNames,
+        })
+      )
     ).resolves.toEqual([])
     expect(indexNames).toEqual([])
   })

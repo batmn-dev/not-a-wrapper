@@ -14,10 +14,9 @@ type SidebarChatStatusIndicatorProps = {
 }
 
 /**
- * The leading-slot indicator for a sidebar chat row (ChatGPT's dynamic slot).
- * Renders nothing when `idle` so the row's title reclaims the full width — the
- * caller can drop this straight into the title flex and rely on `gap` only
- * showing up when an indicator is present.
+ * Status content for the shared sidebar row end-slot. Renders nothing when
+ * `idle`; the end-slot owns placement and width so status cannot drift away
+ * from the action columns.
  *
  * The slot is a fixed 16px square (ChatGPT sizes it to `icon-sm`) so the title
  * baseline never shifts as the indicator swaps between a ring and a dot.

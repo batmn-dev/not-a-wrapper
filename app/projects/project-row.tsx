@@ -1,16 +1,11 @@
 "use client"
 
 import { ProjectActionsMenu } from "@/app/components/projects/project-actions-menu"
-import { useRenameProject } from "@/app/components/projects/use-rename-project"
 import { Icon } from "@/components/ui/icon"
-import { InlineRenameInput } from "@/components/ui/inline-rename-input"
-import { useInlineRename } from "@/hooks/use-inline-rename"
-import { useChats } from "@/lib/chat-store/chats/provider"
 import { cn } from "@/lib/utils"
-import { RiAddLine, RiMoreFill, RiPushpin2Fill } from "@remixicon/react"
-import Link from "next/link"
+import { RiMoreFill, RiPushpin2Fill } from "@remixicon/react"
 import { useRouter } from "next/navigation"
-import { useRef, useState, type KeyboardEvent } from "react"
+import { useState, type KeyboardEvent } from "react"
 import { formatModifiedDate } from "./format-modified-date"
 import { ProjectIcon } from "./project-icon"
 import type { DirectoryProject } from "./projects-grid"
@@ -36,37 +31,22 @@ const rowShellClassName = cn(
 
 type ProjectRowProps = {
   project: DirectoryProject
-  tabIndex: 0 | -1
-  onRowFocus: () => void
   onTogglePinned: () => void
   isPinPending: boolean
 }
 
 /**
- * One directory row: the whole resting row is the project's `/p/[projectId]`
- * link (the app's single-anchor recipe), with the icon tile, name, compact
- * modified date, and the hover/focus-revealed actions menu nested inside.
- * Rename swaps the anchor for an inline editor, sharing `useInlineRename` and
- * the rename mutation path with the sidebar row.
+ * One directory row: the selectable grid row navigates to `/p/[projectId]`
+ * and contains the icon tile, name, compact modified date, and the
+ * hover/focus-revealed actions menu.
  */
 export function ProjectRow({
   project,
-  tabIndex,
-  onRowFocus,
   onTogglePinned,
   isPinPending,
 }: ProjectRowProps) {
   const router = useRouter()
-  const { createNewChat } = useChats()
-  const renameProject = useRenameProject()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [isCreatingChat, setIsCreatingChat] = useState(false)
-  const menuTriggerRef = useRef<HTMLButtonElement | null>(null)
-
-  const { isEditing, start, containerRef, inputProps, onContainerClick } =
-    useInlineRename(project.name || "", (next) =>
-      renameProject(project._id, next)
-    )
 
   const displayName = project.name || "Untitled Project"
   const modifiedLabel = formatModifiedDate(project._creationTime)
@@ -80,17 +60,6 @@ export function ProjectRow({
     navigateToProject()
   }
 
-  const handleCreateChat = async () => {
-    if (isCreatingChat) return
-    setIsCreatingChat(true)
-    try {
-      const newChat = await createNewChat({ projectId: project._id })
-      if (newChat) router.push(`/c/${newChat.id}`)
-    } finally {
-      setIsCreatingChat(false)
-    }
-  }
-
   const nameCell = (
     <div
       role="gridcell"
@@ -100,23 +69,15 @@ export function ProjectRow({
       className="relative z-10 flex min-w-0 items-center gap-3 text-start"
     >
       <ProjectIcon />
-      {isEditing ? (
-        <InlineRenameInput
-          {...inputProps}
-          aria-label="Project title"
-          className="text-foreground w-full text-sm/[18px]"
-        />
-      ) : (
-        <div className="flex min-w-0 flex-col">
-          <div className="text-foreground flex min-w-0 items-center gap-2 text-sm/[18px]">
-            <span className="min-w-0 truncate">{displayName}</span>
-          </div>
-          {/* Mobile-only stacked date (12/16, secondary). */}
-          <div className="text-muted-foreground mt-1 truncate text-xs/4 sm:hidden">
-            {modifiedLabel}
-          </div>
+      <div className="flex min-w-0 flex-col">
+        <div className="text-foreground flex min-w-0 items-center gap-2 text-sm/[18px]">
+          <span className="min-w-0 truncate">{displayName}</span>
         </div>
-      )}
+        {/* Mobile-only stacked date (12/16, secondary). */}
+        <div className="text-muted-foreground mt-1 truncate text-xs/4 sm:hidden">
+          {modifiedLabel}
+        </div>
+      </div>
     </div>
   )
 
@@ -161,7 +122,7 @@ export function ProjectRow({
           data-testid="project-row-actions"
           data-menu-open={isMenuOpen || undefined}
           className={cn(
-            "absolute inset-y-0 end-0 flex w-[78px] items-center justify-end gap-1.5 transition-opacity duration-150 motion-reduce:transition-none",
+            "absolute inset-y-0 end-0 flex size-9 items-center justify-end transition-opacity duration-150 motion-reduce:transition-none",
             "pointer-events-none opacity-0",
             "group-hover/project-row:pointer-events-auto group-hover/project-row:opacity-100",
             "group-focus-within/project-row:pointer-events-auto group-focus-within/project-row:opacity-100",
@@ -170,46 +131,17 @@ export function ProjectRow({
             isMenuOpen && "pointer-events-auto opacity-100"
           )}
         >
-          <button
-            type="button"
-            tabIndex={-1}
-            data-project-row-action="true"
-            data-project-new-chat="true"
-            aria-label={`New chat in ${displayName}`}
-            disabled={isCreatingChat}
-            aria-busy={isCreatingChat || undefined}
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              void handleCreateChat()
-            }}
-            className="hover:bg-[var(--projects-control-fill)] data-[creating=true]:bg-[var(--projects-control-fill)] focus-visible:ring-focus-ring flex size-9 min-h-9 items-center justify-center rounded-sm text-[var(--text-tertiary)] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60 motion-reduce:transition-none"
-            data-creating={isCreatingChat || undefined}
-          >
-            <Icon icon={RiAddLine} slotSize={20} />
-          </button>
           <ProjectActionsMenu
             project={project}
-            onStartEditing={start}
             onTogglePinned={onTogglePinned}
             isPinned={Boolean(project.pinned)}
             isPinPending={isPinPending}
-            onMenuOpenChange={(open) => {
-              setIsMenuOpen(open)
-              if (!open) {
-                requestAnimationFrame(() => {
-                  menuTriggerRef.current
-                    ?.closest<HTMLElement>('[data-project-row="true"]')
-                    ?.focus()
-                })
-              }
-            }}
+            onMenuOpenChange={setIsMenuOpen}
             triggerAriaLabel={`Open project options for ${displayName}`}
             contentAlign="end"
             presentation="directory"
             trigger={
               <button
-                ref={menuTriggerRef}
                 type="button"
                 tabIndex={-1}
                 data-project-row-action="true"
@@ -217,13 +149,11 @@ export function ProjectRow({
                 data-page-table-grid-focus-target="true"
                 data-page-table-row-actions-focus-target="true"
                 aria-label={`Open project options for ${displayName}`}
-                // Nested inside the row <Link>: cancel the anchor's navigation
-                // and keep the click off the row before the menu toggles.
                 onClick={(event) => {
                   event.preventDefault()
                   event.stopPropagation()
                 }}
-                className="hover:bg-[var(--projects-control-fill)] data-popup-open:bg-[var(--projects-control-fill)] focus-visible:ring-focus-ring flex size-9 min-h-9 items-center justify-center rounded-sm text-[var(--text-tertiary)] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-offset-2 motion-reduce:transition-none"
+                className="hover:bg-[var(--projects-control-fill)] data-popup-open:bg-[var(--projects-control-fill)] flex size-9 min-h-9 items-center justify-center rounded-sm text-[var(--text-tertiary)] transition-colors outline-none focus-visible:outline-[1.5px] focus-visible:outline-offset-[2.5px] focus-visible:outline-foreground focus-visible:[outline-style:solid] motion-reduce:transition-none"
               >
                 <Icon icon={RiMoreFill} slotSize={20} />
               </button>
@@ -234,39 +164,15 @@ export function ProjectRow({
     </div>
   )
 
-  // Rename mode keeps a plain container (click-outside commits; no navigation).
-  if (isEditing) {
-    return (
-      <div
-        role="row"
-        tabIndex={-1}
-        data-project-row="true"
-        data-project-id={project._id}
-        ref={containerRef}
-        onClick={onContainerClick}
-        className={cn(rowShellClassName, "z-[1] before:opacity-100")}
-      >
-        {nameCell}
-        {modifiedCell}
-        {actionsCell}
-      </div>
-    )
-  }
-
   return (
-    <Link
+    <div
       role="row"
-      tabIndex={tabIndex}
+      tabIndex={0}
       data-project-row="true"
       data-project-id={project._id}
       data-page-table-selectable-row="true"
       aria-selected="false"
-      href={`/p/${project._id}`}
-      prefetch
-      draggable={false}
-      onFocus={(event) => {
-        if (event.target === event.currentTarget) onRowFocus()
-      }}
+      onClick={navigateToProject}
       onKeyDown={handleRowKeyDown}
       className={cn(
         rowShellClassName,
@@ -276,6 +182,6 @@ export function ProjectRow({
       {nameCell}
       {modifiedCell}
       {actionsCell}
-    </Link>
+    </div>
   )
 }
