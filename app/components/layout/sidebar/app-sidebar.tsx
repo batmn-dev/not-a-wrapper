@@ -270,7 +270,6 @@ function useAppSidebarData() {
   const currentChatId = params.chatId
   const isLoggedIn = !!user
   const isNewChatActive = pathname === "/"
-
   const nonPinnedChats = useMemo(
     () => chats.filter((chat) => !chat.pinned && !chat.project_id),
     [chats]
@@ -454,6 +453,8 @@ function SidebarExpandedNav({
                   items={data.nonPinnedChats}
                   currentChatId={data.currentChatId}
                   storageKey="sidebar-section-your-chats"
+                  showHeaderActions
+                  onNewChat={onMobileClose}
                 />
               )}
             </div>
