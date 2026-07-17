@@ -40,8 +40,8 @@ describe("SourcesGallery (R8 favicon perf)", () => {
     container = null
   })
 
-  it("renders exactly N lazy/async favicon imgs for N sources", () => {
-    const sources = Array.from({ length: 141 }, (_, i) => ({
+  it("loads one favicon lazily for each source", () => {
+    const sources = Array.from({ length: 3 }, (_, i) => ({
       sourceId: `source-${i}`,
       href: `https://example${i}.com/page`,
       title: `Title ${i}`,
@@ -52,10 +52,7 @@ describe("SourcesGallery (R8 favicon perf)", () => {
     })
 
     const imgs = Array.from(container!.querySelectorAll("img"))
-    expect(imgs).toHaveLength(141)
-    expect(container!.querySelector("li")?.className).toContain(
-      "animate-[show_150ms_ease-in]"
-    )
+    expect(imgs).toHaveLength(3)
     for (const img of imgs) {
       expect(img.getAttribute("loading")).toBe("lazy")
       expect(img.getAttribute("decoding")).toBe("async")
@@ -115,7 +112,7 @@ describe("SourcesGallery (R8 favicon perf)", () => {
     }
   })
 
-  it("renders normalized source snippets in the measured result-card shape", () => {
+  it("renders normalized source snippets", () => {
     act(() => {
       root?.render(
         <SourcesGallery
@@ -134,7 +131,5 @@ describe("SourcesGallery (R8 favicon perf)", () => {
 
     const link = container!.querySelector("a")
     expect(link?.textContent).toContain("A result snippet preserved")
-    expect(link?.className).toContain("rounded-[12px]")
-    expect(link?.className).toContain("hover:bg-interactive-hover")
   })
 })

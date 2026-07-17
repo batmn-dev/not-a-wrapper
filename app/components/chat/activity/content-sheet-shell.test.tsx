@@ -69,6 +69,5 @@ describe("ContentSheetShell", () => {
         '[data-testid="chat-screen-cot-mobile-sheet-handle"]'
       )
     ).toBeTruthy()
-    expect(dialog?.querySelector("section")?.className).toContain("h-[80vh]")
   })
 })

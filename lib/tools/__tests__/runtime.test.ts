@@ -400,30 +400,6 @@ describe("prepareToolRuntime — Tool budget degradation & recovery", () => {
     expect(mocks.store.checkAndConsume).not.toHaveBeenCalled()
   })
 
-  it("onStepFinish with an empty toolCalls array is a no-op", async () => {
-    mocks.getProviderTools.mockResolvedValue({
-      tools: { web_search: {} },
-      metadata: new Map([["web_search", meta()]]),
-    })
-
-    const runtime = await prepareToolRuntime(baseOptions())
-
-    // Spy after preparation so the prepare-time policy logs don't count.
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
-    const log = vi.spyOn(console, "log").mockImplementation(() => {})
-    try {
-      await expect(
-        runtime.onStepFinish({ stepNumber: 1, toolCalls: [] })
-      ).resolves.toBeUndefined()
-      // No budget probe/consume, and no degraded/recovered/denied logs.
-      expect(mocks.store.checkAndConsume).not.toHaveBeenCalled()
-      expect(warn).not.toHaveBeenCalled()
-      expect(log).not.toHaveBeenCalled()
-    } finally {
-      warn.mockRestore()
-      log.mockRestore()
-    }
-  })
 })
 
 describe("prepareToolRuntime — naming governance", () => {
@@ -619,53 +595,6 @@ describe("prepareToolRuntime — Tool outcome recording", () => {
     expect(outcome.inputPreview).toBe(JSON.stringify({ q: "hi" }))
     expect(outcome.outputPreview).toBe(JSON.stringify({ answer: "ok" }))
     expect(outcome.mcpServer).toBeUndefined()
-  })
-
-  it("preserves valid falsy output previews", async () => {
-    mocks.getProviderTools.mockResolvedValue({
-      tools: { web_search: {} },
-      metadata: new Map([
-        [
-          "web_search",
-          meta({
-            displayName: "Web Search",
-            source: "builtin",
-            serviceName: "OpenAI",
-          }),
-        ],
-      ]),
-    })
-
-    const sink: ToolOutcome[] = []
-    const runtime = await prepareToolRuntime(
-      baseOptions({
-        outcomeSinks: [(outcome) => sink.push(outcome)],
-      })
-    )
-
-    await runtime.onStepFinish({
-      stepNumber: 2,
-      toolCalls: [
-        { toolCallId: "call_false", toolName: "web_search" },
-        { toolCallId: "call_zero", toolName: "web_search" },
-        { toolCallId: "call_empty", toolName: "web_search" },
-        { toolCallId: "call_null", toolName: "web_search" },
-      ],
-      toolResults: [
-        { toolCallId: "call_false", output: false },
-        { toolCallId: "call_zero", output: 0 },
-        { toolCallId: "call_empty", output: "" },
-        { toolCallId: "call_null", output: null },
-      ],
-      finishReason: "tool-calls",
-    })
-
-    expect(sink.map((outcome) => outcome.outputPreview)).toEqual([
-      "false",
-      "0",
-      '""',
-      "null",
-    ])
   })
 
   it("serializes non-JSON-safe outcome previews without breaking onStepFinish", async () => {

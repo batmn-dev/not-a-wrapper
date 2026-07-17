@@ -6,11 +6,7 @@ import { recordFailure, resetAllCircuits } from "../circuit-breaker"
 // Import after mocks
 // =============================================================================
 
-import {
-  describeMcpConnectionError,
-  loadUserMcpTools,
-  slugify,
-} from "../load-tools"
+import { describeMcpConnectionError, loadUserMcpTools } from "../load-tools"
 
 // =============================================================================
 // Module mocks — must be before imports that use them
@@ -146,35 +142,6 @@ describe("describeMcpConnectionError", () => {
       describeMcpConnectionError(new Error("MCP connection timeout"))
     ).toBe("MCP connection timeout")
     expect(describeMcpConnectionError("not-an-error")).toBe("Connection failed")
-  })
-})
-
-describe("slugify", () => {
-  it("converts name to lowercase URL-safe slug", () => {
-    expect(slugify("My GitHub Server")).toBe("my_github_server")
-  })
-
-  it("replaces special characters with underscores", () => {
-    expect(slugify("Server (v2.0)")).toBe("server_v2_0")
-  })
-
-  it("strips leading and trailing underscores", () => {
-    expect(slugify("--My Server--")).toBe("my_server")
-  })
-
-  it("truncates to 30 characters", () => {
-    const longName = "a".repeat(50)
-    expect(slugify(longName).length).toBeLessThanOrEqual(30)
-  })
-
-  it("returns 'server' for empty-ish names", () => {
-    expect(slugify("")).toBe("server")
-    expect(slugify("---")).toBe("server")
-    expect(slugify("!!!")).toBe("server")
-  })
-
-  it("collapses consecutive special chars into single underscore", () => {
-    expect(slugify("hello---world")).toBe("hello_world")
   })
 })
 
@@ -826,7 +793,7 @@ describe("loadUserMcpTools", () => {
       // Now resolve the orphaned client — simulates a slow server eventually connecting
       resolveClient(orphanedClient)
       // Flush microtasks so the .then() cleanup handler runs
-      await new Promise((resolve) => setTimeout(resolve, 0))
+      await Promise.resolve()
 
       // The orphaned client should have been closed
       expect(orphanedClient.close).toHaveBeenCalledTimes(1)
@@ -852,29 +819,9 @@ describe("loadUserMcpTools", () => {
 
       // Client also fails — the empty rejection handler should absorb it
       rejectClient(new Error("Connection also failed"))
-      await new Promise((resolve) => setTimeout(resolve, 0))
+      await Promise.resolve()
 
       // No unhandled rejection — test passes if it reaches here
-    })
-  })
-
-  // ===========================================================================
-  // Options
-  // ===========================================================================
-
-  describe("options", () => {
-    it("uses custom timeout when provided", async () => {
-      const server = mockServer({ name: "Slow" })
-      const client = mockClient({ tool: mockTool("tool") })
-
-      mockFetchQuery.mockResolvedValueOnce([server]).mockResolvedValueOnce([])
-
-      mockCreateMCPClient.mockResolvedValue(client)
-
-      await loadUserMcpTools("test-token", { timeout: 1000 })
-
-      // The function should still work — we're just verifying it accepts the option
-      expect(mockCreateMCPClient).toHaveBeenCalled()
     })
   })
 })

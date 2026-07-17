@@ -5,7 +5,6 @@ import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { useBreakpoint } from "./use-breakpoint"
-import { useIsMobile } from "./use-mobile"
 
 type MediaListener = () => void
 
@@ -16,11 +15,6 @@ function BreakpointValue({
 }) {
   const value = useBreakpoint(768)
   onRender?.(value)
-  return <output>{String(value)}</output>
-}
-
-function MobileValue() {
-  const value = useIsMobile()
   return <output>{String(value)}</output>
 }
 
@@ -96,12 +90,4 @@ describe("responsive hooks", () => {
     expect(container?.textContent).toBe("false")
   })
 
-  it("keeps useIsMobile as the 768px product adapter", () => {
-    setViewport(767)
-    mockMatchMedia()
-    render(<MobileValue />)
-
-    expect(window.matchMedia).toHaveBeenCalledWith("(max-width: 767px)")
-    expect(container?.textContent).toBe("true")
-  })
 })

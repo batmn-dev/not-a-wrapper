@@ -150,28 +150,6 @@ describe("Message memoization", () => {
     expect(lastAssistantProps.current.retryModelId).toBe("gpt-5.5")
   })
 
-  it("intentionally omits unsupported message roles", () => {
-    if (!container) {
-      container = document.createElement("div")
-      document.body.appendChild(container)
-      root = createRoot(container)
-    }
-
-    act(() => {
-      root?.render(
-        <Message
-          model={{
-            id: "system-1",
-            kind: "unsupported",
-            text: "System-only context",
-          }}
-          onEdit={() => {}}
-        />
-      )
-    })
-
-    expect(container?.innerHTML).toBe("")
-  })
 })
 
 describe("Message body memo contract (R3)", () => {

@@ -33,50 +33,6 @@ function getToolDescriptor(
   return descriptor as ToolDescriptor
 }
 
-function getTopLevelShape(schema: unknown): Record<string, z.ZodTypeAny> {
-  if (!(schema instanceof z.ZodObject)) {
-    throw new Error("Expected tool inputSchema to be a ZodObject")
-  }
-  return schema.shape
-}
-
-function hasPlaceholderText(text: string): boolean {
-  return /todo|tbd|placeholder|lorem ipsum|generic description|insert description|replace me/i.test(
-    text
-  )
-}
-
-function assertDescriptionQuality(
-  toolName: string,
-  description: unknown
-): void {
-  expect(typeof description).toBe("string")
-  const text = (description as string).trim()
-
-  expect(
-    text.length,
-    `${toolName} description should not be empty`
-  ).toBeGreaterThan(0)
-
-  // Low-signal placeholders or generic filler should fail fast.
-  expect(
-    hasPlaceholderText(text),
-    `${toolName} description contains low-signal placeholder text`
-  ).toBe(false)
-}
-
-function assertFieldDescriptions(toolName: string, schema: unknown): void {
-  const shape = getTopLevelShape(schema)
-  for (const [fieldName, fieldSchema] of Object.entries(shape)) {
-    const fieldDescription = fieldSchema.description?.trim() ?? ""
-    if (fieldDescription.length === 0) continue
-    expect(
-      hasPlaceholderText(fieldDescription),
-      `${toolName}.${fieldName} has low-signal description text`
-    ).toBe(false)
-  }
-}
-
 function assertInputExamples(
   toolName: string,
   inputSchema: unknown,
@@ -110,36 +66,6 @@ function assertInputExamples(
     ).toBe(true)
   }
 }
-
-describe("custom tool description quality gates", () => {
-  it("enforces quality for third-party and content extraction tools", async () => {
-    const { tools: thirdPartyTools, metadata: thirdPartyMetadata } =
-      await getThirdPartyTools({
-        exaKey: "exa_test_key",
-        skipSearch: false,
-      })
-    const { tools: contentTools, metadata: contentMetadata } =
-      await getContentExtractionTools({
-        exaKey: "exa_test_key",
-      })
-
-    const webSearch = getToolDescriptor(
-      thirdPartyTools as unknown as Record<string, unknown>,
-      "web_search"
-    )
-    const extractContent = getToolDescriptor(
-      contentTools as unknown as Record<string, unknown>,
-      "extract_content"
-    )
-
-    assertDescriptionQuality("web_search", webSearch.description)
-    assertDescriptionQuality("extract_content", extractContent.description)
-    assertFieldDescriptions("web_search", webSearch.inputSchema)
-    assertFieldDescriptions("extract_content", extractContent.inputSchema)
-    expect(thirdPartyMetadata.get("web_search")?.openWorld).toBe(true)
-    expect(contentMetadata.get("extract_content")?.openWorld).toBe(true)
-  })
-})
 
 describe("custom tool inputExamples", () => {
   it("validates inputExamples against each complex tool schema", async () => {

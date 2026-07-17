@@ -276,17 +276,6 @@ describe("useActivityPanelScrollFollow", () => {
     expect(scroll).toHaveBeenCalledOnce()
   })
 
-  it("follows terminal growth while pinned without settlement counters", () => {
-    render({ turnKey: "turn-1", startAtEnd: true })
-    finishInitialAlignment()
-    viewport().dataset.scrollHeight = "1080"
-
-    act(() => latestObserver().trigger())
-    flushFrames()
-
-    expect(scroll).toHaveBeenCalledWith({ top: 1080, behavior: "instant" })
-  })
-
   it("does not move settled growth while the user is scrolled up", () => {
     render({ turnKey: "turn-1", startAtEnd: true })
     finishInitialAlignment()

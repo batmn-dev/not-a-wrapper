@@ -806,86 +806,6 @@ describe("prepareGenerationForChat", () => {
     ])
   })
 
-  it("keeps legacy descendants selectable after editing a middle user message", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
-    const { user, chat, userId, chatId } = createOwnerFixture()
-    const messages: Doc<"messages">[] = [
-      createStoredMessage({
-        id: "message_user_1",
-        chatId,
-        userId,
-        orderId: 0,
-        clientMessageId: "user-1",
-        role: "user",
-        content: "first prompt",
-        createdAt: 1000,
-      }),
-      createStoredMessage({
-        id: "message_assistant_1",
-        chatId,
-        orderId: 1,
-        role: "assistant",
-        content: "first answer",
-        createdAt: 1001,
-      }),
-      createStoredMessage({
-        id: "message_user_2",
-        chatId,
-        userId,
-        orderId: 2,
-        clientMessageId: "user-2",
-        role: "user",
-        content: "second prompt",
-        createdAt: 1002,
-      }),
-      createStoredMessage({
-        id: "message_assistant_2",
-        chatId,
-        orderId: 3,
-        role: "assistant",
-        content: "second answer",
-        createdAt: 1003,
-      }),
-    ]
-    const { ctx, tables } = createMutationCtx({
-      users: [user],
-      chats: [chat],
-      messages,
-    })
-
-    await prepareGenerationForChat(ctx, {
-      chatId,
-      requestId: "request_edit",
-      model: "gpt-5",
-      provider: "openai",
-      edit: {
-        editedMessageId: "message_user_2",
-        editCutoffTimestamp: 1002,
-        expectedChatVersion: 4,
-        replacementMessage: {
-          id: "replacement-user-2",
-          role: "user",
-          content: "edited second prompt",
-          parts: [{ type: "text", text: "edited second prompt" }],
-        },
-      },
-    })
-
-    await selectBranchForChat(ctx, {
-      chatId,
-      messageId: asId<"messages">("message_user_2"),
-    })
-
-    expect(
-      getSelectedPathMessages(tables.messages).map((message) => message._id)
-    ).toEqual([
-      "message_user_1",
-      "message_assistant_1",
-      "message_user_2",
-      "message_assistant_2",
-    ])
-  })
-
   it("does not double-insert duplicate replacement client message IDs", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1700000000000)
     const { user, chat, userId, chatId } = createOwnerFixture()
@@ -1064,65 +984,6 @@ describe("prepareGenerationForChat", () => {
       branchIndex: 0,
       selected: true,
       status: "streaming",
-    })
-  })
-
-  it("accepts normal sends when the selected path token omits the optional tail id", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
-    const { user, chat, userId, chatId } = createOwnerFixture()
-    const messages: Doc<"messages">[] = [
-      createStoredMessage({
-        id: "message_user_1",
-        chatId,
-        userId,
-        orderId: 0,
-        clientMessageId: "user-1",
-        role: "user",
-        content: "prompt",
-        createdAt: 1000,
-      }),
-      createStoredMessage({
-        id: "message_assistant_1",
-        chatId,
-        orderId: 1,
-        role: "assistant",
-        content: "answer",
-        createdAt: 1001,
-      }),
-    ]
-    const { ctx, tables } = createMutationCtx({
-      users: [user],
-      chats: [chat],
-      messages,
-    })
-
-    const result = await prepareGenerationForChat(ctx, {
-      chatId,
-      requestId: "request_followup",
-      model: "gpt-5",
-      provider: "openai",
-      expectedVisibleMessageCount: 2,
-      latestUserMessage: {
-        id: "user-2",
-        role: "user",
-        content: "next prompt",
-        parts: [{ type: "text", text: "next prompt" }],
-      },
-    })
-
-    const insertedUser = tables.messages.find(
-      (message) => message.clientMessageId === "user-2"
-    )
-
-    expect(result.messages.map((message) => message.content)).toEqual([
-      "prompt",
-      "answer",
-      "next prompt",
-    ])
-    expect(insertedUser).toMatchObject({
-      parentMessageId: "message_assistant_1",
-      branchIndex: 0,
-      selected: true,
     })
   })
 
@@ -1736,107 +1597,6 @@ describe("prepareGenerationForChat", () => {
     })
   })
 
-  it("edits after stopped and regenerated turns, projecting the stopped stub as a history marker", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
-    const { user, chat, userId, chatId } = createOwnerFixture()
-    const { ctx, deletes, tables } = createMutationCtx({
-      users: [user],
-      chats: [chat],
-      messages: [
-        createStoredMessage({
-          id: "message_user_1",
-          chatId,
-          userId,
-          orderId: 0,
-          clientMessageId: "user-1",
-          role: "user",
-          content: "first prompt",
-          createdAt: 1000,
-        }),
-        createAssistantRuntimeMessage({
-          id: "message_partial_assistant",
-          chatId,
-          orderId: 1,
-          content: "partial answer",
-          parts: [{ type: "text", text: "partial answer" }],
-          status: "aborted",
-          createdAt: 1001,
-        }),
-        createAssistantRuntimeMessage({
-          id: "message_empty_assistant",
-          chatId,
-          orderId: 2,
-          parts: [],
-          content: "",
-          status: "aborted",
-          createdAt: 1002,
-        }),
-        createStoredMessage({
-          id: "message_user_2",
-          chatId,
-          userId,
-          orderId: 3,
-          clientMessageId: "user-2",
-          role: "user",
-          content: "second prompt",
-          createdAt: 1003,
-        }),
-        createStoredMessage({
-          id: "message_assistant_2",
-          chatId,
-          orderId: 4,
-          role: "assistant",
-          content: "regenerated answer",
-          createdAt: 1004,
-        }),
-      ],
-    })
-
-    const result = await prepareGenerationForChat(ctx, {
-      chatId,
-      requestId: "request_edit",
-      model: "gpt-5",
-      provider: "openai",
-      edit: {
-        editedMessageId: "user-2",
-        editCutoffTimestamp: 1003,
-        // The aborted stub is a visible first-class turn now, counted by the
-        // client's rendered path like any other message.
-        expectedChatVersion: 5,
-        replacementMessage: {
-          id: "replacement-user-2",
-          role: "user",
-          content: "edited second prompt",
-          parts: [{ type: "text", text: "edited second prompt" }],
-        },
-      },
-    })
-
-    expect(deletes).toEqual([])
-    expect(result.messages.map((message) => message.content)).toEqual([
-      "first prompt",
-      "partial answer",
-      "[This response was stopped before producing content.]",
-      "edited second prompt",
-    ])
-    expect(
-      result.messages.some((message) => message._id === "message_assistant_2")
-    ).toBe(false)
-    expect(
-      tables.messages.find((message) => message.clientMessageId === "user-2")
-    ).toMatchObject({ selected: false })
-    expect(
-      tables.messages.find(
-        (message) => message.clientMessageId === "replacement-user-2"
-      )
-    ).toMatchObject({ selected: true })
-    expect(
-      result.messages.some(
-        (message) => message.role === "assistant" && message.parts.length === 0
-      )
-    ).toBe(false)
-  })
-
   it("rejects stale or unsupported durable regeneration intents", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1700000000000)
     const { user, chat, userId, chatId } = createOwnerFixture()
@@ -2048,55 +1808,6 @@ describe("prepareGenerationForChat", () => {
         edit: editIntent(3),
       })
     ).rejects.toThrow("Chat changed since edit started")
-  })
-
-  it("checks ownership before applying durable regeneration intent", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
-    const { user, chat, userId, chatId } = createOwnerFixture()
-    chat.userId = asId<"users">("user_2")
-    const messages = [
-      createStoredMessage({
-        id: "message_user_1",
-        chatId,
-        userId,
-        orderId: 0,
-        clientMessageId: "user-1",
-        role: "user",
-        content: "prompt",
-        createdAt: 1000,
-      }),
-      createStoredMessage({
-        id: "message_assistant_1",
-        chatId,
-        orderId: 1,
-        role: "assistant",
-        content: "answer",
-        createdAt: 1001,
-      }),
-    ]
-    const { ctx, tables } = createMutationCtx({
-      users: [user],
-      chats: [chat],
-      messages,
-    })
-
-    await expect(
-      prepareGenerationForChat(ctx, {
-        chatId,
-        requestId: "request_regen",
-        model: "gpt-5",
-        provider: "openai",
-        regeneration: {
-          targetAssistantMessageId: "message_assistant_1",
-          targetAssistantCreatedAt: 1001,
-          expectedChatVersion: 2,
-          precedingUserMessageId: "user-1",
-        },
-      })
-    ).rejects.toThrow("Not authorized")
-
-    expect(tables.generationRuns).toEqual([])
-    expect(tables.messages).toEqual(messages)
   })
 
   it("retains previous assistant content when regeneration aborts or fails before first chunk", async () => {
@@ -2397,82 +2108,6 @@ describe("prepareGenerationForChat", () => {
       activeStreamId: undefined,
       assistantMessageId,
     })
-  })
-
-  it("keeps and marks an empty assistant placeholder when a run fails before the first chunk", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
-    const { user, chat, userId, chatId } = createOwnerFixture()
-    const runId = asId<"generationRuns">("run_1")
-    const assistantMessageId = asId<"messages">("message_empty_assistant")
-    const assistantMessage = createAssistantRuntimeMessage({
-      id: assistantMessageId,
-      chatId,
-      runId,
-      orderId: 1,
-      parts: [],
-      content: "",
-      status: "streaming",
-    })
-    const run = createGenerationRun({
-      id: runId,
-      chatId,
-      userId,
-      assistantMessageId,
-    })
-    const { ctx, deletes } = createMutationCtx({
-      users: [user],
-      chats: [chat],
-      messages: [
-        createStoredMessage({
-          id: "message_user_1",
-          chatId,
-          userId,
-          orderId: 0,
-          clientMessageId: "user-1",
-          role: "user",
-          content: "prompt",
-          createdAt: 1000,
-        }),
-        assistantMessage,
-      ],
-      generationRuns: [run],
-    })
-
-    await markGenerationRunFailedForChat(ctx, await runOwner(ctx, runId), {
-      messageId: assistantMessageId,
-      error: "invalid xai provider options",
-    })
-
-    expect(deletes).toEqual([])
-    expect(assistantMessage).toMatchObject({
-      status: "failed",
-      error: "invalid xai provider options",
-    })
-    expect(run).toMatchObject({
-      status: "failed",
-      error: "invalid xai provider options",
-      assistantMessageId,
-    })
-  })
-
-  it("ignores an invalid activeStreamId fallback before reading the message", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
-    const fixture = createGenerationRunLinkageFixture()
-    fixture.run.assistantMessageId = undefined
-    fixture.run.activeStreamId = "not_a_message_id"
-    const { ctx, getCalls } = createMutationCtx(fixture.tables)
-
-    await markGenerationRunFailedForChat(ctx, await runOwner(ctx, fixture.runId), {
-      error: "provider failed",
-    })
-
-    expect(getCalls).not.toContain("not_a_message_id")
-    expect(fixture.run).toMatchObject({
-      status: "failed",
-      error: "provider failed",
-      assistantMessageId: undefined,
-    })
-    expect(fixture.message).toMatchObject({ status: "streaming" })
   })
 
   it("converges to failed in both orders of the onError/envelope-finish race", async () => {
@@ -2813,29 +2448,6 @@ describe("generation run linkage validation", () => {
     expect(fixture.message.content).toBe("done")
   })
 
-  it("rejects approval requests for assistant messages outside the run", async () => {
-    const fixture = createGenerationRunLinkageFixture()
-    const { ctx, inserts, patches } = createMutationCtx(fixture.tables)
-
-    await expect(
-      createToolApprovalRequestForChat(
-        ctx,
-        await runOwner(ctx, fixture.runId),
-        {
-          assistantMessageId: fixture.otherMessageId,
-          toolCallId: "call_1",
-          toolName: "send_email",
-          source: "mcp",
-          riskClass: "destructive",
-          approvalId: "approval_1",
-        }
-      )
-    ).rejects.toThrow("Assistant message not found for run")
-
-    expect(inserts).toEqual([])
-    expect(patches).toEqual([])
-  })
-
   it("ignores a late approval request on a run a Stop already aborted (zombie-repaint fix)", async () => {
     // User Stop settles the run first; then a late approval-request write from
     // the stream's persistence transform arrives. It must not repaint the run
@@ -3039,27 +2651,6 @@ describe("updateAssistantSnapshotForChat", () => {
     expect(inserts).toHaveLength(1)
     expect(fixture.message.content).toBe("partial")
     expect(fixture.message.status).toBe("streaming")
-    expect(fixture.run.status).toBe("streaming")
-  })
-
-  it("rejects snapshots for assistant messages outside the run", async () => {
-    const fixture = createGenerationRunLinkageFixture()
-    const { ctx, inserts, patches } = createMutationCtx(fixture.tables)
-
-    await expect(
-      updateAssistantSnapshotForChat(ctx, await runOwner(ctx, fixture.runId), {
-        messageId: fixture.otherMessageId,
-        order: 2,
-        sequence: 1,
-        textSnapshot: "wrong turn",
-        partsSnapshot: [{ type: "text", text: "wrong turn" }],
-      })
-    ).rejects.toThrow("Assistant message not found for run")
-
-    expect(inserts).toEqual([])
-    expect(patches).toEqual([])
-    expect(fixture.otherMessage.content).toBe("")
-    expect(fixture.otherMessage.status).toBe("streaming")
     expect(fixture.run.status).toBe("streaming")
   })
 

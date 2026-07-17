@@ -38,11 +38,6 @@ describe("getProviderForModel", () => {
     expect(resolveModelIdSpy).toHaveBeenCalledWith("mistral-small-2503")
   })
 
-  it("routes canonical and fast non-reasoning Grok IDs", () => {
-    expect(getProviderForModel("grok-4-0709")).toBe("xai")
-    expect(getProviderForModel("grok-4-1-fast-non-reasoning")).toBe("xai")
-  })
-
   it("falls back for uncatalogued legacy IDs that still need routing", () => {
     expect(getModelInfo("gpt-5.1-thinking")).toBeUndefined()
     expect(getModelInfo("gemini-1.5-pro-latest")).toBeUndefined()

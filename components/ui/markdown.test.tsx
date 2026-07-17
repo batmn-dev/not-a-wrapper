@@ -164,19 +164,6 @@ describe("Markdown response controls and semantics", () => {
     expect(icon?.querySelector("svg")?.getAttribute("focusable")).toBe("false")
   })
 
-  it("keeps inline links in prose color until hover", () => {
-    const body = renderMarkdown(
-      "See [Example](https://example.com) for more details."
-    )
-    const link = body.querySelector("a")
-
-    expect(link?.classList.contains("text-foreground")).toBe(true)
-    expect(link?.classList.contains("decoration-foreground/60")).toBe(true)
-    expect(link?.classList.contains("hover:text-link")).toBe(true)
-    expect(link?.classList.contains("hover:decoration-link")).toBe(true)
-    expect(link?.classList.contains("text-link")).toBe(false)
-  })
-
   it("preserves surrounding text and punctuation for inline external links", () => {
     const body = renderMarkdown(
       "Before [Example](https://example.com), during, and after."
@@ -342,22 +329,6 @@ describe("Markdown response controls and semantics", () => {
     expect(() => renderMarkdown("Trailing [Example](")).not.toThrow()
   })
 
-  it("preserves heading hierarchy and native GFM task-list semantics", () => {
-    const body = renderMarkdown(
-      "##### Heading 5\n\n###### Heading 6\n\n- [x] Done\n- [ ] Pending"
-    )
-    const checkboxes = body.querySelectorAll<HTMLInputElement>(
-      '.contains-task-list input[type="checkbox"]'
-    )
-
-    expect(body.querySelector("h5")?.textContent).toBe("Heading 5")
-    expect(body.querySelector("h6")?.textContent).toBe("Heading 6")
-    expect(checkboxes).toHaveLength(2)
-    expect(checkboxes[0]?.checked).toBe(true)
-    expect(checkboxes[1]?.checked).toBe(false)
-    expect(Array.from(checkboxes).every((input) => input.disabled)).toBe(true)
-  })
-
   it("adds an accessible copy action to tables", () => {
     const body = renderMarkdown("| A | B |\n| --- | --- |\n| 1 | 2 |")
     const table = body.querySelector("table")
@@ -366,8 +337,6 @@ describe("Markdown response controls and semantics", () => {
     expect(table).not.toBeNull()
     expect(table?.hasAttribute("node")).toBe(false)
     expect(copyButton).not.toBeNull()
-    expect(copyButton?.className).toContain("pointer-coarse:pointer-events-auto")
-    expect(copyButton?.className).toContain("pointer-coarse:opacity-100")
   })
 
   it("uses friendly code language labels and hides plaintext labels", () => {

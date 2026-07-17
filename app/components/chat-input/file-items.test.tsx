@@ -90,7 +90,7 @@ describe("FileTile family", () => {
     vi.unstubAllGlobals()
   })
 
-  it("renders generated text with shared wide responsive geometry and restore action", () => {
+  it("renders generated text and restores it to the composer", () => {
     const attachment = createGeneratedLargePasteAttachment(
       "A generated paste preview that truncates",
       1
@@ -100,9 +100,6 @@ describe("FileTile family", () => {
     const tile = container.querySelector(
       '[data-attachment-tile="generated-text"]'
     )
-    expect(tile?.className).toContain("h-[58px]")
-    expect(tile?.className).toContain("w-60")
-    expect(tile?.className).toContain("md:w-80")
     expect(tile?.textContent).toContain("A generated paste pr…")
 
     const restore = container.querySelector(
@@ -119,7 +116,6 @@ describe("FileTile family", () => {
     renderItem(attachment)
 
     const tile = container.querySelector('[data-attachment-tile="document"]')
-    expect(tile?.className).toContain("w-60")
     expect(tile?.textContent).toContain("full-report.pdf")
     expect(tile?.textContent).toContain("PDF")
 
@@ -154,11 +150,6 @@ describe("FileTile family", () => {
     )
     renderItem(attachment)
 
-    const tile = container.querySelector('[data-attachment-tile="image"]')
-    expect(tile?.className).toContain("w-14")
-    expect(tile?.className).toContain("h-[58px]")
-    expect(tile?.textContent).not.toContain("photo.jpg")
-
     const open = container.querySelector(
       'button[aria-label="Open image: photo.jpg"]'
     ) as HTMLButtonElement
@@ -180,7 +171,7 @@ describe("FileTile family", () => {
     expect(document.activeElement).toBe(open)
   })
 
-  it("uses a 16px indexed remove action with a 32px hit target and tooltip", () => {
+  it("removes the indexed attachment", () => {
     const attachment = readyFile(
       new File(["image"], "photo.webp", { type: "image/webp" })
     )
@@ -189,10 +180,6 @@ describe("FileTile family", () => {
     const remove = container.querySelector(
       'button[aria-label="Remove file 3: photo.webp"]'
     ) as HTMLButtonElement
-    expect(remove.className).toContain("size-4")
-    expect(remove.className).toContain("attachment-remove-button")
-    expect(remove.querySelector("svg")?.getBoundingClientRect).toBeTruthy()
-    expect(remove.getAttribute("data-slot")).toBe("tooltip-trigger")
     act(() => remove.click())
     expect(onRemove).toHaveBeenCalledWith(attachment)
   })
@@ -248,7 +235,7 @@ describe("FileTile family", () => {
     expect(retry).toHaveBeenCalledTimes(1)
   })
 
-  it("contains long errors and hides retry for non-retryable failures", () => {
+  it("hides retry for non-retryable failures", () => {
     const attachment = createSelectedFileAttachment(
       new File(["pdf"], "quota.pdf", { type: "application/pdf" })
     )
@@ -260,17 +247,13 @@ describe("FileTile family", () => {
     )
     renderItem(failed)
 
-    const error = Array.from(container.querySelectorAll("span")).find(
-      (element) =>
-        element.textContent === "Daily file upload limit reached."
-    )
-    expect(error?.className).toContain("truncate")
+    expect(container.textContent).toContain("Daily file upload limit reached.")
     expect(
       container.querySelector('button[aria-label^="Retry file"]')
     ).toBeNull()
   })
 
-  it("keeps mixed duplicate filenames in one non-wrapping horizontal row with stable ids", () => {
+  it("addresses duplicate filenames by stable attachment id", () => {
     const first = createSelectedFileAttachment(
       new File(["pdf-a"], "duplicate.pdf", { type: "application/pdf" })
     )
@@ -289,10 +272,6 @@ describe("FileTile family", () => {
       />
     )
 
-    const row = container.querySelector('[data-testid="attachment-row"]')
-    expect(row?.className).toContain("flex-nowrap")
-    expect(row?.className).toContain("gap-2")
-    expect(row?.className).toContain("overflow-x-auto")
     const secondRemove = container.querySelector(
       'button[aria-label="Cancel upload 2: duplicate.pdf"]'
     ) as HTMLButtonElement

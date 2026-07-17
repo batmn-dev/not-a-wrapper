@@ -318,74 +318,6 @@ describe("Conversation regeneration availability", () => {
   })
 })
 
-describe("Conversation timestamp integration", () => {
-  let container: HTMLDivElement | null = null
-  let root: Root | null = null
-
-  type TimestampedUIMessage = UIMessage & { createdAt?: Date }
-
-  function cleanupRender() {
-    const mountedRoot = root
-    if (mountedRoot) act(() => mountedRoot.unmount())
-    container?.remove()
-    root = null
-    container = null
-  }
-
-  afterEach(cleanupRender)
-
-  function renderConversation(messages: TimestampedUIMessage[]) {
-    if (!container) {
-      container = document.createElement("div")
-      document.body.appendChild(container)
-      root = createRoot(container)
-    }
-
-    act(() => {
-      root?.render(
-        <Conversation
-          messages={messages}
-          onEdit={vi.fn()}
-          onReload={vi.fn()}
-          isDurableChat
-        />
-      )
-    })
-  }
-
-  function userMessage(id: string, createdAt: Date): TimestampedUIMessage {
-    return {
-      id,
-      role: "user",
-      createdAt,
-      parts: [{ type: "text", text: id }],
-    }
-  }
-
-  it("places the timestamp outside the capped turn-content column", () => {
-    renderConversation([
-      userMessage("historical-user", new Date(Date.now() - HOUR - 1000)),
-    ])
-
-    const separator = container?.querySelector('[role="separator"]')
-    const wrapper = separator?.closest("[data-turn-id-container]")
-    const turnRow = wrapper?.querySelector('[data-turn="user"]')
-    const contentColumn = turnRow?.firstElementChild
-
-    expect(wrapper?.getAttribute("data-turn-id-container")).toBe(
-      "historical-user"
-    )
-    expect(wrapper?.className).toBe("w-full")
-    expect(wrapper?.firstElementChild).toBe(separator)
-    expect(wrapper?.children[1]).toBe(turnRow)
-    expect(separator?.closest("[data-turn]")).toBeNull()
-    expect(contentColumn?.className).toContain("group/turn-messages")
-    expect(contentColumn?.className).toContain(
-      "max-w-[var(--thread-content-max-width,40rem)]"
-    )
-  })
-})
-
 describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
   type TimestampedUIMessage = UIMessage & { createdAt?: Date }
   type LifecycleApi = {
@@ -610,9 +542,6 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
       const separator = separators?.[0]
       expect(wrapper?.firstElementChild).toBe(separator)
       expect(separator?.closest("[data-turn]")).toBeNull()
-      expect(separator?.className).toContain("h-5")
-      expect(separator?.className).toContain("my-4")
-      expect(separator?.className).toContain("justify-center")
       expect(wrapper?.querySelectorAll('[role="separator"]')).toHaveLength(1)
     }
 

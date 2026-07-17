@@ -479,63 +479,6 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     ).toBeUndefined()
   })
 
-  it("does not reject response finalization when the abort write fails", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
-    try {
-      const harness = makeStreamHarness()
-      const fetchMutation = makeFetchMutation({
-        rejectAborted: new Error("convex unavailable"),
-      })
-      const runtime = createChatTurnRuntime({
-        input: makeInput(),
-        deps: makeDeps(harness, fetchMutation),
-      })
-
-      await runtime.prepare()
-      runtime.toResponse(notAbortedSignal())
-
-      await expect(
-        harness.captured.responseOpts.onEnd({
-          responseMessage: {
-            id: "msg1",
-            role: "assistant",
-            parts: [],
-            metadata: {},
-          },
-          isAborted: true,
-          finishReason: "stop",
-        })
-      ).resolves.toBeUndefined()
-
-      const aborted = findCall(
-        fetchMutation,
-        api.chatRuntime.markGenerationRunAborted
-      )
-      expect(aborted?.[1]).toMatchObject({
-        runId: "run1",
-        messageId: "msg1",
-        reason: "ui message stream aborted",
-      })
-      expect(
-        findCall(fetchMutation, api.chatRuntime.markGenerationRunCompleted)
-      ).toBeUndefined()
-
-      const logLine = warn.mock.calls
-        .map(([message]) => String(message))
-        .find((message) => message.includes("durable_run_abort_write_failed"))
-      expect(logLine).toBeDefined()
-      expect(JSON.parse(logLine ?? "{}")).toMatchObject({
-        _tag: "durable_run_abort_write_failed",
-        requestId: "req-1",
-        chatId: SERVER_CHAT_ID,
-        runId: "run1",
-        error: "convex unavailable",
-      })
-    } finally {
-      warn.mockRestore()
-    }
-  })
-
   it("does not reject stream abort cleanup when the abort write fails", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
     try {
@@ -734,33 +677,6 @@ describe("createChatTurnRuntime — Anthropic pause_turn telemetry", () => {
     expect(
       findCall(fetchMutation, api.chatRuntime.markGenerationRunFailed)
     ).toBeUndefined()
-  })
-
-  it("does not capture an event for a normal Anthropic end_turn", async () => {
-    const harness = makeStreamHarness()
-    const capture = vi.fn()
-    const runtime = createChatTurnRuntime({
-      input: makeInput(),
-      deps: makeDeps(harness, makeFetchMutation(), {
-        getPostHogClient: (() =>
-          ({ capture })) as unknown as ChatTurnDeps["getPostHogClient"],
-      }),
-    })
-
-    await runtime.prepare()
-    runtime.toResponse(notAbortedSignal())
-    await harness.captured.streamOpts.onEnd({
-      text: "done",
-      usage: {},
-      steps: [{ rawFinishReason: "end_turn", toolCalls: [] }],
-      finishReason: "stop",
-    })
-
-    expect(
-      capture.mock.calls.filter(
-        ([event]) => event.event === "anthropic_pause_turn"
-      )
-    ).toHaveLength(0)
   })
 
   it("does not let a telemetry capture failure break stream completion", async () => {

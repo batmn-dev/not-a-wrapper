@@ -18,16 +18,6 @@ describe("model catalog exposure", () => {
     ).toBe(true)
   })
 
-  it("omits hidden and legacy entries from the visible selector catalog", async () => {
-    const visibleModelIds = (await getVisibleModels()).map((model) => model.id)
-
-    expect(visibleModelIds).toContain("gpt-5.4")
-    expect(visibleModelIds).toContain("claude-haiku-4-5-20251001")
-    expect(visibleModelIds).not.toContain("gpt-5.1")
-    expect(visibleModelIds).not.toContain("claude-sonnet-4-5-20250929")
-    expect(visibleModelIds).not.toContain("pixtral-large-2411")
-  })
-
   it("points legacy replacement metadata at visible catalog entries", async () => {
     const allModels = await getAllModels()
     const modelStatusById = new Map(

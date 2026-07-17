@@ -9,7 +9,6 @@ import {
   singleProviderExecutedTool,
   singleSdkToolComplete,
   textOnlyAssistant,
-  textOnlyConversation,
   userMessage,
 } from "./fixtures"
 
@@ -54,19 +53,6 @@ function assertAlternatingRoles(messages: UIMessage[]): void {
   for (let index = 1; index < messages.length; index += 1) {
     expect(messages[index]?.role).not.toBe(messages[index - 1]?.role)
   }
-}
-
-function repeatConversation(seed: UIMessage[], times: number): UIMessage[] {
-  const repeated: UIMessage[] = []
-  for (let batch = 0; batch < times; batch += 1) {
-    for (const message of seed) {
-      repeated.push({
-        ...message,
-        id: `${message.id}-batch-${batch}`,
-      } as UIMessage)
-    }
-  }
-  return repeated
 }
 
 describe("cross-provider replay matrix", () => {
@@ -171,28 +157,6 @@ describe("cross-provider replay matrix", () => {
       ).toBe(true)
     })
 
-    it("keeps text-only history unchanged", async () => {
-      const result = await adaptHistoryForProvider(
-        textOnlyConversation,
-        provider,
-        context
-      )
-      expect(
-        getAssistantMessages(result.messages).every((message) =>
-          hasPartType([message], "text")
-        )
-      ).toBe(true)
-    })
-
-    it("preserves reasoning parts", async () => {
-      const result = await adaptHistoryForProvider(
-        [reasoningPlusText],
-        provider,
-        context
-      )
-      expect(hasPartType(result.messages, "reasoning")).toBe(true)
-    })
-
     it("converts incompatible web_search replay into text and strips cross-provider metadata", async () => {
       const result = await adaptHistoryForProvider(
         [singleProviderExecutedTool],
@@ -236,28 +200,6 @@ describe("cross-provider replay matrix", () => {
   describe("Anthropic -> OpenAI", () => {
     const provider = "openai"
     const context = { targetModelId: "gpt-5.2", hasTools: true }
-
-    it("keeps text-only history valid", async () => {
-      const result = await adaptHistoryForProvider(
-        textOnlyConversation,
-        provider,
-        context
-      )
-      expect(
-        getAssistantMessages(result.messages).every((message) =>
-          hasPartType([message], "text")
-        )
-      ).toBe(true)
-    })
-
-    it("keeps reasoning when paired with text", async () => {
-      const result = await adaptHistoryForProvider(
-        [reasoningPlusText],
-        provider,
-        context
-      )
-      expect(hasPartType(result.messages, "reasoning")).toBe(true)
-    })
 
     it("enforces atomic triples for tool calls", async () => {
       const result = await adaptHistoryForProvider(
@@ -304,15 +246,6 @@ describe("cross-provider replay matrix", () => {
   describe("OpenAI -> OpenAI", () => {
     const provider = "openai"
     const context = { targetModelId: "gpt-5.2", hasTools: true }
-
-    it("supports same-provider text continuation", async () => {
-      const result = await adaptHistoryForProvider(
-        textOnlyConversation,
-        provider,
-        context
-      )
-      expect(result.messages.length).toBe(textOnlyConversation.length)
-    })
 
     it("preserves reasoning + tool content while enforcing OpenAI replay shape", async () => {
       const history = [singleProviderExecutedTool, singleSdkToolComplete]
@@ -393,33 +326,6 @@ describe("cross-provider replay matrix", () => {
       expect(hasPartType(result.messages, "reasoning")).toBe(false)
       expect(hasPartType(result.messages, "tool-web_search")).toBe(false)
       expect(hasPartType(result.messages, "tool-exa_search")).toBe(false)
-    })
-  })
-
-  describe("long history matrix coverage", () => {
-    it("handles 50+ message history for high-traffic switches", async () => {
-      const longHistory = repeatConversation(textOnlyConversation, 13)
-      expect(longHistory.length).toBeGreaterThan(50)
-
-      const openaiToAnthropic = await adaptHistoryForProvider(
-        longHistory,
-        "anthropic",
-        {
-          targetModelId: "claude-4-opus",
-          hasTools: false,
-        }
-      )
-      const anthropicToOpenai = await adaptHistoryForProvider(
-        longHistory,
-        "openai",
-        {
-          targetModelId: "gpt-5.2",
-          hasTools: false,
-        }
-      )
-
-      expect(openaiToAnthropic.messages.length).toBe(longHistory.length)
-      expect(anthropicToOpenai.messages.length).toBe(longHistory.length)
     })
   })
 

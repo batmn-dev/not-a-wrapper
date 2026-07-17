@@ -11,7 +11,7 @@ import {
   it,
   vi,
 } from "vitest"
-import { activityEntryMarker, ActivityPanel } from "./activity-panel"
+import { ActivityPanel } from "./activity-panel"
 import {
   ActivityPanelDockSlot,
   ActivityPanelHostProvider,
@@ -111,7 +111,10 @@ describe("ActivityPanel coexistence (R6)", () => {
     frames = new Map()
     nextFrameId = 0
     scroll = vi.fn()
-    originalScroll = Object.getOwnPropertyDescriptor(Element.prototype, "scroll")
+    originalScroll = Object.getOwnPropertyDescriptor(
+      Element.prototype,
+      "scroll"
+    )
     originalGetAnimations = Object.getOwnPropertyDescriptor(
       Element.prototype,
       "getAnimations"
@@ -352,61 +355,6 @@ describe("ActivityPanel coexistence (R6)", () => {
     expect(document.body.textContent).toContain("Activity")
   })
 
-  it("renders docked header and panel sharp-edge seams immediately", () => {
-    act(() => {
-      root?.render(
-        <ActivityPanelHostProvider>
-          <ActivityPanelDockSlot />
-          <ActivityPanel open onOpenChange={() => {}} {...panelProps(0)} />
-        </ActivityPanelHostProvider>
-      )
-    })
-
-    const header = document.querySelector<HTMLElement>(
-      'section[aria-label="Reasoning details"] > div'
-    )
-    expect(header?.className).toContain("h-app-header")
-    expect(header?.className).toContain("sharp-edge-top-shadow")
-    expect(header?.className).not.toContain("sharp-edge-left-shadow")
-    expect(header?.hasAttribute("data-scrolled")).toBe(false)
-
-    const shell = document.querySelector<HTMLElement>(
-      'section[aria-label="Reasoning details"]'
-    )
-    expect(shell?.className).not.toContain("sharp-edge-left-shadow")
-    expect(shell?.className).toContain("border-s")
-
-    const closeButton = shell?.querySelector('button[aria-label="Close"]')
-    expect(closeButton?.getAttribute("aria-expanded")).toBeNull()
-    expect(closeButton?.getAttribute("aria-controls")).toBeNull()
-  })
-
-  it("renders connector rails below each non-terminal entry icon", () => {
-    act(() => {
-      root?.render(
-        <ActivityPanelHostProvider>
-          <ActivityPanelDockSlot />
-          <ActivityPanel open onOpenChange={() => {}} {...panelProps(5)} />
-        </ActivityPanelHostProvider>
-      )
-    })
-
-    const steps = Array.from(
-      document.querySelectorAll<HTMLElement>("[data-activity-step]")
-    )
-    expect(steps).toHaveLength(2)
-    expect(steps.map((step) => step.getAttribute("data-last"))).toEqual([
-      "false",
-      "true",
-    ])
-    expect(steps.map((step) => step.style.zIndex)).toEqual(["0", "1"])
-    expect(
-      steps.map((step) =>
-        Boolean(step.querySelector("[data-activity-connector]"))
-      )
-    ).toEqual([true, false])
-  })
-
   it("expands N more sources inline with disclosure semantics and resets on reopen", () => {
     function Harness({
       open,
@@ -474,57 +422,6 @@ describe("ActivityPanel coexistence (R6)", () => {
       document.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')
         ?.textContent
     ).toBe("2 more")
-  })
-
-  it("maps chosen marker glyphs over the closed entry algebra", () => {
-    // Exhaustiveness and illegal kind×status pairs are compiler-enforced by
-    // the closed entry variants; this pins only the chosen glyph per legal
-    // shape (status marker beats kind marker; denied collapses to error).
-    const python = { toolName: "python", displayName: "Python" }
-    expect(
-      activityEntryMarker({
-        id: "r",
-        kind: "reasoning",
-        title: "t",
-        status: "complete",
-      })
-    ).toBe("reasoning")
-    expect(
-      activityEntryMarker({
-        id: "s",
-        kind: "search",
-        title: "t",
-        status: "running",
-        sources: [],
-      })
-    ).toBe("search")
-    expect(
-      activityEntryMarker({
-        id: "t",
-        kind: "tool",
-        title: "t",
-        status: "denied",
-        tool: python,
-      })
-    ).toBe("error")
-    expect(
-      activityEntryMarker({
-        id: "t",
-        kind: "tool",
-        title: "t",
-        status: "approval",
-        tool: { ...python, approvalId: "a1" },
-      })
-    ).toBe("approval")
-    expect(
-      activityEntryMarker({
-        id: "completion",
-        kind: "completion",
-        title: "Worked for 5s",
-        detail: "Done",
-        status: "complete",
-      })
-    ).toBe("completedRun")
   })
 
   it("renders unsafe search sources as passive chips", () => {

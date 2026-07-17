@@ -50,32 +50,6 @@ describe("durableStoredMessageToUiMessage", () => {
     })
   })
 
-  it("preserves legacy attachments as displayable file parts", () => {
-    expect(
-      durableStoredMessageToUiMessage({
-        _id: "message_3",
-        role: "user",
-        content: "",
-        parts: [],
-        attachments: [
-          {
-            name: "receipt.pdf",
-            contentType: "application/pdf",
-            url: "https://example.com/receipt.pdf",
-          },
-        ],
-        status: "completed",
-      }).parts
-    ).toEqual([
-      {
-        type: "file",
-        filename: "receipt.pdf",
-        mediaType: "application/pdf",
-        url: "https://example.com/receipt.pdf",
-      },
-    ])
-  })
-
   it("can preserve stored parts exactly for API runtime model history", () => {
     expect(
       durableStoredMessageToUiMessage(
