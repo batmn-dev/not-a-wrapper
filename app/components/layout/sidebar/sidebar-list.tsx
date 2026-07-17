@@ -27,8 +27,6 @@ import Link from "next/link"
 import type { ReactNode } from "react"
 import { SidebarItem } from "./sidebar-item"
 
-export type ChatOrganization = "one-list" | "by-project"
-
 type SidebarListProps = {
   title: string
   items: Chat[]
@@ -37,10 +35,8 @@ type SidebarListProps = {
   defaultOpen?: boolean
   /** localStorage key for persistence */
   storageKey?: string
-  /** Chat organization preference; when present, renders ChatGPT-style actions */
-  organization?: ChatOrganization
-  /** Updates the organization preference selected in the header menu */
-  onOrganizationChange?: (organization: ChatOrganization) => void
+  /** Shows the organizer placeholders and new-chat action in the header */
+  showHeaderActions?: boolean
   /** Closes the mobile drawer after starting a new chat */
   onNewChat?: () => void
 }
@@ -51,36 +47,12 @@ export function SidebarList({
   currentChatId,
   defaultOpen = true,
   storageKey,
-  organization,
-  onOrganizationChange,
+  showHeaderActions = false,
   onNewChat,
 }: SidebarListProps) {
-  const headerActions =
-    organization && onOrganizationChange ? (
-      <SidebarChatGroupActions
-        organization={organization}
-        onNewChat={onNewChat}
-      />
-    ) : null
-
-  if (organization === "one-list") {
-    return (
-      <div className="group/sidebar-expando-section">
-        <div className="sidebar-group-header group/sidebar-expando-section-header flex h-8 min-w-0 items-center justify-end pe-1.5">
-          {headerActions}
-        </div>
-        <div className="pt-0.5">
-          {items.map((chat) => (
-            <SidebarItem
-              key={chat.id}
-              chat={chat}
-              currentChatId={currentChatId}
-            />
-          ))}
-        </div>
-      </div>
-    )
-  }
+  const headerActions = showHeaderActions ? (
+    <SidebarChatGroupActions onNewChat={onNewChat} />
+  ) : null
 
   return (
     <CollapsibleSection
@@ -111,13 +83,7 @@ function SidebarHeaderActionChip({ children }: { children: ReactNode }) {
   )
 }
 
-function SidebarChatGroupActions({
-  organization,
-  onNewChat,
-}: {
-  organization: ChatOrganization
-  onNewChat?: () => void
-}) {
+function SidebarChatGroupActions({ onNewChat }: { onNewChat?: () => void }) {
   return (
     <div className="flex shrink-0 items-center gap-1 pe-2.5 text-[var(--text-tertiary)]">
       <DropdownMenu>
@@ -149,7 +115,7 @@ function SidebarChatGroupActions({
           <div className="__menu-label mx-1.5 h-9 px-2.5 py-2 text-sm leading-5 font-normal text-[var(--text-tertiary)]">
             Organize
           </div>
-          <DropdownMenuRadioGroup value={organization}>
+          <DropdownMenuRadioGroup value="by-project">
             <DropdownMenuRadioItem
               value="by-project"
               className={sidebarMenuRadioItemClassName}
