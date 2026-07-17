@@ -30,7 +30,7 @@ export function ProjectSearch({ value, onValueChange }: ProjectSearchProps) {
         aria-label="Search projects"
         value={value}
         onChange={(event) => onValueChange(event.target.value)}
-        className="text-foreground border-input-border focus:border-border-strong bg-background placeholder:text-[var(--text-tertiary)] focus-visible:ring-focus-ring h-9 w-full rounded-full border ps-9 pe-3 text-sm/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+        className="text-foreground border-input-border focus:border-border-strong bg-[var(--projects-control-surface)] placeholder:text-[var(--text-tertiary)] focus-visible:ring-focus-ring h-9 w-full rounded-full border py-2 ps-9 pe-3 text-sm/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 motion-reduce:transition-none"
       />
     </div>
   )

@@ -61,6 +61,9 @@ const DEFAULT_DIRECTORY_STATE: DirectoryViewState = {
   sortDirection: "desc",
 }
 
+const projectNewButtonClassName =
+  "border border-transparent bg-[#0d0d0d] hover:bg-[#2f2f2f] dark:bg-white dark:hover:bg-[#e8e8e8] motion-reduce:transition-none motion-reduce:active:scale-100"
+
 function parseDirectoryViewState(searchParams: URLSearchParams) {
   const tabParam = searchParams.get("tab")
   const tab: ProjectsDirectoryTab =
@@ -348,7 +351,7 @@ export function ProjectsView() {
   }
 
   return (
-    <div className="flex w-full flex-col">
+    <div className="flex w-full flex-col [--projects-content-max-width:50rem] [--projects-control-fill:#f3f3f3] [--projects-control-surface:#fff] dark:[--projects-control-fill:#414141] dark:[--projects-control-surface:#212121]">
       {/* Mobile compact bar (captured: 52px, menu trigger + bold title + New). */}
       <div
         className="bg-background h-app-header sticky top-0 z-10 flex shrink-0 items-center justify-between gap-2 px-2 [box-shadow:var(--sharp-edge-top-shadow-placeholder)] data-[scrolled]:[box-shadow:var(--sharp-edge-top-shadow)] md:hidden"
@@ -361,7 +364,11 @@ export function ProjectsView() {
           </h1>
         </div>
         <div className="flex shrink-0 items-center justify-center pe-2">
-          <Button type="button" onClick={() => setIsCreateOpen(true)}>
+          <Button
+            type="button"
+            onClick={() => setIsCreateOpen(true)}
+            className={projectNewButtonClassName}
+          >
             New
           </Button>
         </div>
@@ -382,7 +389,11 @@ export function ProjectsView() {
               />
             </div>
             <div className="hidden shrink-0 md:block">
-              <Button type="button" onClick={() => setIsCreateOpen(true)}>
+              <Button
+                type="button"
+                onClick={() => setIsCreateOpen(true)}
+                className={projectNewButtonClassName}
+              >
                 New
               </Button>
             </div>
@@ -419,7 +430,7 @@ export function ProjectsView() {
 
       {/* List column. */}
       <div className="mx-auto flex w-full max-w-(--projects-content-max-width) flex-1 flex-col px-4 pb-8">
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="mt-2 flex min-h-0 flex-1 flex-col">
           <DirectoryErrorBoundary>{listContent}</DirectoryErrorBoundary>
         </div>
       </div>

@@ -10,10 +10,10 @@ import { RiFolderLine } from "@remixicon/react"
 export function ProjectIcon() {
   return (
     <div
-      className="border-border-default bg-background flex size-8 shrink-0 items-center justify-center rounded-md border"
+      className="border-border-default bg-[var(--projects-control-surface)] flex size-8 shrink-0 items-center justify-center rounded-md border"
       data-testid="project-folder-icon"
     >
-      <Icon icon={RiFolderLine} slotSize={20} />
+      <Icon icon={RiFolderLine} slotSize={20} glyphInset={0} />
     </div>
   )
 }

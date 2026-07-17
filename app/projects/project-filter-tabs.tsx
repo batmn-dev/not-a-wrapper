@@ -35,9 +35,9 @@ export function ProjectFilterTabs({ tab, onTabChange }: ProjectFilterTabsProps) 
             onClick={() => onTabChange(id)}
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "h-9 min-h-9 shrink-0 rounded-full px-4 text-sm font-medium",
+              "h-9 min-h-9 shrink-0 rounded-full border border-transparent px-4 text-sm/[18px] font-medium motion-reduce:transition-none motion-reduce:active:scale-100",
               isActive
-                ? "bg-muted text-foreground hover:bg-muted active:bg-muted"
+                ? "bg-[var(--projects-control-fill)] text-foreground hover:bg-[var(--projects-control-fill)] active:bg-[var(--projects-control-fill)]"
                 : "text-muted-foreground hover:text-foreground hover:bg-transparent active:bg-transparent"
             )}
           >

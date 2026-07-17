@@ -9,8 +9,14 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Icon } from "@/components/ui/icon"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
+import { cn } from "@/lib/utils"
 import { RiLoader4Line, RiMoreFill } from "@remixicon/react"
-import { Fragment, type ReactElement, type ReactNode } from "react"
+import {
+  Fragment,
+  type CSSProperties,
+  type ReactElement,
+  type ReactNode,
+} from "react"
 import {
   trailingIconButtonClassName,
   TrailingIconChip,
@@ -35,7 +41,11 @@ type RowActionsMenuProps = {
   trigger?: ReactElement
   triggerAriaLabel?: string
   contentAlign?: "start" | "center" | "end"
+  contentAlignOffset?: number
   contentSide?: "top" | "right" | "bottom" | "left"
+  contentClassName?: string
+  contentStyle?: CSSProperties
+  itemClassName?: string
   onOpenChange?: (open: boolean) => void
 }
 
@@ -50,7 +60,11 @@ export function RowActionsMenu({
   trigger,
   triggerAriaLabel,
   contentAlign = "start",
+  contentAlignOffset,
   contentSide = "bottom",
+  contentClassName,
+  contentStyle,
+  itemClassName,
   onOpenChange,
 }: RowActionsMenuProps) {
   const isMobile = useBreakpoint(768)
@@ -91,7 +105,9 @@ export function RowActionsMenu({
       <DropdownMenuContent
         side={contentSide}
         align={contentAlign}
-        className="w-40"
+        alignOffset={contentAlignOffset}
+        className={cn("w-40", contentClassName)}
+        style={contentStyle}
         animated={false}
       >
         {items.map((item) => (
@@ -99,6 +115,7 @@ export function RowActionsMenu({
             {item.separatorBefore && <DropdownMenuSeparator />}
             <DropdownMenuItem
               variant={item.variant}
+              className={itemClassName}
               disabled={item.disabled}
               aria-label={item.ariaLabel}
               onClick={(e) => {

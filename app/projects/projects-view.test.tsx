@@ -590,9 +590,19 @@ describe("ProjectsView", () => {
       container.querySelector('[data-project-id="p1"] [title="Pinned"]')
     ).toBeTruthy()
     expect(
+      container
+        .querySelector('[data-project-id="p1"] [data-testid="project-row-pin"]')
+        ?.closest('[data-page-table-row-actions="true"]')
+    ).toBeTruthy()
+    expect(
+      container.querySelector(
+        '[data-project-id="p1"] [role="gridcell"]:first-child [title="Pinned"]'
+      )
+    ).toBeNull()
+    expect(
       container.querySelector('[data-project-id="p1"] [data-menu-item="pin"]')
         ?.textContent
-    ).toBe("Unpin")
+    ).toBe("Unpin project")
   })
 
   it("rolls pinning back and shows a failure toast when the mutation rejects", async () => {
@@ -632,6 +642,7 @@ describe("ProjectsView", () => {
     expect(actions.className).toContain(
       "group-focus-within/project-row:opacity-100"
     )
+    expect(actions.className).toContain("max-sm:opacity-100")
     expect(actions.className).toContain("pointer-coarse:opacity-100")
   })
 })

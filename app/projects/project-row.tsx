@@ -108,17 +108,8 @@ export function ProjectRow({
         />
       ) : (
         <div className="flex min-w-0 flex-col">
-          <div className="text-foreground flex min-w-0 items-center gap-1.5 text-sm/[18px]">
+          <div className="text-foreground flex min-w-0 items-center gap-2 text-sm/[18px]">
             <span className="min-w-0 truncate">{displayName}</span>
-            {project.pinned ? (
-              <span
-                className="shrink-0 text-[var(--text-tertiary)]"
-                title="Pinned"
-              >
-                <Icon icon={RiPushpin2Fill} slotSize={14} />
-                <span className="sr-only">Pinned</span>
-              </span>
-            ) : null}
           </div>
           {/* Mobile-only stacked date (12/16, secondary). */}
           <div className="text-muted-foreground mt-1 truncate text-xs/4 sm:hidden">
@@ -147,7 +138,22 @@ export function ProjectRow({
       data-page-table-row-actions="true"
       className="relative z-10 -me-2 flex items-center justify-end"
     >
-      <div className="relative h-9 w-[78px] shrink-0">
+      <div className="relative size-9 shrink-0">
+        {project.pinned ? (
+          <div
+            data-testid="project-row-pin"
+            className={cn(
+              "pointer-events-none absolute inset-0 flex items-center justify-center text-[var(--text-tertiary)] transition-opacity duration-150 motion-reduce:transition-none",
+              "opacity-100 group-hover/project-row:opacity-0 group-focus-within/project-row:opacity-0",
+              "max-sm:opacity-0 pointer-coarse:opacity-0",
+              isMenuOpen && "opacity-0"
+            )}
+            title="Pinned"
+          >
+            <Icon icon={RiPushpin2Fill} slotSize={16} glyphInset={0} />
+            <span className="sr-only">Pinned</span>
+          </div>
+        ) : null}
         {/* Desktop reveal on row hover / focus-within; always visible on touch;
             pinned visible while the menu is open (focus moves into the popup,
             so focus-within alone would hide the open menu's trigger). */}
@@ -155,10 +161,11 @@ export function ProjectRow({
           data-testid="project-row-actions"
           data-menu-open={isMenuOpen || undefined}
           className={cn(
-            "absolute inset-y-0 end-0 flex items-center justify-end gap-1.5 transition-opacity duration-150 motion-reduce:transition-none",
+            "absolute inset-y-0 end-0 flex w-[78px] items-center justify-end gap-1.5 transition-opacity duration-150 motion-reduce:transition-none",
             "pointer-events-none opacity-0",
             "group-hover/project-row:pointer-events-auto group-hover/project-row:opacity-100",
             "group-focus-within/project-row:pointer-events-auto group-focus-within/project-row:opacity-100",
+            "max-sm:pointer-events-auto max-sm:opacity-100",
             "pointer-coarse:pointer-events-auto pointer-coarse:opacity-100",
             isMenuOpen && "pointer-events-auto opacity-100"
           )}
@@ -176,7 +183,7 @@ export function ProjectRow({
               event.stopPropagation()
               void handleCreateChat()
             }}
-            className="hover:bg-muted data-[creating=true]:bg-muted focus-visible:ring-focus-ring flex size-9 min-h-9 items-center justify-center rounded-sm text-[var(--text-tertiary)] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60 motion-reduce:transition-none"
+            className="hover:bg-[var(--projects-control-fill)] data-[creating=true]:bg-[var(--projects-control-fill)] focus-visible:ring-focus-ring flex size-9 min-h-9 items-center justify-center rounded-sm text-[var(--text-tertiary)] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60 motion-reduce:transition-none"
             data-creating={isCreatingChat || undefined}
           >
             <Icon icon={RiAddLine} slotSize={20} />
@@ -199,6 +206,7 @@ export function ProjectRow({
             }}
             triggerAriaLabel={`Open project options for ${displayName}`}
             contentAlign="end"
+            presentation="directory"
             trigger={
               <button
                 ref={menuTriggerRef}
@@ -215,7 +223,7 @@ export function ProjectRow({
                   event.preventDefault()
                   event.stopPropagation()
                 }}
-                className="hover:bg-muted data-popup-open:bg-muted focus-visible:ring-focus-ring flex size-9 min-h-9 items-center justify-center rounded-sm text-[var(--text-tertiary)] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-offset-2 motion-reduce:transition-none"
+                className="hover:bg-[var(--projects-control-fill)] data-popup-open:bg-[var(--projects-control-fill)] focus-visible:ring-focus-ring flex size-9 min-h-9 items-center justify-center rounded-sm text-[var(--text-tertiary)] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-offset-2 motion-reduce:transition-none"
               >
                 <Icon icon={RiMoreFill} slotSize={20} />
               </button>

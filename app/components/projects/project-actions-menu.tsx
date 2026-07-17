@@ -12,6 +12,11 @@ import {
 } from "@remixicon/react"
 import { useState, type ReactElement } from "react"
 
+const directoryMenuStyle = {
+  boxShadow:
+    "rgba(0, 0, 0, 0.08) 0 8px 12px 0, rgba(0, 0, 0, 0.62) 0 0 1px 0",
+} as const
+
 type Project = {
   _id: Id<"projects">
   name: string
@@ -34,6 +39,7 @@ type ProjectActionsMenuProps = {
   trigger?: ReactElement
   contentAlign?: "start" | "center" | "end"
   contentSide?: "top" | "right" | "bottom" | "left"
+  presentation?: "default" | "directory"
 }
 
 // Project adapter over the Row-actions menu: Rename + Delete, owning its own
@@ -50,8 +56,10 @@ export function ProjectActionsMenu({
   trigger,
   contentAlign = "start",
   contentSide = "bottom",
+  presentation = "default",
 }: ProjectActionsMenuProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const isDirectory = presentation === "directory"
 
   return (
     // Layout-neutral click boundary. The menu and dialog render in DOM portals
@@ -71,7 +79,11 @@ export function ProjectActionsMenu({
                 slotSize={20}
               />
             ),
-            label: isPinned ? "Unpin" : "Pin",
+            label: isDirectory
+              ? `${isPinned ? "Unpin" : "Pin"} project`
+              : isPinned
+                ? "Unpin"
+                : "Pin",
             ariaLabel: `${isPinned ? "Unpin" : "Pin"} ${
               project.name || "Untitled Project"
             }`,
@@ -88,9 +100,9 @@ export function ProjectActionsMenu({
           {
             key: "delete",
             icon: <Icon icon={RiDeleteBinLine} slotSize={20} />,
-            label: "Delete",
+            label: isDirectory ? "Delete project" : "Delete",
             variant: "destructive",
-            separatorBefore: true,
+            separatorBefore: !isDirectory,
             onSelect: () => setIsDeleteDialogOpen(true),
           },
         ]}
@@ -99,6 +111,14 @@ export function ProjectActionsMenu({
         onOpenChange={onMenuOpenChange}
         contentSide={contentSide}
         contentAlign={contentAlign}
+        contentAlignOffset={isDirectory ? -4 : undefined}
+        contentClassName={
+          isDirectory ? "w-[200px] rounded-[1rem]" : undefined
+        }
+        contentStyle={
+          isDirectory ? directoryMenuStyle : undefined
+        }
+        itemClassName={isDirectory ? "gap-1.5 px-2.5 pe-8" : undefined}
       />
 
       <DialogDeleteProject
