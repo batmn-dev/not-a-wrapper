@@ -86,6 +86,17 @@ export const updateName = ownedProjectMutation({
 })
 
 /**
+ * Pin or unpin a project. `ownedProjectMutation` authenticates the caller and
+ * verifies ownership before this handler can patch the document.
+ */
+export const togglePinned = ownedProjectMutation({
+  args: { pinned: v.boolean() },
+  handler: async (ctx, { pinned }) => {
+    await ctx.db.patch(ctx.project._id, { pinned })
+  },
+})
+
+/**
  * Delete a project and its associated chats
  */
 export const remove = ownedProjectMutation({

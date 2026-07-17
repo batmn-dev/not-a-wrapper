@@ -21,6 +21,7 @@ export type RowActionItem = {
   /** Rendered as-is (an <Icon/> or a lucide glyph); replaced by a spinner while `loading`. */
   icon: ReactNode
   label: string
+  ariaLabel?: string
   onSelect: () => void
   variant?: "default" | "destructive"
   loading?: boolean
@@ -99,6 +100,7 @@ export function RowActionsMenu({
             <DropdownMenuItem
               variant={item.variant}
               disabled={item.disabled}
+              aria-label={item.ariaLabel}
               onClick={(e) => {
                 e.stopPropagation()
                 item.onSelect()

@@ -53,6 +53,9 @@
      existing h-app-header utility stays in lockstep. */
   --header-height: 3.25rem;
   --spacing-app-header: var(--header-height);
+  /* Captured ChatGPT --text-heading-app (28px/34px): directory page headings. */
+  --text-heading-app: 1.75rem;
+  --text-heading-app--line-height: 2.125rem;
   /* Captured assistant-prose line-height token: 26px body rhythm
      for the thread's `.markdown` container. */
   --text-body-regular--line-height: 1.625rem;
@@ -334,6 +337,8 @@
   --color-interactive-hover: var(--interactive-bg-hover);
   --color-interactive-selected: var(--interactive-bg-selected);
   --color-interactive-pressed: var(--interactive-bg-pressed);
+  /* Opaque list-row hover surface (ChatGPT --interactive-bg-tertiary-hover). */
+  --color-row-hover: var(--row-hover-surface);
   --color-sidebar-row: var(--sidebar-row-bg);
   --color-activity-panel-border: var(--activity-panel-border);
   --color-user-message: var(--user-message-bg);
@@ -416,6 +421,18 @@
   --text-disabled: oklch(0.65 0 0);
   --link: oklch(0.501 0.127 254.712);
   --link-hover: oklch(0.419 0.106 255.109);
+
+  /* Projects directory metrics (captured: 810px content column, 60px sticky
+     toolbar). Page-scoped aliases, not global layout tokens. */
+  --projects-content-max-width: 50.625rem;
+  --projects-toolbar-min-height: 3.75rem;
+
+  /* Opaque row-hover surface for full-bleed list rows (ChatGPT's
+     --interactive-bg-tertiary-hover, measured #f9f9f9 on white). Deliberately
+     OPAQUE — the hover pill overlaps the row hairlines by 1px and must conceal
+     them. oklch(0.981) ≈ #f9f9f9, a lighter lift than the tab pill (#f2f2f2),
+     mirroring ChatGPT's distinct row-hover vs bg-tertiary tokens. */
+  --row-hover-surface: oklch(0.981 0 0);
 
   /* Interactive states remain translucent so they composite with their surface. */
   --interactive-bg-hover: oklch(0 0 0 / 0.05);
@@ -557,6 +574,9 @@
   --text-secondary: oklch(0.848 0 0);
   --text-tertiary: oklch(0.754 0 0);
   --text-disabled: oklch(1 0 0 / 0.412);
+  /* Dark opaque row-hover: a subtle raise off the black surface, matching the
+     strength of the existing translucent hover tokens. */
+  --row-hover-surface: oklch(0.2 0 0);
   --link: oklch(0.767 0.122 253.354);
   /* Preserve AA contrast on every dark raised surface; hover is also conveyed
      by the link decoration, rather than by lowering the link's lightness. */

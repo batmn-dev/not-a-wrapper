@@ -269,6 +269,9 @@ export default defineSchema({
   projects: defineTable({
     userId: v.id("users"),
     name: v.string(),
+    // Optional while this first reaches production so existing smoke-test rows
+    // remain valid; false/undefined are intentionally equivalent.
+    pinned: v.optional(v.boolean()),
   }).index("by_user", ["userId"]),
 
   userPreferences: defineTable({

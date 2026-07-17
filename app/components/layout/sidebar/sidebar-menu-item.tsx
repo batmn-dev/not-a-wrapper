@@ -26,6 +26,12 @@ type SidebarMenuItemProps = Omit<
   onClick?: MouseEventHandler<HTMLAnchorElement | HTMLButtonElement>
   /** Trailing content (keyboard shortcuts, badges, etc.) */
   trailing?: ReactNode
+  /**
+   * Set when `trailing` is an interactive control (not a passive hint): keeps
+   * it reachable by revealing on focus-within and on touch devices, where
+   * hover-only reveal would make it inoperable.
+   */
+  trailingInteractive?: boolean
   /** Test ID for e2e testing */
   testId?: string
   /** Additional className */
@@ -69,6 +75,7 @@ export const SidebarMenuItem = forwardRef<
     href,
     onClick,
     trailing,
+    trailingInteractive,
     testId,
     className,
     isActive,
@@ -89,7 +96,13 @@ export const SidebarMenuItem = forwardRef<
         <span className="truncate">{label}</span>
       </div>
       {trailing && (
-        <div className="shrink-0 text-[var(--text-tertiary)] opacity-0 group-hover/menu-item:opacity-100">
+        <div
+          className={cn(
+            "shrink-0 text-[var(--text-tertiary)] opacity-0 group-hover/menu-item:opacity-100",
+            trailingInteractive &&
+              "group-focus-within/menu-item:opacity-100 pointer-coarse:opacity-100"
+          )}
+        >
           {trailing}
         </div>
       )}
