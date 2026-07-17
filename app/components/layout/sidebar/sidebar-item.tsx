@@ -7,9 +7,9 @@ import { Chat } from "@/lib/chat-store/types"
 import { RiChat3Line } from "@remixicon/react"
 import { SidebarItemMenu } from "./sidebar-item-menu"
 import { SidebarChatStatusIndicator } from "./sidebar-item-status"
+import { SidebarChatPinButton } from "./sidebar-chat-pin-button"
 import { SidebarRow } from "./sidebar-row"
 import { SidebarRowEndSlot } from "./sidebar-row-actions"
-import { SidebarChatPinButton } from "./trailing-icon-button"
 
 type SidebarItemProps = {
   chat: Chat

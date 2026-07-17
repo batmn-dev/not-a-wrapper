@@ -19,6 +19,7 @@ import { SidebarItem } from "./sidebar-item"
 import { SidebarProjectActionsMenu } from "./sidebar-project-actions-menu"
 import { SidebarRow } from "./sidebar-row"
 import { SidebarRowActions } from "./sidebar-row-actions"
+import { SidebarSecondaryAction } from "./trailing-icon-button"
 
 type Project = {
   _id: Id<"projects">
@@ -104,30 +105,39 @@ export function SidebarProjectItem({
         }
         trailing={({ startRename }) => (
           <SidebarRowActions strategy="overlay" key={project._id}>
-            <Tooltip disableHoverablePopup>
-              <TooltipTrigger
-                render={
-                  <Link
-                    href={`/p/${project._id}`}
-                    aria-label="Open project home"
-                    className="hover:text-foreground flex h-9 items-center justify-center text-[var(--text-tertiary)] outline-none"
-                    onClick={() => setOpenMobile(false)}
-                  />
-                }
-              >
-                <span className="trailing-icon-chip flex size-6 items-center justify-center rounded-md">
-                  <Icon icon={RiAddLine} slotSize={20} />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent
-                side="top"
-                sideOffset={-6}
-                variant="outline"
-                className="text-sm font-normal"
-              >
-                New Chat
-              </TooltipContent>
-            </Tooltip>
+            <SidebarSecondaryAction
+              pinned={project.pinned ?? false}
+              title={displayName}
+              itemType="Project"
+              onTogglePinned={onTogglePinned}
+              isPending={isPinPending}
+              unpinnedAction={
+                <Tooltip disableHoverablePopup>
+                  <TooltipTrigger
+                    render={
+                      <Link
+                        href={`/p/${project._id}`}
+                        aria-label="Open project home"
+                        className="hover:text-foreground flex h-9 items-center justify-center text-[var(--text-tertiary)] outline-none"
+                        onClick={() => setOpenMobile(false)}
+                      />
+                    }
+                  >
+                    <span className="trailing-icon-chip flex size-6 items-center justify-center rounded-md">
+                      <Icon icon={RiAddLine} slotSize={20} />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="top"
+                    sideOffset={-14}
+                    variant="outline"
+                    className="text-sm font-normal"
+                  >
+                    New Chat
+                  </TooltipContent>
+                </Tooltip>
+              }
+            />
             <SidebarProjectActionsMenu
               project={project}
               onStartEditing={startRename}

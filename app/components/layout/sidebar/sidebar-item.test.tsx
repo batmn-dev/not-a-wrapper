@@ -45,7 +45,7 @@ vi.mock("./sidebar-item-menu", () => ({
 vi.mock("./sidebar-item-status", () => ({
   SidebarChatStatusIndicator: () => <span data-status-indicator />,
 }))
-vi.mock("./trailing-icon-button", () => ({
+vi.mock("./sidebar-chat-pin-button", () => ({
   SidebarChatPinButton: () => <button type="button">Pin</button>,
 }))
 

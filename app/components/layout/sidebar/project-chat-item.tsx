@@ -10,10 +10,10 @@ import { Chat } from "@/lib/chat-store/types"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { useCallback, useMemo } from "react"
+import { SidebarChatPinButton } from "./sidebar-chat-pin-button"
 import { SidebarItemMenu } from "./sidebar-item-menu"
 import { SidebarChatStatusIndicator } from "./sidebar-item-status"
 import { SidebarRowEndSlot } from "./sidebar-row-actions"
-import { SidebarChatPinButton } from "./trailing-icon-button"
 
 type ProjectChatItemProps = {
   chat: Chat

@@ -18,6 +18,7 @@ import { SidebarProjectItem } from "./sidebar-project-item"
 const mocks = vi.hoisted(() => ({
   pathname: "/projects",
   setOpenMobile: vi.fn(),
+  onTogglePinned: vi.fn(),
 }))
 
 vi.mock("next/link", () => ({
@@ -98,6 +99,7 @@ describe("SidebarProjectItem", () => {
     ).IS_REACT_ACT_ENVIRONMENT = true
     mocks.pathname = "/projects"
     mocks.setOpenMobile.mockClear()
+    mocks.onTogglePinned.mockClear()
     localStorage.clear()
     container = document.createElement("div")
     document.body.append(container)
@@ -155,6 +157,30 @@ describe("SidebarProjectItem", () => {
         ?.getAttribute("data-presentation")
     ).toBe("nested")
     expect(container.textContent).toContain("Show more")
+  })
+
+  it("uses unpin as the secondary action for a pinned project", async () => {
+    await act(async () => {
+      root.render(
+        <SidebarProjectItem
+          project={{ ...project("project-1"), pinned: true }}
+          currentChatId=""
+          onTogglePinned={mocks.onTogglePinned}
+        />
+      )
+    })
+
+    expect(
+      container.querySelector('a[aria-label="Open project home"]')
+    ).toBeNull()
+    const unpinButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Unpin Taxes"]'
+    )
+    expect(unpinButton).not.toBeNull()
+
+    await act(async () => unpinButton?.click())
+
+    expect(mocks.onTogglePinned).toHaveBeenCalledOnce()
   })
 
   it("forces an out-of-preview active project chat open without styling the project active", async () => {
