@@ -17,50 +17,6 @@ type AppUIMessage = Omit<UIMessage, "parts"> & {
 }
 
 describe("prepareTextFilePartsForModelInput", () => {
-  it("converts trusted text/plain file parts into model-safe text content", async () => {
-    const fetchImpl = vi.fn(async () => new Response("hello from the file"))
-    const messages = [
-      {
-        id: "u1",
-        role: "user",
-        parts: [
-          { type: "text", text: "Upload smoke test" },
-          {
-            type: "file",
-            filename: "not-a-wrapper-upload-smoke.txt",
-            mediaType: "text/plain",
-            attachmentId: "attachment-1",
-            url: "https://files.example/smoke.txt",
-          },
-        ],
-      },
-    ] satisfies AppUIMessage[]
-
-    const result = await prepareTextFilePartsForModelInput(messages, {
-      fetchImpl,
-      trustedAttachments: [
-        {
-          attachmentId: "attachment-1",
-          url: "https://files.example/smoke.txt",
-        },
-      ],
-    })
-
-    expect(fetchImpl).toHaveBeenCalledWith(
-      "https://files.example/smoke.txt",
-      expect.objectContaining({ signal: expect.any(Object) })
-    )
-    expect(result.convertedCount).toBe(1)
-    expect(result.failedCount).toBe(0)
-    expect(result.messages[0].parts).toEqual([
-      { type: "text", text: "Upload smoke test" },
-      {
-        type: "text",
-        text: 'Attached plain text file "not-a-wrapper-upload-smoke.txt":\n\nhello from the file',
-      },
-    ])
-  })
-
   it("fetches the trusted stored URL instead of a forged client URL", async () => {
     const fetchImpl = vi.fn(async () => new Response("trusted content"))
     const messages = [

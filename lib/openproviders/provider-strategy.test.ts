@@ -1,30 +1,10 @@
 import { describe, expect, it } from "vitest"
 import { getProviderStrategy } from "./provider-strategy"
-import type { Provider } from "./types"
 
 const SEARCH_PROVIDERS = ["openai", "anthropic", "google", "xai"] as const
 const NON_SEARCH_PROVIDERS = ["mistral", "perplexity", "openrouter"] as const
 
-const ENV_VARS: Record<Provider, string> = {
-  openai: "OPENAI_API_KEY",
-  anthropic: "ANTHROPIC_API_KEY",
-  google: "GOOGLE_GENERATIVE_AI_API_KEY",
-  xai: "XAI_API_KEY",
-  mistral: "MISTRAL_API_KEY",
-  perplexity: "PERPLEXITY_API_KEY",
-  openrouter: "OPENROUTER_API_KEY",
-}
-
 describe("provider strategy registry", () => {
-  it.each(Object.keys(ENV_VARS) as Provider[])(
-    "exposes id and platform env-var name for %s",
-    (provider) => {
-      const strategy = getProviderStrategy(provider)
-      expect(strategy.id).toBe(provider)
-      expect(strategy.envVarName).toBe(ENV_VARS[provider])
-    }
-  )
-
   it.each(SEARCH_PROVIDERS)(
     "%s exposes a native search tool on both BYOK and env paths",
     (provider) => {

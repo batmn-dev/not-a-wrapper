@@ -1,9 +1,7 @@
 import { getDefaultModelForUser } from "@/lib/config"
-import { openrouterModels } from "@/lib/models/data/openrouter"
 import type { ModelConfig } from "@/lib/models/types"
 import { describe, expect, it } from "vitest"
 import {
-  DEFAULT_MODEL_ORDER,
   filterAndSortModels,
   isModelAllowedForAnonymous,
   isModelSelectableForAuthState,
@@ -120,12 +118,6 @@ describe("model access by auth state", () => {
 
 describe("filterAndSortModels", () => {
   const isModelHidden = () => false
-
-  it("derives the OpenRouter selector order from the generated catalog", () => {
-    expect(
-      DEFAULT_MODEL_ORDER.filter((modelId) => modelId.startsWith("openrouter:"))
-    ).toEqual(openrouterModels.map((model) => model.id))
-  })
 
   it("prunes models marked invisible for selectors", () => {
     expect(

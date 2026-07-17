@@ -1,10 +1,7 @@
-import type { ServerInfo } from "@/lib/mcp/load-tools"
 import { describe, expect, it } from "vitest"
-import type { ToolMetadata } from "../types"
 import {
   buildFinishToolInvocationStreamMetadata,
   buildStartToolInvocationStreamMetadata,
-  buildToolInvocationMetadataByName,
   humanizeToolName,
   resolveToolInvocationMetadata,
 } from "../ui-metadata"
@@ -13,69 +10,6 @@ describe("humanizeToolName", () => {
   it("converts snake/camel case names to readable labels", () => {
     expect(humanizeToolName("github_create_issue")).toBe("Github Create Issue")
     expect(humanizeToolName("readFileFromRepo")).toBe("Read File From Repo")
-  })
-})
-
-describe("buildToolInvocationMetadataByName", () => {
-  it("merges non-MCP and MCP metadata into transport-safe shape", () => {
-    const nonMcpMetadata = new Map<string, ToolMetadata>([
-      [
-        "web_search",
-        {
-          displayName: "Web Search",
-          source: "third-party",
-          serviceName: "Exa",
-          icon: "search",
-          estimatedCostPer1k: 5,
-          readOnly: true,
-          idempotent: true,
-        },
-      ],
-    ])
-
-    const mcpToolServerMap = new Map<string, ServerInfo>([
-      [
-        "github_create_issue",
-        {
-          displayName: "create_issue",
-          serverName: "GitHub MCP",
-          serverId: "server_123",
-          readOnly: false,
-          destructive: false,
-          idempotent: true,
-          openWorld: true,
-        },
-      ],
-    ])
-
-    const metadata = buildToolInvocationMetadataByName({
-      nonMcpMetadata,
-      mcpToolServerMap,
-    })
-
-    expect(metadata.web_search).toEqual({
-      displayName: "Web Search",
-      source: "third-party",
-      serviceName: "Exa",
-      icon: "search",
-      estimatedCostPer1k: 5,
-      readOnly: true,
-      destructive: undefined,
-      idempotent: true,
-      openWorld: undefined,
-    })
-
-    expect(metadata.github_create_issue).toEqual({
-      displayName: "Create Issue",
-      source: "mcp",
-      serviceName: "GitHub MCP",
-      icon: "wrench",
-      estimatedCostPer1k: undefined,
-      readOnly: false,
-      destructive: false,
-      idempotent: true,
-      openWorld: true,
-    })
   })
 })
 

@@ -425,20 +425,6 @@ describe("chat turn controller", () => {
     )
   })
 
-  it("does not reject direct text solely because it exceeds 10,000 characters", async () => {
-    const { adapters, controller } = createHarness()
-    const onSuccess = vi.fn()
-
-    await controller.runSendTurn({
-      text: "x".repeat(10_001),
-      onSuccess,
-    })
-
-    expect(adapters.toastError).not.toHaveBeenCalled()
-    expect(adapters.sendMessage).toHaveBeenCalled()
-    expect(onSuccess).toHaveBeenCalledWith("chat-1")
-  })
-
   it("rejects against the selected model's effective input budget before side effects", async () => {
     const { adapters, controller, setSnapshot } = createHarness()
     setSnapshot({ selectedModel: "gemma-3-27b-it" })
@@ -591,35 +577,6 @@ describe("chat turn controller", () => {
     expect(adapters.bumpChat).toHaveBeenCalledWith("chat-1")
   })
 
-  it("does not reject a user-message edit solely because it exceeds 10,000 characters", async () => {
-    const {
-      adapters,
-      controller,
-      setMessagesState,
-      setRoutePersistsMessages,
-      setSnapshot,
-    } = createHarness()
-    setRoutePersistsMessages(true)
-    setSnapshot({ isAuthenticated: true })
-    const messages = [
-      userMessage("user-1", "old text", new Date("2026-01-02T00:00:00Z")),
-      assistantMessage("assistant-1", "old answer"),
-    ]
-    setMessagesState(messages)
-
-    const result = await controller.runEditTurn({
-      chatId: "chat-existing",
-      messages,
-      messageId: "user-1",
-      newContent: "x".repeat(10_001),
-      isSubmitting: false,
-      status: "ready",
-    })
-
-    expect(result).toEqual({ ok: true })
-    expect(adapters.sendMessage).toHaveBeenCalled()
-  })
-
   it("restores visible messages when edit resend dispatch throws", async () => {
     const {
       adapters,
@@ -726,52 +683,6 @@ describe("chat turn controller", () => {
       }
     )
     expect(storeAdapters.pendingEdit.stage).toHaveBeenCalled()
-  })
-
-  it("accepts AI SDK client message IDs in durable edit intents", async () => {
-    const {
-      adapters,
-      controller,
-      setMessagesState,
-      setRoutePersistsMessages,
-      setSnapshot,
-    } = createHarness()
-    setRoutePersistsMessages(true)
-    setSnapshot({ isAuthenticated: true, systemPrompt: "custom system" })
-    const targetCreatedAt = new Date("2026-01-02T00:00:00.000Z")
-    const clientMessageId = "msg-client-123"
-    const originalMessages = [
-      userMessage(clientMessageId, "old text", targetCreatedAt),
-      assistantMessage("assistant-1", "old answer"),
-    ]
-    setMessagesState(originalMessages)
-
-    const result = await controller.runEditTurn({
-      chatId: "server-chat",
-      messages: originalMessages,
-      messageId: clientMessageId,
-      newContent: "new text",
-      isSubmitting: false,
-      status: "ready",
-    })
-
-    expect(result).toEqual({ ok: true })
-    expect(adapters.sendMessage).toHaveBeenCalledWith(
-      {
-        id: "optimistic-edit-message",
-        role: "user",
-        parts: [{ type: "text", text: "new text" }],
-        createdAt: expect.any(Date),
-      },
-      {
-        body: expect.objectContaining({
-          edit: expect.objectContaining({
-            editedMessageId: clientMessageId,
-            editCutoffTimestamp: targetCreatedAt.getTime(),
-          }),
-        }),
-      }
-    )
   })
 
   it("blocks edit while generation is active without closing the draft lifecycle", async () => {
@@ -965,10 +876,10 @@ describe("chat turn controller", () => {
     )
   })
 
-  it("persists finish for local, durable, and pending edit turns", async () => {
-    // Identity adoption is owned by the branch projection seam; finishChatTurn
-    // persists (or skips, when the route persists) and records the finish
-    // reason, but does not patch live message ids.
+  it("records the finish reason and persists the local turn", async () => {
+    // The finish matrix across local/durable/pending-edit routes is owned by
+    // turn-store.test.ts; this pins the controller's setLastFinishReason
+    // wiring plus one persistence pass.
     const local = createHarness()
     const assistant = assistantMessage("assistant-new", "answer")
 
@@ -987,62 +898,5 @@ describe("chat turn controller", () => {
       assistant,
       "local-chat"
     )
-
-    const durable = createHarness()
-    durable.setRoutePersistsMessages(true)
-
-    await durable.controller.finishChatTurn({
-      message: assistant,
-      isAbort: false,
-      isDisconnect: false,
-      isError: false,
-      finishReason: "stop",
-      chatId: "server-chat",
-      previousChatId: null,
-    })
-
-    expect(durable.storeAdapters.cacheAndAddMessage).not.toHaveBeenCalled()
-
-    const pendingLocal = createHarness()
-    pendingLocal.stagePendingEdit(
-      userMessage("edited-user", "edited"),
-      "local-chat"
-    )
-
-    await pendingLocal.controller.finishChatTurn({
-      message: assistant,
-      isAbort: false,
-      isDisconnect: false,
-      isError: true,
-      finishReason: "error",
-      chatId: "local-chat",
-      previousChatId: null,
-    })
-
-    expect(pendingLocal.storeAdapters.cacheAndAddMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "edited-user" }),
-      "local-chat"
-    )
-
-    const pendingDurable = createHarness()
-    pendingDurable.setRoutePersistsMessages(true)
-    pendingDurable.stagePendingEdit(
-      userMessage("edited-user", "edited"),
-      "server-chat"
-    )
-
-    await pendingDurable.controller.finishChatTurn({
-      message: assistant,
-      isAbort: true,
-      isDisconnect: false,
-      isError: false,
-      finishReason: "stop",
-      chatId: "server-chat",
-      previousChatId: null,
-    })
-
-    expect(
-      pendingDurable.storeAdapters.cacheAndAddMessage
-    ).not.toHaveBeenCalled()
   })
 })

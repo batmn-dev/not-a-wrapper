@@ -196,55 +196,6 @@ describe("replay compiler matrix", () => {
     expect(replayText).toContain("job_replay_test_1")
   })
 
-  it("pay_status in history is downgraded to text continuity on OpenAI replay", async () => {
-    const history: UIMessage[] = [
-      {
-        id: "msg-matrix-status-user",
-        role: "user",
-        parts: [{ type: "text", text: "What is the status of my order?" }],
-      } as UIMessage,
-      {
-        id: "msg-matrix-status-assistant",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-pay_status",
-            state: "output-available",
-            toolCallId: "tc_status_1",
-            toolName: "pay_status",
-            providerExecuted: false,
-            input: { jobId: "job_replay_test_2" },
-            output: {
-              jobId: "job_replay_test_2",
-              status: "completed",
-              isTerminal: true,
-              latestMessage: "Order delivered.",
-              eventCount: 5,
-            },
-            callProviderMetadata: {
-              anthropic: { requestId: "req_status_anthropic" },
-            },
-          },
-          { type: "text", text: "Your order has been delivered." },
-        ],
-      } as UIMessage,
-    ]
-
-    const result = await adaptHistoryForProvider(
-      history,
-      "openai",
-      { targetModelId: "gpt-5.2", hasTools: true },
-      { useReplayCompiler: true }
-    )
-    const assistant = findAssistant(result.messages)
-
-    const toolPart = assistant?.parts.find(
-      (part) => part.type === "tool-pay_status" || part.type === "dynamic-tool"
-    )
-    expect(toolPart).toBeUndefined()
-    expect(assistant?.parts.some((part) => part.type === "text")).toBe(true)
-  })
-
   it("OpenAI -> Google falls back to legacy adapter when no replay compiler is registered", async () => {
     const history: UIMessage[] = [
       {

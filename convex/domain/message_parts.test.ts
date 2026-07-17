@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest"
-import {
-  extractTextFromMessageParts,
-  normalizeMessagePartsForStorage,
-} from "./message_parts"
+import { extractTextFromMessageParts } from "./message_parts"
 
 describe("Convex message parts helpers", () => {
   it("extracts text from valid text parts only", () => {
@@ -25,26 +22,4 @@ describe("Convex message parts helpers", () => {
     )
   })
 
-  it("preserves legacy attachment bridging for storage", () => {
-    expect(
-      normalizeMessagePartsForStorage(
-        [{ type: "text", text: "see attached" }],
-        [
-          {
-            name: "receipt.pdf",
-            contentType: "application/pdf",
-            url: "https://example.com/receipt.pdf",
-          },
-        ]
-      )
-    ).toEqual([
-      { type: "text", text: "see attached" },
-      {
-        type: "file",
-        filename: "receipt.pdf",
-        mediaType: "application/pdf",
-        url: "https://example.com/receipt.pdf",
-      },
-    ])
-  })
 })

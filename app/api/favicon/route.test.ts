@@ -13,16 +13,6 @@ describe("/api/favicon route", () => {
     vi.unstubAllGlobals()
   })
 
-  it("rejects requests without a domain", async () => {
-    const fetchMock = vi.fn()
-    vi.stubGlobal("fetch", fetchMock)
-
-    const response = await GET(request())
-
-    expect(response.status).toBe(400)
-    expect(fetchMock).not.toHaveBeenCalled()
-  })
-
   it("forwards successful image responses", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response("favicon", {

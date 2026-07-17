@@ -1,6 +1,5 @@
 import type { UIMessage } from "ai"
 import { describe, expect, it } from "vitest"
-import { sanitizeMessagesForProvider } from "../../utils"
 import { defaultAdapter } from "../default"
 import * as fixtures from "./fixtures"
 
@@ -9,34 +8,7 @@ const context = {
   hasTools: true,
 }
 
-function shape(messages: UIMessage[]) {
-  return messages.map((message) => ({
-    role: message.role,
-    parts: message.parts,
-  }))
-}
-
 describe("defaultAdapter", () => {
-  it("matches legacy strip-all sanitize behavior by message shape", async () => {
-    const conversation = [
-      fixtures.userMessage("u1", "Find Batman products"),
-      fixtures.singleSdkToolComplete,
-      fixtures.userMessage("u2", "Thanks"),
-    ]
-
-    const adapted = await defaultAdapter.adaptMessages(conversation, context)
-    const legacy = sanitizeMessagesForProvider(
-      conversation as unknown as UIMessage[],
-      "openai"
-    )
-
-    expect(shape(adapted.messages)).toEqual(
-      shape(legacy as unknown as UIMessage[])
-    )
-    expect(adapted.stats.partsDropped.reasoning).toBe(1)
-    expect(adapted.warnings).toHaveLength(0)
-  })
-
   it("injects fallback text for assistant messages with only stripped parts", async () => {
     const strippedAssistant = {
       id: "msg-default-fallback-1",

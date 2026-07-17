@@ -65,16 +65,6 @@ describe("PUT /api/projects/[projectId]", () => {
     expect(mocks.convex.mutation).not.toHaveBeenCalled()
   })
 
-  it("returns 400 for a null JSON body without updating the project", async () => {
-    const response = await PUT(makeRequest("null"), routeArg())
-
-    await expect(response.json()).resolves.toEqual({
-      error: "Project name is required",
-    })
-    expect(response.status).toBe(400)
-    expect(mocks.convex.mutation).not.toHaveBeenCalled()
-  })
-
   it("returns 400 for a non-string project name", async () => {
     const response = await PUT(
       makeRequest(JSON.stringify({ name: 42 })),

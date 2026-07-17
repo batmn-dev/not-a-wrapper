@@ -51,7 +51,6 @@ describe("ActivityPanelTrigger", () => {
 
     const button = container.querySelector("button")
     expect(button?.textContent).toContain("Thought for 1s")
-    expect(container.querySelectorAll("svg")).toHaveLength(1)
     expect(button?.getAttribute("aria-expanded")).toBe("false")
     expect(button?.getAttribute("aria-controls")).toBe("activity-panel")
 

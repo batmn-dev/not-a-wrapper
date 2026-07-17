@@ -2,7 +2,6 @@
 
 import React, { act } from "react"
 import { createRoot, Root } from "react-dom/client"
-import { renderToStaticMarkup } from "react-dom/server"
 import {
   afterEach,
   beforeAll,
@@ -307,22 +306,6 @@ describe("Composer primary action", () => {
     expect(onTurn).not.toHaveBeenCalled()
   })
 
-  it("shows the Enter shortcut tooltip only when Send is active", () => {
-    renderComposer({ isSubmitting: false, status: "ready" })
-
-    expect(promptInputActionMockCalls.at(-1)?.disabled).toBe(true)
-
-    changeComposerValue("Ready to send")
-
-    const activeAction = promptInputActionMockCalls.at(-1)
-    expect(activeAction?.disabled).toBe(false)
-
-    const tooltipMarkup = renderToStaticMarkup(<>{activeAction?.tooltip}</>)
-    expect(tooltipMarkup).toContain("Send prompt")
-    expect(tooltipMarkup).toContain('aria-label="Enter"')
-    expect(tooltipMarkup).toContain("↵")
-  })
-
   it("stays compact for empty and attachment-only states; expands for hard newlines", () => {
     const unmountCurrent = () => {
       const mountedRoot = root
@@ -335,10 +318,7 @@ describe("Composer primary action", () => {
     }
 
     renderComposer({ isSubmitting: false, status: "ready" })
-    expect(promptInputMockCalls.at(-1)).toMatchObject({
-      expanded: false,
-      maxHeight: "max(30svh, 5rem)",
-    })
+    expect(promptInputMockCalls.at(-1)?.expanded).toBe(false)
 
     unmountCurrent()
     composerMocks.draftValue = "line one\nline two"

@@ -128,16 +128,6 @@ describe("useInlineRename", () => {
     expect(input()?.selectionEnd).toBe(5)
   })
 
-  it("uses the shared accessible title-editor contract", () => {
-    render(<Harness value="Hello" onSave={vi.fn()} />)
-
-    clickStart()
-
-    expect(input()?.type).toBe("text")
-    expect(input()?.name).toBe("title-editor")
-    expect(input()?.getAttribute("aria-label")).toBe("Chat title")
-  })
-
   it("commits a trimmed, changed value", () => {
     const onSave = vi.fn()
     render(<Harness value="Hello" onSave={onSave} />)

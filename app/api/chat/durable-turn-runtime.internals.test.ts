@@ -1,7 +1,7 @@
 import type { Id } from "@/convex/_generated/dataModel"
 import type { TextStreamPart, ToolSet, UIMessage } from "ai"
 import { fetchMutation } from "convex/nextjs"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   createDurableSnapshotTracker,
   createRuntimeApprovalPersistenceTransform,
@@ -15,6 +15,10 @@ import {
 vi.mock("convex/nextjs", () => ({
   fetchMutation: vi.fn(),
 }))
+
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -130,7 +134,11 @@ describe("durable turn runtime internals", () => {
         metadata: { source: () => "mcp" },
         approvalFor: (name: string) =>
           name === "send_email"
-            ? { needsApproval: true, reason: "External write", riskClass: "write" }
+            ? {
+                needsApproval: true,
+                reason: "External write",
+                riskClass: "write",
+              }
             : undefined,
         toolApproval: undefined,
       },
@@ -308,6 +316,7 @@ describe("durable turn runtime internals", () => {
     // persist loops re-armed each other forever — flush() never resolved, so
     // markGenerationRunAborted never ran and snapshot writes continued at the
     // write-latency rate until the Convex token expired.
+    vi.useFakeTimers()
     vi.mocked(fetchMutation)
       .mockReset()
       .mockImplementation(
@@ -330,18 +339,21 @@ describe("durable turn runtime internals", () => {
     tracker.onChunk({ type: "text-delta", text: "B" } as never)
 
     const flushes = Promise.all([tracker.flush(), tracker.flush()])
-    const outcome = await Promise.race([
+    const outcomePromise = Promise.race([
       flushes.then(() => "flushed" as const),
       new Promise<"livelocked">((resolve) =>
         setTimeout(() => resolve("livelocked"), 500)
       ),
     ])
+    await vi.advanceTimersByTimeAsync(500)
+    const outcome = await outcomePromise
 
     expect(outcome).toBe("flushed")
     // One in-flight incremental write plus at most one forced final write.
     expect(vi.mocked(fetchMutation).mock.calls.length).toBeLessThanOrEqual(3)
     const lastCall = vi.mocked(fetchMutation).mock.calls.at(-1)
     expect(lastCall?.[1]).toMatchObject({ textSnapshot: "AB" })
+    vi.useRealTimers()
   })
 
   it("times out stalled snapshot writes so flush can settle and retry", async () => {

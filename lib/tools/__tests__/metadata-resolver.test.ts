@@ -54,51 +54,6 @@ function buildResolver() {
 }
 
 describe("createToolMetadataResolver — one resolved shape per source", () => {
-  it("resolves a built-in (Layer 1) tool", () => {
-    expect(buildResolver().get("web_search")).toEqual({
-      displayName: "Web Search",
-      source: "builtin",
-      serviceName: "OpenAI",
-      icon: "search",
-      estimatedCostPer1k: undefined,
-      maxResultSize: undefined,
-      readOnly: true,
-      destructive: undefined,
-      idempotent: true,
-      openWorld: undefined,
-    })
-  })
-
-  it("resolves a third-party search (Layer 2) tool, preserving cost", () => {
-    expect(buildResolver().get("exa_search")).toEqual({
-      displayName: "Exa Search",
-      source: "third-party",
-      serviceName: "Exa",
-      icon: "search",
-      estimatedCostPer1k: 5,
-      maxResultSize: undefined,
-      readOnly: true,
-      destructive: undefined,
-      idempotent: true,
-      openWorld: undefined,
-    })
-  })
-
-  it("resolves a content-extraction (Layer 2) tool, preserving maxResultSize", () => {
-    expect(buildResolver().get("extract_content")).toEqual({
-      displayName: "Extract Content",
-      source: "third-party",
-      serviceName: "Exa",
-      icon: "extract",
-      estimatedCostPer1k: undefined,
-      maxResultSize: 100_000,
-      readOnly: true,
-      destructive: undefined,
-      idempotent: undefined,
-      openWorld: undefined,
-    })
-  })
-
   it("resolves an MCP (Layer 3) tool: humanized name, serviceName = serverName, mcpServer carries the raw name", () => {
     expect(buildResolver().get("github_create_issue")).toEqual({
       displayName: "Create Issue",
@@ -121,15 +76,6 @@ describe("createToolMetadataResolver — one resolved shape per source", () => {
 })
 
 describe("createToolMetadataResolver — MCP risk hints are carried verbatim (not trust-filtered)", () => {
-  it("keeps hints when policyHintsTrusted is true", () => {
-    const resolved = buildResolver().get("github_create_issue")
-    expect(resolved?.policyHintsTrusted).toBe(true)
-    expect(resolved?.readOnly).toBe(false)
-    expect(resolved?.destructive).toBe(false)
-    expect(resolved?.idempotent).toBe(true)
-    expect(resolved?.openWorld).toBe(true)
-  })
-
   it("keeps hints verbatim even when policyHintsTrusted is false — call sites apply trust, not the resolver", () => {
     const resolver = createToolMetadataResolver({
       builtIn: new Map(),

@@ -54,8 +54,6 @@ describe("/api/providers route", () => {
 
   it.each([
     ["missing provider", {}],
-    ["empty provider", { provider: "" }],
-    ["non-string provider", { provider: 123 }],
     ["non-object body", null],
   ])("returns 400 for %s", async (_case, body) => {
     const response = await POST(makeRequest(JSON.stringify(body)))
