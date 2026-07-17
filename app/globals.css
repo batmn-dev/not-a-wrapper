@@ -721,6 +721,21 @@
     --sidebar-row-active-background: var(--sidebar-row-bg);
   }
 
+  .sidebar-group-header {
+    font-family:
+      -apple-system-body,
+      ui-sans-serif,
+      -apple-system,
+      system-ui,
+      "Segoe UI",
+      Helvetica,
+      "Apple Color Emoji",
+      Arial,
+      sans-serif,
+      "Segoe UI Emoji",
+      "Segoe UI Symbol";
+  }
+
   .sidebar-row-card {
     --sidebar-row-active-background: var(--sidebar-row-bg);
   }
@@ -734,6 +749,17 @@
   }
 
   .sidebar-row-action button:focus-visible .trailing-icon-chip {
+    outline: 1.5px solid var(--foreground);
+    outline-offset: 2.5px;
+  }
+
+  /* Chat-group header actions use the same keyboard-only 24px inner-chip ring
+     as row actions. The outer 34x36 hit target stays visually transparent. */
+  .sidebar-group-header-action:focus-visible {
+    outline: none;
+  }
+
+  .sidebar-group-header-action:focus-visible .sidebar-group-header-action-chip {
     outline: 1.5px solid var(--foreground);
     outline-offset: 2.5px;
   }

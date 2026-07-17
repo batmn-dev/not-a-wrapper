@@ -64,7 +64,7 @@ import { useHistorySearch } from "../../history/history-search-provider"
 import { HistoryTrigger } from "../../history/history-trigger"
 import { useInfiniteScroll } from "../../history/use-history-view"
 import { UserMenu } from "../user-menu"
-import { SidebarList } from "./sidebar-list"
+import { SidebarList, type ChatOrganization } from "./sidebar-list"
 import { SidebarMenuItem } from "./sidebar-menu-item"
 import { SidebarProject } from "./sidebar-project"
 
@@ -270,6 +270,7 @@ function useAppSidebarData() {
   const currentChatId = params.chatId
   const isLoggedIn = !!user
   const isNewChatActive = pathname === "/"
+  const [chatOrganization, setChatOrganization] = useChatOrganization()
 
   const nonPinnedChats = useMemo(
     () => chats.filter((chat) => !chat.pinned && !chat.project_id),
@@ -289,7 +290,45 @@ function useAppSidebarData() {
     user,
     loadMore,
     canLoadMore,
+    chatOrganization,
+    setChatOrganization,
   }
+}
+
+const CHAT_ORGANIZATION_STORAGE_KEY = "sidebar-chat-organization"
+
+function subscribeToChatOrganization(onStoreChange: () => void) {
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === CHAT_ORGANIZATION_STORAGE_KEY) onStoreChange()
+  }
+  window.addEventListener("storage", handleStorage)
+  return () => window.removeEventListener("storage", handleStorage)
+}
+
+function getChatOrganizationSnapshot(): ChatOrganization {
+  return localStorage.getItem(CHAT_ORGANIZATION_STORAGE_KEY) === "one-list"
+    ? "one-list"
+    : "by-project"
+}
+
+function getServerChatOrganizationSnapshot(): ChatOrganization {
+  return "by-project"
+}
+
+function useChatOrganization() {
+  const organization = React.useSyncExternalStore(
+    subscribeToChatOrganization,
+    getChatOrganizationSnapshot,
+    getServerChatOrganizationSnapshot
+  )
+  const setOrganization = React.useCallback((next: ChatOrganization) => {
+    localStorage.setItem(CHAT_ORGANIZATION_STORAGE_KEY, next)
+    window.dispatchEvent(
+      new StorageEvent("storage", { key: CHAT_ORGANIZATION_STORAGE_KEY })
+    )
+  }, [])
+
+  return [organization, setOrganization] as const
 }
 
 type AppSidebarData = ReturnType<typeof useAppSidebarData>
@@ -454,6 +493,9 @@ function SidebarExpandedNav({
                   items={data.nonPinnedChats}
                   currentChatId={data.currentChatId}
                   storageKey="sidebar-section-your-chats"
+                  organization={data.chatOrganization}
+                  onOrganizationChange={data.setChatOrganization}
+                  onNewChat={onMobileClose}
                 />
               )}
             </div>
