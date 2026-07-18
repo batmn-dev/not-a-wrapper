@@ -553,7 +553,9 @@ describe("chat turn controller", () => {
 
     const dispatchedIds = vi
       .mocked(adapters.sendMessageAndWaitForAcceptance)
-      .mock.calls.map((call) => call[0]?.messageId)
+      .mock.calls.map(([message]) =>
+        "messageId" in message ? message.messageId : undefined
+      )
     expect(dispatchedIds).toEqual([
       "committed-first-turn",
       "committed-first-turn",
