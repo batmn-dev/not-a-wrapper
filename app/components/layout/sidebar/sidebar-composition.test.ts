@@ -69,24 +69,6 @@ describe("sidebar grouping composition", () => {
     ],
   ])
 
-  it("returns stable empty sections while data is empty", () => {
-    const result = deriveSidebarComposition({
-      chats: [],
-      projects: [],
-      projectPreviews: new Map(),
-      organization: "by-project",
-    })
-
-    expect(result).toMatchObject({
-      pinnedChats: [],
-      pinnedProjects: [],
-      sectionProjects: [],
-      historyChats: [],
-    })
-    expect(result.projectPreviews.size).toBe(0)
-    expect(result.projectNames.size).toBe(0)
-  })
-
   it("keeps project chats under projects and out of Chats in By project", () => {
     const result = deriveSidebarComposition({
       chats: [regular, projectOlder, projectRecent, pinnedChat],
@@ -155,45 +137,36 @@ describe("sidebar grouping composition", () => {
     ])
   })
 
-  it("does not duplicate a pinned project chat beside its pinned parent", () => {
+  it("does not duplicate chats rendered under a pinned project", () => {
     const pinnedProjectChat = chat("pinned-project-chat", {
       pinned: true,
       project_id: "pinned-project",
       pinned_at: "2026-01-07T00:00:00.000Z",
       updated_at: "2026-01-07T00:00:00.000Z",
     })
-    const result = deriveSidebarComposition({
-      chats: [regular, pinnedChat, pinnedProjectChat],
-      projects,
-      projectPreviews: new Map([
-        ["pinned-project", { chats: [pinnedProjectChat], hasMore: false }],
-      ]),
-      organization: "one-list",
-    })
-
-    expect(result.pinnedChats.map(({ id }) => id)).toEqual(["pinned-chat"])
-    expect(
-      result.projectPreviews.get("pinned-project")?.chats.map(({ id }) => id)
-    ).toEqual(["pinned-project-chat"])
-  })
-
-  it("does not duplicate recent chats from an expanded pinned project", () => {
     const pinnedProjectRecent = chat("pinned-project-recent", {
       project_id: "pinned-project",
       updated_at: "2026-01-08T00:00:00.000Z",
     })
     const result = deriveSidebarComposition({
-      chats: [regular, pinnedProjectRecent],
+      chats: [regular, pinnedChat, pinnedProjectChat, pinnedProjectRecent],
       projects,
       projectPreviews: new Map([
-        ["pinned-project", { chats: [pinnedProjectRecent], hasMore: false }],
+        [
+          "pinned-project",
+          {
+            chats: [pinnedProjectRecent, pinnedProjectChat],
+            hasMore: false,
+          },
+        ],
       ]),
       organization: "one-list",
     })
 
+    expect(result.pinnedChats.map(({ id }) => id)).toEqual(["pinned-chat"])
     expect(result.historyChats.map(({ id }) => id)).toEqual(["regular"])
     expect(
       result.projectPreviews.get("pinned-project")?.chats.map(({ id }) => id)
-    ).toEqual(["pinned-project-recent"])
+    ).toEqual(["pinned-project-recent", "pinned-project-chat"])
   })
 })

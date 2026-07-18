@@ -40,12 +40,9 @@ describe("chat organization preference", () => {
 
   beforeEach(() => localStorage.clear())
 
-  it("defaults invalid or absent values to By project", () => {
+  it("parses the persisted preference with a safe default", () => {
     expect(parseChatOrganization(null)).toBe(DEFAULT_CHAT_ORGANIZATION)
     expect(parseChatOrganization("unexpected")).toBe("by-project")
-  })
-
-  it("restores In one list", () => {
     expect(parseChatOrganization("one-list")).toBe("one-list")
   })
 
