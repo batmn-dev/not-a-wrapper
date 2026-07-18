@@ -26,11 +26,11 @@ export function SidebarLeadingIcon({
       data-slot="sidebar-leading-icon"
       data-label-spacing={labelSpacing ? "true" : undefined}
       className={cn(
-        "flex size-5 shrink-0 items-center justify-center",
-        labelSpacing && "me-1.5"
+        "flex size-(--sidebar-leading-slot-size) shrink-0 items-center justify-center",
+        labelSpacing && "me-(--sidebar-row-leading-gap)"
       )}
     >
-      <Icon icon={resolvedIcon} slotSize={20} />
+      <Icon icon={resolvedIcon} slotSize="var(--sidebar-leading-slot-size)" />
     </span>
   )
 }

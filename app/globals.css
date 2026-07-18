@@ -378,7 +378,6 @@
 :root {
   /* Sidebar dimensions */
   --sidebar-width: 16.25rem;
-  --sidebar-rail-width: 3.25rem;
   --sidebar-header-height: 3.25rem;
 
   /* Sidebar spacing */
@@ -388,16 +387,28 @@
   --sidebar-row-outer-inset: 0.375rem;
   --sidebar-row-content-block: 0.375rem;
   --sidebar-row-content-inline: 0.625rem;
-  --sidebar-row-inner-content-block: 0.3125rem;
-  --sidebar-row-inner-content-inline: 0.5625rem;
+  /* Bordered rows compensate only on the block axis: .sidebar-menu-row draws
+     border-block, never border-inline, so inline padding has no inner variant. */
+  --sidebar-row-inner-content-block: calc(
+    var(--sidebar-row-content-block) - var(--sidebar-row-separator-size)
+  );
   --sidebar-row-leading-gap: 0.375rem;
-  --sidebar-row-nested-title-inset: 2.25rem;
-  --sidebar-row-inner-nested-title-inset: 2.1875rem;
   --sidebar-row-action-width: 2.125rem;
   --sidebar-row-action-overlap: 0.625rem;
   --sidebar-row-action-rail-width: 3.625rem;
   --sidebar-row-separator-size: 1px;
   --sidebar-row-radius: 0.625rem;
+
+  /* Leading-glyph placement contract. Both sidebar layers derive from the same
+     tokens so the icon center is identical by construction:
+     rail-width / 2 == outer-inset + content-inline + slot / 2. */
+  --sidebar-leading-slot-size: 1.25rem;
+  --sidebar-collapsed-item-width: calc(
+    var(--sidebar-leading-slot-size) + 2 * var(--sidebar-row-content-inline)
+  );
+  --sidebar-rail-width: calc(
+    var(--sidebar-collapsed-item-width) + 2 * var(--sidebar-row-outer-inset)
+  );
 
   /* Icon sizing: wrappers keep the layout slot while Remix SVG glyphs render 2px smaller. */
   --icon-slot-size: 1rem;
@@ -770,22 +781,10 @@
     padding-inline: var(--sidebar-row-content-inline);
   }
 
-  .sidebar-row-shell > .sidebar-row-content {
-    padding-block: var(--sidebar-row-inner-content-block);
-    padding-inline: var(--sidebar-row-inner-content-inline);
-  }
-
+  .sidebar-row-shell > .sidebar-row-content,
   .sidebar-menu-row.sidebar-row-content {
     padding-block: var(--sidebar-row-inner-content-block);
-    padding-inline: var(--sidebar-row-inner-content-inline);
-  }
-
-  .sidebar-row-nested.sidebar-row-content {
-    padding-inline-start: var(--sidebar-row-nested-title-inset);
-  }
-
-  .sidebar-row-nested.sidebar-row-shell > .sidebar-row-content {
-    padding-inline-start: var(--sidebar-row-inner-nested-title-inset);
+    padding-inline: var(--sidebar-row-content-inline);
   }
 
   .sidebar-row-primary-control:focus-visible {

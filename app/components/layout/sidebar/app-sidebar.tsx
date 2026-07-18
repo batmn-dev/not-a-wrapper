@@ -158,7 +158,7 @@ function DesktopAppSidebar() {
         </div>
 
         {/* Action buttons */}
-        <div className="mt-(--sidebar-section-first-margin-top) flex w-full flex-col items-start gap-0 px-1.5">
+        <div className="mt-(--sidebar-section-first-margin-top) flex w-full flex-col items-start gap-0 px-(--sidebar-row-outer-inset)">
           <CollapsedMenuItem
             icon={RiAddCircleLine}
             activeIcon={RiAddCircleFill}
@@ -675,7 +675,7 @@ function CollapsedMenuItem({
   )
 
   const className = cn(
-    "menu-item-hoverable flex h-9 w-10 items-center justify-center rounded-lg",
+    "menu-item-hoverable flex h-9 w-(--sidebar-collapsed-item-width) items-center justify-center rounded-lg",
     "cursor-pointer",
     "hover:bg-sidebar-row active:bg-sidebar-row",
     isActive && "text-foreground",
@@ -751,7 +751,7 @@ function SignedOutCollapsedSearchPopover({
   const [open, setOpen] = React.useState(false)
 
   const className = cn(
-    "menu-item-hoverable flex h-9 w-10 items-center justify-center rounded-lg",
+    "menu-item-hoverable flex h-9 w-(--sidebar-collapsed-item-width) items-center justify-center rounded-lg",
     "cursor-pointer",
     "hover:bg-sidebar-row active:bg-sidebar-row",
     open && "text-foreground",
