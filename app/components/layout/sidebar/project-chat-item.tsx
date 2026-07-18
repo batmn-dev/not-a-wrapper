@@ -10,9 +10,10 @@ import { Chat } from "@/lib/chat-store/types"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { useCallback, useMemo } from "react"
+import { SidebarChatPinButton } from "./sidebar-chat-pin-button"
 import { SidebarItemMenu } from "./sidebar-item-menu"
 import { SidebarChatStatusIndicator } from "./sidebar-item-status"
-import { SidebarChatPinButton } from "./trailing-icon-button"
+import { SidebarRowEndSlot } from "./sidebar-row-actions"
 
 type ProjectChatItemProps = {
   chat: Chat
@@ -69,48 +70,45 @@ export function ProjectChatItem({ chat, formatDate }: ProjectChatItemProps) {
     )
   }
 
-  // Nav mode mirrors the compact row: the <Link> IS the whole card (title, date,
-  // AND the trailing slot nested inside), so the menu button's rounded corners
-  // fall through to the navigable anchor instead of a non-navigable wrapper —
-  // killing the dead corners the old div+sibling-Link structure reintroduced.
   return (
-    <Link
-      href={`/c/${chat.id}`}
-      className={cn(containerClassName, "focus-visible:outline-none")}
-      onClick={handleLinkClick}
-      prefetch
-      draggable={false}
-    >
-      <div className="min-w-0 grow p-3">
-        <h3 className="truncate text-base font-medium text-balance">
-          {displayTitle}
-        </h3>
-        <p className="text-muted-foreground mt-1 text-sm">
-          {chat.updated_at
-            ? formatDate(chat.updated_at)
-            : chat.created_at
-              ? formatDate(chat.created_at)
-              : null}
-        </p>
-      </div>
-
-      <div
-        className="sidebar-row-trailing flex shrink-0 items-center pt-3 pr-3"
-        key={chat.id}
+    <div className={containerClassName}>
+      <Link
+        href={`/c/${chat.id}`}
+        className="min-w-0 grow focus-visible:outline-none"
+        onClick={handleLinkClick}
+        prefetch
+        draggable={false}
       >
-        <SidebarChatStatusIndicator
-          status={status}
-          className="sidebar-row-status"
-        />
-        <div className="sidebar-row-action flex items-center">
-          <SidebarChatPinButton chat={chat} title={displayTitle} />
-          <SidebarItemMenu
-            chat={chat}
-            onStartEditing={start}
-            triggerAriaLabel={`Open chat actions for ${displayTitle}`}
-          />
+        <div className="p-3">
+          <h3 className="truncate text-base font-medium text-balance">
+            {displayTitle}
+          </h3>
+          <p className="text-muted-foreground mt-1 text-sm">
+            {chat.updated_at
+              ? formatDate(chat.updated_at)
+              : chat.created_at
+                ? formatDate(chat.created_at)
+                : null}
+          </p>
         </div>
-      </div>
-    </Link>
+      </Link>
+
+      <SidebarRowEndSlot
+        key={chat.id}
+        layout="card"
+        status={
+          status === "idle" ? undefined : (
+            <SidebarChatStatusIndicator status={status} />
+          )
+        }
+      >
+        <SidebarChatPinButton chat={chat} title={displayTitle} />
+        <SidebarItemMenu
+          chat={chat}
+          onStartEditing={start}
+          triggerAriaLabel={`Open chat actions for ${displayTitle}`}
+        />
+      </SidebarRowEndSlot>
+    </div>
   )
 }

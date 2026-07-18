@@ -5,8 +5,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { useChats } from "@/lib/chat-store/chats/provider"
-import type { Chat } from "@/lib/chat-store/types"
 import { Pin, PinFilled, PinOff, PinOffOutline } from "@/lib/icons"
 import type { ReactNode } from "react"
 
@@ -38,21 +36,33 @@ export function TrailingIconChip({ children }: { children: ReactNode }) {
   )
 }
 
-/**
- * Standalone pin/unpin quick-action, revealed alongside the options menu so the
- * trailing slot mirrors ChatGPT's pin + options pair. Lives inside the row's
- * single `<Link>`, so it cancels the anchor's navigation (preventDefault) and
- * keeps the click off the row (stopPropagation) before toggling.
- */
-export function SidebarChatPinButton({
-  chat,
-  title,
-}: {
-  chat: Chat
+type SidebarSecondaryActionProps = {
+  pinned: boolean
   title: string
-}) {
-  const { togglePinned } = useChats()
-  const tooltipLabel = chat.pinned ? "Unpin Chat" : "Pin Chat"
+  itemType: "Chat" | "Project"
+  onTogglePinned: () => void
+  isPending?: boolean
+  unpinnedAction?: ReactNode
+}
+
+/**
+ * Source of truth for the secondary action in a sidebar row.
+ *
+ * A pinned item always exposes Unpin. Unpinned item types may provide a more
+ * useful default action for the slot (projects use New Chat); otherwise the
+ * slot exposes Pin.
+ */
+export function SidebarSecondaryAction({
+  pinned,
+  title,
+  itemType,
+  onTogglePinned,
+  isPending = false,
+  unpinnedAction,
+}: SidebarSecondaryActionProps) {
+  if (!pinned && unpinnedAction) return unpinnedAction
+
+  const actionLabel = pinned ? `Unpin ${itemType}` : `Pin ${itemType}`
 
   return (
     <Tooltip disableHoverablePopup>
@@ -60,18 +70,19 @@ export function SidebarChatPinButton({
         render={
           <button
             type="button"
-            className={trailingIconButtonClassName}
-            aria-label={chat.pinned ? `Unpin ${title}` : `Pin ${title}`}
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              togglePinned(chat.id, !chat.pinned)
+            className={`${trailingIconButtonClassName} sidebar-chat-pin-action`}
+            aria-label={pinned ? `Unpin ${title}` : `Pin ${title}`}
+            disabled={isPending}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              onTogglePinned()
             }}
           />
         }
       >
         <TrailingIconChip>
-          {chat.pinned ? (
+          {pinned ? (
             <>
               <PinOffOutline
                 slotSize={20}
@@ -102,7 +113,7 @@ export function SidebarChatPinButton({
         variant="outline"
         className="text-sm font-normal"
       >
-        {tooltipLabel}
+        {actionLabel}
       </TooltipContent>
     </Tooltip>
   )

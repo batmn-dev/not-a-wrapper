@@ -10,7 +10,18 @@ import { AppSidebar } from "@/app/components/layout/sidebar/app-sidebar"
 import { ScrollRoot } from "@/components/ui/scroll-root"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 
-export function LayoutApp({ children }: { children: React.ReactNode }) {
+export function LayoutApp({
+  children,
+  header,
+}: {
+  children: React.ReactNode
+  /**
+   * Page-header slot: `undefined` renders the default chat `<Header/>`; `null`
+   * lets a page own its header composition (e.g. /projects renders its own
+   * in-flow compact bar) without pathname conditionals in the shell.
+   */
+  header?: React.ReactNode
+}) {
   const { preferences } = useUserPreferences()
   const hasSidebar = preferences.layout === "sidebar"
 
@@ -35,7 +46,7 @@ export function LayoutApp({ children }: { children: React.ReactNode }) {
           <div className="@container/main relative flex min-w-0 flex-1">
             <div className="relative flex min-w-0 flex-1 flex-col">
               <ScrollRoot className="@[40rem]/main:[scrollbar-gutter:stable_both-edges] print:overflow-visible pointer-coarse:[scrollbar-width:none]">
-                <Header hasSidebar={hasSidebar} />
+                {header === undefined ? <Header hasSidebar={hasSidebar} /> : header}
                 <main id="main" className="min-h-0 flex-1">
                   {children}
                 </main>

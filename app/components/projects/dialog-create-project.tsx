@@ -68,6 +68,7 @@ export function DialogCreateProject({
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
               autoFocus
+              className="focus-visible:ring-0"
             />
           </div>
           <DialogFooter>

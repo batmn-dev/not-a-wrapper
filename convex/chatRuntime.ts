@@ -30,6 +30,7 @@ import {
   isVisibleChatMessage,
   projectModelHistoryMessages,
 } from "./domain/message_visibility"
+import { patchChatActivity } from "./domain/project_activity"
 import {
   getCurrentUser,
   requireOwnedChat,
@@ -837,10 +838,7 @@ export async function applyEditIntentForGeneration(
   })
 
   if (args.edit.title) {
-    await ctx.db.patch(args.chatId, {
-      title: args.edit.title,
-      updatedAt: now,
-    })
+    await ctx.db.patch(args.chatId, { title: args.edit.title })
   }
 }
 
@@ -1290,11 +1288,12 @@ export async function prepareGenerationForChat(
   // slot; the run-scoped guard then makes any older run's late terminal a no-op.
   // Direct write (not projectRunStatusToChat): claiming SETS statusRunId, so it
   // must not be gated on already owning the slot.
-  await ctx.db.patch(args.chatId, {
-    updatedAt: now,
-    liveRunStatus: "streaming",
-    statusRunId: runId,
-  })
+  await patchChatActivity(
+    ctx,
+    owner.chat,
+    { liveRunStatus: "streaming", statusRunId: runId },
+    now
+  )
 
   const modelHistory =
     preparedModelHistory ??

@@ -97,6 +97,10 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_pinned", ["userId", "pinned"])
+    // Sidebar grouping needs one recency-ordered source that can include both
+    // project and non-project chats. Keeping projectId out of this index lets
+    // the UI derive either grouping without N+1 project subscriptions.
+    .index("by_user_pinned_updated", ["userId", "pinned", "updatedAt"])
     .index("by_user_updated", ["userId", "updatedAt"])
     // The history drawer's browse mode: pinned + non-pinned non-project chats
     // newest-first. Project chats are hidden from browse mode and must not
@@ -114,6 +118,11 @@ export default defineSchema({
       "updatedAt",
     ])
     .index("by_project", ["projectId"])
+    // One owner-scoped sidebar query reads the five newest chats for every
+    // project. Recency belongs in the index so a project outside the global
+    // chat window still receives a complete preview without a client-side
+    // subscription per project.
+    .index("by_project_updated", ["projectId", "updatedAt"])
     // Title-only full-history search, scoped per user via the userId filter
     // field. Lets history search reach chats outside the bounded sidebar window
     // (docs/adr/0005-bounded-chat-list-window.md).
@@ -269,6 +278,13 @@ export default defineSchema({
   projects: defineTable({
     userId: v.id("users"),
     name: v.string(),
+    // Last durable user-visible change to the project or one of its chats.
+    // Optional during the initial production backfill; readers fall back to
+    // `_creationTime` until a legacy row is touched.
+    updatedAt: v.optional(v.number()),
+    // Optional while this first reaches production so existing smoke-test rows
+    // remain valid; false/undefined are intentionally equivalent.
+    pinned: v.optional(v.boolean()),
   }).index("by_user", ["userId"]),
 
   userPreferences: defineTable({

@@ -8,13 +8,25 @@ import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { useCallback, useMemo, type ReactNode } from "react"
 
+type SidebarRowInteraction =
+  | { kind: "link"; href: string }
+  | {
+      kind: "disclosure"
+      expanded: boolean
+      controls: string
+      onToggle: () => void
+    }
+
 type SidebarRowProps = {
-  /** Navigation target for the resting row (the whole row is this `<Link>`). */
-  href: string
+  interaction: SidebarRowInteraction
   /** Drives the active tint + `aria-current`. Editing forces the tint on too. */
   isActive: boolean
   /** Truncating label; also the rename seed. */
   title: string
+  /** Optional inline provenance shown after the primary title. */
+  secondaryLabel?: string
+  /** Accessible name when visible provenance needs to be announced. */
+  ariaLabel?: string
   /** Current persisted label the inline rename edits from. */
   renameValue: string
   /** Accessible name for the title editor on this row type. */
@@ -29,27 +41,31 @@ type SidebarRowProps = {
    * stays owned by the shell.
    */
   trailing?: (controls: { startRename: () => void }) => ReactNode
+  /** Stable geometry variant rather than a caller-owned padding correction. */
+  indentation?: "standard" | "nested"
 }
 
 /**
  * The single editable/navigable compact row the sidebar's chat and project
  * lists render through (the **Sidebar row** module). It owns the structural
  * invariants both lists otherwise copy: the editing⇄resting swap, inline
- * rename, the click-outside-commit container, and the single-`<Link>`
- * nested-anchor recipe (trailing actions nest inside the anchor; the nested
- * trigger stops propagation so it opens without navigating — the "dead corners"
- * fix). Domain glue (which mutation, which active predicate, which menu) stays
- * in the thin caller adapters.
+ * rename, and the click-outside-commit container. Chat rows use the
+ * primary link with sibling actions; expandable project rows use a primary
+ * button with sibling navigation/actions so neither row type nests interactive
+ * controls. Domain glue stays in the thin caller adapters.
  */
 export function SidebarRow({
-  href,
+  interaction,
   isActive,
   title,
+  secondaryLabel,
+  ariaLabel,
   renameValue,
   renameLabel,
   onRename,
   leading,
   trailing,
+  indentation = "standard",
 }: SidebarRowProps) {
   const { setOpenMobile } = useSidebar()
   const isMobile = useBreakpoint(768)
@@ -73,11 +89,12 @@ export function SidebarRow({
   const containerClassName = useMemo(
     () =>
       cn(
-        "sidebar-row menu-item-hoverable text-foreground hover:bg-[var(--sidebar-row-active-background)] hover:text-foreground group/row relative mx-1.5 flex h-9 w-[calc(100%-var(--spacing)*3)] items-center rounded-lg text-sm pointer-coarse:h-auto",
+        "sidebar-row sidebar-menu-row sidebar-row-shell menu-item-hoverable text-foreground hover:bg-[var(--sidebar-row-active-background)] hover:text-foreground group/row relative flex items-center text-sm",
+        indentation === "nested" && "sidebar-row-nested",
         (isActive || isEditing) &&
           "bg-[var(--sidebar-row-active-background)] hover:bg-[var(--sidebar-row-active-background)] group-data-[collapsible=icon]:bg-transparent"
       ),
-    [isActive, isEditing]
+    [indentation, isActive, isEditing]
   )
 
   // Rename mode keeps the plain <div> container (it needs containerRef for
@@ -89,7 +106,7 @@ export function SidebarRow({
         onClick={onContainerClick}
         ref={containerRef}
       >
-        <div className="flex h-full w-full items-center rounded-lg px-2.5 py-1.5">
+        <div className="sidebar-row-content flex h-full w-full items-center">
           {leading && (
             <span className="mr-2 flex shrink-0 items-center">{leading}</span>
           )}
@@ -103,36 +120,64 @@ export function SidebarRow({
     )
   }
 
-  // Resting/nav mode: the <Link> IS the whole row (ChatGPT's single `<a>`), with
-  // the leading glyph, title, and the trailing actions nested INSIDE it. This is
-  // the structural fix for the dead corners: `border-radius` clips pointer
-  // hit-testing, so a trailing button's rounded-corner cutouts fall through to
-  // the navigable Link instead of a non-navigable wrapper. The nested trigger
-  // stops propagation, so activating it opens the menu without navigating.
-  return (
-    <Link
-      href={href}
-      className={cn(
-        containerClassName,
-        // ChatGPT's `.__menu-item` <a> box: symmetric 10px inline / 6px block
-        // padding, so the title truncates 10px from the row edge. The trailing
-        // button overflows this padding back to the edge via a hover-only
-        // negative end-margin (see `.sidebar-row-action` in globals.css).
-        "px-2.5 py-1.5 focus-visible:outline-none pointer-coarse:py-3"
-      )}
-      prefetch
-      draggable={false}
-      onClick={handleLinkClick}
-      aria-current={isActive ? "page" : undefined}
-    >
+  const rowContent = (
+    <div className="flex min-w-0 grow items-center gap-(--sidebar-row-leading-gap)">
+      {leading ? <span className="shrink-0">{leading}</span> : null}
       <div className="flex min-w-0 grow items-center gap-2">
-        {leading}
-        <span className="min-w-0 grow truncate" dir="auto">
+        <span className="min-w-0 truncate" dir="auto">
           {title}
         </span>
+        {secondaryLabel ? (
+          <span
+            className="min-w-0 shrink truncate text-[var(--text-tertiary)]"
+            dir="auto"
+          >
+            {secondaryLabel}
+          </span>
+        ) : null}
       </div>
+    </div>
+  )
 
+  if (interaction.kind === "disclosure") {
+    return (
+      <div className={containerClassName}>
+        <button
+          type="button"
+          className="sidebar-row-content sidebar-row-primary-control sidebar-project-row-primary flex h-full min-w-0 grow items-center text-start outline-none"
+          onClick={interaction.onToggle}
+          aria-expanded={interaction.expanded}
+          aria-controls={interaction.controls}
+          aria-label={ariaLabel}
+          data-sidebar-item="true"
+          data-active={isActive ? "" : undefined}
+        >
+          {rowContent}
+        </button>
+        {trailing?.({ startRename: start })}
+      </div>
+    )
+  }
+
+  // Resting/nav mode keeps the primary link and its trailing controls as
+  // siblings. The link grows across every unclaimed pixel; revealing the
+  // in-flow action slot shrinks it without introducing nested interactive HTML.
+  return (
+    <div className={containerClassName}>
+      <Link
+        href={interaction.href}
+        className="sidebar-row-content sidebar-row-primary-control flex h-full min-w-0 grow items-center focus-visible:outline-none"
+        prefetch
+        draggable={false}
+        onClick={handleLinkClick}
+        aria-current={isActive ? "page" : undefined}
+        aria-label={ariaLabel}
+        data-sidebar-item="true"
+        data-active={isActive ? "" : undefined}
+      >
+        {rowContent}
+      </Link>
       {trailing?.({ startRename: start })}
-    </Link>
+    </div>
   )
 }

@@ -91,10 +91,10 @@ export function applyOptimisticOps(
 }
 
 /**
- * Split the sidebar chats into the pinned section and the recent ("Chats")
- * section. Project chats belong to the project view, not the sidebar, so they
- * are excluded from both. A chat is pinned XOR not, so the two sections never
- * intersect. Pinned are ordered newest-pin first.
+ * Split the authoritative sidebar chat source by pin state. Grouping-specific
+ * project filtering is owned by the sidebar composition layer, so project
+ * membership must remain intact here. A chat is pinned XOR not, and pinned
+ * rows are ordered newest-pin first.
  */
 export function partitionSidebarChats(chats: Chats[]): {
   pinned: Chats[]
@@ -104,7 +104,6 @@ export function partitionSidebarChats(chats: Chats[]): {
   const nonPinned: Chats[] = []
 
   for (const chat of chats) {
-    if (chat.project_id) continue
     if (chat.pinned) pinned.push(chat)
     else nonPinned.push(chat)
   }

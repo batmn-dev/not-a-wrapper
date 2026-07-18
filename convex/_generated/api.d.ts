@@ -16,6 +16,7 @@ import type * as domain_message_branches from "../domain/message_branches.js";
 import type * as domain_message_contract from "../domain/message_contract.js";
 import type * as domain_message_parts from "../domain/message_parts.js";
 import type * as domain_message_visibility from "../domain/message_visibility.js";
+import type * as domain_project_activity from "../domain/project_activity.js";
 import type * as feedback from "../feedback.js";
 import type * as files from "../files.js";
 import type * as http from "../http.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   "domain/message_contract": typeof domain_message_contract;
   "domain/message_parts": typeof domain_message_parts;
   "domain/message_visibility": typeof domain_message_visibility;
+  "domain/project_activity": typeof domain_project_activity;
   feedback: typeof feedback;
   files: typeof files;
   http: typeof http;

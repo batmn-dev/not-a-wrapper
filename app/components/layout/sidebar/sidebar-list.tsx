@@ -4,7 +4,6 @@ import {
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Icon } from "@/components/ui/icon"
@@ -16,27 +15,32 @@ import {
 import type { Chat } from "@/lib/chat-store/types"
 import {
   RiAddLine,
-  RiDragMove2Line,
   RiFolderLine,
   RiListUnordered,
   RiMoreFill,
-  RiStarLine,
-  RiTimeLine,
 } from "@remixicon/react"
 import Link from "next/link"
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
+import type { ChatOrganization } from "./chat-organization"
 import { SidebarItem } from "./sidebar-item"
 
 type SidebarListProps = {
   title: string
   items: Chat[]
+  /** Rows inserted before chats, used for the mixed global Pinned section. */
+  beforeItems?: ReactNode
+  presentation?:
+    | { kind: "history"; projectNames?: ReadonlyMap<string, string> }
+    | { kind: "pinned"; projectNames: ReadonlyMap<string, string> }
   currentChatId: string
   /** Initial expanded state (default: true) */
   defaultOpen?: boolean
   /** localStorage key for persistence */
   storageKey?: string
-  /** Shows the organizer placeholders and new-chat action in the header */
+  /** Shows the organizer and new-chat action in the header. */
   showHeaderActions?: boolean
+  organization?: ChatOrganization
+  onOrganizationChange?: (organization: ChatOrganization) => void
   /** Closes the mobile drawer after starting a new chat */
   onNewChat?: () => void
 }
@@ -44,14 +48,22 @@ type SidebarListProps = {
 export function SidebarList({
   title,
   items,
+  beforeItems,
+  presentation = { kind: "history" },
   currentChatId,
   defaultOpen = true,
   storageKey,
   showHeaderActions = false,
+  organization,
+  onOrganizationChange,
   onNewChat,
 }: SidebarListProps) {
   const headerActions = showHeaderActions ? (
-    <SidebarChatGroupActions onNewChat={onNewChat} />
+    <SidebarChatGroupActions
+      organization={organization ?? "by-project"}
+      onOrganizationChange={onOrganizationChange}
+      onNewChat={onNewChat}
+    />
   ) : null
 
   return (
@@ -62,11 +74,32 @@ export function SidebarList({
       variant="sidebar"
       headerActions={headerActions}
     >
+      {beforeItems}
       {items.map((chat) => (
-        <SidebarItem key={chat.id} chat={chat} currentChatId={currentChatId} />
+        <SidebarItem
+          key={chat.id}
+          chat={chat}
+          currentChatId={currentChatId}
+          presentation={getChatRowPresentation(chat, presentation)}
+        />
       ))}
     </CollapsibleSection>
   )
+}
+
+function getChatRowPresentation(
+  chat: Chat,
+  presentation: NonNullable<SidebarListProps["presentation"]>
+) {
+  const projectName = chat.project_id
+    ? presentation.projectNames?.get(chat.project_id)
+    : undefined
+  if (presentation.kind === "pinned") {
+    return { kind: "pinned" as const, projectName }
+  }
+  return projectName
+    ? { kind: "recent-project" as const, projectName }
+    : { kind: "history" as const }
 }
 
 const headerActionClassName =
@@ -83,10 +116,23 @@ function SidebarHeaderActionChip({ children }: { children: ReactNode }) {
   )
 }
 
-function SidebarChatGroupActions({ onNewChat }: { onNewChat?: () => void }) {
+export function SidebarChatGroupActions({
+  organization,
+  onOrganizationChange,
+  onNewChat,
+  onNewProject,
+}: {
+  organization: ChatOrganization
+  onOrganizationChange?: (organization: ChatOrganization) => void
+  onNewChat?: () => void
+  onNewProject?: () => void
+}) {
+  const isProjectAction = onNewProject != null
+  const [isOrganizerOpen, setIsOrganizerOpen] = useState(false)
+
   return (
     <div className="flex shrink-0 items-center gap-1 pe-2.5 text-[var(--text-tertiary)]">
-      <DropdownMenu>
+      <DropdownMenu open={isOrganizerOpen} onOpenChange={setIsOrganizerOpen}>
         <DropdownMenuTrigger
           render={
             <button
@@ -113,16 +159,15 @@ function SidebarChatGroupActions({ onNewChat }: { onNewChat?: () => void }) {
           }}
         >
           <div className="__menu-label mx-1.5 h-9 px-2.5 py-2 text-sm leading-5 font-normal text-[var(--text-tertiary)]">
-            Organize
+            Organize chats
           </div>
-          <DropdownMenuRadioGroup value="by-project">
-            <DropdownMenuRadioItem
-              value="by-project"
-              className={sidebarMenuRadioItemClassName}
-            >
-              <Icon icon={RiFolderLine} />
-              By project
-            </DropdownMenuRadioItem>
+          <DropdownMenuRadioGroup
+            value={organization}
+            onValueChange={(value) => {
+              onOrganizationChange?.(value as ChatOrganization)
+              setIsOrganizerOpen(false)
+            }}
+          >
             <DropdownMenuRadioItem
               value="one-list"
               className={sidebarMenuRadioItemClassName}
@@ -130,32 +175,12 @@ function SidebarChatGroupActions({ onNewChat }: { onNewChat?: () => void }) {
               <Icon icon={RiListUnordered} />
               In one list
             </DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
-          <DropdownMenuSeparator className="mx-3 my-1.5" />
-          <div className="__menu-label mx-1.5 h-9 px-2.5 py-2 text-sm leading-5 font-normal text-[var(--text-tertiary)]">
-            Sort by
-          </div>
-          <DropdownMenuRadioGroup value="priority">
             <DropdownMenuRadioItem
-              value="priority"
+              value="by-project"
               className={sidebarMenuRadioItemClassName}
             >
-              <Icon icon={RiStarLine} />
-              Priority
-            </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem
-              value="last-updated"
-              className={sidebarMenuRadioItemClassName}
-            >
-              <Icon icon={RiTimeLine} />
-              Last updated
-            </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem
-              value="manual-order"
-              className={sidebarMenuRadioItemClassName}
-            >
-              <Icon icon={RiDragMove2Line} />
-              Manual order
+              <Icon icon={RiFolderLine} />
+              By project
             </DropdownMenuRadioItem>
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>
@@ -163,12 +188,21 @@ function SidebarChatGroupActions({ onNewChat }: { onNewChat?: () => void }) {
       <Tooltip disableHoverablePopup>
         <TooltipTrigger
           render={
-            <Link
-              href="/"
-              onClick={onNewChat}
-              className={headerActionClassName}
-              aria-label="New Chat"
-            />
+            isProjectAction ? (
+              <button
+                type="button"
+                onClick={onNewProject}
+                className={headerActionClassName}
+                aria-label="New project"
+              />
+            ) : (
+              <Link
+                href="/"
+                onClick={onNewChat}
+                className={headerActionClassName}
+                aria-label="New chat"
+              />
+            )
           }
         >
           <SidebarHeaderActionChip>
@@ -181,7 +215,7 @@ function SidebarChatGroupActions({ onNewChat }: { onNewChat?: () => void }) {
           variant="outline"
           className="text-sm font-normal"
         >
-          New Chat
+          {isProjectAction ? "New project" : "New chat"}
         </TooltipContent>
       </Tooltip>
     </div>

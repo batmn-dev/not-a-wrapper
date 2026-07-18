@@ -16,6 +16,7 @@ import {
   normalizeMessagePartsForStorage,
 } from "./domain/message_parts"
 import { isVisibleChatMessage } from "./domain/message_visibility"
+import { recordChatActivity } from "./domain/project_activity"
 import { getAuthorizedChatForRead, requireOwnedChat } from "./lib/auth"
 import { ownedChatMutation } from "./lib/authedFunctions"
 
@@ -148,7 +149,7 @@ export async function selectBranchForChat(
     messageId: Id<"messages">
   }
 ) {
-  await requireOwnedChat(ctx, chatId)
+  const { chat } = await requireOwnedChat(ctx, chatId)
 
   const targetMessage = await ctx.db.get(messageId)
   if (!targetMessage || targetMessage.chatId !== chatId) {
@@ -158,7 +159,7 @@ export async function selectBranchForChat(
   const now = Date.now()
   await createMessageBranchWriter(ctx, { chatId, now }).select(targetMessage._id)
 
-  await ctx.db.patch(chatId, { updatedAt: now })
+  await recordChatActivity(ctx, chat, now)
   return targetMessage._id
 }
 
@@ -190,9 +191,8 @@ export const add = ownedChatMutation({
     const user = ctx.user
     const chatId = ctx.chat._id
 
-    // Update chat's updatedAt
     const now = Date.now()
-    await ctx.db.patch(chatId, { updatedAt: now })
+    await recordChatActivity(ctx, ctx.chat, now)
     const orderId = await getNextOrder(ctx, chatId)
     const parts = normalizeMessagePartsForStorage(args.parts, args.attachments)
 
@@ -235,9 +235,8 @@ export const addBatch = ownedChatMutation({
     const user = ctx.user
     const chatId = ctx.chat._id
 
-    // Update chat's updatedAt
     const now = Date.now()
-    await ctx.db.patch(chatId, { updatedAt: now })
+    await recordChatActivity(ctx, ctx.chat, now)
 
     // Insert all messages
     const ids = []
@@ -277,6 +276,10 @@ export const clearForChat = ownedChatMutation({
 
     for (const msg of messages) {
       await ctx.db.delete(msg._id)
+    }
+
+    if (messages.length > 0) {
+      await recordChatActivity(ctx, ctx.chat, Date.now())
     }
 
     return messages.length

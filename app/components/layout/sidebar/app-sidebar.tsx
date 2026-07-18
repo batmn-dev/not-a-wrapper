@@ -1,6 +1,7 @@
 "use client"
 
 import { AuthModalTrigger } from "@/app/auth/_components/auth-modal"
+import { useProjectPinning } from "@/app/components/projects/use-project-pinning"
 import { useScrollAttributes } from "@/app/hooks/use-scroll-attributes"
 import { NawIcon } from "@/components/icons/naw"
 import { Button } from "@/components/ui/button"
@@ -37,7 +38,10 @@ import {
   TooltipShortcut,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { api } from "@/convex/_generated/api"
 import { useChats } from "@/lib/chat-store/chats/provider"
+import { useChat } from "@/lib/chat-store/chats/use-chat"
+import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
 import {
@@ -64,9 +68,12 @@ import { useHistorySearch } from "../../history/history-search-provider"
 import { HistoryTrigger } from "../../history/history-trigger"
 import { useInfiniteScroll } from "../../history/use-history-view"
 import { UserMenu } from "../user-menu"
+import { useChatOrganization } from "./chat-organization"
+import { deriveSidebarComposition } from "./sidebar-composition"
 import { SidebarList } from "./sidebar-list"
 import { SidebarMenuItem } from "./sidebar-menu-item"
 import { SidebarProject } from "./sidebar-project"
+import { SidebarProjectItem } from "./sidebar-project-item"
 
 export function AppSidebar() {
   const { isMobile } = useSidebar()
@@ -244,7 +251,7 @@ function MobileAppSidebarDrawer() {
         showCloseButton={false}
         overlayClassName="bg-scrim-sidebar supports-backdrop-filter:backdrop-blur-none"
         className="bg-sidebar text-sidebar-foreground h-full min-w-0 gap-0 overflow-hidden p-0"
-        style={{ width: "100dvw", maxWidth: "none" }}
+        style={{ width: "var(--sidebar-width)", maxWidth: "100dvw" }}
       >
         <SheetHeader className="sr-only">
           <SheetTitle>Sidebar</SheetTitle>
@@ -263,28 +270,55 @@ function MobileAppSidebarDrawer() {
 
 function useAppSidebarData() {
   const { isHistoryOpen } = useHistorySearch()
-  const { chats, pinnedChats, isLoading, loadMore, canLoadMore } = useChats()
+  const { chats, projectPreviews, isLoading, loadMore, canLoadMore } =
+    useChats()
   const { user } = useUser()
   const params = useParams<{ chatId: string }>()
   const pathname = usePathname()
   const currentChatId = params.chatId
+  const { chat: currentChat, isLoading: isCurrentChatLoading } =
+    useChat(currentChatId)
   const isLoggedIn = !!user
   const isNewChatActive = pathname === "/"
-  const nonPinnedChats = useMemo(
-    () => chats.filter((chat) => !chat.pinned && !chat.project_id),
-    [chats]
+  const [chatOrganization, setChatOrganization, isOrganizationHydrated] =
+    useChatOrganization()
+  const { data: projectDocs } = usePerUserQuery(api.projects.getForCurrentUser)
+  const { isPinned, isPinPending, togglePinned } = useProjectPinning()
+  const projects = useMemo(
+    () =>
+      (projectDocs ?? []).map((project) => ({
+        ...project,
+        pinned: isPinned(project),
+      })),
+    [isPinned, projectDocs]
   )
-  const hasChats = chats.length > 0
+  const composition = useMemo(
+    () =>
+      deriveSidebarComposition({
+        chats,
+        projects,
+        projectPreviews,
+        organization: chatOrganization,
+      }),
+    [chatOrganization, chats, projectPreviews, projects]
+  )
 
   return {
+    chatOrganization,
+    composition,
     currentChatId,
-    hasChats,
     isHistoryOpen,
-    isLoading,
+    isLoading:
+      !isOrganizationHydrated ||
+      isLoading ||
+      (Boolean(currentChatId) && isCurrentChatLoading) ||
+      (isLoggedIn && projectDocs === undefined),
     isLoggedIn,
     isNewChatActive,
-    nonPinnedChats,
-    pinnedChats,
+    activeProjectId: currentChat?.project_id ?? undefined,
+    isProjectPinPending: isPinPending,
+    setChatOrganization,
+    toggleProjectPinned: togglePinned,
     user,
     loadMore,
     canLoadMore,
@@ -433,30 +467,87 @@ function SidebarExpandedNav({
         {/* === SCROLLABLE CONTENT === */}
         <div className="px-0">
           {/* Project and chat lists */}
-          <SidebarProject isAuthenticated={data.isLoggedIn} />
+          {data.chatOrganization === "one-list" ? (
+            <div className="mb-5">
+              <SidebarProject
+                isAuthenticated={data.isLoggedIn}
+                organization={data.chatOrganization}
+                projects={[]}
+                projectPreviews={data.composition.projectPreviews}
+                currentChatId={data.currentChatId}
+                activeProjectId={data.activeProjectId}
+                isPinPending={data.isProjectPinPending}
+                onTogglePinned={data.toggleProjectPinned}
+                onOrganizationChange={data.setChatOrganization}
+              />
+            </div>
+          ) : null}
           {data.isLoading ? (
             <div className="h-full" />
-          ) : data.hasChats ? (
+          ) : data.isLoggedIn ? (
             <div className="space-y-4">
-              {data.pinnedChats.length > 0 && (
+              {(data.composition.pinnedChats.length > 0 ||
+                data.composition.pinnedProjects.length > 0) && (
                 <SidebarList
                   key="pinned"
                   title="Pinned"
-                  items={data.pinnedChats}
+                  items={data.composition.pinnedChats}
+                  presentation={{
+                    kind: "pinned",
+                    projectNames: data.composition.projectNames,
+                  }}
+                  beforeItems={data.composition.pinnedProjects.map(
+                    (project) => (
+                      <SidebarProjectItem
+                        key={project._id}
+                        project={project}
+                        preview={data.composition.projectPreviews.get(
+                          project._id
+                        )}
+                        currentChatId={data.currentChatId}
+                        activeProjectId={data.activeProjectId}
+                        isPinPending={data.isProjectPinPending(project._id)}
+                        onTogglePinned={() => data.toggleProjectPinned(project)}
+                      />
+                    )
+                  )}
                   currentChatId={data.currentChatId}
                   storageKey="sidebar-section-pinned"
                 />
               )}
-              {data.nonPinnedChats.length > 0 && (
-                <SidebarList
-                  title="Chats"
-                  items={data.nonPinnedChats}
+              {data.chatOrganization === "by-project" ? (
+                <SidebarProject
+                  isAuthenticated={data.isLoggedIn}
+                  organization={data.chatOrganization}
+                  projects={data.composition.sectionProjects}
+                  projectPreviews={data.composition.projectPreviews}
                   currentChatId={data.currentChatId}
-                  storageKey="sidebar-section-your-chats"
-                  showHeaderActions
-                  onNewChat={onMobileClose}
+                  activeProjectId={data.activeProjectId}
+                  isPinPending={data.isProjectPinPending}
+                  onTogglePinned={data.toggleProjectPinned}
+                  onOrganizationChange={data.setChatOrganization}
                 />
-              )}
+              ) : null}
+              <SidebarList
+                title={
+                  data.chatOrganization === "one-list" ? "Recents" : "Chats"
+                }
+                items={data.composition.historyChats}
+                presentation={
+                  data.chatOrganization === "one-list"
+                    ? {
+                        kind: "history",
+                        projectNames: data.composition.projectNames,
+                      }
+                    : undefined
+                }
+                currentChatId={data.currentChatId}
+                storageKey="sidebar-section-your-chats"
+                showHeaderActions
+                organization={data.chatOrganization}
+                onOrganizationChange={data.setChatOrganization}
+                onNewChat={onMobileClose}
+              />
             </div>
           ) : null}
         </div>
@@ -878,7 +969,7 @@ function SignedOutHelpPopover() {
           <button
             type="button"
             className={cn(
-              "menu-item-hoverable group/help text-foreground hover:bg-sidebar-row hover:text-foreground active:bg-sidebar-row focus-visible:ring-focus-ring relative mx-1.5 inline-flex h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none pointer-coarse:h-auto pointer-coarse:py-3",
+              "menu-item-hoverable group/help text-foreground hover:bg-sidebar-row hover:text-foreground active:bg-sidebar-row focus-visible:ring-focus-ring relative mx-1.5 inline-flex h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
               open && "bg-sidebar-row text-foreground"
             )}
             data-sidebar-item="true"
@@ -958,7 +1049,7 @@ function SignedOutPopoverItem({
     <button
       type="button"
       onClick={onClick}
-      className="menu-item-hoverable group/help-popover-item text-foreground hover:bg-sidebar-row hover:text-foreground active:bg-sidebar-row focus-visible:bg-sidebar-row focus-visible:text-foreground focus-visible:ring-focus-ring inline-flex h-9 w-full cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset pointer-coarse:h-auto pointer-coarse:py-3"
+      className="menu-item-hoverable group/help-popover-item text-foreground hover:bg-sidebar-row hover:text-foreground active:bg-sidebar-row focus-visible:bg-sidebar-row focus-visible:text-foreground focus-visible:ring-focus-ring inline-flex h-9 w-full cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset"
     >
       <div className="flex shrink-0 items-center justify-center">{icon}</div>
       <div className="flex min-w-0 grow items-center gap-(--sidebar-item-gap)">
