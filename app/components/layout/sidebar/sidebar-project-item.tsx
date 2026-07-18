@@ -2,7 +2,7 @@
 
 import { useRenameProject } from "@/app/components/projects/use-rename-project"
 import type { Id } from "@/convex/_generated/dataModel"
-import { RiFolderFill, RiFolderLine } from "@remixicon/react"
+import { RiFolderLine, RiFolderOpenFill } from "@remixicon/react"
 import { usePathname } from "next/navigation"
 import { SidebarProjectActionsMenu } from "./sidebar-project-actions-menu"
 import { SidebarRow } from "./sidebar-row"
@@ -44,7 +44,7 @@ export function SidebarProjectItem({
       renameLabel="Project title"
       onRename={(next) => renameProject(project._id, next)}
       leadingIcon={RiFolderLine}
-      activeLeadingIcon={RiFolderFill}
+      activeLeadingIcon={RiFolderOpenFill}
       trailing={({ startRename }) => (
         <SidebarRowActions strategy="overlay" key={project._id}>
           <SidebarPinAction

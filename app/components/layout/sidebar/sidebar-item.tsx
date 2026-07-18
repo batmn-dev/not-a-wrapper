@@ -3,7 +3,7 @@
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useSidebarChatStatus } from "@/lib/chat-store/status/sidebar-chat-status"
 import { Chat } from "@/lib/chat-store/types"
-import { RiChat3Line } from "@remixicon/react"
+import { RiChat3Line, RiChatSmile2Fill } from "@remixicon/react"
 import { SidebarChatPinButton } from "./sidebar-chat-pin-button"
 import { SidebarItemMenu } from "./sidebar-item-menu"
 import { SidebarChatStatusIndicator } from "./sidebar-item-status"
@@ -57,6 +57,9 @@ export function SidebarItem({
       renameLabel="Chat title"
       onRename={(next) => updateTitle(chat.id, next)}
       leadingIcon={presentation.kind === "pinned" ? RiChat3Line : undefined}
+      activeLeadingIcon={
+        presentation.kind === "pinned" ? RiChatSmile2Fill : undefined
+      }
       trailing={({ startRename }) => (
         // Trailing slot (ChatGPT's dynamic right-hand slot). At rest it shows the
         // status indicator; on hover/focus/menu-open the indicator hides and the

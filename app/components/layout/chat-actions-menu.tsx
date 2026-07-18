@@ -99,16 +99,16 @@ export function ChatActionsMenu({
         ]
       : []),
     {
-      key: "pin",
-      icon: chat.pinned ? <PinOff size={20} /> : <Pin size={20} />,
-      label: chat.pinned ? "Unpin" : "Pin",
-      onSelect: () => togglePinned(chat.id, !chat.pinned),
-    },
-    {
       key: "rename",
       icon: <Icon icon={RiEditLine} slotSize={20} />,
       label: "Rename",
       onSelect: handleRename,
+    },
+    {
+      key: "pin",
+      icon: chat.pinned ? <PinOff size={20} /> : <Pin size={20} />,
+      label: chat.pinned ? "Unpin" : "Pin",
+      onSelect: () => togglePinned(chat.id, !chat.pinned),
     },
     {
       key: "delete",

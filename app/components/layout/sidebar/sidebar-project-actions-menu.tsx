@@ -9,19 +9,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Icon } from "@/components/ui/icon"
-import { useSidebar } from "@/components/ui/sidebar"
 import type { Id } from "@/convex/_generated/dataModel"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import {
   RiDeleteBinLine,
   RiEditLine,
-  RiHome4Line,
   RiLoader4Line,
   RiMoreFill,
   RiPushpin2Line,
   RiUnpinFill,
 } from "@remixicon/react"
-import { useRouter } from "next/navigation"
 import { useState } from "react"
 import {
   trailingIconButtonClassName,
@@ -48,14 +45,7 @@ export function SidebarProjectActionsMenu({
 }: SidebarProjectActionsMenuProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const isMobile = useBreakpoint(768)
-  const router = useRouter()
-  const { setOpenMobile } = useSidebar()
   const displayName = project.name || "Untitled Project"
-
-  const openProject = () => {
-    setOpenMobile(false)
-    router.push(`/p/${project._id}`)
-  }
 
   return (
     <span className="contents" onClick={(event) => event.stopPropagation()}>
@@ -76,11 +66,7 @@ export function SidebarProjectActionsMenu({
         <DropdownMenuContent className="w-max">
           <DropdownMenuItem onClick={onStartEditing}>
             <Icon icon={RiEditLine} slotSize={20} />
-            Rename project
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={openProject}>
-            <Icon icon={RiHome4Line} slotSize={20} />
-            Project home
+            Rename
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={onTogglePinned}
@@ -98,7 +84,7 @@ export function SidebarProjectActionsMenu({
                 slotSize={20}
               />
             )}
-            {project.pinned ? "Unpin project" : "Pin project"}
+            {project.pinned ? "Unpin" : "Pin"}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
@@ -106,7 +92,7 @@ export function SidebarProjectActionsMenu({
             onClick={() => setIsDeleteDialogOpen(true)}
           >
             <Icon icon={RiDeleteBinLine} slotSize={20} />
-            Delete project
+            Delete
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

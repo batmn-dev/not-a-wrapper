@@ -5,7 +5,6 @@ import { headerActionButtonClassName } from "@/app/components/layout/header-acti
 import { useKeyShortcut } from "@/app/hooks/use-key-shortcut"
 import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
-import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { useChat } from "@/lib/chat-store/chats/use-chat"
 import { useChatSession } from "@/lib/chat-store/session/provider"
 import { RiMoreFill } from "@remixicon/react"
@@ -16,7 +15,6 @@ export function ButtonNewChat() {
   const router = useRouter()
   const { chatId } = useChatSession()
   const { chat } = useChat(chatId)
-  const isMobile = useBreakpoint(768)
 
   useKeyShortcut(
     (e) => (e.key === "u" || e.key === "U") && e.metaKey && e.shiftKey,
@@ -41,7 +39,7 @@ export function ButtonNewChat() {
       }
       contentSide="bottom"
       contentAlign="end"
-      showShare={isMobile}
+      showShare
     />
   )
 }

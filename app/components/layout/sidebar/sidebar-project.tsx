@@ -5,7 +5,7 @@ import { CollapsibleSection } from "@/components/ui/collapsible-section"
 import { Icon } from "@/components/ui/icon"
 import { useSidebar } from "@/components/ui/sidebar"
 import type { Id } from "@/convex/_generated/dataModel"
-import { RiAddLine, RiFolderFill, RiFolderLine } from "@remixicon/react"
+import { RiAddLine, RiFolderLine, RiFolderOpenFill } from "@remixicon/react"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 import type { ChatOrganization } from "./chat-organization"
@@ -52,7 +52,7 @@ export function SidebarProject({
       {organization === "one-list" ? (
         <SidebarMenuItem
           icon={RiFolderLine}
-          activeIcon={RiFolderFill}
+          activeIcon={RiFolderOpenFill}
           label="Projects"
           href="/projects"
           testId="sidebar-item-projects"
