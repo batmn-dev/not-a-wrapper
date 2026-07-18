@@ -15,8 +15,8 @@ type SidebarRowEndSlotProps = {
  * The only placement primitive for compact-row actions.
  *
  * Both strategies share the same 34px control slots, 10px overlap, and 58px
- * rail. `overlay` is used by disclosure rows; `reflow` is used by chat rows so
- * the primary title gives up the rail width when actions reveal.
+ * rail. `overlay` is used by project rows; `reflow` is used by chat rows so the
+ * primary title gives up the rail width when actions reveal.
  */
 export function SidebarRowActions({
   strategy,

@@ -1,7 +1,6 @@
-import type { Id } from "@/convex/_generated/dataModel"
 import type { TextStreamPart, ToolSet, UIMessage } from "ai"
-import { fetchMutation } from "convex/nextjs"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import type { Id } from "@/convex/_generated/dataModel"
 import {
   createDurableSnapshotTracker,
   createRuntimeApprovalPersistenceTransform,
@@ -11,10 +10,6 @@ import {
   isDurableConvexChat,
   toDurableUiMessage,
 } from "./durable-turn-runtime"
-
-vi.mock("convex/nextjs", () => ({
-  fetchMutation: vi.fn(),
-}))
 
 afterEach(() => {
   vi.useRealTimers()
@@ -32,6 +27,8 @@ function createDeferred<T>() {
 // The absorbed internals of the Durable turn runtime (was `durable-runtime.ts`):
 // the stateless helpers, the snapshot tracker, and the approval-persistence
 // transform. The interface-level behaviors live in durable-turn-runtime.test.ts.
+// Both stateful internals are credential-free since ADR-0011 — they receive a
+// worker-wire-backed persister and never see a token or transport.
 describe("durable turn runtime internals", () => {
   it("only enables Convex durability for authenticated Convex chats", () => {
     expect(
@@ -123,12 +120,8 @@ describe("durable turn runtime internals", () => {
 
     const transform = createRuntimeApprovalPersistenceTransform({
       chatId: "chat_1",
-      convexToken: "token",
-      durableRunState: {
-        runId: "run_1" as Id<"generationRuns">,
-        assistantMessageId: "message_1" as Id<"messages">,
-      },
-      // The transform now reads reason/riskClass off ToolFacts.approvalFor
+      assistantMessageId: "message_1" as Id<"messages">,
+      // The transform reads reason/riskClass off ToolFacts.approvalFor
       // (the map+resolver threading dissolved once the decision carried them).
       toolFacts: {
         metadata: { source: () => "mcp" },
@@ -147,6 +140,7 @@ describe("durable turn runtime internals", () => {
       persistApprovalRequest: async (args) => {
         events.push(`write-start:${args.approvalId}`)
         expect(args).toMatchObject({
+          assistantMessageId: "message_1",
           approvalId: "approval-1",
           toolCallId: "call-1",
           toolName: "send_email",
@@ -218,66 +212,41 @@ describe("durable turn runtime internals", () => {
     expect(message.metadata?.durableStatus).toBe("aborted")
   })
 
-  it("uses an injected persister for snapshot writes", async () => {
-    vi.mocked(fetchMutation).mockReset()
-    const injectedFetchMutation = vi.fn().mockResolvedValue(undefined)
-
-    const tracker = createDurableSnapshotTracker({
-      convexToken: "token",
-      runId: "run_1" as Id<"generationRuns">,
-      messageId: "message_1" as Id<"messages">,
-      order: 1,
-      fetchMutation: injectedFetchMutation as unknown as typeof fetchMutation,
-    })
+  it("writes snapshots through the injected persister", async () => {
+    const persist = vi.fn().mockResolvedValue(undefined)
+    const tracker = createDurableSnapshotTracker({ persist })
 
     tracker.onChunk({ type: "text-delta", text: "A" } as never)
     await new Promise<void>((resolve) => setImmediate(resolve))
 
-    expect(injectedFetchMutation).toHaveBeenCalledTimes(1)
-    expect(injectedFetchMutation).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        runId: "run_1",
-        messageId: "message_1",
-        order: 1,
-        sequence: 1,
-        textSnapshot: "A",
-        partsSnapshot: [{ type: "text", text: "A" }],
-      }),
-      { token: "token" }
-    )
-    expect(fetchMutation).not.toHaveBeenCalled()
+    expect(persist).toHaveBeenCalledTimes(1)
+    expect(persist).toHaveBeenCalledWith({
+      sequence: 1,
+      textSnapshot: "A",
+      partsSnapshot: [{ type: "text", text: "A" }],
+    })
   })
 
   it("does not force-write an empty snapshot before the first semantic delta", async () => {
-    vi.mocked(fetchMutation).mockReset()
-
-    const tracker = createDurableSnapshotTracker({
-      convexToken: "token",
-      runId: "run_1" as Id<"generationRuns">,
-      messageId: "message_1" as Id<"messages">,
-      order: 1,
-    })
+    const persist = vi.fn().mockResolvedValue(undefined)
+    const tracker = createDurableSnapshotTracker({ persist })
 
     await tracker.flush()
 
-    expect(fetchMutation).not.toHaveBeenCalled()
+    expect(persist).not.toHaveBeenCalled()
     expect(tracker.textSnapshot).toBe("")
     expect(tracker.partsSnapshot).toEqual([])
   })
 
   it("waits for an in-flight snapshot write before flushing the final snapshot", async () => {
     const firstWrite = createDeferred<void>()
-    vi.mocked(fetchMutation)
-      .mockReset()
+    const persist = vi
+      .fn()
       .mockImplementationOnce(() => firstWrite.promise)
       .mockResolvedValue(undefined)
 
     const tracker = createDurableSnapshotTracker({
-      convexToken: "token",
-      runId: "run_1" as Id<"generationRuns">,
-      messageId: "message_1" as Id<"messages">,
-      order: 1,
+      persist,
       throttleMs: 60_000,
     })
 
@@ -292,8 +261,8 @@ describe("durable turn runtime internals", () => {
     await Promise.resolve()
 
     expect(flushed).toBe(false)
-    expect(fetchMutation).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(fetchMutation).mock.calls[0]?.[1]).toMatchObject({
+    expect(persist).toHaveBeenCalledTimes(1)
+    expect(persist.mock.calls[0]?.[0]).toMatchObject({
       sequence: 1,
       textSnapshot: "A",
       partsSnapshot: [{ type: "text", text: "A" }],
@@ -302,11 +271,44 @@ describe("durable turn runtime internals", () => {
     firstWrite.resolve()
     await flushPromise
 
-    expect(fetchMutation).toHaveBeenCalledTimes(2)
-    expect(vi.mocked(fetchMutation).mock.calls[1]?.[1]).toMatchObject({
+    expect(persist).toHaveBeenCalledTimes(2)
+    expect(persist.mock.calls[1]?.[0]).toMatchObject({
       sequence: 2,
       textSnapshot: "AB",
       partsSnapshot: [{ type: "text", text: "AB" }],
+    })
+  })
+
+  it("sequences the final full-parts snapshot after every throttled write", async () => {
+    const persist = vi.fn().mockResolvedValue(undefined)
+    const tracker = createDurableSnapshotTracker({
+      persist,
+      throttleMs: 60_000,
+    })
+
+    tracker.onChunk({ type: "text-delta", text: "A" } as never)
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    const finalParts = [
+      { type: "text", text: "AB" },
+      {
+        type: "tool-get_weather",
+        toolCallId: "c1",
+        state: "output-available",
+        input: {},
+        output: {},
+      },
+    ]
+    await tracker.flushFinal("AB", finalParts)
+
+    expect(persist).toHaveBeenCalledTimes(2)
+    // The final snapshot carries the COMPLETE response parts (tool parts
+    // included), not the tracker's text/reasoning subset, and a later
+    // sequence than the throttled write.
+    expect(persist.mock.calls[1]?.[0]).toEqual({
+      sequence: 2,
+      textSnapshot: "AB",
+      partsSnapshot: finalParts,
     })
   })
 
@@ -317,20 +319,14 @@ describe("durable turn runtime internals", () => {
     // markGenerationRunAborted never ran and snapshot writes continued at the
     // write-latency rate until the Convex token expired.
     vi.useFakeTimers()
-    vi.mocked(fetchMutation)
-      .mockReset()
+    const persist = vi
+      .fn()
       .mockImplementation(
-        () =>
-          new Promise((resolve) =>
-            setTimeout(resolve, 5)
-          ) as unknown as ReturnType<typeof fetchMutation>
+        () => new Promise((resolve) => setTimeout(resolve, 5))
       )
 
     const tracker = createDurableSnapshotTracker({
-      convexToken: "token",
-      runId: "run_1" as Id<"generationRuns">,
-      messageId: "message_1" as Id<"messages">,
-      order: 1,
+      persist,
       throttleMs: 60_000,
     })
 
@@ -350,28 +346,18 @@ describe("durable turn runtime internals", () => {
 
     expect(outcome).toBe("flushed")
     // One in-flight incremental write plus at most one forced final write.
-    expect(vi.mocked(fetchMutation).mock.calls.length).toBeLessThanOrEqual(3)
-    const lastCall = vi.mocked(fetchMutation).mock.calls.at(-1)
-    expect(lastCall?.[1]).toMatchObject({ textSnapshot: "AB" })
+    expect(persist.mock.calls.length).toBeLessThanOrEqual(3)
+    const lastCall = persist.mock.calls.at(-1)
+    expect(lastCall?.[0]).toMatchObject({ textSnapshot: "AB" })
     vi.useRealTimers()
   })
 
   it("times out stalled snapshot writes so flush can settle and retry", async () => {
     vi.useFakeTimers()
-    vi.mocked(fetchMutation)
-      .mockReset()
-      .mockImplementation(
-        () =>
-          new Promise(() => {}) as unknown as ReturnType<typeof fetchMutation>
-      )
+    const persist = vi.fn().mockImplementation(() => new Promise(() => {}))
 
     try {
-      const tracker = createDurableSnapshotTracker({
-        convexToken: "token",
-        runId: "run_1" as Id<"generationRuns">,
-        messageId: "message_1" as Id<"messages">,
-        order: 1,
-      })
+      const tracker = createDurableSnapshotTracker({ persist })
 
       tracker.onChunk({ type: "text-delta", text: "A" } as never)
 
@@ -382,11 +368,11 @@ describe("durable turn runtime internals", () => {
       await vi.advanceTimersByTimeAsync(10_000)
       await flushExpectation
 
-      vi.mocked(fetchMutation).mockResolvedValue(undefined)
+      persist.mockResolvedValue(undefined)
       await tracker.flush()
 
-      expect(fetchMutation).toHaveBeenCalledTimes(2)
-      expect(vi.mocked(fetchMutation).mock.calls[1]?.[1]).toMatchObject({
+      expect(persist).toHaveBeenCalledTimes(2)
+      expect(persist.mock.calls[1]?.[0]).toMatchObject({
         sequence: 2,
         textSnapshot: "A",
         partsSnapshot: [{ type: "text", text: "A" }],
@@ -401,19 +387,12 @@ describe("durable turn runtime internals", () => {
     const onUnhandledRejection = (reason: unknown) => {
       unhandledRejections.push(reason)
     }
-    vi.mocked(fetchMutation)
-      .mockReset()
-      .mockRejectedValueOnce(new Error("snapshot failed"))
+    const persist = vi.fn().mockRejectedValueOnce(new Error("snapshot failed"))
 
     process.on("unhandledRejection", onUnhandledRejection)
 
     try {
-      const tracker = createDurableSnapshotTracker({
-        convexToken: "token",
-        runId: "run_1" as Id<"generationRuns">,
-        messageId: "message_1" as Id<"messages">,
-        order: 1,
-      })
+      const tracker = createDurableSnapshotTracker({ persist })
 
       tracker.onChunk({
         type: "text-delta",
@@ -425,7 +404,7 @@ describe("durable turn runtime internals", () => {
       process.off("unhandledRejection", onUnhandledRejection)
     }
 
-    expect(fetchMutation).toHaveBeenCalledTimes(1)
+    expect(persist).toHaveBeenCalledTimes(1)
     expect(unhandledRejections).toEqual([])
   })
 })

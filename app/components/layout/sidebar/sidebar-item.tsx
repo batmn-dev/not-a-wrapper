@@ -1,13 +1,12 @@
 "use client"
 
-import { Icon } from "@/components/ui/icon"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useSidebarChatStatus } from "@/lib/chat-store/status/sidebar-chat-status"
 import { Chat } from "@/lib/chat-store/types"
 import { RiChat3Line } from "@remixicon/react"
+import { SidebarChatPinButton } from "./sidebar-chat-pin-button"
 import { SidebarItemMenu } from "./sidebar-item-menu"
 import { SidebarChatStatusIndicator } from "./sidebar-item-status"
-import { SidebarChatPinButton } from "./sidebar-chat-pin-button"
 import { SidebarRow } from "./sidebar-row"
 import { SidebarRowEndSlot } from "./sidebar-row-actions"
 
@@ -16,7 +15,6 @@ type SidebarItemProps = {
   currentChatId: string
   presentation?:
     | { kind: "history" }
-    | { kind: "nested"; projectName: string }
     | { kind: "pinned"; projectName?: string }
     | { kind: "recent-project"; projectName: string }
 }
@@ -32,7 +30,6 @@ export function SidebarItem({
   const status = useSidebarChatStatus(chat)
   const displayTitle = chat.title || "Untitled Chat"
   const isProjectPresentation =
-    presentation.kind === "nested" ||
     presentation.kind === "recent-project" ||
     (presentation.kind === "pinned" && presentation.projectName != null)
   const projectName = isProjectPresentation
@@ -56,15 +53,10 @@ export function SidebarItem({
           : undefined
       }
       ariaLabel={ariaLabel}
-      indentation={presentation.kind === "nested" ? "nested" : "standard"}
       renameValue={chat.title || ""}
       renameLabel="Chat title"
       onRename={(next) => updateTitle(chat.id, next)}
-      leading={
-        presentation.kind === "pinned" ? (
-          <Icon icon={RiChat3Line} slotSize={20} />
-        ) : undefined
-      }
+      leadingIcon={presentation.kind === "pinned" ? RiChat3Line : undefined}
       trailing={({ startRename }) => (
         // Trailing slot (ChatGPT's dynamic right-hand slot). At rest it shows the
         // status indicator; on hover/focus/menu-open the indicator hides and the

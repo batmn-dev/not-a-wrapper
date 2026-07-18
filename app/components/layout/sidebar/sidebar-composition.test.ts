@@ -59,29 +59,15 @@ describe("sidebar grouping composition", () => {
     project("alpha", { created: 1 }),
     project("pinned-project", { pinned: true, created: 2 }),
   ]
-  const projectPreviews = new Map([
-    [
-      "alpha",
-      {
-        chats: [projectRecent, projectOlder, pinnedChat],
-        hasMore: false,
-      },
-    ],
-  ])
-
-  it("keeps project chats under projects and out of Chats in By project", () => {
+  it("keeps project recents on project home while retaining pinned project chats", () => {
     const result = deriveSidebarComposition({
       chats: [regular, projectOlder, projectRecent, pinnedChat],
       projects,
-      projectPreviews,
       organization: "by-project",
     })
 
     expect(result.historyChats.map(({ id }) => id)).toEqual(["regular"])
-    expect(
-      result.projectPreviews.get("alpha")?.chats.map(({ id }) => id)
-    ).toEqual(["project-recent", "project-older", "pinned-chat"])
-    expect(result.pinnedChats).toEqual([])
+    expect(result.pinnedChats.map(({ id }) => id)).toEqual(["pinned-chat"])
     expect(result.sectionProjects.map(({ _id }) => _id)).toEqual(["alpha"])
     expect(result.pinnedProjects.map(({ _id }) => _id)).toEqual([
       "pinned-project",
@@ -92,7 +78,6 @@ describe("sidebar grouping composition", () => {
     const result = deriveSidebarComposition({
       chats: [regular, projectOlder, projectRecent, pinnedChat],
       projects,
-      projectPreviews,
       organization: "one-list",
     })
 
@@ -123,7 +108,6 @@ describe("sidebar grouping composition", () => {
     const result = deriveSidebarComposition({
       chats: [firstPinnedChat, secondPinnedChat],
       projects: [...projects, secondProject],
-      projectPreviews,
       organization: "by-project",
     })
 
@@ -137,7 +121,7 @@ describe("sidebar grouping composition", () => {
     ])
   })
 
-  it("does not duplicate chats rendered under a pinned project", () => {
+  it("keeps chats from a pinned project in their chat sections", () => {
     const pinnedProjectChat = chat("pinned-project-chat", {
       pinned: true,
       project_id: "pinned-project",
@@ -151,22 +135,16 @@ describe("sidebar grouping composition", () => {
     const result = deriveSidebarComposition({
       chats: [regular, pinnedChat, pinnedProjectChat, pinnedProjectRecent],
       projects,
-      projectPreviews: new Map([
-        [
-          "pinned-project",
-          {
-            chats: [pinnedProjectRecent, pinnedProjectChat],
-            hasMore: false,
-          },
-        ],
-      ]),
       organization: "one-list",
     })
 
-    expect(result.pinnedChats.map(({ id }) => id)).toEqual(["pinned-chat"])
-    expect(result.historyChats.map(({ id }) => id)).toEqual(["regular"])
-    expect(
-      result.projectPreviews.get("pinned-project")?.chats.map(({ id }) => id)
-    ).toEqual(["pinned-project-recent", "pinned-project-chat"])
+    expect(result.pinnedChats.map(({ id }) => id)).toEqual([
+      "pinned-project-chat",
+      "pinned-chat",
+    ])
+    expect(result.historyChats.map(({ id }) => id)).toEqual([
+      "pinned-project-recent",
+      "regular",
+    ])
   })
 })

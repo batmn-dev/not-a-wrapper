@@ -197,6 +197,13 @@ export default defineSchema({
     failedToolCalls: v.optional(v.number()),
     activeStreamId: v.optional(v.string()),
     assistantMessageId: v.optional(v.id("messages")),
+    // Execution grant (ADR-0011): SHA-256 digest of the run-scoped worker
+    // secret minted at prepare. Worker writes authenticate against this digest
+    // via the /chat-turn/worker HTTP endpoint instead of the user's request
+    // token, so a mid-run token expiry can no longer reject late writes. The
+    // raw secret lives only in the Next server process's memory.
+    grantDigest: v.optional(v.string()),
+    grantExpiresAt: v.optional(v.number()),
   })
     .index("by_chat", ["chatId"])
     .index("by_user", ["userId"])

@@ -1,21 +1,16 @@
 "use client"
 
 import { InlineRenameInput } from "@/components/ui/inline-rename-input"
+import type { IconProps } from "@/components/ui/icon"
 import { useSidebar } from "@/components/ui/sidebar"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { useInlineRename } from "@/hooks/use-inline-rename"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { useCallback, useMemo, type ReactNode } from "react"
+import { SidebarLeadingIcon } from "./sidebar-leading-icon"
 
-type SidebarRowInteraction =
-  | { kind: "link"; href: string }
-  | {
-      kind: "disclosure"
-      expanded: boolean
-      controls: string
-      onToggle: () => void
-    }
+type SidebarRowInteraction = { kind: "link"; href: string }
 
 type SidebarRowProps = {
   interaction: SidebarRowInteraction
@@ -33,25 +28,24 @@ type SidebarRowProps = {
   renameLabel: string
   /** Persist + error handling live here — the shell only owns the edit UX. */
   onRename: (next: string) => void | Promise<void>
-  /** Optional leading glyph, rendered in both resting and editing modes. */
-  leading?: ReactNode
+  /** Optional leading glyph, rendered through the shared slot in every state. */
+  leadingIcon?: IconProps["icon"]
+  /** Optional active-state glyph swap; the shared slot keeps its geometry fixed. */
+  activeLeadingIcon?: IconProps["icon"]
   /**
    * Trailing actions. A render prop, not a plain slot: the menu it returns must
    * be able to launch inline rename (`startRename`) while `useInlineRename`
    * stays owned by the shell.
    */
   trailing?: (controls: { startRename: () => void }) => ReactNode
-  /** Stable geometry variant rather than a caller-owned padding correction. */
-  indentation?: "standard" | "nested"
 }
 
 /**
  * The single editable/navigable compact row the sidebar's chat and project
  * lists render through (the **Sidebar row** module). It owns the structural
  * invariants both lists otherwise copy: the editing⇄resting swap, inline
- * rename, and the click-outside-commit container. Chat rows use the
- * primary link with sibling actions; expandable project rows use a primary
- * button with sibling navigation/actions so neither row type nests interactive
+ * rename, and the click-outside-commit container. Chat and project rows use a
+ * primary link with sibling actions so neither row type nests interactive
  * controls. Domain glue stays in the thin caller adapters.
  */
 export function SidebarRow({
@@ -63,9 +57,9 @@ export function SidebarRow({
   renameValue,
   renameLabel,
   onRename,
-  leading,
+  leadingIcon,
+  activeLeadingIcon,
   trailing,
-  indentation = "standard",
 }: SidebarRowProps) {
   const { setOpenMobile } = useSidebar()
   const isMobile = useBreakpoint(768)
@@ -90,12 +84,18 @@ export function SidebarRow({
     () =>
       cn(
         "sidebar-row sidebar-menu-row sidebar-row-shell menu-item-hoverable text-foreground hover:bg-[var(--sidebar-row-active-background)] hover:text-foreground group/row relative flex items-center text-sm",
-        indentation === "nested" && "sidebar-row-nested",
         (isActive || isEditing) &&
           "bg-[var(--sidebar-row-active-background)] hover:bg-[var(--sidebar-row-active-background)] group-data-[collapsible=icon]:bg-transparent"
       ),
-    [indentation, isActive, isEditing]
+    [isActive, isEditing]
   )
+  const leading = leadingIcon ? (
+    <SidebarLeadingIcon
+      icon={leadingIcon}
+      activeIcon={activeLeadingIcon}
+      isActive={isActive}
+    />
+  ) : null
 
   // Rename mode keeps the plain <div> container (it needs containerRef for
   // click-outside-commits and swaps the whole row for an input).
@@ -107,9 +107,7 @@ export function SidebarRow({
         ref={containerRef}
       >
         <div className="sidebar-row-content flex h-full w-full items-center">
-          {leading && (
-            <span className="mr-2 flex shrink-0 items-center">{leading}</span>
-          )}
+          {leading}
           <InlineRenameInput
             {...inputProps}
             aria-label={renameLabel}
@@ -121,8 +119,8 @@ export function SidebarRow({
   }
 
   const rowContent = (
-    <div className="flex min-w-0 grow items-center gap-(--sidebar-row-leading-gap)">
-      {leading ? <span className="shrink-0">{leading}</span> : null}
+    <div className="flex min-w-0 grow items-center">
+      {leading}
       <div className="flex min-w-0 grow items-center gap-2">
         <span className="min-w-0 truncate" dir="auto">
           {title}
@@ -138,26 +136,6 @@ export function SidebarRow({
       </div>
     </div>
   )
-
-  if (interaction.kind === "disclosure") {
-    return (
-      <div className={containerClassName}>
-        <button
-          type="button"
-          className="sidebar-row-content sidebar-row-primary-control sidebar-project-row-primary flex h-full min-w-0 grow items-center text-start outline-none"
-          onClick={interaction.onToggle}
-          aria-expanded={interaction.expanded}
-          aria-controls={interaction.controls}
-          aria-label={ariaLabel}
-          data-sidebar-item="true"
-          data-active={isActive ? "" : undefined}
-        >
-          {rowContent}
-        </button>
-        {trailing?.({ startRename: start })}
-      </div>
-    )
-  }
 
   // Resting/nav mode keeps the primary link and its trailing controls as
   // siblings. The link grows across every unclaimed pixel; revealing the

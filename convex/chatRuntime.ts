@@ -127,6 +127,15 @@ type CanonicalApprovalDecision = {
 
 const ACTIVE_RUN_SCAN_LIMIT = 50
 
+/**
+ * Execution-grant lifetime (ADR-0011). Must comfortably exceed the longest
+ * legitimate turn plus settlement retries; it bounds how long a leaked digest
+ * preimage could authorize idempotent worker writes. Writes to a terminal run
+ * are already no-ops under first-terminal-wins, so expiry is the grant's only
+ * hard revocation.
+ */
+export const EXECUTION_GRANT_TTL_MS = 60 * 60 * 1000
+
 const terminalToolInvocationStatuses = new Set<
   Doc<"toolInvocations">["status"]
 >(["denied", "completed", "failed"])
@@ -1145,6 +1154,8 @@ type PrepareGenerationForChatArgs = {
   edit?: GenerationEditIntent
   regeneration?: GenerationRegenerationIntent
   approvalResponses?: GenerationApprovalResponse[]
+  /** SHA-256 hex digest of the run-scoped worker secret (ADR-0011). */
+  grantDigest?: string
 }
 
 export async function prepareGenerationForChat(
@@ -1229,6 +1240,12 @@ export async function prepareGenerationForChat(
     status: "running",
     startedAt: now,
     updatedAt: now,
+    ...(args.grantDigest
+      ? {
+          grantDigest: args.grantDigest,
+          grantExpiresAt: now + EXECUTION_GRANT_TTL_MS,
+        }
+      : {}),
   })
 
   let assistantMessageId: Id<"messages">
@@ -1324,6 +1341,7 @@ export const prepareGeneration = mutation({
     edit: v.optional(vEditIntent),
     regeneration: v.optional(vRegenerationIntent),
     approvalResponses: v.optional(v.array(vApprovalResponse)),
+    grantDigest: v.optional(v.string()),
   },
   handler: async (ctx, args) => prepareGenerationForChat(ctx, args),
 })

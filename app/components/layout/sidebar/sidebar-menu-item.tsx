@@ -1,5 +1,6 @@
 "use client"
 
+import type { IconProps } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import {
@@ -9,15 +10,16 @@ import {
   type ReactNode,
   type Ref,
 } from "react"
+import { SidebarLeadingIcon } from "./sidebar-leading-icon"
 
 type SidebarMenuItemProps = Omit<
   ComponentPropsWithoutRef<"button">,
   "children" | "className" | "type" | "onClick"
 > & {
-  /** Icon node */
-  icon: ReactNode
-  /** Icon node used when the item is active */
-  activeIcon?: ReactNode
+  /** Icon rendered through the shared sidebar leading slot. */
+  icon: IconProps["icon"]
+  /** Icon used when active; the shared slot keeps its geometry fixed. */
+  activeIcon?: IconProps["icon"]
   /** Label text */
   label: string
   /** Navigation href - renders as Link if provided */
@@ -42,8 +44,6 @@ type SidebarMenuItemProps = Omit<
 
 const baseClassName = cn(
   "sidebar-menu-row sidebar-row-content menu-item-hoverable group/menu-item relative inline-flex items-center bg-transparent text-sm",
-  // Spacing using CSS variables
-  "gap-(--sidebar-item-gap)",
   // Native buttons default to cursor: default; sidebar rows should feel clickable.
   "cursor-pointer",
   "disabled:cursor-not-allowed disabled:hover:bg-transparent",
@@ -82,14 +82,13 @@ export const SidebarMenuItem = forwardRef<
   ref
 ) {
   const hasTrailing = Boolean(trailing)
-  const resolvedIcon = isActive && activeIcon ? activeIcon : icon
-
   const primaryContent = (
     <>
-      {/* Icon wrapper for consistent alignment */}
-      <div className="flex shrink-0 items-center justify-center">
-        {resolvedIcon}
-      </div>
+      <SidebarLeadingIcon
+        icon={icon}
+        activeIcon={activeIcon}
+        isActive={isActive}
+      />
       <div className="flex min-w-0 grow items-center gap-(--sidebar-item-gap)">
         <span className="truncate">{label}</span>
       </div>
@@ -126,7 +125,7 @@ export const SidebarMenuItem = forwardRef<
           ref={ref as Ref<HTMLAnchorElement>}
           href={href}
           onClick={onClick as MouseEventHandler<HTMLAnchorElement> | undefined}
-          className="sidebar-row-primary-control after:absolute after:inset-0 flex h-full min-w-0 grow items-center gap-(--sidebar-item-gap) rounded-lg focus-visible:outline-none"
+          className="sidebar-row-primary-control after:absolute after:inset-0 flex h-full min-w-0 grow items-center rounded-lg focus-visible:outline-none"
           data-testid={testId}
           data-sidebar-item="true"
           data-active={isActive ? "true" : undefined}

@@ -7,11 +7,11 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server"
+import { createChatOwnedDeletion } from "./domain/chat_owned_deletion"
 import {
   patchChatActivity,
   recordKnownProjectActivity,
 } from "./domain/project_activity"
-import { createChatOwnedDeletion } from "./domain/chat_owned_deletion"
 import { requireOwnedProject } from "./lib/auth"
 import {
   authenticatedMutation,
@@ -24,7 +24,6 @@ import {
 // Upper bound on title-search results. The history search UI renders a flat
 // list, so a bounded read is plenty and keeps the search subscription cheap.
 const CHAT_SEARCH_RESULT_LIMIT = 50
-export const SIDEBAR_PROJECT_PREVIEW_LIMIT = 5
 
 /**
  * Get all chats for the current user
@@ -147,51 +146,6 @@ export async function getRecentWindowForCurrentUserHandler(
     .order("desc")
     .paginate(paginationOpts)
 }
-
-/**
- * Complete project previews for the current user's sidebar, independent of the
- * bounded global recency window. The client owns one live subscription; this
- * handler first resolves the caller's owned projects, then performs bounded,
- * indexed reads for each project. Returning one extra row provides an exact
- * `hasMore` signal without shipping full project histories to the sidebar.
- */
-export async function getSidebarProjectPreviewsForCurrentUserHandler(
-  ctx: MaybeUserChatQueryCtx
-) {
-  const user = ctx.user
-  if (!user) return []
-
-  const projects = await ctx.db
-    .query("projects")
-    .withIndex("by_user", (q) => q.eq("userId", user._id))
-    .collect()
-  const previews: Array<{
-    projectId: Id<"projects">
-    chats: Doc<"chats">[]
-    hasMore: boolean
-  }> = []
-
-  for (const project of projects) {
-    const chats = await ctx.db
-      .query("chats")
-      .withIndex("by_project_updated", (q) => q.eq("projectId", project._id))
-      .order("desc")
-      .take(SIDEBAR_PROJECT_PREVIEW_LIMIT + 1)
-
-    previews.push({
-      projectId: project._id,
-      chats: chats.slice(0, SIDEBAR_PROJECT_PREVIEW_LIMIT),
-      hasMore: chats.length > SIDEBAR_PROJECT_PREVIEW_LIMIT,
-    })
-  }
-
-  return previews
-}
-
-export const getSidebarProjectPreviewsForCurrentUser = maybeAuthQuery({
-  args: {},
-  handler: async (ctx) => getSidebarProjectPreviewsForCurrentUserHandler(ctx),
-})
 
 /**
  * All chats in a project the caller owns, newest activity first, over the

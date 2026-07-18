@@ -2,9 +2,9 @@
 
 import { useChats } from "@/lib/chat-store/chats/provider"
 import type { Chat } from "@/lib/chat-store/types"
-import { SidebarSecondaryAction } from "./trailing-icon-button"
+import { SidebarPinAction } from "./trailing-icon-button"
 
-/** Chat-store adapter for the shared sidebar secondary-action contract. */
+/** Chat-store adapter for the shared sidebar pin-action contract. */
 export function SidebarChatPinButton({
   chat,
   title,
@@ -15,7 +15,7 @@ export function SidebarChatPinButton({
   const { togglePinned } = useChats()
 
   return (
-    <SidebarSecondaryAction
+    <SidebarPinAction
       pinned={chat.pinned}
       title={title}
       itemType="Chat"

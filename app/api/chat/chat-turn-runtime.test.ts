@@ -16,6 +16,10 @@ import {
   type ChatTurnDeps,
   type ChatTurnInput,
 } from "./chat-turn-runtime"
+import type {
+  DurableWorkerCall,
+  DurableWorkerWire,
+} from "./durable-turn-runtime"
 import { prepareTextFilePartsForModelInput } from "./text-file-parts"
 
 // --- mock the heavy collaborators so a whole turn runs without HTTP or a model.
@@ -207,7 +211,7 @@ function sameRef(a: unknown, b: unknown): boolean {
   }
 }
 
-function makeFetchMutation(options: { rejectAborted?: Error } = {}) {
+function makeFetchMutation() {
   return vi.fn(async (ref: unknown) => {
     if (sameRef(ref, api.chatRuntime.prepareGeneration)) {
       return {
@@ -217,18 +221,36 @@ function makeFetchMutation(options: { rejectAborted?: Error } = {}) {
         messages: [],
       }
     }
-    if (
-      options.rejectAborted &&
-      sameRef(ref, api.chatRuntime.markGenerationRunAborted)
-    ) {
-      throw options.rejectAborted
-    }
     return undefined
   })
 }
 
 function findCall(fetchMutation: ReturnType<typeof vi.fn>, ref: unknown) {
   return fetchMutation.mock.calls.find((call) => sameRef(call[0], ref))
+}
+
+// Post-prepare durable writes travel the Durable worker wire (ADR-0011), not
+// fetchMutation — the recording wire is their test seam.
+type RecordingWire = DurableWorkerWire & { calls: DurableWorkerCall[] }
+
+function makeWorkerWire(
+  responders: Partial<
+    Record<string, (args: Record<string, unknown>) => unknown>
+  > = {}
+): RecordingWire {
+  const calls: DurableWorkerCall[] = []
+  const wire = (async (call: DurableWorkerCall) => {
+    calls.push(call)
+    const responder = responders[call.op]
+    if (responder) return responder(call.args)
+    return undefined
+  }) as RecordingWire
+  wire.calls = calls
+  return wire
+}
+
+function wireCall(wire: RecordingWire, op: string) {
+  return wire.calls.find((call) => call.op === op)
 }
 
 function makeDeps(
@@ -243,6 +265,8 @@ function makeDeps(
     after: vi.fn() as unknown as ChatTurnDeps["after"],
     getPostHogClient: (() =>
       null) as unknown as ChatTurnDeps["getPostHogClient"],
+    durableWorkerWire: makeWorkerWire(),
+    durableSettleRetryDelaysMs: [0],
     ...overrides,
   }
 }
@@ -377,6 +401,7 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
   it("completes with durableFinal tool counts from streamText onEnd, not the countToolParts fallback", async () => {
     const harness = makeStreamHarness()
     const fetchMutation = makeFetchMutation()
+    const wire = makeWorkerWire()
     // Two tool calls, one failed — the streamText onEnd freezes these into
     // durableFinal*. The response message carries NO tool parts, so the
     // countToolParts fallback would yield {0,0}; seeing {2,1} on the completion
@@ -394,7 +419,7 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     )
     const runtime = createChatTurnRuntime({
       input: makeInput(),
-      deps: makeDeps(harness, fetchMutation),
+      deps: makeDeps(harness, fetchMutation, { durableWorkerWire: wire }),
     })
 
     await runtime.prepare()
@@ -425,12 +450,9 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
       finishReason: "stop",
     })
 
-    const completed = findCall(
-      fetchMutation,
-      api.chatRuntime.markGenerationRunCompleted
-    )
+    const completed = wireCall(wire, "markGenerationRunCompleted")
     expect(completed).toBeDefined()
-    expect(completed![1]).toMatchObject({
+    expect(completed!.args).toMatchObject({
       runId: "run1",
       messageId: "msg1",
       content: "final answer",
@@ -439,15 +461,19 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
       failedToolCalls: 1,
       usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
     })
-    expect(completed![2]).toEqual({ token: "tok" })
+    // The user token authorizes admission only; no completion via fetchMutation.
+    expect(
+      findCall(fetchMutation, api.chatRuntime.markGenerationRunCompleted)
+    ).toBeUndefined()
   })
 
   it("marks the run aborted (not completed) when the response stream is aborted", async () => {
     const harness = makeStreamHarness()
     const fetchMutation = makeFetchMutation()
+    const wire = makeWorkerWire()
     const runtime = createChatTurnRuntime({
       input: makeInput(),
-      deps: makeDeps(harness, fetchMutation),
+      deps: makeDeps(harness, fetchMutation, { durableWorkerWire: wire }),
     })
 
     await runtime.prepare()
@@ -464,31 +490,30 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
       finishReason: "stop",
     })
 
-    const aborted = findCall(
-      fetchMutation,
-      api.chatRuntime.markGenerationRunAborted
-    )
+    const aborted = wireCall(wire, "markGenerationRunAborted")
     expect(aborted).toBeDefined()
-    expect(aborted![1]).toMatchObject({
+    expect(aborted!.args).toMatchObject({
       runId: "run1",
       messageId: "msg1",
       reason: "ui message stream aborted",
     })
-    expect(
-      findCall(fetchMutation, api.chatRuntime.markGenerationRunCompleted)
-    ).toBeUndefined()
+    expect(wireCall(wire, "markGenerationRunCompleted")).toBeUndefined()
   })
 
   it("does not reject stream abort cleanup when the abort write fails", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
     try {
       const harness = makeStreamHarness()
-      const fetchMutation = makeFetchMutation({
-        rejectAborted: new Error("convex unavailable"),
+      const wire = makeWorkerWire({
+        markGenerationRunAborted: () => {
+          throw new Error("convex unavailable")
+        },
       })
       const runtime = createChatTurnRuntime({
         input: makeInput(),
-        deps: makeDeps(harness, fetchMutation),
+        deps: makeDeps(harness, makeFetchMutation(), {
+          durableWorkerWire: wire,
+        }),
       })
 
       await runtime.prepare()
@@ -498,11 +523,8 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
         harness.captured.streamOpts.onAbort()
       ).resolves.toBeUndefined()
 
-      const aborted = findCall(
-        fetchMutation,
-        api.chatRuntime.markGenerationRunAborted
-      )
-      expect(aborted?.[1]).toMatchObject({
+      const aborted = wireCall(wire, "markGenerationRunAborted")
+      expect(aborted?.args).toMatchObject({
         runId: "run1",
         messageId: "msg1",
         reason: "stream aborted",
@@ -530,10 +552,12 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     // the durable layer keeps that placeholder as the turn's visible failed
     // stub, so losing the id here would orphan the turn again.
     const harness = makeStreamHarness()
-    const fetchMutation = makeFetchMutation()
+    const wire = makeWorkerWire()
     const runtime = createChatTurnRuntime({
       input: makeInput(),
-      deps: makeDeps(harness, fetchMutation),
+      deps: makeDeps(harness, makeFetchMutation(), {
+        durableWorkerWire: wire,
+      }),
     })
 
     await runtime.prepare()
@@ -541,11 +565,8 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     error.stack = `${error.stack}\n    at googleTransport (server.js:1:1)`
     await runtime.fail(error)
 
-    const failed = findCall(
-      fetchMutation,
-      api.chatRuntime.markGenerationRunFailed
-    )
-    expect(failed?.[1]).toMatchObject({
+    const failed = wireCall(wire, "markGenerationRunFailed")
+    expect(failed?.args).toMatchObject({
       runId: "run1",
       messageId: "msg1",
       error:
@@ -615,6 +636,7 @@ describe("createChatTurnRuntime — Anthropic pause_turn telemetry", () => {
   it("captures one content-free event with model and search dimensions", async () => {
     const harness = makeStreamHarness()
     const fetchMutation = makeFetchMutation()
+    const wire = makeWorkerWire()
     const capture = vi.fn()
     const toolRuntime = makeToolRuntime()
     toolRuntime.policySummary.searchInjected = true
@@ -624,6 +646,7 @@ describe("createChatTurnRuntime — Anthropic pause_turn telemetry", () => {
     const runtime = createChatTurnRuntime({
       input: makeInput(),
       deps: makeDeps(harness, fetchMutation, {
+        durableWorkerWire: wire,
         getPostHogClient: (() =>
           ({ capture })) as unknown as ChatTurnDeps["getPostHogClient"],
       }),
@@ -664,19 +687,13 @@ describe("createChatTurnRuntime — Anthropic pause_turn telemetry", () => {
         },
       ],
     ])
-    expect(
-      findCall(fetchMutation, api.chatRuntime.markGenerationRunCompleted)?.[1]
-    ).toMatchObject({
+    expect(wireCall(wire, "markGenerationRunCompleted")?.args).toMatchObject({
       runId: "run1",
       messageId: "msg1",
       finishReason: "stop",
     })
-    expect(
-      findCall(fetchMutation, api.chatRuntime.markGenerationRunAborted)
-    ).toBeUndefined()
-    expect(
-      findCall(fetchMutation, api.chatRuntime.markGenerationRunFailed)
-    ).toBeUndefined()
+    expect(wireCall(wire, "markGenerationRunAborted")).toBeUndefined()
+    expect(wireCall(wire, "markGenerationRunFailed")).toBeUndefined()
   })
 
   it("does not let a telemetry capture failure break stream completion", async () => {
