@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { Doc, Id } from "./_generated/dataModel"
 import type { MutationCtx } from "./_generated/server"
 import {
+  createChatWithFirstTurnForUser,
   getPinnedForCurrentUserHandler,
   getRecentWindowForCurrentUserHandler,
   listForCurrentUserPaginatedHandler,
@@ -401,5 +402,208 @@ describe("markChatReadForOwner", () => {
       200
     )
     expect(patches).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Atomic first-turn creation (createChatWithFirstTurnForUser).
+//
+// Scope honesty: this array-backed fake has NO transaction semantics, so these
+// tests do NOT (and cannot) prove rollback — the chat-row rollback on a thrown
+// validation error is Convex's mutation transactionality, taken as a platform
+// guarantee. What IS proved here: the handler's composition (chat + binding +
+// message + return shape) and the validate-all-before-any-patch ordering that
+// makes the rolled-back transaction contain no partial binding writes.
+// ---------------------------------------------------------------------------
+
+type AnyDoc = { _id: string; _creationTime: number } & Record<string, unknown>
+
+function createFirstTurnHarness(
+  seedAttachments: Array<Record<string, unknown> & { _id: string }> = []
+) {
+  const tables: Record<"chats" | "messages" | "chatAttachments", AnyDoc[]> = {
+    chats: [],
+    messages: [],
+    chatAttachments: seedAttachments.map((attachment) => ({
+      _creationTime: 1,
+      ...attachment,
+    })) as AnyDoc[],
+  }
+  let nextId = 1
+  const allDocs = () => [
+    ...tables.chats,
+    ...tables.messages,
+    ...tables.chatAttachments,
+  ]
+
+  const ctx = {
+    db: {
+      get: async (id: string) => allDocs().find((doc) => doc._id === id) ?? null,
+      insert: async (
+        table: keyof typeof tables,
+        value: Record<string, unknown>
+      ) => {
+        const id = `${table}_${nextId++}`
+        tables[table].push({ _id: id, _creationTime: nextId, ...value })
+        return id
+      },
+      patch: async (id: string, patch: Record<string, unknown>) => {
+        const doc = allDocs().find((candidate) => candidate._id === id)
+        if (!doc) throw new Error(`Missing doc ${id}`)
+        for (const [field, value] of Object.entries(patch)) {
+          if (value === undefined) delete doc[field]
+          else doc[field] = value
+        }
+      },
+      query: (table: string) => {
+        expect(table).toBe("messages")
+        return {
+          withIndex: (
+            _index: string,
+            build: (query: {
+              eq: (field: string, value: unknown) => unknown
+            }) => unknown
+          ) => {
+            let chatId: unknown
+            const query = {
+              eq: (_field: string, value: unknown) => {
+                chatId = value
+                return query
+              },
+            }
+            build(query)
+            return {
+              collect: async () =>
+                tables.messages
+                  .filter((message) => message.chatId === chatId)
+                  .sort(
+                    (left, right) =>
+                      (left.orderId as number) - (right.orderId as number)
+                  ),
+            }
+          },
+        }
+      },
+    },
+  } as unknown as MutationCtx
+
+  return { ctx, tables }
+}
+
+describe("createChatWithFirstTurnForUser", () => {
+  const user = createUser("user_1")
+
+  function stagedAttachment(overrides: Record<string, unknown> = {}) {
+    return {
+      _id: "att_1",
+      userId: user._id,
+      storageId: "storage_1",
+      fileUrl: "https://files.test/notes.pdf",
+      fileName: "notes.pdf",
+      fileType: "application/pdf",
+      fileSize: 10,
+      stagedAt: 5,
+      ...overrides,
+    }
+  }
+
+  it("creates the chat, binds the staged set, and persists the first user message in one pass", async () => {
+    const { ctx, tables } = createFirstTurnHarness([stagedAttachment()])
+
+    const result = await createChatWithFirstTurnForUser(ctx, user, {
+      title: "Read this",
+      model: "model-1",
+      systemPrompt: "system",
+      message: { clientMessageId: "optimistic-1", text: "Read this" },
+      attachmentIds: ["att_1" as Id<"chatAttachments">],
+    })
+
+    expect(tables.chats).toHaveLength(1)
+    expect(tables.chats[0]).toMatchObject({
+      _id: result.chatId,
+      userId: user._id,
+      title: "Read this",
+      model: "model-1",
+      public: false,
+      pinned: false,
+    })
+
+    // The staged row is now chat-bound (no longer sweepable by the TTL job).
+    expect(tables.chatAttachments[0]).toMatchObject({ chatId: result.chatId })
+    expect(tables.chatAttachments[0]?.stagedAt).toBeUndefined()
+
+    // One selected, completed user message carrying the server-built file part;
+    // no provenance stamp yet (no generation request exists at creation).
+    expect(tables.messages).toHaveLength(1)
+    expect(tables.messages[0]).toMatchObject({
+      _id: result.userMessageId,
+      chatId: result.chatId,
+      role: "user",
+      clientMessageId: "optimistic-1",
+      content: "Read this",
+      orderId: 0,
+      selected: true,
+      status: "completed",
+    })
+    expect(tables.messages[0]?.requestId).toBeUndefined()
+    expect(tables.messages[0]?.parts).toEqual([
+      { type: "text", text: "Read this" },
+      {
+        type: "file",
+        filename: "notes.pdf",
+        mediaType: "application/pdf",
+        url: "https://files.test/notes.pdf",
+        attachmentId: "att_1",
+      },
+    ])
+
+    expect(result.attachments).toEqual([
+      {
+        name: "notes.pdf",
+        contentType: "application/pdf",
+        url: "https://files.test/notes.pdf",
+        attachmentId: "att_1",
+      },
+    ])
+  })
+
+  it("validates the whole set before any binding patch when it contains another user's attachment", async () => {
+    const { ctx, tables } = createFirstTurnHarness([
+      stagedAttachment(),
+      stagedAttachment({ _id: "att_2", userId: asId<"users">("user_2") }),
+    ])
+
+    await expect(
+      createChatWithFirstTurnForUser(ctx, user, {
+        message: { clientMessageId: "optimistic-1", text: "Read both" },
+        attachmentIds: [
+          "att_1" as Id<"chatAttachments">,
+          "att_2" as Id<"chatAttachments">,
+        ],
+      })
+    ).rejects.toThrow("Attachment not found")
+
+    // Validate-all-before-any-patch: even the caller's own attachment stays
+    // unbound, and no message exists. (The chat-row rollback itself is
+    // Convex's mutation transactionality — untestable in this fake and
+    // deliberately not claimed by this suite.)
+    expect(
+      tables.chatAttachments.every((attachment) => !attachment.chatId)
+    ).toBe(true)
+    expect(tables.messages).toHaveLength(0)
+  })
+
+  it("rejects duplicate attachment references", async () => {
+    const { ctx } = createFirstTurnHarness([stagedAttachment()])
+
+    await expect(
+      createChatWithFirstTurnForUser(ctx, user, {
+        message: { clientMessageId: "optimistic-1", text: "Read this" },
+        attachmentIds: [
+          "att_1" as Id<"chatAttachments">,
+          "att_1" as Id<"chatAttachments">,
+        ],
+      })
+    ).rejects.toThrow("Duplicate attachment reference")
   })
 })

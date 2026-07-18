@@ -17,9 +17,9 @@ const pageMocks = vi.hoisted(() => ({
 vi.mock("@/app/components/layout/layout-app", () => ({
   LayoutApp: ({ children }: { children: React.ReactNode }) => children,
 }))
-vi.mock("@/app/p/[projectId]/project-view", () => ({
-  ProjectView: ({ project }: { project: { id: string; name: string } }) => (
-    <div data-project-id={project.id}>{project.name}</div>
+vi.mock("@/app/components/chat/chat", () => ({
+  Chat: ({ project }: { project?: { id: string; name: string } }) => (
+    <div data-project-id={project?.id}>{project?.name}</div>
   ),
 }))
 vi.mock("@/lib/auth/workos", () => ({

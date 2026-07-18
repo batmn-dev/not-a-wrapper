@@ -160,6 +160,40 @@ describe("Message branch writer", () => {
     expect(messages.find((item) => item._id === "user_new")?.selected).toBe(false)
   })
 
+  it("writes an un-stamped first-turn user message, then adopts the claiming run's provenance", async () => {
+    const { ctx, messages } = createHarness()
+    const branches = writer(ctx)
+
+    // The atomic first-turn creation writes before any generation request
+    // exists, so it carries no provenance stamp.
+    const firstTurn = await branches.writeUserMessage(
+      userInput({ requestId: undefined, model: undefined, provider: undefined })
+    )
+    expect(firstTurn).toMatchObject({
+      requestId: undefined,
+      model: undefined,
+      provider: undefined,
+      selected: true,
+      status: "completed",
+    })
+
+    // The generation's idempotent write (same clientMessageId) claims the row:
+    // no duplicate insert, and the run's stamp is adopted.
+    const claimed = await writer(ctx).writeUserMessage(userInput())
+    expect(claimed._id).toBe(firstTurn._id)
+    expect(messages).toHaveLength(1)
+    expect(messages[0]).toMatchObject({
+      requestId: "request_1",
+      model: "model_1",
+      provider: "provider_1",
+    })
+
+    // A later repeat with different provenance does NOT restamp — the first
+    // claiming run keeps ownership.
+    await writer(ctx).writeUserMessage(userInput({ requestId: "request_2" }))
+    expect(messages[0]?.requestId).toBe("request_1")
+  })
+
   it("writes an edit sibling while preserving the replaced descendants", async () => {
     const original = message("user_original", 0, "user", {
       branchIndex: 0,

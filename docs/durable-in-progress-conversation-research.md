@@ -52,6 +52,8 @@ The fixed repository snapshot uses Next.js 16, AI SDK 7, and Convex 1.42 in [`pa
 
 **Verified:** link navigation does not intentionally call Stop on the detached generation. The mounted chat-id transition effect stops an old stream when the same component changes chat IDs, while its own comment explicitly says that link navigation remounts the Chat and intentionally leaves durable streaming alive in [`use-chat-core.ts`](https://github.com/darknightdesigner/not-a-wrapper/blob/c65c0022aa94f225df6868a54c27530037b5a59e/app/components/chat/use-chat-core.ts#L394-L435).
 
+> **Current-state addendum (2026-07-18):** the stop-on-mounted-transition behavior described above is historical to this snapshot. Mounted chat-id transitions now DETACH instead of aborting — the hook replaces a per-instance **Detachable stream binding** whose finish-time work routes to a frozen origin chat id, with a 120 s watchdog bounding orphaned streams. See `docs/adr/0013-back-navigation-detaches-the-stream.md`.
+
 **Verified:** the response stream is consumed server-side so snapshots and finalization can continue after the browser reader detaches. See the response construction in [`chat-turn-runtime.ts`](https://github.com/darknightdesigner/not-a-wrapper/blob/c65c0022aa94f225df6868a54c27530037b5a59e/app/api/chat/chat-turn-runtime.ts#L1356-L1408) and the AI SDK's official guidance on backend stream consumption in [Chatbot Message Persistence](https://ai-sdk.dev/docs/ai-sdk-ui/chatbot-message-persistence#handling-client-disconnects).
 
 **Inferred limitation:** execution remains request and process bound. It is not a durable queue worker.

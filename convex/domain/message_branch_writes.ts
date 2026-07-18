@@ -19,7 +19,7 @@ type ChatMessage = Doc<"messages">
 type PlannedMessage = Omit<ChatMessage, "_id" | "_creationTime">
 
 /**
- * The request/model/provider stamp every branch write carries onto its new
+ * The request/model/provider stamp a branch write carries onto its new
  * message — which Generation run's request produced it.
  */
 type WriteProvenance = {
@@ -33,7 +33,25 @@ type MessageBranchWriterOptions = {
   now: number
 }
 
-type WriteUserMessageInput = WriteProvenance & {
+/** The explicit absence of a provenance stamp — all three fields or none. */
+type NoWriteProvenance = {
+  requestId?: undefined
+  model?: undefined
+  provider?: undefined
+}
+
+/**
+ * User-message provenance is optional AS A GROUP because the atomic first-turn
+ * creation writes the user message BEFORE any generation request exists. The
+ * run that later claims the row (prepareGeneration's idempotent write, same
+ * clientMessageId) adopts its stamp onto the un-stamped row, so durable user
+ * messages still converge on generation provenance. The union makes a
+ * half-stamp (a requestId without its model/provider) unrepresentable — a
+ * requestId permanently blocks later adoption, so it must never land without
+ * the full stamp. Assistant placeholders are only ever written by a
+ * generation, so their stamp stays required.
+ */
+type WriteUserMessageInput = (WriteProvenance | NoWriteProvenance) & {
   clientMessageId: string
   userId: Id<"users">
   content: string
@@ -352,7 +370,20 @@ export function createMessageBranchWriter(
         message.role === "user" &&
         message.clientMessageId === input.clientMessageId
     )
-    if (existing) return await select(existing._id)
+    if (existing) {
+      // The generation claiming a first-turn row (written pre-request, so
+      // un-stamped) adopts its provenance here; an already-stamped row keeps
+      // its original stamp.
+      if (existing.requestId === undefined && input.requestId !== undefined) {
+        await ctx.db.patch(existing._id, {
+          requestId: input.requestId,
+          model: input.model,
+          provider: input.provider,
+          updatedAt: now,
+        })
+      }
+      return await select(existing._id)
+    }
 
     return await insertPlannedBranch("user", input.replaces, (facts) => ({
       chatId,

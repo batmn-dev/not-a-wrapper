@@ -5,13 +5,21 @@
  * self-sizing response gutter, answer-start pinning with a bounded mount retry,
  * and once-per-conversation scroll restoration. The gutter writes its raw
  * remaining height intentionally; negative CSS min-height values are ignored.
+ * Restoration prefers a saved turn anchor (thread-scroll-anchors.ts) and falls
+ * back to the bottom.
  */
 import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { useCallback, useEffect, useRef } from "react"
+import {
+  restoreThreadAnchor,
+  saveThreadAnchor,
+} from "./thread-scroll-anchors"
 
 const SCROLL_FROM_END_ROOT_MARGIN = "0px 0px 72px"
 const GUTTER_THRESHOLDS = Array.from({ length: 101 }, (_, i) => i / 100)
 const PIN_RETRY_TIMEOUT_MS = 10_000
+/** Trailing-idle fallback for browsers without native `scrollend`. */
+const SCROLL_IDLE_FALLBACK_MS = 150
 
 function closestScrollRoot(el: Element | null): HTMLElement | null {
   return el?.closest<HTMLElement>("[data-scroll-root]") ?? null
@@ -176,7 +184,9 @@ export function ThreadScrollEdge({
     }
   }, [pinTurnId])
 
-  // (5) Load restore — once per conversation, instant, before paint.
+  // (5) Load restore — once per conversation, instant, before paint. A saved
+  // turn anchor wins; otherwise fall back to the bottom, repeated across two
+  // frames to absorb late layout growth (images, markdown measurement).
   useBrowserLayoutEffect(() => {
     if (!hydrated) return
     if (restoredChatRef.current === chatId) return
@@ -184,8 +194,59 @@ export function ThreadScrollEdge({
     if (freshChat || streamActive || pinnedTurnRef.current !== null) return
     const rootEl = rootRef.current
     if (!rootEl) return
-    rootEl.scrollTo({ top: rootEl.scrollHeight, behavior: "instant" })
+    if (chatId !== null && restoreThreadAnchor(chatId, rootEl)) return
+    const toBottom = () =>
+      rootEl.scrollTo({ top: rootEl.scrollHeight, behavior: "instant" })
+    toBottom()
+    let frame: number | null = requestAnimationFrame(() => {
+      toBottom()
+      frame = requestAnimationFrame(() => {
+        frame = null
+        toBottom()
+      })
+    })
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame)
+    }
   }, [hydrated, chatId, freshChat, streamActive])
+
+  // (6) Anchor save — when the scroll settles, wait one frame for layout to
+  // settle, then capture the top-visible turn into the module anchor map. A
+  // later settle cancels and replaces a pending save. Cleanup never performs
+  // a final save: navigating away before the scroll settles keeps the
+  // previous settled anchor (ChatGPT-parity, accepted edge).
+  useEffect(() => {
+    const rootEl = rootRef.current
+    if (!rootEl || chatId === null) return
+    let frame: number | null = null
+    let idleTimer: number | null = null
+    const scheduleSave = () => {
+      if (frame !== null) cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        frame = null
+        saveThreadAnchor(chatId, rootEl)
+      })
+    }
+    const supportsScrollEnd = "onscrollend" in window
+    const onScroll = () => {
+      if (idleTimer !== null) window.clearTimeout(idleTimer)
+      idleTimer = window.setTimeout(scheduleSave, SCROLL_IDLE_FALLBACK_MS)
+    }
+    if (supportsScrollEnd) {
+      rootEl.addEventListener("scrollend", scheduleSave, { passive: true })
+    } else {
+      rootEl.addEventListener("scroll", onScroll, { passive: true })
+    }
+    return () => {
+      if (supportsScrollEnd) {
+        rootEl.removeEventListener("scrollend", scheduleSave)
+      } else {
+        rootEl.removeEventListener("scroll", onScroll)
+      }
+      if (idleTimer !== null) window.clearTimeout(idleTimer)
+      if (frame !== null) cancelAnimationFrame(frame)
+    }
+  }, [chatId])
 
   return (
     <>

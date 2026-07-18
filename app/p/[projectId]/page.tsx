@@ -1,5 +1,5 @@
+import { Chat } from "@/app/components/chat/chat"
 import { LayoutApp } from "@/app/components/layout/layout-app"
-import { ProjectView } from "@/app/p/[projectId]/project-view"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { getAuthenticatedWorkosSession } from "@/lib/auth/workos"
@@ -76,7 +76,10 @@ export default async function Page({ params }: Props) {
   return (
     <MessagesProvider>
       <LayoutApp>
-        <ProjectView
+        {/* The project surface IS the Chat surface: the first turn allocates
+            its chat (with projectId) inside the accepted turn and hands off
+            the route shallowly — same pipeline as home. */}
+        <Chat
           project={{ id: project._id, name: project.name }}
           key={projectId}
         />

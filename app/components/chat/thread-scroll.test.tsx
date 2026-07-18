@@ -1,8 +1,12 @@
 /** @vitest-environment jsdom */
 
-import { act, StrictMode } from "react"
+import { act, type ComponentProps, StrictMode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+  resetThreadAnchorsForTest,
+  saveThreadAnchor,
+} from "./thread-scroll-anchors"
 import { ThreadScrollEdge } from "./thread-scroll"
 
 class IntersectionObserverStub {
@@ -43,7 +47,9 @@ describe("ThreadScrollEdge", () => {
   let nextFrameId: number
   let frames: Map<number, FrameCallback>
   let scrollIntoView: ReturnType<typeof vi.fn>
+  let scrollTo: ReturnType<typeof vi.fn>
   let originalScrollIntoView: PropertyDescriptor | undefined
+  let originalScrollTo: PropertyDescriptor | undefined
 
   beforeAll(() => {
     ;(
@@ -56,9 +62,15 @@ describe("ThreadScrollEdge", () => {
     nextFrameId = 0
     frames = new Map()
     scrollIntoView = vi.fn()
+    scrollTo = vi.fn()
+    resetThreadAnchorsForTest()
     originalScrollIntoView = Object.getOwnPropertyDescriptor(
       HTMLElement.prototype,
       "scrollIntoView"
+    )
+    originalScrollTo = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "scrollTo"
     )
 
     vi.stubGlobal("IntersectionObserver", IntersectionObserverStub)
@@ -80,6 +92,10 @@ describe("ThreadScrollEdge", () => {
       configurable: true,
       value: scrollIntoView,
     })
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      value: scrollTo,
+    })
 
     container = document.createElement("div")
     container.setAttribute("data-scroll-root", "")
@@ -100,11 +116,24 @@ describe("ThreadScrollEdge", () => {
       delete (HTMLElement.prototype as { scrollIntoView?: unknown })
         .scrollIntoView
     }
+    if (originalScrollTo) {
+      Object.defineProperty(
+        HTMLElement.prototype,
+        "scrollTo",
+        originalScrollTo
+      )
+    } else {
+      delete (HTMLElement.prototype as { scrollTo?: unknown }).scrollTo
+    }
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 
-  function render(pinTurnId: string | null, strict = false) {
+  function render(
+    pinTurnId: string | null,
+    strict = false,
+    overrides: Partial<ComponentProps<typeof ThreadScrollEdge>> = {}
+  ) {
     const edge = (
       <>
         <div data-turn-id="user-1" />
@@ -114,6 +143,7 @@ describe("ThreadScrollEdge", () => {
           pinTurnId={pinTurnId}
           hydrated
           freshChat
+          {...overrides}
         />
       </>
     )
@@ -165,5 +195,74 @@ describe("ThreadScrollEdge", () => {
     expect(gutter.style.getPropertyValue("--gutter-remaining-height")).toBe(
       "300px"
     )
+  })
+
+  it("restores a saved anchor instead of jumping to the bottom", () => {
+    vi.spyOn(container, "getBoundingClientRect").mockReturnValue({
+      top: 100,
+      bottom: 600,
+    } as DOMRect)
+    const savedTurn = document.createElement("div")
+    savedTurn.setAttribute("data-turn-id-container", "m1")
+    vi.spyOn(savedTurn, "getBoundingClientRect").mockReturnValue({
+      top: 60,
+      bottom: 160,
+    } as DOMRect)
+    container.appendChild(savedTurn)
+    saveThreadAnchor("chat-1", container)
+    savedTurn.remove()
+    container.scrollTop = 0
+
+    act(() => {
+      root.render(
+        <>
+          <div
+            ref={(element) => {
+              if (!element) return
+              vi.spyOn(element, "getBoundingClientRect").mockReturnValue({
+                top: 260,
+                bottom: 360,
+              } as DOMRect)
+            }}
+            data-turn-id-container="m1"
+          />
+          <ThreadScrollEdge
+            chatId="chat-1"
+            streamActive={false}
+            pinTurnId={null}
+            hydrated
+            freshChat={false}
+          />
+        </>
+      )
+    })
+
+    expect(scrollTo).not.toHaveBeenCalled()
+    expect(container.scrollTop).toBe(200)
+  })
+
+  it("repeats the bottom fallback across two animation frames", () => {
+    Object.defineProperty(container, "scrollHeight", {
+      configurable: true,
+      value: 1200,
+    })
+
+    render(null, false, { freshChat: false })
+
+    expect(scrollTo).toHaveBeenCalledOnce()
+    expect(scrollTo).toHaveBeenLastCalledWith({
+      top: 1200,
+      behavior: "instant",
+    })
+
+    flushFrames()
+    expect(scrollTo).toHaveBeenCalledTimes(2)
+
+    flushFrames()
+    expect(scrollTo).toHaveBeenCalledTimes(3)
+    expect(scrollTo).toHaveBeenLastCalledWith({
+      top: 1200,
+      behavior: "instant",
+    })
   })
 })

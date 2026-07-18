@@ -40,6 +40,16 @@ let useChatCore: typeof UseChatCore
 const seamMocks = vi.hoisted(() => ({
   convexMutation: vi.fn(),
   updateTitle: vi.fn(),
+  // Stable across renders so detached-finish persistence is observable: a
+  // detached guest stream must cache into its ORIGIN chat id, never the
+  // currently mounted one.
+  cacheAndAddMessage: vi.fn(async (_message: unknown, _chatId?: string) => {}),
+  controllerAdapters: null as null | {
+    sendMessageAndWaitForAcceptance: (
+      message: UIMessage & { messageId: string },
+      options?: { body?: Record<string, unknown> }
+    ) => Promise<void>
+  },
   // The observation point for the seam: the controller the hook's onFinish
   // must invoke. A singleton, so whichever render's closure fires, the same
   // spies record it.
@@ -55,7 +65,10 @@ const seamMocks = vi.hoisted(() => ({
 // Only createChatTurnController (and types) are imported from this module in
 // the hook's graph; a plain factory avoids loading the real controller chain.
 vi.mock("@/lib/chat-turn/chat-turn-controller", () => ({
-  createChatTurnController: () => seamMocks.chatTurnController,
+  createChatTurnController: (adapters: typeof seamMocks.controllerAdapters) => {
+    seamMocks.controllerAdapters = adapters
+    return seamMocks.chatTurnController
+  },
 }))
 
 vi.mock("./turn-context", () => ({
@@ -185,12 +198,14 @@ function makeUiMessageSseResponse(options: {
  */
 function withAbortSemantics(
   response: Response,
-  signal: AbortSignal | null | undefined
+  signal: AbortSignal | null | undefined,
+  onDone?: () => void
 ): Response {
-  if (!signal || !response.body) return response
+  if (!response.body) return response
   const reader = response.body.getReader()
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
+      if (!signal) return
       const onAbort = () => {
         controller.error(
           new DOMException("The operation was aborted.", "AbortError")
@@ -202,8 +217,10 @@ function withAbortSemantics(
     },
     async pull(controller) {
       const { done, value } = await reader.read()
-      if (done) controller.close()
-      else controller.enqueue(value)
+      if (done) {
+        controller.close()
+        onDone?.()
+      } else controller.enqueue(value)
     },
     cancel() {
       void reader.cancel().catch(() => {})
@@ -280,14 +297,24 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
     hookApiRef.current = null
   })
 
-  function Harness() {
+  // Lets a test drive a mounted chat-id transition (shallow-pushState Back to
+  // the onboarding surface) without remounting the Harness.
+  const setChatIdRef: { current: ((chatId: string | null) => void) | null } = {
+    current: null,
+  }
+
+  function Harness({ initialChatId }: { initialChatId: string | null }) {
+    const [chatId, setChatId] = React.useState<string | null>(initialChatId)
+    React.useEffect(() => {
+      setChatIdRef.current = setChatId
+    }, [])
     const api = useChatCore({
       initialMessages: [] as UIMessage[],
-      cacheAndAddMessage: vi.fn(),
-      chatId: CHAT_ID,
+      cacheAndAddMessage: seamMocks.cacheAndAddMessage,
+      chatId,
       user: authenticatedUser,
       checkLimitsAndNotify: vi.fn(async () => true),
-      ensureChatExists: vi.fn(async () => CHAT_ID),
+      ensureChatExists: vi.fn(async () => ({ chatId: CHAT_ID })),
       bumpChat: vi.fn(),
     })
     React.useEffect(() => {
@@ -296,12 +323,12 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
     return null
   }
 
-  function renderHook(): HookApi {
+  function renderHook(initialChatId: string | null = CHAT_ID): HookApi {
     container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
     act(() => {
-      root?.render(<Harness />)
+      root?.render(<Harness initialChatId={initialChatId} />)
     })
     const api = hookApiRef.current
     if (!api) throw new Error("useChatCore did not render")
@@ -392,6 +419,179 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
     })
   })
 
+  it("detaches (no abort) on a mounted transition to the onboarding surface", async () => {
+    // Durable chat: the detached stream must neither abort nor produce ANY
+    // client-side finish work — persistence is server-owned (ADR-0011).
+    const requestSignals: (AbortSignal | null | undefined)[] = []
+    let resolveStreamServed!: () => void
+    const streamServed = new Promise<void>((resolve) => {
+      resolveStreamServed = resolve
+    })
+    fetchMock.mockImplementation(async (_url, init) => {
+      requestSignals.push(init?.signal)
+      return withAbortSemantics(
+        makeUiMessageSseResponse({
+          deltas: Array.from({ length: 10 }, (_, i) => `piece-${i} `),
+          chunkDelayInMs: 25,
+        }),
+        init?.signal,
+        resolveStreamServed
+      )
+    })
+    const hook = renderHook()
+
+    await act(async () => {
+      void hook.sendMessage({ text: "hi" })
+    })
+    await waitForInAct(() =>
+      expect(hookApiRef.current?.status).toBe("streaming")
+    )
+
+    // Browser Back over the shallow-pushState first-turn flow: Chat stays
+    // mounted, chatId drops to null in place.
+    await act(async () => {
+      setChatIdRef.current?.(null)
+    })
+
+    // Detached, not aborted: the request signal stays live and the mounted
+    // thread is empty (showOnboarding requires messages.length === 0).
+    expect(requestSignals[0]?.aborted).toBe(false)
+    expect(hookApiRef.current?.messages).toEqual([])
+    expect(hookApiRef.current?.status).toBe("ready")
+
+    // Run the detached stream to completion INSIDE this test (no cross-test
+    // leakage), then flush its finish handling.
+    await act(async () => {
+      await streamServed
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+
+    // A detached durable finish is a client no-op: no attached finish, no
+    // client persistence, no deltas leaked into the mounted array.
+    expect(requestSignals[0]?.aborted).toBe(false)
+    expect(seamMocks.chatTurnController.finishChatTurn).not.toHaveBeenCalled()
+    expect(seamMocks.cacheAndAddMessage).not.toHaveBeenCalled()
+    expect(hookApiRef.current?.messages).toEqual([])
+  })
+
+  it("persists a detached guest stream into its origin chat, not the current one", async () => {
+    // The origin-binding contract: after a mounted A→B transition, the
+    // detached guest stream's assistant message caches under chat A (the
+    // binding's frozen ownerChatId), never under B or via stored-guest-id
+    // fallbacks.
+    const originChatId = "local-detach-origin"
+    const nextChatId = "local-detach-next"
+    const expectedText = Array.from({ length: 10 }, (_, i) => `piece-${i} `)
+    fetchMock.mockImplementation(async (_url, init) =>
+      withAbortSemantics(
+        makeUiMessageSseResponse({
+          deltas: expectedText,
+          chunkDelayInMs: 25,
+        }),
+        init?.signal
+      )
+    )
+    const hook = renderHook(originChatId)
+
+    await act(async () => {
+      void hook.sendMessage({ text: "hi" })
+    })
+    await waitForInAct(() =>
+      expect(hookApiRef.current?.status).toBe("streaming")
+    )
+
+    // Mounted transition to ANOTHER chat while the stream is live.
+    await act(async () => {
+      setChatIdRef.current?.(nextChatId)
+    })
+    expect(hookApiRef.current?.messages).toEqual([])
+
+    // The detached finish caches the full assistant message under the ORIGIN
+    // chat, and never routes through the attached finish path.
+    await waitForInAct(() =>
+      expect(seamMocks.cacheAndAddMessage).toHaveBeenCalledTimes(1)
+    )
+    const [cachedMessage, cachedChatId] =
+      seamMocks.cacheAndAddMessage.mock.calls[0]
+    expect(cachedChatId).toBe(originChatId)
+    const message = cachedMessage as UIMessage
+    expect(message.role).toBe("assistant")
+    expect(
+      message.parts
+        .filter((part) => part.type === "text")
+        .map((part) => (part as { text: string }).text)
+        .join("")
+    ).toBe(expectedText.join(""))
+    expect(seamMocks.chatTurnController.finishChatTurn).not.toHaveBeenCalled()
+    expect(hookApiRef.current?.messages).toEqual([])
+  })
+
+  it("still aborts through the Stop button after a detach recreated the instance", async () => {
+    // Regression guard for the Stop chain (Stop → req.signal → onAbort): the
+    // stop() handed out after a detach must abort the CURRENT instance's
+    // stream, and only that stream.
+    const originChatId = "local-stop-origin"
+    const requestSignals: (AbortSignal | null | undefined)[] = []
+    fetchMock.mockImplementation(async (_url, init) => {
+      requestSignals.push(init?.signal)
+      return withAbortSemantics(
+        makeUiMessageSseResponse({
+          deltas: Array.from({ length: 10 }, (_, i) => `piece-${i} `),
+          chunkDelayInMs: 25,
+        }),
+        init?.signal
+      )
+    })
+    const hook = renderHook(originChatId)
+
+    await act(async () => {
+      void hook.sendMessage({ text: "hi" })
+    })
+    await waitForInAct(() =>
+      expect(hookApiRef.current?.status).toBe("streaming")
+    )
+
+    // Detach (Back to onboarding), then start a new turn on the fresh
+    // instance and Stop it mid-stream.
+    await act(async () => {
+      setChatIdRef.current?.(null)
+    })
+    await act(async () => {
+      void hookApiRef.current?.sendMessage({ text: "hi again" })
+    })
+    await waitForInAct(() =>
+      expect(hookApiRef.current?.status).toBe("streaming")
+    )
+    await act(async () => {
+      await hookApiRef.current?.stop()
+    })
+
+    // The new turn aborted through the attached finish path; the detached
+    // stream was never aborted.
+    expect(requestSignals[1]?.aborted).toBe(true)
+    expect(requestSignals[0]?.aborted).toBe(false)
+    const finish = seamMocks.chatTurnController.finishChatTurn
+    await waitForInAct(() =>
+      expect(
+        finish.mock.calls.some(
+          (call) => (call[0] as { isAbort: boolean }).isAbort
+        )
+      ).toBe(true)
+    )
+
+    // Run the detached guest stream to completion inside this test: it caches
+    // under its origin chat, unaffected by the Stop.
+    await waitForInAct(() =>
+      expect(seamMocks.cacheAndAddMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ role: "assistant" }),
+        originChatId
+      )
+    )
+    expect(requestSignals[0]?.aborted).toBe(false)
+  })
+
   it("finishes an errored turn with isError when the transport fails", async () => {
     fetchMock.mockImplementation(
       async () => new Response("model exploded", { status: 500 })
@@ -410,5 +610,74 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       chatId: CHAT_ID,
     })
     await waitForInAct(() => expect(hookApiRef.current?.status).toBe("error"))
+  })
+
+  it("rejects request acceptance on an asynchronous HTTP failure", async () => {
+    fetchMock.mockImplementation(
+      async () => new Response("prepare failed", { status: 503 })
+    )
+    const hook = renderHook()
+    const optimistic = {
+      id: "first-turn-client-id",
+      role: "user" as const,
+      parts: [{ type: "text" as const, text: "hi" }],
+      messageId: "first-turn-client-id",
+    }
+    act(() => hook.setMessages([optimistic]))
+
+    const acceptance =
+      seamMocks.controllerAdapters?.sendMessageAndWaitForAcceptance(
+        optimistic,
+        {
+          body: { chatId: CHAT_ID },
+        }
+      )
+    if (!acceptance) throw new Error("controller adapters were not captured")
+
+    await expect(acceptance).rejects.toThrow("prepare failed")
+    // AI SDK catches the transport error for chat state; the explicit
+    // acceptance promise still rejects, so the controller can retain identity.
+    await waitForInAct(() => expect(hookApiRef.current?.status).toBe("error"))
+  })
+
+  it("acknowledges an accepted request before the response stream completes", async () => {
+    fetchMock.mockImplementation(async (_url, init) =>
+      withAbortSemantics(
+        makeUiMessageSseResponse({
+          deltas: Array.from({ length: 10 }, (_, index) => `piece-${index} `),
+          chunkDelayInMs: 25,
+        }),
+        init?.signal
+      )
+    )
+    const hook = renderHook()
+    const optimistic = {
+      id: "accepted-first-turn-id",
+      role: "user" as const,
+      parts: [{ type: "text" as const, text: "hi" }],
+      messageId: "accepted-first-turn-id",
+    }
+    act(() => hook.setMessages([optimistic]))
+
+    const acceptance =
+      seamMocks.controllerAdapters?.sendMessageAndWaitForAcceptance(
+        optimistic,
+        {
+          body: { chatId: CHAT_ID },
+        }
+      )
+    if (!acceptance) throw new Error("controller adapters were not captured")
+
+    await expect(acceptance).resolves.toBeUndefined()
+    expect(seamMocks.chatTurnController.finishChatTurn).not.toHaveBeenCalled()
+
+    // Keep the open stream inside this test; Stop remains the explicit
+    // cancellation path after acceptance.
+    await act(async () => {
+      await hook.stop()
+    })
+    await waitForInAct(() =>
+      expect(seamMocks.chatTurnController.finishChatTurn).toHaveBeenCalled()
+    )
   })
 })

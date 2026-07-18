@@ -56,7 +56,7 @@ type SendMessage = (
         messageId?: string
       },
   options?: SendMessageOptions
-) => void
+) => void | Promise<void>
 
 /** Read at execution time so every turn kind uses the current picker context. */
 export type ChatTurnSnapshot = {
@@ -64,6 +64,41 @@ export type ChatTurnSnapshot = {
   isAuthenticated: boolean
   systemPrompt: string
   enableSearch: boolean
+}
+
+export type EnsureChatForTurnArgs = {
+  userId: string
+  text: string
+  /** The turn's optimistic message id — persisted as the durable row's
+   * clientMessageId by an atomic first-turn creation, so the generation's
+   * idempotent write claims that row instead of duplicating it. */
+  clientMessageId: string
+  /** Complete staged-attachment set the turn is dispatching. */
+  attachmentIds: string[]
+}
+
+/**
+ * The chat a turn runs in. `firstTurn` is present when the chat holds an
+ * atomically committed, not-yet-dispatched first turn (chats.createWithFirstTurn)
+ * — either created by this call or re-presented by a same-payload retry. The
+ * send runner then skips its own binding call, adopts `clientMessageId` as the
+ * dispatched message id (so the generation's idempotent write claims the
+ * persisted row instead of duplicating it — on a retry this is the ORIGINAL
+ * committed id, not the one the runner just allocated), and derives the
+ * selected-path token from the server fact — one visible message whose tail is
+ * `userMessageId` — instead of its (empty) rendered array.
+ */
+export type EnsuredTurnChat = {
+  chatId: string
+  firstTurn?: {
+    userMessageId: string
+    clientMessageId: string
+    attachments: UploadedAttachment[]
+    /** Called by the send runner once the dispatch is accepted. The provider
+     * then stops re-presenting the committed identity, so a LATER identical
+     * payload becomes a genuine new message instead of a claim. */
+    confirmDispatched?: () => void
+  }
 }
 
 export type ChatTurnAdapters = {
@@ -83,7 +118,9 @@ export type ChatTurnAdapters = {
   store: ChatTurnStoreAdapters
   resolveUserId: () => Promise<string | null>
   checkLimitsAndNotify: (userId: string) => Promise<boolean>
-  ensureChatExists: (userId: string, input: string) => Promise<string | null>
+  ensureChatExists: (
+    args: EnsureChatForTurnArgs
+  ) => Promise<EnsuredTurnChat | null>
   setPreviousChatId: (chatId: string) => void
   cleanupOptimisticAttachments: (attachments?: Array<{ url?: string }>) => void
   attachStagedFiles: (
@@ -91,6 +128,10 @@ export type ChatTurnAdapters = {
     attachmentIds: string[]
   ) => Promise<UploadedAttachment[] | null>
   sendMessage: SendMessage
+  /** Dispatches the same SDK message but resolves at HTTP response acceptance,
+   * after the server has prepared/claimed the turn and before stream
+   * consumption completes. */
+  sendMessageAndWaitForAcceptance: SendMessage
   regenerate: (options?: RegenerateMessageOptions) => void | Promise<void>
   toastError: (title: string) => void
   bumpChat: (chatId: string) => void
@@ -139,7 +180,6 @@ export type EditTurnFailureReason =
   | "message-too-long"
   | "auth-required"
   | "limit-denied"
-  | "chat-create-failed"
   | "plan-rejected"
   | "dispatch-failed"
 
@@ -264,14 +304,8 @@ async function runSendTurn(
       return
     }
 
-    const currentChatId = await adapters.ensureChatExists(userId, text)
-    if (!currentChatId) {
-      return
-    }
-
-    adapters.setPreviousChatId(currentChatId)
-
-    let attachments: UploadedAttachment[] | null = []
+    // An incomplete staged set rejects BEFORE chat creation: an atomic first
+    // turn must never commit a chat around references it cannot bind.
     const attachmentIds = submittedAttachments.flatMap((attachment) =>
       attachment.attachmentId ? [attachment.attachmentId] : []
     )
@@ -279,7 +313,39 @@ async function runSendTurn(
       adapters.toastError(errorMessage)
       return
     }
-    if (attachmentIds.length > 0) {
+
+    // Allocated before the chat exists: a durable first turn persists this id
+    // as the message's clientMessageId inside the atomic creation.
+    optimisticId = (
+      adapters.createOptimisticMessageId ?? createOptimisticMessageId
+    )()
+
+    const ensured = await adapters.ensureChatExists({
+      userId,
+      text,
+      clientMessageId: optimisticId,
+      attachmentIds,
+    })
+    if (!ensured) {
+      return
+    }
+    const currentChatId = ensured.chatId
+
+    // Dispatch under the committed row's identity. On a fresh commit this is
+    // the id allocated above; on a same-payload retry it is the ORIGINAL
+    // committed id, so the claim selects the persisted row instead of
+    // appending a duplicate.
+    if (ensured.firstTurn) {
+      optimisticId = ensured.firstTurn.clientMessageId
+    }
+
+    adapters.setPreviousChatId(currentChatId)
+
+    // A first turn's attachments were bound atomically with the chat; every
+    // later turn binds its staged set to the existing chat here.
+    let attachments: UploadedAttachment[] | null =
+      ensured.firstTurn?.attachments ?? []
+    if (!ensured.firstTurn && attachmentIds.length > 0) {
       attachments = await adapters.attachStagedFiles(
         currentChatId,
         attachmentIds
@@ -290,9 +356,6 @@ async function runSendTurn(
       }
     }
 
-    optimisticId = (
-      adapters.createOptimisticMessageId ?? createOptimisticMessageId
-    )()
     optimisticMessage = {
       id: optimisticId,
       role: "user",
@@ -308,7 +371,7 @@ async function runSendTurn(
       ...optimisticMessage,
     } satisfies ChatTurnMessage
 
-    adapters.sendMessage(
+    await adapters.sendMessageAndWaitForAcceptance(
       {
         ...dispatchedMessage,
         // Replaces the already-rendered optimistic row synchronously inside
@@ -324,10 +387,25 @@ async function runSendTurn(
           systemPrompt: snapshot.systemPrompt,
           enableSearch: snapshot.enableSearch,
           chatVersion,
-          selectedPathToken: buildSelectedPathToken(messages),
+          // After an atomic first-turn creation the server's selected path
+          // already holds exactly the persisted user message, so the token
+          // states that server fact; deriving it from the client's rendered
+          // array (still empty) would falsely reject the turn as stale.
+          selectedPathToken: ensured.firstTurn
+            ? {
+                expectedVisibleMessageCount: 1,
+                tailMessageId: ensured.firstTurn.userMessageId,
+              }
+            : buildSelectedPathToken(messages),
         }),
       }
     )
+
+    // The HTTP response is accepted only after the server's durable prepare
+    // has claimed the idempotent first-message row. A pre-response failure —
+    // including an ambiguous network loss after the server committed — throws
+    // above and retains the original identity for a safe same-id retry.
+    ensured.firstTurn?.confirmDispatched?.()
 
     adapters.setHasSentFirstMessage(true)
     void adapters.turnStore.persistTurnMessage(dispatchedMessage, currentChatId)
@@ -464,11 +542,9 @@ async function runEditTurn(
       return reject("limit-denied", "Message limit reached.")
     }
 
-    const currentChatId = await adapters.ensureChatExists(userId, newContent)
-    if (!currentChatId) {
-      adapters.setMessages(editPlan.originalMessages)
-      return reject("chat-create-failed", "Unable to open chat.")
-    }
+    // Edits never allocate: the durable-chat guard above proved chatId names
+    // an existing durable chat, so there is no first-turn creation here.
+    const currentChatId = chatId
 
     adapters.setPreviousChatId(currentChatId)
 
