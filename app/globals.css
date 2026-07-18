@@ -382,6 +382,14 @@
 
   /* Sidebar spacing */
   --sidebar-section-first-margin-top: 0.5rem;
+  /* The scrollable section stack below the sticky action cluster. Both
+     organizer modes ("In one list" / "By project") flow through one stack
+     container in app-sidebar.tsx: margin-top is the gap from the cluster (or
+     from the one-list Projects row, which stays flush with the cluster) to the
+     first section; gap separates adjacent sections. Values pinned in
+     sidebar-geometry.test.ts so the two modes cannot drift apart again. */
+  --sidebar-section-stack-margin-top: 1.25rem;
+  --sidebar-section-stack-gap: 1rem;
   --sidebar-item-gap: 0.375rem;
   --sidebar-row-height: 2.25rem;
   --sidebar-row-outer-inset: 0.375rem;

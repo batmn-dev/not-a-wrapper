@@ -460,23 +460,24 @@ function SidebarExpandedNav({
 
         {/* === SCROLLABLE CONTENT === */}
         <div className="px-0">
-          {/* Project and chat lists */}
+          {/* Project and chat lists. The one-list Projects nav row extends the
+              action cluster (flush, no margin); all section spacing below is
+              owned by the section-stack tokens on the shared stack container,
+              so both organizer modes share one rhythm. */}
           {data.chatOrganization === "one-list" ? (
-            <div className="mb-5">
-              <SidebarProject
-                isAuthenticated={data.isLoggedIn}
-                organization={data.chatOrganization}
-                projects={[]}
-                isPinPending={data.isProjectPinPending}
-                onTogglePinned={data.toggleProjectPinned}
-                onOrganizationChange={data.setChatOrganization}
-              />
-            </div>
+            <SidebarProject
+              isAuthenticated={data.isLoggedIn}
+              organization={data.chatOrganization}
+              projects={[]}
+              isPinPending={data.isProjectPinPending}
+              onTogglePinned={data.toggleProjectPinned}
+              onOrganizationChange={data.setChatOrganization}
+            />
           ) : null}
           {data.isLoading ? (
             <div className="h-full" />
           ) : data.isLoggedIn ? (
-            <div className="space-y-4">
+            <div className="mt-(--sidebar-section-stack-margin-top) flex flex-col gap-(--sidebar-section-stack-gap)">
               {(data.composition.pinnedChats.length > 0 ||
                 data.composition.pinnedProjects.length > 0) && (
                 <SidebarList
