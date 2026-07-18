@@ -208,38 +208,4 @@ describe("MessagesProvider local chat hydration", () => {
     expect(capture.current?.messages).toEqual([])
     expect(convexMocks.useQuery).toHaveBeenCalledWith(expect.anything(), "skip")
   })
-
-  it("clears local cached messages without Convex mutations", async () => {
-    persistMocks.tables.messages.set("local-thread", {
-      id: "local-thread",
-      messages: [
-        {
-          id: "user-1",
-          role: "user",
-          createdAt: new Date("2026-01-01T00:00:01.000Z"),
-          parts: [{ type: "text", text: "hello" }],
-        },
-      ],
-    })
-    const capture: { current: ReturnType<typeof useMessages> | null } = {
-      current: null,
-    }
-
-    renderProvider(capture)
-    await flushPromises()
-    convexMocks.mutationFn.mockClear()
-
-    await act(async () => {
-      await capture.current?.deleteMessages()
-    })
-
-    expect(
-      (
-        persistMocks.tables.messages.get("local-thread") as {
-          messages: unknown[]
-        }
-      ).messages
-    ).toEqual([])
-    expect(convexMocks.mutationFn).not.toHaveBeenCalled()
-  })
 })

@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import {
   Dialog,
   DialogContent,
@@ -46,6 +47,8 @@ export function DialogDeleteProject({
       if (pathname.startsWith(`/p/${project._id}`)) {
         router.push("/")
       }
+    } catch {
+      toast({ title: "Failed to delete project", status: "error" })
     } finally {
       setIsPending(false)
     }

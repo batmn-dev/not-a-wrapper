@@ -71,6 +71,11 @@ The single mutation-scoped Convex module that commits complete **Message branch*
 _Avoid_: branch-write helpers (the shallow primitives it replaces), generic insert/select command (leaks user-message idempotency), message store (it owns branch invariants, not passive persistence)
 _Status_: implemented 2026-07-11 (branch `darknight/janus-cosmetics`).
 
+**Chat-owned deletion**:
+The mutation-scoped Convex module that atomically removes a Chat's complete durable graph — messages, **Generation runs**, assistant message snapshots, tool invocations, tool approval requests, tool-call log rows, and attachments plus stored files — through role-shaped `deleteChat(chat)` and `deleteChatsForProject(project)` operations. The first updates surviving Project activity; the second removes every Project Chat graph without updating or deleting the Project, leaving **Authenticated handlers** to own authorization and root deletion; leaf-first/root-last ordering, storage-failure rollback, and bounded preflight make late writes converge while oversized Project deletion fails without committing.
+_Avoid_: cascade delete (generic and implicit), deletion helpers (the shallow primitives it replaces), cleanup (undersells complete ownership), async deletion job (not the current atomic policy)
+_Status_: implemented 2026-07-18.
+
 **Selected path**:
 The backend-derived linear path through a chat's message branches used for rendering and model history. Hidden sibling branches stay stored but are not sent to the model until selected.
 _Avoid_: visible messages, active transcript

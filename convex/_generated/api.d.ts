@@ -10,6 +10,7 @@
 
 import type * as chatRuntime from "../chatRuntime.js";
 import type * as chats from "../chats.js";
+import type * as domain_chat_owned_deletion from "../domain/chat_owned_deletion.js";
 import type * as domain_generation_run_lifecycle from "../domain/generation_run_lifecycle.js";
 import type * as domain_message_branch_writes from "../domain/message_branch_writes.js";
 import type * as domain_message_branches from "../domain/message_branches.js";
@@ -46,6 +47,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   chatRuntime: typeof chatRuntime;
   chats: typeof chats;
+  "domain/chat_owned_deletion": typeof domain_chat_owned_deletion;
   "domain/generation_run_lifecycle": typeof domain_generation_run_lifecycle;
   "domain/message_branch_writes": typeof domain_message_branch_writes;
   "domain/message_branches": typeof domain_message_branches;

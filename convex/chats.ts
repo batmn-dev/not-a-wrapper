@@ -10,8 +10,8 @@ import {
 import {
   patchChatActivity,
   recordKnownProjectActivity,
-  recordProjectActivity,
 } from "./domain/project_activity"
+import { createChatOwnedDeletion } from "./domain/chat_owned_deletion"
 import { requireOwnedProject } from "./lib/auth"
 import {
   authenticatedMutation,
@@ -453,40 +453,10 @@ export const backfillUpdatedAt = internalMutation({
   },
 })
 
-/**
- * Delete a chat and its messages
- */
+/** Delete a Chat and its complete durable graph. */
 export const remove = ownedChatMutation({
   args: {},
   handler: async (ctx) => {
-    const chatId = ctx.chat._id
-    // Delete all messages for this chat
-    const messages = await ctx.db
-      .query("messages")
-      .withIndex("by_chat", (q) => q.eq("chatId", chatId))
-      .collect()
-
-    for (const message of messages) {
-      await ctx.db.delete(message._id)
-    }
-
-    // Delete all attachments for this chat
-    const attachments = await ctx.db
-      .query("chatAttachments")
-      .withIndex("by_chat", (q) => q.eq("chatId", chatId))
-      .collect()
-
-    for (const attachment of attachments) {
-      // Delete from storage if exists
-      if (attachment.storageId) {
-        await ctx.storage.delete(attachment.storageId)
-      }
-      await ctx.db.delete(attachment._id)
-    }
-
-    await recordProjectActivity(ctx, ctx.chat.projectId, Date.now())
-
-    // Delete the chat
-    await ctx.db.delete(chatId)
+    await createChatOwnedDeletion(ctx).deleteChat(ctx.chat)
   },
 })

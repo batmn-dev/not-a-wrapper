@@ -262,26 +262,3 @@ export const addBatch = ownedChatMutation({
     return ids
   },
 })
-
-/**
- * Clear all messages for a chat
- */
-export const clearForChat = ownedChatMutation({
-  args: {},
-  handler: async (ctx) => {
-    const messages = await ctx.db
-      .query("messages")
-      .withIndex("by_chat", (q) => q.eq("chatId", ctx.chat._id))
-      .collect()
-
-    for (const msg of messages) {
-      await ctx.db.delete(msg._id)
-    }
-
-    if (messages.length > 0) {
-      await recordChatActivity(ctx, ctx.chat, Date.now())
-    }
-
-    return messages.length
-  },
-})

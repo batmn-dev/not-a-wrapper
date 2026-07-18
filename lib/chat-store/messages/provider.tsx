@@ -48,7 +48,6 @@ type MessagesContextType = {
     overrideChatId?: string
   ) => Promise<void>
   resetMessages: () => Promise<void>
-  deleteMessages: () => Promise<void>
   selectMessageBranch: (messageId: string) => Promise<void>
 }
 
@@ -84,7 +83,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
 
   // Convex mutations
   const addMessageMutation = useMutation(api.messages.add)
-  const clearMessagesMutation = useMutation(api.messages.clearForChat)
   const selectBranchMutation = useMutation(api.messages.selectBranch)
 
   // Convert Convex messages to AI SDK format
@@ -240,26 +238,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     [chatId, updateOptimisticMessages, addMessageMutation]
   )
 
-  const deleteMessages = useCallback(async () => {
-    if (!chatId) return
-
-    // Clear optimistic messages immediately
-    updateOptimisticMessages(() => [])
-
-    if (getMessagePersistenceMode(chatId) === "localOnly") {
-      await cacheMessages(chatId, [])
-      return
-    }
-
-    try {
-      await clearMessagesMutation({ chatId: chatId as Id<"chats"> })
-      await cacheMessages(chatId, [])
-    } catch (error) {
-      console.error("Failed to delete messages:", error)
-      toast({ title: "Failed to delete messages", status: "error" })
-    }
-  }, [chatId, clearMessagesMutation, updateOptimisticMessages])
-
   const resetMessages = useCallback(async () => {
     updateOptimisticMessages(() => [])
   }, [updateOptimisticMessages])
@@ -314,7 +292,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
         setMessages,
         cacheAndAddMessage,
         resetMessages,
-        deleteMessages,
         selectMessageBranch,
       }}
     >

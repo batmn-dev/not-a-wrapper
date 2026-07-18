@@ -43,7 +43,7 @@ export function ChatActionsMenu({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isShareDrawerOpen, setIsShareDrawerOpen] = useState(false)
   const [isShareLoading, setIsShareLoading] = useState(false)
-  const { deleteMessages } = useMessages()
+  const { resetMessages } = useMessages()
   const { deleteChat, togglePinned, updateTitle } = useChats()
   const { chatId } = useChatSession()
   const router = useRouter()
@@ -51,7 +51,7 @@ export function ChatActionsMenu({
 
   const handleConfirmDelete = async () => {
     if (chat.id === chatId) {
-      await deleteMessages()
+      await resetMessages()
     }
     await deleteChat(chat.id, chatId || undefined, () => router.push("/"))
   }
