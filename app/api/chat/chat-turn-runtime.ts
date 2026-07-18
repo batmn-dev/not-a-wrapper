@@ -65,7 +65,9 @@ import type { AdaptationContext, AdaptationWarning } from "./adapters/types"
 import {
   createDurableTurnRuntime,
   isDurableConvexChat,
+  type DurableStreamBinding,
   type DurableTurnRuntime,
+  type DurableWorkerWire,
 } from "./durable-turn-runtime"
 import {
   createPostHogToolCallSink,
@@ -128,6 +130,14 @@ export type ChatTurnDeps = {
   fetchQuery: typeof defaultFetchQuery
   after: typeof after
   getPostHogClient: typeof getPostHogClient
+  /**
+   * The Durable worker wire (ADR-0011) — grant-authorized post-prepare durable
+   * writes. Defaults inside the Durable turn runtime to the Convex
+   * /chat-turn/worker HTTP adapter; tests inject a recording fake.
+   */
+  durableWorkerWire?: DurableWorkerWire
+  /** Terminal-write retry backoff override — tests pass zeros. */
+  durableSettleRetryDelaysMs?: number[]
 }
 
 function resolveDeps(overrides?: Partial<ChatTurnDeps>): ChatTurnDeps {
@@ -137,6 +147,8 @@ function resolveDeps(overrides?: Partial<ChatTurnDeps>): ChatTurnDeps {
     fetchQuery: overrides?.fetchQuery ?? defaultFetchQuery,
     after: overrides?.after ?? after,
     getPostHogClient: overrides?.getPostHogClient ?? getPostHogClient,
+    durableWorkerWire: overrides?.durableWorkerWire,
+    durableSettleRetryDelaysMs: overrides?.durableSettleRetryDelaysMs,
   }
 }
 
@@ -337,7 +349,11 @@ export function createChatTurnRuntime(args: {
       expectedVisibleMessageCount,
       tailMessageId,
     },
-    deps: { fetchMutation: deps.fetchMutation },
+    deps: {
+      fetchMutation: deps.fetchMutation,
+      workerWire: deps.durableWorkerWire,
+      settleRetryDelaysMs: deps.durableSettleRetryDelaysMs,
+    },
   })
 
   // Failure-relevant state — assigned as soon as it exists so `fail()` can act
@@ -836,6 +852,13 @@ export function createChatTurnRuntime(args: {
       phClient,
     } = prepared
 
+    // The AI SDK lifecycle binding (ADR-0011, Design 2): both callback halves
+    // of the durable timeline, bound to the Tool runtime for the stream
+    // lifetime. Settlement ordering, worker authority, and retry policy live
+    // behind it; the two onEnd positions below stay visible in this closure
+    // (ADR-0006).
+    const lifecycle: DurableStreamBinding = durableTurn.bind(tool)
+
     const streamStartMs = Date.now()
     let stepCounter = 0
     let toolMetadataByCallId: ToolInvocationMetadataByCallId = {}
@@ -1002,7 +1025,7 @@ export function createChatTurnRuntime(args: {
           // Durable persistence of the step's tool invocations — status
           // derivation (completed/failed/pending_approval/called) lives inside
           // the module, off the bound ToolFacts. Fire-and-forget by contract.
-          durableTurn.recordStep({
+          lifecycle.stream.recordStep({
             stepNumber: stepCounter,
             toolCalls,
             toolResults,
@@ -1021,18 +1044,17 @@ export function createChatTurnRuntime(args: {
         ...(Object.keys(requestHeaders).length > 0 && {
           headers: requestHeaders,
         }),
-        // The Durable turn runtime's spreadable extras: the call-site approval
-        // gate + the approval-persistence transform (its backpressure array now
-        // module-private), bound to the Tool runtime for the stream lifetime.
-        // Guest returns `{}` — guest chats run ungated, as before.
-        ...durableTurn.streamTextExtras(tool),
+        // The binding's spreadable extras: the call-site approval gate + the
+        // approval-persistence transform (its backpressure array
+        // module-private). Guest returns `{}` — guest chats run ungated.
+        ...lifecycle.streamTextExtras,
 
         onChunk: ({ chunk }) => {
           const now = Date.now()
           lastChunkAtMs = now
           lastProgressAtMs = now
           resolvePostToolContinuation()
-          durableTurn.onChunk(chunk)
+          lifecycle.stream.onChunk(chunk)
           if (firstChunkLatencyMs === null) {
             firstChunkLatencyMs = now - streamStartMs
           }
@@ -1053,7 +1075,7 @@ export function createChatTurnRuntime(args: {
           const errorType = classifyChatError(err)
           // Mark the durable run failed (guest: inert). The parent already
           // computed `errorMessage` for its telemetry below — pass the string.
-          durableTurn.noteStreamError(errorMessage)
+          lifecycle.stream.noteStreamError(errorMessage)
           logBraintrustTraceMetadata(braintrustSpan, {
             ...braintrustMetadata,
             ...getBraintrustErrorMetadata(err),
@@ -1106,7 +1128,7 @@ export function createChatTurnRuntime(args: {
           reasoningActivity.close()
           resolvePostToolContinuation()
           // Flush the latest snapshot, then mark the run aborted (guest: inert).
-          await durableTurn.onStreamAbort("stream aborted")
+          await lifecycle.stream.onAbort("stream aborted")
         },
 
         onEnd: async ({ text, usage, steps, finishReason }) => {
@@ -1178,7 +1200,7 @@ export function createChatTurnRuntime(args: {
           // aggregates across ALL steps (v6 `onFinish.usage` was the final step
           // only, undercounting multi-step tool turns); generation-run
           // accounting wants the aggregate. Guest: inert.
-          durableTurn.captureFinish({
+          lifecycle.stream.captureFinish({
             usage: {
               inputTokens: usage?.inputTokens,
               outputTokens: usage?.outputTokens,
@@ -1355,7 +1377,7 @@ export function createChatTurnRuntime(args: {
     // the HTTP envelope. Both completion callbacks share this closure (ADR-0006).
     const uiMessageStream = toUIMessageStream({
       stream: result.stream,
-      ...durableTurn.uiStreamIdentity(validatedMessages),
+      ...lifecycle.envelope.identity(validatedMessages),
       sendReasoning: true,
       sendSources: true,
       messageMetadata: ({ part }) => {
@@ -1370,8 +1392,16 @@ export function createChatTurnRuntime(args: {
         }
         return {}
       },
-      onEnd: ({ responseMessage, isAborted, finishReason }) =>
-        durableTurn.finalize({ responseMessage, isAborted, finishReason }),
+      // Settlement never rejects (ADR-0011): a persistence failure resolves a
+      // degraded receipt — logged and captured inside the module — instead of
+      // failing the response pipe and erasing a delivered answer.
+      onEnd: async ({ responseMessage, isAborted, finishReason }) => {
+        await lifecycle.envelope.settle({
+          responseMessage,
+          isAborted,
+          finishReason,
+        })
+      },
       onError: (error: unknown) => {
         reasoningActivity.close()
         console.error("Error forwarded to client:", error)

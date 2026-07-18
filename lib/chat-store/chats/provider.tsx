@@ -43,7 +43,6 @@ import {
   deriveSidebarLoading,
   mapConvexChat,
   partitionSidebarChats,
-  sortByRecency,
   type OptimisticOperation,
 } from "./sidebar-window"
 
@@ -58,7 +57,6 @@ if (ENABLE_PAGINATED_SIDEBAR && !api.chats.searchByTitle) {
 }
 
 const SIDEBAR_WINDOW_PAGE_SIZE = 25
-const SIDEBAR_PROJECT_PREVIEW_LIMIT = 5
 const CONVEX_AUTH_READY_TIMEOUT_MS = 5_000
 
 function createConvexAuthReadinessGate() {
@@ -123,15 +121,8 @@ export type CreateNewChatInput = {
   guestUserId?: string
 }
 
-export type SidebarProjectPreview = {
-  chats: Chats[]
-  hasMore: boolean
-}
-
 type ChatsContextType = {
   chats: Chats[]
-  /** Five newest chats per owned project, sourced independently of the window. */
-  projectPreviews: ReadonlyMap<string, SidebarProjectPreview>
   isLoading: boolean
   /** Load the next page of the bounded sidebar window (no-op when the flag is off). */
   loadMore: () => void
@@ -142,7 +133,7 @@ type ChatsContextType = {
     id: string,
     currentChatId?: string,
     redirect?: () => void
-  ) => Promise<void>
+  ) => Promise<boolean>
   createNewChat: (input: CreateNewChatInput) => Promise<Chats | undefined>
   resetChats: () => Promise<void>
   getChatById: (id: string) => Chats | undefined
@@ -199,11 +190,6 @@ export function ChatsProvider({
     api.chats.getPinnedForCurrentUser,
     ENABLE_PAGINATED_SIDEBAR ? {} : "skip"
   )
-  const { data: projectPreviewDocs } = usePerUserQuery(
-    api.chats.getSidebarProjectPreviewsForCurrentUser,
-    ENABLE_PAGINATED_SIDEBAR ? {} : "skip"
-  )
-
   // Convex mutations
   const createChatMutation = useMutation(api.chats.create)
   const updateTitleMutation = useMutation(api.chats.updateTitle)
@@ -226,37 +212,6 @@ export function ChatsProvider({
     return convexChats.map(mapConvexChat)
   }, [convexChats, recentWindow.results, pinnedServerChats])
 
-  const serverProjectPreviews = useMemo(() => {
-    const previews = new Map<string, SidebarProjectPreview>()
-
-    if (ENABLE_PAGINATED_SIDEBAR) {
-      for (const preview of projectPreviewDocs ?? []) {
-        previews.set(preview.projectId, {
-          chats: preview.chats.map(mapConvexChat),
-          hasMore: preview.hasMore,
-        })
-      }
-      return previews
-    }
-
-    const chatsByProject = new Map<string, Chats[]>()
-    for (const doc of convexChats ?? []) {
-      const chat = mapConvexChat(doc)
-      if (!chat.project_id) continue
-      const projectChats = chatsByProject.get(chat.project_id) ?? []
-      projectChats.push(chat)
-      chatsByProject.set(chat.project_id, projectChats)
-    }
-    for (const [projectId, projectChats] of chatsByProject) {
-      const sorted = sortByRecency(projectChats)
-      previews.set(projectId, {
-        chats: sorted.slice(0, SIDEBAR_PROJECT_PREVIEW_LIMIT),
-        hasMore: sorted.length > SIDEBAR_PROJECT_PREVIEW_LIMIT,
-      })
-    }
-    return previews
-  }, [convexChats, projectPreviewDocs])
-
   const cachedLocalChats = useSyncExternalStore(
     subscribeCachedChats,
     getCachedChatsSnapshot,
@@ -278,8 +233,7 @@ export function ChatsProvider({
     // Paginated path: ready once the first window page AND pinned read arrive.
     firstPagePending:
       recentWindow.status === "LoadingFirstPage" ||
-      pinnedServerChats === undefined ||
-      projectPreviewDocs === undefined,
+      pinnedServerChats === undefined,
     shouldUseLocalChats,
     cachedChatsHydrated,
   })
@@ -294,40 +248,6 @@ export function ChatsProvider({
     const localChats = shouldUseLocalChats ? cachedLocalChats : []
     return applyOptimisticOps([...localChats, ...serverChats], optimisticOps)
   }, [cachedLocalChats, serverChats, optimisticOps, shouldUseLocalChats])
-
-  const projectPreviews = useMemo(() => {
-    const projectIds = new Set(serverProjectPreviews.keys())
-    for (const op of optimisticOps) {
-      if (op.type === "add" && op.chat.project_id) {
-        projectIds.add(op.chat.project_id)
-      }
-    }
-
-    const previews = new Map<string, SidebarProjectPreview>()
-    for (const projectId of projectIds) {
-      const serverPreview = serverProjectPreviews.get(projectId) ?? {
-        chats: [],
-        hasMore: false,
-      }
-      const projectOps = optimisticOps.filter(
-        (op) =>
-          op.type !== "add" ||
-          (op.chat.project_id != null && op.chat.project_id === projectId)
-      )
-      const previewChats = applyOptimisticOps(
-        serverPreview.chats,
-        projectOps
-      ).filter((chat) => chat.project_id === projectId)
-
-      previews.set(projectId, {
-        chats: previewChats.slice(0, SIDEBAR_PROJECT_PREVIEW_LIMIT),
-        hasMore:
-          serverPreview.hasMore ||
-          previewChats.length > SIDEBAR_PROJECT_PREVIEW_LIMIT,
-      })
-    }
-    return previews
-  }, [optimisticOps, serverProjectPreviews])
 
   // Helper to remove an optimistic operation
   const removeOp = useCallback(
@@ -379,7 +299,7 @@ export function ChatsProvider({
         await deleteCachedChat(id)
         await clearMessagesCache(id)
         if (id === currentChatId && redirect) redirect()
-        return
+        return true
       }
 
       // Optimistic delete
@@ -389,10 +309,12 @@ export function ChatsProvider({
         await deleteChatMutation({ chatId: id as Id<"chats"> })
         if (id === currentChatId && redirect) redirect()
         // Keep the delete op until server confirms (real-time will remove the chat)
+        return true
       } catch {
         // Revert optimistic delete
         removeOp((op) => op.type === "delete" && op.id === id)
         toast({ title: "Failed to delete chat", status: "error" })
+        return false
       }
     },
     [deleteChatMutation, removeOp]
@@ -667,7 +589,6 @@ export function ChatsProvider({
       <ChatsContext.Provider
         value={{
           chats,
-          projectPreviews,
           updateTitle,
           deleteChat,
           createNewChat,

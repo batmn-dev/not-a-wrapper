@@ -16,6 +16,10 @@ import {
   type ChatTurnDeps,
   type ChatTurnInput,
 } from "./chat-turn-runtime"
+import type {
+  DurableWorkerCall,
+  DurableWorkerWire,
+} from "./durable-turn-runtime"
 
 // ---------------------------------------------------------------------------
 // AI SDK seam tests (PR #97 regression class): run the REAL `ai` package —
@@ -335,7 +339,33 @@ function findCalls(fn: ReturnType<typeof vi.fn>, ref: unknown) {
   return fn.mock.calls.filter((call) => sameRef(call[0], ref))
 }
 
-function makeDeps(fetchMutation: ReturnType<typeof vi.fn>): ChatTurnDeps {
+// Post-prepare durable writes travel the Durable worker wire (ADR-0011), not
+// fetchMutation — the recording wire is their test seam.
+type RecordingWire = DurableWorkerWire & { calls: DurableWorkerCall[] }
+
+function makeWorkerWire(): RecordingWire {
+  const calls: DurableWorkerCall[] = []
+  const wire = (async (call: DurableWorkerCall) => {
+    calls.push(call)
+    return undefined
+  }) as RecordingWire
+  wire.calls = calls
+  return wire
+}
+
+function wireCalls<Op extends DurableWorkerCall["op"]>(
+  wire: RecordingWire,
+  op: Op
+) {
+  return wire.calls.filter(
+    (call): call is Extract<DurableWorkerCall, { op: Op }> => call.op === op
+  )
+}
+
+function makeDeps(
+  fetchMutation: ReturnType<typeof vi.fn>,
+  wire: RecordingWire = makeWorkerWire()
+): ChatTurnDeps {
   return {
     streamText,
     fetchMutation: fetchMutation as unknown as ChatTurnDeps["fetchMutation"],
@@ -343,6 +373,8 @@ function makeDeps(fetchMutation: ReturnType<typeof vi.fn>): ChatTurnDeps {
     after: vi.fn() as unknown as ChatTurnDeps["after"],
     getPostHogClient: (() =>
       null) as unknown as ChatTurnDeps["getPostHogClient"],
+    durableWorkerWire: wire,
+    durableSettleRetryDelaysMs: [0],
   }
 }
 
@@ -398,10 +430,11 @@ describe("chat turn runtime × real ai@7 streamText", () => {
       model as unknown as ReturnType<typeof createLanguageModel>
     )
     const durableFetchMutation = makeDurableFetchMutation()
+    const wire = makeWorkerWire()
 
     const runtime = createChatTurnRuntime({
       input: makeInput(),
-      deps: makeDeps(durableFetchMutation),
+      deps: makeDeps(durableFetchMutation, wire),
     })
     await runtime.prepare()
     const response = runtime.toResponse(new AbortController().signal)
@@ -450,37 +483,26 @@ describe("chat turn runtime × real ai@7 streamText", () => {
       )
     )
 
-    // Durable persistence happened in order: prepare first, per-step tool
-    // invocation writes and snapshots in between, completion last.
+    // Durable persistence happened in order: the user-token admission call is
+    // the ONLY fetchMutation call (ADR-0011); per-step tool invocation writes
+    // and snapshots travel the worker wire, completion last.
     await vi.waitFor(() => {
-      expect(
-        findCalls(
-          durableFetchMutation,
-          api.chatRuntime.markGenerationRunCompleted
-        )
-      ).toHaveLength(1)
+      expect(wireCalls(wire, "markGenerationRunCompleted")).toHaveLength(1)
     })
-    const orderedNames = durableFetchMutation.mock.calls.map((call) =>
+    const fetchNames = durableFetchMutation.mock.calls.map((call) =>
       getFunctionName(call[0] as Parameters<typeof getFunctionName>[0])
     )
-    expect(orderedNames[0]).toBe(
-      getFunctionName(api.chatRuntime.prepareGeneration)
-    )
-    expect(orderedNames.at(-1)).toBe(
-      getFunctionName(api.chatRuntime.markGenerationRunCompleted)
-    )
+    expect(fetchNames).toEqual([
+      getFunctionName(api.chatRuntime.prepareGeneration),
+    ])
+    expect(wire.calls.at(-1)?.op).toBe("markGenerationRunCompleted")
 
-    const invocationWrites = findCalls(
-      durableFetchMutation,
-      api.chatRuntime.recordToolInvocations
-    )
+    const invocationWrites = wireCalls(wire, "recordToolInvocations")
     expect(invocationWrites).toHaveLength(TOOL_STEPS)
     expect(
-      invocationWrites.map(
-        (call) => (call[1] as { stepNumber: number }).stepNumber
-      )
+      invocationWrites.map((call) => call.args.stepNumber)
     ).toEqual([1, 2, 3, 4])
-    expect(invocationWrites[0][1]).toMatchObject({
+    expect(invocationWrites[0].args).toMatchObject({
       runId: "run1",
       messageId: "msg1",
       invocations: [
@@ -494,17 +516,13 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     })
 
     expect(
-      findCalls(durableFetchMutation, api.chatRuntime.updateAssistantSnapshot)
-        .length
+      wireCalls(wire, "updateAssistantSnapshot").length
     ).toBeGreaterThanOrEqual(1)
 
     // The completion write carries the streamText onEnd aggregate — usage
     // across ALL steps and the runtime's tool-outcome totals.
-    const completed = findCalls(
-      durableFetchMutation,
-      api.chatRuntime.markGenerationRunCompleted
-    )[0]
-    expect(completed[1]).toMatchObject({
+    const completed = wireCalls(wire, "markGenerationRunCompleted")[0]
+    expect(completed.args).toMatchObject({
       runId: "run1",
       messageId: "msg1",
       content: "The weather is sunny.",
@@ -516,15 +534,10 @@ describe("chat turn runtime × real ai@7 streamText", () => {
         outputTokens: 5 * (TOOL_STEPS + 1),
       },
     })
-    expect(completed[2]).toEqual({ token: "tok" })
 
     // No failure/abort writes on the happy path.
-    expect(
-      findCalls(durableFetchMutation, api.chatRuntime.markGenerationRunFailed)
-    ).toHaveLength(0)
-    expect(
-      findCalls(durableFetchMutation, api.chatRuntime.markGenerationRunAborted)
-    ).toHaveLength(0)
+    expect(wireCalls(wire, "markGenerationRunFailed")).toHaveLength(0)
+    expect(wireCalls(wire, "markGenerationRunAborted")).toHaveLength(0)
   })
 
   it("persists the aborted outcome when the request signal aborts mid-stream", async () => {
@@ -536,10 +549,11 @@ describe("chat turn runtime × real ai@7 streamText", () => {
       makeSlowTextModel() as unknown as ReturnType<typeof createLanguageModel>
     )
     const durableFetchMutation = makeDurableFetchMutation()
+    const wire = makeWorkerWire()
 
     const runtime = createChatTurnRuntime({
       input: makeInput({ requestId: "req-seam-abort" }),
-      deps: makeDeps(durableFetchMutation),
+      deps: makeDeps(durableFetchMutation, wire),
     })
     await runtime.prepare()
 
@@ -558,25 +572,12 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     // the placeholder as a first-class aborted stub) and never completed.
     await vi.waitFor(() => {
       expect(
-        findCalls(
-          durableFetchMutation,
-          api.chatRuntime.markGenerationRunAborted
-        ).length
+        wireCalls(wire, "markGenerationRunAborted").length
       ).toBeGreaterThanOrEqual(1)
     })
-    const abortWrite = findCalls(
-      durableFetchMutation,
-      api.chatRuntime.markGenerationRunAborted
-    )[0]
-    expect(abortWrite[1]).toMatchObject({ runId: "run1", messageId: "msg1" })
-    expect(
-      findCalls(
-        durableFetchMutation,
-        api.chatRuntime.markGenerationRunCompleted
-      )
-    ).toHaveLength(0)
-    expect(
-      findCalls(durableFetchMutation, api.chatRuntime.markGenerationRunFailed)
-    ).toHaveLength(0)
+    const abortWrite = wireCalls(wire, "markGenerationRunAborted")[0]
+    expect(abortWrite.args).toMatchObject({ runId: "run1", messageId: "msg1" })
+    expect(wireCalls(wire, "markGenerationRunCompleted")).toHaveLength(0)
+    expect(wireCalls(wire, "markGenerationRunFailed")).toHaveLength(0)
   })
 })

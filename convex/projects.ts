@@ -9,6 +9,8 @@ import {
   getProjectModifiedAt,
   patchProjectActivity,
 } from "./domain/project_activity"
+import { createChatOwnedDeletion } from "./domain/chat_owned_deletion"
+import { newestLinkedChat } from "./domain/chat_project_link"
 import {
   authenticatedMutation,
   maybeAuthQuery,
@@ -134,11 +136,7 @@ export async function backfillUpdatedAtBatch(
   let batchPatched = 0
 
   for (const project of projects.page) {
-    const newestChat = await ctx.db
-      .query("chats")
-      .withIndex("by_project_updated", (q) => q.eq("projectId", project._id))
-      .order("desc")
-      .first()
+    const newestChat = await newestLinkedChat(ctx, project)
     const updatedAt = Math.max(
       getProjectModifiedAt(project),
       newestChat?.updatedAt ?? project._creationTime
@@ -184,46 +182,11 @@ export const backfillUpdatedAt = internalMutation({
   handler: backfillUpdatedAtBatch,
 })
 
-/**
- * Delete a project and its associated chats
- */
+/** Delete a Project after deleting every complete Chat graph it owns. */
 export const remove = ownedProjectMutation({
   args: {},
   handler: async (ctx) => {
-    const projectId = ctx.project._id
-    // Get all chats for this project
-    const chats = await ctx.db
-      .query("chats")
-      .withIndex("by_project", (q) => q.eq("projectId", projectId))
-      .collect()
-
-    // Delete all messages and attachments for each chat
-    for (const chat of chats) {
-      const messages = await ctx.db
-        .query("messages")
-        .withIndex("by_chat", (q) => q.eq("chatId", chat._id))
-        .collect()
-
-      for (const message of messages) {
-        await ctx.db.delete(message._id)
-      }
-
-      const attachments = await ctx.db
-        .query("chatAttachments")
-        .withIndex("by_chat", (q) => q.eq("chatId", chat._id))
-        .collect()
-
-      for (const attachment of attachments) {
-        if (attachment.storageId) {
-          await ctx.storage.delete(attachment.storageId)
-        }
-        await ctx.db.delete(attachment._id)
-      }
-
-      await ctx.db.delete(chat._id)
-    }
-
-    // Delete the project
-    await ctx.db.delete(projectId)
+    await createChatOwnedDeletion(ctx).deleteChatsForProject(ctx.project)
+    await ctx.db.delete(ctx.project._id)
   },
 })

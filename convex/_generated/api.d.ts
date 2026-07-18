@@ -9,7 +9,10 @@
  */
 
 import type * as chatRuntime from "../chatRuntime.js";
+import type * as chatRuntimeWorker from "../chatRuntimeWorker.js";
 import type * as chats from "../chats.js";
+import type * as domain_chat_owned_deletion from "../domain/chat_owned_deletion.js";
+import type * as domain_chat_project_link from "../domain/chat_project_link.js";
 import type * as domain_generation_run_lifecycle from "../domain/generation_run_lifecycle.js";
 import type * as domain_message_branch_writes from "../domain/message_branch_writes.js";
 import type * as domain_message_branches from "../domain/message_branches.js";
@@ -23,6 +26,7 @@ import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_authedFunctions from "../lib/authedFunctions.js";
 import type * as lib_messageMetadata from "../lib/messageMetadata.js";
+import type * as lib_sha256 from "../lib/sha256.js";
 import type * as mcpServers from "../mcpServers.js";
 import type * as mcpToolApprovals from "../mcpToolApprovals.js";
 import type * as messages from "../messages.js";
@@ -45,7 +49,10 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   chatRuntime: typeof chatRuntime;
+  chatRuntimeWorker: typeof chatRuntimeWorker;
   chats: typeof chats;
+  "domain/chat_owned_deletion": typeof domain_chat_owned_deletion;
+  "domain/chat_project_link": typeof domain_chat_project_link;
   "domain/generation_run_lifecycle": typeof domain_generation_run_lifecycle;
   "domain/message_branch_writes": typeof domain_message_branch_writes;
   "domain/message_branches": typeof domain_message_branches;
@@ -59,6 +66,7 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/authedFunctions": typeof lib_authedFunctions;
   "lib/messageMetadata": typeof lib_messageMetadata;
+  "lib/sha256": typeof lib_sha256;
   mcpServers: typeof mcpServers;
   mcpToolApprovals: typeof mcpToolApprovals;
   messages: typeof messages;

@@ -35,7 +35,7 @@ export function HistorySearchProvider({ children }: { children: ReactNode }) {
   const isMobile = useBreakpoint(768)
   const router = useRouter()
   const { updateTitle, deleteChat } = useChats()
-  const { deleteMessages } = useMessages()
+  const { resetMessages } = useMessages()
   const { chatId } = useChatSession()
   const { user } = useUser()
   const isAuthenticated = !!user
@@ -70,11 +70,17 @@ export function HistorySearchProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       if (id === chatId) {
         setIsOpen(false)
-        await deleteMessages()
       }
-      await deleteChat(id, chatId || undefined, () => router.push("/"))
+      const deleted = await deleteChat(
+        id,
+        chatId || undefined,
+        () => router.push("/")
+      )
+      if (deleted && id === chatId) {
+        await resetMessages()
+      }
     },
-    [chatId, deleteMessages, deleteChat, router]
+    [chatId, resetMessages, deleteChat, router]
   )
 
   const value = useMemo(

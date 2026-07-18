@@ -36,32 +36,27 @@ export function TrailingIconChip({ children }: { children: ReactNode }) {
   )
 }
 
-type SidebarSecondaryActionProps = {
+type SidebarPinActionProps = {
   pinned: boolean
   title: string
   itemType: "Chat" | "Project"
   onTogglePinned: () => void
   isPending?: boolean
-  unpinnedAction?: ReactNode
 }
 
 /**
- * Source of truth for the secondary action in a sidebar row.
+ * Source of truth for the pin action in every sidebar content row.
  *
- * A pinned item always exposes Unpin. Unpinned item types may provide a more
- * useful default action for the slot (projects use New Chat); otherwise the
- * slot exposes Pin.
+ * Keeping both states in this component makes Pin/Unpin the stable first action
+ * for chats and projects instead of letting each row invent its own affordance.
  */
-export function SidebarSecondaryAction({
+export function SidebarPinAction({
   pinned,
   title,
   itemType,
   onTogglePinned,
   isPending = false,
-  unpinnedAction,
-}: SidebarSecondaryActionProps) {
-  if (!pinned && unpinnedAction) return unpinnedAction
-
+}: SidebarPinActionProps) {
   const actionLabel = pinned ? `Unpin ${itemType}` : `Pin ${itemType}`
 
   return (

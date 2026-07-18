@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx } from "../_generated/server"
+import { CHAT_PROJECT_LINK_OWNER_ERROR } from "./chat_project_link"
 import {
   getProjectModifiedAt,
   patchChatActivity,
   patchProjectActivity,
-  recordProjectActivity,
+  recordKnownProjectActivity,
 } from "./project_activity"
 
 function asId<Table extends "users" | "projects" | "chats">(
@@ -111,19 +112,32 @@ describe("project activity", () => {
     ])
 
     await patchChatActivity(ctx, ordinaryChat, {}, 20)
-    await recordProjectActivity(ctx, storedProject._id, 20)
+    await recordKnownProjectActivity(ctx, storedProject, 20)
 
-    expect(reads()).toBe(1)
+    expect(reads()).toBe(0)
     expect(patches).toEqual([
       { id: "chat-1", value: { updatedAt: 20 } },
     ])
   })
 
   it("rejects a broken project reference instead of hiding corruption", async () => {
-    const { ctx } = createMutationCtx([])
+    const orphanedChat = chat({ projectId: asId<"projects">("missing") })
+    const { ctx, patches } = createMutationCtx([orphanedChat])
 
     await expect(
-      recordProjectActivity(ctx, asId<"projects">("missing"), 20)
+      patchChatActivity(ctx, orphanedChat, {}, 20)
     ).rejects.toThrow("Project not found")
+    expect(patches).toEqual([])
+  })
+
+  it("rejects a cross-owner project link before writing anything", async () => {
+    const foreignProject = project({ userId: asId<"users">("user-2") })
+    const linkedChat = chat()
+    const { ctx, patches } = createMutationCtx([foreignProject, linkedChat])
+
+    await expect(
+      patchChatActivity(ctx, linkedChat, { title: "Renamed" }, 20)
+    ).rejects.toThrow(CHAT_PROJECT_LINK_OWNER_ERROR)
+    expect(patches).toEqual([])
   })
 })

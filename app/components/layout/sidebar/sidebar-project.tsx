@@ -5,14 +5,11 @@ import { CollapsibleSection } from "@/components/ui/collapsible-section"
 import { Icon } from "@/components/ui/icon"
 import { useSidebar } from "@/components/ui/sidebar"
 import type { Id } from "@/convex/_generated/dataModel"
-import { RiAddLine, RiFolderFill, RiFolderLine } from "@remixicon/react"
+import { RiAddLine, RiFolderLine, RiFolderOpenFill } from "@remixicon/react"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 import type { ChatOrganization } from "./chat-organization"
-import type {
-  SidebarProjectModel,
-  SidebarProjectPreview,
-} from "./sidebar-composition"
+import type { SidebarProjectModel } from "./sidebar-composition"
 import { SidebarChatGroupActions } from "./sidebar-list"
 import { SidebarMenuItem } from "./sidebar-menu-item"
 import { SidebarProjectItem } from "./sidebar-project-item"
@@ -21,9 +18,6 @@ type SidebarProjectProps = {
   isAuthenticated: boolean
   organization: ChatOrganization
   projects: SidebarProjectModel[]
-  projectPreviews: ReadonlyMap<string, SidebarProjectPreview>
-  currentChatId: string
-  activeProjectId?: string
   isPinPending: (projectId: Id<"projects">) => boolean
   onTogglePinned: (project: SidebarProjectModel) => void
   onOrganizationChange: (organization: ChatOrganization) => void
@@ -33,9 +27,6 @@ export function SidebarProject({
   isAuthenticated,
   organization,
   projects,
-  projectPreviews,
-  currentChatId,
-  activeProjectId,
   isPinPending,
   onTogglePinned,
   onOrganizationChange,
@@ -51,9 +42,6 @@ export function SidebarProject({
     <SidebarProjectItem
       key={project._id}
       project={project}
-      preview={projectPreviews.get(project._id)}
-      currentChatId={currentChatId}
-      activeProjectId={activeProjectId}
       isPinPending={isPinPending(project._id)}
       onTogglePinned={() => onTogglePinned(project)}
     />
@@ -63,8 +51,8 @@ export function SidebarProject({
     <>
       {organization === "one-list" ? (
         <SidebarMenuItem
-          icon={<Icon icon={RiFolderLine} slotSize={20} />}
-          activeIcon={<Icon icon={RiFolderFill} slotSize={20} />}
+          icon={RiFolderLine}
+          activeIcon={RiFolderOpenFill}
           label="Projects"
           href="/projects"
           testId="sidebar-item-projects"

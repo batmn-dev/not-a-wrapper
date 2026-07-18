@@ -4,21 +4,25 @@ import * as Sentry from "@sentry/nextjs"
 import type { TextStreamPart, ToolSet, UIMessage } from "ai"
 import { fetchMutation as moduleFetchMutation } from "convex/nextjs"
 import { getFunctionName } from "convex/server"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   createConvexDurableTurn,
   createGuestDurableTurn,
+  createHttpDurableWorkerWire,
   type DurableTurnInput,
+  type DurableWorkerCall,
+  type DurableWorkerWire,
   type ToolFacts,
 } from "./durable-turn-runtime"
 
 // ---------------------------------------------------------------------------
-// Durable turn runtime — the interface IS the test surface (ADR-0009). Five
-// lean behaviors driven through the public methods with a recording
-// `fetchMutation` fake (functions identified by getFunctionName, since the
-// generated `api` proxy is not identity-stable across reads):
-//   1. handoff loud-miss, 2. terminal ordering, 3. prepare() error mapping,
-//   4. guest inertness, 5. fail() at each phase.
+// Durable turn runtime — the interface IS the test surface (ADR-0009/0011).
+// The admission call (`prepareGeneration`) is driven through a recording
+// `fetchMutation` fake; every post-prepare write is driven through a recording
+// Durable worker wire fake — the ADR-0011 test seam. Behaviors:
+//   1. handoff loud-miss, 2. settlement ordering + final full-parts snapshot,
+//   3. degraded receipts (settle NEVER rejects), 4. prepare() error mapping +
+//   grant minting, 5. guest inertness, 6. fail() at each phase.
 // ---------------------------------------------------------------------------
 
 // The module default `fetchMutation` is never used by the Convex adapter (it
@@ -82,16 +86,13 @@ type PrepareResult = {
 }
 
 /**
- * A recording fetchMutation: resolves `prepareGeneration` to a run descriptor,
- * lets callers override any function's outcome (value, thrown error, or a
- * pending promise), and records every `(ref, args, opts)` tuple in call order.
+ * A recording fetchMutation for the ONE remaining user-token call: resolves
+ * `prepareGeneration` to a run descriptor, lets callers override its outcome.
  */
 function makeRecordingFetchMutation(
   overrides: {
     prepareResult?: PrepareResult
-    responders?: Partial<
-      Record<string, (args: unknown) => unknown | Promise<unknown>>
-    >
+    prepareResponder?: (args: unknown) => unknown | Promise<unknown>
   } = {}
 ) {
   const prepareResult: PrepareResult = overrides.prepareResult ?? {
@@ -100,21 +101,53 @@ function makeRecordingFetchMutation(
     assistantOrder: 2,
     messages: [makeStoredUserMessage()],
   }
-  return vi.fn(async (ref: unknown, args: unknown) => {
-    const name = nameOf(ref)
-    const responder = overrides.responders?.[name]
-    if (responder) return responder(args)
-    if (sameRef(ref, api.chatRuntime.prepareGeneration)) return prepareResult
+  return vi.fn(async (ref: unknown, args: unknown, opts?: unknown) => {
+    void opts
+    if (sameRef(ref, api.chatRuntime.prepareGeneration)) {
+      if (overrides.prepareResponder) return overrides.prepareResponder(args)
+      return prepareResult
+    }
     return undefined
   })
 }
 
-function findCalls(fetchMutation: ReturnType<typeof vi.fn>, ref: unknown) {
-  return fetchMutation.mock.calls.filter((call) => sameRef(call[0], ref))
+type RecordingWire = DurableWorkerWire & {
+  calls: DurableWorkerCall[]
 }
 
-function orderedNames(fetchMutation: ReturnType<typeof vi.fn>): string[] {
-  return fetchMutation.mock.calls.map((call) => nameOf(call[0]))
+/**
+ * A recording Durable worker wire — the ADR-0011 test seam. Records every
+ * `{ op, args }` in order; per-op responders override outcomes.
+ */
+function makeRecordingWire(
+  overrides: {
+    responders?: Partial<
+      Record<string, (args: Record<string, unknown>) => unknown>
+    >
+  } = {}
+): RecordingWire {
+  const calls: DurableWorkerCall[] = []
+  const wire = (async (call: DurableWorkerCall) => {
+    calls.push(call)
+    const responder = overrides.responders?.[call.op]
+    if (responder) return responder(call.args)
+    return undefined
+  }) as RecordingWire
+  wire.calls = calls
+  return wire
+}
+
+function wireCalls<Op extends DurableWorkerCall["op"]>(
+  wire: RecordingWire,
+  op: Op
+) {
+  return wire.calls.filter(
+    (call): call is Extract<DurableWorkerCall, { op: Op }> => call.op === op
+  )
+}
+
+function orderedOps(wire: RecordingWire): string[] {
+  return wire.calls.map((call) => call.op)
 }
 
 function makeInput(overrides: Partial<DurableTurnInput> = {}): DurableTurnInput {
@@ -145,32 +178,117 @@ function makeToolFacts(overrides: Partial<ToolFacts> = {}): ToolFacts {
 
 function makeConvexTurn(
   input: DurableTurnInput & { convexToken: string },
-  fetchMutation: ReturnType<typeof vi.fn>
+  fetchMutation: ReturnType<typeof vi.fn>,
+  wire: RecordingWire
 ) {
   return createConvexDurableTurn({
     input,
     deps: {
       fetchMutation:
         fetchMutation as unknown as typeof import("convex/nextjs").fetchMutation,
+      workerWire: wire,
+      settleRetryDelaysMs: [0, 0],
     },
   })
 }
+
+async function makePreparedTurn(
+  options: {
+    input?: Partial<DurableTurnInput>
+    wire?: RecordingWire
+    fetchMutation?: ReturnType<typeof vi.fn>
+  } = {}
+) {
+  const wire = options.wire ?? makeRecordingWire()
+  const fetchMutation = options.fetchMutation ?? makeRecordingFetchMutation()
+  const turn = makeConvexTurn(
+    makeInput(options.input) as DurableTurnInput & { convexToken: string },
+    fetchMutation,
+    wire
+  )
+  await turn.prepare({ provider: "anthropic" })
+  return { turn, wire, fetchMutation }
+}
+
+const RESPONSE_MESSAGE = {
+  id: "msg1",
+  role: "assistant",
+  parts: [{ type: "text", text: "done" }],
+  metadata: {},
+} as unknown as UIMessage
 
 beforeEach(() => {
   vi.clearAllMocks()
   vi.spyOn(console, "log").mockImplementation(() => {})
 })
 
+afterEach(() => {
+  vi.useRealTimers()
+  vi.unstubAllEnvs()
+})
+
+describe("durable worker HTTP transport", () => {
+  it("uses the generated Convex site URL for local worker writes", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", "")
+    vi.stubEnv("NEXT_PUBLIC_CONVEX_SITE_URL", "http://127.0.0.1:3211")
+    vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "http://127.0.0.1:3210")
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true })))
+    const wire = createHttpDurableWorkerWire({
+      secret: "grant-secret",
+      fetchImpl,
+    })
+
+    await wire({
+      op: "markGenerationRunAborted",
+      args: { runId: "run_1" as Id<"generationRuns"> },
+    })
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://127.0.0.1:3211/chat-turn/worker",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer grant-secret",
+        }),
+      })
+    )
+  })
+
+  it("derives the default hosted site URL when no site URL is available", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", "")
+    vi.stubEnv("NEXT_PUBLIC_CONVEX_SITE_URL", "")
+    vi.stubEnv(
+      "NEXT_PUBLIC_CONVEX_URL",
+      "https://happy-animal-123.convex.cloud"
+    )
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true })))
+    const wire = createHttpDurableWorkerWire({
+      secret: "grant-secret",
+      fetchImpl,
+    })
+
+    await wire({
+      op: "markGenerationRunAborted",
+      args: { runId: "run_1" as Id<"generationRuns"> },
+    })
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://happy-animal-123.convex.site/chat-turn/worker",
+      expect.anything()
+    )
+  })
+})
+
 describe("durable turn runtime — handoff loud-miss", () => {
-  it("finalize without captureFinish warns + Sentry, still completes with countToolParts", async () => {
+  it("settle without captureFinish warns + Sentry, still completes with countToolParts", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
     try {
-      const fetchMutation = makeRecordingFetchMutation()
-      const turn = makeConvexTurn(
-        makeInput() as DurableTurnInput & { convexToken: string },
-        fetchMutation
-      )
-      await turn.prepare({ provider: "anthropic" })
+      const { turn, wire } = await makePreparedTurn()
+      const binding = turn.bind(makeToolFacts())
 
       // No captureFinish() — the missed handoff. The response message carries
       // two tool parts (one errored) so the part-counted fallback yields {2,1}.
@@ -197,7 +315,10 @@ describe("durable turn runtime — handoff loud-miss", () => {
         metadata: {},
       } as unknown as UIMessage
 
-      await turn.finalize({ responseMessage, isAborted: false })
+      const receipt = await binding.envelope.settle({
+        responseMessage,
+        isAborted: false,
+      })
 
       const warnLine = warn.mock.calls
         .map(([message]) => String(message))
@@ -214,11 +335,13 @@ describe("durable turn runtime — handoff loud-miss", () => {
         { level: "warning" }
       )
 
-      const completed = findCalls(
-        fetchMutation,
-        api.chatRuntime.markGenerationRunCompleted
-      )[0]
-      expect(completed[1]).toMatchObject({
+      expect(receipt).toEqual({
+        status: "confirmed",
+        runId: "run1",
+        outcome: "completed",
+      })
+      const completed = wireCalls(wire, "markGenerationRunCompleted")[0]
+      expect(completed.args).toMatchObject({
         runId: "run1",
         messageId: "msg1",
         content: "done",
@@ -226,29 +349,24 @@ describe("durable turn runtime — handoff loud-miss", () => {
         failedToolCalls: 1,
       })
       // No captured usage/finishReason survived the missed handoff.
-      expect((completed[1] as { usage?: unknown }).usage).toBeUndefined()
+      expect(completed.args.usage).toBeUndefined()
     } finally {
       warn.mockRestore()
     }
   })
 })
 
-describe("durable turn runtime — terminal ordering", () => {
-  it("settles approvals → flushes snapshot → completes, awaiting the approval write", async () => {
+describe("durable turn runtime — settlement ordering", () => {
+  it("settles approvals → flushes → final full-parts snapshot → completes, awaiting the approval write", async () => {
     const approvalDeferred = createDeferred<undefined>()
-    const fetchMutation = makeRecordingFetchMutation({
+    const wire = makeRecordingWire({
       responders: {
-        [nameOf(api.chatRuntime.createToolApprovalRequest)]: () =>
-          approvalDeferred.promise,
+        createToolApprovalRequest: () => approvalDeferred.promise,
       },
     })
-    const turn = makeConvexTurn(
-      makeInput() as DurableTurnInput & { convexToken: string },
-      fetchMutation
-    )
-    await turn.prepare({ provider: "anthropic" })
+    const { turn } = await makePreparedTurn({ wire })
+    const binding = turn.bind(makeToolFacts())
 
-    const extras = turn.streamTextExtras(makeToolFacts())
     // Drive a tool-approval-request chunk through the transform — it pushes a
     // (pending) approval write into the module-private backpressure array and
     // blocks on it before enqueuing the chunk.
@@ -267,7 +385,7 @@ describe("durable turn runtime — terminal ordering", () => {
         controller.close()
       },
     }).pipeThrough(
-      extras.experimental_transform!({
+      binding.streamTextExtras.experimental_transform!({
         tools: {},
         stopStream: () => {},
       } as never)
@@ -277,64 +395,75 @@ describe("durable turn runtime — terminal ordering", () => {
     await flush()
 
     // Dirty the snapshot: the first delta writes immediately, the throttled
-    // second leaves the tracker dirty so the finalize flush actually writes.
-    turn.onChunk({ type: "text-delta", text: "A" } as never)
-    turn.onChunk({ type: "text-delta", text: "B" } as never)
+    // second leaves the tracker dirty so the settle flush actually writes.
+    binding.stream.onChunk({ type: "text-delta", text: "A" } as never)
+    binding.stream.onChunk({ type: "text-delta", text: "B" } as never)
     await flush()
 
-    turn.captureFinish({
+    binding.stream.captureFinish({
       usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
       finishReason: "stop",
       toolCounts: { totalToolCalls: 1, failedToolCalls: 0 },
     })
 
-    // Finalize must block on the pending approval write before completing.
-    let finalized = false
-    const finalizePromise = turn
-      .finalize({
-        responseMessage: {
-          id: "msg1",
-          role: "assistant",
-          parts: [{ type: "text", text: "AB" }],
-          metadata: {},
-        } as unknown as UIMessage,
-        isAborted: false,
-        finishReason: "stop",
-      })
-      .then(() => {
-        finalized = true
+    // Settlement must block on the pending approval write before completing.
+    const responseMessage = {
+      id: "msg1",
+      role: "assistant",
+      parts: [
+        { type: "text", text: "AB" },
+        {
+          type: "tool-send_email",
+          toolCallId: "call-1",
+          state: "output-available",
+          input: {},
+          output: {},
+        },
+      ],
+      metadata: {},
+    } as unknown as UIMessage
+    let settled = false
+    const settlePromise = binding.envelope
+      .settle({ responseMessage, isAborted: false, finishReason: "stop" })
+      .then((receipt) => {
+        settled = true
+        return receipt
       })
     await flush()
 
-    expect(finalized).toBe(false)
-    expect(
-      findCalls(fetchMutation, api.chatRuntime.markGenerationRunCompleted)
-    ).toHaveLength(0)
+    expect(settled).toBe(false)
+    expect(wireCalls(wire, "markGenerationRunCompleted")).toHaveLength(0)
 
     approvalDeferred.resolve(undefined)
     await readPromise
-    await finalizePromise
-    expect(finalized).toBe(true)
+    const receipt = await settlePromise
+    expect(receipt).toEqual({
+      status: "confirmed",
+      runId: "run1",
+      outcome: "completed",
+    })
 
-    // The completion write is last, preceded by a snapshot flush; the captured
-    // finish facts (not the part-count fallback) drive it.
-    const names = orderedNames(fetchMutation)
-    expect(names.at(-1)).toBe(
-      nameOf(api.chatRuntime.markGenerationRunCompleted)
-    )
-    const lastSnapshot = names.lastIndexOf(
-      nameOf(api.chatRuntime.updateAssistantSnapshot)
-    )
-    const complete = names.lastIndexOf(
-      nameOf(api.chatRuntime.markGenerationRunCompleted)
-    )
+    // The completion write is last, preceded by the final full-parts snapshot
+    // (content survival, ADR-0011); the captured finish facts drive it.
+    const ops = orderedOps(wire)
+    expect(ops.at(-1)).toBe("markGenerationRunCompleted")
+    const lastSnapshot = ops.lastIndexOf("updateAssistantSnapshot")
+    const complete = ops.lastIndexOf("markGenerationRunCompleted")
     expect(lastSnapshot).toBeGreaterThanOrEqual(0)
     expect(lastSnapshot).toBeLessThan(complete)
-    const completed = findCalls(
-      fetchMutation,
-      api.chatRuntime.markGenerationRunCompleted
-    )[0]
-    expect(completed[1]).toMatchObject({
+
+    const finalSnapshot = wireCalls(wire, "updateAssistantSnapshot").at(-1)
+    // The final pre-terminal snapshot carries the COMPLETE response parts
+    // (tool parts included), not the tracker's text/reasoning subset.
+    expect(finalSnapshot?.args).toMatchObject({
+      runId: "run1",
+      messageId: "msg1",
+      textSnapshot: "AB",
+      partsSnapshot: responseMessage.parts,
+    })
+
+    const completed = wireCalls(wire, "markGenerationRunCompleted")[0]
+    expect(completed.args).toMatchObject({
       finishReason: "stop",
       totalToolCalls: 1,
       failedToolCalls: 0,
@@ -343,98 +472,205 @@ describe("durable turn runtime — terminal ordering", () => {
     expect(Sentry.captureMessage).not.toHaveBeenCalled()
   })
 
-  it("marks aborted (never rejecting) on the isAborted variant, even if the write fails", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
-    try {
-      const fetchMutation = makeRecordingFetchMutation({
-        responders: {
-          [nameOf(api.chatRuntime.markGenerationRunAborted)]: () => {
-            throw new Error("convex unavailable")
-          },
-        },
-      })
-      const turn = makeConvexTurn(
-        makeInput() as DurableTurnInput & { convexToken: string },
-        fetchMutation
-      )
-      await turn.prepare({ provider: "anthropic" })
-
-      await expect(
-        turn.finalize({
-          responseMessage: {
-            id: "msg1",
-            role: "assistant",
-            parts: [],
-            metadata: {},
-          } as unknown as UIMessage,
-          isAborted: true,
-          finishReason: "stop",
-        })
-      ).resolves.toBeUndefined()
-
-      const aborted = findCalls(
-        fetchMutation,
-        api.chatRuntime.markGenerationRunAborted
-      )[0]
-      expect(aborted[1]).toMatchObject({
-        runId: "run1",
-        messageId: "msg1",
-        reason: "ui message stream aborted",
-      })
-      expect(
-        findCalls(fetchMutation, api.chatRuntime.markGenerationRunCompleted)
-      ).toHaveLength(0)
-      const warnLine = warn.mock.calls
-        .map(([message]) => String(message))
-        .find((message) => message.includes("durable_run_abort_write_failed"))
-      expect(warnLine).toBeDefined()
-    } finally {
-      warn.mockRestore()
-    }
-  })
-
-  it("issues both abort writes with distinct reasons when onStreamAbort precedes finalize (double-terminal, first-terminal-wins)", async () => {
-    const fetchMutation = makeRecordingFetchMutation()
-    const turn = makeConvexTurn(
-      makeInput() as DurableTurnInput & { convexToken: string },
-      fetchMutation
-    )
-    await turn.prepare({ provider: "anthropic" })
+  it("issues both abort writes with distinct reasons when stream onAbort precedes settle (double-terminal, first-terminal-wins)", async () => {
+    const { turn, wire } = await makePreparedTurn()
+    const binding = turn.bind(makeToolFacts())
 
     // The stream `onAbort` half flushes + marks aborted ("stream aborted")...
-    await turn.onStreamAbort("stream aborted")
-    // ...then the envelope `onEnd` half marks aborted again ("ui message stream
+    await binding.stream.onAbort("stream aborted")
+    // ...then the envelope half marks aborted again ("ui message stream
     // aborted"). Both fire by design; the Generation run lifecycle's
-    // first-terminal-wins absorbs the second, and finalize never rejects.
-    await expect(
-      turn.finalize({
-        responseMessage: {
-          id: "msg1",
-          role: "assistant",
-          parts: [],
-          metadata: {},
-        } as unknown as UIMessage,
-        isAborted: true,
-        finishReason: "stop",
-      })
-    ).resolves.toBeUndefined()
+    // first-terminal-wins absorbs the second, and settle never rejects.
+    const receipt = await binding.envelope.settle({
+      responseMessage: RESPONSE_MESSAGE,
+      isAborted: true,
+      finishReason: "stop",
+    })
+    expect(receipt).toEqual({
+      status: "confirmed",
+      runId: "run1",
+      outcome: "aborted",
+    })
 
-    const abortReasons = findCalls(
-      fetchMutation,
-      api.chatRuntime.markGenerationRunAborted
-    ).map((call) => (call[1] as { reason: string }).reason)
+    const abortReasons = wireCalls(wire, "markGenerationRunAborted").map(
+      (call) => call.args.reason
+    )
     expect(abortReasons).toEqual([
       "stream aborted",
       "ui message stream aborted",
     ])
     // The abort path never completes the run.
-    expect(
-      findCalls(fetchMutation, api.chatRuntime.markGenerationRunCompleted)
-    ).toHaveLength(0)
+    expect(wireCalls(wire, "markGenerationRunCompleted")).toHaveLength(0)
+
+    // The final full-parts snapshot is unconditional (ADR-0011) — abort
+    // included — and precedes the envelope's abort mark, so an aborted answer
+    // keeps its complete parts, not just the throttled subset.
+    const ops = orderedOps(wire)
+    const lastSnapshot = ops.lastIndexOf("updateAssistantSnapshot")
+    expect(lastSnapshot).toBeGreaterThanOrEqual(0)
+    expect(lastSnapshot).toBeLessThan(
+      ops.lastIndexOf("markGenerationRunAborted")
+    )
+    expect(wireCalls(wire, "updateAssistantSnapshot").at(-1)?.args).toMatchObject(
+      {
+        textSnapshot: "done",
+        partsSnapshot: RESPONSE_MESSAGE.parts,
+      }
+    )
   })
 })
 
-describe("durable turn runtime — prepare() error mapping", () => {
+describe("durable turn runtime — settlement receipts (never rejects)", () => {
+  it("times out every stalled completion attempt before degrading", async () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          markGenerationRunCompleted: () => new Promise(() => {}),
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+      binding.stream.captureFinish({
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        finishReason: "stop",
+        toolCounts: { totalToolCalls: 0, failedToolCalls: 0 },
+      })
+
+      const receiptPromise = binding.envelope.settle({
+        responseMessage: RESPONSE_MESSAGE,
+        isAborted: false,
+        finishReason: "stop",
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(wireCalls(wire, "markGenerationRunCompleted")).toHaveLength(1)
+      await vi.runAllTimersAsync()
+
+      await expect(receiptPromise).resolves.toEqual({
+        status: "degraded",
+        runId: "run1",
+        reason: "completion write failed after retries",
+      })
+      expect(wireCalls(wire, "markGenerationRunCompleted")).toHaveLength(3)
+      const terminalWarnings = warn.mock.calls
+        .map(([message]) => JSON.parse(String(message)))
+        .filter(
+          (message) => message._tag === "durable_completion_write_failed"
+        )
+      expect(terminalWarnings).toEqual([
+        expect.objectContaining({
+          requestId: "req-1",
+          chatId: "convexchatid000000000000",
+          runId: "run1",
+          op: "markGenerationRunCompleted",
+          attempt: 1,
+          error:
+            "Timed out writing terminal operation markGenerationRunCompleted after 10000ms",
+        }),
+        expect.objectContaining({ attempt: 2 }),
+        expect.objectContaining({ attempt: 3 }),
+      ])
+    } finally {
+      warn.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it("resolves a degraded receipt after bounded completion retries, capturing loudly", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          markGenerationRunCompleted: () => {
+            throw new Error("convex unavailable")
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+      binding.stream.captureFinish({
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        finishReason: "stop",
+        toolCounts: { totalToolCalls: 0, failedToolCalls: 0 },
+      })
+
+      const receipt = await binding.envelope.settle({
+        responseMessage: RESPONSE_MESSAGE,
+        isAborted: false,
+        finishReason: "stop",
+      })
+
+      // settleRetryDelaysMs [0, 0] → three attempts, then degradation.
+      expect(wireCalls(wire, "markGenerationRunCompleted")).toHaveLength(3)
+      expect(receipt).toEqual({
+        status: "degraded",
+        runId: "run1",
+        reason: "completion write failed after retries",
+      })
+      const degradedLine = warn.mock.calls
+        .map(([message]) => String(message))
+        .find((message) => message.includes("durable_settlement_degraded"))
+      expect(degradedLine).toBeDefined()
+      expect(Sentry.captureMessage).toHaveBeenCalledWith(
+        "durable_settlement_degraded",
+        expect.objectContaining({ level: "error" })
+      )
+      // The final full-parts snapshot still landed before the failed terminal
+      // write — the answer content survives on the message doc.
+      expect(wireCalls(wire, "updateAssistantSnapshot")).toHaveLength(1)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("marks aborted without rejecting even when the abort write keeps failing", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          markGenerationRunAborted: () => {
+            throw new Error("convex unavailable")
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+
+      const receipt = await binding.envelope.settle({
+        responseMessage: RESPONSE_MESSAGE,
+        isAborted: true,
+        finishReason: "stop",
+      })
+      expect(receipt).toEqual({
+        status: "degraded",
+        runId: "run1",
+        reason: "abort write failed",
+      })
+
+      const aborted = wireCalls(wire, "markGenerationRunAborted")[0]
+      expect(aborted.args).toMatchObject({
+        runId: "run1",
+        messageId: "msg1",
+        reason: "ui message stream aborted",
+      })
+      expect(wireCalls(wire, "markGenerationRunCompleted")).toHaveLength(0)
+      const warnLine = warn.mock.calls
+        .map(([message]) => String(message))
+        .find((message) => message.includes("durable_run_abort_write_failed"))
+      expect(warnLine).toBeDefined()
+      // A degraded abort is as loud as a degraded completion.
+      expect(Sentry.captureMessage).toHaveBeenCalledWith(
+        "durable_settlement_degraded",
+        expect.objectContaining({ level: "error" })
+      )
+    } finally {
+      warn.mockRestore()
+    }
+  })
+})
+
+describe("durable turn runtime — prepare() error mapping and grant minting", () => {
   it("rejects regeneration that carries pending approval responses (400, no network)", async () => {
     const fetchMutation = makeRecordingFetchMutation()
     const input = makeInput({
@@ -460,30 +696,27 @@ describe("durable turn runtime — prepare() error mapping", () => {
         },
       ] as unknown as UIMessage[],
     }) as DurableTurnInput & { convexToken: string }
-    const turn = makeConvexTurn(input, fetchMutation)
+    const turn = makeConvexTurn(input, fetchMutation, makeRecordingWire())
 
     await expect(turn.prepare({ provider: "anthropic" })).rejects.toMatchObject({
       statusCode: 400,
       code: "INVALID_REQUEST",
     })
-    expect(
-      findCalls(fetchMutation, api.chatRuntime.prepareGeneration)
-    ).toHaveLength(0)
+    expect(fetchMutation).not.toHaveBeenCalled()
   })
 
   it("maps a Convex argument-validation rejection to 400 after warning", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
     try {
       const fetchMutation = makeRecordingFetchMutation({
-        responders: {
-          [nameOf(api.chatRuntime.prepareGeneration)]: () => {
-            throw new Error("ArgumentValidationError: bad id")
-          },
+        prepareResponder: () => {
+          throw new Error("ArgumentValidationError: bad id")
         },
       })
       const turn = makeConvexTurn(
         makeInput() as DurableTurnInput & { convexToken: string },
-        fetchMutation
+        fetchMutation,
+        makeRecordingWire()
       )
 
       await expect(
@@ -503,15 +736,14 @@ describe("durable turn runtime — prepare() error mapping", () => {
   it("passes a concurrency-guard rejection through untouched (no 400 remap)", async () => {
     const guardError = new Error("expectedVisibleMessageCount mismatch")
     const fetchMutation = makeRecordingFetchMutation({
-      responders: {
-        [nameOf(api.chatRuntime.prepareGeneration)]: () => {
-          throw guardError
-        },
+      prepareResponder: () => {
+        throw guardError
       },
     })
     const turn = makeConvexTurn(
       makeInput() as DurableTurnInput & { convexToken: string },
-      fetchMutation
+      fetchMutation,
+      makeRecordingWire()
     )
 
     const thrown = await turn.prepare({ provider: "anthropic" }).then(
@@ -522,7 +754,7 @@ describe("durable turn runtime — prepare() error mapping", () => {
     expect((thrown as { statusCode?: number }).statusCode).toBeUndefined()
   })
 
-  it("forwards the selected-path-token + edit guard args verbatim (count-drift edge)", async () => {
+  it("forwards the selected-path-token + edit guard args verbatim and mints the grant digest", async () => {
     const fetchMutation = makeRecordingFetchMutation()
     const edit = {
       editedMessageId: "m9",
@@ -541,21 +773,28 @@ describe("durable turn runtime — prepare() error mapping", () => {
         tailMessageId: "tail-xyz",
         edit,
       }) as DurableTurnInput & { convexToken: string },
-      fetchMutation
+      fetchMutation,
+      makeRecordingWire()
     )
 
     await turn.prepare({ provider: "anthropic" })
 
-    const prepareArgs = findCalls(
-      fetchMutation,
-      api.chatRuntime.prepareGeneration
-    )[0][1] as Record<string, unknown>
+    const prepareCall = fetchMutation.mock.calls.find((call) =>
+      sameRef(call[0], api.chatRuntime.prepareGeneration)
+    )
+    const prepareArgs = prepareCall?.[1] as Record<string, unknown>
     expect(prepareArgs.expectedVisibleMessageCount).toBe(42)
     expect(prepareArgs.tailMessageId).toBe("tail-xyz")
     expect(prepareArgs.edit).toBe(edit)
     expect(prepareArgs.provider).toBe("anthropic")
     // An edit turn never re-sends the latest client user message.
     expect(prepareArgs.latestUserMessage).toBeUndefined()
+    // The execution grant digest rides the admission call (ADR-0011): a
+    // 64-hex SHA-256 — never the raw secret (which is 64 hex of entropy too,
+    // but the digest is deterministic given the secret; assert shape only).
+    expect(prepareArgs.grantDigest).toMatch(/^[0-9a-f]{64}$/)
+    // The user token authorizes the admission call and nothing after it.
+    expect(prepareCall?.[2]).toEqual({ token: "tok" })
   })
 })
 
@@ -575,31 +814,32 @@ describe("durable turn runtime — guest inertness", () => {
     expect(canonical).toHaveLength(1)
     expect(canonical[0]?.id).toBe("u1")
 
-    expect(guest.streamTextExtras(makeToolFacts())).toEqual({})
+    const binding = guest.bind(makeToolFacts())
+    expect(binding.streamTextExtras).toEqual({})
 
     const validated = [
       { id: "v1", role: "user", parts: [{ type: "text", text: "hi" }] },
     ] as UIMessage[]
-    const identity = guest.uiStreamIdentity(validated)
+    const identity = binding.envelope.identity(validated)
     expect(identity.originalMessages).toBe(validated)
     expect(identity.generateMessageId).toBeUndefined()
 
-    // Every write method is an inert no-op.
-    guest.onChunk({ type: "text-delta", text: "A" } as never)
-    guest.recordStep({
+    // Every write method is an inert no-op; settle resolves the guest receipt.
+    binding.stream.onChunk({ type: "text-delta", text: "A" } as never)
+    binding.stream.recordStep({
       stepNumber: 1,
       toolCalls: [{ toolCallId: "c", toolName: "t", input: {} }],
       toolResults: [],
     })
-    guest.noteStreamError("boom")
-    guest.captureFinish({
+    binding.stream.noteStreamError("boom")
+    binding.stream.captureFinish({
       usage: {},
       finishReason: "stop",
       toolCounts: { totalToolCalls: 0, failedToolCalls: 0 },
     })
-    await expect(guest.onStreamAbort("stream aborted")).resolves.toBeUndefined()
+    await expect(binding.stream.onAbort("stream aborted")).resolves.toBeUndefined()
     await expect(
-      guest.finalize({
+      binding.envelope.settle({
         responseMessage: {
           id: "v1",
           role: "assistant",
@@ -609,7 +849,7 @@ describe("durable turn runtime — guest inertness", () => {
         isAborted: false,
         finishReason: "stop",
       })
-    ).resolves.toBeUndefined()
+    ).resolves.toEqual({ status: "guest" })
     await expect(guest.fail("nope")).resolves.toBeUndefined()
 
     expect(moduleFetchMutation).not.toHaveBeenCalled()
@@ -618,51 +858,41 @@ describe("durable turn runtime — guest inertness", () => {
 
 describe("durable turn runtime — fail() at each phase", () => {
   it("is a no-op before prepare() (no run exists)", async () => {
+    const wire = makeRecordingWire()
     const fetchMutation = makeRecordingFetchMutation()
     const turn = makeConvexTurn(
       makeInput() as DurableTurnInput & { convexToken: string },
-      fetchMutation
+      fetchMutation,
+      wire
     )
     await expect(turn.fail("early")).resolves.toBeUndefined()
     expect(fetchMutation).not.toHaveBeenCalled()
+    expect(wire.calls).toHaveLength(0)
   })
 
-  it("marks the run failed after prepare(), with the assistant message id", async () => {
-    const fetchMutation = makeRecordingFetchMutation()
-    const turn = makeConvexTurn(
-      makeInput() as DurableTurnInput & { convexToken: string },
-      fetchMutation
-    )
-    await turn.prepare({ provider: "anthropic" })
+  it("marks the run failed over the worker wire after prepare(), with the assistant message id", async () => {
+    const { turn, wire } = await makePreparedTurn()
     await turn.fail("provider exploded")
 
-    const failed = findCalls(
-      fetchMutation,
-      api.chatRuntime.markGenerationRunFailed
-    )[0]
-    expect(failed[1]).toMatchObject({
+    const failed = wireCalls(wire, "markGenerationRunFailed")[0]
+    expect(failed.args).toMatchObject({
       runId: "run1",
       messageId: "msg1",
       error: "provider exploded",
     })
-    expect(failed[2]).toEqual({ token: "tok" })
   })
 
   it("warns and resolves when the failure write itself rejects", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
     try {
-      const fetchMutation = makeRecordingFetchMutation({
+      const wire = makeRecordingWire({
         responders: {
-          [nameOf(api.chatRuntime.markGenerationRunFailed)]: () => {
+          markGenerationRunFailed: () => {
             throw new Error("convex unavailable")
           },
         },
       })
-      const turn = makeConvexTurn(
-        makeInput() as DurableTurnInput & { convexToken: string },
-        fetchMutation
-      )
-      await turn.prepare({ provider: "anthropic" })
+      const { turn } = await makePreparedTurn({ wire })
 
       await expect(turn.fail("boom")).resolves.toBeUndefined()
       const warnLine = warn.mock.calls

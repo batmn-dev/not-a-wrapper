@@ -243,10 +243,15 @@ describe("ChatsProvider guest local chats", () => {
     expect(updated.pinned_at).toBeTruthy()
     expect(convexMocks.mutationFn).not.toHaveBeenCalled()
 
+    let deleted: boolean | undefined
     await act(async () => {
-      await capture.current?.deleteChat("local-existing", "local-existing")
+      deleted = await capture.current?.deleteChat(
+        "local-existing",
+        "local-existing"
+      )
     })
 
+    expect(deleted).toBe(true)
     expect(persistMocks.tables.chats.has("local-existing")).toBe(false)
     expect(
       (
@@ -256,6 +261,35 @@ describe("ChatsProvider guest local chats", () => {
       ).messages
     ).toEqual([])
     expect(convexMocks.mutationFn).not.toHaveBeenCalled()
+  })
+
+  it("reports failed durable deletion to callers", async () => {
+    convexMocks.isAuthenticated = true
+    convexMocks.queryValue = []
+    convexMocks.mutationFn.mockRejectedValue(new Error("delete failed"))
+    const capture: { current: ReturnType<typeof useChats> | null } = {
+      current: null,
+    }
+
+    renderProvider(capture, "user-1")
+    await flushPromises()
+
+    let deleted: boolean | undefined
+    await act(async () => {
+      deleted = await capture.current?.deleteChat(
+        "chat-server",
+        "chat-server"
+      )
+    })
+
+    expect(deleted).toBe(false)
+    expect(convexMocks.mutationFn).toHaveBeenCalledWith({
+      chatId: "chat-server",
+    })
+    expect(convexMocks.toast).toHaveBeenCalledWith({
+      title: "Failed to delete chat",
+      status: "error",
+    })
   })
 
   it("creates authenticated chats through Convex from a named input", async () => {

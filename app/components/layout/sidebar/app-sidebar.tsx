@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Icon } from "@/components/ui/icon"
+import { Icon, type IconProps } from "@/components/ui/icon"
 import { Kbd, KbdGroup } from "@/components/ui/kbd"
 import {
   Popover,
@@ -40,7 +40,6 @@ import {
 } from "@/components/ui/tooltip"
 import { api } from "@/convex/_generated/api"
 import { useChats } from "@/lib/chat-store/chats/provider"
-import { useChat } from "@/lib/chat-store/chats/use-chat"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
@@ -71,6 +70,7 @@ import { UserMenu } from "../user-menu"
 import { useChatOrganization } from "./chat-organization"
 import { deriveSidebarComposition } from "./sidebar-composition"
 import { SidebarList } from "./sidebar-list"
+import { SidebarLeadingIcon } from "./sidebar-leading-icon"
 import { SidebarMenuItem } from "./sidebar-menu-item"
 import { SidebarProject } from "./sidebar-project"
 import { SidebarProjectItem } from "./sidebar-project-item"
@@ -158,10 +158,10 @@ function DesktopAppSidebar() {
         </div>
 
         {/* Action buttons */}
-        <div className="mt-(--sidebar-section-first-margin-top) flex w-full flex-col items-start gap-0 px-1.5">
+        <div className="mt-(--sidebar-section-first-margin-top) flex w-full flex-col items-start gap-0 px-(--sidebar-row-outer-inset)">
           <CollapsedMenuItem
-            icon={<Icon icon={RiAddCircleLine} slotSize={20} />}
-            activeIcon={<Icon icon={RiAddCircleFill} slotSize={20} />}
+            icon={RiAddCircleLine}
+            activeIcon={RiAddCircleFill}
             label="New chat"
             href="/"
             shortcut={
@@ -178,7 +178,7 @@ function DesktopAppSidebar() {
               hasSidebar={false}
               trigger={
                 <CollapsedMenuItem
-                  icon={<Icon icon={RiSearchLine} slotSize={20} />}
+                  icon={RiSearchLine}
                   label="Search"
                   shortcut={
                     <>
@@ -270,14 +270,11 @@ function MobileAppSidebarDrawer() {
 
 function useAppSidebarData() {
   const { isHistoryOpen } = useHistorySearch()
-  const { chats, projectPreviews, isLoading, loadMore, canLoadMore } =
-    useChats()
+  const { chats, isLoading, loadMore, canLoadMore } = useChats()
   const { user } = useUser()
   const params = useParams<{ chatId: string }>()
   const pathname = usePathname()
   const currentChatId = params.chatId
-  const { chat: currentChat, isLoading: isCurrentChatLoading } =
-    useChat(currentChatId)
   const isLoggedIn = !!user
   const isNewChatActive = pathname === "/"
   const [chatOrganization, setChatOrganization, isOrganizationHydrated] =
@@ -297,10 +294,9 @@ function useAppSidebarData() {
       deriveSidebarComposition({
         chats,
         projects,
-        projectPreviews,
         organization: chatOrganization,
       }),
-    [chatOrganization, chats, projectPreviews, projects]
+    [chatOrganization, chats, projects]
   )
 
   return {
@@ -311,11 +307,9 @@ function useAppSidebarData() {
     isLoading:
       !isOrganizationHydrated ||
       isLoading ||
-      (Boolean(currentChatId) && isCurrentChatLoading) ||
       (isLoggedIn && projectDocs === undefined),
     isLoggedIn,
     isNewChatActive,
-    activeProjectId: currentChat?.project_id ?? undefined,
     isProjectPinPending: isPinPending,
     setChatOrganization,
     toggleProjectPinned: togglePinned,
@@ -410,8 +404,8 @@ function SidebarExpandedNav({
         >
           <div className="flex w-full flex-col items-start gap-0">
             <SidebarMenuItem
-              icon={<Icon icon={RiAddCircleLine} slotSize={20} />}
-              activeIcon={<Icon icon={RiAddCircleFill} slotSize={20} />}
+              icon={RiAddCircleLine}
+              activeIcon={RiAddCircleFill}
               label="New chat"
               href="/"
               testId="new-chat-button"
@@ -430,7 +424,7 @@ function SidebarExpandedNav({
                 hasSidebar={false}
                 trigger={
                   <SidebarMenuItem
-                    icon={<Icon icon={RiSearchLine} slotSize={20} />}
+                    icon={RiSearchLine}
                     label="Search"
                     isActive={data.isHistoryOpen}
                     trailing={
@@ -466,26 +460,24 @@ function SidebarExpandedNav({
 
         {/* === SCROLLABLE CONTENT === */}
         <div className="px-0">
-          {/* Project and chat lists */}
+          {/* Project and chat lists. The one-list Projects nav row extends the
+              action cluster (flush, no margin); all section spacing below is
+              owned by the section-stack tokens on the shared stack container,
+              so both organizer modes share one rhythm. */}
           {data.chatOrganization === "one-list" ? (
-            <div className="mb-5">
-              <SidebarProject
-                isAuthenticated={data.isLoggedIn}
-                organization={data.chatOrganization}
-                projects={[]}
-                projectPreviews={data.composition.projectPreviews}
-                currentChatId={data.currentChatId}
-                activeProjectId={data.activeProjectId}
-                isPinPending={data.isProjectPinPending}
-                onTogglePinned={data.toggleProjectPinned}
-                onOrganizationChange={data.setChatOrganization}
-              />
-            </div>
+            <SidebarProject
+              isAuthenticated={data.isLoggedIn}
+              organization={data.chatOrganization}
+              projects={[]}
+              isPinPending={data.isProjectPinPending}
+              onTogglePinned={data.toggleProjectPinned}
+              onOrganizationChange={data.setChatOrganization}
+            />
           ) : null}
           {data.isLoading ? (
             <div className="h-full" />
           ) : data.isLoggedIn ? (
-            <div className="space-y-4">
+            <div className="mt-(--sidebar-section-stack-margin-top) flex flex-col gap-(--sidebar-section-stack-gap)">
               {(data.composition.pinnedChats.length > 0 ||
                 data.composition.pinnedProjects.length > 0) && (
                 <SidebarList
@@ -501,11 +493,6 @@ function SidebarExpandedNav({
                       <SidebarProjectItem
                         key={project._id}
                         project={project}
-                        preview={data.composition.projectPreviews.get(
-                          project._id
-                        )}
-                        currentChatId={data.currentChatId}
-                        activeProjectId={data.activeProjectId}
                         isPinPending={data.isProjectPinPending(project._id)}
                         onTogglePinned={() => data.toggleProjectPinned(project)}
                       />
@@ -520,9 +507,6 @@ function SidebarExpandedNav({
                   isAuthenticated={data.isLoggedIn}
                   organization={data.chatOrganization}
                   projects={data.composition.sectionProjects}
-                  projectPreviews={data.composition.projectPreviews}
-                  currentChatId={data.currentChatId}
-                  activeProjectId={data.activeProjectId}
                   isPinPending={data.isProjectPinPending}
                   onTogglePinned={data.toggleProjectPinned}
                   onOrganizationChange={data.setChatOrganization}
@@ -560,13 +544,13 @@ function SidebarExpandedNav({
             <SidebarMenuItem
               aria-disabled="true"
               disabled
-              icon={<Icon icon={RiSparklingLine} slotSize={20} />}
+              icon={RiSparklingLine}
               label="See plans and pricing"
             />
             <SidebarMenuItem
               aria-disabled="true"
               disabled
-              icon={<Icon icon={RiSettings3Line} slotSize={20} />}
+              icon={RiSettings3Line}
               label="Settings"
             />
             <SignedOutHelpPopover />
@@ -674,21 +658,25 @@ function CollapsedMenuItem({
   shortcut,
   isActive,
 }: {
-  icon: React.ReactNode
-  activeIcon?: React.ReactNode
+  icon: IconProps["icon"]
+  activeIcon?: IconProps["icon"]
   label: string
   href?: string
   onClick?: () => void
   shortcut?: React.ReactNode
   isActive?: boolean
 }) {
-  const resolvedIcon = isActive && activeIcon ? activeIcon : icon
   const content = (
-    <div className="flex items-center justify-center">{resolvedIcon}</div>
+    <SidebarLeadingIcon
+      icon={icon}
+      activeIcon={activeIcon}
+      isActive={isActive}
+      labelSpacing={false}
+    />
   )
 
   const className = cn(
-    "menu-item-hoverable flex h-9 w-10 items-center justify-center rounded-lg",
+    "menu-item-hoverable flex h-9 w-(--sidebar-collapsed-item-width) items-center justify-center rounded-lg",
     "cursor-pointer",
     "hover:bg-sidebar-row active:bg-sidebar-row",
     isActive && "text-foreground",
@@ -739,7 +727,7 @@ function SignedOutSidebarSearchPopover() {
       <PopoverTrigger
         render={
           <SidebarMenuItem
-            icon={<Icon icon={RiSearchLine} slotSize={20} />}
+            icon={RiSearchLine}
             label="Search"
             isActive={open}
             trailing={
@@ -764,7 +752,7 @@ function SignedOutCollapsedSearchPopover({
   const [open, setOpen] = React.useState(false)
 
   const className = cn(
-    "menu-item-hoverable flex h-9 w-10 items-center justify-center rounded-lg",
+    "menu-item-hoverable flex h-9 w-(--sidebar-collapsed-item-width) items-center justify-center rounded-lg",
     "cursor-pointer",
     "hover:bg-sidebar-row active:bg-sidebar-row",
     open && "text-foreground",
@@ -795,9 +783,7 @@ function SignedOutCollapsedSearchPopover({
             />
           }
         >
-          <div className="flex items-center justify-center">
-            <Icon icon={RiSearchLine} slotSize={20} />
-          </div>
+          <SidebarLeadingIcon icon={RiSearchLine} labelSpacing={false} />
         </TooltipTrigger>
         <TooltipContent side="right">
           <TooltipShortcut label="Search">
@@ -969,7 +955,7 @@ function SignedOutHelpPopover() {
           <button
             type="button"
             className={cn(
-              "menu-item-hoverable group/help text-foreground hover:bg-sidebar-row hover:text-foreground active:bg-sidebar-row focus-visible:ring-focus-ring relative mx-1.5 inline-flex h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer items-center gap-(--sidebar-item-gap) rounded-lg bg-transparent px-2.5 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
+              "menu-item-hoverable group/help text-foreground hover:bg-sidebar-row hover:text-foreground active:bg-sidebar-row focus-visible:ring-focus-ring relative mx-1.5 inline-flex h-9 w-[calc(100%-var(--spacing)*3)] cursor-pointer items-center rounded-lg bg-transparent px-2.5 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
               open && "bg-sidebar-row text-foreground"
             )}
             data-sidebar-item="true"
@@ -977,9 +963,7 @@ function SignedOutHelpPopover() {
           />
         }
       >
-        <div className="flex shrink-0 items-center justify-center">
-          <Icon icon={RiQuestionLine} slotSize={20} />
-        </div>
+        <SidebarLeadingIcon icon={RiQuestionLine} />
         <div className="flex min-w-0 grow items-center gap-(--sidebar-item-gap)">
           <span className="truncate">Help</span>
         </div>

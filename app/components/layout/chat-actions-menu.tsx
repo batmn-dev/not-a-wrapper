@@ -43,17 +43,21 @@ export function ChatActionsMenu({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isShareDrawerOpen, setIsShareDrawerOpen] = useState(false)
   const [isShareLoading, setIsShareLoading] = useState(false)
-  const { deleteMessages } = useMessages()
+  const { resetMessages } = useMessages()
   const { deleteChat, togglePinned, updateTitle } = useChats()
   const { chatId } = useChatSession()
   const router = useRouter()
   const makePublicMutation = useMutation(api.chats.makePublic)
 
   const handleConfirmDelete = async () => {
-    if (chat.id === chatId) {
-      await deleteMessages()
+    const deleted = await deleteChat(
+      chat.id,
+      chatId || undefined,
+      () => router.push("/")
+    )
+    if (deleted && chat.id === chatId) {
+      await resetMessages()
     }
-    await deleteChat(chat.id, chatId || undefined, () => router.push("/"))
   }
 
   const handleShare = async () => {
@@ -99,16 +103,16 @@ export function ChatActionsMenu({
         ]
       : []),
     {
-      key: "pin",
-      icon: chat.pinned ? <PinOff size={20} /> : <Pin size={20} />,
-      label: chat.pinned ? "Unpin" : "Pin",
-      onSelect: () => togglePinned(chat.id, !chat.pinned),
-    },
-    {
       key: "rename",
       icon: <Icon icon={RiEditLine} slotSize={20} />,
       label: "Rename",
       onSelect: handleRename,
+    },
+    {
+      key: "pin",
+      icon: chat.pinned ? <PinOff size={20} /> : <Pin size={20} />,
+      label: chat.pinned ? "Unpin" : "Pin",
+      onSelect: () => togglePinned(chat.id, !chat.pinned),
     },
     {
       key: "delete",

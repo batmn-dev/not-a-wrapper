@@ -23,11 +23,20 @@ import type {
 } from "ai"
 import { getStaticToolName, isStaticToolUIPart } from "ai"
 import { fetchMutation as defaultFetchMutation } from "convex/nextjs"
+import { createHash, randomBytes } from "node:crypto"
+import type { DurableWorkerPayloads } from "@/convex/chatRuntimeWorker"
 import { isConvexArgumentValidationError } from "./utils"
 
-// Owns durable preparation, snapshots, tool invocations, approvals, terminal
-// writes, and the typed handoff between model-stream and UI-stream completion.
-// Guest turns use an inert adapter (ADR-0009).
+// Owns durable preparation, snapshots, tool invocations, approvals, and turn
+// settlement — the typed receipt that keeps answer delivery independent from
+// terminal persistence (ADR-0011, superseding parts of ADR-0009). Guest turns
+// use an inert adapter.
+//
+// Authority model: the user's Convex token authorizes exactly one call —
+// `prepareGeneration` (admission). Every write after prepare travels over the
+// Durable worker wire, authenticated by a run-scoped execution grant whose
+// raw secret exists only in this process's memory. A mid-run user-token
+// expiry can no longer reject a worker write (the 2026-07-14 incident class).
 
 export type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 
@@ -53,13 +62,83 @@ export type DurableTurnInput = {
   tailMessageId?: string
 }
 
+// ---------------------------------------------------------------------------
+// Durable worker wire — the post-prepare write channel (ADR-0011).
+// ---------------------------------------------------------------------------
+
 /**
- * Injected Convex wire — the established `fetchMutation` seam, faked in tests.
- * Deliberately not a `DurableStore` port (ADR-0009 §Ports): a 7-method port
- * would re-declare what Convex codegen already declares.
+ * The op list and per-op payloads have ONE source of truth: the shared
+ * validator shapes in `convex/chatRuntime.ts` (`generationRunWriteArgs`),
+ * projected to types by `convex/chatRuntimeWorker.ts`. Adding or renaming an
+ * op or field there is a compile error at every call site here.
+ */
+export type DurableWorkerOp = keyof DurableWorkerPayloads
+
+export type DurableWorkerCall = {
+  [Op in DurableWorkerOp]: {
+    op: Op
+    args: DurableWorkerPayloads[Op] & { runId: Id<"generationRuns"> }
+  }
+}[DurableWorkerOp]
+
+/**
+ * The worker-write transport: one grant-authorized call to the Convex
+ * /chat-turn/worker HTTP endpoint. This — not `fetchMutation` — is the test
+ * seam for every post-prepare durable write; tests inject a recording fake.
+ */
+export type DurableWorkerWire = (call: DurableWorkerCall) => Promise<unknown>
+
+function resolveConvexSiteUrl(): string {
+  const explicit = process.env.CONVEX_SITE_URL
+  if (explicit) return explicit
+  const generated = process.env.NEXT_PUBLIC_CONVEX_SITE_URL
+  if (generated) return generated
+  const url = process.env.NEXT_PUBLIC_CONVEX_URL
+  if (!url) {
+    throw new Error("NEXT_PUBLIC_CONVEX_URL is not set")
+  }
+  // Convex HTTP actions live on the deployment's .convex.site origin.
+  return url.replace(/\.convex\.cloud$/, ".convex.site")
+}
+
+export function createHttpDurableWorkerWire(options: {
+  secret: string
+  fetchImpl?: typeof fetch
+}): DurableWorkerWire {
+  const fetchImpl = options.fetchImpl ?? fetch
+  return async ({ op, args }) => {
+    const response = await fetchImpl(
+      `${resolveConvexSiteUrl()}/chat-turn/worker`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${options.secret}`,
+        },
+        body: JSON.stringify({ op, args }),
+      }
+    )
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "")
+      throw new Error(
+        `Durable worker write ${op} failed: ${response.status} ${detail}`.trim()
+      )
+    }
+    return response.json().catch(() => undefined)
+  }
+}
+
+/**
+ * Injected dependencies. `fetchMutation` is the established Convex seam — after
+ * ADR-0011 it carries exactly one call, the user-token `prepareGeneration`
+ * admission. `workerWire` is the grant-authorized transport for every write
+ * after prepare (defaults to the HTTP adapter over the module-minted secret).
+ * `settleRetryDelaysMs` bounds terminal-write retries; tests pass `[0]`s.
  */
 export type DurableTurnDeps = {
   fetchMutation: typeof defaultFetchMutation
+  workerWire?: DurableWorkerWire
+  settleRetryDelaysMs?: number[]
 }
 
 /**
@@ -80,7 +159,7 @@ export type ToolFacts = {
 
 /**
  * The spreadable streamText extras: the call-site approval gate plus the
- * approval-persistence transform (its backpressure array now module-private).
+ * approval-persistence transform (its backpressure array module-private).
  * Guest returns `{}`.
  */
 export type DurableStreamTextExtras = {
@@ -113,6 +192,66 @@ export type DurableStepRecord = {
   }>
 }
 
+/**
+ * The settlement receipt (ADR-0011). Settlement NEVER rejects: a generated
+ * answer's delivery is independent of terminal persistence. `confirmed` means
+ * the terminal transition landed; `degraded` means it did not after bounded
+ * retries — the answer content still survives via the final pre-terminal
+ * snapshot, and the run remains live for the supersede sweep to close
+ * honestly. `guest` marks the inert adapter.
+ */
+export type DurableSettlementReceipt =
+  | { status: "confirmed"; runId: string; outcome: "completed" | "aborted" }
+  | { status: "degraded"; runId: string; reason: string }
+  | { status: "guest" }
+
+/**
+ * The AI SDK lifecycle binding (ADR-0011, Design 2): both callback positions
+ * stay visible in the parent's `toResponse()` closure (ADR-0006), grouped by
+ * seam — `stream.*` for streamText callbacks, `envelope.*` for the UI-message
+ * envelope. Settlement ordering, retries, and worker authority live behind it.
+ */
+export type DurableStreamBinding = {
+  /** Spread into the streamText options object. */
+  streamTextExtras: DurableStreamTextExtras
+  /** The streamText-callback half. void = fire-and-forget BY CONTRACT. */
+  stream: {
+    onChunk(chunk: TextStreamPart<ToolSet>): void
+    recordStep(step: DurableStepRecord): void
+    noteStreamError(errorMessage: string): void
+    /** Flush the snapshot, then mark the run aborted. */
+    onAbort(reason: string): Promise<void>
+    /** Stream-onEnd half of the finish handoff (sync capture). */
+    captureFinish(facts: StreamFinishFacts): void
+  }
+  /** The UI-message-envelope half. */
+  envelope: {
+    /**
+     * Envelope identity: durable history + assistant-message-id factory, or
+     * guest passthrough of the POST-validation array (why this is a method
+     * taking `validatedMessages`, not a construction-time getter).
+     */
+    identity(validatedMessages: MessageAISDK[]): {
+      originalMessages: UIMessage[]
+      generateMessageId?: () => string
+    }
+    /**
+     * Envelope-onEnd settlement. Internal ordering, load-bearing:
+     * allSettled(approvalWritePromises) → flush → final full-parts snapshot →
+     * markAborted | markCompleted (bounded retry). LOUD-FALLBACK CONTRACT: a
+     * completed path without a prior `captureFinish()` emits
+     * `durable_finish_handoff_missed` (warn + Sentry) BEFORE falling back to
+     * `countToolParts`. NEVER rejects — persistence failure resolves a
+     * `degraded` receipt instead of failing the response pipe (ADR-0011).
+     */
+    settle(outcome: {
+      responseMessage: UIMessage
+      isAborted: boolean
+      finishReason?: string
+    }): Promise<DurableSettlementReceipt>
+  }
+}
+
 export type DurableTurnRuntime = {
   /** Observability dimension only — callers MUST NOT branch on it. */
   readonly mode: "durable" | "guest"
@@ -122,54 +261,22 @@ export type DurableTurnRuntime = {
    * regeneration×approvals 400, latest-user-message selection, the Convex
    * argument-validation → 400 mapping after the
    * `durable_prepare_argument_rejected` warn; concurrency-guard errors pass
-   * through unmapped). Returns the canonical model history — durable: sanitized
-   * server history; guest: sanitized input. One-shot.
+   * through unmapped). Mints the execution grant: the digest rides the
+   * admission call, the secret stays in process memory. Returns the canonical
+   * model history — durable: sanitized server history; guest: sanitized
+   * input. One-shot.
    */
   prepare(args: { provider: string }): Promise<MessageAISDK[]>
 
   /**
-   * Binds `ToolFacts` for the stream lifetime; returns the spreadable extras
-   * (toolApproval gate + approval-persistence transform). Guest: `{}`. One-shot,
-   * before the stream starts; `recordStep` before binding throws.
+   * Binds `ToolFacts` for the stream lifetime and returns the AI SDK
+   * lifecycle binding. One-shot, after `prepare()`, before the stream starts.
    */
-  streamTextExtras(toolFacts: ToolFacts): DurableStreamTextExtras
-
-  // Write timeline — void = fire-and-forget BY CONTRACT, Promise = await.
-  onChunk(chunk: TextStreamPart<ToolSet>): void
-  recordStep(step: DurableStepRecord): void
-  noteStreamError(errorMessage: string): void
-  onStreamAbort(reason: string): Promise<void>
-
-  /** Stream-onEnd half of the finish handoff (sync capture). */
-  captureFinish(facts: StreamFinishFacts): void
-
-  /**
-   * Envelope identity: durable history + assistant-message-id factory, or guest
-   * passthrough of the POST-validation array (why this is a method taking
-   * `validatedMessages`, not a construction-time getter).
-   */
-  uiStreamIdentity(validatedMessages: MessageAISDK[]): {
-    originalMessages: UIMessage[]
-    generateMessageId?: () => string
-  }
-
-  /**
-   * Envelope-onEnd terminal write. Internal ordering, load-bearing:
-   * allSettled(approvalWritePromises) → flush → markAborted | markCompleted.
-   * LOUD-FALLBACK CONTRACT: a completed path without a prior `captureFinish()`
-   * emits `durable_finish_handoff_missed` (warn + Sentry) BEFORE falling back to
-   * `countToolParts` — the write still lands; the bug no longer hides. May reject
-   * on completion-write failure (today's envelope semantics).
-   */
-  finalize(outcome: {
-    responseMessage: UIMessage
-    isAborted: boolean
-    finishReason?: string
-  }): Promise<void>
+  bind(toolFacts: ToolFacts): DurableStreamBinding
 
   /**
    * Legal at ANY phase: pre-prepare (no run → no-op), mid-stream, or after
-   * `finalize()` (first-terminal-wins absorbs it). Never throws.
+   * settlement (first-terminal-wins absorbs it). Never throws.
    */
   fail(errorMessage: string): Promise<void>
 }
@@ -306,6 +413,11 @@ function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/** The structured ops-log line every durable warn shares. */
+function warnDurable(tag: string, fields: Record<string, unknown>): void {
+  console.warn(JSON.stringify({ _tag: tag, ...fields }))
+}
+
 function getRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object") return null
   return value as Record<string, unknown>
@@ -322,28 +434,36 @@ function getStringField(
     : undefined
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 // ---------------------------------------------------------------------------
-// Durable snapshot tracker — throttled assistant-snapshot writes.
+// Durable snapshot tracker — throttled assistant-snapshot writes plus the
+// final full-parts snapshot settlement takes before any terminal transition.
 // ---------------------------------------------------------------------------
 
 type SnapshotPart =
   { type: "text"; text: string } | { type: "reasoning"; text: string }
 
-const SNAPSHOT_WRITE_TIMEOUT_MS = 10_000
+const WORKER_WRITE_TIMEOUT_MS = 10_000
 
-class SnapshotWriteTimeoutError extends Error {
-  constructor(timeoutMs: number) {
-    super(`Timed out writing assistant snapshot after ${timeoutMs}ms`)
-    this.name = "SnapshotWriteTimeoutError"
+class WorkerWriteTimeoutError extends Error {
+  constructor(description: string, timeoutMs: number) {
+    super(`Timed out ${description} after ${timeoutMs}ms`)
+    this.name = "WorkerWriteTimeoutError"
   }
 }
 
-function withSnapshotWriteTimeout<T>(write: Promise<T>): Promise<T> {
+function withWorkerWriteTimeout<T>(
+  write: Promise<T>,
+  description: string
+): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | null = null
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeout = setTimeout(() => {
-      reject(new SnapshotWriteTimeoutError(SNAPSHOT_WRITE_TIMEOUT_MS))
-    }, SNAPSHOT_WRITE_TIMEOUT_MS)
+      reject(new WorkerWriteTimeoutError(description, WORKER_WRITE_TIMEOUT_MS))
+    }, WORKER_WRITE_TIMEOUT_MS)
   })
 
   return Promise.race([write, timeoutPromise]).finally(() => {
@@ -351,24 +471,25 @@ function withSnapshotWriteTimeout<T>(write: Promise<T>): Promise<T> {
   })
 }
 
+export type SnapshotPersistArgs = {
+  sequence: number
+  textSnapshot: string
+  partsSnapshot: unknown
+}
+
 type DurableSnapshotTrackerOptions = {
-  convexToken: string
-  runId: Id<"generationRuns">
-  messageId: Id<"messages">
-  order: number
   throttleMs?: number
   /**
-   * Injected snapshot persister — defaults to the module `fetchMutation` so the
-   * Durable turn runtime can thread its own injected `deps.fetchMutation`
-   * through, making snapshot writes mockable without module-level mocking.
+   * Injected snapshot persister — the runtime hands in a worker-wire-backed
+   * writer, so the tracker never sees a credential or a transport.
    */
-  fetchMutation?: typeof defaultFetchMutation
+  persist: (args: SnapshotPersistArgs) => Promise<unknown>
 }
 
 export function createDurableSnapshotTracker(
   options: DurableSnapshotTrackerOptions
 ) {
-  const persistSnapshot = options.fetchMutation ?? defaultFetchMutation
+  const persistSnapshot = options.persist
   let text = ""
   let reasoning = ""
   let sequence = 0
@@ -402,19 +523,13 @@ export function createDurableSnapshotTracker(
       lastWriteAt = now
       const versionAtWrite = contentVersion
       const currentSequence = ++sequence
-      writeInFlight = withSnapshotWriteTimeout(
-        persistSnapshot(
-          api.chatRuntime.updateAssistantSnapshot,
-          {
-            runId: options.runId,
-            messageId: options.messageId,
-            order: options.order,
-            sequence: currentSequence,
-            textSnapshot: text,
-            partsSnapshot: getParts(),
-          },
-          { token: options.convexToken }
-        )
+      writeInFlight = withWorkerWriteTimeout(
+        persistSnapshot({
+          sequence: currentSequence,
+          textSnapshot: text,
+          partsSnapshot: getParts(),
+        }),
+        "writing assistant snapshot"
       )
         .then((written) => {
           writtenVersion = Math.max(writtenVersion, versionAtWrite)
@@ -440,9 +555,36 @@ export function createDurableSnapshotTracker(
     }
   }
 
+  /**
+   * The content-survival write (ADR-0011): an unconditional snapshot carrying
+   * the response message's COMPLETE parts (tool parts included — the throttled
+   * writes carry only text/reasoning), sequenced after every throttled write.
+   * Settlement calls it BEFORE the terminal transition so a failed terminal
+   * write can no longer erase an answer: the snapshot mutation also lands
+   * content+parts on the assistant message doc. Rejections propagate to the
+   * caller — settlement warns (`durable_final_snapshot_write_failed`) and
+   * proceeds to the terminal write, whose receipt (not this snapshot) decides
+   * confirmed vs degraded; on completion that write carries the same
+   * content+parts itself.
+   */
+  const flushFinal = async (finalText: string, finalParts: unknown) => {
+    if (writeInFlight) await writeInFlight.catch(() => {})
+    const currentSequence = ++sequence
+    writtenVersion = contentVersion
+    await withWorkerWriteTimeout(
+      persistSnapshot({
+        sequence: currentSequence,
+        textSnapshot: finalText,
+        partsSnapshot: finalParts,
+      }),
+      "writing assistant snapshot"
+    )
+  }
+
   return {
     onChunk,
     flush: () => persist(true),
+    flushFinal,
     get textSnapshot() {
       return text
     },
@@ -475,13 +617,7 @@ export type ToolInvocationForPersistence = {
   approvalRequestId?: string
 }
 
-type RuntimeApprovalPersistenceRunState = {
-  runId: Id<"generationRuns">
-  assistantMessageId: Id<"messages">
-}
-
 type ToolApprovalRequestPersistenceArgs = {
-  runId: Id<"generationRuns">
   assistantMessageId: Id<"messages">
   toolCallId: string
   toolName: string
@@ -494,37 +630,28 @@ type ToolApprovalRequestPersistenceArgs = {
 
 type RuntimeApprovalPersistenceTransformOptions = {
   chatId: string
-  convexToken: string
-  durableRunState: RuntimeApprovalPersistenceRunState
+  assistantMessageId: Id<"messages">
   /**
    * The Tool runtime facts — `source` for the persisted source, `approvalFor`
-   * for the decision's `reason`/`riskClass` (which subsume the old
-   * `runtimeApprovalByToolName` map threading).
+   * for the decision's `reason`/`riskClass`.
    */
   toolFacts: ToolFacts
   approvalWritePromises: Array<Promise<unknown>>
   requestId: string
-  persistApprovalRequest?: (
+  /** Worker-wire-backed persister injected by the runtime. */
+  persistApprovalRequest: (
     args: ToolApprovalRequestPersistenceArgs
   ) => Promise<unknown>
 }
 
 export function createRuntimeApprovalPersistenceTransform({
   chatId,
-  convexToken,
-  durableRunState,
+  assistantMessageId,
   toolFacts,
   approvalWritePromises,
   requestId,
   persistApprovalRequest,
 }: RuntimeApprovalPersistenceTransformOptions): StreamTextTransform<ToolSet> {
-  const persist =
-    persistApprovalRequest ??
-    ((args: ToolApprovalRequestPersistenceArgs) =>
-      defaultFetchMutation(api.chatRuntime.createToolApprovalRequest, args, {
-        token: convexToken,
-      }))
-
   return () =>
     new TransformStream<TextStreamPart<ToolSet>, TextStreamPart<ToolSet>>({
       async transform(chunk, controller) {
@@ -541,9 +668,8 @@ export function createRuntimeApprovalPersistenceTransform({
           })()
 
           const approvalWrite = (async () =>
-            persist({
-              runId: durableRunState.runId,
-              assistantMessageId: durableRunState.assistantMessageId,
+            persistApprovalRequest({
+              assistantMessageId,
               toolCallId: chunk.toolCall.toolCallId,
               toolName,
               source,
@@ -558,16 +684,13 @@ export function createRuntimeApprovalPersistenceTransform({
           try {
             await approvalWrite
           } catch (error) {
-            console.warn(
-              JSON.stringify({
-                _tag: "tool_approval_request_write_failed",
-                requestId,
-                chatId,
-                toolCallId: chunk.toolCall.toolCallId,
-                toolName,
-                error: describeError(error),
-              })
-            )
+            warnDurable("tool_approval_request_write_failed", {
+              requestId,
+              chatId,
+              toolCallId: chunk.toolCall.toolCallId,
+              toolName,
+              error: describeError(error),
+            })
             throw error
           }
         }
@@ -579,7 +702,8 @@ export function createRuntimeApprovalPersistenceTransform({
 
 // ---------------------------------------------------------------------------
 // Guest adapter — the null object of durability. Identity passthrough, `{}`
-// extras, no-op writes, zero network. "Guest chats run ungated" is structural.
+// extras, no-op writes, zero network, `guest` receipt. "Guest chats run
+// ungated" is structural.
 // ---------------------------------------------------------------------------
 
 export function createGuestDurableTurn(
@@ -590,18 +714,26 @@ export function createGuestDurableTurn(
     async prepare() {
       return sanitizeModelHistoryMessages(input.messages) as MessageAISDK[]
     },
-    streamTextExtras() {
-      return {}
+    bind() {
+      return {
+        streamTextExtras: {},
+        stream: {
+          onChunk() {},
+          recordStep() {},
+          noteStreamError() {},
+          async onAbort() {},
+          captureFinish() {},
+        },
+        envelope: {
+          identity(validatedMessages) {
+            return { originalMessages: validatedMessages }
+          },
+          async settle() {
+            return { status: "guest" as const }
+          },
+        },
+      }
     },
-    onChunk() {},
-    recordStep() {},
-    noteStreamError() {},
-    async onStreamAbort() {},
-    captureFinish() {},
-    uiStreamIdentity(validatedMessages) {
-      return { originalMessages: validatedMessages }
-    },
-    async finalize() {},
     async fail() {},
   }
 }
@@ -628,6 +760,14 @@ export function createConvexDurableTurn(args: {
   } = input
   const { fetchMutation } = deps
 
+  // The execution grant (ADR-0011): minted per turn, digest crosses to Convex
+  // in the admission call, secret stays here. Never logged, never persisted.
+  const grantSecret = randomBytes(32).toString("hex")
+  const grantDigest = createHash("sha256").update(grantSecret).digest("hex")
+  const wire: DurableWorkerWire =
+    deps.workerWire ?? createHttpDurableWorkerWire({ secret: grantSecret })
+  const settleRetryDelaysMs = deps.settleRetryDelaysMs ?? [250, 1000]
+
   // The durable run — assigned once at prepare(), then read by the timeline.
   let runId: Id<"generationRuns"> | null = null
   let assistantMessageId: Id<"messages"> | null = null
@@ -635,38 +775,72 @@ export function createConvexDurableTurn(args: {
   let snapshotTracker: ReturnType<typeof createDurableSnapshotTracker> | null =
     null
 
-  // Stream-lifetime state — bound at streamTextExtras() and the finish handoff.
-  let toolFacts: ToolFacts | null = null
-  const approvalWritePromises: Promise<unknown>[] = []
-  let capturedFinish: StreamFinishFacts | undefined
-
   // One-shot guards — programming errors, not ops events.
   let prepareCalled = false
-  let extrasBound = false
+  let bound = false
 
-  const markRunAborted = async (reason: string) => {
-    if (!runId || !assistantMessageId) return
-    try {
-      await fetchMutation(
-        api.chatRuntime.markGenerationRunAborted,
-        {
-          runId,
-          messageId: assistantMessageId,
-          reason,
-        },
-        { token: convexToken }
+  const workerWrite = <Op extends DurableWorkerOp>(
+    op: Op,
+    opArgs: DurableWorkerPayloads[Op]
+  ): Promise<unknown> => {
+    if (!runId) {
+      return Promise.reject(
+        new Error("Durable turn runtime: worker write before prepare()")
       )
-    } catch (error) {
-      console.warn(
-        JSON.stringify({
-          _tag: "durable_run_abort_write_failed",
+    }
+    // Safe by construction: the generic signature correlates `op` with its
+    // payload; TS cannot carry that correlation into the union.
+    return wire({ op, args: { runId, ...opArgs } } as DurableWorkerCall)
+  }
+
+  // Each retried terminal op warns under its established tag so ops
+  // vocabulary survives the wire migration; the op decides the tag.
+  const TERMINAL_WRITE_FAILURE_TAGS = {
+    markGenerationRunCompleted: "durable_completion_write_failed",
+    markGenerationRunAborted: "durable_run_abort_write_failed",
+  } as const
+
+  /**
+   * A terminal transition with bounded retry. Resolves `true` when the write
+   * landed, `false` when every attempt failed — NEVER throws.
+   */
+  const writeTerminal = async <
+    Op extends keyof typeof TERMINAL_WRITE_FAILURE_TAGS,
+  >(
+    op: Op,
+    opArgs: DurableWorkerPayloads[Op]
+  ): Promise<boolean> => {
+    for (let attempt = 0; attempt <= settleRetryDelaysMs.length; attempt++) {
+      try {
+        await withWorkerWriteTimeout(
+          workerWrite(op, opArgs),
+          `writing terminal operation ${op}`
+        )
+        return true
+      } catch (error) {
+        warnDurable(TERMINAL_WRITE_FAILURE_TAGS[op], {
           requestId,
           chatId,
           runId,
+          op,
+          attempt: attempt + 1,
           error: describeError(error),
         })
-      )
+        if (attempt < settleRetryDelaysMs.length) {
+          await sleep(settleRetryDelaysMs[attempt])
+        }
+      }
     }
+    return false
+  }
+
+  const markRunAborted = async (reason: string): Promise<boolean> => {
+    const currentMessageId = assistantMessageId
+    if (!runId || !currentMessageId) return true
+    return writeTerminal("markGenerationRunAborted", {
+      messageId: currentMessageId,
+      reason,
+    })
   }
 
   return {
@@ -716,6 +890,7 @@ export function createConvexDurableTurn(args: {
           edit,
           regeneration,
           approvalResponses,
+          grantDigest,
         },
         { token: convexToken }
       ).catch((error: unknown) => {
@@ -726,14 +901,11 @@ export function createConvexDurableTurn(args: {
         // internals. Everything else (concurrency guards, transient failures)
         // passes through unchanged.
         if (isConvexArgumentValidationError(error)) {
-          console.warn(
-            JSON.stringify({
-              _tag: "durable_prepare_argument_rejected",
-              requestId,
-              chatId,
-              error: describeError(error),
-            })
-          )
+          warnDurable("durable_prepare_argument_rejected", {
+            requestId,
+            chatId,
+            error: describeError(error),
+          })
           throw Object.assign(
             new Error("Request does not reference a valid durable chat"),
             { statusCode: 400, code: "INVALID_REQUEST" }
@@ -749,12 +921,16 @@ export function createConvexDurableTurn(args: {
       runId = generation.runId
       assistantMessageId = generation.assistantMessageId
       originalMessages = durableMessages
-      snapshotTracker = createDurableSnapshotTracker({
-        convexToken,
-        runId: generation.runId,
+      const snapshotBase = {
         messageId: generation.assistantMessageId,
         order: generation.assistantOrder,
-        fetchMutation,
+      }
+      snapshotTracker = createDurableSnapshotTracker({
+        persist: (snapshotArgs) =>
+          workerWrite("updateAssistantSnapshot", {
+            ...snapshotBase,
+            ...snapshotArgs,
+          }),
       })
 
       console.log(
@@ -775,226 +951,241 @@ export function createConvexDurableTurn(args: {
       return durableMessages as MessageAISDK[]
     },
 
-    streamTextExtras(facts) {
+    bind(toolFacts) {
       const currentRunId = runId
       const currentMessageId = assistantMessageId
-      if (!currentRunId || !currentMessageId) {
+      const tracker = snapshotTracker
+      if (!currentRunId || !currentMessageId || !tracker) {
         throw new Error(
-          "Durable turn runtime: streamTextExtras() requires a completed prepare()"
+          "Durable turn runtime: bind() requires a completed prepare()"
         )
       }
-      if (extrasBound) {
+      if (bound) {
         throw new Error(
-          "Durable turn runtime: streamTextExtras() may only be called once"
+          "Durable turn runtime: bind() may only be called once"
         )
       }
-      extrasBound = true
-      toolFacts = facts
+      bound = true
 
-      const extras: DurableStreamTextExtras = {}
+      const approvalWritePromises: Promise<unknown>[] = []
+      let capturedFinish: StreamFinishFacts | undefined
+
+      const streamTextExtras: DurableStreamTextExtras = {}
       // Call-site approval config (ai@7): the Tool runtime's decisions, durable
       // runs only — guest chats run ungated, matching the pre-v7 wrap-on-durable
       // behavior.
-      if (facts.toolApproval) {
-        extras.toolApproval = facts.toolApproval
+      if (toolFacts.toolApproval) {
+        streamTextExtras.toolApproval = toolFacts.toolApproval
       }
-      extras.experimental_transform = createRuntimeApprovalPersistenceTransform(
-        {
+      streamTextExtras.experimental_transform =
+        createRuntimeApprovalPersistenceTransform({
           chatId,
-          convexToken,
-          durableRunState: {
-            runId: currentRunId,
-            assistantMessageId: currentMessageId,
-          },
-          toolFacts: facts,
+          assistantMessageId: currentMessageId,
+          toolFacts,
           approvalWritePromises,
           requestId,
           persistApprovalRequest: (approvalArgs) =>
-            fetchMutation(
-              api.chatRuntime.createToolApprovalRequest,
-              approvalArgs,
-              { token: convexToken }
-            ),
-        }
-      )
-      return extras
-    },
-
-    onChunk(chunk) {
-      snapshotTracker?.onChunk(chunk)
-    },
-
-    recordStep({ stepNumber, toolCalls, toolResults }) {
-      const currentRunId = runId
-      const currentMessageId = assistantMessageId
-      const facts = toolFacts
-      if (!extrasBound || !facts || !currentRunId || !currentMessageId) {
-        throw new Error(
-          "Durable turn runtime: recordStep() requires streamTextExtras()"
-        )
-      }
-
-      const invocations: ToolInvocationForPersistence[] = toolCalls.map(
-        (call) => {
-          const result = toolResults?.find(
-            (candidate) => candidate.toolCallId === call.toolCallId
-          )
-          const isError = result ? Boolean(result.isError) : false
-          const approvalDecision = facts.approvalFor(call.toolName)
-          return {
-            toolCallId: call.toolCallId,
-            toolName: call.toolName,
-            source: facts.metadata.source(call.toolName),
-            input: call.input,
-            output: result?.output,
-            error: isError
-              ? String(result?.output ?? "Tool failed")
-              : undefined,
-            status: result
-              ? isError
-                ? "failed"
-                : "completed"
-              : approvalDecision?.needsApproval
-                ? "pending_approval"
-                : "called",
-          }
-        }
-      )
-
-      void fetchMutation(
-        api.chatRuntime.recordToolInvocations,
-        {
-          runId: currentRunId,
-          messageId: currentMessageId,
-          stepNumber,
-          invocations,
-        },
-        { token: convexToken }
-      ).catch((error: unknown) => {
-        console.warn(
-          JSON.stringify({
-            _tag: "canonical_tool_invocation_write_failed",
-            requestId,
-            chatId,
-            runId: currentRunId,
-            error: describeError(error),
-          })
-        )
-      })
-    },
-
-    noteStreamError(errorMessage) {
-      const currentRunId = runId
-      const currentMessageId = assistantMessageId
-      if (!currentRunId || !currentMessageId) return
-      void fetchMutation(
-        api.chatRuntime.markGenerationRunFailed,
-        {
-          runId: currentRunId,
-          messageId: currentMessageId,
-          error: errorMessage,
-        },
-        { token: convexToken }
-      ).catch((error: unknown) => {
-        console.warn(
-          JSON.stringify({
-            _tag: "durable_run_failed_write_failed",
-            requestId,
-            chatId,
-            runId: currentRunId,
-            error: describeError(error),
-          })
-        )
-      })
-    },
-
-    async onStreamAbort(reason) {
-      await snapshotTracker?.flush().catch(() => {})
-      await markRunAborted(reason)
-    },
-
-    captureFinish(facts) {
-      capturedFinish = facts
-    },
-
-    uiStreamIdentity() {
-      const messageId = assistantMessageId
-      return messageId
-        ? { originalMessages, generateMessageId: () => messageId }
-        : { originalMessages }
-    },
-
-    async finalize({ responseMessage, isAborted, finishReason }) {
-      await Promise.allSettled(approvalWritePromises)
-      await snapshotTracker?.flush().catch(() => {})
-
-      if (isAborted) {
-        await markRunAborted("ui message stream aborted")
-        return
-      }
-
-      const currentRunId = runId
-      const currentMessageId = assistantMessageId
-      if (!currentRunId || !currentMessageId) return
-
-      let toolCounts = capturedFinish?.toolCounts
-      if (!toolCounts) {
-        // The stream-onEnd half of the handoff never ran — the failure mode
-        // ADR-0006 named. Land the completion write anyway (part-counted), but
-        // LOUDLY so the bug surfaces instead of hiding behind the fallback.
-        console.warn(
-          JSON.stringify({
-            _tag: "durable_finish_handoff_missed",
-            requestId,
-            chatId,
-            runId: currentRunId,
-          })
-        )
-        Sentry.captureMessage("durable_finish_handoff_missed", {
-          level: "warning",
+            workerWrite("createToolApprovalRequest", approvalArgs),
         })
-        toolCounts = countToolParts(responseMessage)
-      }
 
-      await fetchMutation(
-        api.chatRuntime.markGenerationRunCompleted,
-        {
-          runId: currentRunId,
-          messageId: currentMessageId,
-          content: getFinalAssistantText(responseMessage),
-          parts: responseMessage.parts,
-          metadata: projectPersistedMessageMetadata(responseMessage.metadata),
-          finishReason: capturedFinish?.finishReason ?? finishReason,
-          usage: capturedFinish?.usage,
-          totalToolCalls: toolCounts.totalToolCalls,
-          failedToolCalls: toolCounts.failedToolCalls,
+      return {
+        streamTextExtras,
+
+        stream: {
+          onChunk(chunk) {
+            tracker.onChunk(chunk)
+          },
+
+          recordStep({ stepNumber, toolCalls, toolResults }) {
+            const invocations: ToolInvocationForPersistence[] = toolCalls.map(
+              (call) => {
+                const result = toolResults?.find(
+                  (candidate) => candidate.toolCallId === call.toolCallId
+                )
+                const isError = result ? Boolean(result.isError) : false
+                const approvalDecision = toolFacts.approvalFor(call.toolName)
+                return {
+                  toolCallId: call.toolCallId,
+                  toolName: call.toolName,
+                  source: toolFacts.metadata.source(call.toolName),
+                  input: call.input,
+                  output: result?.output,
+                  error: isError
+                    ? String(result?.output ?? "Tool failed")
+                    : undefined,
+                  status: result
+                    ? isError
+                      ? "failed"
+                      : "completed"
+                    : approvalDecision?.needsApproval
+                      ? "pending_approval"
+                      : "called",
+                }
+              }
+            )
+
+            void workerWrite("recordToolInvocations", {
+              messageId: currentMessageId,
+              stepNumber,
+              invocations,
+            }).catch((error: unknown) => {
+              warnDurable("canonical_tool_invocation_write_failed", {
+                requestId,
+                chatId,
+                runId: currentRunId,
+                error: describeError(error),
+              })
+            })
+          },
+
+          noteStreamError(errorMessage) {
+            void workerWrite("markGenerationRunFailed", {
+              messageId: currentMessageId,
+              error: errorMessage,
+            }).catch((error: unknown) => {
+              warnDurable("durable_run_failed_write_failed", {
+                requestId,
+                chatId,
+                runId: currentRunId,
+                error: describeError(error),
+              })
+            })
+          },
+
+          async onAbort(reason) {
+            await tracker.flush().catch(() => {})
+            await markRunAborted(reason)
+          },
+
+          captureFinish(facts) {
+            capturedFinish = facts
+          },
         },
-        { token: convexToken }
-      )
+
+        envelope: {
+          identity() {
+            return {
+              originalMessages,
+              generateMessageId: () => currentMessageId,
+            }
+          },
+
+          async settle({ responseMessage, isAborted, finishReason }) {
+            // A generated answer was delivered but its terminal persistence
+            // was not confirmed. The receipt degrades — loudly, on every
+            // path — and the response pipe does NOT fail (the 2026-07-14
+            // incident inverted this).
+            const degrade = (reason: string): DurableSettlementReceipt => {
+              warnDurable("durable_settlement_degraded", {
+                requestId,
+                chatId,
+                runId: currentRunId,
+                reason,
+              })
+              Sentry.captureMessage("durable_settlement_degraded", {
+                level: "error",
+                tags: { chat_route: "/api/chat" },
+                extra: { requestId, chatId, runId: currentRunId, reason },
+              })
+              return {
+                status: "degraded" as const,
+                runId: currentRunId,
+                reason,
+              }
+            }
+
+            await Promise.allSettled(approvalWritePromises)
+            await tracker.flush().catch(() => {})
+
+            // Content survival before ANY terminal transition (ADR-0011): the
+            // final snapshot is unconditional — abort included — and carries
+            // the COMPLETE response parts, so a failed terminal write (or an
+            // abort, whose terminal write never carries parts) leaves the
+            // full answer on the message doc, not just the throttled
+            // text/reasoning subset.
+            await tracker
+              .flushFinal(
+                getFinalAssistantText(responseMessage),
+                responseMessage.parts
+              )
+              .catch((error: unknown) => {
+                warnDurable("durable_final_snapshot_write_failed", {
+                  requestId,
+                  chatId,
+                  runId: currentRunId,
+                  error: describeError(error),
+                })
+              })
+
+            if (isAborted) {
+              const landed = await markRunAborted("ui message stream aborted")
+              return landed
+                ? {
+                    status: "confirmed" as const,
+                    runId: currentRunId,
+                    outcome: "aborted" as const,
+                  }
+                : degrade("abort write failed")
+            }
+
+            let toolCounts = capturedFinish?.toolCounts
+            if (!toolCounts) {
+              // The stream-onEnd half of the handoff never ran — the failure
+              // mode ADR-0006 named. Land the completion write anyway
+              // (part-counted), but LOUDLY so the bug surfaces instead of
+              // hiding behind the fallback.
+              warnDurable("durable_finish_handoff_missed", {
+                requestId,
+                chatId,
+                runId: currentRunId,
+              })
+              Sentry.captureMessage("durable_finish_handoff_missed", {
+                level: "warning",
+              })
+              toolCounts = countToolParts(responseMessage)
+            }
+
+            const landed = await writeTerminal("markGenerationRunCompleted", {
+              messageId: currentMessageId,
+              content: getFinalAssistantText(responseMessage),
+              parts: responseMessage.parts,
+              metadata: projectPersistedMessageMetadata(
+                responseMessage.metadata
+              ),
+              finishReason: capturedFinish?.finishReason ?? finishReason,
+              usage: capturedFinish?.usage,
+              totalToolCalls: toolCounts.totalToolCalls,
+              failedToolCalls: toolCounts.failedToolCalls,
+            })
+
+            if (!landed) {
+              return degrade("completion write failed after retries")
+            }
+
+            return {
+              status: "confirmed" as const,
+              runId: currentRunId,
+              outcome: "completed" as const,
+            }
+          },
+        },
+      }
     },
 
     async fail(errorMessage) {
       const currentRunId = runId
       const currentMessageId = assistantMessageId
       if (!currentRunId || !currentMessageId) return
-      await fetchMutation(
-        api.chatRuntime.markGenerationRunFailed,
-        {
+      await workerWrite("markGenerationRunFailed", {
+        messageId: currentMessageId,
+        error: errorMessage,
+      }).catch((writeError: unknown) => {
+        warnDurable("durable_run_failed_write_failed", {
+          requestId,
+          chatId,
           runId: currentRunId,
-          messageId: currentMessageId,
-          error: errorMessage,
-        },
-        { token: convexToken }
-      ).catch((writeError: unknown) => {
-        console.warn(
-          JSON.stringify({
-            _tag: "durable_run_failed_write_failed",
-            requestId,
-            chatId,
-            runId: currentRunId,
-            error: describeError(writeError),
-          })
-        )
+          error: describeError(writeError),
+        })
       })
     },
   }

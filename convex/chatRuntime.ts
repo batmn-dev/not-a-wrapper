@@ -73,6 +73,69 @@ const vUsage = v.object({
   totalTokens: v.optional(v.number()),
 })
 
+/**
+ * One declaration per generation-run write op. The user-token mutations below
+ * and their grant-authorized worker twins (convex/chatRuntimeWorker.ts) spread
+ * these same shapes, so a field added or renamed on one authenticator is a
+ * compile + validator change on both — the Chat turn wire contract pattern.
+ */
+export const generationRunWriteArgs = {
+  updateAssistantSnapshot: {
+    messageId: v.id("messages"),
+    order: v.number(),
+    stepOrder: v.optional(v.number()),
+    sequence: v.number(),
+    textSnapshot: v.string(),
+    partsSnapshot: v.any(),
+    delta: v.optional(v.string()),
+    payload: v.optional(v.any()),
+  },
+  recordToolInvocations: {
+    messageId: v.id("messages"),
+    stepNumber: v.optional(v.number()),
+    invocations: v.array(
+      v.object({
+        toolCallId: v.string(),
+        toolName: v.string(),
+        source: vToolSource,
+        input: v.optional(v.any()),
+        output: v.optional(v.any()),
+        error: v.optional(v.string()),
+        status: vToolInvocationStatus,
+        approvalRequestId: v.optional(v.string()),
+      })
+    ),
+  },
+  createToolApprovalRequest: {
+    assistantMessageId: v.id("messages"),
+    toolCallId: v.string(),
+    toolName: v.string(),
+    source: vToolSource,
+    reason: v.optional(v.string()),
+    riskClass: v.string(),
+    inputPreview: v.optional(v.string()),
+    approvalId: v.string(),
+  },
+  markGenerationRunCompleted: {
+    messageId: v.id("messages"),
+    content: v.string(),
+    parts: v.any(),
+    metadata: v.optional(vToolInvocationStreamMetadata),
+    finishReason: v.optional(v.string()),
+    usage: v.optional(vUsage),
+    totalToolCalls: v.optional(v.number()),
+    failedToolCalls: v.optional(v.number()),
+  },
+  markGenerationRunFailed: {
+    messageId: v.optional(v.id("messages")),
+    error: v.string(),
+  },
+  markGenerationRunAborted: {
+    messageId: v.optional(v.id("messages")),
+    reason: v.optional(v.string()),
+  },
+}
+
 const vStoredMessage = v.object({
   id: v.string(),
   role: vMessageRole,
@@ -126,6 +189,15 @@ type CanonicalApprovalDecision = {
 }
 
 const ACTIVE_RUN_SCAN_LIMIT = 50
+
+/**
+ * Execution-grant lifetime (ADR-0011). Must comfortably exceed the longest
+ * legitimate turn plus settlement retries; it bounds how long a leaked digest
+ * preimage could authorize idempotent worker writes. Writes to a terminal run
+ * are already no-ops under first-terminal-wins, so expiry is the grant's only
+ * hard revocation.
+ */
+export const EXECUTION_GRANT_TTL_MS = 60 * 60 * 1000
 
 const terminalToolInvocationStatuses = new Set<
   Doc<"toolInvocations">["status"]
@@ -1145,6 +1217,8 @@ type PrepareGenerationForChatArgs = {
   edit?: GenerationEditIntent
   regeneration?: GenerationRegenerationIntent
   approvalResponses?: GenerationApprovalResponse[]
+  /** SHA-256 hex digest of the run-scoped worker secret (ADR-0011). */
+  grantDigest?: string
 }
 
 export async function prepareGenerationForChat(
@@ -1229,6 +1303,12 @@ export async function prepareGenerationForChat(
     status: "running",
     startedAt: now,
     updatedAt: now,
+    ...(args.grantDigest
+      ? {
+          grantDigest: args.grantDigest,
+          grantExpiresAt: now + EXECUTION_GRANT_TTL_MS,
+        }
+      : {}),
   })
 
   let assistantMessageId: Id<"messages">
@@ -1324,21 +1404,13 @@ export const prepareGeneration = mutation({
     edit: v.optional(vEditIntent),
     regeneration: v.optional(vRegenerationIntent),
     approvalResponses: v.optional(v.array(vApprovalResponse)),
+    grantDigest: v.optional(v.string()),
   },
   handler: async (ctx, args) => prepareGenerationForChat(ctx, args),
 })
 
 export const updateAssistantSnapshot = ownedGenerationRunMutation({
-  args: {
-    messageId: v.id("messages"),
-    order: v.number(),
-    stepOrder: v.optional(v.number()),
-    sequence: v.number(),
-    textSnapshot: v.string(),
-    partsSnapshot: v.any(),
-    delta: v.optional(v.string()),
-    payload: v.optional(v.any()),
-  },
+  args: generationRunWriteArgs.updateAssistantSnapshot,
   handler: async (ctx, args) =>
     updateAssistantSnapshotForChat(
       ctx,
@@ -1408,16 +1480,7 @@ export async function updateAssistantSnapshotForChat(
 }
 
 export const markGenerationRunCompleted = ownedGenerationRunMutation({
-  args: {
-    messageId: v.id("messages"),
-    content: v.string(),
-    parts: v.any(),
-    metadata: v.optional(vToolInvocationStreamMetadata),
-    finishReason: v.optional(v.string()),
-    usage: v.optional(vUsage),
-    totalToolCalls: v.optional(v.number()),
-    failedToolCalls: v.optional(v.number()),
-  },
+  args: generationRunWriteArgs.markGenerationRunCompleted,
   handler: async (ctx, args) =>
     markGenerationRunCompletedForChat(
       ctx,
@@ -1495,10 +1558,7 @@ export async function markGenerationRunCompletedForChat(
 }
 
 export const markGenerationRunFailed = ownedGenerationRunMutation({
-  args: {
-    messageId: v.optional(v.id("messages")),
-    error: v.string(),
-  },
+  args: generationRunWriteArgs.markGenerationRunFailed,
   handler: async (ctx, args) =>
     markGenerationRunFailedForChat(
       ctx,
@@ -1532,10 +1592,7 @@ export async function markGenerationRunFailedForChat(
 }
 
 export const markGenerationRunAborted = ownedGenerationRunMutation({
-  args: {
-    messageId: v.optional(v.id("messages")),
-    reason: v.optional(v.string()),
-  },
+  args: generationRunWriteArgs.markGenerationRunAborted,
   handler: async (ctx, args) =>
     markGenerationRunAbortedForChat(
       ctx,
@@ -1569,16 +1626,7 @@ export async function markGenerationRunAbortedForChat(
 }
 
 export const createToolApprovalRequest = ownedGenerationRunMutation({
-  args: {
-    assistantMessageId: v.id("messages"),
-    toolCallId: v.string(),
-    toolName: v.string(),
-    source: vToolSource,
-    reason: v.optional(v.string()),
-    riskClass: v.string(),
-    inputPreview: v.optional(v.string()),
-    approvalId: v.string(),
-  },
+  args: generationRunWriteArgs.createToolApprovalRequest,
   handler: async (ctx, args) =>
     createToolApprovalRequestForChat(
       ctx,
@@ -1723,22 +1771,7 @@ export const denyToolCall = mutation({
 })
 
 export const recordToolInvocations = ownedGenerationRunMutation({
-  args: {
-    messageId: v.id("messages"),
-    stepNumber: v.optional(v.number()),
-    invocations: v.array(
-      v.object({
-        toolCallId: v.string(),
-        toolName: v.string(),
-        source: vToolSource,
-        input: v.optional(v.any()),
-        output: v.optional(v.any()),
-        error: v.optional(v.string()),
-        status: vToolInvocationStatus,
-        approvalRequestId: v.optional(v.string()),
-      })
-    ),
-  },
+  args: generationRunWriteArgs.recordToolInvocations,
   handler: async (ctx, args) =>
     recordToolInvocationsForChat(
       ctx,

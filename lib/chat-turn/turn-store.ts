@@ -14,6 +14,16 @@ import type { ChatTurnMessage } from "./turn-plans"
 // cache turn messages in IndexedDB; durable chats are route-persisted and skip
 // the local cache entirely. Composed inside createChatTurnController; the
 // parent hook supplies only the adapters and never holds the store.
+//
+// Durable-chat content preservation is SERVER-owned (ADR-0011): settlement
+// writes a final full-parts snapshot onto the assistant message doc before any
+// terminal transition, and a terminal-persistence failure degrades the
+// settlement receipt without failing the response pipe. The client therefore
+// keeps NO second copy for durable chats — the Convex subscription is the one
+// source of truth the durable read path consults (messages/provider.tsx reads
+// IndexedDB only for localOnly chats). Do not "fix" a durable persistence gap
+// here by caching; that recreates the split-brain the 2026-07-14 incident doc
+// warns about.
 // ---------------------------------------------------------------------------
 
 export type SetChatTurnMessages = (

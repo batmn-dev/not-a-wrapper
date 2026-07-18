@@ -7,10 +7,11 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server"
+import { createChatOwnedDeletion } from "./domain/chat_owned_deletion"
+import { collectLinkedChats } from "./domain/chat_project_link"
 import {
   patchChatActivity,
   recordKnownProjectActivity,
-  recordProjectActivity,
 } from "./domain/project_activity"
 import { requireOwnedProject } from "./lib/auth"
 import {
@@ -24,7 +25,6 @@ import {
 // Upper bound on title-search results. The history search UI renders a flat
 // list, so a bounded read is plenty and keeps the search subscription cheap.
 const CHAT_SEARCH_RESULT_LIMIT = 50
-export const SIDEBAR_PROJECT_PREVIEW_LIMIT = 5
 
 /**
  * Get all chats for the current user
@@ -149,64 +149,17 @@ export async function getRecentWindowForCurrentUserHandler(
 }
 
 /**
- * Complete project previews for the current user's sidebar, independent of the
- * bounded global recency window. The client owns one live subscription; this
- * handler first resolves the caller's owned projects, then performs bounded,
- * indexed reads for each project. Returning one extra row provides an exact
- * `hasMore` signal without shipping full project histories to the sidebar.
- */
-export async function getSidebarProjectPreviewsForCurrentUserHandler(
-  ctx: MaybeUserChatQueryCtx
-) {
-  const user = ctx.user
-  if (!user) return []
-
-  const projects = await ctx.db
-    .query("projects")
-    .withIndex("by_user", (q) => q.eq("userId", user._id))
-    .collect()
-  const previews: Array<{
-    projectId: Id<"projects">
-    chats: Doc<"chats">[]
-    hasMore: boolean
-  }> = []
-
-  for (const project of projects) {
-    const chats = await ctx.db
-      .query("chats")
-      .withIndex("by_project_updated", (q) => q.eq("projectId", project._id))
-      .order("desc")
-      .take(SIDEBAR_PROJECT_PREVIEW_LIMIT + 1)
-
-    previews.push({
-      projectId: project._id,
-      chats: chats.slice(0, SIDEBAR_PROJECT_PREVIEW_LIMIT),
-      hasMore: chats.length > SIDEBAR_PROJECT_PREVIEW_LIMIT,
-    })
-  }
-
-  return previews
-}
-
-export const getSidebarProjectPreviewsForCurrentUser = maybeAuthQuery({
-  args: {},
-  handler: async (ctx) => getSidebarProjectPreviewsForCurrentUserHandler(ctx),
-})
-
-/**
  * All chats in a project the caller owns, newest activity first, over the
  * `by_project` index. Lets a project view show its full chat history rather than
  * only those chats that happen to be in the bounded sidebar window — see
  * docs/adr/0005-bounded-chat-list-window.md. Ownership is enforced by
- * the ownedProjectQuery builder (ctx.project).
+ * the ownedProjectQuery builder (ctx.project); the link accessor re-checks
+ * each chat so a corrupted cross-owner link can never ship another user's chat.
  */
 export const getProjectChatsForCurrentUser = ownedProjectQuery({
   args: {},
   handler: async (ctx) => {
-    const chats = await ctx.db
-      .query("chats")
-      .withIndex("by_project", (q) => q.eq("projectId", ctx.project._id))
-      .collect()
+    const chats = await collectLinkedChats(ctx, ctx.project)
 
     return chats.sort(
       (a, b) =>
@@ -453,40 +406,10 @@ export const backfillUpdatedAt = internalMutation({
   },
 })
 
-/**
- * Delete a chat and its messages
- */
+/** Delete a Chat and its complete durable graph. */
 export const remove = ownedChatMutation({
   args: {},
   handler: async (ctx) => {
-    const chatId = ctx.chat._id
-    // Delete all messages for this chat
-    const messages = await ctx.db
-      .query("messages")
-      .withIndex("by_chat", (q) => q.eq("chatId", chatId))
-      .collect()
-
-    for (const message of messages) {
-      await ctx.db.delete(message._id)
-    }
-
-    // Delete all attachments for this chat
-    const attachments = await ctx.db
-      .query("chatAttachments")
-      .withIndex("by_chat", (q) => q.eq("chatId", chatId))
-      .collect()
-
-    for (const attachment of attachments) {
-      // Delete from storage if exists
-      if (attachment.storageId) {
-        await ctx.storage.delete(attachment.storageId)
-      }
-      await ctx.db.delete(attachment._id)
-    }
-
-    await recordProjectActivity(ctx, ctx.chat.projectId, Date.now())
-
-    // Delete the chat
-    await ctx.db.delete(chatId)
+    await createChatOwnedDeletion(ctx).deleteChat(ctx.chat)
   },
 })

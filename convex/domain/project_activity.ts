@@ -1,5 +1,6 @@
-import type { Doc, Id } from "../_generated/dataModel"
+import type { Doc } from "../_generated/dataModel"
 import type { MutationCtx } from "../_generated/server"
+import { requireLinkedProject } from "./chat_project_link"
 
 type ActivityMutationCtx = Pick<MutationCtx, "db">
 
@@ -23,22 +24,6 @@ export function getProjectModifiedAt(
   project: Pick<Doc<"projects">, "_creationTime" | "updatedAt">
 ): number {
   return project.updatedAt ?? project._creationTime
-}
-
-/**
- * Record durable activity produced by a child resource such as a project chat.
- * The max guard makes the aggregate monotonic if an older event is replayed.
- */
-export async function recordProjectActivity(
-  ctx: ActivityMutationCtx,
-  projectId: Id<"projects"> | undefined,
-  occurredAt: number
-): Promise<void> {
-  if (!projectId) return
-
-  const project = await ctx.db.get(projectId)
-  if (!project) throw new Error("Project not found")
-  await recordKnownProjectActivity(ctx, project, occurredAt)
 }
 
 /** Record activity when the caller already resolved the parent project. */
@@ -81,9 +66,12 @@ export async function patchChatActivity(
   patch: ChatActivityPatch,
   occurredAt: number
 ): Promise<void> {
+  // Resolve (and owner-check) the parent before the chat write so a corrupted
+  // link fails before any document changes.
+  const project = await requireLinkedProject(ctx, chat)
   const activityAt = Math.max(chat.updatedAt, occurredAt)
   await ctx.db.patch(chat._id, { ...patch, updatedAt: activityAt })
-  await recordProjectActivity(ctx, chat.projectId, activityAt)
+  await recordKnownProjectActivity(ctx, project ?? undefined, activityAt)
 }
 
 /** Record chat activity when no other chat fields need to change. */
