@@ -24,6 +24,7 @@ import type {
 import { getStaticToolName, isStaticToolUIPart } from "ai"
 import { fetchMutation as defaultFetchMutation } from "convex/nextjs"
 import { createHash, randomBytes } from "node:crypto"
+import type { DurableWorkerPayloads } from "@/convex/chatRuntimeWorker"
 import { isConvexArgumentValidationError } from "./utils"
 
 // Owns durable preparation, snapshots, tool invocations, approvals, and turn
@@ -65,18 +66,20 @@ export type DurableTurnInput = {
 // Durable worker wire — the post-prepare write channel (ADR-0011).
 // ---------------------------------------------------------------------------
 
-export type DurableWorkerOp =
-  | "updateAssistantSnapshot"
-  | "recordToolInvocations"
-  | "createToolApprovalRequest"
-  | "markGenerationRunCompleted"
-  | "markGenerationRunFailed"
-  | "markGenerationRunAborted"
+/**
+ * The op list and per-op payloads have ONE source of truth: the shared
+ * validator shapes in `convex/chatRuntime.ts` (`generationRunWriteArgs`),
+ * projected to types by `convex/chatRuntimeWorker.ts`. Adding or renaming an
+ * op or field there is a compile error at every call site here.
+ */
+export type DurableWorkerOp = keyof DurableWorkerPayloads
 
 export type DurableWorkerCall = {
-  op: DurableWorkerOp
-  args: Record<string, unknown>
-}
+  [Op in DurableWorkerOp]: {
+    op: Op
+    args: DurableWorkerPayloads[Op] & { runId: Id<"generationRuns"> }
+  }
+}[DurableWorkerOp]
 
 /**
  * The worker-write transport: one grant-authorized call to the Convex
@@ -88,6 +91,8 @@ export type DurableWorkerWire = (call: DurableWorkerCall) => Promise<unknown>
 function resolveConvexSiteUrl(): string {
   const explicit = process.env.CONVEX_SITE_URL
   if (explicit) return explicit
+  const generated = process.env.NEXT_PUBLIC_CONVEX_SITE_URL
+  if (generated) return generated
   const url = process.env.NEXT_PUBLIC_CONVEX_URL
   if (!url) {
     throw new Error("NEXT_PUBLIC_CONVEX_URL is not set")
@@ -408,6 +413,11 @@ function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/** The structured ops-log line every durable warn shares. */
+function warnDurable(tag: string, fields: Record<string, unknown>): void {
+  console.warn(JSON.stringify({ _tag: tag, ...fields }))
+}
+
 function getRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object") return null
   return value as Record<string, unknown>
@@ -548,7 +558,10 @@ export function createDurableSnapshotTracker(
    * Settlement calls it BEFORE the terminal transition so a failed terminal
    * write can no longer erase an answer: the snapshot mutation also lands
    * content+parts on the assistant message doc. Rejections propagate to the
-   * caller, which degrades loudly instead of hiding them.
+   * caller — settlement warns (`durable_final_snapshot_write_failed`) and
+   * proceeds to the terminal write, whose receipt (not this snapshot) decides
+   * confirmed vs degraded; on completion that write carries the same
+   * content+parts itself.
    */
   const flushFinal = async (finalText: string, finalParts: unknown) => {
     if (writeInFlight) await writeInFlight.catch(() => {})
@@ -666,16 +679,13 @@ export function createRuntimeApprovalPersistenceTransform({
           try {
             await approvalWrite
           } catch (error) {
-            console.warn(
-              JSON.stringify({
-                _tag: "tool_approval_request_write_failed",
-                requestId,
-                chatId,
-                toolCallId: chunk.toolCall.toolCallId,
-                toolName,
-                error: describeError(error),
-              })
-            )
+            warnDurable("tool_approval_request_write_failed", {
+              requestId,
+              chatId,
+              toolCallId: chunk.toolCall.toolCallId,
+              toolName,
+              error: describeError(error),
+            })
             throw error
           }
         }
@@ -764,45 +774,50 @@ export function createConvexDurableTurn(args: {
   let prepareCalled = false
   let bound = false
 
-  const workerWrite = (
-    op: DurableWorkerOp,
-    opArgs: Record<string, unknown>
+  const workerWrite = <Op extends DurableWorkerOp>(
+    op: Op,
+    opArgs: DurableWorkerPayloads[Op]
   ): Promise<unknown> => {
-    return wire({ op, args: { runId, ...opArgs } })
+    if (!runId) {
+      return Promise.reject(
+        new Error("Durable turn runtime: worker write before prepare()")
+      )
+    }
+    // Safe by construction: the generic signature correlates `op` with its
+    // payload; TS cannot carry that correlation into the union.
+    return wire({ op, args: { runId, ...opArgs } } as DurableWorkerCall)
   }
+
+  // Each retried terminal op warns under its established tag so ops
+  // vocabulary survives the wire migration; the op decides the tag.
+  const TERMINAL_WRITE_FAILURE_TAGS = {
+    markGenerationRunCompleted: "durable_completion_write_failed",
+    markGenerationRunAborted: "durable_run_abort_write_failed",
+  } as const
 
   /**
    * A terminal transition with bounded retry. Resolves `true` when the write
-   * landed, `false` when every attempt failed — NEVER throws. Each failed
-   * attempt warns under the op's established tag so ops vocabulary survives
-   * the wire migration.
+   * landed, `false` when every attempt failed — NEVER throws.
    */
-  const writeTerminal = async (
-    op: Extract<
-      DurableWorkerOp,
-      | "markGenerationRunCompleted"
-      | "markGenerationRunFailed"
-      | "markGenerationRunAborted"
-    >,
-    opArgs: Record<string, unknown>,
-    failureTag: string
+  const writeTerminal = async <
+    Op extends keyof typeof TERMINAL_WRITE_FAILURE_TAGS,
+  >(
+    op: Op,
+    opArgs: DurableWorkerPayloads[Op]
   ): Promise<boolean> => {
     for (let attempt = 0; attempt <= settleRetryDelaysMs.length; attempt++) {
       try {
         await workerWrite(op, opArgs)
         return true
       } catch (error) {
-        console.warn(
-          JSON.stringify({
-            _tag: failureTag,
-            requestId,
-            chatId,
-            runId,
-            op,
-            attempt: attempt + 1,
-            error: describeError(error),
-          })
-        )
+        warnDurable(TERMINAL_WRITE_FAILURE_TAGS[op], {
+          requestId,
+          chatId,
+          runId,
+          op,
+          attempt: attempt + 1,
+          error: describeError(error),
+        })
         if (attempt < settleRetryDelaysMs.length) {
           await sleep(settleRetryDelaysMs[attempt])
         }
@@ -814,11 +829,10 @@ export function createConvexDurableTurn(args: {
   const markRunAborted = async (reason: string): Promise<boolean> => {
     const currentMessageId = assistantMessageId
     if (!runId || !currentMessageId) return true
-    return writeTerminal(
-      "markGenerationRunAborted",
-      { messageId: currentMessageId, reason },
-      "durable_run_abort_write_failed"
-    )
+    return writeTerminal("markGenerationRunAborted", {
+      messageId: currentMessageId,
+      reason,
+    })
   }
 
   return {
@@ -879,14 +893,11 @@ export function createConvexDurableTurn(args: {
         // internals. Everything else (concurrency guards, transient failures)
         // passes through unchanged.
         if (isConvexArgumentValidationError(error)) {
-          console.warn(
-            JSON.stringify({
-              _tag: "durable_prepare_argument_rejected",
-              requestId,
-              chatId,
-              error: describeError(error),
-            })
-          )
+          warnDurable("durable_prepare_argument_rejected", {
+            requestId,
+            chatId,
+            error: describeError(error),
+          })
           throw Object.assign(
             new Error("Request does not reference a valid durable chat"),
             { statusCode: 400, code: "INVALID_REQUEST" }
@@ -1010,15 +1021,12 @@ export function createConvexDurableTurn(args: {
               stepNumber,
               invocations,
             }).catch((error: unknown) => {
-              console.warn(
-                JSON.stringify({
-                  _tag: "canonical_tool_invocation_write_failed",
-                  requestId,
-                  chatId,
-                  runId: currentRunId,
-                  error: describeError(error),
-                })
-              )
+              warnDurable("canonical_tool_invocation_write_failed", {
+                requestId,
+                chatId,
+                runId: currentRunId,
+                error: describeError(error),
+              })
             })
           },
 
@@ -1027,15 +1035,12 @@ export function createConvexDurableTurn(args: {
               messageId: currentMessageId,
               error: errorMessage,
             }).catch((error: unknown) => {
-              console.warn(
-                JSON.stringify({
-                  _tag: "durable_run_failed_write_failed",
-                  requestId,
-                  chatId,
-                  runId: currentRunId,
-                  error: describeError(error),
-                })
-              )
+              warnDurable("durable_run_failed_write_failed", {
+                requestId,
+                chatId,
+                runId: currentRunId,
+                error: describeError(error),
+              })
             })
           },
 
@@ -1058,8 +1063,51 @@ export function createConvexDurableTurn(args: {
           },
 
           async settle({ responseMessage, isAborted, finishReason }) {
+            // A generated answer was delivered but its terminal persistence
+            // was not confirmed. The receipt degrades — loudly, on every
+            // path — and the response pipe does NOT fail (the 2026-07-14
+            // incident inverted this).
+            const degrade = (reason: string): DurableSettlementReceipt => {
+              warnDurable("durable_settlement_degraded", {
+                requestId,
+                chatId,
+                runId: currentRunId,
+                reason,
+              })
+              Sentry.captureMessage("durable_settlement_degraded", {
+                level: "error",
+                tags: { chat_route: "/api/chat" },
+                extra: { requestId, chatId, runId: currentRunId, reason },
+              })
+              return {
+                status: "degraded" as const,
+                runId: currentRunId,
+                reason,
+              }
+            }
+
             await Promise.allSettled(approvalWritePromises)
             await tracker.flush().catch(() => {})
+
+            // Content survival before ANY terminal transition (ADR-0011): the
+            // final snapshot is unconditional — abort included — and carries
+            // the COMPLETE response parts, so a failed terminal write (or an
+            // abort, whose terminal write never carries parts) leaves the
+            // full answer on the message doc, not just the throttled
+            // text/reasoning subset.
+            await tracker
+              .flushFinal(
+                getFinalAssistantText(responseMessage),
+                responseMessage.parts
+              )
+              .catch((error: unknown) => {
+                warnDurable("durable_final_snapshot_write_failed", {
+                  requestId,
+                  chatId,
+                  runId: currentRunId,
+                  error: describeError(error),
+                })
+              })
 
             if (isAborted) {
               const landed = await markRunAborted("ui message stream aborted")
@@ -1069,33 +1117,8 @@ export function createConvexDurableTurn(args: {
                     runId: currentRunId,
                     outcome: "aborted" as const,
                   }
-                : {
-                    status: "degraded" as const,
-                    runId: currentRunId,
-                    reason: "abort write failed",
-                  }
+                : degrade("abort write failed")
             }
-
-            // Content survival before terminal transition (ADR-0011): the
-            // final snapshot carries the COMPLETE response parts, so a failed
-            // completion write leaves the full answer on the message doc, not
-            // just the throttled text/reasoning subset.
-            await tracker
-              .flushFinal(
-                getFinalAssistantText(responseMessage),
-                responseMessage.parts
-              )
-              .catch((error: unknown) => {
-                console.warn(
-                  JSON.stringify({
-                    _tag: "durable_final_snapshot_write_failed",
-                    requestId,
-                    chatId,
-                    runId: currentRunId,
-                    error: describeError(error),
-                  })
-                )
-              })
 
             let toolCounts = capturedFinish?.toolCounts
             if (!toolCounts) {
@@ -1103,59 +1126,32 @@ export function createConvexDurableTurn(args: {
               // mode ADR-0006 named. Land the completion write anyway
               // (part-counted), but LOUDLY so the bug surfaces instead of
               // hiding behind the fallback.
-              console.warn(
-                JSON.stringify({
-                  _tag: "durable_finish_handoff_missed",
-                  requestId,
-                  chatId,
-                  runId: currentRunId,
-                })
-              )
+              warnDurable("durable_finish_handoff_missed", {
+                requestId,
+                chatId,
+                runId: currentRunId,
+              })
               Sentry.captureMessage("durable_finish_handoff_missed", {
                 level: "warning",
               })
               toolCounts = countToolParts(responseMessage)
             }
 
-            const landed = await writeTerminal(
-              "markGenerationRunCompleted",
-              {
-                messageId: currentMessageId,
-                content: getFinalAssistantText(responseMessage),
-                parts: responseMessage.parts,
-                metadata: projectPersistedMessageMetadata(
-                  responseMessage.metadata
-                ),
-                finishReason: capturedFinish?.finishReason ?? finishReason,
-                usage: capturedFinish?.usage,
-                totalToolCalls: toolCounts.totalToolCalls,
-                failedToolCalls: toolCounts.failedToolCalls,
-              },
-              "durable_completion_write_failed"
-            )
+            const landed = await writeTerminal("markGenerationRunCompleted", {
+              messageId: currentMessageId,
+              content: getFinalAssistantText(responseMessage),
+              parts: responseMessage.parts,
+              metadata: projectPersistedMessageMetadata(
+                responseMessage.metadata
+              ),
+              finishReason: capturedFinish?.finishReason ?? finishReason,
+              usage: capturedFinish?.usage,
+              totalToolCalls: toolCounts.totalToolCalls,
+              failedToolCalls: toolCounts.failedToolCalls,
+            })
 
             if (!landed) {
-              // A generated answer was delivered but its terminal persistence
-              // was not confirmed. The receipt degrades; the response pipe
-              // does NOT fail (the 2026-07-14 incident inverted this).
-              console.warn(
-                JSON.stringify({
-                  _tag: "durable_settlement_degraded",
-                  requestId,
-                  chatId,
-                  runId: currentRunId,
-                })
-              )
-              Sentry.captureMessage("durable_settlement_degraded", {
-                level: "error",
-                tags: { chat_route: "/api/chat" },
-                extra: { requestId, chatId, runId: currentRunId },
-              })
-              return {
-                status: "degraded" as const,
-                runId: currentRunId,
-                reason: "completion write failed after retries",
-              }
+              return degrade("completion write failed after retries")
             }
 
             return {
@@ -1176,15 +1172,12 @@ export function createConvexDurableTurn(args: {
         messageId: currentMessageId,
         error: errorMessage,
       }).catch((writeError: unknown) => {
-        console.warn(
-          JSON.stringify({
-            _tag: "durable_run_failed_write_failed",
-            requestId,
-            chatId,
-            runId: currentRunId,
-            error: describeError(writeError),
-          })
-        )
+        warnDurable("durable_run_failed_write_failed", {
+          requestId,
+          chatId,
+          runId: currentRunId,
+          error: describeError(writeError),
+        })
       })
     },
   }

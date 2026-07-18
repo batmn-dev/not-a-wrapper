@@ -37,6 +37,10 @@ export const CHAT_OWNED_DELETION_LIMITS = {
   bytes: 8 * 1024 * 1024,
   projectChats: 250,
   storedFiles: 500,
+  // Deliberately tiny: the document/byte budget is re-checked per page, so a
+  // small page bounds how far a collection overshoots a ceiling before
+  // failing, and ordinary chats already span multiple pages — the cursor loop
+  // is exercised by real data, not only at scale.
   pageSize: 4,
   transactionDocumentReserve: 32,
   transactionByteReserve: 1024 * 1024,

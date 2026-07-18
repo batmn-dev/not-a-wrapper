@@ -249,8 +249,13 @@ function makeWorkerWire(
   return wire
 }
 
-function wireCall(wire: RecordingWire, op: string) {
-  return wire.calls.find((call) => call.op === op)
+function wireCall<Op extends DurableWorkerCall["op"]>(
+  wire: RecordingWire,
+  op: Op
+) {
+  return wire.calls.find(
+    (call): call is Extract<DurableWorkerCall, { op: Op }> => call.op === op
+  )
 }
 
 function makeDeps(

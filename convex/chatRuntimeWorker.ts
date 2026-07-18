@@ -1,8 +1,9 @@
-import { v } from "convex/values"
-import type { Doc, Id } from "./_generated/dataModel"
+import { ConvexError, v, type ObjectType } from "convex/values"
+import type { Id } from "./_generated/dataModel"
 import { internalMutation, type MutationCtx } from "./_generated/server"
 import {
   createToolApprovalRequestForChat,
+  generationRunWriteArgs,
   markGenerationRunAbortedForChat,
   markGenerationRunCompletedForChat,
   markGenerationRunFailedForChat,
@@ -11,7 +12,6 @@ import {
 } from "./chatRuntime"
 import type { AuthenticatedRunOwner } from "./lib/auth"
 import { timingSafeEqualHex } from "./lib/sha256"
-import { vToolInvocationStreamMetadata } from "./lib/messageMetadata"
 
 // ---------------------------------------------------------------------------
 // Chat-turn worker mutations (ADR-0011): the execution-grant half of durable
@@ -21,35 +21,70 @@ import { vToolInvocationStreamMetadata } from "./lib/messageMetadata"
 // the user-token wrappers inject, and reuses the `...ForChat` handlers — one
 // policy, two authenticators. The raw secret never appears in mutation
 // arguments; only its digest does, and internal mutations are unreachable
-// from clients.
+// from clients. Arg shapes are spread from `generationRunWriteArgs` — the one
+// declaration both authenticators share.
 // ---------------------------------------------------------------------------
-
-const vToolSource = v.union(
-  v.literal("builtin"),
-  v.literal("third-party"),
-  v.literal("mcp"),
-  v.literal("platform")
-)
-
-const vToolInvocationStatus = v.union(
-  v.literal("called"),
-  v.literal("pending_approval"),
-  v.literal("approved"),
-  v.literal("denied"),
-  v.literal("completed"),
-  v.literal("failed")
-)
 
 const grantArgs = {
   runId: v.id("generationRuns"),
   grantDigest: v.string(),
 }
 
+/** The grant half of every worker mutation's args. */
+export type GrantAuthArgs = ObjectType<typeof grantArgs>
+
 /**
- * Resolve the run an execution grant authorizes, or throw. All failure shapes
- * collapse to the same message so a probing caller cannot distinguish a
- * missing run from a wrong digest; expiry is reported distinctly because the
+ * Per-op wire payloads, inferred from the shared validator shapes: what the
+ * Next-side Durable worker wire sends as `args` (minus `runId`, which the wire
+ * adds, and `grantDigest`, which the HTTP action derives from the Bearer
+ * secret). The op list and each payload have exactly one source of truth.
+ */
+export type DurableWorkerPayloads = {
+  [Op in keyof typeof generationRunWriteArgs]: ObjectType<
+    (typeof generationRunWriteArgs)[Op]
+  >
+}
+
+/**
+ * Grant failures are typed application errors (`ConvexError`) so the HTTP
+ * action can map them to 401 by code instead of sniffing message strings.
+ * Wrong digest and missing run collapse to one code/message so a probing
+ * caller cannot distinguish them; expiry is reported distinctly because the
  * legitimate worker needs to tell them apart in telemetry.
+ */
+export type GrantRejectionCode = "grant_unauthorized" | "grant_expired"
+
+export const GRANT_REJECTION_MESSAGES: Record<GrantRejectionCode, string> = {
+  grant_unauthorized: "Execution grant not authorized",
+  grant_expired: "Execution grant expired",
+}
+
+function grantRejection(code: GrantRejectionCode): ConvexError<{
+  grantRejection: GrantRejectionCode
+  message: string
+}> {
+  return new ConvexError({
+    grantRejection: code,
+    message: GRANT_REJECTION_MESSAGES[code],
+  })
+}
+
+/** The grant-rejection code carried by `error`, if it is one. */
+export function grantRejectionCode(
+  error: unknown
+): GrantRejectionCode | undefined {
+  if (!(error instanceof ConvexError)) return undefined
+  const data: unknown = error.data
+  if (!data || typeof data !== "object") return undefined
+  const code = (data as { grantRejection?: unknown }).grantRejection
+  return code === "grant_unauthorized" || code === "grant_expired"
+    ? code
+    : undefined
+}
+
+/**
+ * Resolve the run an execution grant authorizes, or throw a typed
+ * grant-rejection error (see `GrantRejectionCode` for the disclosure policy).
  */
 export async function requireGrantAuthorizedRun(
   ctx: MutationCtx,
@@ -61,34 +96,24 @@ export async function requireGrantAuthorizedRun(
     !run.grantDigest ||
     !timingSafeEqualHex(run.grantDigest, args.grantDigest)
   ) {
-    throw new Error("Execution grant not authorized")
+    throw grantRejection("grant_unauthorized")
   }
   if (!run.grantExpiresAt || run.grantExpiresAt <= Date.now()) {
-    throw new Error("Execution grant expired")
+    throw grantRejection("grant_expired")
   }
 
   const chat = await ctx.db.get(run.chatId)
-  if (!chat) throw new Error("Execution grant not authorized")
+  if (!chat) throw grantRejection("grant_unauthorized")
   const user = run.userId ? await ctx.db.get(run.userId) : null
   if (!user || chat.userId !== user._id) {
-    throw new Error("Execution grant not authorized")
+    throw grantRejection("grant_unauthorized")
   }
 
-  return { user: user as Doc<"users">, chat, run }
+  return { user, chat, run }
 }
 
 export const updateAssistantSnapshot = internalMutation({
-  args: {
-    ...grantArgs,
-    messageId: v.id("messages"),
-    order: v.number(),
-    stepOrder: v.optional(v.number()),
-    sequence: v.number(),
-    textSnapshot: v.string(),
-    partsSnapshot: v.any(),
-    delta: v.optional(v.string()),
-    payload: v.optional(v.any()),
-  },
+  args: { ...grantArgs, ...generationRunWriteArgs.updateAssistantSnapshot },
   handler: async (ctx, { runId, grantDigest, ...args }) => {
     const owner = await requireGrantAuthorizedRun(ctx, { runId, grantDigest })
     return updateAssistantSnapshotForChat(ctx, owner, args)
@@ -96,23 +121,7 @@ export const updateAssistantSnapshot = internalMutation({
 })
 
 export const recordToolInvocations = internalMutation({
-  args: {
-    ...grantArgs,
-    messageId: v.id("messages"),
-    stepNumber: v.optional(v.number()),
-    invocations: v.array(
-      v.object({
-        toolCallId: v.string(),
-        toolName: v.string(),
-        source: vToolSource,
-        input: v.optional(v.any()),
-        output: v.optional(v.any()),
-        error: v.optional(v.string()),
-        status: vToolInvocationStatus,
-        approvalRequestId: v.optional(v.string()),
-      })
-    ),
-  },
+  args: { ...grantArgs, ...generationRunWriteArgs.recordToolInvocations },
   handler: async (ctx, { runId, grantDigest, ...args }) => {
     const owner = await requireGrantAuthorizedRun(ctx, { runId, grantDigest })
     return recordToolInvocationsForChat(ctx, owner, args)
@@ -120,17 +129,7 @@ export const recordToolInvocations = internalMutation({
 })
 
 export const createToolApprovalRequest = internalMutation({
-  args: {
-    ...grantArgs,
-    assistantMessageId: v.id("messages"),
-    toolCallId: v.string(),
-    toolName: v.string(),
-    source: vToolSource,
-    reason: v.optional(v.string()),
-    riskClass: v.string(),
-    inputPreview: v.optional(v.string()),
-    approvalId: v.string(),
-  },
+  args: { ...grantArgs, ...generationRunWriteArgs.createToolApprovalRequest },
   handler: async (ctx, { runId, grantDigest, ...args }) => {
     const owner = await requireGrantAuthorizedRun(ctx, { runId, grantDigest })
     return createToolApprovalRequestForChat(ctx, owner, args)
@@ -138,23 +137,7 @@ export const createToolApprovalRequest = internalMutation({
 })
 
 export const markGenerationRunCompleted = internalMutation({
-  args: {
-    ...grantArgs,
-    messageId: v.id("messages"),
-    content: v.string(),
-    parts: v.any(),
-    metadata: v.optional(vToolInvocationStreamMetadata),
-    finishReason: v.optional(v.string()),
-    usage: v.optional(
-      v.object({
-        inputTokens: v.optional(v.number()),
-        outputTokens: v.optional(v.number()),
-        totalTokens: v.optional(v.number()),
-      })
-    ),
-    totalToolCalls: v.optional(v.number()),
-    failedToolCalls: v.optional(v.number()),
-  },
+  args: { ...grantArgs, ...generationRunWriteArgs.markGenerationRunCompleted },
   handler: async (ctx, { runId, grantDigest, ...args }) => {
     const owner = await requireGrantAuthorizedRun(ctx, { runId, grantDigest })
     return markGenerationRunCompletedForChat(ctx, owner, args)
@@ -162,11 +145,7 @@ export const markGenerationRunCompleted = internalMutation({
 })
 
 export const markGenerationRunFailed = internalMutation({
-  args: {
-    ...grantArgs,
-    messageId: v.optional(v.id("messages")),
-    error: v.string(),
-  },
+  args: { ...grantArgs, ...generationRunWriteArgs.markGenerationRunFailed },
   handler: async (ctx, { runId, grantDigest, ...args }) => {
     const owner = await requireGrantAuthorizedRun(ctx, { runId, grantDigest })
     return markGenerationRunFailedForChat(ctx, owner, args)
@@ -174,11 +153,7 @@ export const markGenerationRunFailed = internalMutation({
 })
 
 export const markGenerationRunAborted = internalMutation({
-  args: {
-    ...grantArgs,
-    messageId: v.optional(v.id("messages")),
-    reason: v.optional(v.string()),
-  },
+  args: { ...grantArgs, ...generationRunWriteArgs.markGenerationRunAborted },
   handler: async (ctx, { runId, grantDigest, ...args }) => {
     const owner = await requireGrantAuthorizedRun(ctx, { runId, grantDigest })
     return markGenerationRunAbortedForChat(ctx, owner, args)

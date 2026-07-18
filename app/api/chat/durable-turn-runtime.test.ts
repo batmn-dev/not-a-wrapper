@@ -1,12 +1,14 @@
 import { api } from "@/convex/_generated/api"
+import type { Id } from "@/convex/_generated/dataModel"
 import * as Sentry from "@sentry/nextjs"
 import type { TextStreamPart, ToolSet, UIMessage } from "ai"
 import { fetchMutation as moduleFetchMutation } from "convex/nextjs"
 import { getFunctionName } from "convex/server"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   createConvexDurableTurn,
   createGuestDurableTurn,
+  createHttpDurableWorkerWire,
   type DurableTurnInput,
   type DurableWorkerCall,
   type DurableWorkerWire,
@@ -135,8 +137,13 @@ function makeRecordingWire(
   return wire
 }
 
-function wireCalls(wire: RecordingWire, op: string): DurableWorkerCall[] {
-  return wire.calls.filter((call) => call.op === op)
+function wireCalls<Op extends DurableWorkerCall["op"]>(
+  wire: RecordingWire,
+  op: Op
+) {
+  return wire.calls.filter(
+    (call): call is Extract<DurableWorkerCall, { op: Op }> => call.op === op
+  )
 }
 
 function orderedOps(wire: RecordingWire): string[] {
@@ -213,6 +220,66 @@ const RESPONSE_MESSAGE = {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.spyOn(console, "log").mockImplementation(() => {})
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
+
+describe("durable worker HTTP transport", () => {
+  it("uses the generated Convex site URL for local worker writes", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", "")
+    vi.stubEnv("NEXT_PUBLIC_CONVEX_SITE_URL", "http://127.0.0.1:3211")
+    vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "http://127.0.0.1:3210")
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true })))
+    const wire = createHttpDurableWorkerWire({
+      secret: "grant-secret",
+      fetchImpl,
+    })
+
+    await wire({
+      op: "markGenerationRunAborted",
+      args: { runId: "run_1" as Id<"generationRuns"> },
+    })
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://127.0.0.1:3211/chat-turn/worker",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer grant-secret",
+        }),
+      })
+    )
+  })
+
+  it("derives the default hosted site URL when no site URL is available", async () => {
+    vi.stubEnv("CONVEX_SITE_URL", "")
+    vi.stubEnv("NEXT_PUBLIC_CONVEX_SITE_URL", "")
+    vi.stubEnv(
+      "NEXT_PUBLIC_CONVEX_URL",
+      "https://happy-animal-123.convex.cloud"
+    )
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true })))
+    const wire = createHttpDurableWorkerWire({
+      secret: "grant-secret",
+      fetchImpl,
+    })
+
+    await wire({
+      op: "markGenerationRunAborted",
+      args: { runId: "run_1" as Id<"generationRuns"> },
+    })
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://happy-animal-123.convex.site/chat-turn/worker",
+      expect.anything()
+    )
+  })
 })
 
 describe("durable turn runtime — handoff loud-miss", () => {
@@ -433,6 +500,22 @@ describe("durable turn runtime — settlement ordering", () => {
     ])
     // The abort path never completes the run.
     expect(wireCalls(wire, "markGenerationRunCompleted")).toHaveLength(0)
+
+    // The final full-parts snapshot is unconditional (ADR-0011) — abort
+    // included — and precedes the envelope's abort mark, so an aborted answer
+    // keeps its complete parts, not just the throttled subset.
+    const ops = orderedOps(wire)
+    const lastSnapshot = ops.lastIndexOf("updateAssistantSnapshot")
+    expect(lastSnapshot).toBeGreaterThanOrEqual(0)
+    expect(lastSnapshot).toBeLessThan(
+      ops.lastIndexOf("markGenerationRunAborted")
+    )
+    expect(wireCalls(wire, "updateAssistantSnapshot").at(-1)?.args).toMatchObject(
+      {
+        textSnapshot: "done",
+        partsSnapshot: RESPONSE_MESSAGE.parts,
+      }
+    )
   })
 })
 
@@ -519,6 +602,11 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
         .map(([message]) => String(message))
         .find((message) => message.includes("durable_run_abort_write_failed"))
       expect(warnLine).toBeDefined()
+      // A degraded abort is as loud as a degraded completion.
+      expect(Sentry.captureMessage).toHaveBeenCalledWith(
+        "durable_settlement_degraded",
+        expect.objectContaining({ level: "error" })
+      )
     } finally {
       warn.mockRestore()
     }
