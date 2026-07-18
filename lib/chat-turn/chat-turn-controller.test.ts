@@ -108,6 +108,8 @@ function createHarness() {
     sendMessage: vi.fn(() => {
       events.push("sendMessage")
     }),
+    sendMessageAndWaitForAcceptance: (...args) =>
+      Promise.resolve(adapters.sendMessage(...args)),
     regenerate: vi.fn(() => {
       events.push("regenerate")
     }),
@@ -361,9 +363,7 @@ describe("chat turn controller", () => {
         ],
       })
 
-      expect(adapters.toastError).toHaveBeenCalledWith(
-        "Failed to send message"
-      )
+      expect(adapters.toastError).toHaveBeenCalledWith("Failed to send message")
       expect(getMessages()).toEqual([])
       expect(adapters.setMessages).not.toHaveBeenCalled()
       expect(adapters.sendMessage).not.toHaveBeenCalled()
@@ -495,6 +495,103 @@ describe("chat turn controller", () => {
     // retry to claim.
     expect(confirmDispatched).not.toHaveBeenCalled()
     expect(adapters.toastError).toHaveBeenCalledWith("Failed to send message")
+  })
+
+  it("retains the committed identity when request acceptance fails asynchronously", async () => {
+    const { adapters, controller, getMessages, setSnapshot } = createHarness()
+    setSnapshot({ isAuthenticated: true })
+    const confirmDispatched = vi.fn()
+    adapters.ensureChatExists = vi.fn(async () => ({
+      chatId: "chat-new",
+      firstTurn: {
+        userMessageId: "message_user_1",
+        clientMessageId: "optimistic-message",
+        attachments: [],
+        confirmDispatched,
+      },
+    }))
+    adapters.sendMessageAndWaitForAcceptance = vi.fn(async () => {
+      await Promise.resolve()
+      throw new TypeError("network connection lost")
+    })
+
+    await controller.runSendTurn({ text: "Hello" })
+
+    expect(confirmDispatched).not.toHaveBeenCalled()
+    expect(getMessages()).toEqual([])
+    expect(adapters.toastError).toHaveBeenCalledWith("Failed to send message")
+  })
+
+  it("reuses the original identity after an ambiguous claimed-then-disconnected request", async () => {
+    const { adapters, controller, setSnapshot } = createHarness()
+    setSnapshot({ isAuthenticated: true })
+    const confirmDispatched = vi.fn()
+    adapters.createOptimisticMessageId = vi
+      .fn()
+      .mockReturnValueOnce("fresh-attempt-1")
+      .mockReturnValueOnce("fresh-attempt-2")
+    adapters.ensureChatExists = vi.fn(async () => ({
+      chatId: "chat-new",
+      firstTurn: {
+        userMessageId: "message_user_1",
+        // The provider re-presents the atomically committed identity on both
+        // attempts, even though each runner allocated a fresh local id.
+        clientMessageId: "committed-first-turn",
+        attachments: [],
+        confirmDispatched,
+      },
+    }))
+    adapters.sendMessageAndWaitForAcceptance = vi
+      .fn()
+      // The server may already have claimed the row; losing the response is
+      // ambiguous, so retaining and retrying the same id is the safe action.
+      .mockRejectedValueOnce(new TypeError("response lost"))
+      .mockResolvedValueOnce(undefined)
+
+    await controller.runSendTurn({ text: "Same prompt" })
+    await controller.runSendTurn({ text: "Same prompt" })
+
+    const dispatchedIds = vi
+      .mocked(adapters.sendMessageAndWaitForAcceptance)
+      .mock.calls.map((call) => call[0]?.messageId)
+    expect(dispatchedIds).toEqual([
+      "committed-first-turn",
+      "committed-first-turn",
+    ])
+    expect(confirmDispatched).toHaveBeenCalledTimes(1)
+  })
+
+  it("consumes first-turn identity once request acceptance is acknowledged", async () => {
+    const { adapters, controller, setSnapshot } = createHarness()
+    setSnapshot({ isAuthenticated: true })
+    const confirmDispatched = vi.fn()
+    adapters.ensureChatExists = vi.fn(async () => ({
+      chatId: "chat-new",
+      firstTurn: {
+        userMessageId: "message_user_1",
+        clientMessageId: "optimistic-message",
+        attachments: [],
+        confirmDispatched,
+      },
+    }))
+    let acknowledge!: () => void
+    adapters.sendMessageAndWaitForAcceptance = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          acknowledge = resolve
+        })
+    )
+
+    const turn = controller.runSendTurn({ text: "Hello" })
+    await vi.waitFor(() =>
+      expect(adapters.sendMessageAndWaitForAcceptance).toHaveBeenCalledTimes(1)
+    )
+    expect(confirmDispatched).not.toHaveBeenCalled()
+
+    acknowledge()
+    await turn
+
+    expect(confirmDispatched).toHaveBeenCalledTimes(1)
   })
 
   it("creates no optimistic state when no user id resolves", async () => {

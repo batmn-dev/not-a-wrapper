@@ -56,7 +56,7 @@ type SendMessage = (
         messageId?: string
       },
   options?: SendMessageOptions
-) => void
+) => void | Promise<void>
 
 /** Read at execution time so every turn kind uses the current picker context. */
 export type ChatTurnSnapshot = {
@@ -128,6 +128,10 @@ export type ChatTurnAdapters = {
     attachmentIds: string[]
   ) => Promise<UploadedAttachment[] | null>
   sendMessage: SendMessage
+  /** Dispatches the same SDK message but resolves at HTTP response acceptance,
+   * after the server has prepared/claimed the turn and before stream
+   * consumption completes. */
+  sendMessageAndWaitForAcceptance: SendMessage
   regenerate: (options?: RegenerateMessageOptions) => void | Promise<void>
   toastError: (title: string) => void
   bumpChat: (chatId: string) => void
@@ -367,7 +371,7 @@ async function runSendTurn(
       ...optimisticMessage,
     } satisfies ChatTurnMessage
 
-    adapters.sendMessage(
+    await adapters.sendMessageAndWaitForAcceptance(
       {
         ...dispatchedMessage,
         // Replaces the already-rendered optimistic row synchronously inside
@@ -397,8 +401,10 @@ async function runSendTurn(
       }
     )
 
-    // Dispatch accepted: the committed first-turn identity is consumed and
-    // must not be re-presented to a later send.
+    // The HTTP response is accepted only after the server's durable prepare
+    // has claimed the idempotent first-message row. A pre-response failure —
+    // including an ambiguous network loss after the server committed — throws
+    // above and retains the original identity for a safe same-id retry.
     ensured.firstTurn?.confirmDispatched?.()
 
     adapters.setHasSentFirstMessage(true)

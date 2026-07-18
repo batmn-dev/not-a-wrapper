@@ -44,6 +44,12 @@ const seamMocks = vi.hoisted(() => ({
   // detached guest stream must cache into its ORIGIN chat id, never the
   // currently mounted one.
   cacheAndAddMessage: vi.fn(async (_message: unknown, _chatId?: string) => {}),
+  controllerAdapters: null as null | {
+    sendMessageAndWaitForAcceptance: (
+      message: UIMessage & { messageId: string },
+      options?: { body?: Record<string, unknown> }
+    ) => Promise<void>
+  },
   // The observation point for the seam: the controller the hook's onFinish
   // must invoke. A singleton, so whichever render's closure fires, the same
   // spies record it.
@@ -59,7 +65,10 @@ const seamMocks = vi.hoisted(() => ({
 // Only createChatTurnController (and types) are imported from this module in
 // the hook's graph; a plain factory avoids loading the real controller chain.
 vi.mock("@/lib/chat-turn/chat-turn-controller", () => ({
-  createChatTurnController: () => seamMocks.chatTurnController,
+  createChatTurnController: (adapters: typeof seamMocks.controllerAdapters) => {
+    seamMocks.controllerAdapters = adapters
+    return seamMocks.chatTurnController
+  },
 }))
 
 vi.mock("./turn-context", () => ({
@@ -601,5 +610,74 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       chatId: CHAT_ID,
     })
     await waitForInAct(() => expect(hookApiRef.current?.status).toBe("error"))
+  })
+
+  it("rejects request acceptance on an asynchronous HTTP failure", async () => {
+    fetchMock.mockImplementation(
+      async () => new Response("prepare failed", { status: 503 })
+    )
+    const hook = renderHook()
+    const optimistic = {
+      id: "first-turn-client-id",
+      role: "user" as const,
+      parts: [{ type: "text" as const, text: "hi" }],
+      messageId: "first-turn-client-id",
+    }
+    act(() => hook.setMessages([optimistic]))
+
+    const acceptance =
+      seamMocks.controllerAdapters?.sendMessageAndWaitForAcceptance(
+        optimistic,
+        {
+          body: { chatId: CHAT_ID },
+        }
+      )
+    if (!acceptance) throw new Error("controller adapters were not captured")
+
+    await expect(acceptance).rejects.toThrow("prepare failed")
+    // AI SDK catches the transport error for chat state; the explicit
+    // acceptance promise still rejects, so the controller can retain identity.
+    await waitForInAct(() => expect(hookApiRef.current?.status).toBe("error"))
+  })
+
+  it("acknowledges an accepted request before the response stream completes", async () => {
+    fetchMock.mockImplementation(async (_url, init) =>
+      withAbortSemantics(
+        makeUiMessageSseResponse({
+          deltas: Array.from({ length: 10 }, (_, index) => `piece-${index} `),
+          chunkDelayInMs: 25,
+        }),
+        init?.signal
+      )
+    )
+    const hook = renderHook()
+    const optimistic = {
+      id: "accepted-first-turn-id",
+      role: "user" as const,
+      parts: [{ type: "text" as const, text: "hi" }],
+      messageId: "accepted-first-turn-id",
+    }
+    act(() => hook.setMessages([optimistic]))
+
+    const acceptance =
+      seamMocks.controllerAdapters?.sendMessageAndWaitForAcceptance(
+        optimistic,
+        {
+          body: { chatId: CHAT_ID },
+        }
+      )
+    if (!acceptance) throw new Error("controller adapters were not captured")
+
+    await expect(acceptance).resolves.toBeUndefined()
+    expect(seamMocks.chatTurnController.finishChatTurn).not.toHaveBeenCalled()
+
+    // Keep the open stream inside this test; Stop remains the explicit
+    // cancellation path after acceptance.
+    await act(async () => {
+      await hook.stop()
+    })
+    await waitForInAct(() =>
+      expect(seamMocks.chatTurnController.finishChatTurn).toHaveBeenCalled()
+    )
   })
 })

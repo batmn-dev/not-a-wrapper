@@ -75,9 +75,13 @@ vi.mock("convex/react", () => ({
 }))
 
 vi.mock("@ai-sdk/react", () => ({
-  useChat: () => ({
+  useChat: ({
+    chat,
+  }: {
+    chat: { sendMessage: typeof chatCoreMocks.sendMessage }
+  }) => ({
     messages: chatCoreMocks.useChatState.messages,
-    sendMessage: chatCoreMocks.sendMessage,
+    sendMessage: chat.sendMessage,
     regenerate: chatCoreMocks.regenerate,
     status: chatCoreMocks.useChatState.status,
     error: undefined,
@@ -89,13 +93,34 @@ vi.mock("@ai-sdk/react", () => ({
   // the mocked useChat ignores them, but the watchdog stops detached
   // instances directly — route that through a shared spy.
   Chat: class MockChat {
-    constructor(readonly options: unknown) {}
+    constructor(
+      readonly options: {
+        transport: {
+          sendMessages: (options: {
+            messageId?: string
+          }) => Promise<ReadableStream>
+        }
+      }
+    ) {}
+    sendMessage = (
+      message: { messageId?: string },
+      options?: { body?: Record<string, unknown> }
+    ) => {
+      chatCoreMocks.sendMessage(message, options)
+      return this.options.transport
+        .sendMessages({ messageId: message.messageId })
+        .then(() => undefined)
+    }
     stop = () => chatCoreMocks.bindingStop(this.options)
   },
 }))
 
 vi.mock("ai", () => ({
-  DefaultChatTransport: vi.fn(function DefaultChatTransport() {}),
+  DefaultChatTransport: class MockDefaultChatTransport {
+    async sendMessages() {
+      return new ReadableStream()
+    }
+  },
   lastAssistantMessageIsCompleteWithApprovalResponses: vi.fn(() => false),
 }))
 

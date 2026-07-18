@@ -23,6 +23,13 @@
   user; fall back to an explicit hard stop when safe compaction cannot fit. Cover
   authenticated and guest chats, model switches, attachments, and multi-step
   tool turns with cross-provider tests and token/compaction telemetry.
+- **Project-scoped agent context:** let each project define shared instructions,
+  knowledge and files, tool or connector permissions, and optional durable
+  memory that are automatically available to every chat in that project,
+  similar to ChatGPT Projects and Claude Projects. Make context precedence,
+  token budgeting, provenance, access control, versioning, and user-visible
+  reset or opt-out behavior explicit so project chats remain reproducible and
+  do not leak context across project boundaries.
 - **Add chat-composer dictation**
 - **Voice Mode:** Using Eleven Labs
 - **Image generation:** Nano banna and state of the art image gen tools (Using Vercel's SDK Framework)

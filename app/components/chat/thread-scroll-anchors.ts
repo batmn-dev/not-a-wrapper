@@ -54,10 +54,7 @@ export function selectAnchorTurn(root: HTMLElement): HTMLElement | null {
 export function saveThreadAnchor(chatId: string, root: HTMLElement): void {
   const turn = selectAnchorTurn(root)
   const turnId = turn?.dataset.turnIdContainer
-  if (!turn || !turnId) {
-    savedThreadAnchors.delete(chatId)
-    return
-  }
+  if (!turn || !turnId) return
   const offsetFromTopPx =
     root.getBoundingClientRect().top - turn.getBoundingClientRect().top
   if (!Number.isFinite(offsetFromTopPx)) return

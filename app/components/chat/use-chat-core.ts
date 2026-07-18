@@ -1,6 +1,7 @@
 import { useChatEdit } from "@/app/components/chat/use-chat-edit"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
+import { isEmptyAssistantMessage } from "@/convex/domain/message_visibility"
 import { getOrCreateGuestUserId } from "@/lib/api"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import {
@@ -16,60 +17,33 @@ import {
   type EnsuredTurnChat,
   type StagedAttachmentReference,
 } from "@/lib/chat-turn/chat-turn-controller"
+import { routePersistsChatMessages } from "@/lib/chat-turn/turn-store"
 import { attachStagedFilesToChat } from "@/lib/file-handling"
 import { API_ROUTE_CHAT } from "@/lib/routes"
 import type { UserProfile } from "@/lib/user/types"
-import { isEmptyAssistantMessage } from "@/convex/domain/message_visibility"
-import { routePersistsChatMessages } from "@/lib/chat-turn/turn-store"
 import type { UIMessage } from "@ai-sdk/react"
-import { Chat, useChat } from "@ai-sdk/react"
-import {
-  DefaultChatTransport,
-  lastAssistantMessageIsCompleteWithApprovalResponses,
-} from "ai"
+import { useChat } from "@ai-sdk/react"
 import { useConvex, useMutation } from "convex/react"
 import { useSearchParams } from "next/navigation"
 import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from "react"
 import { useTurnContext } from "./turn-context"
+import {
+  useCommitDetachableChatStream,
+  useDetachableChatStream,
+  type ChatStreamFinishEvent,
+} from "./use-detachable-chat-stream"
 
 /** One send-type Chat turn's inputs, assembled by the Composer. */
 export type ChatTurnPayload = {
   text: string
   files: File[]
   attachments: StagedAttachmentReference[]
-}
-
-/**
- * One AI SDK Chat instance plus the origin identity its finish-time work
- * routes to. The mounted hook owns exactly one attached binding; a mounted
- * chat-id transition away from a chat replaces it and marks the old binding
- * detached (see the detach comment in `useChatCore`). `ownerChatId` tracks the
- * mounted chat only while the binding is attached, so by detach time it is
- * already frozen at the chat the stream belongs to — finish-time routing never
- * consults current navigation state, which by then identifies a different
- * chat (or none).
- */
-type ChatStreamBinding = {
-  chat: Chat<UIMessage>
-  ownerChatId: string | null
-  detached: boolean
-  watchdog: ReturnType<typeof setTimeout> | null
-}
-
-/** The subset of the AI SDK finish event the finish handlers consume. */
-type ChatStreamFinishEvent = {
-  message: UIMessage
-  isAbort: boolean
-  isDisconnect: boolean
-  isError: boolean
-  finishReason?: string
 }
 
 /**
@@ -236,12 +210,6 @@ export function useChatCore({
     })
   }, [])
 
-  // Memoized transport for v6
-  const transport = useMemo(
-    () => new DefaultChatTransport({ api: API_ROUTE_CHAT }),
-    []
-  )
-
   // Mounted chat-id transitions detach — the in-place equivalent of a remount.
   // Leaving a mounted chat (browser Back/Forward over the shallow-pushState
   // first-turn flow, e.g. Back to the onboarding surface mid-generation) means
@@ -249,11 +217,11 @@ export function useChatCore({
   // leaves the durable run streaming: the run normally settles server-side
   // (ADR-0011; a degraded settlement leaves the run for the supersede sweep or
   // the per-binding watchdog below) and the sidebar keeps its backend-projected
-  // generating status. Replacing the binding hands useChat a fresh Chat
-  // instance in this same render — it starts from this render's
-  // `initialMessages` (empty on the onboarding surface, so showOnboarding
-  // holds), while the previous instance keeps consuming its stream detached:
-  // its deltas never reach the mounted array and no abort is sent. The Stop
+  // generating status. The layout commit replaces useChat's binding before
+  // paint with a fresh Chat seeded from this render's `initialMessages` (empty
+  // on the onboarding surface, so showOnboarding holds), while the previous
+  // instance keeps consuming its stream detached: its deltas never reach the
+  // mounted array and no abort is sent. The Stop
   // button, bound to the current instance, stays the only user-facing abort;
   // a durable run-scoped Stop usable after re-entry is deferred alongside
   // ADR-0011's lease/reaper (see docs/adr/0012).
@@ -262,70 +230,15 @@ export function useChatCore({
   // the optimistic user row and the already-started stream carry into the
   // durable route.
   //
-  // The hook owns its Chat instances (useChat's `chat` option) precisely so
-  // every stream callback is bound to its own `ChatStreamBinding`: business
-  // logic routes through `streamHandlersRef` (always the latest closures), but
-  // identity comes from the binding — a detached finish persists to its frozen
-  // `ownerChatId`, never to whatever chat the surface shows by then, and a
-  // detached binding refuses `sendAutomaticallyWhen` so an orphan can't
-  // auto-continue a tool-approval turn.
-  const streamHandlersRef = useRef<{
-    onFinish: (
-      binding: ChatStreamBinding,
-      event: ChatStreamFinishEvent
-    ) => void | Promise<void>
-    onError: (binding: ChatStreamBinding, streamError: Error) => void
-  } | null>(null)
-
-  const createStreamBinding = (
-    bindingChatId: string | null,
-    seedMessages: UIMessage[]
-  ): ChatStreamBinding => {
-    const binding: ChatStreamBinding = {
-      chat: null as unknown as Chat<UIMessage>,
-      ownerChatId: bindingChatId,
-      detached: false,
-      watchdog: null,
-    }
-    binding.chat = new Chat<UIMessage>({
-      transport,
-      messages: seedMessages,
-      sendAutomaticallyWhen: (args) =>
-        binding.detached
-          ? false
-          : lastAssistantMessageIsCompleteWithApprovalResponses(args),
-      onFinish: (event) => {
-        void streamHandlersRef.current?.onFinish(binding, event)
-      },
-      onError: (streamError) => {
-        streamHandlersRef.current?.onError(binding, streamError)
-      },
-    })
-    return binding
-  }
-
-  const [streamState, setStreamState] = useState(() => ({
+  // The extracted owner binds each SDK Chat to immutable detach metadata and
+  // performs route transitions in one layout-phase commit. useChatCore keeps
+  // only orchestration and persistence policy.
+  const detachableStream = useDetachableChatStream({
     chatId,
-    binding: createStreamBinding(chatId, initialMessages),
-  }))
-  let activeBinding = streamState.binding
-  if (streamState.chatId !== chatId) {
-    // Adjust-during-render, not an effect: the replacement must land in the
-    // same render that drops the chat id, or one frame of the old thread leaks
-    // into the onboarding surface. Construction is side-effect-free, so a
-    // discarded concurrent render leaves only an unreferenced instance; the
-    // detach side effects (freezing ownership, arming the watchdog) run in the
-    // commit-side transition effect below. (useChat itself reassigns its
-    // internal ref during render when `chat` changes; a discarded render's
-    // reassignment self-heals on the next committed render because the
-    // committed `streamState` still names the committed instance.)
-    const nextBinding =
-      streamState.chatId !== null
-        ? createStreamBinding(chatId, initialMessages)
-        : streamState.binding
-    activeBinding = nextBinding
-    setStreamState({ chatId, binding: nextBinding })
-  }
+    initialMessages,
+    streamTimeoutMs: STREAM_TIMEOUT_MS,
+    api: API_ROUTE_CHAT,
+  })
 
   const {
     messages,
@@ -336,7 +249,7 @@ export function useChatCore({
     stop,
     setMessages,
     addToolApprovalResponse,
-  } = useChat({ chat: activeBinding.chat })
+  } = useChat({ chat: detachableStream.chat })
 
   const setMessagesRef = useRef(setMessages)
   useEffect(() => {
@@ -355,13 +268,6 @@ export function useChatCore({
     messagesRef.current = messages
     statusRef.current = status
     isSubmittingRef.current = isSubmitting
-    // Track the mounted chat as this binding's origin while it is attached
-    // (covers null → chatId first-turn adoption). A mounted transition away
-    // from a chat replaces the binding in the same render, so the replaced
-    // binding's ownerChatId is left frozen at the chat it served.
-    if (!activeBinding.detached) {
-      activeBinding.ownerChatId = chatId
-    }
   })
   const getStatus = useCallback(() => statusRef.current, [])
   const getIsSubmitting = useCallback(() => isSubmittingRef.current, [])
@@ -449,6 +355,12 @@ export function useChatCore({
     attachStagedFiles: (currentChatId, attachmentIds) =>
       attachStagedFilesToChat(convex, currentChatId, attachmentIds),
     sendMessage,
+    sendMessageAndWaitForAcceptance: (message, options) =>
+      detachableStream.sendMessageAndWaitForAcceptance(
+        sendMessage,
+        message,
+        options
+      ),
     regenerate,
     toastError: (title) => toast({ title, status: "error" }),
     bumpChat,
@@ -503,17 +415,14 @@ export function useChatCore({
   // array, lastFinishReason, error toasts) is deliberately skipped: it belongs
   // to whatever chat the surface shows now, not to this stream.
   const finishDetachedTurn = async (
-    binding: ChatStreamBinding,
+    ownerChatId: string | null,
     { message }: ChatStreamFinishEvent
   ) => {
-    if (binding.watchdog !== null) {
-      clearTimeout(binding.watchdog)
-      binding.watchdog = null
-    }
-
-    const ownerChatId = binding.ownerChatId
     if (!ownerChatId) return
-    const routePersists = routePersistsChatMessages(ownerChatId, isAuthenticated)
+    const routePersists = routePersistsChatMessages(
+      ownerChatId,
+      isAuthenticated
+    )
 
     // Only this binding's own pending edit — a newer chat's staged edit must
     // survive an unrelated detached finish untouched.
@@ -550,25 +459,24 @@ export function useChatCore({
     }
   }
 
-  // Latest-logic routing for the per-binding stream callbacks: business logic
-  // stays current (this render's chatTurn/adapters), identity stays with the
-  // binding. Synced post-render like the sibling refs above.
-  useLayoutEffect(() => {
-    streamHandlersRef.current = {
-      onFinish: (binding, event) =>
-        binding.detached
-          ? finishDetachedTurn(binding, event)
-          : handleAttachedFinish(event),
-      onError: (binding, streamError) => {
-        if (binding.detached) {
-          // No toast: a detached stream's error has no visible surface here;
-          // durable chats surface it through the run's terminal projection.
-          console.error("Detached chat stream error:", streamError)
-          return
-        }
-        handleError(streamError)
+  useCommitDetachableChatStream({
+    stream: detachableStream,
+    chatId,
+    initialMessages,
+    handlers: {
+      onAttachedFinish: handleAttachedFinish,
+      onDetachedFinish: finishDetachedTurn,
+      onAttachedError: handleError,
+      onDetachedError: (_originChatId, streamError) => {
+        // No toast: a detached stream's error has no visible surface here;
+        // durable chats surface it through the run's terminal projection.
+        console.error("Detached chat stream error:", streamError)
       },
-    }
+    },
+    onChatTransition: (previousChatId, nextChatId) => {
+      previousChatIdStore.set(nextChatId)
+      if (previousChatId !== null) hydratedChatIdRef.current = null
+    },
   })
 
   const handleToolApproval = useCallback(
@@ -612,37 +520,6 @@ export function useChatCore({
 
     return () => clearTimeout(timeout)
   }, [status])
-
-  // Mounted chat-id transition bookkeeping — the commit side of the detach
-  // (the binding replacement itself happens at render time, where the
-  // semantics are documented). Marks the replaced binding detached, freezing
-  // finish-time routing to its ownerChatId, and arms its watchdog: the same
-  // hard time budget the attached stuck-stream guard enforces, so a detached
-  // stream is stoppable by the system even though it has no user-facing Stop.
-  // Also tracks the previous id for adoption-time fallbacks and forgets
-  // hydration state for a chat we detached from, so re-entering it (Back then
-  // Forward) hydrates the fresh binding from scratch — the same shape a
-  // remount produces.
-  const activeBindingRef = useRef(activeBinding)
-  useEffect(() => {
-    const previousBinding = activeBindingRef.current
-    activeBindingRef.current = activeBinding
-    if (previousBinding !== activeBinding) {
-      previousBinding.detached = true
-      previousBinding.watchdog = setTimeout(() => {
-        previousBinding.chat.stop()
-      }, STREAM_TIMEOUT_MS)
-    }
-
-    const prevChatId = previousChatIdStore.get()
-    previousChatIdStore.set(chatId)
-
-    if (prevChatId === chatId) return
-
-    if (prevChatId !== null) {
-      hydratedChatIdRef.current = null
-    }
-  }, [chatId, activeBinding, previousChatIdStore])
 
   // Hydrate on chat entry, then keep the live turn array projected onto the
   // backend-derived selected path. `initialMessages` is the reactive selected

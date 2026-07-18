@@ -424,6 +424,10 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
           cleanupOptimisticAttachments: vi.fn(),
           attachStagedFiles: () => uploadGate.promise,
           sendMessage: chat.sendMessage,
+          sendMessageAndWaitForAcceptance: (...args) => {
+            void chat.sendMessage(...args)
+            return Promise.resolve()
+          },
           regenerate: chat.regenerate,
           toastError: vi.fn(),
           bumpChat: vi.fn(),

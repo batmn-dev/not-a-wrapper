@@ -108,36 +108,62 @@ describe("thread scroll anchors", () => {
     expect(targetRoot.scrollTop).toBe(75)
   })
 
-  it("clears a saved anchor when no turn is visible", () => {
-    const visibleRoot = makeRoot(
-      { top: 100, bottom: 600 },
-      [{ id: "m2", top: 80, bottom: 180 }]
-    )
+  it("retains the last valid anchor through a transient empty layout", () => {
+    const visibleRoot = makeRoot({ top: 100, bottom: 600 }, [
+      { id: "m2", top: 80, bottom: 180 },
+    ])
     saveThreadAnchor("chat-1", visibleRoot)
 
-    const allTurnsAboveRoot = makeRoot(
-      { top: 100, bottom: 600 },
-      [{ id: "m2", top: 0, bottom: 80 }]
-    )
+    const allTurnsAboveRoot = makeRoot({ top: 100, bottom: 600 }, [
+      { id: "m2", top: 0, bottom: 80 },
+    ])
     saveThreadAnchor("chat-1", allTurnsAboveRoot)
 
-    expect(restoreThreadAnchor("chat-1", visibleRoot)).toBe(false)
+    const restoredRoot = makeRoot({ top: 100, bottom: 600 }, [
+      { id: "m2", top: 180, bottom: 280 },
+    ])
+    restoredRoot.scrollTop = 300
+
+    expect(restoreThreadAnchor("chat-1", restoredRoot)).toBe(true)
+    // Saved offset was 20px; returning later restores from that settled anchor.
+    expect(restoredRoot.scrollTop).toBe(400)
   })
 
-  it("does not store a non-finite offset", () => {
+  it("does not replace a valid anchor with a non-finite measurement", () => {
+    const settledRoot = makeRoot({ top: 100, bottom: 600 }, [
+      { id: "settled", top: 80, bottom: 180 },
+    ])
+    saveThreadAnchor("chat-1", settledRoot)
+
     const root = document.createElement("div")
     vi.spyOn(root, "getBoundingClientRect").mockReturnValue({
       top: 100,
       bottom: 600,
     } as DOMRect)
     const turn = document.createElement("div")
-    turn.setAttribute("data-turn-id-container", "m1")
+    turn.setAttribute("data-turn-id-container", "unstable")
     vi.spyOn(turn, "getBoundingClientRect")
       .mockReturnValueOnce({ top: 50, bottom: 150 } as DOMRect)
       .mockReturnValue({ top: Number.NaN, bottom: 150 } as DOMRect)
     root.appendChild(turn)
 
     saveThreadAnchor("chat-1", root)
+
+    const restoredRoot = makeRoot({ top: 100, bottom: 600 }, [
+      { id: "settled", top: 130, bottom: 230 },
+    ])
+    restoredRoot.scrollTop = 50
+    expect(restoreThreadAnchor("chat-1", restoredRoot)).toBe(true)
+    expect(restoredRoot.scrollTop).toBe(100)
+  })
+
+  it("uses the test reset as the only clear operation", () => {
+    const root = makeRoot({ top: 100, bottom: 600 }, [
+      { id: "m2", top: 80, bottom: 180 },
+    ])
+    saveThreadAnchor("chat-1", root)
+
+    resetThreadAnchorsForTest()
 
     expect(restoreThreadAnchor("chat-1", root)).toBe(false)
   })
