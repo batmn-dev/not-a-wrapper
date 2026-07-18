@@ -1,5 +1,10 @@
 import { v } from "convex/values"
-import { internalMutation, internalQuery } from "./_generated/server"
+import { internal } from "./_generated/api"
+import {
+  internalMutation,
+  internalQuery,
+  type MutationCtx,
+} from "./_generated/server"
 import {
   getProjectModifiedAt,
   patchProjectActivity,
@@ -104,38 +109,79 @@ export const togglePinned = ownedProjectMutation({
   },
 })
 
+const PROJECT_BACKFILL_PAGE_SIZE = 50
+
+type BackfillUpdatedAtArgs = {
+  cursor?: string
+  total?: number
+  patched?: number
+}
+
+type BackfillUpdatedAtResult = {
+  isDone: boolean
+  total: number
+  patched: number
+}
+
+export async function backfillUpdatedAtBatch(
+  ctx: MutationCtx,
+  { cursor, total = 0, patched = 0 }: BackfillUpdatedAtArgs
+): Promise<BackfillUpdatedAtResult> {
+  const projects = await ctx.db.query("projects").paginate({
+    cursor: cursor ?? null,
+    numItems: PROJECT_BACKFILL_PAGE_SIZE,
+  })
+  let batchPatched = 0
+
+  for (const project of projects.page) {
+    const newestChat = await ctx.db
+      .query("chats")
+      .withIndex("by_project_updated", (q) => q.eq("projectId", project._id))
+      .order("desc")
+      .first()
+    const updatedAt = Math.max(
+      getProjectModifiedAt(project),
+      newestChat?.updatedAt ?? project._creationTime
+    )
+
+    if (project.updatedAt !== updatedAt) {
+      await ctx.db.patch(project._id, { updatedAt })
+      batchPatched++
+    }
+  }
+
+  const nextTotal = total + projects.page.length
+  const nextPatched = patched + batchPatched
+
+  if (!projects.isDone) {
+    await ctx.scheduler.runAfter(0, internal.projects.backfillUpdatedAt, {
+      cursor: projects.continueCursor,
+      total: nextTotal,
+      patched: nextPatched,
+    })
+  }
+
+  return {
+    isDone: projects.isDone,
+    total: nextTotal,
+    patched: nextPatched,
+  }
+}
+
 /**
  * Production-safe backfill for the initially optional activity timestamp.
  * Existing projects start at the later of their creation time and newest chat
  * activity, so deploying the field never labels legacy rows as modified "now".
+ * Each page schedules the next one after committing to stay within transaction
+ * limits while preserving cumulative progress counts.
  */
 export const backfillUpdatedAt = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    const projects = await ctx.db.query("projects").collect()
-    let patched = 0
-
-    for (const project of projects) {
-      const newestChat = await ctx.db
-        .query("chats")
-        .withIndex("by_project_updated", (q) =>
-          q.eq("projectId", project._id)
-        )
-        .order("desc")
-        .first()
-      const updatedAt = Math.max(
-        getProjectModifiedAt(project),
-        newestChat?.updatedAt ?? project._creationTime
-      )
-
-      if (project.updatedAt !== updatedAt) {
-        await ctx.db.patch(project._id, { updatedAt })
-        patched++
-      }
-    }
-
-    return { total: projects.length, patched }
+  args: {
+    cursor: v.optional(v.string()),
+    total: v.optional(v.number()),
+    patched: v.optional(v.number()),
   },
+  handler: backfillUpdatedAtBatch,
 })
 
 /**
