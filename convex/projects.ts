@@ -1,5 +1,9 @@
 import { v } from "convex/values"
-import { internalQuery } from "./_generated/server"
+import { internalMutation, internalQuery } from "./_generated/server"
+import {
+  getProjectModifiedAt,
+  patchProjectActivity,
+} from "./domain/project_activity"
 import {
   authenticatedMutation,
   maybeAuthQuery,
@@ -68,9 +72,11 @@ export const create = authenticatedMutation({
     name: v.string(),
   },
   handler: async (ctx, { name }) => {
+    const now = Date.now()
     return await ctx.db.insert("projects", {
       userId: ctx.user._id,
       name,
+      updatedAt: now,
     })
   },
 })
@@ -81,7 +87,8 @@ export const create = authenticatedMutation({
 export const updateName = ownedProjectMutation({
   args: { name: v.string() },
   handler: async (ctx, { name }) => {
-    await ctx.db.patch(ctx.project._id, { name })
+    if (ctx.project.name === name) return
+    await patchProjectActivity(ctx, ctx.project, { name }, Date.now())
   },
 })
 
@@ -92,7 +99,42 @@ export const updateName = ownedProjectMutation({
 export const togglePinned = ownedProjectMutation({
   args: { pinned: v.boolean() },
   handler: async (ctx, { pinned }) => {
-    await ctx.db.patch(ctx.project._id, { pinned })
+    if (Boolean(ctx.project.pinned) === pinned) return
+    await patchProjectActivity(ctx, ctx.project, { pinned }, Date.now())
+  },
+})
+
+/**
+ * Production-safe backfill for the initially optional activity timestamp.
+ * Existing projects start at the later of their creation time and newest chat
+ * activity, so deploying the field never labels legacy rows as modified "now".
+ */
+export const backfillUpdatedAt = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const projects = await ctx.db.query("projects").collect()
+    let patched = 0
+
+    for (const project of projects) {
+      const newestChat = await ctx.db
+        .query("chats")
+        .withIndex("by_project_updated", (q) =>
+          q.eq("projectId", project._id)
+        )
+        .order("desc")
+        .first()
+      const updatedAt = Math.max(
+        getProjectModifiedAt(project),
+        newestChat?.updatedAt ?? project._creationTime
+      )
+
+      if (project.updatedAt !== updatedAt) {
+        await ctx.db.patch(project._id, { updatedAt })
+        patched++
+      }
+    }
+
+    return { total: projects.length, patched }
   },
 })
 

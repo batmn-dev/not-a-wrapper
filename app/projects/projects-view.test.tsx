@@ -20,6 +20,7 @@ type PerUserQueryState = {
 
 const mocks = vi.hoisted(() => ({
   perUserQuery: { data: undefined, isLoading: true } as PerUserQueryState,
+  perUserQueryError: null as Error | null,
   mutationCalls: [] as Array<{ name: string; args: unknown }>,
   rejectedMutations: new Set<string>(),
   push: vi.fn(),
@@ -29,7 +30,10 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock("@/lib/convex/use-per-user-query", () => ({
-  usePerUserQuery: () => mocks.perUserQuery,
+  usePerUserQuery: () => {
+    if (mocks.perUserQueryError) throw mocks.perUserQueryError
+    return mocks.perUserQuery
+  },
 }))
 vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server")
@@ -187,6 +191,7 @@ describe("ProjectsView", () => {
 
   beforeEach(() => {
     mocks.perUserQuery = { data: ownedProjects, isLoading: false }
+    mocks.perUserQueryError = null
     mocks.mutationCalls = []
     mocks.rejectedMutations.clear()
     mocks.searchParams = new URLSearchParams()
@@ -224,6 +229,25 @@ describe("ProjectsView", () => {
     expect(container.querySelector('[data-project-new-chat="true"]')).toBeNull()
     expect(container.querySelector('[aria-label="Pin Alpha"]')).toBeTruthy()
     expect(container.querySelector('[data-sort-column]')).toBeNull()
+  })
+
+  it("orders projects by persisted activity instead of creation time", async () => {
+    mocks.perUserQuery = {
+      data: [
+        { ...ownedProjects[0], updatedAt: 3_000 },
+        { ...ownedProjects[1], updatedAt: 2_000 },
+      ],
+      isLoading: false,
+    }
+
+    await render()
+
+    const rows = [
+      ...container.querySelectorAll<HTMLElement>(
+        '[data-project-row="true"]'
+      ),
+    ]
+    expect(rows.map((row) => row.dataset.projectId)).toEqual(["p1", "p2"])
   })
 
   it("keeps every row tabbable and traverses cells and rows with arrows", async () => {
@@ -372,6 +396,20 @@ describe("ProjectsView", () => {
 
     expect(byText("No projects yet")).toBeUndefined()
     expect(container.querySelector('[role="grid"]')).toBeNull()
+  })
+
+  it("renders the directory fallback when the per-user query throws", async () => {
+    mocks.perUserQueryError = new Error("subscription failed")
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    await render()
+
+    expect(byText("Projects couldn't load")).toBeTruthy()
+    expect(
+      byText("Something went wrong. Refresh the page to try again.")
+    ).toBeTruthy()
+    expect(container.querySelector('[role="grid"]')).toBeNull()
+    consoleError.mockRestore()
   })
 
   it("filters projects client-side and shows the no-results state", async () => {
@@ -535,7 +573,7 @@ describe("ProjectsView", () => {
     expect(navigationDefaultAllowed).toBe(false)
   })
 
-  it("clears search without exposing a directory new-chat action", async () => {
+  it("clears search, restores input focus, and exposes no new-chat action", async () => {
     await render()
 
     const search = container.querySelector<HTMLInputElement>(
@@ -546,8 +584,10 @@ describe("ProjectsView", () => {
       '[aria-label="Clear search"]'
     )!
     expect(clear).toBeTruthy()
+    clear.focus()
     await act(async () => void click(clear))
     expect(search.value).toBe("")
+    expect(document.activeElement).toBe(search)
     expect(container.querySelector('[data-project-new-chat="true"]')).toBeNull()
   })
 

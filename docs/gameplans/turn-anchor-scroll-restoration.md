@@ -11,7 +11,12 @@ Implementation plan for saving and restoring per-conversation thread scroll posi
 1. **Stay on the current git branch.** Do not create or switch branches. Do not push or open a PR unless asked.
 2. **Use bun** for everything (`bun add`, `bunx`, `bun run`).
 3. **Never kill or restart the dev server on port 3000.** The user's long-running `bun dev` owns it. Live verification happens through the user's signed-in Chrome against `localhost:3000`.
-4. **Scope is exactly three files** (one new, one modified, one-or-two test files). If you believe another file must change, stop and report instead of changing it.
+4. **Scope is exactly four files** (two new files and two modified files):
+   - `app/components/chat/thread-scroll-anchors.ts`
+   - `app/components/chat/thread-scroll.tsx`
+   - `app/components/chat/thread-scroll-anchors.test.ts`
+   - `app/components/chat/thread-scroll.test.tsx`
+   If you believe another file must change, stop and report instead of changing it.
 5. Files you must **NOT** modify:
    - `components/ui/scroll-root.tsx` — the scroll root already has everything we need (`data-scroll-root`, layout ownership).
    - `app/components/chat/conversation.tsx` — the turn markup (`data-turn-id-container={message.id}`) already exists at line ~267. `ThreadScrollEdge`'s props do not change.
@@ -367,4 +372,4 @@ If any expectation fails, diagnose in source before touching timing or adding re
 - [ ] Five pure tests + two lifecycle tests pass; no existing tests modified except the `render` helper extension and shared stubs.
 - [ ] `bunx tsc --noEmit` clean.
 - [ ] Live steps 1–7 verified through the user's Chrome on :3000, including the sidebar-reflow case (step 3).
-- [ ] No changes outside the three (plus test) files; no new dependencies; current branch only, no pushes.
+- [ ] No changes outside these four files; no new dependencies; current branch only, no pushes.

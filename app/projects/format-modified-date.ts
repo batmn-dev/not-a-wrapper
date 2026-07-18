@@ -4,10 +4,8 @@ const DAY_MS = 86_400_000
  * Compact "Modified" date in the reference directory style: a weekday name
  * inside the current week ("Tuesday"), month + day within the current year
  * ("Jun 23"), and month + day + year beyond it ("Apr 22, 2025").
- *
- * Callers currently feed it Convex `_creationTime` — the schema has no
- * `updatedAt` yet, so creation time is the documented stand-in until a real
- * modification timestamp exists.
+ * The input is the project's persisted modification timestamp. Callers may
+ * fall back to `_creationTime` only for legacy rows awaiting backfill.
  */
 export function formatModifiedDate(
   timestampMs: number,

@@ -127,6 +127,11 @@ describe("sidebar grouping composition", () => {
   })
 
   it("orders pinned chats by pinned time and projects newest-first", () => {
+    const firstPinnedChat = chat("first-pinned", {
+      pinned: true,
+      pinned_at: "2026-01-05T00:00:00.000Z",
+      updated_at: "2026-01-05T00:00:00.000Z",
+    })
     const secondPinnedChat = chat("second-pinned", {
       pinned: true,
       pinned_at: "2026-01-06T00:00:00.000Z",
@@ -134,13 +139,16 @@ describe("sidebar grouping composition", () => {
     })
     const secondProject = project("second", { created: 3 })
     const result = deriveSidebarComposition({
-      chats: [pinnedChat, secondPinnedChat],
+      chats: [firstPinnedChat, secondPinnedChat],
       projects: [...projects, secondProject],
       projectPreviews,
       organization: "by-project",
     })
 
-    expect(result.pinnedChats.map(({ id }) => id)).toEqual(["second-pinned"])
+    expect(result.pinnedChats.map(({ id }) => id)).toEqual([
+      "second-pinned",
+      "first-pinned",
+    ])
     expect(result.sectionProjects.map(({ _id }) => _id)).toEqual([
       "second",
       "alpha",

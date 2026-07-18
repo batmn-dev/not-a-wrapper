@@ -101,7 +101,7 @@ export const SidebarMenuItem = forwardRef<
       className={cn(
         "shrink-0 text-[var(--text-tertiary)] opacity-0 group-hover/menu-item:opacity-100",
         trailingInteractive &&
-          "group-focus-within/menu-item:opacity-100 pointer-coarse:opacity-100"
+          "relative z-10 group-focus-within/menu-item:opacity-100 pointer-coarse:opacity-100"
       )}
     >
       {trailing}
@@ -126,7 +126,7 @@ export const SidebarMenuItem = forwardRef<
           ref={ref as Ref<HTMLAnchorElement>}
           href={href}
           onClick={onClick as MouseEventHandler<HTMLAnchorElement> | undefined}
-          className="sidebar-row-primary-control flex h-full min-w-0 grow items-center gap-(--sidebar-item-gap) rounded-lg focus-visible:outline-none"
+          className="sidebar-row-primary-control after:absolute after:inset-0 flex h-full min-w-0 grow items-center gap-(--sidebar-item-gap) rounded-lg focus-visible:outline-none"
           data-testid={testId}
           data-sidebar-item="true"
           data-active={isActive ? "true" : undefined}

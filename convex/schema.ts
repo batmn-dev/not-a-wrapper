@@ -278,6 +278,10 @@ export default defineSchema({
   projects: defineTable({
     userId: v.id("users"),
     name: v.string(),
+    // Last durable user-visible change to the project or one of its chats.
+    // Optional during the initial production backfill; readers fall back to
+    // `_creationTime` until a legacy row is touched.
+    updatedAt: v.optional(v.number()),
     // Optional while this first reaches production so existing smoke-test rows
     // remain valid; false/undefined are intentionally equivalent.
     pinned: v.optional(v.boolean()),

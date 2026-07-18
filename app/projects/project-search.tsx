@@ -18,6 +18,7 @@ type ProjectSearchProps = {
  */
 export function ProjectSearch({ value, onValueChange }: ProjectSearchProps) {
   const lastModalityRef = useRef<"keyboard" | "pointer">("pointer")
+  const inputRef = useRef<HTMLInputElement | null>(null)
   const [hasKeyboardFocus, setHasKeyboardFocus] = useState(false)
 
   // Text inputs match :focus-visible after a mouse click in Chromium, so that
@@ -27,6 +28,7 @@ export function ProjectSearch({ value, onValueChange }: ProjectSearchProps) {
   const attachModalityListeners = useCallback(
     (node: HTMLInputElement | null) => {
       if (!node) return
+      inputRef.current = node
 
       const markKeyboard = () => {
         lastModalityRef.current = "keyboard"
@@ -38,12 +40,18 @@ export function ProjectSearch({ value, onValueChange }: ProjectSearchProps) {
       document.addEventListener("keydown", markKeyboard, true)
       document.addEventListener("pointerdown", markPointer, true)
       return () => {
+        if (inputRef.current === node) inputRef.current = null
         document.removeEventListener("keydown", markKeyboard, true)
         document.removeEventListener("pointerdown", markPointer, true)
       }
     },
     []
   )
+
+  const clearSearch = () => {
+    onValueChange("")
+    inputRef.current?.focus()
+  }
 
   return (
     <div className="relative w-full">
@@ -83,7 +91,7 @@ export function ProjectSearch({ value, onValueChange }: ProjectSearchProps) {
         <button
           type="button"
           aria-label="Clear search"
-          onClick={() => onValueChange("")}
+          onClick={clearSearch}
           className="hover:bg-[var(--projects-control-fill)] focus-visible:bg-[var(--projects-control-fill)] absolute end-0.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-linear-to-r from-transparent via-[var(--projects-control-surface)] via-50% to-transparent text-[var(--text-tertiary)] outline-none focus-visible:outline-[1.5px] focus-visible:outline-offset-[2.5px] focus-visible:outline-foreground focus-visible:[outline-style:solid] motion-reduce:transition-none"
         >
           <Icon icon={RiCloseLine} slotSize={18} glyphInset={0} />

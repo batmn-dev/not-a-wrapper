@@ -28,7 +28,7 @@ describe("SidebarMenuItem", () => {
     container.remove()
   })
 
-  it("renders an interactive trailing action as a sibling of the primary link", async () => {
+  it("keeps the padded row clickable without covering the trailing action", async () => {
     await act(async () => {
       root.render(
         <SidebarMenuItem
@@ -51,7 +51,11 @@ describe("SidebarMenuItem", () => {
     expect(link?.parentElement?.classList.contains("sidebar-row-content")).toBe(
       true
     )
+    expect(link?.classList.contains("after:absolute")).toBe(true)
+    expect(link?.classList.contains("after:inset-0")).toBe(true)
     expect(link?.contains(action)).toBe(false)
     expect(link?.parentElement).toBe(action?.parentElement?.parentElement)
+    expect(action?.parentElement?.classList.contains("relative")).toBe(true)
+    expect(action?.parentElement?.classList.contains("z-10")).toBe(true)
   })
 })

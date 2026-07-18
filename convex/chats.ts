@@ -7,6 +7,11 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server"
+import {
+  patchChatActivity,
+  recordKnownProjectActivity,
+  recordProjectActivity,
+} from "./domain/project_activity"
 import { requireOwnedProject } from "./lib/auth"
 import {
   authenticatedMutation,
@@ -297,11 +302,12 @@ export const create = authenticatedMutation({
     projectId: v.optional(v.id("projects")),
   },
   handler: async (ctx, args) => {
-    if (args.projectId) {
-      await requireOwnedProject(ctx, args.projectId)
-    }
+    const project = args.projectId
+      ? (await requireOwnedProject(ctx, args.projectId)).project
+      : undefined
 
-    return await ctx.db.insert("chats", {
+    const now = Date.now()
+    const chatId = await ctx.db.insert("chats", {
       userId: ctx.user._id,
       title: args.title ?? "New chat",
       model: args.model,
@@ -309,8 +315,10 @@ export const create = authenticatedMutation({
       projectId: args.projectId,
       public: false,
       pinned: false,
-      updatedAt: Date.now(),
+      updatedAt: now,
     })
+    await recordKnownProjectActivity(ctx, project, now)
+    return chatId
   },
 })
 
@@ -320,7 +328,7 @@ export const create = authenticatedMutation({
 export const updateTitle = ownedChatMutation({
   args: { title: v.string() },
   handler: async (ctx, { title }) => {
-    await ctx.db.patch(ctx.chat._id, { title, updatedAt: Date.now() })
+    await patchChatActivity(ctx, ctx.chat, { title }, Date.now())
   },
 })
 
@@ -330,7 +338,7 @@ export const updateTitle = ownedChatMutation({
 export const updateModel = ownedChatMutation({
   args: { model: v.string() },
   handler: async (ctx, { model }) => {
-    await ctx.db.patch(ctx.chat._id, { model, updatedAt: Date.now() })
+    await patchChatActivity(ctx, ctx.chat, { model }, Date.now())
   },
 })
 
@@ -340,11 +348,13 @@ export const updateModel = ownedChatMutation({
 export const togglePin = ownedChatMutation({
   args: { pinned: v.boolean() },
   handler: async (ctx, { pinned }) => {
-    await ctx.db.patch(ctx.chat._id, {
-      pinned,
-      pinnedAt: pinned ? Date.now() : undefined,
-      updatedAt: Date.now(),
-    })
+    const now = Date.now()
+    await patchChatActivity(
+      ctx,
+      ctx.chat,
+      { pinned, pinnedAt: pinned ? now : undefined },
+      now
+    )
   },
 })
 
@@ -354,7 +364,7 @@ export const togglePin = ownedChatMutation({
 export const makePublic = ownedChatMutation({
   args: {},
   handler: async (ctx) => {
-    await ctx.db.patch(ctx.chat._id, { public: true, updatedAt: Date.now() })
+    await patchChatActivity(ctx, ctx.chat, { public: true }, Date.now())
   },
 })
 
@@ -473,6 +483,8 @@ export const remove = ownedChatMutation({
       }
       await ctx.db.delete(attachment._id)
     }
+
+    await recordProjectActivity(ctx, ctx.chat.projectId, Date.now())
 
     // Delete the chat
     await ctx.db.delete(chatId)

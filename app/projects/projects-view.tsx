@@ -67,7 +67,7 @@ function parseDirectoryViewState(searchParams: URLSearchParams) {
   }
 }
 
-function useProjectsDirectory(isPinned: (project: PinnableProject) => boolean) {
+function useProjectsDirectoryViewState() {
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -87,37 +87,6 @@ function useProjectsDirectory(isPinned: (project: PinnableProject) => boolean) {
   }
 
   const { tab, query } = viewState
-
-  const { data: ownedProjects, isLoading: isOwnedLoading } = usePerUserQuery(
-    api.projects.getForCurrentUser
-  )
-
-  const tabSource: DirectoryProject[] | undefined =
-    tab === "shared" ? NO_SHARED_PROJECTS : ownedProjects
-  const isLoading = tab === "shared" ? false : isOwnedLoading
-
-  const normalizedQuery = query.trim().toLowerCase()
-  const visibleProjects = useMemo(() => {
-    if (!tabSource) return undefined
-    const projectsWithPinState = tabSource.map((project) => ({
-      ...project,
-      pinned: isPinned(project),
-    }))
-    const matches = normalizedQuery
-      ? projectsWithPinState.filter((project) =>
-          (project.name || "Untitled Project")
-            .toLowerCase()
-            .includes(normalizedQuery)
-        )
-      : projectsWithPinState
-
-    return [...matches].sort((a, b) => {
-      const pinOrder = Number(Boolean(b.pinned)) - Number(Boolean(a.pinned))
-      if (pinOrder !== 0) return pinOrder
-
-      return b._creationTime - a._creationTime
-    })
-  }, [isPinned, normalizedQuery, tabSource])
 
   const updateUrl = (
     nextState: DirectoryViewState,
@@ -155,6 +124,49 @@ function useProjectsDirectory(isPinned: (project: PinnableProject) => boolean) {
     setTab,
     query,
     setQuery,
+  }
+}
+
+function useProjectsDirectory(
+  tab: ProjectsDirectoryTab,
+  query: string,
+  isPinned: (project: PinnableProject) => boolean
+) {
+  const { data: ownedProjects, isLoading: isOwnedLoading } = usePerUserQuery(
+    api.projects.getForCurrentUser
+  )
+
+  const tabSource: DirectoryProject[] | undefined =
+    tab === "shared" ? NO_SHARED_PROJECTS : ownedProjects
+  const isLoading = tab === "shared" ? false : isOwnedLoading
+
+  const normalizedQuery = query.trim().toLowerCase()
+  const visibleProjects = useMemo(() => {
+    if (!tabSource) return undefined
+    const projectsWithPinState = tabSource.map((project) => ({
+      ...project,
+      pinned: isPinned(project),
+    }))
+    const matches = normalizedQuery
+      ? projectsWithPinState.filter((project) =>
+          (project.name || "Untitled Project")
+            .toLowerCase()
+            .includes(normalizedQuery)
+        )
+      : projectsWithPinState
+
+    return [...matches].sort((a, b) => {
+      const pinOrder = Number(Boolean(b.pinned)) - Number(Boolean(a.pinned))
+      if (pinOrder !== 0) return pinOrder
+
+      return (
+        (b.updatedAt ?? b._creationTime) -
+        (a.updatedAt ?? a._creationTime)
+      )
+    })
+  }, [isPinned, normalizedQuery, tabSource])
+
+  return {
     isLoading,
     hasQuery: normalizedQuery.length > 0,
     visibleProjects,
@@ -204,6 +216,50 @@ class DirectoryErrorBoundary extends Component<
   }
 }
 
+type ProjectsDirectoryListProps = Pick<DirectoryViewState, "tab" | "query"> &
+  Pick<
+    ReturnType<typeof useProjectPinning>,
+    "isPinned" | "isPinPending" | "togglePinned"
+  >
+
+function ProjectsDirectoryList({
+  tab,
+  query,
+  isPinned,
+  isPinPending,
+  togglePinned,
+}: ProjectsDirectoryListProps) {
+  const directory = useProjectsDirectory(tab, query, isPinned)
+
+  if (directory.isLoading || directory.visibleProjects === undefined) {
+    // Auth sync / query in flight: render neither rows nor a false empty state.
+    return null
+  }
+  if (directory.visibleProjects.length > 0) {
+    return (
+      <ProjectsGrid
+        projects={directory.visibleProjects}
+        onTogglePinned={togglePinned}
+        isPinPending={isPinPending}
+      />
+    )
+  }
+  if (directory.hasQuery || tab === "shared") {
+    return (
+      <DirectoryEmptyState
+        title="No matching projects"
+        description="Try a different search or tab."
+      />
+    )
+  }
+  return (
+    <DirectoryEmptyState
+      title="No projects yet"
+      description="Create a project to keep related chats together."
+    />
+  )
+}
+
 /**
  * The /projects directory. Owns the page's whole vertical composition in the
  * app scroll root: the mobile compact bar, the heading/search/New row, the
@@ -216,7 +272,7 @@ export function ProjectsView() {
 
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const projectPinning = useProjectPinning()
-  const directory = useProjectsDirectory(projectPinning.isPinned)
+  const directory = useProjectsDirectoryViewState()
 
   // Same scrolled-signal pattern as the chat Header: drives the mobile bar's
   // sharp-edge shadow.
@@ -251,41 +307,6 @@ export function ProjectsView() {
     observer.observe(sentinel)
     return () => observer.disconnect()
   }, [scrollRef, isMobile])
-
-  let listContent: ReactNode = null
-  if (directory.isLoading || directory.visibleProjects === undefined) {
-    // Auth sync / query in flight: render neither rows nor a false empty state.
-    listContent = null
-  } else if (directory.visibleProjects.length > 0) {
-    listContent = (
-      <ProjectsGrid
-        projects={directory.visibleProjects}
-        onTogglePinned={projectPinning.togglePinned}
-        isPinPending={projectPinning.isPinPending}
-      />
-    )
-  } else if (directory.hasQuery) {
-    listContent = (
-      <DirectoryEmptyState
-        title="No matching projects"
-        description="Try a different search or tab."
-      />
-    )
-  } else if (directory.tab === "shared") {
-    listContent = (
-      <DirectoryEmptyState
-        title="No matching projects"
-        description="Try a different search or tab."
-      />
-    )
-  } else {
-    listContent = (
-      <DirectoryEmptyState
-        title="No projects yet"
-        description="Create a project to keep related chats together."
-      />
-    )
-  }
 
   return (
     <div className="flex w-full flex-col [--projects-content-max-width:50rem] [--projects-control-fill:#f3f3f3] [--projects-control-surface:#fff] dark:[--projects-control-fill:#414141] dark:[--projects-control-surface:#212121]">
@@ -368,7 +389,15 @@ export function ProjectsView() {
       {/* List column. */}
       <div className="mx-auto flex w-full max-w-(--projects-content-max-width) flex-1 flex-col px-4 pb-8">
         <div className="mt-2 flex min-h-0 flex-1 flex-col">
-          <DirectoryErrorBoundary>{listContent}</DirectoryErrorBoundary>
+          <DirectoryErrorBoundary>
+            <ProjectsDirectoryList
+              tab={directory.tab}
+              query={directory.query}
+              isPinned={projectPinning.isPinned}
+              isPinPending={projectPinning.isPinPending}
+              togglePinned={projectPinning.togglePinned}
+            />
+          </DirectoryErrorBoundary>
         </div>
       </div>
 
