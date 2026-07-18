@@ -133,7 +133,7 @@ type ChatsContextType = {
     id: string,
     currentChatId?: string,
     redirect?: () => void
-  ) => Promise<void>
+  ) => Promise<boolean>
   createNewChat: (input: CreateNewChatInput) => Promise<Chats | undefined>
   resetChats: () => Promise<void>
   getChatById: (id: string) => Chats | undefined
@@ -299,7 +299,7 @@ export function ChatsProvider({
         await deleteCachedChat(id)
         await clearMessagesCache(id)
         if (id === currentChatId && redirect) redirect()
-        return
+        return true
       }
 
       // Optimistic delete
@@ -309,10 +309,12 @@ export function ChatsProvider({
         await deleteChatMutation({ chatId: id as Id<"chats"> })
         if (id === currentChatId && redirect) redirect()
         // Keep the delete op until server confirms (real-time will remove the chat)
+        return true
       } catch {
         // Revert optimistic delete
         removeOp((op) => op.type === "delete" && op.id === id)
         toast({ title: "Failed to delete chat", status: "error" })
+        return false
       }
     },
     [deleteChatMutation, removeOp]

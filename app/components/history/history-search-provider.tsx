@@ -70,9 +70,15 @@ export function HistorySearchProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       if (id === chatId) {
         setIsOpen(false)
+      }
+      const deleted = await deleteChat(
+        id,
+        chatId || undefined,
+        () => router.push("/")
+      )
+      if (deleted && id === chatId) {
         await resetMessages()
       }
-      await deleteChat(id, chatId || undefined, () => router.push("/"))
     },
     [chatId, resetMessages, deleteChat, router]
   )
