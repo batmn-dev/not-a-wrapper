@@ -446,21 +446,24 @@ function sleep(ms: number): Promise<void> {
 type SnapshotPart =
   { type: "text"; text: string } | { type: "reasoning"; text: string }
 
-const SNAPSHOT_WRITE_TIMEOUT_MS = 10_000
+const WORKER_WRITE_TIMEOUT_MS = 10_000
 
-class SnapshotWriteTimeoutError extends Error {
-  constructor(timeoutMs: number) {
-    super(`Timed out writing assistant snapshot after ${timeoutMs}ms`)
-    this.name = "SnapshotWriteTimeoutError"
+class WorkerWriteTimeoutError extends Error {
+  constructor(description: string, timeoutMs: number) {
+    super(`Timed out ${description} after ${timeoutMs}ms`)
+    this.name = "WorkerWriteTimeoutError"
   }
 }
 
-function withSnapshotWriteTimeout<T>(write: Promise<T>): Promise<T> {
+function withWorkerWriteTimeout<T>(
+  write: Promise<T>,
+  description: string
+): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | null = null
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeout = setTimeout(() => {
-      reject(new SnapshotWriteTimeoutError(SNAPSHOT_WRITE_TIMEOUT_MS))
-    }, SNAPSHOT_WRITE_TIMEOUT_MS)
+      reject(new WorkerWriteTimeoutError(description, WORKER_WRITE_TIMEOUT_MS))
+    }, WORKER_WRITE_TIMEOUT_MS)
   })
 
   return Promise.race([write, timeoutPromise]).finally(() => {
@@ -520,12 +523,13 @@ export function createDurableSnapshotTracker(
       lastWriteAt = now
       const versionAtWrite = contentVersion
       const currentSequence = ++sequence
-      writeInFlight = withSnapshotWriteTimeout(
+      writeInFlight = withWorkerWriteTimeout(
         persistSnapshot({
           sequence: currentSequence,
           textSnapshot: text,
           partsSnapshot: getParts(),
-        })
+        }),
+        "writing assistant snapshot"
       )
         .then((written) => {
           writtenVersion = Math.max(writtenVersion, versionAtWrite)
@@ -567,12 +571,13 @@ export function createDurableSnapshotTracker(
     if (writeInFlight) await writeInFlight.catch(() => {})
     const currentSequence = ++sequence
     writtenVersion = contentVersion
-    await withSnapshotWriteTimeout(
+    await withWorkerWriteTimeout(
       persistSnapshot({
         sequence: currentSequence,
         textSnapshot: finalText,
         partsSnapshot: finalParts,
-      })
+      }),
+      "writing assistant snapshot"
     )
   }
 
@@ -807,7 +812,10 @@ export function createConvexDurableTurn(args: {
   ): Promise<boolean> => {
     for (let attempt = 0; attempt <= settleRetryDelaysMs.length; attempt++) {
       try {
-        await workerWrite(op, opArgs)
+        await withWorkerWriteTimeout(
+          workerWrite(op, opArgs),
+          `writing terminal operation ${op}`
+        )
         return true
       } catch (error) {
         warnDurable(TERMINAL_WRITE_FAILURE_TAGS[op], {

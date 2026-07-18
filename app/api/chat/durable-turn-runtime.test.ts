@@ -223,6 +223,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllEnvs()
 })
 
@@ -520,6 +521,62 @@ describe("durable turn runtime — settlement ordering", () => {
 })
 
 describe("durable turn runtime — settlement receipts (never rejects)", () => {
+  it("times out every stalled completion attempt before degrading", async () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          markGenerationRunCompleted: () => new Promise(() => {}),
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+      binding.stream.captureFinish({
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        finishReason: "stop",
+        toolCounts: { totalToolCalls: 0, failedToolCalls: 0 },
+      })
+
+      const receiptPromise = binding.envelope.settle({
+        responseMessage: RESPONSE_MESSAGE,
+        isAborted: false,
+        finishReason: "stop",
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(wireCalls(wire, "markGenerationRunCompleted")).toHaveLength(1)
+      await vi.runAllTimersAsync()
+
+      await expect(receiptPromise).resolves.toEqual({
+        status: "degraded",
+        runId: "run1",
+        reason: "completion write failed after retries",
+      })
+      expect(wireCalls(wire, "markGenerationRunCompleted")).toHaveLength(3)
+      const terminalWarnings = warn.mock.calls
+        .map(([message]) => JSON.parse(String(message)))
+        .filter(
+          (message) => message._tag === "durable_completion_write_failed"
+        )
+      expect(terminalWarnings).toEqual([
+        expect.objectContaining({
+          requestId: "req-1",
+          chatId: "convexchatid000000000000",
+          runId: "run1",
+          op: "markGenerationRunCompleted",
+          attempt: 1,
+          error:
+            "Timed out writing terminal operation markGenerationRunCompleted after 10000ms",
+        }),
+        expect.objectContaining({ attempt: 2 }),
+        expect.objectContaining({ attempt: 3 }),
+      ])
+    } finally {
+      warn.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
   it("resolves a degraded receipt after bounded completion retries, capturing loudly", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
     try {
