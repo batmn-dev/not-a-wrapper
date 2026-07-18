@@ -10,6 +10,7 @@ import {
   patchProjectActivity,
 } from "./domain/project_activity"
 import { createChatOwnedDeletion } from "./domain/chat_owned_deletion"
+import { newestLinkedChat } from "./domain/chat_project_link"
 import {
   authenticatedMutation,
   maybeAuthQuery,
@@ -135,11 +136,7 @@ export async function backfillUpdatedAtBatch(
   let batchPatched = 0
 
   for (const project of projects.page) {
-    const newestChat = await ctx.db
-      .query("chats")
-      .withIndex("by_project_updated", (q) => q.eq("projectId", project._id))
-      .order("desc")
-      .first()
+    const newestChat = await newestLinkedChat(ctx, project)
     const updatedAt = Math.max(
       getProjectModifiedAt(project),
       newestChat?.updatedAt ?? project._creationTime

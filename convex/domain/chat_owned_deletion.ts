@@ -1,6 +1,10 @@
 import { getConvexSize, type Value } from "convex/values"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx } from "../_generated/server"
+import {
+  paginateLinkedChats,
+  requireLinkedProject,
+} from "./chat_project_link"
 import { recordKnownProjectActivity } from "./project_activity"
 
 type ChatOwnedDeletionCtx = Pick<MutationCtx, "db" | "meta" | "storage">
@@ -170,18 +174,42 @@ async function collectChatGraph(
   }
 }
 
-function storedFileIds(graphs: readonly ChatGraph[]): Id<"_storage">[] {
-  const ids = new Set<Id<"_storage">>()
+async function exclusiveStoredFileIds(
+  ctx: ChatOwnedDeletionCtx,
+  graphs: readonly ChatGraph[]
+): Promise<Id<"_storage">[]> {
+  const targetReferenceCounts = new Map<Id<"_storage">, number>()
   for (const graph of graphs) {
     for (const attachment of graph.attachments) {
-      if (attachment.storageId) ids.add(attachment.storageId)
+      if (!attachment.storageId) continue
+      targetReferenceCounts.set(
+        attachment.storageId,
+        (targetReferenceCounts.get(attachment.storageId) ?? 0) + 1
+      )
     }
   }
 
-  if (ids.size > CHAT_OWNED_DELETION_LIMITS.storedFiles) {
+  if (
+    targetReferenceCounts.size > CHAT_OWNED_DELETION_LIMITS.storedFiles
+  ) {
     throwLimitError()
   }
-  return [...ids]
+
+  const exclusiveIds: Id<"_storage">[] = []
+  for (const [storageId, targetReferenceCount] of targetReferenceCounts) {
+    // Every target reference is still present in this transaction snapshot.
+    // One additional row is therefore enough to prove that the blob is shared
+    // outside the graphs being deleted, without collecting an unbounded range.
+    const references = await ctx.db
+      .query("chatAttachments")
+      .withIndex("by_storage", (q) => q.eq("storageId", storageId))
+      .take(targetReferenceCount + 1)
+    if (references.length === targetReferenceCount) {
+      exclusiveIds.push(storageId)
+    }
+  }
+
+  return exclusiveIds
 }
 
 async function assertWriteHeadroom(
@@ -245,6 +273,8 @@ async function deleteChatChildren(
 /**
  * Construct the mutation-scoped module. Authenticated handlers retain
  * authorization and root ownership; this module owns the complete Chat graph.
+ * Chat<->Project hops go through `chat_project_link`, so a corrupted
+ * cross-owner link fails closed before any read is budgeted or any write runs.
  */
 export function createChatOwnedDeletion(
   ctx: ChatOwnedDeletionCtx
@@ -254,14 +284,11 @@ export function createChatOwnedDeletion(
       const budget: DeletionBudget = { documents: 0, bytes: 0 }
       addToBudget(budget, [chat])
 
-      const project = chat.projectId
-        ? await ctx.db.get(chat.projectId)
-        : null
-      if (chat.projectId && !project) throw new Error("Project not found")
+      const project = await requireLinkedProject(ctx, chat)
       if (project) addToBudget(budget, [project])
 
       const graph = await collectChatGraph(ctx, chat, budget)
-      const storageIds = storedFileIds([graph])
+      const storageIds = await exclusiveStoredFileIds(ctx, [graph])
       await assertWriteHeadroom(ctx, budget)
 
       // Storage participates in the mutation. Doing it before database writes
@@ -278,25 +305,22 @@ export function createChatOwnedDeletion(
       // it after this operation returns.
       addToBudget(budget, [project])
 
-      const page = { numItems: CHAT_OWNED_DELETION_LIMITS.pageSize }
-      const chats = await collectBounded(
-        (cursor) =>
-          ctx.db
-            .query("chats")
-            .withIndex("by_project", (q) =>
-              q.eq("projectId", project._id)
-            )
-            .paginate({ ...page, cursor }),
-        budget,
-        CHAT_OWNED_DELETION_LIMITS.projectChats
-      )
+      const chats = await paginateLinkedChats(ctx, project, {
+        pageSize: CHAT_OWNED_DELETION_LIMITS.pageSize,
+        onPage: (page, collected) => {
+          addToBudget(budget, page)
+          if (collected.length > CHAT_OWNED_DELETION_LIMITS.projectChats) {
+            throwLimitError()
+          }
+        },
+      })
 
       const graphs: ChatGraph[] = []
       for (const chat of chats) {
         graphs.push(await collectChatGraph(ctx, chat, budget))
       }
 
-      const storageIds = storedFileIds(graphs)
+      const storageIds = await exclusiveStoredFileIds(ctx, graphs)
       await assertWriteHeadroom(ctx, budget)
       await deleteStoredFiles(ctx, storageIds)
 

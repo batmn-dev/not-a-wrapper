@@ -8,6 +8,7 @@ import {
   type QueryCtx,
 } from "./_generated/server"
 import { createChatOwnedDeletion } from "./domain/chat_owned_deletion"
+import { collectLinkedChats } from "./domain/chat_project_link"
 import {
   patchChatActivity,
   recordKnownProjectActivity,
@@ -152,15 +153,13 @@ export async function getRecentWindowForCurrentUserHandler(
  * `by_project` index. Lets a project view show its full chat history rather than
  * only those chats that happen to be in the bounded sidebar window — see
  * docs/adr/0005-bounded-chat-list-window.md. Ownership is enforced by
- * the ownedProjectQuery builder (ctx.project).
+ * the ownedProjectQuery builder (ctx.project); the link accessor re-checks
+ * each chat so a corrupted cross-owner link can never ship another user's chat.
  */
 export const getProjectChatsForCurrentUser = ownedProjectQuery({
   args: {},
   handler: async (ctx) => {
-    const chats = await ctx.db
-      .query("chats")
-      .withIndex("by_project", (q) => q.eq("projectId", ctx.project._id))
-      .collect()
+    const chats = await collectLinkedChats(ctx, ctx.project)
 
     return chats.sort(
       (a, b) =>

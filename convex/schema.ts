@@ -332,7 +332,8 @@ export default defineSchema({
     stagedAt: v.optional(v.number()),
   })
     .index("by_chat", ["chatId"])
-    .index("by_user", ["userId"]),
+    .index("by_user", ["userId"])
+    .index("by_storage", ["storageId"]),
 
   // Anonymous usage tracking (for rate limiting unauthenticated users)
   anonymousUsage: defineTable({

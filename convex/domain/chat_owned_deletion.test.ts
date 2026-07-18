@@ -6,6 +6,7 @@ import {
   CHAT_OWNED_DELETION_LIMITS,
   createChatOwnedDeletion,
 } from "./chat_owned_deletion"
+import { CHAT_PROJECT_LINK_OWNER_ERROR } from "./chat_project_link"
 
 type TableName =
   | "projects"
@@ -60,7 +61,8 @@ function project(
 
 function chat(
   id: string,
-  projectId?: Id<"projects">
+  projectId?: Id<"projects">,
+  overrides: Partial<Doc<"chats">> = {}
 ): Doc<"chats"> {
   return {
     _id: asId<"chats">(id),
@@ -71,6 +73,7 @@ function chat(
     public: false,
     pinned: false,
     updatedAt: 20,
+    ...overrides,
   }
 }
 
@@ -158,6 +161,16 @@ function createHarness(
           buildQuery(query)
 
           return {
+            take: async (numItems: number) => {
+              options.beforeRangeRead?.(tableName, tables)
+              return tables[tableName]
+                .filter((document) =>
+                  [...filters].every(
+                    ([fieldName, value]) => document[fieldName] === value
+                  )
+                )
+                .slice(0, numItems)
+            },
             paginate: async ({
               cursor,
               numItems,
@@ -302,6 +315,42 @@ describe("Chat-owned deletion", () => {
     expect(harness.patchDocument).not.toHaveBeenCalled()
   })
 
+  it("retains storage blobs referenced outside the deleted Chat graph", async () => {
+    const chatDoc = chat("chat-1")
+    const otherChat = chat("chat-2")
+    const sharedStorageId = asId<"_storage">("storage-shared")
+    const exclusiveStorageId = asId<"_storage">("storage-exclusive")
+    const harness = createHarness({
+      chats: [
+        chatDoc as unknown as TestDocument,
+        otherChat as unknown as TestDocument,
+      ],
+      chatAttachments: [
+        row("shared-target", {
+          chatId: chatDoc._id,
+          storageId: sharedStorageId,
+        }),
+        row("exclusive-target", {
+          chatId: chatDoc._id,
+          storageId: exclusiveStorageId,
+        }),
+        row("shared-survivor", {
+          chatId: otherChat._id,
+          storageId: sharedStorageId,
+        }),
+      ],
+    })
+
+    await createChatOwnedDeletion(harness.ctx).deleteChat(chatDoc)
+
+    expect(harness.deleteStoredFile).toHaveBeenCalledTimes(1)
+    expect(harness.deleteStoredFile).toHaveBeenCalledWith(exclusiveStorageId)
+    expect(harness.deleteStoredFile).not.toHaveBeenCalledWith(sharedStorageId)
+    expect(
+      harness.tables.chatAttachments.map((attachment) => attachment._id)
+    ).toEqual(["shared-survivor"])
+  })
+
   it("deletes all and only Project Chat graphs without touching the Project", async () => {
     const projectDoc = project("project-1")
     const otherProject = project("project-2")
@@ -345,6 +394,56 @@ describe("Chat-owned deletion", () => {
     ).toBe(10)
     expect(harness.patchDocument).not.toHaveBeenCalled()
     expect(harness.deleteDocument).not.toHaveBeenCalledWith(projectDoc._id)
+  })
+
+  it("fails closed when a Chat's linked Project belongs to another user", async () => {
+    const foreignProject = project("project-1", {
+      userId: asId<"users">("user-2"),
+    })
+    const chatDoc = chat("chat-1", foreignProject._id)
+    const harness = createHarness({
+      projects: [foreignProject as unknown as TestDocument],
+      chats: [chatDoc as unknown as TestDocument],
+      messages: [row("message-1", { chatId: chatDoc._id })],
+      chatAttachments: [
+        row("attachment-1", {
+          chatId: chatDoc._id,
+          storageId: asId<"_storage">("storage-1"),
+        }),
+      ],
+    })
+
+    await expect(
+      createChatOwnedDeletion(harness.ctx).deleteChat(chatDoc)
+    ).rejects.toThrow(CHAT_PROJECT_LINK_OWNER_ERROR)
+
+    expect(harness.deleteDocument).not.toHaveBeenCalled()
+    expect(harness.patchDocument).not.toHaveBeenCalled()
+    expect(harness.deleteStoredFile).not.toHaveBeenCalled()
+  })
+
+  it("fails closed when a Project's chats include another user's Chat", async () => {
+    const projectDoc = project("project-1")
+    const ownChat = chat("chat-1", projectDoc._id)
+    const foreignChat = chat("chat-2", projectDoc._id, {
+      userId: asId<"users">("user-2"),
+    })
+    const harness = createHarness({
+      projects: [projectDoc as unknown as TestDocument],
+      chats: [
+        ownChat as unknown as TestDocument,
+        foreignChat as unknown as TestDocument,
+      ],
+      messages: [row("message-1", { chatId: ownChat._id })],
+    })
+
+    await expect(
+      createChatOwnedDeletion(harness.ctx).deleteChatsForProject(projectDoc)
+    ).rejects.toThrow(CHAT_PROJECT_LINK_OWNER_ERROR)
+
+    expect(harness.deleteDocument).not.toHaveBeenCalled()
+    expect(harness.patchDocument).not.toHaveBeenCalled()
+    expect(harness.deleteStoredFile).not.toHaveBeenCalled()
   })
 
   it("does not write database state when stored-file deletion fails", async () => {
