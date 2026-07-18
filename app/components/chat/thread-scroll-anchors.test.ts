@@ -108,6 +108,22 @@ describe("thread scroll anchors", () => {
     expect(targetRoot.scrollTop).toBe(75)
   })
 
+  it("clears a saved anchor when no turn is visible", () => {
+    const visibleRoot = makeRoot(
+      { top: 100, bottom: 600 },
+      [{ id: "m2", top: 80, bottom: 180 }]
+    )
+    saveThreadAnchor("chat-1", visibleRoot)
+
+    const allTurnsAboveRoot = makeRoot(
+      { top: 100, bottom: 600 },
+      [{ id: "m2", top: 0, bottom: 80 }]
+    )
+    saveThreadAnchor("chat-1", allTurnsAboveRoot)
+
+    expect(restoreThreadAnchor("chat-1", visibleRoot)).toBe(false)
+  })
+
   it("does not store a non-finite offset", () => {
     const root = document.createElement("div")
     vi.spyOn(root, "getBoundingClientRect").mockReturnValue({

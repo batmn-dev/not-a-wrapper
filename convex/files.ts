@@ -279,48 +279,75 @@ export const saveStagedAttachment = authenticatedMutation({
   handler: saveStagedAttachmentHandler,
 })
 
+/** The wire descriptor a bound attachment crosses back to the client as. */
+export type BoundAttachmentDescriptor = {
+  name: string
+  contentType: string
+  url: string
+  attachmentId: Id<"chatAttachments">
+}
+
 /**
- * Bind a complete staged set to one owned chat. Every row is validated before
- * any patch, so callers never receive or dispatch a partial subset.
+ * Bind a complete staged set to one chat the caller owns. Every row is
+ * validated before any patch, so callers never receive or dispatch a partial
+ * subset — and inside a larger transaction (the atomic first-turn creation) a
+ * validation throw rolls the whole transaction back. Ownership of `chatId` is
+ * the caller's responsibility (the ownedChatMutation builder, or a chat the
+ * same transaction just inserted for `userId`).
+ */
+export async function bindStagedAttachmentsToChat(
+  ctx: MutationCtx,
+  owner: { userId: Id<"users">; chatId: Id<"chats"> },
+  attachmentIds: Id<"chatAttachments">[]
+): Promise<BoundAttachmentDescriptor[]> {
+  const uniqueIds = new Set(attachmentIds)
+  if (uniqueIds.size !== attachmentIds.length) {
+    throw new Error("Duplicate attachment reference")
+  }
+
+  const attachments = await Promise.all(
+    attachmentIds.map((attachmentId) => ctx.db.get(attachmentId))
+  )
+  for (const attachment of attachments) {
+    if (!attachment || attachment.userId !== owner.userId) {
+      throw new Error("Attachment not found")
+    }
+    if (attachment.chatId && attachment.chatId !== owner.chatId) {
+      throw new Error("Attachment belongs to another chat")
+    }
+    if (!attachment.storageId) {
+      throw new Error("Attachment is not ready")
+    }
+  }
+
+  for (const attachment of attachments) {
+    if (attachment?.chatId === owner.chatId) continue
+    await ctx.db.patch(attachment!._id, {
+      chatId: owner.chatId,
+      stagedAt: undefined,
+    })
+  }
+
+  return attachments.map((attachment) => ({
+    name: attachment!.fileName ?? "File",
+    contentType: attachment!.fileType ?? "application/octet-stream",
+    url: attachment!.fileUrl,
+    attachmentId: attachment!._id,
+  }))
+}
+
+/**
+ * Bind a complete staged set to one owned chat (the existing-chat turn path;
+ * the first turn binds through chats.createWithFirstTurn instead).
  */
 export const attachStagedFiles = ownedChatMutation({
   args: { attachmentIds: v.array(v.id("chatAttachments")) },
-  handler: async (ctx, { attachmentIds }) => {
-    const uniqueIds = new Set(attachmentIds)
-    if (uniqueIds.size !== attachmentIds.length) {
-      throw new Error("Duplicate attachment reference")
-    }
-
-    const attachments = await Promise.all(
-      attachmentIds.map((attachmentId) => ctx.db.get(attachmentId))
-    )
-    for (const attachment of attachments) {
-      if (!attachment || attachment.userId !== ctx.user._id) {
-        throw new Error("Attachment not found")
-      }
-      if (attachment.chatId && attachment.chatId !== ctx.chat._id) {
-        throw new Error("Attachment belongs to another chat")
-      }
-      if (!attachment.storageId) {
-        throw new Error("Attachment is not ready")
-      }
-    }
-
-    for (const attachment of attachments) {
-      if (attachment?.chatId === ctx.chat._id) continue
-      await ctx.db.patch(attachment!._id, {
-        chatId: ctx.chat._id,
-        stagedAt: undefined,
-      })
-    }
-
-    return attachments.map((attachment) => ({
-      name: attachment!.fileName ?? "File",
-      contentType: attachment!.fileType ?? "application/octet-stream",
-      url: attachment!.fileUrl,
-      attachmentId: attachment!._id,
-    }))
-  },
+  handler: async (ctx, { attachmentIds }) =>
+    bindStagedAttachmentsToChat(
+      ctx,
+      { userId: ctx.user._id, chatId: ctx.chat._id },
+      attachmentIds
+    ),
 })
 
 /** Resolve an owner-verified preview source for the same-origin proxy. */

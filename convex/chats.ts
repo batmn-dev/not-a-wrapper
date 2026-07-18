@@ -9,10 +9,12 @@ import {
 } from "./_generated/server"
 import { createChatOwnedDeletion } from "./domain/chat_owned_deletion"
 import { collectLinkedChats } from "./domain/chat_project_link"
+import { createMessageBranchWriter } from "./domain/message_branch_writes"
 import {
   patchChatActivity,
   recordKnownProjectActivity,
 } from "./domain/project_activity"
+import { bindStagedAttachmentsToChat } from "./files"
 import { requireOwnedProject } from "./lib/auth"
 import {
   authenticatedMutation,
@@ -244,8 +246,50 @@ export const getById = readableChatQuery({
   handler: async (ctx) => projectChatForReader(ctx.chat, ctx.user),
 })
 
+type NewChatArgs = {
+  title?: string
+  model?: string
+  systemPrompt?: string
+  projectId?: Id<"projects">
+}
+
 /**
- * Create a new chat
+ * The one place a new chat row is authorized and constructed: project
+ * ownership check, then the insert with the row's defaults. Shared by `create`
+ * and `createWithFirstTurn` so a future chat field or default cannot silently
+ * diverge between the compatibility path and the first-turn path.
+ */
+async function insertChatForUser(
+  ctx: MutationCtx,
+  user: Doc<"users">,
+  args: NewChatArgs,
+  now: number
+): Promise<{ chatId: Id<"chats">; project: Doc<"projects"> | undefined }> {
+  const project = args.projectId
+    ? (await requireOwnedProject(ctx, args.projectId)).project
+    : undefined
+
+  const chatId = await ctx.db.insert("chats", {
+    userId: user._id,
+    title: args.title ?? "New chat",
+    model: args.model,
+    systemPrompt: args.systemPrompt,
+    projectId: args.projectId,
+    public: false,
+    pinned: false,
+    updatedAt: now,
+  })
+  return { chatId, project }
+}
+
+/**
+ * Create a new chat.
+ *
+ * NOT the first-turn path: the app's first turn creates its chat through
+ * `createWithFirstTurn` below. Kept for API compatibility (clients running
+ * pre-atomic bundles during a deploy still call it) — which is also why "no
+ * chat without its first message" is an invariant of the first-turn path, not
+ * of the schema.
  */
 export const create = authenticatedMutation({
   args: {
@@ -255,24 +299,91 @@ export const create = authenticatedMutation({
     projectId: v.optional(v.id("projects")),
   },
   handler: async (ctx, args) => {
-    const project = args.projectId
-      ? (await requireOwnedProject(ctx, args.projectId)).project
-      : undefined
-
     const now = Date.now()
-    const chatId = await ctx.db.insert("chats", {
-      userId: ctx.user._id,
-      title: args.title ?? "New chat",
-      model: args.model,
-      systemPrompt: args.systemPrompt,
-      projectId: args.projectId,
-      public: false,
-      pinned: false,
-      updatedAt: now,
-    })
+    const { chatId, project } = await insertChatForUser(ctx, ctx.user, args, now)
     await recordKnownProjectActivity(ctx, project, now)
     return chatId
   },
+})
+
+type CreateWithFirstTurnArgs = NewChatArgs & {
+  message: { clientMessageId: string; text: string }
+  attachmentIds: Id<"chatAttachments">[]
+}
+
+/**
+ * Atomic first-turn creation: create the chat (optionally inside an owned
+ * project), bind the complete staged-attachment set, and persist the initial
+ * user message — one Convex transaction. Any failure (attachment validation,
+ * project ownership) rolls the chat row back too, so THIS path can never
+ * strand a chat without its first user message (a path invariant, not a
+ * schema one, while the compatibility `create` above remains callable). The
+ * generation run still starts via
+ * POST /api/chat afterwards: prepareGeneration's idempotent writeUserMessage
+ * finds this row by clientMessageId, adopts the run's provenance stamp, and
+ * selects it instead of inserting a duplicate.
+ *
+ * The message row is written through the Message branch writer with no
+ * provenance stamp — no generation request exists yet (see
+ * message_branch_writes.ts WriteUserMessageInput).
+ */
+export async function createChatWithFirstTurnForUser(
+  ctx: MutationCtx,
+  user: Doc<"users">,
+  args: CreateWithFirstTurnArgs
+) {
+  const now = Date.now()
+  const { chatId, project } = await insertChatForUser(ctx, user, args, now)
+
+  const attachments = await bindStagedAttachmentsToChat(
+    ctx,
+    { userId: user._id, chatId },
+    args.attachmentIds
+  )
+
+  // The same parts shape the client dispatches (convertAttachmentsToFiles),
+  // built server-side from the just-validated bindings so the persisted parts
+  // never depend on client-supplied URLs.
+  const parts = [
+    { type: "text" as const, text: args.message.text },
+    ...attachments.map((attachment) => ({
+      type: "file" as const,
+      filename: attachment.name,
+      mediaType: attachment.contentType,
+      url: attachment.url,
+      attachmentId: attachment.attachmentId,
+    })),
+  ]
+
+  const userMessage = await createMessageBranchWriter(ctx, {
+    chatId,
+    now,
+  }).writeUserMessage({
+    clientMessageId: args.message.clientMessageId,
+    userId: user._id,
+    content: args.message.text,
+    parts,
+  })
+
+  await recordKnownProjectActivity(ctx, project, now)
+
+  return { chatId, userMessageId: userMessage._id, attachments }
+}
+
+export const createWithFirstTurn = authenticatedMutation({
+  args: {
+    title: v.optional(v.string()),
+    model: v.optional(v.string()),
+    systemPrompt: v.optional(v.string()),
+    projectId: v.optional(v.id("projects")),
+    message: v.object({
+      clientMessageId: v.string(),
+      text: v.string(),
+    }),
+    attachmentIds: v.array(v.id("chatAttachments")),
+  },
+  handler: async (ctx, args) =>
+    createChatWithFirstTurnForUser(ctx, ctx.user, args),
 })
 
 /**

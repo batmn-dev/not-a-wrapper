@@ -14,7 +14,7 @@ import {
 import { resetCachedMessagesSnapshot } from "../messages/api"
 import type { Chats } from "../types"
 import { resetCachedChatsSnapshot } from "./api"
-import { ChatsProvider, useChats } from "./provider"
+import { ChatsProvider, useChats, type FirstTurnChat } from "./provider"
 
 const persistMocks = vi.hoisted(() => {
   const tables = {
@@ -292,9 +292,13 @@ describe("ChatsProvider guest local chats", () => {
     })
   })
 
-  it("creates authenticated chats through Convex from a named input", async () => {
+  it("creates authenticated first-turn chats through the atomic Convex mutation", async () => {
     convexMocks.isAuthenticated = true
-    convexMocks.mutationFn.mockResolvedValue("chat-server")
+    convexMocks.mutationFn.mockResolvedValue({
+      chatId: "chat-server",
+      userMessageId: "msg_first",
+      attachments: [],
+    })
     const capture: { current: ReturnType<typeof useChats> | null } = {
       current: null,
     }
@@ -302,12 +306,14 @@ describe("ChatsProvider guest local chats", () => {
     renderProvider(capture, "user-1")
     await flushPromises()
 
-    let created: Chats | undefined
+    let created: FirstTurnChat | undefined
     await act(async () => {
-      created = await capture.current?.createNewChat({
+      created = await capture.current?.createFirstTurnChat({
         title: "Question",
         model: "gpt-5-mini",
         systemPrompt: "system",
+        message: { clientMessageId: "optimistic-1", text: "Question" },
+        attachmentIds: [],
       })
     })
 
@@ -316,11 +322,17 @@ describe("ChatsProvider guest local chats", () => {
       model: "gpt-5-mini",
       systemPrompt: "system",
       projectId: undefined,
+      message: { clientMessageId: "optimistic-1", text: "Question" },
+      attachmentIds: [],
     })
     expect(created).toMatchObject({
-      id: "chat-server",
-      user_id: "user-1",
-      project_id: null,
+      kind: "durable",
+      userMessageId: "msg_first",
+      chat: {
+        id: "chat-server",
+        user_id: "user-1",
+        project_id: null,
+      },
     })
     expect(persistMocks.writeToIndexedDB).not.toHaveBeenCalled()
   })
@@ -333,19 +345,24 @@ describe("ChatsProvider guest local chats", () => {
     renderProvider(capture)
     await flushPromises()
 
-    let created: Chats | undefined
+    let created: FirstTurnChat | undefined
     await act(async () => {
-      created = await capture.current?.createNewChat({
+      created = await capture.current?.createFirstTurnChat({
         guestUserId: "guest_1",
         title: "Guest question",
+        message: { clientMessageId: "optimistic-1", text: "Guest question" },
+        attachmentIds: [],
       })
     })
 
     expect(created).toMatchObject({
-      id: expect.stringMatching(/^local-/),
-      user_id: "guest_1",
-      title: "Guest question",
-      model: "gpt-5-mini",
+      kind: "local",
+      chat: {
+        id: expect.stringMatching(/^local-/),
+        user_id: "guest_1",
+        title: "Guest question",
+        model: "gpt-5-mini",
+      },
     })
     expect(convexMocks.mutationFn).not.toHaveBeenCalled()
     expect(persistMocks.writeToIndexedDB).toHaveBeenCalledWith(
@@ -354,10 +371,40 @@ describe("ChatsProvider guest local chats", () => {
     )
   })
 
+  it("fails closed on a guest first turn carrying staged attachments", async () => {
+    const capture: { current: ReturnType<typeof useChats> | null } = {
+      current: null,
+    }
+
+    renderProvider(capture)
+    await flushPromises()
+
+    // Staged attachments only exist for authenticated users; their presence on
+    // a guest-shaped creation is a wrong-identity signal, so nothing is created.
+    await expect(
+      capture.current?.createFirstTurnChat({
+        guestUserId: "guest_1",
+        title: "Guest question",
+        message: { clientMessageId: "optimistic-1", text: "Guest question" },
+        attachmentIds: ["attachment-1"],
+      })
+    ).resolves.toBeUndefined()
+    expect(convexMocks.mutationFn).not.toHaveBeenCalled()
+    expect(persistMocks.writeToIndexedDB).not.toHaveBeenCalled()
+    expect(convexMocks.toast).toHaveBeenCalledWith({
+      title: "Failed to create chat",
+      status: "error",
+    })
+  })
+
   it("waits for Convex auth before creating a WorkOS-authenticated chat", async () => {
     convexMocks.isAuthenticated = false
     convexMocks.isLoading = true
-    convexMocks.mutationFn.mockResolvedValue("chat-auth-sync")
+    convexMocks.mutationFn.mockResolvedValue({
+      chatId: "chat-auth-sync",
+      userMessageId: "msg_first",
+      attachments: [],
+    })
     const capture: { current: ReturnType<typeof useChats> | null } = {
       current: null,
     }
@@ -365,11 +412,13 @@ describe("ChatsProvider guest local chats", () => {
     renderProvider(capture, "user-1")
     await flushPromises()
 
-    let creationPromise: Promise<Chats | undefined> | undefined
+    let creationPromise: Promise<FirstTurnChat | undefined> | undefined
     act(() => {
-      creationPromise = capture.current?.createNewChat({
+      creationPromise = capture.current?.createFirstTurnChat({
         guestUserId: "guest-should-be-ignored",
         title: "During auth sync",
+        message: { clientMessageId: "optimistic-1", text: "During auth sync" },
+        attachmentIds: [],
       })
     })
 
@@ -380,14 +429,17 @@ describe("ChatsProvider guest local chats", () => {
     convexMocks.isLoading = false
     rerenderProvider(capture, "user-1")
 
-    let created: Chats | undefined
+    let created: FirstTurnChat | undefined
     await act(async () => {
       created = await creationPromise
     })
 
     expect(created).toMatchObject({
-      id: "chat-auth-sync",
-      user_id: "user-1",
+      kind: "durable",
+      chat: {
+        id: "chat-auth-sync",
+        user_id: "user-1",
+      },
     })
     expect(convexMocks.mutationFn).toHaveBeenCalledTimes(1)
     expect(persistMocks.writeToIndexedDB).not.toHaveBeenCalled()
@@ -404,10 +456,15 @@ describe("ChatsProvider guest local chats", () => {
     renderProvider(capture, "user-1")
     await flushPromises()
 
-    let creationPromise: Promise<Chats | undefined> | undefined
+    let creationPromise: Promise<FirstTurnChat | undefined> | undefined
     act(() => {
-      creationPromise = capture.current?.createNewChat({
+      creationPromise = capture.current?.createFirstTurnChat({
         title: "During stalled auth sync",
+        message: {
+          clientMessageId: "optimistic-1",
+          text: "During stalled auth sync",
+        },
+        attachmentIds: [],
       })
     })
 
@@ -433,7 +490,11 @@ describe("ChatsProvider guest local chats", () => {
     await flushPromises()
 
     await expect(
-      capture.current?.createNewChat({ guestUserId: "guest_1" })
+      capture.current?.createFirstTurnChat({
+        guestUserId: "guest_1",
+        message: { clientMessageId: "optimistic-1", text: "hello" },
+        attachmentIds: [],
+      })
     ).resolves.toBeUndefined()
     expect(convexMocks.mutationFn).not.toHaveBeenCalled()
     expect(persistMocks.writeToIndexedDB).not.toHaveBeenCalled()
@@ -445,7 +506,11 @@ describe("ChatsProvider guest local chats", () => {
 
   it("preserves project association and authenticated default-model selection", async () => {
     convexMocks.isAuthenticated = true
-    convexMocks.mutationFn.mockResolvedValue("chat-project")
+    convexMocks.mutationFn.mockResolvedValue({
+      chatId: "chat-project",
+      userMessageId: "msg_first",
+      attachments: [],
+    })
     const capture: { current: ReturnType<typeof useChats> | null } = {
       current: null,
     }
@@ -453,11 +518,13 @@ describe("ChatsProvider guest local chats", () => {
     renderProvider(capture, "user-1")
     await flushPromises()
 
-    let created: Chats | undefined
+    let created: FirstTurnChat | undefined
     await act(async () => {
-      created = await capture.current?.createNewChat({
+      created = await capture.current?.createFirstTurnChat({
         title: "Project question",
         projectId: "project-1",
+        message: { clientMessageId: "optimistic-1", text: "Project question" },
+        attachmentIds: [],
       })
     })
 
@@ -467,7 +534,7 @@ describe("ChatsProvider guest local chats", () => {
         projectId: "project-1",
       })
     )
-    expect(created?.project_id).toBe("project-1")
+    expect(created?.chat.project_id).toBe("project-1")
   })
 
   it("rolls back an optimistic chat when durable creation fails", async () => {
@@ -482,7 +549,11 @@ describe("ChatsProvider guest local chats", () => {
 
     await act(async () => {
       await expect(
-        capture.current?.createNewChat({ title: "Question" })
+        capture.current?.createFirstTurnChat({
+          title: "Question",
+          message: { clientMessageId: "optimistic-1", text: "Question" },
+          attachmentIds: [],
+        })
       ).resolves.toBeUndefined()
     })
 

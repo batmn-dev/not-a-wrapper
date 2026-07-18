@@ -346,6 +346,54 @@ describe("Composer primary action", () => {
     expect(promptInputMockCalls.at(-1)?.expanded).toBe(false)
   })
 
+  it("accepts an attachment-only turn (empty text, ready attachment)", async () => {
+    // The acceptance predicate every surface shares (home and project): a
+    // ready attachment alone is a sendable turn. This is the case that used
+    // to strand empty project chats behind a text-only gate.
+    const onTurn = vi.fn(async () => true)
+    composerMocks.draftValue = ""
+    composerMocks.attachments = [
+      {
+        id: "attachment-1",
+        kind: "selected-file",
+        status: "ready",
+        file: new File(["hello"], "hello.txt", { type: "text/plain" }),
+        signature: "hello",
+        uploaded: {
+          name: "hello.txt",
+          contentType: "text/plain",
+          url: "/api/files/attachment-1/preview",
+          attachmentId: "attachment-1",
+        },
+      },
+    ]
+    const mounted = renderComposer({
+      onTurn,
+      isSubmitting: false,
+      status: "ready",
+    })
+
+    const sendButton = mounted.querySelector(
+      '[data-testid="send-button"]'
+    ) as HTMLButtonElement
+    expect(sendButton.disabled).toBe(false)
+
+    await act(async () => {
+      sendButton.click()
+    })
+
+    expect(onTurn).toHaveBeenCalledTimes(1)
+    expect(onTurn).toHaveBeenCalledWith({
+      text: "",
+      files: composerMocks.attachments.map(
+        (attachment) => (attachment as { file: File }).file
+      ),
+      attachments: [
+        expect.objectContaining({ attachmentId: "attachment-1" }),
+      ],
+    })
+  })
+
   it("keeps Send disabled while an attachment is uploading or failed", () => {
     const source = {
       id: "attachment-1",

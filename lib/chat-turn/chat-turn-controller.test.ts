@@ -93,7 +93,7 @@ function createHarness() {
     }),
     ensureChatExists: vi.fn(async () => {
       events.push("ensureChatExists")
-      return "chat-1"
+      return { chatId: "chat-1" }
     }),
     setPreviousChatId: vi.fn((chatId) => {
       events.push(`setPreviousChatId:${chatId}`)
@@ -315,6 +315,9 @@ describe("chat turn controller", () => {
 
     expect(adapters.toastError).toHaveBeenCalledWith("Failed to send message")
     expect(adapters.attachStagedFiles).not.toHaveBeenCalled()
+    // The incomplete set rejects BEFORE allocation, so an atomic first turn
+    // can never commit a chat around references it cannot bind.
+    expect(adapters.ensureChatExists).not.toHaveBeenCalled()
     expect(getMessages()).toEqual([])
     expect(adapters.setMessages).not.toHaveBeenCalled()
     expect(adapters.sendMessage).not.toHaveBeenCalled()
@@ -366,6 +369,133 @@ describe("chat turn controller", () => {
       expect(adapters.sendMessage).not.toHaveBeenCalled()
     }
   )
+
+  it("dispatches an atomic first turn against its server-persisted message", async () => {
+    const { adapters, controller, setSnapshot } = createHarness()
+    setSnapshot({ isAuthenticated: true })
+    const boundAttachment = {
+      name: "notes.pdf",
+      contentType: "application/pdf",
+      url: "https://files.test/notes.pdf",
+      attachmentId: "attachment-1",
+    }
+    const confirmDispatched = vi.fn()
+    adapters.ensureChatExists = vi.fn(async (args) => {
+      // The atomic creation receives the optimistic id as the durable row's
+      // clientMessageId and the complete staged set to bind.
+      expect(args).toEqual({
+        userId: "user-1",
+        text: "Read this",
+        clientMessageId: "optimistic-message",
+        attachmentIds: ["attachment-1"],
+      })
+      return {
+        chatId: "chat-new",
+        firstTurn: {
+          userMessageId: "message_user_1",
+          clientMessageId: "optimistic-message",
+          attachments: [boundAttachment],
+          confirmDispatched,
+        },
+      }
+    })
+
+    await controller.runSendTurn({
+      text: "Read this",
+      submittedFiles: [{} as File],
+      submittedAttachments: [{ attachmentId: "attachment-1" }],
+    })
+
+    // The atomic creation already bound the set; a second binding call would
+    // race the dispatch and could double-bind on retries.
+    expect(adapters.attachStagedFiles).not.toHaveBeenCalled()
+    expect(adapters.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "optimistic-message",
+        parts: [
+          { type: "text", text: "Read this" },
+          {
+            type: "file",
+            filename: "notes.pdf",
+            mediaType: "application/pdf",
+            url: "https://files.test/notes.pdf",
+            attachmentId: "attachment-1",
+          },
+        ],
+      }),
+      {
+        // The token states the server fact (one persisted visible message),
+        // not the client's still-empty rendered array.
+        body: expect.objectContaining({
+          chatId: "chat-new",
+          expectedVisibleMessageCount: 1,
+          tailMessageId: "message_user_1",
+        }),
+      }
+    )
+    // Acceptance consumes the committed identity exactly once.
+    expect(confirmDispatched).toHaveBeenCalledTimes(1)
+  })
+
+  it("retries a committed first turn under the ORIGINAL persisted identity", async () => {
+    // The regression this pins: after an atomic commit whose dispatch failed,
+    // the retry allocates a fresh optimistic id — dispatching under it would
+    // either duplicate the prompt or trip the stale-token guard. The provider
+    // re-presents the committed identity; the runner must adopt it wholesale.
+    const { adapters, controller, getMessages, setSnapshot } = createHarness()
+    setSnapshot({ isAuthenticated: true })
+    adapters.ensureChatExists = vi.fn(async () => ({
+      chatId: "chat-new",
+      firstTurn: {
+        userMessageId: "message_user_1",
+        clientMessageId: "committed-optimistic-id",
+        attachments: [],
+      },
+    }))
+
+    await controller.runSendTurn({ text: "Hello" })
+
+    const dispatched = vi.mocked(adapters.sendMessage).mock.calls[0]
+    expect(dispatched?.[0]).toMatchObject({
+      id: "committed-optimistic-id",
+      messageId: "committed-optimistic-id",
+    })
+    expect(dispatched?.[1]).toEqual({
+      body: expect.objectContaining({
+        expectedVisibleMessageCount: 1,
+        tailMessageId: "message_user_1",
+      }),
+    })
+    // The optimistic row also carries the committed identity, so the
+    // projection reconciles it against the persisted row.
+    expect(getMessages()[0]?.id).toBe("committed-optimistic-id")
+    // No confirmDispatched provided (test fake) — the runner tolerates that.
+  })
+
+  it("does not consume the committed identity when dispatch throws", async () => {
+    const { adapters, controller, setSnapshot } = createHarness()
+    setSnapshot({ isAuthenticated: true })
+    const confirmDispatched = vi.fn()
+    adapters.ensureChatExists = vi.fn(async () => ({
+      chatId: "chat-new",
+      firstTurn: {
+        userMessageId: "message_user_1",
+        clientMessageId: "optimistic-message",
+        attachments: [],
+        confirmDispatched,
+      },
+    }))
+    adapters.sendMessage = vi.fn(() => {
+      throw new Error("send failed")
+    })
+
+    await controller.runSendTurn({ text: "Hello" })
+
+    // A failed dispatch must leave the committed identity available for the
+    // retry to claim.
+    expect(confirmDispatched).not.toHaveBeenCalled()
+    expect(adapters.toastError).toHaveBeenCalledWith("Failed to send message")
+  })
 
   it("creates no optimistic state when no user id resolves", async () => {
     // The Composer restores the payload on a rejected turn — a lingering
@@ -534,9 +664,8 @@ describe("chat turn controller", () => {
     // appends the replacement itself (with the optimistic edit id), so a
     // post-send removal by that id would delete the just-sent message.
     expect(snapshots).toEqual([["optimistic-edit-message"], []])
-    expect(events.indexOf("ensureChatExists")).toBeLessThan(
-      events.indexOf("sendMessage")
-    )
+    // Edits never allocate — the durable-chat guard proved the chat exists.
+    expect(events).not.toContain("ensureChatExists")
     expect(storeAdapters.writeMessages).not.toHaveBeenCalled()
     // The replacement goes out as a full message carrying the optimistic edit
     // id — the same id the edit intent records as the server's
@@ -551,7 +680,7 @@ describe("chat turn controller", () => {
       },
       {
         body: expect.objectContaining({
-          chatId: "chat-1",
+          chatId: "chat-existing",
           userId: "user-1",
           model: "model-1",
           systemPrompt: "custom system",
@@ -572,9 +701,9 @@ describe("chat turn controller", () => {
         id: "optimistic-edit-message",
         role: "user",
       }),
-      "chat-1"
+      "chat-existing"
     )
-    expect(adapters.bumpChat).toHaveBeenCalledWith("chat-1")
+    expect(adapters.bumpChat).toHaveBeenCalledWith("chat-existing")
   })
 
   it("restores visible messages when edit resend dispatch throws", async () => {
@@ -662,7 +791,7 @@ describe("chat turn controller", () => {
       },
       {
         body: expect.objectContaining({
-          chatId: "chat-1",
+          chatId: "server-chat",
           userId: "user-1",
           model: "model-1",
           systemPrompt: "custom system",

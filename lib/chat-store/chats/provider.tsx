@@ -3,6 +3,7 @@
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
+import type { Attachment } from "@/lib/file-handling"
 import {
   usePerUserPaginatedQuery,
   usePerUserQuery,
@@ -112,14 +113,36 @@ function ConvexAuthReadySignal({
   return null
 }
 
-export type CreateNewChatInput = {
+export type CreateFirstTurnChatInput = {
   title?: string
   model?: string
   systemPrompt?: string
   projectId?: string
   /** Stable local identity used only when auth has settled signed out. */
   guestUserId?: string
+  /** The first Chat turn's user message. Durable chats persist it atomically
+   * with the chat row (chats.createWithFirstTurn); local chats persist it via
+   * the turn store, so only the durable path consumes it here. */
+  message: { clientMessageId: string; text: string }
+  /** Complete staged-attachment set to bind. Staging requires auth, so the
+   * local path fails closed when this is non-empty. */
+  attachmentIds: string[]
 }
+
+/**
+ * A created first-turn chat. `durable` carries the atomically persisted user
+ * message id (the first-turn selected-path token's tail) and the bound
+ * attachment descriptors; `local` is a guest chat whose message the turn
+ * store persists client-side.
+ */
+export type FirstTurnChat =
+  | { kind: "local"; chat: Chats }
+  | {
+      kind: "durable"
+      chat: Chats
+      userMessageId: string
+      attachments: Attachment[]
+    }
 
 type ChatsContextType = {
   chats: Chats[]
@@ -134,7 +157,9 @@ type ChatsContextType = {
     currentChatId?: string,
     redirect?: () => void
   ) => Promise<boolean>
-  createNewChat: (input: CreateNewChatInput) => Promise<Chats | undefined>
+  createFirstTurnChat: (
+    input: CreateFirstTurnChatInput
+  ) => Promise<FirstTurnChat | undefined>
   resetChats: () => Promise<void>
   getChatById: (id: string) => Chats | undefined
   updateChatModel: (id: string, model: string) => Promise<void>
@@ -191,7 +216,7 @@ export function ChatsProvider({
     ENABLE_PAGINATED_SIDEBAR ? {} : "skip"
   )
   // Convex mutations
-  const createChatMutation = useMutation(api.chats.create)
+  const createFirstTurnMutation = useMutation(api.chats.createWithFirstTurn)
   const updateTitleMutation = useMutation(api.chats.updateTitle)
   const updateModelMutation = useMutation(api.chats.updateModel)
   const togglePinMutation = useMutation(api.chats.togglePin)
@@ -320,14 +345,16 @@ export function ChatsProvider({
     [deleteChatMutation, removeOp]
   )
 
-  const createNewChat = useCallback(
+  const createFirstTurnChat = useCallback(
     async ({
       title,
       model,
       systemPrompt,
       projectId,
       guestUserId,
-    }: CreateNewChatInput): Promise<Chats | undefined> => {
+      message,
+      attachmentIds,
+    }: CreateFirstTurnChatInput): Promise<FirstTurnChat | undefined> => {
       // The server-seeded app user is the durable-intent fact. It becomes
       // available before Convex finishes confirming the JWT, so never use the
       // transient Convex readiness boolean to downgrade that user to a guest.
@@ -340,8 +367,15 @@ export function ChatsProvider({
       if (!authenticatedUserId) {
         // While Convex is still resolving auth (or reports an authenticated JWT
         // without the server-seeded app user), fail closed instead of creating a
-        // local chat that would split an authenticated user's history.
-        if (isConvexAuthLoading || isConvexAuthenticated || !guestUserId) {
+        // local chat that would split an authenticated user's history. Staged
+        // attachments only exist for authenticated users, so their presence
+        // here is the same wrong-identity signal.
+        if (
+          isConvexAuthLoading ||
+          isConvexAuthenticated ||
+          !guestUserId ||
+          attachmentIds.length > 0
+        ) {
           toast({ title: "Failed to create chat", status: "error" })
           return
         }
@@ -361,10 +395,11 @@ export function ChatsProvider({
           pinned_at: null,
         }
 
-        // Add to optimistic state (stays local, not synced to server)
+        // Add to optimistic state (stays local, not synced to server). The
+        // first message itself is the turn store's job on the local path.
         await cacheChat(localChat)
 
-        return localChat
+        return { kind: "local", chat: localChat }
       }
 
       if (!isConvexAuthenticated) {
@@ -397,16 +432,21 @@ export function ChatsProvider({
       ])
 
       try {
-        const chatId = await createChatMutation({
+        // Atomic first-turn creation: chat + attachment binding + initial user
+        // message in one Convex transaction, so a failure leaves NO chat behind
+        // (the empty-chat abandonment class). See chats.createWithFirstTurn.
+        const created = await createFirstTurnMutation({
           title: title || "New chat",
           model: normalizedModel,
           systemPrompt: systemPrompt || SYSTEM_PROMPT_DEFAULT,
           projectId: projectId as Id<"projects"> | undefined,
+          message,
+          attachmentIds: attachmentIds as Id<"chatAttachments">[],
         })
 
         const newChat: Chats = {
           ...optimisticChat,
-          id: chatId,
+          id: created.chatId,
         }
 
         // Replace optimistic with real chat
@@ -419,10 +459,15 @@ export function ChatsProvider({
 
         // Clean up after server sync
         setTimeout(() => {
-          removeOp((op) => op.type === "add" && op.chat.id === chatId)
+          removeOp((op) => op.type === "add" && op.chat.id === created.chatId)
         }, 1000)
 
-        return newChat
+        return {
+          kind: "durable",
+          chat: newChat,
+          userMessageId: created.userMessageId,
+          attachments: created.attachments,
+        }
       } catch {
         // Revert optimistic add
         removeOp((op) => op.type === "add" && op.chat.id === optimisticId)
@@ -431,7 +476,7 @@ export function ChatsProvider({
       }
     },
     [
-      createChatMutation,
+      createFirstTurnMutation,
       authReadinessGate,
       removeOp,
       isConvexAuthenticated,
@@ -591,7 +636,7 @@ export function ChatsProvider({
           chats,
           updateTitle,
           deleteChat,
-          createNewChat,
+          createFirstTurnChat,
           resetChats,
           getChatById,
           updateChatModel,

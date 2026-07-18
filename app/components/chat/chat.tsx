@@ -9,6 +9,7 @@ import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { useGlobalPromptFocus } from "@/app/hooks/use-global-prompt-focus"
 import { ScrollButton } from "@/components/ui/scroll-button"
 import { useStickyPaddingBottom } from "@/components/ui/scroll-root"
+import type { Id } from "@/convex/_generated/dataModel"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useChat } from "@/lib/chat-store/chats/use-chat"
 import { useMessages } from "@/lib/chat-store/messages/provider"
@@ -22,6 +23,8 @@ import { isRouteDurableChat } from "@/lib/chat-turn/chat-turn-controller"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
+import { Icon } from "@/components/ui/icon"
+import { RiChat3Line } from "@remixicon/react"
 import { AnimatePresence, motion } from "motion/react"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
@@ -34,6 +37,7 @@ import {
   useActivityPanelSelectedTurnId,
 } from "./activity/activity-panel-store"
 import { ChatStatusAnnouncer } from "./chat-announcer"
+import { ProjectChatDirectory } from "./project-chat-directory"
 import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
 import { TurnContextProvider, useTurnContext } from "./turn-context"
 import { useActivityPanel } from "./use-activity-panel"
@@ -45,12 +49,26 @@ const DialogAuth = dynamic(
   { ssr: false }
 )
 
+/** Project context for the project surface — the Chat surface with a project
+ * onboarding (name heading, project chat directory) whose first turn creates
+ * its chat inside the project. */
+export type ChatProjectContext = {
+  id: Id<"projects">
+  name: string
+}
+
 /**
  * Chat — resolves the route's chat and hosts the Turn context (model, search,
  * system prompt — the inputs every Chat turn snapshots at run time). The body
  * lives in ChatInner so its hooks read the context.
+ *
+ * With `project` set this is the project surface: the same first-turn pipeline
+ * as home (chat committed atomically WITH its first user message by
+ * `ensureChatExists` inside an ACCEPTED turn, then a shallow route handoff) —
+ * never chat-creation before turn acceptance, which is what used to strand
+ * empty project chats.
  */
-export function Chat() {
+export function Chat({ project }: { project?: ChatProjectContext }) {
   const { chatId } = useChatSession()
   // Resolve the current chat even when it is outside the bounded sidebar window
   // (deep-links to old chats). In-window chats resolve synchronously; out-of-
@@ -67,6 +85,7 @@ export function Chat() {
         chatId={chatId}
         currentChat={currentChat || null}
         isChatLoading={isChatLoading}
+        project={project}
       />
     </TurnContextProvider>
   )
@@ -76,13 +95,15 @@ function ChatInner({
   chatId,
   currentChat,
   isChatLoading,
+  project,
 }: {
   chatId: string | null
   currentChat: Chats | null
   isChatLoading: boolean
+  project?: ChatProjectContext
 }) {
   const router = useRouter()
-  const { createNewChat, bumpChat, isLoading: isChatsLoading } = useChats()
+  const { createFirstTurnChat, bumpChat, isLoading: isChatsLoading } = useChats()
 
   const {
     messages: initialMessages,
@@ -108,7 +129,6 @@ function ChatInner({
   const navigateToChat = useCallback((nextChatId: string) => {
     window.history.pushState(null, "", `/c/${nextChatId}`)
   }, [])
-  const allocatedChatIdRef = useRef<string | null>(null)
 
   // The Composer's imperative handle — quote insertion, ?prompt= hydration,
   // and global focus are commands into the Composer, not state threaded
@@ -127,10 +147,10 @@ function ChatInner({
     chatId,
     selectedModel,
     systemPrompt,
-    createNewChat,
+    projectId: project?.id,
+    createFirstTurnChat,
     navigateToChat,
     setHasDialogAuth,
-    allocatedChatIdRef,
   })
 
   // Core chat functionality (initialization + state + actions)
@@ -364,21 +384,34 @@ function ChatInner({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
               >
-                <div
-                  className="flex justify-center"
-                  data-splash-headline-option="WHATS_ON_YOUR_MIND"
-                >
-                  <div className="hidden text-center sm:mb-[22px] sm:block">
-                    <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
-                      What&apos;s on your mind?
+                {project ? (
+                  <div className="mb-6 flex items-center justify-center gap-2">
+                    <Icon
+                      icon={RiChat3Line}
+                      slotSize={24}
+                      className="text-muted-foreground"
+                    />
+                    <h1 className="text-center text-3xl font-medium tracking-tight text-balance">
+                      {project.name}
                     </h1>
                   </div>
-                  <div className="flex h-full w-full shrink flex-col items-center justify-center px-4 text-center sm:hidden">
-                    <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
-                      What&apos;s on your mind?
-                    </h1>
+                ) : (
+                  <div
+                    className="flex justify-center"
+                    data-splash-headline-option="WHATS_ON_YOUR_MIND"
+                  >
+                    <div className="hidden text-center sm:mb-[22px] sm:block">
+                      <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
+                        What&apos;s on your mind?
+                      </h1>
+                    </div>
+                    <div className="flex h-full w-full shrink flex-col items-center justify-center px-4 text-center sm:hidden">
+                      <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
+                        What&apos;s on your mind?
+                      </h1>
+                    </div>
                   </div>
-                </div>
+                )}
               </motion.div>
             ) : (
               <Conversation key="conversation" {...conversationProps} />
@@ -390,7 +423,9 @@ function ChatInner({
             ref={threadBottomRef}
             className={cn(
               `group/thread-bottom-container sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col px-[var(--thread-content-margin,1rem)] pb-[env(safe-area-inset-bottom,0px)] ${THREAD_GUTTER_VARS}`,
-              showOnboarding ? "sm:grow" : "content-fade"
+              // Project onboarding keeps the composer in flow (no grow) so the
+              // project's chat directory reads directly beneath it.
+              showOnboarding ? (project ? undefined : "sm:grow") : "content-fade"
             )}
           >
             {!showOnboarding && (
@@ -409,6 +444,7 @@ function ChatInner({
               <Composer
                 ref={composerRef}
                 chatId={chatId}
+                draftScopeId={project ? `project-${project.id}` : undefined}
                 onTurn={submit}
                 onSuggestion={handleSuggestion}
                 isSubmitting={isSubmitting}
@@ -416,6 +452,7 @@ function ChatInner({
                 stop={stop}
                 hasSuggestions={
                   preferences.promptSuggestions &&
+                  !project &&
                   !chatId &&
                   messages.length === 0
                 }
@@ -434,6 +471,9 @@ function ChatInner({
               </div>
             )}
           </div>
+          {showOnboarding && project && (
+            <ProjectChatDirectory projectId={project.id} />
+          )}
         </div>
       </div>
     </ActivityPanelStoreProvider>

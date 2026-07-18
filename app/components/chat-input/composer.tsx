@@ -97,9 +97,6 @@ type ComposerProps = {
   /** Draft-persistence scope when there is no chat id (e.g. `project-<id>`),
    * so surface drafts don't bleed into the home composer's "new chat" draft. */
   draftScopeId?: string
-  /** Project handoff and anonymous chat cannot use authenticated storage, so
-   * generated pastes cross those seams as ordinary turn text. */
-  largePasteDelivery?: "upload" | "inline"
 }
 
 const isOnlyWhitespace = (text: string) => !/[^\s]/.test(text)
@@ -196,7 +193,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       hasSuggestions,
       onLockedGuestModelSelect,
       draftScopeId,
-      largePasteDelivery,
     },
     ref
   ) {
@@ -217,8 +213,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    const shouldUploadGeneratedPastes =
-      (largePasteDelivery ?? "upload") === "upload" && isUserAuthenticated
+    // Anonymous chat cannot use authenticated storage, so guests' generated
+    // pastes cross the turn seam as ordinary turn text.
+    const shouldUploadGeneratedPastes = isUserAuthenticated
 
     // One Composer-owned picker lifecycle. It stages authenticated files
     // immediately and hands only ready metadata to the Chat turn.

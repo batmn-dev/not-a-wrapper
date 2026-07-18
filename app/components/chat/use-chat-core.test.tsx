@@ -33,6 +33,7 @@ const chatCoreMocks = vi.hoisted(() => ({
   setMessages: vi.fn(),
   setWebSearchEnabled: vi.fn(),
   stop: vi.fn(),
+  bindingStop: vi.fn(),
   updateTitle: vi.fn(),
   // Controllable useChat state for the selected-path projection effect tests.
   useChatState: { messages: [] as unknown[], status: "ready" as string },
@@ -84,6 +85,13 @@ vi.mock("@ai-sdk/react", () => ({
     setMessages: chatCoreMocks.setMessages,
     addToolApprovalResponse: chatCoreMocks.addToolApprovalResponse,
   }),
+  // The hook constructs its own Chat instances (detachable stream bindings);
+  // the mocked useChat ignores them, but the watchdog stops detached
+  // instances directly — route that through a shared spy.
+  Chat: class MockChat {
+    constructor(readonly options: unknown) {}
+    stop = () => chatCoreMocks.bindingStop(this.options)
+  },
 }))
 
 vi.mock("ai", () => ({
@@ -202,11 +210,11 @@ describe("useChatCore prompt query handling", () => {
 
   function renderCore({
     search,
-    ensureChatExists = vi.fn(async () => "chat-project"),
+    ensureChatExists = vi.fn(async () => ({ chatId: "chat-project" })),
     checkLimitsAndNotify = vi.fn(async () => true),
   }: {
     search: string
-    ensureChatExists?: (uid: string, input: string) => Promise<string | null>
+    ensureChatExists?: Parameters<typeof useChatCore>[0]["ensureChatExists"]
     checkLimitsAndNotify?: (uid: string) => Promise<boolean>
   }) {
     window.history.replaceState(null, "", `/c/chat-project${search}`)
@@ -251,7 +259,7 @@ describe("useChatCore prompt query handling", () => {
   })
 
   it("auto-submits a transferred project prompt once through the chat turn", async () => {
-    const ensureChatExists = vi.fn(async () => "chat-project")
+    const ensureChatExists = vi.fn(async () => ({ chatId: "chat-project" }))
 
     renderCore({
       search: "?prompt=Project%20question&autoSubmit=1",
@@ -259,7 +267,14 @@ describe("useChatCore prompt query handling", () => {
     })
     await flushAsyncWork()
 
-    expect(ensureChatExists).toHaveBeenCalledWith("user-1", "Project question")
+    expect(ensureChatExists).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        text: "Project question",
+        clientMessageId: expect.any(String),
+        attachmentIds: [],
+      })
+    )
     expect(chatCoreMocks.sendMessage).toHaveBeenCalledTimes(1)
     expect(chatCoreMocks.sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -284,38 +299,6 @@ describe("useChatCore prompt query handling", () => {
     const dispatchedMessage = chatCoreMocks.sendMessage.mock.calls[0]?.[0]
     expect(dispatchedMessage.messageId).toBe(dispatchedMessage.id)
     expect(window.location.pathname).toBe("/c/chat-project")
-    expect(window.location.search).toBe("")
-  })
-
-  it("binds transferred project attachments exactly once", async () => {
-    const ensureChatExists = vi.fn(async () => "chat-project")
-
-    renderCore({
-      search:
-        "?prompt=Project%20question&autoSubmit=1&attachment=attachment-1",
-      ensureChatExists,
-    })
-    await flushAsyncWork()
-
-    expect(chatCoreMocks.attachStagedFilesToChat).toHaveBeenCalledTimes(1)
-    expect(chatCoreMocks.attachStagedFilesToChat).toHaveBeenCalledWith(
-      expect.any(Object),
-      "chat-project",
-      ["attachment-1"]
-    )
-    expect(chatCoreMocks.sendMessage).toHaveBeenCalledTimes(1)
-    expect(chatCoreMocks.sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        parts: [
-          { type: "text", text: "Project question" },
-          expect.objectContaining({
-            type: "file",
-            filename: "project-notes.pdf",
-          }),
-        ],
-      }),
-      expect.any(Object)
-    )
     expect(window.location.search).toBe("")
   })
 
@@ -377,7 +360,7 @@ describe("useChatCore selected-path projection", () => {
       chatId,
       user: authenticatedUser,
       checkLimitsAndNotify: vi.fn(async () => true),
-      ensureChatExists: vi.fn(async () => "chat_projection"),
+      ensureChatExists: vi.fn(async () => ({ chatId: "chat_projection" })),
       bumpChat: chatCoreMocks.bumpChat,
     })
     return null
@@ -491,5 +474,22 @@ describe("useChatCore selected-path projection", () => {
       "optimistic-user",
       "assistant-streaming",
     ])
+  })
+
+  it("stops a detached binding's stream when the watchdog budget elapses", () => {
+    vi.useFakeTimers()
+    try {
+      mount()
+      render([], "chat_projection")
+      render([], null) // mounted Back to onboarding → detach
+
+      expect(chatCoreMocks.bindingStop).not.toHaveBeenCalled()
+      act(() => {
+        vi.advanceTimersByTime(120_000)
+      })
+      expect(chatCoreMocks.bindingStop).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

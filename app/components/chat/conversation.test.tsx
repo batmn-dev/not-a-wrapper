@@ -419,7 +419,7 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
           setMessages: chat.setMessages,
           resolveUserId: () => authGate.promise,
           checkLimitsAndNotify: vi.fn(async () => true),
-          ensureChatExists: vi.fn(async () => "chat-durable"),
+          ensureChatExists: vi.fn(async () => ({ chatId: "chat-durable" })),
           setPreviousChatId: vi.fn(),
           cleanupOptimisticAttachments: vi.fn(),
           attachStagedFiles: () => uploadGate.promise,
