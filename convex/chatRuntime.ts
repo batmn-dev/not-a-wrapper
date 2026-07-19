@@ -1,8 +1,12 @@
 import { v } from "convex/values"
 import { CHAT_TURN_EXECUTION_BUDGET } from "../lib/chat-turn/execution-budget"
 import type { Doc, Id } from "./_generated/dataModel"
-import { mutation, type MutationCtx, type QueryCtx } from "./_generated/server"
-import { ownedGenerationRunMutation } from "./lib/authedFunctions"
+import {
+  internalMutation,
+  mutation,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server"
 import {
   isIgnoredSignal,
   isSupersedableGenerationRunStatus,
@@ -44,6 +48,7 @@ import {
   type AuthenticatedChatOwner,
   type AuthenticatedRunOwner,
 } from "./lib/auth"
+import { ownedGenerationRunMutation } from "./lib/authedFunctions"
 import {
   vToolInvocationStreamMetadata,
   type PersistedMessageMetadata,
@@ -1142,6 +1147,11 @@ export async function denyPendingApprovalsForChat(
           completedAt: verdict.run.settle ? now : undefined,
           updatedAt: now,
           activeStreamId: undefined,
+          ...(verdict.run.terminalReason
+            ? { terminalReason: verdict.run.terminalReason }
+            : {}),
+          ...grantRevocationForStatus(verdict.run.status),
+          ...LEASE_CLEAR,
         })
       }
     }
@@ -2047,3 +2057,197 @@ export async function recordToolInvocationsForChat(
     await ctx.db.patch(run._id, { lastProgressAt: now, updatedAt: now })
   }
 }
+
+// ---------------------------------------------------------------------------
+// Reconciliation reapers (durable-turn gameplan §6, PR 3). Internal MUTATIONS
+// (transactional, exactly-once per invocation — never actions), invoked by
+// convex/crons.ts. Bounded to 100 candidates per status per tick; the next
+// tick finishes what this one left.
+//
+// Load-bearing range shape (§18 #6): Convex orders `undefined < null < all
+// other values`, and documents missing an indexed field sort as `undefined` —
+// so every expiry range MUST exclude `undefined` via `.gt(field, undefined)`
+// or pre-heartbeat rows (no lease fields) would be falsely reaped.
+//
+// Deploy-boundary drain rule (§6): enable these crons only after every
+// in-flight run started by a pre-heartbeat deploy has drained. With the
+// `undefined` exclusion this is belt-and-suspenders; pre-launch it is
+// trivially satisfied (dev data is disposable).
+// ---------------------------------------------------------------------------
+
+const REAPER_BATCH_LIMIT = 100
+
+/**
+ * Settle the auxiliary records a reaped run leaves behind: pending approvals
+ * expire; non-terminal tool invocations fail. Partial assistant content is
+ * preserved by the lifecycle's terminal message policy — never erased here.
+ */
+async function settleAuxiliaryRecordsForReapedRun(
+  ctx: MutationCtx,
+  run: Doc<"generationRuns">,
+  error: string,
+  now: number
+) {
+  const pendingApprovals = await ctx.db
+    .query("toolApprovalRequests")
+    .withIndex("by_run_status", (q) =>
+      q.eq("runId", run._id).eq("status", "pending")
+    )
+    .collect()
+  for (const approval of pendingApprovals) {
+    await ctx.db.patch(approval._id, { status: "expired", resolvedAt: now })
+  }
+
+  const invocations = await ctx.db
+    .query("toolInvocations")
+    .withIndex("by_run", (q) => q.eq("runId", run._id))
+    .collect()
+  for (const invocation of invocations) {
+    if (terminalToolInvocationStatuses.has(invocation.status)) continue
+    await ctx.db.patch(invocation._id, {
+      status: "failed",
+      error,
+      completedAt: now,
+      updatedAt: now,
+    })
+  }
+}
+
+/**
+ * Fail runs whose worker lease lapsed. Every candidate is validated inside
+ * this transaction: the indexed read IS the transactional state (Convex
+ * mutations are serializable — a concurrently renewing heartbeat conflicts
+ * and one of the two retries against the other's committed state), and the
+ * lifecycle's `lease-expired` rule re-checks worker-executing status. A
+ * reaped run becomes failed/lease_expired — never fake-completed — with
+ * partial content preserved.
+ */
+export async function reapExpiredGenerationRunsPass(
+  ctx: MutationCtx
+): Promise<{ reaped: number }> {
+  {
+    const now = nowMs()
+    let reaped = 0
+    for (const status of ["running", "streaming"] as const) {
+      const candidates = await ctx.db
+        .query("generationRuns")
+        .withIndex("by_status_lease_expires", (q) =>
+          q
+            .eq("status", status)
+            .gt("leaseExpiresAt", undefined)
+            .lt("leaseExpiresAt", now)
+        )
+        .take(REAPER_BATCH_LIMIT)
+      for (const run of candidates) {
+        // Belt-and-suspenders re-validation of the fields the range implies.
+        if (run.leaseExpiresAt === undefined || run.leaseExpiresAt >= now) {
+          continue
+        }
+        const resolved = await gatherAssistantMessageFacts(ctx, run, undefined)
+        const verdict = resolveGenerationRunTransition(
+          { runStatus: run.status, message: resolved?.facts ?? null },
+          { kind: "lease-expired" }
+        )
+        if (verdict.kind !== "transition") continue
+        await applyLifecycleVerdict(ctx, run, verdict, resolved, now)
+        await settleAuxiliaryRecordsForReapedRun(
+          ctx,
+          run,
+          "generation worker lease expired",
+          now
+        )
+        reaped++
+        console.log(
+          JSON.stringify({
+            _tag: "run_stale_reaped",
+            runId: run._id,
+            chatId: run.chatId,
+            status,
+            heartbeatAt: run.heartbeatAt,
+            leaseExpiresAt: run.leaseExpiresAt,
+            ageMs: run.startedAt === undefined ? null : now - run.startedAt,
+          })
+        )
+      }
+    }
+    return { reaped }
+  }
+}
+
+export const reapExpiredGenerationRuns = internalMutation({
+  args: {},
+  handler: async (ctx) => reapExpiredGenerationRunsPass(ctx),
+})
+
+/**
+ * Expire approval pauses nobody resolved. The pending approval row settles as
+ * `expired`; its run (if still paused) fails with `approval_expired` through
+ * the lifecycle rule, preserving the pre-approval content tail.
+ */
+export async function reapExpiredToolApprovalsPass(
+  ctx: MutationCtx
+): Promise<{ expired: number }> {
+  {
+    const now = nowMs()
+    let expired = 0
+    const candidates = await ctx.db
+      .query("toolApprovalRequests")
+      .withIndex("by_status_expires", (q) =>
+        q
+          .eq("status", "pending")
+          .gt("expiresAt", undefined)
+          .lt("expiresAt", now)
+      )
+      .take(REAPER_BATCH_LIMIT)
+    for (const approval of candidates) {
+      if (approval.expiresAt === undefined || approval.expiresAt >= now) {
+        continue
+      }
+      await ctx.db.patch(approval._id, { status: "expired", resolvedAt: now })
+      expired++
+
+      const run = await ctx.db.get(approval.runId)
+      if (!run) continue
+      const invocation = await ctx.db
+        .query("toolInvocations")
+        .withIndex("by_run_tool_call", (q) =>
+          q.eq("runId", run._id).eq("toolCallId", approval.toolCallId)
+        )
+        .unique()
+      if (
+        invocation &&
+        !terminalToolInvocationStatuses.has(invocation.status)
+      ) {
+        await ctx.db.patch(invocation._id, {
+          status: "failed",
+          error: "tool approval expired",
+          completedAt: now,
+          updatedAt: now,
+        })
+      }
+
+      const resolved = await gatherAssistantMessageFacts(ctx, run, undefined)
+      const verdict = resolveGenerationRunTransition(
+        { runStatus: run.status, message: resolved?.facts ?? null },
+        { kind: "approval-expired" }
+      )
+      if (verdict.kind !== "transition") continue
+      await applyLifecycleVerdict(ctx, run, verdict, resolved, now)
+      console.log(
+        JSON.stringify({
+          _tag: "run_stale_reaped",
+          reason: "approval_expired",
+          runId: run._id,
+          chatId: run.chatId,
+          approvalId: approval.approvalId,
+        })
+      )
+    }
+    return { expired }
+  }
+}
+
+export const reapExpiredToolApprovals = internalMutation({
+  args: {},
+  handler: async (ctx) => reapExpiredToolApprovalsPass(ctx),
+})

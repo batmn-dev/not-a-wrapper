@@ -10,6 +10,8 @@ import {
   markGenerationRunCompletedForChat,
   markGenerationRunFailedForChat,
   prepareGenerationForChat,
+  reapExpiredGenerationRunsPass,
+  reapExpiredToolApprovalsPass,
   recordToolInvocationsForChat,
   updateAssistantSnapshotForChat,
 } from "./chatRuntime"
@@ -36,6 +38,25 @@ type StoredDocument = TableDocuments[TableName][number]
 
 type QueryBuilder = {
   eq: (fieldName: string, value: unknown) => QueryBuilder
+  gt: (fieldName: string, value: unknown) => QueryBuilder
+  lt: (fieldName: string, value: unknown) => QueryBuilder
+}
+
+// Convex index-order rank: undefined < null < everything else. Enough to model
+// the reaper's `.gt(field, undefined).lt(field, now)` range in the fake db.
+function convexOrderRank(value: unknown): number {
+  if (value === undefined) return 0
+  if (value === null) return 1
+  return 2
+}
+
+function convexOrderCompare(left: unknown, right: unknown): number {
+  const rankDelta = convexOrderRank(left) - convexOrderRank(right)
+  if (rankDelta !== 0) return rankDelta
+  if (typeof left === "number" && typeof right === "number") {
+    return left === right ? 0 : left < right ? -1 : 1
+  }
+  return 0
 }
 
 type MutationCtxOptions = {
@@ -112,9 +133,22 @@ function createMutationCtx(
           buildQuery: (query: QueryBuilder) => unknown
         ) => {
           const filters = new Map<string, unknown>()
+          const rangeFilters: Array<{
+            fieldName: string
+            op: "gt" | "lt"
+            value: unknown
+          }> = []
           const query: QueryBuilder = {
             eq: (fieldName, value) => {
               filters.set(fieldName, value)
+              return query
+            },
+            gt: (fieldName, value) => {
+              rangeFilters.push({ fieldName, op: "gt", value })
+              return query
+            },
+            lt: (fieldName, value) => {
+              rangeFilters.push({ fieldName, op: "lt", value })
               return query
             },
           }
@@ -125,6 +159,14 @@ function createMutationCtx(
               const record = document as unknown as Record<string, unknown>
               for (const [fieldName, value] of filters) {
                 if (record[fieldName] !== value) return false
+              }
+              for (const range of rangeFilters) {
+                const comparison = convexOrderCompare(
+                  record[range.fieldName],
+                  range.value
+                )
+                if (range.op === "gt" && comparison <= 0) return false
+                if (range.op === "lt" && comparison >= 0) return false
               }
               return true
             }
@@ -2913,6 +2955,233 @@ describe("lease lifecycle (gameplan §6)", () => {
     expect(approval.expiresAt).toBe(1700000000000 + APPROVAL_EXPIRY_MS)
     // The pause's freshness ceiling becomes the approval's own expiry.
     expect(paused.chat.liveRunFreshUntil).toBe(approval.expiresAt)
+  })
+})
+
+describe("reapers (gameplan §6, PR 3)", () => {
+  const NOW = 1700000000000
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function makeExpiredStreamingFixture() {
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.chat.statusRunId = fixture.runId
+    fixture.chat.liveRunStatus = "streaming"
+    fixture.chat.liveRunFreshUntil = NOW + 1
+    fixture.run.grantDigest = "d".repeat(64)
+    fixture.run.grantExpiresAt = NOW + 400_000
+    fixture.run.heartbeatAt = NOW - 60_000
+    fixture.run.leaseExpiresAt = NOW - 15_000
+    fixture.message.content = "partial answer"
+    fixture.message.parts = [{ type: "text", text: "partial answer" }]
+    return fixture
+  }
+
+  it("fails an expired streaming run: lease_expired, partial content preserved, chat projection cleared", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fixture = makeExpiredStreamingFixture()
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    const result = await reapExpiredGenerationRunsPass(ctx)
+
+    expect(result).toEqual({ reaped: 1 })
+    expect(fixture.run).toMatchObject({
+      status: "failed",
+      terminalReason: "lease_expired",
+      heartbeatAt: undefined,
+      leaseExpiresAt: undefined,
+      // Absorbing outcome → grant revoked.
+      grantDigest: undefined,
+      grantExpiresAt: undefined,
+    })
+    // Honest failure, content intact.
+    expect(fixture.message.status).toBe("failed")
+    expect(fixture.message.content).toBe("partial answer")
+    // The owner's chat projection cleared and marked failed.
+    expect(fixture.chat.liveRunStatus).toBeUndefined()
+    expect(fixture.chat.liveRunFreshUntil).toBeUndefined()
+    expect(fixture.chat.lastRunStatus).toBe("failed")
+  })
+
+  it("never matches fresh leases, lease-less rows, or the approval pause", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fresh = createGenerationRunLinkageFixture()
+    fresh.run.leaseExpiresAt = NOW + 30_000
+
+    // A pre-heartbeat row: active-looking, NO lease fields (race #36).
+    const legacy = createGenerationRun({
+      id: "run_legacy",
+      chatId: fresh.chatId,
+      userId: fresh.userId,
+      status: "streaming",
+    })
+    // A paused run holds no lease and must never be lease-reaped.
+    const paused = createGenerationRun({
+      id: "run_paused",
+      chatId: fresh.chatId,
+      userId: fresh.userId,
+      status: "awaiting_approval",
+    })
+    fresh.tables.generationRuns.push(legacy, paused)
+    const { ctx } = createMutationCtx(fresh.tables)
+
+    const result = await reapExpiredGenerationRunsPass(ctx)
+
+    expect(result).toEqual({ reaped: 0 })
+    expect(fresh.run.status).toBe("streaming")
+    expect(legacy.status).toBe("streaming")
+    expect(paused.status).toBe("awaiting_approval")
+  })
+
+  it("a reaped run cannot clear a newer owner's chat projection", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fixture = makeExpiredStreamingFixture()
+    // A newer run claimed the slot; the reaped run's projection must no-op.
+    fixture.chat.statusRunId = fixture.otherRunId
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await reapExpiredGenerationRunsPass(ctx)
+
+    expect(fixture.run.status).toBe("failed")
+    expect(fixture.chat.liveRunStatus).toBe("streaming")
+    expect(fixture.chat.liveRunFreshUntil).toBe(NOW + 1)
+  })
+
+  it("settles the reaped run's pending approvals and active tool records", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fixture = makeExpiredStreamingFixture()
+    fixture.tables.toolApprovalRequests.push({
+      _id: asId<"toolApprovalRequests">("approval_request_1"),
+      _creationTime: 1,
+      chatId: fixture.chatId,
+      runId: fixture.runId,
+      assistantMessageId: fixture.messageId,
+      userId: fixture.userId,
+      toolCallId: "call_1",
+      toolName: "send_email",
+      source: "mcp",
+      riskClass: "destructive",
+      approvalId: "approval_1",
+      status: "pending",
+      createdAt: 1,
+      expiresAt: NOW + 1000,
+    })
+    fixture.tables.toolInvocations.push({
+      _id: asId<"toolInvocations">("tool_invocation_1"),
+      _creationTime: 1,
+      runId: fixture.runId,
+      chatId: fixture.chatId,
+      messageId: fixture.messageId,
+      toolCallId: "call_1",
+      toolName: "send_email",
+      source: "mcp",
+      status: "called",
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await reapExpiredGenerationRunsPass(ctx)
+
+    expect(fixture.tables.toolApprovalRequests[0]).toMatchObject({
+      status: "expired",
+      resolvedAt: NOW,
+    })
+    expect(fixture.tables.toolInvocations[0]).toMatchObject({
+      status: "failed",
+      completedAt: NOW,
+    })
+  })
+
+  it("expires an unattended approval pause: approval_expired on the paused run", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.chat.statusRunId = fixture.runId
+    fixture.run.status = "awaiting_approval"
+    fixture.message.content = "content tail"
+    fixture.message.parts = [{ type: "text", text: "content tail" }]
+    fixture.tables.toolApprovalRequests.push({
+      _id: asId<"toolApprovalRequests">("approval_request_1"),
+      _creationTime: 1,
+      chatId: fixture.chatId,
+      runId: fixture.runId,
+      assistantMessageId: fixture.messageId,
+      userId: fixture.userId,
+      toolCallId: "call_1",
+      toolName: "send_email",
+      source: "mcp",
+      riskClass: "destructive",
+      approvalId: "approval_1",
+      status: "pending",
+      createdAt: 1,
+      expiresAt: NOW - 1,
+    })
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    const result = await reapExpiredToolApprovalsPass(ctx)
+
+    expect(result).toEqual({ expired: 1 })
+    expect(fixture.tables.toolApprovalRequests[0]).toMatchObject({
+      status: "expired",
+      resolvedAt: NOW,
+    })
+    expect(fixture.run).toMatchObject({
+      status: "failed",
+      terminalReason: "approval_expired",
+    })
+    expect(fixture.message.content).toBe("content tail")
+  })
+
+  it("the approval reaper never touches unexpired or expiry-less pending approvals", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.run.status = "awaiting_approval"
+    fixture.tables.toolApprovalRequests.push(
+      {
+        _id: asId<"toolApprovalRequests">("approval_request_fresh"),
+        _creationTime: 1,
+        chatId: fixture.chatId,
+        runId: fixture.runId,
+        assistantMessageId: fixture.messageId,
+        userId: fixture.userId,
+        toolCallId: "call_fresh",
+        toolName: "send_email",
+        source: "mcp",
+        riskClass: "destructive",
+        approvalId: "approval_fresh",
+        status: "pending",
+        createdAt: 1,
+        expiresAt: NOW + 60_000,
+      },
+      {
+        // Pre-expiry-field row: undefined must be excluded, not treated as
+        // instantly expired (undefined < now in index order — race #36).
+        _id: asId<"toolApprovalRequests">("approval_request_legacy"),
+        _creationTime: 1,
+        chatId: fixture.chatId,
+        runId: fixture.runId,
+        assistantMessageId: fixture.messageId,
+        userId: fixture.userId,
+        toolCallId: "call_legacy",
+        toolName: "send_email",
+        source: "mcp",
+        riskClass: "destructive",
+        approvalId: "approval_legacy",
+        status: "pending",
+        createdAt: 1,
+      }
+    )
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    const result = await reapExpiredToolApprovalsPass(ctx)
+
+    expect(result).toEqual({ expired: 0 })
+    expect(
+      fixture.tables.toolApprovalRequests.map((approval) => approval.status)
+    ).toEqual(["pending", "pending"])
+    expect(fixture.run.status).toBe("awaiting_approval")
   })
 })
 
