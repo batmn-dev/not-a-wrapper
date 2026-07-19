@@ -17,6 +17,12 @@ import {
   type EnsuredTurnChat,
   type StagedAttachmentReference,
 } from "@/lib/chat-turn/chat-turn-controller"
+import { useMessages } from "@/lib/chat-store/messages/provider"
+import {
+  resolveGenerationPresentation,
+  type GenerationPresentation,
+  type LocalTransportStatus,
+} from "@/lib/chat-runs/run-presentation"
 import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
 import { routePersistsChatMessages } from "@/lib/chat-turn/turn-store"
 import { attachStagedFilesToChat } from "@/lib/file-handling"
@@ -24,12 +30,13 @@ import { API_ROUTE_CHAT } from "@/lib/routes"
 import type { UserProfile } from "@/lib/user/types"
 import type { UIMessage } from "@ai-sdk/react"
 import { useChat } from "@ai-sdk/react"
-import { useConvex, useMutation } from "convex/react"
+import { useConvex, useConvexConnectionState, useMutation } from "convex/react"
 import { useSearchParams } from "next/navigation"
 import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react"
@@ -509,6 +516,76 @@ export function useChatCore({
     stopRef.current = stop
   }, [stop])
 
+  // -------------------------------------------------------------------------
+  // Generation presentation (gameplan §8, PR 5): raw durable facts from the
+  // atomic selected-conversation projection + this client's transport state,
+  // resolved by the ONE pure resolver. The resolver — not any surface — owns
+  // lease/approval clock classification (with skew grace) and the
+  // terminal→local-stop side effect.
+  // -------------------------------------------------------------------------
+  const { selectedRun } = useMessages()
+  const connectionState = useConvexConnectionState()
+
+  // The local stream's assistant identity: durable runs stream the durable
+  // assistantMessageId as the SDK message id, so this match is exact. Known
+  // only once streaming begins — never inferred from "last run in chat".
+  const localAssistantMessageId = useMemo(() => {
+    if (status !== "streaming") return null
+    for (let index = messages.length - 1; index >= 0; index--) {
+      if (messages[index].role === "assistant") return messages[index].id
+    }
+    return null
+  }, [messages, status])
+
+  // Durable Stop intent: the run id a stop mutation is in flight for (wired
+  // by the durable Stop orchestration — PR 6).
+  const [pendingStopRunId] = useState<string | null>(null)
+
+  // Freshness is CLIENT-classified against the clock, so re-classification
+  // needs a tick while an active-looking run could cross its lease boundary.
+  const [presentationClock, setPresentationClock] = useState(() => Date.now())
+  const runCouldGoStale =
+    selectedRun !== null &&
+    (selectedRun.status === "running" ||
+      selectedRun.status === "streaming" ||
+      selectedRun.status === "awaiting_approval")
+  useEffect(() => {
+    if (!runCouldGoStale) return
+    const interval = setInterval(() => setPresentationClock(Date.now()), 5_000)
+    return () => clearInterval(interval)
+  }, [runCouldGoStale])
+
+  const presentation: GenerationPresentation = useMemo(
+    () =>
+      resolveGenerationPresentation({
+        localStatus: status as LocalTransportStatus,
+        isSubmitting,
+        localAssistantMessageId,
+        selectedRun,
+        pendingStopRunId,
+        isConnected: connectionState.isWebSocketConnected,
+        now: presentationClock,
+      }),
+    [
+      status,
+      isSubmitting,
+      localAssistantMessageId,
+      selectedRun,
+      pendingStopRunId,
+      connectionState.isWebSocketConnected,
+      presentationClock,
+    ]
+  )
+
+  // Resolver-mandated convergence: a durable terminal (remote Stop,
+  // supersession, reap) for the locally attached run cuts the local transport
+  // — no content growth or flicker under a stopped banner (§18, race #34).
+  useEffect(() => {
+    if (presentation.shouldStopLocalStream) {
+      void stopRef.current()
+    }
+  }, [presentation.shouldStopLocalStream])
+
   // Generation guard: prevent stuck "streaming" UI when a stream drops silently
   useEffect(() => {
     if (status !== "streaming") return
@@ -704,6 +781,8 @@ export function useChatCore({
     status,
     error,
     stop,
+    /** The resolved local/background/stale generation presentation (§8). */
+    presentation,
     setMessages,
     isAuthenticated,
     systemPrompt,

@@ -73,6 +73,12 @@ vi.mock("@/convex/_generated/api", () => ({
 vi.mock("convex/react", () => ({
   useMutation: () => chatCoreMocks.convexMutation,
   useConvex: () => ({}),
+  useConvexConnectionState: () => ({ isWebSocketConnected: true }),
+}))
+
+// The presentation resolver's durable input: guest/local default (no run).
+vi.mock("@/lib/chat-store/messages/provider", () => ({
+  useMessages: () => ({ selectedRun: null }),
 }))
 
 vi.mock("@ai-sdk/react", () => ({
