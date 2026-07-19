@@ -9,6 +9,7 @@ import {
   getForChatHandler,
   getLastMessagesHandler,
   getPublicForChatHandler,
+  getSelectedConversationHandler,
   normalizeMessagePartsForStorage,
   selectBranchForChat,
 } from "./messages"
@@ -17,6 +18,9 @@ type TableDocuments = {
   users: Doc<"users">[]
   chats: Doc<"chats">[]
   messages: Doc<"messages">[]
+  generationRuns: Doc<"generationRuns">[]
+  toolInvocations: Doc<"toolInvocations">[]
+  toolApprovalRequests: Doc<"toolApprovalRequests">[]
 }
 
 type TableName = keyof TableDocuments
@@ -74,6 +78,9 @@ function createMutationCtx(tablesInput: Partial<TableDocuments>) {
     users: [],
     chats: [],
     messages: [],
+    generationRuns: [],
+    toolInvocations: [],
+    toolApprovalRequests: [],
     ...tablesInput,
   }
 
@@ -365,4 +372,211 @@ describe("message branch selection", () => {
     ).resolves.toMatchObject([{ _id: "message_assistant_old" }])
   })
 
+})
+
+describe("getSelectedConversation (gameplan §7, PR 4)", () => {
+  function createRunWorld({
+    runStatus = "streaming" as Doc<"generationRuns">["status"],
+    assistantSelected = true,
+    publicChat = false,
+  } = {}) {
+    const { user, chat, userId, chatId } = createOwnerFixture({ publicChat })
+    const runId = asId<"generationRuns">("run_1")
+    const assistantId = asMessageId("message_assistant_1")
+    const messages: Doc<"messages">[] = [
+      createMessage({
+        id: "message_user_1",
+        orderId: 0,
+        role: "user",
+        content: "prompt",
+        selected: true,
+      }),
+      {
+        ...createMessage({
+          id: "message_assistant_1",
+          orderId: 1,
+          role: "assistant",
+          content: "partial",
+          selected: assistantSelected,
+        }),
+        status: "streaming" as const,
+        generationRunId: runId,
+      },
+    ]
+    const run: Doc<"generationRuns"> = {
+      _id: runId,
+      _creationTime: 1,
+      chatId,
+      userId,
+      requestId: "request_1",
+      model: "gpt-5",
+      provider: "openai",
+      status: runStatus,
+      startedAt: 1,
+      updatedAt: 1,
+      activeStreamId: assistantId,
+      assistantMessageId: assistantId,
+      leaseExpiresAt: 46_000,
+      lastSnapshotSequence: 3,
+      lastProgressAt: 900,
+      terminalReason: runStatus === "failed" ? "lease_expired" : undefined,
+    }
+    chat.statusRunId = runId
+    return { user, chat, userId, chatId, runId, assistantId, messages, run }
+  }
+
+  it("returns messages and the linked run's raw facts atomically for the owner", async () => {
+    const world = createRunWorld()
+    const { ctx } = createMutationCtx({
+      users: [world.user],
+      chats: [world.chat],
+      messages: world.messages,
+      generationRuns: [world.run],
+      toolInvocations: [
+        {
+          _id: asId<"toolInvocations">("tool_invocation_1"),
+          _creationTime: 1,
+          runId: world.runId,
+          chatId: world.chatId,
+          messageId: world.assistantId,
+          toolCallId: "call_1",
+          toolName: "web_search",
+          source: "builtin",
+          status: "called",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          _id: asId<"toolInvocations">("tool_invocation_2"),
+          _creationTime: 1,
+          runId: world.runId,
+          chatId: world.chatId,
+          messageId: world.assistantId,
+          toolCallId: "call_2",
+          toolName: "extract_content",
+          source: "builtin",
+          status: "completed",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      toolApprovalRequests: [
+        {
+          _id: asId<"toolApprovalRequests">("approval_request_1"),
+          _creationTime: 1,
+          chatId: world.chatId,
+          runId: world.runId,
+          assistantMessageId: world.assistantId,
+          userId: world.userId,
+          toolCallId: "call_3",
+          toolName: "send_email",
+          source: "mcp",
+          riskClass: "destructive",
+          approvalId: "approval_1",
+          status: "pending",
+          createdAt: 5,
+          expiresAt: 90_000,
+        },
+      ],
+    })
+
+    const projection = await getSelectedConversationHandler(ctx, {
+      chatId: world.chatId,
+    })
+
+    expect(
+      projection.selectedMessages.map((message) => message._id)
+    ).toEqual(["message_user_1", "message_assistant_1"])
+    expect(projection.selectedRun).toMatchObject({
+      runId: world.runId,
+      assistantMessageId: world.assistantId,
+      status: "streaming",
+      leaseExpiresAt: 46_000,
+      lastSnapshotSequence: 3,
+      lastProgressAt: 900,
+      // Only ACTIVE tool evidence; completed invocations are history.
+      activeToolNames: ["web_search"],
+      pendingApproval: {
+        approvalId: "approval_1",
+        toolName: "send_email",
+        expiresAt: 90_000,
+      },
+    })
+  })
+
+  it("returns selectedRun null to a public non-owner viewer (no run metadata leaks)", async () => {
+    const world = createRunWorld({ publicChat: true })
+    // The viewer is authenticated but does NOT own the chat.
+    world.chat.userId = asId<"users">("user_other")
+    const { ctx } = createMutationCtx({
+      users: [
+        world.user,
+        {
+          _id: asId<"users">("user_other"),
+          _creationTime: 1,
+          workosUserId: "workos_user_other",
+          email: "other@example.com",
+        },
+      ],
+      chats: [world.chat],
+      messages: world.messages,
+      generationRuns: [world.run],
+    })
+
+    const projection = await getSelectedConversationHandler(ctx, {
+      chatId: world.chatId,
+    })
+
+    expect(projection.selectedMessages.length).toBeGreaterThan(0)
+    expect(projection.selectedRun).toBeNull()
+  })
+
+  it("returns no run when the linked assistant message is off the selected path", async () => {
+    const world = createRunWorld({ assistantSelected: false })
+    // A selected sibling displaces the run's message from the selected path.
+    world.messages.push({
+      ...createMessage({
+        id: "message_assistant_2",
+        orderId: 1,
+        role: "assistant",
+        content: "other branch",
+        parentMessageId: asMessageId("message_user_1"),
+        branchIndex: 1,
+        selected: true,
+      }),
+    })
+    world.messages[1].parentMessageId = asMessageId("message_user_1")
+    world.messages[1].branchIndex = 0
+    const { ctx } = createMutationCtx({
+      users: [world.user],
+      chats: [world.chat],
+      messages: world.messages,
+      generationRuns: [world.run],
+    })
+
+    const projection = await getSelectedConversationHandler(ctx, {
+      chatId: world.chatId,
+    })
+
+    expect(projection.selectedRun).toBeNull()
+  })
+
+  it("keeps projecting a terminal current run with its terminal reason (convergence metadata)", async () => {
+    const world = createRunWorld({ runStatus: "failed" })
+    const { ctx } = createMutationCtx({
+      users: [world.user],
+      chats: [world.chat],
+      messages: world.messages,
+      generationRuns: [world.run],
+    })
+
+    const projection = await getSelectedConversationHandler(ctx, {
+      chatId: world.chatId,
+    })
+
+    expect(projection.selectedRun).toMatchObject({
+      status: "failed",
+      terminalReason: "lease_expired",
+    })
+  })
 })

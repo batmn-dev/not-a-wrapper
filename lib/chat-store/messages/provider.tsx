@@ -3,6 +3,7 @@
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
+import type { SelectedRunProjection } from "@/convex/messages"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import { durableStoredMessageToUiMessage } from "@/lib/chat-messages/ui-message-adapter"
@@ -40,6 +41,14 @@ export type ExtendedUIMessage = UIMessage & {
 
 type MessagesContextType = {
   messages: ExtendedUIMessage[]
+  /**
+   * Raw durable facts about the chat's current run, atomically consistent
+   * with `messages` (one Convex query — gameplan §7). Null for guests,
+   * public/non-owner viewers, and chats with no current run. Carries NO
+   * time-derived fields; the pure presentation resolver owns clock
+   * classification.
+   */
+  selectedRun: SelectedRunProjection | null
   isLoading: boolean
   setMessages: React.Dispatch<React.SetStateAction<ExtendedUIMessage[]>>
   /** Cache message locally and persist to Convex. Pass overrideChatId to handle stale closures during chat creation. */
@@ -69,17 +78,22 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
   // Only query if chatId is a valid Convex ID (not optimistic or local guest chat)
   const isValidConvexId = messagePersistenceMode === "server"
 
-  // Convex real-time query for messages. getForChat requires an owned chat, so
-  // the Per-user subscription seam also gates it on Convex auth readiness —
-  // avoiding a throw if the subscription opens before the JWT is synced.
+  // Convex real-time query for the selected conversation — messages AND the
+  // linked current run in one atomic projection (gameplan §7; independent
+  // subscriptions would tear). The Per-user subscription seam gates it on
+  // Convex auth readiness — avoiding a throw if the subscription opens before
+  // the JWT is synced.
   const {
-    data: convexMessages,
+    data: selectedConversation,
     isAuthReady: canSubscribeToMessages,
     isLoading: isMessagesLoading,
   } = usePerUserQuery(
-    api.messages.getForChat,
+    api.messages.getSelectedConversation,
     isValidConvexId ? { chatId: chatId as Id<"chats"> } : "skip"
   )
+  const convexMessages = selectedConversation?.selectedMessages
+  const selectedRun =
+    (canSubscribeToMessages ? selectedConversation?.selectedRun : null) ?? null
 
   // Convex mutations
   const addMessageMutation = useMutation(api.messages.add)
@@ -288,6 +302,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     <MessagesContext.Provider
       value={{
         messages,
+        selectedRun,
         isLoading,
         setMessages,
         cacheAndAddMessage,

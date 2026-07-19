@@ -17,7 +17,11 @@ import {
 } from "./domain/message_parts"
 import { isVisibleChatMessage } from "./domain/message_visibility"
 import { recordChatActivity } from "./domain/project_activity"
-import { getAuthorizedChatForRead, requireOwnedChat } from "./lib/auth"
+import {
+  getAuthorizedChatForRead,
+  getCurrentUser,
+  requireOwnedChat,
+} from "./lib/auth"
 import { ownedChatMutation } from "./lib/authedFunctions"
 
 export { normalizeMessagePartsForStorage } from "./domain/message_parts"
@@ -107,6 +111,166 @@ export async function getLastMessagesHandler(
   const messages = await listMessagesByChatOrder(ctx, chatId)
   return getVisibleSelectedMessages(messages).slice(-limit)
 }
+
+// ---------------------------------------------------------------------------
+// Atomic selected-conversation projection (durable-turn gameplan §7, PR 4).
+// ---------------------------------------------------------------------------
+
+const ACTIVE_TOOL_INVOCATION_STATUSES = new Set<
+  Doc<"toolInvocations">["status"]
+>(["called", "pending_approval", "approved"])
+
+export type PendingApprovalProjection = {
+  approvalId: string
+  toolCallId: string
+  toolName: string
+  source: Doc<"toolApprovalRequests">["source"]
+  reason?: string
+  riskClass: string
+  inputPreview?: string
+  assistantMessageId: Id<"messages">
+  createdAt: number
+  expiresAt?: number
+}
+
+/**
+ * Raw durable facts about the chat's current run — deliberately `selectedRun`,
+ * not `activeRun`: `statusRunId` is kept after a terminal transition, so the
+ * UI receives the linked terminal status/reason during convergence. NO
+ * time-derived fields cross this wire (freshness, controllable, stoppable):
+ * Convex queries re-execute on data changes, never on wall-clock time — a
+ * server-classified freshness could never expire between writes (§18 #3). The
+ * client resolver owns all clock classification.
+ */
+export type SelectedRunProjection = {
+  runId: Id<"generationRuns">
+  assistantMessageId: Id<"messages">
+  status: Doc<"generationRuns">["status"]
+  terminalReason?: Doc<"generationRuns">["terminalReason"]
+  leaseExpiresAt?: number
+  lastSnapshotSequence?: number
+  lastProgressAt?: number
+  activeToolNames: string[]
+  pendingApproval: PendingApprovalProjection | null
+}
+
+export type SelectedConversationProjection = {
+  selectedMessages: Awaited<ReturnType<typeof getForChatHandler>>
+  selectedRun: SelectedRunProjection | null
+}
+
+/**
+ * The owner's primary selected-message subscription: selected visible path
+ * AND the linked current run in ONE query transaction, so content and run
+ * state can never tear. Public and non-owner viewers receive `selectedRun:
+ * null` — no run IDs, lease times, or approval capabilities leak. Guest/local
+ * chats never reach this query (no runs; the provider keeps its
+ * persistence-mode gating).
+ */
+export async function getSelectedConversationHandler(
+  ctx: QueryCtx,
+  { chatId }: { chatId: Id<"chats"> }
+): Promise<SelectedConversationProjection> {
+  const chat = await getAuthorizedChatForRead(ctx, chatId)
+  if (!chat) return { selectedMessages: [], selectedRun: null }
+
+  const messages = await listMessagesByChatOrder(ctx, chatId)
+  const selectedMessages = getVisibleSelectedMessages(messages)
+
+  const viewer = await getCurrentUser(ctx)
+  const isOwner = viewer !== null && chat.userId === viewer._id
+  if (!isOwner || !chat.statusRunId) {
+    return { selectedMessages, selectedRun: null }
+  }
+
+  // Validation gauntlet (§7): the run must belong to this chat and owner,
+  // its assistant message must sit on the selected path, and the message must
+  // point back at the same run. Any mismatch returns no run rather than a
+  // torn or misattributed one.
+  const run = await ctx.db.get(chat.statusRunId)
+  if (
+    !run ||
+    run.chatId !== chat._id ||
+    (run.userId !== undefined && run.userId !== chat.userId)
+  ) {
+    return { selectedMessages, selectedRun: null }
+  }
+  const assistantMessageId = run.assistantMessageId
+  if (!assistantMessageId) return { selectedMessages, selectedRun: null }
+  const onSelectedPath = selectedMessages.some(
+    (message) => message._id === assistantMessageId
+  )
+  const linkedMessage = messages.find(
+    (message) => message._id === assistantMessageId
+  )
+  const pointsBack =
+    linkedMessage !== undefined &&
+    (linkedMessage.generationRunId === run._id ||
+      run.activeStreamId === linkedMessage._id)
+  if (!onSelectedPath || !pointsBack) {
+    return { selectedMessages, selectedRun: null }
+  }
+
+  // Tool/approval reads only for the validated run.
+  const invocations = await ctx.db
+    .query("toolInvocations")
+    .withIndex("by_run", (q) => q.eq("runId", run._id))
+    .collect()
+  const activeToolNames = [
+    ...new Set(
+      invocations
+        .filter((invocation) =>
+          ACTIVE_TOOL_INVOCATION_STATUSES.has(invocation.status)
+        )
+        .map((invocation) => invocation.toolName)
+    ),
+  ]
+  const pendingApproval = await ctx.db
+    .query("toolApprovalRequests")
+    .withIndex("by_run_status", (q) =>
+      q.eq("runId", run._id).eq("status", "pending")
+    )
+    .first()
+
+  return {
+    selectedMessages,
+    selectedRun: {
+      runId: run._id,
+      assistantMessageId,
+      status: run.status,
+      terminalReason: run.terminalReason,
+      leaseExpiresAt: run.leaseExpiresAt,
+      lastSnapshotSequence: run.lastSnapshotSequence,
+      lastProgressAt: run.lastProgressAt,
+      activeToolNames,
+      pendingApproval: pendingApproval
+        ? {
+            approvalId: pendingApproval.approvalId,
+            toolCallId: pendingApproval.toolCallId,
+            toolName: pendingApproval.toolName,
+            source: pendingApproval.source,
+            reason: pendingApproval.reason,
+            riskClass: pendingApproval.riskClass,
+            inputPreview: pendingApproval.inputPreview,
+            assistantMessageId: pendingApproval.assistantMessageId,
+            createdAt: pendingApproval.createdAt,
+            expiresAt: pendingApproval.expiresAt,
+          }
+        : null,
+    },
+  }
+}
+
+/**
+ * The owner's atomic selected conversation (messages + linked run). Replaces
+ * `getForChat` as the authenticated client's primary subscription — do NOT
+ * wrap `getForChat` with an independent run subscription; that reintroduces
+ * torn combinations.
+ */
+export const getSelectedConversation = query({
+  args: { chatId: v.id("chats") },
+  handler: getSelectedConversationHandler,
+})
 
 /**
  * Get all messages for a chat
