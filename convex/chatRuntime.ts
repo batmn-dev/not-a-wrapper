@@ -595,6 +595,9 @@ async function applyLifecycleVerdict(
     completedAt: verdict.run.settle ? now : undefined,
     updatedAt: now,
     ...(verdict.run.clearActiveStream ? { activeStreamId: undefined } : {}),
+    ...(verdict.run.terminalReason
+      ? { terminalReason: verdict.run.terminalReason }
+      : {}),
     ...grantRevocationForStatus(verdict.run.status),
     assistantMessageId,
   })
@@ -710,6 +713,9 @@ async function closeSupersededGenerationsForChat(
             completedAt: verdict.run.settle ? now : undefined,
             updatedAt: now,
             activeStreamId: undefined,
+            ...(verdict.run.terminalReason
+              ? { terminalReason: verdict.run.terminalReason }
+              : {}),
             ...grantRevocationForStatus(verdict.run.status),
             assistantMessageId: supersededMessageId,
           })
@@ -1214,6 +1220,9 @@ export async function applyApprovalResponses(
       completedAt: verdict.run.settle ? now : undefined,
       updatedAt: now,
       activeStreamId: undefined,
+      ...(verdict.run.terminalReason
+        ? { terminalReason: verdict.run.terminalReason }
+        : {}),
       ...grantRevocationForStatus(verdict.run.status),
     })
   }
@@ -1579,6 +1588,9 @@ export async function markGenerationRunCompletedForChat(
     totalToolCalls: args.totalToolCalls,
     failedToolCalls: args.failedToolCalls,
     activeStreamId: undefined,
+    ...(verdict.run.terminalReason
+      ? { terminalReason: verdict.run.terminalReason }
+      : {}),
   })
   // Completion patches the run directly (not via applyLifecycleVerdict), so the
   // projection is hooked here. verdict.run.status is "completed", or

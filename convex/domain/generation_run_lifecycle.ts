@@ -1,5 +1,9 @@
-import { isActiveGenerationRunStatus } from "./message_contract"
+import {
+  isActiveGenerationRunStatus,
+  isTerminalGenerationRunStatus,
+} from "./message_contract"
 import type { GenerationRunStatus } from "./message_contract"
+import { isWorkerExecutingStatus } from "./generation_run_liveness"
 
 /**
  * Generation run lifecycle — the single pure brain owning the legal transitions
@@ -27,6 +31,28 @@ export type LifecycleSignal =
   | { kind: "supersede"; reason: string }
   | { kind: "approval-requested" }
   | { kind: "approvals-resolved"; anyDenied: boolean }
+  // Durable-turn control signals (gameplan §10): an authenticated user Stop,
+  // the lease reaper failing a dead worker's run, and the approval reaper
+  // expiring an unattended pause.
+  | { kind: "stop"; reason?: string }
+  | { kind: "lease-expired" }
+  | { kind: "approval-expired" }
+
+/**
+ * Why a run reached its terminal status — durable audit vocabulary carried on
+ * the run doc and the selected-conversation projection (gameplan §5). Stamped
+ * by every settling transition below; the approvals-resolved close leaves it
+ * unset for the denied case (no member of this union describes it, and
+ * inventing one is worse than an optional).
+ */
+export type GenerationRunTerminalReason =
+  | "completed"
+  | "user_stop"
+  | "superseded"
+  | "provider_error"
+  | "lease_expired"
+  | "approval_expired"
+  | "request_aborted"
 
 /**
  * Facts about the assistant message a terminal transition resolves against,
@@ -59,10 +85,19 @@ export type MessageResolution =
   | { kind: "delete-and-reselect"; siblingId: string }
   | { kind: "restore-completed" }
 
+export type LifecycleIgnoreReason =
+  | "already-terminal"
+  | "not-supersedable"
+  | "not-awaiting-approval"
+  // lease-expired probes a run that is not queued/running/streaming — an
+  // awaiting_approval pause holds no lease, so the lease reaper must not
+  // touch it (the approval reaper owns that expiry).
+  | "not-worker-executing"
+
 export type LifecycleVerdict<M extends MessageResolution = MessageResolution> =
   | {
       kind: "ignore"
-      reason: "already-terminal" | "not-supersedable" | "not-awaiting-approval"
+      reason: LifecycleIgnoreReason
     }
   | {
       kind: "transition"
@@ -75,6 +110,9 @@ export type LifecycleVerdict<M extends MessageResolution = MessageResolution> =
         // stamp completedAt — all terminal transitions settle; awaiting_approval
         // (from either a pending completion or an approval request) does not.
         settle: boolean
+        // durable audit vocabulary; present exactly when the transition settles
+        // (except the approvals-resolved denied close — see the type's doc).
+        terminalReason?: GenerationRunTerminalReason
       }
       message: M
     }
@@ -120,9 +158,7 @@ export function resolveTerminalAssistantMessageResolution(
   return { kind: "stamp", status: outcome.status, error: outcome.error }
 }
 
-function ignore(
-  reason: "already-terminal" | "not-supersedable" | "not-awaiting-approval"
-): LifecycleVerdict {
+function ignore(reason: LifecycleIgnoreReason): LifecycleVerdict {
   return { kind: "ignore", reason }
 }
 
@@ -180,6 +216,7 @@ export function resolveGenerationRunTransition(
           status,
           clearActiveStream: true,
           settle: status === "completed",
+          terminalReason: status === "completed" ? "completed" : undefined,
         },
         message: { kind: "stamp", status },
       }
@@ -202,6 +239,7 @@ export function resolveGenerationRunTransition(
           error: signal.error,
           clearActiveStream: true,
           settle: true,
+          terminalReason: "provider_error",
         },
         message: terminalMessage(message, {
           status: "failed",
@@ -223,10 +261,88 @@ export function resolveGenerationRunTransition(
           error: signal.reason,
           clearActiveStream: true,
           settle: true,
+          terminalReason: "request_aborted",
         },
         message: terminalMessage(message, {
           status: "aborted",
           error: signal.reason,
+        }),
+      }
+    }
+    case "stop": {
+      // The authenticated durable Stop (gameplan §9): same reach as abort —
+      // active statuses INCLUDING awaiting_approval (a Stop may close a
+      // paused run; the handler denies its pending approvals in the same
+      // transaction). First terminal wins; a settled run returns its
+      // canonical result via ignore.
+      if (!isActiveGenerationRunStatus(runStatus)) {
+        return ignore("already-terminal")
+      }
+      return {
+        kind: "transition",
+        run: {
+          status: "aborted",
+          error: signal.reason ?? "stopped by user",
+          clearActiveStream: true,
+          settle: true,
+          terminalReason: "user_stop",
+        },
+        message: terminalMessage(message, {
+          status: "aborted",
+          error: signal.reason ?? "stopped by user",
+        }),
+      }
+    }
+    case "lease-expired": {
+      // The lease reaper fails a run whose worker died (gameplan §6). Only
+      // worker-executing statuses hold a lease: an awaiting_approval pause is
+      // lease-free (the approval reaper owns its expiry), and a terminal run
+      // is settled. Partial content is preserved by the terminal message
+      // policy; a dead worker's run becomes failed, never fake-completed.
+      if (isTerminalGenerationRunStatus(runStatus)) {
+        return ignore("already-terminal")
+      }
+      if (!isWorkerExecutingStatus(runStatus)) {
+        return ignore("not-worker-executing")
+      }
+      return {
+        kind: "transition",
+        run: {
+          status: "failed",
+          error: "generation worker lease expired",
+          clearActiveStream: true,
+          settle: true,
+          terminalReason: "lease_expired",
+        },
+        message: terminalMessage(message, {
+          status: "failed",
+          error: "generation worker lease expired",
+        }),
+      }
+    }
+    case "approval-expired": {
+      // The approval reaper settles a pause nobody resolved (gameplan §6).
+      // Only awaiting_approval holds an approval expiry; anything else is
+      // either settled or a misrouted signal.
+      if (runStatus !== "awaiting_approval") {
+        return ignore(
+          isActiveGenerationRunStatus(runStatus)
+            ? "not-awaiting-approval"
+            : "already-terminal"
+        )
+      }
+      return {
+        kind: "transition",
+        run: {
+          status: "failed",
+          error: "tool approval expired",
+          clearActiveStream: true,
+          settle: true,
+          terminalReason: "approval_expired",
+        },
+        message: terminalMessage(message, {
+          status: "failed",
+          error: "tool approval expired",
         }),
       }
     }
@@ -244,6 +360,7 @@ export function resolveGenerationRunTransition(
           error: signal.reason,
           clearActiveStream: true,
           settle: true,
+          terminalReason: "superseded",
         },
         message: terminalMessage(message, {
           status: "aborted",
@@ -289,6 +406,7 @@ export function resolveGenerationRunTransition(
           status: signal.anyDenied ? "aborted" : "completed",
           clearActiveStream: true,
           settle: true,
+          terminalReason: signal.anyDenied ? undefined : "completed",
         },
         message: { kind: "none" },
       }
@@ -306,6 +424,9 @@ const probeSignals: Record<LifecycleSignal["kind"], LifecycleSignal> = {
   supersede: { kind: "supersede", reason: "" },
   "approval-requested": { kind: "approval-requested" },
   "approvals-resolved": { kind: "approvals-resolved", anyDenied: false },
+  stop: { kind: "stop" },
+  "lease-expired": { kind: "lease-expired" },
+  "approval-expired": { kind: "approval-expired" },
 }
 
 /**
