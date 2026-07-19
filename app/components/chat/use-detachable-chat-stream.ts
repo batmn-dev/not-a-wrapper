@@ -1,6 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react"
 import { Chat } from "@ai-sdk/react"
-import { messageHasLocallyResolvedApproval } from "@/lib/chat-runs/approval-auto-send-gate"
+import { consumeLocallyResolvedApprovals } from "@/lib/chat-runs/approval-auto-send-gate"
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
@@ -184,12 +184,13 @@ function createDetachableChatStreamOwner(
             return false
           }
           // Only the tab that LOCALLY resolved the approval may auto-send the
-          // continuation (gameplan §10 layer 3): approval-responded parts
-          // adopted from the server must not arm a duplicate dispatch.
+          // continuation (gameplan §10 layer 3), and the resolution arms
+          // exactly ONE dispatch — consuming here closes the gate for any
+          // later remount that rehydrates the same approval-responded parts.
           const lastMessage = args.messages[args.messages.length - 1]
           return (
             lastMessage !== undefined &&
-            messageHasLocallyResolvedApproval(lastMessage)
+            consumeLocallyResolvedApprovals(lastMessage)
           )
         },
         onFinish: (event) => routeFinish(binding, event),

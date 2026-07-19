@@ -529,6 +529,32 @@ describe("getSelectedConversation (gameplan §7, PR 4)", () => {
 
     expect(projection.selectedMessages.length).toBeGreaterThan(0)
     expect(projection.selectedRun).toBeNull()
+    // The message docs carry the run linkage too — nulling `selectedRun`
+    // while returning raw docs would still leak run ids to a public viewer.
+    for (const message of projection.selectedMessages) {
+      expect(message).not.toHaveProperty("generationRunId")
+      expect(message).not.toHaveProperty("requestId")
+    }
+  })
+
+  it("keeps run linkage on message docs for the owner", async () => {
+    const world = createRunWorld()
+    const { ctx } = createMutationCtx({
+      users: [world.user],
+      chats: [world.chat],
+      messages: world.messages,
+      generationRuns: [world.run],
+    })
+
+    const projection = await getSelectedConversationHandler(ctx, {
+      chatId: world.chatId,
+    })
+
+    expect(
+      projection.selectedMessages.some(
+        (message) => message.generationRunId !== undefined
+      )
+    ).toBe(true)
   })
 
   it("returns no run when the linked assistant message is off the selected path", async () => {

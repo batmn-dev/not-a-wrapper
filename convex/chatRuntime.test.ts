@@ -3532,6 +3532,41 @@ describe("updateAssistantSnapshotForChat", () => {
     vi.restoreAllMocks()
   })
 
+  it("lands content on an awaiting_approval pause WITHOUT repainting it streaming", async () => {
+    // The pause is lease-free (gameplan §6): the same worker's post-pause
+    // final flush must land the content tail, but flipping the run back to
+    // "streaming" without a lease would strand it outside both liveness
+    // regimes — no lease for the run reaper, no pending status for the
+    // approval reaper — a permanent zombie if the completion downgrade never
+    // arrives.
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.run.status = "awaiting_approval"
+    fixture.run.heartbeatAt = undefined
+    fixture.run.leaseExpiresAt = undefined
+    fixture.message.status = "awaiting_approval"
+    const { ctx, inserts } = createMutationCtx(fixture.tables)
+
+    const result = await updateAssistantSnapshotForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        order: 1,
+        sequence: 4,
+        textSnapshot: "tail after pause",
+        partsSnapshot: [{ type: "text", text: "tail after pause" }],
+      }
+    )
+
+    expect(result).toEqual({ kind: "applied" })
+    expect(inserts).toHaveLength(1)
+    expect(fixture.message.content).toBe("tail after pause")
+    expect(fixture.message.status).toBe("awaiting_approval")
+    expect(fixture.run.status).toBe("awaiting_approval")
+    expect(fixture.run.lastSnapshotSequence).toBe(4)
+    expect(fixture.run.leaseExpiresAt).toBeUndefined()
+  })
+
   it("becomes a no-op once the run is terminal (post-Stop write storm)", async () => {
     // A streamer that lost the abort/supersede race must not keep inserting
     // snapshots or patching the run/message docs — that write pressure is what

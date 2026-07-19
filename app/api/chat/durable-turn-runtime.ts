@@ -243,13 +243,21 @@ export type DurableStepRecord = {
 /**
  * The settlement receipt (ADR-0011). Settlement NEVER rejects: a generated
  * answer's delivery is independent of terminal persistence. `confirmed` means
- * the terminal transition landed; `degraded` means it did not after bounded
- * retries — the answer content still survives via the final pre-terminal
- * snapshot, and the run remains live for the supersede sweep to close
- * honestly. `guest` marks the inert adapter.
+ * the run is durably settled — outcome `completed`/`aborted` when THIS write
+ * landed it, `settled-elsewhere` when the grant was revoked by an earlier
+ * absorbing terminal (Stop, supersession, failure, reap): the run is settled,
+ * but with THAT writer's outcome — Convex, not this receipt, is the source of
+ * truth for which. `degraded` means no terminal is known to have landed after
+ * bounded retries — the answer content still survives via the final
+ * pre-terminal snapshot, and the run remains live for the reaper/supersede
+ * sweep to close honestly. `guest` marks the inert adapter.
  */
 export type DurableSettlementReceipt =
-  | { status: "confirmed"; runId: string; outcome: "completed" | "aborted" }
+  | {
+      status: "confirmed"
+      runId: string
+      outcome: "completed" | "aborted" | "settled-elsewhere"
+    }
   | { status: "degraded"; runId: string; reason: string }
   | { status: "guest" }
 
@@ -308,10 +316,22 @@ export type DurableTurnRuntime = {
    * Aborts when this worker can no longer legitimately execute the run: the
    * heartbeat answered `lost` (Stop, supersession, reaping) or heartbeat
    * transport died past its retry budget. The Chat turn runtime composes it
-   * with the request signal and the provider deadline so provider consumption
-   * stops promptly (gameplan §6/§12). Guest: never aborts.
+   * with the provider deadline so provider consumption stops promptly
+   * (gameplan §6/§12). Guest: never aborts.
    */
   readonly executionAbortSignal: AbortSignal
+
+  /**
+   * The signals provider/tool consumption must respect, given the incoming
+   * request's signal. Durable: the request signal is EXCLUDED — a client
+   * disconnect (reload, tab close, navigation that drops the fetch) leaves
+   * the worker streaming to durable settlement (gameplan §12 scenario 9; §14
+   * "Reload mid-text → same run ID"); Stop, supersession, and reaping reach
+   * the worker through `executionAbortSignal` instead. Guest: the request
+   * signal IS the lifecycle — nobody is left to receive or settle a
+   * disconnected guest stream.
+   */
+  providerAbortSignals(requestSignal: AbortSignal): AbortSignal[]
 
   /**
    * Durable-prepare: `prepareGeneration` (approval-response extraction, the
@@ -769,6 +789,9 @@ export function createGuestDurableTurn(
   return {
     mode: "guest",
     executionAbortSignal: new AbortController().signal,
+    providerAbortSignals(requestSignal) {
+      return [requestSignal]
+    },
     async prepare() {
       return sanitizeModelHistoryMessages(input.messages) as MessageAISDK[]
     },
@@ -837,6 +860,16 @@ export function createConvexDurableTurn(args: {
   let prepareCalled = false
   let bound = false
 
+  // Grant-authority loss, discovered by ANY worker write. `grantAuthorityLost`
+  // means Convex REVOKED the grant — an absorbing terminal (Stop, supersession,
+  // failure, reap) landed elsewhere, so the run is settled and every later
+  // write from this worker is moot: short-circuit them locally instead of
+  // hammering the endpoint with 401s (the post-Stop write-storm noise).
+  // `grantExpired` means the TTL lapsed — the run is NOT known settled, so
+  // terminal writes still degrade honestly rather than claiming settlement.
+  let grantAuthorityLost = false
+  let grantExpired = false
+
   const workerWrite = <Op extends DurableWorkerOp>(
     op: Op,
     opArgs: DurableWorkerPayloads[Op]
@@ -846,10 +879,15 @@ export function createConvexDurableTurn(args: {
         new Error("Durable turn runtime: worker write before prepare()")
       )
     }
+    if (grantAuthorityLost || grantExpired) {
+      return Promise.resolve({ ok: false, skipped: "grant_authority_lost" })
+    }
     // Safe by construction: the generic signature correlates `op` with its
     // payload; TS cannot carry that correlation into the union.
     return wire({ op, args: { runId, ...opArgs } } as DurableWorkerCall)
   }
+
+  type TerminalWriteResult = "landed" | "settled-elsewhere" | "failed"
 
   // Each retried terminal op warns under its established tag so ops
   // vocabulary survives the wire migration; the op decides the tag.
@@ -859,42 +897,57 @@ export function createConvexDurableTurn(args: {
   } as const
 
   /**
-   * A terminal transition with bounded retry. Resolves `true` when the write
-   * landed (or was idempotently absorbed by an already-settled run), `false`
-   * when every attempt failed — NEVER throws.
+   * A terminal transition with bounded retry. NEVER throws. Three-way result:
+   * `landed` — THIS write's outcome is the run's terminal; `settled-elsewhere`
+   * — the grant was revoked, meaning an absorbing terminal (Stop,
+   * supersession, failure, reap) already settled the run durably, but NOT
+   * necessarily with this write's outcome (Convex is the source of truth —
+   * claiming the requested outcome here would let a completion write report
+   * "completed" over a landed failure); `failed` — nothing is known to have
+   * landed after bounded retries, the degraded-receipt path.
    */
   const writeTerminal = async <
     Op extends keyof typeof TERMINAL_WRITE_FAILURE_TAGS,
   >(
     op: Op,
     opArgs: DurableWorkerPayloads[Op]
-  ): Promise<boolean> => {
+  ): Promise<TerminalWriteResult> => {
+    if (grantAuthorityLost) {
+      warnDurable("durable_terminal_write_rejected_settled", {
+        requestId,
+        chatId,
+        runId,
+        op,
+        reason: "grant-authority-lost",
+      })
+      return "settled-elsewhere"
+    }
+    if (grantExpired) return "failed"
     for (let attempt = 0; attempt <= settleRetryDelaysMs.length; attempt++) {
       try {
         await withWorkerWriteTimeout(
           workerWrite(op, opArgs),
           `writing terminal operation ${op}`
         )
-        return true
+        return "landed"
       } catch (error) {
         // Absorbing outcomes revoke the grant (gameplan §0 amendment 2), so
         // the benign double-terminal orders — the envelope's abort after the
         // stream's, or a spurious completion after a landed failure — now
         // reject at the grant gate instead of no-oping inside the handler.
-        // Same semantics, different door: the run is settled, the write is
-        // idempotently absorbed, and degrading the receipt for it would turn
-        // every user Stop into false settlement noise.
+        // The run IS settled; whether with THIS outcome only Convex knows.
         if (
           error instanceof DurableWorkerWriteError &&
           error.grantRejection === "grant_unauthorized"
         ) {
+          noteGrantRejection("grant_unauthorized", op)
           warnDurable("durable_terminal_write_rejected_settled", {
             requestId,
             chatId,
             runId,
             op,
           })
-          return true
+          return "settled-elsewhere"
         }
         warnDurable(TERMINAL_WRITE_FAILURE_TAGS[op], {
           requestId,
@@ -909,19 +962,22 @@ export function createConvexDurableTurn(args: {
           error instanceof DurableWorkerWriteError &&
           error.grantRejection === "grant_expired"
         ) {
-          return false
+          noteGrantRejection("grant_expired", op)
+          return "failed"
         }
         if (attempt < settleRetryDelaysMs.length) {
           await sleep(settleRetryDelaysMs[attempt])
         }
       }
     }
-    return false
+    return "failed"
   }
 
-  const markRunAborted = async (reason: string): Promise<boolean> => {
+  const markRunAborted = async (
+    reason: string
+  ): Promise<TerminalWriteResult> => {
     const currentMessageId = assistantMessageId
-    if (!runId || !currentMessageId) return true
+    if (!runId || !currentMessageId) return "landed"
     return writeTerminal("markGenerationRunAborted", {
       messageId: currentMessageId,
       reason,
@@ -960,6 +1016,34 @@ export function createConvexDurableTurn(args: {
         new Error(`Durable worker execution lost: ${reason}`)
       )
     }
+  }
+
+  /**
+   * A grant rejection from ANY worker write: stop executing, and gate every
+   * later write locally (see `grantAuthorityLost`/`grantExpired`). Warned once
+   * — the discovering site keeps its own established tag; repeats are the
+   * post-Stop 401 storm this exists to remove.
+   */
+  const noteGrantRejection = (
+    rejection: "grant_unauthorized" | "grant_expired",
+    source: string
+  ) => {
+    const firstDiscovery = !grantAuthorityLost && !grantExpired
+    if (rejection === "grant_expired") {
+      grantExpired = true
+    } else {
+      grantAuthorityLost = true
+    }
+    if (firstDiscovery) {
+      warnDurable("durable_worker_authority_revoked", {
+        requestId,
+        chatId,
+        runId,
+        rejection,
+        source,
+      })
+    }
+    loseExecution(`grant ${rejection}`)
   }
 
   const scheduleHeartbeat = (delayMs: number) => {
@@ -1022,7 +1106,7 @@ export function createConvexDurableTurn(args: {
           outcome: "lost",
           reason: error.grantRejection,
         })
-        loseExecution(error.grantRejection)
+        noteGrantRejection(error.grantRejection, "heartbeat")
         return
       }
       heartbeatTransportFailures += 1
@@ -1057,6 +1141,13 @@ export function createConvexDurableTurn(args: {
   return {
     mode: "durable",
     executionAbortSignal: executionAbortController.signal,
+    providerAbortSignals() {
+      // Deliberately excludes the request signal: the durable worker outlives
+      // its client (gameplan §12 scenario 9 — reload/disconnect leaves the
+      // stream settling server-side). Stop/supersession/reaping abort through
+      // the execution signal via heartbeat `lost` or a grant rejection.
+      return [executionAbortController.signal]
+    },
 
     async prepare({ provider }) {
       if (prepareCalled) {
@@ -1156,6 +1247,26 @@ export function createConvexDurableTurn(args: {
           workerWrite("updateAssistantSnapshot", {
             ...snapshotBase,
             ...snapshotArgs,
+          }).catch((error: unknown) => {
+            // Snapshot writes discover revocation too (a Stop race lands
+            // between beats). Unauthorized = the run settled elsewhere and its
+            // content froze at that terminal — this write is moot, absorb it
+            // instead of cascading write-failure noise. Expiry keeps
+            // propagating: content survival is genuinely at risk there.
+            if (
+              error instanceof DurableWorkerWriteError &&
+              error.grantRejection === "grant_unauthorized"
+            ) {
+              noteGrantRejection("grant_unauthorized", "assistant-snapshot")
+              return { ok: false, skipped: "grant_authority_lost" }
+            }
+            if (
+              error instanceof DurableWorkerWriteError &&
+              error.grantRejection === "grant_expired"
+            ) {
+              noteGrantRejection("grant_expired", "assistant-snapshot")
+            }
+            throw error
           }),
       })
 
@@ -1332,7 +1443,13 @@ export function createConvexDurableTurn(args: {
                 }
               }
 
-              await Promise.allSettled(approvalWritePromises)
+              // Bounded: settlement runs inside the route's reserve tail —
+              // one worker-write timeout is the most any straggling approval
+              // write may hold it (the writes carry their own catch logging).
+              await Promise.race([
+                Promise.allSettled(approvalWritePromises),
+                sleep(WORKER_WRITE_TIMEOUT_MS),
+              ])
               await tracker.flush().catch(() => {})
 
               // Content survival before ANY terminal transition (ADR-0011): the
@@ -1356,14 +1473,16 @@ export function createConvexDurableTurn(args: {
                 })
 
               if (isAborted) {
-                const landed = await markRunAborted("ui message stream aborted")
-                return landed
-                  ? {
-                      status: "confirmed" as const,
-                      runId: currentRunId,
-                      outcome: "aborted" as const,
-                    }
-                  : degrade("abort write failed")
+                const aborted = await markRunAborted("ui message stream aborted")
+                if (aborted === "failed") return degrade("abort write failed")
+                return {
+                  status: "confirmed" as const,
+                  runId: currentRunId,
+                  outcome:
+                    aborted === "landed"
+                      ? ("aborted" as const)
+                      : ("settled-elsewhere" as const),
+                }
               }
 
               let toolCounts = capturedFinish?.toolCounts
@@ -1396,14 +1515,17 @@ export function createConvexDurableTurn(args: {
                 failedToolCalls: toolCounts.failedToolCalls,
               })
 
-              if (!landed) {
+              if (landed === "failed") {
                 return degrade("completion write failed after retries")
               }
 
               return {
                 status: "confirmed" as const,
                 runId: currentRunId,
-                outcome: "completed" as const,
+                outcome:
+                  landed === "landed"
+                    ? ("completed" as const)
+                    : ("settled-elsewhere" as const),
               }
             } finally {
               stopHeartbeat()
@@ -1417,10 +1539,18 @@ export function createConvexDurableTurn(args: {
       const currentRunId = runId
       const currentMessageId = assistantMessageId
       if (!currentRunId || !currentMessageId) return
-      await workerWrite("markGenerationRunFailed", {
-        messageId: currentMessageId,
-        error: errorMessage,
-      }).catch((writeError: unknown) => {
+      // Heartbeat first: a stalled failure write must not leave the loop
+      // renewing a lease for a worker that is already tearing down. Bounded
+      // like every settlement-path write — a hung transport here otherwise
+      // holds the route past its budget.
+      stopHeartbeat()
+      await withWorkerWriteTimeout(
+        workerWrite("markGenerationRunFailed", {
+          messageId: currentMessageId,
+          error: errorMessage,
+        }),
+        "writing terminal operation markGenerationRunFailed"
+      ).catch((writeError: unknown) => {
         warnDurable("durable_run_failed_write_failed", {
           requestId,
           chatId,
@@ -1428,7 +1558,6 @@ export function createConvexDurableTurn(args: {
           error: describeError(writeError),
         })
       })
-      stopHeartbeat()
     },
   }
 }

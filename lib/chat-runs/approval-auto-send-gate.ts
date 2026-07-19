@@ -46,6 +46,32 @@ export function messageHasLocallyResolvedApproval(message: {
   return false
 }
 
+/**
+ * One-shot arm: when the auto-send predicate fires, the matched approval ids
+ * are CONSUMED — the resolution authorizes exactly one continuation dispatch.
+ * A later remount that rehydrates the same approval-responded parts (still
+ * present until the continuation lands) finds the gate closed, so reopening
+ * or reloading never submits another model request (gameplan §19 checklist).
+ * Returns whether any id matched (i.e. whether auto-send may arm).
+ */
+export function consumeLocallyResolvedApprovals(message: {
+  parts?: unknown[]
+}): boolean {
+  let matched = false
+  for (const part of message.parts ?? []) {
+    const candidate = part as MessagePartLike
+    if (candidate?.state !== "approval-responded") continue
+    const approvalId = candidate.approval?.id
+    if (
+      typeof approvalId === "string" &&
+      locallyResolvedApprovalIds.delete(approvalId)
+    ) {
+      matched = true
+    }
+  }
+  return matched
+}
+
 /** Test seam. */
 export function clearLocallyResolvedApprovals(): void {
   locallyResolvedApprovalIds.clear()

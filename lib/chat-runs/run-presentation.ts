@@ -74,11 +74,28 @@ export type RunPresentationInputs = {
   pendingStopRunId: string | null
   /** Convex socket connectivity — presentation only, never lifecycle truth. */
   isConnected: boolean
+  /**
+   * When this client's live stream entered submitted/streaming (ms), or null
+   * when nothing is locally live. Guards the orphan cut below: right after a
+   * regeneration dispatch, the projection can still show the PREVIOUS run for
+   * a beat — the new local stream must not be cut as "orphaned" during that
+   * identity gap.
+   */
+  localStreamStartedAtMs?: number | null
   /** Injected clock (ms). */
   now: number
   /** Clock-skew grace; defaults to the shared constant. */
   skewGraceMs?: number
 }
+
+/**
+ * How long a live local stream is protected from the supersession cut while
+ * the selected-run projection catches up to its own dispatch (regeneration
+ * identity gap). A genuinely superseded stream older than this still cuts;
+ * younger ones are also ended server-side by the superseding prepare (grant
+ * revocation → provider abort), so nothing streams on unbounded.
+ */
+export const ORPHAN_STREAM_CUT_GRACE_MS = 15_000
 
 const TERMINAL_RUN_STATUSES = new Set(["completed", "aborted", "failed"])
 
@@ -228,10 +245,19 @@ export function resolveGenerationPresentation(
   //    the chat slot to a newer run (supersession) — cut it; its own run's
   //    terminal is no longer visible through this projection.
   if (selectedRun) {
+    const localStreamStartedAtMs = inputs.localStreamStartedAtMs ?? null
+    // The identity mismatch is only trustworthy once the projection has had
+    // time to reflect this client's own dispatch (see the input's doc) — a
+    // null start time means the caller can't vouch for the stream's age, so
+    // never cut on its behalf.
+    const orphanGraceElapsed =
+      localStreamStartedAtMs !== null &&
+      now - localStreamStartedAtMs >= ORPHAN_STREAM_CUT_GRACE_MS
     const orphanedLocalStream =
       localStatus === "streaming" &&
       localAssistantMessageId !== null &&
-      !localMatchesRun
+      !localMatchesRun &&
+      orphanGraceElapsed
     const fresh =
       selectedRun.leaseExpiresAt !== undefined &&
       now < selectedRun.leaseExpiresAt + skewGraceMs

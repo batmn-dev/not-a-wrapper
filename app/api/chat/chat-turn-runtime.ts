@@ -860,14 +860,16 @@ export function createChatTurnRuntime(args: {
     // (ADR-0006).
     const lifecycle: DurableStreamBinding = durableTurn.bind(tool)
 
-    // Provider consumption stops on the FIRST of: the client disconnecting
-    // (req.signal), this worker losing run ownership (heartbeat `lost` /
-    // transport death — gameplan §6), or the budget's provider deadline (the
-    // settlement reserve must fit inside the route budget — gameplan §0).
-    // Abort telemetry below stays keyed to the request signal alone.
+    // Provider consumption stops on the FIRST of: the runtime's execution
+    // scope ending (durable: worker lost run ownership via heartbeat `lost` /
+    // grant rejection — the CLIENT signal is deliberately absent, a reload or
+    // disconnect leaves the worker streaming to durable settlement, gameplan
+    // §12 scenario 9; guest: the request signal itself), or the budget's
+    // provider deadline (the settlement reserve must fit inside the route
+    // budget — gameplan §0). Client-disconnect telemetry below stays keyed to
+    // the request signal alone and never stops the stream.
     const executionSignal = AbortSignal.any([
-      signal,
-      durableTurn.executionAbortSignal,
+      ...durableTurn.providerAbortSignals(signal),
       AbortSignal.timeout(CHAT_TURN_EXECUTION_BUDGET.providerDeadlineMs),
     ])
 
@@ -975,12 +977,22 @@ export function createChatTurnRuntime(args: {
       clearStalledContinuationTimer()
     }
 
+    // Two abort observers with distinct meanings (gameplan §12 scenario 9):
+    // the REQUEST signal is client-disconnect telemetry only — for durable
+    // chats the stream keeps executing after it fires — while the EXECUTION
+    // signal is the stream actually ending, which owns the abort cleanup
+    // (reasoning close, stalled-continuation disarm).
+    let clientAbortCaptured = false
     const handleRequestAbort = () => {
+      if (clientAbortCaptured || streamCompleted) return
+      clientAbortCaptured = true
+      captureChatLifecycleSignal("chat_client_abort")
+    }
+    const handleExecutionAbort = () => {
       if (abortCaptured || streamCompleted) return
       abortCaptured = true
       reasoningActivity.close()
       resolvePostToolContinuation()
-      captureChatLifecycleSignal("chat_client_abort")
     }
 
     if (signal.aborted) {
@@ -989,6 +1001,16 @@ export function createChatTurnRuntime(args: {
       signal.addEventListener("abort", handleRequestAbort, { once: true })
       deps.after(() => {
         signal.removeEventListener("abort", handleRequestAbort)
+      })
+    }
+    if (executionSignal.aborted) {
+      handleExecutionAbort()
+    } else {
+      executionSignal.addEventListener("abort", handleExecutionAbort, {
+        once: true,
+      })
+      deps.after(() => {
+        executionSignal.removeEventListener("abort", handleExecutionAbort)
       })
     }
 

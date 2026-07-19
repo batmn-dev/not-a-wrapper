@@ -1597,14 +1597,23 @@ export async function updateAssistantSnapshotForChat(
   })
 
   if (!isTerminalMessageStatus(message.status)) {
+    // Status advances to "streaming" only while the worker still owns
+    // execution. An awaiting_approval pause is lease-free (gameplan §6) and
+    // its liveness is the pending approval — the same worker's post-pause
+    // final flush lands CONTENT here, but repainting the pause "streaming"
+    // would strand the run outside both liveness regimes (no lease → the
+    // reaper's expiry range skips it; no pending-approval status → the
+    // approval reaper skips it): a permanent zombie if the completion
+    // downgrade write never arrives.
+    const workerExecuting = isWorkerExecutingStatus(run.status)
     await ctx.db.patch(args.messageId, {
       content: args.textSnapshot,
       parts: args.partsSnapshot,
-      status: "streaming",
+      ...(workerExecuting && { status: "streaming" as const }),
       updatedAt: now,
     })
     await ctx.db.patch(run._id, {
-      status: "streaming",
+      ...(workerExecuting && { status: "streaming" as const }),
       lastSnapshotSequence: args.sequence,
       lastProgressAt: now,
       updatedAt: now,
@@ -2217,8 +2226,8 @@ export async function recordToolInvocationsForChat(
 // ---------------------------------------------------------------------------
 // Reconciliation reapers (durable-turn gameplan §6, PR 3). Internal MUTATIONS
 // (transactional, exactly-once per invocation — never actions), invoked by
-// convex/crons.ts. Bounded to 100 candidates per status per tick; the next
-// tick finishes what this one left.
+// convex/crons.ts. Bounded per status per tick (REAPER_BATCH_LIMIT); the
+// next tick finishes what this one left.
 //
 // Load-bearing range shape (§18 #6): Convex orders `undefined < null < all
 // other values`, and documents missing an indexed field sort as `undefined` —
@@ -2231,7 +2240,14 @@ export async function recordToolInvocationsForChat(
 // trivially satisfied (dev data is disposable).
 // ---------------------------------------------------------------------------
 
-const REAPER_BATCH_LIMIT = 100
+// Modest by design: each reaped run also settles its auxiliary records
+// (pending approvals + non-terminal tool invocations) inside the SAME
+// transaction, so the per-tick write volume is candidates × per-run records.
+// An oversized batch that trips Convex transaction limits fails atomically
+// and would re-select the identical oldest candidates every tick — permanent
+// starvation. 25 keeps a pathological backlog draining incrementally
+// (25/status/tick at a 15 s cadence clears thousands per hour).
+const REAPER_BATCH_LIMIT = 25
 
 /**
  * Settle the auxiliary records a reaped run leaves behind: pending approvals

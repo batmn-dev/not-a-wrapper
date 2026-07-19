@@ -765,11 +765,14 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
     }
   })
 
-  it("absorbs a grant-unauthorized rejection as already-settled instead of degrading (revocation, gameplan §0)", async () => {
+  it("absorbs a grant-unauthorized rejection as settled-elsewhere instead of degrading OR claiming this outcome (revocation, gameplan §0)", async () => {
     // An absorbing outcome (stream onAbort's write, a landed failure) revokes
     // the grant, so the envelope's benign double-terminal write now rejects at
     // the grant gate. That rejection must read as idempotent settlement — not
-    // a degraded receipt on every user Stop.
+    // a degraded receipt on every user Stop — but it must NOT claim the
+    // requested outcome either: the run settled with the REVOKER's outcome
+    // (which could be `failed` under a completion write), and only Convex
+    // knows which. `settled-elsewhere` keeps the receipt honest.
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
     try {
       const wire = makeRecordingWire({
@@ -797,7 +800,7 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
       expect(receipt).toEqual({
         status: "confirmed",
         runId: "run1",
-        outcome: "aborted",
+        outcome: "settled-elsewhere",
       })
       // No retries: the rejection is deterministic and benign.
       expect(wireCalls(wire, "markGenerationRunAborted")).toHaveLength(1)
@@ -811,6 +814,60 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
         runId: "run1",
         op: "markGenerationRunAborted",
       })
+      expect(Sentry.captureMessage).not.toHaveBeenCalled()
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("short-circuits every later worker write after a grant rejection (post-Stop 401 storm)", async () => {
+    // A Stop lands mid-stream: the FIRST rejected write discovers revocation;
+    // everything after it — snapshot flushes, the final full-parts snapshot,
+    // the terminal write — must settle locally instead of hammering the
+    // endpoint with more 401s.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          updateAssistantSnapshot: () => {
+            throw new DurableWorkerWriteError({
+              op: "updateAssistantSnapshot",
+              status: 401,
+              detail: '{"ok":false,"code":"grant_unauthorized"}',
+              grantRejection: "grant_unauthorized",
+            })
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+
+      // Stream chunk → throttled snapshot write → 401 discovers revocation.
+      binding.stream.onChunk({ type: "text-delta", text: "partial" } as never)
+      await vi.waitFor(() => {
+        expect(wireCalls(wire, "updateAssistantSnapshot")).toHaveLength(1)
+      })
+      expect(turn.executionAbortSignal.aborted).toBe(true)
+
+      const receipt = await binding.envelope.settle({
+        responseMessage: RESPONSE_MESSAGE,
+        isAborted: true,
+        finishReason: "stop",
+      })
+
+      expect(receipt).toEqual({
+        status: "confirmed",
+        runId: "run1",
+        outcome: "settled-elsewhere",
+      })
+      // ONE wire write total after prepare: the discovering snapshot. The
+      // final snapshot and the terminal abort write were both gated locally.
+      expect(wireCalls(wire, "updateAssistantSnapshot")).toHaveLength(1)
+      expect(wireCalls(wire, "markGenerationRunAborted")).toHaveLength(0)
+      const revokedWarnings = warn.mock.calls
+        .map(([message]) => JSON.parse(String(message)))
+        .filter((message) => message._tag === "durable_worker_authority_revoked")
+      expect(revokedWarnings).toHaveLength(1)
       expect(Sentry.captureMessage).not.toHaveBeenCalled()
     } finally {
       warn.mockRestore()

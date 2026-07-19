@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { SelectedRunProjection } from "@/convex/messages"
 import {
+  ORPHAN_STREAM_CUT_GRACE_MS,
   resolveGenerationPresentation,
   type RunPresentationInputs,
 } from "./run-presentation"
@@ -240,6 +241,7 @@ describe("supersession orphan cut", () => {
     const presentation = resolve({
       localStatus: "streaming",
       localAssistantMessageId: "msg_old",
+      localStreamStartedAtMs: NOW - ORPHAN_STREAM_CUT_GRACE_MS,
       selectedRun: makeRun({ runId: "run_new", assistantMessageId: "msg_new" }),
     })
     expect(presentation.state).toBe("background-streaming")
@@ -251,6 +253,29 @@ describe("supersession orphan cut", () => {
       localStatus: "submitted",
       localAssistantMessageId: null,
       selectedRun: makeRun(),
+    })
+    expect(presentation.shouldStopLocalStream).toBe(false)
+  })
+
+  it("does NOT cut a young mismatched stream (regeneration identity gap)", () => {
+    // Right after a regeneration dispatch the projection can still show the
+    // PREVIOUS run — the healthy new local stream must survive the gap.
+    const presentation = resolve({
+      localStatus: "streaming",
+      localAssistantMessageId: "msg_regen",
+      localStreamStartedAtMs: NOW - ORPHAN_STREAM_CUT_GRACE_MS + 1,
+      selectedRun: makeRun({ runId: "run_old", assistantMessageId: "msg_old" }),
+    })
+    expect(presentation.state).toBe("background-streaming")
+    expect(presentation.shouldStopLocalStream).toBe(false)
+  })
+
+  it("never cuts when the caller cannot vouch for the stream's age", () => {
+    const presentation = resolve({
+      localStatus: "streaming",
+      localAssistantMessageId: "msg_old",
+      localStreamStartedAtMs: null,
+      selectedRun: makeRun({ runId: "run_new", assistantMessageId: "msg_new" }),
     })
     expect(presentation.shouldStopLocalStream).toBe(false)
   })

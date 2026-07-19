@@ -256,5 +256,14 @@ describe("detachable chat stream lifecycle", () => {
         messages: [approvalMessage],
       })
     ).toBe(true)
+    // One-shot arm: the resolution authorized exactly one dispatch. A remount
+    // that rehydrates the same approval-responded part (still present until
+    // the continuation lands) must find the gate closed — reload never
+    // submits another model request (gameplan §19 checklist).
+    expect(
+      firstTurnBinding.options.sendAutomaticallyWhen({
+        messages: [approvalMessage],
+      })
+    ).toBe(false)
   })
 })

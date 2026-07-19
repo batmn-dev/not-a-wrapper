@@ -568,6 +568,20 @@ export function useChatCore({
   // Durable Stop intent: the run id a stop mutation is in flight for.
   const [pendingStopRunId, setPendingStopRunId] = useState<string | null>(null)
 
+  // When this client's live stream began — the resolver's orphan-cut grace
+  // input (regeneration identity gap: the projection may briefly still show
+  // the previous run after our own dispatch).
+  const [localStreamStartedAt, setLocalStreamStartedAt] = useState<
+    number | null
+  >(null)
+  const localTransportLive = status === "streaming" || status === "submitted"
+  useEffect(() => {
+    setLocalStreamStartedAt((current) => {
+      if (!localTransportLive) return null
+      return current ?? Date.now()
+    })
+  }, [localTransportLive])
+
   // Freshness is CLIENT-classified against the clock, so re-classification
   // needs a tick while an active-looking run could cross its lease boundary.
   const [presentationClock, setPresentationClock] = useState(() => Date.now())
@@ -590,6 +604,7 @@ export function useChatCore({
         localAssistantMessageId,
         selectedRun,
         pendingStopRunId,
+        localStreamStartedAtMs: localStreamStartedAt,
         isConnected: connectionState.isWebSocketConnected,
         now: presentationClock,
       }),
@@ -599,6 +614,7 @@ export function useChatCore({
       localAssistantMessageId,
       selectedRun,
       pendingStopRunId,
+      localStreamStartedAt,
       connectionState.isWebSocketConnected,
       presentationClock,
     ]

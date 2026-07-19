@@ -67,6 +67,29 @@ function getVisibleSelectedMessages(messages: Doc<"messages">[]) {
   )
 }
 
+/**
+ * Run/worker correlation ids are owner-internal plumbing (durable-turn
+ * gameplan §7): a public or non-owner viewer gets the conversation, never the
+ * generation-run linkage that keys durable control state. Both fields are
+ * optional on the doc, so omitting them preserves the handler return type.
+ */
+function stripRunLinkageForViewer<
+  T extends { generationRunId?: unknown; requestId?: unknown },
+>(messages: T[]): T[] {
+  return messages.map((message) => {
+    const { generationRunId: _run, requestId: _request, ...rest } = message
+    return rest as unknown as T
+  })
+}
+
+async function isChatOwner(
+  ctx: QueryCtx,
+  chat: Doc<"chats">
+): Promise<boolean> {
+  const viewer = await getCurrentUser(ctx)
+  return viewer !== null && chat.userId === viewer._id
+}
+
 async function listMessagesByChatOrder(
   ctx: QueryCtx | MutationCtx,
   chatId: Id<"chats">
@@ -85,7 +108,9 @@ export async function getForChatHandler(
   if (!chat) return []
 
   const messages = await listMessagesByChatOrder(ctx, chatId)
-  return getVisibleSelectedMessages(messages)
+  const visible = getVisibleSelectedMessages(messages)
+  if (await isChatOwner(ctx, chat)) return visible
+  return stripRunLinkageForViewer(visible)
 }
 
 export async function getPublicForChatHandler(
@@ -96,8 +121,10 @@ export async function getPublicForChatHandler(
   if (!chat || !chat.public) return []
 
   const messages = await listMessagesByChatOrder(ctx, chatId)
-  return getVisibleSelectedMessages(messages).filter(
-    (message) => message.status !== "awaiting_approval"
+  return stripRunLinkageForViewer(
+    getVisibleSelectedMessages(messages).filter(
+      (message) => message.status !== "awaiting_approval"
+    )
   )
 }
 
@@ -109,7 +136,9 @@ export async function getLastMessagesHandler(
   if (!chat) return []
 
   const messages = await listMessagesByChatOrder(ctx, chatId)
-  return getVisibleSelectedMessages(messages).slice(-limit)
+  const tail = getVisibleSelectedMessages(messages).slice(-limit)
+  if (await isChatOwner(ctx, chat)) return tail
+  return stripRunLinkageForViewer(tail)
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +208,15 @@ export async function getSelectedConversationHandler(
 
   const viewer = await getCurrentUser(ctx)
   const isOwner = viewer !== null && chat.userId === viewer._id
-  if (!isOwner || !chat.statusRunId) {
+  if (!isOwner) {
+    // Message docs carry the run linkage too — a public viewer must not read
+    // run ids out of `selectedMessages` after `selectedRun` was nulled.
+    return {
+      selectedMessages: stripRunLinkageForViewer(selectedMessages),
+      selectedRun: null,
+    }
+  }
+  if (!chat.statusRunId) {
     return { selectedMessages, selectedRun: null }
   }
 
