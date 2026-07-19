@@ -99,11 +99,22 @@ http.route({
       if (rejection) {
         return jsonResponse(401, {
           ok: false,
+          code: rejection,
           error: GRANT_REJECTION_MESSAGES[rejection],
         })
       }
-      const message = error instanceof Error ? error.message : String(error)
-      return jsonResponse(400, { ok: false, error: message })
+      // Generic body only: raw internal error text must not escape to the
+      // caller — Convex argument-validation errors run BEFORE the grant check,
+      // so this branch is reachable by an unauthenticated probe. The detail
+      // stays in the deployment's function logs.
+      console.warn(
+        JSON.stringify({
+          _tag: "chat_turn_worker_dispatch_failed",
+          op,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      )
+      return jsonResponse(400, { ok: false, error: "Invalid worker call" })
     }
   }),
 })

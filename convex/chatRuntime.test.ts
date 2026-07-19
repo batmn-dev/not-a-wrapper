@@ -2633,6 +2633,135 @@ describe("generation run linkage validation", () => {
     expect(inserts).toEqual([])
     expect(patches).toEqual([])
   })
+
+  it("rejects tool invocations once the run is terminal (post-settlement write)", async () => {
+    // The gameplan §10 guard matrix: a terminal run is read-only to its old
+    // worker. recordToolInvocations was the one worker op missing this guard.
+    const fixture = createGenerationRunLinkageFixture()
+    const { ctx, inserts } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunAbortedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      { messageId: fixture.messageId, reason: "user stop" }
+    )
+    expect(fixture.run.status).toBe("aborted")
+
+    await recordToolInvocationsForChat(ctx, await runOwner(ctx, fixture.runId), {
+      messageId: fixture.messageId,
+      invocations: [
+        {
+          toolCallId: "call_late",
+          toolName: "send_email",
+          source: "mcp",
+          status: "called",
+        },
+      ],
+    })
+
+    expect(fixture.tables.toolInvocations).toEqual([])
+    expect(
+      inserts.filter((insert) => insert.tableName === "toolInvocations")
+    ).toEqual([])
+  })
+
+  it("cannot stamp a different assistant message in the same chat via fail/abort", async () => {
+    // gatherAssistantMessageFacts enforces run→message linkage: a worker
+    // payload naming another run's assistant message must not receive this
+    // run's terminal outcome. The run half still settles.
+    const fixture = createGenerationRunLinkageFixture()
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunFailedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      { messageId: fixture.otherMessageId, error: "provider exploded" }
+    )
+
+    expect(fixture.run.status).toBe("failed")
+    // The unlinked message keeps its own state — no failed stamp, no error.
+    expect(fixture.otherMessage.status).toBe("streaming")
+    expect(fixture.otherMessage.error).toBeUndefined()
+    // The run's own linked message is untouched too (the caller misnamed the
+    // target, so the message half is a no-op, not a redirect).
+    expect(fixture.message.status).toBe("streaming")
+  })
+})
+
+describe("execution grant revocation", () => {
+  const GRANT = {
+    grantDigest: "d".repeat(64),
+    grantExpiresAt: 2_000_000,
+  }
+
+  it("clears the grant when a run reaches an absorbing outcome (aborted)", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    Object.assign(fixture.run, GRANT)
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunAbortedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      { messageId: fixture.messageId, reason: "user stop" }
+    )
+
+    expect(fixture.run.status).toBe("aborted")
+    expect(fixture.run.grantDigest).toBeUndefined()
+    expect(fixture.run.grantExpiresAt).toBeUndefined()
+  })
+
+  it("keeps the grant at completed so the fail-over-completed convergence stays writable", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    Object.assign(fixture.run, GRANT)
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunCompletedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        content: "done",
+        parts: [{ type: "text", text: "done" }],
+      }
+    )
+    expect(fixture.run.status).toBe("completed")
+    expect(fixture.run.grantDigest).toBe(GRANT.grantDigest)
+    expect(fixture.run.grantExpiresAt).toBe(GRANT.grantExpiresAt)
+
+    // The deliberate convergence: the late failure write still lands through
+    // the retained grant, and reaching failed (absorbing) then revokes.
+    await markGenerationRunFailedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      { messageId: fixture.messageId, error: "stream errored" }
+    )
+    expect(fixture.run.status).toBe("failed")
+    expect(fixture.run.grantDigest).toBeUndefined()
+    expect(fixture.run.grantExpiresAt).toBeUndefined()
+  })
+
+  it("keeps the grant at the awaiting_approval pause (the worker's era is not over)", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    Object.assign(fixture.run, GRANT)
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await createToolApprovalRequestForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        assistantMessageId: fixture.messageId,
+        toolCallId: "call_1",
+        toolName: "send_email",
+        source: "mcp",
+        riskClass: "destructive",
+        approvalId: "approval_1",
+      }
+    )
+
+    expect(fixture.run.status).toBe("awaiting_approval")
+    expect(fixture.run.grantDigest).toBe(GRANT.grantDigest)
+    expect(fixture.run.grantExpiresAt).toBe(GRANT.grantExpiresAt)
+  })
 })
 
 describe("updateAssistantSnapshotForChat", () => {

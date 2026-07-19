@@ -1,4 +1,5 @@
 import { v } from "convex/values"
+import { CHAT_TURN_EXECUTION_BUDGET } from "../lib/chat-turn/execution-budget"
 import type { Doc, Id } from "./_generated/dataModel"
 import { mutation, type MutationCtx, type QueryCtx } from "./_generated/server"
 import { ownedGenerationRunMutation } from "./lib/authedFunctions"
@@ -191,17 +192,35 @@ type CanonicalApprovalDecision = {
 const ACTIVE_RUN_SCAN_LIMIT = 50
 
 /**
- * Execution-grant lifetime (ADR-0011). Must comfortably exceed the longest
- * legitimate turn plus settlement retries; it bounds how long a leaked digest
- * preimage could authorize idempotent worker writes. Writes to a terminal run
- * are already no-ops under first-terminal-wins, so expiry is the grant's only
- * hard revocation.
+ * Execution-grant lifetime (ADR-0011), budget-derived (route max + settlement
+ * reserve + slack — durable-turn gameplan §0). Must comfortably exceed the
+ * longest legitimate turn plus settlement retries; it bounds how long a leaked
+ * digest preimage could authorize idempotent worker writes. Expiry is the
+ * backstop revocation; absorbing terminal transitions (aborted/failed) also
+ * clear the grant fields eagerly via `applyLifecycleVerdict`.
  */
-export const EXECUTION_GRANT_TTL_MS = 60 * 60 * 1000
+export const EXECUTION_GRANT_TTL_MS = CHAT_TURN_EXECUTION_BUDGET.grantTtlMs
 
 const terminalToolInvocationStatuses = new Set<
   Doc<"toolInvocations">["status"]
 >(["denied", "completed", "failed"])
+
+/**
+ * Absorbing terminal outcomes (`aborted`, `failed`) also revoke the execution
+ * grant eagerly — nothing may overwrite them, so the grant authorizes nothing
+ * but rejections from here on (gameplan §0 amendment 2). `completed` keeps its
+ * grant while the deliberate fail-over-completed convergence exists: the
+ * fire-and-forget failure write must still land after a spurious completion.
+ * `awaiting_approval` is a pause, not a settlement — the pausing worker's
+ * final flush and completion downgrade still need the grant.
+ */
+function grantRevocationForStatus(
+  status: GenerationRunStatus
+): Partial<Doc<"generationRuns">> {
+  return status === "aborted" || status === "failed"
+    ? { grantDigest: undefined, grantExpiresAt: undefined }
+    : {}
+}
 
 function truncatePreview(value: unknown): string | undefined {
   if (value === undefined) return undefined
@@ -393,10 +412,17 @@ async function gatherAssistantMessageFacts(
   if (!resolvedMessageId) return null
 
   const message = await ctx.db.get(resolvedMessageId)
+  // Linkage is required, not just chat membership: a caller-supplied messageId
+  // naming a DIFFERENT assistant message in the same chat (a confused or
+  // malicious worker payload) must not let markGenerationRunFailed/-Aborted
+  // stamp that message with this run's terminal outcome. An unlinked target
+  // resolves like a missing one — the run half still settles; the message half
+  // is a no-op.
   if (
     !message ||
     message.chatId !== run.chatId ||
-    message.role !== "assistant"
+    message.role !== "assistant" ||
+    !isAssistantMessageLinkedToRun(message, run)
   ) {
     return null
   }
@@ -569,6 +595,7 @@ async function applyLifecycleVerdict(
     completedAt: verdict.run.settle ? now : undefined,
     updatedAt: now,
     ...(verdict.run.clearActiveStream ? { activeStreamId: undefined } : {}),
+    ...grantRevocationForStatus(verdict.run.status),
     assistantMessageId,
   })
 
@@ -683,6 +710,7 @@ async function closeSupersededGenerationsForChat(
             completedAt: verdict.run.settle ? now : undefined,
             updatedAt: now,
             activeStreamId: undefined,
+            ...grantRevocationForStatus(verdict.run.status),
             assistantMessageId: supersededMessageId,
           })
         }
@@ -1186,6 +1214,7 @@ export async function applyApprovalResponses(
       completedAt: verdict.run.settle ? now : undefined,
       updatedAt: now,
       activeStreamId: undefined,
+      ...grantRevocationForStatus(verdict.run.status),
     })
   }
 
@@ -1800,6 +1829,14 @@ export async function recordToolInvocationsForChat(
 ) {
   const { run } = owner
   await requireAssistantMessageForRun(ctx, run, args.messageId)
+
+  // A terminal run accepts no further tool-invocation writes — the same
+  // read-only rule the snapshot path enforces (gameplan §10 guard matrix; this
+  // was the one worker op that still accepted writes after settlement). The
+  // late writer here is a worker that lost the abort/supersede race flushing
+  // its step records.
+  if (isTerminalGenerationRunStatus(run.status)) return
+
   const now = nowMs()
 
   for (const invocation of args.invocations) {

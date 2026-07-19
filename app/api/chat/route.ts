@@ -17,7 +17,11 @@ import {
 } from "./chat-turn-runtime"
 import { createErrorResponse } from "./utils"
 
-export const maxDuration = 60
+// Top-line chat-turn budget. Next.js statically analyzes segment config, so
+// this must stay a literal; it must equal CHAT_ROUTE_MAX_DURATION_SECONDS in
+// lib/chat-turn/execution-budget.ts (pinned by route.test.ts) — every other
+// generation deadline derives from that module.
+export const maxDuration = 300
 
 function setChatConversationCorrelation(chatId: string): void {
   const sentryWithConversationApi = Sentry as typeof Sentry & {

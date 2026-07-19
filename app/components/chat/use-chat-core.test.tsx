@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 
 import type { UIMessage } from "@ai-sdk/react"
+import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import {
@@ -510,7 +511,9 @@ describe("useChatCore selected-path projection", () => {
 
       expect(chatCoreMocks.bindingStop).not.toHaveBeenCalled()
       act(() => {
-        vi.advanceTimersByTime(120_000)
+        vi.advanceTimersByTime(
+          CHAT_TURN_EXECUTION_BUDGET.clientStreamWatchdogMs
+        )
       })
       expect(chatCoreMocks.bindingStop).toHaveBeenCalledTimes(1)
     } finally {

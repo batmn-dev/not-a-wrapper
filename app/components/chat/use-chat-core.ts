@@ -17,6 +17,7 @@ import {
   type EnsuredTurnChat,
   type StagedAttachmentReference,
 } from "@/lib/chat-turn/chat-turn-controller"
+import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
 import { routePersistsChatMessages } from "@/lib/chat-turn/turn-store"
 import { attachStagedFilesToChat } from "@/lib/file-handling"
 import { API_ROUTE_CHAT } from "@/lib/routes"
@@ -50,9 +51,11 @@ export type ChatTurnPayload = {
  * Hard time budget for one generation's client stream. Attached streams get it
  * from the stuck-stream guard; detached streams get the same budget from the
  * per-binding watchdog, so an orphaned stream can never run (or spend)
- * unbounded even if server settlement degrades.
+ * unbounded even if server settlement degrades. Budget-derived: sits above the
+ * route's maxDuration so the client never cuts a stream the server can still
+ * legitimately be running.
  */
-const STREAM_TIMEOUT_MS = 120_000
+const STREAM_TIMEOUT_MS = CHAT_TURN_EXECUTION_BUDGET.clientStreamWatchdogMs
 
 type UseChatCoreProps = {
   initialMessages: UIMessage[]

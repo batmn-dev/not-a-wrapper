@@ -88,6 +88,46 @@ export type DurableWorkerCall = {
  */
 export type DurableWorkerWire = (call: DurableWorkerCall) => Promise<unknown>
 
+/**
+ * A worker-wire HTTP rejection, carrying the endpoint's typed grant-rejection
+ * code when there is one. `grant_unauthorized` after prepare means the run
+ * already reached an absorbing outcome and revoked its grant (aborted/failed —
+ * gameplan §0 amendment 2): the write is an idempotent no-op, not a failure.
+ * `grant_expired` is deterministic — retrying cannot succeed.
+ */
+export class DurableWorkerWriteError extends Error {
+  readonly status: number
+  readonly grantRejection?: "grant_unauthorized" | "grant_expired"
+
+  constructor(args: {
+    op: string
+    status: number
+    detail: string
+    grantRejection?: "grant_unauthorized" | "grant_expired"
+  }) {
+    super(
+      `Durable worker write ${args.op} failed: ${args.status} ${args.detail}`.trim()
+    )
+    this.name = "DurableWorkerWriteError"
+    this.status = args.status
+    this.grantRejection = args.grantRejection
+  }
+}
+
+function parseGrantRejectionCode(
+  body: string
+): "grant_unauthorized" | "grant_expired" | undefined {
+  try {
+    const parsed: unknown = JSON.parse(body)
+    const code = (parsed as { code?: unknown } | null)?.code
+    return code === "grant_unauthorized" || code === "grant_expired"
+      ? code
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function resolveConvexSiteUrl(): string {
   const explicit = process.env.CONVEX_SITE_URL
   if (explicit) return explicit
@@ -120,9 +160,12 @@ export function createHttpDurableWorkerWire(options: {
     )
     if (!response.ok) {
       const detail = await response.text().catch(() => "")
-      throw new Error(
-        `Durable worker write ${op} failed: ${response.status} ${detail}`.trim()
-      )
+      throw new DurableWorkerWriteError({
+        op,
+        status: response.status,
+        detail,
+        grantRejection: parseGrantRejectionCode(detail),
+      })
     }
     return response.json().catch(() => undefined)
   }
@@ -802,7 +845,8 @@ export function createConvexDurableTurn(args: {
 
   /**
    * A terminal transition with bounded retry. Resolves `true` when the write
-   * landed, `false` when every attempt failed — NEVER throws.
+   * landed (or was idempotently absorbed by an already-settled run), `false`
+   * when every attempt failed — NEVER throws.
    */
   const writeTerminal = async <
     Op extends keyof typeof TERMINAL_WRITE_FAILURE_TAGS,
@@ -818,6 +862,25 @@ export function createConvexDurableTurn(args: {
         )
         return true
       } catch (error) {
+        // Absorbing outcomes revoke the grant (gameplan §0 amendment 2), so
+        // the benign double-terminal orders — the envelope's abort after the
+        // stream's, or a spurious completion after a landed failure — now
+        // reject at the grant gate instead of no-oping inside the handler.
+        // Same semantics, different door: the run is settled, the write is
+        // idempotently absorbed, and degrading the receipt for it would turn
+        // every user Stop into false settlement noise.
+        if (
+          error instanceof DurableWorkerWriteError &&
+          error.grantRejection === "grant_unauthorized"
+        ) {
+          warnDurable("durable_terminal_write_rejected_settled", {
+            requestId,
+            chatId,
+            runId,
+            op,
+          })
+          return true
+        }
         warnDurable(TERMINAL_WRITE_FAILURE_TAGS[op], {
           requestId,
           chatId,
@@ -826,6 +889,13 @@ export function createConvexDurableTurn(args: {
           attempt: attempt + 1,
           error: describeError(error),
         })
+        // Grant expiry is deterministic — the remaining retries cannot land.
+        if (
+          error instanceof DurableWorkerWriteError &&
+          error.grantRejection === "grant_expired"
+        ) {
+          return false
+        }
         if (attempt < settleRetryDelaysMs.length) {
           await sleep(settleRetryDelaysMs[attempt])
         }

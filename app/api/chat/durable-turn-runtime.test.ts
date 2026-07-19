@@ -9,6 +9,7 @@ import {
   createConvexDurableTurn,
   createGuestDurableTurn,
   createHttpDurableWorkerWire,
+  DurableWorkerWriteError,
   type DurableTurnInput,
   type DurableWorkerCall,
   type DurableWorkerWire,
@@ -664,6 +665,153 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
         "durable_settlement_degraded",
         expect.objectContaining({ level: "error" })
       )
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("confirms after a retry when the first completion attempt fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      let attempts = 0
+      const wire = makeRecordingWire({
+        responders: {
+          markGenerationRunCompleted: () => {
+            attempts += 1
+            if (attempts === 1) throw new Error("transient convex hiccup")
+            return undefined
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+      binding.stream.captureFinish({
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        finishReason: "stop",
+        toolCounts: { totalToolCalls: 0, failedToolCalls: 0 },
+      })
+
+      const receipt = await binding.envelope.settle({
+        responseMessage: RESPONSE_MESSAGE,
+        isAborted: false,
+        finishReason: "stop",
+      })
+
+      expect(receipt).toEqual({
+        status: "confirmed",
+        runId: "run1",
+        outcome: "completed",
+      })
+      expect(wireCalls(wire, "markGenerationRunCompleted")).toHaveLength(2)
+      // The first attempt still warned — retries are observable, not silent.
+      const attemptWarnings = warn.mock.calls
+        .map(([message]) => JSON.parse(String(message)))
+        .filter(
+          (message) => message._tag === "durable_completion_write_failed"
+        )
+      expect(attemptWarnings).toEqual([expect.objectContaining({ attempt: 1 })])
+      expect(Sentry.captureMessage).not.toHaveBeenCalledWith(
+        "durable_settlement_degraded",
+        expect.anything()
+      )
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("warns durable_final_snapshot_write_failed and still confirms the terminal write", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          updateAssistantSnapshot: () => {
+            throw new Error("snapshot write refused")
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+      binding.stream.captureFinish({
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        finishReason: "stop",
+        toolCounts: { totalToolCalls: 0, failedToolCalls: 0 },
+      })
+
+      const receipt = await binding.envelope.settle({
+        responseMessage: RESPONSE_MESSAGE,
+        isAborted: false,
+        finishReason: "stop",
+      })
+
+      // The failed final snapshot degrades nothing by itself: the completion
+      // write carries the same content+parts and its receipt decides.
+      expect(receipt).toEqual({
+        status: "confirmed",
+        runId: "run1",
+        outcome: "completed",
+      })
+      const snapshotWarning = warn.mock.calls
+        .map(([message]) => JSON.parse(String(message)))
+        .find(
+          (message) => message._tag === "durable_final_snapshot_write_failed"
+        )
+      expect(snapshotWarning).toMatchObject({
+        requestId: "req-1",
+        runId: "run1",
+        error: "snapshot write refused",
+      })
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("absorbs a grant-unauthorized rejection as already-settled instead of degrading (revocation, gameplan §0)", async () => {
+    // An absorbing outcome (stream onAbort's write, a landed failure) revokes
+    // the grant, so the envelope's benign double-terminal write now rejects at
+    // the grant gate. That rejection must read as idempotent settlement — not
+    // a degraded receipt on every user Stop.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          markGenerationRunAborted: () => {
+            throw new DurableWorkerWriteError({
+              op: "markGenerationRunAborted",
+              status: 401,
+              detail:
+                '{"ok":false,"code":"grant_unauthorized","error":"Execution grant not authorized"}',
+              grantRejection: "grant_unauthorized",
+            })
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+
+      const receipt = await binding.envelope.settle({
+        responseMessage: RESPONSE_MESSAGE,
+        isAborted: true,
+        finishReason: "stop",
+      })
+
+      expect(receipt).toEqual({
+        status: "confirmed",
+        runId: "run1",
+        outcome: "aborted",
+      })
+      // No retries: the rejection is deterministic and benign.
+      expect(wireCalls(wire, "markGenerationRunAborted")).toHaveLength(1)
+      const settledWarning = warn.mock.calls
+        .map(([message]) => JSON.parse(String(message)))
+        .find(
+          (message) =>
+            message._tag === "durable_terminal_write_rejected_settled"
+        )
+      expect(settledWarning).toMatchObject({
+        runId: "run1",
+        op: "markGenerationRunAborted",
+      })
+      expect(Sentry.captureMessage).not.toHaveBeenCalled()
     } finally {
       warn.mockRestore()
     }

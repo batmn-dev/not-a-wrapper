@@ -17,6 +17,13 @@ type PostHogClient = NonNullable<ReturnType<typeof getPostHogClient>>
 /**
  * Audit-log sink: persists every outcome to Convex `toolCallLog` (fire-and-
  * forget; failures are logged and swallowed so they never break the stream).
+ *
+ * ACCEPTED-LOSSY (durable-turn gameplan §0, decided 2026-07-19): this sink
+ * deliberately rides the captured user token, not the execution-grant worker
+ * wire — it writes audit rows, not durable run state. If the token expires in
+ * the tail of a long run, the remaining rows are dropped and logged
+ * (`tool_call_log_write_failed`). Do not migrate it to the worker wire without
+ * revisiting that decision.
  */
 export function createToolCallLogSink(options: {
   convexToken: string

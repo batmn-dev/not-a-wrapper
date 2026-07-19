@@ -40,6 +40,24 @@ describe("secret value detection", () => {
       )
     ).toBe("Incorrect API key provided: [REDACTED]")
   })
+
+  it("leak-canary: catches the execution-grant secret bare and as a Bearer header", () => {
+    // Shaped exactly like the ADR-0011 grant: randomBytes(32).toString("hex").
+    const grantSecret =
+      "9f8b1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c"
+    for (const leak of [
+      grantSecret,
+      `Bearer ${grantSecret}`,
+      `Durable worker write updateAssistantSnapshot failed: 401 secret=${grantSecret}`,
+    ]) {
+      expect(containsSecret(leak)).toBe(true)
+      expect(redactSecretsInString(leak)).not.toContain(grantSecret)
+    }
+    // Generic bearer credentials without a known prefix are still caught.
+    expect(containsSecret("Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9")).toBe(
+      true
+    )
+  })
 })
 
 describe("sentryBeforeSend", () => {
