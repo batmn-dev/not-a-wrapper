@@ -277,11 +277,9 @@ function makeDeps(
 }
 
 function notAbortedSignal(): AbortSignal {
-  return {
-    aborted: false,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  } as unknown as AbortSignal
+  // A REAL signal: toResponse composes it via AbortSignal.any (worker-loss +
+  // provider-deadline), which rejects plain-object fakes.
+  return new AbortController().signal
 }
 
 beforeEach(() => {
@@ -741,7 +739,7 @@ describe("createChatTurnRuntime — Anthropic pause_turn telemetry", () => {
 })
 
 describe("createChatTurnRuntime — abort telemetry", () => {
-  it("passes the request abort signal into streamText", async () => {
+  it("composes the request abort signal into streamText's execution signal", async () => {
     const harness = makeStreamHarness()
     const runtime = createChatTurnRuntime({
       input: makeInput(),
@@ -749,10 +747,17 @@ describe("createChatTurnRuntime — abort telemetry", () => {
     })
 
     await runtime.prepare()
-    const signal = notAbortedSignal()
-    runtime.toResponse(signal)
+    const controller = new AbortController()
+    runtime.toResponse(controller.signal)
 
-    expect(harness.captured.streamOpts.abortSignal).toBe(signal)
+    // The signal handed to streamText is the composed execution signal
+    // (request + worker-loss + provider deadline); a request abort must
+    // propagate through it.
+    const executionSignal = harness.captured.streamOpts
+      .abortSignal as AbortSignal
+    expect(executionSignal.aborted).toBe(false)
+    controller.abort()
+    expect(executionSignal.aborted).toBe(true)
   })
 
   it("captures chat_client_abort exactly once when the request is already aborted", async () => {
@@ -763,12 +768,9 @@ describe("createChatTurnRuntime — abort telemetry", () => {
     })
 
     await runtime.prepare()
-    const abortedSignal = {
-      aborted: true,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    } as unknown as AbortSignal
-    runtime.toResponse(abortedSignal)
+    const abortedController = new AbortController()
+    abortedController.abort()
+    runtime.toResponse(abortedController.signal)
 
     // Stream then completes — the streamCompleted/abortCaptured guards must
     // prevent any second chat_client_abort capture.

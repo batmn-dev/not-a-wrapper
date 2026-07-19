@@ -5,6 +5,7 @@ import {
   applyApprovalResponses,
   createToolApprovalRequestForChat,
   denyPendingApprovalsForChat,
+  heartbeatGenerationRunForChat,
   markGenerationRunAbortedForChat,
   markGenerationRunCompletedForChat,
   markGenerationRunFailedForChat,
@@ -12,6 +13,10 @@ import {
   recordToolInvocationsForChat,
   updateAssistantSnapshotForChat,
 } from "./chatRuntime"
+import {
+  APPROVAL_EXPIRY_MS,
+  LEASE_DURATION_MS,
+} from "./domain/generation_run_liveness"
 import { getSelectedPathMessages } from "./domain/message_branches"
 import type { AuthenticatedRunOwner } from "./lib/auth"
 import { selectBranchForChat } from "./messages"
@@ -2764,6 +2769,153 @@ describe("execution grant revocation", () => {
   })
 })
 
+describe("lease lifecycle (gameplan §6)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("prepare initializes the lease and the chat freshness ceiling", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const { ctx, tables } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages: [
+        createStoredMessage({
+          id: "message_user_1",
+          chatId,
+          userId,
+          orderId: 0,
+          clientMessageId: "user-1",
+          role: "user",
+          content: "prompt",
+          createdAt: 1000,
+        }),
+      ],
+    })
+
+    const result = await prepareGenerationForChat(ctx, {
+      chatId,
+      requestId: "request_lease",
+      model: "gpt-5",
+      provider: "openai",
+      latestUserMessage: {
+        id: "user-2",
+        role: "user",
+        content: "hello",
+        parts: [{ type: "text", text: "hello" }],
+      },
+      expectedVisibleMessageCount: 1,
+    })
+
+    const run = tables.generationRuns.find(
+      (candidate) => candidate._id === result.runId
+    )
+    expect(run).toMatchObject({
+      heartbeatAt: 1700000000000,
+      leaseExpiresAt: 1700000000000 + LEASE_DURATION_MS,
+      lastProgressAt: 1700000000000,
+    })
+    // Written once at prepare — the ceiling no legitimate run outlives.
+    expect(chat.liveRunFreshUntil).toBeGreaterThan(1700000000000)
+    expect(chat.statusRunId).toBe(result.runId)
+  })
+
+  it("heartbeat renews only worker-executing statuses and extends the run only", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.chat.statusRunId = fixture.runId
+    const { ctx, patches } = createMutationCtx(fixture.tables)
+
+    const result = await heartbeatGenerationRunForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId)
+    )
+
+    expect(result).toEqual({
+      kind: "renewed",
+      leaseExpiresAt: 1700000000000 + LEASE_DURATION_MS,
+    })
+    expect(fixture.run.heartbeatAt).toBe(1700000000000)
+    expect(fixture.run.leaseExpiresAt).toBe(1700000000000 + LEASE_DURATION_MS)
+    // Never touches the chat doc (§18 #4).
+    expect(patches.filter((patch) => patch.id === fixture.chatId)).toEqual([])
+  })
+
+  it("heartbeat returns paused on the approval pause and lost on a terminal run", async () => {
+    const paused = createGenerationRunLinkageFixture()
+    paused.run.status = "awaiting_approval"
+    const pausedCtx = createMutationCtx(paused.tables)
+    expect(
+      await heartbeatGenerationRunForChat(
+        pausedCtx.ctx,
+        await runOwner(pausedCtx.ctx, paused.runId)
+      )
+    ).toEqual({ kind: "paused" })
+    expect(paused.run.heartbeatAt).toBeUndefined()
+
+    const settled = createGenerationRunLinkageFixture()
+    settled.run.status = "aborted"
+    const settledCtx = createMutationCtx(settled.tables)
+    expect(
+      await heartbeatGenerationRunForChat(
+        settledCtx.ctx,
+        await runOwner(settledCtx.ctx, settled.runId)
+      )
+    ).toEqual({ kind: "lost", reason: "terminal" })
+  })
+
+  it("heartbeat returns lost when a newer run owns the chat status slot", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.chat.statusRunId = fixture.otherRunId
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    expect(
+      await heartbeatGenerationRunForChat(ctx, await runOwner(ctx, fixture.runId))
+    ).toEqual({ kind: "lost", reason: "not-owner" })
+    expect(fixture.run.heartbeatAt).toBeUndefined()
+  })
+
+  it("terminal transitions shed the lease; the approval pause sheds it and stamps its expiry", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const aborted = createGenerationRunLinkageFixture()
+    aborted.run.heartbeatAt = 1
+    aborted.run.leaseExpiresAt = 2
+    const abortedCtx = createMutationCtx(aborted.tables)
+    await markGenerationRunAbortedForChat(
+      abortedCtx.ctx,
+      await runOwner(abortedCtx.ctx, aborted.runId),
+      { messageId: aborted.messageId, reason: "user stop" }
+    )
+    expect(aborted.run.heartbeatAt).toBeUndefined()
+    expect(aborted.run.leaseExpiresAt).toBeUndefined()
+
+    const paused = createGenerationRunLinkageFixture()
+    paused.run.heartbeatAt = 1
+    paused.run.leaseExpiresAt = 2
+    paused.chat.statusRunId = paused.runId
+    const pausedCtx = createMutationCtx(paused.tables)
+    await createToolApprovalRequestForChat(
+      pausedCtx.ctx,
+      await runOwner(pausedCtx.ctx, paused.runId),
+      {
+        assistantMessageId: paused.messageId,
+        toolCallId: "call_1",
+        toolName: "send_email",
+        source: "mcp",
+        riskClass: "destructive",
+        approvalId: "approval_1",
+      }
+    )
+    expect(paused.run.heartbeatAt).toBeUndefined()
+    expect(paused.run.leaseExpiresAt).toBeUndefined()
+    const approval = paused.tables.toolApprovalRequests[0]
+    expect(approval.expiresAt).toBe(1700000000000 + APPROVAL_EXPIRY_MS)
+    // The pause's freshness ceiling becomes the approval's own expiry.
+    expect(paused.chat.liveRunFreshUntil).toBe(approval.expiresAt)
+  })
+})
+
 describe("updateAssistantSnapshotForChat", () => {
   it("persists the snapshot and keeps the run/message streaming while the run is active", async () => {
     const fixture = createGenerationRunLinkageFixture()
@@ -2783,40 +2935,77 @@ describe("updateAssistantSnapshotForChat", () => {
     expect(fixture.run.status).toBe("streaming")
   })
 
-  it("does not let late lower-sequence snapshots overwrite newer content", async () => {
+  it("rejects late lower-sequence snapshots BEFORE insertion", async () => {
+    // PR 2 (gameplan §10 "Snapshot sequencing"): the run's
+    // lastSnapshotSequence is the authority, checked pre-insert — a stale
+    // write leaves neither a snapshot row nor a doc patch behind.
     const fixture = createGenerationRunLinkageFixture()
     fixture.message.content = "newer"
     fixture.message.parts = [{ type: "text", text: "newer" }]
-    fixture.tables.assistantMessageSnapshots = [
-      {
-        _id: asId<"assistantMessageSnapshots">("snapshot_existing"),
-        _creationTime: 1,
-        runId: fixture.runId,
-        chatId: fixture.chatId,
-        messageId: fixture.messageId,
-        order: 1,
-        stepOrder: 0,
-        sequence: 2,
-        format: "text_snapshot",
-        textSnapshot: "newer",
-        partsSnapshot: [{ type: "text", text: "newer" }],
-        createdAt: 1,
-      },
-    ]
+    fixture.run.lastSnapshotSequence = 2
     const { ctx, inserts, patches } = createMutationCtx(fixture.tables)
 
-    await updateAssistantSnapshotForChat(ctx, await runOwner(ctx, fixture.runId), {
-      messageId: fixture.messageId,
-      order: 1,
-      sequence: 1,
-      textSnapshot: "stale",
-      partsSnapshot: [{ type: "text", text: "stale" }],
-    })
+    const result = await updateAssistantSnapshotForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        order: 1,
+        sequence: 1,
+        textSnapshot: "stale",
+        partsSnapshot: [{ type: "text", text: "stale" }],
+      }
+    )
 
-    expect(inserts).toHaveLength(1)
+    expect(result).toEqual({ kind: "stale", lastSequence: 2 })
+    expect(inserts).toEqual([])
     expect(patches).toEqual([])
     expect(fixture.message.content).toBe("newer")
     expect(fixture.message.parts).toEqual([{ type: "text", text: "newer" }])
+  })
+
+  it("rejects an equal-sequence duplicate before insertion", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.run.lastSnapshotSequence = 3
+    const { ctx, inserts } = createMutationCtx(fixture.tables)
+
+    const result = await updateAssistantSnapshotForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        order: 1,
+        sequence: 3,
+        textSnapshot: "dup",
+        partsSnapshot: [{ type: "text", text: "dup" }],
+      }
+    )
+
+    expect(result).toEqual({ kind: "stale", lastSequence: 3 })
+    expect(inserts).toEqual([])
+  })
+
+  it("records the accepted sequence and progress on the run", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const fixture = createGenerationRunLinkageFixture()
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    const result = await updateAssistantSnapshotForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        order: 1,
+        sequence: 5,
+        textSnapshot: "partial",
+        partsSnapshot: [{ type: "text", text: "partial" }],
+      }
+    )
+
+    expect(result).toEqual({ kind: "applied" })
+    expect(fixture.run.lastSnapshotSequence).toBe(5)
+    expect(fixture.run.lastProgressAt).toBe(1700000000000)
+    vi.restoreAllMocks()
   })
 
   it("becomes a no-op once the run is terminal (post-Stop write storm)", async () => {
@@ -2884,6 +3073,12 @@ describe("applyApprovalResponses", () => {
           completedAt: 1700000000000,
           updatedAt: 1700000000000,
           activeStreamId: undefined,
+          // Absorbing outcome: the grant revokes and the lease sheds in the
+          // same transaction (gameplan §0 amendment 2 / §6 step 6).
+          grantDigest: undefined,
+          grantExpiresAt: undefined,
+          heartbeatAt: undefined,
+          leaseExpiresAt: undefined,
         },
       },
     ])

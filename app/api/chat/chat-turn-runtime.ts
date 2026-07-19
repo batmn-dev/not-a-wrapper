@@ -62,6 +62,7 @@ import {
 import { after } from "next/server"
 import { adaptHistoryForProvider } from "./adapters"
 import type { AdaptationContext, AdaptationWarning } from "./adapters/types"
+import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
 import {
   createDurableTurnRuntime,
   isDurableConvexChat,
@@ -859,6 +860,17 @@ export function createChatTurnRuntime(args: {
     // (ADR-0006).
     const lifecycle: DurableStreamBinding = durableTurn.bind(tool)
 
+    // Provider consumption stops on the FIRST of: the client disconnecting
+    // (req.signal), this worker losing run ownership (heartbeat `lost` /
+    // transport death — gameplan §6), or the budget's provider deadline (the
+    // settlement reserve must fit inside the route budget — gameplan §0).
+    // Abort telemetry below stays keyed to the request signal alone.
+    const executionSignal = AbortSignal.any([
+      signal,
+      durableTurn.executionAbortSignal,
+      AbortSignal.timeout(CHAT_TURN_EXECUTION_BUDGET.providerDeadlineMs),
+    ])
+
     const streamStartMs = Date.now()
     let stepCounter = 0
     let toolMetadataByCallId: ToolInvocationMetadataByCallId = {}
@@ -989,7 +1001,7 @@ export function createChatTurnRuntime(args: {
         messages: modelMessages,
         tools: tool.tools,
         stopWhen: isStepCount(maxSteps),
-        abortSignal: signal,
+        abortSignal: executionSignal,
         // Request dimensions use Sentry because AI SDK 7 telemetry has no
         // per-call metadata field.
         telemetry: {

@@ -4,6 +4,7 @@ import { internalMutation, type MutationCtx } from "./_generated/server"
 import {
   createToolApprovalRequestForChat,
   generationRunWriteArgs,
+  heartbeatGenerationRunForChat,
   markGenerationRunAbortedForChat,
   markGenerationRunCompletedForChat,
   markGenerationRunFailedForChat,
@@ -157,5 +158,16 @@ export const markGenerationRunAborted = internalMutation({
   handler: async (ctx, { runId, grantDigest, ...args }) => {
     const owner = await requireGrantAuthorizedRun(ctx, { runId, grantDigest })
     return markGenerationRunAbortedForChat(ctx, owner, args)
+  },
+})
+
+// Heartbeats are worker-wire only — there is deliberately no user-token twin
+// (gameplan §0 amendment 1): the lease belongs to the executing worker, and
+// the worker's only credential is the execution grant.
+export const heartbeatGenerationRun = internalMutation({
+  args: { ...grantArgs, ...generationRunWriteArgs.heartbeatGenerationRun },
+  handler: async (ctx, { runId, grantDigest }) => {
+    const owner = await requireGrantAuthorizedRun(ctx, { runId, grantDigest })
+    return heartbeatGenerationRunForChat(ctx, owner)
   },
 })

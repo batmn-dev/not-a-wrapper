@@ -818,6 +818,179 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
   })
 })
 
+describe("durable turn runtime — heartbeat loop (gameplan §6)", () => {
+  function heartbeatCalls(wire: RecordingWire) {
+    return wireCalls(wire, "heartbeatGenerationRun")
+  }
+
+  it("starts after prepare, renews on cadence, and never overlaps", async () => {
+    vi.useFakeTimers()
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          heartbeatGenerationRun: () => ({
+            result: { kind: "renewed", leaseExpiresAt: Date.now() + 45_000 },
+          }),
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      expect(heartbeatCalls(wire)).toHaveLength(0)
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(heartbeatCalls(wire)).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(heartbeatCalls(wire)).toHaveLength(2)
+      expect(turn.executionAbortSignal.aborted).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("stops on paused WITHOUT aborting (the approval worker's finalize is still legitimate)", async () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          heartbeatGenerationRun: () => ({ result: { kind: "paused" } }),
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(heartbeatCalls(wire)).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(30_000)
+      // Loop stopped — no further beats, no abort.
+      expect(heartbeatCalls(wire)).toHaveLength(1)
+      expect(turn.executionAbortSignal.aborted).toBe(false)
+      const rejectedLine = warn.mock.calls
+        .map(([message]) => JSON.parse(String(message)))
+        .find((message) => message._tag === "run_heartbeat_rejected")
+      expect(rejectedLine).toMatchObject({ outcome: "paused" })
+    } finally {
+      warn.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it("aborts provider consumption on lost and stops the loop", async () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          heartbeatGenerationRun: () => ({
+            result: { kind: "lost", reason: "not-owner" },
+          }),
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(turn.executionAbortSignal.aborted).toBe(true)
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(heartbeatCalls(wire)).toHaveLength(1)
+    } finally {
+      warn.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it("tolerates two transport failures, aborts on the third — a grant rejection aborts immediately", async () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          heartbeatGenerationRun: () => {
+            throw new Error("socket reset")
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+
+      await vi.advanceTimersByTimeAsync(10_000) // beat 1 fails
+      expect(turn.executionAbortSignal.aborted).toBe(false)
+      await vi.advanceTimersByTimeAsync(3_100) // jittered retry → failure 2
+      expect(turn.executionAbortSignal.aborted).toBe(false)
+      await vi.advanceTimersByTimeAsync(3_100) // failure 3 → budget exhausted
+      expect(turn.executionAbortSignal.aborted).toBe(true)
+      expect(heartbeatCalls(wire)).toHaveLength(3)
+
+      // Grant rejection path: never retried.
+      const rejectedWire = makeRecordingWire({
+        responders: {
+          heartbeatGenerationRun: () => {
+            throw new DurableWorkerWriteError({
+              op: "heartbeatGenerationRun",
+              status: 401,
+              detail: '{"ok":false,"code":"grant_unauthorized"}',
+              grantRejection: "grant_unauthorized",
+            })
+          },
+        },
+      })
+      const { turn: rejectedTurn } = await makePreparedTurn({
+        wire: rejectedWire,
+      })
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(rejectedTurn.executionAbortSignal.aborted).toBe(true)
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(heartbeatCalls(rejectedWire)).toHaveLength(1)
+    } finally {
+      warn.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it("recovers after a transient failure and settle() stops the loop for good", async () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      let failures = 0
+      const wire = makeRecordingWire({
+        responders: {
+          heartbeatGenerationRun: () => {
+            if (failures < 1) {
+              failures += 1
+              throw new Error("blip")
+            }
+            return {
+              result: { kind: "renewed", leaseExpiresAt: Date.now() + 45_000 },
+            }
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+      binding.stream.captureFinish({
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        finishReason: "stop",
+        toolCounts: { totalToolCalls: 0, failedToolCalls: 0 },
+      })
+
+      await vi.advanceTimersByTimeAsync(10_000) // failure 1
+      await vi.advanceTimersByTimeAsync(3_100) // jittered retry → renewed
+      expect(heartbeatCalls(wire)).toHaveLength(2)
+      expect(turn.executionAbortSignal.aborted).toBe(false)
+
+      const receipt = await binding.envelope.settle({
+        responseMessage: RESPONSE_MESSAGE,
+        isAborted: false,
+        finishReason: "stop",
+      })
+      expect(receipt).toMatchObject({ status: "confirmed" })
+
+      const beatsAtSettle = heartbeatCalls(wire).length
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(heartbeatCalls(wire)).toHaveLength(beatsAtSettle)
+    } finally {
+      warn.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+})
+
 describe("durable turn runtime — prepare() error mapping and grant minting", () => {
   it("rejects regeneration that carries pending approval responses (400, no network)", async () => {
     const fetchMutation = makeRecordingFetchMutation()

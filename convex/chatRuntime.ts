@@ -13,6 +13,12 @@ import {
   type LifecycleVerdict,
   type MessageResolution,
 } from "./domain/generation_run_lifecycle"
+import {
+  APPROVAL_EXPIRY_MS,
+  computeLeaseExpiresAt,
+  computeLiveRunFreshUntil,
+  isWorkerExecutingStatus,
+} from "./domain/generation_run_liveness"
 import { createMessageBranchWriter } from "./domain/message_branch_writes"
 import {
   getEffectiveParentId,
@@ -135,6 +141,9 @@ export const generationRunWriteArgs = {
     messageId: v.optional(v.id("messages")),
     reason: v.optional(v.string()),
   },
+  // The lease heartbeat (gameplan §6) — no payload beyond the run identity
+  // the wire adds; the server clock is authoritative.
+  heartbeatGenerationRun: {},
 }
 
 const vStoredMessage = v.object({
@@ -220,6 +229,16 @@ function grantRevocationForStatus(
   return status === "aborted" || status === "failed"
     ? { grantDigest: undefined, grantExpiresAt: undefined }
     : {}
+}
+
+/**
+ * Lease fields clear at every terminal transition AND at the approval pause
+ * (gameplan §6 step 6): a paused run is lease-free — its liveness is the
+ * pending unexpired approval, not a heartbeat.
+ */
+const LEASE_CLEAR: Partial<Doc<"generationRuns">> = {
+  heartbeatAt: undefined,
+  leaseExpiresAt: undefined,
 }
 
 function truncatePreview(value: unknown): string | undefined {
@@ -524,22 +543,26 @@ function chatStatusProjection(
     case "streaming":
       return { liveRunStatus: "streaming" }
     case "awaiting_approval":
+      // The approval-pause handler stamps liveRunFreshUntil = approval expiry
+      // itself (it knows the deadline); the projection leaves it alone.
       return { liveRunStatus: "awaiting" }
     case "completed":
       return {
         liveRunStatus: undefined,
+        liveRunFreshUntil: undefined,
         lastRunEndedAt: now,
         lastRunStatus: "completed",
       }
     case "failed":
       return {
         liveRunStatus: undefined,
+        liveRunFreshUntil: undefined,
         lastRunEndedAt: now,
         lastRunStatus: "failed",
       }
     case "aborted":
       // User Stop / supersede — no signal; only clear the live phase.
-      return { liveRunStatus: undefined }
+      return { liveRunStatus: undefined, liveRunFreshUntil: undefined }
   }
 }
 
@@ -552,11 +575,17 @@ async function projectRunStatusToChat(
   ctx: MutationCtx,
   run: Doc<"generationRuns">,
   status: GenerationRunStatus,
-  now: number
+  now: number,
+  // Extra owner-guarded chat fields riding the same projection write (the
+  // approval pause stamps liveRunFreshUntil = approval expiry here).
+  extra?: Partial<Doc<"chats">>
 ) {
   const chat = await ctx.db.get(run.chatId)
   if (!chat || chat.statusRunId !== run._id) return // a newer run owns the row → skip
-  await ctx.db.patch(run.chatId, chatStatusProjection(status, now))
+  await ctx.db.patch(run.chatId, {
+    ...chatStatusProjection(status, now),
+    ...extra,
+  })
 }
 
 // Applies a transition verdict for the terminal-close paths (fail/abort/
@@ -599,6 +628,7 @@ async function applyLifecycleVerdict(
       ? { terminalReason: verdict.run.terminalReason }
       : {}),
     ...grantRevocationForStatus(verdict.run.status),
+    ...LEASE_CLEAR,
     assistantMessageId,
   })
 
@@ -717,6 +747,7 @@ async function closeSupersededGenerationsForChat(
               ? { terminalReason: verdict.run.terminalReason }
               : {}),
             ...grantRevocationForStatus(verdict.run.status),
+            ...LEASE_CLEAR,
             assistantMessageId: supersededMessageId,
           })
         }
@@ -1224,6 +1255,7 @@ export async function applyApprovalResponses(
         ? { terminalReason: verdict.run.terminalReason }
         : {}),
       ...grantRevocationForStatus(verdict.run.status),
+      ...LEASE_CLEAR,
     })
   }
 
@@ -1341,6 +1373,11 @@ export async function prepareGenerationForChat(
     status: "running",
     startedAt: now,
     updatedAt: now,
+    // The lease is born at prepare (gameplan §6): the worker's heartbeat loop
+    // renews it; the reaper fails runs whose deadline lapses.
+    heartbeatAt: now,
+    leaseExpiresAt: computeLeaseExpiresAt(now),
+    lastProgressAt: now,
     ...(args.grantDigest
       ? {
           grantDigest: args.grantDigest,
@@ -1409,7 +1446,13 @@ export async function prepareGenerationForChat(
   await patchChatActivity(
     ctx,
     owner.chat,
-    { liveRunStatus: "streaming", statusRunId: runId },
+    {
+      liveRunStatus: "streaming",
+      statusRunId: runId,
+      // Written ONCE here (and overwritten only by an approval pause): the
+      // hard ceiling no legitimate run outlives (gameplan §18 #4).
+      liveRunFreshUntil: computeLiveRunFreshUntil(now),
+    },
     now
   )
 
@@ -1478,10 +1521,21 @@ export async function updateAssistantSnapshotForChat(
   // abort/supersede race must become read-only here — its continued writes
   // to the run and message docs are what OCC-starve the next turn's
   // prepareGeneration on the same chat.
-  if (isTerminalGenerationRunStatus(run.status)) return
+  if (isTerminalGenerationRunStatus(run.status)) {
+    return { kind: "lost" as const, reason: "terminal" as const }
+  }
+
+  // Stale snapshots are rejected BEFORE persistence (gameplan §10 "Snapshot
+  // sequencing"): a late lower-or-equal sequence write inserts nothing — the
+  // old post-insert latest-snapshot check only prevented adoption, leaving a
+  // dead row and a write conflict surface behind.
+  const lastSequence = run.lastSnapshotSequence ?? 0
+  if (args.sequence <= lastSequence) {
+    return { kind: "stale" as const, lastSequence }
+  }
 
   const now = nowMs()
-  const snapshotId = await ctx.db.insert("assistantMessageSnapshots", {
+  await ctx.db.insert("assistantMessageSnapshots", {
     runId: run._id,
     chatId: run.chatId,
     messageId: args.messageId,
@@ -1496,13 +1550,6 @@ export async function updateAssistantSnapshotForChat(
     createdAt: now,
   })
 
-  const latestSnapshot = await ctx.db
-    .query("assistantMessageSnapshots")
-    .withIndex("by_run_sequence", (q) => q.eq("runId", run._id))
-    .order("desc")
-    .first()
-  if (latestSnapshot?._id !== snapshotId) return
-
   if (!isTerminalMessageStatus(message.status)) {
     await ctx.db.patch(args.messageId, {
       content: args.textSnapshot,
@@ -1512,9 +1559,76 @@ export async function updateAssistantSnapshotForChat(
     })
     await ctx.db.patch(run._id, {
       status: "streaming",
+      lastSnapshotSequence: args.sequence,
+      lastProgressAt: now,
+      updatedAt: now,
+    })
+  } else {
+    // The message already settled (its half of a terminal is stamped) but the
+    // run has not — record the accepted sequence so later stale writes still
+    // reject pre-insert.
+    await ctx.db.patch(run._id, {
+      lastSnapshotSequence: args.sequence,
+      lastProgressAt: now,
       updatedAt: now,
     })
   }
+  return { kind: "applied" as const }
+}
+
+/**
+ * The heartbeat's three-way discriminant (gameplan §6): the runtime MUST
+ * branch on it — `renewed` continues the loop, `paused` stops the loop
+ * WITHOUT aborting (the approval worker's envelope finalize is still
+ * legitimate), `lost` aborts provider consumption and stops all writes.
+ */
+export type GenerationRunHeartbeatResult =
+  | { kind: "renewed"; leaseExpiresAt: number }
+  | { kind: "paused" }
+  | { kind: "lost"; reason: "terminal" | "unlinked" | "not-owner" }
+
+/**
+ * Renew the worker's lease (worker-wire only — heartbeats have no user-token
+ * twin; gameplan §0 amendment 1). Guards per the §10 matrix: exact run (the
+ * grant), worker-executing status, run→message→chat linkage, and current
+ * chat-slot ownership. Extends the run's lease fields only — never the chat
+ * doc (§18 #4). Server clock, never a client timestamp.
+ */
+export async function heartbeatGenerationRunForChat(
+  ctx: MutationCtx,
+  owner: AuthenticatedRunOwner
+): Promise<GenerationRunHeartbeatResult> {
+  const { chat, run } = owner
+  if (run.status === "awaiting_approval") return { kind: "paused" }
+  if (!isWorkerExecutingStatus(run.status)) {
+    return { kind: "lost", reason: "terminal" }
+  }
+
+  const activeStreamMessageId =
+    run.activeStreamId === undefined
+      ? null
+      : ctx.db.normalizeId("messages", run.activeStreamId)
+  const messageId = run.assistantMessageId ?? activeStreamMessageId
+  const message = messageId ? await ctx.db.get(messageId) : null
+  if (
+    !message ||
+    message.chatId !== run.chatId ||
+    message.role !== "assistant" ||
+    !isAssistantMessageLinkedToRun(message, run)
+  ) {
+    return { kind: "lost", reason: "unlinked" }
+  }
+
+  if (chat.statusRunId !== run._id) return { kind: "lost", reason: "not-owner" }
+
+  const now = nowMs()
+  const leaseExpiresAt = computeLeaseExpiresAt(now)
+  await ctx.db.patch(run._id, {
+    heartbeatAt: now,
+    leaseExpiresAt,
+    updatedAt: now,
+  })
+  return { kind: "renewed", leaseExpiresAt }
 }
 
 export const markGenerationRunCompleted = ownedGenerationRunMutation({
@@ -1591,6 +1705,9 @@ export async function markGenerationRunCompletedForChat(
     ...(verdict.run.terminalReason
       ? { terminalReason: verdict.run.terminalReason }
       : {}),
+    // Both outcomes shed the lease: completed is terminal; the
+    // awaiting_approval downgrade is the lease-free pause.
+    ...LEASE_CLEAR,
   })
   // Completion patches the run directly (not via applyLifecycleVerdict), so the
   // projection is hooked here. verdict.run.status is "completed", or
@@ -1724,6 +1841,7 @@ export async function createToolApprovalRequestForChat(
   if (existing) return existing._id
 
   const now = nowMs()
+  const approvalExpiresAt = now + APPROVAL_EXPIRY_MS
   const approvalRequestId = await ctx.db.insert("toolApprovalRequests", {
     chatId: run.chatId,
     runId: run._id,
@@ -1738,19 +1856,28 @@ export async function createToolApprovalRequestForChat(
     approvalId: args.approvalId,
     status: "pending",
     createdAt: now,
+    expiresAt: approvalExpiresAt,
   })
 
   await ctx.db.patch(run._id, {
     status: verdict.run.status,
     updatedAt: now,
+    lastProgressAt: now,
+    // The pause is lease-free (gameplan §6): liveness becomes the pending
+    // unexpired approval; the same worker's final flush and completion
+    // downgrade stay legal via the non-terminal content-write guard.
+    ...LEASE_CLEAR,
   })
   await ctx.db.patch(args.assistantMessageId, {
     status: verdict.message.status,
     updatedAt: now,
   })
   // The approval-request pause patches the run directly (not via
-  // applyLifecycleVerdict), so project the awaiting phase here.
-  await projectRunStatusToChat(ctx, run, verdict.run.status, now)
+  // applyLifecycleVerdict), so project the awaiting phase here — carrying the
+  // pause's freshness deadline (the approval expiry) onto the chat doc.
+  await projectRunStatusToChat(ctx, run, verdict.run.status, now, {
+    liveRunFreshUntil: approvalExpiresAt,
+  })
 
   return approvalRequestId
 }
@@ -1912,5 +2039,11 @@ export async function recordToolInvocationsForChat(
         ...patch,
       })
     }
+  }
+
+  if (args.invocations.length > 0) {
+    // Accepted tool activity is progress evidence (gameplan §5) — not
+    // liveness; the heartbeat alone renews the lease.
+    await ctx.db.patch(run._id, { lastProgressAt: now, updatedAt: now })
   }
 }

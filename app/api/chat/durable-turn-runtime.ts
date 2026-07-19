@@ -1,5 +1,12 @@
+import { createHash, randomBytes } from "node:crypto"
 import { api } from "@/convex/_generated/api"
 import type { Doc, Id } from "@/convex/_generated/dataModel"
+import type { GenerationRunHeartbeatResult } from "@/convex/chatRuntime"
+import type { DurableWorkerPayloads } from "@/convex/chatRuntimeWorker"
+import {
+  HEARTBEAT_INTERVAL_MS,
+  LEASE_DURATION_MS,
+} from "@/convex/domain/generation_run_liveness"
 import { sanitizeModelHistoryMessages as sanitizeSemanticModelHistoryMessages } from "@/convex/domain/message_visibility"
 import { projectPersistedMessageMetadata } from "@/convex/lib/messageMetadata"
 import type {
@@ -23,8 +30,6 @@ import type {
 } from "ai"
 import { getStaticToolName, isStaticToolUIPart } from "ai"
 import { fetchMutation as defaultFetchMutation } from "convex/nextjs"
-import { createHash, randomBytes } from "node:crypto"
-import type { DurableWorkerPayloads } from "@/convex/chatRuntimeWorker"
 import { isConvexArgumentValidationError } from "./utils"
 
 // Owns durable preparation, snapshots, tool invocations, approvals, and turn
@@ -298,6 +303,15 @@ export type DurableStreamBinding = {
 export type DurableTurnRuntime = {
   /** Observability dimension only — callers MUST NOT branch on it. */
   readonly mode: "durable" | "guest"
+
+  /**
+   * Aborts when this worker can no longer legitimately execute the run: the
+   * heartbeat answered `lost` (Stop, supersession, reaping) or heartbeat
+   * transport died past its retry budget. The Chat turn runtime composes it
+   * with the request signal and the provider deadline so provider consumption
+   * stops promptly (gameplan §6/§12). Guest: never aborts.
+   */
+  readonly executionAbortSignal: AbortSignal
 
   /**
    * Durable-prepare: `prepareGeneration` (approval-response extraction, the
@@ -754,6 +768,7 @@ export function createGuestDurableTurn(
 ): DurableTurnRuntime {
   return {
     mode: "guest",
+    executionAbortSignal: new AbortController().signal,
     async prepare() {
       return sanitizeModelHistoryMessages(input.messages) as MessageAISDK[]
     },
@@ -913,8 +928,135 @@ export function createConvexDurableTurn(args: {
     })
   }
 
+  // -------------------------------------------------------------------------
+  // Heartbeat loop (gameplan §6): recursive and non-overlapping — the next
+  // beat is scheduled only after the previous one settles. Three-way branch:
+  // renewed → continue; paused → stop the loop WITHOUT aborting (the approval
+  // worker's envelope finalize is still legitimate); lost → abort provider
+  // consumption. Transport failures get a bounded retry budget (two
+  // consecutive tolerated, jittered retry); an explicit `lost` is never
+  // retried. The loop also aborts if the last confirmed lease is about to
+  // lapse — continuing to stream against an expired lease invites the reaper.
+  // -------------------------------------------------------------------------
+  const HEARTBEAT_TRANSPORT_RETRY_LIMIT = 2
+  const executionAbortController = new AbortController()
+  let heartbeatTimer: ReturnType<typeof setTimeout> | null = null
+  let heartbeatStopped = false
+  let heartbeatTransportFailures = 0
+  let lastConfirmedLeaseExpiresAt: number | null = null
+
+  const stopHeartbeat = () => {
+    heartbeatStopped = true
+    if (heartbeatTimer) {
+      clearTimeout(heartbeatTimer)
+      heartbeatTimer = null
+    }
+  }
+
+  const loseExecution = (reason: string) => {
+    stopHeartbeat()
+    if (!executionAbortController.signal.aborted) {
+      executionAbortController.abort(
+        new Error(`Durable worker execution lost: ${reason}`)
+      )
+    }
+  }
+
+  const scheduleHeartbeat = (delayMs: number) => {
+    if (heartbeatStopped) return
+    heartbeatTimer = setTimeout(() => {
+      heartbeatTimer = null
+      void heartbeatOnce()
+    }, delayMs)
+    // Never hold the process open for a heartbeat.
+    heartbeatTimer.unref?.()
+  }
+
+  const heartbeatOnce = async (): Promise<void> => {
+    if (heartbeatStopped) return
+    try {
+      const response = await withWorkerWriteTimeout(
+        workerWrite("heartbeatGenerationRun", {}),
+        "writing heartbeat"
+      )
+      heartbeatTransportFailures = 0
+      const result = (response as { result?: GenerationRunHeartbeatResult })
+        ?.result
+      if (heartbeatStopped) return
+      if (result?.kind === "renewed") {
+        lastConfirmedLeaseExpiresAt = result.leaseExpiresAt
+        scheduleHeartbeat(HEARTBEAT_INTERVAL_MS)
+        return
+      }
+      if (result?.kind === "paused") {
+        warnDurable("run_heartbeat_rejected", {
+          requestId,
+          chatId,
+          runId,
+          outcome: "paused",
+        })
+        stopHeartbeat()
+        return
+      }
+      // `lost` (or an unrecognizable body, which no healthy deploy produces).
+      warnDurable("run_heartbeat_rejected", {
+        requestId,
+        chatId,
+        runId,
+        outcome: "lost",
+        reason: result?.kind === "lost" ? result.reason : "unrecognized",
+      })
+      loseExecution(
+        result?.kind === "lost" ? result.reason : "unrecognized heartbeat body"
+      )
+    } catch (error) {
+      // A grant rejection is an explicit settlement signal, not transport.
+      if (
+        error instanceof DurableWorkerWriteError &&
+        error.grantRejection !== undefined
+      ) {
+        warnDurable("run_heartbeat_rejected", {
+          requestId,
+          chatId,
+          runId,
+          outcome: "lost",
+          reason: error.grantRejection,
+        })
+        loseExecution(error.grantRejection)
+        return
+      }
+      heartbeatTransportFailures += 1
+      warnDurable("run_heartbeat_failed", {
+        requestId,
+        chatId,
+        runId,
+        consecutiveFailures: heartbeatTransportFailures,
+        error: describeError(error),
+      })
+      const leaseNearlyLapsed =
+        lastConfirmedLeaseExpiresAt !== null &&
+        Date.now() >= lastConfirmedLeaseExpiresAt - HEARTBEAT_INTERVAL_MS / 2
+      if (
+        heartbeatTransportFailures > HEARTBEAT_TRANSPORT_RETRY_LIMIT ||
+        leaseNearlyLapsed
+      ) {
+        loseExecution("heartbeat transport lost")
+        return
+      }
+      // Bounded jittered retry, well inside the lease window.
+      scheduleHeartbeat(2_000 + Math.floor(Math.random() * 1_000))
+    }
+  }
+
+  const startHeartbeat = () => {
+    // Prepare just wrote the initial lease; treat it as the first confirmation.
+    lastConfirmedLeaseExpiresAt = Date.now() + LEASE_DURATION_MS
+    scheduleHeartbeat(HEARTBEAT_INTERVAL_MS)
+  }
+
   return {
     mode: "durable",
+    executionAbortSignal: executionAbortController.signal,
 
     async prepare({ provider }) {
       if (prepareCalled) {
@@ -1003,6 +1145,11 @@ export function createConvexDurableTurn(args: {
           }),
       })
 
+      // The lease was born inside prepareGeneration; the loop keeps it fresh
+      // for the stream's lifetime (gameplan §6 — starts immediately after a
+      // successful prepare, stops at settlement/pause/loss).
+      startHeartbeat()
+
       console.log(
         JSON.stringify({
           _tag: "durable_chat_runtime_prepared",
@@ -1031,9 +1178,7 @@ export function createConvexDurableTurn(args: {
         )
       }
       if (bound) {
-        throw new Error(
-          "Durable turn runtime: bind() may only be called once"
-        )
+        throw new Error("Durable turn runtime: bind() may only be called once")
       }
       bound = true
 
@@ -1125,6 +1270,9 @@ export function createConvexDurableTurn(args: {
           async onAbort(reason) {
             await tracker.flush().catch(() => {})
             await markRunAborted(reason)
+            // The run is settled (or unreachable); the envelope settle that
+            // follows re-stops idempotently.
+            stopHeartbeat()
           },
 
           captureFinish(facts) {
@@ -1141,101 +1289,110 @@ export function createConvexDurableTurn(args: {
           },
 
           async settle({ responseMessage, isAborted, finishReason }) {
-            // A generated answer was delivered but its terminal persistence
-            // was not confirmed. The receipt degrades — loudly, on every
-            // path — and the response pipe does NOT fail (the 2026-07-14
-            // incident inverted this).
-            const degrade = (reason: string): DurableSettlementReceipt => {
-              warnDurable("durable_settlement_degraded", {
-                requestId,
-                chatId,
-                runId: currentRunId,
-                reason,
-              })
-              Sentry.captureMessage("durable_settlement_degraded", {
-                level: "error",
-                tags: { chat_route: "/api/chat" },
-                extra: { requestId, chatId, runId: currentRunId, reason },
-              })
-              return {
-                status: "degraded" as const,
-                runId: currentRunId,
-                reason,
-              }
-            }
-
-            await Promise.allSettled(approvalWritePromises)
-            await tracker.flush().catch(() => {})
-
-            // Content survival before ANY terminal transition (ADR-0011): the
-            // final snapshot is unconditional — abort included — and carries
-            // the COMPLETE response parts, so a failed terminal write (or an
-            // abort, whose terminal write never carries parts) leaves the
-            // full answer on the message doc, not just the throttled
-            // text/reasoning subset.
-            await tracker
-              .flushFinal(
-                getFinalAssistantText(responseMessage),
-                responseMessage.parts
-              )
-              .catch((error: unknown) => {
-                warnDurable("durable_final_snapshot_write_failed", {
+            // Heartbeat policy (gameplan §10 "Runtime terminal convergence"):
+            // stay alive through the bounded terminal retries — a mid-retry
+            // reaping would race the write — then stop on EVERY exit. A
+            // degraded exit stops too: lease expiry is the honest convergence
+            // path once retries are exhausted.
+            try {
+              // A generated answer was delivered but its terminal persistence
+              // was not confirmed. The receipt degrades — loudly, on every
+              // path — and the response pipe does NOT fail (the 2026-07-14
+              // incident inverted this).
+              const degrade = (reason: string): DurableSettlementReceipt => {
+                warnDurable("durable_settlement_degraded", {
                   requestId,
                   chatId,
                   runId: currentRunId,
-                  error: describeError(error),
+                  reason,
                 })
-              })
+                Sentry.captureMessage("durable_settlement_degraded", {
+                  level: "error",
+                  tags: { chat_route: "/api/chat" },
+                  extra: { requestId, chatId, runId: currentRunId, reason },
+                })
+                return {
+                  status: "degraded" as const,
+                  runId: currentRunId,
+                  reason,
+                }
+              }
 
-            if (isAborted) {
-              const landed = await markRunAborted("ui message stream aborted")
-              return landed
-                ? {
-                    status: "confirmed" as const,
+              await Promise.allSettled(approvalWritePromises)
+              await tracker.flush().catch(() => {})
+
+              // Content survival before ANY terminal transition (ADR-0011): the
+              // final snapshot is unconditional — abort included — and carries
+              // the COMPLETE response parts, so a failed terminal write (or an
+              // abort, whose terminal write never carries parts) leaves the
+              // full answer on the message doc, not just the throttled
+              // text/reasoning subset.
+              await tracker
+                .flushFinal(
+                  getFinalAssistantText(responseMessage),
+                  responseMessage.parts
+                )
+                .catch((error: unknown) => {
+                  warnDurable("durable_final_snapshot_write_failed", {
+                    requestId,
+                    chatId,
                     runId: currentRunId,
-                    outcome: "aborted" as const,
-                  }
-                : degrade("abort write failed")
-            }
+                    error: describeError(error),
+                  })
+                })
 
-            let toolCounts = capturedFinish?.toolCounts
-            if (!toolCounts) {
-              // The stream-onEnd half of the handoff never ran — the failure
-              // mode ADR-0006 named. Land the completion write anyway
-              // (part-counted), but LOUDLY so the bug surfaces instead of
-              // hiding behind the fallback.
-              warnDurable("durable_finish_handoff_missed", {
-                requestId,
-                chatId,
+              if (isAborted) {
+                const landed = await markRunAborted("ui message stream aborted")
+                return landed
+                  ? {
+                      status: "confirmed" as const,
+                      runId: currentRunId,
+                      outcome: "aborted" as const,
+                    }
+                  : degrade("abort write failed")
+              }
+
+              let toolCounts = capturedFinish?.toolCounts
+              if (!toolCounts) {
+                // The stream-onEnd half of the handoff never ran — the failure
+                // mode ADR-0006 named. Land the completion write anyway
+                // (part-counted), but LOUDLY so the bug surfaces instead of
+                // hiding behind the fallback.
+                warnDurable("durable_finish_handoff_missed", {
+                  requestId,
+                  chatId,
+                  runId: currentRunId,
+                })
+                Sentry.captureMessage("durable_finish_handoff_missed", {
+                  level: "warning",
+                })
+                toolCounts = countToolParts(responseMessage)
+              }
+
+              const landed = await writeTerminal("markGenerationRunCompleted", {
+                messageId: currentMessageId,
+                content: getFinalAssistantText(responseMessage),
+                parts: responseMessage.parts,
+                metadata: projectPersistedMessageMetadata(
+                  responseMessage.metadata
+                ),
+                finishReason: capturedFinish?.finishReason ?? finishReason,
+                usage: capturedFinish?.usage,
+                totalToolCalls: toolCounts.totalToolCalls,
+                failedToolCalls: toolCounts.failedToolCalls,
+              })
+
+              if (!landed) {
+                return degrade("completion write failed after retries")
+              }
+
+              return {
+                status: "confirmed" as const,
                 runId: currentRunId,
-              })
-              Sentry.captureMessage("durable_finish_handoff_missed", {
-                level: "warning",
-              })
-              toolCounts = countToolParts(responseMessage)
-            }
-
-            const landed = await writeTerminal("markGenerationRunCompleted", {
-              messageId: currentMessageId,
-              content: getFinalAssistantText(responseMessage),
-              parts: responseMessage.parts,
-              metadata: projectPersistedMessageMetadata(
-                responseMessage.metadata
-              ),
-              finishReason: capturedFinish?.finishReason ?? finishReason,
-              usage: capturedFinish?.usage,
-              totalToolCalls: toolCounts.totalToolCalls,
-              failedToolCalls: toolCounts.failedToolCalls,
-            })
-
-            if (!landed) {
-              return degrade("completion write failed after retries")
-            }
-
-            return {
-              status: "confirmed" as const,
-              runId: currentRunId,
-              outcome: "completed" as const,
+                outcome: "completed" as const,
+              }
+            } finally {
+              stopHeartbeat()
             }
           },
         },
@@ -1257,6 +1414,7 @@ export function createConvexDurableTurn(args: {
           error: describeError(writeError),
         })
       })
+      stopHeartbeat()
     },
   }
 }
