@@ -4,10 +4,39 @@
 | --- | --- |
 | Incident date | 2026-07-14 |
 | Investigation date | 2026-07-14 |
-| Status | Root cause confirmed; remediation recommended; no production code or data changed by this investigation |
+| Status | Historical report (frozen 2026-07-19). Root cause confirmed. Core remediation landed 2026-07-18 as [ADR-0011](./adr/0011-durable-turn-settlement.md); remaining work lives in the [durable-turn gameplan](./gameplans/extend-the-existing-convex-native-durable-turn-architecture.md) addendum. Do not implement from this document — see "Post-remediation reconciliation" below. |
 | Affected chat | `jh7cysfnkqjwsjd01nnjmt96ds8ajpjk` |
 | Affected generation run | `js726yecyxdbyvx0s3vgwky1jd8akn7x` |
 | Affected assistant message | `k571pjr8grk0jwvxy531gefvwn8ajptm` |
+
+## Post-remediation reconciliation (2026-07-19)
+
+This document is a historical incident record. The diagnosis, evidence, and timeline sections remain accurate as written on 2026-07-14. The recommendation and phase sections are frozen and partially superseded: the core remediation landed on 2026-07-18 as [ADR-0011 — Durable turn settlement](./adr/0011-durable-turn-settlement.md) (PR #121), and the single forward-looking plan is now the [durable-turn gameplan](./gameplans/extend-the-existing-convex-native-durable-turn-architecture.md) and its 2026-07-19 ADR-0011 addendum. **Implement from the gameplan, not from this report.**
+
+### Outcome of each recommendation
+
+| Recommendation (section) | Outcome |
+| --- | --- |
+| Run-scoped execution capability (Option C, systemic design §1, Phase 2) | **Implemented** — ADR-0011 execution grant: per-run 32-byte CSPRNG secret, SHA-256 digest stored on the run row, Bearer worker wire through `convex/http.ts` → grant-authorized internal mutations in `convex/chatRuntimeWorker.ts` (constant-time digest compare, expiry, run→chat→user linkage). |
+| Delivery isolated from settlement; typed persistence outcome (§4, Phase 1 item 4) | **Implemented** — `settle()` never rejects; typed `DurableSettlementReceipt` (`confirmed` / `degraded` / `guest`); degraded settlement logs `durable_settlement_degraded` and the response pipe finishes cleanly. |
+| Final content snapshot before the terminal transition (§3, Phase 1 item 3) | **Implemented** — unconditional final full-parts snapshot sequenced before the terminal write in `settle()`. |
+| Bounded, idempotent terminal retries (§5, Phase 1 item 2) | **Implemented** — `settleRetryDelaysMs` (three attempts); first-terminal-wins was already enforced by `convex/domain/generation_run_lifecycle.ts`. |
+| Browser recovery copy for degraded persistence (§4, Phase 1 item 5) | **Rejected** — ADR-0011 "Client contract (deliberate non-change)": content preservation is server-owned and the durable read path consults only the Convex subscription; a client copy recreates the split-brain this report warns about. Marked inline below. |
+| Admission-time WorkOS freshness check / refresh (§2, Phase 1 item 1, Option B containment) | **Obsolete** — with execution grants the user token only needs to survive `prepareGeneration`; an expired token now fails admission cleanly with a 4xx before any stream begins. |
+| Heartbeat lease + cron reaper (§6, Phase 3) | **Remaining** — deferred (not rejected) by ADR-0011; gameplan PRs 1–3, with heartbeat re-based onto the grant-authorized worker wire. |
+| Shared run-presentation resolver (§7, Phase 4 items 1–2) | **Remaining** — gameplan PRs 4–5 and 7. `Finished / Done` still renders without positive completion evidence at HEAD. |
+| Ordered execution deadlines (§8, Phase 4 item 3) | **Remaining** — gameplan addendum "execution budget"; the top-line route duration is an open product decision. |
+| Tool-budget enforcement under degraded accounting (§9, Phase 4 item 4) | **Substantially implemented** — bounded request-local cap and fail-closed behavior for non-policy errors, tested in `lib/tools`; elapsed-time/settlement-reserve inputs remain optional follow-up. |
+| Phase 0 containment and audit | **Obsolete pre-launch** — the development database is disposable (AGENTS.md); the affected run may simply be administratively failed or wiped. |
+| Observability/SLO program (§10) | **Trimmed** — ADR-0011's structured warn-tag vocabulary landed; dashboards, alerts, and SLOs are deferred until launch. |
+| Amend or supersede ADR-0009 | **Done** — ADR-0011 supersedes exactly three ADR-0009 decisions and leaves the rest intact. |
+
+A 2026-07-19 review of the landed implementation identified hardening follow-ups (grant TTL and terminal revocation, fail/abort run→message linkage, tool-invocation terminal guard, secret-scrubber coverage for the grant secret, worker-endpoint error redaction, the residual `toolCallLog` user-token write). They are absorbed into the gameplan addendum's PR 0.
+
+### Corrections to this report
+
+1. **Gameplan terminal-race rule.** The "Idempotent settlement" section below originally claimed the gameplan proposes a narrow `failed → completed` exception. That was wrong: the gameplan — and the implemented lifecycle table — specify the *reverse* convergence (`fail` may overwrite `completed`, because the response envelope's completion signal fires for errored streams too), keep `aborted` absorbing, and explicitly forbid relabeling a reaped run as completed. The passage is corrected inline.
+2. **Evidence confidence.** The following claims are observed local behavior or inference, not documented platform behavior (checked against official docs on 2026-07-19): Convex's `InvalidAuthHeader` message (observed log string; the term appears nowhere in Convex documentation), the WorkOS default access-token lifetime and strict single-use refresh rotation (docs state tokens are JWTs and rotation "may" occur; lifetimes are dashboard-configured), the inability to persist refreshed session cookies after streaming has begun (HTTP inference; not stated by WorkOS docs), Next.js dev-server non-enforcement of `maxDuration` (implied by docs, not stated), and the "onEnd rejection fails the response pipe" mechanism (observed; consistent with vercel/ai#8052, undocumented). Documented facts: Convex mutation atomicity, Convex scheduled functions not propagating caller auth, and Vercel duration semantics — streaming counts toward `maxDuration`, and Fluid Compute allows 300 s default / 800 s max on Pro (1800 s in beta), so the current 60-second route cap is a project choice, not a platform ceiling.
 
 ## Executive summary
 
@@ -394,6 +423,8 @@ This does not mean pretending persistence succeeded. It means preserving two fac
 - the generation result was delivered;
 - durable settlement is degraded or unconfirmed.
 
+> **[Superseded 2026-07-18 — do not implement.]** ADR-0011 rejected this client recovery copy: durable-chat content preservation is server-owned (the unconditional final full-parts snapshot), the durable read path consults only the Convex subscription, and a client-held copy recreates exactly the split-brain this report warns about. The rule is documented at the seam in `lib/chat-turn/turn-store.ts`. The remaining loss window — Convex entirely unreachable for the whole settlement tail while the stream delivered fine — is accepted and observable via `durable_settlement_degraded`. The original recommendation is preserved below for the historical record.
+
 The browser should retain a local recovery copy for that case, keyed by chat, run, and assistant message IDs. A later confirmed durable snapshot or terminal record can clear it. This fallback must be narrowly scoped to degraded persistence so it does not create a permanent second source of truth.
 
 ### 5. Idempotent settlement: retry safely without duplicating state
@@ -407,7 +438,7 @@ All worker writes should accept stable request/run IDs and be idempotent.
 - Allow only the explicitly documented recovery exception, if any, for a late completion racing a lease reaper.
 - Record terminal attempt count and final persistence result in telemetry.
 
-The existing gameplan proposes a narrow `failed -> completed` exception for a completion that can prove it belongs to the same run. That policy must be decided alongside the user experience. A conservative alternative is to preserve the answer but keep the run failed after the lease expires. What must not happen is an unguarded late write that resurrects or overwrites a newer run.
+**[Corrected 2026-07-19]** An earlier version of this paragraph claimed the gameplan proposes a narrow `failed -> completed` exception. It does not: the gameplan specifies the reverse convergence — `fail` may overwrite `completed` (the response envelope's completion signal fires for errored streams, so both commit orders must converge to failed), `aborted` is absorbing, and a reaped run becomes `failed`, never fake-completed. That rule is implemented and regression-tested in `convex/domain/generation_run_lifecycle.ts`. The conservative policy this paragraph asked to be decided is therefore already decided: preserve the answer, keep the run failed after the lease expires. What must not happen is an unguarded late write that resurrects or overwrites a newer run.
 
 ### 6. Liveness: heartbeat, lease, and reap every active run
 
@@ -513,6 +544,8 @@ tool_calls_executed > configured_hard_cap                  == 0
 
 ### Phase 0: contain and audit
 
+*Status 2026-07-19: obsolete pre-launch (the development database is disposable); only the administrative disposition of the affected run remains an open choice.*
+
 1. Query for all non-terminal generation runs older than the legitimate execution envelope.
 2. Report the affected chat/run/message IDs and preserve their partial content before cleanup.
 3. Mark stale runs with an explicit administrative recovery reason; do not silently label them completed.
@@ -520,6 +553,8 @@ tool_calls_executed > configured_hard_cap                  == 0
 5. For the affected run in this report, choose explicitly whether to retain it as incident evidence or administratively mark it failed. This investigation did not mutate it.
 
 ### Phase 1: prevent answer loss at the current boundary
+
+*Status 2026-07-19: items 2–4 landed via ADR-0011; item 1 is obsolete (execution grants removed the mid-run token dependency); item 5 was rejected (see the superseded marker in systemic design §4); item 6 is partial — durable failed/aborted/awaiting-approval outcomes now render first-class, but the shared resolver (Phase 4) still owns the rest.*
 
 1. Refresh near-expiry WorkOS sessions before admitting a stream.
 2. Add bounded retry and typed failure handling around snapshot and terminal writes.
@@ -532,6 +567,8 @@ This phase reduces immediate user harm but still should not rely indefinitely on
 
 ### Phase 2: introduce run-scoped worker authorization
 
+*Status 2026-07-19: implemented — ADR-0011 (PR #121). Hardening follow-ups are gameplan addendum PR 0.*
+
 1. Threat-model and specify the execution capability.
 2. Add the verifier/expiry to the durable run model.
 3. Create dedicated, exact-scope worker mutations.
@@ -541,6 +578,8 @@ This phase reduces immediate user harm but still should not rely indefinitely on
 
 ### Phase 3: make liveness self-healing
 
+*Status 2026-07-19: remaining — gameplan PRs 1–3, with heartbeat re-based onto the grant-authorized worker wire.*
+
 1. Implement heartbeat and lease fields.
 2. Add the Convex cron/internal reaper.
 3. Apply status guards and first-terminal-wins to every write.
@@ -548,6 +587,8 @@ This phase reduces immediate user harm but still should not rely indefinitely on
 5. Update chat projections atomically and only when IDs match.
 
 ### Phase 4: unify presentation and execution limits
+
+*Status 2026-07-19: remaining — gameplan PRs 4–7 plus the addendum's execution budget; tool-budget degradation handling (item 4) already substantially landed.*
 
 1. Add the shared run-presentation resolver.
 2. Replace inferred success with positive terminal evidence.
