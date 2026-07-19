@@ -1,6 +1,10 @@
 /** @vitest-environment jsdom */
 
 import type { UIMessage } from "@ai-sdk/react"
+import {
+  clearLocallyResolvedApprovals,
+  markApprovalResolvedLocally,
+} from "@/lib/chat-runs/approval-auto-send-gate"
 import React, { act, useLayoutEffect, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import {
@@ -84,6 +88,7 @@ describe("detachable chat stream lifecycle", () => {
     container = null
     root = null
     vi.useRealTimers()
+    clearLocallyResolvedApprovals()
   })
 
   function mountHarness(initialChatId: string | null) {
@@ -227,8 +232,29 @@ describe("detachable chat stream lifecycle", () => {
 
     expect(lifecycleMocks.bindings).toHaveLength(1)
     expect(vi.getTimerCount()).toBe(0)
+    // Attached AND locally resolved → auto-send arms; an adopted approval
+    // part alone never does (the layer-3 continuation gate, gameplan §10).
+    const approvalMessage = {
+      id: "assistant-1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-send_email",
+          state: "approval-responded",
+          approval: { id: "approval_local", approved: true },
+        },
+      ],
+    } as unknown as UIMessage
     expect(
-      firstTurnBinding.options.sendAutomaticallyWhen({ messages: [] })
+      firstTurnBinding.options.sendAutomaticallyWhen({
+        messages: [approvalMessage],
+      })
+    ).toBe(false)
+    markApprovalResolvedLocally("approval_local")
+    expect(
+      firstTurnBinding.options.sendAutomaticallyWhen({
+        messages: [approvalMessage],
+      })
     ).toBe(true)
   })
 })

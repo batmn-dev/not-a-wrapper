@@ -19,6 +19,7 @@ import {
   type StagedAttachmentReference,
 } from "@/lib/chat-turn/chat-turn-controller"
 import { useMessages } from "@/lib/chat-store/messages/provider"
+import { markApprovalResolvedLocally } from "@/lib/chat-runs/approval-auto-send-gate"
 import {
   resolveGenerationPresentation,
   type GenerationPresentation,
@@ -207,6 +208,16 @@ export function useChatCore({
 
   // Handle errors directly in onError callback
   const handleError = useCallback((error: Error) => {
+    // A losing approval-continuation POST (another tab's auto-send won —
+    // structured 409, gameplan §10) is swallowed without a failed repaint;
+    // this tab simply observes the winner's run through the projection.
+    if (
+      error.message.includes("APPROVAL_CONTINUATION_CONFLICT") ||
+      error.message.includes("Approval continuation already dispatched")
+    ) {
+      console.warn("Approval continuation conflict (another tab won):", error)
+      return
+    }
     console.error("Chat error:", error)
     console.error("Error message:", error.message)
     let errorMsg = error.message || "Something went wrong."
@@ -493,12 +504,28 @@ export function useChatCore({
   const handleToolApproval = useCallback(
     async (approvalId: string, approved: boolean, reason?: string) => {
       try {
-        if (approved) {
-          await approveToolCall({ approvalId, reason })
-        } else {
-          await denyToolCall({ approvalId, reason })
+        // Pending-only resolution (gameplan §10, PR 8): the mutation returns
+        // the CANONICAL decision — a conflicting second click adopts the
+        // winner instead of overwriting it.
+        const decision = approved
+          ? await approveToolCall({ approvalId, reason })
+          : await denyToolCall({ approvalId, reason })
+
+        if (decision.status === "expired") {
+          toast({ title: "This approval has expired", status: "error" })
+          return
         }
-        addToolApprovalResponse({ id: approvalId, approved, reason })
+        if (!decision.alreadyResolved) {
+          // Only the WINNING tab arms the auto-send continuation (layer 3);
+          // a loser renders the canonical outcome and dispatches nothing —
+          // the winner's continuation arrives through the projection.
+          markApprovalResolvedLocally(approvalId)
+        }
+        addToolApprovalResponse({
+          id: approvalId,
+          approved: decision.status === "approved",
+          reason,
+        })
       } catch (error) {
         console.error("Failed to submit tool approval:", error)
         toast({

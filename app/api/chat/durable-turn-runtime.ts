@@ -1106,6 +1106,20 @@ export function createConvexDurableTurn(args: {
         },
         { token: convexToken }
       ).catch((error: unknown) => {
+        // Approval-continuation idempotency, layer 2 of 3 (gameplan §10):
+        // the losing auto-send continuation gets a structured 409 the client
+        // recognizes and swallows — never a failed repaint.
+        const conflictCode = (
+          (error as { data?: { code?: unknown } } | null)?.data as
+            | { code?: unknown }
+            | undefined
+        )?.code
+        if (conflictCode === "approval_continuation_conflict") {
+          throw Object.assign(
+            new Error("Approval continuation already dispatched"),
+            { statusCode: 409, code: "APPROVAL_CONTINUATION_CONFLICT" }
+          )
+        }
         // `isServerChatId` only rules out local/optimistic prefixes, so a
         // crafted or corrupted id reaches the durable contract here and Convex
         // rejects it with argument validation. That is a request-shape fault:

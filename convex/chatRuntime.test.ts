@@ -13,6 +13,7 @@ import {
   reapExpiredGenerationRunsPass,
   reapExpiredToolApprovalsPass,
   recordToolInvocationsForChat,
+  resolveToolCallDecision,
   stopGenerationRunForChat,
   updateAssistantSnapshotForChat,
 } from "./chatRuntime"
@@ -3183,6 +3184,114 @@ describe("reapers (gameplan §6, PR 3)", () => {
       fixture.tables.toolApprovalRequests.map((approval) => approval.status)
     ).toEqual(["pending", "pending"])
     expect(fixture.run.status).toBe("awaiting_approval")
+  })
+})
+
+describe("approval-continuation idempotency (gameplan §10, PR 8)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function makePausedWorld() {
+    const fixture = createApprovalContinuationFixture([
+      {
+        approvalId: "approval_1",
+        approved: true,
+        toolCallId: "call_1",
+        toolName: "read_file",
+      },
+    ])
+    const { user, chat } = fixture.owner
+    const tables: Partial<TableDocuments> = {
+      ...fixture.tables,
+      users: [user],
+      chats: [chat],
+    }
+    return { fixture, user, chat, tables }
+  }
+
+  it("exactly one continuation run: the second prepare gets the typed conflict", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { fixture, chat, tables } = makePausedWorld()
+    const { ctx, tables: world } = createMutationCtx(tables)
+
+    const first = await prepareGenerationForChat(ctx, {
+      chatId: chat._id,
+      requestId: "request_continuation_1",
+      model: "gpt-5",
+      provider: "openai",
+      approvalResponses: fixture.responses,
+    })
+
+    const pausedRun = world.generationRuns.find(
+      (run) => run._id === fixture.run._id
+    )
+    const continuationRun = world.generationRuns.find(
+      (run) => run._id === first.runId
+    )
+    expect(pausedRun?.continuationRunId).toBe(first.runId)
+    expect(continuationRun?.continuedFromRunId).toBe(fixture.run._id)
+
+    // The losing tab's auto-send re-prepares with the same (now-resolved)
+    // approval state — rejected with the typed conflict, creating nothing.
+    await expect(
+      prepareGenerationForChat(ctx, {
+        chatId: chat._id,
+        requestId: "request_continuation_2",
+        model: "gpt-5",
+        provider: "openai",
+        approvalResponses: fixture.responses,
+      })
+    ).rejects.toThrow("Approval continuation already dispatched")
+    expect(pausedRun?.continuationRunId).toBe(first.runId)
+  })
+})
+
+describe("pending-only approval resolution (gameplan §10, PR 8)", () => {
+  it("a conflicting second decision returns the canonical result instead of overwriting", async () => {
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const approval: Doc<"toolApprovalRequests"> = {
+      _id: asId<"toolApprovalRequests">("approval_request_1"),
+      _creationTime: 1,
+      chatId,
+      runId: asId<"generationRuns">("run_1"),
+      assistantMessageId: asId<"messages">("message_1"),
+      userId,
+      toolCallId: "call_1",
+      toolName: "send_email",
+      source: "mcp",
+      riskClass: "destructive",
+      approvalId: "approval_1",
+      status: "approved",
+      resolvedAt: 500,
+      resolvedByUserId: userId,
+      createdAt: 1,
+    }
+    const { ctx } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      toolApprovalRequests: [approval],
+    })
+
+    // The late deny must NOT repaint the earlier approve.
+    const result = await resolveToolCallDecision(
+      ctx,
+      { approvalId: "approval_1", reason: "changed my mind" },
+      "denied"
+    )
+    expect(result).toEqual({ status: "approved", alreadyResolved: true })
+    expect(approval.status).toBe("approved")
+    expect(approval.resolvedAt).toBe(500)
+
+    // A pending approval resolves normally.
+    approval.status = "pending"
+    const fresh = await resolveToolCallDecision(
+      ctx,
+      { approvalId: "approval_1" },
+      "denied"
+    )
+    expect(fresh).toEqual({ status: "denied", alreadyResolved: false })
+    expect(approval.status).toBe("denied")
   })
 })
 

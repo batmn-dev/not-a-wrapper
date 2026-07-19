@@ -1,4 +1,4 @@
-import { v } from "convex/values"
+import { ConvexError, v } from "convex/values"
 import { CHAT_TURN_EXECUTION_BUDGET } from "../lib/chat-turn/execution-budget"
 import type { Doc, Id } from "./_generated/dataModel"
 import {
@@ -1169,12 +1169,22 @@ export async function applyApprovalResponses(
     approved: boolean
     reason?: string
   }>
-): Promise<Doc<"messages"> | null> {
+): Promise<{
+  message: Doc<"messages">
+  /**
+   * The run the resolved approvals PAUSED — the continuation-idempotency
+   * anchor (its `continuationRunId` is checked and stamped by prepare's
+   * continuation branch). Read from the approval rows, not the message's
+   * `generationRunId`, which a prior continuation already re-pointed.
+   */
+  pausedRunId: Id<"generationRuns"> | null
+} | null> {
   if (responses.length === 0) return null
 
   const messages = await listMessages(ctx, owner.chat._id)
   const messageById = new Map(messages.map((message) => [message._id, message]))
   let updatedMessage: Doc<"messages"> | null = null
+  let pausedRunId: Id<"generationRuns"> | null = null
   const now = nowMs()
   const runDecisions = new Map<Id<"generationRuns">, { denied: boolean }>()
 
@@ -1201,6 +1211,7 @@ export async function applyApprovalResponses(
     runDecisions.set(approval.runId, {
       denied: (runDecision?.denied ?? false) || !canonicalDecision.approved,
     })
+    pausedRunId = approval.runId
 
     const message = findMessageByUiId(messages, response.messageId)
     if (!message || message.chatId !== owner.chat._id) {
@@ -1269,7 +1280,7 @@ export async function applyApprovalResponses(
     })
   }
 
-  return updatedMessage
+  return updatedMessage ? { message: updatedMessage, pausedRunId } : null
 }
 
 type GenerationApprovalResponse = {
@@ -1336,11 +1347,8 @@ export async function prepareGenerationForChat(
 
   await closeSupersededGenerationsForChat(ctx, args.chatId, owner.user._id, now)
 
-  const continuationMessage = await applyApprovalResponses(
-    ctx,
-    owner,
-    approvalResponses
-  )
+  const continuation = await applyApprovalResponses(ctx, owner, approvalResponses)
+  const continuationMessage = continuation?.message ?? null
 
   if (latestUserMessage) {
     await denyPendingApprovalsForChat(
@@ -1419,6 +1427,34 @@ export async function prepareGenerationForChat(
     assistantOrder = preparedRegeneration.assistantOrder
     preparedModelHistory = preparedRegeneration.messages
   } else if (continuationMessage) {
+    // Approval-continuation idempotency, layer 1 of 3 (gameplan §10, PR 8):
+    // the paused run records its continuation inside this transaction, so of
+    // two racing auto-send continuations exactly ONE creates a run — the
+    // second sees continuationRunId and gets a typed conflict the route maps
+    // to a structured 409 the client swallows. Anchored on the APPROVALS' run
+    // (the message's generationRunId is re-pointed by the first winner).
+    const pausedRunId = continuation?.pausedRunId ?? null
+    if (pausedRunId && pausedRunId !== runId) {
+      const pausedRun = await ctx.db.get(pausedRunId)
+      if (pausedRun && pausedRun.chatId === args.chatId) {
+        if (pausedRun.continuationRunId !== undefined) {
+          console.log(
+            JSON.stringify({
+              _tag: "run_continuation_conflict",
+              chatId: args.chatId,
+              pausedRunId,
+              winnerRunId: pausedRun.continuationRunId,
+            })
+          )
+          throw new ConvexError({
+            code: "approval_continuation_conflict",
+            message: "Approval continuation already dispatched",
+          })
+        }
+        await ctx.db.patch(pausedRunId, { continuationRunId: runId })
+        await ctx.db.patch(runId, { continuedFromRunId: pausedRunId })
+      }
+    }
     assistantMessageId = continuationMessage._id
     assistantOrder = continuationMessage.orderId
     includeAssistantInModelHistory = true
@@ -2008,32 +2044,56 @@ export const stopGenerationRun = mutation({
   },
 })
 
+/**
+ * Approval resolution transitions ONLY `pending → approved|denied` (gameplan
+ * §10, PR 8): a conflicting second decision — the other tab already resolved
+ * — returns the canonical existing resolution instead of overwriting it (the
+ * old unconditional patch let a late deny repaint an earlier approve).
+ */
+export type ToolCallDecisionResult = {
+  status: "approved" | "denied" | "expired"
+  alreadyResolved: boolean
+}
+
+export async function resolveToolCallDecision(
+  ctx: MutationCtx,
+  args: { approvalId: string; reason?: string },
+  decision: "approved" | "denied"
+): Promise<ToolCallDecisionResult> {
+  const user = await getCurrentUser(ctx)
+  if (!user) throw new Error("Not authenticated")
+
+  const approval = await ctx.db
+    .query("toolApprovalRequests")
+    .withIndex("by_approval", (q) => q.eq("approvalId", args.approvalId))
+    .unique()
+  if (!approval || approval.userId !== user._id) {
+    throw new Error("Approval not found")
+  }
+
+  if (approval.status !== "pending") {
+    return {
+      status: approval.status as "approved" | "denied" | "expired",
+      alreadyResolved: true,
+    }
+  }
+
+  const now = nowMs()
+  await ctx.db.patch(approval._id, {
+    status: decision,
+    resolvedAt: now,
+    resolvedByUserId: user._id,
+    reason: args.reason ?? approval.reason,
+  })
+  return { status: decision, alreadyResolved: false }
+}
+
 export const approveToolCall = mutation({
   args: {
     approvalId: v.string(),
     reason: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
-    const user = await getCurrentUser(ctx)
-    if (!user) throw new Error("Not authenticated")
-
-    const approval = await ctx.db
-      .query("toolApprovalRequests")
-      .withIndex("by_approval", (q) => q.eq("approvalId", args.approvalId))
-      .unique()
-    if (!approval || approval.userId !== user._id) {
-      throw new Error("Approval not found")
-    }
-
-    const now = nowMs()
-    await ctx.db.patch(approval._id, {
-      status: "approved",
-      resolvedAt: now,
-      resolvedByUserId: user._id,
-      reason: args.reason ?? approval.reason,
-    })
-    return approval._id
-  },
+  handler: async (ctx, args) => resolveToolCallDecision(ctx, args, "approved"),
 })
 
 export const denyToolCall = mutation({
@@ -2041,27 +2101,7 @@ export const denyToolCall = mutation({
     approvalId: v.string(),
     reason: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
-    const user = await getCurrentUser(ctx)
-    if (!user) throw new Error("Not authenticated")
-
-    const approval = await ctx.db
-      .query("toolApprovalRequests")
-      .withIndex("by_approval", (q) => q.eq("approvalId", args.approvalId))
-      .unique()
-    if (!approval || approval.userId !== user._id) {
-      throw new Error("Approval not found")
-    }
-
-    const now = nowMs()
-    await ctx.db.patch(approval._id, {
-      status: "denied",
-      resolvedAt: now,
-      resolvedByUserId: user._id,
-      reason: args.reason ?? approval.reason,
-    })
-    return approval._id
-  },
+  handler: async (ctx, args) => resolveToolCallDecision(ctx, args, "denied"),
 })
 
 export const recordToolInvocations = ownedGenerationRunMutation({

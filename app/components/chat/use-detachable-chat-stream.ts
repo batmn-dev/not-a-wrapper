@@ -1,5 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react"
 import { Chat } from "@ai-sdk/react"
+import { messageHasLocallyResolvedApproval } from "@/lib/chat-runs/approval-auto-send-gate"
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
@@ -178,9 +179,18 @@ function createDetachableChatStreamOwner(
         messages,
         sendAutomaticallyWhen: (args) => {
           const lifecycle = lifecycles.get(binding)
-          return lifecycle?.state === "detached"
-            ? false
-            : lastAssistantMessageIsCompleteWithApprovalResponses(args)
+          if (lifecycle?.state === "detached") return false
+          if (!lastAssistantMessageIsCompleteWithApprovalResponses(args)) {
+            return false
+          }
+          // Only the tab that LOCALLY resolved the approval may auto-send the
+          // continuation (gameplan §10 layer 3): approval-responded parts
+          // adopted from the server must not arm a duplicate dispatch.
+          const lastMessage = args.messages[args.messages.length - 1]
+          return (
+            lastMessage !== undefined &&
+            messageHasLocallyResolvedApproval(lastMessage)
+          )
         },
         onFinish: (event) => routeFinish(binding, event),
         onError: (error) => routeError(binding, error),
