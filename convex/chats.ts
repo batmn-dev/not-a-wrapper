@@ -208,6 +208,7 @@ export const searchByTitle = maybeAuthQuery({
 // chats, so only the getById/getPublicById paths below need this.
 const OWNER_ONLY_STATUS_FIELDS = [
   "liveRunStatus",
+  "liveRunFreshUntil",
   "statusRunId",
   "lastRunEndedAt",
   "lastRunStatus",

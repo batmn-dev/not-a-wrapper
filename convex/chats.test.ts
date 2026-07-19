@@ -250,6 +250,7 @@ describe("listForCurrentUserPaginatedHandler", () => {
 describe("projectChatForReader (owner-only status strip)", () => {
   const OWNER_ONLY_FIELDS = [
     "liveRunStatus",
+    "liveRunFreshUntil",
     "statusRunId",
     "lastRunEndedAt",
     "lastRunStatus",
@@ -263,6 +264,7 @@ describe("projectChatForReader (owner-only status strip)", () => {
       title: "shared",
       public: true,
       liveRunStatus: "streaming",
+      liveRunFreshUntil: 330_000,
       statusRunId: "run_1" as Id<"generationRuns">,
       lastRunEndedAt: 200,
       lastRunStatus: "completed",
