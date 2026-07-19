@@ -40,6 +40,8 @@ const chatCoreMocks = vi.hoisted(() => ({
   useChatState: { messages: [] as unknown[], status: "ready" as string },
   // Controllable Turn context hydration for the auto-submit gate tests.
   turnContextHydrated: true,
+  // Controllable selected-run projection for the deferred-Stop tests.
+  selectedRun: null as unknown,
 }))
 
 vi.mock("./turn-context", () => ({
@@ -76,9 +78,10 @@ vi.mock("convex/react", () => ({
   useConvexConnectionState: () => ({ isWebSocketConnected: true }),
 }))
 
-// The presentation resolver's durable input: guest/local default (no run).
+// The presentation resolver's durable input: guest/local default (no run),
+// controllable for the deferred-Stop projection-gap tests.
 vi.mock("@/lib/chat-store/messages/provider", () => ({
-  useMessages: () => ({ selectedRun: null }),
+  useMessages: () => ({ selectedRun: chatCoreMocks.selectedRun }),
 }))
 
 vi.mock("@ai-sdk/react", () => ({
@@ -525,5 +528,107 @@ describe("useChatCore selected-path projection", () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe("useChatCore deferred durable Stop (projection gap)", () => {
+  let container: HTMLDivElement | null = null
+  let root: Root | null = null
+  const coreRef: { current: ReturnType<typeof useChatCore> | null } = {
+    current: null,
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    chatCoreMocks.useChatState.messages = []
+    chatCoreMocks.useChatState.status = "ready"
+    chatCoreMocks.selectedRun = null
+  })
+
+  afterEach(() => {
+    const mountedRoot = root
+    if (mountedRoot) act(() => mountedRoot.unmount())
+    container?.remove()
+    container = null
+    root = null
+    coreRef.current = null
+  })
+
+  function Harness() {
+    const core = useChatCore({
+      initialMessages: [] as UIMessage[],
+      cacheAndAddMessage: vi.fn(),
+      chatId: "chat_stopgap",
+      user: authenticatedUser,
+      checkLimitsAndNotify: vi.fn(async () => true),
+      ensureChatExists: vi.fn(async () => ({ chatId: "chat_stopgap" })),
+      bumpChat: chatCoreMocks.bumpChat,
+    })
+    React.useEffect(() => {
+      coreRef.current = core
+    })
+    return null
+  }
+
+  function render() {
+    act(() => {
+      root?.render(<Harness />)
+    })
+  }
+
+  function mount() {
+    window.history.replaceState(null, "", "/c/chat_stopgap")
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+    render()
+  }
+
+  it("defers a Stop clicked before the run projection arrives, then fires at the exact run id", async () => {
+    mount()
+    // Stop lands in the projection gap: local transport is cut, but no run id
+    // is known yet — with durable turns detached from req.signal, dropping
+    // the intent here would leave the worker streaming (the review's silent
+    // no-op). The intent must fire once the projection delivers the run.
+    await act(async () => {
+      await coreRef.current?.stop()
+    })
+    expect(chatCoreMocks.stop).toHaveBeenCalled()
+    expect(chatCoreMocks.convexMutation).not.toHaveBeenCalled()
+
+    chatCoreMocks.selectedRun = {
+      runId: "run_live",
+      assistantMessageId: "msg_live",
+      status: "streaming",
+      activeToolNames: [],
+      pendingApproval: null,
+    }
+    render()
+    await flushAsyncWork()
+
+    expect(chatCoreMocks.convexMutation).toHaveBeenCalledTimes(1)
+    expect(chatCoreMocks.convexMutation).toHaveBeenCalledWith({
+      chatId: "chat_stopgap",
+      runId: "run_live",
+    })
+  })
+
+  it("disarms without firing when the arriving projection is already terminal", async () => {
+    mount()
+    await act(async () => {
+      await coreRef.current?.stop()
+    })
+
+    chatCoreMocks.selectedRun = {
+      runId: "run_done",
+      assistantMessageId: "msg_done",
+      status: "completed",
+      activeToolNames: [],
+      pendingApproval: null,
+    }
+    render()
+    await flushAsyncWork()
+
+    expect(chatCoreMocks.convexMutation).not.toHaveBeenCalled()
   })
 })

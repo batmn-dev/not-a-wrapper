@@ -873,6 +873,86 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
       warn.mockRestore()
     }
   })
+
+  it("degrades — never claims settlement — when grant EXPIRY is discovered mid-settlement", async () => {
+    // Expiry means the TTL lapsed with NO known terminal anywhere. The final
+    // snapshot discovers it; the completion write must then degrade instead
+    // of resolving a local skip as a landed (or settled-elsewhere) outcome.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          updateAssistantSnapshot: () => {
+            throw new DurableWorkerWriteError({
+              op: "updateAssistantSnapshot",
+              status: 401,
+              detail: '{"ok":false,"code":"grant_expired"}',
+              grantRejection: "grant_expired",
+            })
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+
+      const receipt = await binding.envelope.settle({
+        responseMessage: RESPONSE_MESSAGE,
+        isAborted: false,
+        finishReason: "stop",
+      })
+
+      expect(receipt).toEqual({
+        status: "degraded",
+        runId: "run1",
+        reason: "completion write failed after retries",
+      })
+      // The completion write was gated locally — no wire attempt could land.
+      expect(wireCalls(wire, "markGenerationRunCompleted")).toHaveLength(0)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("a grant rejection from a TOOL-INVOCATION write gates later writes too", async () => {
+    // "ANY worker write" discovers revocation — not just heartbeat/snapshot/
+    // terminal. The first rejected record write must close the local gate.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          recordToolInvocations: () => {
+            throw new DurableWorkerWriteError({
+              op: "recordToolInvocations",
+              status: 401,
+              detail: '{"ok":false,"code":"grant_unauthorized"}',
+              grantRejection: "grant_unauthorized",
+            })
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+
+      binding.stream.recordStep({
+        stepNumber: 1,
+        toolCalls: [
+          { toolCallId: "call_1", toolName: "web_search", input: {} },
+        ] as never,
+        toolResults: [] as never,
+      })
+      await vi.waitFor(() => {
+        expect(turn.executionAbortSignal.aborted).toBe(true)
+      })
+
+      // A later snapshot chunk is gated locally — no second 401.
+      binding.stream.onChunk({ type: "text-delta", text: "tail" } as never)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(wireCalls(wire, "recordToolInvocations")).toHaveLength(1)
+      expect(wireCalls(wire, "updateAssistantSnapshot")).toHaveLength(0)
+    } finally {
+      warn.mockRestore()
+    }
+  })
 })
 
 describe("durable turn runtime — heartbeat loop (gameplan §6)", () => {

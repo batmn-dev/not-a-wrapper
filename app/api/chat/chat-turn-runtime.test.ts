@@ -77,6 +77,7 @@ vi.mock("@/lib/observability/braintrust", () => ({
   hashBraintrustIdentifier: vi.fn(async () => "hash"),
   logBraintrustTraceMetadata: vi.fn(),
   getBraintrustErrorMetadata: vi.fn(() => ({})),
+  flushBraintrust: vi.fn(async () => {}),
 }))
 
 vi.mock("@/lib/posthog", () => ({

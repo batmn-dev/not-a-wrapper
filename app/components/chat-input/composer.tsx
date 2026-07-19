@@ -92,6 +92,10 @@ type ComposerProps = {
   isSubmitting?: boolean
   status?: "submitted" | "streaming" | "ready" | "error"
   stop?: () => void
+  /** Resolver-driven Stop affordance beyond the local transport (gameplan
+   * §8/§11): a stoppable background, awaiting-approval, or possibly-stale run
+   * presents Stop even while the local status reads ready. */
+  stoppable?: boolean
   hasSuggestions?: boolean
   onLockedGuestModelSelect?: (modelId: string) => void
   /** Draft-persistence scope when there is no chat id (e.g. `project-<id>`),
@@ -190,6 +194,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       isSubmitting,
       status,
       stop,
+      stoppable,
       hasSuggestions,
       onLockedGuestModelSelect,
       draftScopeId,
@@ -356,14 +361,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const primaryAction = useMemo(
       () =>
         resolveComposerPrimaryActionState({
-          isStreaming: status === "streaming",
-          isAbortable: status === "streaming",
+          // Stop presents for a live LOCAL stream or any resolver-stoppable
+          // run (background, awaiting-approval, possibly-stale — §8/§11):
+          // durable Stop is a mutation, not a transport abort, so the local
+          // status alone must not gate the affordance.
+          isStreaming: status === "streaming" || stoppable === true,
+          isAbortable: status === "streaming" || stoppable === true,
           canSend:
             !isSubmitting &&
             attachments.every((attachment) => attachment.status === "ready") &&
             (!isOnlyWhitespace(localValue) || attachments.length > 0),
         }),
-      [attachments, isSubmitting, localValue, status]
+      [attachments, isSubmitting, localValue, status, stoppable]
     )
 
     const handlePrimaryActionClick = useCallback(() => {

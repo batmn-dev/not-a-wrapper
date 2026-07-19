@@ -2253,6 +2253,9 @@ const REAPER_BATCH_LIMIT = 25
  * Settle the auxiliary records a reaped run leaves behind: pending approvals
  * expire; non-terminal tool invocations fail. Partial assistant content is
  * preserved by the lifecycle's terminal message policy — never erased here.
+ * The per-run collects are unbounded queries over naturally bounded sets:
+ * both tables are keyed by runId, and one run accrues at most a handful of
+ * approvals and step-count-bounded invocations (maxSteps caps the stream).
  */
 async function settleAuxiliaryRecordsForReapedRun(
   ctx: MutationCtx,

@@ -52,12 +52,20 @@ export function messageHasLocallyResolvedApproval(message: {
  * A later remount that rehydrates the same approval-responded parts (still
  * present until the continuation lands) finds the gate closed, so reopening
  * or reloading never submits another model request (gameplan §19 checklist).
- * Returns whether any id matched (i.e. whether auto-send may arm).
+ * Returns the consumed ids (empty = gate closed, auto-send must not arm).
+ *
+ * The caller MUST pair this with `restoreLocallyResolvedApprovals` when the
+ * armed dispatch ERRORS: the SDK does not re-evaluate its predicate on error,
+ * the approval is already resolved durably (the reaper only expires PENDING
+ * rows), and without restoration the consumed authorization is the last one —
+ * the continuation would be stranded with no recovery path. Restoring re-arms
+ * the next evaluation (a reload/remount recovers the dispatch); a duplicate
+ * from a lost race is absorbed by the server's structured 409.
  */
 export function consumeLocallyResolvedApprovals(message: {
   parts?: unknown[]
-}): boolean {
-  let matched = false
+}): string[] {
+  const consumed: string[] = []
   for (const part of message.parts ?? []) {
     const candidate = part as MessagePartLike
     if (candidate?.state !== "approval-responded") continue
@@ -66,10 +74,17 @@ export function consumeLocallyResolvedApprovals(message: {
       typeof approvalId === "string" &&
       locallyResolvedApprovalIds.delete(approvalId)
     ) {
-      matched = true
+      consumed.push(approvalId)
     }
   }
-  return matched
+  return consumed
+}
+
+/** Re-arm after a failed armed dispatch (see consume's doc). */
+export function restoreLocallyResolvedApprovals(approvalIds: string[]): void {
+  for (const approvalId of approvalIds) {
+    locallyResolvedApprovalIds.add(approvalId)
+  }
 }
 
 /** Test seam. */

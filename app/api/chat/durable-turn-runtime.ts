@@ -870,6 +870,17 @@ export function createConvexDurableTurn(args: {
   let grantAuthorityLost = false
   let grantExpired = false
 
+  // Identity-checkable skip sentinel: a gated write resolves to THIS object,
+  // and any caller that must distinguish "landed" from "locally skipped"
+  // (writeTerminal) checks for it — a resolved skip must never read as a
+  // landed write.
+  const GRANT_GATED_SKIP = {
+    ok: false as const,
+    skipped: "grant_authority_lost" as const,
+  }
+  const isGrantGatedSkip = (value: unknown): boolean =>
+    value === GRANT_GATED_SKIP
+
   const workerWrite = <Op extends DurableWorkerOp>(
     op: Op,
     opArgs: DurableWorkerPayloads[Op]
@@ -880,7 +891,7 @@ export function createConvexDurableTurn(args: {
       )
     }
     if (grantAuthorityLost || grantExpired) {
-      return Promise.resolve({ ok: false, skipped: "grant_authority_lost" })
+      return Promise.resolve(GRANT_GATED_SKIP)
     }
     // Safe by construction: the generic signature correlates `op` with its
     // payload; TS cannot carry that correlation into the union.
@@ -912,23 +923,32 @@ export function createConvexDurableTurn(args: {
     op: Op,
     opArgs: DurableWorkerPayloads[Op]
   ): Promise<TerminalWriteResult> => {
-    if (grantAuthorityLost) {
+    const settledElsewhere = (reason?: string): TerminalWriteResult => {
       warnDurable("durable_terminal_write_rejected_settled", {
         requestId,
         chatId,
         runId,
         op,
-        reason: "grant-authority-lost",
+        ...(reason && { reason }),
       })
       return "settled-elsewhere"
     }
-    if (grantExpired) return "failed"
     for (let attempt = 0; attempt <= settleRetryDelaysMs.length; attempt++) {
+      // Re-checked EVERY iteration: authority loss or expiry can be
+      // discovered by another write while this one sits in a retry delay.
+      // Expiry stays "failed" — nothing is known settled there — and a
+      // resolved skip sentinel below must never read as a landed write.
+      if (grantExpired) return "failed"
+      if (grantAuthorityLost) return settledElsewhere("grant-authority-lost")
       try {
-        await withWorkerWriteTimeout(
+        const written = await withWorkerWriteTimeout(
           workerWrite(op, opArgs),
           `writing terminal operation ${op}`
         )
+        if (isGrantGatedSkip(written)) {
+          if (grantExpired) return "failed"
+          return settledElsewhere("grant-authority-lost")
+        }
         return "landed"
       } catch (error) {
         // Absorbing outcomes revoke the grant (gameplan §0 amendment 2), so
@@ -941,13 +961,7 @@ export function createConvexDurableTurn(args: {
           error.grantRejection === "grant_unauthorized"
         ) {
           noteGrantRejection("grant_unauthorized", op)
-          warnDurable("durable_terminal_write_rejected_settled", {
-            requestId,
-            chatId,
-            runId,
-            op,
-          })
-          return "settled-elsewhere"
+          return settledElsewhere()
         }
         warnDurable(TERMINAL_WRITE_FAILURE_TAGS[op], {
           requestId,
@@ -1044,6 +1058,26 @@ export function createConvexDurableTurn(args: {
       })
     }
     loseExecution(`grant ${rejection}`)
+  }
+
+  /**
+   * Shared discovery hook for the fire-and-forget write catches: EVERY worker
+   * write path notes a grant rejection so the first discoverer — whichever
+   * write it happens to be — gates the rest. Returns true when the error was
+   * a grant rejection (callers skip their generic failure warn: the moot
+   * write is covered by the single authority-revoked warn). Writes already
+   * in flight when the flag flips can still each reject once — the gate
+   * stops NEW writes, it cannot recall dispatched ones.
+   */
+  const noteIfGrantRejection = (error: unknown, source: string): boolean => {
+    if (
+      error instanceof DurableWorkerWriteError &&
+      error.grantRejection !== undefined
+    ) {
+      noteGrantRejection(error.grantRejection, source)
+      return true
+    }
+    return false
   }
 
   const scheduleHeartbeat = (delayMs: number) => {
@@ -1325,7 +1359,12 @@ export function createConvexDurableTurn(args: {
           approvalWritePromises,
           requestId,
           persistApprovalRequest: (approvalArgs) =>
-            workerWrite("createToolApprovalRequest", approvalArgs),
+            workerWrite("createToolApprovalRequest", approvalArgs).catch(
+              (error: unknown) => {
+                noteIfGrantRejection(error, "approval-request")
+                throw error
+              }
+            ),
         })
 
       return {
@@ -1369,6 +1408,7 @@ export function createConvexDurableTurn(args: {
               stepNumber,
               invocations,
             }).catch((error: unknown) => {
+              if (noteIfGrantRejection(error, "tool-invocations")) return
               warnDurable("canonical_tool_invocation_write_failed", {
                 requestId,
                 chatId,
@@ -1383,6 +1423,7 @@ export function createConvexDurableTurn(args: {
               messageId: currentMessageId,
               error: errorMessage,
             }).catch((error: unknown) => {
+              if (noteIfGrantRejection(error, "stream-error")) return
               warnDurable("durable_run_failed_write_failed", {
                 requestId,
                 chatId,
@@ -1446,10 +1487,16 @@ export function createConvexDurableTurn(args: {
               // Bounded: settlement runs inside the route's reserve tail —
               // one worker-write timeout is the most any straggling approval
               // write may hold it (the writes carry their own catch logging).
-              await Promise.race([
-                Promise.allSettled(approvalWritePromises),
-                sleep(WORKER_WRITE_TIMEOUT_MS),
-              ])
+              // The losing timer is cancelled — the common already-settled
+              // case must not pin the process for the full timeout.
+              await new Promise<void>((resolve) => {
+                const timer = setTimeout(resolve, WORKER_WRITE_TIMEOUT_MS)
+                timer.unref?.()
+                void Promise.allSettled(approvalWritePromises).then(() => {
+                  clearTimeout(timer)
+                  resolve()
+                })
+              })
               await tracker.flush().catch(() => {})
 
               // Content survival before ANY terminal transition (ADR-0011): the
@@ -1539,25 +1586,30 @@ export function createConvexDurableTurn(args: {
       const currentRunId = runId
       const currentMessageId = assistantMessageId
       if (!currentRunId || !currentMessageId) return
-      // Heartbeat first: a stalled failure write must not leave the loop
-      // renewing a lease for a worker that is already tearing down. Bounded
-      // like every settlement-path write — a hung transport here otherwise
-      // holds the route past its budget.
-      stopHeartbeat()
-      await withWorkerWriteTimeout(
-        workerWrite("markGenerationRunFailed", {
-          messageId: currentMessageId,
-          error: errorMessage,
-        }),
-        "writing terminal operation markGenerationRunFailed"
-      ).catch((writeError: unknown) => {
-        warnDurable("durable_run_failed_write_failed", {
-          requestId,
-          chatId,
-          runId: currentRunId,
-          error: describeError(writeError),
+      // Write first (bounded), heartbeat stopped in finally: keeping the
+      // lease alive through the ≤10 s write means a reaper tick cannot race
+      // in and relabel this provider failure `lease_expired`; the bound —
+      // not the ordering — is what prevents a stalled write from leaving
+      // the loop renewing forever.
+      try {
+        await withWorkerWriteTimeout(
+          workerWrite("markGenerationRunFailed", {
+            messageId: currentMessageId,
+            error: errorMessage,
+          }),
+          "writing terminal operation markGenerationRunFailed"
+        ).catch((writeError: unknown) => {
+          if (noteIfGrantRejection(writeError, "fail")) return
+          warnDurable("durable_run_failed_write_failed", {
+            requestId,
+            chatId,
+            runId: currentRunId,
+            error: describeError(writeError),
+          })
         })
-      })
+      } finally {
+        stopHeartbeat()
+      }
     },
   }
 }

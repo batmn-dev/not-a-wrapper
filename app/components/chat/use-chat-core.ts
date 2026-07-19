@@ -570,17 +570,27 @@ export function useChatCore({
 
   // When this client's live stream began — the resolver's orphan-cut grace
   // input (regeneration identity gap: the projection may briefly still show
-  // the previous run after our own dispatch).
+  // the previous run after our own dispatch). Keyed to the STATUS TRANSITION,
+  // not a live/idle boolean: every new dispatch passes through "submitted",
+  // which unconditionally restarts the clock — a streaming→submitted commit
+  // (stop+resend batched into one render) must not inherit the previous
+  // stream's start time, or the new stream's grace would be pre-elapsed.
   const [localStreamStartedAt, setLocalStreamStartedAt] = useState<
     number | null
   >(null)
-  const localTransportLive = status === "streaming" || status === "submitted"
   useEffect(() => {
-    setLocalStreamStartedAt((current) => {
-      if (!localTransportLive) return null
-      return current ?? Date.now()
-    })
-  }, [localTransportLive])
+    if (status === "submitted") {
+      setLocalStreamStartedAt(Date.now())
+      return
+    }
+    if (status === "streaming") {
+      // Entered streaming without an observed submitted commit (adoption):
+      // start the clock now rather than never.
+      setLocalStreamStartedAt((current) => current ?? Date.now())
+      return
+    }
+    setLocalStreamStartedAt(null)
+  }, [status])
 
   // Freshness is CLIENT-classified against the clock, so re-classification
   // needs a tick while an active-looking run could cross its lease boundary.
@@ -638,29 +648,78 @@ export function useChatCore({
   useLayoutEffect(() => {
     presentationRef.current = presentation
   })
+  const fireDurableStop = useCallback(
+    async (targetRunId: string) => {
+      if (!chatId) return
+      setPendingStopRunId(targetRunId)
+      try {
+        await stopGenerationRunMutation({
+          chatId: chatId as Id<"chats">,
+          runId: targetRunId as Id<"generationRuns">,
+        })
+      } catch (stopError) {
+        console.error("Durable stop failed:", stopError)
+        toast({ title: "Failed to stop generation", status: "error" })
+      } finally {
+        setPendingStopRunId(null)
+      }
+    },
+    [chatId, stopGenerationRunMutation]
+  )
+
+  // A Stop clicked before the selected-run projection has delivered this
+  // dispatch's run id must NOT be a silent no-op: durable provider
+  // consumption is detached from req.signal, so cutting the local transport
+  // alone leaves the worker streaming. The intent is deferred — the effect
+  // below fires it at the EXACT run id the projection delivers (Stop stays
+  // run-scoped, never "the active run").
+  const [deferredStopForChatId, setDeferredStopForChatId] = useState<
+    string | null
+  >(null)
+
   const handleStop = useCallback(async () => {
     void stopRef.current()
+    if (!chatId || getMessagePersistenceMode(chatId) !== "server") {
+      return
+    }
     const targetRunId = presentationRef.current.stopTargetRunId
+    if (!targetRunId) {
+      // The run exists server-side (prepare commits before the first token)
+      // but its projection hasn't arrived — defer instead of dropping.
+      setDeferredStopForChatId(chatId)
+      return
+    }
+    await fireDurableStop(targetRunId)
+  }, [chatId, fireDurableStop])
+
+  useEffect(() => {
+    if (deferredStopForChatId === null) return
+    if (deferredStopForChatId !== chatId) {
+      // Navigated away — the intent was for another chat's projection.
+      setDeferredStopForChatId(null)
+      return
+    }
+    if (selectedRun === null) return
+    setDeferredStopForChatId(null)
+    // A terminal projection means nothing is left to stop; anything active —
+    // queued/running/streaming/awaiting_approval — takes the deferred Stop.
     if (
-      !targetRunId ||
-      !chatId ||
-      getMessagePersistenceMode(chatId) !== "server"
+      selectedRun.status === "completed" ||
+      selectedRun.status === "aborted" ||
+      selectedRun.status === "failed"
     ) {
       return
     }
-    setPendingStopRunId(targetRunId)
-    try {
-      await stopGenerationRunMutation({
-        chatId: chatId as Id<"chats">,
-        runId: targetRunId as Id<"generationRuns">,
-      })
-    } catch (stopError) {
-      console.error("Durable stop failed:", stopError)
-      toast({ title: "Failed to stop generation", status: "error" })
-    } finally {
-      setPendingStopRunId(null)
-    }
-  }, [chatId, stopGenerationRunMutation])
+    void fireDurableStop(selectedRun.runId)
+  }, [deferredStopForChatId, chatId, selectedRun, fireDurableStop])
+
+  // The intent cannot wait forever: if no projection ever arrives (the
+  // dispatch failed before prepare), disarm quietly.
+  useEffect(() => {
+    if (deferredStopForChatId === null) return
+    const timer = setTimeout(() => setDeferredStopForChatId(null), 30_000)
+    return () => clearTimeout(timer)
+  }, [deferredStopForChatId])
 
   // Generation guard: prevent stuck "streaming" UI when a stream drops silently
   useEffect(() => {

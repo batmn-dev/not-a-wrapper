@@ -265,5 +265,23 @@ describe("detachable chat stream lifecycle", () => {
         messages: [approvalMessage],
       })
     ).toBe(false)
+
+    // ...but an ERRORED armed dispatch restores the authorization: the SDK
+    // never re-evaluates its predicate on error and the approval is already
+    // resolved durably, so without restoration the continuation would be
+    // stranded with no recovery path. A finished dispatch stays consumed.
+    firstTurnBinding.options.onError(new Error("continuation transport died"))
+    expect(
+      firstTurnBinding.options.sendAutomaticallyWhen({
+        messages: [approvalMessage],
+      })
+    ).toBe(true)
+    firstTurnBinding.options.onFinish(finishEvent)
+    firstTurnBinding.options.onError(new Error("later unrelated error"))
+    expect(
+      firstTurnBinding.options.sendAutomaticallyWhen({
+        messages: [approvalMessage],
+      })
+    ).toBe(false)
   })
 })

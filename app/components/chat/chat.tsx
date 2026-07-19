@@ -462,6 +462,7 @@ function ChatInner({
                 isSubmitting={isSubmitting}
                 status={effectiveStatus}
                 stop={stop}
+                stoppable={presentation.stoppable}
                 hasSuggestions={
                   preferences.promptSuggestions &&
                   !project &&

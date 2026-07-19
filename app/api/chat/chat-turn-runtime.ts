@@ -367,6 +367,25 @@ export function createChatTurnRuntime(args: {
   let credentialSource: ApiKeySource | undefined
   let lastPublicError: PublicChatError | null = null
 
+  // Request-scoped resource teardown (MCP clients, analytics flushes) is
+  // owned by SETTLEMENT, not by `after()`: `after()` can fire on
+  // response-stream cancellation while a durable worker is still executing
+  // (client reload — gameplan §12 scenario 9), and disposing MCP clients
+  // mid-run would fail every later tool step. The `after()` registration
+  // below stays only as the backstop for turns whose stream never started
+  // (prepare failures) or already settled; the provider deadline bounds how
+  // long a started stream can defer disposal.
+  let providerStreamStarted = false
+  let turnSettled = false
+  let turnResourcesDisposed = false
+  const disposeTurnResources = async () => {
+    if (turnResourcesDisposed) return
+    turnResourcesDisposed = true
+    if (toolRuntime) await toolRuntime.dispose()
+    await flushPostHog().catch(() => {})
+    await flushBraintrust().catch(() => {})
+  }
+
   const normalizeTurnError = (error: unknown): PublicChatError => {
     const normalized = normalizeChatError(error, {
       provider,
@@ -488,9 +507,14 @@ export function createChatTurnRuntime(args: {
       outcomeSinks,
     })
     toolRuntime = tool
-    // Register MCP cleanup immediately — after() runs even when the response
-    // errors or the client disconnects. dispose() is idempotent.
-    deps.after(() => tool.dispose())
+    // Backstop registration only (see disposeTurnResources): a started,
+    // unsettled stream skips this — its settlement path disposes — because
+    // after() can fire on response cancellation while the durable worker is
+    // still executing tool steps. dispose() is idempotent.
+    deps.after(async () => {
+      if (providerStreamStarted && !turnSettled) return
+      await disposeTurnResources()
+    })
 
     const hasAnyTools = tool.hasTools
     const shouldInjectSearch = tool.policySummary.searchInjected
@@ -505,16 +529,10 @@ export function createChatTurnRuntime(args: {
 
     const startTime = Date.now()
 
-    // Schedule PostHog/Braintrust flush after streaming completes. Using flush()
-    // (not shutdown()) allows client reuse in warm containers.
-    if (phClient) {
-      deps.after(async () => {
-        await flushPostHog()
-      })
-    }
-    deps.after(async () => {
-      await flushBraintrust()
-    })
+    // PostHog/Braintrust flushes ride the same settlement-owned teardown as
+    // MCP disposal (disposeTurnResources) — flush() (not shutdown()) allows
+    // client reuse in warm containers. No separate after() registrations: the
+    // backstop above already covers never-started turns.
 
     const durableRuntimeEnabled = isDurableConvexChat({
       isAuthenticated,
@@ -874,6 +892,7 @@ export function createChatTurnRuntime(args: {
     ])
 
     const streamStartMs = Date.now()
+    providerStreamStarted = true
     let stepCounter = 0
     let toolMetadataByCallId: ToolInvocationMetadataByCallId = {}
 
@@ -1430,11 +1449,19 @@ export function createChatTurnRuntime(args: {
       // degraded receipt — logged and captured inside the module — instead of
       // failing the response pipe and erasing a delivered answer.
       onEnd: async ({ responseMessage, isAborted, finishReason }) => {
-        await lifecycle.envelope.settle({
-          responseMessage,
-          isAborted,
-          finishReason,
-        })
+        try {
+          await lifecycle.envelope.settle({
+            responseMessage,
+            isAborted,
+            finishReason,
+          })
+        } finally {
+          // Settlement owns request-scoped teardown (see the factory-level
+          // note): the stream is truly over here — reload or not — so MCP
+          // clients and analytics flushes release now, not at after() time.
+          turnSettled = true
+          await disposeTurnResources()
+        }
       },
       onError: (error: unknown) => {
         reasoningActivity.close()
@@ -1473,9 +1500,10 @@ export function createChatTurnRuntime(args: {
   async function fail(err: unknown): Promise<void> {
     phase = "terminal"
 
-    // Clean up any MCP clients that were opened before the error. dispose() is
-    // idempotent, so this is safe even if the after() registration also runs.
-    if (toolRuntime) await toolRuntime.dispose()
+    // Terminal teardown: MCP clients + analytics flushes. dispose() is
+    // idempotent, so this is safe even if the after() backstop also runs.
+    turnSettled = true
+    await disposeTurnResources()
 
     // Finalize a failed durable run (guest: inert; pre-prepare: no-op). Legal at
     // any phase — the Generation run lifecycle's first-terminal-wins absorbs a

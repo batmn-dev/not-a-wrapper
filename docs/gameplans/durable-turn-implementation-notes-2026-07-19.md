@@ -74,13 +74,15 @@ fixed in the follow-up commit:
    three-way (`landed` / `settled-elsewhere` / `failed`) and the receipt's
    `settled-elsewhere` outcome says exactly what is known: the run is settled,
    by the revoker, with the revoker's outcome — Convex is the source of truth.
-4. **Post-Stop 401 write storm.** The first grant rejection on ANY worker
-   write (heartbeat, snapshot, terminal) now records authority loss, aborts
-   provider consumption, and short-circuits every later write locally
+4. **Post-Stop 401 write storm.** The first grant rejection on a worker
+   write records authority loss, aborts provider consumption, and
+   short-circuits every later write locally
    (`durable_worker_authority_revoked`, warned once). Live-verified: a Stop
-   now produces exactly ONE discovering 401 in Convex logs (previously 5–7,
-   including the abort write). Grant EXPIRY stays a degraded receipt — the
-   run is not known settled there.
+   produced ONE discovering 401 in Convex logs (previously 5–7, including
+   the abort write). Grant EXPIRY stays a degraded receipt — the run is not
+   known settled there. (Round 2 corrected the claim's scope: writes already
+   in flight at discovery can still each reject once, and round 2 extended
+   discovery to the approval/tool-record/failure write paths.)
 5. **Run linkage leaked to non-owner viewers through message docs.**
    `getSelectedConversation` nulled `selectedRun` but returned raw messages
    carrying `generationRunId`/`requestId`; the older `getForChat` /
@@ -97,6 +99,52 @@ writes race a worker-write timeout, `fail()` stops the heartbeat first and
 bounds its write) and `REAPER_BATCH_LIMIT` dropped to 25 (per-run auxiliary
 settlement makes oversized batches an atomic-failure starvation risk).
 
+## Second review round (2026-07-19, post-fix commit)
+
+A follow-up review of the fix commit confirmed the text-only reload headline
+and the pause/stripping fixes, and found seven real residuals — all addressed
+in the second fix commit:
+
+1. **Stop-before-projection was a silent no-op** (the worst residual: with
+   durable turns detached from `req.signal`, cutting the local transport
+   stops nothing). `handleStop` now arms a DEFERRED stop intent when no run
+   id is known; an effect fires the mutation at the exact run id the
+   projection delivers (still run-scoped, never "the active run"), disarming
+   on terminal projections, chat switches, or a 30 s timeout.
+2. **The local write gate could resolve a skip that read as a landed
+   terminal.** `writeTerminal` re-checks authority/expiry every retry
+   iteration and identity-checks the skip sentinel; expiry discovered
+   mid-settlement now degrades (nothing is known settled) instead of
+   confirming.
+3. **A failed armed continuation dispatch stranded the approval** (consumed
+   ids were the only authorization; the SDK never re-evaluates on error and
+   the reaper only expires PENDING approvals). The armed ids are stashed per
+   binding and RESTORED on dispatch error — a reload then recovers the
+   continuation; a finished dispatch stays consumed.
+4. **Not every write path discovered revocation.** Approval-request,
+   tool-invocation, stream-error, and fail() writes now note grant
+   rejections too. Claim corrected: the gate stops NEW writes after the
+   first discovery — writes already in flight can still each reject once.
+5. **`after()` could dispose MCP clients / flush analytics while a reloaded
+   worker was still executing tool steps.** Request-scoped teardown is now
+   settlement-owned (`disposeTurnResources` from envelope-onEnd and fail());
+   the `after()` registration remains only as a backstop for never-started
+   or already-settled turns.
+6. **The orphan-grace clock keyed on a live/idle boolean** — a
+   streaming→submitted commit inherited the previous stream's start time.
+   It now resets on every entry into `submitted` (each dispatch passes
+   through it).
+7. **Composer Stop for `possibly-stale`/`awaiting-approval`** — previously
+   "accepted as polish", rejected by both reviews against §8/§11: the
+   composer now takes the resolver's `stoppable` verdict directly, so those
+   states present Stop (which the lifecycle's `stop` rule accepts on
+   `awaiting_approval`).
+
+Plus the bounded-settlement cleanups: the approval-wait race cancels its
+losing timer, and `fail()` writes first (bounded ≤10 s) with the heartbeat
+stopped in `finally` — the lease outlives the write, so a reaper tick cannot
+relabel a provider failure `lease_expired`.
+
 **Reviewed and accepted as-is (not defects, or deliberate polish gaps):**
 
 - A worker-write timeout does not cancel the underlying fetch, so a late
@@ -106,10 +154,6 @@ settlement makes oversized batches an atomic-failure starvation risk).
   deliberately dropped: the Stop terminal freezes content, and the worker's
   later flush is absorbed as settled-elsewhere. First-terminal-wins applies
   to content too.
-- The composer surfaces Stop only for local/background streaming; the
-  resolver's `stoppable` verdict for `possibly-stale`/`awaiting-approval` has
-  no composer affordance yet — grouped with the §11 copy / offline Stop
-  intent queue polish (the reaper terminalizes those runs regardless).
 - A pathological settlement tail (multiple consecutive 10 s write timeouts)
   can still overrun the 30 s reserve; the receipt degrades and the reaper is
   the honest backstop — the reserve covers the common case by design.
