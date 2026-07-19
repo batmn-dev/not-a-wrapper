@@ -1,6 +1,7 @@
 import { useChatEdit } from "@/app/components/chat/use-chat-edit"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
+import type { Id } from "@/convex/_generated/dataModel"
 import { isEmptyAssistantMessage } from "@/convex/domain/message_visibility"
 import { getOrCreateGuestUserId } from "@/lib/api"
 import { useChats } from "@/lib/chat-store/chats/provider"
@@ -537,9 +538,8 @@ export function useChatCore({
     return null
   }, [messages, status])
 
-  // Durable Stop intent: the run id a stop mutation is in flight for (wired
-  // by the durable Stop orchestration — PR 6).
-  const [pendingStopRunId] = useState<string | null>(null)
+  // Durable Stop intent: the run id a stop mutation is in flight for.
+  const [pendingStopRunId, setPendingStopRunId] = useState<string | null>(null)
 
   // Freshness is CLIENT-classified against the clock, so re-classification
   // needs a tick while an active-looking run could cross its lease boundary.
@@ -585,6 +585,39 @@ export function useChatCore({
       void stopRef.current()
     }
   }, [presentation.shouldStopLocalStream])
+
+  // Orchestrated Stop (§9): cut the local transport promptly, then settle the
+  // EXACT run durably so every tab converges — a returning client with no
+  // local stream stops the background run the same way. The resolver's
+  // stopTargetRunId is read at call time (the composer retains this callback).
+  const stopGenerationRunMutation = useMutation(api.chatRuntime.stopGenerationRun)
+  const presentationRef = useRef(presentation)
+  useLayoutEffect(() => {
+    presentationRef.current = presentation
+  })
+  const handleStop = useCallback(async () => {
+    void stopRef.current()
+    const targetRunId = presentationRef.current.stopTargetRunId
+    if (
+      !targetRunId ||
+      !chatId ||
+      getMessagePersistenceMode(chatId) !== "server"
+    ) {
+      return
+    }
+    setPendingStopRunId(targetRunId)
+    try {
+      await stopGenerationRunMutation({
+        chatId: chatId as Id<"chats">,
+        runId: targetRunId as Id<"generationRuns">,
+      })
+    } catch (stopError) {
+      console.error("Durable stop failed:", stopError)
+      toast({ title: "Failed to stop generation", status: "error" })
+    } finally {
+      setPendingStopRunId(null)
+    }
+  }, [chatId, stopGenerationRunMutation])
 
   // Generation guard: prevent stuck "streaming" UI when a stream drops silently
   useEffect(() => {
@@ -780,7 +813,9 @@ export function useChatCore({
     messages,
     status,
     error,
-    stop,
+    // The orchestrated local-plus-durable Stop (§9/§11) — local transport cut
+    // promptly, then the exact run settled durably so all tabs converge.
+    stop: handleStop,
     /** The resolved local/background/stale generation presentation (§8). */
     presentation,
     setMessages,

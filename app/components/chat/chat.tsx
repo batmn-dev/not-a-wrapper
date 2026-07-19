@@ -460,7 +460,7 @@ function ChatInner({
                 onTurn={submit}
                 onSuggestion={handleSuggestion}
                 isSubmitting={isSubmitting}
-                status={status}
+                status={effectiveStatus}
                 stop={stop}
                 hasSuggestions={
                   preferences.promptSuggestions &&

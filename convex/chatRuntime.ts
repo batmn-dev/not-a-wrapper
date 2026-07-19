@@ -1892,6 +1892,122 @@ export async function createToolApprovalRequestForChat(
   return approvalRequestId
 }
 
+// ---------------------------------------------------------------------------
+// Durable Stop (gameplan §9, PR 6): authenticated, idempotent, explicitly
+// run-scoped — Stop targets `(chatId, runId)`, never "the active run".
+// ---------------------------------------------------------------------------
+
+export type StopGenerationRunResult = {
+  outcome: "stopped" | "already-terminal" | "not-current"
+  status: GenerationRunStatus
+  terminalReason?: Doc<"generationRuns">["terminalReason"]
+}
+
+export async function stopGenerationRunForChat(
+  ctx: MutationCtx,
+  owner: AuthenticatedChatOwner,
+  args: { runId: Id<"generationRuns"> }
+): Promise<StopGenerationRunResult> {
+  const run = await ctx.db.get(args.runId)
+  if (!run || run.chatId !== owner.chat._id) {
+    throw new Error("Generation run not found for chat")
+  }
+
+  // Idempotent second Stop / lost race against completion or failure: the
+  // first committed terminal wins; return its canonical result.
+  if (isTerminalGenerationRunStatus(run.status)) {
+    return {
+      outcome: "already-terminal",
+      status: run.status,
+      terminalReason: run.terminalReason,
+    }
+  }
+
+  // A run that lost the chat's status slot is already terminal or is an
+  // awaiting_approval run the next prepare's deny-pending pass closes —
+  // never stop the newer owner (§9 step 5).
+  if (owner.chat.statusRunId !== run._id) {
+    return {
+      outcome: "not-current",
+      status: run.status,
+      terminalReason: run.terminalReason,
+    }
+  }
+
+  const now = nowMs()
+  const reason = "stopped by user"
+  const resolved = await gatherAssistantMessageFacts(ctx, run, undefined)
+  const verdict = resolveGenerationRunTransition(
+    { runStatus: run.status, message: resolved?.facts ?? null },
+    { kind: "stop", reason }
+  )
+  if (verdict.kind !== "transition") {
+    return {
+      outcome: "already-terminal",
+      status: run.status,
+      terminalReason: run.terminalReason,
+    }
+  }
+
+  // Lifecycle apply: message half (partial content preserved / stub policy),
+  // run terminal fields (user_stop + grant revocation + lease shed), and the
+  // owner-guarded chat projection clear — one shared path.
+  await applyLifecycleVerdict(ctx, run, verdict, resolved, now)
+  await ctx.db.patch(run._id, {
+    stopRequestedAt: now,
+    stopRequestedBy: owner.user._id,
+  })
+
+  // Deny this run's pending approvals; settle its active tool records
+  // without erasing completed evidence (§9 steps 10–11).
+  const pendingApprovals = await ctx.db
+    .query("toolApprovalRequests")
+    .withIndex("by_run_status", (q) =>
+      q.eq("runId", run._id).eq("status", "pending")
+    )
+    .collect()
+  for (const approval of pendingApprovals) {
+    await ctx.db.patch(approval._id, {
+      status: "denied",
+      resolvedAt: now,
+      resolvedByUserId: owner.user._id,
+      reason,
+    })
+  }
+  const invocations = await ctx.db
+    .query("toolInvocations")
+    .withIndex("by_run", (q) => q.eq("runId", run._id))
+    .collect()
+  for (const invocation of invocations) {
+    if (terminalToolInvocationStatuses.has(invocation.status)) continue
+    await ctx.db.patch(invocation._id, {
+      status: invocation.status === "pending_approval" ? "denied" : "failed",
+      error: reason,
+      completedAt: now,
+      updatedAt: now,
+    })
+  }
+
+  console.log(
+    JSON.stringify({
+      _tag: "run_stop_won",
+      runId: run._id,
+      chatId: run.chatId,
+      fromStatus: run.status,
+    })
+  )
+
+  return { outcome: "stopped", status: "aborted", terminalReason: "user_stop" }
+}
+
+export const stopGenerationRun = mutation({
+  args: { chatId: v.id("chats"), runId: v.id("generationRuns") },
+  handler: async (ctx, args) => {
+    const owner = await requireOwnedChat(ctx, args.chatId)
+    return stopGenerationRunForChat(ctx, owner, { runId: args.runId })
+  },
+})
+
 export const approveToolCall = mutation({
   args: {
     approvalId: v.string(),

@@ -13,6 +13,7 @@ import {
   reapExpiredGenerationRunsPass,
   reapExpiredToolApprovalsPass,
   recordToolInvocationsForChat,
+  stopGenerationRunForChat,
   updateAssistantSnapshotForChat,
 } from "./chatRuntime"
 import {
@@ -3182,6 +3183,151 @@ describe("reapers (gameplan §6, PR 3)", () => {
       fixture.tables.toolApprovalRequests.map((approval) => approval.status)
     ).toEqual(["pending", "pending"])
     expect(fixture.run.status).toBe("awaiting_approval")
+  })
+})
+
+describe("stopGenerationRun (gameplan §9, PR 6)", () => {
+  const NOW = 1700000000000
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function makeStoppableFixture() {
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.chat.statusRunId = fixture.runId
+    fixture.chat.liveRunStatus = "streaming"
+    fixture.chat.liveRunFreshUntil = NOW + 100_000
+    fixture.run.grantDigest = "d".repeat(64)
+    fixture.run.grantExpiresAt = NOW + 400_000
+    fixture.run.heartbeatAt = NOW - 5_000
+    fixture.run.leaseExpiresAt = NOW + 40_000
+    fixture.message.content = "partial answer"
+    fixture.message.parts = [{ type: "text", text: "partial answer" }]
+    return fixture
+  }
+
+  it("stops the exact run: user_stop, audit, content preserved, approvals denied, tools settled", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fixture = makeStoppableFixture()
+    fixture.tables.toolApprovalRequests.push({
+      _id: asId<"toolApprovalRequests">("approval_request_1"),
+      _creationTime: 1,
+      chatId: fixture.chatId,
+      runId: fixture.runId,
+      assistantMessageId: fixture.messageId,
+      userId: fixture.userId,
+      toolCallId: "call_1",
+      toolName: "send_email",
+      source: "mcp",
+      riskClass: "destructive",
+      approvalId: "approval_1",
+      status: "pending",
+      createdAt: 1,
+      expiresAt: NOW + 1000,
+    })
+    fixture.tables.toolInvocations.push(
+      {
+        _id: asId<"toolInvocations">("tool_invocation_1"),
+        _creationTime: 1,
+        runId: fixture.runId,
+        chatId: fixture.chatId,
+        messageId: fixture.messageId,
+        toolCallId: "call_1",
+        toolName: "send_email",
+        source: "mcp",
+        status: "pending_approval",
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      {
+        _id: asId<"toolInvocations">("tool_invocation_2"),
+        _creationTime: 1,
+        runId: fixture.runId,
+        chatId: fixture.chatId,
+        messageId: fixture.messageId,
+        toolCallId: "call_2",
+        toolName: "web_search",
+        source: "builtin",
+        status: "completed",
+        createdAt: 1,
+        updatedAt: 1,
+      }
+    )
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    const result = await stopGenerationRunForChat(
+      ctx,
+      { user: fixture.user, chat: fixture.chat },
+      { runId: fixture.runId }
+    )
+
+    expect(result).toEqual({
+      outcome: "stopped",
+      status: "aborted",
+      terminalReason: "user_stop",
+    })
+    expect(fixture.run).toMatchObject({
+      status: "aborted",
+      terminalReason: "user_stop",
+      stopRequestedAt: NOW,
+      stopRequestedBy: fixture.userId,
+      grantDigest: undefined,
+      leaseExpiresAt: undefined,
+    })
+    expect(fixture.message.status).toBe("aborted")
+    expect(fixture.message.content).toBe("partial answer")
+    expect(fixture.tables.toolApprovalRequests[0]).toMatchObject({
+      status: "denied",
+      resolvedByUserId: fixture.userId,
+    })
+    // pending_approval → denied; completed evidence untouched.
+    expect(
+      fixture.tables.toolInvocations.map((invocation) => invocation.status)
+    ).toEqual(["denied", "completed"])
+    expect(fixture.chat.liveRunStatus).toBeUndefined()
+    expect(fixture.chat.liveRunFreshUntil).toBeUndefined()
+  })
+
+  it("is idempotent: the second Stop returns the canonical terminal result", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fixture = makeStoppableFixture()
+    const { ctx } = createMutationCtx(fixture.tables)
+    const owner = { user: fixture.user, chat: fixture.chat }
+
+    await stopGenerationRunForChat(ctx, owner, { runId: fixture.runId })
+    const second = await stopGenerationRunForChat(ctx, owner, {
+      runId: fixture.runId,
+    })
+
+    expect(second).toEqual({
+      outcome: "already-terminal",
+      status: "aborted",
+      terminalReason: "user_stop",
+    })
+  })
+
+  it("returns not-current for a run that lost the chat slot — the newer owner is never touched", async () => {
+    const fixture = makeStoppableFixture()
+    fixture.chat.statusRunId = fixture.otherRunId
+    const newerRun = createGenerationRun({
+      id: "run_2",
+      chatId: fixture.chatId,
+      userId: fixture.userId,
+      assistantMessageId: fixture.otherMessageId,
+    })
+    fixture.tables.generationRuns.push(newerRun)
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    const result = await stopGenerationRunForChat(
+      ctx,
+      { user: fixture.user, chat: fixture.chat },
+      { runId: fixture.runId }
+    )
+
+    expect(result.outcome).toBe("not-current")
+    expect(fixture.run.status).toBe("streaming")
+    expect(newerRun.status).toBe("streaming")
   })
 })
 
