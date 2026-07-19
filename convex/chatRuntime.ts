@@ -1178,6 +1178,15 @@ export async function applyApprovalResponses(
    * `generationRunId`, which a prior continuation already re-pointed.
    */
   pausedRunId: Id<"generationRuns"> | null
+  /**
+   * True when THIS transaction's `approvals-resolved` close transitioned the
+   * paused run — i.e. the pause was still live (`awaiting_approval`) when
+   * this prepare began. False means the pause was already settled by an
+   * earlier writer (a Stop that denied the approvals, a supersession, a
+   * reap): the continuation branch must CONFLICT rather than resurrect a
+   * settled run (gameplan §13 race #16).
+   */
+  pausedRunWasLive: boolean
 } | null> {
   if (responses.length === 0) return null
 
@@ -1254,6 +1263,7 @@ export async function applyApprovalResponses(
     }
   }
 
+  let pausedRunWasLive = false
   for (const [runId, runDecision] of runDecisions) {
     const run = await ctx.db.get(runId)
     if (!run) continue
@@ -1267,6 +1277,7 @@ export async function applyApprovalResponses(
       { kind: "approvals-resolved", anyDenied: runDecision.denied }
     )
     if (verdict.kind === "ignore") continue
+    if (runId === pausedRunId) pausedRunWasLive = true
     await ctx.db.patch(runId, {
       status: verdict.run.status,
       completedAt: verdict.run.settle ? now : undefined,
@@ -1280,7 +1291,9 @@ export async function applyApprovalResponses(
     })
   }
 
-  return updatedMessage ? { message: updatedMessage, pausedRunId } : null
+  return updatedMessage
+    ? { message: updatedMessage, pausedRunId, pausedRunWasLive }
+    : null
 }
 
 type GenerationApprovalResponse = {
@@ -1443,12 +1456,60 @@ export async function prepareGenerationForChat(
               _tag: "run_continuation_conflict",
               chatId: args.chatId,
               pausedRunId,
+              reason: "already-dispatched",
               winnerRunId: pausedRun.continuationRunId,
             })
           )
           throw new ConvexError({
             code: "approval_continuation_conflict",
             message: "Approval continuation already dispatched",
+          })
+        }
+        // A continuation is only legal against a pause that was still LIVE
+        // when this prepare began (gameplan §9/§13 race #16 — "no approval
+        // can resurrect a stopped run"). `pausedRunWasLive` is stamped by
+        // applyApprovalResponses above: its approvals-resolved close
+        // transitioned the pause in THIS transaction. False means an earlier
+        // writer (Stop denying the approvals, supersession, reap) already
+        // settled it — a late auto-send POST must conflict, not create a new
+        // streaming run that re-claims the chat slot, repaints the settled
+        // assistant message, and re-approves invocations the Stop denied.
+        // The ConvexError rolls back this whole transaction — approval
+        // repaints included.
+        if (!continuation?.pausedRunWasLive) {
+          console.log(
+            JSON.stringify({
+              _tag: "run_continuation_conflict",
+              chatId: args.chatId,
+              pausedRunId,
+              reason: "pause-settled",
+              pausedRunStatus: pausedRun.status,
+            })
+          )
+          throw new ConvexError({
+            code: "approval_continuation_conflict",
+            message: "Approval pause already settled",
+          })
+        }
+        // Belt-and-suspenders slot check: a pause that lost the chat's status
+        // slot to a newer run must not let its continuation's supersede sweep
+        // abort that healthy run mid-stream.
+        if (
+          owner.chat.statusRunId !== undefined &&
+          owner.chat.statusRunId !== pausedRunId
+        ) {
+          console.log(
+            JSON.stringify({
+              _tag: "run_continuation_conflict",
+              chatId: args.chatId,
+              pausedRunId,
+              reason: "slot-moved",
+              slotRunId: owner.chat.statusRunId,
+            })
+          )
+          throw new ConvexError({
+            code: "approval_continuation_conflict",
+            message: "Approval pause no longer owns the chat's active run",
           })
         }
         await ctx.db.patch(pausedRunId, { continuationRunId: runId })

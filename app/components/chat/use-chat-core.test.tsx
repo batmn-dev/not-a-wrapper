@@ -631,4 +631,46 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
 
     expect(chatCoreMocks.convexMutation).not.toHaveBeenCalled()
   })
+
+  it("waits through the PREVIOUS turn's terminal run instead of disarming on it (chat with history)", async () => {
+    // Round-3 review G2: at arm time, a chat with history holds the previous
+    // completed run in selectedRun. Disarming on that terminal made every
+    // projection-gap Stop after the first turn a silent no-op — the worker
+    // kept streaming. The intent must wait for a NEW run id.
+    const previousTerminalRun = {
+      runId: "run_previous",
+      assistantMessageId: "msg_previous",
+      status: "completed",
+      activeToolNames: [],
+      pendingApproval: null,
+    }
+    chatCoreMocks.selectedRun = previousTerminalRun
+    mount()
+    await act(async () => {
+      await coreRef.current?.stop()
+    })
+    expect(chatCoreMocks.convexMutation).not.toHaveBeenCalled()
+
+    // The previous run's projection is unchanged: still armed, still quiet.
+    render()
+    await flushAsyncWork()
+    expect(chatCoreMocks.convexMutation).not.toHaveBeenCalled()
+
+    // The stopped dispatch's own run arrives — the intent fires at ITS id.
+    chatCoreMocks.selectedRun = {
+      runId: "run_new_dispatch",
+      assistantMessageId: "msg_new",
+      status: "streaming",
+      activeToolNames: [],
+      pendingApproval: null,
+    }
+    render()
+    await flushAsyncWork()
+
+    expect(chatCoreMocks.convexMutation).toHaveBeenCalledTimes(1)
+    expect(chatCoreMocks.convexMutation).toHaveBeenCalledWith({
+      chatId: "chat_stopgap",
+      runId: "run_new_dispatch",
+    })
+  })
 })

@@ -1097,11 +1097,14 @@ export function createConvexDurableTurn(args: {
         workerWrite("heartbeatGenerationRun", {}),
         "writing heartbeat"
       )
-      heartbeatTransportFailures = 0
       const result = (response as { result?: GenerationRunHeartbeatResult })
         ?.result
       if (heartbeatStopped) return
       if (result?.kind === "renewed") {
+        // Reset only on a RECOGNIZED body: consecutive unparseable responses
+        // (thrown below) must accumulate against the transport retry budget,
+        // not reset it each round-trip.
+        heartbeatTransportFailures = 0
         lastConfirmedLeaseExpiresAt = result.leaseExpiresAt
         scheduleHeartbeat(HEARTBEAT_INTERVAL_MS)
         return
@@ -1116,17 +1119,22 @@ export function createConvexDurableTurn(args: {
         stopHeartbeat()
         return
       }
-      // `lost` (or an unrecognizable body, which no healthy deploy produces).
-      warnDurable("run_heartbeat_rejected", {
-        requestId,
-        chatId,
-        runId,
-        outcome: "lost",
-        reason: result?.kind === "lost" ? result.reason : "unrecognized",
-      })
-      loseExecution(
-        result?.kind === "lost" ? result.reason : "unrecognized heartbeat body"
-      )
+      if (result?.kind === "lost") {
+        warnDurable("run_heartbeat_rejected", {
+          requestId,
+          chatId,
+          runId,
+          outcome: "lost",
+          reason: result.reason,
+        })
+        loseExecution(result.reason)
+        return
+      }
+      // Unrecognizable 200 body: a proxy-truncated response or a mid-deploy
+      // shape drift is TRANSPORT trouble, not an authoritative verdict —
+      // only an explicit `lost` may abort a healthy generation. Falls through
+      // to the bounded transport-retry budget below.
+      throw new Error("unrecognized heartbeat response body")
     } catch (error) {
       // A grant rejection is an explicit settlement signal, not transport.
       if (

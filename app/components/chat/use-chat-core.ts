@@ -672,10 +672,18 @@ export function useChatCore({
   // consumption is detached from req.signal, so cutting the local transport
   // alone leaves the worker streaming. The intent is deferred — the effect
   // below fires it at the EXACT run id the projection delivers (Stop stays
-  // run-scoped, never "the active run").
-  const [deferredStopForChatId, setDeferredStopForChatId] = useState<
-    string | null
-  >(null)
+  // run-scoped, never "the active run"). `priorRunId` pins the run the
+  // projection showed AT ARM TIME: in any chat with history that is the
+  // PREVIOUS turn's terminal run, and the intent must keep waiting through
+  // it — disarming on it was the round-3 review's silent-no-op bug.
+  const [deferredStop, setDeferredStop] = useState<{
+    chatId: string
+    priorRunId: string | null
+  } | null>(null)
+  const selectedRunRef = useRef(selectedRun)
+  useLayoutEffect(() => {
+    selectedRunRef.current = selectedRun
+  })
 
   const handleStop = useCallback(async () => {
     void stopRef.current()
@@ -686,23 +694,30 @@ export function useChatCore({
     if (!targetRunId) {
       // The run exists server-side (prepare commits before the first token)
       // but its projection hasn't arrived — defer instead of dropping.
-      setDeferredStopForChatId(chatId)
+      setDeferredStop({
+        chatId,
+        priorRunId: selectedRunRef.current?.runId ?? null,
+      })
       return
     }
     await fireDurableStop(targetRunId)
   }, [chatId, fireDurableStop])
 
   useEffect(() => {
-    if (deferredStopForChatId === null) return
-    if (deferredStopForChatId !== chatId) {
+    if (deferredStop === null) return
+    if (deferredStop.chatId !== chatId) {
       // Navigated away — the intent was for another chat's projection.
-      setDeferredStopForChatId(null)
+      setDeferredStop(null)
       return
     }
     if (selectedRun === null) return
-    setDeferredStopForChatId(null)
-    // A terminal projection means nothing is left to stop; anything active —
-    // queued/running/streaming/awaiting_approval — takes the deferred Stop.
+    // Still the pre-dispatch run (typically the previous turn's terminal):
+    // the stopped dispatch's own projection hasn't landed — keep waiting.
+    if (selectedRun.runId === deferredStop.priorRunId) return
+    setDeferredStop(null)
+    // A NEW run id arriving already terminal means nothing is left to stop;
+    // anything active — queued/running/streaming/awaiting_approval — takes
+    // the deferred Stop.
     if (
       selectedRun.status === "completed" ||
       selectedRun.status === "aborted" ||
@@ -711,15 +726,15 @@ export function useChatCore({
       return
     }
     void fireDurableStop(selectedRun.runId)
-  }, [deferredStopForChatId, chatId, selectedRun, fireDurableStop])
+  }, [deferredStop, chatId, selectedRun, fireDurableStop])
 
-  // The intent cannot wait forever: if no projection ever arrives (the
+  // The intent cannot wait forever: if no new projection ever arrives (the
   // dispatch failed before prepare), disarm quietly.
   useEffect(() => {
-    if (deferredStopForChatId === null) return
-    const timer = setTimeout(() => setDeferredStopForChatId(null), 30_000)
+    if (deferredStop === null) return
+    const timer = setTimeout(() => setDeferredStop(null), 30_000)
     return () => clearTimeout(timer)
-  }, [deferredStopForChatId])
+  }, [deferredStop])
 
   // Generation guard: prevent stuck "streaming" UI when a stream drops silently
   useEffect(() => {

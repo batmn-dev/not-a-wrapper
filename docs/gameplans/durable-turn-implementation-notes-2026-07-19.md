@@ -145,6 +145,57 @@ losing timer, and `fail()` writes first (bounded ≤10 s) with the heartbeat
 stopped in `finally` — the lease outlives the write, so a reaper tick cannot
 relabel a provider failure `lease_expired`.
 
+## Third review round (2026-07-19, whole-branch black-box test)
+
+An independent whole-branch test pass (live browser + Convex state + three
+adversarial probe reviewers) confirmed the durable core and found two gating
+defects in this branch's own Stop/continuation orchestration — both fixed:
+
+1. **A late approval continuation could resurrect a user-stopped run.** The
+   continuation branch of `prepareGenerationForChat` enforced only the
+   `continuationRunId` idempotency half. It now also requires the pause to
+   have been LIVE when the prepare began — `applyApprovalResponses` stamps
+   `pausedRunWasLive` when its own `approvals-resolved` close transitioned
+   the run in this transaction; a pause settled earlier (Stop, supersession,
+   reap) throws the structured continuation conflict, rolling back the whole
+   transaction (approval repaints included). A belt-and-suspenders slot
+   check also conflicts a pause that no longer owns `chat.statusRunId`, so
+   a delayed continuation can never supersede-sweep a healthy newer run.
+2. **The deferred Stop disarmed against the PREVIOUS turn's terminal run.**
+   In any chat with history, `selectedRun` at arm time is the prior turn's
+   completed run; the disarm-on-terminal branch fired immediately and the
+   worker streamed on. The intent now pins the arm-time run id and waits
+   through it — it fires (or disarms) only when a NEW run id arrives.
+
+Round-3 should-fixes also landed: the "stopping" presentation cuts only a
+stream whose identity matches the stopped run (a new turn dispatched during
+the Stop mutation is no longer demoted to snapshot cadence); the provider
+deadline is anchored at turn construction so a slow prepare (MCP connects,
+attachments) erodes the provider window, not the settlement reserve (with a
+15 s floor); an unparseable heartbeat 200 body is transport trouble with the
+bounded retry budget — only an explicit `lost` verdict aborts a healthy
+generation (and the failure counter resets only on recognized bodies); and
+the non-owner selected-conversation read applies the same
+`awaiting_approval` message filter as the public share read.
+
+**Round-3 items deferred, deliberately (recorded, not forgotten):**
+
+- A pause whose approvals are all resolved but whose continuation never
+  dispatched (tab crash before auto-send) has no reaper rule: no lease, no
+  pending approval. Bounded harm — the slot transfers on the next send, and
+  the composer now offers Stop on the stale pause — but "everything
+  converges" needs a dedicated resolved-without-continuation reaper pass.
+- `supersededByRunId` is schema+gameplan vocabulary with no writer.
+- Tool-invocation writes rely on the terminal-run guard alone (no per-tool
+  monotonic sequence); the dangerous windows close with the continuation
+  conflict above.
+- One unreproduced cold-tab anomaly (a tab mid-Stop at load rendered the
+  next run only at terminal, 1 of 3 trials) — watch cold-mount adoption
+  timing.
+- `onFinish` clears armed continuation ids on abort finishes too: correct
+  when the Stop settled the pause (nothing left to continue), and a
+  restored-then-conflicted redispatch would be noise.
+
 **Reviewed and accepted as-is (not defects, or deliberate polish gaps):**
 
 - A worker-write timeout does not cancel the underlying fetch, so a late

@@ -204,8 +204,11 @@ export function resolveGenerationPresentation(
       stopTargetRunId: pendingStopRunId,
       caretEligible: false,
       actionsSuppressed: true,
-      // The local transport is cut promptly while the mutation settles.
-      shouldStopLocalStream: localLive,
+      // Cut only a stream KNOWN to belong to the run being stopped: a new
+      // turn dispatched while the Stop mutation is in flight is a different
+      // stream and must not be demoted to snapshot-cadence rendering. The
+      // stopping tab's own stream was already cut directly by handleStop.
+      shouldStopLocalStream: localLive && localMatchesRun,
       terminalReason: undefined,
     }
   }

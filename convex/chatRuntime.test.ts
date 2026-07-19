@@ -3245,6 +3245,60 @@ describe("approval-continuation idempotency (gameplan §10, PR 8)", () => {
     ).rejects.toThrow("Approval continuation already dispatched")
     expect(pausedRun?.continuationRunId).toBe(first.runId)
   })
+
+  it("a late continuation cannot resurrect a Stop-settled pause (race #16)", async () => {
+    // The user approved (the click resolved the approval row), then Stopped
+    // before the auto-send POST landed: the Stop aborted the pause. The late
+    // continuation prepare must CONFLICT — not create a new streaming run
+    // linked to the aborted pause, re-claim the chat slot, and repaint the
+    // Stop-settled assistant message back to streaming.
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { fixture, chat, tables } = makePausedWorld()
+    fixture.run.status = "aborted"
+    fixture.run.terminalReason = "user_stop"
+    for (const approval of fixture.tables.toolApprovalRequests ?? []) {
+      approval.status = "approved"
+      approval.resolvedAt = 1699999999000
+    }
+    const { ctx, tables: world } = createMutationCtx(tables)
+    const runCountBefore = world.generationRuns.length
+
+    await expect(
+      prepareGenerationForChat(ctx, {
+        chatId: chat._id,
+        requestId: "request_late_continuation",
+        model: "gpt-5",
+        provider: "openai",
+        approvalResponses: fixture.responses,
+      })
+    ).rejects.toThrow("Approval pause already settled")
+
+    // The pause keeps its Stop terminal and never records a continuation.
+    // (Real Convex also rolls back this transaction's interim writes; the
+    // fake ctx only proves the typed conflict fired before any commit.)
+    expect(fixture.run.status).toBe("aborted")
+    expect(fixture.run.continuationRunId).toBeUndefined()
+    expect(world.generationRuns.length).toBeGreaterThanOrEqual(runCountBefore)
+  })
+
+  it("a continuation whose pause lost the chat slot to a newer run conflicts (no supersede of the healthy run)", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { fixture, chat, tables } = makePausedWorld()
+    // A newer, healthy run owns the chat's status slot.
+    chat.statusRunId = asId<"generationRuns">("run_newer")
+
+    const { ctx } = createMutationCtx(tables)
+
+    await expect(
+      prepareGenerationForChat(ctx, {
+        chatId: chat._id,
+        requestId: "request_displaced_continuation",
+        model: "gpt-5",
+        provider: "openai",
+        approvalResponses: fixture.responses,
+      })
+    ).rejects.toThrow("Approval pause no longer owns the chat's active run")
+  })
 })
 
 describe("pending-only approval resolution (gameplan §10, PR 8)", () => {

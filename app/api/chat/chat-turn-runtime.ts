@@ -308,6 +308,12 @@ export function createChatTurnRuntime(args: {
 }): ChatTurnRuntime {
   const { input } = args
   const deps = resolveDeps(args.deps)
+  // The budget's deadlines are measured from TURN start, but the platform's
+  // route clock started at request receipt — construction happens right
+  // after request parsing, so anchoring here charges prepare() (MCP
+  // connections, attachment fetches) against the provider deadline instead
+  // of silently eroding the settlement reserve.
+  const turnStartedAtMs = Date.now()
   const {
     messages,
     chatId,
@@ -886,9 +892,19 @@ export function createChatTurnRuntime(args: {
     // provider deadline (the settlement reserve must fit inside the route
     // budget — gameplan §0). Client-disconnect telemetry below stays keyed to
     // the request signal alone and never stops the stream.
+    // Remaining provider budget = deadline minus what prepare() already
+    // consumed (anchored at construction — see turnStartedAtMs). The floor
+    // keeps a pathologically slow prepare from instant-aborting the stream;
+    // past it the reserve is already eroded and settlement leans on the
+    // degraded-receipt + reaper backstops.
+    const providerDeadlineRemainingMs = Math.max(
+      15_000,
+      CHAT_TURN_EXECUTION_BUDGET.providerDeadlineMs -
+        (Date.now() - turnStartedAtMs)
+    )
     const executionSignal = AbortSignal.any([
       ...durableTurn.providerAbortSignals(signal),
-      AbortSignal.timeout(CHAT_TURN_EXECUTION_BUDGET.providerDeadlineMs),
+      AbortSignal.timeout(providerDeadlineRemainingMs),
     ])
 
     const streamStartMs = Date.now()

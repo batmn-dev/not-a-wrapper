@@ -210,9 +210,15 @@ export async function getSelectedConversationHandler(
   const isOwner = viewer !== null && chat.userId === viewer._id
   if (!isOwner) {
     // Message docs carry the run linkage too — a public viewer must not read
-    // run ids out of `selectedMessages` after `selectedRun` was nulled.
+    // run ids out of `selectedMessages` after `selectedRun` was nulled. The
+    // awaiting_approval filter matches the public share-page read: a pending
+    // approval's tool name/args are the owner's business until resolved.
     return {
-      selectedMessages: stripRunLinkageForViewer(selectedMessages),
+      selectedMessages: stripRunLinkageForViewer(
+        selectedMessages.filter(
+          (message) => message.status !== "awaiting_approval"
+        )
+      ),
       selectedRun: null,
     }
   }
