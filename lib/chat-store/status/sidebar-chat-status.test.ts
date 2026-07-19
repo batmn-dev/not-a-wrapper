@@ -84,6 +84,47 @@ describe("deriveChatRowStatus", () => {
     expect(deriveChatRowStatus({}, null)).toBe("idle")
   })
 
+  it("never renders a spinner past the freshness ceiling (gameplan §11)", () => {
+    const NOW = 1_000_000
+    const live = {
+      live_run_status: "streaming" as const,
+      live_run_fresh_until: NOW + 1,
+    }
+    expect(deriveChatRowStatus(live, null, NOW)).toBe("streaming")
+    expect(
+      deriveChatRowStatus(
+        { ...live, live_run_fresh_until: NOW },
+        null,
+        NOW
+      )
+    ).toBe("idle")
+    expect(
+      deriveChatRowStatus(
+        { live_run_status: "awaiting", live_run_fresh_until: NOW - 1 },
+        null,
+        NOW
+      )
+    ).toBe("idle")
+    // An expired live phase still lets the unread/error mirror through.
+    expect(
+      deriveChatRowStatus(
+        {
+          live_run_status: "streaming",
+          live_run_fresh_until: NOW - 1,
+          last_run_ended_at: 10,
+          last_run_status: "failed",
+          last_read_at: 0,
+        },
+        null,
+        NOW
+      )
+    ).toBe("error")
+    // A deadline-less legacy row keeps its projected phase (reaper bounds it).
+    expect(
+      deriveChatRowStatus({ live_run_status: "streaming" }, null, NOW)
+    ).toBe("streaming")
+  })
+
   it("lets a non-idle override win over the backend (local error beats projected streaming)", () => {
     // Terminal failure writes are best-effort and can lag, so the tab that
     // errored is authoritative for its own row.
