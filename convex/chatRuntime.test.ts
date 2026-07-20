@@ -3110,31 +3110,102 @@ describe("reapers (gameplan §6, PR 3)", () => {
     fixture.run.status = "awaiting_approval"
     fixture.message.content = "content tail"
     fixture.message.parts = [{ type: "text", text: "content tail" }]
-    fixture.tables.toolApprovalRequests.push({
-      _id: asId<"toolApprovalRequests">("approval_request_1"),
-      _creationTime: 1,
-      chatId: fixture.chatId,
-      runId: fixture.runId,
-      assistantMessageId: fixture.messageId,
-      userId: fixture.userId,
-      toolCallId: "call_1",
-      toolName: "send_email",
-      source: "mcp",
-      riskClass: "destructive",
-      approvalId: "approval_1",
-      status: "pending",
-      createdAt: 1,
-      expiresAt: NOW - 1,
-    })
+    fixture.tables.toolApprovalRequests.push(
+      {
+        _id: asId<"toolApprovalRequests">("approval_request_1"),
+        _creationTime: 1,
+        chatId: fixture.chatId,
+        runId: fixture.runId,
+        assistantMessageId: fixture.messageId,
+        userId: fixture.userId,
+        toolCallId: "call_1",
+        toolName: "send_email",
+        source: "mcp",
+        riskClass: "destructive",
+        approvalId: "approval_1",
+        status: "pending",
+        createdAt: 1,
+        expiresAt: NOW - 1,
+      },
+      {
+        // This approval is still fresh, but the triggering expiry makes its
+        // shared run terminal, so it must settle in the same transaction.
+        _id: asId<"toolApprovalRequests">("approval_request_2"),
+        _creationTime: 2,
+        chatId: fixture.chatId,
+        runId: fixture.runId,
+        assistantMessageId: fixture.messageId,
+        userId: fixture.userId,
+        toolCallId: "call_2",
+        toolName: "write_file",
+        source: "mcp",
+        riskClass: "destructive",
+        approvalId: "approval_2",
+        status: "pending",
+        createdAt: 2,
+        expiresAt: NOW + 60_000,
+      }
+    )
+    fixture.tables.toolInvocations.push(
+      {
+        _id: asId<"toolInvocations">("tool_invocation_1"),
+        _creationTime: 1,
+        runId: fixture.runId,
+        chatId: fixture.chatId,
+        messageId: fixture.messageId,
+        toolCallId: "call_1",
+        toolName: "send_email",
+        source: "mcp",
+        status: "pending_approval",
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      {
+        _id: asId<"toolInvocations">("tool_invocation_2"),
+        _creationTime: 2,
+        runId: fixture.runId,
+        chatId: fixture.chatId,
+        messageId: fixture.messageId,
+        toolCallId: "call_2",
+        toolName: "write_file",
+        source: "mcp",
+        status: "called",
+        createdAt: 2,
+        updatedAt: 2,
+      }
+    )
     const { ctx } = createMutationCtx(fixture.tables)
 
     const result = await reapExpiredToolApprovalsPass(ctx)
 
     expect(result).toEqual({ expired: 1 })
-    expect(fixture.tables.toolApprovalRequests[0]).toMatchObject({
-      status: "expired",
-      resolvedAt: NOW,
-    })
+    expect(
+      fixture.tables.toolApprovalRequests.map((approval) => ({
+        status: approval.status,
+        resolvedAt: approval.resolvedAt,
+      }))
+    ).toEqual([
+      { status: "expired", resolvedAt: NOW },
+      { status: "expired", resolvedAt: NOW },
+    ])
+    expect(
+      fixture.tables.toolInvocations.map((invocation) => ({
+        status: invocation.status,
+        error: invocation.error,
+        completedAt: invocation.completedAt,
+      }))
+    ).toEqual([
+      {
+        status: "failed",
+        error: "tool approval expired",
+        completedAt: NOW,
+      },
+      {
+        status: "failed",
+        error: "tool approval expired",
+        completedAt: NOW,
+      },
+    ])
     expect(fixture.run).toMatchObject({
       status: "failed",
       terminalReason: "approval_expired",
@@ -3431,8 +3502,39 @@ describe("pending-only approval resolution (gameplan §10, PR 8)", () => {
     ["after expiry but before reaping", EXPIRY + 1],
   ])("expires atomically %s", async (_label, now) => {
     vi.spyOn(Date, "now").mockReturnValue(now)
-    const { ctx, approval, invocation, run, message, chat } =
+    const { ctx, tables, approval, invocation, run, message, chat } =
       makeApprovalWorld()
+    const siblingApproval: Doc<"toolApprovalRequests"> = {
+      _id: asId<"toolApprovalRequests">("approval_request_2"),
+      _creationTime: 2,
+      chatId: approval.chatId,
+      runId: approval.runId,
+      assistantMessageId: approval.assistantMessageId,
+      userId: approval.userId,
+      toolCallId: "call_2",
+      toolName: "write_file",
+      source: "mcp",
+      riskClass: "destructive",
+      approvalId: "approval_2",
+      status: "pending",
+      createdAt: 2,
+      expiresAt: EXPIRY + 60_000,
+    }
+    const siblingInvocation: Doc<"toolInvocations"> = {
+      _id: asId<"toolInvocations">("tool_invocation_2"),
+      _creationTime: 2,
+      runId: approval.runId,
+      chatId: approval.chatId,
+      messageId: approval.assistantMessageId,
+      toolCallId: "call_2",
+      toolName: "write_file",
+      source: "mcp",
+      status: "called",
+      createdAt: 2,
+      updatedAt: 2,
+    }
+    tables.toolApprovalRequests.push(siblingApproval)
+    tables.toolInvocations.push(siblingInvocation)
 
     const result = await resolveToolCallDecision(
       ctx,
@@ -3443,6 +3545,15 @@ describe("pending-only approval resolution (gameplan §10, PR 8)", () => {
     expect(result).toMatchObject({ status: "expired", alreadyResolved: true })
     expect(approval).toMatchObject({ status: "expired", resolvedAt: now })
     expect(invocation.status).toBe("failed")
+    expect(siblingApproval).toMatchObject({
+      status: "expired",
+      resolvedAt: now,
+    })
+    expect(siblingInvocation).toMatchObject({
+      status: "failed",
+      error: "tool approval expired",
+      completedAt: now,
+    })
     expect(run).toMatchObject({
       status: "failed",
       terminalReason: "approval_expired",

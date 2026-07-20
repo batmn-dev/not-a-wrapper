@@ -598,10 +598,9 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
 
   it("defers a Stop clicked before the run projection arrives, then fires at the exact run id", async () => {
     mount()
-    // Stop lands in the projection gap: local transport is cut, but no run id
-    // is known yet — with durable turns detached from req.signal, dropping
-    // the intent here would leave the worker streaming (the review's silent
-    // no-op). The intent must fire once the projection delivers the run.
+    // Stop lands before either response acceptance or the run projection. The
+    // local transport must stay attached until one of those proves the durable
+    // handoff; the intent then fires once the projection delivers the run.
     await act(async () => {
       await coreRef.current?.stop()
     })
@@ -621,6 +620,34 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
     expect(chatCoreMocks.convexMutation).toHaveBeenCalledTimes(1)
     expect(chatCoreMocks.convexMutation).toHaveBeenCalledWith({
       runId: "run_live",
+    })
+    expect(chatCoreMocks.stop).toHaveBeenCalledTimes(1)
+  })
+
+  it("cuts an accepted local stream while deferring the exact durable run stop", async () => {
+    chatCoreMocks.useChatState.status = "streaming"
+    mount()
+
+    await act(async () => {
+      await coreRef.current?.stop()
+    })
+
+    expect(chatCoreMocks.stop).toHaveBeenCalledTimes(1)
+    expect(chatCoreMocks.convexMutation).not.toHaveBeenCalled()
+
+    chatCoreMocks.selectedRun = {
+      runId: "run_accepted",
+      assistantMessageId: "msg_accepted",
+      status: "streaming",
+      activeToolNames: [],
+      pendingApproval: null,
+    }
+    render()
+    await flushAsyncWork()
+
+    expect(chatCoreMocks.convexMutation).toHaveBeenCalledTimes(1)
+    expect(chatCoreMocks.convexMutation).toHaveBeenCalledWith({
+      runId: "run_accepted",
     })
     expect(chatCoreMocks.stop).toHaveBeenCalledTimes(1)
   })

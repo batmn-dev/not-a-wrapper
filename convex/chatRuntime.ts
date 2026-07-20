@@ -2176,6 +2176,12 @@ async function expireToolApprovalForChat(
   )
   if (verdict.kind === "transition") {
     await applyLifecycleVerdict(ctx, run, verdict, resolved, now)
+    await settleAuxiliaryRecordsForTerminalRun(
+      ctx,
+      run,
+      "tool approval expired",
+      now
+    )
   }
   console.log(
     JSON.stringify({
@@ -2391,14 +2397,15 @@ export async function recordToolInvocationsForChat(
 const REAPER_BATCH_LIMIT = 25
 
 /**
- * Settle the auxiliary records a reaped run leaves behind: pending approvals
- * expire; non-terminal tool invocations fail. Partial assistant content is
- * preserved by the lifecycle's terminal message policy — never erased here.
+ * Settle the auxiliary records a terminal run leaves behind: pending
+ * approvals expire; non-terminal tool invocations fail. Partial assistant
+ * content is preserved by the lifecycle's terminal message policy — never
+ * erased here.
  * The per-run collects are unbounded queries over naturally bounded sets:
  * both tables are keyed by runId, and one run accrues at most a handful of
  * approvals and step-count-bounded invocations (maxSteps caps the stream).
  */
-async function settleAuxiliaryRecordsForReapedRun(
+async function settleAuxiliaryRecordsForTerminalRun(
   ctx: MutationCtx,
   run: Doc<"generationRuns">,
   error: string,
@@ -2466,7 +2473,7 @@ export async function reapExpiredGenerationRunsPass(
         )
         if (verdict.kind !== "transition") continue
         await applyLifecycleVerdict(ctx, run, verdict, resolved, now)
-        await settleAuxiliaryRecordsForReapedRun(
+        await settleAuxiliaryRecordsForTerminalRun(
           ctx,
           run,
           "generation worker lease expired",

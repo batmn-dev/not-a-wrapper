@@ -24,14 +24,14 @@ describe("favicon policy", () => {
     const files = SOURCE_ROOTS.flatMap(productionSourceFiles)
     const directGoogleCallers = files.filter(
       (file) =>
-        file !== ALLOWED_GOOGLE_SOURCE &&
+        file.replace(/\\/g, "/") !== ALLOWED_GOOGLE_SOURCE &&
         readFileSync(path.join(ROOT, file), "utf8").includes(
           "google.com/s2/favicons"
         )
     )
     const directProxyCallers = files.filter(
       (file) =>
-        file !== ALLOWED_PROXY_SOURCE &&
+        file.replace(/\\/g, "/") !== ALLOWED_PROXY_SOURCE &&
         readFileSync(path.join(ROOT, file), "utf8").includes("/api/favicon?")
     )
 

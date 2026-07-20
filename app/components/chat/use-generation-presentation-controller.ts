@@ -15,6 +15,7 @@ type DeferredStop = {
   chatId: string
   priorRunId: string | null
   expiresAt: number
+  localStopIssued: boolean
 }
 
 type ControllerState = {
@@ -210,17 +211,26 @@ export function useGenerationPresentationController({
       return
     }
 
+    // `streaming` is the SDK's post-acceptance boundary: the transport has
+    // returned a response and written the first stream update. We can stop the
+    // local reader immediately without risking the pre-response durable
+    // handoff. While still `submitted`, wait for the exact run projection
+    // before cutting the request.
+    const localStopIssued = localStatus === "streaming"
     setState((current) => ({
       ...(current.chatId === chatId ? current : initialControllerState(chatId)),
       deferredStop: {
         chatId,
         priorRunId: selectedRun?.runId ?? null,
         expiresAt: Date.now() + DEFERRED_STOP_TIMEOUT_MS,
+        localStopIssued,
       },
     }))
+    if (localStopIssued) void stopLocal()
   }, [
     chatId,
     fireDurableStop,
+    localStatus,
     presentation.stopTargetRunId,
     selectedRun,
     stopLocal,
@@ -261,10 +271,10 @@ export function useGenerationPresentationController({
       ) {
         firedDeferredStopRef.current = commandKey
         void fireDurableStop(selectedRun.runId).finally(() => {
-          // The request is abortable only after the server projection proves
-          // which explicit run owns it. Cutting earlier can abort the HTTP
-          // handoff before any run exists and strand a client-only row.
-          void stopLocal()
+          // A submitted request is abortable only after the server projection
+          // proves which exact run owns it. A stream that already crossed the
+          // SDK's response-acceptance boundary was stopped at click time.
+          if (!deferredStop.localStopIssued) void stopLocal()
         })
       }
     }

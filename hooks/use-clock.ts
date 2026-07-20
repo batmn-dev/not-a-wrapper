@@ -1,14 +1,13 @@
 import { useMemo, useSyncExternalStore } from "react"
 
-const NO_SUBSCRIBE = () => () => undefined
-
-function createPeriodicClock(intervalMs: number) {
+function createPeriodicClock(intervalMs: number, enabled: boolean) {
   let now = Date.now()
 
   return {
     getSnapshot: () => now,
     getServerSnapshot: () => now,
     subscribe: (onStoreChange: () => void) => {
+      if (!enabled) return () => undefined
       const interval = window.setInterval(() => {
         now = Date.now()
         onStoreChange()
@@ -25,23 +24,30 @@ function createPeriodicClock(intervalMs: number) {
  * timer.
  */
 export function usePeriodicClock(enabled: boolean, intervalMs: number): number {
-  const clock = useMemo(() => createPeriodicClock(intervalMs), [intervalMs])
+  const clock = useMemo(
+    () => createPeriodicClock(intervalMs, enabled),
+    [intervalMs, enabled]
+  )
   return useSyncExternalStore(
-    enabled ? clock.subscribe : NO_SUBSCRIBE,
+    clock.subscribe,
     clock.getSnapshot,
     clock.getServerSnapshot
   )
 }
 
-function createDeadlineStore(deadlineMs: number | null) {
+function createDeadlineStore(deadlineMs: number | null, enabled: boolean) {
   let reached = deadlineMs !== null && Date.now() >= deadlineMs
 
   return {
     getSnapshot: () => reached,
     getServerSnapshot: () => false,
     subscribe: (onStoreChange: () => void) => {
-      if (deadlineMs === null || reached) return () => undefined
-      const remaining = Math.max(0, deadlineMs - Date.now())
+      if (!enabled || deadlineMs === null || reached) return () => undefined
+      const remaining = deadlineMs - Date.now()
+      if (remaining <= 0) {
+        reached = true
+        return () => undefined
+      }
       const timeout = window.setTimeout(() => {
         reached = true
         onStoreChange()
@@ -56,9 +62,12 @@ export function useDeadlineReached(
   deadlineMs: number | null,
   enabled: boolean = true
 ): boolean {
-  const store = useMemo(() => createDeadlineStore(deadlineMs), [deadlineMs])
+  const store = useMemo(
+    () => createDeadlineStore(deadlineMs, enabled),
+    [deadlineMs, enabled]
+  )
   return useSyncExternalStore(
-    enabled ? store.subscribe : NO_SUBSCRIBE,
+    store.subscribe,
     store.getSnapshot,
     store.getServerSnapshot
   )
