@@ -196,6 +196,44 @@ the non-owner selected-conversation read applies the same
   when the Stop settled the pause (nothing left to continue), and a
   restored-then-conflicted redispatch would be noise.
 
+## Fourth review round (2026-07-19, standards + spec)
+
+Fixed:
+
+- **Structural auth for the new surfaces** (CONTEXT.md "Authenticated
+  handler"): `getSelectedConversation` moved onto `readableChatQuery`
+  (auth-free `getSelectedConversationForViewer` core takes the injected
+  chat/viewer), and `stopGenerationRun` moved onto
+  `ownedGenerationRunMutation` — the chat is derived THROUGH the run, so the
+  old hand-written `run.chatId` cross-check (and the client's `chatId` arg)
+  is gone; the mutation takes `runId` alone.
+- **The previous turn's terminal no longer suppresses a new dispatch's
+  presentation** (§8): a terminal projection behind a live NON-matching local
+  dispatch is masked — local-submitted/local-streaming render immediately
+  with Stop (deferred intent when the run id is unknown). A terminal for the
+  local stream's OWN run is never masked (remote-Stop convergence intact).
+- **Approval expiry is transactional**: `resolveToolCallDecision` compares
+  `expiresAt` against the server clock inside the mutation and settles the
+  row `expired` — a decision racing in after expiry can no longer approve
+  expired work regardless of reaper cadence.
+- **Losing approval clicks render the canonical decision fully**: the
+  mutation returns the persisted `reason`, and the client applies it instead
+  of the losing tab's local input.
+
+Refuted (with evidence): the "activated `no-use-effect` rule" cited against
+`use-chat-core.ts`/`sidebar-chat-status.ts` does not exist — the repo's
+eslint config restricts icons, `interface`, inline `ctx.auth`, and raw
+`useQuery` imports only, and neither CONTEXT.md nor AGENTS.md bans effects
+(the same file carries twelve pre-dating effects). No refactor performed.
+
+Accepted deviation: the §16 presentation rollout flag + 15-flow manual gate
+was NOT built. The plan's own settled list ("compatibility machinery stays
+collapsed per the pre-launch disposable-database policy; the browser/E2E
+harness is optional follow-on, never a rollout gate") plus the pre-launch
+posture make a dual presentation path pure risk: the legacy path no longer
+exists to fall back to, and a flag guarding an unlaunched app's only surface
+gates nothing. Revisit if a production rollout needs staged exposure.
+
 **Reviewed and accepted as-is (not defects, or deliberate polish gaps):**
 
 - A worker-write timeout does not cancel the underlying fetch, so a late

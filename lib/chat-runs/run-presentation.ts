@@ -119,18 +119,32 @@ export function resolveGenerationPresentation(
     localStatus,
     isSubmitting,
     localAssistantMessageId,
-    selectedRun,
     pendingStopRunId,
     isConnected,
     now,
   } = inputs
   const skewGraceMs = inputs.skewGraceMs ?? LEASE_SKEW_GRACE_MS
 
+  const rawSelectedRun = inputs.selectedRun
   const localLive = localStatus === "submitted" || localStatus === "streaming"
   const localMatchesRun =
-    selectedRun !== null &&
+    rawSelectedRun !== null &&
     localAssistantMessageId !== null &&
-    selectedRun.assistantMessageId === localAssistantMessageId
+    rawSelectedRun.assistantMessageId === localAssistantMessageId
+
+  // A TERMINAL projection behind a NEW local dispatch is the PREVIOUS turn's
+  // run — presentation-irrelevant to the in-flight submission (gameplan §8:
+  // local submission renders immediately, Stop included). Without masking it,
+  // rule 1 below would win for the whole projection gap in any chat with
+  // history: the composer would show the prior turn's settled state and offer
+  // no Stop while the new dispatch streams. A terminal for OUR OWN stream
+  // (localMatchesRun) is never masked — that is the remote-Stop convergence.
+  const selectedRunMasked =
+    rawSelectedRun !== null &&
+    TERMINAL_RUN_STATUSES.has(rawSelectedRun.status) &&
+    (localLive || isSubmitting) &&
+    !localMatchesRun
+  const selectedRun = selectedRunMasked ? null : rawSelectedRun
 
   const settledBase = (
     state: Extract<

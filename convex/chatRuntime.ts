@@ -2011,13 +2011,13 @@ export type StopGenerationRunResult = {
 
 export async function stopGenerationRunForChat(
   ctx: MutationCtx,
-  owner: AuthenticatedChatOwner,
-  args: { runId: Id<"generationRuns"> }
+  owner: AuthenticatedRunOwner
 ): Promise<StopGenerationRunResult> {
-  const run = await ctx.db.get(args.runId)
-  if (!run || run.chatId !== owner.chat._id) {
-    throw new Error("Generation run not found for chat")
-  }
+  // Structural run ownership (CONTEXT.md "Authenticated handler"): the caller
+  // resolves the chat THROUGH the run (`ownedGenerationRunMutation` /
+  // `requireOwnedGenerationRun`), so a mismatched chat/run pair is
+  // unrepresentable here — no hand-written cross-check.
+  const { run } = owner
 
   // Idempotent second Stop / lost race against completion or failure: the
   // first committed terminal wins; return its canonical result.
@@ -2106,12 +2106,14 @@ export async function stopGenerationRunForChat(
   return { outcome: "stopped", status: "aborted", terminalReason: "user_stop" }
 }
 
-export const stopGenerationRun = mutation({
-  args: { chatId: v.id("chats"), runId: v.id("generationRuns") },
-  handler: async (ctx, args) => {
-    const owner = await requireOwnedChat(ctx, args.chatId)
-    return stopGenerationRunForChat(ctx, owner, { runId: args.runId })
-  },
+export const stopGenerationRun = ownedGenerationRunMutation({
+  args: {},
+  handler: async (ctx) =>
+    stopGenerationRunForChat(ctx, {
+      user: ctx.user,
+      chat: ctx.chat,
+      run: ctx.run,
+    }),
 })
 
 /**
@@ -2123,6 +2125,8 @@ export const stopGenerationRun = mutation({
 export type ToolCallDecisionResult = {
   status: "approved" | "denied" | "expired"
   alreadyResolved: boolean
+  /** The CANONICAL persisted reason — the winner's, not the caller's. */
+  reason?: string
 }
 
 export async function resolveToolCallDecision(
@@ -2145,17 +2149,35 @@ export async function resolveToolCallDecision(
     return {
       status: approval.status as "approved" | "denied" | "expired",
       alreadyResolved: true,
+      reason: approval.reason,
     }
   }
 
   const now = nowMs()
+
+  // Expiry is checked TRANSACTIONALLY against the server clock, not left to
+  // the cron: a decision racing in after `expiresAt` settles the row as
+  // expired here — approving expired work must be impossible regardless of
+  // reaper cadence (gameplan §10).
+  if (approval.expiresAt !== undefined && now >= approval.expiresAt) {
+    await ctx.db.patch(approval._id, {
+      status: "expired",
+      resolvedAt: now,
+    })
+    return { status: "expired", alreadyResolved: true, reason: approval.reason }
+  }
+
   await ctx.db.patch(approval._id, {
     status: decision,
     resolvedAt: now,
     resolvedByUserId: user._id,
     reason: args.reason ?? approval.reason,
   })
-  return { status: decision, alreadyResolved: false }
+  return {
+    status: decision,
+    alreadyResolved: false,
+    reason: args.reason ?? approval.reason,
+  }
 }
 
 export const approveToolCall = mutation({

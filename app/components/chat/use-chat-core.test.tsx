@@ -608,7 +608,6 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
 
     expect(chatCoreMocks.convexMutation).toHaveBeenCalledTimes(1)
     expect(chatCoreMocks.convexMutation).toHaveBeenCalledWith({
-      chatId: "chat_stopgap",
       runId: "run_live",
     })
   })
@@ -669,7 +668,6 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
 
     expect(chatCoreMocks.convexMutation).toHaveBeenCalledTimes(1)
     expect(chatCoreMocks.convexMutation).toHaveBeenCalledWith({
-      chatId: "chat_stopgap",
       runId: "run_new_dispatch",
     })
   })

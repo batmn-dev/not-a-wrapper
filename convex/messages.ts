@@ -22,7 +22,7 @@ import {
   getCurrentUser,
   requireOwnedChat,
 } from "./lib/auth"
-import { ownedChatMutation } from "./lib/authedFunctions"
+import { ownedChatMutation, readableChatQuery } from "./lib/authedFunctions"
 
 export { normalizeMessagePartsForStorage } from "./domain/message_parts"
 
@@ -196,17 +196,21 @@ export type SelectedConversationProjection = {
  * chats never reach this query (no runs; the provider keeps its
  * persistence-mode gating).
  */
-export async function getSelectedConversationHandler(
+export async function getSelectedConversationForViewer(
   ctx: QueryCtx,
-  { chatId }: { chatId: Id<"chats"> }
+  {
+    chat,
+    viewer,
+  }: { chat: Doc<"chats"> | null; viewer: Doc<"users"> | null }
 ): Promise<SelectedConversationProjection> {
-  const chat = await getAuthorizedChatForRead(ctx, chatId)
+  // Auth-free core (CONTEXT.md "Authenticated handler"): the caller resolves
+  // `chat` (owner-or-public) and `viewer` through the readableChatQuery
+  // builder — this body never touches ctx.auth.
   if (!chat) return { selectedMessages: [], selectedRun: null }
 
-  const messages = await listMessagesByChatOrder(ctx, chatId)
+  const messages = await listMessagesByChatOrder(ctx, chat._id)
   const selectedMessages = getVisibleSelectedMessages(messages)
 
-  const viewer = await getCurrentUser(ctx)
   const isOwner = viewer !== null && chat.userId === viewer._id
   if (!isOwner) {
     // Message docs carry the run linkage too — a public viewer must not read
@@ -310,9 +314,13 @@ export async function getSelectedConversationHandler(
  * wrap `getForChat` with an independent run subscription; that reintroduces
  * torn combinations.
  */
-export const getSelectedConversation = query({
-  args: { chatId: v.id("chats") },
-  handler: getSelectedConversationHandler,
+export const getSelectedConversation = readableChatQuery({
+  args: {},
+  handler: async (ctx) =>
+    getSelectedConversationForViewer(ctx, {
+      chat: ctx.chat,
+      viewer: ctx.user,
+    }),
 })
 
 /**

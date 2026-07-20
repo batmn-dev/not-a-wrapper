@@ -3347,6 +3347,42 @@ describe("pending-only approval resolution (gameplan §10, PR 8)", () => {
     expect(fresh).toEqual({ status: "denied", alreadyResolved: false })
     expect(approval.status).toBe("denied")
   })
+
+  it("a decision racing in after expiresAt settles the row expired — never approves expired work", async () => {
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const NOW = 1700000000000
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const approval: Doc<"toolApprovalRequests"> = {
+      _id: asId<"toolApprovalRequests">("approval_request_1"),
+      _creationTime: 1,
+      chatId,
+      runId: asId<"generationRuns">("run_1"),
+      assistantMessageId: asId<"messages">("message_1"),
+      userId,
+      toolCallId: "call_1",
+      toolName: "send_email",
+      source: "mcp",
+      riskClass: "destructive",
+      approvalId: "approval_1",
+      status: "pending",
+      createdAt: 1,
+      expiresAt: NOW - 1,
+    }
+    const { ctx } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      toolApprovalRequests: [approval],
+    })
+
+    const result = await resolveToolCallDecision(
+      ctx,
+      { approvalId: "approval_1" },
+      "approved"
+    )
+    expect(result).toMatchObject({ status: "expired", alreadyResolved: true })
+    expect(approval.status).toBe("expired")
+    expect(approval.resolvedAt).toBe(NOW)
+  })
 })
 
 describe("stopGenerationRun (gameplan §9, PR 6)", () => {
@@ -3419,11 +3455,11 @@ describe("stopGenerationRun (gameplan §9, PR 6)", () => {
     )
     const { ctx } = createMutationCtx(fixture.tables)
 
-    const result = await stopGenerationRunForChat(
-      ctx,
-      { user: fixture.user, chat: fixture.chat },
-      { runId: fixture.runId }
-    )
+    const result = await stopGenerationRunForChat(ctx, {
+      user: fixture.user,
+      chat: fixture.chat,
+      run: fixture.run,
+    })
 
     expect(result).toEqual({
       outcome: "stopped",
@@ -3456,12 +3492,14 @@ describe("stopGenerationRun (gameplan §9, PR 6)", () => {
     vi.spyOn(Date, "now").mockReturnValue(NOW)
     const fixture = makeStoppableFixture()
     const { ctx } = createMutationCtx(fixture.tables)
-    const owner = { user: fixture.user, chat: fixture.chat }
+    const owner = {
+      user: fixture.user,
+      chat: fixture.chat,
+      run: fixture.run,
+    }
 
-    await stopGenerationRunForChat(ctx, owner, { runId: fixture.runId })
-    const second = await stopGenerationRunForChat(ctx, owner, {
-      runId: fixture.runId,
-    })
+    await stopGenerationRunForChat(ctx, owner)
+    const second = await stopGenerationRunForChat(ctx, owner)
 
     expect(second).toEqual({
       outcome: "already-terminal",
@@ -3482,11 +3520,11 @@ describe("stopGenerationRun (gameplan §9, PR 6)", () => {
     fixture.tables.generationRuns.push(newerRun)
     const { ctx } = createMutationCtx(fixture.tables)
 
-    const result = await stopGenerationRunForChat(
-      ctx,
-      { user: fixture.user, chat: fixture.chat },
-      { runId: fixture.runId }
-    )
+    const result = await stopGenerationRunForChat(ctx, {
+      user: fixture.user,
+      chat: fixture.chat,
+      run: fixture.run,
+    })
 
     expect(result.outcome).toBe("not-current")
     expect(fixture.run.status).toBe("streaming")

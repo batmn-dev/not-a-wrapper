@@ -524,7 +524,9 @@ export function useChatCore({
         addToolApprovalResponse({
           id: approvalId,
           approved: decision.status === "approved",
-          reason,
+          // The CANONICAL reason: a losing click renders the winner's
+          // decision, reason included — never its own discarded input.
+          reason: decision.reason,
         })
       } catch (error) {
         console.error("Failed to submit tool approval:", error)
@@ -653,8 +655,9 @@ export function useChatCore({
       if (!chatId) return
       setPendingStopRunId(targetRunId)
       try {
+        // Run-scoped by construction: the mutation derives (and ownership-
+        // checks) the chat THROUGH the run — no second id to disagree.
         await stopGenerationRunMutation({
-          chatId: chatId as Id<"chats">,
           runId: targetRunId as Id<"generationRuns">,
         })
       } catch (stopError) {

@@ -80,14 +80,37 @@ describe("precedence ladder", () => {
     })
   })
 
-  it("a terminal for a NON-matching local stream does not cut it via the terminal branch", () => {
+  it("a PREVIOUS turn's terminal is masked behind a new local stream (projection gap)", () => {
+    // Gameplan §8: local submission renders immediately. The prior turn's
+    // completed run must neither present (rule 1) nor cut the new stream.
     const presentation = resolve({
       localStatus: "streaming",
       localAssistantMessageId: "msg_other",
       selectedRun: makeRun({ status: "completed", terminalReason: "completed" }),
     })
-    expect(presentation.state).toBe("completed")
+    expect(presentation.state).toBe("local-streaming")
+    expect(presentation.stoppable).toBe(true)
     expect(presentation.shouldStopLocalStream).toBe(false)
+  })
+
+  it("the submitted phase of a history chat presents local-submitted with Stop, not the prior terminal", () => {
+    const presentation = resolve({
+      localStatus: "submitted",
+      localAssistantMessageId: null,
+      selectedRun: makeRun({ status: "aborted", terminalReason: "user_stop" }),
+    })
+    expect(presentation.state).toBe("local-submitted")
+    expect(presentation.stoppable).toBe(true)
+    // No run id is known yet — Stop goes through the deferred intent.
+    expect(presentation.stopTargetRunId).toBeNull()
+  })
+
+  it("hydrating a settled chat (no local activity) still presents the terminal", () => {
+    const presentation = resolve({
+      localStatus: "ready",
+      selectedRun: makeRun({ status: "completed", terminalReason: "completed" }),
+    })
+    expect(presentation.state).toBe("completed")
   })
 
   it("terminal states map: completed / failed / stopped / superseded", () => {

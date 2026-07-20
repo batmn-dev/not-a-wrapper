@@ -9,7 +9,7 @@ import {
   getForChatHandler,
   getLastMessagesHandler,
   getPublicForChatHandler,
-  getSelectedConversationHandler,
+  getSelectedConversationForViewer,
   normalizeMessagePartsForStorage,
   selectBranchForChat,
 } from "./messages"
@@ -480,8 +480,9 @@ describe("getSelectedConversation (gameplan §7, PR 4)", () => {
       ],
     })
 
-    const projection = await getSelectedConversationHandler(ctx, {
-      chatId: world.chatId,
+    const projection = await getSelectedConversationForViewer(ctx, {
+      chat: world.chat,
+      viewer: world.user,
     })
 
     expect(
@@ -523,8 +524,9 @@ describe("getSelectedConversation (gameplan §7, PR 4)", () => {
       generationRuns: [world.run],
     })
 
-    const projection = await getSelectedConversationHandler(ctx, {
-      chatId: world.chatId,
+    const projection = await getSelectedConversationForViewer(ctx, {
+      chat: world.chat,
+      viewer: world.user,
     })
 
     expect(projection.selectedMessages.length).toBeGreaterThan(0)
@@ -546,8 +548,9 @@ describe("getSelectedConversation (gameplan §7, PR 4)", () => {
       generationRuns: [world.run],
     })
 
-    const projection = await getSelectedConversationHandler(ctx, {
-      chatId: world.chatId,
+    const projection = await getSelectedConversationForViewer(ctx, {
+      chat: world.chat,
+      viewer: world.user,
     })
 
     expect(
@@ -580,8 +583,9 @@ describe("getSelectedConversation (gameplan §7, PR 4)", () => {
       generationRuns: [world.run],
     })
 
-    const projection = await getSelectedConversationHandler(ctx, {
-      chatId: world.chatId,
+    const projection = await getSelectedConversationForViewer(ctx, {
+      chat: world.chat,
+      viewer: world.user,
     })
 
     expect(projection.selectedRun).toBeNull()
@@ -596,8 +600,9 @@ describe("getSelectedConversation (gameplan §7, PR 4)", () => {
       generationRuns: [world.run],
     })
 
-    const projection = await getSelectedConversationHandler(ctx, {
-      chatId: world.chatId,
+    const projection = await getSelectedConversationForViewer(ctx, {
+      chat: world.chat,
+      viewer: world.user,
     })
 
     expect(projection.selectedRun).toMatchObject({
