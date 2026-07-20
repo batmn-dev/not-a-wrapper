@@ -79,8 +79,8 @@ vi.mock("convex/react", () => ({
     convexMocks.useQuery(...args)
     return convexMocks.queryValue
   },
-  // ENABLE_PAGINATED_SIDEBAR is off in tests; the paginated sidebar hook is still
-  // called (with "skip"), so it must exist. Guest tests don't exercise it.
+  // ENABLE_PAGINATED_SIDEBAR defaults on. Guest tests remain unsubscribed, but
+  // the provider still calls the paginated hook with "skip", so it must exist.
   usePaginatedQuery: () => ({
     results: [],
     status: "Exhausted" as const,
@@ -276,10 +276,7 @@ describe("ChatsProvider guest local chats", () => {
 
     let deleted: boolean | undefined
     await act(async () => {
-      deleted = await capture.current?.deleteChat(
-        "chat-server",
-        "chat-server"
-      )
+      deleted = await capture.current?.deleteChat("chat-server", "chat-server")
     })
 
     expect(deleted).toBe(false)
