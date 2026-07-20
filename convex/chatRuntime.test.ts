@@ -42,6 +42,7 @@ type QueryBuilder = {
   eq: (fieldName: string, value: unknown) => QueryBuilder
   gt: (fieldName: string, value: unknown) => QueryBuilder
   lt: (fieldName: string, value: unknown) => QueryBuilder
+  lte: (fieldName: string, value: unknown) => QueryBuilder
 }
 
 // Convex index-order rank: undefined < null < everything else. Enough to model
@@ -137,7 +138,7 @@ function createMutationCtx(
           const filters = new Map<string, unknown>()
           const rangeFilters: Array<{
             fieldName: string
-            op: "gt" | "lt"
+            op: "gt" | "lt" | "lte"
             value: unknown
           }> = []
           const query: QueryBuilder = {
@@ -151,6 +152,10 @@ function createMutationCtx(
             },
             lt: (fieldName, value) => {
               rangeFilters.push({ fieldName, op: "lt", value })
+              return query
+            },
+            lte: (fieldName, value) => {
+              rangeFilters.push({ fieldName, op: "lte", value })
               return query
             },
           }
@@ -169,6 +174,7 @@ function createMutationCtx(
                 )
                 if (range.op === "gt" && comparison <= 0) return false
                 if (range.op === "lt" && comparison >= 0) return false
+                if (range.op === "lte" && comparison > 0) return false
               }
               return true
             }
@@ -3302,86 +3308,177 @@ describe("approval-continuation idempotency (gameplan §10, PR 8)", () => {
 })
 
 describe("pending-only approval resolution (gameplan §10, PR 8)", () => {
-  it("a conflicting second decision returns the canonical result instead of overwriting", async () => {
-    const { user, chat, userId, chatId } = createOwnerFixture()
-    const approval: Doc<"toolApprovalRequests"> = {
-      _id: asId<"toolApprovalRequests">("approval_request_1"),
-      _creationTime: 1,
-      chatId,
-      runId: asId<"generationRuns">("run_1"),
-      assistantMessageId: asId<"messages">("message_1"),
-      userId,
-      toolCallId: "call_1",
-      toolName: "send_email",
-      source: "mcp",
-      riskClass: "destructive",
-      approvalId: "approval_1",
-      status: "approved",
-      resolvedAt: 500,
-      resolvedByUserId: userId,
-      createdAt: 1,
-    }
-    const { ctx } = createMutationCtx({
-      users: [user],
-      chats: [chat],
-      toolApprovalRequests: [approval],
-    })
+  const EXPIRY = 1700000000000
 
-    // The late deny must NOT repaint the earlier approve.
-    const result = await resolveToolCallDecision(
-      ctx,
-      { approvalId: "approval_1", reason: "changed my mind" },
-      "denied"
-    )
-    expect(result).toEqual({ status: "approved", alreadyResolved: true })
-    expect(approval.status).toBe("approved")
-    expect(approval.resolvedAt).toBe(500)
-
-    // A pending approval resolves normally.
-    approval.status = "pending"
-    const fresh = await resolveToolCallDecision(
-      ctx,
-      { approvalId: "approval_1" },
-      "denied"
-    )
-    expect(fresh).toEqual({ status: "denied", alreadyResolved: false })
-    expect(approval.status).toBe("denied")
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
-  it("a decision racing in after expiresAt settles the row expired — never approves expired work", async () => {
-    const { user, chat, userId, chatId } = createOwnerFixture()
-    const NOW = 1700000000000
-    vi.spyOn(Date, "now").mockReturnValue(NOW)
+  function makeApprovalWorld({
+    expiresAt = EXPIRY,
+    status = "pending",
+    reason,
+  }: {
+    expiresAt?: number
+    status?: Doc<"toolApprovalRequests">["status"]
+    reason?: string
+  } = {}) {
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.chat.statusRunId = fixture.runId
+    fixture.chat.liveRunStatus = "awaiting"
+    fixture.chat.liveRunFreshUntil = expiresAt
+    fixture.run.status = "awaiting_approval"
+    fixture.message.status = "awaiting_approval"
     const approval: Doc<"toolApprovalRequests"> = {
       _id: asId<"toolApprovalRequests">("approval_request_1"),
       _creationTime: 1,
-      chatId,
-      runId: asId<"generationRuns">("run_1"),
-      assistantMessageId: asId<"messages">("message_1"),
-      userId,
+      chatId: fixture.chatId,
+      runId: fixture.runId,
+      assistantMessageId: fixture.messageId,
+      userId: fixture.userId,
       toolCallId: "call_1",
       toolName: "send_email",
       source: "mcp",
       riskClass: "destructive",
       approvalId: "approval_1",
-      status: "pending",
+      status,
+      reason,
       createdAt: 1,
-      expiresAt: NOW - 1,
+      expiresAt,
     }
-    const { ctx } = createMutationCtx({
-      users: [user],
-      chats: [chat],
-      toolApprovalRequests: [approval],
-    })
+    fixture.tables.toolApprovalRequests.push(approval)
+    const invocation: Doc<"toolInvocations"> = {
+      _id: asId<"toolInvocations">("tool_invocation_1"),
+      _creationTime: 1,
+      runId: fixture.runId,
+      chatId: fixture.chatId,
+      messageId: fixture.messageId,
+      toolCallId: "call_1",
+      toolName: "send_email",
+      source: "mcp",
+      status: "pending_approval",
+      createdAt: 1,
+      updatedAt: 1,
+    }
+    fixture.tables.toolInvocations.push(invocation)
+    const world = createMutationCtx(fixture.tables)
+    return { ...fixture, approval, invocation, ...world }
+  }
+
+  it.each([
+    {
+      first: "approved" as const,
+      firstReason: "Approved in tab A",
+      second: "denied" as const,
+      secondReason: "Denied in tab B",
+    },
+    {
+      first: "denied" as const,
+      firstReason: "Denied in tab A",
+      second: "approved" as const,
+      secondReason: "Approved in tab B",
+    },
+  ])(
+    "keeps the first $first decision and reason canonical when a $second click loses",
+    async ({ first, firstReason, second, secondReason }) => {
+      vi.spyOn(Date, "now").mockReturnValue(EXPIRY - 1)
+      const { ctx, approval } = makeApprovalWorld()
+
+      const winner = await resolveToolCallDecision(
+        ctx,
+        { approvalId: "approval_1", reason: firstReason },
+        first
+      )
+      const loser = await resolveToolCallDecision(
+        ctx,
+        { approvalId: "approval_1", reason: secondReason },
+        second
+      )
+
+      expect(winner).toEqual({
+        status: first,
+        alreadyResolved: false,
+        reason: firstReason,
+      })
+      expect(loser).toEqual({
+        status: first,
+        alreadyResolved: true,
+        reason: firstReason,
+      })
+      expect(approval).toMatchObject({ status: first, reason: firstReason })
+    }
+  )
+
+  it("allows a decision just before expiry and leaves nothing for the reaper", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(EXPIRY - 1)
+    const { ctx, approval, run } = makeApprovalWorld()
+
+    const decision = await resolveToolCallDecision(
+      ctx,
+      { approvalId: "approval_1", reason: "Approved in time" },
+      "approved"
+    )
+    expect(decision.status).toBe("approved")
+    expect(run.status).toBe("awaiting_approval")
+
+    vi.spyOn(Date, "now").mockReturnValue(EXPIRY)
+    expect(await reapExpiredToolApprovalsPass(ctx)).toEqual({ expired: 0 })
+    expect(approval.status).toBe("approved")
+  })
+
+  it.each([
+    ["exactly at expiry", EXPIRY],
+    ["after expiry but before reaping", EXPIRY + 1],
+  ])("expires atomically %s", async (_label, now) => {
+    vi.spyOn(Date, "now").mockReturnValue(now)
+    const { ctx, approval, invocation, run, message, chat } =
+      makeApprovalWorld()
 
     const result = await resolveToolCallDecision(
       ctx,
       { approvalId: "approval_1" },
       "approved"
     )
+
     expect(result).toMatchObject({ status: "expired", alreadyResolved: true })
+    expect(approval).toMatchObject({ status: "expired", resolvedAt: now })
+    expect(invocation.status).toBe("failed")
+    expect(run).toMatchObject({
+      status: "failed",
+      terminalReason: "approval_expired",
+    })
+    expect(message.status).toBe("failed")
+    expect(chat.liveRunStatus).toBeUndefined()
+  })
+
+  it("converges when the reaper commits before a losing decision", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(EXPIRY)
+    const { ctx, approval, run } = makeApprovalWorld()
+
+    expect(await reapExpiredToolApprovalsPass(ctx)).toEqual({ expired: 1 })
+    const loser = await resolveToolCallDecision(
+      ctx,
+      { approvalId: "approval_1", reason: "Too late" },
+      "denied"
+    )
+
+    expect(loser).toEqual({
+      status: "expired",
+      alreadyResolved: true,
+      reason: undefined,
+    })
     expect(approval.status).toBe("expired")
-    expect(approval.resolvedAt).toBe(NOW)
+    expect(run.terminalReason).toBe("approval_expired")
+  })
+
+  it("converges when decision-side expiry commits before the reaper", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(EXPIRY)
+    const { ctx, approval, run } = makeApprovalWorld()
+
+    await resolveToolCallDecision(ctx, { approvalId: "approval_1" }, "approved")
+    expect(await reapExpiredToolApprovalsPass(ctx)).toEqual({ expired: 0 })
+    expect(approval.status).toBe("expired")
+    expect(run.terminalReason).toBe("approval_expired")
   })
 })
 

@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
-import type { UIMessage } from "@ai-sdk/react"
 import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
+import type { UIMessage } from "@ai-sdk/react"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import {
@@ -18,6 +18,8 @@ let useChatCore: (typeof import("./use-chat-core"))["useChatCore"]
 
 const chatCoreMocks = vi.hoisted(() => ({
   addToolApprovalResponse: vi.fn(),
+  approveToolCall: vi.fn(),
+  denyToolCall: vi.fn(),
   attachStagedFilesToChat: vi.fn(
     async (_convex: unknown, _chatId: string, attachmentIds: string[]) =>
       attachmentIds.map((attachmentId) => ({
@@ -34,6 +36,7 @@ const chatCoreMocks = vi.hoisted(() => ({
   setMessages: vi.fn(),
   setWebSearchEnabled: vi.fn(),
   stop: vi.fn(),
+  toast: vi.fn(),
   bindingStop: vi.fn(),
   updateTitle: vi.fn(),
   // Controllable useChat state for the selected-path projection effect tests.
@@ -68,12 +71,17 @@ vi.mock("@/convex/_generated/api", () => ({
     chatRuntime: {
       approveToolCall: "approveToolCall",
       denyToolCall: "denyToolCall",
+      stopGenerationRun: "stopGenerationRun",
     },
   },
 }))
 
 vi.mock("convex/react", () => ({
-  useMutation: () => chatCoreMocks.convexMutation,
+  useMutation: (mutation: string) => {
+    if (mutation === "approveToolCall") return chatCoreMocks.approveToolCall
+    if (mutation === "denyToolCall") return chatCoreMocks.denyToolCall
+    return chatCoreMocks.convexMutation
+  },
   useConvex: () => ({}),
   useConvexConnectionState: () => ({ isWebSocketConnected: true }),
 }))
@@ -139,7 +147,11 @@ vi.mock("next/navigation", () => ({
 }))
 
 vi.mock("@/components/ui/toast", () => ({
-  toast: vi.fn(),
+  toast: chatCoreMocks.toast,
+}))
+
+vi.mock("@/lib/flags", () => ({
+  ENABLE_DURABLE_RUN_PRESENTATION: true,
 }))
 
 vi.mock("@/lib/api", () => ({
@@ -593,7 +605,7 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
     await act(async () => {
       await coreRef.current?.stop()
     })
-    expect(chatCoreMocks.stop).toHaveBeenCalled()
+    expect(chatCoreMocks.stop).not.toHaveBeenCalled()
     expect(chatCoreMocks.convexMutation).not.toHaveBeenCalled()
 
     chatCoreMocks.selectedRun = {
@@ -610,6 +622,7 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
     expect(chatCoreMocks.convexMutation).toHaveBeenCalledWith({
       runId: "run_live",
     })
+    expect(chatCoreMocks.stop).toHaveBeenCalledTimes(1)
   })
 
   it("disarms without firing when the arriving projection is already terminal", async () => {
@@ -629,6 +642,36 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
     await flushAsyncWork()
 
     expect(chatCoreMocks.convexMutation).not.toHaveBeenCalled()
+  })
+
+  it("expires a deferred Stop intent without leaving a timer-driven action relay", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000_000)
+    try {
+      mount()
+      await act(async () => {
+        await coreRef.current?.stop()
+      })
+
+      act(() => {
+        vi.advanceTimersByTime(30_000)
+      })
+      chatCoreMocks.selectedRun = {
+        runId: "run_too_late",
+        assistantMessageId: "msg_late",
+        status: "streaming",
+        activeToolNames: [],
+        pendingApproval: null,
+      }
+      render()
+      await act(async () => {
+        await Promise.resolve()
+      })
+
+      expect(chatCoreMocks.convexMutation).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("waits through the PREVIOUS turn's terminal run instead of disarming on it (chat with history)", async () => {
@@ -669,6 +712,34 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
     expect(chatCoreMocks.convexMutation).toHaveBeenCalledTimes(1)
     expect(chatCoreMocks.convexMutation).toHaveBeenCalledWith({
       runId: "run_new_dispatch",
+    })
+  })
+
+  it("renders the winning tab's canonical approval reason and reports an already-resolved click", async () => {
+    chatCoreMocks.approveToolCall.mockResolvedValue({
+      status: "denied",
+      alreadyResolved: true,
+      reason: "Denied in the other tab",
+    })
+    mount()
+
+    await act(async () => {
+      await coreRef.current?.handleToolApproval(
+        "approval_1",
+        true,
+        "Approve from this tab"
+      )
+    })
+
+    expect(chatCoreMocks.addToolApprovalResponse).toHaveBeenCalledWith({
+      id: "approval_1",
+      approved: false,
+      reason: "Denied in the other tab",
+    })
+    expect(chatCoreMocks.toast).toHaveBeenCalledWith({
+      title: "Already resolved",
+      description: "This approval was decided in another tab.",
+      status: "info",
     })
   })
 })

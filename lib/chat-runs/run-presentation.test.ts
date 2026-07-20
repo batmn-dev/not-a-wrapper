@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest"
 import type { SelectedRunProjection } from "@/convex/messages"
+import { describe, expect, it } from "vitest"
 import {
   ORPHAN_STREAM_CUT_GRACE_MS,
   resolveGenerationPresentation,
@@ -86,7 +86,10 @@ describe("precedence ladder", () => {
     const presentation = resolve({
       localStatus: "streaming",
       localAssistantMessageId: "msg_other",
-      selectedRun: makeRun({ status: "completed", terminalReason: "completed" }),
+      selectedRun: makeRun({
+        status: "completed",
+        terminalReason: "completed",
+      }),
     })
     expect(presentation.state).toBe("local-streaming")
     expect(presentation.stoppable).toBe(true)
@@ -108,9 +111,35 @@ describe("precedence ladder", () => {
   it("hydrating a settled chat (no local activity) still presents the terminal", () => {
     const presentation = resolve({
       localStatus: "ready",
-      selectedRun: makeRun({ status: "completed", terminalReason: "completed" }),
+      selectedRun: makeRun({
+        status: "completed",
+        terminalReason: "completed",
+      }),
     })
     expect(presentation.state).toBe("completed")
+  })
+
+  it("the rollout flag hides unmatched background presentation but keeps local run convergence", () => {
+    const background = resolve({
+      durablePresentationEnabled: false,
+      localStatus: "ready",
+      selectedRun: makeRun({ status: "streaming" }),
+    })
+    expect(background).toMatchObject({
+      state: "settled",
+      stoppable: false,
+    })
+
+    const attachedTerminal = resolve({
+      durablePresentationEnabled: false,
+      localStatus: "streaming",
+      localAssistantMessageId: "msg_1",
+      selectedRun: makeRun({ status: "aborted", terminalReason: "user_stop" }),
+    })
+    expect(attachedTerminal).toMatchObject({
+      state: "stopped",
+      shouldStopLocalStream: true,
+    })
   })
 
   it("terminal states map: completed / failed / stopped / superseded", () => {
@@ -119,17 +148,26 @@ describe("precedence ladder", () => {
     ).toBe("completed")
     expect(
       resolve({
-        selectedRun: makeRun({ status: "failed", terminalReason: "lease_expired" }),
+        selectedRun: makeRun({
+          status: "failed",
+          terminalReason: "lease_expired",
+        }),
       })
     ).toMatchObject({ state: "failed", terminalReason: "lease_expired" })
     expect(
       resolve({
-        selectedRun: makeRun({ status: "aborted", terminalReason: "user_stop" }),
+        selectedRun: makeRun({
+          status: "aborted",
+          terminalReason: "user_stop",
+        }),
       }).state
     ).toBe("stopped")
     expect(
       resolve({
-        selectedRun: makeRun({ status: "aborted", terminalReason: "superseded" }),
+        selectedRun: makeRun({
+          status: "aborted",
+          terminalReason: "superseded",
+        }),
       }).state
     ).toBe("superseded")
   })
@@ -160,6 +198,21 @@ describe("precedence ladder", () => {
       stopTargetRunId: "run_1",
       caretEligible: false,
       actionsSuppressed: true,
+    })
+  })
+
+  it("presents a projection-gap deferred Stop as non-repeatable stopping", () => {
+    const presentation = resolve({
+      localStatus: "streaming",
+      deferredStopPending: true,
+    })
+
+    expect(presentation).toMatchObject({
+      state: "stopping",
+      active: true,
+      stoppable: false,
+      stopTargetRunId: null,
+      shouldStopLocalStream: false,
     })
   })
 

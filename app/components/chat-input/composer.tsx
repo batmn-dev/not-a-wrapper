@@ -359,19 +359,25 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     ])
 
     const primaryAction = useMemo(
-      () =>
-        resolveComposerPrimaryActionState({
+      () => {
+        // When supplied, the resolver owns the complete Stop policy — including
+        // a local transport that is still streaming while an exact durable Stop
+        // is already pending. The status fallback preserves standalone/local
+        // callers that do not participate in durable presentation.
+        const canStop = stoppable ?? status === "streaming"
+        return resolveComposerPrimaryActionState({
           // Stop presents for a live LOCAL stream or any resolver-stoppable
           // run (background, awaiting-approval, possibly-stale — §8/§11):
           // durable Stop is a mutation, not a transport abort, so the local
           // status alone must not gate the affordance.
-          isStreaming: status === "streaming" || stoppable === true,
-          isAbortable: status === "streaming" || stoppable === true,
+          isStreaming: canStop,
+          isAbortable: canStop,
           canSend:
             !isSubmitting &&
             attachments.every((attachment) => attachment.status === "ready") &&
             (!isOnlyWhitespace(localValue) || attachments.length > 0),
-        }),
+        })
+      },
       [attachments, isSubmitting, localValue, status, stoppable]
     )
 

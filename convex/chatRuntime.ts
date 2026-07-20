@@ -2129,6 +2129,67 @@ export type ToolCallDecisionResult = {
   reason?: string
 }
 
+/**
+ * The ONE transactional approval-expiry operation. Both a user decision at or
+ * after the deadline and the cron reaper use it, so whichever transaction
+ * commits first produces the same approval, invocation, run, message, and chat
+ * projection. Removing the approval from the pending index without settling
+ * the paused run would otherwise strand it forever outside the reaper.
+ */
+async function expireToolApprovalForChat(
+  ctx: MutationCtx,
+  approval: Doc<"toolApprovalRequests">,
+  now: number,
+  source: "decision" | "reaper"
+): Promise<boolean> {
+  if (
+    approval.status !== "pending" ||
+    approval.expiresAt === undefined ||
+    now < approval.expiresAt
+  ) {
+    return false
+  }
+
+  await ctx.db.patch(approval._id, { status: "expired", resolvedAt: now })
+
+  const run = await ctx.db.get(approval.runId)
+  if (!run) return true
+  const invocation = await ctx.db
+    .query("toolInvocations")
+    .withIndex("by_run_tool_call", (q) =>
+      q.eq("runId", run._id).eq("toolCallId", approval.toolCallId)
+    )
+    .unique()
+  if (invocation && !terminalToolInvocationStatuses.has(invocation.status)) {
+    await ctx.db.patch(invocation._id, {
+      status: "failed",
+      error: "tool approval expired",
+      completedAt: now,
+      updatedAt: now,
+    })
+  }
+
+  const resolved = await gatherAssistantMessageFacts(ctx, run, undefined)
+  const verdict = resolveGenerationRunTransition(
+    { runStatus: run.status, message: resolved?.facts ?? null },
+    { kind: "approval-expired" }
+  )
+  if (verdict.kind === "transition") {
+    await applyLifecycleVerdict(ctx, run, verdict, resolved, now)
+  }
+  console.log(
+    JSON.stringify({
+      _tag: source === "reaper" ? "run_stale_reaped" : "run_approval_expired",
+      reason: "approval_expired",
+      source,
+      runId: run._id,
+      chatId: run.chatId,
+      approvalId: approval.approvalId,
+    })
+  )
+  return true
+}
+
 export async function resolveToolCallDecision(
   ctx: MutationCtx,
   args: { approvalId: string; reason?: string },
@@ -2160,10 +2221,7 @@ export async function resolveToolCallDecision(
   // expired here — approving expired work must be impossible regardless of
   // reaper cadence (gameplan §10).
   if (approval.expiresAt !== undefined && now >= approval.expiresAt) {
-    await ctx.db.patch(approval._id, {
-      status: "expired",
-      resolvedAt: now,
-    })
+    await expireToolApprovalForChat(ctx, approval, now, "decision")
     return { status: "expired", alreadyResolved: true, reason: approval.reason }
   }
 
@@ -2454,52 +2512,16 @@ export async function reapExpiredToolApprovalsPass(
         q
           .eq("status", "pending")
           .gt("expiresAt", undefined)
-          .lt("expiresAt", now)
+          .lte("expiresAt", now)
       )
       .take(REAPER_BATCH_LIMIT)
     for (const approval of candidates) {
-      if (approval.expiresAt === undefined || approval.expiresAt >= now) {
+      if (approval.expiresAt === undefined || approval.expiresAt > now) {
         continue
       }
-      await ctx.db.patch(approval._id, { status: "expired", resolvedAt: now })
-      expired++
-
-      const run = await ctx.db.get(approval.runId)
-      if (!run) continue
-      const invocation = await ctx.db
-        .query("toolInvocations")
-        .withIndex("by_run_tool_call", (q) =>
-          q.eq("runId", run._id).eq("toolCallId", approval.toolCallId)
-        )
-        .unique()
-      if (
-        invocation &&
-        !terminalToolInvocationStatuses.has(invocation.status)
-      ) {
-        await ctx.db.patch(invocation._id, {
-          status: "failed",
-          error: "tool approval expired",
-          completedAt: now,
-          updatedAt: now,
-        })
+      if (await expireToolApprovalForChat(ctx, approval, now, "reaper")) {
+        expired++
       }
-
-      const resolved = await gatherAssistantMessageFacts(ctx, run, undefined)
-      const verdict = resolveGenerationRunTransition(
-        { runStatus: run.status, message: resolved?.facts ?? null },
-        { kind: "approval-expired" }
-      )
-      if (verdict.kind !== "transition") continue
-      await applyLifecycleVerdict(ctx, run, verdict, resolved, now)
-      console.log(
-        JSON.stringify({
-          _tag: "run_stale_reaped",
-          reason: "approval_expired",
-          runId: run._id,
-          chatId: run.chatId,
-          approvalId: approval.approvalId,
-        })
-      )
     }
     return { expired }
   }

@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import type { GenerationPresentationState } from "@/lib/chat-runs/run-presentation"
 import { createPortal } from "react-dom"
 
 type Politeness = "polite" | "assertive"
@@ -95,16 +96,50 @@ type ChatStatus = "streaming" | "ready" | "submitted" | "error"
 export function ChatStatusAnnouncer({
   status,
   isSubmitting,
+  presentationState,
 }: {
   status?: ChatStatus
   isSubmitting?: boolean
+  presentationState?: GenerationPresentationState
 }) {
   const ctx = useContext(AnnouncerContext)
   const generating =
     isSubmitting === true || status === "submitted" || status === "streaming"
-  const polite = generating ? "Generating response." : ""
+  const presentationAnnouncement = (() => {
+    switch (presentationState) {
+      case "local-submitted":
+      case "local-streaming":
+        return { polite: "Generating response.", assertive: "" }
+      case "background-streaming":
+        return { polite: "Generating in background.", assertive: "" }
+      case "awaiting-approval":
+        return { polite: "Approval required.", assertive: "" }
+      case "stopping":
+        return { polite: "Stopping generation.", assertive: "" }
+      case "possibly-stale":
+        return {
+          polite: "Generation status is temporarily unavailable.",
+          assertive: "",
+        }
+      case "stopped":
+        return { polite: "Generation stopped.", assertive: "" }
+      case "failed":
+        return { polite: "", assertive: "Generation failed." }
+      case "completed":
+      case "superseded":
+      case "settled":
+      case undefined:
+        return null
+    }
+  })()
+  const polite =
+    presentationAnnouncement?.polite ??
+    (generating ? "Generating response." : "")
   const assertive =
-    status === "error" ? "Something went wrong generating the response." : ""
+    presentationAnnouncement?.assertive ??
+    (status === "error"
+      ? "Something went wrong generating the response."
+      : "")
 
   if (!ctx) return null
   return (

@@ -4,12 +4,14 @@ import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { isEmptyAssistantMessage } from "@/convex/domain/message_visibility"
 import { getOrCreateGuestUserId } from "@/lib/api"
+import { markApprovalResolvedLocally } from "@/lib/chat-runs/approval-auto-send-gate"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import {
   createOptimisticMessageId,
   getMessagePersistenceMode,
   GUEST_CHAT_STORAGE_KEY,
 } from "@/lib/chat-store/identity"
+import { useMessages } from "@/lib/chat-store/messages/provider"
 import { projectSelectedPath } from "@/lib/chat-store/turns/selected-path"
 import {
   createChatTurnController,
@@ -18,16 +20,10 @@ import {
   type EnsuredTurnChat,
   type StagedAttachmentReference,
 } from "@/lib/chat-turn/chat-turn-controller"
-import { useMessages } from "@/lib/chat-store/messages/provider"
-import { markApprovalResolvedLocally } from "@/lib/chat-runs/approval-auto-send-gate"
-import {
-  resolveGenerationPresentation,
-  type GenerationPresentation,
-  type LocalTransportStatus,
-} from "@/lib/chat-runs/run-presentation"
 import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
 import { routePersistsChatMessages } from "@/lib/chat-turn/turn-store"
 import { attachStagedFilesToChat } from "@/lib/file-handling"
+import { ENABLE_DURABLE_RUN_PRESENTATION } from "@/lib/flags"
 import { API_ROUTE_CHAT } from "@/lib/routes"
 import type { UserProfile } from "@/lib/user/types"
 import type { UIMessage } from "@ai-sdk/react"
@@ -48,6 +44,7 @@ import {
   useDetachableChatStream,
   type ChatStreamFinishEvent,
 } from "./use-detachable-chat-stream"
+import { useGenerationPresentationController } from "./use-generation-presentation-controller"
 
 /** One send-type Chat turn's inputs, assembled by the Composer. */
 export type ChatTurnPayload = {
@@ -232,6 +229,18 @@ export function useChatCore({
     })
   }, [])
 
+  const handleDurableStopError = useCallback((stopError: unknown) => {
+    console.error("Durable stop failed:", stopError)
+    toast({ title: "Failed to stop generation", status: "error" })
+  }, [])
+
+  const handleLocalStreamTimeout = useCallback(() => {
+    toast({
+      title: "Response timed out — please try again",
+      status: "error",
+    })
+  }, [])
+
   // Mounted chat-id transitions detach — the in-place equivalent of a remount.
   // Leaving a mounted chat (browser Back/Forward over the shallow-pushState
   // first-turn flow, e.g. Back to the onboarding surface mid-generation) means
@@ -272,6 +281,52 @@ export function useChatCore({
     setMessages,
     addToolApprovalResponse,
   } = useChat({ chat: detachableStream.chat })
+
+  // The local stream's assistant identity: durable runs stream the durable
+  // assistantMessageId as the SDK message id, so this match is exact. Known
+  // only once streaming begins — never inferred from "last run in chat".
+  const localAssistantMessageId = useMemo(() => {
+    if (status !== "streaming") return null
+    for (let index = messages.length - 1; index >= 0; index--) {
+      if (messages[index].role === "assistant") return messages[index].id
+    }
+    return null
+  }, [messages, status])
+
+  const { selectedRun } = useMessages()
+  const connectionState = useConvexConnectionState()
+  const stopGenerationRunMutation = useMutation(
+    api.chatRuntime.stopGenerationRun
+  )
+  const stopDurableRun = useCallback(
+    async (runId: string) => {
+      await stopGenerationRunMutation({
+        runId: runId as Id<"generationRuns">,
+      })
+    },
+    [stopGenerationRunMutation]
+  )
+  const generationPresentation = useGenerationPresentationController({
+    chatId,
+    localStatus: status,
+    isSubmitting,
+    localAssistantMessageId,
+    selectedRun,
+    isConnected: connectionState.isWebSocketConnected,
+    durablePresentationEnabled: ENABLE_DURABLE_RUN_PRESENTATION,
+    stopLocal: stop,
+    stopDurable: stopDurableRun,
+    onDurableStopError: handleDurableStopError,
+    streamTimeoutMs: STREAM_TIMEOUT_MS,
+    onLocalStreamTimeout: handleLocalStreamTimeout,
+  })
+  const {
+    presentation,
+    stop: handleStop,
+    noteLocalDispatch,
+    noteLocalTransportSettled,
+    consumeLocalStopIntent,
+  } = generationPresentation
 
   const setMessagesRef = useRef(setMessages)
   useEffect(() => {
@@ -384,6 +439,8 @@ export function useChatCore({
         options
       ),
     regenerate,
+    onLocalDispatch: noteLocalDispatch,
+    consumeLocalStopIntent,
     toastError: (title) => toast({ title, status: "error" }),
     bumpChat,
     setLastFinishReason,
@@ -400,6 +457,7 @@ export function useChatCore({
     isError,
     finishReason,
   }: ChatStreamFinishEvent) => {
+    noteLocalTransportSettled()
     const messageWithCreatedAt = message as ChatTurnMessage
     const finishedMessageCreatedAt =
       messageWithCreatedAt.createdAt ?? new Date()
@@ -488,7 +546,10 @@ export function useChatCore({
     handlers: {
       onAttachedFinish: handleAttachedFinish,
       onDetachedFinish: finishDetachedTurn,
-      onAttachedError: handleError,
+      onAttachedError: (streamError) => {
+        noteLocalTransportSettled()
+        handleError(streamError)
+      },
       onDetachedError: (_originChatId, streamError) => {
         // No toast: a detached stream's error has no visible surface here;
         // durable chats surface it through the run's terminal projection.
@@ -520,6 +581,13 @@ export function useChatCore({
           // a loser renders the canonical outcome and dispatches nothing —
           // the winner's continuation arrives through the projection.
           markApprovalResolvedLocally(approvalId)
+          noteLocalDispatch()
+        } else {
+          toast({
+            title: "Already resolved",
+            description: "This approval was decided in another tab.",
+            status: "info",
+          })
         }
         addToolApprovalResponse({
           id: approvalId,
@@ -536,223 +604,8 @@ export function useChatCore({
         })
       }
     },
-    [addToolApprovalResponse, approveToolCall, denyToolCall]
+    [addToolApprovalResponse, approveToolCall, denyToolCall, noteLocalDispatch]
   )
-
-  // Ref to latest stop function to avoid stale closures in effects
-  const stopRef = useRef(stop)
-
-  useEffect(() => {
-    stopRef.current = stop
-  }, [stop])
-
-  // -------------------------------------------------------------------------
-  // Generation presentation (gameplan §8, PR 5): raw durable facts from the
-  // atomic selected-conversation projection + this client's transport state,
-  // resolved by the ONE pure resolver. The resolver — not any surface — owns
-  // lease/approval clock classification (with skew grace) and the
-  // terminal→local-stop side effect.
-  // -------------------------------------------------------------------------
-  const { selectedRun } = useMessages()
-  const connectionState = useConvexConnectionState()
-
-  // The local stream's assistant identity: durable runs stream the durable
-  // assistantMessageId as the SDK message id, so this match is exact. Known
-  // only once streaming begins — never inferred from "last run in chat".
-  const localAssistantMessageId = useMemo(() => {
-    if (status !== "streaming") return null
-    for (let index = messages.length - 1; index >= 0; index--) {
-      if (messages[index].role === "assistant") return messages[index].id
-    }
-    return null
-  }, [messages, status])
-
-  // Durable Stop intent: the run id a stop mutation is in flight for.
-  const [pendingStopRunId, setPendingStopRunId] = useState<string | null>(null)
-
-  // When this client's live stream began — the resolver's orphan-cut grace
-  // input (regeneration identity gap: the projection may briefly still show
-  // the previous run after our own dispatch). Keyed to the STATUS TRANSITION,
-  // not a live/idle boolean: every new dispatch passes through "submitted",
-  // which unconditionally restarts the clock — a streaming→submitted commit
-  // (stop+resend batched into one render) must not inherit the previous
-  // stream's start time, or the new stream's grace would be pre-elapsed.
-  const [localStreamStartedAt, setLocalStreamStartedAt] = useState<
-    number | null
-  >(null)
-  useEffect(() => {
-    if (status === "submitted") {
-      setLocalStreamStartedAt(Date.now())
-      return
-    }
-    if (status === "streaming") {
-      // Entered streaming without an observed submitted commit (adoption):
-      // start the clock now rather than never.
-      setLocalStreamStartedAt((current) => current ?? Date.now())
-      return
-    }
-    setLocalStreamStartedAt(null)
-  }, [status])
-
-  // Freshness is CLIENT-classified against the clock, so re-classification
-  // needs a tick while an active-looking run could cross its lease boundary.
-  const [presentationClock, setPresentationClock] = useState(() => Date.now())
-  const runCouldGoStale =
-    selectedRun !== null &&
-    (selectedRun.status === "running" ||
-      selectedRun.status === "streaming" ||
-      selectedRun.status === "awaiting_approval")
-  useEffect(() => {
-    if (!runCouldGoStale) return
-    const interval = setInterval(() => setPresentationClock(Date.now()), 5_000)
-    return () => clearInterval(interval)
-  }, [runCouldGoStale])
-
-  const presentation: GenerationPresentation = useMemo(
-    () =>
-      resolveGenerationPresentation({
-        localStatus: status as LocalTransportStatus,
-        isSubmitting,
-        localAssistantMessageId,
-        selectedRun,
-        pendingStopRunId,
-        localStreamStartedAtMs: localStreamStartedAt,
-        isConnected: connectionState.isWebSocketConnected,
-        now: presentationClock,
-      }),
-    [
-      status,
-      isSubmitting,
-      localAssistantMessageId,
-      selectedRun,
-      pendingStopRunId,
-      localStreamStartedAt,
-      connectionState.isWebSocketConnected,
-      presentationClock,
-    ]
-  )
-
-  // Resolver-mandated convergence: a durable terminal (remote Stop,
-  // supersession, reap) for the locally attached run cuts the local transport
-  // — no content growth or flicker under a stopped banner (§18, race #34).
-  useEffect(() => {
-    if (presentation.shouldStopLocalStream) {
-      void stopRef.current()
-    }
-  }, [presentation.shouldStopLocalStream])
-
-  // Orchestrated Stop (§9): cut the local transport promptly, then settle the
-  // EXACT run durably so every tab converges — a returning client with no
-  // local stream stops the background run the same way. The resolver's
-  // stopTargetRunId is read at call time (the composer retains this callback).
-  const stopGenerationRunMutation = useMutation(api.chatRuntime.stopGenerationRun)
-  const presentationRef = useRef(presentation)
-  useLayoutEffect(() => {
-    presentationRef.current = presentation
-  })
-  const fireDurableStop = useCallback(
-    async (targetRunId: string) => {
-      if (!chatId) return
-      setPendingStopRunId(targetRunId)
-      try {
-        // Run-scoped by construction: the mutation derives (and ownership-
-        // checks) the chat THROUGH the run — no second id to disagree.
-        await stopGenerationRunMutation({
-          runId: targetRunId as Id<"generationRuns">,
-        })
-      } catch (stopError) {
-        console.error("Durable stop failed:", stopError)
-        toast({ title: "Failed to stop generation", status: "error" })
-      } finally {
-        setPendingStopRunId(null)
-      }
-    },
-    [chatId, stopGenerationRunMutation]
-  )
-
-  // A Stop clicked before the selected-run projection has delivered this
-  // dispatch's run id must NOT be a silent no-op: durable provider
-  // consumption is detached from req.signal, so cutting the local transport
-  // alone leaves the worker streaming. The intent is deferred — the effect
-  // below fires it at the EXACT run id the projection delivers (Stop stays
-  // run-scoped, never "the active run"). `priorRunId` pins the run the
-  // projection showed AT ARM TIME: in any chat with history that is the
-  // PREVIOUS turn's terminal run, and the intent must keep waiting through
-  // it — disarming on it was the round-3 review's silent-no-op bug.
-  const [deferredStop, setDeferredStop] = useState<{
-    chatId: string
-    priorRunId: string | null
-  } | null>(null)
-  const selectedRunRef = useRef(selectedRun)
-  useLayoutEffect(() => {
-    selectedRunRef.current = selectedRun
-  })
-
-  const handleStop = useCallback(async () => {
-    void stopRef.current()
-    if (!chatId || getMessagePersistenceMode(chatId) !== "server") {
-      return
-    }
-    const targetRunId = presentationRef.current.stopTargetRunId
-    if (!targetRunId) {
-      // The run exists server-side (prepare commits before the first token)
-      // but its projection hasn't arrived — defer instead of dropping.
-      setDeferredStop({
-        chatId,
-        priorRunId: selectedRunRef.current?.runId ?? null,
-      })
-      return
-    }
-    await fireDurableStop(targetRunId)
-  }, [chatId, fireDurableStop])
-
-  useEffect(() => {
-    if (deferredStop === null) return
-    if (deferredStop.chatId !== chatId) {
-      // Navigated away — the intent was for another chat's projection.
-      setDeferredStop(null)
-      return
-    }
-    if (selectedRun === null) return
-    // Still the pre-dispatch run (typically the previous turn's terminal):
-    // the stopped dispatch's own projection hasn't landed — keep waiting.
-    if (selectedRun.runId === deferredStop.priorRunId) return
-    setDeferredStop(null)
-    // A NEW run id arriving already terminal means nothing is left to stop;
-    // anything active — queued/running/streaming/awaiting_approval — takes
-    // the deferred Stop.
-    if (
-      selectedRun.status === "completed" ||
-      selectedRun.status === "aborted" ||
-      selectedRun.status === "failed"
-    ) {
-      return
-    }
-    void fireDurableStop(selectedRun.runId)
-  }, [deferredStop, chatId, selectedRun, fireDurableStop])
-
-  // The intent cannot wait forever: if no new projection ever arrives (the
-  // dispatch failed before prepare), disarm quietly.
-  useEffect(() => {
-    if (deferredStop === null) return
-    const timer = setTimeout(() => setDeferredStop(null), 30_000)
-    return () => clearTimeout(timer)
-  }, [deferredStop])
-
-  // Generation guard: prevent stuck "streaming" UI when a stream drops silently
-  useEffect(() => {
-    if (status !== "streaming") return
-
-    const timeout = setTimeout(() => {
-      stopRef.current()
-      toast({
-        title: "Response timed out — please try again",
-        status: "error",
-      })
-    }, STREAM_TIMEOUT_MS)
-
-    return () => clearTimeout(timeout)
-  }, [status])
 
   // Hydrate on chat entry, then keep the live turn array projected onto the
   // backend-derived selected path. `initialMessages` is the reactive selected

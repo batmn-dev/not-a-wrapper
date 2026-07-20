@@ -1,6 +1,8 @@
 "use client"
 
 import { api } from "@/convex/_generated/api"
+import { useDeadlineReached } from "@/hooks/use-clock"
+import { ENABLE_DURABLE_RUN_PRESENTATION } from "@/lib/flags"
 import { useConvexAuth, useMutation } from "convex/react"
 import * as React from "react"
 import { create } from "zustand"
@@ -82,7 +84,8 @@ export function deriveChatRowStatus(
     last_read_at?: number | null
   },
   overrideStatus: SidebarChatStatus | null,
-  now: number = Date.now()
+  now: number = Date.now(),
+  durablePresentationEnabled: boolean = true
 ): SidebarChatStatus {
   if (overrideStatus && overrideStatus !== "idle") return overrideStatus
   // Freshness-bounded (durable-turn gameplan §11/§18 #4): the projection's
@@ -93,8 +96,20 @@ export function deriveChatRowStatus(
   // the reaper still bounds it.
   const fresh =
     chat.live_run_fresh_until == null || now < chat.live_run_fresh_until
-  if (fresh && chat.live_run_status === "streaming") return "streaming"
-  if (fresh && chat.live_run_status === "awaiting") return "awaiting"
+  if (
+    durablePresentationEnabled &&
+    fresh &&
+    chat.live_run_status === "streaming"
+  ) {
+    return "streaming"
+  }
+  if (
+    durablePresentationEnabled &&
+    fresh &&
+    chat.live_run_status === "awaiting"
+  ) {
+    return "awaiting"
+  }
   if ((chat.last_run_ended_at ?? 0) > (chat.last_read_at ?? 0)) {
     if (chat.last_run_status === "failed") return "error"
     if (chat.last_run_status === "completed") return "unread"
@@ -112,21 +127,23 @@ export function useSidebarChatStatus(chat: Chat): SidebarChatStatus {
   const overrideStatus = useSidebarChatStatusStore((state) =>
     state.liveOverride?.chatId === chat.id ? state.liveOverride.status : null
   )
-  // Re-render once when a live row's freshness ceiling lapses, so an expired
-  // deadline stops animating without waiting for another data change (the
-  // reaper's terminal projection follows and settles it durably).
-  const [, forceExpiryRender] = React.useReducer((tick: number) => tick + 1, 0)
   const freshUntil = chat.live_run_fresh_until
   const isLive =
     chat.live_run_status === "streaming" || chat.live_run_status === "awaiting"
-  React.useEffect(() => {
-    if (!isLive || freshUntil == null) return
-    const remaining = freshUntil - Date.now()
-    if (remaining <= 0) return
-    const timeout = setTimeout(forceExpiryRender, remaining + 250)
-    return () => clearTimeout(timeout)
-  }, [isLive, freshUntil])
-  return deriveChatRowStatus(chat, overrideStatus)
+  // The expiry deadline is an external clock boundary, subscribed through
+  // useSyncExternalStore instead of mirrored component state/effect.
+  const deadlineReached = useDeadlineReached(
+    freshUntil ?? null,
+    ENABLE_DURABLE_RUN_PRESENTATION && isLive
+  )
+  const now =
+    freshUntil == null ? 0 : deadlineReached ? freshUntil : freshUntil - 1
+  return deriveChatRowStatus(
+    chat,
+    overrideStatus,
+    now,
+    ENABLE_DURABLE_RUN_PRESENTATION
+  )
 }
 
 /**

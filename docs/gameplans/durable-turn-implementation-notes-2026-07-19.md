@@ -250,6 +250,42 @@ gates nothing. Revisit if a production rollout needs staged exposure.
   string; collision risk is negligible and the route emits that code
   deliberately.
 
+## Fifth review remediation (2026-07-20)
+
+The fourth-round conclusions about effects and the presentation flag are
+superseded for this branch by the explicit follow-up review standard:
+
+- **Presentation ownership was consolidated.** The newly introduced
+  transport-clock mirror, presentation interval, terminal-to-local-Stop relay,
+  deferred-Stop relay/timeout, and sidebar-expiry timer no longer live as
+  independent `useEffect` choreography. A focused generation-presentation
+  controller owns local dispatch identity and exact deferred Stop state;
+  dispatch time is emitted by the Chat turn controller at the actual SDK
+  dispatch boundary. Wall-clock updates and deadlines use external-store
+  subscriptions. One purpose-built layout synchronization is retained for the
+  genuine external convergence boundary: a Convex projection can satisfy a
+  deferred Stop or terminalize a locally attached transport independently of a
+  user event.
+- **The presentation rollout boundary now exists.**
+  `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION=true` enables unmatched
+  background/stale/returning-client presentation. It is OFF by default until
+  the §14 fifteen-flow checklist passes. Backend leases, reapers, snapshots,
+  approval expiry, atomic projection, and run-owned Stop remain active while
+  the flag is off. The independently accepted default-on paginated-sidebar flag
+  (ADR-0005) is unchanged.
+- **Approval expiry now has one transactional owner.** Decision-time expiry and
+  the approval reaper call the same operation, settling the approval, linked
+  Tool invocation, paused run, Assistant message, and chat projection in either
+  commit order. The exact boundary is `now >= expiresAt` for both paths.
+- **Canonical losing-click feedback is complete.** The client applies the
+  stored winning status and reason and displays the required “Already resolved”
+  informational feedback. Tests cover approve-first and deny-first races with
+  different reasons.
+- **The projection-gap Stop regression reaches the real Composer control.** A
+  submitted turn in a chat with a previous terminal run renders Stop; clicking
+  the actual primary action reaches the deferred exact-run path, which waits
+  for a new projection identity rather than inferring the last run in the chat.
+
 ## Live verification performed
 
 - PR 3 reaper: a seeded expired-lease streaming run on the dev deployment was

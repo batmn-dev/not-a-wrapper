@@ -113,6 +113,7 @@ function createHarness() {
     regenerate: vi.fn(() => {
       events.push("regenerate")
     }),
+    consumeLocalStopIntent: vi.fn(() => false),
     toastError: vi.fn((title) => {
       events.push(`toastError:${title}`)
     }),
@@ -520,6 +521,42 @@ describe("chat turn controller", () => {
     expect(confirmDispatched).not.toHaveBeenCalled()
     expect(getMessages()).toEqual([])
     expect(adapters.toastError).toHaveBeenCalledWith("Failed to send message")
+  })
+
+  it("accepts an explicitly stopped turn when local abort races request acceptance", async () => {
+    const { adapters, controller, getMessages, setSnapshot } = createHarness()
+    setSnapshot({ isAuthenticated: true })
+    const confirmDispatched = vi.fn()
+    const onSuccess = vi.fn()
+    adapters.ensureChatExists = vi.fn(async () => ({
+      chatId: "chat-new",
+      firstTurn: {
+        userMessageId: "message_user_1",
+        clientMessageId: "stopped-message",
+        attachments: [],
+        confirmDispatched,
+      },
+    }))
+    adapters.sendMessageAndWaitForAcceptance = vi.fn(async () => {
+      throw new DOMException("The operation was aborted", "AbortError")
+    })
+    adapters.consumeLocalStopIntent = vi
+      .fn()
+      .mockReturnValueOnce(true)
+      .mockReturnValue(false)
+
+    await controller.runSendTurn({
+      text: "Stop this turn",
+      onSuccess,
+    })
+
+    expect(getMessages()).toEqual([
+      expect.objectContaining({ id: "stopped-message", role: "user" }),
+    ])
+    expect(confirmDispatched).toHaveBeenCalledTimes(1)
+    expect(adapters.setHasSentFirstMessage).toHaveBeenCalledWith(true)
+    expect(onSuccess).toHaveBeenCalledWith("chat-new")
+    expect(adapters.toastError).not.toHaveBeenCalled()
   })
 
   it("reuses the original identity after an ambiguous claimed-then-disconnected request", async () => {

@@ -372,6 +372,7 @@ function ChatInner({
         <ChatStatusAnnouncer
           status={effectiveStatus}
           isSubmitting={isSubmitting}
+          presentationState={presentation.state}
         />
         <DialogAuth open={hasDialogAuth} setOpen={setHasDialogAuth} />
 
