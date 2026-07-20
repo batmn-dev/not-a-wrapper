@@ -3,8 +3,8 @@
 - **Better in-progress conversation view:** persist and surface active progress
   when a user leaves and returns to a streaming chat.
 - **Finish durable-run liveness and presentation:** ADR-0011 (2026-07-18) closed the
-  incident's answer-loss and worker-auth failure modes (execution grants, settlement
-  receipts, final full-parts snapshot). Remaining: execution budget + grant hardening
+  incident's answer-loss and durable-settlement worker-auth failure modes (execution
+  grants, settlement receipts, final full-parts snapshot). Remaining: execution budget + grant hardening
   (PR 0), heartbeat/lease/cron reaper, shared run-presentation resolver, durable Stop —
   follow the [durable-turn gameplan](docs/gameplans/extend-the-existing-convex-native-durable-turn-architecture.md)
   and its 2026-07-19 ADR-0011 addendum. The

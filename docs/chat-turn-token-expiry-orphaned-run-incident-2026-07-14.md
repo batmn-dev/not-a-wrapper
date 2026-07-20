@@ -11,7 +11,7 @@
 
 ## Post-remediation reconciliation (2026-07-19)
 
-This document is a historical incident record. The diagnosis, evidence, and timeline sections remain accurate as written on 2026-07-14. The recommendation and phase sections are frozen and partially superseded: the core remediation landed on 2026-07-18 as [ADR-0011 — Durable turn settlement](./adr/0011-durable-turn-settlement.md) (PR #121), and the single forward-looking plan is now the [durable-turn gameplan](./gameplans/extend-the-existing-convex-native-durable-turn-architecture.md) and its 2026-07-19 ADR-0011 addendum. **Implement from the gameplan, not from this report.**
+This document is a historical incident record. The diagnosis, evidence, and timeline sections remain accurate as written on 2026-07-14; code references in the historical sections describe the 2026-07-14 tree and may no longer match current `HEAD`. The recommendation and phase sections are frozen and partially superseded: the core remediation landed on 2026-07-18 as [ADR-0011 — Durable turn settlement](./adr/0011-durable-turn-settlement.md) (PR #121), and the single forward-looking plan is now the [durable-turn gameplan](./gameplans/extend-the-existing-convex-native-durable-turn-architecture.md) and its 2026-07-19 ADR-0011 addendum. **Implement from the gameplan, not from this report.**
 
 ### Outcome of each recommendation
 
@@ -20,18 +20,18 @@ This document is a historical incident record. The diagnosis, evidence, and time
 | Run-scoped execution capability (Option C, systemic design §1, Phase 2) | **Implemented** — ADR-0011 execution grant: per-run 32-byte CSPRNG secret, SHA-256 digest stored on the run row, Bearer worker wire through `convex/http.ts` → grant-authorized internal mutations in `convex/chatRuntimeWorker.ts` (constant-time digest compare, expiry, run→chat→user linkage). |
 | Delivery isolated from settlement; typed persistence outcome (§4, Phase 1 item 4) | **Implemented** — `settle()` never rejects; typed `DurableSettlementReceipt` (`confirmed` / `degraded` / `guest`); degraded settlement logs `durable_settlement_degraded` and the response pipe finishes cleanly. |
 | Final content snapshot before the terminal transition (§3, Phase 1 item 3) | **Implemented** — unconditional final full-parts snapshot sequenced before the terminal write in `settle()`. |
-| Bounded, idempotent terminal retries (§5, Phase 1 item 2) | **Implemented** — `settleRetryDelaysMs` (three attempts); first-terminal-wins was already enforced by `convex/domain/generation_run_lifecycle.ts`. |
+| Bounded, idempotent terminal retries (§5, Phase 1 item 2) | **Implemented for terminal writes** — `settleRetryDelaysMs` (three attempts); snapshot writes remain single-shot and the final-flush failure is caught and warned, not retried. Terminal convergence was already enforced by `convex/domain/generation_run_lifecycle.ts`: first terminal wins, except `fail` may overwrite `completed`, and `aborted` is absorbing. |
 | Browser recovery copy for degraded persistence (§4, Phase 1 item 5) | **Rejected** — ADR-0011 "Client contract (deliberate non-change)": content preservation is server-owned and the durable read path consults only the Convex subscription; a client copy recreates the split-brain this report warns about. Marked inline below. |
-| Admission-time WorkOS freshness check / refresh (§2, Phase 1 item 1, Option B containment) | **Obsolete** — with execution grants the user token only needs to survive `prepareGeneration`; an expired token now fails admission cleanly with a 4xx before any stream begins. |
+| Admission-time WorkOS freshness check / refresh (§2, Phase 1 item 1, Option B containment) | **Obsolete** — with execution grants the user token only needs to survive `prepareGeneration`; an expired token now fails at admission, before any stream begins. (Today that surfaces as a generic request error — prepare maps only argument-validation failures to 400 and the route falls back to 500; explicit 401 mapping is optional follow-up, not a durability concern.) |
 | Heartbeat lease + cron reaper (§6, Phase 3) | **Remaining** — deferred (not rejected) by ADR-0011; gameplan PRs 1–3, with heartbeat re-based onto the grant-authorized worker wire. |
 | Shared run-presentation resolver (§7, Phase 4 items 1–2) | **Remaining** — gameplan PRs 4–5 and 7. `Finished / Done` still renders without positive completion evidence at HEAD. |
-| Ordered execution deadlines (§8, Phase 4 item 3) | **Remaining** — gameplan addendum "execution budget"; the top-line route duration is an open product decision. |
+| Ordered execution deadlines (§8, Phase 4 item 3) | **Remaining** — gameplan addendum "execution budget" (PR 0). The top-line route duration was decided 2026-07-19: 300 s. |
 | Tool-budget enforcement under degraded accounting (§9, Phase 4 item 4) | **Substantially implemented** — bounded request-local cap and fail-closed behavior for non-policy errors, tested in `lib/tools`; elapsed-time/settlement-reserve inputs remain optional follow-up. |
 | Phase 0 containment and audit | **Obsolete pre-launch** — the development database is disposable (AGENTS.md); the affected run may simply be administratively failed or wiped. |
-| Observability/SLO program (§10) | **Trimmed** — ADR-0011's structured warn-tag vocabulary landed; dashboards, alerts, and SLOs are deferred until launch. |
+| Observability/SLO program (§10) | **Partially landed; the rest is rollout-scoped** — ADR-0011's structured warn-tag vocabulary landed. The gameplan's §15 operational telemetry and alerts remain required rollout gating for the lease/reaper and presentation phases; only dashboards and SLOs are deferred until launch. |
 | Amend or supersede ADR-0009 | **Done** — ADR-0011 supersedes exactly three ADR-0009 decisions and leaves the rest intact. |
 
-A 2026-07-19 review of the landed implementation identified hardening follow-ups (grant TTL and terminal revocation, fail/abort run→message linkage, tool-invocation terminal guard, secret-scrubber coverage for the grant secret, worker-endpoint error redaction, the residual `toolCallLog` user-token write). They are absorbed into the gameplan addendum's PR 0.
+A 2026-07-19 review of the landed implementation identified hardening follow-ups (grant TTL and absorbing-terminal revocation, fail/abort run→message linkage, tool-invocation terminal guard, secret-scrubber coverage for the grant secret, worker-endpoint error redaction, and the two residual mid-stream user-token writes — `toolCallLog.log` and `toolLimits.checkAndConsume`). They are absorbed into the gameplan addendum's PR 0.
 
 ### Corrections to this report
 
@@ -554,7 +554,7 @@ tool_calls_executed > configured_hard_cap                  == 0
 
 ### Phase 1: prevent answer loss at the current boundary
 
-*Status 2026-07-19: items 2–4 landed via ADR-0011; item 1 is obsolete (execution grants removed the mid-run token dependency); item 5 was rejected (see the superseded marker in systemic design §4); item 6 is partial — durable failed/aborted/awaiting-approval outcomes now render first-class, but the shared resolver (Phase 4) still owns the rest.*
+*Status 2026-07-19: items 3–4 landed via ADR-0011; item 2 is partial (terminal writes retry with bounded backoff; snapshot writes are single-shot and the final-flush failure is caught, not retried); item 1 is obsolete for durability (execution grants removed the mid-run token dependency from durable-run writes); item 5 was rejected (see the superseded marker in systemic design §4); item 6 is partial — durable failed/aborted/awaiting-approval outcomes now render first-class, but the shared resolver (Phase 4) still owns the rest.*
 
 1. Refresh near-expiry WorkOS sessions before admitting a stream.
 2. Add bounded retry and typed failure handling around snapshot and terminal writes.
@@ -567,7 +567,7 @@ This phase reduces immediate user harm but still should not rely indefinitely on
 
 ### Phase 2: introduce run-scoped worker authorization
 
-*Status 2026-07-19: implemented — ADR-0011 (PR #121). Hardening follow-ups are gameplan addendum PR 0.*
+*Status 2026-07-19: core implemented — ADR-0011 (PR #121) moved snapshots, tool-invocation records, approval requests, and terminal transitions onto grant-authorized worker mutations. Not yet on the wire: heartbeats (they do not exist yet — Phase 3) and two mid-stream writes that still ride the user token (`toolCallLog.log`, `toolLimits.checkAndConsume`). Hardening follow-ups are gameplan addendum PR 0.*
 
 1. Threat-model and specify the execution capability.
 2. Add the verifier/expiry to the durable run model.
