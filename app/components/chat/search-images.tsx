@@ -1,6 +1,7 @@
+import { Favicon } from "@/components/ui/favicon"
 import Image from "next/image"
 import { useState } from "react"
-import { addUTM, getFavicon, getSiteName } from "./utils"
+import { addUTM, getSiteName } from "./utils"
 
 type ImageResult = {
   title: string
@@ -20,7 +21,6 @@ export function SearchImages({ results }: { results: ImageResult[] }) {
   return (
     <div className="my-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
       {results.map((img, i) => {
-        const favicon = getFavicon(img.sourceUrl)
         return hiddenIndexes.has(i) ? null : (
           <a
             key={i}
@@ -38,13 +38,12 @@ export function SearchImages({ results }: { results: ImageResult[] }) {
             />
             <div className="bg-primary absolute right-0 bottom-0 left-0 flex flex-col gap-0.5 px-2.5 py-1.5 opacity-0 transition-opacity duration-100 ease-out group-hover/image:opacity-100">
               <div className="flex items-center gap-1">
-                {favicon && (
-                  <Image
-                    src={favicon}
-                    alt="favicon"
-                    className="h-4 w-4 rounded-full"
-                  />
-                )}
+                <Favicon
+                  url={img.sourceUrl}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                />
                 <span className="text-secondary line-clamp-1 text-xs">
                   {getSiteName(img.sourceUrl)}
                 </span>

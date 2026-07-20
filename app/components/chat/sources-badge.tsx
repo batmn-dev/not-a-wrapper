@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge"
 import { Favicon } from "@/components/ui/favicon"
-import type { SourceUrlUIPart } from "ai"
+import type { AssistantSourceResult } from "@/lib/chat-messages/sources"
 
 /**
  * Opens the selected turn's Sources section. The cluster keeps the first three
@@ -10,9 +10,11 @@ import type { SourceUrlUIPart } from "ai"
 
 const MAX_CLUSTER_FAVICONS = 3
 
-function clusterSources(sources: SourceUrlUIPart[]): SourceUrlUIPart[] {
+function clusterSources(
+  sources: readonly AssistantSourceResult[]
+): AssistantSourceResult[] {
   const seenHosts = new Set<string>()
-  const cluster: SourceUrlUIPart[] = []
+  const cluster: AssistantSourceResult[] = []
   for (const source of sources) {
     let host = source.url
     try {
@@ -30,7 +32,7 @@ function clusterSources(sources: SourceUrlUIPart[]): SourceUrlUIPart[] {
 
 export type SourcesBadgeProps = {
   /** Deduped sources from the Assistant turn view — never re-extracted here. */
-  sources: SourceUrlUIPart[]
+  sources: readonly AssistantSourceResult[]
   /** True when this turn is projected into the open Activity panel. */
   open: boolean
   /** Opens the Activity panel on this turn's Sources section. */
@@ -69,7 +71,7 @@ export function SourcesBadge({
             className="border-background bg-background group-hover/source-badge:border-border-default relative -ms-1.5 flex items-center overflow-clip rounded-full border-2 first:me-0"
           >
             <Favicon
-              url={source.url}
+              url={source.faviconDomain ?? source.url}
               loading="lazy"
               decoding="async"
               className="border-border border-[0.5px]"

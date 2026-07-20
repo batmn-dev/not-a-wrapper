@@ -4,17 +4,13 @@
  * @upstream https://prompt-kit.com/docs/source
  * @customized true
  * @customizations
- *   - ESLint disables for `@next/next/no-img-element` are intentional
- *   - Uses Google Favicon API for dynamic external favicons
- *   - next/image optimization not beneficial for external dynamic URLs
- *   - Each ESLint disable has inline comment explaining the reason
+ *   - Uses the shared Favicon module for retrieval and fallback consistency
  * @upgradeNotes
- *   - Preserve ESLint disable comments with explanations
- *   - Do NOT convert img tags to next/image (dynamic external URLs)
- *   - Verify Google Favicon API URL format remains current
+ *   - Preserve the shared Favicon module instead of adding direct images
  */
 "use client"
 
+import { Favicon } from "@/components/ui/favicon"
 import {
   HoverCard,
   HoverCardContent,
@@ -95,15 +91,12 @@ export function SourceTrigger({
   return (
     <HoverCardTrigger delay={150} closeDelay={0} render={trigger}>
       {showFavicon && (
-        // eslint-disable-next-line @next/next/no-img-element -- Dynamic external favicon, optimization not beneficial
-        <img
-          src={`https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(
-            href
-          )}`}
-          alt="favicon"
-          width={14}
-          height={14}
-          className="size-3.5 rounded-full"
+        <Favicon
+          url={href}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="size-3.5"
         />
       )}
       <span className="truncate text-center font-normal tabular-nums">
@@ -135,16 +128,7 @@ export function SourceContent({
         className="flex flex-col gap-2 p-3"
       >
         <div className="flex items-center gap-1.5">
-          {/* eslint-disable-next-line @next/next/no-img-element -- Dynamic external favicon, optimization not beneficial */}
-          <img
-            src={`https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(
-              href
-            )}`}
-            alt="favicon"
-            className="size-4 rounded-full"
-            width={16}
-            height={16}
-          />
+          <Favicon url={href} alt="" loading="lazy" decoding="async" />
           <div className="text-primary truncate text-sm">
             {domain.replace("www.", "")}
           </div>
@@ -175,9 +159,8 @@ export type SourcesGalleryItemProps = {
  * SourcesGalleryItem — a single full-bleed source row for the Activity panel
  * sources gallery. Unlike `Source`/`SourceTrigger`/`SourceContent` (a HoverCard
  * citation pill), this is a plain anchor with an internal favicon, site name,
- * semibold title, and a reserved description slot. Favicon is requested at
- * `sz=32` against the page ORIGIN and rendered in a fixed 16px box to avoid
- * layout shift across a large gallery.
+ * semibold title, and a reserved description slot. Favicon is rendered in a
+ * fixed 16px box to avoid layout shift across a large gallery.
  */
 export function SourcesGalleryItem({
   href,
@@ -190,10 +173,7 @@ export function SourcesGalleryItem({
   const safeHref = safeUrl?.toString()
   const hostname = safeUrl?.hostname ?? getFallbackSourceLabel(href)
 
-  let origin = faviconDomain
-  if (!origin) {
-    origin = safeUrl?.origin ?? ""
-  }
+  const faviconUrl = faviconDomain ?? safeUrl?.origin ?? href
 
   return (
     <a
@@ -203,14 +183,9 @@ export function SourcesGalleryItem({
       className="hover:bg-interactive-hover active:bg-interactive-pressed focus-visible:ring-focus-ring flex flex-col gap-0.5 rounded-[12px] px-3 py-2.5 outline-none focus-visible:ring-2"
     >
       <div className="flex h-6 items-center gap-2 text-xs">
-        {/* eslint-disable-next-line @next/next/no-img-element -- Dynamic external favicon, optimization not beneficial */}
-        <img
-          src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(
-            origin
-          )}&sz=32`}
+        <Favicon
+          url={faviconUrl}
           alt=""
-          width={16}
-          height={16}
           loading="lazy"
           decoding="async"
           className="bg-card size-4 shrink-0 rounded-full object-cover motion-safe:transition-opacity"

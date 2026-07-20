@@ -210,7 +210,7 @@ describe("ActivityPanel coexistence (R6)", () => {
     ).toHaveLength(1)
     // Three visible search chips, the overflow toggle's two-favicon stack
     // (both hidden sources), plus all five result rows.
-    expect(document.querySelectorAll("img")).toHaveLength(10)
+    expect(document.querySelectorAll('[data-slot="avatar"]')).toHaveLength(10)
   })
 
   it("collapses the slot on close but keeps the shell mounted until the width transition ends", () => {
@@ -383,8 +383,8 @@ describe("ActivityPanel coexistence (R6)", () => {
     // Collapsed: favicon-stack preview of the hidden sources + "N more".
     expect(more?.textContent).toBe("2 more")
     expect(more?.getAttribute("aria-controls")).toBeTruthy()
-    expect(more?.querySelectorAll("img")).toHaveLength(2)
-    expect(document.querySelectorAll("img")).toHaveLength(10)
+    expect(more?.querySelectorAll('[data-slot="avatar"]')).toHaveLength(2)
+    expect(document.querySelectorAll('[data-slot="avatar"]')).toHaveLength(10)
 
     act(() => more?.click())
     // Expanded: all chips inline plus a text-only "Show less" toggle.
@@ -393,9 +393,9 @@ describe("ActivityPanel coexistence (R6)", () => {
       'button[aria-expanded="true"]'
     )
     expect(less?.textContent).toBe("Show less")
-    expect(less?.querySelectorAll("img")).toHaveLength(0)
+    expect(less?.querySelectorAll('[data-slot="avatar"]')).toHaveLength(0)
     // Five inline chips plus five Sources gallery rows.
-    expect(document.querySelectorAll("img")).toHaveLength(10)
+    expect(document.querySelectorAll('[data-slot="avatar"]')).toHaveLength(10)
 
     // The toggle round-trips freely.
     act(() => less?.click())

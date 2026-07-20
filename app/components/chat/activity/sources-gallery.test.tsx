@@ -40,7 +40,7 @@ describe("SourcesGallery (R8 favicon perf)", () => {
     container = null
   })
 
-  it("loads one favicon lazily for each source", () => {
+  it("renders one shared favicon for each source", () => {
     const sources = Array.from({ length: 3 }, (_, i) => ({
       sourceId: `source-${i}`,
       href: `https://example${i}.com/page`,
@@ -51,12 +51,7 @@ describe("SourcesGallery (R8 favicon perf)", () => {
       root?.render(<SourcesGallery sources={sources} />)
     })
 
-    const imgs = Array.from(container!.querySelectorAll("img"))
-    expect(imgs).toHaveLength(3)
-    for (const img of imgs) {
-      expect(img.getAttribute("loading")).toBe("lazy")
-      expect(img.getAttribute("decoding")).toBe("async")
-    }
+    expect(container!.querySelectorAll('[data-slot="avatar"]')).toHaveLength(3)
   })
 
   it("does not assign unsafe schemes to source row anchors", () => {
