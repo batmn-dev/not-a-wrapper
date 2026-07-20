@@ -9,6 +9,7 @@ import {
   createConvexDurableTurn,
   createGuestDurableTurn,
   createHttpDurableWorkerWire,
+  DurableWorkerWriteError,
   type DurableTurnInput,
   type DurableWorkerCall,
   type DurableWorkerWire,
@@ -666,6 +667,463 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
       )
     } finally {
       warn.mockRestore()
+    }
+  })
+
+  it("confirms after a retry when the first completion attempt fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      let attempts = 0
+      const wire = makeRecordingWire({
+        responders: {
+          markGenerationRunCompleted: () => {
+            attempts += 1
+            if (attempts === 1) throw new Error("transient convex hiccup")
+            return undefined
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+      binding.stream.captureFinish({
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        finishReason: "stop",
+        toolCounts: { totalToolCalls: 0, failedToolCalls: 0 },
+      })
+
+      const receipt = await binding.envelope.settle({
+        responseMessage: RESPONSE_MESSAGE,
+        isAborted: false,
+        finishReason: "stop",
+      })
+
+      expect(receipt).toEqual({
+        status: "confirmed",
+        runId: "run1",
+        outcome: "completed",
+      })
+      expect(wireCalls(wire, "markGenerationRunCompleted")).toHaveLength(2)
+      // The first attempt still warned — retries are observable, not silent.
+      const attemptWarnings = warn.mock.calls
+        .map(([message]) => JSON.parse(String(message)))
+        .filter(
+          (message) => message._tag === "durable_completion_write_failed"
+        )
+      expect(attemptWarnings).toEqual([expect.objectContaining({ attempt: 1 })])
+      expect(Sentry.captureMessage).not.toHaveBeenCalledWith(
+        "durable_settlement_degraded",
+        expect.anything()
+      )
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("warns durable_final_snapshot_write_failed and still confirms the terminal write", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          updateAssistantSnapshot: () => {
+            throw new Error("snapshot write refused")
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+      binding.stream.captureFinish({
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        finishReason: "stop",
+        toolCounts: { totalToolCalls: 0, failedToolCalls: 0 },
+      })
+
+      const receipt = await binding.envelope.settle({
+        responseMessage: RESPONSE_MESSAGE,
+        isAborted: false,
+        finishReason: "stop",
+      })
+
+      // The failed final snapshot degrades nothing by itself: the completion
+      // write carries the same content+parts and its receipt decides.
+      expect(receipt).toEqual({
+        status: "confirmed",
+        runId: "run1",
+        outcome: "completed",
+      })
+      const snapshotWarning = warn.mock.calls
+        .map(([message]) => JSON.parse(String(message)))
+        .find(
+          (message) => message._tag === "durable_final_snapshot_write_failed"
+        )
+      expect(snapshotWarning).toMatchObject({
+        requestId: "req-1",
+        runId: "run1",
+        error: "snapshot write refused",
+      })
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("absorbs a grant-unauthorized rejection as settled-elsewhere instead of degrading OR claiming this outcome (revocation, gameplan §0)", async () => {
+    // An absorbing outcome (stream onAbort's write, a landed failure) revokes
+    // the grant, so the envelope's benign double-terminal write now rejects at
+    // the grant gate. That rejection must read as idempotent settlement — not
+    // a degraded receipt on every user Stop — but it must NOT claim the
+    // requested outcome either: the run settled with the REVOKER's outcome
+    // (which could be `failed` under a completion write), and only Convex
+    // knows which. `settled-elsewhere` keeps the receipt honest.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          markGenerationRunAborted: () => {
+            throw new DurableWorkerWriteError({
+              op: "markGenerationRunAborted",
+              status: 401,
+              detail:
+                '{"ok":false,"code":"grant_unauthorized","error":"Execution grant not authorized"}',
+              grantRejection: "grant_unauthorized",
+            })
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+
+      const receipt = await binding.envelope.settle({
+        responseMessage: RESPONSE_MESSAGE,
+        isAborted: true,
+        finishReason: "stop",
+      })
+
+      expect(receipt).toEqual({
+        status: "confirmed",
+        runId: "run1",
+        outcome: "settled-elsewhere",
+      })
+      // No retries: the rejection is deterministic and benign.
+      expect(wireCalls(wire, "markGenerationRunAborted")).toHaveLength(1)
+      const settledWarning = warn.mock.calls
+        .map(([message]) => JSON.parse(String(message)))
+        .find(
+          (message) =>
+            message._tag === "durable_terminal_write_rejected_settled"
+        )
+      expect(settledWarning).toMatchObject({
+        runId: "run1",
+        op: "markGenerationRunAborted",
+      })
+      expect(Sentry.captureMessage).not.toHaveBeenCalled()
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("short-circuits every later worker write after a grant rejection (post-Stop 401 storm)", async () => {
+    // A Stop lands mid-stream: the FIRST rejected write discovers revocation;
+    // everything after it — snapshot flushes, the final full-parts snapshot,
+    // the terminal write — must settle locally instead of hammering the
+    // endpoint with more 401s.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          updateAssistantSnapshot: () => {
+            throw new DurableWorkerWriteError({
+              op: "updateAssistantSnapshot",
+              status: 401,
+              detail: '{"ok":false,"code":"grant_unauthorized"}',
+              grantRejection: "grant_unauthorized",
+            })
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+
+      // Stream chunk → throttled snapshot write → 401 discovers revocation.
+      binding.stream.onChunk({ type: "text-delta", text: "partial" } as never)
+      await vi.waitFor(() => {
+        expect(wireCalls(wire, "updateAssistantSnapshot")).toHaveLength(1)
+      })
+      expect(turn.executionAbortSignal.aborted).toBe(true)
+
+      const receipt = await binding.envelope.settle({
+        responseMessage: RESPONSE_MESSAGE,
+        isAborted: true,
+        finishReason: "stop",
+      })
+
+      expect(receipt).toEqual({
+        status: "confirmed",
+        runId: "run1",
+        outcome: "settled-elsewhere",
+      })
+      // ONE wire write total after prepare: the discovering snapshot. The
+      // final snapshot and the terminal abort write were both gated locally.
+      expect(wireCalls(wire, "updateAssistantSnapshot")).toHaveLength(1)
+      expect(wireCalls(wire, "markGenerationRunAborted")).toHaveLength(0)
+      const revokedWarnings = warn.mock.calls
+        .map(([message]) => JSON.parse(String(message)))
+        .filter((message) => message._tag === "durable_worker_authority_revoked")
+      expect(revokedWarnings).toHaveLength(1)
+      expect(Sentry.captureMessage).not.toHaveBeenCalled()
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("degrades — never claims settlement — when grant EXPIRY is discovered mid-settlement", async () => {
+    // Expiry means the TTL lapsed with NO known terminal anywhere. The final
+    // snapshot discovers it; the completion write must then degrade instead
+    // of resolving a local skip as a landed (or settled-elsewhere) outcome.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          updateAssistantSnapshot: () => {
+            throw new DurableWorkerWriteError({
+              op: "updateAssistantSnapshot",
+              status: 401,
+              detail: '{"ok":false,"code":"grant_expired"}',
+              grantRejection: "grant_expired",
+            })
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+
+      const receipt = await binding.envelope.settle({
+        responseMessage: RESPONSE_MESSAGE,
+        isAborted: false,
+        finishReason: "stop",
+      })
+
+      expect(receipt).toEqual({
+        status: "degraded",
+        runId: "run1",
+        reason: "completion write failed after retries",
+      })
+      // The completion write was gated locally — no wire attempt could land.
+      expect(wireCalls(wire, "markGenerationRunCompleted")).toHaveLength(0)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("a grant rejection from a TOOL-INVOCATION write gates later writes too", async () => {
+    // "ANY worker write" discovers revocation — not just heartbeat/snapshot/
+    // terminal. The first rejected record write must close the local gate.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          recordToolInvocations: () => {
+            throw new DurableWorkerWriteError({
+              op: "recordToolInvocations",
+              status: 401,
+              detail: '{"ok":false,"code":"grant_unauthorized"}',
+              grantRejection: "grant_unauthorized",
+            })
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+
+      binding.stream.recordStep({
+        stepNumber: 1,
+        toolCalls: [
+          { toolCallId: "call_1", toolName: "web_search", input: {} },
+        ] as never,
+        toolResults: [] as never,
+      })
+      await vi.waitFor(() => {
+        expect(turn.executionAbortSignal.aborted).toBe(true)
+      })
+
+      // A later snapshot chunk is gated locally — no second 401.
+      binding.stream.onChunk({ type: "text-delta", text: "tail" } as never)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(wireCalls(wire, "recordToolInvocations")).toHaveLength(1)
+      expect(wireCalls(wire, "updateAssistantSnapshot")).toHaveLength(0)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+})
+
+describe("durable turn runtime — heartbeat loop (gameplan §6)", () => {
+  function heartbeatCalls(wire: RecordingWire) {
+    return wireCalls(wire, "heartbeatGenerationRun")
+  }
+
+  it("starts after prepare, renews on cadence, and never overlaps", async () => {
+    vi.useFakeTimers()
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          heartbeatGenerationRun: () => ({
+            result: { kind: "renewed", leaseExpiresAt: Date.now() + 45_000 },
+          }),
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      expect(heartbeatCalls(wire)).toHaveLength(0)
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(heartbeatCalls(wire)).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(heartbeatCalls(wire)).toHaveLength(2)
+      expect(turn.executionAbortSignal.aborted).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("stops on paused WITHOUT aborting (the approval worker's finalize is still legitimate)", async () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          heartbeatGenerationRun: () => ({ result: { kind: "paused" } }),
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(heartbeatCalls(wire)).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(30_000)
+      // Loop stopped — no further beats, no abort.
+      expect(heartbeatCalls(wire)).toHaveLength(1)
+      expect(turn.executionAbortSignal.aborted).toBe(false)
+      const rejectedLine = warn.mock.calls
+        .map(([message]) => JSON.parse(String(message)))
+        .find((message) => message._tag === "run_heartbeat_rejected")
+      expect(rejectedLine).toMatchObject({ outcome: "paused" })
+    } finally {
+      warn.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it("aborts provider consumption on lost and stops the loop", async () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          heartbeatGenerationRun: () => ({
+            result: { kind: "lost", reason: "not-owner" },
+          }),
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(turn.executionAbortSignal.aborted).toBe(true)
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(heartbeatCalls(wire)).toHaveLength(1)
+    } finally {
+      warn.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it("tolerates two transport failures, aborts on the third — a grant rejection aborts immediately", async () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          heartbeatGenerationRun: () => {
+            throw new Error("socket reset")
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+
+      await vi.advanceTimersByTimeAsync(10_000) // beat 1 fails
+      expect(turn.executionAbortSignal.aborted).toBe(false)
+      await vi.advanceTimersByTimeAsync(3_100) // jittered retry → failure 2
+      expect(turn.executionAbortSignal.aborted).toBe(false)
+      await vi.advanceTimersByTimeAsync(3_100) // failure 3 → budget exhausted
+      expect(turn.executionAbortSignal.aborted).toBe(true)
+      expect(heartbeatCalls(wire)).toHaveLength(3)
+
+      // Grant rejection path: never retried.
+      const rejectedWire = makeRecordingWire({
+        responders: {
+          heartbeatGenerationRun: () => {
+            throw new DurableWorkerWriteError({
+              op: "heartbeatGenerationRun",
+              status: 401,
+              detail: '{"ok":false,"code":"grant_unauthorized"}',
+              grantRejection: "grant_unauthorized",
+            })
+          },
+        },
+      })
+      const { turn: rejectedTurn } = await makePreparedTurn({
+        wire: rejectedWire,
+      })
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(rejectedTurn.executionAbortSignal.aborted).toBe(true)
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(heartbeatCalls(rejectedWire)).toHaveLength(1)
+    } finally {
+      warn.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it("recovers after a transient failure and settle() stops the loop for good", async () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      let failures = 0
+      const wire = makeRecordingWire({
+        responders: {
+          heartbeatGenerationRun: () => {
+            if (failures < 1) {
+              failures += 1
+              throw new Error("blip")
+            }
+            return {
+              result: { kind: "renewed", leaseExpiresAt: Date.now() + 45_000 },
+            }
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+      binding.stream.captureFinish({
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        finishReason: "stop",
+        toolCounts: { totalToolCalls: 0, failedToolCalls: 0 },
+      })
+
+      await vi.advanceTimersByTimeAsync(10_000) // failure 1
+      await vi.advanceTimersByTimeAsync(3_100) // jittered retry → renewed
+      expect(heartbeatCalls(wire)).toHaveLength(2)
+      expect(turn.executionAbortSignal.aborted).toBe(false)
+
+      const receipt = await binding.envelope.settle({
+        responseMessage: RESPONSE_MESSAGE,
+        isAborted: false,
+        finishReason: "stop",
+      })
+      expect(receipt).toMatchObject({ status: "confirmed" })
+
+      const beatsAtSettle = heartbeatCalls(wire).length
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(heartbeatCalls(wire)).toHaveLength(beatsAtSettle)
+    } finally {
+      warn.mockRestore()
+      vi.useRealTimers()
     }
   })
 })

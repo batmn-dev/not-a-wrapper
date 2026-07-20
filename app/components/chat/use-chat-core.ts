@@ -1,14 +1,17 @@
 import { useChatEdit } from "@/app/components/chat/use-chat-edit"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
+import type { Id } from "@/convex/_generated/dataModel"
 import { isEmptyAssistantMessage } from "@/convex/domain/message_visibility"
 import { getOrCreateGuestUserId } from "@/lib/api"
+import { markApprovalResolvedLocally } from "@/lib/chat-runs/approval-auto-send-gate"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import {
   createOptimisticMessageId,
   getMessagePersistenceMode,
   GUEST_CHAT_STORAGE_KEY,
 } from "@/lib/chat-store/identity"
+import { useMessages } from "@/lib/chat-store/messages/provider"
 import { projectSelectedPath } from "@/lib/chat-store/turns/selected-path"
 import {
   createChatTurnController,
@@ -17,18 +20,21 @@ import {
   type EnsuredTurnChat,
   type StagedAttachmentReference,
 } from "@/lib/chat-turn/chat-turn-controller"
+import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
 import { routePersistsChatMessages } from "@/lib/chat-turn/turn-store"
 import { attachStagedFilesToChat } from "@/lib/file-handling"
+import { ENABLE_DURABLE_RUN_PRESENTATION } from "@/lib/flags"
 import { API_ROUTE_CHAT } from "@/lib/routes"
 import type { UserProfile } from "@/lib/user/types"
 import type { UIMessage } from "@ai-sdk/react"
 import { useChat } from "@ai-sdk/react"
-import { useConvex, useMutation } from "convex/react"
+import { useConvex, useConvexConnectionState, useMutation } from "convex/react"
 import { useSearchParams } from "next/navigation"
 import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react"
@@ -38,6 +44,7 @@ import {
   useDetachableChatStream,
   type ChatStreamFinishEvent,
 } from "./use-detachable-chat-stream"
+import { useGenerationPresentationController } from "./use-generation-presentation-controller"
 
 /** One send-type Chat turn's inputs, assembled by the Composer. */
 export type ChatTurnPayload = {
@@ -50,9 +57,11 @@ export type ChatTurnPayload = {
  * Hard time budget for one generation's client stream. Attached streams get it
  * from the stuck-stream guard; detached streams get the same budget from the
  * per-binding watchdog, so an orphaned stream can never run (or spend)
- * unbounded even if server settlement degrades.
+ * unbounded even if server settlement degrades. Budget-derived: sits above the
+ * route's maxDuration so the client never cuts a stream the server can still
+ * legitimately be running.
  */
-const STREAM_TIMEOUT_MS = 120_000
+const STREAM_TIMEOUT_MS = CHAT_TURN_EXECUTION_BUDGET.clientStreamWatchdogMs
 
 type UseChatCoreProps = {
   initialMessages: UIMessage[]
@@ -196,6 +205,16 @@ export function useChatCore({
 
   // Handle errors directly in onError callback
   const handleError = useCallback((error: Error) => {
+    // A losing approval-continuation POST (another tab's auto-send won —
+    // structured 409, gameplan §10) is swallowed without a failed repaint;
+    // this tab simply observes the winner's run through the projection.
+    if (
+      error.message.includes("APPROVAL_CONTINUATION_CONFLICT") ||
+      error.message.includes("Approval continuation already dispatched")
+    ) {
+      console.warn("Approval continuation conflict (another tab won):", error)
+      return
+    }
     console.error("Chat error:", error)
     console.error("Error message:", error.message)
     let errorMsg = error.message || "Something went wrong."
@@ -206,6 +225,18 @@ export function useChatCore({
 
     toast({
       title: errorMsg,
+      status: "error",
+    })
+  }, [])
+
+  const handleDurableStopError = useCallback((stopError: unknown) => {
+    console.error("Durable stop failed:", stopError)
+    toast({ title: "Failed to stop generation", status: "error" })
+  }, [])
+
+  const handleLocalStreamTimeout = useCallback(() => {
+    toast({
+      title: "Response timed out — please try again",
       status: "error",
     })
   }, [])
@@ -250,6 +281,52 @@ export function useChatCore({
     setMessages,
     addToolApprovalResponse,
   } = useChat({ chat: detachableStream.chat })
+
+  // The local stream's assistant identity: durable runs stream the durable
+  // assistantMessageId as the SDK message id, so this match is exact. Known
+  // only once streaming begins — never inferred from "last run in chat".
+  const localAssistantMessageId = useMemo(() => {
+    if (status !== "streaming") return null
+    for (let index = messages.length - 1; index >= 0; index--) {
+      if (messages[index].role === "assistant") return messages[index].id
+    }
+    return null
+  }, [messages, status])
+
+  const { selectedRun } = useMessages()
+  const connectionState = useConvexConnectionState()
+  const stopGenerationRunMutation = useMutation(
+    api.chatRuntime.stopGenerationRun
+  )
+  const stopDurableRun = useCallback(
+    async (runId: string) => {
+      await stopGenerationRunMutation({
+        runId: runId as Id<"generationRuns">,
+      })
+    },
+    [stopGenerationRunMutation]
+  )
+  const generationPresentation = useGenerationPresentationController({
+    chatId,
+    localStatus: status,
+    isSubmitting,
+    localAssistantMessageId,
+    selectedRun,
+    isConnected: connectionState.isWebSocketConnected,
+    durablePresentationEnabled: ENABLE_DURABLE_RUN_PRESENTATION,
+    stopLocal: stop,
+    stopDurable: stopDurableRun,
+    onDurableStopError: handleDurableStopError,
+    streamTimeoutMs: STREAM_TIMEOUT_MS,
+    onLocalStreamTimeout: handleLocalStreamTimeout,
+  })
+  const {
+    presentation,
+    stop: handleStop,
+    noteLocalDispatch,
+    noteLocalTransportSettled,
+    consumeLocalStopIntent,
+  } = generationPresentation
 
   const setMessagesRef = useRef(setMessages)
   useEffect(() => {
@@ -362,6 +439,8 @@ export function useChatCore({
         options
       ),
     regenerate,
+    onLocalDispatch: noteLocalDispatch,
+    consumeLocalStopIntent,
     toastError: (title) => toast({ title, status: "error" }),
     bumpChat,
     setLastFinishReason,
@@ -378,6 +457,7 @@ export function useChatCore({
     isError,
     finishReason,
   }: ChatStreamFinishEvent) => {
+    noteLocalTransportSettled()
     const messageWithCreatedAt = message as ChatTurnMessage
     const finishedMessageCreatedAt =
       messageWithCreatedAt.createdAt ?? new Date()
@@ -466,7 +546,10 @@ export function useChatCore({
     handlers: {
       onAttachedFinish: handleAttachedFinish,
       onDetachedFinish: finishDetachedTurn,
-      onAttachedError: handleError,
+      onAttachedError: (streamError) => {
+        noteLocalTransportSettled()
+        handleError(streamError)
+      },
       onDetachedError: (_originChatId, streamError) => {
         // No toast: a detached stream's error has no visible surface here;
         // durable chats surface it through the run's terminal projection.
@@ -482,12 +565,37 @@ export function useChatCore({
   const handleToolApproval = useCallback(
     async (approvalId: string, approved: boolean, reason?: string) => {
       try {
-        if (approved) {
-          await approveToolCall({ approvalId, reason })
-        } else {
-          await denyToolCall({ approvalId, reason })
+        // Pending-only resolution (gameplan §10, PR 8): the mutation returns
+        // the CANONICAL decision — a conflicting second click adopts the
+        // winner instead of overwriting it.
+        const decision = approved
+          ? await approveToolCall({ approvalId, reason })
+          : await denyToolCall({ approvalId, reason })
+
+        if (decision.status === "expired") {
+          toast({ title: "This approval has expired", status: "error" })
+          return
         }
-        addToolApprovalResponse({ id: approvalId, approved, reason })
+        if (!decision.alreadyResolved) {
+          // Only the WINNING tab arms the auto-send continuation (layer 3);
+          // a loser renders the canonical outcome and dispatches nothing —
+          // the winner's continuation arrives through the projection.
+          markApprovalResolvedLocally(approvalId)
+          noteLocalDispatch()
+        } else {
+          toast({
+            title: "Already resolved",
+            description: "This approval was decided in another tab.",
+            status: "info",
+          })
+        }
+        addToolApprovalResponse({
+          id: approvalId,
+          approved: decision.status === "approved",
+          // The CANONICAL reason: a losing click renders the winner's
+          // decision, reason included — never its own discarded input.
+          reason: decision.reason,
+        })
       } catch (error) {
         console.error("Failed to submit tool approval:", error)
         toast({
@@ -496,30 +604,8 @@ export function useChatCore({
         })
       }
     },
-    [addToolApprovalResponse, approveToolCall, denyToolCall]
+    [addToolApprovalResponse, approveToolCall, denyToolCall, noteLocalDispatch]
   )
-
-  // Ref to latest stop function to avoid stale closures in effects
-  const stopRef = useRef(stop)
-
-  useEffect(() => {
-    stopRef.current = stop
-  }, [stop])
-
-  // Generation guard: prevent stuck "streaming" UI when a stream drops silently
-  useEffect(() => {
-    if (status !== "streaming") return
-
-    const timeout = setTimeout(() => {
-      stopRef.current()
-      toast({
-        title: "Response timed out — please try again",
-        status: "error",
-      })
-    }, STREAM_TIMEOUT_MS)
-
-    return () => clearTimeout(timeout)
-  }, [status])
 
   // Hydrate on chat entry, then keep the live turn array projected onto the
   // backend-derived selected path. `initialMessages` is the reactive selected
@@ -700,7 +786,11 @@ export function useChatCore({
     messages,
     status,
     error,
-    stop,
+    // The orchestrated local-plus-durable Stop (§9/§11) — local transport cut
+    // promptly, then the exact run settled durably so all tabs converge.
+    stop: handleStop,
+    /** The resolved local/background/stale generation presentation (§8). */
+    presentation,
     setMessages,
     isAuthenticated,
     systemPrompt,

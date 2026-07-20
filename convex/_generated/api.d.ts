@@ -11,9 +11,11 @@
 import type * as chatRuntime from "../chatRuntime.js";
 import type * as chatRuntimeWorker from "../chatRuntimeWorker.js";
 import type * as chats from "../chats.js";
+import type * as crons from "../crons.js";
 import type * as domain_chat_owned_deletion from "../domain/chat_owned_deletion.js";
 import type * as domain_chat_project_link from "../domain/chat_project_link.js";
 import type * as domain_generation_run_lifecycle from "../domain/generation_run_lifecycle.js";
+import type * as domain_generation_run_liveness from "../domain/generation_run_liveness.js";
 import type * as domain_message_branch_writes from "../domain/message_branch_writes.js";
 import type * as domain_message_branches from "../domain/message_branches.js";
 import type * as domain_message_contract from "../domain/message_contract.js";
@@ -51,9 +53,11 @@ declare const fullApi: ApiFromModules<{
   chatRuntime: typeof chatRuntime;
   chatRuntimeWorker: typeof chatRuntimeWorker;
   chats: typeof chats;
+  crons: typeof crons;
   "domain/chat_owned_deletion": typeof domain_chat_owned_deletion;
   "domain/chat_project_link": typeof domain_chat_project_link;
   "domain/generation_run_lifecycle": typeof domain_generation_run_lifecycle;
+  "domain/generation_run_liveness": typeof domain_generation_run_liveness;
   "domain/message_branch_writes": typeof domain_message_branch_writes;
   "domain/message_branches": typeof domain_message_branches;
   "domain/message_contract": typeof domain_message_contract;

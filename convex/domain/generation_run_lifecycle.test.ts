@@ -152,7 +152,12 @@ describe("resolveGenerationRunTransition", () => {
       })
       expect(verdict).toEqual({
         kind: "transition",
-        run: { status: "completed", clearActiveStream: true, settle: true },
+        run: {
+          status: "completed",
+          clearActiveStream: true,
+          settle: true,
+          terminalReason: "completed",
+        },
         message: { kind: "stamp", status: "completed" },
       })
     })
@@ -329,6 +334,137 @@ describe("resolveTerminalAssistantMessageResolution — first match wins", () =>
   })
 })
 
+describe("durable control signals (gameplan §10)", () => {
+  it("stop reaches every active status — including the approval pause — and stamps user_stop", () => {
+    for (const status of [
+      "queued",
+      "running",
+      "streaming",
+      "awaiting_approval",
+    ]) {
+      expect(
+        resolve(status, { kind: "stop", reason: "stopped" }, semanticFacts)
+      ).toMatchObject({
+        kind: "transition",
+        run: {
+          status: "aborted",
+          settle: true,
+          terminalReason: "user_stop",
+        },
+        message: { kind: "stamp", status: "aborted" },
+      })
+    }
+  })
+
+  it("stop on a settled run is ignored (idempotent second Stop, completion race)", () => {
+    for (const status of ["completed", "aborted", "failed"]) {
+      expect(resolve(status, { kind: "stop" })).toEqual({
+        kind: "ignore",
+        reason: "already-terminal",
+      })
+    }
+  })
+
+  it("lease-expired fails only worker-executing statuses, preserving partial content", () => {
+    for (const status of ["queued", "running", "streaming"]) {
+      expect(
+        resolve(status, { kind: "lease-expired" }, semanticFacts)
+      ).toMatchObject({
+        kind: "transition",
+        run: {
+          status: "failed",
+          settle: true,
+          terminalReason: "lease_expired",
+        },
+        message: { kind: "stamp", status: "failed" },
+      })
+    }
+  })
+
+  it("lease-expired never touches the lease-free approval pause or a settled run", () => {
+    expect(resolve("awaiting_approval", { kind: "lease-expired" })).toEqual({
+      kind: "ignore",
+      reason: "not-worker-executing",
+    })
+    for (const status of ["completed", "aborted", "failed"]) {
+      expect(resolve(status, { kind: "lease-expired" })).toEqual({
+        kind: "ignore",
+        reason: "already-terminal",
+      })
+    }
+  })
+
+  it("approval-expired settles only the approval pause", () => {
+    expect(
+      resolve("awaiting_approval", { kind: "approval-expired" }, semanticFacts)
+    ).toMatchObject({
+      kind: "transition",
+      run: {
+        status: "failed",
+        settle: true,
+        terminalReason: "approval_expired",
+      },
+    })
+    expect(resolve("streaming", { kind: "approval-expired" })).toEqual({
+      kind: "ignore",
+      reason: "not-awaiting-approval",
+    })
+    expect(resolve("aborted", { kind: "approval-expired" })).toEqual({
+      kind: "ignore",
+      reason: "already-terminal",
+    })
+  })
+
+  it("reaped runs become failed, never completed — and stay absorbing against late completion", () => {
+    const reaped = resolve("streaming", { kind: "lease-expired" })
+    expect(reaped).toMatchObject({ kind: "transition", run: { status: "failed" } })
+    // A late spurious completion after reaping is ignored (first terminal wins).
+    expect(
+      resolve("failed", { kind: "complete", hasPendingApprovals: false })
+    ).toEqual({ kind: "ignore", reason: "already-terminal" })
+  })
+})
+
+describe("terminal reasons ride the transitions", () => {
+  it("stamps the vocabulary per signal", () => {
+    expect(
+      resolve("streaming", { kind: "complete", hasPendingApprovals: false })
+    ).toMatchObject({ run: { terminalReason: "completed" } })
+    expect(resolve("streaming", { kind: "fail", error: "x" })).toMatchObject({
+      run: { terminalReason: "provider_error" },
+    })
+    expect(resolve("streaming", { kind: "abort" })).toMatchObject({
+      run: { terminalReason: "request_aborted" },
+    })
+    expect(
+      resolve("streaming", { kind: "supersede", reason: "newer turn" })
+    ).toMatchObject({ run: { terminalReason: "superseded" } })
+  })
+
+  it("the awaiting_approval downgrade carries no terminal reason (it does not settle)", () => {
+    expect(
+      resolve("streaming", { kind: "complete", hasPendingApprovals: true })
+    ).toMatchObject({
+      run: { status: "awaiting_approval", settle: false },
+    })
+    const verdict = resolve("streaming", {
+      kind: "complete",
+      hasPendingApprovals: true,
+    })
+    expect(
+      verdict.kind === "transition" ? verdict.run.terminalReason : "unreached"
+    ).toBeUndefined()
+  })
+
+  it("fail-over-completed rewrites the terminal reason to provider_error", () => {
+    expect(
+      resolve("completed", { kind: "fail", error: "boom" }, semanticFacts)
+    ).toMatchObject({
+      run: { status: "failed", terminalReason: "provider_error" },
+    })
+  })
+})
+
 describe("isIgnoredSignal", () => {
   it("agrees with the resolver's ignore column for every status × signal", () => {
     const statuses = [
@@ -347,6 +483,9 @@ describe("isIgnoredSignal", () => {
       { kind: "supersede", reason: "superseded" },
       { kind: "approval-requested" },
       { kind: "approvals-resolved", anyDenied: true },
+      { kind: "stop", reason: "stopped" },
+      { kind: "lease-expired" },
+      { kind: "approval-expired" },
     ]
     for (const status of statuses) {
       for (const signal of signals) {

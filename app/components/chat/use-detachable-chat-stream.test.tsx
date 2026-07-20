@@ -1,6 +1,10 @@
 /** @vitest-environment jsdom */
 
 import type { UIMessage } from "@ai-sdk/react"
+import {
+  clearLocallyResolvedApprovals,
+  markApprovalResolvedLocally,
+} from "@/lib/chat-runs/approval-auto-send-gate"
 import React, { act, useLayoutEffect, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import {
@@ -84,6 +88,7 @@ describe("detachable chat stream lifecycle", () => {
     container = null
     root = null
     vi.useRealTimers()
+    clearLocallyResolvedApprovals()
   })
 
   function mountHarness(initialChatId: string | null) {
@@ -227,8 +232,56 @@ describe("detachable chat stream lifecycle", () => {
 
     expect(lifecycleMocks.bindings).toHaveLength(1)
     expect(vi.getTimerCount()).toBe(0)
+    // Attached AND locally resolved → auto-send arms; an adopted approval
+    // part alone never does (the layer-3 continuation gate, gameplan §10).
+    const approvalMessage = {
+      id: "assistant-1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-send_email",
+          state: "approval-responded",
+          approval: { id: "approval_local", approved: true },
+        },
+      ],
+    } as unknown as UIMessage
     expect(
-      firstTurnBinding.options.sendAutomaticallyWhen({ messages: [] })
+      firstTurnBinding.options.sendAutomaticallyWhen({
+        messages: [approvalMessage],
+      })
+    ).toBe(false)
+    markApprovalResolvedLocally("approval_local")
+    expect(
+      firstTurnBinding.options.sendAutomaticallyWhen({
+        messages: [approvalMessage],
+      })
     ).toBe(true)
+    // One-shot arm: the resolution authorized exactly one dispatch. A remount
+    // that rehydrates the same approval-responded part (still present until
+    // the continuation lands) must find the gate closed — reload never
+    // submits another model request (gameplan §19 checklist).
+    expect(
+      firstTurnBinding.options.sendAutomaticallyWhen({
+        messages: [approvalMessage],
+      })
+    ).toBe(false)
+
+    // ...but an ERRORED armed dispatch restores the authorization: the SDK
+    // never re-evaluates its predicate on error and the approval is already
+    // resolved durably, so without restoration the continuation would be
+    // stranded with no recovery path. A finished dispatch stays consumed.
+    firstTurnBinding.options.onError(new Error("continuation transport died"))
+    expect(
+      firstTurnBinding.options.sendAutomaticallyWhen({
+        messages: [approvalMessage],
+      })
+    ).toBe(true)
+    firstTurnBinding.options.onFinish(finishEvent)
+    firstTurnBinding.options.onError(new Error("later unrelated error"))
+    expect(
+      firstTurnBinding.options.sendAutomaticallyWhen({
+        messages: [approvalMessage],
+      })
+    ).toBe(false)
   })
 })

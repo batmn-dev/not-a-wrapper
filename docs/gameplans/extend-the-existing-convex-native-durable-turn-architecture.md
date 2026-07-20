@@ -1,6 +1,51 @@
 # Extend the existing Convex-native durable-turn architecture
 
-The research report’s architecture remains materially valid against the current branch. The plan below refines it into an implementation contract; no files were changed.
+The research report’s architecture remains materially valid against the current branch. The plan below refines it into an implementation contract; no files were changed. *(This preamble and the body below were written before ADR-0011 landed; the §0 addendum governs wherever they conflict.)*
+
+## 0. Addendum — re-based on ADR-0011 durable turn settlement (2026-07-19)
+
+[ADR-0011](../adr/0011-durable-turn-settlement.md) (accepted 2026-07-18, PR #121) landed after this plan was written and changes its substrate. **This addendum governs wherever the body conflicts; the body text below is preserved unedited.** This is now the single forward plan for the 2026-07-14 incident class; the [incident report](../chat-turn-token-expiry-orphaned-run-incident-2026-07-14.md) is a frozen historical record with its own reconciliation section.
+
+### What ADR-0011 already delivered
+
+- **Worker authority for durable-run state is the execution grant, not the user token.** The user token authorizes admission (`prepareGeneration`); every post-prepare durable-run state write — snapshots, tool-invocation records, approval requests, terminal transitions — travels the Durable worker wire: `POST /chat-turn/worker` with `Authorization: Bearer <per-run 32-byte secret>`, hashed before dispatch (`convex/http.ts`), verified transactionally by `requireGrantAuthorizedRun` (`convex/chatRuntimeWorker.ts`: constant-time digest compare, expiry, run→chat→user linkage), then routed into the shared `...ForChat` handlers — one policy, two authenticators. Two non-run-state mutations still ride the captured user token mid-stream — `toolCallLog.log` and `toolLimits.checkAndConsume` — addressed in PR 0 below.
+- **Settlement never rejects delivery.** `settle()` orders approval-settle → snapshot flush → unconditional final full-parts snapshot → terminal write with bounded retry (`settleRetryDelaysMs [250, 1000]`, three attempts) and returns a typed receipt (`confirmed` / `degraded` / `guest`). §10 “Runtime terminal convergence” is therefore partially delivered already.
+
+### Amendments to the body
+
+1. **Every worker-originated write in this plan — heartbeat included — is a grant-authorized worker-wire op**, not a user-token mutation. Heartbeat becomes a new op in the `WORKER_OPS` table (`convex/http.ts`) with its own internal mutation in `convex/chatRuntimeWorker.ts`; `DurableTurnRuntime` sends it through the injected worker wire (`deps.workerWire`, the ADR-0011 test seam). The §12 file map accordingly gains `convex/chatRuntimeWorker.ts`, `convex/http.ts`, and worker-wire fakes in the runtime suites; §12 rows that say “heartbeat, guarded writes” in `convex/chatRuntime.ts` mean the shared handlers reached through both authenticators.
+2. **Absorbing terminal transitions also revoke the grant.** ADR-0011 deferred explicit revocation; this plan absorbs it with lifecycle-aware scope: clear `grantDigest`/`grantExpiresAt` only when a run reaches an absorbing outcome (`aborted`, `failed`), via `applyLifecycleVerdict` — **not** at the `completed` write and **never** at the `awaiting_approval` pause. `completed` must stay writable to the grant: the deliberate `fail`-over-`completed` convergence (§3 invariant 3, §18 #1) depends on the fire-and-forget failure write landing after a spurious completion, and revoking at completion would reject it as unauthorized. Revoke-on-completed becomes safe only after the source race is removed (§10's deferred strict-first-terminal cleanup) or failure settlement is awaited. `awaiting_approval` is a pause, not a settlement — the same worker's final flush and completion downgrade must still land (§18 #5). Grant expiry remains the backstop for the completed window.
+3. **Grant TTL derives from the execution budget** (PR 0 below), replacing the interim `EXECUTION_GRANT_TTL_MS = 60 min`, which outlives the 60-second route by ~50×.
+4. **One telemetry vocabulary.** §10/§15’s `terminal_mutation_failed` / `run_terminal_mutation_failed` already shipped as `durable_completion_write_failed` (per attempt) and `durable_settlement_degraded` (exhaustion). Keep the shipped names; do not introduce a parallel set.
+5. **§4’s premise that “every legitimate run ends within 60 seconds” is currently false in practice** — the incident run finished at ~116 s in dev. The execution-budget decision (PR 0) restores that invariant one way or the other; §6’s 10/45/15-second heartbeat/lease/reaper constants are unchanged either way because they key off worker death, not run length, while `liveRunFreshUntil` and the client watchdog become budget-derived.
+
+### PR 0 (new — precedes PR 1) — Execution budget and grant hardening
+
+Small and independent; closes the 2026-07-19 implementation-review findings on the landed grant before the lease machinery builds on it.
+
+- **Execution budget module.** One pure derivation emitting, from a single top-line route duration: provider/tool deadline, settlement reserve, client stuck-stream watchdog, grant TTL, `liveRunFreshUntil` slack, and lease-reaper grace, with the enforced ordering `provider deadline < settlement reserve boundary < route max < grant expiry < reaper grace ceiling`. Existing scattered constants (`maxDuration = 60`, the 120 s watchdog — currently longer than the route itself — and `EXECUTION_GRANT_TTL_MS`) become consumers. **Decided 2026-07-19: the top-line route duration is 300 s** (`maxDuration = 300` — the Fluid Compute default, supported on both Hobby and Pro; verified against Vercel docs 2026-07-19; streaming counts toward the limit). Initial derivation targets, to be finalized in the budget module: provider/tool deadline ≈ 270 s, settlement reserve ≈ 30 s (covers three terminal attempts at 10 s timeout plus delays, plus the final flush), client watchdog above the provider deadline, grant TTL ≈ route max + reserve + slack (~7 min), `liveRunFreshUntil = startedAt + 300 s + slack`, lease-reaper grace ordered above grant expiry. The 116 s incident-class research turn fits with headroom; the accepted cost is longer worst-case token spend on abandoned runs until the reaper (PR 3) lands.
+- **Grant hardening** (defects found 2026-07-19 in the landed implementation):
+  - clear `grantDigest`/`grantExpiresAt` on absorbing outcomes only (amendment 2 — never at the `awaiting_approval` pause; deferred at `completed` while the fail-over-completed source race exists);
+  - shrink the TTL to the budget-derived value;
+  - add the terminal-run guard to `recordToolInvocationsForChat` (already specified in §10’s guard matrix; missing at HEAD — the one worker op that still accepts writes after settlement);
+  - enforce run→message linkage in `gatherAssistantMessageFacts` so `markGenerationRunFailed`/`markGenerationRunAborted` cannot stamp a different assistant message in the same chat;
+  - return a generic 400 body from the worker endpoint (raw internal error text currently escapes, and Convex argument-validation errors precede the grant check);
+  - add a 64-hex / Bearer-token pattern to `lib/observability/secret-patterns.ts` plus a leak-canary test (the grant secret currently matches no scrub pattern);
+  - move the two residual mid-stream user-token mutations onto the worker wire or explicitly accept their token-lifetime coupling: the `toolCallLog` sink (`app/api/chat/outcome-sinks.ts` — fire-and-forget audit rows; accepted-lossy is a defensible answer) and `toolLimits.checkAndConsume` (`lib/tools/policy.ts`, wired in `lib/tools/runtime.ts` — its failure already degrades into the tested bounded local cap, which is exactly the degradation the 2026-07-14 incident exercised, so accepting the coupling means accepting degraded budget accounting for the tail of long runs).
+- **Tests:** grant linkage-rejection vectors; post-terminal tool-invocation rejection; terminal retry-then-succeed → `confirmed` receipt; the `durable_final_snapshot_write_failed` path; secret-scrubber canary. (Equal-sequence duplicate-snapshot idempotency is deliberately *not* PR 0 work — the snapshot row is currently inserted before the sequence check, and pre-insert rejection lands with PR 2's guarded writes, §10 "Snapshot sequencing".)
+- Complexity: **S–M**. Rollback: each guard is independent.
+
+Revised ordering: **PR 0 → PR 1 → … → PR 8** (PR 9 optional, unchanged).
+
+### Boundary decision — execution stays request-scoped
+
+Generation continues to run inside the `POST /api/chat` request; the lease makes worker death honest but does not resume execution (§4, §19). Moving execution off the request (Convex action, queue, or workflow engine, with delivery purely via the durable subscription) was evaluated on 2026-07-19 and deliberately not adopted: it would trade the low-latency HTTP stream for snapshot-cadence delivery or a second transport, and every state-machine control in this plan is required regardless of where execution runs. Revisit only if one of these exit criteria fires:
+
+- runs routinely need more than the chosen route budget;
+- background or multi-device generation becomes a product requirement;
+- measured `durable_settlement_degraded` frequency shows the request-tail loss window matters in practice.
+
+---
 
 ## 1. Executive implementation decision
 

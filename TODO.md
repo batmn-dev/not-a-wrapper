@@ -2,11 +2,14 @@
 
 - **Better in-progress conversation view:** persist and surface active progress
   when a user leaves and returns to a streaming chat.
-- **Fix orphaned completed chat turns:** prevent expired request auth from losing
-  answers, leaving runs streaming, or showing false success; follow the
-  [incident remediation plan](docs/chat-turn-token-expiry-orphaned-run-incident-2026-07-14.md).
-- **Remember conversation scroll position:** restore each chat thread to its
-  previous scroll position when navigating away and returning.
+- **Finish durable-run liveness and presentation:** ADR-0011 (2026-07-18) closed the
+  incident's answer-loss and durable-settlement worker-auth failure modes (execution
+  grants, settlement receipts, final full-parts snapshot). Remaining: execution budget + grant hardening
+  (PR 0), heartbeat/lease/cron reaper, shared run-presentation resolver, durable Stop —
+  follow the [durable-turn gameplan](docs/gameplans/extend-the-existing-convex-native-durable-turn-architecture.md)
+  and its 2026-07-19 ADR-0011 addendum. The
+  [incident report](docs/chat-turn-token-expiry-orphaned-run-incident-2026-07-14.md) is
+  now a historical record with a reconciliation section.
 - **Assistant message highlighting:** When highlighting text from an asssitant response, add a clear "Add to chat" button that adds it to the chat composer.
 - **Dynamic Activity-panel source presentation:** adapt each source item to the
   metadata available instead of forcing every source into one fixed layout.

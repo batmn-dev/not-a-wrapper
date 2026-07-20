@@ -5,13 +5,22 @@ import {
   applyApprovalResponses,
   createToolApprovalRequestForChat,
   denyPendingApprovalsForChat,
+  heartbeatGenerationRunForChat,
   markGenerationRunAbortedForChat,
   markGenerationRunCompletedForChat,
   markGenerationRunFailedForChat,
   prepareGenerationForChat,
+  reapExpiredGenerationRunsPass,
+  reapExpiredToolApprovalsPass,
   recordToolInvocationsForChat,
+  resolveToolCallDecision,
+  stopGenerationRunForChat,
   updateAssistantSnapshotForChat,
 } from "./chatRuntime"
+import {
+  APPROVAL_EXPIRY_MS,
+  LEASE_DURATION_MS,
+} from "./domain/generation_run_liveness"
 import { getSelectedPathMessages } from "./domain/message_branches"
 import type { AuthenticatedRunOwner } from "./lib/auth"
 import { selectBranchForChat } from "./messages"
@@ -31,6 +40,26 @@ type StoredDocument = TableDocuments[TableName][number]
 
 type QueryBuilder = {
   eq: (fieldName: string, value: unknown) => QueryBuilder
+  gt: (fieldName: string, value: unknown) => QueryBuilder
+  lt: (fieldName: string, value: unknown) => QueryBuilder
+  lte: (fieldName: string, value: unknown) => QueryBuilder
+}
+
+// Convex index-order rank: undefined < null < everything else. Enough to model
+// the reaper's `.gt(field, undefined).lt(field, now)` range in the fake db.
+function convexOrderRank(value: unknown): number {
+  if (value === undefined) return 0
+  if (value === null) return 1
+  return 2
+}
+
+function convexOrderCompare(left: unknown, right: unknown): number {
+  const rankDelta = convexOrderRank(left) - convexOrderRank(right)
+  if (rankDelta !== 0) return rankDelta
+  if (typeof left === "number" && typeof right === "number") {
+    return left === right ? 0 : left < right ? -1 : 1
+  }
+  return 0
 }
 
 type MutationCtxOptions = {
@@ -107,9 +136,26 @@ function createMutationCtx(
           buildQuery: (query: QueryBuilder) => unknown
         ) => {
           const filters = new Map<string, unknown>()
+          const rangeFilters: Array<{
+            fieldName: string
+            op: "gt" | "lt" | "lte"
+            value: unknown
+          }> = []
           const query: QueryBuilder = {
             eq: (fieldName, value) => {
               filters.set(fieldName, value)
+              return query
+            },
+            gt: (fieldName, value) => {
+              rangeFilters.push({ fieldName, op: "gt", value })
+              return query
+            },
+            lt: (fieldName, value) => {
+              rangeFilters.push({ fieldName, op: "lt", value })
+              return query
+            },
+            lte: (fieldName, value) => {
+              rangeFilters.push({ fieldName, op: "lte", value })
               return query
             },
           }
@@ -120,6 +166,15 @@ function createMutationCtx(
               const record = document as unknown as Record<string, unknown>
               for (const [fieldName, value] of filters) {
                 if (record[fieldName] !== value) return false
+              }
+              for (const range of rangeFilters) {
+                const comparison = convexOrderCompare(
+                  record[range.fieldName],
+                  range.value
+                )
+                if (range.op === "gt" && comparison <= 0) return false
+                if (range.op === "lt" && comparison >= 0) return false
+                if (range.op === "lte" && comparison > 0) return false
               }
               return true
             }
@@ -2633,6 +2688,1056 @@ describe("generation run linkage validation", () => {
     expect(inserts).toEqual([])
     expect(patches).toEqual([])
   })
+
+  it("rejects tool invocations once the run is terminal (post-settlement write)", async () => {
+    // The gameplan §10 guard matrix: a terminal run is read-only to its old
+    // worker. recordToolInvocations was the one worker op missing this guard.
+    const fixture = createGenerationRunLinkageFixture()
+    const { ctx, inserts } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunAbortedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      { messageId: fixture.messageId, reason: "user stop" }
+    )
+    expect(fixture.run.status).toBe("aborted")
+
+    await recordToolInvocationsForChat(ctx, await runOwner(ctx, fixture.runId), {
+      messageId: fixture.messageId,
+      invocations: [
+        {
+          toolCallId: "call_late",
+          toolName: "send_email",
+          source: "mcp",
+          status: "called",
+        },
+      ],
+    })
+
+    expect(fixture.tables.toolInvocations).toEqual([])
+    expect(
+      inserts.filter((insert) => insert.tableName === "toolInvocations")
+    ).toEqual([])
+  })
+
+  it("cannot stamp a different assistant message in the same chat via fail/abort", async () => {
+    // gatherAssistantMessageFacts enforces run→message linkage: a worker
+    // payload naming another run's assistant message must not receive this
+    // run's terminal outcome. The run half still settles.
+    const fixture = createGenerationRunLinkageFixture()
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunFailedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      { messageId: fixture.otherMessageId, error: "provider exploded" }
+    )
+
+    expect(fixture.run.status).toBe("failed")
+    // The unlinked message keeps its own state — no failed stamp, no error.
+    expect(fixture.otherMessage.status).toBe("streaming")
+    expect(fixture.otherMessage.error).toBeUndefined()
+    // The run's own linked message is untouched too (the caller misnamed the
+    // target, so the message half is a no-op, not a redirect).
+    expect(fixture.message.status).toBe("streaming")
+  })
+})
+
+describe("execution grant revocation", () => {
+  const GRANT = {
+    grantDigest: "d".repeat(64),
+    grantExpiresAt: 2_000_000,
+  }
+
+  it("clears the grant when a run reaches an absorbing outcome (aborted)", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    Object.assign(fixture.run, GRANT)
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunAbortedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      { messageId: fixture.messageId, reason: "user stop" }
+    )
+
+    expect(fixture.run.status).toBe("aborted")
+    expect(fixture.run.grantDigest).toBeUndefined()
+    expect(fixture.run.grantExpiresAt).toBeUndefined()
+  })
+
+  it("keeps the grant at completed so the fail-over-completed convergence stays writable", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    Object.assign(fixture.run, GRANT)
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunCompletedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        content: "done",
+        parts: [{ type: "text", text: "done" }],
+      }
+    )
+    expect(fixture.run.status).toBe("completed")
+    expect(fixture.run.grantDigest).toBe(GRANT.grantDigest)
+    expect(fixture.run.grantExpiresAt).toBe(GRANT.grantExpiresAt)
+
+    // The deliberate convergence: the late failure write still lands through
+    // the retained grant, and reaching failed (absorbing) then revokes.
+    await markGenerationRunFailedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      { messageId: fixture.messageId, error: "stream errored" }
+    )
+    expect(fixture.run.status).toBe("failed")
+    expect(fixture.run.grantDigest).toBeUndefined()
+    expect(fixture.run.grantExpiresAt).toBeUndefined()
+  })
+
+  it("keeps the grant at the awaiting_approval pause (the worker's era is not over)", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    Object.assign(fixture.run, GRANT)
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await createToolApprovalRequestForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        assistantMessageId: fixture.messageId,
+        toolCallId: "call_1",
+        toolName: "send_email",
+        source: "mcp",
+        riskClass: "destructive",
+        approvalId: "approval_1",
+      }
+    )
+
+    expect(fixture.run.status).toBe("awaiting_approval")
+    expect(fixture.run.grantDigest).toBe(GRANT.grantDigest)
+    expect(fixture.run.grantExpiresAt).toBe(GRANT.grantExpiresAt)
+  })
+})
+
+describe("lease lifecycle (gameplan §6)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("prepare initializes the lease and the chat freshness ceiling", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const { ctx, tables } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages: [
+        createStoredMessage({
+          id: "message_user_1",
+          chatId,
+          userId,
+          orderId: 0,
+          clientMessageId: "user-1",
+          role: "user",
+          content: "prompt",
+          createdAt: 1000,
+        }),
+      ],
+    })
+
+    const result = await prepareGenerationForChat(ctx, {
+      chatId,
+      requestId: "request_lease",
+      model: "gpt-5",
+      provider: "openai",
+      latestUserMessage: {
+        id: "user-2",
+        role: "user",
+        content: "hello",
+        parts: [{ type: "text", text: "hello" }],
+      },
+      expectedVisibleMessageCount: 1,
+    })
+
+    const run = tables.generationRuns.find(
+      (candidate) => candidate._id === result.runId
+    )
+    expect(run).toMatchObject({
+      heartbeatAt: 1700000000000,
+      leaseExpiresAt: 1700000000000 + LEASE_DURATION_MS,
+      lastProgressAt: 1700000000000,
+    })
+    // Written once at prepare — the ceiling no legitimate run outlives.
+    expect(chat.liveRunFreshUntil).toBeGreaterThan(1700000000000)
+    expect(chat.statusRunId).toBe(result.runId)
+  })
+
+  it("heartbeat renews only worker-executing statuses and extends the run only", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.chat.statusRunId = fixture.runId
+    const { ctx, patches } = createMutationCtx(fixture.tables)
+
+    const result = await heartbeatGenerationRunForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId)
+    )
+
+    expect(result).toEqual({
+      kind: "renewed",
+      leaseExpiresAt: 1700000000000 + LEASE_DURATION_MS,
+    })
+    expect(fixture.run.heartbeatAt).toBe(1700000000000)
+    expect(fixture.run.leaseExpiresAt).toBe(1700000000000 + LEASE_DURATION_MS)
+    // Never touches the chat doc (§18 #4).
+    expect(patches.filter((patch) => patch.id === fixture.chatId)).toEqual([])
+  })
+
+  it("heartbeat returns paused on the approval pause and lost on a terminal run", async () => {
+    const paused = createGenerationRunLinkageFixture()
+    paused.run.status = "awaiting_approval"
+    const pausedCtx = createMutationCtx(paused.tables)
+    expect(
+      await heartbeatGenerationRunForChat(
+        pausedCtx.ctx,
+        await runOwner(pausedCtx.ctx, paused.runId)
+      )
+    ).toEqual({ kind: "paused" })
+    expect(paused.run.heartbeatAt).toBeUndefined()
+
+    const settled = createGenerationRunLinkageFixture()
+    settled.run.status = "aborted"
+    const settledCtx = createMutationCtx(settled.tables)
+    expect(
+      await heartbeatGenerationRunForChat(
+        settledCtx.ctx,
+        await runOwner(settledCtx.ctx, settled.runId)
+      )
+    ).toEqual({ kind: "lost", reason: "terminal" })
+  })
+
+  it("heartbeat returns lost when a newer run owns the chat status slot", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.chat.statusRunId = fixture.otherRunId
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    expect(
+      await heartbeatGenerationRunForChat(ctx, await runOwner(ctx, fixture.runId))
+    ).toEqual({ kind: "lost", reason: "not-owner" })
+    expect(fixture.run.heartbeatAt).toBeUndefined()
+  })
+
+  it("terminal transitions shed the lease; the approval pause sheds it and stamps its expiry", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const aborted = createGenerationRunLinkageFixture()
+    aborted.run.heartbeatAt = 1
+    aborted.run.leaseExpiresAt = 2
+    const abortedCtx = createMutationCtx(aborted.tables)
+    await markGenerationRunAbortedForChat(
+      abortedCtx.ctx,
+      await runOwner(abortedCtx.ctx, aborted.runId),
+      { messageId: aborted.messageId, reason: "user stop" }
+    )
+    expect(aborted.run.heartbeatAt).toBeUndefined()
+    expect(aborted.run.leaseExpiresAt).toBeUndefined()
+
+    const paused = createGenerationRunLinkageFixture()
+    paused.run.heartbeatAt = 1
+    paused.run.leaseExpiresAt = 2
+    paused.chat.statusRunId = paused.runId
+    const pausedCtx = createMutationCtx(paused.tables)
+    await createToolApprovalRequestForChat(
+      pausedCtx.ctx,
+      await runOwner(pausedCtx.ctx, paused.runId),
+      {
+        assistantMessageId: paused.messageId,
+        toolCallId: "call_1",
+        toolName: "send_email",
+        source: "mcp",
+        riskClass: "destructive",
+        approvalId: "approval_1",
+      }
+    )
+    expect(paused.run.heartbeatAt).toBeUndefined()
+    expect(paused.run.leaseExpiresAt).toBeUndefined()
+    const approval = paused.tables.toolApprovalRequests[0]
+    expect(approval.expiresAt).toBe(1700000000000 + APPROVAL_EXPIRY_MS)
+    // The pause's freshness ceiling becomes the approval's own expiry.
+    expect(paused.chat.liveRunFreshUntil).toBe(approval.expiresAt)
+  })
+})
+
+describe("reapers (gameplan §6, PR 3)", () => {
+  const NOW = 1700000000000
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function makeExpiredStreamingFixture() {
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.chat.statusRunId = fixture.runId
+    fixture.chat.liveRunStatus = "streaming"
+    fixture.chat.liveRunFreshUntil = NOW + 1
+    fixture.run.grantDigest = "d".repeat(64)
+    fixture.run.grantExpiresAt = NOW + 400_000
+    fixture.run.heartbeatAt = NOW - 60_000
+    fixture.run.leaseExpiresAt = NOW - 15_000
+    fixture.message.content = "partial answer"
+    fixture.message.parts = [{ type: "text", text: "partial answer" }]
+    return fixture
+  }
+
+  it("fails an expired streaming run: lease_expired, partial content preserved, chat projection cleared", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fixture = makeExpiredStreamingFixture()
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    const result = await reapExpiredGenerationRunsPass(ctx)
+
+    expect(result).toEqual({ reaped: 1 })
+    expect(fixture.run).toMatchObject({
+      status: "failed",
+      terminalReason: "lease_expired",
+      heartbeatAt: undefined,
+      leaseExpiresAt: undefined,
+      // Absorbing outcome → grant revoked.
+      grantDigest: undefined,
+      grantExpiresAt: undefined,
+    })
+    // Honest failure, content intact.
+    expect(fixture.message.status).toBe("failed")
+    expect(fixture.message.content).toBe("partial answer")
+    // The owner's chat projection cleared and marked failed.
+    expect(fixture.chat.liveRunStatus).toBeUndefined()
+    expect(fixture.chat.liveRunFreshUntil).toBeUndefined()
+    expect(fixture.chat.lastRunStatus).toBe("failed")
+  })
+
+  it("never matches fresh leases, lease-less rows, or the approval pause", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fresh = createGenerationRunLinkageFixture()
+    fresh.run.leaseExpiresAt = NOW + 30_000
+
+    // A pre-heartbeat row: active-looking, NO lease fields (race #36).
+    const legacy = createGenerationRun({
+      id: "run_legacy",
+      chatId: fresh.chatId,
+      userId: fresh.userId,
+      status: "streaming",
+    })
+    // A paused run holds no lease and must never be lease-reaped.
+    const paused = createGenerationRun({
+      id: "run_paused",
+      chatId: fresh.chatId,
+      userId: fresh.userId,
+      status: "awaiting_approval",
+    })
+    fresh.tables.generationRuns.push(legacy, paused)
+    const { ctx } = createMutationCtx(fresh.tables)
+
+    const result = await reapExpiredGenerationRunsPass(ctx)
+
+    expect(result).toEqual({ reaped: 0 })
+    expect(fresh.run.status).toBe("streaming")
+    expect(legacy.status).toBe("streaming")
+    expect(paused.status).toBe("awaiting_approval")
+  })
+
+  it("a reaped run cannot clear a newer owner's chat projection", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fixture = makeExpiredStreamingFixture()
+    // A newer run claimed the slot; the reaped run's projection must no-op.
+    fixture.chat.statusRunId = fixture.otherRunId
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await reapExpiredGenerationRunsPass(ctx)
+
+    expect(fixture.run.status).toBe("failed")
+    expect(fixture.chat.liveRunStatus).toBe("streaming")
+    expect(fixture.chat.liveRunFreshUntil).toBe(NOW + 1)
+  })
+
+  it("settles the reaped run's pending approvals and active tool records", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fixture = makeExpiredStreamingFixture()
+    fixture.tables.toolApprovalRequests.push({
+      _id: asId<"toolApprovalRequests">("approval_request_1"),
+      _creationTime: 1,
+      chatId: fixture.chatId,
+      runId: fixture.runId,
+      assistantMessageId: fixture.messageId,
+      userId: fixture.userId,
+      toolCallId: "call_1",
+      toolName: "send_email",
+      source: "mcp",
+      riskClass: "destructive",
+      approvalId: "approval_1",
+      status: "pending",
+      createdAt: 1,
+      expiresAt: NOW + 1000,
+    })
+    fixture.tables.toolInvocations.push({
+      _id: asId<"toolInvocations">("tool_invocation_1"),
+      _creationTime: 1,
+      runId: fixture.runId,
+      chatId: fixture.chatId,
+      messageId: fixture.messageId,
+      toolCallId: "call_1",
+      toolName: "send_email",
+      source: "mcp",
+      status: "called",
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await reapExpiredGenerationRunsPass(ctx)
+
+    expect(fixture.tables.toolApprovalRequests[0]).toMatchObject({
+      status: "expired",
+      resolvedAt: NOW,
+    })
+    expect(fixture.tables.toolInvocations[0]).toMatchObject({
+      status: "failed",
+      completedAt: NOW,
+    })
+  })
+
+  it("expires an unattended approval pause: approval_expired on the paused run", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.chat.statusRunId = fixture.runId
+    fixture.run.status = "awaiting_approval"
+    fixture.message.content = "content tail"
+    fixture.message.parts = [{ type: "text", text: "content tail" }]
+    fixture.tables.toolApprovalRequests.push(
+      {
+        _id: asId<"toolApprovalRequests">("approval_request_1"),
+        _creationTime: 1,
+        chatId: fixture.chatId,
+        runId: fixture.runId,
+        assistantMessageId: fixture.messageId,
+        userId: fixture.userId,
+        toolCallId: "call_1",
+        toolName: "send_email",
+        source: "mcp",
+        riskClass: "destructive",
+        approvalId: "approval_1",
+        status: "pending",
+        createdAt: 1,
+        expiresAt: NOW - 1,
+      },
+      {
+        // This approval is still fresh, but the triggering expiry makes its
+        // shared run terminal, so it must settle in the same transaction.
+        _id: asId<"toolApprovalRequests">("approval_request_2"),
+        _creationTime: 2,
+        chatId: fixture.chatId,
+        runId: fixture.runId,
+        assistantMessageId: fixture.messageId,
+        userId: fixture.userId,
+        toolCallId: "call_2",
+        toolName: "write_file",
+        source: "mcp",
+        riskClass: "destructive",
+        approvalId: "approval_2",
+        status: "pending",
+        createdAt: 2,
+        expiresAt: NOW + 60_000,
+      }
+    )
+    fixture.tables.toolInvocations.push(
+      {
+        _id: asId<"toolInvocations">("tool_invocation_1"),
+        _creationTime: 1,
+        runId: fixture.runId,
+        chatId: fixture.chatId,
+        messageId: fixture.messageId,
+        toolCallId: "call_1",
+        toolName: "send_email",
+        source: "mcp",
+        status: "pending_approval",
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      {
+        _id: asId<"toolInvocations">("tool_invocation_2"),
+        _creationTime: 2,
+        runId: fixture.runId,
+        chatId: fixture.chatId,
+        messageId: fixture.messageId,
+        toolCallId: "call_2",
+        toolName: "write_file",
+        source: "mcp",
+        status: "called",
+        createdAt: 2,
+        updatedAt: 2,
+      }
+    )
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    const result = await reapExpiredToolApprovalsPass(ctx)
+
+    expect(result).toEqual({ expired: 1 })
+    expect(
+      fixture.tables.toolApprovalRequests.map((approval) => ({
+        status: approval.status,
+        resolvedAt: approval.resolvedAt,
+      }))
+    ).toEqual([
+      { status: "expired", resolvedAt: NOW },
+      { status: "expired", resolvedAt: NOW },
+    ])
+    expect(
+      fixture.tables.toolInvocations.map((invocation) => ({
+        status: invocation.status,
+        error: invocation.error,
+        completedAt: invocation.completedAt,
+      }))
+    ).toEqual([
+      {
+        status: "failed",
+        error: "tool approval expired",
+        completedAt: NOW,
+      },
+      {
+        status: "failed",
+        error: "tool approval expired",
+        completedAt: NOW,
+      },
+    ])
+    expect(fixture.run).toMatchObject({
+      status: "failed",
+      terminalReason: "approval_expired",
+    })
+    expect(fixture.message.content).toBe("content tail")
+  })
+
+  it("the approval reaper never touches unexpired or expiry-less pending approvals", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.run.status = "awaiting_approval"
+    fixture.tables.toolApprovalRequests.push(
+      {
+        _id: asId<"toolApprovalRequests">("approval_request_fresh"),
+        _creationTime: 1,
+        chatId: fixture.chatId,
+        runId: fixture.runId,
+        assistantMessageId: fixture.messageId,
+        userId: fixture.userId,
+        toolCallId: "call_fresh",
+        toolName: "send_email",
+        source: "mcp",
+        riskClass: "destructive",
+        approvalId: "approval_fresh",
+        status: "pending",
+        createdAt: 1,
+        expiresAt: NOW + 60_000,
+      },
+      {
+        // Pre-expiry-field row: undefined must be excluded, not treated as
+        // instantly expired (undefined < now in index order — race #36).
+        _id: asId<"toolApprovalRequests">("approval_request_legacy"),
+        _creationTime: 1,
+        chatId: fixture.chatId,
+        runId: fixture.runId,
+        assistantMessageId: fixture.messageId,
+        userId: fixture.userId,
+        toolCallId: "call_legacy",
+        toolName: "send_email",
+        source: "mcp",
+        riskClass: "destructive",
+        approvalId: "approval_legacy",
+        status: "pending",
+        createdAt: 1,
+      }
+    )
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    const result = await reapExpiredToolApprovalsPass(ctx)
+
+    expect(result).toEqual({ expired: 0 })
+    expect(
+      fixture.tables.toolApprovalRequests.map((approval) => approval.status)
+    ).toEqual(["pending", "pending"])
+    expect(fixture.run.status).toBe("awaiting_approval")
+  })
+})
+
+describe("approval-continuation idempotency (gameplan §10, PR 8)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function makePausedWorld() {
+    const fixture = createApprovalContinuationFixture([
+      {
+        approvalId: "approval_1",
+        approved: true,
+        toolCallId: "call_1",
+        toolName: "read_file",
+      },
+    ])
+    const { user, chat } = fixture.owner
+    const tables: Partial<TableDocuments> = {
+      ...fixture.tables,
+      users: [user],
+      chats: [chat],
+    }
+    return { fixture, user, chat, tables }
+  }
+
+  it("exactly one continuation run: the second prepare gets the typed conflict", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { fixture, chat, tables } = makePausedWorld()
+    const { ctx, tables: world } = createMutationCtx(tables)
+
+    const first = await prepareGenerationForChat(ctx, {
+      chatId: chat._id,
+      requestId: "request_continuation_1",
+      model: "gpt-5",
+      provider: "openai",
+      approvalResponses: fixture.responses,
+    })
+
+    const pausedRun = world.generationRuns.find(
+      (run) => run._id === fixture.run._id
+    )
+    const continuationRun = world.generationRuns.find(
+      (run) => run._id === first.runId
+    )
+    expect(pausedRun?.continuationRunId).toBe(first.runId)
+    expect(continuationRun?.continuedFromRunId).toBe(fixture.run._id)
+
+    // The losing tab's auto-send re-prepares with the same (now-resolved)
+    // approval state — rejected with the typed conflict, creating nothing.
+    await expect(
+      prepareGenerationForChat(ctx, {
+        chatId: chat._id,
+        requestId: "request_continuation_2",
+        model: "gpt-5",
+        provider: "openai",
+        approvalResponses: fixture.responses,
+      })
+    ).rejects.toThrow("Approval continuation already dispatched")
+    expect(pausedRun?.continuationRunId).toBe(first.runId)
+  })
+
+  it("a late continuation cannot resurrect a Stop-settled pause (race #16)", async () => {
+    // The user approved (the click resolved the approval row), then Stopped
+    // before the auto-send POST landed: the Stop aborted the pause. The late
+    // continuation prepare must CONFLICT — not create a new streaming run
+    // linked to the aborted pause, re-claim the chat slot, and repaint the
+    // Stop-settled assistant message back to streaming.
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { fixture, chat, tables } = makePausedWorld()
+    fixture.run.status = "aborted"
+    fixture.run.terminalReason = "user_stop"
+    for (const approval of fixture.tables.toolApprovalRequests ?? []) {
+      approval.status = "approved"
+      approval.resolvedAt = 1699999999000
+    }
+    const { ctx, tables: world } = createMutationCtx(tables)
+    const runCountBefore = world.generationRuns.length
+
+    await expect(
+      prepareGenerationForChat(ctx, {
+        chatId: chat._id,
+        requestId: "request_late_continuation",
+        model: "gpt-5",
+        provider: "openai",
+        approvalResponses: fixture.responses,
+      })
+    ).rejects.toThrow("Approval pause already settled")
+
+    // The pause keeps its Stop terminal and never records a continuation.
+    // (Real Convex also rolls back this transaction's interim writes; the
+    // fake ctx only proves the typed conflict fired before any commit.)
+    expect(fixture.run.status).toBe("aborted")
+    expect(fixture.run.continuationRunId).toBeUndefined()
+    expect(world.generationRuns.length).toBeGreaterThanOrEqual(runCountBefore)
+  })
+
+  it("a continuation whose pause lost the chat slot to a newer run conflicts (no supersede of the healthy run)", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { fixture, chat, tables } = makePausedWorld()
+    // A newer, healthy run owns the chat's status slot.
+    chat.statusRunId = asId<"generationRuns">("run_newer")
+
+    const { ctx } = createMutationCtx(tables)
+
+    await expect(
+      prepareGenerationForChat(ctx, {
+        chatId: chat._id,
+        requestId: "request_displaced_continuation",
+        model: "gpt-5",
+        provider: "openai",
+        approvalResponses: fixture.responses,
+      })
+    ).rejects.toThrow("Approval pause no longer owns the chat's active run")
+  })
+})
+
+describe("pending-only approval resolution (gameplan §10, PR 8)", () => {
+  const EXPIRY = 1700000000000
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function makeApprovalWorld({
+    expiresAt = EXPIRY,
+    status = "pending",
+    reason,
+  }: {
+    expiresAt?: number
+    status?: Doc<"toolApprovalRequests">["status"]
+    reason?: string
+  } = {}) {
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.chat.statusRunId = fixture.runId
+    fixture.chat.liveRunStatus = "awaiting"
+    fixture.chat.liveRunFreshUntil = expiresAt
+    fixture.run.status = "awaiting_approval"
+    fixture.message.status = "awaiting_approval"
+    const approval: Doc<"toolApprovalRequests"> = {
+      _id: asId<"toolApprovalRequests">("approval_request_1"),
+      _creationTime: 1,
+      chatId: fixture.chatId,
+      runId: fixture.runId,
+      assistantMessageId: fixture.messageId,
+      userId: fixture.userId,
+      toolCallId: "call_1",
+      toolName: "send_email",
+      source: "mcp",
+      riskClass: "destructive",
+      approvalId: "approval_1",
+      status,
+      reason,
+      createdAt: 1,
+      expiresAt,
+    }
+    fixture.tables.toolApprovalRequests.push(approval)
+    const invocation: Doc<"toolInvocations"> = {
+      _id: asId<"toolInvocations">("tool_invocation_1"),
+      _creationTime: 1,
+      runId: fixture.runId,
+      chatId: fixture.chatId,
+      messageId: fixture.messageId,
+      toolCallId: "call_1",
+      toolName: "send_email",
+      source: "mcp",
+      status: "pending_approval",
+      createdAt: 1,
+      updatedAt: 1,
+    }
+    fixture.tables.toolInvocations.push(invocation)
+    const world = createMutationCtx(fixture.tables)
+    return { ...fixture, approval, invocation, ...world }
+  }
+
+  it.each([
+    {
+      first: "approved" as const,
+      firstReason: "Approved in tab A",
+      second: "denied" as const,
+      secondReason: "Denied in tab B",
+    },
+    {
+      first: "denied" as const,
+      firstReason: "Denied in tab A",
+      second: "approved" as const,
+      secondReason: "Approved in tab B",
+    },
+  ])(
+    "keeps the first $first decision and reason canonical when a $second click loses",
+    async ({ first, firstReason, second, secondReason }) => {
+      vi.spyOn(Date, "now").mockReturnValue(EXPIRY - 1)
+      const { ctx, approval } = makeApprovalWorld()
+
+      const winner = await resolveToolCallDecision(
+        ctx,
+        { approvalId: "approval_1", reason: firstReason },
+        first
+      )
+      const loser = await resolveToolCallDecision(
+        ctx,
+        { approvalId: "approval_1", reason: secondReason },
+        second
+      )
+
+      expect(winner).toEqual({
+        status: first,
+        alreadyResolved: false,
+        reason: firstReason,
+      })
+      expect(loser).toEqual({
+        status: first,
+        alreadyResolved: true,
+        reason: firstReason,
+      })
+      expect(approval).toMatchObject({ status: first, reason: firstReason })
+    }
+  )
+
+  it("allows a decision just before expiry and leaves nothing for the reaper", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(EXPIRY - 1)
+    const { ctx, approval, run } = makeApprovalWorld()
+
+    const decision = await resolveToolCallDecision(
+      ctx,
+      { approvalId: "approval_1", reason: "Approved in time" },
+      "approved"
+    )
+    expect(decision.status).toBe("approved")
+    expect(run.status).toBe("awaiting_approval")
+
+    vi.spyOn(Date, "now").mockReturnValue(EXPIRY)
+    expect(await reapExpiredToolApprovalsPass(ctx)).toEqual({ expired: 0 })
+    expect(approval.status).toBe("approved")
+  })
+
+  it.each([
+    ["exactly at expiry", EXPIRY],
+    ["after expiry but before reaping", EXPIRY + 1],
+  ])("expires atomically %s", async (_label, now) => {
+    vi.spyOn(Date, "now").mockReturnValue(now)
+    const { ctx, tables, approval, invocation, run, message, chat } =
+      makeApprovalWorld()
+    const siblingApproval: Doc<"toolApprovalRequests"> = {
+      _id: asId<"toolApprovalRequests">("approval_request_2"),
+      _creationTime: 2,
+      chatId: approval.chatId,
+      runId: approval.runId,
+      assistantMessageId: approval.assistantMessageId,
+      userId: approval.userId,
+      toolCallId: "call_2",
+      toolName: "write_file",
+      source: "mcp",
+      riskClass: "destructive",
+      approvalId: "approval_2",
+      status: "pending",
+      createdAt: 2,
+      expiresAt: EXPIRY + 60_000,
+    }
+    const siblingInvocation: Doc<"toolInvocations"> = {
+      _id: asId<"toolInvocations">("tool_invocation_2"),
+      _creationTime: 2,
+      runId: approval.runId,
+      chatId: approval.chatId,
+      messageId: approval.assistantMessageId,
+      toolCallId: "call_2",
+      toolName: "write_file",
+      source: "mcp",
+      status: "called",
+      createdAt: 2,
+      updatedAt: 2,
+    }
+    tables.toolApprovalRequests.push(siblingApproval)
+    tables.toolInvocations.push(siblingInvocation)
+
+    const result = await resolveToolCallDecision(
+      ctx,
+      { approvalId: "approval_1" },
+      "approved"
+    )
+
+    expect(result).toMatchObject({ status: "expired", alreadyResolved: true })
+    expect(approval).toMatchObject({ status: "expired", resolvedAt: now })
+    expect(invocation.status).toBe("failed")
+    expect(siblingApproval).toMatchObject({
+      status: "expired",
+      resolvedAt: now,
+    })
+    expect(siblingInvocation).toMatchObject({
+      status: "failed",
+      error: "tool approval expired",
+      completedAt: now,
+    })
+    expect(run).toMatchObject({
+      status: "failed",
+      terminalReason: "approval_expired",
+    })
+    expect(message.status).toBe("failed")
+    expect(chat.liveRunStatus).toBeUndefined()
+  })
+
+  it("converges when the reaper commits before a losing decision", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(EXPIRY)
+    const { ctx, approval, run } = makeApprovalWorld()
+
+    expect(await reapExpiredToolApprovalsPass(ctx)).toEqual({ expired: 1 })
+    const loser = await resolveToolCallDecision(
+      ctx,
+      { approvalId: "approval_1", reason: "Too late" },
+      "denied"
+    )
+
+    expect(loser).toEqual({
+      status: "expired",
+      alreadyResolved: true,
+      reason: undefined,
+    })
+    expect(approval.status).toBe("expired")
+    expect(run.terminalReason).toBe("approval_expired")
+  })
+
+  it("converges when decision-side expiry commits before the reaper", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(EXPIRY)
+    const { ctx, approval, run } = makeApprovalWorld()
+
+    await resolveToolCallDecision(ctx, { approvalId: "approval_1" }, "approved")
+    expect(await reapExpiredToolApprovalsPass(ctx)).toEqual({ expired: 0 })
+    expect(approval.status).toBe("expired")
+    expect(run.terminalReason).toBe("approval_expired")
+  })
+})
+
+describe("stopGenerationRun (gameplan §9, PR 6)", () => {
+  const NOW = 1700000000000
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function makeStoppableFixture() {
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.chat.statusRunId = fixture.runId
+    fixture.chat.liveRunStatus = "streaming"
+    fixture.chat.liveRunFreshUntil = NOW + 100_000
+    fixture.run.grantDigest = "d".repeat(64)
+    fixture.run.grantExpiresAt = NOW + 400_000
+    fixture.run.heartbeatAt = NOW - 5_000
+    fixture.run.leaseExpiresAt = NOW + 40_000
+    fixture.message.content = "partial answer"
+    fixture.message.parts = [{ type: "text", text: "partial answer" }]
+    return fixture
+  }
+
+  it("stops the exact run: user_stop, audit, content preserved, approvals denied, tools settled", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fixture = makeStoppableFixture()
+    fixture.tables.toolApprovalRequests.push({
+      _id: asId<"toolApprovalRequests">("approval_request_1"),
+      _creationTime: 1,
+      chatId: fixture.chatId,
+      runId: fixture.runId,
+      assistantMessageId: fixture.messageId,
+      userId: fixture.userId,
+      toolCallId: "call_1",
+      toolName: "send_email",
+      source: "mcp",
+      riskClass: "destructive",
+      approvalId: "approval_1",
+      status: "pending",
+      createdAt: 1,
+      expiresAt: NOW + 1000,
+    })
+    fixture.tables.toolInvocations.push(
+      {
+        _id: asId<"toolInvocations">("tool_invocation_1"),
+        _creationTime: 1,
+        runId: fixture.runId,
+        chatId: fixture.chatId,
+        messageId: fixture.messageId,
+        toolCallId: "call_1",
+        toolName: "send_email",
+        source: "mcp",
+        status: "pending_approval",
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      {
+        _id: asId<"toolInvocations">("tool_invocation_2"),
+        _creationTime: 1,
+        runId: fixture.runId,
+        chatId: fixture.chatId,
+        messageId: fixture.messageId,
+        toolCallId: "call_2",
+        toolName: "web_search",
+        source: "builtin",
+        status: "completed",
+        createdAt: 1,
+        updatedAt: 1,
+      }
+    )
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    const result = await stopGenerationRunForChat(ctx, {
+      user: fixture.user,
+      chat: fixture.chat,
+      run: fixture.run,
+    })
+
+    expect(result).toEqual({
+      outcome: "stopped",
+      status: "aborted",
+      terminalReason: "user_stop",
+    })
+    expect(fixture.run).toMatchObject({
+      status: "aborted",
+      terminalReason: "user_stop",
+      stopRequestedAt: NOW,
+      stopRequestedBy: fixture.userId,
+      grantDigest: undefined,
+      leaseExpiresAt: undefined,
+    })
+    expect(fixture.message.status).toBe("aborted")
+    expect(fixture.message.content).toBe("partial answer")
+    expect(fixture.tables.toolApprovalRequests[0]).toMatchObject({
+      status: "denied",
+      resolvedByUserId: fixture.userId,
+    })
+    // pending_approval → denied; completed evidence untouched.
+    expect(
+      fixture.tables.toolInvocations.map((invocation) => invocation.status)
+    ).toEqual(["denied", "completed"])
+    expect(fixture.chat.liveRunStatus).toBeUndefined()
+    expect(fixture.chat.liveRunFreshUntil).toBeUndefined()
+  })
+
+  it("is idempotent: the second Stop returns the canonical terminal result", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fixture = makeStoppableFixture()
+    const { ctx } = createMutationCtx(fixture.tables)
+    const owner = {
+      user: fixture.user,
+      chat: fixture.chat,
+      run: fixture.run,
+    }
+
+    await stopGenerationRunForChat(ctx, owner)
+    const second = await stopGenerationRunForChat(ctx, owner)
+
+    expect(second).toEqual({
+      outcome: "already-terminal",
+      status: "aborted",
+      terminalReason: "user_stop",
+    })
+  })
+
+  it("returns not-current for a run that lost the chat slot — the newer owner is never touched", async () => {
+    const fixture = makeStoppableFixture()
+    fixture.chat.statusRunId = fixture.otherRunId
+    const newerRun = createGenerationRun({
+      id: "run_2",
+      chatId: fixture.chatId,
+      userId: fixture.userId,
+      assistantMessageId: fixture.otherMessageId,
+    })
+    fixture.tables.generationRuns.push(newerRun)
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    const result = await stopGenerationRunForChat(ctx, {
+      user: fixture.user,
+      chat: fixture.chat,
+      run: fixture.run,
+    })
+
+    expect(result.outcome).toBe("not-current")
+    expect(fixture.run.status).toBe("streaming")
+    expect(newerRun.status).toBe("streaming")
+  })
 })
 
 describe("updateAssistantSnapshotForChat", () => {
@@ -2654,40 +3759,112 @@ describe("updateAssistantSnapshotForChat", () => {
     expect(fixture.run.status).toBe("streaming")
   })
 
-  it("does not let late lower-sequence snapshots overwrite newer content", async () => {
+  it("rejects late lower-sequence snapshots BEFORE insertion", async () => {
+    // PR 2 (gameplan §10 "Snapshot sequencing"): the run's
+    // lastSnapshotSequence is the authority, checked pre-insert — a stale
+    // write leaves neither a snapshot row nor a doc patch behind.
     const fixture = createGenerationRunLinkageFixture()
     fixture.message.content = "newer"
     fixture.message.parts = [{ type: "text", text: "newer" }]
-    fixture.tables.assistantMessageSnapshots = [
-      {
-        _id: asId<"assistantMessageSnapshots">("snapshot_existing"),
-        _creationTime: 1,
-        runId: fixture.runId,
-        chatId: fixture.chatId,
-        messageId: fixture.messageId,
-        order: 1,
-        stepOrder: 0,
-        sequence: 2,
-        format: "text_snapshot",
-        textSnapshot: "newer",
-        partsSnapshot: [{ type: "text", text: "newer" }],
-        createdAt: 1,
-      },
-    ]
+    fixture.run.lastSnapshotSequence = 2
     const { ctx, inserts, patches } = createMutationCtx(fixture.tables)
 
-    await updateAssistantSnapshotForChat(ctx, await runOwner(ctx, fixture.runId), {
-      messageId: fixture.messageId,
-      order: 1,
-      sequence: 1,
-      textSnapshot: "stale",
-      partsSnapshot: [{ type: "text", text: "stale" }],
-    })
+    const result = await updateAssistantSnapshotForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        order: 1,
+        sequence: 1,
+        textSnapshot: "stale",
+        partsSnapshot: [{ type: "text", text: "stale" }],
+      }
+    )
 
-    expect(inserts).toHaveLength(1)
+    expect(result).toEqual({ kind: "stale", lastSequence: 2 })
+    expect(inserts).toEqual([])
     expect(patches).toEqual([])
     expect(fixture.message.content).toBe("newer")
     expect(fixture.message.parts).toEqual([{ type: "text", text: "newer" }])
+  })
+
+  it("rejects an equal-sequence duplicate before insertion", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.run.lastSnapshotSequence = 3
+    const { ctx, inserts } = createMutationCtx(fixture.tables)
+
+    const result = await updateAssistantSnapshotForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        order: 1,
+        sequence: 3,
+        textSnapshot: "dup",
+        partsSnapshot: [{ type: "text", text: "dup" }],
+      }
+    )
+
+    expect(result).toEqual({ kind: "stale", lastSequence: 3 })
+    expect(inserts).toEqual([])
+  })
+
+  it("records the accepted sequence and progress on the run", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const fixture = createGenerationRunLinkageFixture()
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    const result = await updateAssistantSnapshotForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        order: 1,
+        sequence: 5,
+        textSnapshot: "partial",
+        partsSnapshot: [{ type: "text", text: "partial" }],
+      }
+    )
+
+    expect(result).toEqual({ kind: "applied" })
+    expect(fixture.run.lastSnapshotSequence).toBe(5)
+    expect(fixture.run.lastProgressAt).toBe(1700000000000)
+    vi.restoreAllMocks()
+  })
+
+  it("lands content on an awaiting_approval pause WITHOUT repainting it streaming", async () => {
+    // The pause is lease-free (gameplan §6): the same worker's post-pause
+    // final flush must land the content tail, but flipping the run back to
+    // "streaming" without a lease would strand it outside both liveness
+    // regimes — no lease for the run reaper, no pending status for the
+    // approval reaper — a permanent zombie if the completion downgrade never
+    // arrives.
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.run.status = "awaiting_approval"
+    fixture.run.heartbeatAt = undefined
+    fixture.run.leaseExpiresAt = undefined
+    fixture.message.status = "awaiting_approval"
+    const { ctx, inserts } = createMutationCtx(fixture.tables)
+
+    const result = await updateAssistantSnapshotForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        order: 1,
+        sequence: 4,
+        textSnapshot: "tail after pause",
+        partsSnapshot: [{ type: "text", text: "tail after pause" }],
+      }
+    )
+
+    expect(result).toEqual({ kind: "applied" })
+    expect(inserts).toHaveLength(1)
+    expect(fixture.message.content).toBe("tail after pause")
+    expect(fixture.message.status).toBe("awaiting_approval")
+    expect(fixture.run.status).toBe("awaiting_approval")
+    expect(fixture.run.lastSnapshotSequence).toBe(4)
+    expect(fixture.run.leaseExpiresAt).toBeUndefined()
   })
 
   it("becomes a no-op once the run is terminal (post-Stop write storm)", async () => {
@@ -2755,6 +3932,12 @@ describe("applyApprovalResponses", () => {
           completedAt: 1700000000000,
           updatedAt: 1700000000000,
           activeStreamId: undefined,
+          // Absorbing outcome: the grant revokes and the lease sheds in the
+          // same transaction (gameplan §0 amendment 2 / §6 step 6).
+          grantDigest: undefined,
+          grantExpiresAt: undefined,
+          heartbeatAt: undefined,
+          leaseExpiresAt: undefined,
         },
       },
     ])

@@ -47,6 +47,8 @@ const WORKER_OPS: {
     ctx.runMutation(internal.chatRuntimeWorker.markGenerationRunFailed, args),
   markGenerationRunAborted: (ctx, args) =>
     ctx.runMutation(internal.chatRuntimeWorker.markGenerationRunAborted, args),
+  heartbeatGenerationRun: (ctx, args) =>
+    ctx.runMutation(internal.chatRuntimeWorker.heartbeatGenerationRun, args),
 }
 
 function jsonResponse(status: number, body: Record<string, unknown>) {
@@ -92,18 +94,35 @@ http.route({
     ) => Promise<unknown>
 
     try {
-      await dispatch(ctx, { ...(args as Record<string, unknown>), grantDigest })
-      return jsonResponse(200, { ok: true })
+      // The mutation's return value rides back to the worker — the heartbeat's
+      // renewed/paused/lost discriminant and the snapshot guard results are
+      // branching inputs on the Next side, not fire-and-forget acks.
+      const result = await dispatch(ctx, {
+        ...(args as Record<string, unknown>),
+        grantDigest,
+      })
+      return jsonResponse(200, { ok: true, result: result ?? null })
     } catch (error) {
       const rejection = grantRejectionCode(error)
       if (rejection) {
         return jsonResponse(401, {
           ok: false,
+          code: rejection,
           error: GRANT_REJECTION_MESSAGES[rejection],
         })
       }
-      const message = error instanceof Error ? error.message : String(error)
-      return jsonResponse(400, { ok: false, error: message })
+      // Generic body only: raw internal error text must not escape to the
+      // caller — Convex argument-validation errors run BEFORE the grant check,
+      // so this branch is reachable by an unauthenticated probe. The detail
+      // stays in the deployment's function logs.
+      console.warn(
+        JSON.stringify({
+          _tag: "chat_turn_worker_dispatch_failed",
+          op,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      )
+      return jsonResponse(400, { ok: false, error: "Invalid worker call" })
     }
   }),
 })

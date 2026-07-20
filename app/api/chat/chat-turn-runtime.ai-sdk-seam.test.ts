@@ -540,7 +540,7 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     expect(wireCalls(wire, "markGenerationRunAborted")).toHaveLength(0)
   })
 
-  it("persists the aborted outcome when the request signal aborts mid-stream", async () => {
+  it("keeps streaming to durable completion when the request signal aborts mid-stream (client disconnect)", async () => {
     const { loadResult } = makeMcpToolsFixture()
     vi.mocked(loadUserMcpTools).mockResolvedValue(
       loadResult as unknown as Awaited<ReturnType<typeof loadUserMcpTools>>
@@ -561,23 +561,28 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     const response = runtime.toResponse(abortController.signal)
     const reader = response.body!.getReader()
 
-    // Wait for the stream to actually start, then abort the request signal.
+    // Wait for the stream to actually start, then abort the request signal —
+    // the reload/disconnect case (gameplan §12 scenario 9): a durable turn's
+    // provider consumption deliberately excludes req.signal, so the worker
+    // streams on to a normal durable completion. Stop reaches the worker
+    // through the heartbeat/grant path, never through client disconnect.
     await reader.read()
     abortController.abort()
     while (!(await reader.read()).done) {
-      // drain whatever the runtime still emits after the abort
+      // drain whatever the runtime still emits after the disconnect
     }
 
-    // The aborted outcome is durable: the run is marked aborted (the app keeps
-    // the placeholder as a first-class aborted stub) and never completed.
     await vi.waitFor(() => {
       expect(
-        wireCalls(wire, "markGenerationRunAborted").length
+        wireCalls(wire, "markGenerationRunCompleted").length
       ).toBeGreaterThanOrEqual(1)
     })
-    const abortWrite = wireCalls(wire, "markGenerationRunAborted")[0]
-    expect(abortWrite.args).toMatchObject({ runId: "run1", messageId: "msg1" })
-    expect(wireCalls(wire, "markGenerationRunCompleted")).toHaveLength(0)
+    const completionWrite = wireCalls(wire, "markGenerationRunCompleted")[0]
+    expect(completionWrite.args).toMatchObject({
+      runId: "run1",
+      messageId: "msg1",
+    })
+    expect(wireCalls(wire, "markGenerationRunAborted")).toHaveLength(0)
     expect(wireCalls(wire, "markGenerationRunFailed")).toHaveLength(0)
   })
 })

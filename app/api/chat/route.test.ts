@@ -3,7 +3,7 @@ import { getToolDimensionForError } from "@/lib/observability/chat-error-taxonom
 import * as Sentry from "@sentry/nextjs"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { createChatTurnRuntime } from "./chat-turn-runtime"
-import { POST } from "./route"
+import { maxDuration, POST } from "./route"
 
 vi.mock("@sentry/nextjs", () => ({
   setTag: vi.fn(),
@@ -70,6 +70,15 @@ describe("/api/chat route", () => {
   afterEach(() => {
     consoleErrorSpy.mockClear()
     consoleWarnSpy.mockClear()
+  })
+
+  it("keeps the literal maxDuration in agreement with the execution budget", async () => {
+    // Next.js statically analyzes segment config, so route.ts cannot import
+    // the budget module's value — this pin is the agreement.
+    const { CHAT_ROUTE_MAX_DURATION_SECONDS } = await import(
+      "@/lib/chat-turn/execution-budget"
+    )
+    expect(maxDuration).toBe(CHAT_ROUTE_MAX_DURATION_SECONDS)
   })
 
   it("returns the original fallback response when turn.fail throws", async () => {

@@ -94,6 +94,11 @@ export default defineSchema({
       v.union(v.literal("completed"), v.literal("failed"))
     ),
     lastReadAt: v.optional(v.number()),
+    // Freshness ceiling for the live projection, written ONCE (at prepare:
+    // startedAt + route budget + slack; at approval pause: the approval's
+    // expiresAt) and cleared at terminal transitions — never per heartbeat
+    // (gameplan §5/§18 #4). An expired deadline must never render a spinner.
+    liveRunFreshUntil: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .index("by_user_pinned", ["userId", "pinned"])
@@ -201,14 +206,44 @@ export default defineSchema({
     // secret minted at prepare. Worker writes authenticate against this digest
     // via the /chat-turn/worker HTTP endpoint instead of the user's request
     // token, so a mid-run token expiry can no longer reject late writes. The
-    // raw secret lives only in the Next server process's memory.
+    // raw secret lives only in the Next server process's memory. Absorbing
+    // terminal outcomes (aborted/failed) clear both fields (revocation).
     grantDigest: v.optional(v.string()),
     grantExpiresAt: v.optional(v.number()),
+    // --- Durable liveness (durable-turn gameplan §5). Lease fields are
+    // written by the worker heartbeat; a document missing them sorts as
+    // `undefined` in by_status_lease_expires, so every reaper range MUST
+    // exclude undefined (`.gt("leaseExpiresAt", undefined)`) or lease-less
+    // rows are falsely reaped.
+    heartbeatAt: v.optional(v.number()), // last server-timestamped heartbeat
+    leaseExpiresAt: v.optional(v.number()), // stored expiry: reaping + client classification
+    lastSnapshotSequence: v.optional(v.number()), // reject stale snapshots pre-insert
+    lastProgressAt: v.optional(v.number()), // latest accepted content/tool progress; NOT liveness
+    terminalReason: v.optional(
+      v.union(
+        v.literal("completed"),
+        v.literal("user_stop"),
+        v.literal("superseded"),
+        v.literal("provider_error"),
+        v.literal("lease_expired"),
+        v.literal("approval_expired"),
+        v.literal("request_aborted")
+      )
+    ),
+    stopRequestedAt: v.optional(v.number()),
+    stopRequestedBy: v.optional(v.id("users")),
+    supersededByRunId: v.optional(v.id("generationRuns")),
+    // Approval continuation idempotency (gameplan §10): the first continuation
+    // records both relation fields; a second attempt sees continuationRunId
+    // and returns a typed conflict.
+    continuationRunId: v.optional(v.id("generationRuns")),
+    continuedFromRunId: v.optional(v.id("generationRuns")),
   })
     .index("by_chat", ["chatId"])
     .index("by_user", ["userId"])
     .index("by_status", ["status"])
-    .index("by_chat_updated", ["chatId", "updatedAt"]),
+    .index("by_chat_updated", ["chatId", "updatedAt"])
+    .index("by_status_lease_expires", ["status", "leaseExpiresAt"]),
 
   assistantMessageSnapshots: defineTable({
     runId: v.id("generationRuns"),
@@ -276,11 +311,17 @@ export default defineSchema({
     createdAt: v.number(),
     resolvedAt: v.optional(v.number()),
     resolvedByUserId: v.optional(v.id("users")),
+    // Approval pauses are lease-free with their own expiry (gameplan §6).
+    // Backfill pending rows before enabling the approval reaper — the
+    // undefined-first index ordering would otherwise expire them instantly;
+    // the reaper range excludes undefined regardless.
+    expiresAt: v.optional(v.number()),
   })
     .index("by_user_status", ["userId", "status"])
     .index("by_chat_status", ["chatId", "status"])
     .index("by_run_status", ["runId", "status"])
-    .index("by_approval", ["approvalId"]),
+    .index("by_approval", ["approvalId"])
+    .index("by_status_expires", ["status", "expiresAt"]),
 
   projects: defineTable({
     userId: v.id("users"),

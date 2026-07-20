@@ -1,6 +1,7 @@
 "use client"
 
 import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
+import { Favicon } from "@/components/ui/favicon"
 import { Icon } from "@/components/ui/icon"
 import { Markdown } from "@/components/ui/markdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -165,14 +166,12 @@ function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
           const domain = sourceDomain(source.url)
           const content = (
             <>
-              <Image
+              <Favicon
+                url={source.faviconDomain ?? source.url}
                 alt=""
-                src={`https://www.google.com/s2/favicons?sz=32&domain_url=${encodeURIComponent(source.url)}`}
-                width={12}
-                height={12}
                 loading="lazy"
                 decoding="async"
-                className="size-3 shrink-0 rounded-full"
+                className="size-3"
               />
               <span className="max-w-32 truncate">{domain}</span>
             </>
@@ -227,11 +226,9 @@ function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
                   key={`${source.sourceId}:${source.url}`}
                   className="border-muted bg-background group-hover:border-foreground -ms-3 box-content size-3 shrink-0 overflow-hidden rounded-full border first:-ms-1"
                 >
-                  <Image
+                  <Favicon
+                    url={source.faviconDomain ?? source.url}
                     alt=""
-                    src={`https://www.google.com/s2/favicons?sz=32&domain_url=${encodeURIComponent(source.url)}`}
-                    width={12}
-                    height={12}
                     loading="lazy"
                     decoding="async"
                     className="size-3"

@@ -2,14 +2,14 @@
 
 import { Favicon } from "@/components/ui/favicon"
 import { Icon } from "@/components/ui/icon"
+import type { AssistantSourceResult } from "@/lib/chat-messages/sources"
 import { cn } from "@/lib/utils"
 import { RiLink } from "@remixicon/react"
-import type { SourceUrlUIPart } from "ai"
 import { DisclosureCard } from "./disclosure-card"
 import { addUTM, formatUrl } from "./utils"
 
 type SourcesListProps = {
-  sources: SourceUrlUIPart[]
+  sources: readonly AssistantSourceResult[]
   className?: string
 }
 
@@ -24,7 +24,7 @@ export function SourcesList({ sources, className }: SourcesListProps) {
               {sources?.map((source, index) => (
                 <Favicon
                   key={`${source.url}-${index}`}
-                  url={source.url}
+                  url={source.faviconDomain ?? source.url}
                   alt={`Favicon for ${source.title}`}
                   shape="rounded"
                   className="border-background size-4 border"
@@ -50,7 +50,7 @@ export function SourcesList({ sources, className }: SourcesListProps) {
                   className="text-primary group line-clamp-1 flex items-center gap-1 hover:underline"
                 >
                   <Favicon
-                    url={source.url}
+                    url={source.faviconDomain ?? source.url}
                     alt={`Favicon for ${source.title}`}
                     shape="rounded"
                     className="size-4 flex-shrink-0"

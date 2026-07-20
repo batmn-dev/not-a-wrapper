@@ -133,6 +133,15 @@ export type ChatTurnAdapters = {
    * consumption completes. */
   sendMessageAndWaitForAcceptance: SendMessage
   regenerate: (options?: RegenerateMessageOptions) => void | Promise<void>
+  /** Event-owned local dispatch boundary for presentation identity/grace. */
+  onLocalDispatch?: () => void
+  /**
+   * Consumes the one-shot fact that the user explicitly stopped the current
+   * local dispatch. This distinguishes an intentional transport abort from a
+   * navigation, watchdog, timeout, or network failure without inspecting
+   * browser-specific error shapes.
+   */
+  consumeLocalStopIntent?: () => boolean
   toastError: (title: string) => void
   bumpChat: (chatId: string) => void
   setLastFinishReason: (finishReason: string | undefined) => void
@@ -286,6 +295,7 @@ async function runSendTurn(
   adapters.setIsSubmitting(true)
   let optimisticId: string | null = null
   let optimisticMessage: (ChatTurnMessage & { role: "user" }) | null = null
+  let finalizeAcceptedTurn: (() => void) | null = null
 
   const removeOptimistic = () => {
     if (!optimisticId) return
@@ -371,6 +381,21 @@ async function runSendTurn(
       ...optimisticMessage,
     } satisfies ChatTurnMessage
 
+    finalizeAcceptedTurn = () => {
+      // An explicit user Stop accepts the submitted turn even when aborting
+      // the response races the HTTP-acceptance signal. Consume a first-turn
+      // identity too: a later identical prompt is a genuine new turn, not an
+      // accidental retry of the intentionally stopped one.
+      ensured.firstTurn?.confirmDispatched?.()
+      adapters.setHasSentFirstMessage(true)
+      void adapters.turnStore.persistTurnMessage(
+        dispatchedMessage,
+        currentChatId
+      )
+      onSuccess?.(currentChatId)
+    }
+
+    adapters.onLocalDispatch?.()
     await adapters.sendMessageAndWaitForAcceptance(
       {
         ...dispatchedMessage,
@@ -405,12 +430,15 @@ async function runSendTurn(
     // has claimed the idempotent first-message row. A pre-response failure —
     // including an ambiguous network loss after the server committed — throws
     // above and retains the original identity for a safe same-id retry.
-    ensured.firstTurn?.confirmDispatched?.()
-
-    adapters.setHasSentFirstMessage(true)
-    void adapters.turnStore.persistTurnMessage(dispatchedMessage, currentChatId)
-    onSuccess?.(currentChatId)
+    finalizeAcceptedTurn()
   } catch {
+    if (
+      finalizeAcceptedTurn !== null &&
+      adapters.consumeLocalStopIntent?.() === true
+    ) {
+      finalizeAcceptedTurn()
+      return
+    }
     removeOptimistic()
     adapters.toastError(errorMessage)
   } finally {
@@ -552,6 +580,7 @@ async function runEditTurn(
 
     // Preserve one identity across the optimistic row, SDK replacement, and
     // persisted branch so projection can reconcile without losing live metadata.
+    adapters.onLocalDispatch?.()
     adapters.sendMessage(
       {
         id: editPlan.optimisticEditedMessage.id,
@@ -642,6 +671,7 @@ async function runRegenerationTurn(
   if (!userId) return
 
   try {
+    adapters.onLocalDispatch?.()
     await adapters.regenerate({
       messageId: regenerationPlan.regeneration.targetAssistantMessageId,
       body: buildChatTurnRequestBody({

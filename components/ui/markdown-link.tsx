@@ -2,7 +2,7 @@ import { Favicon } from "@/components/ui/favicon"
 import { Icon } from "@/components/ui/icon"
 import { isExternalHttpHref } from "@/lib/markdown/remark-link-presentation"
 import { cn } from "@/lib/utils"
-import { RiArrowRightUpLine, RiGlobalLine } from "@remixicon/react"
+import { RiArrowRightUpLine } from "@remixicon/react"
 import { Children, cloneElement, isValidElement, type ReactNode } from "react"
 
 export type LinkMarkdownPresentation = "inline" | "pill"
@@ -169,15 +169,6 @@ export function LinkMarkdown({
               url={href}
               alt=""
               className="size-3.5"
-              fallback={
-                <Icon
-                  icon={RiGlobalLine}
-                  data-slot="favicon-placeholder"
-                  slotSize={14}
-                  glyphInset={0}
-                />
-              }
-              fallbackOnMissing
               loading="lazy"
               decoding="async"
             />

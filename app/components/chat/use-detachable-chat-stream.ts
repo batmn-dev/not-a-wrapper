@@ -1,6 +1,10 @@
 import type { UIMessage } from "@ai-sdk/react"
 import { Chat } from "@ai-sdk/react"
 import {
+  consumeLocallyResolvedApprovals,
+  restoreLocallyResolvedApprovals,
+} from "@/lib/chat-runs/approval-auto-send-gate"
+import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
   type ChatTransport,
@@ -173,17 +177,44 @@ function createDetachableChatStreamOwner(
         ownerChatId,
         finished: false,
       })
+      // Ids consumed by the LAST armed auto-send, held until its outcome is
+      // known: an errored dispatch restores them (the SDK never re-evaluates
+      // its predicate on error, and the approval is already resolved durably
+      // — without restoration the continuation would be stranded with no
+      // recovery); a finished dispatch discards them, keeping the arm
+      // one-shot across remounts.
+      let armedContinuationApprovalIds: string[] = []
       binding.chat = new Chat<UIMessage>({
         transport,
         messages,
         sendAutomaticallyWhen: (args) => {
           const lifecycle = lifecycles.get(binding)
-          return lifecycle?.state === "detached"
-            ? false
-            : lastAssistantMessageIsCompleteWithApprovalResponses(args)
+          if (lifecycle?.state === "detached") return false
+          if (!lastAssistantMessageIsCompleteWithApprovalResponses(args)) {
+            return false
+          }
+          // Only the tab that LOCALLY resolved the approval may auto-send the
+          // continuation (gameplan §10 layer 3), and the resolution arms
+          // exactly ONE dispatch — consuming here closes the gate for any
+          // later remount that rehydrates the same approval-responded parts.
+          const lastMessage = args.messages[args.messages.length - 1]
+          if (lastMessage === undefined) return false
+          const consumed = consumeLocallyResolvedApprovals(lastMessage)
+          if (consumed.length === 0) return false
+          armedContinuationApprovalIds = consumed
+          return true
         },
-        onFinish: (event) => routeFinish(binding, event),
-        onError: (error) => routeError(binding, error),
+        onFinish: (event) => {
+          armedContinuationApprovalIds = []
+          routeFinish(binding, event)
+        },
+        onError: (error) => {
+          if (armedContinuationApprovalIds.length > 0) {
+            restoreLocallyResolvedApprovals(armedContinuationApprovalIds)
+            armedContinuationApprovalIds = []
+          }
+          routeError(binding, error)
+        },
       })
       return binding
     },

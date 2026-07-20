@@ -29,7 +29,12 @@ vi.mock("convex/react", () => ({
   useMutation: () => convexMocks.markChatRead,
 }))
 
+vi.mock("@/lib/flags", () => ({
+  ENABLE_DURABLE_RUN_PRESENTATION: true,
+}))
+
 let deriveChatRowStatus: SidebarStatusModule["deriveChatRowStatus"]
+let useSidebarChatStatus: SidebarStatusModule["useSidebarChatStatus"]
 let useMarkChatReadOnView: SidebarStatusModule["useMarkChatReadOnView"]
 let dom: JSDOM | null = null
 
@@ -44,6 +49,7 @@ beforeAll(async () => {
 
   const sidebarStatusModule = await import("./sidebar-chat-status")
   deriveChatRowStatus = sidebarStatusModule.deriveChatRowStatus
+  useSidebarChatStatus = sidebarStatusModule.useSidebarChatStatus
   useMarkChatReadOnView = sidebarStatusModule.useMarkChatReadOnView
 })
 
@@ -70,6 +76,15 @@ function MarkReadHarness({
   return null
 }
 
+function SidebarStatusHarness({
+  chat,
+}: {
+  chat: Parameters<SidebarStatusModule["useSidebarChatStatus"]>[0]
+}) {
+  const status = useSidebarChatStatus(chat)
+  return React.createElement("div", { "data-testid": "sidebar-status" }, status)
+}
+
 describe("deriveChatRowStatus", () => {
   it("maps the chat doc's live_run_status through when there is no override", () => {
     expect(deriveChatRowStatus({ live_run_status: "streaming" }, null)).toBe(
@@ -82,6 +97,47 @@ describe("deriveChatRowStatus", () => {
 
   it("returns idle for a chat with no projection fields (guest/local/optimistic)", () => {
     expect(deriveChatRowStatus({}, null)).toBe("idle")
+  })
+
+  it("never renders a spinner past the freshness ceiling (gameplan §11)", () => {
+    const NOW = 1_000_000
+    const live = {
+      live_run_status: "streaming" as const,
+      live_run_fresh_until: NOW + 1,
+    }
+    expect(deriveChatRowStatus(live, null, NOW)).toBe("streaming")
+    expect(
+      deriveChatRowStatus(
+        { ...live, live_run_fresh_until: NOW },
+        null,
+        NOW
+      )
+    ).toBe("idle")
+    expect(
+      deriveChatRowStatus(
+        { live_run_status: "awaiting", live_run_fresh_until: NOW - 1 },
+        null,
+        NOW
+      )
+    ).toBe("idle")
+    // An expired live phase still lets the unread/error mirror through.
+    expect(
+      deriveChatRowStatus(
+        {
+          live_run_status: "streaming",
+          live_run_fresh_until: NOW - 1,
+          last_run_ended_at: 10,
+          last_run_status: "failed",
+          last_read_at: 0,
+        },
+        null,
+        NOW
+      )
+    ).toBe("error")
+    // A deadline-less legacy row keeps its projected phase (reaper bounds it).
+    expect(
+      deriveChatRowStatus({ live_run_status: "streaming" }, null, NOW)
+    ).toBe("streaming")
   })
 
   it("lets a non-idle override win over the backend (local error beats projected streaming)", () => {
@@ -98,6 +154,42 @@ describe("deriveChatRowStatus", () => {
     expect(deriveChatRowStatus({ live_run_status: "streaming" }, "idle")).toBe(
       "streaming"
     )
+  })
+
+  it("keeps the durable presentation rollout independent from local and terminal indicators", () => {
+    const NOW = 1_000_000
+    expect(
+      deriveChatRowStatus(
+        {
+          live_run_status: "streaming",
+          live_run_fresh_until: NOW + 1_000,
+        },
+        null,
+        NOW,
+        false
+      )
+    ).toBe("idle")
+    expect(
+      deriveChatRowStatus(
+        { live_run_status: "streaming" },
+        "streaming",
+        NOW,
+        false
+      )
+    ).toBe("streaming")
+    expect(
+      deriveChatRowStatus(
+        {
+          live_run_status: "streaming",
+          last_run_ended_at: 200,
+          last_run_status: "failed",
+          last_read_at: 100,
+        },
+        null,
+        NOW,
+        false
+      )
+    ).toBe("error")
   })
 
   it("derives unread when a completed run finished after the read cursor", () => {
@@ -159,6 +251,45 @@ describe("deriveChatRowStatus", () => {
         null
       )
     ).toBe("streaming")
+  })
+})
+
+describe("useSidebarChatStatus deadline subscription", () => {
+  let container: HTMLDivElement | null = null
+  let root: Root | null = null
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000_000)
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(() => {
+    if (root) act(() => root?.unmount())
+    container?.remove()
+    root = null
+    container = null
+    vi.useRealTimers()
+  })
+
+  it("re-renders exactly when the backend freshness deadline expires", () => {
+    const chat = {
+      id: "chat_1",
+      live_run_status: "streaming",
+      live_run_fresh_until: 1_001_000,
+    } as unknown as Parameters<SidebarStatusModule["useSidebarChatStatus"]>[0]
+
+    act(() => {
+      root?.render(React.createElement(SidebarStatusHarness, { chat }))
+    })
+    expect(container?.textContent).toBe("streaming")
+
+    act(() => {
+      vi.advanceTimersByTime(1_000)
+    })
+    expect(container?.textContent).toBe("idle")
   })
 })
 

@@ -62,6 +62,7 @@ import {
 import { after } from "next/server"
 import { adaptHistoryForProvider } from "./adapters"
 import type { AdaptationContext, AdaptationWarning } from "./adapters/types"
+import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
 import {
   createDurableTurnRuntime,
   isDurableConvexChat,
@@ -307,6 +308,12 @@ export function createChatTurnRuntime(args: {
 }): ChatTurnRuntime {
   const { input } = args
   const deps = resolveDeps(args.deps)
+  // The budget's deadlines are measured from TURN start, but the platform's
+  // route clock started at request receipt — construction happens right
+  // after request parsing, so anchoring here charges prepare() (MCP
+  // connections, attachment fetches) against the provider deadline instead
+  // of silently eroding the settlement reserve.
+  const turnStartedAtMs = Date.now()
   const {
     messages,
     chatId,
@@ -365,6 +372,25 @@ export function createChatTurnRuntime(args: {
   let provider: Provider | undefined
   let credentialSource: ApiKeySource | undefined
   let lastPublicError: PublicChatError | null = null
+
+  // Request-scoped resource teardown (MCP clients, analytics flushes) is
+  // owned by SETTLEMENT, not by `after()`: `after()` can fire on
+  // response-stream cancellation while a durable worker is still executing
+  // (client reload — gameplan §12 scenario 9), and disposing MCP clients
+  // mid-run would fail every later tool step. The `after()` registration
+  // below stays only as the backstop for turns whose stream never started
+  // (prepare failures) or already settled; the provider deadline bounds how
+  // long a started stream can defer disposal.
+  let providerStreamStarted = false
+  let turnSettled = false
+  let turnResourcesDisposed = false
+  const disposeTurnResources = async () => {
+    if (turnResourcesDisposed) return
+    turnResourcesDisposed = true
+    if (toolRuntime) await toolRuntime.dispose()
+    await flushPostHog().catch(() => {})
+    await flushBraintrust().catch(() => {})
+  }
 
   const normalizeTurnError = (error: unknown): PublicChatError => {
     const normalized = normalizeChatError(error, {
@@ -487,9 +513,14 @@ export function createChatTurnRuntime(args: {
       outcomeSinks,
     })
     toolRuntime = tool
-    // Register MCP cleanup immediately — after() runs even when the response
-    // errors or the client disconnects. dispose() is idempotent.
-    deps.after(() => tool.dispose())
+    // Backstop registration only (see disposeTurnResources): a started,
+    // unsettled stream skips this — its settlement path disposes — because
+    // after() can fire on response cancellation while the durable worker is
+    // still executing tool steps. dispose() is idempotent.
+    deps.after(async () => {
+      if (providerStreamStarted && !turnSettled) return
+      await disposeTurnResources()
+    })
 
     const hasAnyTools = tool.hasTools
     const shouldInjectSearch = tool.policySummary.searchInjected
@@ -504,16 +535,10 @@ export function createChatTurnRuntime(args: {
 
     const startTime = Date.now()
 
-    // Schedule PostHog/Braintrust flush after streaming completes. Using flush()
-    // (not shutdown()) allows client reuse in warm containers.
-    if (phClient) {
-      deps.after(async () => {
-        await flushPostHog()
-      })
-    }
-    deps.after(async () => {
-      await flushBraintrust()
-    })
+    // PostHog/Braintrust flushes ride the same settlement-owned teardown as
+    // MCP disposal (disposeTurnResources) — flush() (not shutdown()) allows
+    // client reuse in warm containers. No separate after() registrations: the
+    // backstop above already covers never-started turns.
 
     const durableRuntimeEnabled = isDurableConvexChat({
       isAuthenticated,
@@ -859,7 +884,31 @@ export function createChatTurnRuntime(args: {
     // (ADR-0006).
     const lifecycle: DurableStreamBinding = durableTurn.bind(tool)
 
+    // Provider consumption stops on the FIRST of: the runtime's execution
+    // scope ending (durable: worker lost run ownership via heartbeat `lost` /
+    // grant rejection — the CLIENT signal is deliberately absent, a reload or
+    // disconnect leaves the worker streaming to durable settlement, gameplan
+    // §12 scenario 9; guest: the request signal itself), or the budget's
+    // provider deadline (the settlement reserve must fit inside the route
+    // budget — gameplan §0). Client-disconnect telemetry below stays keyed to
+    // the request signal alone and never stops the stream.
+    // Remaining provider budget = deadline minus what prepare() already
+    // consumed (anchored at construction — see turnStartedAtMs). The floor
+    // keeps a pathologically slow prepare from instant-aborting the stream;
+    // past it the reserve is already eroded and settlement leans on the
+    // degraded-receipt + reaper backstops.
+    const providerDeadlineRemainingMs = Math.max(
+      15_000,
+      CHAT_TURN_EXECUTION_BUDGET.providerDeadlineMs -
+        (Date.now() - turnStartedAtMs)
+    )
+    const executionSignal = AbortSignal.any([
+      ...durableTurn.providerAbortSignals(signal),
+      AbortSignal.timeout(providerDeadlineRemainingMs),
+    ])
+
     const streamStartMs = Date.now()
+    providerStreamStarted = true
     let stepCounter = 0
     let toolMetadataByCallId: ToolInvocationMetadataByCallId = {}
 
@@ -963,12 +1012,22 @@ export function createChatTurnRuntime(args: {
       clearStalledContinuationTimer()
     }
 
+    // Two abort observers with distinct meanings (gameplan §12 scenario 9):
+    // the REQUEST signal is client-disconnect telemetry only — for durable
+    // chats the stream keeps executing after it fires — while the EXECUTION
+    // signal is the stream actually ending, which owns the abort cleanup
+    // (reasoning close, stalled-continuation disarm).
+    let clientAbortCaptured = false
     const handleRequestAbort = () => {
+      if (clientAbortCaptured || streamCompleted) return
+      clientAbortCaptured = true
+      captureChatLifecycleSignal("chat_client_abort")
+    }
+    const handleExecutionAbort = () => {
       if (abortCaptured || streamCompleted) return
       abortCaptured = true
       reasoningActivity.close()
       resolvePostToolContinuation()
-      captureChatLifecycleSignal("chat_client_abort")
     }
 
     if (signal.aborted) {
@@ -977,6 +1036,16 @@ export function createChatTurnRuntime(args: {
       signal.addEventListener("abort", handleRequestAbort, { once: true })
       deps.after(() => {
         signal.removeEventListener("abort", handleRequestAbort)
+      })
+    }
+    if (executionSignal.aborted) {
+      handleExecutionAbort()
+    } else {
+      executionSignal.addEventListener("abort", handleExecutionAbort, {
+        once: true,
+      })
+      deps.after(() => {
+        executionSignal.removeEventListener("abort", handleExecutionAbort)
       })
     }
 
@@ -989,7 +1058,7 @@ export function createChatTurnRuntime(args: {
         messages: modelMessages,
         tools: tool.tools,
         stopWhen: isStepCount(maxSteps),
-        abortSignal: signal,
+        abortSignal: executionSignal,
         // Request dimensions use Sentry because AI SDK 7 telemetry has no
         // per-call metadata field.
         telemetry: {
@@ -1396,11 +1465,19 @@ export function createChatTurnRuntime(args: {
       // degraded receipt — logged and captured inside the module — instead of
       // failing the response pipe and erasing a delivered answer.
       onEnd: async ({ responseMessage, isAborted, finishReason }) => {
-        await lifecycle.envelope.settle({
-          responseMessage,
-          isAborted,
-          finishReason,
-        })
+        try {
+          await lifecycle.envelope.settle({
+            responseMessage,
+            isAborted,
+            finishReason,
+          })
+        } finally {
+          // Settlement owns request-scoped teardown (see the factory-level
+          // note): the stream is truly over here — reload or not — so MCP
+          // clients and analytics flushes release now, not at after() time.
+          turnSettled = true
+          await disposeTurnResources()
+        }
       },
       onError: (error: unknown) => {
         reasoningActivity.close()
@@ -1439,9 +1516,10 @@ export function createChatTurnRuntime(args: {
   async function fail(err: unknown): Promise<void> {
     phase = "terminal"
 
-    // Clean up any MCP clients that were opened before the error. dispose() is
-    // idempotent, so this is safe even if the after() registration also runs.
-    if (toolRuntime) await toolRuntime.dispose()
+    // Terminal teardown: MCP clients + analytics flushes. dispose() is
+    // idempotent, so this is safe even if the after() backstop also runs.
+    turnSettled = true
+    await disposeTurnResources()
 
     // Finalize a failed durable run (guest: inert; pre-prepare: no-op). Legal at
     // any phase — the Generation run lifecycle's first-terminal-wins absorbs a

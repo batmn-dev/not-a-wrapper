@@ -32,11 +32,20 @@ const REDACTED = "[REDACTED]"
  * `{8,}` body, which keeps this off short dashed identifiers (uuids split on `-`,
  * css class fragments, etc.), so false positives on real telemetry are rare.
  *
+ * Two unprefixed shapes are also matched (ADR-0011 execution grant):
+ *
+ * - a bare 64-hex run — the run-scoped worker secret is 32 random bytes hex.
+ *   This also redacts SHA-256 digests (the grant digest included), which is
+ *   an accepted over-match: a digest in telemetry is never load-bearing.
+ * - any `Bearer <token>` credential of 16+ token chars — the grant crosses
+ *   the worker wire as a Bearer header, and future schemes shouldn't depend
+ *   on someone remembering to add their prefix here.
+ *
  * Stateful (`g`) — callers using `.test()` in a loop must reset `lastIndex`, or
  * call the provided helpers which build a fresh regex per invocation.
  */
 export function buildSecretValueRegex(): RegExp {
-  return /\b(?:Bearer\s+)?(?:bt|fc|gh[pousr]|sk|xox[baprs]?)[-_][A-Za-z0-9_-]{8,}\b|\b(?:AKIA|ASIA)[0-9A-Z]{16}\b|\bAIza[0-9A-Za-z_-]{35}\b/g
+  return /\b(?:Bearer\s+)?(?:bt|fc|gh[pousr]|sk|xox[baprs]?)[-_][A-Za-z0-9_-]{8,}\b|\b(?:AKIA|ASIA)[0-9A-Z]{16}\b|\bAIza[0-9A-Za-z_-]{35}\b|\b[0-9a-fA-F]{64}\b|\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/g
 }
 
 /** True if the string contains anything shaped like a credential. */

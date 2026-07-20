@@ -77,6 +77,7 @@ vi.mock("@/lib/observability/braintrust", () => ({
   hashBraintrustIdentifier: vi.fn(async () => "hash"),
   logBraintrustTraceMetadata: vi.fn(),
   getBraintrustErrorMetadata: vi.fn(() => ({})),
+  flushBraintrust: vi.fn(async () => {}),
 }))
 
 vi.mock("@/lib/posthog", () => ({
@@ -277,11 +278,9 @@ function makeDeps(
 }
 
 function notAbortedSignal(): AbortSignal {
-  return {
-    aborted: false,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  } as unknown as AbortSignal
+  // A REAL signal: toResponse composes it via AbortSignal.any (worker-loss +
+  // provider-deadline), which rejects plain-object fakes.
+  return new AbortController().signal
 }
 
 beforeEach(() => {
@@ -741,7 +740,7 @@ describe("createChatTurnRuntime — Anthropic pause_turn telemetry", () => {
 })
 
 describe("createChatTurnRuntime — abort telemetry", () => {
-  it("passes the request abort signal into streamText", async () => {
+  it("excludes the request signal from a DURABLE turn's execution signal — a client disconnect leaves the worker streaming", async () => {
     const harness = makeStreamHarness()
     const runtime = createChatTurnRuntime({
       input: makeInput(),
@@ -749,10 +748,37 @@ describe("createChatTurnRuntime — abort telemetry", () => {
     })
 
     await runtime.prepare()
-    const signal = notAbortedSignal()
-    runtime.toResponse(signal)
+    const controller = new AbortController()
+    runtime.toResponse(controller.signal)
 
-    expect(harness.captured.streamOpts.abortSignal).toBe(signal)
+    // Reload/disconnect durability (gameplan §12 scenario 9, §14 "Reload
+    // mid-text → same run ID"): the request abort is telemetry only; Stop and
+    // supersession reach the worker via heartbeat `lost`/grant rejection.
+    const executionSignal = harness.captured.streamOpts
+      .abortSignal as AbortSignal
+    expect(executionSignal.aborted).toBe(false)
+    controller.abort()
+    expect(executionSignal.aborted).toBe(false)
+  })
+
+  it("keeps the request signal authoritative for GUEST turns", async () => {
+    const harness = makeStreamHarness()
+    const runtime = createChatTurnRuntime({
+      input: makeInput({ isAuthenticated: false, convexToken: undefined }),
+      deps: makeDeps(harness, makeFetchMutation()),
+    })
+
+    await runtime.prepare()
+    const controller = new AbortController()
+    runtime.toResponse(controller.signal)
+
+    // Nobody is left to receive or settle a disconnected guest stream — the
+    // request signal IS the guest lifecycle.
+    const executionSignal = harness.captured.streamOpts
+      .abortSignal as AbortSignal
+    expect(executionSignal.aborted).toBe(false)
+    controller.abort()
+    expect(executionSignal.aborted).toBe(true)
   })
 
   it("captures chat_client_abort exactly once when the request is already aborted", async () => {
@@ -763,12 +789,9 @@ describe("createChatTurnRuntime — abort telemetry", () => {
     })
 
     await runtime.prepare()
-    const abortedSignal = {
-      aborted: true,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    } as unknown as AbortSignal
-    runtime.toResponse(abortedSignal)
+    const abortedController = new AbortController()
+    abortedController.abort()
+    runtime.toResponse(abortedController.signal)
 
     // Stream then completes — the streamCompleted/abortCaptured guards must
     // prevent any second chat_client_abort capture.

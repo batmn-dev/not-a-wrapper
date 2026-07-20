@@ -74,12 +74,12 @@ The paginated reads go through a new `usePerUserPaginatedQuery` seam gated on
 `isConvexAuthenticated` (ADR-0004 applied to pagination), and the eslint ban on
 raw `useQuery` was extended to `usePaginatedQuery`.
 
-The sidebar swap ships behind **`ENABLE_PAGINATED_SIDEBAR`** (default off) for
-instant rollback. With the flag off, the app reads the full list exactly as
-before; the other surfaces' dedicated reads are harmless because they already
-cover the full history. A compile-time reference asserts `chats.searchByTitle`
-exists wherever the flag can bound the sidebar, so the list can never be bounded
-without full-history search present.
+The sidebar swap is default-on behind **`ENABLE_PAGINATED_SIDEBAR`** with an
+explicit `"false"` rollback value. With the flag disabled, the app reads the
+full list exactly as before; the other surfaces' dedicated reads are harmless
+because they already cover the full history. A compile-time reference asserts
+`chats.searchByTitle` exists wherever the flag can bound the sidebar, so the
+list can never be bounded without full-history search present.
 
 ### Rejected alternatives (do not relitigate)
 
@@ -114,7 +114,7 @@ without full-history search present.
   consumers use `useChat`, which carries its own fallback `isLoading`.
 - Full-history surfaces (search, browse, project, deep-link) each own a read and
   no longer depend on the sidebar list; bounding the sidebar cannot shrink them.
-- `ENABLE_PAGINATED_SIDEBAR` is a temporary rollout lever, not permanent config —
-  remove it after the soak (follow-up ticket).
+- `ENABLE_PAGINATED_SIDEBAR` is a temporary default-on rollback lever, not
+  permanent config — remove it after the soak (follow-up ticket).
 - The before/after Convex dashboard numbers are recorded in
   `docs/measurements/chat-list-invalidations.md`.

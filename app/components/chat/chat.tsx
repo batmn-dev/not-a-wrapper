@@ -158,6 +158,7 @@ function ChatInner({
     messages,
     status,
     stop,
+    presentation,
     hasSentFirstMessage,
     isSubmitting,
     lastFinishReason,
@@ -181,6 +182,14 @@ function ChatInner({
   // rotating ring while generating. Front-end seam #1 — cross-chat/background
   // status is projected onto the chat doc and derived per-row.
   usePublishActiveChatStatus(chatId, status)
+
+  // The EFFECTIVE transport status every liveness-consuming surface renders:
+  // a client-classified FRESH background run (another tab / re-entry — §8)
+  // reads as streaming so conversation rows, the Activity panel, and the
+  // announcer follow durable progress; a stale or terminal run never does —
+  // the resolver's freshness bound is what keeps zombie loaders impossible.
+  const effectiveStatus: typeof status =
+    presentation.state === "background-streaming" ? "streaming" : status
   // Clear this chat's unread/error on open, and again when its backend terminal
   // mirror advances while viewing (a run you watched to completion counts as
   // read). Passes the active chat's mirror timestamp; no-op for guest/local ids.
@@ -205,7 +214,7 @@ function ChatInner({
     panelProps,
   } = useActivityPanel({
     messages,
-    status,
+    status: effectiveStatus,
     isSubmitting,
     selectedActivityTurnId,
   })
@@ -273,7 +282,7 @@ function ChatInner({
   const conversationProps = useMemo(
     () => ({
       messages,
-      status,
+      status: effectiveStatus,
       isSubmitting,
       chatId,
       hasSentFirstMessage,
@@ -287,7 +296,7 @@ function ChatInner({
     }),
     [
       messages,
-      status,
+      effectiveStatus,
       isSubmitting,
       chatId,
       hasSentFirstMessage,
@@ -360,7 +369,11 @@ function ChatInner({
         // consumes it with the same 1/3 fallback).
         style={{ "--thread-show-context-pct": "1/3" } as React.CSSProperties}
       >
-        <ChatStatusAnnouncer status={status} isSubmitting={isSubmitting} />
+        <ChatStatusAnnouncer
+          status={effectiveStatus}
+          isSubmitting={isSubmitting}
+          presentationState={presentation.state}
+        />
         <DialogAuth open={hasDialogAuth} setOpen={setHasDialogAuth} />
 
         <ActivityPanel
@@ -448,8 +461,9 @@ function ChatInner({
                 onTurn={submit}
                 onSuggestion={handleSuggestion}
                 isSubmitting={isSubmitting}
-                status={status}
+                status={effectiveStatus}
                 stop={stop}
+                stoppable={presentation.stoppable}
                 hasSuggestions={
                   preferences.promptSuggestions &&
                   !project &&

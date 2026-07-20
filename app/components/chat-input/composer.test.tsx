@@ -1,5 +1,7 @@
 /** @vitest-environment jsdom */
 
+import type { Id } from "@/convex/_generated/dataModel"
+import { resolveGenerationPresentation } from "@/lib/chat-runs/run-presentation"
 import React, { act } from "react"
 import { createRoot, Root } from "react-dom/client"
 import {
@@ -304,6 +306,62 @@ describe("Composer primary action", () => {
 
     expect(stop).toHaveBeenCalledTimes(1)
     expect(onTurn).not.toHaveBeenCalled()
+  })
+
+  it("does not resurrect Stop from local streaming while the resolver says a Stop is pending", () => {
+    const stop = vi.fn()
+    const mounted = renderComposer({
+      stop,
+      isSubmitting: false,
+      status: "streaming",
+      stoppable: false,
+    })
+
+    expect(mounted.querySelector('button[aria-label="Stop"]')).toBeNull()
+    expect(stop).not.toHaveBeenCalled()
+  })
+
+  it("routes a history chat's projection-gap Stop through the real primary control", () => {
+    const presentation = resolveGenerationPresentation({
+      localStatus: "submitted",
+      isSubmitting: false,
+      localAssistantMessageId: null,
+      selectedRun: {
+        runId: "run_previous" as Id<"generationRuns">,
+        assistantMessageId: "msg_previous" as Id<"messages">,
+        status: "completed",
+        terminalReason: "completed",
+        activeToolNames: [],
+        pendingApproval: null,
+      },
+      pendingStopRunId: null,
+      isConnected: true,
+      now: 1,
+    })
+    const stop = vi.fn()
+    const mounted = renderComposer({
+      chatId: "chat_with_history",
+      status: "submitted",
+      stoppable: presentation.stoppable,
+      stop,
+    })
+
+    expect(presentation).toMatchObject({
+      state: "local-submitted",
+      stoppable: true,
+      stopTargetRunId: null,
+    })
+    const button = mounted.querySelector(
+      'button[aria-label="Stop"]'
+    ) as HTMLButtonElement | null
+    expect(button?.disabled).toBe(false)
+
+    act(() => button?.click())
+
+    // stopTargetRunId=null is the controller's explicit deferred-Stop branch;
+    // this proves the real Composer control reaches it rather than only unit-
+    // invoking useChatCore's returned callback.
+    expect(stop).toHaveBeenCalledTimes(1)
   })
 
   it("stays compact for empty and attachment-only states; expands for hard newlines", () => {
