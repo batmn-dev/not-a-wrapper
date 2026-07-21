@@ -616,7 +616,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   />
                 </div>
                 <div className="cant-hover:gap-1.5 ms-auto flex items-center gap-2">
-                  {/* TODO: Add dictation here when the app exposes a local voice input capability. */}
                   <PromptInputAction
                     disabled={primaryAction.disabled}
                     tooltip={
