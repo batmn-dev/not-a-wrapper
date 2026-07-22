@@ -41,7 +41,7 @@ import {
 import { StopBulkRoundedIcon } from "@/lib/icons"
 import { getModelInfo } from "@/lib/models"
 import { useUser } from "@/lib/user-store/provider"
-import { debounce } from "@/lib/utils"
+import { cn, debounce } from "@/lib/utils"
 import { RiArrowUpLine } from "@remixicon/react"
 import { useConvex } from "convex/react"
 import {
@@ -101,6 +101,12 @@ type ComposerProps = {
   /** Draft-persistence scope when there is no chat id (e.g. `project-<id>`),
    * so surface drafts don't bleed into the home composer's "new chat" draft. */
   draftScopeId?: string
+  /** Surface-owned prompt copy. Other Composer behavior remains shared. */
+  placeholder?: string
+  /** Accessible prompt name when visible placeholder copy is compacted. */
+  ariaLabel?: string
+  /** Surface-owned spacing below the composer shell. */
+  bottomSpacing?: "default" | "none"
 }
 
 const isOnlyWhitespace = (text: string) => !/[^\s]/.test(text)
@@ -198,6 +204,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       hasSuggestions,
       onLockedGuestModelSelect,
       draftScopeId,
+      placeholder = "Ask anything",
+      ariaLabel,
+      bottomSpacing = "default",
     },
     ref
   ) {
@@ -358,28 +367,25 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       setAttachmentAnnouncement,
     ])
 
-    const primaryAction = useMemo(
-      () => {
-        // When supplied, the resolver owns the complete Stop policy — including
-        // a local transport that is still streaming while an exact durable Stop
-        // is already pending. The status fallback preserves standalone/local
-        // callers that do not participate in durable presentation.
-        const canStop = stoppable ?? status === "streaming"
-        return resolveComposerPrimaryActionState({
-          // Stop presents for a live LOCAL stream or any resolver-stoppable
-          // run (background, awaiting-approval, possibly-stale — §8/§11):
-          // durable Stop is a mutation, not a transport abort, so the local
-          // status alone must not gate the affordance.
-          isStreaming: canStop,
-          isAbortable: canStop,
-          canSend:
-            !isSubmitting &&
-            attachments.every((attachment) => attachment.status === "ready") &&
-            (!isOnlyWhitespace(localValue) || attachments.length > 0),
-        })
-      },
-      [attachments, isSubmitting, localValue, status, stoppable]
-    )
+    const primaryAction = useMemo(() => {
+      // When supplied, the resolver owns the complete Stop policy — including
+      // a local transport that is still streaming while an exact durable Stop
+      // is already pending. The status fallback preserves standalone/local
+      // callers that do not participate in durable presentation.
+      const canStop = stoppable ?? status === "streaming"
+      return resolveComposerPrimaryActionState({
+        // Stop presents for a live LOCAL stream or any resolver-stoppable
+        // run (background, awaiting-approval, possibly-stale — §8/§11):
+        // durable Stop is a mutation, not a transport abort, so the local
+        // status alone must not gate the affordance.
+        isStreaming: canStop,
+        isAbortable: canStop,
+        canSend:
+          !isSubmitting &&
+          attachments.every((attachment) => attachment.status === "ready") &&
+          (!isOnlyWhitespace(localValue) || attachments.length > 0),
+      })
+    }, [attachments, isSubmitting, localValue, status, stoppable])
 
     const handlePrimaryActionClick = useCallback(() => {
       if (primaryAction.disabled) {
@@ -538,7 +544,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           disabled={!isUserAuthenticated || !isFileUploadAvailable}
         >
           <div
-            className="relative order-2 pb-3 sm:pb-4 md:order-1"
+            className={cn(
+              "relative order-2 pb-3 sm:pb-4 md:order-1",
+              bottomSpacing === "none" && "pb-0 sm:pb-0"
+            )}
             onClick={() => textareaRef.current?.focus()}
           >
             <PromptInput
@@ -559,9 +568,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                       tabIndex={-1}
                       onChange={(event) => {
                         if (event.target.files?.length) {
-                          handleAttachmentUpload(
-                            Array.from(event.target.files)
-                          )
+                          handleAttachmentUpload(Array.from(event.target.files))
                           event.target.value = ""
                         }
                       }}
@@ -595,7 +602,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               </PromptInputActions>
               <PromptInputTextarea
                 ref={textareaRef}
-                placeholder="Ask anything"
+                placeholder={placeholder}
+                aria-label={ariaLabel ?? placeholder}
+                className={
+                  placeholder === "Ask anything"
+                    ? undefined
+                    : "placeholder-shown:[field-sizing:fixed] placeholder-shown:h-[42px] placeholder-shown:overflow-hidden placeholder-shown:text-ellipsis"
+                }
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 containerClassName="[grid-area:primary]"
@@ -616,7 +629,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   />
                 </div>
                 <div className="cant-hover:gap-1.5 ms-auto flex items-center gap-2">
-                  {/* TODO: Add dictation here when the app exposes a local voice input capability. */}
                   <PromptInputAction
                     disabled={primaryAction.disabled}
                     tooltip={

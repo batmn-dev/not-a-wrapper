@@ -64,7 +64,7 @@ export default function AuthErrorPage() {
 
       <footer className="py-6 text-center text-sm text-zinc-500">
         <p>
-          Need help? {/* @todo */}
+          Need help?{" "}
           <Link href="/" className="text-zinc-400 hover:underline">
             Contact Support
           </Link>

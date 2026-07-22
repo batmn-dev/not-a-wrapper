@@ -77,10 +77,7 @@ function chat(
   }
 }
 
-function row(
-  id: string,
-  fields: Record<string, unknown> = {}
-): TestDocument {
+function row(id: string, fields: Record<string, unknown> = {}): TestDocument {
   return { _id: id, _creationTime: 1, ...fields }
 }
 
@@ -92,8 +89,11 @@ function createHarness(
   seed: Seed,
   options: {
     failStorageId?: Id<"_storage">
+    bytesReadRemaining?: number
     documentsWrittenRemaining?: number
     bytesWrittenRemaining?: number
+    databaseQueriesRemaining?: number
+    documentsReadRemaining?: number
     beforeRangeRead?: (
       tableName: TableName,
       tables: Record<TableName, TestDocument[]>
@@ -101,12 +101,10 @@ function createHarness(
   } = {}
 ) {
   const tables = Object.fromEntries(
-    tableNames.map((tableName) => [
-      tableName,
-      [...(seed[tableName] ?? [])],
-    ])
+    tableNames.map((tableName) => [tableName, [...(seed[tableName] ?? [])]])
   ) as Record<TableName, TestDocument[]>
   const operations: string[] = []
+  let paginatedQueryCount = 0
 
   const find = (id: string) => {
     for (const tableName of tableNames) {
@@ -178,6 +176,12 @@ function createHarness(
               cursor: string | null
               numItems: number
             }) => {
+              paginatedQueryCount++
+              if (paginatedQueryCount > 1) {
+                throw new Error(
+                  "This query or mutation function ran multiple paginated queries. Convex only supports a single paginated query in each function."
+                )
+              }
               options.beforeRangeRead?.(tableName, tables)
               const matching = tables[tableName].filter((document) =>
                 [...filters].every(
@@ -199,15 +203,11 @@ function createHarness(
     storage: { delete: deleteStoredFile },
     meta: {
       getTransactionMetrics: async () => ({
-        bytesRead: metric(16 * 1024 * 1024),
-        bytesWritten: metric(
-          options.bytesWrittenRemaining ?? 16 * 1024 * 1024
-        ),
-        databaseQueries: metric(4_096),
-        documentsRead: metric(32_000),
-        documentsWritten: metric(
-          options.documentsWrittenRemaining ?? 16_000
-        ),
+        bytesRead: metric(options.bytesReadRemaining ?? 16 * 1024 * 1024),
+        bytesWritten: metric(options.bytesWrittenRemaining ?? 16 * 1024 * 1024),
+        databaseQueries: metric(options.databaseQueriesRemaining ?? 4_096),
+        documentsRead: metric(options.documentsReadRemaining ?? 32_000),
+        documentsWritten: metric(options.documentsWrittenRemaining ?? 16_000),
         functionsScheduled: metric(1_000),
         scheduledFunctionArgsBytes: metric(16 * 1024 * 1024),
       }),
@@ -221,6 +221,7 @@ function createHarness(
     deleteStoredFile,
     deleteDocument,
     patchDocument,
+    getPaginatedQueryCount: () => paginatedQueryCount,
   }
 }
 
@@ -257,9 +258,7 @@ describe("Chat-owned deletion", () => {
         row("other-message", { chatId: otherChat._id }),
       ],
       generationRuns: [row("run-1", { chatId: chatDoc._id })],
-      assistantMessageSnapshots: [
-        row("snapshot-1", { chatId: chatDoc._id }),
-      ],
+      assistantMessageSnapshots: [row("snapshot-1", { chatId: chatDoc._id })],
       toolInvocations: [row("invocation-1", { chatId: chatDoc._id })],
       toolApprovalRequests: approvalStatuses.map((status) =>
         row(`approval-${status}`, { chatId: chatDoc._id, status })
@@ -281,9 +280,9 @@ describe("Chat-owned deletion", () => {
 
     await createChatOwnedDeletion(harness.ctx).deleteChat(chatDoc)
 
-    expect(
-      harness.tables.chats.map((document) => document._id)
-    ).toEqual([otherChat._id])
+    expect(harness.tables.chats.map((document) => document._id)).toEqual([
+      otherChat._id,
+    ])
     expect(idsForChat(harness.tables, chatDoc._id)).toEqual([])
     expect(idsForChat(harness.tables, otherChat._id).sort()).toEqual(
       ["other-attachment", "other-log", "other-message"].sort()
@@ -313,6 +312,24 @@ describe("Chat-owned deletion", () => {
 
     expect(harness.tables.chats).toEqual([])
     expect(harness.patchDocument).not.toHaveBeenCalled()
+    expect(harness.getPaginatedQueryCount()).toBe(0)
+  })
+
+  it("deletes a graph larger than the former page size without paginating", async () => {
+    const chatDoc = chat("chat-1")
+    const messages = Array.from({ length: 9 }, (_, index) =>
+      row(`message-${index}`, { chatId: chatDoc._id })
+    )
+    const harness = createHarness({
+      chats: [chatDoc as unknown as TestDocument],
+      messages,
+    })
+
+    await createChatOwnedDeletion(harness.ctx).deleteChat(chatDoc)
+
+    expect(harness.tables.chats).toEqual([])
+    expect(harness.tables.messages).toEqual([])
+    expect(harness.getPaginatedQueryCount()).toBe(0)
   })
 
   it("retains storage blobs referenced outside the deleted Chat graph", async () => {
@@ -375,18 +392,14 @@ describe("Chat-owned deletion", () => {
       toolCallLog: [row("log-1", { chatId: secondChat._id })],
     })
 
-    await createChatOwnedDeletion(harness.ctx).deleteChatsForProject(
-      projectDoc
-    )
+    await createChatOwnedDeletion(harness.ctx).deleteChatsForProject(projectDoc)
 
     expect(harness.tables.chats.map((document) => document._id)).toEqual([
       unrelatedChat._id,
     ])
     expect(idsForChat(harness.tables, firstChat._id)).toEqual([])
     expect(idsForChat(harness.tables, secondChat._id)).toEqual([])
-    expect(idsForChat(harness.tables, unrelatedChat._id)).toEqual([
-      "message-3",
-    ])
+    expect(idsForChat(harness.tables, unrelatedChat._id)).toEqual(["message-3"])
     expect(
       harness.tables.projects.find(
         (document) => document._id === projectDoc._id
@@ -394,6 +407,7 @@ describe("Chat-owned deletion", () => {
     ).toBe(10)
     expect(harness.patchDocument).not.toHaveBeenCalled()
     expect(harness.deleteDocument).not.toHaveBeenCalledWith(projectDoc._id)
+    expect(harness.getPaginatedQueryCount()).toBe(0)
   })
 
   it("fails closed when a Chat's linked Project belongs to another user", async () => {
@@ -494,6 +508,50 @@ describe("Chat-owned deletion", () => {
     expect(harness.deleteDocument).not.toHaveBeenCalled()
   })
 
+  it("fails before writes when the document budget is exceeded", async () => {
+    const chatDoc = chat("chat-1")
+    const messages = Array.from(
+      { length: CHAT_OWNED_DELETION_LIMITS.documents },
+      (_, index) => row(`message-${index}`, { chatId: chatDoc._id })
+    )
+    const harness = createHarness({
+      chats: [chatDoc as unknown as TestDocument],
+      messages,
+    })
+
+    await expect(
+      createChatOwnedDeletion(harness.ctx).deleteChat(chatDoc)
+    ).rejects.toThrow(CHAT_OWNED_DELETION_LIMIT_ERROR)
+
+    expect(harness.tables.chats).toHaveLength(1)
+    expect(harness.tables.messages).toHaveLength(messages.length)
+    expect(harness.deleteStoredFile).not.toHaveBeenCalled()
+    expect(harness.deleteDocument).not.toHaveBeenCalled()
+  })
+
+  it("fails before writes when the byte budget is exceeded", async () => {
+    const chatDoc = chat("chat-1")
+    const messages = Array.from({ length: 16 }, (_, index) =>
+      row(`message-${index}`, {
+        chatId: chatDoc._id,
+        content: "x".repeat(600 * 1024),
+      })
+    )
+    const harness = createHarness({
+      chats: [chatDoc as unknown as TestDocument],
+      messages,
+    })
+
+    await expect(
+      createChatOwnedDeletion(harness.ctx).deleteChat(chatDoc)
+    ).rejects.toThrow(CHAT_OWNED_DELETION_LIMIT_ERROR)
+
+    expect(harness.tables.chats).toHaveLength(1)
+    expect(harness.tables.messages).toHaveLength(messages.length)
+    expect(harness.deleteStoredFile).not.toHaveBeenCalled()
+    expect(harness.deleteDocument).not.toHaveBeenCalled()
+  })
+
   it("honors live transaction headroom before writing", async () => {
     const chatDoc = chat("chat-1")
     const harness = createHarness(
@@ -512,6 +570,47 @@ describe("Chat-owned deletion", () => {
     expect(harness.deleteDocument).not.toHaveBeenCalled()
   })
 
+  it.each([
+    {
+      name: "read-document",
+      options: {
+        documentsReadRemaining:
+          CHAT_OWNED_DELETION_LIMITS.transactionReadDocumentReserve - 1,
+      },
+    },
+    {
+      name: "read-byte",
+      options: {
+        bytesReadRemaining:
+          CHAT_OWNED_DELETION_LIMITS.transactionReadByteReserve - 1,
+      },
+    },
+    {
+      name: "query-range",
+      options: {
+        databaseQueriesRemaining:
+          CHAT_OWNED_DELETION_LIMITS.transactionQueryReserve - 1,
+      },
+    },
+  ])(
+    "rejects insufficient $name headroom before writing",
+    async ({ options }) => {
+      const chatDoc = chat("chat-1")
+      const harness = createHarness(
+        { chats: [chatDoc as unknown as TestDocument] },
+        options
+      )
+
+      await expect(
+        createChatOwnedDeletion(harness.ctx).deleteChat(chatDoc)
+      ).rejects.toThrow(CHAT_OWNED_DELETION_LIMIT_ERROR)
+
+      expect(harness.tables.chats).toHaveLength(1)
+      expect(harness.deleteStoredFile).not.toHaveBeenCalled()
+      expect(harness.deleteDocument).not.toHaveBeenCalled()
+    }
+  )
+
   it("includes a late owned write before that indexed range is read", async () => {
     const chatDoc = chat("chat-1")
     let inserted = false
@@ -524,9 +623,7 @@ describe("Chat-owned deletion", () => {
         beforeRangeRead: (tableName, tables) => {
           if (inserted || tableName !== "messages") return
           inserted = true
-          tables.toolCallLog.push(
-            row("late-log", { chatId: chatDoc._id })
-          )
+          tables.toolCallLog.push(row("late-log", { chatId: chatDoc._id }))
         },
       }
     )

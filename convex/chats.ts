@@ -28,6 +28,30 @@ import {
 // list, so a bounded read is plenty and keeps the search subscription cheap.
 const CHAT_SEARCH_RESULT_LIMIT = 50
 
+// Conversation previews are a directory affordance, not a transcript read.
+// Scan only a small tail of each chat so abandoned branch messages can be
+// skipped without turning the project directory into an unbounded message
+// collection.
+export const PROJECT_CHAT_PREVIEW_SCAN_LIMIT = 12
+export const PROJECT_CHAT_PREVIEW_CHARACTER_LIMIT = 320
+
+export function selectProjectChatPreview(
+  messages: Array<Pick<Doc<"messages">, "content" | "role" | "selected">>
+): string | null {
+  const message = messages.find(
+    (candidate) =>
+      candidate.selected !== false &&
+      (candidate.role === "user" || candidate.role === "assistant") &&
+      candidate.content.trim().length > 0
+  )
+  if (!message) return null
+
+  return message.content
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, PROJECT_CHAT_PREVIEW_CHARACTER_LIMIT)
+}
+
 /**
  * Get all chats for the current user
  */
@@ -158,16 +182,40 @@ export async function getRecentWindowForCurrentUserHandler(
  * the ownedProjectQuery builder (ctx.project); the link accessor re-checks
  * each chat so a corrupted cross-owner link can never ship another user's chat.
  */
+type ProjectChatDirectoryCtx = Pick<QueryCtx, "db">
+
+export async function getProjectChatDirectoryForProject(
+  ctx: ProjectChatDirectoryCtx,
+  project: Doc<"projects">
+) {
+  const chats = await collectLinkedChats(ctx, project)
+
+  const sortedChats = chats.sort(
+    (a, b) =>
+      (b.updatedAt ?? b._creationTime) - (a.updatedAt ?? a._creationTime)
+  )
+
+  const directory = await Promise.all(
+    sortedChats.map(async (chat) => {
+      const messages = await ctx.db
+        .query("messages")
+        .withIndex("by_chat_order", (q) => q.eq("chatId", chat._id))
+        .order("desc")
+        .take(PROJECT_CHAT_PREVIEW_SCAN_LIMIT)
+
+      return {
+        chat,
+        preview: selectProjectChatPreview(messages),
+      }
+    })
+  )
+
+  return directory
+}
+
 export const getProjectChatsForCurrentUser = ownedProjectQuery({
   args: {},
-  handler: async (ctx) => {
-    const chats = await collectLinkedChats(ctx, ctx.project)
-
-    return chats.sort(
-      (a, b) =>
-        (b.updatedAt ?? b._creationTime) - (a.updatedAt ?? a._creationTime)
-    )
-  },
+  handler: async (ctx) => getProjectChatDirectoryForProject(ctx, ctx.project),
 })
 
 /**
@@ -301,7 +349,12 @@ export const create = authenticatedMutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now()
-    const { chatId, project } = await insertChatForUser(ctx, ctx.user, args, now)
+    const { chatId, project } = await insertChatForUser(
+      ctx,
+      ctx.user,
+      args,
+      now
+    )
     await recordKnownProjectActivity(ctx, project, now)
     return chatId
   },

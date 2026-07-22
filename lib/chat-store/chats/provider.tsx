@@ -3,11 +3,11 @@
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
-import type { Attachment } from "@/lib/file-handling"
 import {
   usePerUserPaginatedQuery,
   usePerUserQuery,
 } from "@/lib/convex/use-per-user-query"
+import type { Attachment } from "@/lib/file-handling"
 import { ENABLE_PAGINATED_SIDEBAR } from "@/lib/flags"
 import { resolveModelId } from "@/lib/models/model-id-migration"
 import { useConvexAuth, useMutation } from "convex/react"
@@ -335,9 +335,12 @@ export function ChatsProvider({
         if (id === currentChatId && redirect) redirect()
         // Keep the delete op until server confirms (real-time will remove the chat)
         return true
-      } catch {
+      } catch (error) {
         // Revert optimistic delete
         removeOp((op) => op.type === "delete" && op.id === id)
+        // Keep the toast generic, but retain Convex's request/error details in
+        // developer diagnostics so runtime failures are actionable.
+        console.error("Failed to delete durable chat:", error)
         toast({ title: "Failed to delete chat", status: "error" })
         return false
       }

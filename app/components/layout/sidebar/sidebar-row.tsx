@@ -1,7 +1,7 @@
 "use client"
 
-import { InlineRenameInput } from "@/components/ui/inline-rename-input"
 import type { IconProps } from "@/components/ui/icon"
+import { InlineRenameInput } from "@/components/ui/inline-rename-input"
 import { useSidebar } from "@/components/ui/sidebar"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { useInlineRename } from "@/hooks/use-inline-rename"
@@ -45,8 +45,8 @@ type SidebarRowProps = {
  * lists render through (the **Sidebar row** module). It owns the structural
  * invariants both lists otherwise copy: the editing⇄resting swap, inline
  * rename, and the click-outside-commit container. Chat and project rows use a
- * primary link with sibling actions so neither row type nests interactive
- * controls. Domain glue stays in the thin caller adapters.
+ * full-row primary link with its trailing action cluster. Domain glue stays in
+ * the thin caller adapters.
  */
 export function SidebarRow({
   interaction,
@@ -137,25 +137,28 @@ export function SidebarRow({
     </div>
   )
 
-  // Resting/nav mode keeps the primary link and its trailing controls as
-  // siblings. The link grows across every unclaimed pixel; revealing the
-  // in-flow action slot shrinks it without introducing nested interactive HTML.
+  // ChatGPT renders the title lane and trailing controls inside one full-row
+  // anchor. At rest the trailing item is visually clipped and absolutely
+  // positioned; on hover/focus/menu-open it returns to flex flow, contributing
+  // 44px plus the row's 8px gap. Short labels therefore remain unchanged while
+  // only labels wider than the remaining lane truncate earlier.
   return (
-    <div className={containerClassName}>
-      <Link
-        href={interaction.href}
-        className="sidebar-row-content sidebar-row-primary-control flex h-full min-w-0 grow items-center focus-visible:outline-none"
-        prefetch
-        draggable={false}
-        onClick={handleLinkClick}
-        aria-current={isActive ? "page" : undefined}
-        aria-label={ariaLabel}
-        data-sidebar-item="true"
-        data-active={isActive ? "" : undefined}
-      >
-        {rowContent}
-      </Link>
+    <Link
+      href={interaction.href}
+      className={cn(
+        containerClassName,
+        "sidebar-row-content sidebar-row-primary-control gap-(--sidebar-row-action-content-gap) focus-visible:outline-none"
+      )}
+      prefetch
+      draggable={false}
+      onClick={handleLinkClick}
+      aria-current={isActive ? "page" : undefined}
+      aria-label={ariaLabel}
+      data-sidebar-item="true"
+      data-active={isActive ? "" : undefined}
+    >
+      {rowContent}
       {trailing?.({ startRename: start })}
-    </div>
+    </Link>
   )
 }

@@ -1,19 +1,10 @@
 import { getConvexSize, type Value } from "convex/values"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx } from "../_generated/server"
-import {
-  paginateLinkedChats,
-  requireLinkedProject,
-} from "./chat_project_link"
+import { requireLinkedProject, takeLinkedChats } from "./chat_project_link"
 import { recordKnownProjectActivity } from "./project_activity"
 
 type ChatOwnedDeletionCtx = Pick<MutationCtx, "db" | "meta" | "storage">
-
-type Page<T> = {
-  page: T[]
-  isDone: boolean
-  continueCursor: string
-}
 
 type DeletionBudget = {
   documents: number
@@ -41,13 +32,11 @@ export const CHAT_OWNED_DELETION_LIMITS = {
   bytes: 8 * 1024 * 1024,
   projectChats: 250,
   storedFiles: 500,
-  // Deliberately tiny: the document/byte budget is re-checked per page, so a
-  // small page bounds how far a collection overshoots a ceiling before
-  // failing, and ordinary chats already span multiple pages — the cursor loop
-  // is exercised by real data, not only at scale.
-  pageSize: 4,
   transactionDocumentReserve: 32,
   transactionByteReserve: 1024 * 1024,
+  transactionReadDocumentReserve: 2_000,
+  transactionReadByteReserve: 2 * 1024 * 1024,
+  transactionQueryReserve: 128,
 } as const
 
 export const CHAT_OWNED_DELETION_LIMIT_ERROR =
@@ -76,25 +65,30 @@ function addToBudget<T>(budget: DeletionBudget, rows: readonly T[]): void {
   }
 }
 
+function nextRangeReadLimit(
+  budget: DeletionBudget,
+  rangeLimit?: number
+): number {
+  const remainingDocuments =
+    CHAT_OWNED_DELETION_LIMITS.documents - budget.documents
+  if (remainingDocuments < 0) throwLimitError()
+
+  // Read one beyond the tightest remaining limit. Returning fewer rows proves
+  // the indexed range is complete; returning the sentinel row fails preflight.
+  return Math.min(remainingDocuments, rangeLimit ?? remainingDocuments) + 1
+}
+
 async function collectBounded<T>(
-  loadPage: (cursor: string | null) => Promise<Page<T>>,
+  loadRange: (limit: number) => Promise<T[]>,
   budget: DeletionBudget,
   rangeLimit?: number
 ): Promise<T[]> {
-  const rows: T[] = []
-  let cursor: string | null = null
-
-  while (true) {
-    const result = await loadPage(cursor)
-    rows.push(...result.page)
-    addToBudget(budget, result.page)
-
-    if (rangeLimit !== undefined && rows.length > rangeLimit) {
-      throwLimitError()
-    }
-    if (result.isDone) return rows
-    cursor = result.continueCursor
+  const rows = await loadRange(nextRangeReadLimit(budget, rangeLimit))
+  if (rangeLimit !== undefined && rows.length > rangeLimit) {
+    throwLimitError()
   }
+  addToBudget(budget, rows)
+  return rows
 }
 
 async function collectChatGraph(
@@ -103,62 +97,61 @@ async function collectChatGraph(
   budget: DeletionBudget
 ): Promise<ChatGraph> {
   const chatId = chat._id
-  const page = { numItems: CHAT_OWNED_DELETION_LIMITS.pageSize }
 
   const messages = await collectBounded(
-    (cursor) =>
+    (limit) =>
       ctx.db
         .query("messages")
         .withIndex("by_chat", (q) => q.eq("chatId", chatId))
-        .paginate({ ...page, cursor }),
+        .take(limit),
     budget
   )
   const generationRuns = await collectBounded(
-    (cursor) =>
+    (limit) =>
       ctx.db
         .query("generationRuns")
         .withIndex("by_chat", (q) => q.eq("chatId", chatId))
-        .paginate({ ...page, cursor }),
+        .take(limit),
     budget
   )
   const assistantMessageSnapshots = await collectBounded(
-    (cursor) =>
+    (limit) =>
       ctx.db
         .query("assistantMessageSnapshots")
         .withIndex("by_chat_order", (q) => q.eq("chatId", chatId))
-        .paginate({ ...page, cursor }),
+        .take(limit),
     budget
   )
   const toolInvocations = await collectBounded(
-    (cursor) =>
+    (limit) =>
       ctx.db
         .query("toolInvocations")
         .withIndex("by_chat", (q) => q.eq("chatId", chatId))
-        .paginate({ ...page, cursor }),
+        .take(limit),
     budget
   )
   const toolApprovalRequests = await collectBounded(
-    (cursor) =>
+    (limit) =>
       ctx.db
         .query("toolApprovalRequests")
         .withIndex("by_chat_status", (q) => q.eq("chatId", chatId))
-        .paginate({ ...page, cursor }),
+        .take(limit),
     budget
   )
   const toolCallLogs = await collectBounded(
-    (cursor) =>
+    (limit) =>
       ctx.db
         .query("toolCallLog")
         .withIndex("by_chat", (q) => q.eq("chatId", chatId))
-        .paginate({ ...page, cursor }),
+        .take(limit),
     budget
   )
   const attachments = await collectBounded(
-    (cursor) =>
+    (limit) =>
       ctx.db
         .query("chatAttachments")
         .withIndex("by_chat", (q) => q.eq("chatId", chatId))
-        .paginate({ ...page, cursor }),
+        .take(limit),
     budget
   )
 
@@ -189,9 +182,7 @@ async function exclusiveStoredFileIds(
     }
   }
 
-  if (
-    targetReferenceCounts.size > CHAT_OWNED_DELETION_LIMITS.storedFiles
-  ) {
+  if (targetReferenceCounts.size > CHAT_OWNED_DELETION_LIMITS.storedFiles) {
     throwLimitError()
   }
 
@@ -212,9 +203,10 @@ async function exclusiveStoredFileIds(
   return exclusiveIds
 }
 
-async function assertWriteHeadroom(
+async function assertTransactionHeadroom(
   ctx: ChatOwnedDeletionCtx,
-  budget: DeletionBudget
+  budget: DeletionBudget,
+  storedFileCount: number
 ): Promise<void> {
   const metrics = await ctx.meta.getTransactionMetrics()
   const documentHeadroom =
@@ -225,8 +217,14 @@ async function assertWriteHeadroom(
     CHAT_OWNED_DELETION_LIMITS.transactionByteReserve
 
   if (
-    budget.documents > documentHeadroom ||
-    budget.bytes > byteHeadroom
+    budget.documents + storedFileCount > documentHeadroom ||
+    budget.bytes > byteHeadroom ||
+    metrics.documentsRead.remaining <
+      CHAT_OWNED_DELETION_LIMITS.transactionReadDocumentReserve ||
+    metrics.bytesRead.remaining <
+      CHAT_OWNED_DELETION_LIMITS.transactionReadByteReserve ||
+    metrics.databaseQueries.remaining <
+      CHAT_OWNED_DELETION_LIMITS.transactionQueryReserve
   ) {
     throwLimitError()
   }
@@ -289,7 +287,7 @@ export function createChatOwnedDeletion(
 
       const graph = await collectChatGraph(ctx, chat, budget)
       const storageIds = await exclusiveStoredFileIds(ctx, [graph])
-      await assertWriteHeadroom(ctx, budget)
+      await assertTransactionHeadroom(ctx, budget, storageIds.length)
 
       // Storage participates in the mutation. Doing it before database writes
       // also leaves test fakes and local diagnostics free of partial DB state.
@@ -305,15 +303,11 @@ export function createChatOwnedDeletion(
       // it after this operation returns.
       addToBudget(budget, [project])
 
-      const chats = await paginateLinkedChats(ctx, project, {
-        pageSize: CHAT_OWNED_DELETION_LIMITS.pageSize,
-        onPage: (page, collected) => {
-          addToBudget(budget, page)
-          if (collected.length > CHAT_OWNED_DELETION_LIMITS.projectChats) {
-            throwLimitError()
-          }
-        },
-      })
+      const chats = await collectBounded(
+        (limit) => takeLinkedChats(ctx, project, limit),
+        budget,
+        CHAT_OWNED_DELETION_LIMITS.projectChats
+      )
 
       const graphs: ChatGraph[] = []
       for (const chat of chats) {
@@ -321,7 +315,7 @@ export function createChatOwnedDeletion(
       }
 
       const storageIds = await exclusiveStoredFileIds(ctx, graphs)
-      await assertWriteHeadroom(ctx, budget)
+      await assertTransactionHeadroom(ctx, budget, storageIds.length)
       await deleteStoredFiles(ctx, storageIds)
 
       for (const graph of graphs) {

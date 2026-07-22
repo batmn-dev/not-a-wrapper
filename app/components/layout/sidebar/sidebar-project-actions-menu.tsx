@@ -56,6 +56,10 @@ export function SidebarProjectActionsMenu({
               type="button"
               className={trailingIconButtonClassName}
               aria-label={`Open project options for ${displayName}`}
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+              }}
             />
           }
         >
@@ -68,10 +72,7 @@ export function SidebarProjectActionsMenu({
             <Icon icon={RiEditLine} slotSize={20} />
             Rename
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={onTogglePinned}
-            disabled={isPinPending}
-          >
+          <DropdownMenuItem onClick={onTogglePinned} disabled={isPinPending}>
             {isPinPending ? (
               <Icon
                 icon={RiLoader4Line}

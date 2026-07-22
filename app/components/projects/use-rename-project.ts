@@ -22,6 +22,7 @@ export function useRenameProject() {
       } catch (error) {
         toast({ title: "Failed to rename project", status: "error" })
         console.error("Failed to rename project:", error)
+        throw error
       }
     },
     [updateProjectName]

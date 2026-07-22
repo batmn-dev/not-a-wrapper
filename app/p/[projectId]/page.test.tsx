@@ -12,10 +12,20 @@ const pageMocks = vi.hoisted(() => ({
     throw new Error("NEXT_REDIRECT")
   }),
   setAuth: vi.fn(),
+  layoutHeader: undefined as React.ReactNode,
 }))
 
 vi.mock("@/app/components/layout/layout-app", () => ({
-  LayoutApp: ({ children }: { children: React.ReactNode }) => children,
+  LayoutApp: ({
+    children,
+    header,
+  }: {
+    children: React.ReactNode
+    header?: React.ReactNode
+  }) => {
+    pageMocks.layoutHeader = header
+    return children
+  },
 }))
 vi.mock("@/app/components/chat/chat", () => ({
   Chat: ({ project }: { project?: { id: string; name: string } }) => (
@@ -63,10 +73,19 @@ describe("project page", () => {
     })
     expect(html).toContain('data-project-id="project-123456"')
     expect(html).toContain("Authorized project")
+    expect(pageMocks.layoutHeader).toBeNull()
   })
 
   it("continues to hide missing or unauthorized projects as not found", async () => {
     pageMocks.query.mockResolvedValue(null)
+
+    await expect(
+      Page({ params: Promise.resolve({ projectId: "project-123456" }) })
+    ).rejects.toThrow("NEXT_NOT_FOUND")
+  })
+
+  it("does not disclose a project when the owner-checked query fails", async () => {
+    pageMocks.query.mockRejectedValue(new Error("Convex unavailable"))
 
     await expect(
       Page({ params: Promise.resolve({ projectId: "project-123456" }) })

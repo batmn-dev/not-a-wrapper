@@ -3,7 +3,6 @@
 import { AuthModalTrigger } from "@/app/auth/_components/auth-modal"
 import { HistoryTrigger } from "@/app/components/history/history-trigger"
 import { ButtonNewChat } from "@/app/components/layout/button-new-chat"
-import { ModelSelectorHeader } from "@/app/components/layout/model-selector-header"
 import { UserMenu } from "@/app/components/layout/user-menu"
 import { NawIcon } from "@/components/icons/naw"
 import { useScrollRoot } from "@/components/ui/scroll-root"
@@ -55,11 +54,6 @@ export function Header({ hasSidebar }: { hasSidebar: boolean }) {
           )}
           {/* Show toggle only on mobile (collapsed rail has its own toggle on desktop) */}
           {hasSidebar && isMobile && <HeaderSidebarTrigger />}
-        </div>
-
-        {/* CENTER SECTION - flex-1 to fill remaining space */}
-        <div className="flex min-w-0 flex-1 items-center [&>*]:pointer-events-auto">
-          <ModelSelectorHeader />
         </div>
 
         {/* RIGHT SECTION - natural width, not flex-1 */}

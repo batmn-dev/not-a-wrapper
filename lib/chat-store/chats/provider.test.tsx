@@ -110,6 +110,18 @@ function localChat(overrides: Partial<Chats> = {}): Chats {
   }
 }
 
+function durableChat() {
+  return {
+    _id: "chat-server",
+    _creationTime: 1,
+    userId: "user-1",
+    title: "Durable chat",
+    public: false,
+    pinned: true,
+    updatedAt: 1,
+  }
+}
+
 function flushPromises() {
   return act(async () => {
     await Promise.resolve()
@@ -164,6 +176,7 @@ describe("ChatsProvider guest local chats", () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.restoreAllMocks()
     const mountedRoot = root
     if (mountedRoot) {
       act(() => {
@@ -263,10 +276,48 @@ describe("ChatsProvider guest local chats", () => {
     expect(convexMocks.mutationFn).not.toHaveBeenCalled()
   })
 
-  it("reports failed durable deletion to callers", async () => {
+  it("rolls back optimistic durable deletion and retains diagnostics on failure", async () => {
     convexMocks.isAuthenticated = true
-    convexMocks.queryValue = []
-    convexMocks.mutationFn.mockRejectedValue(new Error("delete failed"))
+    convexMocks.queryValue = [durableChat()]
+    const error = new Error("delete failed")
+    convexMocks.mutationFn.mockRejectedValue(error)
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+    const capture: { current: ReturnType<typeof useChats> | null } = {
+      current: null,
+    }
+
+    renderProvider(capture, "user-1")
+    await flushPromises()
+    expect(capture.current?.chats.map((chat) => chat.id)).toEqual([
+      "chat-server",
+    ])
+
+    let deleted: boolean | undefined
+    await act(async () => {
+      deleted = await capture.current?.deleteChat("chat-server", "chat-server")
+    })
+
+    expect(deleted).toBe(false)
+    expect(capture.current?.chats.map((chat) => chat.id)).toEqual([
+      "chat-server",
+    ])
+    expect(convexMocks.mutationFn).toHaveBeenCalledWith({
+      chatId: "chat-server",
+    })
+    expect(consoleError).toHaveBeenCalledWith(
+      "Failed to delete durable chat:",
+      error
+    )
+    expect(convexMocks.toast).toHaveBeenCalledWith({
+      title: "Failed to delete chat",
+      status: "error",
+    })
+  })
+
+  it("keeps a durable chat deleted after server confirmation", async () => {
+    convexMocks.isAuthenticated = true
+    convexMocks.queryValue = [durableChat()]
+    convexMocks.mutationFn.mockResolvedValue(undefined)
     const capture: { current: ReturnType<typeof useChats> | null } = {
       current: null,
     }
@@ -276,17 +327,12 @@ describe("ChatsProvider guest local chats", () => {
 
     let deleted: boolean | undefined
     await act(async () => {
-      deleted = await capture.current?.deleteChat("chat-server", "chat-server")
+      deleted = await capture.current?.deleteChat("chat-server")
     })
 
-    expect(deleted).toBe(false)
-    expect(convexMocks.mutationFn).toHaveBeenCalledWith({
-      chatId: "chat-server",
-    })
-    expect(convexMocks.toast).toHaveBeenCalledWith({
-      title: "Failed to delete chat",
-      status: "error",
-    })
+    expect(deleted).toBe(true)
+    expect(capture.current?.chats).toEqual([])
+    expect(convexMocks.toast).not.toHaveBeenCalled()
   })
 
   it("creates authenticated first-turn chats through the atomic Convex mutation", async () => {
