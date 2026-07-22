@@ -308,6 +308,40 @@ describe("Composer primary action", () => {
     expect(onTurn).not.toHaveBeenCalled()
   })
 
+  it("keeps the shared default placeholder and accepts narrow surface copy", () => {
+    const defaultComposer = renderComposer({ status: "ready" })
+    expect(defaultComposer.querySelector("textarea")?.placeholder).toBe(
+      "Ask anything"
+    )
+    expect(
+      defaultComposer
+        .querySelector("textarea")
+        ?.closest<HTMLDivElement>('div[class*="order-2"]')?.className
+    ).toContain("sm:pb-4")
+
+    act(() => {
+      root?.render(
+        composerElement({
+          status: "ready",
+          placeholder: "New chat in Investing",
+          ariaLabel: "New chat in Investing project",
+          bottomSpacing: "none",
+        })
+      )
+    })
+    expect(defaultComposer.querySelector("textarea")?.placeholder).toBe(
+      "New chat in Investing"
+    )
+    expect(defaultComposer.querySelector("textarea")?.ariaLabel).toBe(
+      "New chat in Investing project"
+    )
+    expect(
+      defaultComposer
+        .querySelector("textarea")
+        ?.closest<HTMLDivElement>('div[class*="order-2"]')?.className
+    ).toContain("sm:pb-0")
+  })
+
   it("does not resurrect Stop from local streaming while the resolver says a Stop is pending", () => {
     const stop = vi.fn()
     const mounted = renderComposer({
@@ -446,9 +480,7 @@ describe("Composer primary action", () => {
       files: composerMocks.attachments.map(
         (attachment) => (attachment as { file: File }).file
       ),
-      attachments: [
-        expect.objectContaining({ attachmentId: "attachment-1" }),
-      ],
+      attachments: [expect.objectContaining({ attachmentId: "attachment-1" })],
     })
   })
 
@@ -622,9 +654,7 @@ describe("Composer primary action", () => {
     expect(composerMocks.consumeAttachments).toHaveBeenCalledWith([
       "attachment-1",
     ])
-    expect(composerMocks.lockAttachments).toHaveBeenCalledWith([
-      "attachment-1",
-    ])
+    expect(composerMocks.lockAttachments).toHaveBeenCalledWith(["attachment-1"])
     expect(composerMocks.unlockAttachments).toHaveBeenCalledWith([
       "attachment-1",
     ])

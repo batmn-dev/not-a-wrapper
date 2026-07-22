@@ -23,8 +23,6 @@ import { isRouteDurableChat } from "@/lib/chat-turn/chat-turn-controller"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
-import { Icon } from "@/components/ui/icon"
-import { RiChat3Line } from "@remixicon/react"
 import { AnimatePresence, motion } from "motion/react"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
@@ -37,7 +35,7 @@ import {
   useActivityPanelSelectedTurnId,
 } from "./activity/activity-panel-store"
 import { ChatStatusAnnouncer } from "./chat-announcer"
-import { ProjectChatDirectory } from "./project-chat-directory"
+import { ProjectDetailSurface } from "./project-detail-surface"
 import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
 import { TurnContextProvider, useTurnContext } from "./turn-context"
 import { useActivityPanel } from "./use-activity-panel"
@@ -55,6 +53,7 @@ const DialogAuth = dynamic(
 export type ChatProjectContext = {
   id: Id<"projects">
   name: string
+  pinned?: boolean
 }
 
 /**
@@ -103,7 +102,11 @@ function ChatInner({
   project?: ChatProjectContext
 }) {
   const router = useRouter()
-  const { createFirstTurnChat, bumpChat, isLoading: isChatsLoading } = useChats()
+  const {
+    createFirstTurnChat,
+    bumpChat,
+    isLoading: isChatsLoading,
+  } = useChats()
 
   const {
     messages: initialMessages,
@@ -349,6 +352,36 @@ function ChatInner({
   // scroll-margin/gutter system derives its bottom inset from. Disabled during
   // onboarding, where the container grows to center the composer.
   const threadBottomRef = useStickyPaddingBottom(!showOnboarding)
+  const projectComposerLabel = project
+    ? `New chat in ${project.name}`
+    : undefined
+  const projectComposerPlaceholder =
+    projectComposerLabel && projectComposerLabel.length > 54
+      ? `${projectComposerLabel.slice(0, 53).trimEnd()}…`
+      : projectComposerLabel
+  const composer = (
+    <Composer
+      ref={composerRef}
+      chatId={chatId}
+      draftScopeId={project ? `project-${project.id}` : undefined}
+      placeholder={projectComposerPlaceholder}
+      ariaLabel={projectComposerLabel}
+      bottomSpacing={project ? "none" : undefined}
+      onTurn={submit}
+      onSuggestion={handleSuggestion}
+      isSubmitting={isSubmitting}
+      status={effectiveStatus}
+      stop={stop}
+      stoppable={presentation.stoppable}
+      hasSuggestions={
+        preferences.promptSuggestions &&
+        !project &&
+        !chatId &&
+        messages.length === 0
+      }
+      onLockedGuestModelSelect={() => setHasDialogAuth(true)}
+    />
+  )
 
   return (
     <ActivityPanelStoreProvider
@@ -384,31 +417,26 @@ function ChatInner({
           {...panelProps}
         />
 
-        <div
-          role="presentation"
-          className="composer-parent flex flex-1 flex-col focus-visible:outline-0"
-        >
-          <AnimatePresence initial={false} mode="popLayout">
-            {showOnboarding ? (
-              <motion.div
-                key="onboarding"
-                className="relative flex shrink basis-auto flex-col justify-end max-sm:grow max-sm:justify-center sm:min-h-[calc(42svh-var(--spacing-app-header))]"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-              >
-                {project ? (
-                  <div className="mb-6 flex items-center justify-center gap-2">
-                    <Icon
-                      icon={RiChat3Line}
-                      slotSize={24}
-                      className="text-muted-foreground"
-                    />
-                    <h1 className="text-center text-3xl font-medium tracking-tight text-balance">
-                      {project.name}
-                    </h1>
-                  </div>
-                ) : (
+        {showOnboarding && project ? (
+          <ProjectDetailSurface
+            project={project}
+            composer={composer}
+            onStartChat={() => composerRef.current?.focus()}
+          />
+        ) : (
+          <div
+            role="presentation"
+            className="composer-parent flex flex-1 flex-col focus-visible:outline-0"
+          >
+            <AnimatePresence initial={false} mode="popLayout">
+              {showOnboarding ? (
+                <motion.div
+                  key="onboarding"
+                  className="relative flex shrink basis-auto flex-col justify-end max-sm:grow max-sm:justify-center sm:min-h-[calc(42svh-var(--spacing-app-header))]"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
                   <div
                     className="flex justify-center"
                     data-splash-headline-option="WHATS_ON_YOUR_MIND"
@@ -424,71 +452,49 @@ function ChatInner({
                       </h1>
                     </div>
                   </div>
-                )}
-              </motion.div>
-            ) : (
-              <Conversation key="conversation" {...conversationProps} />
-            )}
-          </AnimatePresence>
+                </motion.div>
+              ) : (
+                <Conversation key="conversation" {...conversationProps} />
+              )}
+            </AnimatePresence>
 
-          <div
-            id="thread-bottom-container"
-            ref={threadBottomRef}
-            className={cn(
-              `group/thread-bottom-container sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col px-[var(--thread-content-margin,1rem)] pb-[env(safe-area-inset-bottom,0px)] ${THREAD_GUTTER_VARS}`,
-              // Project onboarding keeps the composer in flow (no grow) so the
-              // project's chat directory reads directly beneath it.
-              showOnboarding ? (project ? undefined : "sm:grow") : "content-fade"
-            )}
-          >
-            {!showOnboarding && (
-              <div className="relative h-0">
-                <div className="pointer-events-none absolute inset-x-0 bottom-[calc(100%+1.5rem)] z-30 flex justify-center">
-                  <div className="pointer-events-auto">
-                    <ScrollButton />
-                  </div>
-                </div>
-              </div>
-            )}
             <div
-              id="thread-bottom"
-              className={`mx-auto w-full max-w-[var(--thread-content-max-width,40rem)] ${THREAD_MAXWIDTH_VARS}`}
+              id="thread-bottom-container"
+              ref={threadBottomRef}
+              className={cn(
+                `group/thread-bottom-container sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col px-[var(--thread-content-margin,1rem)] pb-[env(safe-area-inset-bottom,0px)] ${THREAD_GUTTER_VARS}`,
+                showOnboarding ? "sm:grow" : "content-fade"
+              )}
             >
-              <Composer
-                ref={composerRef}
-                chatId={chatId}
-                draftScopeId={project ? `project-${project.id}` : undefined}
-                onTurn={submit}
-                onSuggestion={handleSuggestion}
-                isSubmitting={isSubmitting}
-                status={effectiveStatus}
-                stop={stop}
-                stoppable={presentation.stoppable}
-                hasSuggestions={
-                  preferences.promptSuggestions &&
-                  !project &&
-                  !chatId &&
-                  messages.length === 0
-                }
-                onLockedGuestModelSelect={() => setHasDialogAuth(true)}
-              />
-            </div>
-            {!showOnboarding && (
-              <div className="text-muted-foreground relative -mt-4 w-full overflow-hidden text-center text-xs md:px-[60px]">
-                <div className="flex min-h-8 w-full items-center justify-center p-2 select-none">
-                  <div className="pointer-events-auto">
-                    <div>
-                      Not A Wrapper can make mistakes. Check important info.
+              {!showOnboarding && (
+                <div className="relative h-0">
+                  <div className="pointer-events-none absolute inset-x-0 bottom-[calc(100%+1.5rem)] z-30 flex justify-center">
+                    <div className="pointer-events-auto">
+                      <ScrollButton />
                     </div>
                   </div>
                 </div>
+              )}
+              <div
+                id="thread-bottom"
+                className={`mx-auto w-full max-w-[var(--thread-content-max-width,40rem)] ${THREAD_MAXWIDTH_VARS}`}
+              >
+                {composer}
               </div>
-            )}
+              {!showOnboarding && (
+                <div className="text-muted-foreground relative -mt-4 w-full overflow-hidden text-center text-xs md:px-[60px]">
+                  <div className="flex min-h-8 w-full items-center justify-center p-2 select-none">
+                    <div className="pointer-events-auto">
+                      <div>
+                        Not A Wrapper can make mistakes. Check important info.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-          {showOnboarding && project && (
-            <ProjectChatDirectory projectId={project.id} />
-          )}
-        </div>
+        )}
       </div>
     </ActivityPanelStoreProvider>
   )

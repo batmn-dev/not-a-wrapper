@@ -4,10 +4,13 @@ import type { MutationCtx } from "./_generated/server"
 import {
   createChatWithFirstTurnForUser,
   getPinnedForCurrentUserHandler,
+  getProjectChatDirectoryForProject,
   getRecentWindowForCurrentUserHandler,
   listForCurrentUserPaginatedHandler,
   markChatReadForOwner,
+  PROJECT_CHAT_PREVIEW_SCAN_LIMIT,
   projectChatForReader,
+  selectProjectChatPreview,
 } from "./chats"
 
 type ChatQueryCtx = Parameters<typeof getPinnedForCurrentUserHandler>[0]
@@ -16,11 +19,119 @@ type QueryBuilder = {
   eq: (fieldName: string, value: unknown) => QueryBuilder
 }
 
-function asId<Table extends "users" | "chats" | "projects">(
+function asId<Table extends "users" | "chats" | "projects" | "messages">(
   value: string
 ): Id<Table> {
   return value as Id<Table>
 }
+
+describe("project conversation previews", () => {
+  it("uses the newest visible conversational message and bounds its payload", () => {
+    const longContent = `Newest   preview\n${"x".repeat(400)}`
+    const preview = selectProjectChatPreview([
+      { role: "assistant", content: "abandoned branch", selected: false },
+      { role: "data", content: "internal data", selected: true },
+      { role: "user", content: longContent, selected: true },
+      { role: "assistant", content: "older visible", selected: true },
+    ])
+
+    expect(preview).toMatch(/^Newest preview x+/)
+    expect(preview).toHaveLength(320)
+  })
+
+  it("projects one bounded message tail per owner-checked project chat", async () => {
+    const user = createUser("owner")
+    const project: Doc<"projects"> = {
+      _id: asId<"projects">("project-1"),
+      _creationTime: 1,
+      userId: user._id,
+      name: "Investing",
+    }
+    const older = createChat({
+      _id: asId<"chats">("older"),
+      userId: user._id,
+      projectId: project._id,
+      updatedAt: 10,
+    })
+    const newer = createChat({
+      _id: asId<"chats">("newer"),
+      userId: user._id,
+      projectId: project._id,
+      updatedAt: 20,
+    })
+    const previewMessages = new Map<string, Array<Partial<Doc<"messages">>>>([
+      [newer._id, [{ role: "user", content: "newer preview", selected: true }]],
+      [
+        older._id,
+        [{ role: "assistant", content: "older preview", selected: true }],
+      ],
+    ])
+    const messageReads: Array<{ chatId: string; limit: number }> = []
+    let selectedChatId = ""
+
+    const ctx = {
+      db: {
+        query: (tableName: "chats" | "messages") => {
+          if (tableName === "chats") {
+            return {
+              withIndex: (
+                indexName: string,
+                buildQuery: (query: QueryBuilder) => unknown
+              ) => {
+                expect(indexName).toBe("by_project")
+                const query: QueryBuilder = {
+                  eq: (_field, value) => {
+                    expect(value).toBe(project._id)
+                    return query
+                  },
+                }
+                buildQuery(query)
+                return { collect: async () => [older, newer] }
+              },
+            }
+          }
+
+          const resultApi = {
+            withIndex: (
+              indexName: string,
+              buildQuery: (query: QueryBuilder) => unknown
+            ) => {
+              expect(indexName).toBe("by_chat_order")
+              const query: QueryBuilder = {
+                eq: (_field, value) => {
+                  selectedChatId = String(value)
+                  return query
+                },
+              }
+              buildQuery(query)
+              return resultApi
+            },
+            order: (direction: string) => {
+              expect(direction).toBe("desc")
+              return resultApi
+            },
+            take: async (limit: number) => {
+              messageReads.push({ chatId: selectedChatId, limit })
+              return previewMessages.get(selectedChatId) ?? []
+            },
+          }
+          return resultApi
+        },
+      },
+    } as unknown as Parameters<typeof getProjectChatDirectoryForProject>[0]
+
+    const result = await getProjectChatDirectoryForProject(ctx, project)
+
+    expect(result.map(({ chat, preview }) => [chat._id, preview])).toEqual([
+      [newer._id, "newer preview"],
+      [older._id, "older preview"],
+    ])
+    expect(messageReads).toEqual([
+      { chatId: newer._id, limit: PROJECT_CHAT_PREVIEW_SCAN_LIMIT },
+      { chatId: older._id, limit: PROJECT_CHAT_PREVIEW_SCAN_LIMIT },
+    ])
+  })
+})
 
 function createUser(id: string): Doc<"users"> {
   return {
@@ -440,7 +551,8 @@ function createFirstTurnHarness(
 
   const ctx = {
     db: {
-      get: async (id: string) => allDocs().find((doc) => doc._id === id) ?? null,
+      get: async (id: string) =>
+        allDocs().find((doc) => doc._id === id) ?? null,
       insert: async (
         table: keyof typeof tables,
         value: Record<string, unknown>

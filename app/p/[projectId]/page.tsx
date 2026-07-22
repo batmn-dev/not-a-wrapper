@@ -75,12 +75,16 @@ export default async function Page({ params }: Props) {
 
   return (
     <MessagesProvider>
-      <LayoutApp>
+      <LayoutApp header={null}>
         {/* The project surface IS the Chat surface: the first turn allocates
             its chat (with projectId) inside the accepted turn and hands off
             the route shallowly — same pipeline as home. */}
         <Chat
-          project={{ id: project._id, name: project.name }}
+          project={{
+            id: project._id,
+            name: project.name,
+            pinned: project.pinned,
+          }}
           key={projectId}
         />
       </LayoutApp>
