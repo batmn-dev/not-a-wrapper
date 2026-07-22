@@ -19,8 +19,7 @@ type ChatProjectLinkCtx = Pick<QueryCtx, "db">
  * the corruption (e.g. a foreign chat left dangling after its project's
  * deletion) and hide that the write-boundary guarantee was violated.
  */
-export const CHAT_PROJECT_LINK_OWNER_ERROR =
-  "Chat-Project link crosses owners"
+export const CHAT_PROJECT_LINK_OWNER_ERROR = "Chat-Project link crosses owners"
 
 function assertLinkedOwners(
   chat: Doc<"chats">,
@@ -66,38 +65,24 @@ export async function collectLinkedChats(
 }
 
 /**
- * All chats linked to a project via a cursor loop, for mutations that must
- * account per page (deletion budgets). `onPage` observes each verified page
- * plus everything collected so far, and may throw to stop the traversal.
+ * A bounded prefix of chats linked to a project. Deletion preflights request
+ * one row beyond their remaining limit, so a full result proves overflow
+ * without using Convex pagination (a function may execute only one paginated
+ * database query).
  */
-export async function paginateLinkedChats(
+export async function takeLinkedChats(
   ctx: ChatProjectLinkCtx,
   project: Doc<"projects">,
-  options: {
-    pageSize: number
-    onPage?: (
-      page: Doc<"chats">[],
-      collected: readonly Doc<"chats">[]
-    ) => void
-  }
+  limit: number
 ): Promise<Doc<"chats">[]> {
-  const chats: Doc<"chats">[] = []
-  let cursor: string | null = null
-
-  while (true) {
-    const result = await ctx.db
-      .query("chats")
-      .withIndex("by_project", (q) => q.eq("projectId", project._id))
-      .paginate({ numItems: options.pageSize, cursor })
-    for (const chat of result.page) {
-      assertLinkedOwners(chat, project)
-    }
-    chats.push(...result.page)
-    options.onPage?.(result.page, chats)
-
-    if (result.isDone) return chats
-    cursor = result.continueCursor
+  const chats = await ctx.db
+    .query("chats")
+    .withIndex("by_project", (q) => q.eq("projectId", project._id))
+    .take(limit)
+  for (const chat of chats) {
+    assertLinkedOwners(chat, project)
   }
+  return chats
 }
 
 /** The project's most recently active linked chat, if any. */

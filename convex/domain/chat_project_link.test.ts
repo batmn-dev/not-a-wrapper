@@ -6,6 +6,7 @@ import {
   collectLinkedChats,
   newestLinkedChat,
   requireLinkedProject,
+  takeLinkedChats,
 } from "./chat_project_link"
 
 function asId<Table extends "users" | "projects" | "chats">(
@@ -69,11 +70,11 @@ function createCtx(documents: {
 
           return {
             collect: async () => matching(),
+            take: async (limit: number) => matching().slice(0, limit),
             order: () => ({
               first: async () =>
-                [...matching()].sort(
-                  (a, b) => b.updatedAt - a.updatedAt
-                )[0] ?? null,
+                [...matching()].sort((a, b) => b.updatedAt - a.updatedAt)[0] ??
+                null,
             }),
           }
         },
@@ -121,6 +122,20 @@ describe("Chat-Project link", () => {
     await expect(collectLinkedChats(ctx, storedProject)).rejects.toThrow(
       CHAT_PROJECT_LINK_OWNER_ERROR
     )
+  })
+
+  it("takes a bounded owner-checked Project Chat range", async () => {
+    const storedProject = project()
+    const first = chat("chat-1")
+    const second = chat("chat-2")
+    const ctx = createCtx({
+      projects: [storedProject],
+      chats: [first, second],
+    })
+
+    await expect(takeLinkedChats(ctx, storedProject, 1)).resolves.toEqual([
+      first,
+    ])
   })
 
   it("returns the newest linked chat and rejects a cross-owner newest", async () => {
