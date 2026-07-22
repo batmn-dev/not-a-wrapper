@@ -67,7 +67,6 @@ describe("project conversation previews", () => {
       ],
     ])
     const messageReads: Array<{ chatId: string; limit: number }> = []
-    let selectedChatId = ""
 
     const ctx = {
       db: {
@@ -91,6 +90,7 @@ describe("project conversation previews", () => {
             }
           }
 
+          let selectedChatId = ""
           const resultApi = {
             withIndex: (
               indexName: string,

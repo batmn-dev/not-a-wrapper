@@ -195,19 +195,20 @@ export async function getProjectChatDirectoryForProject(
       (b.updatedAt ?? b._creationTime) - (a.updatedAt ?? a._creationTime)
   )
 
-  const directory = []
-  for (const chat of sortedChats) {
-    const messages = await ctx.db
-      .query("messages")
-      .withIndex("by_chat_order", (q) => q.eq("chatId", chat._id))
-      .order("desc")
-      .take(PROJECT_CHAT_PREVIEW_SCAN_LIMIT)
+  const directory = await Promise.all(
+    sortedChats.map(async (chat) => {
+      const messages = await ctx.db
+        .query("messages")
+        .withIndex("by_chat_order", (q) => q.eq("chatId", chat._id))
+        .order("desc")
+        .take(PROJECT_CHAT_PREVIEW_SCAN_LIMIT)
 
-    directory.push({
-      chat,
-      preview: selectProjectChatPreview(messages),
+      return {
+        chat,
+        preview: selectProjectChatPreview(messages),
+      }
     })
-  }
+  )
 
   return directory
 }
