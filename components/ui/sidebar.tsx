@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -18,10 +19,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { PanelLeft } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
+import { RiSideBarLine } from "@remixicon/react"
 import { cva, type VariantProps } from "class-variance-authority"
 import * as React from "react"
 
@@ -307,8 +308,9 @@ function SidebarTrigger({
       }}
       {...props}
     >
-      <PanelLeft
-        size={20}
+      <Icon
+        icon={RiSideBarLine}
+        slotSize={20}
         glyphInset={0}
         className="group-hover/button:text-foreground size-5 text-[var(--text-tertiary)]"
       />

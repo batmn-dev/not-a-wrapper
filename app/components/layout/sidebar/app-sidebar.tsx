@@ -49,13 +49,13 @@ import {
   RiArrowRightSLine,
   RiCloseLine,
   RiDownloadLine,
-  RiExpandRightLine,
   RiFileTextLine,
   RiInformationLine,
   RiQuestionLine,
   RiQuillPenLine,
   RiSearchLine,
   RiSettings3Line,
+  RiSideBarLine,
   RiSparklingLine,
   RiUserLine,
 } from "@remixicon/react"
@@ -628,7 +628,7 @@ function CollapsedHeaderToggle() {
         <NawIcon className="absolute inset-0 m-auto size-5 transition-opacity group-hover/toggle:opacity-0 group-focus-visible/toggle:opacity-0" />
         {/* Hover: Sidebar icon */}
         <Icon
-          icon={RiExpandRightLine}
+          icon={RiSideBarLine}
           slotSize={20}
           glyphInset={0}
           className="absolute inset-0 m-auto opacity-0 transition-opacity group-hover/toggle:opacity-100 group-focus-visible/toggle:opacity-100"
