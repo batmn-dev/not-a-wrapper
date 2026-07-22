@@ -46,7 +46,7 @@ export function SidebarProjectItem({
       leadingIcon={RiFolderLine}
       activeLeadingIcon={RiFolderOpenFill}
       trailing={({ startRename }) => (
-        <SidebarRowActions strategy="overlay" key={project._id}>
+        <SidebarRowActions key={project._id}>
           <SidebarPinAction
             pinned={project.pinned ?? false}
             title={displayName}

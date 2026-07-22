@@ -19,7 +19,7 @@ import type { ReactNode } from "react"
  * lives on the inner chip via a `:focus-visible` CSS rule in globals.css.
  */
 export const trailingIconButtonClassName =
-  "group/pin text-[var(--text-tertiary)] hover:text-foreground data-popup-open:text-foreground flex h-9 w-[34px] shrink-0 items-center justify-center outline-none"
+  "sidebar-row-trailing-button group/pin text-[var(--text-tertiary)] hover:text-foreground data-popup-open:text-foreground flex shrink-0 items-center justify-center outline-none"
 
 /**
  * The inner 24×24 chip that hosts the keyboard-only focus ring — ChatGPT outlines

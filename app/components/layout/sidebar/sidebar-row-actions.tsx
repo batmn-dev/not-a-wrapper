@@ -1,7 +1,7 @@
 import { Children, type ReactNode } from "react"
 
 type SidebarRowActionsProps = {
-  strategy: "overlay" | "reflow"
+  layout?: "compact" | "card"
   children: ReactNode
 }
 
@@ -12,24 +12,32 @@ type SidebarRowEndSlotProps = {
 }
 
 /**
- * The only placement primitive for compact-row actions.
+ * The only placement primitive for sidebar row actions.
  *
- * Both strategies share the same 34px control slots, 10px overlap, and 58px
- * rail. `overlay` is used by project rows; `reflow` is used by chat rows so the
- * primary title gives up the rail width when actions reveal.
+ * Compact rows mirror ChatGPT's trailing markup: one trailing flex item with a
+ * 4px inner gap and direct 34×36 button children. The buttons' negative inline
+ * margins make the revealed item contribute exactly 44px to row layout while
+ * preserving the full hit targets.
  */
 export function SidebarRowActions({
-  strategy,
+  layout = "compact",
   children,
 }: SidebarRowActionsProps) {
+  if (layout === "card") {
+    return (
+      <div className="sidebar-row-action-rail" data-sidebar-row-actions="card">
+        {Children.map(children, (child) => (
+          <div className="sidebar-row-action-slot">{child}</div>
+        ))}
+      </div>
+    )
+  }
+
   return (
-    <div
-      className="sidebar-row-action-rail"
-      data-sidebar-row-actions={strategy}
-    >
-      {Children.map(children, (child) => (
-        <div className="sidebar-row-action-slot">{child}</div>
-      ))}
+    <div className="sidebar-row-action-rail" data-sidebar-row-actions="compact">
+      <div className="sidebar-row-action-group">
+        {Children.map(children, (child) => child)}
+      </div>
     </div>
   )
 }
@@ -43,14 +51,22 @@ export function SidebarRowEndSlot({
   layout = "compact",
   children,
 }: SidebarRowEndSlotProps) {
-  return (
-    <div className="sidebar-row-end-slot" data-sidebar-row-end-slot={layout}>
+  const contents = (
+    <>
       {status ? (
         <div className="sidebar-row-status-slot" data-sidebar-row-status-slot>
           {status}
         </div>
       ) : null}
-      <SidebarRowActions strategy="reflow">{children}</SidebarRowActions>
+      <SidebarRowActions layout={layout}>{children}</SidebarRowActions>
+    </>
+  )
+
+  if (layout === "compact") return contents
+
+  return (
+    <div className="sidebar-row-end-slot" data-sidebar-row-end-slot="card">
+      {contents}
     </div>
   )
 }

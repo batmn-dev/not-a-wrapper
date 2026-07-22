@@ -1,8 +1,8 @@
 /** @vitest-environment jsdom */
 
+import { RiFolderFill, RiFolderLine, RiSearchLine } from "@remixicon/react"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { RiFolderFill, RiFolderLine, RiSearchLine } from "@remixicon/react"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { SidebarMenuItem } from "./sidebar-menu-item"
 import { SidebarRow } from "./sidebar-row"
@@ -112,7 +112,7 @@ describe("SidebarRow navigation contract", () => {
     expect(link?.getAttribute("aria-current")).toBe("page")
     expect(container?.querySelector("[aria-expanded]")).toBeNull()
     expect(container?.querySelector("[aria-controls]")).toBeNull()
-    expect(link?.contains(action ?? null)).toBe(false)
+    expect(link?.contains(action ?? null)).toBe(true)
 
     link?.addEventListener("click", (event) => event.preventDefault())
     act(() =>

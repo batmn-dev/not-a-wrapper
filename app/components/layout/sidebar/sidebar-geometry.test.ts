@@ -8,7 +8,10 @@ import { describe, expect, it } from "vitest"
  * padding token (the original 1px drift) cannot come back unnoticed.
  */
 
-const css = readFileSync(new URL("../../../globals.css", import.meta.url), "utf8")
+const css = readFileSync(
+  new URL("../../../globals.css", import.meta.url),
+  "utf8"
+)
 
 // First declaration wins: theme blocks later in the file only override colors.
 const declarations = new Map<string, string>()
@@ -36,8 +39,9 @@ function resolvePx(name: string, seen: readonly string[] = []): number {
   }
   const raw = declarations.get(name)
   if (raw === undefined) throw new Error(`Missing token: ${name}`)
-  const substituted = raw.replace(/var\((--[\w-]+)\)/g, (_, ref: string) =>
-    `${resolvePx(ref, [...seen, name])}px`
+  const substituted = raw.replace(
+    /var\((--[\w-]+)\)/g,
+    (_, ref: string) => `${resolvePx(ref, [...seen, name])}px`
   )
   return evaluate(substituted)
 }
@@ -74,5 +78,20 @@ describe("sidebar leading-icon placement contract", () => {
     // The row draws border-block only, so inline padding must be the shared
     // token — an "inner" inline variant would re-introduce the 1px icon drift.
     expect(declarations.has("--sidebar-row-inner-content-inline")).toBe(false)
+  })
+
+  it("matches ChatGPT's trailing-action reflow geometry", () => {
+    const actionContribution =
+      resolvePx("--sidebar-row-action-width") -
+      resolvePx("--sidebar-row-action-margin-inline-start") -
+      resolvePx("--sidebar-row-action-margin-inline-end")
+    const twoActionRail =
+      2 * actionContribution + resolvePx("--sidebar-row-action-gap")
+
+    expect(resolvePx("--sidebar-row-action-width")).toBe(34)
+    expect(resolvePx("--sidebar-row-action-gap")).toBe(4)
+    expect(resolvePx("--sidebar-row-action-content-gap")).toBe(8)
+    expect(twoActionRail).toBe(44)
+    expect(resolvePx("--sidebar-row-action-rail-width")).toBe(twoActionRail)
   })
 })
