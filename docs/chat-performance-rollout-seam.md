@@ -1,4 +1,4 @@
-# Chat-performance flag and cohort seam (PR 0b step 10)
+# Chat-performance flag rollout seam (PR 0b step 10)
 
 Decision record for the repository-standard rollout seam the
 chat-responsiveness plan's later phases must use (plan §6 PR 0 step 10,
@@ -36,26 +36,19 @@ Alternatives considered and rejected for now:
 | Kill switch (client flags) | Redeploy | Change the env var and redeploy; latency = one Vercel build/deploy (~minutes). **Not a live toggle** — no phase may claim one. |
 | Kill switch (Next server flags) | Redeploy | Same as client: env changes require a redeploy of the Next app. |
 | Kill switch (Convex flags) | Env change + function restart | Convex deployment env vars apply to subsequent function executions without a code deploy (set via dashboard/CLI); still not instantaneous and not client-visible. |
-| Percentage cohorts | **Not provided by the seam itself** | Env flags are all-or-nothing per deployment. Cohorts require *client-local deterministic bucketing* layered on top (below). |
-| Remote weight adjustment | No | Changing experiment weights is a redeploy. Experiment designs must accept that (plan PR 2 configuration note). |
-| Stable per-user assignment | Via local bucketing | Deterministic local bucketing from an existing analytics identity, persisted as `{experimentVersion, variant}` in localStorage. The raw identity is never emitted in performance events. |
+| Percentage cohorts | No | Env flags are all-or-nothing per deployment. No active phase includes cohort infrastructure. |
+| Remote weight adjustment | No | The selected env-flag seam has no remote experiment weights. |
+| Stable per-user assignment | No | The active scope has no experiment assignment or persistence mechanism. |
 
-## Cohort assignment pattern (for PR 2+)
+## Future cohort experiments require re-admission
 
-Percentage cohorts (the PR 2 throttle experiment) are implemented as:
+No active phase uses percentage cohorts. PR 2 selects its throttle value by
+local comparison, then follows the deployment-wide progression in plan §9.2.
 
-1. A build-time flag enables the experiment and carries its version
-   (`NEXT_PUBLIC_CHAT_MESSAGE_THROTTLE_EXPERIMENT`).
-2. The client resolves one stable variant per browser profile by hashing an
-   existing analytics identity locally, persisting only
-   `{experimentVersion, variant}`; reloads keep the variant, and no raw
-   identity leaves the device in any performance event.
-3. Weights are code constants for the experiment version — adjusting them or
-   forcing control is a redeploy (the emergency path documented in the plan).
-
-Pre-launch traffic may be too small to distinguish cohorts; §9.2's default
-progression (flag off → staging → flag on with rollback watch) is the
-fallback whenever cohort volume is insufficient.
+If future evidence justifies a cohort experiment, a fresh review must re-admit
+it and select an assignment, versioning, privacy, and rollback design.
+Client-local deterministic bucketing is one candidate, not a capability of the
+active seam or a requirement for PR 2+.
 
 ## Rules for later phases
 

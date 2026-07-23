@@ -32,6 +32,7 @@ const lifecycleMocks = vi.hoisted(() => ({
     stop: ReturnType<typeof vi.fn>
   }>,
   approvalGate: vi.fn(() => true),
+  markChatPerf: vi.fn(),
 }))
 
 vi.mock("@ai-sdk/react", () => ({
@@ -55,6 +56,17 @@ vi.mock("ai", () => ({
   lastAssistantMessageIsCompleteWithApprovalResponses:
     lifecycleMocks.approvalGate,
 }))
+
+vi.mock("@/lib/observability/chat-performance", async () => {
+  const actual =
+    await vi.importActual<
+      typeof import("@/lib/observability/chat-performance")
+    >("@/lib/observability/chat-performance")
+  return {
+    ...actual,
+    markChatPerf: lifecycleMocks.markChatPerf,
+  }
+})
 
 const finishEvent = {
   message: {
@@ -190,6 +202,41 @@ describe("detachable chat stream lifecycle", () => {
 
     expect(vi.getTimerCount()).toBe(0)
     expect(originBinding.stop).not.toHaveBeenCalled()
+  })
+
+  it("settles a normally finished attached gauge exactly once", () => {
+    const harness = mountHarness("chat-a")
+    const originBinding = lifecycleMocks.bindings[0]
+    if (!originBinding) throw new Error("origin binding was not created")
+
+    const createdGauge = lifecycleMocks.markChatPerf.mock.calls.find(
+      ([name, fields]) =>
+        name === "detached_binding_gauge" && fields.event === "created"
+    )?.[1]
+    if (!createdGauge) throw new Error("created gauge was not emitted")
+
+    originBinding.options.onFinish(finishEvent)
+
+    const finishedGauge = lifecycleMocks.markChatPerf.mock.calls.find(
+      ([name, fields]) =>
+        name === "detached_binding_gauge" &&
+        fields.event === "finished_attached"
+    )?.[1]
+    expect(finishedGauge).toMatchObject({
+      attachedCount: createdGauge.attachedCount - 1,
+      detachedCount: createdGauge.detachedCount,
+    })
+
+    harness.setChatId("chat-b")
+
+    const detachedGauge = lifecycleMocks.markChatPerf.mock.calls.find(
+      ([name, fields]) =>
+        name === "detached_binding_gauge" && fields.event === "detached"
+    )?.[1]
+    expect(detachedGauge).toMatchObject({
+      attachedCount: createdGauge.attachedCount - 1,
+      detachedCount: createdGauge.detachedCount,
+    })
   })
 
   it("routes finish and error atomically after the navigation commit", () => {

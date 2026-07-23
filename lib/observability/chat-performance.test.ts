@@ -9,6 +9,11 @@ import {
   parseChatPerfIdHeader,
   validateChatPerfEvent,
 } from "./chat-performance"
+import {
+  beginChatPerfTurn,
+  clearArmedChatPerfHeader,
+  takeChatPerfHeader,
+} from "./chat-performance-client"
 
 afterEach(() => {
   delete process.env.NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION
@@ -48,6 +53,21 @@ describe("correlation id", () => {
     ]) {
       expect(parseChatPerfIdHeader(invalid)).toBeUndefined()
     }
+  })
+
+  it("disarms only the matching undispatched turn header", () => {
+    process.env.NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION = "true"
+    const rejectedTurnId = beginChatPerfTurn()
+    const newerTurnId = beginChatPerfTurn()
+
+    clearArmedChatPerfHeader(rejectedTurnId)
+    expect(takeChatPerfHeader()).toEqual({
+      [CHAT_PERF_ID_HEADER]: newerTurnId,
+    })
+
+    const undispatchedTurnId = beginChatPerfTurn()
+    clearArmedChatPerfHeader(undispatchedTurnId)
+    expect(takeChatPerfHeader()).toEqual({})
   })
 })
 

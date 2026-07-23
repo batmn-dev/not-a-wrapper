@@ -51,6 +51,16 @@ export function takeChatPerfHeader(): Record<string, string> {
   return headers
 }
 
+/**
+ * Disarms a turn whose request was never dispatched. The identity check keeps
+ * a late rejection from clearing a newer turn's armed header.
+ */
+export function clearArmedChatPerfHeader(turnId: string | undefined): void {
+  if (turnId && pendingHeaderTurnId === turnId) {
+    pendingHeaderTurnId = undefined
+  }
+}
+
 function turnFields(): ChatPerfFields {
   return currentTurnId ? { correlationId: currentTurnId } : {}
 }
@@ -148,7 +158,10 @@ export function useChatNavigationPerfMarks(input: NavigationPerfInput): void {
   const committedChatId = useRef<string | null>(null)
   const paintedForChatId = useRef<string | null>(null)
   const authoritativeForChatId = useRef<string | null>(null)
-  const previousRunStatus = useRef<string | null>(null)
+  const previousRunState = useRef<{
+    chatId: string | null
+    status: string | null
+  } | null>(null)
   // Latest-value ref: hit/miss is a fact about the moment the route
   // committed, so the commit effect reads it from a ref instead of taking
   // loading/count churn as dependencies. Updated in its own effect (declared
@@ -199,17 +212,21 @@ export function useChatNavigationPerfMarks(input: NavigationPerfInput): void {
 
   useEffect(() => {
     if (!isChatPerfClientEnabled()) return
-    const previous = previousRunStatus.current
-    previousRunStatus.current = input.selectedRunStatus
+    const previous = previousRunState.current
+    previousRunState.current = {
+      chatId: input.chatId,
+      status: input.selectedRunStatus,
+    }
     if (
+      previous?.chatId === input.chatId &&
       input.selectedRunStatus &&
       TERMINAL_RUN_STATUSES.has(input.selectedRunStatus) &&
-      previous !== null &&
-      previous !== input.selectedRunStatus
+      previous.status !== null &&
+      previous.status !== input.selectedRunStatus
     ) {
       markChatPerf("durable_settlement_receipt", {
         outcome: input.selectedRunStatus as "completed" | "failed" | "aborted",
       })
     }
-  }, [input.selectedRunStatus])
+  }, [input.chatId, input.selectedRunStatus])
 }

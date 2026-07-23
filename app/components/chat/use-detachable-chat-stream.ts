@@ -196,6 +196,7 @@ function createDetachableChatStreamOwner(
       return
     }
     lifecycle.finished = true
+    attachedBindingCount = Math.max(0, attachedBindingCount - 1)
     emitBindingGauge("finished_attached", lifecycle.ownerChatId)
     void handlers.onAttachedFinish(event)
   }
@@ -273,7 +274,9 @@ function createDetachableChatStreamOwner(
         watchdog: null,
       }
       lifecycles.set(binding, detached)
-      attachedBindingCount = Math.max(0, attachedBindingCount - 1)
+      if (!lifecycle.finished) {
+        attachedBindingCount = Math.max(0, attachedBindingCount - 1)
+      }
       if (lifecycle.finished) {
         emitBindingGauge("detached", detached.originChatId)
         return

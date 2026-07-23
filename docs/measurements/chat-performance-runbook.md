@@ -72,6 +72,7 @@ new >50 ms long task (plan PR 0 acceptance). If it fails, reduce
 
 ## Rollout seam
 
-Flag/cohort capabilities for later phases are fixed by
-`docs/chat-performance-rollout-seam.md` — build/deploy-time env flags plus
-client-local deterministic bucketing; no live kill switch, no remote weights.
+Flag capabilities for later phases are fixed by
+`docs/chat-performance-rollout-seam.md`: build/deploy-time env flags with a
+deployment-wide local → staging → production flag-on progression. The active
+seam has no percentage cohorts, live kill switch, or remote weights.

@@ -27,6 +27,7 @@ import { ENABLE_DURABLE_RUN_PRESENTATION } from "@/lib/flags"
 import { isChatPerfClientEnabled } from "@/lib/observability/chat-performance"
 import {
   beginChatPerfTurn,
+  clearArmedChatPerfHeader,
   useChatTurnPerfMarks,
 } from "@/lib/observability/chat-performance-client"
 import { API_ROUTE_CHAT } from "@/lib/routes"
@@ -717,22 +718,28 @@ export function useChatCore({
 
       // Fresh per-turn correlation id + chat_send_intent mark (no-op unless
       // instrumentation is enabled); the transport consumes the armed header.
-      beginChatPerfTurn()
+      const perfTurnId = beginChatPerfTurn()
 
       let accepted = false
-      await chatTurn.runSendTurn({
-        text,
-        messages,
-        submittedFiles,
-        submittedAttachments: attachments,
-        chatVersion: messages.length + 1, // current messages + 1 for the new message being sent
-        onSuccess: (currentChatId) => {
-          accepted = true
-          if (messages.length > 0) {
-            bumpChat(currentChatId)
-          }
-        },
-      })
+      try {
+        await chatTurn.runSendTurn({
+          text,
+          messages,
+          submittedFiles,
+          submittedAttachments: attachments,
+          chatVersion: messages.length + 1, // current messages + 1 for the new message being sent
+          onSuccess: (currentChatId) => {
+            accepted = true
+            if (messages.length > 0) {
+              bumpChat(currentChatId)
+            }
+          },
+        })
+      } finally {
+        if (!accepted) {
+          clearArmedChatPerfHeader(perfTurnId)
+        }
+      }
       return accepted
     },
     [chatTurn, messages, bumpChat]
