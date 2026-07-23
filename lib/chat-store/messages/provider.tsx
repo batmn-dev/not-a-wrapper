@@ -8,12 +8,18 @@ import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import { durableStoredMessageToUiMessage } from "@/lib/chat-messages/ui-message-adapter"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
+import {
+  isChatPerfClientEnabled,
+  markChatPerf,
+} from "@/lib/observability/chat-performance"
+import { useChatNavigationPerfMarks } from "@/lib/observability/chat-performance-client"
 import type { UIMessage } from "ai"
 import { useMutation } from "convex/react"
 import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   useSyncExternalStore,
@@ -107,6 +113,25 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     ) as ExtendedUIMessage[]
   }, [canSubscribeToMessages, convexMessages])
 
+  // Selected-conversation client counters (PR 0b step 6): selected count and
+  // mapping duration, counts only — no content, no ids. Render must stay
+  // pure, so the duration is measured post-commit by timing one additional
+  // mapping pass of the same update; instrumentation is off by default and
+  // this cost exists only in diagnostic builds (documented in the runbook).
+  useEffect(() => {
+    if (!isChatPerfClientEnabled()) return
+    if (!canSubscribeToMessages || !convexMessages) return
+    const mappingStart = performance.now()
+    const mapped = convexMessages.map((msg) =>
+      durableStoredMessageToUiMessage(msg)
+    )
+    markChatPerf("selected_conversation_client", {
+      selectedCount: mapped.length,
+      mappingDurationMs:
+        Math.round((performance.now() - mappingStart) * 100) / 100,
+    })
+  }, [canSubscribeToMessages, convexMessages])
+
   const isLoading = isValidConvexId && isMessagesLoading
 
   const subscribeToCachedMessages = useCallback(
@@ -174,6 +199,16 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     optimisticMessages,
     chatId,
   ])
+
+  // Navigation/chat-switch marks + durable settlement receipt (PR 0b step 3).
+  // No-op unless the build-time instrumentation flag is on.
+  useChatNavigationPerfMarks({
+    chatId,
+    isAuthoritativeLoading: isLoading,
+    authoritativeMessageCount: serverMessages.length,
+    totalMessageCount: messages.length,
+    selectedRunStatus: selectedRun?.status ?? null,
+  })
 
   // Helper to update optimistic messages for current chat
   const updateOptimisticMessages = useCallback(

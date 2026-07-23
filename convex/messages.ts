@@ -8,14 +8,19 @@ import {
 } from "./_generated/server"
 import { createMessageBranchWriter } from "./domain/message_branch_writes"
 import {
+  createBranchContext,
   getBranchInfoForMessage,
+  getBranchInfoForMessageFromContext,
   getSelectedPathMessages,
+  getSelectedPathMessagesFromContext,
+  type MessageBranchInfo,
 } from "./domain/message_branches"
 import {
   extractTextFromMessageParts,
   normalizeMessagePartsForStorage,
 } from "./domain/message_parts"
 import { isVisibleChatMessage } from "./domain/message_visibility"
+import { isSinglePassBranchContextEnabled } from "./lib/runtime_flags"
 import { recordChatActivity } from "./domain/project_activity"
 import {
   getAuthorizedChatForRead,
@@ -36,11 +41,11 @@ async function getNextOrder(ctx: MutationCtx, chatId: Id<"chats">) {
 }
 
 function withBranchMetadata(
-  allMessages: Doc<"messages">[],
-  selectedMessages: Doc<"messages">[]
+  selectedMessages: Doc<"messages">[],
+  getBranchInfo: (message: Doc<"messages">) => MessageBranchInfo | undefined
 ) {
   return selectedMessages.map((message) => {
-    const branch = getBranchInfoForMessage(allMessages, message)
+    const branch = getBranchInfo(message)
     if (!branch) return message
 
     const metadata =
@@ -60,10 +65,24 @@ function withBranchMetadata(
   })
 }
 
+/**
+ * Selected visible path plus branch descriptors. With
+ * `CHAT_SINGLE_PASS_BRANCH_CONTEXT` on, the whole projection shares ONE
+ * branch context (plan PR 1 step 3); off, it keeps the pre-PR-1 pattern of
+ * one context build per helper call. Both paths run the same canonical
+ * algorithm and return identical results.
+ */
 function getVisibleSelectedMessages(messages: Doc<"messages">[]) {
+  if (isSinglePassBranchContextEnabled()) {
+    const context = createBranchContext(messages)
+    return withBranchMetadata(
+      getSelectedPathMessagesFromContext(context).filter(isVisibleChatMessage),
+      (message) => getBranchInfoForMessageFromContext(context, message)
+    )
+  }
   return withBranchMetadata(
-    messages,
-    getSelectedPathMessages(messages).filter(isVisibleChatMessage)
+    getSelectedPathMessages(messages).filter(isVisibleChatMessage),
+    (message) => getBranchInfoForMessage(messages, message)
   )
 }
 

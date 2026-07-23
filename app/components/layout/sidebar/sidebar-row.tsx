@@ -5,6 +5,7 @@ import { InlineRenameInput } from "@/components/ui/inline-rename-input"
 import { useSidebar } from "@/components/ui/sidebar"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { useInlineRename } from "@/hooks/use-inline-rename"
+import { markChatPerf } from "@/lib/observability/chat-performance"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { useCallback, useMemo, type ReactNode } from "react"
@@ -70,6 +71,10 @@ export function SidebarRow({
   const handleLinkClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation()
+      // Chat-switch responsiveness anchor (PR 0b): the user's navigation
+      // intent, marked before Next.js routing commits. Content-free no-op
+      // unless instrumentation is enabled.
+      markChatPerf("chat_navigation_intent")
       if (isMobile) setOpenMobile(false)
     },
     [isMobile, setOpenMobile]

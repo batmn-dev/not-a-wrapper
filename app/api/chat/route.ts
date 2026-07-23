@@ -4,6 +4,10 @@ import {
   classifyChatError,
   getToolDimensionForError,
 } from "@/lib/observability/chat-error-taxonomy"
+import {
+  CHAT_PERF_ID_HEADER,
+  createChatPerfServerSession,
+} from "@/lib/observability/chat-performance"
 import * as Sentry from "@sentry/nextjs"
 import {
   checkServerSideUsage,
@@ -44,6 +48,14 @@ function getErrorMessage(error: unknown): string {
 // the durable-persistence timeline.
 export async function POST(req: Request) {
   const requestId = crypto.randomUUID()
+  // Sampled chat-performance session (PR 0b): off unless CHAT_PERF_SAMPLE_RATE
+  // is set. The client's x-chat-perf-id is validated here and carried only
+  // through perf spans — never persisted to chat/run/message docs and never
+  // used as an admission idempotency key. (`requestId` above is generated
+  // after arrival, so it cannot correlate earlier client marks.)
+  const perf = createChatPerfServerSession(
+    req.headers.get(CHAT_PERF_ID_HEADER)
+  )
   // Pre-runtime telemetry fallbacks: read by the catch when the error is thrown
   // before the runtime exists (parse / validation / usage admission). Once the
   // runtime is constructed, its `fail()` owns the rich capture.
@@ -59,7 +71,9 @@ export async function POST(req: Request) {
     Sentry.setTag("chat_operation", "stream_text")
 
     // Server-side authentication — derive user ID from WorkOS AuthKit session.
-    const authSession = await getWorkosSession()
+    const authSession = await perf.span("auth_session", () =>
+      getWorkosSession()
+    )
     const authUserId = authSession.user?.id
     const isAuthenticated = !!authUserId
     telemetryIsAuthenticated = isAuthenticated
@@ -170,16 +184,17 @@ export async function POST(req: Request) {
           "chat.is_authenticated": isAuthenticated,
         },
       },
-      async () => {
-        await checkServerSideUsage(convexToken, model, anonymousId)
-        await validateAndTrackUsage({
-          userId,
-          model,
-          isAuthenticated,
-          token: convexToken,
+      () =>
+        perf.span("usage_admission", async () => {
+          await checkServerSideUsage(convexToken, model, anonymousId)
+          await validateAndTrackUsage({
+            userId,
+            model,
+            isAuthenticated,
+            token: convexToken,
+          })
+          await incrementServerSideUsage(convexToken, model, anonymousId)
         })
-        await incrementServerSideUsage(convexToken, model, anonymousId)
-      }
     )
 
     turn = createChatTurnRuntime({
@@ -199,10 +214,11 @@ export async function POST(req: Request) {
         anonymousId,
         isAuthenticated,
         convexToken,
+        perf,
       },
     })
 
-    await turn.prepare()
+    await perf.span("prepare_total", () => turn!.prepare())
     return turn.toResponse(req.signal)
   } catch (err: unknown) {
     console.error("Error in /api/chat:", err)

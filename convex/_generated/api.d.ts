@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as branchContextShadow from "../branchContextShadow.js";
 import type * as chatRuntime from "../chatRuntime.js";
 import type * as chatRuntimeWorker from "../chatRuntimeWorker.js";
 import type * as chats from "../chats.js";
@@ -17,7 +18,9 @@ import type * as domain_chat_project_link from "../domain/chat_project_link.js";
 import type * as domain_generation_run_lifecycle from "../domain/generation_run_lifecycle.js";
 import type * as domain_generation_run_liveness from "../domain/generation_run_liveness.js";
 import type * as domain_message_branch_writes from "../domain/message_branch_writes.js";
+import type * as domain_message_branch_writes_legacy_fixture from "../domain/message_branch_writes_legacy_fixture.js";
 import type * as domain_message_branches from "../domain/message_branches.js";
+import type * as domain_message_branches_legacy_fixture from "../domain/message_branches_legacy_fixture.js";
 import type * as domain_message_contract from "../domain/message_contract.js";
 import type * as domain_message_parts from "../domain/message_parts.js";
 import type * as domain_message_visibility from "../domain/message_visibility.js";
@@ -28,6 +31,7 @@ import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_authedFunctions from "../lib/authedFunctions.js";
 import type * as lib_messageMetadata from "../lib/messageMetadata.js";
+import type * as lib_runtime_flags from "../lib/runtime_flags.js";
 import type * as lib_sha256 from "../lib/sha256.js";
 import type * as mcpServers from "../mcpServers.js";
 import type * as mcpToolApprovals from "../mcpToolApprovals.js";
@@ -50,6 +54,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  branchContextShadow: typeof branchContextShadow;
   chatRuntime: typeof chatRuntime;
   chatRuntimeWorker: typeof chatRuntimeWorker;
   chats: typeof chats;
@@ -59,7 +64,9 @@ declare const fullApi: ApiFromModules<{
   "domain/generation_run_lifecycle": typeof domain_generation_run_lifecycle;
   "domain/generation_run_liveness": typeof domain_generation_run_liveness;
   "domain/message_branch_writes": typeof domain_message_branch_writes;
+  "domain/message_branch_writes_legacy_fixture": typeof domain_message_branch_writes_legacy_fixture;
   "domain/message_branches": typeof domain_message_branches;
+  "domain/message_branches_legacy_fixture": typeof domain_message_branches_legacy_fixture;
   "domain/message_contract": typeof domain_message_contract;
   "domain/message_parts": typeof domain_message_parts;
   "domain/message_visibility": typeof domain_message_visibility;
@@ -70,6 +77,7 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/authedFunctions": typeof lib_authedFunctions;
   "lib/messageMetadata": typeof lib_messageMetadata;
+  "lib/runtime_flags": typeof lib_runtime_flags;
   "lib/sha256": typeof lib_sha256;
   mcpServers: typeof mcpServers;
   mcpToolApprovals: typeof mcpToolApprovals;

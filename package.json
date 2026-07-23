@@ -25,7 +25,9 @@
     "catalog:openrouter:refresh": "bun scripts/generate-openrouter-catalog.ts --fetch",
     "catalog:openrouter:check": "bun scripts/generate-openrouter-catalog.ts --check",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bench": "vitest bench --run",
+    "bench:chat": "vitest bench --run benchmarks/chat-performance"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.12",

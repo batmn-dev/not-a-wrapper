@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
+import { takeChatPerfHeader } from "@/lib/observability/chat-performance-client"
 import type { UIMessage } from "@ai-sdk/react"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -269,9 +270,12 @@ describe("useChatCore prompt query handling", () => {
     container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
+    const currentCoreRef: {
+      current: ReturnType<typeof useChatCore> | undefined
+    } = { current: undefined }
 
     function Harness() {
-      useChatCore({
+      const core = useChatCore({
         initialMessages: [] as UIMessage[],
         cacheAndAddMessage: vi.fn(),
         chatId: "chat-project",
@@ -280,6 +284,9 @@ describe("useChatCore prompt query handling", () => {
         ensureChatExists,
         bumpChat: chatCoreMocks.bumpChat,
       })
+      React.useEffect(() => {
+        currentCoreRef.current = core
+      }, [core])
       return null
     }
 
@@ -294,7 +301,12 @@ describe("useChatCore prompt query handling", () => {
     }
     rerender()
 
-    return { checkLimitsAndNotify, ensureChatExists, rerender }
+    return {
+      checkLimitsAndNotify,
+      ensureChatExists,
+      rerender,
+      getCore: () => currentCoreRef.current,
+    }
   }
 
   it("keeps prompt-only links as composer hydration without dispatching", async () => {
@@ -373,6 +385,30 @@ describe("useChatCore prompt query handling", () => {
 
     expect(chatCoreMocks.sendMessage).toHaveBeenCalledTimes(1)
     expect(window.location.search).toBe("")
+  })
+
+  it("disarms the performance header when submit is rejected before dispatch", async () => {
+    process.env.NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION = "true"
+    try {
+      const { getCore } = renderCore({
+        search: "",
+        checkLimitsAndNotify: vi.fn(async () => false),
+      })
+      await act(async () => {
+        await expect(
+          getCore()?.submit({
+            text: "Project question",
+            files: [],
+            attachments: [],
+          })
+        ).resolves.toBe(false)
+      })
+
+      expect(chatCoreMocks.sendMessage).not.toHaveBeenCalled()
+      expect(takeChatPerfHeader()).toEqual({})
+    } finally {
+      delete process.env.NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION
+    }
   })
 })
 

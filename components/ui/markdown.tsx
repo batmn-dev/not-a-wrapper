@@ -58,7 +58,9 @@ const markdownProcessor = unified()
   .use(remarkGfm)
   .use(remarkMath, REMARK_MATH_OPTIONS)
 
-function parseMarkdownIntoBlocks(markdown: string): string[] {
+// Exported for benchmarks/chat-performance so the harness measures the real
+// production splitter (plan PR 0a), not a reimplementation.
+export function parseMarkdownIntoBlocks(markdown: string): string[] {
   const tree = markdownProcessor.parse(markdown)
 
   return tree.children.flatMap((node) => {
