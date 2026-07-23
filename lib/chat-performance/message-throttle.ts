@@ -19,10 +19,12 @@
 /**
  * The value selected by the PR 2 local comparison (0/32/50/100 ms on the
  * deterministic streams; see docs/measurements/2026-07-23-pr2-throttle-selection.md).
- * Deployments enable the throttle by setting
- * `NEXT_PUBLIC_CHAT_MESSAGE_THROTTLE` to this value; the constant is the
- * recorded recommendation, not a runtime default — unset stays disabled so
- * the legacy path remains the build-time default through the soak.
+ * Since 2026-07-23 `next.config.ts` injects this value when the deployment
+ * leaves the env var unset (the §6 freeze hold was lifted —
+ * docs/measurements/2026-07-23-section6-freeze-rootcause.md), so Next builds
+ * ship throttled by default; an explicit `0` is the rollback. The RESOLVER
+ * still treats unset as disabled — non-Next consumers (unit tests, the bench
+ * harness) stay on the legacy path unless they opt in.
  */
 export const RECOMMENDED_CHAT_MESSAGE_THROTTLE_MS = 50
 

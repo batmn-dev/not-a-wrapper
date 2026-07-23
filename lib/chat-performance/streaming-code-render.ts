@@ -4,8 +4,15 @@
  * `NEXT_PUBLIC_STREAMING_CODE_RENDER_MODE` selects how the TERMINAL, still-
  * growing code block of a live message renders in `CodeBlockCode`:
  *
- * - `legacy` (default): the pre-PR-3 behavior — a full Shiki highlight for
- *   every (code, language, theme) change, growing or not. The rollback path.
+ * - `legacy` (resolver default): the pre-PR-3 behavior — a full Shiki
+ *   highlight for every (code, language, theme) change, growing or not. The
+ *   rollback path (set the env var to `legacy` explicitly). Note: since
+ *   2026-07-23 `next.config.ts` injects `throttled-highlight` when the
+ *   deployment leaves the var unset — it is the direct mitigation for the
+ *   large-block freeze/crash path
+ *   (docs/measurements/2026-07-23-section6-freeze-rootcause.md §5) — so Next
+ *   builds default to it while unit tests and non-Next consumers still
+ *   resolve unset to `legacy`.
  * - `throttled-highlight`: the growing block keeps its highlighted look but
  *   re-highlights at most once per `GROWING_HIGHLIGHT_THROTTLE_MS`; stale
  *   async completions are invalidated by generation token.
