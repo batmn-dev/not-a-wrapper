@@ -4,6 +4,11 @@
 - Date: 2026-06-25
 - Context: Architecture deepening — Convex function-call cost; branch `darknight/crime-alley`
 
+> **Status note (2026-07-23).** ADR-0005 subsequently replaced
+> `chats.getForCurrentUser` with the bounded-window reads, and the
+> `usePublicQuery` passthrough described below was removed because it never had
+> a caller. The authenticated per-user query and pagination seams remain active.
+
 ## Context
 
 Four app-wide live `useQuery` subscriptions accounted for ~900K of 927K Convex

@@ -5,6 +5,7 @@
 | Field           | Value                                                                                                                   |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | Status          | **Accepted — conservative scope** (2026-07-22): PR 0a → PR 1 → PR 0b (lean) → PR 2 → PR 3 (minimal) → PR 7a/7b. All other phases descoped to the ledger in section 6. |
+| Active scope    | **Complete** (2026-07-23); the PR 1/2/3/7b rollout flags were collapsed after verification. See [`docs/measurements/2026-07-23-flag-collapse.md`](../measurements/2026-07-23-flag-collapse.md). |
 | Reviewed commit | `d942ac9f23c844aef700332c5234581ee5ef1fb4`                                                                              |
 | Review date     | 2026-07-22                                                                                                              |
 | Attribution     | Codex planning agent, based on source inspection at the reviewed commit and the supplied independent benchmark findings |

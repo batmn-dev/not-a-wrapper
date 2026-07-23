@@ -26,11 +26,11 @@ accessors**, in two placements:
 - **Client-visible flags**: `NEXT_PUBLIC_*` env vars read in `lib/flags.ts`
   (or a dedicated module), inlined into the client bundle at build time.
   Examples: `NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION`,
-  `NEXT_PUBLIC_ENABLE_PAGINATED_SIDEBAR`.
+  `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION`.
 - **Server-only flags**: plain env vars read at call time — Next server code
-  reads `process.env` directly (`CHAT_PERF_SAMPLE_RATE`); Convex functions
-  read deployment env vars through `convex/lib/runtime_flags.ts`
-  (`CHAT_SINGLE_PASS_BRANCH_CONTEXT`).
+  reads `process.env` directly (`CHAT_PERF_SAMPLE_RATE`). No Convex runtime
+  flag remains after the 2026-07-23 collapse; a future one should use a
+  code-owned call-time accessor.
 
 Alternatives considered and rejected for now:
 
@@ -55,8 +55,8 @@ Alternatives considered and rejected for now:
 
 ## Future cohort experiments require re-admission
 
-No active phase uses percentage cohorts. PR 2 selects its throttle value by
-local comparison, then follows the deployment-wide progression in plan §9.2.
+No active phase uses percentage cohorts. The completed PR 1/2/3/7b work used
+the deployment-wide progression in plan §9.2 before its flags were removed.
 
 If future evidence justifies a cohort experiment, a fresh review must re-admit
 it and select an assignment, versioning, privacy, and rollback design.

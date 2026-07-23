@@ -5,6 +5,11 @@
 - Context: Architecture deepening — Convex function-call cost; branch `darknight/chat-list-window`
 - Related: ADR-0004 (per-user subscription seam — the lifecycle half of the same cost audit)
 
+> **Status note (2026-07-23).** The default-on rollback lever was removed after
+> its soak. The bounded window is now the sole sidebar path, and the legacy
+> full-list query was deleted. Rollback is `git revert`; see
+> `docs/measurements/2026-07-23-flag-collapse.md`.
+
 ## Context
 
 ADR-0004 closed the _subscription-lifecycle_ channel of the four dominant Convex
