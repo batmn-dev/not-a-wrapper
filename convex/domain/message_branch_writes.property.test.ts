@@ -12,7 +12,7 @@ import {
   createSeededRandom,
   hashValue,
   makeBenchMessage,
-} from "@/benchmarks/chat-performance/fixtures"
+} from "../../benchmarks/chat-performance/fixtures"
 import { afterEach, describe, expect, it } from "vitest"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx } from "../_generated/server"

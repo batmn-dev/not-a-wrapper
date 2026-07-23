@@ -15,7 +15,7 @@ import {
   hashValue,
   NAMED_BRANCH_FIXTURES,
   type BenchMessage,
-} from "@/benchmarks/chat-performance/fixtures"
+} from "../../benchmarks/chat-performance/fixtures"
 import { describe, expect, it } from "vitest"
 import type { Id } from "../_generated/dataModel"
 import * as candidate from "./message_branches"

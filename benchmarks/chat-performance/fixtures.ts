@@ -7,7 +7,7 @@
  * committable and legacy/candidate implementations can be compared exactly.
  * No wall-clock time is read anywhere — stream cadence is virtual (`atMs`).
  */
-import type { Doc, Id } from "@/convex/_generated/dataModel"
+import type { Doc, Id } from "../../convex/_generated/dataModel"
 import {
   createBranchContext,
   getBranchInfoForMessage,
@@ -18,7 +18,7 @@ import {
   getSelectedPathMessagesFromContext,
   type MessageBranchInfo,
   type MessageBranchPatch,
-} from "@/convex/domain/message_branches"
+} from "../../convex/domain/message_branches"
 
 export type BenchMessage = Doc<"messages">
 
