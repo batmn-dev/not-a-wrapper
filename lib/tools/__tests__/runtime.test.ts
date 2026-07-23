@@ -1,5 +1,5 @@
 import type { ServerInfo } from "@/lib/mcp/load-tools"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ToolPolicyError } from "../policy"
 // =============================================================================
 // Imports after mocks
@@ -830,5 +830,107 @@ describe("prepareToolRuntime — Tool outcome recording", () => {
 
     expect(recorded).toHaveLength(1)
     expect(runtime.outcomeSummary().totalToolCalls).toBe(1)
+  })
+})
+
+// =============================================================================
+// PR 7b — conditional Exa resolution (CHAT_CONDITIONAL_EXA)
+// =============================================================================
+
+describe("prepareToolRuntime — conditional Exa resolution (CHAT_CONDITIONAL_EXA)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  /** Run the same scenario with the flag off (legacy) then on (conditional),
+   * returning both runtimes plus the per-run Exa key read counts. */
+  async function runBothFlagStates(options: PrepareToolRuntimeOptions) {
+    vi.stubEnv("CHAT_CONDITIONAL_EXA", "false")
+    const legacy = await prepareToolRuntime(options)
+    const legacyExaReads = mocks.getEffectiveToolKeyWithMode.mock.calls.length
+    mocks.getEffectiveToolKeyWithMode.mockClear()
+    vi.stubEnv("CHAT_CONDITIONAL_EXA", "true")
+    const conditional = await prepareToolRuntime(options)
+    const conditionalExaReads =
+      mocks.getEffectiveToolKeyWithMode.mock.calls.length
+    return { legacy, conditional, legacyExaReads, conditionalExaReads }
+  }
+
+  function expectIdenticalExposure(a: ToolRuntime, b: ToolRuntime) {
+    expect(Object.keys(a.tools).sort()).toEqual(Object.keys(b.tools).sort())
+    expect(a.toolCounts).toEqual(b.toolCounts)
+    expect(a.policySummary.capabilities).toEqual(b.policySummary.capabilities)
+    expect(a.policySummary.earlyAllowedCount).toBe(
+      b.policySummary.earlyAllowedCount
+    )
+    expect(a.policySummary.lateAllowedCount).toBe(
+      b.policySummary.lateAllowedCount
+    )
+  }
+
+  it("zero Exa reads when no Exa-backed tool can be exposed; tool set unchanged", async () => {
+    // Door 1 closed: Layer 1 provides search. Door 2 closed: extract off.
+    mocks.getProviderTools.mockResolvedValue({
+      tools: { web_search: {} },
+      metadata: new Map([["web_search", meta({ source: "builtin" })]]),
+    })
+    const options = baseOptions({ modelTools: { extract: false } })
+
+    const { legacy, conditional, legacyExaReads, conditionalExaReads } =
+      await runBothFlagStates(options)
+
+    expect(legacyExaReads).toBe(1)
+    expect(conditionalExaReads).toBe(0)
+    expectIdenticalExposure(legacy, conditional)
+    expect(Object.keys(conditional.tools)).toEqual(["web_search"])
+
+    // Search toggle off as well → still zero reads.
+    mocks.getEffectiveToolKeyWithMode.mockClear()
+    const noSearch = await prepareToolRuntime(
+      baseOptions({ enableSearch: false, modelTools: { extract: false } })
+    )
+    expect(mocks.getEffectiveToolKeyWithMode).not.toHaveBeenCalled()
+    expect(Object.keys(noSearch.tools)).toEqual([])
+  })
+
+  it("extraction still resolves Exa when the search toggle is off", async () => {
+    mocks.getContentExtractionTools.mockResolvedValue({
+      tools: { extract_content: {} },
+      metadata: new Map([
+        ["extract_content", meta({ source: "third-party", readOnly: true })],
+      ]),
+    })
+    const options = baseOptions({ enableSearch: false, modelTools: true })
+
+    const { legacy, conditional, legacyExaReads, conditionalExaReads } =
+      await runBothFlagStates(options)
+
+    expect(legacyExaReads).toBe(1)
+    expect(conditionalExaReads).toBe(1)
+    expectIdenticalExposure(legacy, conditional)
+    expect(Object.keys(conditional.tools)).toEqual(["extract_content"])
+  })
+
+  it("Layer 2 search fallback resolves Exa and matches the legacy tool set", async () => {
+    mocks.getProviderTools.mockResolvedValue({ tools: {}, metadata: new Map() })
+    mocks.getThirdPartyTools.mockResolvedValue({
+      tools: { web_search: {} },
+      metadata: new Map([
+        ["web_search", meta({ source: "third-party", readOnly: true })],
+      ]),
+    })
+    const options = baseOptions({ modelTools: { extract: false } })
+
+    const { legacy, conditional, legacyExaReads, conditionalExaReads } =
+      await runBothFlagStates(options)
+
+    expect(legacyExaReads).toBe(1)
+    expect(conditionalExaReads).toBe(1)
+    expectIdenticalExposure(legacy, conditional)
+    expect(mocks.getThirdPartyTools).toHaveBeenLastCalledWith({
+      skipSearch: false,
+      exaKey: "exa_key",
+    })
+    expect(Object.keys(conditional.tools)).toEqual(["web_search"])
   })
 })
