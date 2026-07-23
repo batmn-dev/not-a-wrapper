@@ -4,13 +4,13 @@ import { isOptimisticChatId } from "../identity"
 import type { Chats } from "../types"
 
 // Optimistic updates layered over the server data (adds, updates, deletes).
-export type OptimisticAdd = { type: "add"; chat: Chats }
-export type OptimisticUpdate = {
+type OptimisticAdd = { type: "add"; chat: Chats }
+type OptimisticUpdate = {
   type: "update"
   id: string
   changes: Partial<Chats>
 }
-export type OptimisticDelete = { type: "delete"; id: string }
+type OptimisticDelete = { type: "delete"; id: string }
 export type OptimisticOperation =
   OptimisticAdd | OptimisticUpdate | OptimisticDelete
 

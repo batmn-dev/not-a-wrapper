@@ -13,12 +13,10 @@
  * site re-derives it with a different predicate (and none can forget it, the way
  * `userKeys.getProviderStatus` did).
  *
- * Public / share-link reads (no user concept, e.g. `chats.getPublicById`) go
- * through `usePublicQuery`, the explicit passthrough — the client mirror of the
- * server's public `query` sitting beside `maybeAuthQuery`. A `no-restricted-syntax`
- * lint rule bans importing `useQuery` from `convex/react` outside this module, so
- * every call site declares per-user vs public. This module is the one exempt
- * place that may import it.
+ * A `no-restricted-syntax` lint rule bans importing `useQuery` from
+ * `convex/react` outside this module. There is currently no public/share-link
+ * live client read; introduce a named public seam only when it has a real
+ * caller.
  */
 
 import {
@@ -34,7 +32,7 @@ import type { FunctionReference, FunctionReturnType } from "convex/server"
 
 type QueryRef = FunctionReference<"query">
 
-export type PerUserQueryResult<Query extends QueryRef> = {
+type PerUserQueryResult<Query extends QueryRef> = {
   /** The query result, or `undefined` while loading or gated out. */
   data: FunctionReturnType<Query> | undefined
   /** True once the Convex JWT is synced — the subscribe gate. */
@@ -87,17 +85,4 @@ export function usePerUserPaginatedQuery<Query extends PaginatedQueryReference>(
   const gatedArgs =
     isAuthenticated && args !== "skip" ? args : ("skip" as const)
   return usePaginatedQuery(query, gatedArgs, options)
-}
-
-/**
- * Subscribe to a genuinely-public Convex query (share links, public chats) with
- * no auth gate. The explicit escape hatch from the per-user taxonomy — naming it
- * is the point, so public intent is declared rather than implied by a bare
- * `useQuery`.
- */
-export function usePublicQuery<Query extends QueryRef>(
-  query: Query,
-  ...args: OptionalRestArgsOrSkip<Query>
-): FunctionReturnType<Query> | undefined {
-  return useQuery(query, ...args)
 }
