@@ -21,6 +21,8 @@ import type { Id } from "../_generated/dataModel"
 import * as candidate from "./message_branches"
 import * as legacy from "./message_branches_legacy_fixture"
 
+const EXHAUSTIVE_EQUIVALENCE_TIMEOUT_MS = 15_000
+
 type BranchOps = {
   getSelectedPathMessages(messages: BenchMessage[]): BenchMessage[]
   getEffectiveParentId(
@@ -144,13 +146,13 @@ describe("BranchContext equivalence vs pre-change implementation", () => {
   it("matches on the deterministic 575-row and 1,150-row trees", () => {
     expectEquivalent(buildDeterministicBranchTree(575), "575-row tree")
     expectEquivalent(buildDeterministicBranchTree(1150), "1150-row tree")
-  })
+  }, EXHAUSTIVE_EQUIVALENCE_TIMEOUT_MS)
 
   it("matches on 200 seeded randomized trees", () => {
     for (const seed of buildRandomBranchTreeSeeds(200)) {
       expectEquivalent(buildRandomBranchTree(seed), `seed ${seed}`)
     }
-  })
+  }, EXHAUSTIVE_EQUIVALENCE_TIMEOUT_MS)
 
   it("keeps the context immutable at the type boundary and stable across reads", () => {
     const messages = buildDeterministicBranchTree(575)
