@@ -15,9 +15,15 @@
  */
 "use client"
 
+import {
+  GROWING_HIGHLIGHT_DEBOUNCE_MS,
+  GROWING_HIGHLIGHT_THROTTLE_MS,
+  normalizeShikiLanguage,
+  resolveStreamingCodeRenderMode,
+} from "@/lib/chat-performance/streaming-code-render"
 import { cn } from "@/lib/utils"
 import { useTheme } from "next-themes"
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import type { Highlighter } from "shiki"
 import { createHighlighter } from "shiki"
 
@@ -100,38 +106,61 @@ export type CodeBlockCodeProps = {
   code: string
   language?: string
   className?: string
+  /**
+   * True only for the terminal code block of a live (submitted/streaming)
+   * message (plan PR 3 stability rule, classified in
+   * `components/ui/markdown.tsx`). Ignored by the `legacy` render mode.
+   */
+  growing?: boolean
 } & React.HTMLProps<HTMLDivElement>
+
+/** A completed highlight and the exact inputs it was produced from. */
+type HighlightedCode = {
+  html: string
+  code: string
+  language: string
+  theme: string
+}
 
 function CodeBlockCode({
   code,
   language = "tsx",
   className,
+  growing = false,
   ...props
 }: CodeBlockCodeProps) {
   const { resolvedTheme: appTheme } = useTheme()
-  const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null)
+  const theme = appTheme === "dark" ? "github-dark" : "github-light"
+  // Streaming-code render mode (plan PR 3): resolved once per mount; `legacy`
+  // is the default and the rollback path.
+  const [mode] = useState(() => resolveStreamingCodeRenderMode())
+  const [highlighted, setHighlighted] = useState<HighlightedCode | null>(null)
 
+  // Legacy mode — the pre-PR-3 effect, byte-for-byte semantics: one full
+  // highlight per (code, language, theme) change, exception-driven `text`
+  // fallback, stale HTML shown until the next completion lands.
   useEffect(() => {
+    if (mode !== "legacy") return
     let cancelled = false
 
     async function highlight() {
       if (!code) {
-        setHighlightedHtml(null)
+        setHighlighted(null)
         return
       }
 
       const highlighter = await getHighlighter()
-      const theme = appTheme === "dark" ? "github-dark" : "github-light"
+      const legacyTheme = appTheme === "dark" ? "github-dark" : "github-light"
 
       let html: string
       try {
-        html = highlighter.codeToHtml(code, { lang: language, theme })
+        html = highlighter.codeToHtml(code, { lang: language, theme: legacyTheme })
       } catch {
-        html = highlighter.codeToHtml(code, { lang: "text", theme })
+        html = highlighter.codeToHtml(code, { lang: "text", theme: legacyTheme })
       }
 
       if (!cancelled) {
-        setHighlightedHtml(html)
+        setHighlighted({ html, code, language, theme: legacyTheme })
       }
     }
     highlight()
@@ -139,7 +168,67 @@ function CodeBlockCode({
     return () => {
       cancelled = true
     }
-  }, [code, language, appTheme])
+  }, [code, language, appTheme, mode])
+
+  // Variant modes (plan PR 3). Stale async completions are invalidated by
+  // generation token in addition to the cleanup flag; unmount and every input
+  // change clear pending timers.
+  const generationRef = useRef(0)
+  // Wall-clock start of the last growing highlight, for the throttle window.
+  const lastGrowingHighlightAtRef = useRef(0)
+
+  useEffect(() => {
+    if (mode === "legacy") return
+    const generation = ++generationRef.current
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    // Empty code renders through the plain path (the display rule ignores any
+    // stale record); nothing to highlight and no state to reset.
+    if (!code) return
+
+    const runHighlight = async () => {
+      if (growing) {
+        lastGrowingHighlightAtRef.current = Date.now()
+      }
+      const highlighter = await getHighlighter()
+      if (cancelled || generation !== generationRef.current) return
+      // Loaded-language query instead of exception-driven fallback: unknown
+      // and plain ids normalize to Shiki's built-in `text` language.
+      const lang = normalizeShikiLanguage(
+        language,
+        highlighter.getLoadedLanguages()
+      )
+      const html = highlighter.codeToHtml(code, { lang, theme })
+      if (cancelled || generation !== generationRef.current) return
+      setHighlighted({ html, code, language, theme })
+    }
+
+    if (!growing) {
+      // Stable, settled, or become-non-terminal: highlight the final tuple.
+      void runHighlight()
+    } else if (mode === "throttled-highlight") {
+      // Growing: keep the highlighted look, at most one highlight per
+      // interval — leading edge immediately, then trailing.
+      const elapsed = Date.now() - lastGrowingHighlightAtRef.current
+      if (elapsed >= GROWING_HIGHLIGHT_THROTTLE_MS) {
+        void runHighlight()
+      } else {
+        timer = setTimeout(
+          () => void runHighlight(),
+          GROWING_HIGHLIGHT_THROTTLE_MS - elapsed
+        )
+      }
+    } else {
+      // plain-while-growing: highlight only after deltas pause.
+      timer = setTimeout(() => void runHighlight(), GROWING_HIGHLIGHT_DEBOUNCE_MS)
+    }
+
+    return () => {
+      cancelled = true
+      if (timer !== null) clearTimeout(timer)
+    }
+  }, [code, language, theme, growing, mode])
 
   // Captured code text metrics: 14px / 24px (0.875em at 1.71429), 20px inline
   // padding, 12px block padding; the container's card surface shows through.
@@ -148,11 +237,27 @@ function CodeBlockCode({
     className
   )
 
-  // SSR fallback: render plain code if not hydrated yet
-  return highlightedHtml ? (
+  // Display rule. legacy/throttled-highlight: latest completed highlight
+  // (throttled growth may lag the tail by at most one interval).
+  // plain-while-growing: highlighted HTML only when it matches the CURRENT
+  // inputs exactly — a later delta immediately returns the block to plain
+  // React-escaped text, never showing stale code.
+  const showHighlighted =
+    highlighted !== null &&
+    (mode === "legacy"
+      ? true // legacy manages its own state lifecycle, including the empty-code reset
+      : Boolean(code) &&
+        (mode !== "plain-while-growing" ||
+          (highlighted.code === code &&
+            highlighted.language === language &&
+            highlighted.theme === theme)))
+
+  // Plain path doubles as the SSR/pre-highlight fallback: React-escaped text
+  // in the same wrapper, so `<script>`-like content renders as text.
+  return showHighlighted ? (
     <div
       className={classNames}
-      dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+      dangerouslySetInnerHTML={{ __html: highlighted.html }}
       {...props}
     />
   ) : (
