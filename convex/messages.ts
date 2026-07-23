@@ -9,9 +9,7 @@ import {
 import { createMessageBranchWriter } from "./domain/message_branch_writes"
 import {
   createBranchContext,
-  getBranchInfoForMessage,
   getBranchInfoForMessageFromContext,
-  getSelectedPathMessages,
   getSelectedPathMessagesFromContext,
   type MessageBranchInfo,
 } from "./domain/message_branches"
@@ -20,7 +18,6 @@ import {
   normalizeMessagePartsForStorage,
 } from "./domain/message_parts"
 import { isVisibleChatMessage } from "./domain/message_visibility"
-import { isSinglePassBranchContextEnabled } from "./lib/runtime_flags"
 import { recordChatActivity } from "./domain/project_activity"
 import {
   getAuthorizedChatForRead,
@@ -66,23 +63,15 @@ function withBranchMetadata(
 }
 
 /**
- * Selected visible path plus branch descriptors. With
- * `CHAT_SINGLE_PASS_BRANCH_CONTEXT` on, the whole projection shares ONE
- * branch context (plan PR 1 step 3); off, it keeps the pre-PR-1 pattern of
- * one context build per helper call. Both paths run the same canonical
- * algorithm and return identical results.
+ * Selected visible path plus branch descriptors. The whole projection shares
+ * ONE branch context (plan PR 1 step 3; made unconditional in the 2026-07-23
+ * flag collapse after hash-identical equivalence held across every fixture).
  */
 function getVisibleSelectedMessages(messages: Doc<"messages">[]) {
-  if (isSinglePassBranchContextEnabled()) {
-    const context = createBranchContext(messages)
-    return withBranchMetadata(
-      getSelectedPathMessagesFromContext(context).filter(isVisibleChatMessage),
-      (message) => getBranchInfoForMessageFromContext(context, message)
-    )
-  }
+  const context = createBranchContext(messages)
   return withBranchMetadata(
-    getSelectedPathMessages(messages).filter(isVisibleChatMessage),
-    (message) => getBranchInfoForMessage(messages, message)
+    getSelectedPathMessagesFromContext(context).filter(isVisibleChatMessage),
+    (message) => getBranchInfoForMessageFromContext(context, message)
   )
 }
 

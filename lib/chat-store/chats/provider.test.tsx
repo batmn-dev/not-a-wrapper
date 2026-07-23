@@ -79,8 +79,9 @@ vi.mock("convex/react", () => ({
     convexMocks.useQuery(...args)
     return convexMocks.queryValue
   },
-  // ENABLE_PAGINATED_SIDEBAR defaults on. Guest tests remain unsubscribed, but
-  // the provider still calls the paginated hook with "skip", so it must exist.
+  // The bounded sidebar is the only read path (ADR-0005). Guest tests remain
+  // unsubscribed, but the provider still calls the paginated hook, so it must
+  // exist.
   usePaginatedQuery: () => ({
     results: [],
     status: "Exhausted" as const,

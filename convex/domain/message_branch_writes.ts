@@ -1,6 +1,5 @@
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx } from "../_generated/server"
-import { isSinglePassBranchContextEnabled } from "../lib/runtime_flags"
 import {
   createBranchContext,
   getEffectiveParentIdFromContext,
@@ -96,8 +95,8 @@ function asSimulatedDoc(
  * maps to a fresh array), so keying the cache by array reference is exactly
  * the plan's lifecycle rule: a context is never reused after any branch field
  * in its source array changes, and each logical array version is built at
- * most once. With the rollout flag off, every lookup rebuilds — the pre-PR-1
- * work pattern — so the flag is a pure consumption-pattern rollback lever.
+ * most once. (Unconditional since the 2026-07-23 flag collapse; the writer
+ * equivalence property tests pin exact parity with the pre-PR-1 writer.)
  */
 const contextByArrayVersion = new WeakMap<
   readonly ChatMessage[],
@@ -105,9 +104,6 @@ const contextByArrayVersion = new WeakMap<
 >()
 
 function contextFor(messages: ChatMessage[]): BranchContext {
-  if (!isSinglePassBranchContextEnabled()) {
-    return createBranchContext(messages)
-  }
   let context = contextByArrayVersion.get(messages)
   if (!context) {
     context = createBranchContext(messages)

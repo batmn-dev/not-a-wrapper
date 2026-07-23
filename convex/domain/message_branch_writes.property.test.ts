@@ -4,8 +4,9 @@
  * EXACTLY the pre-change writer's observable behavior — the ordered
  * patch/insert log (patch sets and `updatedAt` bumps included), the final
  * table state, the returned message, and thrown errors — for randomized
- * operation sequences over randomized starting trees, with the
- * `CHAT_SINGLE_PASS_BRANCH_CONTEXT` flag both off and on.
+ * operation sequences over randomized starting trees. (The rollout flag was
+ * removed in the 2026-07-23 flag collapse; the shared-context writer is the
+ * only writer, still pinned against the pre-PR-1 fixture oracle.)
  */
 import {
   buildRandomBranchTree,
@@ -13,7 +14,7 @@ import {
   hashValue,
   makeBenchMessage,
 } from "../../benchmarks/chat-performance/fixtures"
-import { afterEach, describe, expect, it } from "vitest"
+import { describe, expect, it } from "vitest"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx } from "../_generated/server"
 import { createMessageBranchWriter } from "./message_branch_writes"
@@ -190,37 +191,26 @@ function buildStartingTree(seed: number): ChatMessage[] {
   return buildRandomBranchTree(seed, { minRows: 4, maxRows: 24 })
 }
 
-afterEach(() => {
-  delete process.env.CHAT_SINGLE_PASS_BRANCH_CONTEXT
-})
-
 describe("branch writer equivalence vs pre-change writer", () => {
   const seeds = Array.from({ length: 60 }, (_, i) => 90210 + i * 131)
 
-  async function expectSequenceEquivalence(flagValue: "true" | undefined) {
+  it("matches the exact db op log, outcomes, and final state", async () => {
     for (const seed of seeds) {
       const initial = buildStartingTree(seed)
       const ops = buildOpSequence(seed, 8)
 
-      delete process.env.CHAT_SINGLE_PASS_BRANCH_CONTEXT
       const legacyRun = await runSequence(
         (ctx) => createLegacyMessageBranchWriter(ctx, { chatId, now: NOW }),
         initial,
         ops
       )
-
-      if (flagValue === undefined) {
-        delete process.env.CHAT_SINGLE_PASS_BRANCH_CONTEXT
-      } else {
-        process.env.CHAT_SINGLE_PASS_BRANCH_CONTEXT = flagValue
-      }
       const candidateRun = await runSequence(
         (ctx) => createMessageBranchWriter(ctx, { chatId, now: NOW }),
         initial,
         ops
       )
 
-      const label = `seed ${seed}, flag=${flagValue ?? "off"}`
+      const label = `seed ${seed}`
       if (hashValue(candidateRun) !== hashValue(legacyRun)) {
         expect(candidateRun.log, `${label}: db op log`).toEqual(legacyRun.log)
         expect(candidateRun.outcomes, `${label}: outcomes`).toEqual(
@@ -231,13 +221,5 @@ describe("branch writer equivalence vs pre-change writer", () => {
         )
       }
     }
-  }
-
-  it("matches the exact db op log, outcomes, and final state with the flag off", async () => {
-    await expectSequenceEquivalence(undefined)
-  })
-
-  it("matches the exact db op log, outcomes, and final state with the flag on", async () => {
-    await expectSequenceEquivalence("true")
   })
 })

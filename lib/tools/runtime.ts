@@ -41,14 +41,6 @@ import { sanitizeForJson } from "@/lib/tools/utils"
 import type { ToolKeyMode } from "@/lib/user-keys"
 import type { ToolApprovalStatus, ToolSet } from "ai"
 
-/**
- * PR 7b rollout flag — read at call time (never module scope) so a redeploy or
- * test can flip it without stale closures. Off = legacy unconditional read.
- */
-function isConditionalExaResolutionEnabled(): boolean {
-  return process.env.CHAT_CONDITIONAL_EXA === "true"
-}
-
 function serializeToolOutcomePreview(value: unknown): string | undefined {
   if (value === undefined) return undefined
   try {
@@ -349,14 +341,14 @@ async function buildToolRuntime(
   // -----------------------------------------------------------------------
   // Exa API key resolution (shared by Layer 2 capabilities)
   //
-  // Conditional resolution (plan PR 7b, behind CHAT_CONDITIONAL_EXA): every
-  // Exa-backed tool enters through exactly two doors — the Layer 2 search
-  // fallback (search injected AND Layer 1 yielded no provider-native search
-  // tools) and Layer 2 content extraction (the model's `extract` capability).
-  // Both facts are known before any secret lookup, so when neither door can
-  // open the key read is skipped entirely: built-in provider search never
-  // pays for Exa, while extraction still resolves the key even when the
-  // search toggle is off. Flag off = the legacy unconditional read.
+  // Conditional resolution (plan PR 7b; unconditional since the 2026-07-23
+  // flag collapse): every Exa-backed tool enters through exactly two doors —
+  // the Layer 2 search fallback (search injected AND Layer 1 yielded no
+  // provider-native search tools) and Layer 2 content extraction (the
+  // model's `extract` capability). Both facts are known before any secret
+  // lookup, so when neither door can open the key read is skipped entirely:
+  // built-in provider search never pays for Exa, while extraction still
+  // resolves the key even when the search toggle is off.
   // -----------------------------------------------------------------------
   const builtInHasSearch = Object.keys(builtInTools).length > 0
   const exaBackedToolPossible =
@@ -364,7 +356,7 @@ async function buildToolRuntime(
 
   let resolvedExaKey: string | undefined
   let resolvedExaKeyMode: ToolKeyMode | undefined
-  if (!isConditionalExaResolutionEnabled() || exaBackedToolPossible) {
+  if (exaBackedToolPossible) {
     const { getEffectiveToolKeyWithMode } = await import("@/lib/user-keys")
     const resolvedExa = await getEffectiveToolKeyWithMode("exa", convexToken)
     resolvedExaKey = resolvedExa.key

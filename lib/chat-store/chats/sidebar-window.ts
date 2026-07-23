@@ -119,26 +119,21 @@ export function partitionSidebarChats(chats: Chats[]): {
 }
 
 /**
- * The sidebar's loading state. With the flag off it means "the full chat list
- * has loaded" (legacy). With the flag on it means **"the first window page is
- * ready"** (not "all chats loaded") — so the sidebar paints as soon as the first
- * page + pinned arrive, and load-more streams the rest.
+ * The sidebar's loading state: **"the first window page is ready"** (not "all
+ * chats loaded") — the sidebar paints as soon as the first page + pinned
+ * arrive, and load-more streams the rest.
  */
 export function deriveSidebarLoading(params: {
   isConvexAuthLoading: boolean
   isConvexAuthenticated: boolean
-  paginated: boolean
-  /** Legacy path: chats.getForCurrentUser still undefined. */
-  fullListPending: boolean
-  /** Paginated path: first window page or pinned read not yet ready. */
+  /** First window page or pinned read not yet ready. */
   firstPagePending: boolean
   shouldUseLocalChats: boolean
   cachedChatsHydrated: boolean
 }): boolean {
   return (
     params.isConvexAuthLoading ||
-    (params.isConvexAuthenticated &&
-      (params.paginated ? params.firstPagePending : params.fullListPending)) ||
+    (params.isConvexAuthenticated && params.firstPagePending) ||
     (params.shouldUseLocalChats && !params.cachedChatsHydrated)
   )
 }

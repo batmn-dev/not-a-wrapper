@@ -13,7 +13,10 @@ exactly the capabilities documented here.
 > render path (see `docs/measurements/2026-07-23-flag-collapse.md`). This
 > seam remains the standard for flags that still exist
 > (`NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION`, `CHAT_PERF_SAMPLE_RATE`,
-> `CHAT_CONDITIONAL_EXA`, Convex runtime flags) and for future phases.
+> `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION`) and for future phases.
+> Round 2 of the collapse also removed `CHAT_SINGLE_PASS_BRANCH_CONTEXT`
+> (with `convex/lib/runtime_flags.ts` itself), `ENABLE_PAGINATED_SIDEBAR`,
+> and `CHAT_CONDITIONAL_EXA`.
 
 ## Selected seam: build/deploy-time environment flags
 

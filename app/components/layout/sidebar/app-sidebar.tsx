@@ -332,8 +332,8 @@ function SidebarExpandedNav({
   // Zero-rerender scroll tracking via data attributes
   useScrollAttributes(scrollRef)
 
-  // Bounded sidebar (ENABLE_PAGINATED_SIDEBAR): load more window pages as the
-  // user nears the bottom. No-op when the flag is off (canLoadMore is false).
+  // Bounded sidebar (ADR-0005): load more window pages as the user nears the
+  // bottom.
   const { canLoadMore, loadMore } = data
   useInfiniteScroll(scrollRef, canLoadMore, loadMore)
 

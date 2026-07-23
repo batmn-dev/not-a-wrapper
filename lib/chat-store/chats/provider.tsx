@@ -8,7 +8,6 @@ import {
   usePerUserQuery,
 } from "@/lib/convex/use-per-user-query"
 import type { Attachment } from "@/lib/file-handling"
-import { ENABLE_PAGINATED_SIDEBAR } from "@/lib/flags"
 import { resolveModelId } from "@/lib/models/model-id-migration"
 import { useConvexAuth, useMutation } from "convex/react"
 import {
@@ -47,13 +46,13 @@ import {
   type OptimisticOperation,
 } from "./sidebar-window"
 
-// The bounded sidebar (ENABLE_PAGINATED_SIDEBAR) can only safely drop the full
-// list because full-history search exists (ADR-0005) to reach out-of-window
-// chats. Referencing api.chats.searchByTitle here makes removing it a compile
-// error, so the sidebar can never be bounded without the search swap present.
-if (ENABLE_PAGINATED_SIDEBAR && !api.chats.searchByTitle) {
+// The bounded sidebar can only safely drop the full list because full-history
+// search exists (ADR-0005) to reach out-of-window chats. Referencing
+// api.chats.searchByTitle here makes removing it a compile error, so the
+// sidebar can never be bounded without the search swap present.
+if (!api.chats.searchByTitle) {
   throw new Error(
-    "ENABLE_PAGINATED_SIDEBAR requires chats.searchByTitle (history search)."
+    "The bounded sidebar requires chats.searchByTitle (history search)."
   )
 }
 
@@ -197,23 +196,19 @@ export function ChatsProvider({
     [authReadinessGate]
   )
 
-  // Sidebar reads. Both code paths' hooks are always called (rules of hooks);
-  // the inactive path passes "skip" so it never subscribes. Flag OFF: the full
-  // list. Flag ON: a bounded recency window (including project membership) + a
-  // small live pinned read, so a chat write no longer re-reads the whole
-  // collection and both sidebar grouping modes share one source.
-  const { data: convexChats } = usePerUserQuery(
-    api.chats.getForCurrentUser,
-    ENABLE_PAGINATED_SIDEBAR ? "skip" : {}
-  )
+  // Sidebar reads: a bounded recency window (including project membership) +
+  // a small live pinned read, so a chat write never re-reads the whole
+  // collection and both sidebar grouping modes share one source (ADR-0005;
+  // the legacy full-list subscription was removed in the 2026-07-23 flag
+  // collapse).
   const recentWindow = usePerUserPaginatedQuery(
     api.chats.getRecentWindowForCurrentUser,
-    ENABLE_PAGINATED_SIDEBAR ? {} : "skip",
+    {},
     { initialNumItems: SIDEBAR_WINDOW_PAGE_SIZE }
   )
   const { data: pinnedServerChats } = usePerUserQuery(
     api.chats.getPinnedForCurrentUser,
-    ENABLE_PAGINATED_SIDEBAR ? {} : "skip"
+    {}
   )
   // Convex mutations
   const createFirstTurnMutation = useMutation(api.chats.createWithFirstTurn)
@@ -222,20 +217,18 @@ export function ChatsProvider({
   const togglePinMutation = useMutation(api.chats.togglePin)
   const deleteChatMutation = useMutation(api.chats.remove)
 
-  // Convert Convex chats to unified format. Flag ON: the union of the recency
-  // window and the (full) pinned read, deduped — so pinned chats stay present
-  // even when they fall outside the window, and the optimistic overlay + sidebar
-  // partition both operate over the bounded set. Flag OFF: the full list.
-  const serverChats: Chats[] = useMemo(() => {
-    if (ENABLE_PAGINATED_SIDEBAR) {
-      return dedupeById([
+  // Convert Convex chats to unified format: the union of the recency window
+  // and the (full) pinned read, deduped — so pinned chats stay present even
+  // when they fall outside the window, and the optimistic overlay + sidebar
+  // partition both operate over the bounded set.
+  const serverChats: Chats[] = useMemo(
+    () =>
+      dedupeById([
         ...recentWindow.results.map(mapConvexChat),
         ...(pinnedServerChats ?? []).map(mapConvexChat),
-      ])
-    }
-    if (!convexChats) return []
-    return convexChats.map(mapConvexChat)
-  }, [convexChats, recentWindow.results, pinnedServerChats])
+      ]),
+    [recentWindow.results, pinnedServerChats]
+  )
 
   const cachedLocalChats = useSyncExternalStore(
     subscribeCachedChats,
@@ -253,9 +246,7 @@ export function ChatsProvider({
   const isLoading = deriveSidebarLoading({
     isConvexAuthLoading,
     isConvexAuthenticated,
-    paginated: ENABLE_PAGINATED_SIDEBAR,
-    fullListPending: convexChats === undefined,
-    // Paginated path: ready once the first window page AND pinned read arrive.
+    // Ready once the first window page AND pinned read arrive.
     firstPagePending:
       recentWindow.status === "LoadingFirstPage" ||
       pinnedServerChats === undefined,
@@ -617,14 +608,11 @@ export function ChatsProvider({
     [chats]
   )
 
-  // Load-more for the bounded sidebar window. No-op when the flag is off.
+  // Load-more for the bounded sidebar window.
   const loadMore = useCallback(() => {
-    if (ENABLE_PAGINATED_SIDEBAR) {
-      recentWindow.loadMore(SIDEBAR_WINDOW_PAGE_SIZE)
-    }
+    recentWindow.loadMore(SIDEBAR_WINDOW_PAGE_SIZE)
   }, [recentWindow])
-  const canLoadMore =
-    ENABLE_PAGINATED_SIDEBAR && recentWindow.status === "CanLoadMore"
+  const canLoadMore = recentWindow.status === "CanLoadMore"
 
   return (
     <>
