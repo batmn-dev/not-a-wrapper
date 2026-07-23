@@ -882,8 +882,10 @@ Active phases only. Files touched exclusively by descoped phases are intentional
 | 1       | `convex/chatRuntime.ts`                                  | Reuse context in prepare/history selection                                      | High   | prepare/selected-token/model history       |
 | 1       | `convex/lib/runtime_flags.ts`                            | `CHAT_SINGLE_PASS_BRANCH_CONTEXT` call-time env getter                          | Low    | On/off same-output tests                   |
 | 1       | `convex/branchContextShadow.ts`                          | Hand-invoked internal shadow compare (counts/hashes only, non-reactive)         | Low    | Serialization stability                    |
-| 2       | `lib/chat-performance/message-throttle.ts`               | Throttle value constant and flag resolution                                     | Low    | Value/0-disable/stability                  |
-| 2       | `app/components/chat/use-chat-core.ai-sdk-seam.test.tsx` | Extend existing seam test: pin throttle with supplied `Chat`                    | Low    | Fake timers/final update                   |
+| 2       | `lib/chat-performance/message-throttle.ts`               | Throttle value constant and flag resolution (landed 2026-07-23; selected 50 ms) | Low    | Value/0-disable/stability                  |
+| 2       | `lib/chat-performance/message-throttle.test.ts`          | Flag-resolution tests (value applied, 0/unset/invalid disable, range guard)     | Low    | Resolver matrix                            |
+| 2       | `app/components/chat/use-chat-core.ai-sdk-seam.test.tsx` | Extended seam test: fake-timer 0/32/50/100 matrix, immediacy, Stop, approval    | Low    | Fake timers/final update                   |
+| 2       | `docs/measurements/2026-07-23-pr2-throttle-selection.md` | Selection record: matrix, 50 ms rationale, gates, staging caveat                | Low    | Link/check review                          |
 | 3       | `app/components/chat/message-assistant.tsx`              | Pass live render status to Markdown                                             | Medium | Status/Stop/error rendering                |
 | 3       | `components/ui/message.tsx`                              | Carry Markdown streaming metadata                                               | Low    | Prop/default behavior                      |
 | 7a      | `lib/user-keys.ts`                                       | One credential-resolution fact; delete deprecated `getUserKey` stub             | High   | BYOK/platform/free/missing/decrypt         |

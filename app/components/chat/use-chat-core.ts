@@ -23,6 +23,7 @@ import {
 import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
 import { routePersistsChatMessages } from "@/lib/chat-turn/turn-store"
 import { attachStagedFilesToChat } from "@/lib/file-handling"
+import { resolveChatMessageThrottleMs } from "@/lib/chat-performance/message-throttle"
 import { ENABLE_DURABLE_RUN_PRESENTATION } from "@/lib/flags"
 import { isChatPerfClientEnabled } from "@/lib/observability/chat-performance"
 import {
@@ -277,6 +278,12 @@ export function useChatCore({
     api: API_ROUTE_CHAT,
   })
 
+  // Message-notification throttle (plan PR 2): resolved ONCE per mount so the
+  // subscription's interval never changes mid-stream. The SDK applies it to
+  // the messages callback only — status/error subscriptions, onFinish, Stop,
+  // and approval mutations stay immediate — and 0 disables it (rollback path).
+  const [messageThrottleMs] = useState(() => resolveChatMessageThrottleMs())
+
   const {
     messages,
     sendMessage,
@@ -286,7 +293,7 @@ export function useChatCore({
     stop,
     setMessages,
     addToolApprovalResponse,
-  } = useChat({ chat: detachableStream.chat })
+  } = useChat({ chat: detachableStream.chat, throttle: messageThrottleMs })
 
   // The local stream's assistant identity: durable runs stream the durable
   // assistantMessageId as the SDK message id, so this match is exact. Known
