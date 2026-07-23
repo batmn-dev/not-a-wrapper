@@ -1,3 +1,4 @@
+import type { ChatPerfServerSession } from "@/lib/observability/chat-performance"
 import { createHash, randomBytes } from "node:crypto"
 import { api } from "@/convex/_generated/api"
 import type { Doc, Id } from "@/convex/_generated/dataModel"
@@ -187,6 +188,8 @@ export type DurableTurnDeps = {
   fetchMutation: typeof defaultFetchMutation
   workerWire?: DurableWorkerWire
   settleRetryDelaysMs?: number[]
+  /** Sampled chat-performance session (PR 0b) — checkpoint counters only. */
+  perf?: ChatPerfServerSession
 }
 
 /**
@@ -1285,31 +1288,56 @@ export function createConvexDurableTurn(args: {
         order: generation.assistantOrder,
       }
       snapshotTracker = createDurableSnapshotTracker({
-        persist: (snapshotArgs) =>
-          workerWrite("updateAssistantSnapshot", {
+        persist: (snapshotArgs) => {
+          // Checkpoint counters (PR 0b step 5): attempts/accepted/lost/failed
+          // plus cumulative payload bytes. Sizes and enums only — the
+          // serialization happens only when this request is sampled.
+          const perfSession = deps.perf
+          if (perfSession?.sampled) {
+            let payloadBytes = snapshotArgs.textSnapshot.length
+            try {
+              payloadBytes += JSON.stringify(snapshotArgs.partsSnapshot).length
+            } catch {
+              // Size estimate only; never fail a checkpoint for telemetry.
+            }
+            perfSession.counter("attempt", payloadBytes)
+          }
+          // Single two-handler then(): the rejection handler must attach at
+          // the same microtask depth as the pre-instrumentation `.catch` —
+          // revocation discovery aborts execution, and consumers observe that
+          // abort immediately after the write settles.
+          return workerWrite("updateAssistantSnapshot", {
             ...snapshotBase,
             ...snapshotArgs,
-          }).catch((error: unknown) => {
-            // Snapshot writes discover revocation too (a Stop race lands
-            // between beats). Unauthorized = the run settled elsewhere and its
-            // content froze at that terminal — this write is moot, absorb it
-            // instead of cascading write-failure noise. Expiry keeps
-            // propagating: content survival is genuinely at risk there.
-            if (
-              error instanceof DurableWorkerWriteError &&
-              error.grantRejection === "grant_unauthorized"
-            ) {
-              noteGrantRejection("grant_unauthorized", "assistant-snapshot")
-              return { ok: false, skipped: "grant_authority_lost" }
-            }
-            if (
-              error instanceof DurableWorkerWriteError &&
-              error.grantRejection === "grant_expired"
-            ) {
-              noteGrantRejection("grant_expired", "assistant-snapshot")
-            }
-            throw error
-          }),
+          }).then(
+            (written) => {
+              perfSession?.counter("accepted")
+              return written
+            },
+            (error: unknown) => {
+              // Snapshot writes discover revocation too (a Stop race lands
+              // between beats). Unauthorized = the run settled elsewhere and its
+              // content froze at that terminal — this write is moot, absorb it
+              // instead of cascading write-failure noise. Expiry keeps
+              // propagating: content survival is genuinely at risk there.
+              if (
+                error instanceof DurableWorkerWriteError &&
+                error.grantRejection === "grant_unauthorized"
+              ) {
+                noteGrantRejection("grant_unauthorized", "assistant-snapshot")
+                perfSession?.counter("authority_lost")
+                return { ok: false, skipped: "grant_authority_lost" }
+              }
+              if (
+                error instanceof DurableWorkerWriteError &&
+                error.grantRejection === "grant_expired"
+              ) {
+                noteGrantRejection("grant_expired", "assistant-snapshot")
+              }
+              perfSession?.counter("failed")
+              throw error
+            })
+        },
       })
 
       // The lease was born inside prepareGeneration; the loop keeps it fresh
@@ -1485,6 +1513,7 @@ export function createConvexDurableTurn(args: {
                   tags: { chat_route: "/api/chat" },
                   extra: { requestId, chatId, runId: currentRunId, reason },
                 })
+                deps.perf?.counter("settlement_receipt_degraded")
                 return {
                   status: "degraded" as const,
                   runId: currentRunId,
@@ -1513,6 +1542,7 @@ export function createConvexDurableTurn(args: {
               // abort, whose terminal write never carries parts) leaves the
               // full answer on the message doc, not just the throttled
               // text/reasoning subset.
+              deps.perf?.counter("final_flush")
               await tracker
                 .flushFinal(
                   getFinalAssistantText(responseMessage),
@@ -1530,6 +1560,7 @@ export function createConvexDurableTurn(args: {
               if (isAborted) {
                 const aborted = await markRunAborted("ui message stream aborted")
                 if (aborted === "failed") return degrade("abort write failed")
+                deps.perf?.counter("settlement_receipt_confirmed")
                 return {
                   status: "confirmed" as const,
                   runId: currentRunId,
@@ -1574,6 +1605,7 @@ export function createConvexDurableTurn(args: {
                 return degrade("completion write failed after retries")
               }
 
+              deps.perf?.counter("settlement_receipt_confirmed")
               return {
                 status: "confirmed" as const,
                 runId: currentRunId,

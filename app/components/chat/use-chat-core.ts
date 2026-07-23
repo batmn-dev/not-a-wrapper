@@ -24,6 +24,11 @@ import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
 import { routePersistsChatMessages } from "@/lib/chat-turn/turn-store"
 import { attachStagedFilesToChat } from "@/lib/file-handling"
 import { ENABLE_DURABLE_RUN_PRESENTATION } from "@/lib/flags"
+import { isChatPerfClientEnabled } from "@/lib/observability/chat-performance"
+import {
+  beginChatPerfTurn,
+  useChatTurnPerfMarks,
+} from "@/lib/observability/chat-performance-client"
 import { API_ROUTE_CHAT } from "@/lib/routes"
 import type { UserProfile } from "@/lib/user/types"
 import type { UIMessage } from "@ai-sdk/react"
@@ -292,6 +297,37 @@ export function useChatCore({
     }
     return null
   }, [messages, status])
+
+  // Turn marks (PR 0b) — every input below is derived only when the
+  // build-time instrumentation flag is on; the hook is a no-op otherwise.
+  const chatPerfTurnFacts = useMemo(() => {
+    if (!isChatPerfClientEnabled()) {
+      return {
+        hasVisibleAssistantText: false,
+        lastUserMessageId: undefined as string | undefined,
+      }
+    }
+    let hasVisibleAssistantText = false
+    let lastUserMessageId: string | undefined
+    for (let index = messages.length - 1; index >= 0; index--) {
+      const message = messages[index]
+      if (!hasVisibleAssistantText && message.role === "assistant") {
+        hasVisibleAssistantText = message.parts.some(
+          (part) => part.type === "text" && part.text.length > 0
+        )
+      }
+      if (!lastUserMessageId && message.role === "user") {
+        lastUserMessageId = message.id
+      }
+      if (hasVisibleAssistantText && lastUserMessageId) break
+    }
+    return { hasVisibleAssistantText, lastUserMessageId }
+  }, [messages])
+  useChatTurnPerfMarks({
+    status,
+    hasVisibleAssistantText: chatPerfTurnFacts.hasVisibleAssistantText,
+    lastUserMessageId: chatPerfTurnFacts.lastUserMessageId,
+  })
 
   const { selectedRun } = useMessages()
   const connectionState = useConvexConnectionState()
@@ -678,6 +714,10 @@ export function useChatCore({
   const submit = useCallback(
     async ({ text, files, attachments }: ChatTurnPayload): Promise<boolean> => {
       const submittedFiles = [...files]
+
+      // Fresh per-turn correlation id + chat_send_intent mark (no-op unless
+      // instrumentation is enabled); the transport consumes the armed header.
+      beginChatPerfTurn()
 
       let accepted = false
       await chatTurn.runSendTurn({

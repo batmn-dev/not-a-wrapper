@@ -4,6 +4,9 @@ import {
   consumeLocallyResolvedApprovals,
   restoreLocallyResolvedApprovals,
 } from "@/lib/chat-runs/approval-auto-send-gate"
+import { LOCAL_CHAT_ID_PREFIX } from "@/lib/chat-store/identity"
+import { markChatPerf } from "@/lib/observability/chat-performance"
+import { takeChatPerfHeader } from "@/lib/observability/chat-performance-client"
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
@@ -90,7 +93,10 @@ class AcceptanceAwareChatTransport extends DefaultChatTransport<UIMessage> {
     private readonly acceptances: RequestAcceptanceRegistry,
     api: string
   ) {
-    super({ api })
+    // One-shot chat-perf correlation header (PR 0b): resolves to an empty
+    // object unless instrumentation is enabled AND a turn armed an id — so a
+    // continuation request never reuses a prior turn's correlation id.
+    super({ api, headers: () => takeChatPerfHeader() })
   }
 
   override async sendMessages(
@@ -126,6 +132,40 @@ type DetachableChatStreamOwner = {
   ) => Promise<void>
 }
 
+/**
+ * Detached-binding gauges (PR 0b step 7): enumerable counts beside the
+ * WeakMap lifecycle (which is deliberately non-enumerable). Counts and class
+ * enums only — no chat ids or content ever leave through these marks, and
+ * emission is a no-op unless client instrumentation is enabled.
+ */
+let attachedBindingCount = 0
+let detachedBindingCount = 0
+
+function classifyBindingChat(
+  chatId: string | null
+): "durable" | "guest" | "unowned" {
+  if (chatId === null) return "unowned"
+  return chatId.startsWith(LOCAL_CHAT_ID_PREFIX) ? "guest" : "durable"
+}
+
+function emitBindingGauge(
+  event:
+    | "created"
+    | "detached"
+    | "adopted"
+    | "finished_attached"
+    | "finished_detached"
+    | "watchdog_stop",
+  chatId: string | null
+) {
+  markChatPerf("detached_binding_gauge", {
+    event,
+    attachedCount: attachedBindingCount,
+    detachedCount: detachedBindingCount,
+    bindingClass: classifyBindingChat(chatId),
+  })
+}
+
 function createDetachableChatStreamOwner(
   streamTimeoutMs: number,
   api: string
@@ -150,10 +190,13 @@ function createDetachableChatStreamOwner(
     if (!lifecycle || !handlers) return
     if (lifecycle.state === "detached") {
       clearWatchdog(binding)
+      detachedBindingCount = Math.max(0, detachedBindingCount - 1)
+      emitBindingGauge("finished_detached", lifecycle.originChatId)
       void handlers.onDetachedFinish(lifecycle.originChatId, event)
       return
     }
     lifecycle.finished = true
+    emitBindingGauge("finished_attached", lifecycle.ownerChatId)
     void handlers.onAttachedFinish(event)
   }
 
@@ -177,6 +220,8 @@ function createDetachableChatStreamOwner(
         ownerChatId,
         finished: false,
       })
+      attachedBindingCount += 1
+      emitBindingGauge("created", ownerChatId)
       // Ids consumed by the LAST armed auto-send, held until its outcome is
       // known: an errored dispatch restores them (the SDK never re-evaluates
       // its predicate on error, and the approval is already resolved durably
@@ -228,9 +273,18 @@ function createDetachableChatStreamOwner(
         watchdog: null,
       }
       lifecycles.set(binding, detached)
-      if (lifecycle.finished) return
+      attachedBindingCount = Math.max(0, attachedBindingCount - 1)
+      if (lifecycle.finished) {
+        emitBindingGauge("detached", detached.originChatId)
+        return
+      }
+      detachedBindingCount += 1
+      emitBindingGauge("detached", detached.originChatId)
       detached.watchdog = setTimeout(() => {
         detached.watchdog = null
+        // Count is settled by the stop's own finish routing (routeFinish
+        // decrements on finished_detached); this gauge only records the fire.
+        emitBindingGauge("watchdog_stop", detached.originChatId)
         binding.chat.stop()
       }, streamTimeoutMs)
     },
@@ -239,6 +293,7 @@ function createDetachableChatStreamOwner(
       const lifecycle = lifecycles.get(binding)
       if (lifecycle?.state === "attached" && lifecycle.ownerChatId === null) {
         lifecycle.ownerChatId = chatId
+        emitBindingGauge("adopted", chatId)
       }
     },
 

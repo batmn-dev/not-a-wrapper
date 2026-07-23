@@ -60,6 +60,59 @@ describe("secret value detection", () => {
   })
 })
 
+describe("chat-performance scrub corpus (plan PR 0b step 8)", () => {
+  it("catches WorkOS-style session/access tokens behind Bearer schemes", () => {
+    for (const leak of [
+      "Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6InNzb19vaWRjX2tleV9wYWlyIn0.payload.sig",
+      "Bearer wos_session_abcdefghijklmnop",
+    ]) {
+      expect(containsSecret(leak)).toBe(true)
+    }
+  })
+
+  it("redacts MCP authorization headers by key name", () => {
+    const event = {
+      contexts: {
+        mcp_request: {
+          serverUrl: "https://mcp.example.com",
+          authorization: "Bearer mcp-server-token-000111222333",
+        },
+      },
+    }
+    const scrubbed = sentryBeforeSend(event) as typeof event
+    expect(scrubbed.contexts.mcp_request.authorization).toBe("[REDACTED]")
+  })
+
+  it("redacts prompt/output-like AI telemetry paths regardless of content", () => {
+    // Root-level AI telemetry paths — the shape sentryBeforeSendSpan sees.
+    const event = {
+      ai: { prompt: { messages: [{ role: "user", content: "my prompt" }] } },
+      gen_ai: {
+        response: { text: "assistant output text" },
+        tool: {
+          call: {
+            arguments: { query: "tool input text" },
+            result: { snippet: "tool output text" },
+          },
+        },
+      },
+    }
+    const flattened = JSON.stringify(sentryBeforeSend(event))
+    expect(flattened).not.toContain("my prompt")
+    expect(flattened).not.toContain("assistant output text")
+    expect(flattened).not.toContain("tool input text")
+    expect(flattened).not.toContain("tool output text")
+  })
+
+  it("redacts provider keys and grants inside attachment-URL-shaped strings", () => {
+    const leak =
+      "https://files.example.com/att/1?sig=9f8b1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c"
+    expect(redactSecretsInString(leak)).not.toContain(
+      "9f8b1c2d3e4a5b6c7d8e9f0a1b2c3d4e"
+    )
+  })
+})
+
 describe("sentryBeforeSend", () => {
   it("redacts a key embedded in an exception message (value-level, innocuous path)", () => {
     const event = {

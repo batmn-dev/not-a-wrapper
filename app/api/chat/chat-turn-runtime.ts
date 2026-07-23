@@ -64,6 +64,10 @@ import { adaptHistoryForProvider } from "./adapters"
 import type { AdaptationContext, AdaptationWarning } from "./adapters/types"
 import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
 import {
+  createChatPerfServerSession,
+  type ChatPerfServerSession,
+} from "@/lib/observability/chat-performance"
+import {
   createDurableTurnRuntime,
   isDurableConvexChat,
   type DurableStreamBinding,
@@ -118,6 +122,12 @@ export type ChatTurnInput = {
   anonymousId: string | undefined
   isAuthenticated: boolean
   convexToken: string | undefined
+  /**
+   * Sampled chat-performance session (PR 0b). Absent/no-op by default; when
+   * sampled it wraps preparation stages in content-free spans and receives
+   * checkpoint counters from the durable runtime.
+   */
+  perf?: ChatPerfServerSession
 }
 
 /**
@@ -331,6 +341,8 @@ export function createChatTurnRuntime(args: {
     isAuthenticated,
     convexToken,
   } = input
+  // No-op unless the route sampled this request (rate 0 short-circuits).
+  const perf = input.perf ?? createChatPerfServerSession(null, { rate: 0 })
 
   // Lifecycle guard — the runtime is one-shot. `prepare()` and `toResponse()`
   // may each run at most once, in order, so a repeated call can never open a
@@ -360,6 +372,7 @@ export function createChatTurnRuntime(args: {
       fetchMutation: deps.fetchMutation,
       workerWire: deps.durableWorkerWire,
       settleRetryDelaysMs: deps.durableSettleRetryDelaysMs,
+      perf,
     },
   })
 
@@ -433,9 +446,11 @@ export function createChatTurnRuntime(args: {
     Sentry.setTag("chat_provider", resolvedProvider)
 
     const { getEffectiveProviderApiKey } = await import("@/lib/user-keys")
-    const keyResolution = await getEffectiveProviderApiKey(
-      resolvedProvider,
-      isAuthenticated ? convexToken : undefined
+    const keyResolution = await perf.span("credential_resolution", () =>
+      getEffectiveProviderApiKey(
+        resolvedProvider,
+        isAuthenticated ? convexToken : undefined
+      )
     )
     const apiKey = keyResolution.apiKey
     credentialSource = keyResolution.source
@@ -497,7 +512,8 @@ export function createChatTurnRuntime(args: {
     // decisions — all behind one interface. It owns the stream-lifecycle hooks
     // (`prepareStep`, `onStepFinish`) the turn composes with durable persistence.
     // -----------------------------------------------------------------------
-    const tool = await prepareToolRuntime({
+    const tool = await perf.span("tool_preparation", () =>
+      prepareToolRuntime({
       isAuthenticated,
       convexToken,
       anonymousId,
@@ -511,7 +527,8 @@ export function createChatTurnRuntime(args: {
         openedMcpClientCount = clientCount
       },
       outcomeSinks,
-    })
+      })
+    )
     toolRuntime = tool
     // Backstop registration only (see disposeTurnResources): a started,
     // unsettled stream skips this — its settlement path disposes — because
@@ -547,9 +564,11 @@ export function createChatTurnRuntime(args: {
     })
 
     // Durable prepare returns canonical history and rejects invalid turn input.
-    let canonicalMessages = await durableTurn.prepare({
-      provider: resolvedProvider,
-    })
+    let canonicalMessages = await perf.span("durable_prepare", () =>
+      durableTurn.prepare({
+        provider: resolvedProvider,
+      })
+    )
 
     // History system messages are untrusted artifacts; trusted instructions use
     // streamText's separate `instructions` input.
@@ -568,12 +587,14 @@ export function createChatTurnRuntime(args: {
     }
     canonicalMessages = systemRoleExclusion.messages
 
-    const validatedMessages = await validateUIMessages({
-      messages: canonicalMessages,
-      tools: tool.tools as unknown as Parameters<
-        typeof validateUIMessages
-      >[0]["tools"],
-    })
+    const validatedMessages = await perf.span("message_validation", () =>
+      validateUIMessages({
+        messages: canonicalMessages,
+        tools: tool.tools as unknown as Parameters<
+          typeof validateUIMessages
+        >[0]["tools"],
+      })
+    )
 
     const textFileReferences = getTextFilePartReferences(validatedMessages)
     const trustedTextAttachments =
@@ -1050,6 +1071,10 @@ export function createChatTurnRuntime(args: {
     }
 
     const streamText = deps.streamText
+
+    // Request-to-provider-start (plan §7.4): request receipt → immediately
+    // before provider consumption begins. Content-free; no-op unless sampled.
+    perf.record("stream_start", Date.now() - turnStartedAtMs)
 
     const runGeneration = (braintrustSpan: BraintrustTraceSpan) =>
       streamText({
