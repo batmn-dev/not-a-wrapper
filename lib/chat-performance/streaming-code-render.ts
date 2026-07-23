@@ -1,63 +1,39 @@
 /**
- * Streaming code rendering mode (chat-responsiveness plan, PR 3).
+ * Streaming code rendering (chat-responsiveness plan, PR 3).
  *
- * `NEXT_PUBLIC_STREAMING_CODE_RENDER_MODE` selects how the TERMINAL, still-
- * growing code block of a live message renders in `CodeBlockCode`:
+ * The TERMINAL, still-growing code block of a live message keeps its
+ * highlighted look but re-highlights at most once per
+ * `GROWING_HIGHLIGHT_THROTTLE_MS` (leading edge immediately, then trailing);
+ * settled, non-terminal, and non-live blocks highlight immediately. Stale
+ * async completions are invalidated by generation token in
+ * `components/ui/code-block.tsx`; the stability classification (terminal
+ * block of a streaming message) lives in `components/ui/markdown.tsx`.
  *
- * - `legacy` (resolver default): the pre-PR-3 behavior — a full Shiki
- *   highlight for every (code, language, theme) change, growing or not. The
- *   rollback path (set the env var to `legacy` explicitly). Note: since
- *   2026-07-23 `next.config.ts` injects `throttled-highlight` when the
- *   deployment leaves the var unset — it is the direct mitigation for the
- *   large-block freeze/crash path
- *   (docs/measurements/2026-07-23-section6-freeze-rootcause.md §5) — so Next
- *   builds default to it while unit tests and non-Next consumers still
- *   resolve unset to `legacy`.
- * - `throttled-highlight`: the growing block keeps its highlighted look but
- *   re-highlights at most once per `GROWING_HIGHLIGHT_THROTTLE_MS`; stale
- *   async completions are invalidated by generation token.
- * - `plain-while-growing`: the growing block renders as escaped React text;
- *   an inactivity debounce (`GROWING_HIGHLIGHT_DEBOUNCE_MS`) highlights it if
- *   deltas pause, and any later delta immediately returns it to plain.
- *
- * Settled, non-terminal, and non-live blocks highlight normally in every
- * mode. The stability classification itself (terminal block + live message)
- * lives in `components/ui/markdown.tsx`; this module owns only the flag seam
- * and the measurement constants.
- *
- * Seam contract (docs/chat-performance-rollout-seam.md): build-time env flag,
- * redeploy to change, resolved once per mount by consumers.
+ * This is the sole behavior since the 2026-07-23 pre-launch flag collapse.
+ * The former `NEXT_PUBLIC_STREAMING_CODE_RENDER_MODE` flag and its other two
+ * modes were removed after verification: `legacy` (full re-highlight per
+ * delta) froze and crashed tabs on large code streams, and
+ * `plain-while-growing` lost the variant bake-off on ChatGPT-fidelity
+ * (docs/measurements/2026-07-23-pr3-streaming-code-decision.md,
+ * 2026-07-23-pr2-pr3-verification.md,
+ * 2026-07-23-section6-freeze-rootcause.md). Note the throttled highlight only
+ * bounds Shiki work — the per-delta React commit cost is bounded by the
+ * message throttle (`lib/chat-performance/message-throttle.ts`); the
+ * mode-only cell without it froze like legacy
+ * (2026-07-23-perf-followup-measurements.md §3).
  */
-
-export type StreamingCodeRenderMode =
-  | "legacy"
-  | "throttled-highlight"
-  | "plain-while-growing"
 
 /**
- * Re-highlight interval for `throttled-highlight`. A named constant for
- * measurement comparability — deliberately not a public product setting
- * (plan PR 3 flag note).
+ * Re-highlight interval for the growing terminal block. A named constant for
+ * measurement comparability — deliberately not a public product setting.
  */
 export const GROWING_HIGHLIGHT_THROTTLE_MS = 300
-
-/** Inactivity debounce for `plain-while-growing` (initial experimental value). */
-export const GROWING_HIGHLIGHT_DEBOUNCE_MS = 150
-
-/** Unknown or invalid flag values fail safe to `legacy`. */
-export function resolveStreamingCodeRenderMode(
-  raw: string | undefined = process.env.NEXT_PUBLIC_STREAMING_CODE_RENDER_MODE
-): StreamingCodeRenderMode {
-  return raw === "throttled-highlight" || raw === "plain-while-growing"
-    ? raw
-    : "legacy"
-}
 
 /**
  * Language ids Shiki treats as the built-in plain language; they need no
  * grammar and never load. Everything else must be a loaded language (aliases
  * included — `getLoadedLanguages()` registers them) or it normalizes to
- * `text`, replacing the legacy path's exception-driven fallback.
+ * `text`, replacing the old exception-driven fallback.
  */
 const PLAIN_LANGUAGE_IDS = new Set(["", "plain", "plaintext", "text", "txt"])
 

@@ -16,10 +16,8 @@
 "use client"
 
 import {
-  GROWING_HIGHLIGHT_DEBOUNCE_MS,
   GROWING_HIGHLIGHT_THROTTLE_MS,
   normalizeShikiLanguage,
-  resolveStreamingCodeRenderMode,
 } from "@/lib/chat-performance/streaming-code-render"
 import { cn } from "@/lib/utils"
 import { useTheme } from "next-themes"
@@ -109,18 +107,12 @@ export type CodeBlockCodeProps = {
   /**
    * True only for the terminal code block of a live (submitted/streaming)
    * message (plan PR 3 stability rule, classified in
-   * `components/ui/markdown.tsx`). Ignored by the `legacy` render mode.
+   * `components/ui/markdown.tsx`). Growing blocks re-highlight at most once
+   * per `GROWING_HIGHLIGHT_THROTTLE_MS`; everything else highlights
+   * immediately.
    */
   growing?: boolean
 } & React.HTMLProps<HTMLDivElement>
-
-/** A completed highlight and the exact inputs it was produced from. */
-type HighlightedCode = {
-  html: string
-  code: string
-  language: string
-  theme: string
-}
 
 function CodeBlockCode({
   code,
@@ -131,60 +123,20 @@ function CodeBlockCode({
 }: CodeBlockCodeProps) {
   const { resolvedTheme: appTheme } = useTheme()
   const theme = appTheme === "dark" ? "github-dark" : "github-light"
-  // Streaming-code render mode (plan PR 3): resolved once per mount; `legacy`
-  // is the default and the rollback path.
-  const [mode] = useState(() => resolveStreamingCodeRenderMode())
-  const [highlighted, setHighlighted] = useState<HighlightedCode | null>(null)
+  const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null)
 
-  // Legacy mode — the pre-PR-3 effect, byte-for-byte semantics: one full
-  // highlight per (code, language, theme) change, exception-driven `text`
-  // fallback, stale HTML shown until the next completion lands.
-  useEffect(() => {
-    if (mode !== "legacy") return
-    let cancelled = false
-
-    async function highlight() {
-      if (!code) {
-        setHighlighted(null)
-        return
-      }
-
-      const highlighter = await getHighlighter()
-      const legacyTheme = appTheme === "dark" ? "github-dark" : "github-light"
-
-      let html: string
-      try {
-        html = highlighter.codeToHtml(code, { lang: language, theme: legacyTheme })
-      } catch {
-        html = highlighter.codeToHtml(code, { lang: "text", theme: legacyTheme })
-      }
-
-      if (!cancelled) {
-        setHighlighted({ html, code, language, theme: legacyTheme })
-      }
-    }
-    highlight()
-
-    return () => {
-      cancelled = true
-    }
-  }, [code, language, appTheme, mode])
-
-  // Variant modes (plan PR 3). Stale async completions are invalidated by
-  // generation token in addition to the cleanup flag; unmount and every input
-  // change clear pending timers.
+  // Stale async completions are invalidated by generation token in addition
+  // to the cleanup flag; unmount and every input change clear pending timers.
   const generationRef = useRef(0)
   // Wall-clock start of the last growing highlight, for the throttle window.
   const lastGrowingHighlightAtRef = useRef(0)
 
   useEffect(() => {
-    if (mode === "legacy") return
     const generation = ++generationRef.current
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | null = null
 
-    // Empty code renders through the plain path (the display rule ignores any
-    // stale record); nothing to highlight and no state to reset.
+    // Empty code renders through the plain path; nothing to highlight.
     if (!code) return
 
     const runHighlight = async () => {
@@ -201,15 +153,17 @@ function CodeBlockCode({
       )
       const html = highlighter.codeToHtml(code, { lang, theme })
       if (cancelled || generation !== generationRef.current) return
-      setHighlighted({ html, code, language, theme })
+      setHighlightedHtml(html)
     }
 
     if (!growing) {
       // Stable, settled, or become-non-terminal: highlight the final tuple.
       void runHighlight()
-    } else if (mode === "throttled-highlight") {
-      // Growing: keep the highlighted look, at most one highlight per
-      // interval — leading edge immediately, then trailing.
+    } else {
+      // Growing terminal block: keep the highlighted look, at most one
+      // highlight per interval — leading edge immediately, then trailing.
+      // The visible highlight may lag the raw tail by at most one interval;
+      // the settle pass above always renders the final tuple.
       const elapsed = Date.now() - lastGrowingHighlightAtRef.current
       if (elapsed >= GROWING_HIGHLIGHT_THROTTLE_MS) {
         void runHighlight()
@@ -219,16 +173,13 @@ function CodeBlockCode({
           GROWING_HIGHLIGHT_THROTTLE_MS - elapsed
         )
       }
-    } else {
-      // plain-while-growing: highlight only after deltas pause.
-      timer = setTimeout(() => void runHighlight(), GROWING_HIGHLIGHT_DEBOUNCE_MS)
     }
 
     return () => {
       cancelled = true
       if (timer !== null) clearTimeout(timer)
     }
-  }, [code, language, theme, growing, mode])
+  }, [code, language, theme, growing])
 
   // Captured code text metrics: 14px / 24px (0.875em at 1.71429), 20px inline
   // padding, 12px block padding; the container's card surface shows through.
@@ -237,27 +188,16 @@ function CodeBlockCode({
     className
   )
 
-  // Display rule. legacy/throttled-highlight: latest completed highlight
-  // (throttled growth may lag the tail by at most one interval).
-  // plain-while-growing: highlighted HTML only when it matches the CURRENT
-  // inputs exactly — a later delta immediately returns the block to plain
-  // React-escaped text, never showing stale code.
-  const showHighlighted =
-    highlighted !== null &&
-    (mode === "legacy"
-      ? true // legacy manages its own state lifecycle, including the empty-code reset
-      : Boolean(code) &&
-        (mode !== "plain-while-growing" ||
-          (highlighted.code === code &&
-            highlighted.language === language &&
-            highlighted.theme === theme)))
+  // Latest completed highlight (throttled growth may lag the raw tail by at
+  // most one interval; the settle pass renders the final tuple).
+  const showHighlighted = highlightedHtml !== null && Boolean(code)
 
   // Plain path doubles as the SSR/pre-highlight fallback: React-escaped text
   // in the same wrapper, so `<script>`-like content renders as text.
   return showHighlighted ? (
     <div
       className={classNames}
-      dangerouslySetInnerHTML={{ __html: highlighted.html }}
+      dangerouslySetInnerHTML={{ __html: highlightedHtml }}
       {...props}
     />
   ) : (

@@ -5,6 +5,16 @@ chat-responsiveness plan's later phases must use (plan §6 PR 0 step 10,
 correction 5, §9.2). Later phases' flag/rollout language is constrained to
 exactly the capabilities documented here.
 
+> **Status note (2026-07-23, flag collapse).** The PR 2/PR 3 behavior flags
+> (`NEXT_PUBLIC_CHAT_MESSAGE_THROTTLE`,
+> `NEXT_PUBLIC_STREAMING_CODE_RENDER_MODE`) no longer exist: after
+> verification and the §6 freeze root-cause, the throttle became the constant
+> `CHAT_MESSAGE_THROTTLE_MS` and throttled highlighting became the sole code
+> render path (see `docs/measurements/2026-07-23-flag-collapse.md`). This
+> seam remains the standard for flags that still exist
+> (`NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION`, `CHAT_PERF_SAMPLE_RATE`,
+> `CHAT_CONDITIONAL_EXA`, Convex runtime flags) and for future phases.
+
 ## Selected seam: build/deploy-time environment flags
 
 The repository standard is **environment variables read through code-owned

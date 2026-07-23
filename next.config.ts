@@ -95,24 +95,6 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
-  // Chat-performance flags (chat-responsiveness plan PRs 2/3), enabled by
-  // default 2026-07-23: the §6 post-Stop freeze hold was lifted after the
-  // root-cause exonerated the throttle and identified `throttled-highlight`
-  // as the direct mitigation for the large-code-block freeze/crash path
-  // (docs/measurements/2026-07-23-section6-freeze-rootcause.md and
-  // 2026-07-23-pr2-pr3-verification.md §8 — ship both together). A deployment
-  // env var still wins: set `0` / `legacy` to roll back (build-time seam,
-  // docs/chat-performance-rollout-seam.md — a redeploy, not a live toggle).
-  // Values mirror RECOMMENDED_CHAT_MESSAGE_THROTTLE_MS and the PR 3 decision
-  // doc; the resolvers in lib/chat-performance/ keep unset = legacy/off, so
-  // this injection is the single enablement point.
-  env: {
-    NEXT_PUBLIC_CHAT_MESSAGE_THROTTLE:
-      process.env.NEXT_PUBLIC_CHAT_MESSAGE_THROTTLE ?? "50",
-    NEXT_PUBLIC_STREAMING_CODE_RENDER_MODE:
-      process.env.NEXT_PUBLIC_STREAMING_CODE_RENDER_MODE ??
-      "throttled-highlight",
-  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }]
   },

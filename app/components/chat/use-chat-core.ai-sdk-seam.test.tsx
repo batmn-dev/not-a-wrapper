@@ -93,6 +93,19 @@ vi.mock("./turn-context", () => ({
   }),
 }))
 
+// The shipped throttle is a plain constant (50 ms — the 2026-07-23 flag
+// collapse made it permanent). The throttle suite below still needs to pin
+// the SDK's coalescing semantics across 0/32/50/100 ms, so the constant is
+// mocked with a live getter; tests set the value BEFORE mounting and never
+// change it mid-mount (a mounted subscription's interval is stable in
+// production by construction — it's a module constant).
+const throttleMock = vi.hoisted(() => ({ value: 0 }))
+vi.mock("@/lib/chat-performance/message-throttle", () => ({
+  get CHAT_MESSAGE_THROTTLE_MS() {
+    return throttleMock.value
+  },
+}))
+
 vi.mock("@/convex/_generated/api", () => ({
   api: {
     chatRuntime: {
@@ -734,7 +747,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
 
     afterEach(() => {
       vi.useRealTimers()
-      vi.unstubAllEnvs()
+      throttleMock.value = 0
       framesRecorder.current = null
     })
 
@@ -824,7 +837,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
 
       for (const cadence of cadences) {
         for (const value of values) {
-          vi.stubEnv("NEXT_PUBLIC_CHAT_MESSAGE_THROTTLE", String(value))
+          throttleMock.value = value
           fetchMock.mockImplementation(async (_url, init) =>
             withAbortSemantics(
               makeUiMessageSseResponse({
@@ -924,7 +937,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
     })
 
     it("keeps status and error subscriptions immediate while messages are throttled at 100 ms", async () => {
-      vi.stubEnv("NEXT_PUBLIC_CHAT_MESSAGE_THROTTLE", "100")
+      throttleMock.value = 100
 
       // (a) Status flips to "streaming" mid-window, long before the next
       // throttled messages notification is due.
@@ -974,7 +987,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
     })
 
     it("Stop mid-stream at 50 ms settles isAbort and the trailing update preserves exactly the partial output", async () => {
-      vi.stubEnv("NEXT_PUBLIC_CHAT_MESSAGE_THROTTLE", "50")
+      throttleMock.value = 50
       fetchMock.mockImplementation(async (_url, init) =>
         withAbortSemantics(
           makeUiMessageSseResponse({
@@ -1026,7 +1039,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
     })
 
     it("tool approval and one-shot auto-send continuation survive the throttle at 50 ms", async () => {
-      vi.stubEnv("NEXT_PUBLIC_CHAT_MESSAGE_THROTTLE", "50")
+      throttleMock.value = 50
       seamMocks.convexMutation.mockResolvedValue({
         status: "approved",
         alreadyResolved: false,
@@ -1143,38 +1156,11 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       mounted.unmount()
     })
 
-    it("resolves the flag once per mount and survives unmount during a pending trailing update", async () => {
-      // (a) Mid-subscription env changes do not alter an active mount.
-      vi.stubEnv("NEXT_PUBLIC_CHAT_MESSAGE_THROTTLE", "0")
-      const deltas = Array.from({ length: 20 }, (_, i) => `piece-${i} `)
-      fetchMock.mockImplementation(async (_url, init) =>
-        withAbortSemantics(
-          makeUiMessageSseResponse({ deltas, chunkDelayInMs: 10 }),
-          init?.signal
-        )
-      )
-      framesRecorder.current = []
-      const mounted = mountThrottleHarness()
-      await act(async () => {
-        void hookApiRef.current?.sendMessage({ text: "hi" })
-      })
-      await advanceFake(60)
-      vi.stubEnv("NEXT_PUBLIC_CHAT_MESSAGE_THROTTLE", "100")
-      await advanceFake(400)
-      const frames = framesRecorder.current
-      if (!frames) throw new Error("frames recorder was not installed")
-      // Still unthrottled end-to-end: per-delta delivery, not 100 ms batches.
-      expect(frames.length).toBeGreaterThanOrEqual(deltas.length)
-      expect(assistantText(frames[frames.length - 1].messages)).toBe(
-        deltas.join("")
-      )
-      mounted.unmount()
-      seamMocks.chatTurnController.finishChatTurn.mockClear()
-
-      // (b) Unmount while a trailing notification is still scheduled: the
-      // late timer must be inert (no throw, no state corruption), and a fresh
+    it("survives unmount during a pending trailing update", async () => {
+      // Unmount while a trailing notification is still scheduled: the late
+      // timer must be inert (no throw, no state corruption), and a fresh
       // mount starts clean.
-      vi.stubEnv("NEXT_PUBLIC_CHAT_MESSAGE_THROTTLE", "100")
+      throttleMock.value = 100
       fetchMock.mockImplementation(async (_url, init) =>
         withAbortSemantics(
           makeUiMessageSseResponse({
