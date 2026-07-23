@@ -2,10 +2,19 @@ import { fetchQuery } from "convex/nextjs"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { decryptSecret } from "./encryption"
 import { getProviderStrategy } from "./openproviders/provider-strategy"
-import { getEffectiveApiKey, getEffectiveProviderApiKey } from "./user-keys"
+import {
+  getEffectiveApiKey,
+  getEffectiveProviderApiKey,
+  hasUserKey,
+} from "./user-keys"
 
 vi.mock("convex/nextjs", () => ({ fetchQuery: vi.fn() }))
-vi.mock("./encryption", () => ({ decryptSecret: vi.fn() }))
+// Keep isSupportedCiphertext real — the stale-row behavior under test hinges
+// on the actual format check — and stub only the crypto.
+vi.mock("./encryption", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./encryption")>()),
+  decryptSecret: vi.fn(),
+}))
 vi.mock("./openproviders/provider-strategy", () => ({
   getProviderStrategy: vi.fn(),
 }))
@@ -25,7 +34,7 @@ describe("provider API key resolution", () => {
   it("returns user BYOK provenance before a configured platform key", async () => {
     vi.stubEnv("OPENAI_API_KEY", "platform-key")
     vi.mocked(fetchQuery).mockResolvedValue({
-      encryptedKey: "ciphertext",
+      encryptedKey: "v3:deadbeef:cafef00d",
       iv: "iv",
       ownerId: "user-1",
     } as never)
@@ -53,6 +62,29 @@ describe("provider API key resolution", () => {
       apiKey: undefined,
       source: undefined,
     })
+  })
+
+  it("treats a pre-v3 (stale-format) row as a clean miss, without error logs", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "platform-key")
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
+    vi.mocked(fetchQuery).mockResolvedValue({
+      encryptedKey: "deadbeef:cafef00d", // unversioned pre-ADR-0010 envelope
+      iv: "iv",
+      ownerId: "user-1",
+    } as never)
+
+    await expect(
+      getEffectiveProviderApiKey("openai", "convex-token")
+    ).resolves.toEqual({ apiKey: "platform-key", source: "platform" })
+    await expect(hasUserKey("openai", "convex-token")).resolves.toBe(false)
+
+    expect(decryptSecret).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
+    // Warn-once dedupe: two stale reads for the same provider, one warning.
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    errorSpy.mockRestore()
+    warnSpy.mockRestore()
   })
 
   it("keeps the legacy key-only accessor compatible", async () => {

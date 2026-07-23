@@ -1,6 +1,6 @@
 import { api } from "@/convex/_generated/api"
 import { fetchQuery } from "convex/nextjs"
-import { decryptSecret } from "./encryption"
+import { decryptSecret, isSupportedCiphertext } from "./encryption"
 import { getProviderStrategy } from "./openproviders/provider-strategy"
 import { Provider } from "./openproviders/types"
 import { TOOL_PROVIDER_IDENTITY, type ToolProvider } from "./provider-identity"
@@ -15,9 +15,24 @@ export type ProviderApiKeyResolution = {
   source?: ApiKeySource
 }
 
+// Stale-format rows (written before the ADR-0010 AAD hardening) are a per-row
+// constant, not a transient fault: they will fail on every request until the
+// owner re-saves the key. Warn once per provider per process instead of
+// emitting an error stack on every chat turn.
+const staleCiphertextWarned = new Set<string>()
+
+function warnStaleCiphertextOnce(provider: string) {
+  if (staleCiphertextWarned.has(provider)) return
+  staleCiphertextWarned.add(provider)
+  console.warn(
+    `Stored ${provider} API key predates the current encryption format and is ignored; re-save it in Settings.`
+  )
+}
+
 /**
- * Check if user has an API key for a provider via Convex
- * Returns true if a key exists, false otherwise
+ * Check if user has a usable API key for a provider via Convex.
+ * Rows in a pre-ADR-0010 ciphertext format can never decrypt, so they count
+ * as absent — keeping this check consistent with getUserKeyFromConvex.
  */
 export async function hasUserKey(
   provider: Provider,
@@ -31,7 +46,12 @@ export async function hasUserKey(
       { provider },
       { token }
     )
-    return userKey !== null
+    if (!userKey) return false
+    if (!isSupportedCiphertext(userKey.encryptedKey ?? "")) {
+      warnStaleCiphertextOnce(provider)
+      return false
+    }
+    return true
   } catch (error) {
     console.error("Error checking user key:", error)
     return false
@@ -60,6 +80,11 @@ export async function getUserKeyFromConvex(
     )
 
     if (!userKey?.encryptedKey || !userKey?.iv) {
+      return null
+    }
+
+    if (!isSupportedCiphertext(userKey.encryptedKey)) {
+      warnStaleCiphertextOnce(provider)
       return null
     }
 
