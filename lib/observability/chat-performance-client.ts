@@ -66,6 +66,65 @@ function turnFields(): ChatPerfFields {
 }
 
 // ---------------------------------------------------------------------------
+// Turn facts (pure derivation over the live message list)
+// ---------------------------------------------------------------------------
+
+type TurnFactMessage = {
+  id: string
+  role: string
+  parts: ReadonlyArray<{ type: string; text?: string }>
+}
+
+export type ChatPerfTurnFacts = {
+  hasVisibleAssistantText: boolean
+  /** Total visible text length of the CURRENT turn's assistant output. */
+  visibleAssistantTextLength: number
+  lastUserMessageId: string | undefined
+}
+
+/**
+ * Derives the turn-mark inputs from the message list. The current-turn
+ * boundary is the trailing user message: only assistant output AFTER it
+ * counts, so a prior turn's settled answer can never satisfy
+ * `first_visible_text` for a new turn in a chat with history.
+ */
+export function deriveChatPerfTurnFacts(
+  messages: ReadonlyArray<TurnFactMessage>
+): ChatPerfTurnFacts {
+  let visibleAssistantTextLength = 0
+  let lastUserMessageId: string | undefined
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index]
+    if (message.role === "user") {
+      lastUserMessageId = message.id
+      break
+    }
+    if (message.role === "assistant") {
+      for (const part of message.parts) {
+        if (part.type === "text" && part.text) {
+          visibleAssistantTextLength += part.text.length
+        }
+      }
+    }
+  }
+  return {
+    hasVisibleAssistantText: visibleAssistantTextLength > 0,
+    visibleAssistantTextLength,
+    lastUserMessageId,
+  }
+}
+
+/**
+ * Coarse power-of-two bucket (1, 2, 4, … capped at 2^20) — a size class,
+ * never a content-revealing exact length.
+ */
+export function bucketTextLength(length: number): number {
+  if (!Number.isFinite(length) || length <= 1) return 1
+  const capped = Math.min(length, 1 << 20)
+  return 2 ** Math.ceil(Math.log2(capped))
+}
+
+// ---------------------------------------------------------------------------
 // Turn marks (status-transition driven)
 // ---------------------------------------------------------------------------
 
@@ -75,6 +134,8 @@ type TurnPerfInput = {
   status: ChatStreamStatus
   /** True once the live assistant message has any nonempty visible text. */
   hasVisibleAssistantText: boolean
+  /** Visible text length of the live turn, bucketed before emission. */
+  visibleAssistantTextLength: number
   /** Id of the trailing user message, used to observe the optimistic paint. */
   lastUserMessageId: string | undefined
 }
@@ -128,9 +189,16 @@ export function useChatTurnPerfMarks(input: TurnPerfInput): void {
     if (input.status !== "streaming") return
     if (input.hasVisibleAssistantText && !sawVisibleText.current) {
       sawVisibleText.current = true
-      markChatPerf("first_visible_text", turnFields())
+      markChatPerf("first_visible_text", {
+        ...turnFields(),
+        textLengthBucket: bucketTextLength(input.visibleAssistantTextLength),
+      })
     }
-  }, [input.hasVisibleAssistantText, input.status])
+  }, [
+    input.hasVisibleAssistantText,
+    input.status,
+    input.visibleAssistantTextLength,
+  ])
 }
 
 // ---------------------------------------------------------------------------

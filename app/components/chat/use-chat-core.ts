@@ -29,6 +29,7 @@ import { isChatPerfClientEnabled } from "@/lib/observability/chat-performance"
 import {
   beginChatPerfTurn,
   clearArmedChatPerfHeader,
+  deriveChatPerfTurnFacts,
   useChatTurnPerfMarks,
 } from "@/lib/observability/chat-performance-client"
 import { API_ROUTE_CHAT } from "@/lib/routes"
@@ -312,28 +313,16 @@ export function useChatCore({
     if (!isChatPerfClientEnabled()) {
       return {
         hasVisibleAssistantText: false,
+        visibleAssistantTextLength: 0,
         lastUserMessageId: undefined as string | undefined,
       }
     }
-    let hasVisibleAssistantText = false
-    let lastUserMessageId: string | undefined
-    for (let index = messages.length - 1; index >= 0; index--) {
-      const message = messages[index]
-      if (!hasVisibleAssistantText && message.role === "assistant") {
-        hasVisibleAssistantText = message.parts.some(
-          (part) => part.type === "text" && part.text.length > 0
-        )
-      }
-      if (!lastUserMessageId && message.role === "user") {
-        lastUserMessageId = message.id
-      }
-      if (hasVisibleAssistantText && lastUserMessageId) break
-    }
-    return { hasVisibleAssistantText, lastUserMessageId }
+    return deriveChatPerfTurnFacts(messages)
   }, [messages])
   useChatTurnPerfMarks({
     status,
     hasVisibleAssistantText: chatPerfTurnFacts.hasVisibleAssistantText,
+    visibleAssistantTextLength: chatPerfTurnFacts.visibleAssistantTextLength,
     lastUserMessageId: chatPerfTurnFacts.lastUserMessageId,
   })
 
