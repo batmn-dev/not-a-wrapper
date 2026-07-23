@@ -20,7 +20,7 @@ import {
  * ids, effective parents, branch indexes, selected flags, sibling order, and
  * descriptors.
  *
- * Deliberately an `internalQuery` operators invoke by hand
+ * Deliberately an `internalQuery` that operators invoke by hand
  * (`bunx convex run branchContextShadow:compareForChat '{"chatId": "..."}'`),
  * NEVER wired into the reactive `getSelectedConversation` path: a shadow
  * inside a reactive query would re-run on every invalidation and add CPU
