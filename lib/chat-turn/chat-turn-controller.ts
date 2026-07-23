@@ -108,6 +108,10 @@ export type ChatTurnAdapters = {
   createOptimisticMessageId?: () => string
   createOptimisticEditMessageId?: () => string
   getTurnSnapshot: () => ChatTurnSnapshot
+  /** Route identity at turn start. A null route means first-turn creation is
+   * still part of this submission, so a pre-dispatch Stop must be consumed
+   * before starting the transport. */
+  getCurrentChatId: () => string | null
   getIsSending: () => boolean
   setIsSending: (isSending: boolean) => void
   setIsSubmitting: (isSubmitting: boolean) => void
@@ -135,6 +139,8 @@ export type ChatTurnAdapters = {
   regenerate: (options?: RegenerateMessageOptions) => void | Promise<void>
   /** Event-owned local dispatch boundary for presentation identity/grace. */
   onLocalDispatch?: () => void
+  /** Clears any Stop fact left by an earlier completed submission. */
+  resetLocalStopIntent?: () => void
   /**
    * Consumes the one-shot fact that the user explicitly stopped the current
    * local dispatch. This distinguishes an intentional transport abort from a
@@ -274,6 +280,7 @@ async function runSendTurn(
 
   // Read the Turn context at run time — never from a render-time closure.
   const snapshot = adapters.getTurnSnapshot()
+  const startedWithoutChat = adapters.getCurrentChatId() === null
 
   // Rejected payloads must create no chat, navigation, or optimistic row.
   const promptSize = evaluatePromptSize({
@@ -292,6 +299,7 @@ async function runSendTurn(
   }
 
   adapters.setIsSending(true)
+  adapters.resetLocalStopIntent?.()
   adapters.setIsSubmitting(true)
   let optimisticId: string | null = null
   let optimisticMessage: (ChatTurnMessage & { role: "user" }) | null = null
@@ -393,6 +401,19 @@ async function runSendTurn(
         currentChatId
       )
       onSuccess?.(currentChatId)
+    }
+
+    // Home/project first turns can spend time creating their chat before an
+    // SDK request exists. Stop during that window records a one-shot command;
+    // consume it here, after the user turn has a durable/local identity but
+    // before transport dispatch. The submitted user message remains accepted,
+    // while no generation request (and therefore no unowned worker) starts.
+    if (
+      startedWithoutChat &&
+      adapters.consumeLocalStopIntent?.() === true
+    ) {
+      finalizeAcceptedTurn()
+      return
     }
 
     adapters.onLocalDispatch?.()

@@ -353,6 +353,7 @@ export function useChatCore({
   const {
     presentation,
     stop: handleStop,
+    resetLocalStopIntent,
     noteLocalDispatch,
     noteLocalTransportSettled,
     consumeLocalStopIntent,
@@ -431,6 +432,7 @@ export function useChatCore({
   const chatTurn = createChatTurnController({
     createOptimisticMessageId,
     getTurnSnapshot,
+    getCurrentChatId: () => chatId,
     getIsSending,
     setIsSending,
     setIsSubmitting,
@@ -469,6 +471,7 @@ export function useChatCore({
         options
       ),
     regenerate,
+    resetLocalStopIntent,
     onLocalDispatch: noteLocalDispatch,
     consumeLocalStopIntent,
     toastError: (title) => toast({ title, status: "error" }),

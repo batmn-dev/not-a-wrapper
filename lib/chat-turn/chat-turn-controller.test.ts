@@ -5,6 +5,7 @@ import {
   type ChatTurnAdapters,
   type ChatTurnMessage,
   type ChatTurnSnapshot,
+  type EnsuredTurnChat,
 } from "./chat-turn-controller"
 import { assistantMessage, userMessage } from "./fixtures"
 
@@ -12,6 +13,7 @@ function createHarness() {
   let messages: ChatTurnMessage[] = []
   let cachedMessages: ChatTurnMessage[] = []
   let isSending = false
+  let currentChatId: string | null = "chat-1"
   // The Turn context snapshot runners read at run time (adapters.getTurnSnapshot).
   let snapshot: ChatTurnSnapshot = {
     selectedModel: "model-1",
@@ -67,6 +69,7 @@ function createHarness() {
     createOptimisticMessageId: vi.fn(() => "optimistic-message"),
     createOptimisticEditMessageId: vi.fn(() => "optimistic-edit-message"),
     getTurnSnapshot: vi.fn(() => snapshot),
+    getCurrentChatId: vi.fn(() => currentChatId),
     getIsSending: vi.fn(() => isSending),
     setIsSending: vi.fn((value) => {
       isSending = value
@@ -108,11 +111,14 @@ function createHarness() {
     sendMessage: vi.fn(() => {
       events.push("sendMessage")
     }),
-    sendMessageAndWaitForAcceptance: (...args) =>
-      Promise.resolve(adapters.sendMessage(...args)),
+    sendMessageAndWaitForAcceptance: vi.fn((...args) =>
+      Promise.resolve(adapters.sendMessage(...args))
+    ),
     regenerate: vi.fn(() => {
       events.push("regenerate")
     }),
+    onLocalDispatch: vi.fn(),
+    resetLocalStopIntent: vi.fn(),
     consumeLocalStopIntent: vi.fn(() => false),
     toastError: vi.fn((title) => {
       events.push(`toastError:${title}`)
@@ -143,6 +149,9 @@ function createHarness() {
       cachedMessages = nextMessages
     },
     getPendingEdit: () => pendingEdit,
+    setCurrentChatId: (nextChatId: string | null) => {
+      currentChatId = nextChatId
+    },
     setRoutePersistsMessages: (next: boolean) => {
       routePersistsMessages = next
     },
@@ -555,6 +564,68 @@ describe("chat turn controller", () => {
     ])
     expect(confirmDispatched).toHaveBeenCalledTimes(1)
     expect(adapters.setHasSentFirstMessage).toHaveBeenCalledWith(true)
+    expect(onSuccess).toHaveBeenCalledWith("chat-new")
+    expect(adapters.toastError).not.toHaveBeenCalled()
+  })
+
+  it("accepts a first turn stopped during chat creation without dispatching a generation", async () => {
+    const {
+      adapters,
+      controller,
+      getMessages,
+      setCurrentChatId,
+      setSnapshot,
+    } = createHarness()
+    setSnapshot({ isAuthenticated: true })
+    setCurrentChatId(null)
+    const confirmDispatched = vi.fn()
+    const onSuccess = vi.fn()
+    let resolveChat!: (chat: EnsuredTurnChat) => void
+    adapters.ensureChatExists = vi.fn(
+      () =>
+        new Promise<EnsuredTurnChat>((resolve) => {
+          resolveChat = resolve
+        })
+    )
+    let stopRequested = false
+    adapters.resetLocalStopIntent = vi.fn(() => {
+      stopRequested = false
+    })
+    adapters.consumeLocalStopIntent = vi.fn(() => {
+      const requested = stopRequested
+      stopRequested = false
+      return requested
+    })
+
+    const turn = controller.runSendTurn({
+      text: "Stop before dispatch",
+      onSuccess,
+    })
+    await vi.waitFor(() =>
+      expect(adapters.ensureChatExists).toHaveBeenCalledTimes(1)
+    )
+
+    stopRequested = true
+    resolveChat({
+      chatId: "chat-new",
+      firstTurn: {
+        userMessageId: "message_user_1",
+        clientMessageId: "stopped-before-dispatch",
+        attachments: [],
+        confirmDispatched,
+      },
+    })
+    await turn
+
+    expect(getMessages()).toEqual([
+      expect.objectContaining({
+        id: "stopped-before-dispatch",
+        role: "user",
+      }),
+    ])
+    expect(adapters.onLocalDispatch).not.toHaveBeenCalled()
+    expect(adapters.sendMessageAndWaitForAcceptance).not.toHaveBeenCalled()
+    expect(confirmDispatched).toHaveBeenCalledTimes(1)
     expect(onSuccess).toHaveBeenCalledWith("chat-new")
     expect(adapters.toastError).not.toHaveBeenCalled()
   })

@@ -48,7 +48,6 @@ Alternatives considered and rejected for now:
 | --- | --- | --- |
 | Kill switch (client flags) | Redeploy | Change the env var and redeploy; latency = one Vercel build/deploy (~minutes). **Not a live toggle** — no phase may claim one. |
 | Kill switch (Next server flags) | Redeploy | Same as client: env changes require a redeploy of the Next app. |
-| Kill switch (Convex flags) | Env change + function restart | Convex deployment env vars apply to subsequent function executions without a code deploy (set via dashboard/CLI); still not instantaneous and not client-visible. |
 | Percentage cohorts | No | Env flags are all-or-nothing per deployment. No active phase includes cohort infrastructure. |
 | Remote weight adjustment | No | The selected env-flag seam has no remote experiment weights. |
 | Stable per-user assignment | No | The active scope has no experiment assignment or persistence mechanism. |

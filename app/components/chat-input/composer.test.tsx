@@ -336,6 +336,21 @@ describe("Composer primary action", () => {
     expect(onTurn).not.toHaveBeenCalled()
   })
 
+  it("does not present Stop while submitting without a stop handler", () => {
+    const mounted = renderComposer({
+      isSubmitting: true,
+      status: "ready",
+      stoppable: false,
+    })
+
+    expect(mounted.querySelector('button[aria-label="Stop"]')).toBeNull()
+    const sendButton = mounted.querySelector(
+      'button[aria-label="Send message"]'
+    ) as HTMLButtonElement | null
+    expect(sendButton).toBeTruthy()
+    expect(sendButton?.disabled).toBe(true)
+  })
+
   it("keeps the shared default placeholder and accepts narrow surface copy", () => {
     const defaultComposer = renderComposer({ status: "ready" })
     expect(defaultComposer.querySelector("textarea")?.placeholder).toBe(

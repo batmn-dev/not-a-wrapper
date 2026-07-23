@@ -5,6 +5,7 @@ import { getProviderStrategy } from "./openproviders/provider-strategy"
 import {
   getEffectiveApiKey,
   getEffectiveProviderApiKey,
+  getUserKeyFromConvex,
   hasUserKey,
 } from "./user-keys"
 
@@ -84,6 +85,24 @@ describe("provider API key resolution", () => {
     // Warn-once dedupe: two stale reads for the same provider, one warning.
     expect(warnSpy).toHaveBeenCalledTimes(1)
     errorSpy.mockRestore()
+    warnSpy.mockRestore()
+  })
+
+  it("treats a current-format row without an IV as unusable", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
+    vi.mocked(fetchQuery).mockResolvedValue({
+      encryptedKey: "v3:deadbeef:cafef00d",
+      iv: "",
+      ownerId: "user-1",
+    } as never)
+
+    await expect(hasUserKey("anthropic", "convex-token")).resolves.toBe(false)
+    await expect(
+      getUserKeyFromConvex("anthropic", "convex-token")
+    ).resolves.toBeNull()
+
+    expect(decryptSecret).not.toHaveBeenCalled()
+    expect(warnSpy).toHaveBeenCalledTimes(1)
     warnSpy.mockRestore()
   })
 

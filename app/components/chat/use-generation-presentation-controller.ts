@@ -43,6 +43,7 @@ type GenerationPresentationControllerArgs = {
 export type GenerationPresentationController = {
   presentation: GenerationPresentation
   stop: () => Promise<void>
+  resetLocalStopIntent: () => void
   noteLocalDispatch: () => void
   noteLocalTransportSettled: () => void
   consumeLocalStopIntent: () => boolean
@@ -150,6 +151,10 @@ export function useGenerationPresentationController({
   // a state update renders, and the Chat turn controller must classify that
   // rejection in the same command turn.
   const localStopIntentRef = useRef(false)
+
+  const resetLocalStopIntent = useCallback(() => {
+    localStopIntentRef.current = false
+  }, [])
 
   const noteLocalDispatch = useCallback(() => {
     localStopIntentRef.current = false
@@ -317,6 +322,7 @@ export function useGenerationPresentationController({
   return {
     presentation,
     stop,
+    resetLocalStopIntent,
     noteLocalDispatch,
     noteLocalTransportSettled,
     consumeLocalStopIntent,

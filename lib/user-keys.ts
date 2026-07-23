@@ -47,7 +47,7 @@ export async function hasUserKey(
       { token }
     )
     if (!userKey) return false
-    if (!isSupportedCiphertext(userKey.encryptedKey ?? "")) {
+    if (!userKey.iv || !isSupportedCiphertext(userKey.encryptedKey ?? "")) {
       warnStaleCiphertextOnce(provider)
       return false
     }

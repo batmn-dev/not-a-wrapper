@@ -258,14 +258,20 @@ describe("useChatCore prompt query handling", () => {
 
   function renderCore({
     search,
+    chatId = "chat-project",
     ensureChatExists = vi.fn(async () => ({ chatId: "chat-project" })),
     checkLimitsAndNotify = vi.fn(async () => true),
   }: {
     search: string
+    chatId?: string | null
     ensureChatExists?: Parameters<typeof useChatCore>[0]["ensureChatExists"]
     checkLimitsAndNotify?: (uid: string) => Promise<boolean>
   }) {
-    window.history.replaceState(null, "", `/c/chat-project${search}`)
+    window.history.replaceState(
+      null,
+      "",
+      `${chatId ? `/c/${chatId}` : "/"}${search}`
+    )
 
     container = document.createElement("div")
     document.body.appendChild(container)
@@ -278,7 +284,7 @@ describe("useChatCore prompt query handling", () => {
       const core = useChatCore({
         initialMessages: [] as UIMessage[],
         cacheAndAddMessage: vi.fn(),
-        chatId: "chat-project",
+        chatId,
         user: authenticatedUser,
         checkLimitsAndNotify,
         ensureChatExists,
@@ -409,6 +415,57 @@ describe("useChatCore prompt query handling", () => {
     } finally {
       delete process.env.NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION
     }
+  })
+
+  it("carries Stop across first-turn chat creation and prevents generation dispatch", async () => {
+    const confirmDispatched = vi.fn()
+    let resolveChat!: (
+      chat: Awaited<
+        ReturnType<Parameters<typeof useChatCore>[0]["ensureChatExists"]>
+      >
+    ) => void
+    const ensureChatExists = vi.fn(
+      () =>
+        new Promise<
+          Awaited<
+            ReturnType<Parameters<typeof useChatCore>[0]["ensureChatExists"]>
+          >
+        >((resolve) => {
+          resolveChat = resolve
+        })
+    )
+    const { getCore } = renderCore({
+      search: "",
+      chatId: null,
+      ensureChatExists,
+    })
+
+    let submitted!: Promise<boolean>
+    await act(async () => {
+      submitted = getCore()!.submit({
+        text: "Stop this first turn",
+        files: [],
+        attachments: [],
+      })
+      await vi.waitFor(() =>
+        expect(ensureChatExists).toHaveBeenCalledTimes(1)
+      )
+      await getCore()!.stop()
+      resolveChat({
+        chatId: "chat-first",
+        firstTurn: {
+          userMessageId: "message_user_1",
+          clientMessageId: "stopped-before-dispatch",
+          attachments: [],
+          confirmDispatched,
+        },
+      })
+      await expect(submitted).resolves.toBe(true)
+    })
+
+    expect(chatCoreMocks.stop).toHaveBeenCalledTimes(1)
+    expect(chatCoreMocks.sendMessage).not.toHaveBeenCalled()
+    expect(confirmDispatched).toHaveBeenCalledTimes(1)
   })
 })
 

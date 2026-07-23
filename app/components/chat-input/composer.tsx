@@ -380,7 +380,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       // arms a deferred Stop that only ever targets the run this dispatch
       // creates (§4.1.4). A resolver-declined Stop (e.g. one already pending)
       // is NOT overridden: isSubmitting has settled false by then.
-      const presentStop = canStop || Boolean(isSubmitting)
+      // Never present an enabled Stop without an actionable handler.
+      const presentStop =
+        Boolean(stop) && (canStop || Boolean(isSubmitting))
       return resolveComposerPrimaryActionState({
         // Stop presents for a live LOCAL stream or any resolver-stoppable
         // run (background, awaiting-approval, possibly-stale — §8/§11):
@@ -393,7 +395,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           attachments.every((attachment) => attachment.status === "ready") &&
           (!isOnlyWhitespace(localValue) || attachments.length > 0),
       })
-    }, [attachments, isSubmitting, localValue, status, stoppable])
+    }, [attachments, isSubmitting, localValue, status, stop, stoppable])
 
     const handlePrimaryActionClick = useCallback(() => {
       if (primaryAction.disabled) {

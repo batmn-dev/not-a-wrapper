@@ -72,7 +72,7 @@ export type EncryptedSecret = { encrypted: string; iv: string }
  */
 export function isSupportedCiphertext(encrypted: string): boolean {
   const [version, body, tag, ...rest] = encrypted.split(":")
-  return rest.length === 0 && version === VERSION && !!body && !!tag
+  return rest.length === 0 && version === VERSION && body !== undefined && !!tag
 }
 
 /**
