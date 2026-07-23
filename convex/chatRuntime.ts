@@ -25,9 +25,13 @@ import {
 } from "./domain/generation_run_liveness"
 import { createMessageBranchWriter } from "./domain/message_branch_writes"
 import {
+  createBranchContext,
   getEffectiveParentId,
+  getEffectiveParentIdFromContext,
   getSelectedPathMessages,
+  getSelectedPathMessagesFromContext,
   getSiblingMessages,
+  getSiblingMessagesFromContext,
 } from "./domain/message_branches"
 import {
   isTerminalGenerationRunStatus,
@@ -49,6 +53,7 @@ import {
   type AuthenticatedRunOwner,
 } from "./lib/auth"
 import { ownedGenerationRunMutation } from "./lib/authedFunctions"
+import { isSinglePassBranchContextEnabled } from "./lib/runtime_flags"
 import {
   vToolInvocationStreamMetadata,
   type PersistedMessageMetadata,
@@ -321,8 +326,20 @@ function findMessageIndexByUiId(
   )
 }
 
+/**
+ * Selected-path derivation for runtime consumers. With
+ * `CHAT_SINGLE_PASS_BRANCH_CONTEXT` on, one context serves the whole call
+ * (plan PR 1 step 4); off, the pre-PR-1 per-call pattern. Same algorithm,
+ * identical results either way.
+ */
+function getSelectedPath(messages: Doc<"messages">[]) {
+  return isSinglePassBranchContextEnabled()
+    ? getSelectedPathMessagesFromContext(createBranchContext(messages))
+    : getSelectedPathMessages(messages)
+}
+
 function getVisibleSelectedMessages(messages: Doc<"messages">[]) {
-  return getSelectedPathMessages(messages).filter(isVisibleChatMessage)
+  return getSelectedPath(messages).filter(isVisibleChatMessage)
 }
 
 function selectedMessagesMatchToken(
@@ -391,11 +408,15 @@ function resolveFallbackSibling(
   messages: Doc<"messages">[],
   message: Doc<"messages">
 ): Id<"messages"> | null {
-  const parentMessageId = getEffectiveParentId(messages, message)
-  const semanticSiblings = getSiblingMessages(
-    messages,
-    parentMessageId,
-    message.role
+  const context = isSinglePassBranchContextEnabled()
+    ? createBranchContext(messages)
+    : null
+  const parentMessageId = context
+    ? getEffectiveParentIdFromContext(context, message)
+    : getEffectiveParentId(messages, message)
+  const semanticSiblings = (context
+    ? getSiblingMessagesFromContext(context, parentMessageId, message.role)
+    : getSiblingMessages(messages, parentMessageId, message.role)
   ).filter(
     (sibling) =>
       sibling._id !== message._id && hasSemanticAssistantParts(sibling)
@@ -1566,7 +1587,7 @@ export async function prepareGenerationForChat(
   const modelHistory =
     preparedModelHistory ??
     projectModelHistoryMessages(
-      getSelectedPathMessages(await listMessages(ctx, args.chatId)).filter(
+      getSelectedPath(await listMessages(ctx, args.chatId)).filter(
         (message) =>
           includeAssistantInModelHistory || message._id !== assistantMessageId
       )

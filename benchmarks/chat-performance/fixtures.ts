@@ -9,9 +9,13 @@
  */
 import type { Doc, Id } from "@/convex/_generated/dataModel"
 import {
+  createBranchContext,
   getBranchInfoForMessage,
+  getBranchInfoForMessageFromContext,
   getSelectedPathBranchNormalizationPatches,
+  getSelectedPathBranchNormalizationPatchesFromContext,
   getSelectedPathMessages,
+  getSelectedPathMessagesFromContext,
   type MessageBranchInfo,
   type MessageBranchPatch,
 } from "@/convex/domain/message_branches"
@@ -449,15 +453,38 @@ export function createArrayOpsImplementation(
   }
 }
 
-/** The production implementation as shipped at this commit. */
+/**
+ * The per-call adapter pattern — the pre-PR-1 production call shape and the
+ * `CHAT_SINGLE_PASS_BRANCH_CONTEXT`-off shape after PR 1 (each helper call
+ * builds its own context).
+ */
 export const currentBranchImplementation = createArrayOpsImplementation(
-  "current",
+  "per-call-adapters",
   {
     getSelectedPathMessages,
     getBranchInfoForMessage,
     getSelectedPathBranchNormalizationPatches,
   }
 )
+
+/**
+ * PR 1 candidate: one shared `BranchContext` per array version — the
+ * `CHAT_SINGLE_PASS_BRANCH_CONTEXT`-on production shape.
+ */
+export const singlePassBranchImplementation: BranchProjectionImplementation = {
+  name: "single-pass-context",
+  project: (messages) => {
+    const context = createBranchContext(messages)
+    return createArrayOpsImplementation("single-pass-context", {
+      getSelectedPathMessages: () =>
+        getSelectedPathMessagesFromContext(context),
+      getBranchInfoForMessage: (_messages, message) =>
+        getBranchInfoForMessageFromContext(context, message),
+      getSelectedPathBranchNormalizationPatches: () =>
+        getSelectedPathBranchNormalizationPatchesFromContext(context),
+    }).project(messages)
+  },
+}
 
 export function projectionHash(projection: BranchProjection): string {
   return hashValue(projection)

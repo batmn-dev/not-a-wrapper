@@ -1,17 +1,21 @@
+/**
+ * TEST-ONLY LEGACY FIXTURE — verbatim copy of `message_branch_writes.ts` as it existed before
+ * PR 1 (single-pass branch context; chat-responsiveness plan). It is the
+ * accepted-behavior baseline for the property/equivalence tests and is never
+ * imported by production code. Remove after the PR 1 soak once the permanent
+ * fixtures fully encode its behavior (plan PR 1 step 9).
+ */
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx } from "../_generated/server"
-import { isSinglePassBranchContextEnabled } from "../lib/runtime_flags"
 import {
-  createBranchContext,
-  getEffectiveParentIdFromContext,
-  getNextBranchIndexFromContext,
-  getNextMissingBranchIndexFromContext,
-  getSelectedPathBranchNormalizationPatchesFromContext,
-  getSelectedPathMessagesFromContext,
-  getSiblingMessagesFromContext,
-  type BranchContext,
+  getEffectiveParentId,
+  getNextBranchIndex,
+  getNextMissingBranchIndex,
+  getSelectedPathBranchNormalizationPatches,
+  getSelectedPathMessages,
+  getSiblingMessages,
   type MessageBranchPatch,
-} from "./message_branches"
+} from "./message_branches_legacy_fixture"
 
 type ChatMessage = Doc<"messages">
 
@@ -90,32 +94,6 @@ function asSimulatedDoc(
   return { _id: PLANNED_MESSAGE_ID, _creationTime: creationTime, ...planned }
 }
 
-/**
- * One `BranchContext` per immutable message-array version. Every plan step
- * that changes a branch field produces a NEW array (`applyPatchToMessages`
- * maps to a fresh array), so keying the cache by array reference is exactly
- * the plan's lifecycle rule: a context is never reused after any branch field
- * in its source array changes, and each logical array version is built at
- * most once. With the rollout flag off, every lookup rebuilds — the pre-PR-1
- * work pattern — so the flag is a pure consumption-pattern rollback lever.
- */
-const contextByArrayVersion = new WeakMap<
-  readonly ChatMessage[],
-  BranchContext
->()
-
-function contextFor(messages: ChatMessage[]): BranchContext {
-  if (!isSinglePassBranchContextEnabled()) {
-    return createBranchContext(messages)
-  }
-  let context = contextByArrayVersion.get(messages)
-  if (!context) {
-    context = createBranchContext(messages)
-    contextByArrayVersion.set(messages, context)
-  }
-  return context
-}
-
 function applyPatchToMessages(
   messages: ChatMessage[],
   messageId: Id<"messages">,
@@ -144,9 +122,7 @@ function patchFromNormalization(
 
 function planSelectedPathNormalization(messages: ChatMessage[]) {
   let normalizedMessages = messages
-  const patches = getSelectedPathBranchNormalizationPatchesFromContext(
-    contextFor(messages)
-  )
+  const patches = getSelectedPathBranchNormalizationPatches(messages)
 
   for (const patch of patches) {
     normalizedMessages = applyPatchToMessages(
@@ -159,26 +135,13 @@ function planSelectedPathNormalization(messages: ChatMessage[]) {
   return normalizedMessages
 }
 
-/**
- * Sibling patches are planned from ONE context of the entry array (plan PR 1
- * step 6): missing branch indexes for the whole group are assigned in a
- * single pass instead of rebuilding after each sibling patch. This matches
- * the previous sequential behavior exactly — each sequential call recomputed
- * the same group assignment and consumed the next free index in the same
- * message-sort order — which the writer equivalence tests pin down.
- */
 function planSiblingSelection(
   messages: ChatMessage[],
   target: ChatMessage
 ): ChatMessage[] {
-  const context = contextFor(messages)
-  const parentMessageId = getEffectiveParentIdFromContext(context, target)
+  const parentMessageId = getEffectiveParentId(messages, target)
   let updatedMessages = messages
-  const siblings = getSiblingMessagesFromContext(
-    context,
-    parentMessageId,
-    target.role
-  )
+  const siblings = getSiblingMessages(messages, parentMessageId, target.role)
 
   for (const sibling of siblings) {
     const patch: Partial<ChatMessage> = {
@@ -191,7 +154,7 @@ function planSiblingSelection(
       patch.parentMessageId = parentMessageId
     }
     if (sibling.branchIndex === undefined) {
-      patch.branchIndex = getNextMissingBranchIndexFromContext(context, sibling)
+      patch.branchIndex = getNextMissingBranchIndex(updatedMessages, sibling)
     }
     updatedMessages = applyPatchToMessages(
       updatedMessages,
@@ -208,9 +171,8 @@ function planSiblingDeselection(
   parentMessageId: Id<"messages"> | undefined,
   role: ChatMessage["role"]
 ): ChatMessage[] {
-  const context = contextFor(messages)
   let updatedMessages = messages
-  const siblings = getSiblingMessagesFromContext(context, parentMessageId, role)
+  const siblings = getSiblingMessages(messages, parentMessageId, role)
 
   for (const sibling of siblings) {
     const patch: Partial<ChatMessage> = { selected: false }
@@ -221,7 +183,7 @@ function planSiblingDeselection(
       patch.parentMessageId = parentMessageId
     }
     if (sibling.branchIndex === undefined) {
-      patch.branchIndex = getNextMissingBranchIndexFromContext(context, sibling)
+      patch.branchIndex = getNextMissingBranchIndex(updatedMessages, sibling)
     }
     updatedMessages = applyPatchToMessages(
       updatedMessages,
@@ -273,7 +235,7 @@ function assertSelectedPathContains(
   messageId: Id<"messages">
 ) {
   if (
-    !getSelectedPathMessagesFromContext(contextFor(messages)).some(
+    !getSelectedPathMessages(messages).some(
       (message) => message._id === messageId
     )
   ) {
@@ -382,20 +344,15 @@ export function createMessageBranchWriter(
       : undefined
     if (replaces && !replacement) throw new Error("Message not found")
 
-    const normalizedContext = contextFor(normalized)
-    const selectedPath = getSelectedPathMessagesFromContext(normalizedContext)
+    const selectedPath = getSelectedPathMessages(normalized)
     const parentMessageId = replacement
-      ? getEffectiveParentIdFromContext(normalizedContext, replacement)
+      ? getEffectiveParentId(normalized, replacement)
       : selectedPath.at(-1)?._id
     const deselected = planSiblingDeselection(normalized, parentMessageId, role)
     const plannedMessage = buildPlanned({
       parentMessageId,
       orderId: nextMessageOrder(deselected),
-      branchIndex: getNextBranchIndexFromContext(
-        contextFor(deselected),
-        parentMessageId,
-        role
-      ),
+      branchIndex: getNextBranchIndex(deselected, parentMessageId, role),
       replacement,
     })
     const planned = planSelectedPathNormalization([

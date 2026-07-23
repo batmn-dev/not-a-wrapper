@@ -2,10 +2,10 @@
  * Branch-projection benchmark (plan PR 0a, step 2).
  *
  * Reproduces the supplied branch finding in a repository-owned harness:
- * the current `convex/domain/message_branches.ts` helpers rebuild their
- * context per call, so full projection cost grows superlinearly with row
- * count. PR 1 registers its shared-context candidate in IMPLEMENTATIONS;
- * until then the current implementation is both legacy and candidate.
+ * the per-call adapter pattern rebuilds its context per helper call, so full
+ * projection cost grows superlinearly with row count. The PR 1 single-pass
+ * candidate (one shared context per array version) runs in the same process
+ * for a direct comparison; equivalence is asserted before timing.
  *
  * Run with: bun run bench:chat
  * Record results per docs/measurements/2026-07-22-chat-performance-baseline.md.
@@ -19,11 +19,13 @@ import {
   currentBranchImplementation,
   describeBenchEnvironment,
   NAMED_BRANCH_FIXTURES,
+  singlePassBranchImplementation,
   type BranchProjectionImplementation,
 } from "./fixtures"
 
 const IMPLEMENTATIONS: BranchProjectionImplementation[] = [
   currentBranchImplementation,
+  singlePassBranchImplementation,
 ]
 
 const tree575 = buildDeterministicBranchTree(575)
