@@ -454,9 +454,10 @@ export function createArrayOpsImplementation(
 }
 
 /**
- * The per-call adapter pattern — the pre-PR-1 production call shape and the
- * `CHAT_SINGLE_PASS_BRANCH_CONTEXT`-off shape after PR 1 (each helper call
- * builds its own context).
+ * The per-call adapter pattern — the pre-PR-1 production call shape (each
+ * helper call builds its own context). Benchmark-comparison baseline only:
+ * production has used the shared single-pass context unconditionally since
+ * the 2026-07-23 flag collapse.
  */
 export const currentBranchImplementation = createArrayOpsImplementation(
   "per-call-adapters",
@@ -468,8 +469,8 @@ export const currentBranchImplementation = createArrayOpsImplementation(
 )
 
 /**
- * PR 1 candidate: one shared `BranchContext` per array version — the
- * `CHAT_SINGLE_PASS_BRANCH_CONTEXT`-on production shape.
+ * One shared `BranchContext` per array version — the production shape
+ * (unconditional since the 2026-07-23 flag collapse).
  */
 export const singlePassBranchImplementation: BranchProjectionImplementation = {
   name: "single-pass-context",

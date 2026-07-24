@@ -77,11 +77,11 @@ const eslintConfig = [
   },
   {
     // Per-user subscription seam (ADR-0004): client per-user Convex live reads
-    // must go through usePerUserQuery (or the explicit usePublicQuery passthrough
-    // for share-link reads) in lib/convex/, which owns the isConvexAuthenticated
-    // subscribe gate. Importing useQuery from convex/react directly bypasses the
-    // gate — which is how userKeys.getProviderStatus ended up ungated and running
-    // for guests. The hook module in lib/convex/ is the one exempt place.
+    // must go through usePerUserQuery in lib/convex/, which owns the
+    // isConvexAuthenticated subscribe gate. Importing useQuery from convex/react
+    // directly bypasses the gate — which is how userKeys.getProviderStatus ended
+    // up ungated and running for guests. The hook module in lib/convex/ is the
+    // one exempt place; add a named public seam there only with a real caller.
     files: [
       "app/**/*.{ts,tsx}",
       "lib/**/*.{ts,tsx}",
@@ -95,7 +95,7 @@ const eslintConfig = [
           selector:
             "ImportDeclaration[source.value='convex/react'] > ImportSpecifier[imported.name='useQuery']",
           message:
-            "Do not import useQuery from convex/react directly. Use usePerUserQuery (or usePublicQuery for share-link reads) from @/lib/convex/use-per-user-query, which owns the isConvexAuthenticated subscribe gate. See ADR-0004.",
+            "Do not import useQuery from convex/react directly. Use usePerUserQuery from @/lib/convex/use-per-user-query, which owns the isConvexAuthenticated subscribe gate. Add a named public seam there only with a real caller. See ADR-0004.",
         },
         {
           selector:

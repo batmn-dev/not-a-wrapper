@@ -340,13 +340,28 @@ async function buildToolRuntime(
 
   // -----------------------------------------------------------------------
   // Exa API key resolution (shared by Layer 2 capabilities)
+  //
+  // Conditional resolution (plan PR 7b; unconditional since the 2026-07-23
+  // flag collapse): every Exa-backed tool enters through exactly two doors —
+  // the Layer 2 search fallback (search injected AND Layer 1 yielded no
+  // provider-native search tools) and Layer 2 content extraction (the
+  // model's `extract` capability). Both facts are known before any secret
+  // lookup, so when neither door can open the key read is skipped entirely:
+  // built-in provider search never pays for Exa, while extraction still
+  // resolves the key even when the search toggle is off.
   // -----------------------------------------------------------------------
+  const builtInHasSearch = Object.keys(builtInTools).length > 0
+  const exaBackedToolPossible =
+    (shouldInjectSearch && !builtInHasSearch) || capabilities.extract
+
   let resolvedExaKey: string | undefined
   let resolvedExaKeyMode: ToolKeyMode | undefined
-  const { getEffectiveToolKeyWithMode } = await import("@/lib/user-keys")
-  const resolvedExa = await getEffectiveToolKeyWithMode("exa", convexToken)
-  resolvedExaKey = resolvedExa.key
-  resolvedExaKeyMode = resolvedExa.keyMode
+  if (exaBackedToolPossible) {
+    const { getEffectiveToolKeyWithMode } = await import("@/lib/user-keys")
+    const resolvedExa = await getEffectiveToolKeyWithMode("exa", convexToken)
+    resolvedExaKey = resolvedExa.key
+    resolvedExaKeyMode = resolvedExa.keyMode
+  }
 
   // -----------------------------------------------------------------------
   // Tool budget — policy guards + outage-tolerant enforcers
@@ -459,8 +474,6 @@ async function buildToolRuntime(
   let thirdPartyToolMetadata = new Map<string, ToolMetadata>()
 
   if (shouldInjectSearch) {
-    const builtInHasSearch = Object.keys(builtInTools).length > 0
-
     if (!builtInHasSearch) {
       const { getThirdPartyTools } = await import("@/lib/tools/third-party")
       const thirdPartyResult = await getThirdPartyTools({

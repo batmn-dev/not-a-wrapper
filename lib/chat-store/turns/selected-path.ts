@@ -29,12 +29,48 @@ import {
   adoptServerOwned,
   getServerMessageId,
 } from "@/lib/chat-messages/metadata"
-import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import type { ChatTurnMessage } from "@/lib/chat-turn/turn-plans"
 
 function createdAtMs(value: unknown): number | undefined {
   return value instanceof Date ? value.getTime() : undefined
 }
+
+/**
+ * Total length of the text parts without building the concatenated string —
+ * same number `extractTextFromMessageParts(parts).length` would produce, at
+ * O(part count) instead of O(content) allocation per call.
+ */
+function textLengthOfParts(parts: unknown): number {
+  if (!Array.isArray(parts)) return 0
+  let length = 0
+  for (const part of parts) {
+    if (
+      part &&
+      typeof part === "object" &&
+      (part as { type?: unknown }).type === "text" &&
+      typeof (part as { text?: unknown }).text === "string"
+    ) {
+      length += (part as { text: string }).text.length
+    }
+  }
+  return length
+}
+
+/**
+ * Parts arrays already verified structurally equal to (or adopted from) a
+ * TERMINAL durable record. A settled run's parts never change again (terminal
+ * writes are first-wins and content writes are rejected once settled), so one
+ * structural comparison per message suffices; without this memo every
+ * projection pass re-serializes the full content of every settled assistant
+ * turn — O(chat content) per durable snapshot, the reconcile component of the
+ * section-6 freeze (docs/measurements/2026-07-23-section6-freeze-rootcause.md
+ * §5). Keyed by parts-array identity: adoption installs the server array
+ * itself, an equal local array is marked directly, and the local reference
+ * stays stable across later passes (the server side is re-materialized fresh
+ * per snapshot, which is exactly why the memo lives on the local array).
+ * Performance-only state — results are identical with the memo removed.
+ */
+const terminalConvergedParts = new WeakSet<object>()
 
 /**
  * Whether a matched assistant message should adopt the server's parts.
@@ -64,13 +100,25 @@ function shouldAdoptServerParts(
 ): boolean {
   const localParts = local.parts ?? []
   const serverParts = server.parts ?? []
-  const localText = extractTextFromMessageParts(local.parts)
-  const serverText = extractTextFromMessageParts(server.parts)
+  const serverTerminal = isTerminalMessageStatus(server.status)
 
-  if (serverText.length > localText.length) return true
+  // Settled fast path: this local array already converged with the message's
+  // immutable terminal form — skip the O(content) comparison entirely.
+  if (serverTerminal && terminalConvergedParts.has(localParts)) return false
+
+  if (textLengthOfParts(serverParts) > textLengthOfParts(localParts)) {
+    return true
+  }
   if (serverParts.length > localParts.length) return true
-  if (!isTerminalMessageStatus(server.status)) return false
-  return JSON.stringify(serverParts) !== JSON.stringify(localParts)
+  if (!serverTerminal) return false
+  if (JSON.stringify(serverParts) === JSON.stringify(localParts)) {
+    terminalConvergedParts.add(localParts)
+    return false
+  }
+  // The caller (reconcileSelectedPath — the only caller) adopts `serverParts`
+  // wholesale on `true`, so the adopted array IS the terminal form.
+  terminalConvergedParts.add(serverParts)
+  return true
 }
 
 /**

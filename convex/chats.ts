@@ -53,34 +53,6 @@ export function selectProjectChatPreview(
 }
 
 /**
- * Get all chats for the current user
- */
-export const getForCurrentUser = maybeAuthQuery({
-  args: {},
-  handler: async (ctx) => {
-    const user = ctx.user
-    if (!user) return []
-
-    const chats = await ctx.db
-      .query("chats")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect()
-
-    // Sort: pinned first (by pinnedAt desc), then by updatedAt/createdAt desc
-    return chats.sort((a, b) => {
-      if (a.pinned && !b.pinned) return -1
-      if (!a.pinned && b.pinned) return 1
-      if (a.pinned && b.pinned) {
-        return (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0)
-      }
-      const aTime = a.updatedAt ?? a._creationTime
-      const bTime = b.updatedAt ?? b._creationTime
-      return bTime - aTime
-    })
-  },
-})
-
-/**
  * The current user's pinned chats over the composite sidebar index — a small,
  * live read rendered as its own sidebar section alongside the paginated
  * recency window (ADR-0005). Project membership is retained so the sidebar can

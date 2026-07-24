@@ -32,6 +32,12 @@ describe("encryptSecret / decryptSecret", () => {
     expect(decryptSecret(encrypted, iv, userKeyBinding)).toBe(plaintext)
   })
 
+  it("round-trips an empty plaintext", () => {
+    const { encrypted, iv } = encryptSecret("", userKeyBinding)
+    expect(encrypted).toMatch(/^v3::[0-9a-f]+$/)
+    expect(decryptSecret(encrypted, iv, userKeyBinding)).toBe("")
+  })
+
   it("emits versioned ciphertext and a fresh IV per call", () => {
     const a = encryptSecret("same", userKeyBinding)
     const b = encryptSecret("same", userKeyBinding)

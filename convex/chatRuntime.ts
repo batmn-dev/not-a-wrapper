@@ -26,11 +26,8 @@ import {
 import { createMessageBranchWriter } from "./domain/message_branch_writes"
 import {
   createBranchContext,
-  getEffectiveParentId,
   getEffectiveParentIdFromContext,
-  getSelectedPathMessages,
   getSelectedPathMessagesFromContext,
-  getSiblingMessages,
   getSiblingMessagesFromContext,
 } from "./domain/message_branches"
 import {
@@ -53,7 +50,6 @@ import {
   type AuthenticatedRunOwner,
 } from "./lib/auth"
 import { ownedGenerationRunMutation } from "./lib/authedFunctions"
-import { isSinglePassBranchContextEnabled } from "./lib/runtime_flags"
 import {
   vToolInvocationStreamMetadata,
   type PersistedMessageMetadata,
@@ -327,15 +323,12 @@ function findMessageIndexByUiId(
 }
 
 /**
- * Selected-path derivation for runtime consumers. With
- * `CHAT_SINGLE_PASS_BRANCH_CONTEXT` on, one context serves the whole call
- * (plan PR 1 step 4); off, the pre-PR-1 per-call pattern. Same algorithm,
- * identical results either way.
+ * Selected-path derivation for runtime consumers: one context serves the
+ * whole call (plan PR 1 step 4; made unconditional in the 2026-07-23 flag
+ * collapse).
  */
 function getSelectedPath(messages: Doc<"messages">[]) {
-  return isSinglePassBranchContextEnabled()
-    ? getSelectedPathMessagesFromContext(createBranchContext(messages))
-    : getSelectedPathMessages(messages)
+  return getSelectedPathMessagesFromContext(createBranchContext(messages))
 }
 
 function getVisibleSelectedMessages(messages: Doc<"messages">[]) {
@@ -408,15 +401,12 @@ function resolveFallbackSibling(
   messages: Doc<"messages">[],
   message: Doc<"messages">
 ): Id<"messages"> | null {
-  const context = isSinglePassBranchContextEnabled()
-    ? createBranchContext(messages)
-    : null
-  const parentMessageId = context
-    ? getEffectiveParentIdFromContext(context, message)
-    : getEffectiveParentId(messages, message)
-  const semanticSiblings = (context
-    ? getSiblingMessagesFromContext(context, parentMessageId, message.role)
-    : getSiblingMessages(messages, parentMessageId, message.role)
+  const context = createBranchContext(messages)
+  const parentMessageId = getEffectiveParentIdFromContext(context, message)
+  const semanticSiblings = getSiblingMessagesFromContext(
+    context,
+    parentMessageId,
+    message.role
   ).filter(
     (sibling) =>
       sibling._id !== message._id && hasSemanticAssistantParts(sibling)

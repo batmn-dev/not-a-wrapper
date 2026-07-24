@@ -23,11 +23,13 @@ import {
 import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
 import { routePersistsChatMessages } from "@/lib/chat-turn/turn-store"
 import { attachStagedFilesToChat } from "@/lib/file-handling"
+import { CHAT_MESSAGE_THROTTLE_MS } from "@/lib/chat-performance/message-throttle"
 import { ENABLE_DURABLE_RUN_PRESENTATION } from "@/lib/flags"
 import { isChatPerfClientEnabled } from "@/lib/observability/chat-performance"
 import {
   beginChatPerfTurn,
   clearArmedChatPerfHeader,
+  deriveChatPerfTurnFacts,
   useChatTurnPerfMarks,
 } from "@/lib/observability/chat-performance-client"
 import { API_ROUTE_CHAT } from "@/lib/routes"
@@ -286,7 +288,10 @@ export function useChatCore({
     stop,
     setMessages,
     addToolApprovalResponse,
-  } = useChat({ chat: detachableStream.chat })
+    // The SDK applies the throttle to the messages callback only —
+    // status/error subscriptions, onFinish, Stop, and approval mutations stay
+    // immediate, and the trailing notification always delivers final state.
+  } = useChat({ chat: detachableStream.chat, throttle: CHAT_MESSAGE_THROTTLE_MS })
 
   // The local stream's assistant identity: durable runs stream the durable
   // assistantMessageId as the SDK message id, so this match is exact. Known
@@ -305,28 +310,16 @@ export function useChatCore({
     if (!isChatPerfClientEnabled()) {
       return {
         hasVisibleAssistantText: false,
+        visibleAssistantTextLength: 0,
         lastUserMessageId: undefined as string | undefined,
       }
     }
-    let hasVisibleAssistantText = false
-    let lastUserMessageId: string | undefined
-    for (let index = messages.length - 1; index >= 0; index--) {
-      const message = messages[index]
-      if (!hasVisibleAssistantText && message.role === "assistant") {
-        hasVisibleAssistantText = message.parts.some(
-          (part) => part.type === "text" && part.text.length > 0
-        )
-      }
-      if (!lastUserMessageId && message.role === "user") {
-        lastUserMessageId = message.id
-      }
-      if (hasVisibleAssistantText && lastUserMessageId) break
-    }
-    return { hasVisibleAssistantText, lastUserMessageId }
+    return deriveChatPerfTurnFacts(messages)
   }, [messages])
   useChatTurnPerfMarks({
     status,
     hasVisibleAssistantText: chatPerfTurnFacts.hasVisibleAssistantText,
+    visibleAssistantTextLength: chatPerfTurnFacts.visibleAssistantTextLength,
     lastUserMessageId: chatPerfTurnFacts.lastUserMessageId,
   })
 
@@ -360,6 +353,7 @@ export function useChatCore({
   const {
     presentation,
     stop: handleStop,
+    resetLocalStopIntent,
     noteLocalDispatch,
     noteLocalTransportSettled,
     consumeLocalStopIntent,
@@ -438,6 +432,7 @@ export function useChatCore({
   const chatTurn = createChatTurnController({
     createOptimisticMessageId,
     getTurnSnapshot,
+    getCurrentChatId: () => chatId,
     getIsSending,
     setIsSending,
     setIsSubmitting,
@@ -476,6 +471,7 @@ export function useChatCore({
         options
       ),
     regenerate,
+    resetLocalStopIntent,
     onLocalDispatch: noteLocalDispatch,
     consumeLocalStopIntent,
     toastError: (title) => toast({ title, status: "error" }),

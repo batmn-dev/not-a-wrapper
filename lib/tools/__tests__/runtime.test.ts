@@ -832,3 +832,64 @@ describe("prepareToolRuntime — Tool outcome recording", () => {
     expect(runtime.outcomeSummary().totalToolCalls).toBe(1)
   })
 })
+
+// =============================================================================
+// PR 7b — conditional Exa resolution (unconditional since the 2026-07-23 flag
+// collapse): the key is read only when the Layer 2 search-fallback or content-
+// extraction door can open.
+// =============================================================================
+
+describe("prepareToolRuntime — conditional Exa resolution", () => {
+  it("zero Exa reads when no Exa-backed tool can be exposed; tool set unchanged", async () => {
+    // Door 1 closed: Layer 1 provides search. Door 2 closed: extract off.
+    mocks.getProviderTools.mockResolvedValue({
+      tools: { web_search: {} },
+      metadata: new Map([["web_search", meta({ source: "builtin" })]]),
+    })
+    const runtime = await prepareToolRuntime(
+      baseOptions({ modelTools: { extract: false } })
+    )
+    expect(mocks.getEffectiveToolKeyWithMode).not.toHaveBeenCalled()
+    expect(Object.keys(runtime.tools)).toEqual(["web_search"])
+
+    // Search toggle off as well → still zero reads.
+    const noSearch = await prepareToolRuntime(
+      baseOptions({ enableSearch: false, modelTools: { extract: false } })
+    )
+    expect(mocks.getEffectiveToolKeyWithMode).not.toHaveBeenCalled()
+    expect(Object.keys(noSearch.tools)).toEqual([])
+  })
+
+  it("extraction still resolves Exa when the search toggle is off", async () => {
+    mocks.getContentExtractionTools.mockResolvedValue({
+      tools: { extract_content: {} },
+      metadata: new Map([
+        ["extract_content", meta({ source: "third-party", readOnly: true })],
+      ]),
+    })
+    const runtime = await prepareToolRuntime(
+      baseOptions({ enableSearch: false, modelTools: true })
+    )
+    expect(mocks.getEffectiveToolKeyWithMode).toHaveBeenCalledTimes(1)
+    expect(Object.keys(runtime.tools)).toEqual(["extract_content"])
+  })
+
+  it("Layer 2 search fallback resolves Exa and exposes the third-party search tool", async () => {
+    mocks.getProviderTools.mockResolvedValue({ tools: {}, metadata: new Map() })
+    mocks.getThirdPartyTools.mockResolvedValue({
+      tools: { web_search: {} },
+      metadata: new Map([
+        ["web_search", meta({ source: "third-party", readOnly: true })],
+      ]),
+    })
+    const runtime = await prepareToolRuntime(
+      baseOptions({ modelTools: { extract: false } })
+    )
+    expect(mocks.getEffectiveToolKeyWithMode).toHaveBeenCalledTimes(1)
+    expect(mocks.getThirdPartyTools).toHaveBeenLastCalledWith({
+      skipSearch: false,
+      exaKey: "exa_key",
+    })
+    expect(Object.keys(runtime.tools)).toEqual(["web_search"])
+  })
+})

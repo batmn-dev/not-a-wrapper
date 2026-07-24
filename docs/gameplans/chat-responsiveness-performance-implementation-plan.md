@@ -5,6 +5,7 @@
 | Field           | Value                                                                                                                   |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | Status          | **Accepted — conservative scope** (2026-07-22): PR 0a → PR 1 → PR 0b (lean) → PR 2 → PR 3 (minimal) → PR 7a/7b. All other phases descoped to the ledger in section 6. |
+| Active scope    | **Complete** (2026-07-23); the PR 1/2/3/7b rollout flags were collapsed after verification. See [`docs/measurements/2026-07-23-flag-collapse.md`](../measurements/2026-07-23-flag-collapse.md). |
 | Reviewed commit | `d942ac9f23c844aef700332c5234581ee5ef1fb4`                                                                              |
 | Review date     | 2026-07-22                                                                                                              |
 | Attribution     | Codex planning agent, based on source inspection at the reviewed commit and the supplied independent benchmark findings |
@@ -882,10 +883,15 @@ Active phases only. Files touched exclusively by descoped phases are intentional
 | 1       | `convex/chatRuntime.ts`                                  | Reuse context in prepare/history selection                                      | High   | prepare/selected-token/model history       |
 | 1       | `convex/lib/runtime_flags.ts`                            | `CHAT_SINGLE_PASS_BRANCH_CONTEXT` call-time env getter                          | Low    | On/off same-output tests                   |
 | 1       | `convex/branchContextShadow.ts`                          | Hand-invoked internal shadow compare (counts/hashes only, non-reactive)         | Low    | Serialization stability                    |
-| 2       | `lib/chat-performance/message-throttle.ts`               | Throttle value constant and flag resolution                                     | Low    | Value/0-disable/stability                  |
-| 2       | `app/components/chat/use-chat-core.ai-sdk-seam.test.tsx` | Extend existing seam test: pin throttle with supplied `Chat`                    | Low    | Fake timers/final update                   |
-| 3       | `app/components/chat/message-assistant.tsx`              | Pass live render status to Markdown                                             | Medium | Status/Stop/error rendering                |
-| 3       | `components/ui/message.tsx`                              | Carry Markdown streaming metadata                                               | Low    | Prop/default behavior                      |
+| 2       | `lib/chat-performance/message-throttle.ts`               | Throttle value constant and flag resolution (landed 2026-07-23; selected 50 ms) | Low    | Value/0-disable/stability                  |
+| 2       | `lib/chat-performance/message-throttle.test.ts`          | Flag-resolution tests (value applied, 0/unset/invalid disable, range guard)     | Low    | Resolver matrix                            |
+| 2       | `app/components/chat/use-chat-core.ai-sdk-seam.test.tsx` | Extended seam test: fake-timer 0/32/50/100 matrix, immediacy, Stop, approval    | Low    | Fake timers/final update                   |
+| 2       | `docs/measurements/2026-07-23-pr2-throttle-selection.md` | Selection record: matrix, 50 ms rationale, gates, staging caveat                | Low    | Link/check review                          |
+| 3       | `app/components/chat/message-assistant.tsx`              | Pass live render status to Markdown (landed 2026-07-23)                         | Medium | Status/Stop/error rendering                |
+| 3       | `components/ui/message.tsx`                              | Unchanged — `streaming` flows through `MessageContent`'s existing Markdown prop passthrough | Low    | Prop/default behavior                      |
+| 3       | `lib/chat-performance/streaming-code-render.ts`          | Mode flag resolution, throttle/debounce constants, loaded-language normalization | Low    | Component tests exercise all three modes   |
+| 3       | `components/ui/markdown.streaming.test.tsx`              | Terminal-block stability through the full pipeline; copy/XSS during growth      | Low    | Stability fixtures                         |
+| 3       | `docs/measurements/2026-07-23-pr3-streaming-code-decision.md` | Variant decision: throttled-highlight recommended; 16 ms/highlight evidence | Low    | Link/check review                          |
 | 7a      | `lib/user-keys.ts`                                       | One credential-resolution fact; delete deprecated `getUserKey` stub             | High   | BYOK/platform/free/missing/decrypt         |
 | 7a      | `app/api/chat/api.ts`                                    | Consume the resolved credential fact for admission                              | High   | auth/usage/public errors                   |
 | 7b      | `lib/tools/runtime.ts`                                   | Conditional Exa resolution                                                      | High   | Tool set/policy equivalence                |

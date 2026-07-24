@@ -308,6 +308,49 @@ describe("Composer primary action", () => {
     expect(onTurn).not.toHaveBeenCalled()
   })
 
+  it("presents Stop through the pre-acceptance dispatch window (submit in flight, no run identity yet)", () => {
+    const onTurn = vi.fn()
+    const stop = vi.fn()
+
+    const mounted = renderComposer({
+      onTurn,
+      stop,
+      isSubmitting: true,
+      status: "ready",
+      stoppable: false,
+    })
+
+    const button = mounted.querySelector(
+      'button[aria-label="Stop"]'
+    ) as HTMLButtonElement | null
+    expect(button).toBeTruthy()
+    expect(button?.disabled).toBe(false)
+
+    act(() => {
+      button?.click()
+    })
+
+    // Routes to the orchestrated stop (deferred exact-run semantics live
+    // there), never to a send.
+    expect(stop).toHaveBeenCalledTimes(1)
+    expect(onTurn).not.toHaveBeenCalled()
+  })
+
+  it("does not present Stop while submitting without a stop handler", () => {
+    const mounted = renderComposer({
+      isSubmitting: true,
+      status: "ready",
+      stoppable: false,
+    })
+
+    expect(mounted.querySelector('button[aria-label="Stop"]')).toBeNull()
+    const sendButton = mounted.querySelector(
+      'button[aria-label="Send message"]'
+    ) as HTMLButtonElement | null
+    expect(sendButton).toBeTruthy()
+    expect(sendButton?.disabled).toBe(true)
+  })
+
   it("keeps the shared default placeholder and accepts narrow surface copy", () => {
     const defaultComposer = renderComposer({ status: "ready" })
     expect(defaultComposer.querySelector("textarea")?.placeholder).toBe(

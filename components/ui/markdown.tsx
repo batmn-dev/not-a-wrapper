@@ -26,7 +26,7 @@ import { remarkLinkPresentation } from "@/lib/markdown/remark-link-presentation"
 import { remarkUnwrapLinkParens } from "@/lib/markdown/remark-unwrap-link-parens"
 import { cn } from "@/lib/utils"
 import { RiCodeLine } from "@remixicon/react"
-import { memo, useId, useMemo, useRef } from "react"
+import { createContext, memo, useContext, useId, useMemo, useRef } from "react"
 import ReactMarkdown, {
   Components,
   defaultUrlTransform,
@@ -47,7 +47,46 @@ export type MarkdownProps = {
   id?: string
   className?: string
   components?: Partial<Components>
+  /**
+   * True while the message that owns this Markdown is still live
+   * (submitted/streaming). Only then can the TERMINAL parsed block be
+   * `growing` (plan PR 3 stability rule); settled/aborted/failed messages and
+   * every non-terminal block are always `stable`. Threaded from the message
+   * row without changing how status is derived.
+   */
+  streaming?: boolean
 }
+
+/**
+ * Block stability (plan PR 3): `growing` iff the block is the terminal parsed
+ * Markdown block AND the owning message's render state is live. There is
+ * deliberately NO fence parsing — every non-terminal block is definitionally
+ * complete, and a terminal block settles when the message does or when a
+ * later block appears after it.
+ */
+export type MarkdownBlockStability = "stable" | "growing"
+
+/**
+ * Stable per-block record (plan PR 3): the block's source text, its identity
+ * (index-based — streamed Markdown only appends blocks), and its source
+ * offsets in the full payload. Stability is derived per render from the
+ * terminal-block rule, not stored by the parser.
+ */
+export type MarkdownBlockRecord = {
+  text: string
+  id: string
+  startOffset: number
+  endOffset: number
+}
+
+/**
+ * How a code block inside a Markdown block learns its stability without
+ * per-block component identities (which would defeat `INITIAL_COMPONENTS`
+ * memoization). Default `stable`: code rendered outside a live message —
+ * or outside Markdown entirely — highlights normally.
+ */
+const MarkdownBlockStabilityContext =
+  createContext<MarkdownBlockStability>("stable")
 
 const REMARK_MATH_OPTIONS = {
   singleDollarTextMath: false,
@@ -60,19 +99,26 @@ const markdownProcessor = unified()
 
 // Exported for benchmarks/chat-performance so the harness measures the real
 // production splitter (plan PR 0a), not a reimplementation.
-export function parseMarkdownIntoBlocks(markdown: string): string[] {
+export function parseMarkdownIntoBlocks(markdown: string): MarkdownBlockRecord[] {
   const tree = markdownProcessor.parse(markdown)
 
-  return tree.children.flatMap((node) => {
+  const blocks: MarkdownBlockRecord[] = []
+  for (const node of tree.children) {
     const start = node.position?.start.offset
     const end = node.position?.end.offset
 
     if (typeof start !== "number" || typeof end !== "number") {
-      return []
+      continue
     }
 
-    return markdown.slice(start, end)
-  })
+    blocks.push({
+      text: markdown.slice(start, end),
+      id: `block-${blocks.length}`,
+      startOffset: start,
+      endOffset: end,
+    })
+  }
+  return blocks
 }
 
 function extractLanguage(className?: string): string {
@@ -119,6 +165,9 @@ function getTableText(table: HTMLTableElement | null): string {
 
 const INITIAL_COMPONENTS: Partial<Components> = {
   code: function CodeComponent({ className, children, node: _, ...props }) {
+    // Read before the inline-code early return (hooks must be unconditional).
+    // Default "stable" outside a live message's terminal block.
+    const stability = useContext(MarkdownBlockStabilityContext)
     const isBlock =
       (props as typeof props & Record<string, unknown>)[
         CODE_BLOCK_ATTRIBUTE
@@ -174,6 +223,7 @@ const INITIAL_COMPONENTS: Partial<Components> = {
           )}
           code={children as string}
           language={language}
+          growing={stability === "growing"}
         />
       </CodeBlock>
     )
@@ -233,31 +283,40 @@ const INITIAL_COMPONENTS: Partial<Components> = {
 const MemoizedMarkdownBlock = memo(
   function MarkdownBlock({
     content,
+    stability,
     components = INITIAL_COMPONENTS,
   }: {
     content: string
+    stability: MarkdownBlockStability
     components?: Partial<Components>
   }) {
     return (
-      <ReactMarkdown
-        remarkPlugins={[
-          remarkGfm,
-          remarkBreaks,
-          [remarkMath, REMARK_MATH_OPTIONS],
-          remarkCodeBlockAnnotation,
-          remarkLinkPresentation,
-          remarkUnwrapLinkParens,
-        ]}
-        rehypePlugins={[rehypeKatex]}
-        urlTransform={markdownUrlTransform}
-        components={components}
-      >
-        {content}
-      </ReactMarkdown>
+      <MarkdownBlockStabilityContext.Provider value={stability}>
+        <ReactMarkdown
+          remarkPlugins={[
+            remarkGfm,
+            remarkBreaks,
+            [remarkMath, REMARK_MATH_OPTIONS],
+            remarkCodeBlockAnnotation,
+            remarkLinkPresentation,
+            remarkUnwrapLinkParens,
+          ]}
+          rehypePlugins={[rehypeKatex]}
+          urlTransform={markdownUrlTransform}
+          components={components}
+        >
+          {content}
+        </ReactMarkdown>
+      </MarkdownBlockStabilityContext.Provider>
     )
   },
   function propsAreEqual(prevProps, nextProps) {
-    return prevProps.content === nextProps.content
+    // Stability participates so a block re-renders exactly when it settles
+    // (growing → stable) — the moment its code block must highlight.
+    return (
+      prevProps.content === nextProps.content &&
+      prevProps.stability === nextProps.stability
+    )
   }
 )
 
@@ -268,6 +327,7 @@ function MarkdownComponent({
   id,
   className,
   components,
+  streaming = false,
 }: MarkdownProps) {
   const generatedId = useId()
   const blockId = id ?? generatedId
@@ -284,8 +344,11 @@ function MarkdownComponent({
     <div className={className}>
       {blocks.map((block, index) => (
         <MemoizedMarkdownBlock
-          key={`${blockId}-block-${index}`}
-          content={block}
+          key={`${blockId}-${block.id}`}
+          content={block.text}
+          stability={
+            streaming && index === blocks.length - 1 ? "growing" : "stable"
+          }
           components={mergedComponents}
         />
       ))}

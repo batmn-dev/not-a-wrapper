@@ -65,8 +65,19 @@ function aadFor(binding: SecretBinding): Buffer {
 export type EncryptedSecret = { encrypted: string; iv: string }
 
 /**
+ * True when `encrypted` is in the current versioned envelope
+ * (`v3:<ct>:<tag>`). Rows written before the AAD hardening (ADR-0010) fail
+ * this check permanently — callers should treat them as absent (the owner must
+ * re-save the secret), not as transient decrypt faults.
+ */
+export function isSupportedCiphertext(encrypted: string): boolean {
+  const [version, body, tag, ...rest] = encrypted.split(":")
+  return rest.length === 0 && version === VERSION && body !== undefined && !!tag
+}
+
+/**
  * Encrypt a secret, binding it to its owner + purpose via AAD. Returns the
- * versioned ciphertext (`v2:<ct>:<tag>`) and the per-record IV, matching the
+ * versioned ciphertext (`v3:<ct>:<tag>`) and the per-record IV, matching the
  * two-column storage shape (`encryptedKey` / `iv`).
  */
 export function encryptSecret(
@@ -99,14 +110,10 @@ export function decryptSecret(
   ivHex: string,
   binding: SecretBinding
 ): string {
-  const parts = encryptedData.split(":")
-  if (parts.length !== 3) {
+  if (!isSupportedCiphertext(encryptedData)) {
     throw new Error("Unsupported or malformed ciphertext")
   }
-  const [version, encrypted, authTagHex] = parts
-  if (version !== VERSION || !encrypted || !authTagHex) {
-    throw new Error("Unsupported or malformed ciphertext")
-  }
+  const [, encrypted, authTagHex] = encryptedData.split(":")
 
   const iv = Buffer.from(ivHex, "hex")
   const authTag = Buffer.from(authTagHex, "hex")

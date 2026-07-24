@@ -5,6 +5,19 @@ chat-responsiveness plan's later phases must use (plan §6 PR 0 step 10,
 correction 5, §9.2). Later phases' flag/rollout language is constrained to
 exactly the capabilities documented here.
 
+> **Status note (2026-07-23, flag collapse).** The PR 2/PR 3 behavior flags
+> (`NEXT_PUBLIC_CHAT_MESSAGE_THROTTLE`,
+> `NEXT_PUBLIC_STREAMING_CODE_RENDER_MODE`) no longer exist: after
+> verification and the §6 freeze root-cause, the throttle became the constant
+> `CHAT_MESSAGE_THROTTLE_MS` and throttled highlighting became the sole code
+> render path (see `docs/measurements/2026-07-23-flag-collapse.md`). This
+> seam remains the standard for flags that still exist
+> (`NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION`, `CHAT_PERF_SAMPLE_RATE`,
+> `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION`) and for future phases.
+> Round 2 of the collapse also removed `CHAT_SINGLE_PASS_BRANCH_CONTEXT`
+> (with `convex/lib/runtime_flags.ts` itself), `ENABLE_PAGINATED_SIDEBAR`,
+> and `CHAT_CONDITIONAL_EXA`.
+
 ## Selected seam: build/deploy-time environment flags
 
 The repository standard is **environment variables read through code-owned
@@ -13,11 +26,11 @@ accessors**, in two placements:
 - **Client-visible flags**: `NEXT_PUBLIC_*` env vars read in `lib/flags.ts`
   (or a dedicated module), inlined into the client bundle at build time.
   Examples: `NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION`,
-  `NEXT_PUBLIC_ENABLE_PAGINATED_SIDEBAR`.
+  `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION`.
 - **Server-only flags**: plain env vars read at call time — Next server code
-  reads `process.env` directly (`CHAT_PERF_SAMPLE_RATE`); Convex functions
-  read deployment env vars through `convex/lib/runtime_flags.ts`
-  (`CHAT_SINGLE_PASS_BRANCH_CONTEXT`).
+  reads `process.env` directly (`CHAT_PERF_SAMPLE_RATE`). No Convex runtime
+  flag remains after the 2026-07-23 collapse; a future one should use a
+  code-owned call-time accessor.
 
 Alternatives considered and rejected for now:
 
@@ -35,15 +48,14 @@ Alternatives considered and rejected for now:
 | --- | --- | --- |
 | Kill switch (client flags) | Redeploy | Change the env var and redeploy; latency = one Vercel build/deploy (~minutes). **Not a live toggle** — no phase may claim one. |
 | Kill switch (Next server flags) | Redeploy | Same as client: env changes require a redeploy of the Next app. |
-| Kill switch (Convex flags) | Env change + function restart | Convex deployment env vars apply to subsequent function executions without a code deploy (set via dashboard/CLI); still not instantaneous and not client-visible. |
 | Percentage cohorts | No | Env flags are all-or-nothing per deployment. No active phase includes cohort infrastructure. |
 | Remote weight adjustment | No | The selected env-flag seam has no remote experiment weights. |
 | Stable per-user assignment | No | The active scope has no experiment assignment or persistence mechanism. |
 
 ## Future cohort experiments require re-admission
 
-No active phase uses percentage cohorts. PR 2 selects its throttle value by
-local comparison, then follows the deployment-wide progression in plan §9.2.
+No active phase uses percentage cohorts. The completed PR 1/2/3/7b work used
+the deployment-wide progression in plan §9.2 before its flags were removed.
 
 If future evidence justifies a cohort experiment, a fresh review must re-admit
 it and select an assignment, versioning, privacy, and rollback design.

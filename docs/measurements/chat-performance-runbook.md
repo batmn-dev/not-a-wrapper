@@ -5,6 +5,12 @@ benchmark half (branch/Markdown/Shiki, PR 0a) is covered by
 `2026-07-22-chat-performance-baseline.md`; this runbook covers live
 browser/server measurement.
 
+> **Status note (2026-07-23).** The verified PR 1/2/3/7b behaviors covered by
+> the flag collapse now run unconditionally. The diagnostic instrumentation
+> switches below remain, while `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION`
+> is deliberately retained for unverified product presentation; see
+> `2026-07-23-flag-collapse.md`.
+
 ## Instrumentation switches (all default OFF)
 
 | Switch | Side | Effect |

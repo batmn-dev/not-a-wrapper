@@ -3,7 +3,21 @@
 - **Enable durable in-progress conversation presentation:** complete the
   [durable-turn gameplan's 15-flow manual checklist](docs/gameplans/extend-the-existing-convex-native-durable-turn-architecture.md#browser-verification-manual-checklist-now-automated-later),
   then enable `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION` so users who leave,
-  reload, or return to a streaming chat see its active progress.
+  reload, or return to a streaming chat see its active progress. The shared
+  pure presentation resolver is already implemented; this item tracks rollout,
+  not resolver construction.
+- **Cold-tab durable-run adoption anomaly:** investigate the unreproduced
+  cold-mount case where a tab loaded during Stop and adopted the next run only
+  at terminal (1 of 3 trials). Instrument and verify subscription-to-local
+  presentation timing before changing adoption semantics.
+- **Resolved approvals without continuation:** add a dedicated reaper rule for
+  an `awaiting_approval` run whose approvals are all resolved but whose client
+  crashed before dispatching the continuation. Preserve current
+  continuation-idempotency and next-send slot-transfer behavior.
+- **Single provider-credential read (chat-performance PR 7a):** replace the
+  admission `hasUserKey` read plus runtime `getEffectiveProviderApiKey` read
+  with one server-only credential-resolution fact, preserving BYOK/platform,
+  free-model, missing-key, decrypt-failure, and source-attribution behavior.
 - **Assistant message highlighting:** When highlighting text from an asssitant response, add a clear "Add to chat" button that adds it to the chat composer.
 - **Dynamic Activity-panel source presentation:** adapt each source item to the
   metadata available instead of forcing every source into one fixed layout.

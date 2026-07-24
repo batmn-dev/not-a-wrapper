@@ -74,13 +74,11 @@ describe("partitionSidebarChats", () => {
 })
 
 describe("deriveSidebarLoading", () => {
-  it("keeps the paginated sidebar loading until every first-page read is ready", () => {
+  it("keeps the sidebar loading until every first-page read is ready", () => {
     expect(
       deriveSidebarLoading({
         isConvexAuthLoading: false,
         isConvexAuthenticated: true,
-        paginated: true,
-        fullListPending: false,
         firstPagePending: true,
         shouldUseLocalChats: false,
         cachedChatsHydrated: true,
@@ -91,8 +89,6 @@ describe("deriveSidebarLoading", () => {
       deriveSidebarLoading({
         isConvexAuthLoading: false,
         isConvexAuthenticated: true,
-        paginated: true,
-        fullListPending: false,
         firstPagePending: false,
         shouldUseLocalChats: false,
         cachedChatsHydrated: true,

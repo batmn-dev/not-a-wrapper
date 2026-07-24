@@ -226,6 +226,11 @@ export function MessageAssistant({
                 <MessageContent
                   className="markdown prose relative w-full bg-transparent p-0"
                   markdown={true}
+                  // Live render state for the Markdown block model (plan PR 3):
+                  // only a live message's terminal block may render as a
+                  // growing code block. Conversation already scopes live
+                  // status to the last row, so no isLast gate is needed here.
+                  streaming={status === "submitted" || status === "streaming"}
                 >
                   {children}
                 </MessageContent>

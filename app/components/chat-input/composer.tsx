@@ -373,19 +373,29 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       // is already pending. The status fallback preserves standalone/local
       // callers that do not participate in durable presentation.
       const canStop = stoppable ?? status === "streaming"
+      // The pre-acceptance dispatch window (submit in flight, run identity
+      // not yet known) also presents Stop — ChatGPT keeps a Stop control up
+      // for the whole in-flight turn. The orchestrated stop() already covers
+      // this phase: it cancels a pre-transport dispatch locally and otherwise
+      // arms a deferred Stop that only ever targets the run this dispatch
+      // creates (§4.1.4). A resolver-declined Stop (e.g. one already pending)
+      // is NOT overridden: isSubmitting has settled false by then.
+      // Never present an enabled Stop without an actionable handler.
+      const presentStop =
+        Boolean(stop) && (canStop || Boolean(isSubmitting))
       return resolveComposerPrimaryActionState({
         // Stop presents for a live LOCAL stream or any resolver-stoppable
         // run (background, awaiting-approval, possibly-stale — §8/§11):
         // durable Stop is a mutation, not a transport abort, so the local
         // status alone must not gate the affordance.
-        isStreaming: canStop,
-        isAbortable: canStop,
+        isStreaming: presentStop,
+        isAbortable: presentStop,
         canSend:
           !isSubmitting &&
           attachments.every((attachment) => attachment.status === "ready") &&
           (!isOnlyWhitespace(localValue) || attachments.length > 0),
       })
-    }, [attachments, isSubmitting, localValue, status, stoppable])
+    }, [attachments, isSubmitting, localValue, status, stop, stoppable])
 
     const handlePrimaryActionClick = useCallback(() => {
       if (primaryAction.disabled) {

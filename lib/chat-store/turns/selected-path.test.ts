@@ -440,6 +440,48 @@ describe("durable content adoption", () => {
     expect(result[1].status).toBe("completed")
   })
 
+  it("does not re-scan a converged terminal message's content on later passes", () => {
+    // The section-6 freeze's reconcile component: every durable snapshot used
+    // to re-extract and re-serialize the FULL content of every settled
+    // assistant turn. After one structural comparison against the immutable
+    // terminal form, later passes must not touch the content at all — pinned
+    // by counting text-getter reads (the server side is rebuilt fresh per
+    // snapshot, as the Convex projection does).
+    let reads = 0
+    const trackedParts = (text: string): ChatTurnMessage["parts"] => {
+      const part: Record<string, unknown> = { type: "text" }
+      Object.defineProperty(part, "text", {
+        get: () => {
+          reads++
+          return text
+        },
+        enumerable: true,
+      })
+      return [part] as ChatTurnMessage["parts"]
+    }
+    const liveAssistant = {
+      ...serverMessage("s2", "assistant", "unused"),
+      parts: trackedParts("settled answer"),
+    }
+    const live = [serverMessage("s1", "user", "q"), liveAssistant]
+    const serverSnapshot = () => [
+      serverMessage("s1", "user", "q"),
+      {
+        ...serverMessage("s2", "assistant", "unused"),
+        parts: trackedParts("settled answer"),
+        status: "completed" as const,
+      },
+    ]
+
+    const once = projectSelectedPath(live, serverSnapshot())
+    expect(reads).toBeGreaterThan(0) // first pass really compared content
+
+    reads = 0
+    const twice = projectSelectedPath(once, serverSnapshot())
+    expect(twice).toBe(once)
+    expect(reads).toBe(0) // converged terminal content is never re-scanned
+  })
+
   it("adopts terminal server parts that differ only inside part payloads", () => {
     // Same text, same part count — the durable completion finalized a tool
     // part (state/output) that the local copy still holds mid-flight.

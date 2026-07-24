@@ -4,7 +4,7 @@ type ChatMessage = Doc<"messages">
 
 const ROOT_PARENT_KEY = "__root__"
 
-export type MessageBranchSibling = {
+type MessageBranchSibling = {
   messageId: Id<"messages">
   clientMessageId?: string
 }
@@ -365,10 +365,9 @@ export function getBranchInfoForMessageFromContext(
 }
 
 // ---------------------------------------------------------------------------
-// Array-based compatibility adapters — one-line delegations to the context
-// primitives above. Migration aids only (plan PR 1): each builds a throwaway
-// context, so hot paths that call several of them should build one context
-// and use the `*FromContext` primitives instead.
+// Test/benchmark-only array adapters — one-line delegations to the context
+// primitives above. Each builds a throwaway context; production hot paths use
+// the shared `*FromContext` primitives instead.
 // ---------------------------------------------------------------------------
 
 export function getEffectiveParentId(

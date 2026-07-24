@@ -410,6 +410,7 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
             selectedModel: "fixture-model",
             systemPrompt: "fixture system prompt",
           }),
+          getCurrentChatId: () => "chat-durable",
           getIsSending: () => isSending,
           setIsSending: (value) => {
             isSending = value
