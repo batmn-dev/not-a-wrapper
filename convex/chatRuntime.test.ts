@@ -2101,6 +2101,73 @@ describe("prepareGenerationForChat", () => {
     ])
   })
 
+  it("uses the run-level snapshot invariant to keep reused regeneration output on failure", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.run.startedAt = 2000
+    fixture.run.lastSnapshotSequence = 3
+    fixture.message.content = "partial regenerated answer"
+    fixture.message.parts = [
+      { type: "text", text: "partial regenerated answer" },
+    ]
+    const { ctx, deletes } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunFailedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        error: "provider failed",
+      }
+    )
+
+    expect(fixture.tables.assistantMessageSnapshots).toEqual([])
+    expect(deletes).toEqual([])
+    expect(fixture.message).toMatchObject({
+      content: "partial regenerated answer",
+      status: "failed",
+      error: "provider failed",
+    })
+  })
+
+  it("falls back to a legacy snapshot row for reused regeneration output", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.run.startedAt = 2000
+    fixture.run.lastSnapshotSequence = undefined
+    fixture.message.content = "legacy partial answer"
+    fixture.message.parts = [{ type: "text", text: "legacy partial answer" }]
+    fixture.tables.assistantMessageSnapshots.push({
+      _id: asId<"assistantMessageSnapshots">("snapshot_legacy"),
+      _creationTime: 1500,
+      runId: fixture.runId,
+      chatId: fixture.chatId,
+      messageId: fixture.messageId,
+      order: 1,
+      stepOrder: 0,
+      sequence: 1,
+      format: "text_snapshot",
+      textSnapshot: "legacy partial answer",
+      partsSnapshot: [{ type: "text", text: "legacy partial answer" }],
+      createdAt: 1500,
+    })
+    const { ctx, deletes } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunFailedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        error: "provider failed",
+      }
+    )
+
+    expect(deletes).toEqual([])
+    expect(fixture.message).toMatchObject({
+      content: "legacy partial answer",
+      status: "failed",
+      error: "provider failed",
+    })
+  })
+
   it("keeps and marks an empty assistant placeholder when a run aborts before the first chunk", async () => {
     // The stub IS the turn's durable outcome: deleting it made the turn
     // invisible (user bubble with no marker) and its user message got
@@ -3741,19 +3808,24 @@ describe("stopGenerationRun (gameplan §9, PR 6)", () => {
 })
 
 describe("updateAssistantSnapshotForChat", () => {
-  it("persists the snapshot and keeps the run/message streaming while the run is active", async () => {
+  it("applies a checkpoint without retaining a routine snapshot row", async () => {
     const fixture = createGenerationRunLinkageFixture()
     const { ctx, inserts } = createMutationCtx(fixture.tables)
 
-    await updateAssistantSnapshotForChat(ctx, await runOwner(ctx, fixture.runId), {
-      messageId: fixture.messageId,
-      order: 1,
-      sequence: 1,
-      textSnapshot: "partial",
-      partsSnapshot: [{ type: "text", text: "partial" }],
-    })
+    const result = await updateAssistantSnapshotForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        order: 1,
+        sequence: 1,
+        textSnapshot: "partial",
+        partsSnapshot: [{ type: "text", text: "partial" }],
+      }
+    )
 
-    expect(inserts).toHaveLength(1)
+    expect(result).toEqual({ kind: "applied", deduped: false })
+    expect(inserts).toEqual([])
     expect(fixture.message.content).toBe("partial")
     expect(fixture.message.status).toBe("streaming")
     expect(fixture.run.status).toBe("streaming")
@@ -3826,9 +3898,47 @@ describe("updateAssistantSnapshotForChat", () => {
       }
     )
 
-    expect(result).toEqual({ kind: "applied" })
+    expect(result).toEqual({ kind: "applied", deduped: false })
     expect(fixture.run.lastSnapshotSequence).toBe(5)
     expect(fixture.run.lastProgressAt).toBe(1700000000000)
+    vi.restoreAllMocks()
+  })
+
+  it("advances the run without rewriting byte-identical message content", async () => {
+    const firstNow = 1700000000000
+    const secondNow = firstNow + 1
+    vi.spyOn(Date, "now")
+      .mockReturnValueOnce(firstNow)
+      .mockReturnValueOnce(secondNow)
+    const fixture = createGenerationRunLinkageFixture()
+    const { ctx, patches } = createMutationCtx(fixture.tables)
+    const checkpoint = {
+      messageId: fixture.messageId,
+      order: 1,
+      textSnapshot: "same partial",
+      partsSnapshot: [{ type: "text", text: "same partial" }],
+    }
+
+    const first = await updateAssistantSnapshotForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      { ...checkpoint, sequence: 1 }
+    )
+    const firstMessageUpdatedAt = fixture.message.updatedAt
+    const second = await updateAssistantSnapshotForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      { ...checkpoint, sequence: 2 }
+    )
+
+    expect(first).toEqual({ kind: "applied", deduped: false })
+    expect(second).toEqual({ kind: "applied", deduped: true })
+    expect(fixture.message.updatedAt).toBe(firstMessageUpdatedAt)
+    expect(fixture.run.lastSnapshotSequence).toBe(2)
+    expect(
+      patches.filter((patch) => patch.id === fixture.messageId)
+    ).toHaveLength(1)
+    expect(patches.filter((patch) => patch.id === fixture.runId)).toHaveLength(2)
     vi.restoreAllMocks()
   })
 
@@ -3858,8 +3968,8 @@ describe("updateAssistantSnapshotForChat", () => {
       }
     )
 
-    expect(result).toEqual({ kind: "applied" })
-    expect(inserts).toHaveLength(1)
+    expect(result).toEqual({ kind: "applied", deduped: false })
+    expect(inserts).toEqual([])
     expect(fixture.message.content).toBe("tail after pause")
     expect(fixture.message.status).toBe("awaiting_approval")
     expect(fixture.run.status).toBe("awaiting_approval")

@@ -464,12 +464,19 @@ async function gatherAssistantMessageFacts(
 
   const isReusedForRegeneration =
     typeof run.startedAt === "number" && message.createdAt < run.startedAt
-  // Only meaningful for a reused regeneration, and only worth the read there.
+  // Projected-output invariant: `lastSnapshotSequence` is patched in the same
+  // mutation as every accepted checkpoint (both branches of
+  // updateAssistantSnapshotForChat) and sequences start at 1, so `> 0` is
+  // equivalent to "at least one accepted checkpoint for this run". Legacy runs
+  // written before the field existed fall back to the row probe; that fallback
+  // (and the rows it reads) may be removed only after the legacy purge.
   const hasSnapshotForRun = isReusedForRegeneration
-    ? (await ctx.db
-        .query("assistantMessageSnapshots")
-        .withIndex("by_run_sequence", (q) => q.eq("runId", run._id))
-        .first()) !== null
+    ? run.lastSnapshotSequence !== undefined
+      ? run.lastSnapshotSequence > 0
+      : (await ctx.db
+          .query("assistantMessageSnapshots")
+          .withIndex("by_run_sequence", (q) => q.eq("runId", run._id))
+          .first()) !== null
     : false
 
   const hasSemanticParts = hasSemanticAssistantParts(message)
@@ -1652,21 +1659,35 @@ export async function updateAssistantSnapshotForChat(
     return { kind: "stale" as const, lastSequence }
   }
 
+  // Write-storm guard: a checkpoint whose content is byte-identical to what the
+  // message already carries advances the sequence but must not rewrite the
+  // (potentially large) message doc. Historical storms wrote identical
+  // ~7 KB checkpoints at ~59 ms cadence for minutes; the sequence guard cannot
+  // reject them because sequences advance.
+  const contentUnchanged =
+    message.content === args.textSnapshot &&
+    JSON.stringify(message.parts) === JSON.stringify(args.partsSnapshot)
+
   const now = nowMs()
-  await ctx.db.insert("assistantMessageSnapshots", {
-    runId: run._id,
-    chatId: run.chatId,
-    messageId: args.messageId,
-    order: args.order,
-    stepOrder: args.stepOrder ?? 0,
-    sequence: args.sequence,
-    format: args.payload ? "UIMessageChunk" : "text_snapshot",
-    delta: args.delta,
-    payload: args.payload,
-    textSnapshot: args.textSnapshot,
-    partsSnapshot: args.partsSnapshot,
-    createdAt: now,
-  })
+  // Rollback seam (delete after one green production cycle): setting
+  // RETAIN_ROUTINE_SNAPSHOT_ROWS=1 in the Convex deployment env restores
+  // historical row retention without any other behavior change.
+  if (process.env.RETAIN_ROUTINE_SNAPSHOT_ROWS === "1") {
+    await ctx.db.insert("assistantMessageSnapshots", {
+      runId: run._id,
+      chatId: run.chatId,
+      messageId: args.messageId,
+      order: args.order,
+      stepOrder: args.stepOrder ?? 0,
+      sequence: args.sequence,
+      format: args.payload ? "UIMessageChunk" : "text_snapshot",
+      delta: args.delta,
+      payload: args.payload,
+      textSnapshot: args.textSnapshot,
+      partsSnapshot: args.partsSnapshot,
+      createdAt: now,
+    })
+  }
 
   if (!isTerminalMessageStatus(message.status)) {
     // Status advances to "streaming" only while the worker still owns
@@ -1678,12 +1699,14 @@ export async function updateAssistantSnapshotForChat(
     // approval reaper skips it): a permanent zombie if the completion
     // downgrade write never arrives.
     const workerExecuting = isWorkerExecutingStatus(run.status)
-    await ctx.db.patch(args.messageId, {
-      content: args.textSnapshot,
-      parts: args.partsSnapshot,
-      ...(workerExecuting && { status: "streaming" as const }),
-      updatedAt: now,
-    })
+    if (!contentUnchanged) {
+      await ctx.db.patch(args.messageId, {
+        content: args.textSnapshot,
+        parts: args.partsSnapshot,
+        ...(workerExecuting && { status: "streaming" as const }),
+        updatedAt: now,
+      })
+    }
     await ctx.db.patch(run._id, {
       ...(workerExecuting && { status: "streaming" as const }),
       lastSnapshotSequence: args.sequence,
@@ -1700,7 +1723,7 @@ export async function updateAssistantSnapshotForChat(
       updatedAt: now,
     })
   }
-  return { kind: "applied" as const }
+  return { kind: "applied" as const, deduped: contentUnchanged }
 }
 
 /**
