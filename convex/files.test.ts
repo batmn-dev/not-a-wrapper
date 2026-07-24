@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
-import type { Id } from "./_generated/dataModel"
+import type { Doc, Id } from "./_generated/dataModel"
 import {
   assertAttachmentCanBeDeletedIndependently,
+  getAttachmentPreviewForUserHandler,
+  getFileUrlForUserHandler,
   getFileUploadLimit,
   getFileUploadLimitStatus,
   isFileUploadLimitExceeded,
@@ -134,6 +136,65 @@ describe("attachment deletion", () => {
     expect(() =>
       assertAttachmentCanBeDeletedIndependently({ chatId })
     ).toThrow("Attached files cannot be deleted independently")
+  })
+})
+
+describe("attachment reads", () => {
+  it("denies URLs and previews when the bound Chat's Project is tombstoned", async () => {
+    const user: Doc<"users"> = {
+      _id: userId,
+      _creationTime: 1,
+      workosUserId: "workos-user-1",
+      email: "user@example.com",
+    }
+    const project: Doc<"projects"> = {
+      _id: "project-1" as Id<"projects">,
+      _creationTime: 1,
+      userId,
+      name: "Deleting",
+      deletingAt: 2,
+    }
+    const chat: Doc<"chats"> = {
+      _id: chatId,
+      _creationTime: 1,
+      userId,
+      projectId: project._id,
+      public: false,
+      pinned: false,
+      updatedAt: 1,
+    }
+    const bound: Doc<"chatAttachments"> = {
+      ...attachment(),
+      _creationTime: 1,
+    }
+    const getUrl = vi.fn().mockResolvedValue("https://convex.cloud/file")
+    const resultApi = {
+      filter: () => resultApi,
+      first: async () => bound,
+    }
+    const ctx = {
+      user,
+      db: {
+        get: async (id: string) => {
+          if (id === bound._id) return bound
+          if (id === chat._id) return chat
+          if (id === project._id) return project
+          return null
+        },
+        query: () => ({
+          withIndex: () => resultApi,
+        }),
+      },
+      storage: { getUrl },
+    } as unknown as Parameters<typeof getFileUrlForUserHandler>[0]
+
+    await expect(
+      getFileUrlForUserHandler(ctx, { storageId })
+    ).resolves.toBeNull()
+    await expect(
+      getAttachmentPreviewForUserHandler(ctx, { attachmentId })
+    ).resolves.toBeNull()
+    expect(getUrl).not.toHaveBeenCalled()
   })
 })
 

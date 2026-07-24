@@ -33,6 +33,7 @@ type TableDocuments = {
   toolInvocations: Doc<"toolInvocations">[]
   users: Doc<"users">[]
   chats: Doc<"chats">[]
+  projects: Doc<"projects">[]
 }
 
 type TableName = keyof TableDocuments
@@ -90,6 +91,7 @@ function createMutationCtx(
     toolInvocations: [],
     users: [],
     chats: [],
+    projects: [],
     ...tablesInput,
   }
   const patches: Array<{
@@ -427,6 +429,7 @@ function createGenerationRunLinkageFixture() {
     toolInvocations: [],
     users: [user],
     chats: [chat],
+    projects: [],
   }
 
   return {
@@ -3080,6 +3083,27 @@ describe("reapers (gameplan §6, PR 3)", () => {
     expect(fixture.chat.lastRunStatus).toBe("failed")
   })
 
+  it("does not reap an expired run whose parent project is tombstoned", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fixture = makeExpiredStreamingFixture()
+    const project: Doc<"projects"> = {
+      _id: asId<"projects">("project_deleting"),
+      _creationTime: 1,
+      userId: fixture.userId,
+      name: "Deleting project",
+      deletingAt: NOW - 1,
+    }
+    fixture.chat.projectId = project._id
+    fixture.tables.projects.push(project)
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await expect(reapExpiredGenerationRunsPass(ctx)).resolves.toEqual({
+      reaped: 0,
+    })
+    expect(fixture.run.status).toBe("streaming")
+    expect(fixture.message.status).toBe("streaming")
+  })
+
   it("never matches fresh leases, lease-less rows, or the approval pause", async () => {
     vi.spyOn(Date, "now").mockReturnValue(NOW)
     const fresh = createGenerationRunLinkageFixture()
@@ -3278,6 +3302,45 @@ describe("reapers (gameplan §6, PR 3)", () => {
       terminalReason: "approval_expired",
     })
     expect(fixture.message.content).toBe("content tail")
+  })
+
+  it("does not reap an expired approval whose parent project is tombstoned", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fixture = createGenerationRunLinkageFixture()
+    const project: Doc<"projects"> = {
+      _id: asId<"projects">("project_deleting"),
+      _creationTime: 1,
+      userId: fixture.userId,
+      name: "Deleting project",
+      deletingAt: NOW - 1,
+    }
+    fixture.chat.projectId = project._id
+    fixture.tables.projects.push(project)
+    fixture.run.status = "awaiting_approval"
+    const approval: Doc<"toolApprovalRequests"> = {
+      _id: asId<"toolApprovalRequests">("approval_request_1"),
+      _creationTime: 1,
+      chatId: fixture.chatId,
+      runId: fixture.runId,
+      assistantMessageId: fixture.messageId,
+      userId: fixture.userId,
+      toolCallId: "call_1",
+      toolName: "send_email",
+      source: "mcp",
+      riskClass: "destructive",
+      approvalId: "approval_1",
+      status: "pending",
+      createdAt: 1,
+      expiresAt: NOW - 1,
+    }
+    fixture.tables.toolApprovalRequests.push(approval)
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await expect(reapExpiredToolApprovalsPass(ctx)).resolves.toEqual({
+      expired: 0,
+    })
+    expect(approval.status).toBe("pending")
+    expect(fixture.run.status).toBe("awaiting_approval")
   })
 
   it("the approval reaper never touches unexpired or expiry-less pending approvals", async () => {
@@ -3502,6 +3565,29 @@ describe("pending-only approval resolution (gameplan §10, PR 8)", () => {
     const world = createMutationCtx(fixture.tables)
     return { ...fixture, approval, invocation, ...world }
   }
+
+  it("rejects a decision when the parent project is tombstoned", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(EXPIRY - 1)
+    const world = makeApprovalWorld()
+    const project: Doc<"projects"> = {
+      _id: asId<"projects">("project_deleting"),
+      _creationTime: 1,
+      userId: world.userId,
+      name: "Deleting project",
+      deletingAt: EXPIRY - 2,
+    }
+    world.chat.projectId = project._id
+    world.tables.projects.push(project)
+
+    await expect(
+      resolveToolCallDecision(
+        world.ctx,
+        { approvalId: "approval_1" },
+        "approved"
+      )
+    ).rejects.toThrow("Approval not found")
+    expect(world.approval.status).toBe("pending")
+  })
 
   it.each([
     {

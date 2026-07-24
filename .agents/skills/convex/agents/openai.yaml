@@ -1,0 +1,4 @@
+interface:
+  display_name: "Convex Documentation Router"
+  short_description: "Route Convex work to current official docs"
+  default_prompt: "Use $convex to find the current official Convex documentation for this task."

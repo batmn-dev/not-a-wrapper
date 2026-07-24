@@ -140,6 +140,7 @@ export async function backfillUpdatedAtBatch(
   let batchPatched = 0
 
   for (const project of projects.page) {
+    if (project.deletingAt !== undefined) continue
     const newestChat = await newestLinkedChat(ctx, project)
     const updatedAt = Math.max(
       getProjectModifiedAt(project),

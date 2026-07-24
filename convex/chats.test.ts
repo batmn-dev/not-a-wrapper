@@ -12,6 +12,7 @@ import {
   PROJECT_CHAT_PREVIEW_SCAN_LIMIT,
   projectChatForReader,
   removeChatForOwner,
+  searchByTitleForCurrentUserHandler,
   selectProjectChatPreview,
 } from "./chats"
 
@@ -189,20 +190,38 @@ function createChat(
   }
 }
 
+function createProject(
+  id: string,
+  userId: Id<"users">,
+  overrides: Partial<Doc<"projects">> = {}
+): Doc<"projects"> {
+  return {
+    _id: asId<"projects">(id),
+    _creationTime: 1,
+    userId,
+    name: id,
+    ...overrides,
+  }
+}
+
 function createCtx({
   user,
   chats = [],
+  projects = [],
   indexNames = [],
 }: {
   user: Doc<"users"> | null
   chats?: Doc<"chats">[]
+  projects?: Doc<"projects">[]
   indexNames?: string[]
 }): ChatQueryCtx {
   return {
     user,
     db: {
-      get: async (id: Id<"chats">) =>
-        chats.find((chat) => chat._id === id) ?? null,
+      get: async (id: Id<"chats"> | Id<"projects">) =>
+        chats.find((chat) => chat._id === id) ??
+        projects.find((project) => project._id === id) ??
+        null,
       query: (tableName: "chats") => ({
         withIndex: (
           indexName: string,
@@ -274,18 +293,28 @@ describe("getPinnedForCurrentUserHandler", () => {
   it("reads pinned project and non-project chats through the sidebar index", async () => {
     const user = createUser("user-1")
     const otherUser = createUser("user-2")
+    const activeProject = createProject("project-1", user._id)
+    const deletingProject = createProject("project-2", user._id, {
+      deletingAt: 2,
+    })
     const indexNames: string[] = []
 
     const result = await getPinnedForCurrentUserHandler(
       createCtx({
         user,
         indexNames,
+        projects: [activeProject, deletingProject],
         chats: [
           createChat({ _id: asId<"chats">("personal"), userId: user._id }),
           createChat({
             _id: asId<"chats">("project"),
             userId: user._id,
-            projectId: asId<"projects">("project-1"),
+            projectId: activeProject._id,
+          }),
+          createChat({
+            _id: asId<"chats">("deleting-project"),
+            userId: user._id,
+            projectId: deletingProject._id,
           }),
           createChat({
             _id: asId<"chats">("unpinned"),
@@ -335,17 +364,42 @@ describe("getPublicByIdHandler", () => {
       getPublicByIdHandler(ctx, { chatId: chat._id })
     ).resolves.toBeNull()
   })
+
+  it("returns null when the public Chat's Project is tombstoned", async () => {
+    const user = createUser("user-1")
+    const project = createProject("project-1", user._id, { deletingAt: 2 })
+    const chat = createChat({
+      _id: asId<"chats">("project-public"),
+      userId: user._id,
+      projectId: project._id,
+      public: true,
+    })
+    const ctx = createCtx({
+      user: null,
+      chats: [chat],
+      projects: [project],
+    })
+
+    await expect(
+      getPublicByIdHandler(ctx, { chatId: chat._id })
+    ).resolves.toBeNull()
+  })
 })
 
 describe("getRecentWindowForCurrentUserHandler", () => {
   it("paginates project and non-project chats in one recency window", async () => {
     const user = createUser("user-1")
+    const activeProject = createProject("project-1", user._id)
+    const deletingProject = createProject("project-2", user._id, {
+      deletingAt: 2,
+    })
     const indexNames: string[] = []
 
     const result = await getRecentWindowForCurrentUserHandler(
       createCtx({
         user,
         indexNames,
+        projects: [activeProject, deletingProject],
         chats: [
           createChat({
             _id: asId<"chats">("personal"),
@@ -357,8 +411,15 @@ describe("getRecentWindowForCurrentUserHandler", () => {
             _id: asId<"chats">("project"),
             userId: user._id,
             pinned: false,
-            projectId: asId<"projects">("project-1"),
+            projectId: activeProject._id,
             updatedAt: 2,
+          }),
+          createChat({
+            _id: asId<"chats">("deleting-project"),
+            userId: user._id,
+            pinned: false,
+            projectId: deletingProject._id,
+            updatedAt: 4,
           }),
           createChat({
             _id: asId<"chats">("pinned"),
@@ -373,6 +434,69 @@ describe("getRecentWindowForCurrentUserHandler", () => {
 
     expect(indexNames).toEqual(["by_user_pinned_updated"])
     expect(result.page.map((chat) => chat._id)).toEqual(["project", "personal"])
+  })
+})
+
+describe("searchByTitleForCurrentUserHandler", () => {
+  it("filters matches whose parent Project is tombstoned", async () => {
+    const user = createUser("user-1")
+    const activeProject = createProject("project-active", user._id)
+    const deletingProject = createProject("project-deleting", user._id, {
+      deletingAt: 2,
+    })
+    const active = createChat({
+      _id: asId<"chats">("active"),
+      userId: user._id,
+      projectId: activeProject._id,
+      title: "Research",
+    })
+    const hidden = createChat({
+      _id: asId<"chats">("hidden"),
+      userId: user._id,
+      projectId: deletingProject._id,
+      title: "Research archive",
+    })
+    const projects = [activeProject, deletingProject]
+    const resultApi = {
+      filter: () => resultApi,
+      take: async () => [active, hidden],
+    }
+    const ctx = {
+      user,
+      db: {
+        get: async (id: Id<"projects">) =>
+          projects.find((project) => project._id === id) ?? null,
+        query: () => ({
+          withSearchIndex: (
+            indexName: string,
+            buildQuery: (query: {
+              search: (fieldName: string, term: string) => unknown
+              eq: (fieldName: string, value: unknown) => unknown
+            }) => unknown
+          ) => {
+            expect(indexName).toBe("by_title")
+            const query = {
+              search: (fieldName: string, term: string) => {
+                expect(fieldName).toBe("title")
+                expect(term).toBe("Research")
+                return query
+              },
+              eq: (fieldName: string, value: unknown) => {
+                expect(fieldName).toBe("userId")
+                expect(value).toBe(user._id)
+                return query
+              },
+            }
+            buildQuery(query)
+            return resultApi
+          },
+        }),
+      },
+    } as unknown as ChatQueryCtx
+
+    await expect(
+      searchByTitleForCurrentUserHandler(ctx, " Research ")
+    ).resolves.toEqual([active])
   })
 })
 
@@ -495,12 +619,17 @@ describe("projectChatForReader (owner-only status strip)", () => {
 })
 
 describe("markChatReadForOwner", () => {
-  function createReadWriteCtx(chats: Doc<"chats">[]) {
+  function createReadWriteCtx(
+    chats: Doc<"chats">[],
+    projects: Doc<"projects">[] = []
+  ) {
     const patches: Array<{ id: string; value: Record<string, unknown> }> = []
     const ctx = {
       db: {
         get: async (id: string) =>
-          chats.find((chat) => chat._id === id) ?? null,
+          chats.find((chat) => chat._id === id) ??
+          projects.find((project) => project._id === id) ??
+          null,
         patch: async (id: string, value: Record<string, unknown>) => {
           patches.push({ id, value })
           const chat = chats.find((candidate) => candidate._id === id)
@@ -593,6 +722,23 @@ describe("markChatReadForOwner", () => {
       200
     )
     expect(patches).toEqual([])
+  })
+
+  it("no-ops when the owned Chat's Project is tombstoned", async () => {
+    const owner = createUser("owner")
+    const project = createProject("project-1", owner._id, { deletingAt: 2 })
+    const chat = createChat({
+      _id: asId<"chats">("c1"),
+      userId: owner._id,
+      projectId: project._id,
+      lastRunEndedAt: 200,
+    })
+    const { ctx, patches } = createReadWriteCtx([chat], [project])
+
+    await markChatReadForOwner(ctx, owner, chat._id, 200)
+
+    expect(patches).toEqual([])
+    expect(chat.lastReadAt).toBeUndefined()
   })
 })
 

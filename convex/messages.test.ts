@@ -17,6 +17,7 @@ import {
 type TableDocuments = {
   users: Doc<"users">[]
   chats: Doc<"chats">[]
+  projects: Doc<"projects">[]
   messages: Doc<"messages">[]
   generationRuns: Doc<"generationRuns">[]
   toolInvocations: Doc<"toolInvocations">[]
@@ -77,6 +78,7 @@ function createMutationCtx(tablesInput: Partial<TableDocuments>) {
   const tables: TableDocuments = {
     users: [],
     chats: [],
+    projects: [],
     messages: [],
     generationRuns: [],
     toolInvocations: [],
@@ -250,6 +252,38 @@ describe("getPublicForChatHandler", () => {
     const { ctx } = createMutationCtx({
       users: [user],
       chats: [chat],
+      messages: [
+        {
+          ...createMessage({
+            id: "message_1",
+            orderId: 1,
+            role: "user",
+            content: "hidden",
+          }),
+          chatId,
+        },
+      ],
+    })
+
+    await expect(
+      getPublicForChatHandler(ctx, { chatId })
+    ).resolves.toEqual([])
+  })
+
+  it("returns no messages when the public Chat's Project is tombstoned", async () => {
+    const { user, chat, chatId } = createOwnerFixture({ publicChat: true })
+    const project: Doc<"projects"> = {
+      _id: asId<"projects">("project_1"),
+      _creationTime: 1,
+      userId: user._id,
+      name: "Deleting",
+      deletingAt: 2,
+    }
+    chat.projectId = project._id
+    const { ctx } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      projects: [project],
       messages: [
         {
           ...createMessage({

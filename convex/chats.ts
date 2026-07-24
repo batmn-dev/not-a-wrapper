@@ -19,7 +19,11 @@ import {
   recordKnownProjectActivity,
 } from "./domain/project_activity"
 import { bindStagedAttachmentsToChat } from "./files"
-import { requireOwnedProject } from "./lib/auth"
+import {
+  filterActiveChats,
+  isChatActive,
+  requireOwnedProject,
+} from "./lib/auth"
 import {
   authenticatedMutation,
   maybeAuthQuery,
@@ -72,7 +76,7 @@ export async function getPinnedForCurrentUserHandler(
   const user = ctx.user
   if (!user) return []
 
-  return await ctx.db
+  const chats = await ctx.db
     .query("chats")
     .withIndex("by_user_pinned_updated", (q) =>
       q.eq("userId", user._id).eq("pinned", true)
@@ -80,6 +84,7 @@ export async function getPinnedForCurrentUserHandler(
     .filter((q) => q.eq(q.field("deletingAt"), undefined))
     .order("desc")
     .collect()
+  return await filterActiveChats(ctx, chats)
 }
 
 export const getPinnedForCurrentUser = maybeAuthQuery({
@@ -144,7 +149,7 @@ export async function getRecentWindowForCurrentUserHandler(
     return { page: [], isDone: true, continueCursor: "" }
   }
 
-  return await ctx.db
+  const result = await ctx.db
     .query("chats")
     .withIndex("by_user_pinned_updated", (q) =>
       q.eq("userId", user._id).eq("pinned", false)
@@ -153,6 +158,10 @@ export async function getRecentWindowForCurrentUserHandler(
     .filter((q) => q.eq(q.field("deletingAt"), undefined))
     .order("desc")
     .paginate(paginationOpts)
+  return {
+    ...result,
+    page: await filterActiveChats(ctx, result.page),
+  }
 }
 
 /**
@@ -211,23 +220,30 @@ export const getProjectChatsForCurrentUser = ownedProjectQuery({
  * is title-only by design; message-content search would be a separate index on
  * `messages` and is out of scope.
  */
+export async function searchByTitleForCurrentUserHandler(
+  ctx: MaybeUserChatQueryCtx,
+  term: string
+) {
+  const user = ctx.user
+  if (!user) return []
+
+  const trimmed = term.trim()
+  if (trimmed.length === 0) return []
+
+  const chats = await ctx.db
+    .query("chats")
+    .withSearchIndex("by_title", (q) =>
+      q.search("title", trimmed).eq("userId", user._id)
+    )
+    .filter((q) => q.eq(q.field("deletingAt"), undefined))
+    .take(CHAT_SEARCH_RESULT_LIMIT)
+  return await filterActiveChats(ctx, chats)
+}
+
 export const searchByTitle = maybeAuthQuery({
   args: { term: v.string() },
-  handler: async (ctx, { term }) => {
-    const user = ctx.user
-    if (!user) return []
-
-    const trimmed = term.trim()
-    if (trimmed.length === 0) return []
-
-    return await ctx.db
-      .query("chats")
-      .withSearchIndex("by_title", (q) =>
-        q.search("title", trimmed).eq("userId", user._id)
-      )
-      .filter((q) => q.eq(q.field("deletingAt"), undefined))
-      .take(CHAT_SEARCH_RESULT_LIMIT)
-  },
+  handler: async (ctx, { term }) =>
+    await searchByTitleForCurrentUserHandler(ctx, term),
 })
 
 // The sidebar status-projection fields (docs/design/sidebar-status-backend-wiring.md)
@@ -481,7 +497,7 @@ export async function getPublicByIdHandler(
 
   // Only return if chat is public
   if (!chat.public) return null
-  if (chat.deletingAt !== undefined) return null
+  if (!(await isChatActive(ctx, chat))) return null
 
   // Pure-public read (no owner concept) — always strip owner-only fields.
   return stripOwnerStatus(chat)
@@ -504,13 +520,8 @@ export async function markChatReadForOwner(
   readThroughAt: number
 ): Promise<void> {
   const chat = await ctx.db.get(chatId)
-  if (
-    !chat ||
-    chat.userId !== user._id ||
-    chat.deletingAt !== undefined
-  ) {
-    return // public / not-owned / deleting → no-op
-  }
+  if (!chat || chat.userId !== user._id) return
+  if (!(await isChatActive(ctx, chat))) return
   if (typeof chat.lastRunEndedAt !== "number") return
 
   const lastReadAt = chat.lastReadAt ?? 0
@@ -557,6 +568,7 @@ export const backfillUpdatedAt = internalMutation({
     for (const chat of chats) {
       const current = (chat as { updatedAt?: number }).updatedAt
       if (current === undefined) {
+        if (!(await isChatActive(ctx, chat))) continue
         await ctx.db.patch(chat._id, { updatedAt: chat._creationTime })
         patched++
       }

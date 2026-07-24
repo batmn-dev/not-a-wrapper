@@ -194,6 +194,26 @@ describe("backfillUpdatedAtBatch", () => {
     expect(patches).toEqual([{ id: "project-3", updatedAt: 10 }])
     expect(scheduled).toEqual([])
   })
+
+  it("does not patch a tombstoned project", async () => {
+    const deletingProject = project("project-deleting", {
+      deletingAt: 30,
+    })
+    const { ctx, patches, scheduled } = createCtx({
+      projects: [deletingProject],
+      chats: [chat("chat-1", deletingProject._id, 40)],
+      isDone: true,
+      continueCursor: "",
+    })
+
+    await expect(backfillUpdatedAtBatch(ctx, {})).resolves.toEqual({
+      isDone: true,
+      total: 1,
+      patched: 0,
+    })
+    expect(patches).toEqual([])
+    expect(scheduled).toEqual([])
+  })
 })
 
 describe("removeProjectForOwner", () => {

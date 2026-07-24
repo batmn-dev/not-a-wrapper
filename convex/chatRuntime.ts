@@ -45,6 +45,7 @@ import {
 import { patchChatActivity } from "./domain/project_activity"
 import {
   getCurrentUser,
+  isChatActive,
   requireOwnedChat,
   type AuthenticatedChatOwner,
   type AuthenticatedRunOwner,
@@ -604,7 +605,13 @@ async function projectRunStatusToChat(
   extra?: Partial<Doc<"chats">>
 ) {
   const chat = await ctx.db.get(run.chatId)
-  if (!chat || chat.statusRunId !== run._id) return // a newer run owns the row → skip
+  if (
+    !chat ||
+    chat.statusRunId !== run._id ||
+    !(await isChatActive(ctx, chat))
+  ) {
+    return // a newer run or deleting logical root owns the row → skip
+  }
   await ctx.db.patch(run.chatId, {
     ...chatStatusProjection(status, now),
     ...extra,
@@ -2248,7 +2255,7 @@ export async function resolveToolCallDecision(
   const run = await ctx.db.get(approval.runId)
   if (!run) throw new Error("Approval not found")
   const chat = await ctx.db.get(run.chatId)
-  if (!chat || chat.deletingAt !== undefined) {
+  if (!chat || !(await isChatActive(ctx, chat))) {
     throw new Error("Approval not found")
   }
 
@@ -2507,7 +2514,7 @@ export async function reapExpiredGenerationRunsPass(
           continue
         }
         const chat = await ctx.db.get(run.chatId)
-        if (!chat || chat.deletingAt !== undefined) continue
+        if (!chat || !(await isChatActive(ctx, chat))) continue
         const currentRun = await ctx.db.get(run._id)
         if (!currentRun) continue
         const resolved = await gatherAssistantMessageFacts(
@@ -2577,7 +2584,7 @@ export async function reapExpiredToolApprovalsPass(
       const run = await ctx.db.get(approval.runId)
       if (!run) continue
       const chat = await ctx.db.get(run.chatId)
-      if (!chat || chat.deletingAt !== undefined) continue
+      if (!chat || !(await isChatActive(ctx, chat))) continue
       const currentApproval = await ctx.db.get(approval._id)
       if (
         currentApproval &&

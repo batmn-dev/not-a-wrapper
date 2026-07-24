@@ -2,6 +2,7 @@ import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx, QueryCtx } from "../_generated/server"
 
 type ConvexCtx = QueryCtx | MutationCtx
+type ChatActivityCtx = Pick<QueryCtx, "db">
 
 export type AuthenticatedChatOwner = {
   user: Doc<"users">
@@ -26,13 +27,47 @@ export function isChatDocActive(chat: Doc<"chats">): boolean {
 }
 
 export async function isChatActive(
-  ctx: ConvexCtx,
+  ctx: ChatActivityCtx,
   chat: Doc<"chats">
 ): Promise<boolean> {
-  if (chat.deletingAt !== undefined) return false
+  if (!isChatDocActive(chat)) return false
   if (!chat.projectId) return true
   const project = await ctx.db.get(chat.projectId)
   return project !== null && project.deletingAt === undefined
+}
+
+/**
+ * Parent-aware projection for bounded Chat result sets. Project ids are
+ * de-duplicated so a page containing siblings reads each logical root once;
+ * missing projects fail closed like `isChatActive`.
+ */
+export async function filterActiveChats(
+  ctx: ChatActivityCtx,
+  chats: readonly Doc<"chats">[]
+): Promise<Doc<"chats">[]> {
+  const rootActiveChats = chats.filter(isChatDocActive)
+  const projectIds = [
+    ...new Set(
+      rootActiveChats.flatMap((chat) =>
+        chat.projectId ? [chat.projectId] : []
+      )
+    ),
+  ]
+  const projects = await Promise.all(
+    projectIds.map(async (projectId) => await ctx.db.get(projectId))
+  )
+  const activeProjectIds = new Set(
+    projects
+      .filter(
+        (project): project is Doc<"projects"> =>
+          project !== null && project.deletingAt === undefined
+      )
+      .map((project) => project._id)
+  )
+
+  return rootActiveChats.filter(
+    (chat) => !chat.projectId || activeProjectIds.has(chat.projectId)
+  )
 }
 
 async function getUserByWorkosSubject(ctx: ConvexCtx, subject: string) {
