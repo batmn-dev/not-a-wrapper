@@ -11,6 +11,7 @@ import {
   markChatReadForOwner,
   PROJECT_CHAT_PREVIEW_SCAN_LIMIT,
   projectChatForReader,
+  removeChatForOwner,
   selectProjectChatPreview,
 } from "./chats"
 
@@ -796,5 +797,109 @@ describe("createChatWithFirstTurnForUser", () => {
         ],
       })
     ).rejects.toThrow("Duplicate attachment reference")
+  })
+})
+
+describe("removeChatForOwner", () => {
+  it("tombstones and schedules without synchronously reading or deleting children", async () => {
+    const owner = createUser("owner")
+    const chat = createChat({
+      _id: asId<"chats">("chat-1"),
+      userId: owner._id,
+      public: true,
+      liveRunStatus: "streaming",
+      liveRunFreshUntil: 500,
+      statusRunId: "run-1" as Id<"generationRuns">,
+    })
+    const messages = [{ _id: "message-1", chatId: chat._id }]
+    const jobs: Array<Record<string, unknown>> = []
+    const scheduled: Array<{ delay: number; args: unknown }> = []
+    const deleted: string[] = []
+    const ctx = {
+      chat,
+      user: owner,
+      db: {
+        get: async (id: string) => {
+          if (id === chat._id) return chat
+          return jobs.find((job) => job._id === id) ?? null
+        },
+        patch: async (id: string, patch: Record<string, unknown>) => {
+          expect(id).toBe(chat._id)
+          const chatRecord = chat as unknown as Record<string, unknown>
+          for (const [field, value] of Object.entries(patch)) {
+            if (value === undefined) {
+              delete chatRecord[field]
+            } else {
+              chatRecord[field] = value
+            }
+          }
+        },
+        insert: async (tableName: string, value: Record<string, unknown>) => {
+          expect(tableName).toBe("deletionJobs")
+          const id = "job-1"
+          jobs.push({ _id: id, _creationTime: 1, ...value })
+          return id
+        },
+        delete: async (id: string) => deleted.push(id),
+        query: (tableName: string) => {
+          expect(tableName).toBe("deletionJobs")
+          const resultApi = {
+            withIndex: (
+              indexName: string,
+              build: (query: {
+                eq: (field: string, value: unknown) => unknown
+              }) => unknown
+            ) => {
+              expect(indexName).toBe("by_chat")
+              const query = {
+                eq: (field: string, value: unknown) => {
+                  expect(field).toBe("chatId")
+                  expect(value).toBe(chat._id)
+                  return query
+                },
+              }
+              build(query)
+              return resultApi
+            },
+            filter: () => resultApi,
+            first: async () => null,
+          }
+          return resultApi
+        },
+      },
+      scheduler: {
+        runAfter: async (delay: number, _fn: unknown, args: unknown) => {
+          scheduled.push({ delay, args })
+          return "scheduled-id"
+        },
+      },
+      storage: {},
+      meta: {},
+    } as unknown as MutationCtx & {
+      chat: Doc<"chats">
+      user: Doc<"users">
+    }
+
+    await removeChatForOwner(ctx)
+
+    expect(chat).toMatchObject({
+      deletingAt: expect.any(Number),
+      public: false,
+    })
+    expect(chat.liveRunStatus).toBeUndefined()
+    expect(chat.liveRunFreshUntil).toBeUndefined()
+    expect(chat.statusRunId).toBeUndefined()
+    expect(jobs).toHaveLength(1)
+    expect(jobs[0]).toMatchObject({
+      targetKind: "chat",
+      chatId: chat._id,
+      state: "pending",
+      phase: "assistantMessageSnapshots",
+    })
+    expect(scheduled).toEqual([
+      { delay: 0, args: { jobId: "job-1" } },
+    ])
+    expect(messages).toEqual([{ _id: "message-1", chatId: chat._id }])
+    expect(deleted).toEqual([])
   })
 })

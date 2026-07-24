@@ -1,16 +1,17 @@
 import { v } from "convex/values"
 import { internal } from "./_generated/api"
+import type { Doc } from "./_generated/dataModel"
 import {
   internalMutation,
   internalQuery,
   type MutationCtx,
 } from "./_generated/server"
+import { ensureProjectDeletionJob } from "./domain/chat_deletion"
+import { newestLinkedChat } from "./domain/chat_project_link"
 import {
   getProjectModifiedAt,
   patchProjectActivity,
 } from "./domain/project_activity"
-import { createChatOwnedDeletion } from "./domain/chat_owned_deletion"
-import { newestLinkedChat } from "./domain/chat_project_link"
 import {
   authenticatedMutation,
   maybeAuthQuery,
@@ -185,11 +186,26 @@ export const backfillUpdatedAt = internalMutation({
   handler: backfillUpdatedAtBatch,
 })
 
-/** Delete a Project after deleting every complete Chat graph it owns. */
+export async function removeProjectForOwner(
+  ctx: MutationCtx & { project: Doc<"projects">; user: Doc<"users"> }
+): Promise<void> {
+  const now = Date.now()
+  await ctx.db.patch(ctx.project._id, {
+    deletingAt: now,
+    updatedAt: now,
+  })
+  const job = await ensureProjectDeletionJob(ctx, ctx.project, ctx.user)
+  await ctx.scheduler.runAfter(
+    0,
+    internal.deletionCleanup.runDeletionBatch,
+    {
+      jobId: job._id,
+    }
+  )
+}
+
+/** Logically delete a Project and schedule its bounded physical drain. */
 export const remove = ownedProjectMutation({
   args: {},
-  handler: async (ctx) => {
-    await createChatOwnedDeletion(ctx).deleteChatsForProject(ctx.project)
-    await ctx.db.delete(ctx.project._id)
-  },
+  handler: async (ctx) => removeProjectForOwner(ctx),
 })

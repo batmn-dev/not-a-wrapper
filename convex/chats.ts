@@ -1,5 +1,6 @@
 import { paginationOptsValidator, type PaginationOptions } from "convex/server"
 import { v } from "convex/values"
+import { internal } from "./_generated/api"
 import type { Doc, Id } from "./_generated/dataModel"
 import {
   internalMutation,
@@ -7,8 +8,11 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server"
-import { createChatOwnedDeletion } from "./domain/chat_owned_deletion"
-import { collectLinkedChats } from "./domain/chat_project_link"
+import { ensureChatDeletionJob } from "./domain/chat_deletion"
+import {
+  collectLinkedChats,
+  requireLinkedProject,
+} from "./domain/chat_project_link"
 import { createMessageBranchWriter } from "./domain/message_branch_writes"
 import {
   patchChatActivity,
@@ -561,10 +565,32 @@ export const backfillUpdatedAt = internalMutation({
   },
 })
 
-/** Delete a Chat and its complete durable graph. */
+export async function removeChatForOwner(
+  ctx: MutationCtx & { chat: Doc<"chats">; user: Doc<"users"> }
+): Promise<void> {
+  const now = Date.now()
+  const project = await requireLinkedProject(ctx, ctx.chat)
+  await ctx.db.patch(ctx.chat._id, {
+    deletingAt: now,
+    public: false, // revoke share links in the same commit
+    liveRunStatus: undefined,
+    statusRunId: undefined,
+    liveRunFreshUntil: undefined,
+    updatedAt: now,
+  })
+  const job = await ensureChatDeletionJob(ctx, ctx.chat, ctx.user)
+  await ctx.scheduler.runAfter(
+    0,
+    internal.deletionCleanup.runDeletionBatch,
+    {
+      jobId: job._id,
+    }
+  )
+  await recordKnownProjectActivity(ctx, project ?? undefined, now)
+}
+
+/** Logically delete a Chat and schedule its bounded physical drain. */
 export const remove = ownedChatMutation({
   args: {},
-  handler: async (ctx) => {
-    await createChatOwnedDeletion(ctx).deleteChat(ctx.chat)
-  },
+  handler: async (ctx) => removeChatForOwner(ctx),
 })
