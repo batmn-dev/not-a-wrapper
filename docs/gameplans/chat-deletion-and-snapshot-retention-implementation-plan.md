@@ -1,12 +1,13 @@
 # Implementation Plan: Snapshot Retention Repair + Asynchronous Chat/Project Deletion
 
-- **Status:** Ready to implement
+- **Status:** Implemented, with the post-review correction in §3.8
 - **Date:** 2026-07-23
 - **Inputs:** `docs/convex-chat-deletion-failure-analysis.md` (Option D) + the independent
   review that approved it with required revisions (write-storm guard, exact tombstone
   surface inventory, legacy-purge ordering rule, one-paginate-per-function constraint).
 - **Branch:** work on the **current branch** (`darknight/justice-buster`). Do NOT create
-  a new branch. Three commits (Checkpoints 1–3), then one PR to `main`.
+  a new branch. The three checkpoint commits and the approved post-review corrective
+  commit, plus its documentation follow-up, belong in one PR to `main`.
 - **Incident being fixed:** `chats:remove` fails with
   `Too many bytes read in a single function execution (limit: 16777216 bytes)` at
   `convex/domain/chat_owned_deletion.ts:86/:117` because the mutation reads the complete
@@ -681,11 +682,49 @@ Asynchronous deletion engine: tombstone + bounded scheduled drain
 - ADR-0014
 ```
 
+### 3.8 Post-review correction (Commit 4 + documentation follow-up)
+
+The three checkpoint commits preserve the requested implementation history. A
+post-review audit found that §§2.4–2.6 were internally inconsistent with the
+parent-aware invariant in §2.2: several bypass surfaces checked only
+`chat.deletingAt`, so a Chat linked to a tombstoned Project could remain visible or
+mutable until physical cleanup reached it.
+
+This correction supersedes §§2.4–2.6 wherever a local-only Chat tombstone check
+conflicts with §2.2:
+
+- Use `isChatActive` for every direct Chat read/write surface, including public Chat
+  and message reads, read receipts, attachment URL/preview reads, tool-call writes and
+  per-Chat history, approval decisions, run-status projection, and both reapers.
+- Post-filter bounded Chat list/search result pages through a shared parent-aware
+  helper. De-duplicate Project ids so siblings read their logical parent once, and
+  preserve pagination metadata even when filtering underfills a page.
+- Apply the same parent-aware projection to paginated per-user tool-call history,
+  while retaining Chat-less audit rows.
+- Do not let dormant activity backfills patch tombstoned Chat or Project roots.
+- Extend stalled-job reconciliation with a bounded count of `blocked` jobs for
+  observability only. Blocked jobs remain hidden and are never resumed automatically.
+- Add targeted regressions for Project tombstones across public reads, list/search
+  projection, attachments, tool history, approval decisions, reapers, and backfills.
+
+No schema, wire, state-machine, snapshot-retention, or cleanup-order behavior changes
+in this correction.
+
+**Commit 4 message (as published):**
+
+```
+Harden Convex deletion boundaries
+```
+
+This documentation follow-up records the erratum and ADR clarification without
+rewriting the already-pushed corrective commit.
+
 ---
 
 ## 4. The PR
 
-One PR from `darknight/justice-buster` → `main`, containing exactly the three commits.
+One PR from `darknight/justice-buster` → `main`, containing the three checkpoint
+commits, the approved post-review corrective commit, and its documentation follow-up.
 Before opening: `git fetch origin` and diff against `origin/main` (per `AGENTS.md` PR
 baseline). Title:
 

@@ -18,7 +18,9 @@ grow much faster than the visible conversation.
 Deletion is a two-stage operation:
 
 1. The authenticated owner mutation tombstones the Chat or Project. Every read
-   and write surface treats that root as missing immediately.
+   and write surface treats that logical root as missing immediately. A linked
+   Project is the Chat's logical ancestor: Chat-bound access reads both the Chat
+   and its Project and fails closed when either is missing or tombstoned.
 2. A `deletionJobs` state machine drains one bounded child-table page per
    scheduled mutation. Destructive pages always restart at `cursor: null`;
    attachments use bounded `take` reads and an in-transaction
@@ -34,12 +36,23 @@ retaining cumulative copies; a temporary deployment setting,
 Jobs are idempotent, keep content-free document/byte counters, and schedule
 their next batch atomically. Unexpected invariant or storage failures convert a
 job to `blocked`; jobs are never auto-untombstoned or automatically resumed.
-The reconciler only restarts stale `pending` or `running` jobs.
+The reconciler only restarts stale `pending` or `running` jobs. It reports a
+bounded count of `blocked` jobs without mutating or scheduling them.
+
+Collection reads that can include project-linked Chats post-filter their bounded
+result set through the same parent-aware rule. Parent ids are de-duplicated and
+pagination metadata is preserved; a page may therefore underfill while a
+Project deletion is draining. Because these Project reads occur in the same
+reactive query or mutation, Convex invalidation and optimistic concurrency
+ordering make the tombstone authoritative without fan-out writes to child
+Chats.
 
 ## Consequences
 
 - Deletion disappears from the product immediately while physical reclamation
   is eventual and observable through `deletionJobs`.
+- Tombstoning a Project immediately hides and write-disables its linked Chats,
+  even before the coordinator reaches their individual roots.
 - Large Chats and Projects take multiple transactions but no transaction reads
   the complete graph.
 - Existing tombstones must remain hidden through rollback. Reverting the async
