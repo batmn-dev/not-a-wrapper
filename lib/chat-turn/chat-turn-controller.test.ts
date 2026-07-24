@@ -111,8 +111,9 @@ function createHarness() {
     sendMessage: vi.fn(() => {
       events.push("sendMessage")
     }),
-    sendMessageAndWaitForAcceptance: vi.fn((...args) =>
-      Promise.resolve(adapters.sendMessage(...args))
+    sendMessageAndWaitForAcceptance: vi.fn(
+      (...args: Parameters<ChatTurnAdapters["sendMessage"]>) =>
+        Promise.resolve(adapters.sendMessage(...args))
     ),
     regenerate: vi.fn(() => {
       events.push("regenerate")
