@@ -82,16 +82,45 @@ function createCtx({
               },
             }
             buildQuery(query)
-            const newestChat = chats
-              .filter((candidate) => candidate.projectId === projectId)
-              .sort((a, b) => b.updatedAt - a.updatedAt)[0]
+            let matchingChats = chats.filter(
+              (candidate) => candidate.projectId === projectId
+            )
 
             const orderedQuery = {
+              filter: (
+                buildFilter: (query: {
+                  eq: (fieldName: unknown, value: unknown) => boolean
+                  field: (fieldName: string) => string
+                }) => unknown
+              ) => {
+                let fieldName = ""
+                let expected: unknown
+                buildFilter({
+                  field: (field) => {
+                    fieldName = field
+                    return field
+                  },
+                  eq: (_field, value) => {
+                    expected = value
+                    return true
+                  },
+                })
+                matchingChats = matchingChats.filter(
+                  (candidate) =>
+                    (candidate as unknown as Record<string, unknown>)[
+                      fieldName
+                    ] === expected
+                )
+                return orderedQuery
+              },
               order: (direction: "asc" | "desc") => {
                 expect(direction).toBe("desc")
                 return orderedQuery
               },
-              first: async () => newestChat ?? null,
+              first: async () =>
+                [...matchingChats].sort(
+                  (a, b) => b.updatedAt - a.updatedAt
+                )[0] ?? null,
             }
             return orderedQuery
           },

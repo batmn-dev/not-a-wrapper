@@ -278,6 +278,17 @@ describe("Convex auth helpers", () => {
     }
   )
 
+  it("returns null for a tombstoned public chat just like a missing chat", async () => {
+    const owner = createUser("user_1", "workos_owner")
+    const chat = {
+      ...createChat("chat_1", owner._id, true),
+      deletingAt: 2,
+    }
+    const ctx = createCtx({ users: [owner], chats: [chat] })
+
+    await expect(getAuthorizedChatForRead(ctx, chat._id)).resolves.toBeNull()
+  })
+
   describe("owned chat requirement", () => {
     it.each([
       {
@@ -359,6 +370,28 @@ describe("Convex auth helpers", () => {
         user: owner,
         chat,
       })
+    })
+
+    it("rejects a chat whose linked project is tombstoned as missing", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const project = {
+        ...createProject("project_1", owner._id),
+        deletingAt: 2,
+      }
+      const chat = {
+        ...createChat("chat_1", owner._id),
+        projectId: project._id,
+      }
+      const ctx = createCtx({
+        identitySubject: owner.workosUserId,
+        users: [owner],
+        chats: [chat],
+        projects: [project],
+      })
+
+      await expect(requireOwnedChat(ctx, chat._id)).rejects.toThrow(
+        "Chat not found"
+      )
     })
   })
 
@@ -443,6 +476,23 @@ describe("Convex auth helpers", () => {
         user: owner,
         project,
       })
+    })
+
+    it("rejects a tombstoned project as missing", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const project = {
+        ...createProject("project_1", owner._id),
+        deletingAt: 2,
+      }
+      const ctx = createCtx({
+        identitySubject: owner.workosUserId,
+        users: [owner],
+        projects: [project],
+      })
+
+      await expect(requireOwnedProject(ctx, project._id)).rejects.toThrow(
+        "Project not found"
+      )
     })
   })
 
@@ -625,6 +675,25 @@ describe("Convex auth helpers", () => {
         chat,
         run,
       })
+    })
+
+    it("rejects a run whose chat is tombstoned as missing", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const chat = {
+        ...createChat("chat_1", owner._id),
+        deletingAt: 2,
+      }
+      const run = createGenerationRun("run_1", chat._id, owner._id)
+      const ctx = createCtx({
+        identitySubject: owner.workosUserId,
+        users: [owner],
+        chats: [chat],
+        generationRuns: [run],
+      })
+
+      await expect(requireOwnedGenerationRun(ctx, run._id)).rejects.toThrow(
+        "Run not found"
+      )
     })
   })
 })

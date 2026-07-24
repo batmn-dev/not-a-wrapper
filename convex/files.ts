@@ -201,6 +201,10 @@ export const getUrl = authenticatedQuery({
       .filter((q) => q.eq(q.field("storageId"), storageId))
       .first()
     if (!owned) return null
+    if (owned.chatId) {
+      const chat = await ctx.db.get(owned.chatId)
+      if (!chat || chat.deletingAt !== undefined) return null
+    }
 
     return await ctx.storage.getUrl(storageId)
   },
@@ -356,6 +360,10 @@ export const getAttachmentPreview = authenticatedQuery({
   handler: async (ctx, { attachmentId }) => {
     const attachment = await ctx.db.get(attachmentId)
     if (!attachment || attachment.userId !== ctx.user._id) return null
+    if (attachment.chatId) {
+      const chat = await ctx.db.get(attachment.chatId)
+      if (!chat || chat.deletingAt !== undefined) return null
+    }
     if (!attachment.storageId) return null
     const url = await ctx.storage.getUrl(attachment.storageId)
     if (!url) return null

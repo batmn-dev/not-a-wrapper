@@ -73,6 +73,7 @@ export async function getPinnedForCurrentUserHandler(
     .withIndex("by_user_pinned_updated", (q) =>
       q.eq("userId", user._id).eq("pinned", true)
     )
+    .filter((q) => q.eq(q.field("deletingAt"), undefined))
     .order("desc")
     .collect()
 }
@@ -105,6 +106,8 @@ export async function listForCurrentUserPaginatedHandler(
     .withIndex("by_user_project_updated", (q) =>
       q.eq("userId", user._id).eq("projectId", undefined)
     )
+    // Tombstones can underfill a page until physical cleanup removes them.
+    .filter((q) => q.eq(q.field("deletingAt"), undefined))
     .order("desc")
     .paginate(paginationOpts)
 }
@@ -142,6 +145,8 @@ export async function getRecentWindowForCurrentUserHandler(
     .withIndex("by_user_pinned_updated", (q) =>
       q.eq("userId", user._id).eq("pinned", false)
     )
+    // Tombstones can underfill a page until physical cleanup removes them.
+    .filter((q) => q.eq(q.field("deletingAt"), undefined))
     .order("desc")
     .paginate(paginationOpts)
 }
@@ -216,6 +221,7 @@ export const searchByTitle = maybeAuthQuery({
       .withSearchIndex("by_title", (q) =>
         q.search("title", trimmed).eq("userId", user._id)
       )
+      .filter((q) => q.eq(q.field("deletingAt"), undefined))
       .take(CHAT_SEARCH_RESULT_LIMIT)
   },
 })
@@ -462,18 +468,24 @@ export const makePublic = ownedChatMutation({
  * Get a public chat by ID (no authentication required). Pure-public read with
  * no user concept — deliberately outside the authenticated-handler seam.
  */
+export async function getPublicByIdHandler(
+  ctx: Pick<QueryCtx, "db">,
+  { chatId }: { chatId: Id<"chats"> }
+) {
+  const chat = await ctx.db.get(chatId)
+  if (!chat) return null
+
+  // Only return if chat is public
+  if (!chat.public) return null
+  if (chat.deletingAt !== undefined) return null
+
+  // Pure-public read (no owner concept) — always strip owner-only fields.
+  return stripOwnerStatus(chat)
+}
+
 export const getPublicById = query({
   args: { chatId: v.id("chats") },
-  handler: async (ctx, { chatId }) => {
-    const chat = await ctx.db.get(chatId)
-    if (!chat) return null
-
-    // Only return if chat is public
-    if (!chat.public) return null
-
-    // Pure-public read (no owner concept) — always strip owner-only fields.
-    return stripOwnerStatus(chat)
-  },
+  handler: getPublicByIdHandler,
 })
 
 /**
@@ -488,7 +500,13 @@ export async function markChatReadForOwner(
   readThroughAt: number
 ): Promise<void> {
   const chat = await ctx.db.get(chatId)
-  if (!chat || chat.userId !== user._id) return // public / not-owned → no-op
+  if (
+    !chat ||
+    chat.userId !== user._id ||
+    chat.deletingAt !== undefined
+  ) {
+    return // public / not-owned / deleting → no-op
+  }
   if (typeof chat.lastRunEndedAt !== "number") return
 
   const lastReadAt = chat.lastReadAt ?? 0

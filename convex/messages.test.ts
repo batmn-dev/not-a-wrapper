@@ -243,6 +243,32 @@ describe("normalizeMessagePartsForStorage", () => {
   })
 })
 
+describe("getPublicForChatHandler", () => {
+  it("returns no messages for a tombstoned public chat", async () => {
+    const { user, chat, chatId } = createOwnerFixture({ publicChat: true })
+    chat.deletingAt = 2
+    const { ctx } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages: [
+        {
+          ...createMessage({
+            id: "message_1",
+            orderId: 1,
+            role: "user",
+            content: "hidden",
+          }),
+          chatId,
+        },
+      ],
+    })
+
+    await expect(
+      getPublicForChatHandler(ctx, { chatId })
+    ).resolves.toEqual([])
+  })
+})
+
 describe("message branch selection", () => {
   it("walks the selected path and reports sibling branch metadata", () => {
     const messages = [

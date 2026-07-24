@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest"
 import type { Doc, Id } from "./_generated/dataModel"
 import type { MutationCtx } from "./_generated/server"
-import { requireGrantAuthorizedRun } from "./chatRuntimeWorker"
+import {
+  grantRejectionCode,
+  requireGrantAuthorizedRun,
+} from "./chatRuntimeWorker"
 import { sha256Hex, timingSafeEqualHex } from "./lib/sha256"
 
 // The execution-grant verifier (ADR-0011) — the only NEW authorization logic
@@ -23,6 +26,7 @@ function makeGrantWorld(
   overrides: {
     run?: Partial<Doc<"generationRuns">>
     chat?: Partial<Doc<"chats">>
+    project?: Partial<Doc<"projects">>
   } = {}
 ) {
   return makeCtx({
@@ -36,6 +40,11 @@ function makeGrantWorld(
       ...overrides.run,
     },
     chat_1: { _id: "chat_1", userId: "user_1", ...overrides.chat },
+    project_1: {
+      _id: "project_1",
+      userId: "user_1",
+      ...overrides.project,
+    },
     user_1: { _id: "user_1", workosUserId: "workos_user_1" },
   })
 }
@@ -115,5 +124,26 @@ describe("requireGrantAuthorizedRun", () => {
         { runId, grantDigest: DIGEST }
       )
     ).rejects.toThrow("Execution grant not authorized")
+  })
+
+  it("rejects a tombstoned chat as grant_unauthorized", async () => {
+    const error = await requireGrantAuthorizedRun(
+      makeGrantWorld({ chat: { deletingAt: Date.now() } }),
+      { runId, grantDigest: DIGEST }
+    ).catch((caught: unknown) => caught)
+
+    expect(grantRejectionCode(error)).toBe("grant_unauthorized")
+  })
+
+  it("rejects a tombstoned linked project as grant_unauthorized", async () => {
+    const error = await requireGrantAuthorizedRun(
+      makeGrantWorld({
+        chat: { projectId: "project_1" as Id<"projects"> },
+        project: { deletingAt: Date.now() },
+      }),
+      { runId, grantDigest: DIGEST }
+    ).catch((caught: unknown) => caught)
+
+    expect(grantRejectionCode(error)).toBe("grant_unauthorized")
   })
 })

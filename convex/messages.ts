@@ -126,7 +126,7 @@ export async function getPublicForChatHandler(
   { chatId }: { chatId: Id<"chats"> }
 ) {
   const chat = await ctx.db.get(chatId)
-  if (!chat || !chat.public) return []
+  if (!chat || !chat.public || chat.deletingAt !== undefined) return []
 
   const messages = await listMessagesByChatOrder(ctx, chatId)
   return stripRunLinkageForViewer(

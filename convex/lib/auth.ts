@@ -17,6 +17,24 @@ export type AuthenticatedRunOwner = AuthenticatedChatOwner & {
   run: Doc<"generationRuns">
 }
 
+/** A chat is active when neither it nor its linked project is being deleted.
+ * The project read is required so tombstoning a project instantly revokes
+ * every linked chat without patching children. Fail closed on a dangling
+ * projectId (same policy as chat_project_link). */
+export function isChatDocActive(chat: Doc<"chats">): boolean {
+  return chat.deletingAt === undefined
+}
+
+export async function isChatActive(
+  ctx: ConvexCtx,
+  chat: Doc<"chats">
+): Promise<boolean> {
+  if (chat.deletingAt !== undefined) return false
+  if (!chat.projectId) return true
+  const project = await ctx.db.get(chat.projectId)
+  return project !== null && project.deletingAt === undefined
+}
+
 async function getUserByWorkosSubject(ctx: ConvexCtx, subject: string) {
   return await ctx.db
     .query("users")
@@ -80,6 +98,7 @@ export async function getAuthorizedChatForRead(
 ): Promise<Doc<"chats"> | null> {
   const chat = await ctx.db.get(chatId)
   if (!chat) return null
+  if (!(await isChatActive(ctx, chat))) return null
   if (chat.public) return chat
 
   const user = await getCurrentUser(ctx)
@@ -99,6 +118,7 @@ export async function requireOwnedChat(
   if (chat.userId !== user._id) {
     throw new Error("Not authorized")
   }
+  if (!(await isChatActive(ctx, chat))) throw new Error("Chat not found")
 
   return { user, chat }
 }
@@ -133,6 +153,7 @@ export async function requireOwnedGenerationRun(
 
   const chat = await ctx.db.get(run.chatId)
   if (!chat || chat.userId !== user._id) throw new Error("Run not found")
+  if (!(await isChatActive(ctx, chat))) throw new Error("Run not found")
 
   return { user, chat, run }
 }
@@ -151,6 +172,7 @@ export async function requireOwnedProject(
   if (!user || project.userId !== user._id) {
     throw new Error("Not authorized")
   }
+  if (project.deletingAt !== undefined) throw new Error("Project not found")
 
   return { user, project }
 }

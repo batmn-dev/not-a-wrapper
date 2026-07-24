@@ -2245,6 +2245,12 @@ export async function resolveToolCallDecision(
   if (!approval || approval.userId !== user._id) {
     throw new Error("Approval not found")
   }
+  const run = await ctx.db.get(approval.runId)
+  if (!run) throw new Error("Approval not found")
+  const chat = await ctx.db.get(run.chatId)
+  if (!chat || chat.deletingAt !== undefined) {
+    throw new Error("Approval not found")
+  }
 
   if (approval.status !== "pending") {
     return {
@@ -2500,16 +2506,24 @@ export async function reapExpiredGenerationRunsPass(
         if (run.leaseExpiresAt === undefined || run.leaseExpiresAt >= now) {
           continue
         }
-        const resolved = await gatherAssistantMessageFacts(ctx, run, undefined)
+        const chat = await ctx.db.get(run.chatId)
+        if (!chat || chat.deletingAt !== undefined) continue
+        const currentRun = await ctx.db.get(run._id)
+        if (!currentRun) continue
+        const resolved = await gatherAssistantMessageFacts(
+          ctx,
+          currentRun,
+          undefined
+        )
         const verdict = resolveGenerationRunTransition(
-          { runStatus: run.status, message: resolved?.facts ?? null },
+          { runStatus: currentRun.status, message: resolved?.facts ?? null },
           { kind: "lease-expired" }
         )
         if (verdict.kind !== "transition") continue
-        await applyLifecycleVerdict(ctx, run, verdict, resolved, now)
+        await applyLifecycleVerdict(ctx, currentRun, verdict, resolved, now)
         await settleAuxiliaryRecordsForTerminalRun(
           ctx,
-          run,
+          currentRun,
           "generation worker lease expired",
           now
         )
@@ -2560,7 +2574,20 @@ export async function reapExpiredToolApprovalsPass(
       if (approval.expiresAt === undefined || approval.expiresAt > now) {
         continue
       }
-      if (await expireToolApprovalForChat(ctx, approval, now, "reaper")) {
+      const run = await ctx.db.get(approval.runId)
+      if (!run) continue
+      const chat = await ctx.db.get(run.chatId)
+      if (!chat || chat.deletingAt !== undefined) continue
+      const currentApproval = await ctx.db.get(approval._id)
+      if (
+        currentApproval &&
+        (await expireToolApprovalForChat(
+          ctx,
+          currentApproval,
+          now,
+          "reaper"
+        ))
+      ) {
         expired++
       }
     }

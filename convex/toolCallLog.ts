@@ -62,7 +62,11 @@ export const log = authenticatedMutation({
   handler: async (ctx, args) => {
     if (args.chatId) {
       const chat = await ctx.db.get(args.chatId)
-      if (!chat || chat.userId !== ctx.user._id) {
+      if (
+        !chat ||
+        chat.userId !== ctx.user._id ||
+        chat.deletingAt !== undefined
+      ) {
         throw new Error("Chat not found")
       }
     }
@@ -107,7 +111,9 @@ export const listByChat = maybeAuthQuery({
     if (!user) return []
 
     const chat = await ctx.db.get(chatId)
-    if (!chat || chat.userId !== user._id) return []
+    if (!chat || chat.userId !== user._id || chat.deletingAt !== undefined) {
+      return []
+    }
 
     return await ctx.db
       .query("toolCallLog")

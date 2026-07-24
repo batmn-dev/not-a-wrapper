@@ -29,6 +29,7 @@ export const getForCurrentUser = maybeAuthQuery({
     return await ctx.db
       .query("projects")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .filter((q) => q.eq(q.field("deletingAt"), undefined))
       .collect()
   },
 })
@@ -43,6 +44,7 @@ export const getById = maybeAuthQuery({
     const project = await ctx.db.get(projectId)
     if (!project) return null
     if (!ctx.user || project.userId !== ctx.user._id) return null
+    if (project.deletingAt !== undefined) return null
     return project
   },
 })
@@ -59,6 +61,7 @@ export const getByIdWithOwner = internalQuery({
   handler: async (ctx, { projectId }) => {
     const project = await ctx.db.get(projectId)
     if (!project) return null
+    if (project.deletingAt !== undefined) return null
 
     // Get the owner's WorkOS user ID for ownership verification
     const owner = await ctx.db.get(project.userId)

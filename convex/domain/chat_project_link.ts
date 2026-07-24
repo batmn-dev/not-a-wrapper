@@ -57,6 +57,7 @@ export async function collectLinkedChats(
   const chats = await ctx.db
     .query("chats")
     .withIndex("by_project", (q) => q.eq("projectId", project._id))
+    .filter((q) => q.eq(q.field("deletingAt"), undefined))
     .collect()
   for (const chat of chats) {
     assertLinkedOwners(chat, project)
@@ -93,6 +94,7 @@ export async function newestLinkedChat(
   const chat = await ctx.db
     .query("chats")
     .withIndex("by_project_updated", (q) => q.eq("projectId", project._id))
+    .filter((q) => q.eq(q.field("deletingAt"), undefined))
     .order("desc")
     .first()
   if (chat) assertLinkedOwners(chat, project)

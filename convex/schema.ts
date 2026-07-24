@@ -99,6 +99,10 @@ export default defineSchema({
     // expiresAt) and cleared at terminal transitions — never per heartbeat
     // (gameplan §5/§18 #4). An expired deadline must never render a spinner.
     liveRunFreshUntil: v.optional(v.number()),
+    // Deletion tombstone (logical deletion is immediate; physical cleanup is a
+    // scheduled drain — see deletionJobs). A set value makes the chat invisible
+    // and write-dead on every surface. Never cleared once set.
+    deletingAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .index("by_user_pinned", ["userId", "pinned"])
@@ -333,7 +337,37 @@ export default defineSchema({
     // Optional while this first reaches production so existing smoke-test rows
     // remain valid; false/undefined are intentionally equivalent.
     pinned: v.optional(v.boolean()),
+    // Deletion tombstone (logical deletion is immediate; physical cleanup is a
+    // scheduled drain — see deletionJobs). A set value makes the project
+    // invisible and write-dead on every surface. Never cleared once set.
+    deletingAt: v.optional(v.number()),
   }).index("by_user", ["userId"]),
+
+  deletionJobs: defineTable({
+    targetKind: v.union(v.literal("chat"), v.literal("project")),
+    chatId: v.optional(v.id("chats")), // chat target, or project job's current chat
+    projectId: v.optional(v.id("projects")),
+    userId: v.id("users"), // owner at initiation; internal consistency only
+    state: v.union(
+      v.literal("pending"),
+      v.literal("running"),
+      v.literal("blocked"),
+      v.literal("complete")
+    ),
+    phase: v.string(), // one of DELETION_PHASES / PROJECT_PHASES
+    version: v.number(), // job format version, start at 1
+    batchesProcessed: v.number(),
+    documentsDeleted: v.number(),
+    bytesObserved: v.number(), // getConvexSize of deleted rows, content-free
+    retryCount: v.number(),
+    failureCode: v.optional(v.string()), // stable enum string, never content
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_chat", ["chatId"])
+    .index("by_project", ["projectId"])
+    .index("by_state_updated", ["state", "updatedAt"]),
 
   userPreferences: defineTable({
     userId: v.id("users"),

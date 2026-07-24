@@ -5,6 +5,7 @@ import {
   createChatWithFirstTurnForUser,
   getPinnedForCurrentUserHandler,
   getProjectChatDirectoryForProject,
+  getPublicByIdHandler,
   getRecentWindowForCurrentUserHandler,
   listForCurrentUserPaginatedHandler,
   markChatReadForOwner,
@@ -17,6 +18,11 @@ type ChatQueryCtx = Parameters<typeof getPinnedForCurrentUserHandler>[0]
 
 type QueryBuilder = {
   eq: (fieldName: string, value: unknown) => QueryBuilder
+}
+
+type FilterBuilder = {
+  eq: (fieldName: unknown, value: unknown) => boolean
+  field: (fieldName: string) => string
 }
 
 function asId<Table extends "users" | "chats" | "projects" | "messages">(
@@ -85,7 +91,34 @@ describe("project conversation previews", () => {
                   },
                 }
                 buildQuery(query)
-                return { collect: async () => [older, newer] }
+                let chats = [older, newer]
+                const resultApi = {
+                  filter: (
+                    buildFilter: (filter: FilterBuilder) => unknown
+                  ) => {
+                    let fieldName = ""
+                    let expected: unknown
+                    buildFilter({
+                      field: (field) => {
+                        fieldName = field
+                        return field
+                      },
+                      eq: (_field, value) => {
+                        expected = value
+                        return true
+                      },
+                    })
+                    chats = chats.filter(
+                      (chat) =>
+                        (chat as unknown as Record<string, unknown>)[
+                          fieldName
+                        ] === expected
+                    )
+                    return resultApi
+                  },
+                  collect: async () => chats,
+                }
+                return resultApi
               },
             }
           }
@@ -167,6 +200,8 @@ function createCtx({
   return {
     user,
     db: {
+      get: async (id: Id<"chats">) =>
+        chats.find((chat) => chat._id === id) ?? null,
       query: (tableName: "chats") => ({
         withIndex: (
           indexName: string,
@@ -184,7 +219,7 @@ function createCtx({
           }
           buildQuery(query)
 
-          const results = chats.filter((chat) => {
+          let results = chats.filter((chat) => {
             const record = chat as unknown as Record<string, unknown>
             for (const [fieldName, value] of filters) {
               if (record[fieldName] !== value) return false
@@ -193,6 +228,26 @@ function createCtx({
           })
 
           const resultApi = {
+            filter: (buildFilter: (filter: FilterBuilder) => unknown) => {
+              let fieldName = ""
+              let expected: unknown
+              buildFilter({
+                field: (field) => {
+                  fieldName = field
+                  return field
+                },
+                eq: (_field, value) => {
+                  expected = value
+                  return true
+                },
+              })
+              results = results.filter(
+                (chat) =>
+                  (chat as unknown as Record<string, unknown>)[fieldName] ===
+                  expected
+              )
+              return resultApi
+            },
             collect: async () => results,
             order: (direction: "asc" | "desc") => {
               results.sort((a, b) => {
@@ -241,6 +296,11 @@ describe("getPinnedForCurrentUserHandler", () => {
             _id: asId<"chats">("other-user"),
             userId: otherUser._id,
           }),
+          createChat({
+            _id: asId<"chats">("deleting"),
+            userId: user._id,
+            deletingAt: 2,
+          }),
         ],
       })
     )
@@ -256,6 +316,23 @@ describe("getPinnedForCurrentUserHandler", () => {
       getPinnedForCurrentUserHandler(createCtx({ user: null, indexNames }))
     ).resolves.toEqual([])
     expect(indexNames).toEqual([])
+  })
+})
+
+describe("getPublicByIdHandler", () => {
+  it("returns null for a tombstoned public chat", async () => {
+    const user = createUser("user-1")
+    const chat = createChat({
+      _id: asId<"chats">("deleting-public"),
+      userId: user._id,
+      public: true,
+      deletingAt: 2,
+    })
+    const ctx = createCtx({ user: null, chats: [chat] })
+
+    await expect(
+      getPublicByIdHandler(ctx, { chatId: chat._id })
+    ).resolves.toBeNull()
   })
 })
 
