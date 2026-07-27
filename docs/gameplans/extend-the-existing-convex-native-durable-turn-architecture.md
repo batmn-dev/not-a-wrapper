@@ -8,33 +8,36 @@ The research report’s architecture remains materially valid against the curren
 
 ### Presentation decision — one unconditional path after local proof (2026-07-27)
 
-**Status: executed 2026-07-27.** The §14 checklist ran locally, its failures
-(an MCP `dynamic-tool` static-part gap across the presentation fold and the
-continuation path, plus the auto-send body and continuation-tail history
-adaptation defects) were fixed, the cold-tab anomaly did not reproduce in
-three post-fix trials, and the flag/disabled path/flag-only tests were
-removed — see the implementation notes' 2026-07-27 checklist section.
+**Status: executed 2026-07-27.** The §14 checklist completed locally before
+the presentation flag was removed. Its failures (an MCP `dynamic-tool`
+static-part gap across the presentation fold and the continuation path, plus
+the auto-send body and continuation-tail history adaptation defects) were
+fixed, the cold-tab anomaly did not reproduce in three post-fix trials, and the
+flag/disabled path/flag-only tests were removed — see the implementation
+notes' 2026-07-27 checklist section.
 
 This decision supersedes every presentation-flag rollout or rollback instruction
 later in this plan. The authenticated local smoke test with the flag OFF proved
 that the durable backend already keeps partial content moving across navigation,
 reload, and a second tab, but returning clients render no active status and no
-Stop control. That is the product gap this presentation work closes.
+Stop control. That is the product gap this presentation work closed.
 
-- Use `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION=true` only to exercise the
-  already-implemented presentation locally while completing the §14 checklist.
-  Do not use it for a staged deployment, cohort, soak, or permanent kill switch.
-- Fix any checklist failure, including the recorded cold-tab adoption anomaly,
-  before making the behavior unconditional.
-- Once the checklist passes, remove the environment flag, its accessor and
-  parsing tests, the disabled presentation branch, and flag parameters whose
-  only purpose was maintaining the second path. Keep the pure resolver and its
-  behavioral coverage.
-- Ship one user-facing behavior: a fresh durable run is presented consistently
-  in the initiating tab, after navigation or reload, and in another tab/device.
-- Roll back a regression by reverting the unconditional-presentation change and
-  redeploying. Do not preserve a dormant local-only UI path indefinitely; the
-  build-time flag also required a redeploy and was not a live safety control.
+- `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION=true` was used only to exercise
+  the already-implemented presentation locally while completing the §14
+  checklist, not for a staged deployment, cohort, soak, or permanent kill
+  switch.
+- Checklist failures, including the recorded cold-tab adoption anomaly, were
+  resolved before the behavior became unconditional.
+- After the checklist completed, the environment flag, its accessor and parsing
+  tests, the disabled presentation branch, and flag parameters whose only
+  purpose was maintaining the second path were removed. The pure resolver and
+  its behavioral coverage remain.
+- One user-facing behavior now ships: a fresh durable run is presented
+  consistently in the initiating tab, after navigation or reload, and in
+  another tab/device.
+- Regression rollback remains reverting the unconditional-presentation change
+  and redeploying. The removed build-time flag also required a redeploy and was
+  not a live safety control.
 
 ### What ADR-0011 already delivered
 
@@ -819,10 +822,11 @@ Extend both durable runtime suites:
 
 ### Browser verification (manual checklist now; automated later)
 
-Until the E2E harness exists (optional PR 9), the fifteen end-to-end flows below
-are a written manual checklist executed locally with the temporary presentation
-seam enabled. They must pass before the flag and disabled path are deleted and
-the presentation becomes unconditional. Use a deliberately slow model/prompt:
+Before the presentation flag and disabled path were removed, the fifteen
+end-to-end scenarios below were completed locally through the temporary seam.
+The implementation notes record the live results, documented dispositions, and
+post-fix verification; presentation is now unconditional. Until the optional PR
+9 E2E harness exists, future reruns should use a deliberately slow model/prompt:
 
 | Scenario | UI check | Data check (Convex dashboard) |
 |---|---|---|

@@ -394,23 +394,23 @@ turns fail with an actionable "insufficient credits" banner — itself correct
 failure presentation). Later verification switched to GPT-5 Mini; future live
 smokes should use cheap models from the start.
 
-## Presentation decision update (2026-07-27)
+## Presentation decision record (2026-07-27)
 
-This section supersedes the fifth-review presentation rollout boundary and the
+This decision superseded the fifth-review presentation rollout boundary and the
 older flag-based rollout instructions in the gameplan.
 
 - An authenticated local smoke test with the flag OFF confirmed that durable
   snapshots continue across navigation, reload, and a second tab, but returning
   clients show neither active-generation presentation nor a Stop control.
-- The existing `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION` seam is now only a
-  temporary way to exercise the implemented behavior while running the
-  gameplan's fifteen local browser flows.
-- After those flows pass and any defect is fixed, remove the flag, the disabled
-  path, and flag-only tests. The verified durable presentation becomes the only
-  product path.
-- Do not run a flag-off/flag-on deployment progression or retain the flag for a
-  soak. Rollback is `git revert` plus redeploy, which has the same deployment
-  latency without permanently maintaining two presentation behaviors.
+- The temporary `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION` seam was used
+  only to exercise the implemented behavior while completing the gameplan's
+  fifteen-scenario local checklist.
+- After the checklist completed and its defects were fixed, the flag, disabled
+  path, and flag-only tests were removed. The verified durable presentation is
+  now the only product path.
+- No flag-off/flag-on deployment progression or flag soak was used. Rollback
+  remains `git revert` plus redeploy, which has the same deployment latency
+  without permanently maintaining two presentation behaviors.
 
 ## Resolved-approvals-without-continuation reaper (2026-07-27)
 

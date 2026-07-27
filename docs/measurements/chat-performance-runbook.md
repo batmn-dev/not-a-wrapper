@@ -7,10 +7,10 @@ browser/server measurement.
 
 > **Status note (2026-07-23).** The verified PR 1/2/3/7b behaviors covered by
 > the flag collapse now run unconditionally. The diagnostic instrumentation
-> switches below remain. A later 2026-07-27 decision makes
-> `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION` a temporary local verification
-> scaffold only: after its browser checklist passes, the flag and disabled path
-> are removed and the presentation runs unconditionally. See
+> switches below remain. A later 2026-07-27 decision used
+> `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION` only as a temporary local
+> verification scaffold. The checklist completed, the flag and disabled path
+> were removed, and durable presentation now runs unconditionally. See
 > `2026-07-23-flag-collapse.md` and the durable-turn gameplan.
 
 ## Instrumentation switches (all default OFF)
@@ -84,5 +84,6 @@ Flag capabilities for later phases are fixed by
 `docs/chat-performance-rollout-seam.md`: build/deploy-time env flags with a
 deployment-wide local → staging → production flag-on progression. The active
 seam has no percentage cohorts, live kill switch, or remote weights.
-Durable-run presentation is an explicit exception: verify it locally through
-the temporary seam, then delete the flag and ship one unconditional path.
+Durable-run presentation no longer has a rollout seam: its local checklist
+completed, the temporary flag was deleted, and one unconditional path now
+ships.

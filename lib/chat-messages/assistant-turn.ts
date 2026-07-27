@@ -76,7 +76,10 @@ export type AssistantTurnView = {
   orderedParts: UIMessage["parts"]
   /** Ordered text content across all text parts. */
   text: string
-  /** Static tool parts, for phase detection and non-timeline result rendering. */
+  /**
+   * Static and dynamic tool evidence parts, for phase detection and
+   * non-timeline result rendering.
+   */
   toolParts: ToolEvidenceUIPart[]
   /** Immutable snapshot of rendered tool input/output for memo comparison. */
   toolRenderSignature: string
