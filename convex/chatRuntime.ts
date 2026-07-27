@@ -2647,18 +2647,34 @@ export const reapExpiredToolApprovals = internalMutation({
  * of reads; settling remains bounded by REAPER_BATCH_LIMIT.
  */
 const RESOLVED_PAUSE_SCAN_LIMIT = 8 * REAPER_BATCH_LIMIT
+const RESOLVED_PAUSE_REAPER_CHECKPOINT = "resolved_approval_pauses_by_status_v1"
 
 export async function reapResolvedApprovalPausesPass(
   ctx: MutationCtx
 ): Promise<{ settled: number }> {
   const now = nowMs()
   let settled = 0
-  const candidates = await ctx.db
+  const checkpoint = await ctx.db
+    .query("reaperCheckpoints")
+    .withIndex("by_name", (q) => q.eq("name", RESOLVED_PAUSE_REAPER_CHECKPOINT))
+    .unique()
+  const scanCursor = checkpoint?.cursor ?? null
+  const candidatesPage = await ctx.db
     .query("generationRuns")
     .withIndex("by_status", (q) => q.eq("status", "awaiting_approval"))
-    .take(RESOLVED_PAUSE_SCAN_LIMIT)
-  for (const candidate of candidates) {
-    if (settled >= REAPER_BATCH_LIMIT) break
+    .paginate({
+      cursor: scanCursor,
+      numItems: RESOLVED_PAUSE_SCAN_LIMIT,
+      maximumRowsRead: RESOLVED_PAUSE_SCAN_LIMIT,
+    })
+  let scanned = 0
+  let pageFullyExamined = true
+  for (const candidate of candidatesPage.page) {
+    if (settled >= REAPER_BATCH_LIMIT) {
+      pageFullyExamined = false
+      break
+    }
+    scanned++
     const run = await ctx.db.get(candidate._id)
     if (!run || run.status !== "awaiting_approval") continue
     if (run.continuationRunId !== undefined) continue
@@ -2718,15 +2734,38 @@ export async function reapResolvedApprovalPausesPass(
       })
     )
   }
-  // No silent caps: a full scan window means candidates beyond it were not
-  // examined this tick — and since the same prefix re-scans next tick, a
-  // window persistently full of ineligible rows IS starvation. Surface it.
-  if (candidates.length === RESOLVED_PAUSE_SCAN_LIMIT) {
-    console.warn(
+
+  // Advance only after examining the whole page. If 25 eligible rows consume
+  // the settlement budget partway through, hold the input cursor: those rows
+  // leave by_status after this transaction, so the next tick re-opens the same
+  // page without skipping its unexamined tail. A fully examined final page
+  // wraps to the beginning, allowing rows inserted behind the cursor to join
+  // the next sweep.
+  const nextCursor = pageFullyExamined
+    ? candidatesPage.isDone
+      ? undefined
+      : candidatesPage.continueCursor
+    : checkpoint?.cursor
+  const checkpointPatch = {
+    cursor: nextCursor,
+    updatedAt: now,
+  }
+  if (checkpoint) {
+    await ctx.db.patch(checkpoint._id, checkpointPatch)
+  } else {
+    await ctx.db.insert("reaperCheckpoints", {
+      name: RESOLVED_PAUSE_REAPER_CHECKPOINT,
+      ...checkpointPatch,
+    })
+  }
+
+  if (!pageFullyExamined) {
+    console.info(
       JSON.stringify({
-        _tag: "resolved_pause_scan_saturated",
-        scanned: candidates.length,
+        _tag: "resolved_pause_settle_budget_exhausted",
+        scanned,
         settled,
+        cursorHeld: true,
       })
     )
   }

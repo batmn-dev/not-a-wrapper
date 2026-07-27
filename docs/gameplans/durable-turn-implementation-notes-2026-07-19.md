@@ -487,17 +487,17 @@ Retry and a live composer.
 **Review round (2026-07-27, whole-diff):** three findings addressed, one
 partially refuted.
 
-1. *Reaper scan starvation (fixed):* candidate selection now scans
-   `RESOLVED_PAUSE_SCAN_LIMIT` (8× the settle budget) `awaiting_approval`
-   rows per tick while settling at most `REAPER_BATCH_LIMIT` — unlike the
-   lease/approval reapers, this pass's eligibility is only decidable per
-   candidate, so ineligible pauses legitimately occupy the `by_status`
-   prefix and a settle-budget-sized scan could curtain off eligible strands
-   forever. A persistently full window logs
-   `resolved_pause_scan_saturated` (no silent caps). Regression test: 30
-   ineligible pauses ahead of one eligible strand still settle it. Also
-   added the multi-approval grace test (the LAST `resolvedAt` gates the
-   pause).
+1. *Reaper scan starvation (fixed, then hardened):* candidate selection scans
+   paginated `RESOLVED_PAUSE_SCAN_LIMIT` (8× the settle budget)
+   `awaiting_approval` rows per tick while settling at most
+   `REAPER_BATCH_LIMIT`. A versioned durable checkpoint advances after each
+   fully examined page and wraps at the end, so even more than one scan
+   window of permanently ineligible legacy rows cannot curtain off eligible
+   strands forever. If the settlement budget is reached partway through a
+   page, the cursor is held so its unexamined tail is not skipped. Regression
+   coverage proves both 30-blocker same-page progress and cross-tick progress
+   past more than 200 blockers. The multi-approval grace test also proves the
+   LAST `resolvedAt` gates the pause.
 2. *OpenAI plaintext replay fallback flattened the continuation tail
    (fixed):* the fallback now plaintexts only the adapted HISTORY; the live
    continuation tail keeps its full parts (the approval-responded tool call

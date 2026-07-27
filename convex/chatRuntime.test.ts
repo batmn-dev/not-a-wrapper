@@ -30,6 +30,7 @@ import { selectBranchForChat } from "./messages"
 type TableDocuments = {
   toolApprovalRequests: Doc<"toolApprovalRequests">[]
   generationRuns: Doc<"generationRuns">[]
+  reaperCheckpoints: Doc<"reaperCheckpoints">[]
   messages: Doc<"messages">[]
   assistantMessageSnapshots: Doc<"assistantMessageSnapshots">[]
   toolInvocations: Doc<"toolInvocations">[]
@@ -88,6 +89,7 @@ function createMutationCtx(
   const tables: TableDocuments = {
     toolApprovalRequests: [],
     generationRuns: [],
+    reaperCheckpoints: [],
     messages: [],
     assistantMessageSnapshots: [],
     toolInvocations: [],
@@ -136,7 +138,7 @@ function createMutationCtx(
       },
       query: (tableName: TableName) => ({
         withIndex: (
-          _indexName: string,
+          indexName: string,
           buildQuery: (query: QueryBuilder) => unknown
         ) => {
           const filters = new Map<string, unknown>()
@@ -183,6 +185,14 @@ function createMutationCtx(
               return true
             }
           )
+          if (tableName === "generationRuns" && indexName === "by_status") {
+            results = [...results].sort((left, right) => {
+              const creationDelta = left._creationTime - right._creationTime
+              return creationDelta !== 0
+                ? creationDelta
+                : String(left._id).localeCompare(String(right._id))
+            })
+          }
 
           const resultApi = {
             collect: async () =>
@@ -210,6 +220,50 @@ function createMutationCtx(
             first: async () => (results[0] ? readDocument(results[0]) : null),
             take: async (limit: number) =>
               results.slice(0, limit).map((document) => readDocument(document)),
+            paginate: async ({
+              cursor,
+              numItems,
+            }: {
+              cursor: string | null
+              numItems: number
+            }) => {
+              const cursorPosition = cursor
+                ? (JSON.parse(cursor) as {
+                    creationTime: number
+                    id: string
+                  })
+                : null
+              const startIndex =
+                cursorPosition === null
+                  ? 0
+                  : results.findIndex((document) => {
+                      if (
+                        document._creationTime !== cursorPosition.creationTime
+                      ) {
+                        return (
+                          document._creationTime > cursorPosition.creationTime
+                        )
+                      }
+                      return String(document._id) > cursorPosition.id
+                    })
+              const normalizedStartIndex =
+                startIndex === -1 ? results.length : startIndex
+              const page = results.slice(
+                normalizedStartIndex,
+                normalizedStartIndex + numItems
+              )
+              const last = page.at(-1)
+              return {
+                page: page.map((document) => readDocument(document)),
+                isDone: normalizedStartIndex + page.length >= results.length,
+                continueCursor: last
+                  ? JSON.stringify({
+                      creationTime: last._creationTime,
+                      id: String(last._id),
+                    })
+                  : (cursor ?? ""),
+              }
+            },
           }
           return resultApi
         },
@@ -426,6 +480,7 @@ function createGenerationRunLinkageFixture() {
   const tables: TableDocuments = {
     toolApprovalRequests: [],
     generationRuns: [run],
+    reaperCheckpoints: [],
     messages: [message, otherMessage],
     assistantMessageSnapshots: [],
     toolInvocations: [],
@@ -3644,6 +3699,7 @@ describe("resolved-approvals-without-continuation reaper", () => {
         chatId: chat._id,
         userId: fixture.owner.user._id,
         status: "awaiting_approval",
+        updatedAt: index - 30,
       })
     )
     tables.generationRuns = [...blockers, ...(tables.generationRuns ?? [])]
@@ -3656,6 +3712,92 @@ describe("resolved-approvals-without-continuation reaper", () => {
     for (const blocker of blockers) {
       expect(blocker.status).toBe("awaiting_approval")
     }
+  })
+
+  it("advances its durable cursor past a saturated prefix across cron ticks", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const { fixture, chat, tables } = makeStrandedWorld()
+    const blockerCount = 205
+    const blockers = Array.from({ length: blockerCount }, (_, index) =>
+      createGenerationRun({
+        id: `run_saturated_blocker_${index}`,
+        chatId: chat._id,
+        userId: fixture.owner.user._id,
+        status: "awaiting_approval",
+        updatedAt: index - blockerCount,
+      })
+    )
+    tables.generationRuns = [...blockers, ...(tables.generationRuns ?? [])]
+    const { ctx, tables: world } = createMutationCtx(tables)
+
+    // Tick 1 examines the oldest 200-row page. Every row is permanently
+    // ineligible (no approval records), but the durable cursor advances.
+    await expect(reapResolvedApprovalPausesPass(ctx)).resolves.toEqual({
+      settled: 0,
+    })
+    expect(fixture.run.status).toBe("awaiting_approval")
+    expect(world.reaperCheckpoints).toHaveLength(1)
+    expect(world.reaperCheckpoints[0]?.cursor).toEqual(expect.any(String))
+
+    // Tick 2 resumes after that page and reaches the eligible strand behind
+    // the remaining blockers. The final page wraps the next sweep to null.
+    await expect(reapResolvedApprovalPausesPass(ctx)).resolves.toEqual({
+      settled: 1,
+    })
+    expect(fixture.run.status).toBe("failed")
+    expect(world.reaperCheckpoints[0]?.cursor).toBeUndefined()
+    expect(
+      blockers.every((blocker) => blocker.status === "awaiting_approval")
+    ).toBe(true)
+  })
+
+  it("holds the cursor when the settlement budget stops mid-page", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const runs = Array.from({ length: 26 }, (_, index) =>
+      createGenerationRun({
+        id: `run_eligible_${index}`,
+        chatId,
+        userId,
+        status: "awaiting_approval",
+        updatedAt: index + 1,
+      })
+    )
+    const approvals: Doc<"toolApprovalRequests">[] = runs.map((run, index) => ({
+      _id: asId<"toolApprovalRequests">(`approval_eligible_${index}`),
+      _creationTime: index + 1,
+      chatId,
+      runId: run._id,
+      assistantMessageId: asId<"messages">(`message_missing_${index}`),
+      userId,
+      toolCallId: `call_${index}`,
+      toolName: "read_file",
+      source: "mcp",
+      riskClass: "read",
+      approvalId: `approval_${index}`,
+      status: "approved",
+      createdAt: 1,
+      resolvedAt: NOW - GRACE,
+    }))
+    const { ctx, tables } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      generationRuns: runs,
+      toolApprovalRequests: approvals,
+    })
+
+    await expect(reapResolvedApprovalPausesPass(ctx)).resolves.toEqual({
+      settled: 25,
+    })
+    expect(
+      runs.filter((run) => run.status === "awaiting_approval")
+    ).toHaveLength(1)
+    expect(tables.reaperCheckpoints[0]?.cursor).toBeUndefined()
+
+    await expect(reapResolvedApprovalPausesPass(ctx)).resolves.toEqual({
+      settled: 1,
+    })
+    expect(runs.every((run) => run.status === "failed")).toBe(true)
   })
 
   it("anchors the grace on the LAST resolvedAt across multiple approvals", async () => {
