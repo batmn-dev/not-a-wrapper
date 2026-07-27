@@ -224,6 +224,40 @@ describe("Markdown terminal-block stability (plan PR 3)", () => {
     expect(renderedParagraphs.length).toBe(1)
   })
 
+  it("non-prefix corrections reset block identity (remount) while appends preserve DOM nodes", () => {
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+    const render = (markdown: string) => {
+      act(() => {
+        root?.render(
+          <Markdown id="reset" streaming>
+            {markdown}
+          </Markdown>
+        )
+      })
+    }
+
+    render("Stable first paragraph.\n\nGrowing tail")
+    const firstParagraphBefore = container.querySelector("p")
+    expect(firstParagraphBefore?.textContent).toBe("Stable first paragraph.")
+
+    // Append-only growth: the settled block's DOM node is REUSED (same
+    // identity, memo bailout), never recreated.
+    render("Stable first paragraph.\n\nGrowing tail with more words")
+    expect(container.querySelector("p")).toBe(firstParagraphBefore)
+
+    // Non-prefix correction (regeneration/branch divergence): identities
+    // reset, so the DOM remounts — no stale node, no duplicated content.
+    render("Regenerated different answer.\n\nOther tail")
+    const firstParagraphAfter = container.querySelector("p")
+    expect(firstParagraphAfter?.textContent).toBe(
+      "Regenerated different answer."
+    )
+    expect(firstParagraphAfter).not.toBe(firstParagraphBefore)
+    expect(container.textContent).not.toContain("Stable first paragraph.")
+  })
+
   it("renders byte-identically after streaming settles vs a fresh settled mount", async () => {
     const markdown =
       "Some **bold** prose with `inline code`.\n\n```ts\nconst x = 1\n```\n\nTail paragraph."
