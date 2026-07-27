@@ -47,6 +47,7 @@ export type StreamFadeRuntime = ReturnType<typeof createStreamFadeRuntime>
 
 export function createStreamFadeRuntime() {
   const blocks = new Map<string, BlockFadeState>()
+  let snapPending = false
 
   const ensure = (blockKey: string): BlockFadeState => {
     let block = blocks.get(blockKey)
@@ -79,6 +80,18 @@ export function createStreamFadeRuntime() {
         blocks.delete(blockKey)
         block = ensure(blockKey)
       }
+      if (snapPending) {
+        // Snapped-in text (hidden tab, mid-stream adoption, terminal flush)
+        // renders already revealed: births are back-dated past the fade so
+        // no animation queues. Later appends fade normally.
+        snapPending = false
+        for (let i = block.wordCount; i < revealedWordCount; i++) {
+          block.births[i] = nowMs - FADE_MS
+        }
+        block.wordCount = revealedWordCount
+        block.lastCommitAtMs = nowMs
+        return
+      }
       const newWords = revealedWordCount - block.wordCount
       const gap =
         block.lastCommitAtMs >= 0 ? nowMs - block.lastCommitAtMs : 0
@@ -93,6 +106,15 @@ export function createStreamFadeRuntime() {
       }
       block.wordCount = revealedWordCount
       block.lastCommitAtMs = nowMs
+    },
+
+    /**
+     * Marks the NEXT commit's new words as born already-revealed. Called by
+     * the reveal hook when displayed text snaps straight to canonical —
+     * snapped text must never queue fades.
+     */
+    snap(): void {
+      snapPending = true
     },
 
     /**
@@ -137,6 +159,7 @@ export function createStreamFadeRuntime() {
 export const NOOP_STREAM_FADE_RUNTIME: StreamFadeRuntime = {
   noteCommit: () => {},
   styleFor: () => REVEALED_STYLE,
+  snap: () => {},
   prune: () => {},
 }
 

@@ -154,6 +154,18 @@ describe("birth timeline runtime", () => {
     )
   })
 
+  it("snap back-dates the next commit's births so snapped text queues no fades", () => {
+    const runtime = createStreamFadeRuntime()
+    runtime.snap()
+    runtime.noteCommit("block-0", 3, 1000)
+    expect(runtime.styleFor("block-0", 2, 1000).className).toBe(
+      "stream-word stream-word-revealed"
+    )
+    // The snap is one-shot: the following commit fades normally.
+    runtime.noteCommit("block-0", 4, 1050)
+    expect(runtime.styleFor("block-0", 3, 1050).className).toBe("stream-word")
+  })
+
   it("prune drops every block except the live one", () => {
     const runtime = createStreamFadeRuntime()
     runtime.noteCommit("block-0", 1, 0)
