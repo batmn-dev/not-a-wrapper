@@ -146,6 +146,10 @@ try {
 }
 ```
 
+## Smoke Testing (MUST)
+
+- Always try the user's existing local authenticated session first when smoke testing. Use a guest or new session only if the authenticated session is unavailable, and report the fallback.
+
 ## On-Demand Context
 
 Load only when needed:

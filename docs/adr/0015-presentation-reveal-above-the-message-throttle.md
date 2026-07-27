@@ -1,7 +1,8 @@
 # 15. Presentation reveal commits above the message throttle
 
-- Status: superseded (2026-07-27 — the reveal was removed unmerged the same
-  day it passed its gate; the streaming-architecture review in
+- Status: superseded by ADR-0016 (2026-07-27 — the reveal was removed
+  unmerged the same day it passed its gate; the streaming-architecture
+  review in
   `docs/gameplans/streaming-rendering-convex-implementation-plan.md` rejected
   the second prefix-reveal scheduler in favor of making the raw rendering
   path fast enough to present provider deltas directly. The implementation

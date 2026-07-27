@@ -184,6 +184,11 @@ The deep client module that assembles a **Chat turn** payload: it owns the draft
 _Avoid_: chat-input prop orchestration (the shallow 21-prop interface), parent-owned draft/file state, `quotedText`-style commands modeled as state
 _Status_: implemented 2026-07-03 (branch `darknight/gotham-by-gaslight`).
 
+**Streaming renderer**:
+The client rendering path that presents provider deltas directly (ADR-0016): the initiating tab renders AI SDK local message state from the direct HTTP stream at the 32 ms notification throttle; the **Markdown projection** (`lib/markdown/incremental-block-projection.ts`) advances append-only growth by re-parsing only the mutable tail from a blank-line-safe restart boundary (identity-stable blocks, full-parse resets on non-prefix changes, authoritative settlement parse with equivalence verification), and Shiki loads lazily per grammar through `lib/markdown/shiki-client.ts` (no static shiki import in components; no-code chats ship zero Shiki bytes). Convex stays the durable/shared plane only — 750 ms snapshots, run lifecycle, reactive projection for reload/other tabs/devices — never the foreground token-to-paint path. There is deliberately NO presentation scheduler: displayed text never trails canonical text (the ADR-0015 reveal was rejected and removed).
+_Avoid_: second displayed-text store or prefix scheduler, full re-parse per update, eager Shiki bundle, routing active-tab tokens through Convex, persisting presentation state
+_Status_: implemented 2026-07-27 (branch `darknight/the-black-glove`, post-reveal-revert; gates in `docs/measurements/2026-07-27-streaming-renderer-results.md`).
+
 ### Tools
 
 **Tool runtime**:
