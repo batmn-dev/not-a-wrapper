@@ -21,6 +21,7 @@ import { isServerChatId } from "@/lib/chat-store/identity"
 import type { ToolSource } from "@/lib/tools/types"
 import * as Sentry from "@sentry/nextjs"
 import type {
+  DynamicToolUIPart,
   UIMessage as MessageAISDK,
   StreamTextTransform,
   TextStreamPart,
@@ -29,7 +30,7 @@ import type {
   ToolUIPart,
   UIMessage,
 } from "ai"
-import { getStaticToolName, isStaticToolUIPart } from "ai"
+import { getToolName, isToolUIPart } from "ai"
 import { fetchMutation as defaultFetchMutation } from "convex/nextjs"
 import { isConvexArgumentValidationError } from "./utils"
 
@@ -430,12 +431,16 @@ export function sanitizeModelHistoryMessages(
 
 function isApprovalRespondedToolPart(
   part: UIMessage["parts"][number]
-): part is ToolUIPart & {
+): part is (ToolUIPart | DynamicToolUIPart) & {
   state: "approval-responded"
   approval: { id: string; approved: boolean; reason?: string }
 } {
+  // Both tool-part shapes: MCP tools — the ONLY runtime-approval source in
+  // production — stream as `dynamic-tool`, and a static-only guard here made
+  // every MCP continuation classify as a fresh send (missing selected-path
+  // token) instead of an approval continuation.
   return (
-    isStaticToolUIPart(part) &&
+    isToolUIPart(part) &&
     part.state === "approval-responded" &&
     typeof part.approval?.id === "string" &&
     typeof part.approval.approved === "boolean"
@@ -454,7 +459,7 @@ export function extractApprovalResponses(
         messageId: message.id,
         approvalId: part.approval.id,
         toolCallId: part.toolCallId,
-        toolName: String(getStaticToolName(part)),
+        toolName: String(getToolName(part)),
         approved: part.approval.approved,
         ...(part.approval.reason ? { reason: part.approval.reason } : {}),
       })
@@ -479,7 +484,7 @@ export function countToolParts(message: UIMessage): {
   let totalToolCalls = 0
   let failedToolCalls = 0
   for (const part of message.parts) {
-    if (!isStaticToolUIPart(part)) continue
+    if (!isToolUIPart(part)) continue
     totalToolCalls++
     if (part.state === "output-error" || part.state === "output-denied") {
       failedToolCalls++

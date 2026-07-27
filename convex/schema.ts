@@ -231,6 +231,7 @@ export default defineSchema({
         v.literal("provider_error"),
         v.literal("lease_expired"),
         v.literal("approval_expired"),
+        v.literal("continuation_lost"),
         v.literal("request_aborted")
       )
     ),

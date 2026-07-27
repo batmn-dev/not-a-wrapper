@@ -37,6 +37,12 @@ export type LifecycleSignal =
   | { kind: "stop"; reason?: string }
   | { kind: "lease-expired" }
   | { kind: "approval-expired" }
+  // The resolved-approvals reaper settling a pause whose approvals were all
+  // resolved but whose continuation never dispatched (the client crashed or
+  // reloaded before auto-send). `anyDenied` mirrors approvals-resolved: a
+  // denied strand closes aborted, an approved strand closes failed (the tool
+  // never ran, so "completed" would be a lie).
+  | { kind: "continuation-lost"; anyDenied: boolean }
 
 /**
  * Why a run reached its terminal status — durable audit vocabulary carried on
@@ -52,6 +58,7 @@ export type GenerationRunTerminalReason =
   | "provider_error"
   | "lease_expired"
   | "approval_expired"
+  | "continuation_lost"
   | "request_aborted"
 
 /**
@@ -346,6 +353,37 @@ export function resolveGenerationRunTransition(
         }),
       }
     }
+    case "continuation-lost": {
+      // The resolved-approvals reaper (chatRuntime's
+      // reapResolvedApprovalPausesPass) settles a pause whose approvals are
+      // all resolved but whose continuation never dispatched. Only
+      // awaiting_approval qualifies: any other status means either the
+      // continuation DID prepare (its approvals-resolved close settled the
+      // pause) or another terminal writer won — both are left alone, so this
+      // signal can never resurrect or repaint a stopped run.
+      if (runStatus !== "awaiting_approval") {
+        return ignore(
+          isActiveGenerationRunStatus(runStatus)
+            ? "not-awaiting-approval"
+            : "already-terminal"
+        )
+      }
+      const status = signal.anyDenied ? "aborted" : "failed"
+      return {
+        kind: "transition",
+        run: {
+          status,
+          error: "approval continuation was not dispatched",
+          clearActiveStream: true,
+          settle: true,
+          terminalReason: "continuation_lost",
+        },
+        message: terminalMessage(message, {
+          status,
+          error: "approval continuation was not dispatched",
+        }),
+      }
+    }
     case "supersede": {
       // Supersede reaches only queued/running/streaming. A paused
       // (awaiting_approval) run is closed by deny-pending at the next turn's
@@ -427,6 +465,7 @@ const probeSignals: Record<LifecycleSignal["kind"], LifecycleSignal> = {
   stop: { kind: "stop" },
   "lease-expired": { kind: "lease-expired" },
   "approval-expired": { kind: "approval-expired" },
+  "continuation-lost": { kind: "continuation-lost", anyDenied: false },
 }
 
 /**

@@ -6,7 +6,7 @@
  * importing from the component tree.
  */
 import type { SourceUrlUIPart, UIMessage } from "ai"
-import { isStaticToolUIPart } from "ai"
+import { isToolUIPart } from "ai"
 
 // Source type for validation
 type SourceLike = {
@@ -102,7 +102,7 @@ export function getPartSources(
   if (part.type === "source-url") {
     return [normalizeSource(part as SourceLike)]
   }
-  if (!isStaticToolUIPart(part) || part.state !== "output-available") return []
+  if (!isToolUIPart(part) || part.state !== "output-available") return []
   return dedupeSources(sourceCandidates(part.output).map(normalizeSource))
 }
 

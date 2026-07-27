@@ -298,3 +298,221 @@ superseded for this branch by the explicit follow-up review standard:
   signed-in browser against the dev deployment.
 - Every Convex push (`bunx convex dev --once`) validated schema and bundling
   against the real dev deployment after each PR.
+
+## §14 fifteen-flow checklist executed; presentation made unconditional (2026-07-27, follows the decision below)
+
+The fifteen browser flows ran locally through the signed-in browser against the
+dev deployment with the presentation seam forced on. After the fixes below, the
+flag, its disabled path, `lib/flags.ts`, the flag-only tests
+(`lib/flags.test.ts`, the resolver's flag-off case, the sidebar rollout case,
+both `vi.mock("@/lib/flags")` shims), and the `durablePresentationEnabled`
+parameters were removed; the resolver and its behavioral coverage are intact
+and presentation is unconditional. A post-removal smoke (reload mid-stream on
+a GPT-5 Mini run) confirmed the returning client presents the background run.
+
+**Flow results.** Passed live with Convex data checks: navigate-away/return
+mid-text (projection ring while away; partial text + Stop on return; snapshot
+sequence growth), reload mid-text (same run id, content restored), reload
+during reasoning/approval (activity + approval controls restored; content tail
+preserved; pause had lease cleared, 24 h approval expiry mirrored to
+`liveRunFreshUntil`), reload during tool (five parallel approved DeepWiki
+calls; reloaded client showed the running tool from durable evidence), second
+tab (identical presentation), Stop from tab two (`aborted/user_stop`,
+lease+grant cleared, tab one's stream cut), simultaneous Stop (one terminal
+transition, no error loop), worker death (grant revoked + lease back-dated via
+a temporary probe mutation — deleted afterward — because killing the user's
+long-running dev server was off-limits; reaper settled `failed/lease_expired`
+with partial content preserved and a Retry affordance), complete during
+hydration (no zombie loader; `completed/completed`), two-tab approve (loser
+rendered "Already resolved — decided in another tab", exactly one
+continuation), terminal zombie sweep (zero active-looking runs, zero live chat
+projections, no sidebar spinner). The §5 one-off legacy settle also ran: six
+pre-lease `streaming` rows (and one chat with a null-deadline `liveRunStatus`
+that rendered an indefinite spinner) were lease-back-dated and settled
+`failed/lease_expired` by the production reaper.
+
+**Dispositions rather than live passes.** Reload-before-first-token: the
+window is sub-second with current providers; the contract is pinned by the
+resolver/React "remount before first content" coverage and evidenced by the
+no-text background presentations above. Newer generation: the composer
+deliberately gates sends while any run is active (Stop is the primary action,
+Enter does not dispatch — verified live), so prepare-level supersession has no
+UI trigger; it remains covered by the Convex supersession suite. Convex
+disconnection: an offline toggle could not be simulated through the browser
+harness (WebSocket sabotage attempts never tripped the client); disconnected
+presentation stays pinned by the resolver's `isConnected` coverage.
+
+**Checklist failures found and fixed (all one root cause, three sites):** the
+presentation fold and the chat API recognized only STATIC tool parts
+(`tool-*`), but every MCP tool — the only runtime-approval source in
+production — streams and persists as `dynamic-tool`:
+
+1. `lib/chat-messages/turn-evidence.ts` (plus `parts.ts`, `sources.ts`,
+   `assistant-turn.ts`) skipped dynamic parts, so an MCP tool produced no
+   activity entries: no disclosure trigger, therefore NO reachable
+   Approve/Deny — live and after reload. The evidence walk now accepts both
+   shapes through a single widened seam (`ToolEvidenceUIPart`,
+   `isToolEvidencePart`, `getToolEvidenceName`), which also fixes the tool
+   render signature (dynamic state changes now re-render memoized rows).
+2. The SDK's approval-continuation auto-send dispatches with no per-call body,
+   so the continuation POST had no `chatId`/`model` and 400'd. The transport
+   (`AcceptanceAwareChatTransport`) now merges a fallback turn body — built by
+   `buildChatTurnRequestBody` from call-time Turn-context reads — under any
+   per-call body whenever a dispatch carries no `chatId`; runner sends are
+   untouched.
+3. `extractApprovalResponses`/`hasApprovalResponse`/`countToolParts` in the
+   durable runtime were also static-only, so an MCP continuation classified as
+   a fresh send ("Selected path token required"). Widened to both shapes; and
+   the history adaptation in `chat-turn-runtime.ts` now exempts the live
+   continuation tail (the trailing assistant message with approval-responded
+   parts) — the replay compilers summarize non-replayable tool exchanges away,
+   which had stripped the very tool call being continued and left a
+   thinking-final assistant message Anthropic rejects
+   ("The final block in an assistant message cannot be `thinking`").
+
+After the three fixes the full chain verified live: approve → continuation
+prepare (pause closed `completed`, `continuationRunId`/`continuedFromRunId`
+linked) → tool executed → answer streamed → `completed/completed`, invocation
+`approved`, projection cleared.
+
+**Cold-tab adoption anomaly: resolved by verification.** Three post-fix trials
+of the recorded scenario (tab cold-loaded during a Stop, next run dispatched
+immediately) all presented the new run promptly — streaming content and Stop
+within one projection tick, never only-at-terminal. No adoption-semantics
+change was made; the 2026-07-19 single-trial observation is attributed to the
+now-fixed defect cluster or a transient, and the TODO entry is closed.
+
+**Confirmed live, still deferred (existing TODO):** an `awaiting_approval`
+pause whose approval was resolved but whose continuation never dispatched has
+no automatic recovery — clicking Approve again returns `alreadyResolved`
+without re-arming auto-send. The composer's Stop settles it manually; the
+dedicated reaper rule remains the recorded follow-up.
+
+**Operational note:** the checklist's Opus 4.8 runs exhausted the platform
+Anthropic account's credits near the end of the session (subsequent Anthropic
+turns fail with an actionable "insufficient credits" banner — itself correct
+failure presentation). Later verification switched to GPT-5 Mini; future live
+smokes should use cheap models from the start.
+
+## Presentation decision update (2026-07-27)
+
+This section supersedes the fifth-review presentation rollout boundary and the
+older flag-based rollout instructions in the gameplan.
+
+- An authenticated local smoke test with the flag OFF confirmed that durable
+  snapshots continue across navigation, reload, and a second tab, but returning
+  clients show neither active-generation presentation nor a Stop control.
+- The existing `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION` seam is now only a
+  temporary way to exercise the implemented behavior while running the
+  gameplan's fifteen local browser flows.
+- After those flows pass and any defect is fixed, remove the flag, the disabled
+  path, and flag-only tests. The verified durable presentation becomes the only
+  product path.
+- Do not run a flag-off/flag-on deployment progression or retain the flag for a
+  soak. Rollback is `git revert` plus redeploy, which has the same deployment
+  latency without permanently maintaining two presentation behaviors.
+
+## Resolved-approvals-without-continuation reaper (2026-07-27)
+
+Closes the third-round deferred item ("everything converges" needed a
+dedicated resolved-without-continuation pass) and the matching TODO entry.
+The stranded shape: an `awaiting_approval` run whose approvals are all
+resolved but whose continuation prepare never ran (client crashed or reloaded
+before auto-send, or a historical strand). It held no lease (the pause sheds
+it) and no pending approval, so neither existing reaper matched; deny-pending
+only touches pending rows and the supersede sweep never reaches a pause, so
+next-turn convergence left it awaiting forever, and a second Approve click
+returned `alreadyResolved` without re-arming auto-send.
+
+**What landed:**
+
+- Lifecycle signal `continuation-lost` (with `anyDenied`, mirroring
+  `approvals-resolved`): legal ONLY from `awaiting_approval` — every other
+  status ignores (`not-awaiting-approval` / `already-terminal`), so the signal
+  structurally cannot resurrect a Stop-settled, superseded, or
+  already-continued run. Denied strands close `aborted`; approved strands
+  close `failed` (the tool never executed — `completed` would lie). Both stamp
+  the new terminal reason `continuation_lost` (schema union extended) and
+  error `approval continuation was not dispatched`.
+- `reapResolvedApprovalPausesPass` in `convex/chatRuntime.ts`, registered in
+  `convex/crons.ts` every minute, bounded by `REAPER_BATCH_LIMIT` over the
+  `by_status` index at `awaiting_approval`.
+
+**Exact boundary conditions (all checked transactionally per candidate):**
+
+1. Re-read run still `awaiting_approval`; `continuationRunId` undefined (a
+   stamped continuation means a prepare owns the close — unreachable while
+   paused, but never fought).
+2. Chat exists and is active (tombstoned logical roots skipped, like the
+   other reapers).
+3. ≥ 1 approval row for the run (prefix read on `by_run_status`); NONE
+   pending — a pending row means the user or the approval reaper still owns
+   the pause.
+4. Every resolved row carries a defined `resolvedAt`, and
+   `now >= latest(resolvedAt) + RESOLVED_APPROVAL_CONTINUATION_GRACE_MS`
+   (5 min, in `generation_run_liveness.ts`). The boundary instant itself is
+   eligible. An UNDATED resolution excludes the candidate — the §18 #6
+   `undefined` rule applied to this pass's expiry comparison: `undefined`
+   must never classify as "old enough" (fail-closed, unit-pinned).
+5. Settlement reuses the shared machinery: `gatherAssistantMessageFacts` +
+   `applyLifecycleVerdict` (partial content preserved / stub policy) +
+   `settleAuxiliaryRecordsForTerminalRun` (never-executed invocations →
+   `failed`; approval rows keep their canonical approved/denied decision).
+   The chat projection stays `statusRunId`-guarded, so a pause whose slot
+   already transferred to a next send cannot clear the newer run's status.
+
+**Race posture (both commit orders unit-tested):** reaper-first → the late
+auto-send continuation hits the existing `pausedRunWasLive` typed conflict
+("Approval pause already settled") and rolls back; continuation-first → the
+pause is no longer `awaiting_approval`, the pass no-ops, continuation and
+`continuationRunId` linkage intact. The grace window is measured from the
+LAST `resolvedAt`, so the live approve → auto-send path (verified end-to-end
+2026-07-27) is never raced; the minute cadence only bounds detection latency.
+
+**Live evidence (dev `polite-jackal-630`, 2026-07-27):** a real DeepWiki
+`ask_question` pause (run `js7eskr53c6xjpsrg6jgawrzts8bbm7g`, chat
+`jh7daw47ehravh8cgyqdbc9arn8bbft2`) was stranded via a temporary probe
+mutation that resolved the pending approval with a `resolvedAt` backdated
+past the grace (probe deleted and deployment re-pushed afterward). The next
+cron tick logged `run_stale_reaped / continuation_lost` (ageMs ≈ 376 s) and
+settled: run `failed`/`continuation_lost` with `completedAt`, invocation
+`failed` ("approval continuation was not dispatched"), approval row kept
+`approved`, message stamped `failed` with all parts preserved, chat
+projection cleared (`liveRunStatus`/`liveRunFreshUntil` gone,
+`lastRunStatus: failed`, `statusRunId` kept). Deployment-wide scan after:
+zero queued/running/streaming/awaiting runs, zero pending approvals, zero
+chats with a live projection. UI renders the honest inline failure with
+Retry and a live composer.
+
+**Review round (2026-07-27, whole-diff):** three findings addressed, one
+partially refuted.
+
+1. *Reaper scan starvation (fixed):* candidate selection now scans
+   `RESOLVED_PAUSE_SCAN_LIMIT` (8× the settle budget) `awaiting_approval`
+   rows per tick while settling at most `REAPER_BATCH_LIMIT` — unlike the
+   lease/approval reapers, this pass's eligibility is only decidable per
+   candidate, so ineligible pauses legitimately occupy the `by_status`
+   prefix and a settle-budget-sized scan could curtain off eligible strands
+   forever. A persistently full window logs
+   `resolved_pause_scan_saturated` (no silent caps). Regression test: 30
+   ineligible pauses ahead of one eligible strand still settle it. Also
+   added the multi-approval grace test (the LAST `resolvedAt` gates the
+   pause).
+2. *OpenAI plaintext replay fallback flattened the continuation tail
+   (fixed):* the fallback now plaintexts only the adapted HISTORY; the live
+   continuation tail keeps its full parts (the approval-responded tool call
+   the SDK executes this turn) with provider-linked metadata stripped via
+   `stripProviderLinkedMetadataFromMessage` (app/api/chat/utils.ts, unit
+   tested) so pairing ids cannot ride back in. The fallback warn logs
+   `continuationTailPreserved`.
+3. *Auto-send fallback body vs. wire contract (partially refuted, link
+   restored):* assembly was already through the controller's
+   `buildChatTurnRequestBody` — the Chat turn wire contract seam — so no
+   ownership move was needed; what was real is that the transport plumbing
+   erased the type to `Record<string, unknown>`. The fallback provider is
+   now typed `() => ChatTurnBodyFields | null` end-to-end, restoring the
+   compile-time contract link.
+
+CONTEXT.md's Generation run lifecycle entry now lists the full signal
+vocabulary (stop / lease-expired / approval-expired / continuation-lost
+included).

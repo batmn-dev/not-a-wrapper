@@ -21,10 +21,10 @@ import {
   type StagedAttachmentReference,
 } from "@/lib/chat-turn/chat-turn-controller"
 import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
+import { buildChatTurnRequestBody } from "@/lib/chat-turn/turn-plans"
 import { routePersistsChatMessages } from "@/lib/chat-turn/turn-store"
 import { attachStagedFilesToChat } from "@/lib/file-handling"
 import { CHAT_MESSAGE_THROTTLE_MS } from "@/lib/chat-performance/message-throttle"
-import { ENABLE_DURABLE_RUN_PRESENTATION } from "@/lib/flags"
 import { isChatPerfClientEnabled } from "@/lib/observability/chat-performance"
 import {
   beginChatPerfTurn,
@@ -272,11 +272,28 @@ export function useChatCore({
   // The extracted owner binds each SDK Chat to immutable detach metadata and
   // performs route transitions in one layout-phase commit. useChatCore keeps
   // only orchestration and persistence policy.
+  // Wire-contract fields for SDK-initiated dispatches (the approval
+  // continuation auto-send carries no per-call body — the transport merges
+  // these in). Turn context is read at dispatch time, never from a
+  // render-time closure; continuations only exist on durable chats.
+  const getFallbackTurnBody = useCallback(() => {
+    if (!chatId || getMessagePersistenceMode(chatId) !== "server") return null
+    const snapshot = getTurnSnapshot()
+    return buildChatTurnRequestBody({
+      chatId,
+      userId: user?.id ?? "",
+      selectedModel: snapshot.selectedModel,
+      systemPrompt: snapshot.systemPrompt,
+      enableSearch: snapshot.enableSearch,
+    })
+  }, [chatId, getTurnSnapshot, user?.id])
+
   const detachableStream = useDetachableChatStream({
     chatId,
     initialMessages,
     streamTimeoutMs: STREAM_TIMEOUT_MS,
     api: API_ROUTE_CHAT,
+    getFallbackTurnBody,
   })
 
   const {
@@ -343,7 +360,6 @@ export function useChatCore({
     localAssistantMessageId,
     selectedRun,
     isConnected: connectionState.isWebSocketConnected,
-    durablePresentationEnabled: ENABLE_DURABLE_RUN_PRESENTATION,
     stopLocal: stop,
     stopDurable: stopDurableRun,
     onDurableStopError: handleDurableStopError,

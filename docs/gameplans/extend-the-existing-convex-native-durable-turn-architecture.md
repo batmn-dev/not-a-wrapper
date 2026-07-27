@@ -6,6 +6,36 @@ The research report’s architecture remains materially valid against the curren
 
 [ADR-0011](../adr/0011-durable-turn-settlement.md) (accepted 2026-07-18, PR #121) landed after this plan was written and changes its substrate. **This addendum governs wherever the body conflicts; the body text below is preserved unedited.** This is now the single forward plan for the 2026-07-14 incident class; the [incident report](../chat-turn-token-expiry-orphaned-run-incident-2026-07-14.md) is a frozen historical record with its own reconciliation section.
 
+### Presentation decision — one unconditional path after local proof (2026-07-27)
+
+**Status: executed 2026-07-27.** The §14 checklist ran locally, its failures
+(an MCP `dynamic-tool` static-part gap across the presentation fold and the
+continuation path, plus the auto-send body and continuation-tail history
+adaptation defects) were fixed, the cold-tab anomaly did not reproduce in
+three post-fix trials, and the flag/disabled path/flag-only tests were
+removed — see the implementation notes' 2026-07-27 checklist section.
+
+This decision supersedes every presentation-flag rollout or rollback instruction
+later in this plan. The authenticated local smoke test with the flag OFF proved
+that the durable backend already keeps partial content moving across navigation,
+reload, and a second tab, but returning clients render no active status and no
+Stop control. That is the product gap this presentation work closes.
+
+- Use `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION=true` only to exercise the
+  already-implemented presentation locally while completing the §14 checklist.
+  Do not use it for a staged deployment, cohort, soak, or permanent kill switch.
+- Fix any checklist failure, including the recorded cold-tab adoption anomaly,
+  before making the behavior unconditional.
+- Once the checklist passes, remove the environment flag, its accessor and
+  parsing tests, the disabled presentation branch, and flag parameters whose
+  only purpose was maintaining the second path. Keep the pure resolver and its
+  behavioral coverage.
+- Ship one user-facing behavior: a fresh durable run is presented consistently
+  in the initiating tab, after navigation or reload, and in another tab/device.
+- Roll back a regression by reverting the unconditional-presentation change and
+  redeploying. Do not preserve a dormant local-only UI path indefinitely; the
+  build-time flag also required a redeploy and was not a live safety control.
+
 ### What ADR-0011 already delivered
 
 - **Worker authority for durable-run state is the execution grant, not the user token.** The user token authorizes admission (`prepareGeneration`); every post-prepare durable-run state write — snapshots, tool-invocation records, approval requests, terminal transitions — travels the Durable worker wire: `POST /chat-turn/worker` with `Authorization: Bearer <per-run 32-byte secret>`, hashed before dispatch (`convex/http.ts`), verified transactionally by `requireGrantAuthorizedRun` (`convex/chatRuntimeWorker.ts`: constant-time digest compare, expiry, run→chat→user linkage), then routed into the shared `...ForChat` handlers — one policy, two authenticators. Two non-run-state mutations still ride the captured user token mid-stream — `toolCallLog.log` and `toolLimits.checkAndConsume` — addressed in PR 0 below.
@@ -789,7 +819,10 @@ Extend both durable runtime suites:
 
 ### Browser verification (manual checklist now; automated later)
 
-Until the E2E harness exists (optional PR 9), the fifteen end-to-end flows below are a written manual checklist executed before enabling the presentation flag, using a deliberately slow model/prompt:
+Until the E2E harness exists (optional PR 9), the fifteen end-to-end flows below
+are a written manual checklist executed locally with the temporary presentation
+seam enabled. They must pass before the flag and disabled path are deleted and
+the presentation becomes unconditional. Use a deliberately slow model/prompt:
 
 | Scenario | UI check | Data check (Convex dashboard) |
 |---|---|---|
@@ -833,7 +866,10 @@ Never log prompts, response text, reasoning, attachments, tool inputs, tool outp
 
 ## 16. Migration and rollout
 
-Simplified per the pre-launch disposable-database policy (§5 Compatibility). All backend additions are additive; the only user-visible switch is the presentation flag.
+Simplified per the pre-launch disposable-database policy (§5 Compatibility).
+All backend additions are additive. Durable presentation has no long-lived
+user-visible switch: the current environment flag is a temporary local test
+scaffold that is removed when the §14 checklist passes.
 
 | Phase | Entry | Exit | Rollback | Telemetry |
 |---|---|---|---|---|
@@ -841,13 +877,18 @@ Simplified per the pre-launch disposable-database policy (§5 Compatibility). Al
 | 2. Heartbeat + guarded writes, UI off | Phase 1 deployed | New runs renew; guarded writes green | Disable heartbeat flag while retaining fields | Renewal rate, cost, rejected writes |
 | 3. Reaper | Heartbeats stable; > 60 s since phase-2 deploy (drain rule) | Injected dead runs converge; no healthy-run false positives | Disable cron; fields remain | Reaper age/volume, false positives |
 | 4. Atomic projection | Reaper stable | Query matches old selected path and run owner | Client stays on old query | Message parity, projection mismatch |
-| 5. Background UI flag | Projection mismatch near zero | Manual browser checklist (§14) passes for internal cohort | Disable flag; backend remains | Background/stale entries, zombie indicators |
+| 5. Background UI verification + collapse | Projection mismatch near zero; temporary seam enabled locally | Manual browser checklist (§14) passes; flag and disabled path removed; presentation unconditional | Revert the unconditional-presentation change and redeploy | Background/stale entries, zombie indicators |
 | 6. Durable Stop | Guarded writes proven | Cross-tab Stop scenarios pass | Hide returning-client Stop; keep mutation unused | Stop wins/losses/latency |
 | 7. Approval/continuation hardening | Durable Stop stable | Duplicate decisions/continuations eliminated; conflict path exercised | Retain old continuation path behind flag | Conflicts, duplicate prevention |
 
 ### Rollback behavior
 
-Turning off the presentation flag returns the app to current local-only conversation liveness while preserving durable safety. Do not roll back schema fields or indexes during incident response.
+There is no maintained presentation-off product path after local verification.
+If unconditional presentation regresses after merge, revert that change and
+redeploy while leaving the durable backend, schema fields, and indexes intact.
+Do not reintroduce an environment flag as an incident shortcut; it has the same
+redeploy latency as a revert and recreates the maintenance burden this decision
+removes.
 
 ---
 
@@ -1024,7 +1065,7 @@ A resumable provider job would become a separate product requirement if survivin
 - [ ] Stop and approval are keyboard-accessible and announced through the existing announcer regions.
 - [ ] Reduced-motion users receive equivalent status without animation.
 - [ ] Public/non-owner viewers receive no run-control metadata; guest chats are unaffected.
-- [ ] All 37 race scenarios have deterministic coverage at the unit/Convex/runtime/React layers; the 15 browser flows pass the manual checklist before the presentation flag is enabled (automated later by the optional harness PR).
+- [ ] All 37 race scenarios have deterministic coverage at the unit/Convex/runtime/React layers; the 15 browser flows pass locally with the temporary seam enabled, then the presentation flag and disabled path are removed so the behavior ships unconditionally (automated later by the optional harness PR).
 - [ ] Runtime, reaper, Stop, projection mismatch, continuation-conflict, and stale-write telemetry are deployed before full UI enablement.
 - [ ] No private prompt, reasoning, response, tool, credential, or approval content appears in logs.
 - [ ] The final rollout proves that navigating away, reloading, opening a second tab, stopping remotely, losing a worker, and reconnecting all converge to the same durable presentation.

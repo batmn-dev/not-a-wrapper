@@ -64,7 +64,23 @@ this is `git revert`, which is exactly as fast as the old env-var path
 
 - `NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION` / `CHAT_PERF_SAMPLE_RATE` — the
   off-by-default diagnostic kit (not behavior).
-- `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION` — gates genuinely unverified
-  product presentation behind a manual checklist; a flag doing its job.
+- As of this 2026-07-23 decision, `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION`
+  gated unverified product presentation behind a manual checklist. The
+  2026-07-27 decision below supersedes its retention as a rollout mechanism.
 - `GROWING_HIGHLIGHT_THROTTLE_MS = 300` and `CHAT_MESSAGE_THROTTLE_MS = 50`
   as named constants — tuning knobs are code changes now.
+
+## Decision update (2026-07-27)
+
+Durable presentation now follows the same maintenance principle as the
+verified performance behaviors above: prove it locally, then keep one code
+path.
+
+- Use the existing flag only to run the fifteen durable-turn browser flows
+  locally.
+- Fix any failure before enablement.
+- When the checklist passes, remove the flag, disabled path, and flag-only
+  tests; make durable presentation unconditional.
+- Roll back with `git revert` plus redeploy instead of maintaining a dormant
+  presentation implementation. The old build-time flag required a redeploy
+  too, so it was not a faster live safety control.

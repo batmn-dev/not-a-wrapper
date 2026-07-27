@@ -2,7 +2,6 @@
 
 import { api } from "@/convex/_generated/api"
 import { useDeadlineReached } from "@/hooks/use-clock"
-import { ENABLE_DURABLE_RUN_PRESENTATION } from "@/lib/flags"
 import { useConvexAuth, useMutation } from "convex/react"
 import * as React from "react"
 import { create } from "zustand"
@@ -84,8 +83,7 @@ export function deriveChatRowStatus(
     last_read_at?: number | null
   },
   overrideStatus: SidebarChatStatus | null,
-  now: number = Date.now(),
-  durablePresentationEnabled: boolean = true
+  now: number = Date.now()
 ): SidebarChatStatus {
   if (overrideStatus && overrideStatus !== "idle") return overrideStatus
   // Freshness-bounded (durable-turn gameplan §11/§18 #4): the projection's
@@ -96,18 +94,10 @@ export function deriveChatRowStatus(
   // the reaper still bounds it.
   const fresh =
     chat.live_run_fresh_until == null || now < chat.live_run_fresh_until
-  if (
-    durablePresentationEnabled &&
-    fresh &&
-    chat.live_run_status === "streaming"
-  ) {
+  if (fresh && chat.live_run_status === "streaming") {
     return "streaming"
   }
-  if (
-    durablePresentationEnabled &&
-    fresh &&
-    chat.live_run_status === "awaiting"
-  ) {
+  if (fresh && chat.live_run_status === "awaiting") {
     return "awaiting"
   }
   if ((chat.last_run_ended_at ?? 0) > (chat.last_read_at ?? 0)) {
@@ -132,18 +122,10 @@ export function useSidebarChatStatus(chat: Chat): SidebarChatStatus {
     chat.live_run_status === "streaming" || chat.live_run_status === "awaiting"
   // The expiry deadline is an external clock boundary, subscribed through
   // useSyncExternalStore instead of mirrored component state/effect.
-  const deadlineReached = useDeadlineReached(
-    freshUntil ?? null,
-    ENABLE_DURABLE_RUN_PRESENTATION && isLive
-  )
+  const deadlineReached = useDeadlineReached(freshUntil ?? null, isLive)
   const now =
     freshUntil == null ? 0 : deadlineReached ? freshUntil : freshUntil - 1
-  return deriveChatRowStatus(
-    chat,
-    overrideStatus,
-    now,
-    ENABLE_DURABLE_RUN_PRESENTATION
-  )
+  return deriveChatRowStatus(chat, overrideStatus, now)
 }
 
 /**

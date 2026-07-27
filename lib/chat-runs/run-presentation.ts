@@ -70,12 +70,6 @@ export type RunPresentationInputs = {
   localAssistantMessageId: string | null
   /** Raw durable facts from the atomic projection; null for guests/non-owners. */
   selectedRun: SelectedRunProjection | null
-  /**
-   * Rollout boundary for background/stale/returning-client presentation.
-   * Durable state, messages, and exact-run control remain active underneath;
-   * disabling this flag reduces unmatched projections to local-only UI.
-   */
-  durablePresentationEnabled?: boolean
   /** Run id of a durable Stop mutation currently in flight, if any. */
   pendingStopRunId: string | null
   /** A user Stop is armed for the local dispatch, but its explicit durable run
@@ -134,7 +128,6 @@ export function resolveGenerationPresentation(
   } = inputs
   const deferredStopPending = inputs.deferredStopPending ?? false
   const skewGraceMs = inputs.skewGraceMs ?? LEASE_SKEW_GRACE_MS
-  const durablePresentationEnabled = inputs.durablePresentationEnabled ?? true
 
   const rawSelectedRun = inputs.selectedRun
   const localLive = localStatus === "submitted" || localStatus === "streaming"
@@ -142,18 +135,6 @@ export function resolveGenerationPresentation(
     rawSelectedRun !== null &&
     localAssistantMessageId !== null &&
     rawSelectedRun.assistantMessageId === localAssistantMessageId
-
-  // Presentation rollout is deliberately narrower than durable correctness:
-  // keep projections that belong to this tab's local stream (remote terminal
-  // convergence) or an exact Stop already in flight, while hiding unmatched
-  // background/stale state behind the rollout flag.
-  const rolloutEligibleRun =
-    rawSelectedRun !== null &&
-    (durablePresentationEnabled ||
-      localMatchesRun ||
-      pendingStopRunId === rawSelectedRun.runId)
-      ? rawSelectedRun
-      : null
 
   // A TERMINAL projection behind a NEW local dispatch is the PREVIOUS turn's
   // run — presentation-irrelevant to the in-flight submission (gameplan §8:
@@ -163,11 +144,11 @@ export function resolveGenerationPresentation(
   // no Stop while the new dispatch streams. A terminal for OUR OWN stream
   // (localMatchesRun) is never masked — that is the remote-Stop convergence.
   const selectedRunMasked =
-    rolloutEligibleRun !== null &&
-    TERMINAL_RUN_STATUSES.has(rolloutEligibleRun.status) &&
+    rawSelectedRun !== null &&
+    TERMINAL_RUN_STATUSES.has(rawSelectedRun.status) &&
     (localLive || isSubmitting) &&
     !localMatchesRun
-  const selectedRun = selectedRunMasked ? null : rolloutEligibleRun
+  const selectedRun = selectedRunMasked ? null : rawSelectedRun
 
   const settledBase = (
     state: Extract<

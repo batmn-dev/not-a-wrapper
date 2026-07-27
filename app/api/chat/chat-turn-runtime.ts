@@ -69,6 +69,7 @@ import {
 } from "@/lib/observability/chat-performance"
 import {
   createDurableTurnRuntime,
+  hasApprovalResponse,
   isDurableConvexChat,
   type DurableStreamBinding,
   type DurableTurnRuntime,
@@ -88,6 +89,7 @@ import {
 import {
   excludeSystemRoleMessages,
   hasProviderLinkedResponseIds,
+  stripProviderLinkedMetadataFromMessage,
   toPlainTextModelMessages,
 } from "./utils"
 
@@ -637,15 +639,38 @@ export function createChatTurnRuntime(args: {
       sourceProviderHint: resolvedProvider,
     }
 
+    // The live continuation tail — a trailing assistant message carrying
+    // approval-responded tool parts the SDK executes on THIS turn — is not
+    // history. History adaptation must never touch it: the replay compilers
+    // summarize non-replayable tool exchanges away, which strips the very
+    // tool call being continued and leaves a thinking-final assistant message
+    // Anthropic rejects outright.
+    const trailingMessage =
+      textFileModelInput.messages[textFileModelInput.messages.length - 1]
+    const continuationTail =
+      trailingMessage !== undefined &&
+      trailingMessage.role === "assistant" &&
+      hasApprovalResponse([trailingMessage])
+        ? [trailingMessage]
+        : []
+    const historyForAdaptation =
+      continuationTail.length > 0
+        ? textFileModelInput.messages.slice(0, -1)
+        : textFileModelInput.messages
+
     const adaptStartTime = Date.now()
     const adapterResult = await adaptHistoryForProvider(
-      textFileModelInput.messages,
+      historyForAdaptation,
       resolvedProvider,
       adaptationContext,
       {
         useReplayCompiler: HISTORY_REPLAY_COMPILER_V1,
       }
     )
+    const adaptedMessagesWithTail = [
+      ...adapterResult.messages,
+      ...continuationTail,
+    ]
     const adaptationTimeMs = Date.now() - adaptStartTime
     const warningCount = adapterResult.warnings.length
     const warningCountsByCode = countWarningsByCode(adapterResult.warnings)
@@ -748,7 +773,7 @@ export function createChatTurnRuntime(args: {
 
     // Convert UIMessage[] to ModelMessage[] for streamText
     let modelMessages: ModelMessage[] = await convertToModelMessages(
-      adapterResult.messages,
+      adaptedMessagesWithTail,
       {
         tools: tool.tools,
         ignoreIncompleteToolCalls: true,
@@ -773,9 +798,29 @@ export function createChatTurnRuntime(args: {
           reason: "provider_linked_response_ids_detected_post_conversion",
           messageCount: modelMessages.length,
           compilerEnabled: HISTORY_REPLAY_COMPILER_V1,
+          continuationTailPreserved: continuationTail.length > 0,
         })
       )
-      modelMessages = toPlainTextModelMessages(adapterResult.messages)
+      // Flatten HISTORY only. The live continuation tail (already exempted
+      // from adaptation above) carries the approval-responded tool part the
+      // SDK executes THIS turn — flattening it to text silently drops the
+      // very tool call being continued. The tail keeps its full parts; only
+      // its provider-linked metadata is stripped, so the pairing ids this
+      // fallback exists to remove cannot ride back in through it.
+      const tailModelMessages =
+        continuationTail.length > 0
+          ? await convertToModelMessages(
+              continuationTail.map(stripProviderLinkedMetadataFromMessage),
+              {
+                tools: tool.tools,
+                ignoreIncompleteToolCalls: true,
+              }
+            )
+          : []
+      modelMessages = [
+        ...toPlainTextModelMessages(adapterResult.messages),
+        ...tailModelMessages,
+      ]
     }
 
     // Request shaping (CONTEXT.md; lib/openproviders/request-shaping.ts):

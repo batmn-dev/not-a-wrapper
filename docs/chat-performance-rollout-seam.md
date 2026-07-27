@@ -11,12 +11,19 @@ exactly the capabilities documented here.
 > verification and the §6 freeze root-cause, the throttle became the constant
 > `CHAT_MESSAGE_THROTTLE_MS` and throttled highlighting became the sole code
 > render path (see `docs/measurements/2026-07-23-flag-collapse.md`). This
-> seam remains the standard for flags that still exist
-> (`NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION`, `CHAT_PERF_SAMPLE_RATE`,
-> `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION`) and for future phases.
+> seam remains the standard for the diagnostic switches that still exist
+> (`NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION`, `CHAT_PERF_SAMPLE_RATE`) and for
+> future phases that explicitly justify a maintained flag.
 > Round 2 of the collapse also removed `CHAT_SINGLE_PASS_BRANCH_CONTEXT`
 > (with `convex/lib/runtime_flags.ts` itself), `ENABLE_PAGINATED_SIDEBAR`,
 > and `CHAT_CONDITIONAL_EXA`.
+>
+> **Decision update (2026-07-27).** Durable-run presentation does not use this
+> seam as a production rollout mechanism. Its
+> `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION` flag was a temporary local
+> verification scaffold; the durable-turn checklist passed the same day, and
+> the flag, its disabled path, and `lib/flags.ts` were removed — the
+> presentation now ships unconditionally.
 
 ## Selected seam: build/deploy-time environment flags
 
@@ -25,8 +32,7 @@ accessors**, in two placements:
 
 - **Client-visible flags**: `NEXT_PUBLIC_*` env vars read in `lib/flags.ts`
   (or a dedicated module), inlined into the client bundle at build time.
-  Examples: `NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION`,
-  `NEXT_PUBLIC_ENABLE_DURABLE_RUN_PRESENTATION`.
+  Current example: `NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION`.
 - **Server-only flags**: plain env vars read at call time — Next server code
   reads `process.env` directly (`CHAT_PERF_SAMPLE_RATE`). No Convex runtime
   flag remains after the 2026-07-23 collapse; a future one should use a
@@ -69,3 +75,7 @@ active seam or a requirement for PR 2+.
   in particular, never a live kill switch for a `NEXT_PUBLIC_` flag.
 - Flags default to the legacy/off behavior until the phase's gates pass.
 - Remove a flag only after its soak, in a separate cleanup change.
+
+These generic rules do not override the durable-presentation decision above:
+that product behavior uses local proof followed directly by flag removal and
+one unconditional path, with no production flag soak.

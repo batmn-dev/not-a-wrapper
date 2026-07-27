@@ -195,6 +195,36 @@ export function toPlainTextModelMessages(
 }
 
 /**
+ * Strip provider-linked metadata (`callProviderMetadata` / `providerMetadata`)
+ * from every part of a UI message WITHOUT touching part semantics. Used on the
+ * live continuation tail when the plaintext replay fallback fires: the tail
+ * must keep its full parts — the approval-responded tool call the SDK executes
+ * THIS turn — so only the replay-pairing ids (msg_/rs_/ws_ carriers) are
+ * removed instead of flattening the message to text.
+ */
+export function stripProviderLinkedMetadataFromMessage(
+  message: MessageAISDK
+): MessageAISDK {
+  const parts = message.parts.map((part) => {
+    if (!part || typeof part !== "object") return part
+    const record = part as Record<string, unknown>
+    if (
+      !("callProviderMetadata" in record) &&
+      !("providerMetadata" in record)
+    ) {
+      return part
+    }
+    const {
+      callProviderMetadata: _callProviderMetadata,
+      providerMetadata: _providerMetadata,
+      ...rest
+    } = record
+    return rest as typeof part
+  })
+  return { ...message, parts }
+}
+
+/**
  * Extract a user-friendly error message from various error types
  * Used for streaming errors that need to be forwarded to the client
  * @param error - The error from AI SDK or other sources

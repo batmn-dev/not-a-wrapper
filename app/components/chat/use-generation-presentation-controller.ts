@@ -32,7 +32,6 @@ type GenerationPresentationControllerArgs = {
   localAssistantMessageId: string | null
   selectedRun: SelectedRunProjection | null
   isConnected: boolean
-  durablePresentationEnabled: boolean
   stopLocal: () => void | Promise<void>
   stopDurable: (runId: string) => Promise<void>
   onDurableStopError: (error: unknown) => void
@@ -77,7 +76,6 @@ export function useGenerationPresentationController({
   localAssistantMessageId,
   selectedRun,
   isConnected,
-  durablePresentationEnabled,
   stopLocal,
   stopDurable,
   onDurableStopError,
@@ -103,13 +101,8 @@ export function useGenerationPresentationController({
         : activeState.localStreamStartedAtMs + streamTimeoutMs
       : null
   const streamDeadlineReached = useDeadlineReached(streamDeadline)
-  const localMatchesRun =
-    selectedRun !== null &&
-    localAssistantMessageId !== null &&
-    selectedRun.assistantMessageId === localAssistantMessageId
   const runCouldGoStale =
     selectedRun !== null &&
-    (durablePresentationEnabled || localMatchesRun) &&
     (selectedRun.status === "running" ||
       selectedRun.status === "streaming" ||
       selectedRun.status === "awaiting_approval")
@@ -130,7 +123,6 @@ export function useGenerationPresentationController({
         localStreamStartedAtMs: activeState.localStreamStartedAtMs,
         isConnected,
         now: presentationNow,
-        durablePresentationEnabled,
       }),
     [
       localStatus,
@@ -142,7 +134,6 @@ export function useGenerationPresentationController({
       activeState.localStreamStartedAtMs,
       isConnected,
       presentationNow,
-      durablePresentationEnabled,
     ]
   )
 

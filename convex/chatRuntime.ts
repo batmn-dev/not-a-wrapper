@@ -22,6 +22,7 @@ import {
   computeLeaseExpiresAt,
   computeLiveRunFreshUntil,
   isWorkerExecutingStatus,
+  RESOLVED_APPROVAL_CONTINUATION_GRACE_MS,
 } from "./domain/generation_run_liveness"
 import { createMessageBranchWriter } from "./domain/message_branch_writes"
 import {
@@ -2605,4 +2606,134 @@ export async function reapExpiredToolApprovalsPass(
 export const reapExpiredToolApprovals = internalMutation({
   args: {},
   handler: async (ctx) => reapExpiredToolApprovalsPass(ctx),
+})
+
+/**
+ * Settle awaiting_approval runs whose approvals are ALL resolved but whose
+ * continuation never dispatched (the client crashed or reloaded before
+ * auto-send, or a historical strand). Such a pause sits outside both other
+ * reapers — no lease (the pause sheds it) and no pending approval (the rows
+ * resolved) — and outside next-turn convergence too: deny-pending only touches
+ * pending rows and the supersede sweep never reaches a pause, so without this
+ * pass it looks awaiting forever.
+ *
+ * Eligibility is transactional and fail-closed:
+ *  - at least one approval row, none pending (a pending row means the user or
+ *    the approval reaper still owns the pause);
+ *  - no `continuationRunId` (a stamped continuation means a prepare owns the
+ *    close — unreachable while still paused, but never fight it);
+ *  - every resolution carries a defined `resolvedAt`, and the NEWEST one is
+ *    older than the grace window. An undated resolution is EXCLUDED, never
+ *    treated as infinitely old — the §18 #6 `undefined` rule applied to this
+ *    pass's expiry comparison (`undefined` must not classify as "expired").
+ *
+ * The grace window (measured from the last `resolvedAt`) keeps the live
+ * approve → auto-send → prepare path unraced; a continuation that still
+ * arrives after the reap hits the existing `pausedRunWasLive` conflict (the
+ * lifecycle's continuation-lost rule only ever touches awaiting_approval, so
+ * a Stop-settled or already-continued run is untouchable). The chat
+ * projection stays statusRunId-guarded, so a pause that already transferred
+ * the slot to a next send cannot clear the newer run's status.
+ */
+/**
+ * Candidate scan window for the resolved-approvals pass — deliberately wider
+ * than the settle budget. Unlike the lease/approval reapers, whose index
+ * ranges select only eligible rows, this pass's eligibility (no pending
+ * approval, dated resolutions, grace elapsed) is only decidable per candidate
+ * — so legitimately ineligible pauses (users still deciding, resolutions
+ * inside the grace) sit in the `by_status` prefix. A scan capped at the
+ * settle budget would let 25 such rows curtain off every eligible strand
+ * behind them permanently. Examining an ineligible candidate costs a handful
+ * of reads; settling remains bounded by REAPER_BATCH_LIMIT.
+ */
+const RESOLVED_PAUSE_SCAN_LIMIT = 8 * REAPER_BATCH_LIMIT
+
+export async function reapResolvedApprovalPausesPass(
+  ctx: MutationCtx
+): Promise<{ settled: number }> {
+  const now = nowMs()
+  let settled = 0
+  const candidates = await ctx.db
+    .query("generationRuns")
+    .withIndex("by_status", (q) => q.eq("status", "awaiting_approval"))
+    .take(RESOLVED_PAUSE_SCAN_LIMIT)
+  for (const candidate of candidates) {
+    if (settled >= REAPER_BATCH_LIMIT) break
+    const run = await ctx.db.get(candidate._id)
+    if (!run || run.status !== "awaiting_approval") continue
+    if (run.continuationRunId !== undefined) continue
+    const chat = await ctx.db.get(run.chatId)
+    if (!chat || !(await isChatActive(ctx, chat))) continue
+
+    // Prefix read on by_run_status: ALL approval rows for the run, any status.
+    const approvals = await ctx.db
+      .query("toolApprovalRequests")
+      .withIndex("by_run_status", (q) => q.eq("runId", run._id))
+      .collect()
+    if (approvals.length === 0) continue
+    let anyPending = false
+    let anyDenied = false
+    let anyUndated = false
+    let latestResolvedAt = 0
+    for (const approval of approvals) {
+      if (approval.status === "pending") {
+        anyPending = true
+        break
+      }
+      if (approval.status !== "approved") anyDenied = true
+      if (approval.resolvedAt === undefined) {
+        anyUndated = true
+        continue
+      }
+      latestResolvedAt = Math.max(latestResolvedAt, approval.resolvedAt)
+    }
+    if (anyPending || anyUndated) continue
+    if (now < latestResolvedAt + RESOLVED_APPROVAL_CONTINUATION_GRACE_MS) {
+      continue
+    }
+
+    const resolved = await gatherAssistantMessageFacts(ctx, run, undefined)
+    const verdict = resolveGenerationRunTransition(
+      { runStatus: run.status, message: resolved?.facts ?? null },
+      { kind: "continuation-lost", anyDenied }
+    )
+    if (verdict.kind !== "transition") continue
+    await applyLifecycleVerdict(ctx, run, verdict, resolved, now)
+    await settleAuxiliaryRecordsForTerminalRun(
+      ctx,
+      run,
+      "approval continuation was not dispatched",
+      now
+    )
+    settled++
+    console.log(
+      JSON.stringify({
+        _tag: "run_stale_reaped",
+        reason: "continuation_lost",
+        runId: run._id,
+        chatId: run.chatId,
+        anyDenied,
+        latestResolvedAt,
+        ageMs: now - latestResolvedAt,
+      })
+    )
+  }
+  // No silent caps: a full scan window means candidates beyond it were not
+  // examined this tick — and since the same prefix re-scans next tick, a
+  // window persistently full of ineligible rows IS starvation. Surface it.
+  if (candidates.length === RESOLVED_PAUSE_SCAN_LIMIT) {
+    console.warn(
+      JSON.stringify({
+        _tag: "resolved_pause_scan_saturated",
+        scanned: candidates.length,
+        settled,
+      })
+    )
+  }
+  return { settled }
+}
+
+export const reapResolvedApprovalPauses = internalMutation({
+  args: {},
+  handler: async (ctx) => reapResolvedApprovalPausesPass(ctx),
 })

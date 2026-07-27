@@ -119,19 +119,8 @@ describe("precedence ladder", () => {
     expect(presentation.state).toBe("completed")
   })
 
-  it("the rollout flag hides unmatched background presentation but keeps local run convergence", () => {
-    const background = resolve({
-      durablePresentationEnabled: false,
-      localStatus: "ready",
-      selectedRun: makeRun({ status: "streaming" }),
-    })
-    expect(background).toMatchObject({
-      state: "settled",
-      stoppable: false,
-    })
-
+  it("a terminal for the attached local stream cuts it (remote-Stop convergence)", () => {
     const attachedTerminal = resolve({
-      durablePresentationEnabled: false,
       localStatus: "streaming",
       localAssistantMessageId: "msg_1",
       selectedRun: makeRun({ status: "aborted", terminalReason: "user_stop" }),

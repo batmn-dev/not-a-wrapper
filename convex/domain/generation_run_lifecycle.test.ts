@@ -415,6 +415,46 @@ describe("durable control signals (gameplan §10)", () => {
     })
   })
 
+  it("continuation-lost settles only the approval pause: denied → aborted, approved → failed, never a resurrection", () => {
+    expect(
+      resolve(
+        "awaiting_approval",
+        { kind: "continuation-lost", anyDenied: false },
+        semanticFacts
+      )
+    ).toMatchObject({
+      kind: "transition",
+      run: {
+        status: "failed",
+        settle: true,
+        terminalReason: "continuation_lost",
+      },
+    })
+    expect(
+      resolve(
+        "awaiting_approval",
+        { kind: "continuation-lost", anyDenied: true },
+        semanticFacts
+      )
+    ).toMatchObject({
+      kind: "transition",
+      run: {
+        status: "aborted",
+        settle: true,
+        terminalReason: "continuation_lost",
+      },
+    })
+    expect(
+      resolve("streaming", { kind: "continuation-lost", anyDenied: false })
+    ).toEqual({ kind: "ignore", reason: "not-awaiting-approval" })
+    // A Stop-settled (or already-continued) pause is untouchable.
+    for (const status of ["completed", "aborted", "failed"]) {
+      expect(
+        resolve(status, { kind: "continuation-lost", anyDenied: false })
+      ).toEqual({ kind: "ignore", reason: "already-terminal" })
+    }
+  })
+
   it("reaped runs become failed, never completed — and stay absorbing against late completion", () => {
     const reaped = resolve("streaming", { kind: "lease-expired" })
     expect(reaped).toMatchObject({ kind: "transition", run: { status: "failed" } })
@@ -486,6 +526,7 @@ describe("isIgnoredSignal", () => {
       { kind: "stop", reason: "stopped" },
       { kind: "lease-expired" },
       { kind: "approval-expired" },
+      { kind: "continuation-lost", anyDenied: false },
     ]
     for (const status of statuses) {
       for (const signal of signals) {

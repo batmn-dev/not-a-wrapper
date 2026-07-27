@@ -29,6 +29,18 @@ crons.interval(
   {}
 )
 
+// Resolved-approvals-without-continuation strands (the pause is lease-free and
+// its approvals are no longer pending, so neither reaper above can reach it).
+// The pass's own grace window — measured from the last approval's resolvedAt —
+// is what protects the live approve→auto-send path; the minute cadence only
+// bounds detection latency.
+crons.interval(
+  "reap resolved approval pauses missing their continuation",
+  { minutes: 1 },
+  internal.chatRuntime.reapResolvedApprovalPauses,
+  {}
+)
+
 crons.interval(
   "reconcile stalled deletion jobs",
   { minutes: 10 },
