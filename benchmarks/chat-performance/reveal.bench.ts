@@ -74,6 +74,39 @@ console.log(
     `cost (time/op ÷ updates); O(appended) means they stay comparable.`
 )
 
+// advanceReveal-only per-update cost (the plan's O(appended) target),
+// measured with reconcile excluded from the timed region — the reconcile
+// append-check memcmp is O(message) with a tiny constant and V8
+// rope-flattening noise, and would otherwise dominate the comparison.
+for (const [label, states] of [
+  ["mixed-markdown", mixedMarkdownStates],
+  ["10x-message", longMessageStates],
+] as const) {
+  let advanceMs = 0
+  for (let round = 0; round < 3; round++) {
+    let state = createRevealState("", true)
+    for (const { text, atMs } of states) {
+      state = reconcileCanonical(state, text, false).state
+      const start = performance.now()
+      state = advanceReveal(state, text, atMs, PROSE_REVEAL_PROFILE, "streaming")
+        .state
+      state = advanceReveal(
+        state,
+        text,
+        atMs + 8,
+        PROSE_REVEAL_PROFILE,
+        "streaming"
+      ).state
+      advanceMs += performance.now() - start
+    }
+  }
+  console.log(
+    `[reveal-bench] advanceReveal-only ${label}: ` +
+      `${((advanceMs / 3 / states.length) * 1000).toFixed(1)}µs per update ` +
+      `(${states.length} updates)`
+  )
+}
+
 describe("presentation-reveal core", () => {
   bench(
     "mixed-markdown @ 30 chunks/s (full stream replay)",

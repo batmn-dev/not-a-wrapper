@@ -133,6 +133,26 @@ describe("settling", () => {
     expect(final.state.displayedEnd).toBe(text.length)
   })
 
+  it("settleDrainMs is a hard deadline even for a large backlog", () => {
+    // 1200-char backlog, per-frame cap 10: rate alone could never finish in
+    // 100ms — the deadline flush must land the tail.
+    const text = "ab ".repeat(400)
+    const overrides = { maxCharsPerFrame: 10, settleDrainMs: 100 }
+    let { state } = tick(liveState(text), text, 0, overrides)
+    let caughtAt: number | null = null
+    for (let t = 10; t <= 400; t += 10) {
+      const result = tick(state, text, t, overrides, "settling")
+      state = result.state
+      if (result.caughtUp) {
+        caughtAt = t
+        break
+      }
+    }
+    expect(caughtAt).not.toBeNull()
+    expect(caughtAt!).toBeLessThanOrEqual(100 + 20)
+    expect(state.displayedEnd).toBe(text.length)
+  })
+
   it("streaming holds a trailing partial word; settling releases it", () => {
     const text = "Hello wor"
     let { state } = tick(liveState(text), text, 0)

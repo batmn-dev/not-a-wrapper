@@ -26,6 +26,12 @@ import {
   type RevealState,
 } from "@/lib/chat-performance/presentation-reveal"
 import {
+  markRevealCaughtUp,
+  markRevealCommit,
+  markRevealSnap,
+  type RevealSnapReason,
+} from "@/lib/observability/chat-performance-client"
+import {
   createStreamFadeRuntime,
   NOOP_STREAM_FADE_RUNTIME,
   type StreamFadeRuntime,
@@ -81,6 +87,7 @@ export function usePresentationReveal(args: {
   const rafRef = useRef<number | null>(null)
   const backstopRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const phaseRef = useRef<RevealPhase>("streaming")
+  const settleStartedAtRef = useRef<number | null>(null)
   const textRef = useRef(text)
   textRef.current = text
   const profileRef = useRef(profile)
@@ -90,7 +97,7 @@ export function usePresentationReveal(args: {
   // settle drain; rows that were never live (history) bypass it entirely.
   const engaged = !reducedMotion && (live || entryRef.current !== null)
 
-  const snapToCanonical = useCallback(() => {
+  const snapToCanonical = useCallback((reason: RevealSnapReason) => {
     const entry = entryRef.current
     if (!entry) return
     if (rafRef.current !== null) {
@@ -105,6 +112,7 @@ export function usePresentationReveal(args: {
     entry.state = createCaughtUpRevealState(canonical)
     entry.runtime.prune(null)
     entry.runtime.snap()
+    markRevealSnap(reason)
     setDisplayed(canonical)
   }, [])
 
@@ -121,14 +129,24 @@ export function usePresentationReveal(args: {
     )
     entry.state = result.state
     if (result.shouldCommit) {
+      markRevealCommit(
+        result.state.displayedEnd,
+        entry.state.canonical.length - result.state.displayedEnd
+      )
       setDisplayed(entry.state.canonical.slice(0, result.state.displayedEnd))
     }
     if (result.caughtUp) {
       // Loop self-stops; a settle backstop is no longer needed once the
       // drain finished naturally.
-      if (phaseRef.current === "settling" && backstopRef.current !== null) {
-        clearTimeout(backstopRef.current)
-        backstopRef.current = null
+      if (phaseRef.current === "settling") {
+        if (backstopRef.current !== null) {
+          clearTimeout(backstopRef.current)
+          backstopRef.current = null
+        }
+        if (settleStartedAtRef.current !== null) {
+          markRevealCaughtUp(nowMs - settleStartedAtRef.current)
+          settleStartedAtRef.current = null
+        }
       }
       return
     }
@@ -199,13 +217,14 @@ export function usePresentationReveal(args: {
     const entry = entryRef.current
     if (!entry) return
     if (document.visibilityState === "hidden") {
-      snapToCanonical()
+      snapToCanonical("hidden")
       return
     }
     const { state, discontinuity } = reconcileCanonical(entry.state, text, false)
     entry.state = state
     if (discontinuity === "snap") {
       entry.runtime.prune(null)
+      markRevealSnap("nonprefix")
       setDisplayed("")
     }
     startLoop()
@@ -219,18 +238,26 @@ export function usePresentationReveal(args: {
     if (!entry) return
     if (live) {
       phaseRef.current = "streaming"
+      settleStartedAtRef.current = null
       return
     }
     phaseRef.current = "settling"
-    if (settleMode === "immediate") return // render-phase snap handled it
-    if (document.visibilityState === "hidden") {
-      snapToCanonical()
+    if (settleMode === "immediate") {
+      // Render-phase snap already landed the text; record the cause here so
+      // the mark fires once, effect-driven, outside render.
+      markRevealSnap("terminal")
       return
     }
+    if (document.visibilityState === "hidden") {
+      snapToCanonical("hidden")
+      return
+    }
+    settleStartedAtRef.current =
+      typeof performance !== "undefined" ? performance.now() : 0
     startLoop()
     backstopRef.current = setTimeout(() => {
       backstopRef.current = null
-      snapToCanonical()
+      snapToCanonical("backstop")
     }, profileRef.current.settleDrainMs + 100)
     return () => {
       if (backstopRef.current !== null) {
@@ -247,7 +274,7 @@ export function usePresentationReveal(args: {
     if (reducedMotion) return
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden" && entryRef.current) {
-        snapToCanonical()
+        snapToCanonical("hidden")
       }
     }
     document.addEventListener("visibilitychange", onVisibilityChange)

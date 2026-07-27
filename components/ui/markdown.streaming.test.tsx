@@ -231,6 +231,54 @@ describe("Markdown terminal-block stability (plan PR 3)", () => {
     expect(container.querySelectorAll(".stream-word")).toHaveLength(0)
   })
 
+  it("reveal-driven growth re-renders only the terminal block subtree (§9 cost gate)", async () => {
+    const { createStreamFadeRuntime } = await import(
+      "@/lib/markdown/rehype-stream-fade"
+    )
+    const runtime = createStreamFadeRuntime()
+    // A paragraph-render counter stands in for React Profiler commit
+    // attribution: each <p> render is one block-subtree render.
+    const renderedParagraphs: string[] = []
+    const CountingP = ({
+      children,
+      node: _,
+      ...props
+    }: React.ComponentPropsWithoutRef<"p"> & { node?: unknown }) => {
+      renderedParagraphs.push("p")
+      return <p {...props}>{children}</p>
+    }
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+    const render = (markdown: string) => {
+      act(() => {
+        root?.render(
+          <Markdown
+            id="confine"
+            streaming
+            fadeRuntime={runtime}
+            components={{ p: CountingP }}
+          >
+            {markdown}
+          </Markdown>
+        )
+      })
+    }
+    const settledPrefix = "First paragraph.\n\nSecond paragraph.\n\n"
+    render(settledPrefix + "Growing tail")
+    expect(renderedParagraphs.length).toBe(3)
+
+    // A reveal commit grows only the displayed prefix: the two settled
+    // blocks must memo-bail — exactly one paragraph (the terminal block)
+    // re-renders per commit.
+    renderedParagraphs.length = 0
+    render(settledPrefix + "Growing tail with more")
+    expect(renderedParagraphs.length).toBe(1)
+    renderedParagraphs.length = 0
+    render(settledPrefix + "Growing tail with more words")
+    expect(renderedParagraphs.length).toBe(1)
+  })
+
   it("renders byte-identically to the runtime-less output once settled", async () => {
     const { createStreamFadeRuntime } = await import(
       "@/lib/markdown/rehype-stream-fade"

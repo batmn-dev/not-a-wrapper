@@ -202,6 +202,35 @@ export function useChatTurnPerfMarks(input: TurnPerfInput): void {
 }
 
 // ---------------------------------------------------------------------------
+// Presentation-reveal marks (ADR-0015 commit 5)
+// ---------------------------------------------------------------------------
+
+export type RevealSnapReason =
+  | "hidden"
+  | "terminal"
+  | "nonprefix"
+  | "backstop"
+
+/** One reveal commit: chars now displayed and chars still backlogged.
+ * Content-free by construction — lengths only, never text. */
+export function markRevealCommit(
+  revealedChars: number,
+  backlogChars: number
+): void {
+  markChatPerf("reveal_commit", { revealedChars, backlogChars })
+}
+
+/** Settle drain finished naturally: transport-finish → caught-up delta. */
+export function markRevealCaughtUp(drainMs: number): void {
+  markChatPerf("reveal_caught_up", { drainMs: Math.max(0, drainMs) })
+}
+
+/** A snap-to-canonical discontinuity, by cause. */
+export function markRevealSnap(reason: RevealSnapReason): void {
+  markChatPerf("reveal_snap", { reason })
+}
+
+// ---------------------------------------------------------------------------
 // Navigation / chat-switch marks and the settlement receipt
 // ---------------------------------------------------------------------------
 

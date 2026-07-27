@@ -69,6 +69,8 @@ export type RevealState = {
   lastTickMs: number
   carryMs: number // banked fractional time (assistant-ui pattern)
   lastCommitMs: number
+  /** First settling tick — settleDrainMs is a hard deadline from here. */
+  settleStartMs: number | null
   /** Liveness at creation: non-live (history) state is permanently caught up. */
   live: boolean
   /** Last-seen canonical text — a reference for prefix checks, not a buffer. */
@@ -225,6 +227,7 @@ export function createRevealState(canonical: string, live: boolean): RevealState
       lastTickMs: -1,
       carryMs: 0,
       lastCommitMs: -1,
+      settleStartMs: null,
       live: false,
       canonical,
       fences: [],
@@ -240,6 +243,7 @@ export function createRevealState(canonical: string, live: boolean): RevealState
     lastTickMs: -1,
     carryMs: 0,
     lastCommitMs: -1,
+    settleStartMs: null,
     live: true,
     canonical,
     fences,
@@ -280,22 +284,45 @@ export function advanceReveal(
   let carryMs = state.carryMs
   const backlog = length - frontier
 
+  // Settling runs against a hard deadline: settleStartMs pins the first
+  // settling tick, and the whole backlog must land by settleStartMs +
+  // settleDrainMs (drainMs alone is a time-constant — exponential decay
+  // that never quite finishes).
+  let settleStartMs = state.settleStartMs
+  if (phase === "streaming") {
+    settleStartMs = null
+  } else {
+    settleStartMs ??= nowMs
+  }
+
   // Rate math (assistant-ui): interval recomputed from current backlog,
   // fractional time banked, per-tick cap discards surplus (anti-burst).
   const elapsed =
     state.lastTickMs < 0 ? 0 : Math.max(0, nowMs - state.lastTickMs) + carryMs
   if (backlog > 0 && elapsed > 0) {
-    const drainMs = phase === "settling" ? profile.settleDrainMs : profile.drainMs
-    const interval = Math.min(profile.maxCharIntervalMs, drainMs / backlog)
-    let chars = Math.floor(elapsed / interval)
-    if (chars > profile.maxCharsPerFrame) {
-      chars = profile.maxCharsPerFrame
+    const remainingSettleMs =
+      phase === "settling"
+        ? settleStartMs! + profile.settleDrainMs - nowMs
+        : null
+    if (remainingSettleMs !== null && remainingSettleMs <= 0) {
+      // Deadline hit: flush the tail outright (event-driven, cap-exempt —
+      // mirrors the hook's timer backstop semantics).
+      frontier = length
       carryMs = 0
     } else {
-      carryMs = elapsed - chars * interval
+      const budgetMs =
+        remainingSettleMs !== null ? remainingSettleMs : profile.drainMs
+      const interval = Math.min(profile.maxCharIntervalMs, budgetMs / backlog)
+      let chars = Math.floor(elapsed / interval)
+      if (chars > profile.maxCharsPerFrame) {
+        chars = profile.maxCharsPerFrame
+        carryMs = 0
+      } else {
+        carryMs = elapsed - chars * interval
+      }
+      frontier = Math.min(length, frontier + chars)
+      if (frontier >= length) carryMs = 0
     }
-    frontier = Math.min(length, frontier + chars)
-    if (frontier >= length) carryMs = 0
   } else if (backlog <= 0) {
     carryMs = 0
   }
@@ -386,6 +413,7 @@ export function advanceReveal(
       lastTickMs: nowMs,
       carryMs,
       lastCommitMs: shouldCommit ? nowMs : state.lastCommitMs,
+      settleStartMs,
       canonical,
       lastBlockBoundary,
     },
