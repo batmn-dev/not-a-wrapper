@@ -562,6 +562,28 @@ describe("MessageAssistant activity trigger", () => {
     expect(document.body.textContent).toContain("Using GPT-5.5")
   })
 
+  it("renders full canonical text with zero reveal structure on non-last and settled rows", async () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+    await act(async () => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView([], "ready")}
+            status="ready"
+          >
+            {"A settled answer with **markdown** in it."}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    expect(container?.textContent).toContain(
+      "A settled answer with markdown in it."
+    )
+    expect(container?.querySelectorAll(".stream-word")).toHaveLength(0)
+  })
+
   it("keeps a Retry control on an aborted turn whose only preserved content is a tool card", async () => {
     const store = makeStore({ panelTurnId: "assistant-1" })
     const onReload = vi.fn()
@@ -605,5 +627,118 @@ describe("MessageAssistant activity trigger", () => {
       retry?.click()
     })
     expect(onReload).toHaveBeenCalledWith("assistant-1")
+  })
+})
+
+describe("MessageAssistant presentation reveal (ADR-0015)", () => {
+  let container: HTMLDivElement | null = null
+  let root: Root | null = null
+  let rafCallbacks: Map<number, FrameRequestCallback>
+
+  beforeEach(() => {
+    // rAF captured (never flushed): the reveal loop cannot advance, so
+    // backlog created after mount stays pending — exactly the state the
+    // terminal paths must flush without depending on animation frames.
+    rafCallbacks = new Map()
+    let rafId = 0
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      (callback: FrameRequestCallback) => {
+        rafCallbacks.set(++rafId, callback)
+        return rafId
+      }
+    )
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => {
+      rafCallbacks.delete(id)
+    })
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(() => {
+    const rootToUnmount = root
+    if (rootToUnmount) {
+      act(() => {
+        rootToUnmount.unmount()
+      })
+    }
+    container?.remove()
+    root = null
+    container = null
+    vi.unstubAllGlobals()
+  })
+
+  function renderRow(args: {
+    children: string
+    status: "streaming" | "ready" | "aborted"
+    isLast?: boolean
+  }) {
+    const chatStatus = args.status === "streaming" ? "streaming" : "ready"
+    act(() => {
+      root?.render(
+        <MessageAssistant
+          messageId="assistant-live"
+          view={makeView([], chatStatus)}
+          status={args.status}
+          isLast={args.isLast ?? true}
+          copied={false}
+          copyToClipboard={() => {}}
+        >
+          {args.children}
+        </MessageAssistant>
+      )
+    })
+  }
+
+  it("abnormal terminals render the full text in the same commit as the banner", () => {
+    renderRow({ children: "Partial answer", status: "streaming" })
+    // Growth after mount stays backlogged (frames never run).
+    renderRow({
+      children: "Partial answer plus an unrevealed tail",
+      status: "streaming",
+    })
+    expect(container?.textContent).not.toContain("unrevealed tail")
+
+    renderRow({
+      children: "Partial answer plus an unrevealed tail",
+      status: "aborted",
+    })
+    expect(container?.textContent).toContain("unrevealed tail")
+    expect(container?.textContent).toContain("Generation stopped.")
+  })
+
+  it("footer actions wait for the reveal drain after natural completion", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+    try {
+      renderRow({ children: "The answer", status: "streaming" })
+      renderRow({
+        children: "The answer with a pending tail",
+        status: "streaming",
+      })
+      renderRow({
+        children: "The answer with a pending tail",
+        status: "ready",
+      })
+      // Drain pending: footer actions held back, and the caret outlives the
+      // transport — still fully visible (no fade-out animation class).
+      expect(
+        container?.querySelector('button[aria-label="Copy Response"]')
+      ).toBeNull()
+      const caretHost = () =>
+        container?.querySelector(".pointer-events-none.absolute.inset-y-0")
+      expect(caretHost()).toBeTruthy()
+      expect(caretHost()?.innerHTML).not.toContain("caret-fade-out")
+
+      // Frames never run — the settle backstop flushes the drain, and only
+      // then does the caret begin its fade.
+      act(() => {
+        vi.advanceTimersByTime(400 + 100 + 10)
+      })
+      expect(container?.textContent).toContain("pending tail")
+      expect(caretHost()?.innerHTML).toContain("caret-fade-out")
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

@@ -10,14 +10,17 @@ import type {
   ActivityEntryStatus,
   AssistantActivityEntry,
   AssistantActivityModel,
+  AssistantActivityReasoningEntry,
   AssistantActivitySearchEntry,
   AssistantActivityToolEntry,
 } from "@/lib/chat-messages/assistant-activity"
+import { REASONING_REVEAL_PROFILE } from "@/lib/chat-performance/presentation-reveal"
 import { parseSafeExternalUrl } from "@/lib/url-safety"
 import { RiCheckLine, RiCodeLine, RiFileCopyLine } from "@remixicon/react"
 import Image from "next/image"
 import { useId, useRef, useState, type RefCallback } from "react"
 import { createPortal } from "react-dom"
+import { usePresentationReveal } from "../use-presentation-reveal"
 import { useActivityPanelDockSlot } from "./activity-panel-host"
 import { useActivityPanelSectionTarget } from "./activity-panel-store"
 import { ActivityStep, ActivityTimeline, StepTitle } from "./activity-timeline"
@@ -289,6 +292,37 @@ export function activityEntryMarker(entry: AssistantActivityEntry) {
   }
 }
 
+/**
+ * Reasoning detail with the Presentation reveal (ADR-0015 §6.6). Extracted
+ * so the hook mounts only for reasoning rows — ActivityEntryRow renders
+ * every entry kind, and hooks must be unconditional. Each step's detail
+ * reveals independently, keyed by the stable entry id; a step that stopped
+ * growing (`status: "complete"`) drains within the reasoning profile's
+ * settle window.
+ */
+function ReasoningEntryDetail({
+  entry,
+}: {
+  entry: AssistantActivityReasoningEntry & { detail: string }
+}) {
+  const reveal = usePresentationReveal({
+    text: entry.detail,
+    live: entry.status === "running",
+    settleMode: "drain",
+    revealKey: entry.id,
+    profile: REASONING_REVEAL_PROFILE,
+  })
+  return (
+    <Markdown
+      className="text-muted-foreground text-sm leading-5"
+      streaming={entry.status === "running" || !reveal.caughtUp}
+      fadeRuntime={reveal.fadeRuntime}
+    >
+      {reveal.text}
+    </Markdown>
+  )
+}
+
 function ActivityEntryRow({
   entry,
   onToolApproval,
@@ -310,9 +344,9 @@ function ActivityEntryRow({
       <StepTitle>{entry.title}</StepTitle>
       {entry.detail ? (
         entry.kind === "reasoning" ? (
-          <Markdown className="text-muted-foreground text-sm leading-5">
-            {entry.detail}
-          </Markdown>
+          <ReasoningEntryDetail
+            entry={entry as AssistantActivityReasoningEntry & { detail: string }}
+          />
         ) : (
           <p className="text-muted-foreground text-sm leading-5">
             {entry.detail}

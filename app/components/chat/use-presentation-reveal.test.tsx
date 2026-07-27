@@ -272,6 +272,33 @@ describe("usePresentationReveal", () => {
     )
   })
 
+  it("keeps revealing after a StrictMode mount→unmount→remount cycle", () => {
+    // Regression: the unmount cleanup must null the rAF/backstop refs — a
+    // stale non-null rafRef makes every later startLoop() a no-op and the
+    // reveal buffers everything until the terminal snap (found live in the
+    // dev-server smoke, where next dev runs StrictMode).
+    const renderStrict = (text: string) => {
+      act(() => {
+        root?.render(
+          <React.StrictMode>
+            <Probe
+              text={text}
+              live
+              settleMode="drain"
+              revealKey="m1"
+              profile={FAST_PROFILE}
+            />
+          </React.StrictMode>
+        )
+      })
+    }
+    renderStrict("")
+    renderStrict("Words that must reveal live ")
+    expect(rafCallbacks.size).toBeGreaterThan(0)
+    flushFrames(8)
+    expect(latest.result?.text).toBe("Words that must reveal live")
+  })
+
   it("uses the reasoning-vs-prose profile it is given", () => {
     // Sanity pin: the hook honors the injected profile object (the
     // reasoning wiring passes REASONING_REVEAL_PROFILE).

@@ -270,8 +270,18 @@ export function usePresentationReveal(args: {
 
   useEffect(
     () => () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
-      if (backstopRef.current !== null) clearTimeout(backstopRef.current)
+      // Refs must be nulled, not just cancelled: under StrictMode's
+      // mount→unmount→remount, a stale non-null rafRef would make every
+      // later startLoop() no-op and the reveal would buffer until the
+      // terminal snap.
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
+      if (backstopRef.current !== null) {
+        clearTimeout(backstopRef.current)
+        backstopRef.current = null
+      }
     },
     []
   )

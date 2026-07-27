@@ -17,6 +17,7 @@ import {
 } from "@/lib/chat-messages/assistant-turn"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { getDurableError } from "@/lib/chat-messages/metadata"
+import { PROSE_REVEAL_PROFILE } from "@/lib/chat-performance/presentation-reveal"
 import { getModelInfo } from "@/lib/models"
 import { cn } from "@/lib/utils"
 import { RiCheckLine, RiFileCopyLine, RiLoopRightLine } from "@remixicon/react"
@@ -32,6 +33,7 @@ import { MessageActionButton } from "./message-action-button"
 import { QuoteButton } from "./quote-button"
 import { SearchImages } from "./search-images"
 import { SourcesBadge } from "./sources-badge"
+import { usePresentationReveal } from "./use-presentation-reveal"
 import { useAssistantMessageSelection } from "./useAssistantMessageSelection"
 
 type MessageAssistantProps = {
@@ -76,8 +78,28 @@ export function MessageAssistant({
   const retryModelName =
     getModelInfo(retryModelId ?? "")?.name ?? retryModelId ?? "selected model"
 
-  const contentNullOrEmpty = children === null || children === ""
-  const isLastStreaming = status === "streaming" && isLast
+  // Presentation reveal (ADR-0015): the displayed prose is a word-boundary
+  // prefix of the canonical text on the live last row; everywhere else the
+  // hook is inert and reveal.text === children. Abnormal terminals flush
+  // instantly so the full text commits together with the terminal banner;
+  // natural completion drains, and presentedLive keeps caret/footer/growing
+  // classification alive until the drain finishes.
+  const transportLive = status === "submitted" || status === "streaming"
+  const settleMode =
+    status === "aborted" || status === "failed" || status === "awaiting_approval"
+      ? "immediate"
+      : "drain"
+  const reveal = usePresentationReveal({
+    text: children,
+    live: transportLive && Boolean(isLast),
+    settleMode,
+    revealKey: messageId,
+    profile: PROSE_REVEAL_PROFILE,
+  })
+  const presentedLive = (transportLive || !reveal.caughtUp) && Boolean(isLast)
+
+  const contentNullOrEmpty = reveal.text === null || reveal.text === ""
+  const isLastStreaming = presentedLive
   const hasContent = !contentNullOrEmpty
   // Durable terminal-state presentation inputs: whether any visible response
   // content survived, and the persisted error summary for failed turns.
@@ -156,7 +178,7 @@ export function MessageAssistant({
     "hidden" | "visible" | "fading"
   >("hidden")
   const showActiveContentCaret = Boolean(
-    isLast && status === "streaming" && hasContent
+    presentedLive && status !== "submitted" && hasContent
   )
 
   const didStreamInSession = Boolean(isLast && finishReason)
@@ -172,6 +194,7 @@ export function MessageAssistant({
   } else if (
     !showActiveContentCaret &&
     status === "ready" &&
+    reveal.caughtUp &&
     isLast &&
     contentCaretPhase === "visible"
   ) {
@@ -226,13 +249,16 @@ export function MessageAssistant({
                 <MessageContent
                   className="markdown prose relative w-full bg-transparent p-0"
                   markdown={true}
-                  // Live render state for the Markdown block model (plan PR 3):
-                  // only a live message's terminal block may render as a
-                  // growing code block. Conversation already scopes live
-                  // status to the last row, so no isLast gate is needed here.
-                  streaming={status === "submitted" || status === "streaming"}
+                  // Live render state for the Markdown block model (plan PR 3
+                  // + ADR-0015): presented liveness, not transport status —
+                  // the terminal block stays growing (fade wrappers +
+                  // growing-code classification) until the reveal drains;
+                  // the flip to stable then removes the wrappers and runs
+                  // the final Shiki pass.
+                  streaming={presentedLive}
+                  fadeRuntime={reveal.fadeRuntime}
                 >
-                  {children}
+                  {reveal.text}
                 </MessageContent>
               )}
 
