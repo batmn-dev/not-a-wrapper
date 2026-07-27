@@ -1,7 +1,13 @@
 # 15. Presentation reveal commits above the message throttle
 
-- Status: accepted (2026-07-27 — merge gate passed, see
-  `docs/measurements/2026-07-27-presentation-reveal-decision.md`)
+- Status: superseded (2026-07-27 — the reveal was removed unmerged the same
+  day it passed its gate; the streaming-architecture review in
+  `docs/gameplans/streaming-rendering-convex-implementation-plan.md` rejected
+  the second prefix-reveal scheduler in favor of making the raw rendering
+  path fast enough to present provider deltas directly. The implementation
+  lives on PR #130 (`darknight/the-black-glove` pre-revert history) for
+  fixture/measurement salvage. Accepted earlier that day with merge gate
+  passed, see `docs/measurements/2026-07-27-presentation-reveal-decision.md`)
 - Date: 2026-07-27
 - Related: ADR-0009 (durable turn runtime — 750 ms snapshot cadence, unchanged),
   ADR-0011 (settlement — terminal writes the reveal must flush on, unchanged);

@@ -24,21 +24,9 @@ import {
 } from "@/lib/markdown/remark-code-block-annotation"
 import { remarkLinkPresentation } from "@/lib/markdown/remark-link-presentation"
 import { remarkUnwrapLinkParens } from "@/lib/markdown/remark-unwrap-link-parens"
-import {
-  rehypeStreamFade,
-  type StreamFadeRuntime,
-} from "@/lib/markdown/rehype-stream-fade"
 import { cn } from "@/lib/utils"
 import { RiCodeLine } from "@remixicon/react"
-import {
-  createContext,
-  memo,
-  useContext,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-} from "react"
+import { createContext, memo, useContext, useId, useMemo, useRef } from "react"
 import ReactMarkdown, {
   Components,
   defaultUrlTransform,
@@ -67,13 +55,6 @@ export type MarkdownProps = {
    * row without changing how status is derived.
    */
   streaming?: boolean
-  /**
-   * Presentation-reveal fade runtime (ADR-0015). When present and the
-   * message is live, the growing terminal block renders its words through
-   * the stream-fade rehype plugin; every other block — and every render
-   * without a runtime — is byte-identical to the runtime-less output.
-   */
-  fadeRuntime?: StreamFadeRuntime
 }
 
 /**
@@ -299,37 +280,16 @@ const INITIAL_COMPONENTS: Partial<Components> = {
   },
 }
 
-const BASE_REHYPE_PLUGINS = [rehypeKatex]
-
 const MemoizedMarkdownBlock = memo(
   function MarkdownBlock({
     content,
     stability,
-    blockKey,
-    fadeRuntime,
     components = INITIAL_COMPONENTS,
   }: {
     content: string
     stability: MarkdownBlockStability
-    blockKey?: string
-    fadeRuntime?: StreamFadeRuntime
     components?: Partial<Components>
   }) {
-    // The plugin array is derived here (not threaded as a prop) so the memo
-    // comparator stays on scalar fields, and its identity is stable per
-    // (runtime, blockKey): an unstable array would defeat the bailout for
-    // settled blocks. The stable branch passes no fade plugin, so the
-    // growing → stable re-render IS the fade-wrapper-removal commit.
-    const rehypePlugins = useMemo(
-      () =>
-        fadeRuntime && stability === "growing" && blockKey !== undefined
-          ? [
-              ...BASE_REHYPE_PLUGINS,
-              [rehypeStreamFade, { runtime: fadeRuntime, blockKey }] as const,
-            ]
-          : BASE_REHYPE_PLUGINS,
-      [fadeRuntime, stability, blockKey]
-    )
     return (
       <MarkdownBlockStabilityContext.Provider value={stability}>
         <ReactMarkdown
@@ -341,11 +301,7 @@ const MemoizedMarkdownBlock = memo(
             remarkLinkPresentation,
             remarkUnwrapLinkParens,
           ]}
-          rehypePlugins={
-            rehypePlugins as React.ComponentProps<
-              typeof ReactMarkdown
-            >["rehypePlugins"]
-          }
+          rehypePlugins={[rehypeKatex]}
           urlTransform={markdownUrlTransform}
           components={components}
         >
@@ -356,13 +312,10 @@ const MemoizedMarkdownBlock = memo(
   },
   function propsAreEqual(prevProps, nextProps) {
     // Stability participates so a block re-renders exactly when it settles
-    // (growing → stable) — the moment its code block must highlight and the
-    // moment its fade wrappers unwrap. The runtime identity participates so
-    // a reveal reset cannot leave a growing block on a pruned runtime.
+    // (growing → stable) — the moment its code block must highlight.
     return (
       prevProps.content === nextProps.content &&
-      prevProps.stability === nextProps.stability &&
-      prevProps.fadeRuntime === nextProps.fadeRuntime
+      prevProps.stability === nextProps.stability
     )
   }
 )
@@ -375,7 +328,6 @@ function MarkdownComponent({
   className,
   components,
   streaming = false,
-  fadeRuntime,
 }: MarkdownProps) {
   const generatedId = useId()
   const blockId = id ?? generatedId
@@ -387,17 +339,6 @@ function MarkdownComponent({
         : INITIAL_COMPONENTS,
     [components]
   )
-  const terminalBlockKey =
-    streaming && blocks.length > 0 ? blocks[blocks.length - 1].id : null
-
-  // Drop fade state for blocks that are no longer the terminal one (the
-  // terminal index advanced or the message reset). Post-commit is safe:
-  // pruning only touches non-live blocks, which render without the plugin.
-  useEffect(() => {
-    if (fadeRuntime && terminalBlockKey !== null) {
-      fadeRuntime.prune(terminalBlockKey)
-    }
-  }, [fadeRuntime, terminalBlockKey])
 
   return (
     <div className={className}>
@@ -407,10 +348,6 @@ function MarkdownComponent({
           content={block.text}
           stability={
             streaming && index === blocks.length - 1 ? "growing" : "stable"
-          }
-          blockKey={block.id}
-          fadeRuntime={
-            streaming && index === blocks.length - 1 ? fadeRuntime : undefined
           }
           components={mergedComponents}
         />

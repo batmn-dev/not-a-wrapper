@@ -723,11 +723,7 @@ async function finishChatTurn(
     previousChatId,
   }: FinishChatTurnArgs
 ) {
-  // A local Stop is a first-class outcome: guest/local chats have no durable
-  // aborted status to adopt, so "abort" here is what lets the last row's
-  // presentation (reveal flush, ADR-0015) treat Stop as an immediate
-  // terminal instead of a natural drain.
-  adapters.setLastFinishReason(isAbort ? "abort" : finishReason)
+  adapters.setLastFinishReason(finishReason)
   await adapters.turnStore.finishTurn({
     message,
     isAbort,

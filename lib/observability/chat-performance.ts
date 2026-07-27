@@ -124,12 +124,6 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
   durable_settlement_receipt: {
     outcome: oneOf("completed", "failed", "aborted"),
   },
-  // --- presentation reveal marks (ADR-0015 commit 5) ---
-  reveal_commit: { revealedChars: NUMBER, backlogChars: NUMBER },
-  reveal_caught_up: { drainMs: NUMBER },
-  reveal_snap: {
-    reason: oneOf("hidden", "terminal", "nonprefix", "backstop"),
-  },
   // --- client navigation marks (plan PR 0 step 3) ---
   chat_navigation_intent: {},
   chat_route_state_committed: {},

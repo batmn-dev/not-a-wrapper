@@ -1457,31 +1457,3 @@ code {
 [data-sonner-toaster] > li {
   width: 100%;
 }
-
-/* Presentation reveal word fade (ADR-0015; lib/markdown/rehype-stream-fade.ts).
-   Plain CSS, not Tailwind utilities — a competing responsive transition
-   utility can leave motion-reduce:* variants inert (known cascade gotcha).
-   The reduced-motion rule is defense-in-depth: the reveal hook already
-   short-circuits to canonical text with no spans under reduced motion. */
-@keyframes stream-word-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-.stream-word {
-  animation: stream-word-fade 180ms cubic-bezier(0.33, 0, 0.67, 1) both;
-}
-.stream-word-revealed {
-  animation: none;
-}
-@media (prefers-reduced-motion: reduce) {
-  .stream-word {
-    animation: none;
-  }
-}
-.stream-word .katex * {
-  animation: none !important;
-}
