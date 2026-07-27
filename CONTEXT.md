@@ -184,6 +184,11 @@ The deep client module that assembles a **Chat turn** payload: it owns the draft
 _Avoid_: chat-input prop orchestration (the shallow 21-prop interface), parent-owned draft/file state, `quotedText`-style commands modeled as state
 _Status_: implemented 2026-07-03 (branch `darknight/gotham-by-gaslight`).
 
+**Presentation reveal**:
+The client-side presentation layer that animates how canonical streamed assistant text becomes visible: the displayed text is a word-boundary prefix of the canonical AI SDK message text, advanced on an adaptive cadence and faded in word-by-word, with newly revealed words briefly animating. It is never a second source of truth — canonical message state (AI SDK on the active tab, Convex snapshots elsewhere) is unchanged, unpersisted, and authoritative; the reveal is display-only and always converges to the full canonical text. Prose and reasoning text participate; code block interiors, tool cards, approvals, sources, errors, and terminal states do not — they appear at canonical cadence. Terminal events (settle, Stop, error, approval) and non-prefix canonical changes (branch switch, regeneration, correction, shrinkage) flush or reset the reveal immediately; reduced-motion users get canonical text directly with no reveal structure.
+_Avoid_: smoothing buffer as state (the reveal holds no text, only a frontier), typewriter (implies fixed-rate character reveal), second message store, delaying first text
+_Status_: implemented 2026-07-27 (ADR 0015 accepted; gate artifact `docs/measurements/2026-07-27-presentation-reveal-decision.md`).
+
 ### Tools
 
 **Tool runtime**:
