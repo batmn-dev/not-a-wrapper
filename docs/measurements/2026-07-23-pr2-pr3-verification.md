@@ -2,11 +2,16 @@
 
 Independent verification of commits `26cd10b4` (PR 2, message-notification
 throttle) and `0aa5f7ff` (PR 3, streaming code rendering), diffed against
-`7228afaa`, on branch `darknight/ten-nights-of-the-beast`. Authority:
-`docs/gameplans/chat-responsiveness-performance-implementation-plan.md`
-(PR 2/PR 3 sections, §4, §8, §9). Claims checked against
-`2026-07-23-pr2-throttle-selection.md` and
-`2026-07-23-pr3-streaming-code-decision.md`.
+`7228afaa`, on branch `darknight/ten-nights-of-the-beast`. Verification
+criteria are recorded in
+[`2026-07-23-pr2-throttle-selection.md`](./2026-07-23-pr2-throttle-selection.md)
+and
+[`2026-07-23-pr3-streaming-code-decision.md`](./2026-07-23-pr3-streaming-code-decision.md).
+
+> **Status:** Historical verification checkpoint. The section 6 anomaly was
+> later root-caused, both winning behaviors were made unconditional, and their
+> feature flags were removed; see
+> [`2026-07-23-flag-collapse.md`](./2026-07-23-flag-collapse.md).
 
 **Bottom line:** every quantitative claim in both measurement docs
 reproduced; the live performance difference is not merely tangible, it is
@@ -48,7 +53,7 @@ as recommended.
   typescript code block" (LRU cache + typed event emitter + doc comments, no
   prose); the model consistently produced **860–1,050-line** single blocks
   (25–33 KB code, 1.2–1.4 MB SSE stream incl. reasoning deltas), i.e. ~2.4×
-  the plan's 400-line fixture — same workload for every config.
+  the specified 400-line fixture — same workload for every config.
 
 ## 2. Build matrix
 
@@ -80,7 +85,7 @@ mid-session to attribute the reload-freeze anomaly (section 6).
   ~37.7 ms (~35), Shiki settled 400-line **16.6 ms mean** (~15.5; PR 3 doc
   claims 16.0 median/17.4 max), re-highlight 45 states ~389 ms (~357). All
   within run noise → **no regression from the block-record change**.
-- **Diff review vs plan §4 / out-of-scope ledgers — clean.** Specifics:
+- **Diff review against the conservative-cut scope — clean.** Specifics:
   - PR 2: flag resolved once per mount via a `useState` initializer (cannot
     change mid-subscription); confined to `use-chat-core.ts`; fail-safe
     parser (malformed/negative/huge values → 0, cap 1000 ms); trailing
@@ -99,8 +104,8 @@ mid-session to attribute the reload-freeze anomaly (section 6).
     completions are invalidated by generation token. `MessageAssistant`
     passes a single merged string per assistant row, so the
     terminal-block-only stability rule is sound.
-  - No test gaps worth padding were found; the suite covers the plan's
-    listed automated tests (lean-suite preference respected).
+  - No test gaps worth padding were found; the suite covers the required
+    automated cases (lean-suite preference respected).
   - Minor, non-blocking notes: (1) in `throttled-highlight` a theme switch
     mid-growth shows the old-theme highlight for ≤300 ms (inherent to the
     throttle window, allowed); (2) block identity is index-based
@@ -161,7 +166,8 @@ for comparisons. Even so, B's legacy per-commit full-block highlight at
   the PR 3 doc's dev-build observation.
 - **Reload during/after generation:** A2's chat rehydrated completely after a
   renderer *crash* (durable run finished server-side; 883-line block
-  restored) — invariant §4.1.1 held under the harshest client failure. ✔
+  restored) — the durable reload invariant held under the harshest client
+  failure. ✔
 - **Not covered this session:** a dedicated ~10 KB mixed-markdown scenario
   cell (tables/lists/links, no code) and an approval/tool-heavy stream. The
   runs above each streamed multi-KB reasoning/markdown phases with clean
@@ -205,8 +211,8 @@ stopped turn; and the B observation is n=1. The evidence is therefore
 *strongly suggestive* that the throttle-enabled builds interact badly with
 post-Stop durable reconciliation (e.g. a throttled-notification /
 reconciliation loop), but the "big settled turn + in-window reload +
-flags off" cell was not run. This trips the spirit of §9.3 (a visible-state
-hang is worse than a stale part) and §9.4 (long-task blow-up): **do not
+flags off" cell was not run. This violates the required visible-state
+correctness and long-task bounds: **do not
 enable `NEXT_PUBLIC_CHAT_MESSAGE_THROTTLE` in production until this is
 root-caused or shown pre-existing.** Repro recipe: send the code prompt,
 click Stop while "Thinking", reload the chat immediately and keep it open
@@ -246,20 +252,20 @@ catastrophically broken (freeze/crash, Stop unreachable, 2/2 runs); B
 restores full interactivity (typing p95 20 ms); C additionally removes
 ~3–7× of remaining main-thread blocking and preserves the
 highlight-while-streaming look. First-visible-text is not degraded. All
-§9.3 correctness checks pass on the runs that settled (copy, theme, Stop
+required correctness checks pass on the runs that settled (copy, theme, Stop
 stubs, crash-reload rehydration) — except the section 6 anomaly.
 
-Recommended sequence:
+Recommendation at this checkpoint:
 
 1. **Hold production enablement briefly** to root-cause the post-Stop reload
    freeze (section 6 recipe). If it reproduces with flags off or pre-PR, it
    is a pre-existing bug and stops blocking the flags; if it is
    throttle-linked, fix before enabling.
 2. Then enable **both** `NEXT_PUBLIC_CHAT_MESSAGE_THROTTLE=50` and
-   `NEXT_PUBLIC_STREAMING_CODE_RENDER_MODE=throttled-highlight` per §9.2 —
+   `NEXT_PUBLIC_STREAMING_CODE_RENDER_MODE=throttled-highlight` —
    the measured case is overwhelming, and shipping neither leaves a
    production tab-crash pathology (A2) in the current default path.
-3. `0` / `legacy` remain valid instant rollbacks (build-time, redeploy).
+3. `0` / `legacy` were the available instant rollbacks (build-time, redeploy).
 
 ## 9. Out-of-scope observations (not fixed here)
 

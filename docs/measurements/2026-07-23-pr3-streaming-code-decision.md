@@ -1,14 +1,13 @@
 # PR 3 — streaming code rendering: variant decision (2026-07-23)
 
-Decision record for the chat-responsiveness plan's PR 3
-(`docs/gameplans/chat-responsiveness-performance-implementation-plan.md`):
-which `NEXT_PUBLIC_STREAMING_CODE_RENDER_MODE` variant to prefer when the
-flag is enabled. **Both variants are implemented; the flag default remains
-`legacy`** (rollback path). **Recommended enablement mode:
-`throttled-highlight`** — the plan's preferred variant passes its own
-fallback criterion.
+Historical decision record for PR 3: which
+`NEXT_PUBLIC_STREAMING_CODE_RENDER_MODE` variant to prefer during verification.
+**Selected mode: `throttled-highlight`** — it passed the fallback criterion.
+After verification, the flag and alternate paths were removed and throttled
+highlighting became unconditional; see
+[`2026-07-23-flag-collapse.md`](./2026-07-23-flag-collapse.md).
 
-## The criterion (plan PR 3 scope note)
+## The criterion
 
 Evaluate throttled re-highlighting (growing terminal block, at most one
 highlight per `GROWING_HIGHLIGHT_THROTTLE_MS` = 300 ms) first; fall back to
@@ -23,7 +22,7 @@ documented repository benchmark environment (same as the PR 0a baseline).
 
 | Measure | Result |
 | --- | --- |
-| Shiki highlighter initialization (cold) | 24.2 ms (one-time, counted separately per plan step 7) |
+| Shiki highlighter initialization (cold) | 24.2 ms (one-time, counted separately) |
 | One settled 400-line TypeScript highlight | **16.0 ms median / 17.4 ms max** (15 samples) |
 | Per-delta replay across 45 growth states (legacy behavior) | ~370 ms cumulative per pass |
 | Splitter, settled ~12 KB payload (block records) | 9.3 ms median — in line with the PR 0a baseline; the record shape added no measurable cost |
@@ -33,8 +32,7 @@ timers, mocked Shiki): a 400-line block streamed as 40 deltas at the PR 2
 50 ms cadence produces **8 highlights in throttled-highlight mode
 (bounded by ceil(streamMs/300)+3) vs 40 in legacy**, plus one settle
 highlight; `plain-while-growing` produces 0 during continuous growth plus
-debounce/settle highlights. Never one highlight per delta in either variant
-(plan §8.1.4 gate).
+debounce/settle highlights. Never one highlight per delta in either variant.
 
 ## Why throttled-highlight
 
@@ -50,11 +48,11 @@ debounce/settle highlights. Never one highlight per delta in either variant
 Caveats recorded honestly:
 
 - Under Chrome **4× CPU slowdown** a ~16 ms highlight extrapolates to ~64 ms —
-  above the threshold, at most once per 300 ms. If the staging pass (plan
-  §9.2, production build, 4× slowdown) shows this harming input delay,
-  `plain-while-growing` is the same-flag fallback with zero code change.
-- Blocks far beyond ~500 lines raise the per-highlight cost; the plan
-  explicitly defers "extremely large settled blocks" and web-worker Shiki.
+  above the threshold, at most once per 300 ms. If the production-build staging
+  pass under 4× slowdown showed this harming input delay,
+  `plain-while-growing` was the same-flag fallback with zero code change.
+- Blocks far beyond ~500 lines raise the per-highlight cost; this decision
+  explicitly deferred "extremely large settled blocks" and web-worker Shiki.
 
 ## Live verification (2026-07-23, user's dev server @ localhost:3000)
 
@@ -77,6 +75,6 @@ PR 3 block-record model and status threading live:
   behavior is pinned by the PR 2 seam tests and the unclosed-fence-at-Stop
   unit test instead.
 
-Variant behavior cannot be exercised on the running dev server — the flag is
-build-time — so throttled-highlight's visual pass happens on the §9.2 staging
-build alongside PR 2's texture comparison.
+At this decision point, variant behavior could not be exercised on the running
+dev server because the flag was build-time; throttled-highlight's visual pass
+therefore happened in a staging build alongside PR 2's texture comparison.

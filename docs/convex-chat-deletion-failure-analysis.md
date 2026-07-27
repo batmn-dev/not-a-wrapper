@@ -385,7 +385,6 @@ Sources:
 
 - [`ADR-0008`](adr/0008-no-stream-resume-read-surface.md#decision)
 - [`turn-store.ts`](../lib/chat-turn/turn-store.ts#L18-L26)
-- [`chat-responsiveness-performance-implementation-plan.md`](gameplans/chat-responsiveness-performance-implementation-plan.md#current-branch-corrections-to-the-supplied-findings)
 
 The terminal completion mutation also writes the final content and parts
 directly onto the assistant message:
