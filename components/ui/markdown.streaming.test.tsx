@@ -21,21 +21,15 @@ import { Markdown } from "./markdown"
 const shikiMock = vi.hoisted(() => {
   const escapeHtml = (value: string) =>
     value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-  const codeToHtml = vi.fn(
-    (code: string, options: { lang: string; theme: string }) =>
-      `<pre class="shiki" data-lang="${options.lang}"><code>${escapeHtml(code)}</code></pre>`
+  const highlightCode = vi.fn(
+    async (args: { code: string; language?: string; theme: string }) =>
+      `<pre class="shiki" data-lang="${args.language ?? "text"}"><code>${escapeHtml(args.code)}</code></pre>`
   )
-  return {
-    codeToHtml,
-    createHighlighter: vi.fn(async () => ({
-      codeToHtml,
-      getLoadedLanguages: () => ["typescript", "ts", "javascript", "js"],
-    })),
-  }
+  return { highlightCode }
 })
 
-vi.mock("shiki", () => ({
-  createHighlighter: shikiMock.createHighlighter,
+vi.mock("@/lib/markdown/shiki-client", () => ({
+  highlightCode: shikiMock.highlightCode,
 }))
 
 vi.mock("next-themes", () => ({
@@ -118,10 +112,9 @@ describe("Markdown terminal-block stability (plan PR 3)", () => {
     await advance(10)
     // One highlight each: the completed first fence (stable, immediate) and
     // the growing terminal fence's leading highlight.
-    expect(shikiMock.codeToHtml).toHaveBeenCalledTimes(2)
-    expect(shikiMock.codeToHtml).toHaveBeenCalledWith(
-      `${firstFence}\n`,
-      expect.objectContaining({ lang: "ts" })
+    expect(shikiMock.highlightCode).toHaveBeenCalledTimes(2)
+    expect(shikiMock.highlightCode).toHaveBeenCalledWith(
+      expect.objectContaining({ code: `${firstFence}\n`, language: "ts" })
     )
 
     // The growing fence's raw tail — inner backticks included — flows through
@@ -138,29 +131,30 @@ describe("Markdown terminal-block stability (plan PR 3)", () => {
     // unchanged, block memoized).
     const grown = multiFenceStreaming + "\nconst third = 3"
     view.rerender(grown, true)
-    expect(shikiMock.codeToHtml).toHaveBeenCalledTimes(2)
+    expect(shikiMock.highlightCode).toHaveBeenCalledTimes(2)
     await advance(GROWING_HIGHLIGHT_THROTTLE_MS + 10)
-    expect(shikiMock.codeToHtml).toHaveBeenCalledTimes(3)
-    expect(shikiMock.codeToHtml).toHaveBeenLastCalledWith(
-      expect.stringContaining("const third = 3"),
-      expect.objectContaining({ lang: "ts" })
+    expect(shikiMock.highlightCode).toHaveBeenCalledTimes(3)
+    expect(shikiMock.highlightCode).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        code: expect.stringContaining("const third = 3"),
+        language: "ts",
+      })
     )
   })
 
   it("settling the message (finish, Stop, or error) highlights the unclosed terminal fence", async () => {
     const view = mount(multiFenceStreaming, true)
     await advance(10)
-    expect(shikiMock.codeToHtml).toHaveBeenCalledTimes(2)
+    expect(shikiMock.highlightCode).toHaveBeenCalledTimes(2)
 
     // Message settles with the fence still unclosed (Stop/error partial
     // output): the terminal block becomes stable and highlights its final
     // tuple immediately — no throttle window involved.
     view.rerender(multiFenceStreaming, false)
     await advance(10)
-    expect(shikiMock.codeToHtml).toHaveBeenCalledTimes(3)
-    expect(shikiMock.codeToHtml).toHaveBeenLastCalledWith(
-      `${growingTail}\n`,
-      expect.objectContaining({ lang: "ts" })
+    expect(shikiMock.highlightCode).toHaveBeenCalledTimes(3)
+    expect(shikiMock.highlightCode).toHaveBeenLastCalledWith(
+      expect.objectContaining({ code: `${growingTail}\n`, language: "ts" })
     )
     const codeBlocks = container?.querySelectorAll(".markdown-code-block")
     expect(codeBlocks?.[1]?.querySelector("pre.shiki")).not.toBeNull()
@@ -171,17 +165,16 @@ describe("Markdown terminal-block stability (plan PR 3)", () => {
     const view = mount(unclosed, true)
     await advance(10)
     // Leading highlight of the growing fence.
-    expect(shikiMock.codeToHtml).toHaveBeenCalledTimes(1)
+    expect(shikiMock.highlightCode).toHaveBeenCalledTimes(1)
 
     // The fence closes and prose follows: the code block is no longer the
     // terminal block, so it re-highlights its settled content immediately —
     // no throttle window involved.
     view.rerender("```ts\nconst tail = 1\n```\n\nMore prose.", true)
     await advance(10)
-    expect(shikiMock.codeToHtml).toHaveBeenCalledTimes(2)
-    expect(shikiMock.codeToHtml).toHaveBeenLastCalledWith(
-      "const tail = 1\n",
-      expect.objectContaining({ lang: "ts" })
+    expect(shikiMock.highlightCode).toHaveBeenCalledTimes(2)
+    expect(shikiMock.highlightCode).toHaveBeenLastCalledWith(
+      expect.objectContaining({ code: "const tail = 1\n", language: "ts" })
     )
   })
 

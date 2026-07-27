@@ -26,22 +26,10 @@
 /**
  * Re-highlight interval for the growing terminal block. A named constant for
  * measurement comparability — deliberately not a public product setting.
+ *
+ * Language normalization moved to `lib/markdown/shiki-client.ts`
+ * (`resolveShikiLanguage`): with demand-loaded grammars (streaming plan
+ * PR C) the support surface is the static allowlist, not whatever the old
+ * eager highlighter happened to have loaded.
  */
 export const GROWING_HIGHLIGHT_THROTTLE_MS = 300
-
-/**
- * Language ids Shiki treats as the built-in plain language; they need no
- * grammar and never load. Everything else must be a loaded language (aliases
- * included — `getLoadedLanguages()` registers them) or it normalizes to
- * `text`, replacing the old exception-driven fallback.
- */
-const PLAIN_LANGUAGE_IDS = new Set(["", "plain", "plaintext", "text", "txt"])
-
-export function normalizeShikiLanguage(
-  language: string | undefined,
-  loadedLanguages: readonly string[]
-): string {
-  const candidate = (language ?? "").trim().toLowerCase()
-  if (PLAIN_LANGUAGE_IDS.has(candidate)) return "text"
-  return loadedLanguages.includes(candidate) ? candidate : "text"
-}

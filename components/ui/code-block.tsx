@@ -15,64 +15,11 @@
  */
 "use client"
 
-import {
-  GROWING_HIGHLIGHT_THROTTLE_MS,
-  normalizeShikiLanguage,
-} from "@/lib/chat-performance/streaming-code-render"
+import { GROWING_HIGHLIGHT_THROTTLE_MS } from "@/lib/chat-performance/streaming-code-render"
+import { highlightCode } from "@/lib/markdown/shiki-client"
 import { cn } from "@/lib/utils"
 import { useTheme } from "next-themes"
 import React, { useEffect, useRef, useState } from "react"
-import type { Highlighter } from "shiki"
-import { createHighlighter } from "shiki"
-
-const DEFAULT_LANGS = [
-  "bash",
-  "c",
-  "cpp",
-  "csharp",
-  "css",
-  "diff",
-  "dockerfile",
-  "go",
-  "graphql",
-  "html",
-  "ini",
-  "java",
-  "javascript",
-  "json",
-  "jsx",
-  "kotlin",
-  "lua",
-  "makefile",
-  "markdown",
-  "perl",
-  "php",
-  "powershell",
-  "python",
-  "ruby",
-  "rust",
-  "scala",
-  "shell",
-  "sql",
-  "swift",
-  "toml",
-  "tsx",
-  "typescript",
-  "xml",
-  "yaml",
-] as const
-
-let highlighterPromise: Promise<Highlighter> | null = null
-
-function getHighlighter(): Promise<Highlighter> {
-  if (!highlighterPromise) {
-    highlighterPromise = createHighlighter({
-      themes: ["github-dark", "github-light"],
-      langs: [...DEFAULT_LANGS],
-    })
-  }
-  return highlighterPromise
-}
 
 export type CodeBlockProps = {
   children?: React.ReactNode
@@ -143,17 +90,17 @@ function CodeBlockCode({
       if (growing) {
         lastGrowingHighlightAtRef.current = Date.now()
       }
-      const highlighter = await getHighlighter()
-      if (cancelled || generation !== generationRef.current) return
-      // Loaded-language query instead of exception-driven fallback: unknown
-      // and plain ids normalize to Shiki's built-in `text` language.
-      const lang = normalizeShikiLanguage(
-        language,
-        highlighter.getLoadedLanguages()
-      )
-      const html = highlighter.codeToHtml(code, { lang, theme })
-      if (cancelled || generation !== generationRef.current) return
-      setHighlightedHtml(html)
+      try {
+        // Lazy service (plan PR C): Shiki core, themes, and the grammar for
+        // this language load on first demand; unknown/plain ids resolve to
+        // the grammar-less `text` language inside the service.
+        const html = await highlightCode({ code, language, theme })
+        if (cancelled || generation !== generationRef.current) return
+        setHighlightedHtml(html)
+      } catch {
+        // Module or grammar loading failed: keep the React-escaped plain
+        // fallback for this tuple; a later input change retries.
+      }
     }
 
     if (!growing) {
