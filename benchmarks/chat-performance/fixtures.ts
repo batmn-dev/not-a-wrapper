@@ -528,8 +528,17 @@ export function assertProjectionEquivalence(
  * code, one fence). Size is asserted to sit in the benchmark's 8–15 KB window.
  */
 export function buildMarkdownPayload(): string {
+  return buildSectionedMarkdownPayload(24)
+}
+
+/**
+ * Shared section generator behind the mixed payloads: `sectionCount` controls
+ * total size (24 sections ≈ 12 KB) without changing the per-section shape, so
+ * the 12 KB and ~100 KB fixtures differ only in completed-block count.
+ */
+export function buildSectionedMarkdownPayload(sectionCount: number): string {
   const sections: string[] = ["# Deterministic mixed Markdown payload\n"]
-  for (let section = 0; section < 24; section++) {
+  for (let section = 0; section < sectionCount; section++) {
     sections.push(
       `## Section ${section}: streaming behavior\n`,
       `Paragraph ${section} exercises **bold**, _italic_, \`inline code\`, and a ` +
@@ -559,6 +568,58 @@ export function buildMarkdownPayload(): string {
     "Final paragraph after the fence so the payload does not end inside code.\n"
   )
   return sections.join("\n")
+}
+
+/**
+ * Short prose payload (~500 characters, streaming-renderer plan §5 payload 1):
+ * plain sentences, no Markdown constructs beyond emphasis, single paragraph.
+ */
+export function buildShortProsePayload(): string {
+  return (
+    "Streaming answers should appear the moment the provider emits them, " +
+    "stay smooth while the response grows, and settle into exactly the " +
+    "canonical text. This short prose fixture exists so the fastest path — " +
+    "one growing paragraph with *light* emphasis and no code — is measured " +
+    "on its own, without amortizing any cost against heavier Markdown. It " +
+    "is deterministic, content-safe, and sized near five hundred characters " +
+    "so first-token and per-delta costs dominate the numbers."
+  )
+}
+
+/**
+ * Long mixed payload (~100 KB, plan §5 payload 3): the same section shape as
+ * the 12 KB fixture repeated until ~100 KB of COMPLETED blocks, ending in a
+ * short growing terminal paragraph. Per-update projection cost on this
+ * payload must track the terminal region, not the accumulated size.
+ */
+export function buildLongMarkdownPayload(): string {
+  return (
+    buildSectionedMarkdownPayload(210) +
+    "\nShort growing terminal paragraph under construction"
+  )
+}
+
+/**
+ * Many short completed blocks with a small mutable tail (plan §5 payload 8):
+ * block COUNT is the stressor (memo/reconciliation overhead per block),
+ * where the ~100 KB payload stresses accumulated BYTES.
+ */
+export function buildManyShortBlocksPayload(): string {
+  const blocks: string[] = []
+  for (let i = 0; i < 400; i++) {
+    blocks.push(`Short completed paragraph number ${i}.`)
+  }
+  blocks.push("Growing tail paragraph")
+  return blocks.join("\n\n")
+}
+
+/**
+ * Code stress payload (plan §5 payload 5): a single fenced block large enough
+ * to reproduce the historical full-rehighlight tab pressure (the section-6
+ * freeze class) without crashing CI. 1600 lines ≈ 4× the 400-line fixture.
+ */
+export function buildCodeStressPayload(): string {
+  return buildCodePayload(1600)
 }
 
 /** Deterministic TypeScript payload with `lineCount` lines (250–500 window). */
