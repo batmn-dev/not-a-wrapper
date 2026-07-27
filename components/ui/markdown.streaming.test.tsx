@@ -185,6 +185,97 @@ describe("Markdown terminal-block stability (plan PR 3)", () => {
     )
   })
 
+  it("wraps only the growing terminal block in fade spans and unwraps on settle", async () => {
+    const { createStreamFadeRuntime } = await import(
+      "@/lib/markdown/rehype-stream-fade"
+    )
+    const runtime = createStreamFadeRuntime()
+    const twoBlocks = "First paragraph done.\n\nSecond paragraph grows"
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+    const render = (markdown: string, streaming: boolean) => {
+      act(() => {
+        root?.render(
+          <Markdown id="fade" streaming={streaming} fadeRuntime={runtime}>
+            {markdown}
+          </Markdown>
+        )
+      })
+    }
+    render(twoBlocks, true)
+
+    const paragraphs = container.querySelectorAll("p")
+    expect(paragraphs).toHaveLength(2)
+    // Settled first block: no spans. Growing terminal block: one span per
+    // word, whitespace as plain text between them.
+    expect(paragraphs[0]?.querySelectorAll(".stream-word")).toHaveLength(0)
+    expect(paragraphs[1]?.querySelectorAll(".stream-word")).toHaveLength(3)
+    expect(paragraphs[1]?.textContent).toBe("Second paragraph grows")
+
+    // Frozen styles: the same word keeps an identical animation-delay across
+    // three consecutive growing renders (a rewrite would restart the fade).
+    const delayOf = () =>
+      container
+        ?.querySelectorAll("p")[1]
+        ?.querySelector<HTMLSpanElement>(".stream-word")?.style.animationDelay
+    const initialDelay = delayOf()
+    render(twoBlocks + " larger", true)
+    expect(delayOf()).toBe(initialDelay)
+    render(twoBlocks + " larger still", true)
+    expect(delayOf()).toBe(initialDelay)
+
+    // Settle: the growing → stable flip re-renders the terminal block once
+    // without the plugin — zero spans retained anywhere.
+    render(twoBlocks + " larger still", false)
+    expect(container.querySelectorAll(".stream-word")).toHaveLength(0)
+  })
+
+  it("renders byte-identically to the runtime-less output once settled", async () => {
+    const { createStreamFadeRuntime } = await import(
+      "@/lib/markdown/rehype-stream-fade"
+    )
+    const markdown =
+      "Some **bold** prose with `inline code`.\n\n```ts\nconst x = 1\n```\n\nTail paragraph."
+    const mountInto = (fadeRuntime?: ReturnType<typeof createStreamFadeRuntime>) => {
+      const host = document.createElement("div")
+      document.body.appendChild(host)
+      const hostRoot = createRoot(host)
+      const render = (streaming: boolean) => {
+        act(() => {
+          hostRoot.render(
+            <Markdown id="parity" streaming={streaming} fadeRuntime={fadeRuntime}>
+              {markdown}
+            </Markdown>
+          )
+        })
+      }
+      return { host, hostRoot, render }
+    }
+
+    // One tree streams with the fade runtime and settles; the control never
+    // had a runtime at all. Their settled DOM must match byte-for-byte.
+    const faded = mountInto(createStreamFadeRuntime())
+    faded.render(true)
+    faded.render(false)
+    const control = mountInto(undefined)
+    control.render(false)
+    await advance(GROWING_HIGHLIGHT_THROTTLE_MS + 10)
+    // base-ui autogenerates per-instance tooltip ids; they differ between
+    // mounts regardless of the fade machinery — normalize before comparing.
+    const normalize = (html: string) => html.replace(/base-ui-[_a-z0-9]+/g, "base-ui-x")
+    expect(normalize(faded.host.innerHTML)).toBe(
+      normalize(control.host.innerHTML)
+    )
+
+    act(() => {
+      faded.hostRoot.unmount()
+      control.hostRoot.unmount()
+    })
+    faded.host.remove()
+    control.host.remove()
+  })
+
   it("copy during growth writes the raw code, and hostile code stays inert text", async () => {
     const hostile = '<script>alert("xss")</script>'
     mount("```ts\n" + hostile, true)

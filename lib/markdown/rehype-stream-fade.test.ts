@@ -1,0 +1,169 @@
+/**
+ * Stream word-fade runtime + plugin tests (plan §6.2 / commit 2). The risky
+ * logic: birth chaining and the cap, write-once frozen styles (the
+ * animation-restart hazard), noteCommit idempotence under double render,
+ * skip-list placement, and prune.
+ */
+import type { Element, Root, Text } from "hast"
+import { describe, expect, it } from "vitest"
+import { createStreamFadeRuntime, rehypeStreamFade } from "./rehype-stream-fade"
+
+function paragraph(text: string): Element {
+  return {
+    type: "element",
+    tagName: "p",
+    properties: {},
+    children: [{ type: "text", value: text }],
+  }
+}
+
+function root(...children: Element[]): Root {
+  return { type: "root", children }
+}
+
+function spansOf(node: Element): Element[] {
+  const spans: Element[] = []
+  const walk = (element: Element) => {
+    for (const child of element.children) {
+      if (child.type !== "element") continue
+      if (child.tagName === "span") spans.push(child)
+      walk(child)
+    }
+  }
+  walk(node)
+  return spans
+}
+
+describe("rehypeStreamFade placement", () => {
+  it("wraps words, keeps whitespace as plain text, and preserves the text", () => {
+    const runtime = createStreamFadeRuntime()
+    const tree = root(paragraph("Hello brave world"))
+    rehypeStreamFade({ runtime, blockKey: "block-0" })(tree)
+
+    const p = tree.children[0] as Element
+    const spans = spansOf(p)
+    expect(spans).toHaveLength(3)
+    expect(
+      spans.every((span) =>
+        (span.properties?.className as string[]).includes("stream-word")
+      )
+    ).toBe(true)
+    // Whitespace stays as sibling text nodes, not inside spans.
+    const textChildren = p.children.filter(
+      (child): child is Text => child.type === "text"
+    )
+    expect(textChildren.map((child) => child.value)).toEqual([" ", " "])
+    const flattened = p.children
+      .map((child) =>
+        child.type === "text"
+          ? child.value
+          : ((child as Element).children[0] as Text).value
+      )
+      .join("")
+    expect(flattened).toBe("Hello brave world")
+  })
+
+  it("never descends into pre/code/table/svg or KaTeX subtrees", () => {
+    const runtime = createStreamFadeRuntime()
+    const pre: Element = {
+      type: "element",
+      tagName: "pre",
+      properties: {},
+      children: [
+        {
+          type: "element",
+          tagName: "code",
+          properties: {},
+          children: [{ type: "text", value: "const x = 1" }],
+        },
+      ],
+    }
+    const table: Element = {
+      type: "element",
+      tagName: "table",
+      properties: {},
+      children: [paragraph("cell words here")],
+    }
+    const katex: Element = {
+      type: "element",
+      tagName: "span",
+      properties: { className: ["katex"] },
+      children: [{ type: "text", value: "x^2" }],
+    }
+    const tree = root(paragraph("Outside words"), pre, table, katex)
+    rehypeStreamFade({ runtime, blockKey: "block-0" })(tree)
+
+    expect(spansOf(tree.children[0] as Element)).toHaveLength(2)
+    expect(spansOf(pre)).toHaveLength(0)
+    expect(spansOf(table)).toHaveLength(0)
+    expect(spansOf(katex)).toHaveLength(0)
+  })
+})
+
+describe("birth timeline runtime", () => {
+  it("freezes styles per word: identical object identity across repeated reads", () => {
+    const runtime = createStreamFadeRuntime()
+    runtime.noteCommit("block-0", 2, 1000)
+    const first = runtime.styleFor("block-0", 1, 1050)
+    const again = runtime.styleFor("block-0", 1, 1300) // much later
+    expect(again).toBe(first) // write-once: never recomputed
+    expect(first.style?.animationDelay).toBeDefined()
+  })
+
+  it("emits negative delays for mid-fade words and no style once elapsed", () => {
+    const runtime = createStreamFadeRuntime()
+    runtime.noteCommit("block-0", 1, 1000)
+    const midFade = runtime.styleFor("block-0", 0, 1100)
+    expect(midFade.className).toBe("stream-word")
+    expect(midFade.style?.animationDelay).toBe("-100ms")
+
+    const late = createStreamFadeRuntime()
+    late.noteCommit("block-0", 1, 1000)
+    const elapsed = late.styleFor("block-0", 0, 1300)
+    expect(elapsed.className).toBe("stream-word stream-word-revealed")
+    expect(elapsed.style).toBeUndefined()
+  })
+
+  it("noteCommit with an unchanged count is a no-op (StrictMode double render)", () => {
+    const runtime = createStreamFadeRuntime()
+    runtime.noteCommit("block-0", 2, 0)
+    // The duplicate at t=50 must not move the commit clock…
+    runtime.noteCommit("block-0", 2, 50)
+    runtime.noteCommit("block-0", 4, 100)
+    // …so the observed gap is 100 (pace 50), not 50 (pace 25): word 3 is
+    // born pace after word 2 → 50ms in the future at t=100.
+    expect(runtime.styleFor("block-0", 3, 100).style?.animationDelay).toBe(
+      "50ms"
+    )
+  })
+
+  it("staggers by observed gap ÷ new words, clamped to [8, 80]ms", () => {
+    const runtime = createStreamFadeRuntime()
+    runtime.noteCommit("block-0", 1, 0)
+    runtime.noteCommit("block-0", 3, 1000) // gap 1000 / 2 words → clamp 80
+    expect(runtime.styleFor("block-0", 2, 1000).style?.animationDelay).toBe(
+      "80ms"
+    )
+  })
+
+  it("caps births at now + gap + fade so a burst cannot schedule far-future fades", () => {
+    const runtime = createStreamFadeRuntime()
+    runtime.noteCommit("block-0", 100, 1000) // first commit: gap 0, cap 1180
+    expect(runtime.styleFor("block-0", 99, 1000).style?.animationDelay).toBe(
+      "180ms"
+    )
+  })
+
+  it("prune drops every block except the live one", () => {
+    const runtime = createStreamFadeRuntime()
+    runtime.noteCommit("block-0", 1, 0)
+    runtime.noteCommit("block-1", 1, 0)
+    const before = runtime.styleFor("block-0", 0, 10)
+    runtime.prune("block-1")
+    // block-0's cache and births are gone: a re-read recomputes fresh with
+    // the unknown-word fallback (born now), not the old frozen entry.
+    const after = runtime.styleFor("block-0", 0, 500)
+    expect(after).not.toBe(before)
+    expect(after.style?.animationDelay).toBe("0ms")
+  })
+})
