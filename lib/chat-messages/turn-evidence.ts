@@ -21,14 +21,36 @@
  *    (last part wins) and accumulate sources — a streaming update can enrich
  *    a row but never move or duplicate it.
  */
-import type { ToolUIPart, UIMessage } from "ai"
-import { getStaticToolName, isStaticToolUIPart } from "ai"
+import type { DynamicToolUIPart, ToolUIPart, UIMessage } from "ai"
+import { getToolName, isToolUIPart } from "ai"
 import {
   dedupeSources,
   getPartSources,
   getSources,
   type AssistantSourceResult,
 } from "./sources"
+
+/**
+ * One tool-call part in either SDK shape. Static tools (`tool-${name}` types,
+ * known at development time) and dynamic tools (`dynamic-tool` — every MCP
+ * tool) share the same state machine; only the name's location differs. The
+ * evidence walk MUST accept both: MCP calls stream/persist as `dynamic-tool`,
+ * and dropping them severs the approval-controls path (the Activity panel is
+ * the only surface carrying Approve/Deny).
+ */
+export type ToolEvidenceUIPart = ToolUIPart | DynamicToolUIPart
+
+/** Both tool-part shapes; the seam consumers use instead of the static guard. */
+export function isToolEvidencePart(
+  part: UIMessage["parts"][number]
+): part is ToolEvidenceUIPart {
+  return isToolUIPart(part)
+}
+
+/** Tool name across both shapes (`toolName` field vs `tool-${name}` type). */
+export function getToolEvidenceName(part: ToolEvidenceUIPart): string {
+  return getToolName(part)
+}
 
 export type SearchImageResult = {
   title: string
@@ -90,7 +112,7 @@ function isErrorOutput(output: unknown): boolean {
   )
 }
 
-function getToolLifecycle(part: ToolUIPart): ToolLifecycle {
+function getToolLifecycle(part: ToolEvidenceUIPart): ToolLifecycle {
   if (part.state === "output-error") {
     return {
       kind: "errored",
@@ -244,7 +266,7 @@ function trimmedQuery(value: unknown): string | undefined {
   return typeof query === "string" && query.trim() ? query.trim() : undefined
 }
 
-function recoverSearchQuery(part: ToolUIPart): string | undefined {
+function recoverSearchQuery(part: ToolEvidenceUIPart): string | undefined {
   const input = "input" in part ? trimmedQuery(part.input) : undefined
   if (input) return input
   if (part.state !== "output-available") return undefined
@@ -284,7 +306,7 @@ function stringArray(value: unknown): readonly string[] | undefined {
   return strings.length > 0 ? strings : undefined
 }
 
-function interpretWebActivity(part: ToolUIPart): WebActivityAction {
+function interpretWebActivity(part: ToolEvidenceUIPart): WebActivityAction {
   const output = part.state === "output-available" ? part.output : undefined
   const action =
     typeof output === "object" && output !== null && !Array.isArray(output)
@@ -325,7 +347,7 @@ function interpretWebActivity(part: ToolUIPart): WebActivityAction {
 }
 
 function collectSearchImageResults(
-  part: ToolUIPart,
+  part: ToolEvidenceUIPart,
   into: SearchImageResult[]
 ): void {
   if (part.state !== "output-available") return
@@ -408,8 +430,8 @@ export function deriveTurnEvidence(
       return
     }
 
-    if (!isStaticToolUIPart(part)) return
-    const toolName = getStaticToolName(part)
+    if (!isToolEvidencePart(part)) return
+    const toolName = getToolEvidenceName(part)
     const classification = classifyToolName(toolName)
     if (classification === "image-search") {
       collectSearchImageResults(part, searchImageResults)

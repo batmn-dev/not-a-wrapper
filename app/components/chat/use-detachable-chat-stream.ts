@@ -1,5 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react"
 import { Chat } from "@ai-sdk/react"
+import type { ChatTurnBodyFields } from "@/lib/chat-messages/chat-turn-contract"
 import {
   consumeLocallyResolvedApprovals,
   restoreLocallyResolvedApprovals,
@@ -91,7 +92,11 @@ class RequestAcceptanceRegistry {
 class AcceptanceAwareChatTransport extends DefaultChatTransport<UIMessage> {
   constructor(
     private readonly acceptances: RequestAcceptanceRegistry,
-    api: string
+    api: string,
+    // The closed Chat turn wire contract shape — assembled by the controller's
+    // buildChatTurnRequestBody, never an open record: the compile-time link to
+    // ChatTurnBodyFields is what keeps a new wire field a contract change.
+    private readonly getFallbackTurnBody: () => ChatTurnBodyFields | null
   ) {
     // One-shot chat-perf correlation header (PR 0b): resolves to an empty
     // object unless instrumentation is enabled AND a turn armed an id — so a
@@ -102,13 +107,24 @@ class AcceptanceAwareChatTransport extends DefaultChatTransport<UIMessage> {
   override async sendMessages(
     options: Parameters<ChatTransport<UIMessage>["sendMessages"]>[0]
   ) {
+    // SDK-initiated dispatches (the approval-continuation auto-send) carry no
+    // per-call body — only the turn runners pass one. The wire contract
+    // requires chatId/model on every POST, so a body without a chatId merges
+    // the mounted chat's turn fields UNDER any per-call values. Runner sends
+    // always carry chatId and are never touched.
+    const callBody = options.body as Record<string, unknown> | undefined
+    const fallbackBody =
+      typeof callBody?.chatId === "string" ? null : this.getFallbackTurnBody()
+    const dispatchOptions = fallbackBody
+      ? { ...options, body: { ...fallbackBody, ...(callBody ?? {}) } }
+      : options
     try {
       // HttpChatTransport resolves here only after fetch returned an OK
       // response with a body. The route performs durable prepareGeneration —
       // including the idempotent first-message claim — before constructing
       // that response, so this is the request-acceptance boundary. The stream
       // itself remains unconsumed and can continue independently.
-      const stream = await super.sendMessages(options)
+      const stream = await super.sendMessages(dispatchOptions)
       this.acceptances.accept(options.messageId)
       return stream
     } catch (error) {
@@ -126,6 +142,9 @@ type DetachableChatStreamOwner = {
   detach: (binding: StreamBinding) => void
   adopt: (binding: StreamBinding, chatId: string) => void
   setHandlers: (handlers: ChatStreamHandlers) => void
+  setFallbackTurnBodyProvider: (
+    provider: (() => ChatTurnBodyFields | null) | null
+  ) => void
   dispatchMessageAndWaitForAcceptance: (
     sendMessage: SendMessage,
     ...args: SendMessageArgs
@@ -172,7 +191,11 @@ function createDetachableChatStreamOwner(
 ): DetachableChatStreamOwner {
   const lifecycles = new WeakMap<StreamBinding, BindingLifecycle>()
   const acceptances = new RequestAcceptanceRegistry()
-  const transport = new AcceptanceAwareChatTransport(acceptances, api)
+  let fallbackTurnBodyProvider: (() => ChatTurnBodyFields | null) | null =
+    null
+  const transport = new AcceptanceAwareChatTransport(acceptances, api, () =>
+    fallbackTurnBodyProvider ? fallbackTurnBodyProvider() : null
+  )
   let handlers: ChatStreamHandlers | null = null
 
   const clearWatchdog = (binding: StreamBinding) => {
@@ -304,6 +327,10 @@ function createDetachableChatStreamOwner(
       handlers = nextHandlers
     },
 
+    setFallbackTurnBodyProvider(provider) {
+      fallbackTurnBodyProvider = provider
+    },
+
     async dispatchMessageAndWaitForAcceptance(sendMessage, ...args) {
       const messageId = args[0]?.messageId
       if (!messageId) {
@@ -346,15 +373,25 @@ export function useDetachableChatStream({
   initialMessages,
   streamTimeoutMs,
   api,
+  getFallbackTurnBody,
 }: {
   chatId: string | null
   initialMessages: UIMessage[]
   streamTimeoutMs: number
   api: string
+  /**
+   * Turn fields (chatId/model/…) for dispatches the SDK initiates itself —
+   * today only the approval-continuation auto-send, which carries no per-call
+   * body. Read at dispatch time; null means "no mounted durable chat".
+   */
+  getFallbackTurnBody?: () => ChatTurnBodyFields | null
 }): DetachableChatStream {
   const [owner] = useState(() =>
     createDetachableChatStreamOwner(streamTimeoutMs, api)
   )
+  useLayoutEffect(() => {
+    owner.setFallbackTurnBodyProvider(getFallbackTurnBody ?? null)
+  }, [owner, getFallbackTurnBody])
   const [streamState, setStreamState] = useState(() => ({
     chatId,
     binding: owner.createBinding(initialMessages, chatId),

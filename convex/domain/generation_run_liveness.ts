@@ -38,6 +38,17 @@ export const REAPER_INTERVAL_MS = 15_000
 export const APPROVAL_EXPIRY_MS = 24 * 60 * 60 * 1000
 
 /**
+ * Grace window before the resolved-approvals reaper settles a pause whose
+ * approvals are all resolved but whose continuation never dispatched. Measured
+ * from the LAST approval's `resolvedAt`; must comfortably exceed the worst
+ * legitimate approve → auto-send → prepare latency (MCP connects, slow
+ * attachment refetches erode the prepare) so the live continuation path is
+ * never raced — a too-short window would settle the pause and force the
+ * in-flight continuation into the typed conflict.
+ */
+export const RESOLVED_APPROVAL_CONTINUATION_GRACE_MS = 5 * 60 * 1000
+
+/**
  * Client-side clock-skew grace for lease/approval classification (resolver
  * input, gameplan §8). Lives here so the one number is shared with tests.
  */

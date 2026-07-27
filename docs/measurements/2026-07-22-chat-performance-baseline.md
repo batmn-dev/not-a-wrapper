@@ -1,10 +1,9 @@
 # Chat performance baseline — PR 0a (2026-07-22)
 
 Repository-owned reproduction of the supplied branch/Markdown/Shiki findings
-(plan: `docs/gameplans/chat-responsiveness-performance-implementation-plan.md`,
-PR 0a). This note records the commands, environment, and one baseline run.
+for PR 0a. This note records the commands, environment, and one baseline run.
 Exact historical numbers from the supplied external benchmark are **not** a
-gate — only direction and output-hash equivalence are (plan §3.3).
+gate — only direction and output-hash equivalence are.
 
 ## Commands
 

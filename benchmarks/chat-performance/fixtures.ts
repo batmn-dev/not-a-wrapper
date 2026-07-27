@@ -1,6 +1,6 @@
 /**
  * Shared deterministic fixtures for the chat-performance benchmarks
- * (docs/gameplans/chat-responsiveness-performance-implementation-plan.md, PR 0a).
+ * (docs/measurements/2026-07-22-chat-performance-baseline.md).
  *
  * Everything here is seeded and pure: the same seed always produces the same
  * branch trees, payloads, and stream scripts, so benchmark output hashes are
@@ -292,7 +292,7 @@ function buildMalformedCycleFixture(): BenchMessage[] {
 
 /**
  * The six named fixture classes preserved from the supplied benchmark
- * (plan §7.2): deep path, wide siblings, legacy linear, mixed legacy/explicit,
+ * baseline: deep path, wide siblings, legacy linear, mixed legacy/explicit,
  * selection anomalies (duplicate/missing flags + tied orders), malformed cycles.
  */
 export const NAMED_BRANCH_FIXTURES: Record<string, () => BenchMessage[]> = {
@@ -525,7 +525,7 @@ export function assertProjectionEquivalence(
 
 /**
  * Fixed mixed-Markdown payload (headings, lists, table, math, links, inline
- * code, one fence). Size is asserted to sit in the plan's 8–15 KB window.
+ * code, one fence). Size is asserted to sit in the benchmark's 8–15 KB window.
  */
 export function buildMarkdownPayload(): string {
   const sections: string[] = ["# Deterministic mixed Markdown payload\n"]

@@ -22,8 +22,8 @@
  *    activity panel owns that state; the trigger's source count settles on
  *    the status flip). Message text is compared by the row's `children` prop.
  */
-import type { ToolUIPart, UIMessage } from "ai"
-import { isStaticToolUIPart } from "ai"
+import type { UIMessage } from "ai"
+import { isToolEvidencePart, type ToolEvidenceUIPart } from "./turn-evidence"
 import type { DurableMessageStatus } from "./durable-contract"
 import { getReasoningDurationMs, getServerMessageId } from "./metadata"
 import { extractTextFromMessageParts, getToolRenderSignature } from "./parts"
@@ -76,8 +76,11 @@ export type AssistantTurnView = {
   orderedParts: UIMessage["parts"]
   /** Ordered text content across all text parts. */
   text: string
-  /** Static tool parts, for phase detection and non-timeline result rendering. */
-  toolParts: ToolUIPart[]
+  /**
+   * Static and dynamic tool evidence parts, for phase detection and
+   * non-timeline result rendering.
+   */
+  toolParts: ToolEvidenceUIPart[]
   /** Immutable snapshot of rendered tool input/output for memo comparison. */
   toolRenderSignature: string
   /** Normalized sources across source-url parts and tool outputs. */
@@ -184,7 +187,9 @@ export function deriveAssistantTurnView(
 ): AssistantTurnView {
   const parts = message.parts
   const toolParts =
-    parts?.filter((part): part is ToolUIPart => isStaticToolUIPart(part)) ?? []
+    parts?.filter((part): part is ToolEvidenceUIPart =>
+      isToolEvidencePart(part)
+    ) ?? []
   const evidence = deriveTurnEvidence(parts)
 
   return {

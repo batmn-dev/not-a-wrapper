@@ -1,9 +1,9 @@
+import { type UIMessage } from "ai"
 import {
-  getStaticToolName,
-  isStaticToolUIPart,
-  type ToolUIPart,
-  type UIMessage,
-} from "ai"
+  getToolEvidenceName,
+  isToolEvidencePart,
+  type ToolEvidenceUIPart,
+} from "./turn-evidence"
 
 type StoredAttachment = {
   name: string
@@ -85,7 +85,7 @@ function serializeToolRenderValue(value: unknown): string {
 }
 
 function getToolRenderValueSignature(
-  part: ToolUIPart,
+  part: ToolEvidenceUIPart,
   key: "input" | "output"
 ): string {
   if (key === "input") return serializeToolRenderValue(part.input)
@@ -102,9 +102,9 @@ export function getToolRenderSignature(
 
   const signatures: Array<[string, string, string, string]> = []
   for (const part of parts) {
-    if (isStaticToolUIPart(part)) {
+    if (isToolEvidencePart(part)) {
       signatures.push([
-        getStaticToolName(part),
+        getToolEvidenceName(part),
         part.state,
         getToolRenderValueSignature(part, "input"),
         getToolRenderValueSignature(part, "output"),

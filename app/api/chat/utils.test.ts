@@ -4,6 +4,7 @@ import {
   excludeSystemRoleMessages,
   hasProviderLinkedResponseIds,
   isConvexArgumentValidationError,
+  stripProviderLinkedMetadataFromMessage,
   toPlainTextModelMessages,
 } from "./utils"
 
@@ -44,6 +45,53 @@ describe("toPlainTextModelMessages", () => {
       { role: "assistant", content: "line 1\n\nline 2" },
       { role: "user", content: "follow-up" },
     ])
+  })
+})
+
+describe("stripProviderLinkedMetadataFromMessage", () => {
+  it("removes provider metadata carriers but keeps part semantics intact", () => {
+    const message = {
+      id: "tail",
+      role: "assistant",
+      parts: [
+        {
+          type: "reasoning",
+          text: "thinking",
+          providerMetadata: { openai: { itemId: "rs_abc123" } },
+        },
+        {
+          type: "dynamic-tool",
+          toolName: "deepwiki_ask_question",
+          toolCallId: "call_1",
+          state: "approval-responded",
+          input: { question: "q" },
+          approval: { id: "approval_1", approved: true },
+          callProviderMetadata: { openai: { itemId: "msg_def456" } },
+        },
+        { type: "text", text: "plain" },
+      ],
+    } as unknown as UIMessage
+
+    const stripped = stripProviderLinkedMetadataFromMessage(message)
+
+    expect(stripped.parts).toEqual([
+      { type: "reasoning", text: "thinking" },
+      {
+        type: "dynamic-tool",
+        toolName: "deepwiki_ask_question",
+        toolCallId: "call_1",
+        state: "approval-responded",
+        input: { question: "q" },
+        approval: { id: "approval_1", approved: true },
+      },
+      { type: "text", text: "plain" },
+    ])
+    // The pairing-id detector no longer fires on the stripped message.
+    expect(
+      hasProviderLinkedResponseIds([
+        { role: "assistant", content: JSON.stringify(stripped.parts) },
+      ] as never)
+    ).toBe(false)
   })
 })
 

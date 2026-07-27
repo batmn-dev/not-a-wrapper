@@ -231,6 +231,7 @@ export default defineSchema({
         v.literal("provider_error"),
         v.literal("lease_expired"),
         v.literal("approval_expired"),
+        v.literal("continuation_lost"),
         v.literal("request_aborted")
       )
     ),
@@ -248,6 +249,15 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_chat_updated", ["chatId", "updatedAt"])
     .index("by_status_lease_expires", ["status", "leaseExpiresAt"]),
+
+  // Durable cursors for bounded reconciliation scans. The versioned name is
+  // part of the query contract: changing a scan's index/range starts a new
+  // checkpoint instead of reusing an opaque cursor from a different query.
+  reaperCheckpoints: defineTable({
+    name: v.string(),
+    cursor: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_name", ["name"]),
 
   assistantMessageSnapshots: defineTable({
     runId: v.id("generationRuns"),

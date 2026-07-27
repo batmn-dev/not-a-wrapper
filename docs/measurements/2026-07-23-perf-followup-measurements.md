@@ -2,10 +2,9 @@
 
 Follow-up session to `2026-07-23-pr2-pr3-verification.md` (kept untouched here
 because it is another session's uncommitted artifact; this doc closes its §5/§8
-gaps and corrects two of its §9 observations). Authority:
-`docs/gameplans/chat-responsiveness-performance-implementation-plan.md`
-(§4, §8, PR 3, PR 7b). Branch `darknight/ten-nights-of-the-beast`, all builds at
-commit `0aa5f7ff`.
+gaps and corrects two of its §9 observations). It also verifies the completed
+PR 3 streaming-code decision and PR 7b conditional Exa behavior. Branch
+`darknight/ten-nights-of-the-beast`, all builds at commit `0aa5f7ff`.
 
 **Bottom line:**
 

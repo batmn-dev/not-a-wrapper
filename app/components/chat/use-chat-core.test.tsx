@@ -151,10 +151,6 @@ vi.mock("@/components/ui/toast", () => ({
   toast: chatCoreMocks.toast,
 }))
 
-vi.mock("@/lib/flags", () => ({
-  ENABLE_DURABLE_RUN_PRESENTATION: true,
-}))
-
 vi.mock("@/lib/api", () => ({
   getOrCreateGuestUserId: vi.fn(async (user: { id?: string } | null) =>
     user?.id ? user.id : "guest_1"

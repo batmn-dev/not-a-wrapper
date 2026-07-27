@@ -12,6 +12,7 @@ import {
   prepareGenerationForChat,
   reapExpiredGenerationRunsPass,
   reapExpiredToolApprovalsPass,
+  reapResolvedApprovalPausesPass,
   recordToolInvocationsForChat,
   resolveToolCallDecision,
   stopGenerationRunForChat,
@@ -20,6 +21,7 @@ import {
 import {
   APPROVAL_EXPIRY_MS,
   LEASE_DURATION_MS,
+  RESOLVED_APPROVAL_CONTINUATION_GRACE_MS,
 } from "./domain/generation_run_liveness"
 import { getSelectedPathMessages } from "./domain/message_branches"
 import type { AuthenticatedRunOwner } from "./lib/auth"
@@ -28,6 +30,7 @@ import { selectBranchForChat } from "./messages"
 type TableDocuments = {
   toolApprovalRequests: Doc<"toolApprovalRequests">[]
   generationRuns: Doc<"generationRuns">[]
+  reaperCheckpoints: Doc<"reaperCheckpoints">[]
   messages: Doc<"messages">[]
   assistantMessageSnapshots: Doc<"assistantMessageSnapshots">[]
   toolInvocations: Doc<"toolInvocations">[]
@@ -86,6 +89,7 @@ function createMutationCtx(
   const tables: TableDocuments = {
     toolApprovalRequests: [],
     generationRuns: [],
+    reaperCheckpoints: [],
     messages: [],
     assistantMessageSnapshots: [],
     toolInvocations: [],
@@ -134,7 +138,7 @@ function createMutationCtx(
       },
       query: (tableName: TableName) => ({
         withIndex: (
-          _indexName: string,
+          indexName: string,
           buildQuery: (query: QueryBuilder) => unknown
         ) => {
           const filters = new Map<string, unknown>()
@@ -181,6 +185,14 @@ function createMutationCtx(
               return true
             }
           )
+          if (tableName === "generationRuns" && indexName === "by_status") {
+            results = [...results].sort((left, right) => {
+              const creationDelta = left._creationTime - right._creationTime
+              return creationDelta !== 0
+                ? creationDelta
+                : String(left._id).localeCompare(String(right._id))
+            })
+          }
 
           const resultApi = {
             collect: async () =>
@@ -208,6 +220,50 @@ function createMutationCtx(
             first: async () => (results[0] ? readDocument(results[0]) : null),
             take: async (limit: number) =>
               results.slice(0, limit).map((document) => readDocument(document)),
+            paginate: async ({
+              cursor,
+              numItems,
+            }: {
+              cursor: string | null
+              numItems: number
+            }) => {
+              const cursorPosition = cursor
+                ? (JSON.parse(cursor) as {
+                    creationTime: number
+                    id: string
+                  })
+                : null
+              const startIndex =
+                cursorPosition === null
+                  ? 0
+                  : results.findIndex((document) => {
+                      if (
+                        document._creationTime !== cursorPosition.creationTime
+                      ) {
+                        return (
+                          document._creationTime > cursorPosition.creationTime
+                        )
+                      }
+                      return String(document._id) > cursorPosition.id
+                    })
+              const normalizedStartIndex =
+                startIndex === -1 ? results.length : startIndex
+              const page = results.slice(
+                normalizedStartIndex,
+                normalizedStartIndex + numItems
+              )
+              const last = page.at(-1)
+              return {
+                page: page.map((document) => readDocument(document)),
+                isDone: normalizedStartIndex + page.length >= results.length,
+                continueCursor: last
+                  ? JSON.stringify({
+                      creationTime: last._creationTime,
+                      id: String(last._id),
+                    })
+                  : (cursor ?? ""),
+              }
+            },
           }
           return resultApi
         },
@@ -424,6 +480,7 @@ function createGenerationRunLinkageFixture() {
   const tables: TableDocuments = {
     toolApprovalRequests: [],
     generationRuns: [run],
+    reaperCheckpoints: [],
     messages: [message, otherMessage],
     assistantMessageSnapshots: [],
     toolInvocations: [],
@@ -3505,6 +3562,337 @@ describe("approval-continuation idempotency (gameplan §10, PR 8)", () => {
         approvalResponses: fixture.responses,
       })
     ).rejects.toThrow("Approval pause no longer owns the chat's active run")
+  })
+})
+
+describe("resolved-approvals-without-continuation reaper", () => {
+  const NOW = 1700000000000
+  const GRACE = RESOLVED_APPROVAL_CONTINUATION_GRACE_MS
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  // A stranded pause: the approvals resolved (default: at exactly the grace
+  // boundary, the earliest eligible instant) but no continuation prepare ever
+  // ran. The pause still owns the chat's status slot, as it would after a
+  // crash with no further sends.
+  function makeStrandedWorld({
+    approved = true,
+    resolvedAt = NOW - GRACE,
+  }: { approved?: boolean; resolvedAt?: number } = {}) {
+    const fixture = createApprovalContinuationFixture([
+      {
+        approvalId: "approval_1",
+        approved,
+        toolCallId: "call_1",
+        toolName: "read_file",
+      },
+    ])
+    for (const approval of fixture.tables.toolApprovalRequests) {
+      approval.resolvedAt = resolvedAt
+    }
+    const { user, chat } = fixture.owner
+    chat.statusRunId = fixture.run._id
+    chat.liveRunStatus = "awaiting"
+    chat.liveRunFreshUntil = NOW + APPROVAL_EXPIRY_MS
+    const tables: Partial<TableDocuments> = {
+      ...fixture.tables,
+      users: [user],
+      chats: [chat],
+    }
+    return { fixture, user, chat, tables }
+  }
+
+  it("settles an approved strand at the grace boundary: failed/continuation_lost, tools settled, projection cleared", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const { fixture, chat, tables } = makeStrandedWorld()
+    const { ctx } = createMutationCtx(tables)
+
+    const result = await reapResolvedApprovalPausesPass(ctx)
+
+    expect(result).toEqual({ settled: 1 })
+    expect(fixture.run).toMatchObject({
+      status: "failed",
+      terminalReason: "continuation_lost",
+      error: "approval continuation was not dispatched",
+      completedAt: NOW,
+    })
+    // The approved-but-never-executed invocation settles failed; the approval
+    // row keeps its canonical approved decision (audit trail, not erased).
+    expect(fixture.invocations[0]).toMatchObject({
+      status: "failed",
+      error: "approval continuation was not dispatched",
+      completedAt: NOW,
+    })
+    expect(fixture.tables.toolApprovalRequests[0]?.status).toBe("approved")
+    // The message keeps its tool part and is stamped with the honest terminal.
+    expect(fixture.tables.messages[0]?.status).toBe("failed")
+    // The pause still owned the slot, so the owner projection clears + signals.
+    expect(chat.liveRunStatus).toBeUndefined()
+    expect(chat.liveRunFreshUntil).toBeUndefined()
+    expect(chat.lastRunStatus).toBe("failed")
+  })
+
+  it("a denied strand settles aborted; a pause that lost the chat slot cannot clear the newer owner's projection", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const { fixture, chat, tables } = makeStrandedWorld({ approved: false })
+    // Next-send slot transfer already happened: a newer run owns the slot.
+    chat.statusRunId = asId<"generationRuns">("run_newer")
+    chat.liveRunStatus = "streaming"
+    const { ctx } = createMutationCtx(tables)
+
+    const result = await reapResolvedApprovalPausesPass(ctx)
+
+    expect(result).toEqual({ settled: 1 })
+    expect(fixture.run).toMatchObject({
+      status: "aborted",
+      terminalReason: "continuation_lost",
+    })
+    expect(chat.liveRunStatus).toBe("streaming")
+  })
+
+  it("never touches a within-grace, still-pending, undated, or already-continued pause", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const pendingWorld = makeStrandedWorld()
+    for (const approval of pendingWorld.fixture.tables.toolApprovalRequests) {
+      approval.status = "pending"
+      approval.resolvedAt = undefined
+    }
+    const undatedWorld = makeStrandedWorld()
+    for (const approval of undatedWorld.fixture.tables.toolApprovalRequests) {
+      approval.resolvedAt = undefined
+    }
+    const continuedWorld = makeStrandedWorld()
+    continuedWorld.fixture.run.continuationRunId =
+      asId<"generationRuns">("run_cont")
+    const scenarios = [
+      // Resolved one tick after the earliest eligible instant — still in grace.
+      makeStrandedWorld({ resolvedAt: NOW - GRACE + 1 }),
+      // A pending row: the user or the approval reaper still owns the pause.
+      pendingWorld,
+      // Resolved but undated: undefined is EXCLUDED, never "old enough"
+      // (the §18 #6 undefined rule applied to this pass's expiry comparison).
+      undatedWorld,
+      // A stamped continuation means a prepare owns the close.
+      continuedWorld,
+    ]
+    for (const world of scenarios) {
+      const { ctx } = createMutationCtx(world.tables)
+      await expect(reapResolvedApprovalPausesPass(ctx)).resolves.toEqual({
+        settled: 0,
+      })
+      expect(world.fixture.run.status).toBe("awaiting_approval")
+      expect(world.chat.liveRunStatus).toBe("awaiting")
+    }
+  })
+
+  it("scans past a batch-limit-sized prefix of ineligible pauses (no starvation)", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const { fixture, chat, tables } = makeStrandedWorld()
+    // 30 older awaiting pauses that are permanently ineligible for THIS pass
+    // (no approval rows). A scan capped at REAPER_BATCH_LIMIT (25) would
+    // never reach the eligible strand behind them.
+    const blockers = Array.from({ length: 30 }, (_, index) =>
+      createGenerationRun({
+        id: `run_blocker_${index}`,
+        chatId: chat._id,
+        userId: fixture.owner.user._id,
+        status: "awaiting_approval",
+        updatedAt: index - 30,
+      })
+    )
+    tables.generationRuns = [...blockers, ...(tables.generationRuns ?? [])]
+    const { ctx } = createMutationCtx(tables)
+
+    const result = await reapResolvedApprovalPausesPass(ctx)
+
+    expect(result).toEqual({ settled: 1 })
+    expect(fixture.run.status).toBe("failed")
+    for (const blocker of blockers) {
+      expect(blocker.status).toBe("awaiting_approval")
+    }
+  })
+
+  it("advances its durable cursor past a saturated prefix across cron ticks", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const { fixture, chat, tables } = makeStrandedWorld()
+    const blockerCount = 205
+    const blockers = Array.from({ length: blockerCount }, (_, index) =>
+      createGenerationRun({
+        id: `run_saturated_blocker_${index}`,
+        chatId: chat._id,
+        userId: fixture.owner.user._id,
+        status: "awaiting_approval",
+        updatedAt: index - blockerCount,
+      })
+    )
+    tables.generationRuns = [...blockers, ...(tables.generationRuns ?? [])]
+    const { ctx, tables: world } = createMutationCtx(tables)
+
+    // Tick 1 examines the oldest 200-row page. Every row is permanently
+    // ineligible (no approval records), but the durable cursor advances.
+    await expect(reapResolvedApprovalPausesPass(ctx)).resolves.toEqual({
+      settled: 0,
+    })
+    expect(fixture.run.status).toBe("awaiting_approval")
+    expect(world.reaperCheckpoints).toHaveLength(1)
+    expect(world.reaperCheckpoints[0]?.cursor).toEqual(expect.any(String))
+
+    // Tick 2 resumes after that page and reaches the eligible strand behind
+    // the remaining blockers. The final page wraps the next sweep to null.
+    await expect(reapResolvedApprovalPausesPass(ctx)).resolves.toEqual({
+      settled: 1,
+    })
+    expect(fixture.run.status).toBe("failed")
+    expect(world.reaperCheckpoints[0]?.cursor).toBeUndefined()
+    expect(
+      blockers.every((blocker) => blocker.status === "awaiting_approval")
+    ).toBe(true)
+  })
+
+  it("holds the cursor when the settlement budget stops mid-page", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const runs = Array.from({ length: 26 }, (_, index) =>
+      createGenerationRun({
+        id: `run_eligible_${index}`,
+        chatId,
+        userId,
+        status: "awaiting_approval",
+        updatedAt: index + 1,
+      })
+    )
+    const approvals: Doc<"toolApprovalRequests">[] = runs.map((run, index) => ({
+      _id: asId<"toolApprovalRequests">(`approval_eligible_${index}`),
+      _creationTime: index + 1,
+      chatId,
+      runId: run._id,
+      assistantMessageId: asId<"messages">(`message_missing_${index}`),
+      userId,
+      toolCallId: `call_${index}`,
+      toolName: "read_file",
+      source: "mcp",
+      riskClass: "read",
+      approvalId: `approval_${index}`,
+      status: "approved",
+      createdAt: 1,
+      resolvedAt: NOW - GRACE,
+    }))
+    const { ctx, tables } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      generationRuns: runs,
+      toolApprovalRequests: approvals,
+    })
+
+    await expect(reapResolvedApprovalPausesPass(ctx)).resolves.toEqual({
+      settled: 25,
+    })
+    expect(
+      runs.filter((run) => run.status === "awaiting_approval")
+    ).toHaveLength(1)
+    expect(tables.reaperCheckpoints[0]?.cursor).toBeUndefined()
+
+    await expect(reapResolvedApprovalPausesPass(ctx)).resolves.toEqual({
+      settled: 1,
+    })
+    expect(runs.every((run) => run.status === "failed")).toBe(true)
+  })
+
+  it("anchors the grace on the LAST resolvedAt across multiple approvals", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fixture = createApprovalContinuationFixture([
+      {
+        approvalId: "approval_1",
+        approved: true,
+        toolCallId: "call_1",
+        toolName: "read_file",
+      },
+      {
+        approvalId: "approval_2",
+        approved: true,
+        toolCallId: "call_2",
+        toolName: "write_file",
+      },
+    ])
+    const [first, second] = fixture.tables.toolApprovalRequests
+    first!.resolvedAt = NOW - GRACE - 60_000 // long past the grace
+    second!.resolvedAt = NOW - GRACE + 1 // resolved a tick too recently
+    const { user, chat } = fixture.owner
+    const tables: Partial<TableDocuments> = {
+      ...fixture.tables,
+      users: [user],
+      chats: [chat],
+    }
+    const { ctx } = createMutationCtx(tables)
+
+    // The newest resolution gates the whole pause — one old approval must not
+    // make a freshly-resolved sibling eligible.
+    await expect(reapResolvedApprovalPausesPass(ctx)).resolves.toEqual({
+      settled: 0,
+    })
+    expect(fixture.run.status).toBe("awaiting_approval")
+
+    second!.resolvedAt = NOW - GRACE
+    await expect(reapResolvedApprovalPausesPass(ctx)).resolves.toEqual({
+      settled: 1,
+    })
+    expect(fixture.run.status).toBe("failed")
+  })
+
+  it("commit order A — reaper first: the late continuation prepare gets the typed pause-settled conflict", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const { fixture, chat, tables } = makeStrandedWorld()
+    const { ctx, tables: world } = createMutationCtx(tables)
+
+    await expect(reapResolvedApprovalPausesPass(ctx)).resolves.toEqual({
+      settled: 1,
+    })
+    const runCountAfterReap = world.generationRuns.length
+
+    // The crashed tab comes back and fires the stale auto-send continuation.
+    await expect(
+      prepareGenerationForChat(ctx, {
+        chatId: chat._id,
+        requestId: "request_late_continuation",
+        model: "gpt-5",
+        provider: "openai",
+        approvalResponses: fixture.responses,
+      })
+    ).rejects.toThrow("Approval pause already settled")
+
+    // The reaped terminal is never resurrected and records no continuation.
+    expect(fixture.run.status).toBe("failed")
+    expect(fixture.run.terminalReason).toBe("continuation_lost")
+    expect(fixture.run.continuationRunId).toBeUndefined()
+    expect(world.generationRuns.length).toBeGreaterThanOrEqual(
+      runCountAfterReap
+    )
+  })
+
+  it("commit order B — continuation prepare first: the reaper leaves the settled pause and its continuation intact", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const { fixture, chat, tables } = makeStrandedWorld()
+    const { ctx, tables: world } = createMutationCtx(tables)
+
+    const continuation = await prepareGenerationForChat(ctx, {
+      chatId: chat._id,
+      requestId: "request_continuation",
+      model: "gpt-5",
+      provider: "openai",
+      approvalResponses: fixture.responses,
+    })
+    expect(fixture.run.continuationRunId).toBe(continuation.runId)
+
+    await expect(reapResolvedApprovalPausesPass(ctx)).resolves.toEqual({
+      settled: 0,
+    })
+    expect(fixture.run.status).toBe("completed")
+    const continuationRun = world.generationRuns.find(
+      (run) => run._id === continuation.runId
+    )
+    expect(continuationRun?.status).toBe("streaming")
   })
 })
 

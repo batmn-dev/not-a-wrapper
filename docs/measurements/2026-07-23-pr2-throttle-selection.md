@@ -1,14 +1,11 @@
 # PR 2 — message-notification throttle selection (2026-07-23)
 
-Selection record for the chat-responsiveness plan's PR 2
-(`docs/gameplans/chat-responsiveness-performance-implementation-plan.md`):
-the value passed to `useChat({ chat, throttle })` via
-`NEXT_PUBLIC_CHAT_MESSAGE_THROTTLE`, compared 0/32/50/100 ms against the
-deterministic streams. **Selected value: 50 ms**
-(`RECOMMENDED_CHAT_MESSAGE_THROTTLE_MS` in
-`lib/chat-performance/message-throttle.ts`). The flag ships **off** (unset/0 =
-legacy unthrottled path); enabling it is a deploy-time decision per the plan's
-§9.2 progression, and `0` remains the rollback.
+Historical selection record for PR 2: the value passed to
+`useChat({ chat, throttle })` via the former
+`NEXT_PUBLIC_CHAT_MESSAGE_THROTTLE` flag, compared at 0/32/50/100 ms against
+deterministic streams. **Selected value: 50 ms.** After verification, the flag
+was removed and 50 ms became the unconditional `CHAT_MESSAGE_THROTTLE_MS`
+value; see [`2026-07-23-flag-collapse.md`](./2026-07-23-flag-collapse.md).
 
 ## Method
 
@@ -57,9 +54,9 @@ here — all timing is virtual.
   first chunk's own arrival time). The status subscription is not throttled;
   the `submitted → streaming` transition re-renders immediately and React
   re-reads the messages snapshot in that same commit, so the leading text
-  never waits for a throttle window. The plan's bound (interval + baseline
+  never waits for a throttle window. The acceptance bound (interval + baseline
   allowance) holds with margin.
-- **100 ms is the stress comparator only** (plan §PR 2 configuration note):
+- **100 ms is the stress comparator only:**
   its extra reduction (−78% vs −69%) buys visible burstiness at 30 chunks/s
   (10 updates/s cadence) for little marginal render savings.
 - **Terminal/approval/tool updates are not delayed:** `onFinish`, Stop
@@ -68,7 +65,7 @@ here — all timing is virtual.
   render also delivers the final parts without waiting for the trailing
   window).
 
-## Gates (plan §8.1.3)
+## Acceptance gates
 
 - Material reduction vs 0 ms: **yes** — −69% (100 chunks/s) / −31%
   (30 chunks/s) at the selected 50 ms.
@@ -78,13 +75,14 @@ here — all timing is virtual.
   UIMessage deep-equals the 0 ms baseline at every value; Stop/error/approval/
   continuation covered by dedicated fake-timer tests in the same file.
 
-## Caveats / remaining rollout steps
+## Historical rollout caveats
 
-- The production-build **visual** side-by-side (streaming texture, Composer
-  keypress feel, 4× CPU slowdown) remains part of the §9.2 staging step:
-  `NEXT_PUBLIC_` flags are build-time-inlined, so per-value comparison
-  requires separate builds — it cannot be flipped on a running dev server.
-  The quantitative selection above does not depend on it; texture concerns
-  argued for 50 over 100, not for/against enabling.
+- At this decision point, the production-build **visual** side-by-side
+  (streaming texture, Composer keypress feel, 4× CPU slowdown) remained a
+  staging requirement:
+  `NEXT_PUBLIC_` flags were build-time-inlined, so per-value comparison
+  required separate builds — they could not be flipped on a running dev
+  server. The quantitative selection above did not depend on it; texture
+  concerns argued for 50 over 100, not for/against enabling.
 - React-commit counts here are commits at the `useChat` seam. Downstream
   render cost per commit (Markdown/Shiki) is PR 3's territory.

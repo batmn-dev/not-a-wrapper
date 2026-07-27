@@ -29,10 +29,6 @@ vi.mock("convex/react", () => ({
   useMutation: () => convexMocks.markChatRead,
 }))
 
-vi.mock("@/lib/flags", () => ({
-  ENABLE_DURABLE_RUN_PRESENTATION: true,
-}))
-
 let deriveChatRowStatus: SidebarStatusModule["deriveChatRowStatus"]
 let useSidebarChatStatus: SidebarStatusModule["useSidebarChatStatus"]
 let useMarkChatReadOnView: SidebarStatusModule["useMarkChatReadOnView"]
@@ -154,42 +150,6 @@ describe("deriveChatRowStatus", () => {
     expect(deriveChatRowStatus({ live_run_status: "streaming" }, "idle")).toBe(
       "streaming"
     )
-  })
-
-  it("keeps the durable presentation rollout independent from local and terminal indicators", () => {
-    const NOW = 1_000_000
-    expect(
-      deriveChatRowStatus(
-        {
-          live_run_status: "streaming",
-          live_run_fresh_until: NOW + 1_000,
-        },
-        null,
-        NOW,
-        false
-      )
-    ).toBe("idle")
-    expect(
-      deriveChatRowStatus(
-        { live_run_status: "streaming" },
-        "streaming",
-        NOW,
-        false
-      )
-    ).toBe("streaming")
-    expect(
-      deriveChatRowStatus(
-        {
-          live_run_status: "streaming",
-          last_run_ended_at: 200,
-          last_run_status: "failed",
-          last_read_at: 100,
-        },
-        null,
-        NOW,
-        false
-      )
-    ).toBe("error")
   })
 
   it("derives unread when a completed run finished after the read cursor", () => {
