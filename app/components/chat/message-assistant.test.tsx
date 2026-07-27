@@ -673,6 +673,7 @@ describe("MessageAssistant presentation reveal (ADR-0015)", () => {
     children: string
     status: "streaming" | "ready" | "aborted" | "error"
     isLast?: boolean
+    finishReason?: string
   }) {
     const chatStatus = args.status === "streaming" ? "streaming" : "ready"
     act(() => {
@@ -684,6 +685,7 @@ describe("MessageAssistant presentation reveal (ADR-0015)", () => {
           isLast={args.isLast ?? true}
           copied={false}
           copyToClipboard={() => {}}
+          finishReason={args.finishReason}
         >
           {args.children}
         </MessageAssistant>
@@ -706,6 +708,24 @@ describe("MessageAssistant presentation reveal (ADR-0015)", () => {
     })
     expect(container?.textContent).toContain("unrevealed tail")
     expect(container?.textContent).toContain("Generation stopped.")
+  })
+
+  it("guest/local Stop (ready + finishReason abort) flushes instantly", () => {
+    renderRow({ children: "Partial answer", status: "streaming" })
+    renderRow({
+      children: "Partial answer plus a stop-time tail",
+      status: "streaming",
+    })
+    expect(container?.textContent).not.toContain("stop-time tail")
+    // A guest chat has no durable aborted status: Stop surfaces as the AI
+    // SDK's "ready" with the turn controller's finishReason "abort" — that
+    // must take the immediate path, not the 400ms natural drain.
+    renderRow({
+      children: "Partial answer plus a stop-time tail",
+      status: "ready",
+      finishReason: "abort",
+    })
+    expect(container?.textContent).toContain("stop-time tail")
   })
 
   it("client error status flushes instantly, like every abnormal terminal", () => {

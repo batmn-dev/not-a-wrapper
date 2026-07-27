@@ -32,9 +32,17 @@ export type StreamFadeStyle = {
 }
 
 type BlockFadeState = {
-  wordCount: number
+  /** High-water RENDERED word count — commit detection only, never word
+   * identity (rendered counts shrink when Markdown syntax closes). */
+  highWaterCount: number
   lastCommitAtMs: number
-  births: number[]
+  /** Pacing for births assigned under the current commit. */
+  paceMs: number
+  birthCapMs: number
+  backdateBirths: boolean
+  lastAssignedBirthMs: number
+  /** Keyed by word key (source-offset based): stable across re-parses. */
+  births: Map<number, number>
   styles: Map<number, StreamFadeStyle>
 }
 
@@ -53,9 +61,13 @@ export function createStreamFadeRuntime() {
     let block = blocks.get(blockKey)
     if (!block) {
       block = {
-        wordCount: 0,
+        highWaterCount: 0,
         lastCommitAtMs: -1,
-        births: [],
+        paceMs: MIN_STAGGER_MS,
+        birthCapMs: -1,
+        backdateBirths: false,
+        lastAssignedBirthMs: -Infinity,
+        births: new Map(),
         styles: new Map(),
       }
       blocks.set(blockKey, block)
@@ -65,14 +77,13 @@ export function createStreamFadeRuntime() {
 
   return {
     /**
-     * Assigns monotonically chained births to the words revealed by this
-     * commit. A count at or below the block's high-water mark is a no-op:
-     * StrictMode double renders repeat the same count, and append-only
-     * Markdown growth can SHRINK the rendered word count (emphasis/link
-     * syntax characters vanish when their closer arrives) — resetting
-     * births there would rewrite every span's delay and restart the whole
-     * block's fades. Kept births are approximate for re-indexed words;
-     * approximate phase is invisible, a mass restart is not.
+     * Records one commit's pacing: observed gap ÷ new words (clamped) and
+     * the birth cap. Births themselves are assigned lazily by `styleFor`,
+     * KEYED BY WORD (source offset), so a word keeps its birth across
+     * Markdown re-parses that renumber ordinals. A count at or below the
+     * high-water mark is a no-op: StrictMode double renders repeat the
+     * same count, and append-only growth can SHRINK the rendered count
+     * (emphasis/link syntax closing) — offset keys make that harmless.
      */
     noteCommit(
       blockKey: string,
@@ -80,32 +91,21 @@ export function createStreamFadeRuntime() {
       nowMs: number
     ): void {
       const block = ensure(blockKey)
-      if (revealedWordCount <= block.wordCount) return
-      if (snapPending) {
-        // Snapped-in text (hidden tab, mid-stream adoption, terminal flush)
-        // renders already revealed: births are back-dated past the fade so
-        // no animation queues. Later appends fade normally.
-        snapPending = false
-        for (let i = block.wordCount; i < revealedWordCount; i++) {
-          block.births[i] = nowMs - FADE_MS
-        }
-        block.wordCount = revealedWordCount
-        block.lastCommitAtMs = nowMs
-        return
-      }
-      const newWords = revealedWordCount - block.wordCount
+      if (revealedWordCount <= block.highWaterCount) return
+      const newWords = revealedWordCount - block.highWaterCount
       const gap =
         block.lastCommitAtMs >= 0 ? nowMs - block.lastCommitAtMs : 0
-      const pace = Math.min(
+      block.paceMs = Math.min(
         MAX_STAGGER_MS,
         Math.max(MIN_STAGGER_MS, gap / newWords)
       )
-      const cap = nowMs + gap + FADE_MS
-      for (let i = block.wordCount; i < revealedWordCount; i++) {
-        const prevBirth = i > 0 ? (block.births[i - 1] ?? nowMs) : -Infinity
-        block.births[i] = Math.min(cap, Math.max(prevBirth + pace, nowMs))
-      }
-      block.wordCount = revealedWordCount
+      block.birthCapMs = nowMs + gap + FADE_MS
+      // Snapped-in text (hidden tab, adoption, terminal flush, lag jump)
+      // renders already revealed: this commit's births back-date past the
+      // fade so no animation queues. Later commits fade normally.
+      block.backdateBirths = snapPending
+      snapPending = false
+      block.highWaterCount = revealedWordCount
       block.lastCommitAtMs = nowMs
     },
 
@@ -119,34 +119,46 @@ export function createStreamFadeRuntime() {
     },
 
     /**
-     * Frozen-while-in-flight style per `(blockKey, wordIndex)`: an active
-     * fade's `animation-delay` is never recomputed (a rewritten value
-     * restarts the animation on a live node), but once the fade window has
-     * elapsed the entry UPGRADES to the terminal revealed style — a
-     * finished animation sits at opacity 1 either way, and the upgrade is
-     * what lets the plugin unwrap elapsed words and keeps a late-remounted
-     * span from replaying an old fade phase.
+     * Style per `(blockKey, wordKey)`. A word's first read assigns its
+     * birth — chained `pace` after the previously assigned word, based at
+     * the commit time, clamped to the birth cap. In-flight styles are
+     * frozen (a rewritten `animation-delay` restarts the animation on a
+     * live node); once the fade window elapses the entry UPGRADES to the
+     * terminal revealed style — a finished animation sits at opacity 1
+     * either way, and the upgrade is what lets the plugin unwrap elapsed
+     * words and keeps a late-remounted span from replaying an old phase.
      */
     styleFor(
       blockKey: string,
-      wordIndex: number,
+      wordKey: number,
       nowMs: number
     ): StreamFadeStyle {
       const block = ensure(blockKey)
-      const cached = block.styles.get(wordIndex)
+      const cached = block.styles.get(wordKey)
       if (cached) {
         if (!cached.style) return cached // terminal: revealed is permanent
-        const birth = block.births[wordIndex] ?? nowMs
+        const birth = block.births.get(wordKey) ?? nowMs
         if (nowMs - birth < FADE_MS) return cached // in flight: frozen
-        block.styles.set(wordIndex, REVEALED_STYLE)
+        block.styles.set(wordKey, REVEALED_STYLE)
         return REVEALED_STYLE
       }
-      let birth = block.births[wordIndex]
+      let birth = block.births.get(wordKey)
       if (birth === undefined) {
-        // Unknown word (count drift): born now, recorded so the upgrade
-        // check above has a birth to age against.
-        birth = nowMs
-        block.births[wordIndex] = birth
+        const commitBase =
+          block.lastCommitAtMs >= 0 ? block.lastCommitAtMs : nowMs
+        if (block.backdateBirths) {
+          birth = nowMs - FADE_MS
+          block.lastAssignedBirthMs = commitBase
+        } else {
+          const cap =
+            block.birthCapMs >= 0 ? block.birthCapMs : nowMs + FADE_MS
+          birth = Math.min(
+            cap,
+            Math.max(block.lastAssignedBirthMs + block.paceMs, commitBase)
+          )
+          block.lastAssignedBirthMs = birth
+        }
+        block.births.set(wordKey, birth)
       }
       const elapsed = nowMs - birth
       const result: StreamFadeStyle =
@@ -158,7 +170,7 @@ export function createStreamFadeRuntime() {
                 animationDelay: `${Math.round(-elapsed)}ms`,
               }),
             })
-      block.styles.set(wordIndex, result)
+      block.styles.set(wordKey, result)
       return result
     },
 
@@ -226,8 +238,15 @@ function countWords(value: string): number {
  * already elapsed render as plain text (merged with whitespace), so the
  * span count is bounded by the births of the last fade window + the birth
  * cap, independent of block length. Whitespace stays plain text
- * (selection/copy fidelity). Word indexes run in document order across the
- * whole block, matching the counting pass that feeds `noteCommit`.
+ * (selection/copy fidelity).
+ *
+ * Word identity is the SOURCE OFFSET of the word's text node plus the
+ * segment offset within it — stable under append-only growth even when a
+ * re-parse restructures the tree (closing `**hello**` moves "hello" into a
+ * <strong> but keeps its source offset), so a remounted word resumes its
+ * own fade instead of inheriting a renumbered neighbor's. Position-less
+ * nodes (plugin-synthesized) fall back to a document-order ordinal in a
+ * disjoint negative key space.
  */
 export function rehypeStreamFade(options: {
   runtime: StreamFadeRuntime
@@ -244,9 +263,10 @@ export function rehypeStreamFade(options: {
     })
     runtime.noteCommit(blockKey, totalWords, nowMs)
 
-    let wordIndex = 0
+    let fallbackOrdinal = 0
     const replacements = new Map<Parents, Map<number, ElementContent[]>>()
     visitTextNodes(tree, (parent, node, index) => {
+      const nodeOffset = node.position?.start?.offset
       const pieces: ElementContent[] = []
       let hasSpan = false
       const pushText = (value: string) => {
@@ -262,7 +282,11 @@ export function rehypeStreamFade(options: {
           pushText(segment.segment)
           continue
         }
-        const style = runtime.styleFor(blockKey, wordIndex++, nowMs)
+        const wordKey =
+          nodeOffset !== undefined
+            ? nodeOffset + segment.index
+            : -(++fallbackOrdinal)
+        const style = runtime.styleFor(blockKey, wordKey, nowMs)
         if (!style.style) {
           // Fade already elapsed: plain text, no span retained.
           pushText(segment.segment)

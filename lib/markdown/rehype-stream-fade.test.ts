@@ -104,11 +104,16 @@ describe("rehypeStreamFade span bound", () => {
   it("unwraps elapsed words: spans exist only while a fade is in flight", () => {
     const runtime = createStreamFadeRuntime()
     const tree = root(paragraph("old words already elapsed plus fresh"))
-    // Six words: five born long ago, the sixth mid-fade "now" — the plugin
-    // transform (which calls noteCommit with the CURRENT count) must keep
-    // only in-flight words wrapped, so span count tracks recent births, not
-    // block length.
-    runtime.noteCommit("block-0", 5, performance.now() - 5000)
+    // Six words: five born long ago (pre-walked at an old timestamp), the
+    // sixth new "now" — the transform must keep only in-flight words
+    // wrapped, so span count tracks recent births, not block length.
+    // Handcrafted nodes carry no source position, so keys fall back to
+    // document-order ordinals (-1, -2, …) — pre-seed those.
+    const oldMs = performance.now() - 5000
+    runtime.noteCommit("block-0", 5, oldMs)
+    for (let ordinal = 1; ordinal <= 5; ordinal++) {
+      runtime.styleFor("block-0", -ordinal, oldMs)
+    }
     rehypeStreamFade({ runtime, blockKey: "block-0" })(tree)
     const p = tree.children[0] as Element
     expect(spansOf(p)).toHaveLength(1)
@@ -120,6 +125,84 @@ describe("rehypeStreamFade span bound", () => {
       )
       .join("")
     expect(flattened).toBe("old words already elapsed plus fresh")
+  })
+
+  it("keeps a word's fade phase across a Markdown restructure (offset keys)", () => {
+    const runtime = createStreamFadeRuntime()
+    // `**hello` while the emphasis is still open: one literal text node at
+    // source offset 0.
+    const openTree = root({
+      type: "element",
+      tagName: "p",
+      properties: {},
+      children: [
+        {
+          type: "text",
+          value: "**hello",
+          position: {
+            start: { line: 1, column: 1, offset: 0 },
+            end: { line: 1, column: 8, offset: 7 },
+          },
+        },
+      ],
+    })
+    rehypeStreamFade({ runtime, blockKey: "block-0" })(openTree)
+    const helloSpan = spansOf(openTree.children[0] as Element).find(
+      (span) => (span.children[0] as Text).value === "hello"
+    )
+    const originalDelay = helloSpan?.properties?.style
+
+    // The closer arrives: "hello" is now inside <strong>, but its SOURCE
+    // offset is unchanged (2) — it must resume its own fade, not restart
+    // from a renumbered neighbor's phase.
+    const closedTree = root({
+      type: "element",
+      tagName: "p",
+      properties: {},
+      children: [
+        {
+          type: "element",
+          tagName: "strong",
+          properties: {},
+          children: [
+            {
+              type: "text",
+              value: "hello",
+              position: {
+                start: { line: 1, column: 3, offset: 2 },
+                end: { line: 1, column: 8, offset: 7 },
+              },
+            },
+          ],
+        },
+        {
+          type: "text",
+          value: " world",
+          position: {
+            start: { line: 1, column: 10, offset: 9 },
+            end: { line: 1, column: 16, offset: 15 },
+          },
+        },
+      ],
+    })
+    rehypeStreamFade({ runtime, blockKey: "block-0" })(closedTree)
+    const spans = spansOf(closedTree.children[0] as Element)
+    const helloAfter = spans.find(
+      (span) => (span.children[0] as Text).value === "hello"
+    )
+    expect(helloAfter?.properties?.style).toBe(originalDelay)
+    // And the appended word still fades even though the RENDERED count
+    // (2) sits below the open-syntax high-water mark (3): identity is the
+    // offset, not the ordinal.
+    const worldSpan = spans.find(
+      (span) => (span.children[0] as Text).value === "world"
+    )
+    expect(worldSpan).toBeTruthy()
+    expect(
+      (worldSpan?.properties?.className as string[]).includes(
+        "stream-word-revealed"
+      )
+    ).toBe(false)
   })
 })
 
@@ -173,11 +256,15 @@ describe("birth timeline runtime", () => {
   it("noteCommit with an unchanged count is a no-op (StrictMode double render)", () => {
     const runtime = createStreamFadeRuntime()
     runtime.noteCommit("block-0", 2, 0)
+    runtime.styleFor("block-0", 0, 0)
+    runtime.styleFor("block-0", 1, 0)
     // The duplicate at t=50 must not move the commit clock…
     runtime.noteCommit("block-0", 2, 50)
     runtime.noteCommit("block-0", 4, 100)
     // …so the observed gap is 100 (pace 50), not 50 (pace 25): word 3 is
-    // born pace after word 2 → 50ms in the future at t=100.
+    // born pace after word 2 → 50ms in the future at t=100. (Births assign
+    // lazily in walk order.)
+    runtime.styleFor("block-0", 2, 100)
     expect(runtime.styleFor("block-0", 3, 100).style?.animationDelay).toBe(
       "50ms"
     )
@@ -186,7 +273,9 @@ describe("birth timeline runtime", () => {
   it("staggers by observed gap ÷ new words, clamped to [8, 80]ms", () => {
     const runtime = createStreamFadeRuntime()
     runtime.noteCommit("block-0", 1, 0)
+    runtime.styleFor("block-0", 0, 0)
     runtime.noteCommit("block-0", 3, 1000) // gap 1000 / 2 words → clamp 80
+    runtime.styleFor("block-0", 1, 1000)
     expect(runtime.styleFor("block-0", 2, 1000).style?.animationDelay).toBe(
       "80ms"
     )
@@ -195,6 +284,7 @@ describe("birth timeline runtime", () => {
   it("caps births at now + gap + fade so a burst cannot schedule far-future fades", () => {
     const runtime = createStreamFadeRuntime()
     runtime.noteCommit("block-0", 100, 1000) // first commit: gap 0, cap 1180
+    for (let i = 0; i < 99; i++) runtime.styleFor("block-0", i, 1000)
     expect(runtime.styleFor("block-0", 99, 1000).style?.animationDelay).toBe(
       "180ms"
     )

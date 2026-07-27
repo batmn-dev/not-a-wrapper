@@ -281,6 +281,39 @@ describe("usePresentationReveal", () => {
     expect(latest.result?.text).toBe("New message")
   })
 
+  it("lands a stalled trailing word within maxLagMs (elapsed-time cap)", () => {
+    const stallProfile: RevealProfile = { ...FAST_PROFILE, maxLagMs: 500 }
+    render({ text: "", live: true, profile: stallProfile })
+    render({ text: "a", live: true, profile: stallProfile })
+    flushFrames(2)
+    expect(latest.result?.text).toBe("a")
+    // The word grows but never completes and the stream stalls: the clamp
+    // holds mid-word and the loop self-stops. The elapsed-time backstop
+    // must land the text within maxLagMs — canonical chars can never wait
+    // indefinitely for whitespace.
+    render({ text: "abcdefghijkl", live: true, profile: stallProfile })
+    flushFrames(8)
+    expect(latest.result?.text).toBe("a")
+    act(() => {
+      vi.advanceTimersByTime(500 + 10)
+    })
+    expect(latest.result?.text).toBe("abcdefghijkl")
+  })
+
+  it("revealKey change on a live entry resets to empty even with non-empty text", () => {
+    render({ text: "", live: true })
+    render({ text: "First message words ", live: true })
+    flushFrames(8)
+    expect(latest.result?.text).toBe("First message words")
+    // Branch switch / regeneration into an already-growing target: the plan
+    // requires a full reset — reveal from empty, never a flash of the new
+    // target's accumulated text.
+    render({ text: "Second message already long", live: true, revealKey: "m2" })
+    expect(latest.result?.text).toBe("")
+    flushFrames(8)
+    expect(latest.result?.text.startsWith("Second")).toBe(true)
+  })
+
   it("adopts mid-stream text instantly (remount) and animates only later appends", () => {
     render({ text: "Already streamed half of the answer", live: true })
     // Non-empty at engagement → shown instantly, no re-typing.

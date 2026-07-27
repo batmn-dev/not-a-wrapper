@@ -94,7 +94,15 @@ export type RevealGateMetrics = {
   commitCount: number
   commitsPerSecond: number
   firstTextToFirstCommitMs: number
+  /** Stagger granularity: words per distinct birth timestamp — what the
+   * animation-delay timeline schedules. */
   medianWordsPerVisualUpdate: number
+  /** Paint granularity: words per 60 Hz frame bucket — what a display can
+   * physically distinguish. The ≤1 product bar applies at TYPICAL token
+   * rates (30–80 tok/s, §2.9); stress fixtures exceed 60 words/s, where
+   * ≤1 word/paint is arithmetically impossible for ANY presentation. */
+  medianWordsPerPaint: number
+  p95WordsPerPaint: number
   p95VisibleGapMs: number
   lagP50Ms: number
   lagMaxMs: number
@@ -167,11 +175,15 @@ function simulateReveal(
     (a, b) => a - b
   )
   const groupSizes = new Map<number, number>()
+  const paintSizes = new Map<number, number>()
   for (const birth of births) {
     const key = Math.round(birth)
     groupSizes.set(key, (groupSizes.get(key) ?? 0) + 1)
+    const paintKey = Math.floor(birth / FRAME_MS)
+    paintSizes.set(paintKey, (paintSizes.get(paintKey) ?? 0) + 1)
   }
   const sizes = [...groupSizes.values()].sort((a, b) => a - b)
+  const paints = [...paintSizes.values()].sort((a, b) => a - b)
 
   const gaps: number[] = []
   for (let i = 1; i < birthTimes.length; i++) {
@@ -196,6 +208,8 @@ function simulateReveal(
     commitsPerSecond: commits.length / Math.max(0.001, durationSec),
     firstTextToFirstCommitMs: (commits[0]?.t ?? 0) - firstTextAt,
     medianWordsPerVisualUpdate: quantile(sizes, 0.5),
+    medianWordsPerPaint: quantile(paints, 0.5),
+    p95WordsPerPaint: quantile(paints, 0.95),
     p95VisibleGapMs: quantile(gaps, 0.95),
     lagP50Ms: quantile(streamLags, 0.5),
     lagMaxMs: lagMax,
@@ -296,8 +310,28 @@ const codeBlock30 = buildStreamScript({
   scenario: "code-block",
   chunksPerSecond: 30,
 })
+// The §2.9 product bar's regime: 30 chunks/s × 10 chars ≈ 300 chars/s ≈
+// 75 tok/s — the top of "typical token rates". The 40-char fixtures above
+// are stress cadences (~300 tok/s), useful for cost/lag bounds but beyond
+// what any 60 Hz presentation could show at one word per paint.
+const proseTypical = buildStreamScript({
+  scenario: "text-only",
+  chunksPerSecond: 30,
+  deltaSize: 10,
+})
 
 describe("presentation-reveal merge gate (§9)", () => {
+  it("meets the ≤1-word bar at PAINT granularity at typical token rates (§2.9)", () => {
+    const m = simulateReveal(proseTypical, PROSE_REVEAL_PROFILE)
+    // ~75 tok/s (top of typical): at most one word starts fading per 60 Hz
+    // frame — the strict product bar, measured the way a display shows it.
+    expect(m.medianWordsPerPaint).toBeLessThanOrEqual(1)
+    expect(m.p95VisibleGapMs).toBeLessThanOrEqual(100)
+    expect(m.lagP50Ms).toBeLessThanOrEqual(300)
+    expect(m.lagMaxMs).toBeLessThanOrEqual(1000)
+    expect(m.drainMs).toBeLessThanOrEqual(500)
+  })
+
   it("meets every gate criterion on mixed-markdown @ 30 chunks/s", () => {
     const m = simulateReveal(mixedMarkdown30, PROSE_REVEAL_PROFILE)
     expect(m.medianWordsPerVisualUpdate).toBeLessThanOrEqual(1) // smoothness
@@ -357,6 +391,9 @@ describe("presentation-reveal merge gate (§9)", () => {
       [
         label.padEnd(26),
         String(m.medianWordsPerVisualUpdate).padStart(11),
+        m.medianWordsPerPaint !== undefined
+          ? `${m.medianWordsPerPaint}/${m.p95WordsPerPaint}`.padStart(11)
+          : "          —",
         `${Math.round(m.p95VisibleGapMs)}ms`.padStart(9),
         m.lagP50Ms !== undefined ? `${Math.round(m.lagP50Ms)}ms`.padStart(8) : "       —",
         m.drainMs !== undefined ? `${Math.round(m.drainMs)}ms`.padStart(8) : "       —",
@@ -367,12 +404,13 @@ describe("presentation-reveal merge gate (§9)", () => {
       ].join(" | ")
 
     for (const [name, script] of [
+      ["prose-typical@75tok/s", proseTypical],
       ["mixed-markdown@30", mixedMarkdown30],
       ["prose@100", prose100],
     ] as const) {
       console.log(`\n[reveal-gate] ${name}`)
       console.log(
-        "variant                    | words/upd |  p95 gap |  lag p50 |    drain | commits/s | visual/s"
+        "variant                    | words/upd | paint m/p95 |  p95 gap |  lag p50 |    drain | commits/s | visual/s"
       )
       console.log(row("baseline throttle 50ms", simulateThrottleBaseline(script, 50)))
       console.log(row("throttle 32ms (never ships)", simulateThrottleBaseline(script, 32)))

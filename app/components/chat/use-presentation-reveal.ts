@@ -182,18 +182,23 @@ export function usePresentationReveal(args: {
   if (engaged) {
     let entry = entryRef.current
     if (entry === null || entry.key !== revealKey) {
-      // New reveal target. Empty text reveals from empty (a live new
-      // message types out); non-empty text at engagement is mid-stream
-      // adoption (remount, reduced-motion off, continuation) — it shows
-      // instantly and only later appends animate.
+      // Fresh engagement (entry === null: mount, continuation,
+      // reduced-motion off) ADOPTS existing text — it shows instantly and
+      // only later appends animate, so a remount never re-types. A KEY
+      // CHANGE on a live entry is a different target (branch switch /
+      // regeneration): full reset per the plan — a live new message
+      // reveals from empty, never flashes accumulated text.
+      const keyChangedWhileLive = entry !== null && live
       const runtime = createStreamFadeRuntime()
       const state =
-        live && text.length === 0
-          ? createRevealState(text, true)
+        keyChangedWhileLive || text.length === 0
+          ? createRevealState(text, live)
           : createCaughtUpRevealState(text)
-      // Adopted text renders without queued fades; an empty start keeps
-      // normal fades for the words that stream in.
-      if (text.length > 0) runtime.snap()
+      // Adopted text renders without queued fades; a reveal-from-empty
+      // start keeps normal fades for the words that stream in.
+      if (state.displayedEnd === text.length && text.length > 0) {
+        runtime.snap()
+      }
       entry = { key: revealKey, state, runtime }
       entryRef.current = entry
       phaseRef.current = live ? "streaming" : "settling"
@@ -307,6 +312,24 @@ export function usePresentationReveal(args: {
     return () =>
       document.removeEventListener("visibilitychange", onVisibilityChange)
   }, [reducedMotion, snapToCanonical])
+
+  // maxLagMs is an ELAPSED-TIME promise, not only a backlog-size bound: a
+  // live stream that stalls mid-word (the streaming clamp holds a trailing
+  // partial word and the loop self-stops) must still land within maxLagMs.
+  // Every canonical update or commit re-arms this timer, so it fires only
+  // after a genuine stall — and the revealed tail then fades in normally.
+  useEffect(() => {
+    if (reducedMotion || !live) return
+    if (displayed === text) return
+    if (entryRef.current === null) return
+    const timer = setTimeout(() => {
+      const entry = entryRef.current
+      if (!entry) return
+      entry.state = createCaughtUpRevealState(textRef.current)
+      setDisplayed(textRef.current)
+    }, profileRef.current.maxLagMs)
+    return () => clearTimeout(timer)
+  }, [live, displayed, text, reducedMotion])
 
   // A settled, fully drained row releases its machinery: later canonical
   // edits render directly (engaged flips false) instead of re-animating.
