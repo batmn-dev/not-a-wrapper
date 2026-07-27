@@ -1,5 +1,6 @@
 import { paginationOptsValidator, type PaginationOptions } from "convex/server"
 import { v } from "convex/values"
+import { internal } from "./_generated/api"
 import type { Doc, Id } from "./_generated/dataModel"
 import {
   internalMutation,
@@ -7,15 +8,22 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server"
-import { createChatOwnedDeletion } from "./domain/chat_owned_deletion"
-import { collectLinkedChats } from "./domain/chat_project_link"
+import { ensureChatDeletionJob } from "./domain/chat_deletion"
+import {
+  collectLinkedChats,
+  requireLinkedProject,
+} from "./domain/chat_project_link"
 import { createMessageBranchWriter } from "./domain/message_branch_writes"
 import {
   patchChatActivity,
   recordKnownProjectActivity,
 } from "./domain/project_activity"
 import { bindStagedAttachmentsToChat } from "./files"
-import { requireOwnedProject } from "./lib/auth"
+import {
+  filterActiveChats,
+  isChatActive,
+  requireOwnedProject,
+} from "./lib/auth"
 import {
   authenticatedMutation,
   maybeAuthQuery,
@@ -68,13 +76,15 @@ export async function getPinnedForCurrentUserHandler(
   const user = ctx.user
   if (!user) return []
 
-  return await ctx.db
+  const chats = await ctx.db
     .query("chats")
     .withIndex("by_user_pinned_updated", (q) =>
       q.eq("userId", user._id).eq("pinned", true)
     )
+    .filter((q) => q.eq(q.field("deletingAt"), undefined))
     .order("desc")
     .collect()
+  return await filterActiveChats(ctx, chats)
 }
 
 export const getPinnedForCurrentUser = maybeAuthQuery({
@@ -105,6 +115,8 @@ export async function listForCurrentUserPaginatedHandler(
     .withIndex("by_user_project_updated", (q) =>
       q.eq("userId", user._id).eq("projectId", undefined)
     )
+    // Tombstones can underfill a page until physical cleanup removes them.
+    .filter((q) => q.eq(q.field("deletingAt"), undefined))
     .order("desc")
     .paginate(paginationOpts)
 }
@@ -137,13 +149,19 @@ export async function getRecentWindowForCurrentUserHandler(
     return { page: [], isDone: true, continueCursor: "" }
   }
 
-  return await ctx.db
+  const result = await ctx.db
     .query("chats")
     .withIndex("by_user_pinned_updated", (q) =>
       q.eq("userId", user._id).eq("pinned", false)
     )
+    // Tombstones can underfill a page until physical cleanup removes them.
+    .filter((q) => q.eq(q.field("deletingAt"), undefined))
     .order("desc")
     .paginate(paginationOpts)
+  return {
+    ...result,
+    page: await filterActiveChats(ctx, result.page),
+  }
 }
 
 /**
@@ -202,22 +220,30 @@ export const getProjectChatsForCurrentUser = ownedProjectQuery({
  * is title-only by design; message-content search would be a separate index on
  * `messages` and is out of scope.
  */
+export async function searchByTitleForCurrentUserHandler(
+  ctx: MaybeUserChatQueryCtx,
+  term: string
+) {
+  const user = ctx.user
+  if (!user) return []
+
+  const trimmed = term.trim()
+  if (trimmed.length === 0) return []
+
+  const chats = await ctx.db
+    .query("chats")
+    .withSearchIndex("by_title", (q) =>
+      q.search("title", trimmed).eq("userId", user._id)
+    )
+    .filter((q) => q.eq(q.field("deletingAt"), undefined))
+    .take(CHAT_SEARCH_RESULT_LIMIT)
+  return await filterActiveChats(ctx, chats)
+}
+
 export const searchByTitle = maybeAuthQuery({
   args: { term: v.string() },
-  handler: async (ctx, { term }) => {
-    const user = ctx.user
-    if (!user) return []
-
-    const trimmed = term.trim()
-    if (trimmed.length === 0) return []
-
-    return await ctx.db
-      .query("chats")
-      .withSearchIndex("by_title", (q) =>
-        q.search("title", trimmed).eq("userId", user._id)
-      )
-      .take(CHAT_SEARCH_RESULT_LIMIT)
-  },
+  handler: async (ctx, { term }) =>
+    await searchByTitleForCurrentUserHandler(ctx, term),
 })
 
 // The sidebar status-projection fields (docs/design/sidebar-status-backend-wiring.md)
@@ -462,18 +488,24 @@ export const makePublic = ownedChatMutation({
  * Get a public chat by ID (no authentication required). Pure-public read with
  * no user concept — deliberately outside the authenticated-handler seam.
  */
+export async function getPublicByIdHandler(
+  ctx: Pick<QueryCtx, "db">,
+  { chatId }: { chatId: Id<"chats"> }
+) {
+  const chat = await ctx.db.get(chatId)
+  if (!chat) return null
+
+  // Only return if chat is public
+  if (!chat.public) return null
+  if (!(await isChatActive(ctx, chat))) return null
+
+  // Pure-public read (no owner concept) — always strip owner-only fields.
+  return stripOwnerStatus(chat)
+}
+
 export const getPublicById = query({
   args: { chatId: v.id("chats") },
-  handler: async (ctx, { chatId }) => {
-    const chat = await ctx.db.get(chatId)
-    if (!chat) return null
-
-    // Only return if chat is public
-    if (!chat.public) return null
-
-    // Pure-public read (no owner concept) — always strip owner-only fields.
-    return stripOwnerStatus(chat)
-  },
+  handler: getPublicByIdHandler,
 })
 
 /**
@@ -488,7 +520,8 @@ export async function markChatReadForOwner(
   readThroughAt: number
 ): Promise<void> {
   const chat = await ctx.db.get(chatId)
-  if (!chat || chat.userId !== user._id) return // public / not-owned → no-op
+  if (!chat || chat.userId !== user._id) return
+  if (!(await isChatActive(ctx, chat))) return
   if (typeof chat.lastRunEndedAt !== "number") return
 
   const lastReadAt = chat.lastReadAt ?? 0
@@ -535,6 +568,7 @@ export const backfillUpdatedAt = internalMutation({
     for (const chat of chats) {
       const current = (chat as { updatedAt?: number }).updatedAt
       if (current === undefined) {
+        if (!(await isChatActive(ctx, chat))) continue
         await ctx.db.patch(chat._id, { updatedAt: chat._creationTime })
         patched++
       }
@@ -543,10 +577,32 @@ export const backfillUpdatedAt = internalMutation({
   },
 })
 
-/** Delete a Chat and its complete durable graph. */
+export async function removeChatForOwner(
+  ctx: MutationCtx & { chat: Doc<"chats">; user: Doc<"users"> }
+): Promise<void> {
+  const now = Date.now()
+  const project = await requireLinkedProject(ctx, ctx.chat)
+  await ctx.db.patch(ctx.chat._id, {
+    deletingAt: now,
+    public: false, // revoke share links in the same commit
+    liveRunStatus: undefined,
+    statusRunId: undefined,
+    liveRunFreshUntil: undefined,
+    updatedAt: now,
+  })
+  const job = await ensureChatDeletionJob(ctx, ctx.chat, ctx.user)
+  await ctx.scheduler.runAfter(
+    0,
+    internal.deletionCleanup.runDeletionBatch,
+    {
+      jobId: job._id,
+    }
+  )
+  await recordKnownProjectActivity(ctx, project ?? undefined, now)
+}
+
+/** Logically delete a Chat and schedule its bounded physical drain. */
 export const remove = ownedChatMutation({
   args: {},
-  handler: async (ctx) => {
-    await createChatOwnedDeletion(ctx).deleteChat(ctx.chat)
-  },
+  handler: async (ctx) => removeChatForOwner(ctx),
 })

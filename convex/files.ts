@@ -18,6 +18,7 @@ import {
   ownedChatMutation,
   ownedChatQuery,
 } from "./lib/authedFunctions"
+import { isChatActive } from "./lib/auth"
 
 const DAILY_FILE_UPLOAD_LIMIT = 5
 const PREMIUM_FILE_UPLOAD_LIMIT = null
@@ -192,18 +193,31 @@ export const generateUploadUrl = authenticatedMutation({
  * previously, any unauthenticated) caller could read any file by guessing a
  * storage id.
  */
+type AuthenticatedFileReadCtx = Pick<QueryCtx, "db" | "storage"> & {
+  user: Doc<"users">
+}
+
+export async function getFileUrlForUserHandler(
+  ctx: AuthenticatedFileReadCtx,
+  { storageId }: { storageId: Id<"_storage"> }
+) {
+  const owned = await ctx.db
+    .query("chatAttachments")
+    .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
+    .filter((q) => q.eq(q.field("storageId"), storageId))
+    .first()
+  if (!owned) return null
+  if (owned.chatId) {
+    const chat = await ctx.db.get(owned.chatId)
+    if (!chat || !(await isChatActive(ctx, chat))) return null
+  }
+
+  return await ctx.storage.getUrl(storageId)
+}
+
 export const getUrl = authenticatedQuery({
   args: { storageId: v.id("_storage") },
-  handler: async (ctx, { storageId }) => {
-    const owned = await ctx.db
-      .query("chatAttachments")
-      .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
-      .filter((q) => q.eq(q.field("storageId"), storageId))
-      .first()
-    if (!owned) return null
-
-    return await ctx.storage.getUrl(storageId)
-  },
+  handler: getFileUrlForUserHandler,
 })
 
 type SaveStagedAttachmentCtx = MutationCtx & {
@@ -351,21 +365,30 @@ export const attachStagedFiles = ownedChatMutation({
 })
 
 /** Resolve an owner-verified preview source for the same-origin proxy. */
+export async function getAttachmentPreviewForUserHandler(
+  ctx: AuthenticatedFileReadCtx,
+  { attachmentId }: { attachmentId: Id<"chatAttachments"> }
+) {
+  const attachment = await ctx.db.get(attachmentId)
+  if (!attachment || attachment.userId !== ctx.user._id) return null
+  if (attachment.chatId) {
+    const chat = await ctx.db.get(attachment.chatId)
+    if (!chat || !(await isChatActive(ctx, chat))) return null
+  }
+  if (!attachment.storageId) return null
+  const url = await ctx.storage.getUrl(attachment.storageId)
+  if (!url) return null
+  return {
+    url,
+    fileName: attachment.fileName ?? "File",
+    fileType: attachment.fileType ?? "application/octet-stream",
+    fileSize: attachment.fileSize,
+  }
+}
+
 export const getAttachmentPreview = authenticatedQuery({
   args: { attachmentId: v.id("chatAttachments") },
-  handler: async (ctx, { attachmentId }) => {
-    const attachment = await ctx.db.get(attachmentId)
-    if (!attachment || attachment.userId !== ctx.user._id) return null
-    if (!attachment.storageId) return null
-    const url = await ctx.storage.getUrl(attachment.storageId)
-    if (!url) return null
-    return {
-      url,
-      fileName: attachment.fileName ?? "File",
-      fileType: attachment.fileType ?? "application/octet-stream",
-      fileSize: attachment.fileSize,
-    }
-  },
+  handler: getAttachmentPreviewForUserHandler,
 })
 
 /** Best-effort server cleanup for abandoned staged rows. */

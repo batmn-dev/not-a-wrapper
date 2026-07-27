@@ -45,6 +45,7 @@ import {
 import { patchChatActivity } from "./domain/project_activity"
 import {
   getCurrentUser,
+  isChatActive,
   requireOwnedChat,
   type AuthenticatedChatOwner,
   type AuthenticatedRunOwner,
@@ -464,12 +465,19 @@ async function gatherAssistantMessageFacts(
 
   const isReusedForRegeneration =
     typeof run.startedAt === "number" && message.createdAt < run.startedAt
-  // Only meaningful for a reused regeneration, and only worth the read there.
+  // Projected-output invariant: `lastSnapshotSequence` is patched in the same
+  // mutation as every accepted checkpoint (both branches of
+  // updateAssistantSnapshotForChat) and sequences start at 1, so `> 0` is
+  // equivalent to "at least one accepted checkpoint for this run". Legacy runs
+  // written before the field existed fall back to the row probe; that fallback
+  // (and the rows it reads) may be removed only after the legacy purge.
   const hasSnapshotForRun = isReusedForRegeneration
-    ? (await ctx.db
-        .query("assistantMessageSnapshots")
-        .withIndex("by_run_sequence", (q) => q.eq("runId", run._id))
-        .first()) !== null
+    ? run.lastSnapshotSequence !== undefined
+      ? run.lastSnapshotSequence > 0
+      : (await ctx.db
+          .query("assistantMessageSnapshots")
+          .withIndex("by_run_sequence", (q) => q.eq("runId", run._id))
+          .first()) !== null
     : false
 
   const hasSemanticParts = hasSemanticAssistantParts(message)
@@ -597,7 +605,13 @@ async function projectRunStatusToChat(
   extra?: Partial<Doc<"chats">>
 ) {
   const chat = await ctx.db.get(run.chatId)
-  if (!chat || chat.statusRunId !== run._id) return // a newer run owns the row → skip
+  if (
+    !chat ||
+    chat.statusRunId !== run._id ||
+    !(await isChatActive(ctx, chat))
+  ) {
+    return // a newer run or deleting logical root owns the row → skip
+  }
   await ctx.db.patch(run.chatId, {
     ...chatStatusProjection(status, now),
     ...extra,
@@ -1652,21 +1666,35 @@ export async function updateAssistantSnapshotForChat(
     return { kind: "stale" as const, lastSequence }
   }
 
+  // Write-storm guard: a checkpoint whose content is byte-identical to what the
+  // message already carries advances the sequence but must not rewrite the
+  // (potentially large) message doc. Historical storms wrote identical
+  // ~7 KB checkpoints at ~59 ms cadence for minutes; the sequence guard cannot
+  // reject them because sequences advance.
+  const contentUnchanged =
+    message.content === args.textSnapshot &&
+    JSON.stringify(message.parts) === JSON.stringify(args.partsSnapshot)
+
   const now = nowMs()
-  await ctx.db.insert("assistantMessageSnapshots", {
-    runId: run._id,
-    chatId: run.chatId,
-    messageId: args.messageId,
-    order: args.order,
-    stepOrder: args.stepOrder ?? 0,
-    sequence: args.sequence,
-    format: args.payload ? "UIMessageChunk" : "text_snapshot",
-    delta: args.delta,
-    payload: args.payload,
-    textSnapshot: args.textSnapshot,
-    partsSnapshot: args.partsSnapshot,
-    createdAt: now,
-  })
+  // Rollback seam (delete after one green production cycle): setting
+  // RETAIN_ROUTINE_SNAPSHOT_ROWS=1 in the Convex deployment env restores
+  // historical row retention without any other behavior change.
+  if (process.env.RETAIN_ROUTINE_SNAPSHOT_ROWS === "1") {
+    await ctx.db.insert("assistantMessageSnapshots", {
+      runId: run._id,
+      chatId: run.chatId,
+      messageId: args.messageId,
+      order: args.order,
+      stepOrder: args.stepOrder ?? 0,
+      sequence: args.sequence,
+      format: args.payload ? "UIMessageChunk" : "text_snapshot",
+      delta: args.delta,
+      payload: args.payload,
+      textSnapshot: args.textSnapshot,
+      partsSnapshot: args.partsSnapshot,
+      createdAt: now,
+    })
+  }
 
   if (!isTerminalMessageStatus(message.status)) {
     // Status advances to "streaming" only while the worker still owns
@@ -1678,12 +1706,14 @@ export async function updateAssistantSnapshotForChat(
     // approval reaper skips it): a permanent zombie if the completion
     // downgrade write never arrives.
     const workerExecuting = isWorkerExecutingStatus(run.status)
-    await ctx.db.patch(args.messageId, {
-      content: args.textSnapshot,
-      parts: args.partsSnapshot,
-      ...(workerExecuting && { status: "streaming" as const }),
-      updatedAt: now,
-    })
+    if (!contentUnchanged) {
+      await ctx.db.patch(args.messageId, {
+        content: args.textSnapshot,
+        parts: args.partsSnapshot,
+        ...(workerExecuting && { status: "streaming" as const }),
+        updatedAt: now,
+      })
+    }
     await ctx.db.patch(run._id, {
       ...(workerExecuting && { status: "streaming" as const }),
       lastSnapshotSequence: args.sequence,
@@ -1700,7 +1730,7 @@ export async function updateAssistantSnapshotForChat(
       updatedAt: now,
     })
   }
-  return { kind: "applied" as const }
+  return { kind: "applied" as const, deduped: contentUnchanged }
 }
 
 /**
@@ -2222,6 +2252,12 @@ export async function resolveToolCallDecision(
   if (!approval || approval.userId !== user._id) {
     throw new Error("Approval not found")
   }
+  const run = await ctx.db.get(approval.runId)
+  if (!run) throw new Error("Approval not found")
+  const chat = await ctx.db.get(run.chatId)
+  if (!chat || !(await isChatActive(ctx, chat))) {
+    throw new Error("Approval not found")
+  }
 
   if (approval.status !== "pending") {
     return {
@@ -2477,16 +2513,24 @@ export async function reapExpiredGenerationRunsPass(
         if (run.leaseExpiresAt === undefined || run.leaseExpiresAt >= now) {
           continue
         }
-        const resolved = await gatherAssistantMessageFacts(ctx, run, undefined)
+        const chat = await ctx.db.get(run.chatId)
+        if (!chat || !(await isChatActive(ctx, chat))) continue
+        const currentRun = await ctx.db.get(run._id)
+        if (!currentRun) continue
+        const resolved = await gatherAssistantMessageFacts(
+          ctx,
+          currentRun,
+          undefined
+        )
         const verdict = resolveGenerationRunTransition(
-          { runStatus: run.status, message: resolved?.facts ?? null },
+          { runStatus: currentRun.status, message: resolved?.facts ?? null },
           { kind: "lease-expired" }
         )
         if (verdict.kind !== "transition") continue
-        await applyLifecycleVerdict(ctx, run, verdict, resolved, now)
+        await applyLifecycleVerdict(ctx, currentRun, verdict, resolved, now)
         await settleAuxiliaryRecordsForTerminalRun(
           ctx,
-          run,
+          currentRun,
           "generation worker lease expired",
           now
         )
@@ -2537,7 +2581,20 @@ export async function reapExpiredToolApprovalsPass(
       if (approval.expiresAt === undefined || approval.expiresAt > now) {
         continue
       }
-      if (await expireToolApprovalForChat(ctx, approval, now, "reaper")) {
+      const run = await ctx.db.get(approval.runId)
+      if (!run) continue
+      const chat = await ctx.db.get(run.chatId)
+      if (!chat || !(await isChatActive(ctx, chat))) continue
+      const currentApproval = await ctx.db.get(approval._id)
+      if (
+        currentApproval &&
+        (await expireToolApprovalForChat(
+          ctx,
+          currentApproval,
+          now,
+          "reaper"
+        ))
+      ) {
         expired++
       }
     }

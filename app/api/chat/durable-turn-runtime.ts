@@ -1311,7 +1311,9 @@ export function createConvexDurableTurn(args: {
             ...snapshotArgs,
           }).then(
             (written) => {
-              perfSession?.counter("accepted")
+              const result = (written as { result?: { deduped?: boolean } })
+                ?.result
+              perfSession?.counter(result?.deduped ? "deduped" : "accepted")
               return written
             },
             (error: unknown) => {

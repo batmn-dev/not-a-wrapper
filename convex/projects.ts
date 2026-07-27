@@ -1,16 +1,17 @@
 import { v } from "convex/values"
 import { internal } from "./_generated/api"
+import type { Doc } from "./_generated/dataModel"
 import {
   internalMutation,
   internalQuery,
   type MutationCtx,
 } from "./_generated/server"
+import { ensureProjectDeletionJob } from "./domain/chat_deletion"
+import { newestLinkedChat } from "./domain/chat_project_link"
 import {
   getProjectModifiedAt,
   patchProjectActivity,
 } from "./domain/project_activity"
-import { createChatOwnedDeletion } from "./domain/chat_owned_deletion"
-import { newestLinkedChat } from "./domain/chat_project_link"
 import {
   authenticatedMutation,
   maybeAuthQuery,
@@ -29,6 +30,7 @@ export const getForCurrentUser = maybeAuthQuery({
     return await ctx.db
       .query("projects")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .filter((q) => q.eq(q.field("deletingAt"), undefined))
       .collect()
   },
 })
@@ -43,6 +45,7 @@ export const getById = maybeAuthQuery({
     const project = await ctx.db.get(projectId)
     if (!project) return null
     if (!ctx.user || project.userId !== ctx.user._id) return null
+    if (project.deletingAt !== undefined) return null
     return project
   },
 })
@@ -59,6 +62,7 @@ export const getByIdWithOwner = internalQuery({
   handler: async (ctx, { projectId }) => {
     const project = await ctx.db.get(projectId)
     if (!project) return null
+    if (project.deletingAt !== undefined) return null
 
     // Get the owner's WorkOS user ID for ownership verification
     const owner = await ctx.db.get(project.userId)
@@ -136,6 +140,7 @@ export async function backfillUpdatedAtBatch(
   let batchPatched = 0
 
   for (const project of projects.page) {
+    if (project.deletingAt !== undefined) continue
     const newestChat = await newestLinkedChat(ctx, project)
     const updatedAt = Math.max(
       getProjectModifiedAt(project),
@@ -182,11 +187,26 @@ export const backfillUpdatedAt = internalMutation({
   handler: backfillUpdatedAtBatch,
 })
 
-/** Delete a Project after deleting every complete Chat graph it owns. */
+export async function removeProjectForOwner(
+  ctx: MutationCtx & { project: Doc<"projects">; user: Doc<"users"> }
+): Promise<void> {
+  const now = Date.now()
+  await ctx.db.patch(ctx.project._id, {
+    deletingAt: now,
+    updatedAt: now,
+  })
+  const job = await ensureProjectDeletionJob(ctx, ctx.project, ctx.user)
+  await ctx.scheduler.runAfter(
+    0,
+    internal.deletionCleanup.runDeletionBatch,
+    {
+      jobId: job._id,
+    }
+  )
+}
+
+/** Logically delete a Project and schedule its bounded physical drain. */
 export const remove = ownedProjectMutation({
   args: {},
-  handler: async (ctx) => {
-    await createChatOwnedDeletion(ctx).deleteChatsForProject(ctx.project)
-    await ctx.db.delete(ctx.project._id)
-  },
+  handler: async (ctx) => removeProjectForOwner(ctx),
 })

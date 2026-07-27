@@ -22,6 +22,7 @@ import { recordChatActivity } from "./domain/project_activity"
 import {
   getAuthorizedChatForRead,
   getCurrentUser,
+  isChatActive,
   requireOwnedChat,
 } from "./lib/auth"
 import { ownedChatMutation, readableChatQuery } from "./lib/authedFunctions"
@@ -126,7 +127,7 @@ export async function getPublicForChatHandler(
   { chatId }: { chatId: Id<"chats"> }
 ) {
   const chat = await ctx.db.get(chatId)
-  if (!chat || !chat.public) return []
+  if (!chat || !chat.public || !(await isChatActive(ctx, chat))) return []
 
   const messages = await listMessagesByChatOrder(ctx, chatId)
   return stripRunLinkageForViewer(

@@ -29,4 +29,10 @@ crons.interval(
   {}
 )
 
+crons.interval(
+  "reconcile stalled deletion jobs",
+  { minutes: 10 },
+  internal.deletionCleanup.reconcileStalledDeletionJobs
+)
+
 export default crons

@@ -2,6 +2,7 @@ import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx, QueryCtx } from "../_generated/server"
 
 type ConvexCtx = QueryCtx | MutationCtx
+type ChatActivityCtx = Pick<QueryCtx, "db">
 
 export type AuthenticatedChatOwner = {
   user: Doc<"users">
@@ -15,6 +16,58 @@ export type AuthenticatedChatOwner = {
  */
 export type AuthenticatedRunOwner = AuthenticatedChatOwner & {
   run: Doc<"generationRuns">
+}
+
+/** A chat is active when neither it nor its linked project is being deleted.
+ * The project read is required so tombstoning a project instantly revokes
+ * every linked chat without patching children. Fail closed on a dangling
+ * projectId (same policy as chat_project_link). */
+export function isChatDocActive(chat: Doc<"chats">): boolean {
+  return chat.deletingAt === undefined
+}
+
+export async function isChatActive(
+  ctx: ChatActivityCtx,
+  chat: Doc<"chats">
+): Promise<boolean> {
+  if (!isChatDocActive(chat)) return false
+  if (!chat.projectId) return true
+  const project = await ctx.db.get(chat.projectId)
+  return project !== null && project.deletingAt === undefined
+}
+
+/**
+ * Parent-aware projection for bounded Chat result sets. Project ids are
+ * de-duplicated so a page containing siblings reads each logical root once;
+ * missing projects fail closed like `isChatActive`.
+ */
+export async function filterActiveChats(
+  ctx: ChatActivityCtx,
+  chats: readonly Doc<"chats">[]
+): Promise<Doc<"chats">[]> {
+  const rootActiveChats = chats.filter(isChatDocActive)
+  const projectIds = [
+    ...new Set(
+      rootActiveChats.flatMap((chat) =>
+        chat.projectId ? [chat.projectId] : []
+      )
+    ),
+  ]
+  const projects = await Promise.all(
+    projectIds.map(async (projectId) => await ctx.db.get(projectId))
+  )
+  const activeProjectIds = new Set(
+    projects
+      .filter(
+        (project): project is Doc<"projects"> =>
+          project !== null && project.deletingAt === undefined
+      )
+      .map((project) => project._id)
+  )
+
+  return rootActiveChats.filter(
+    (chat) => !chat.projectId || activeProjectIds.has(chat.projectId)
+  )
 }
 
 async function getUserByWorkosSubject(ctx: ConvexCtx, subject: string) {
@@ -80,6 +133,7 @@ export async function getAuthorizedChatForRead(
 ): Promise<Doc<"chats"> | null> {
   const chat = await ctx.db.get(chatId)
   if (!chat) return null
+  if (!(await isChatActive(ctx, chat))) return null
   if (chat.public) return chat
 
   const user = await getCurrentUser(ctx)
@@ -99,6 +153,7 @@ export async function requireOwnedChat(
   if (chat.userId !== user._id) {
     throw new Error("Not authorized")
   }
+  if (!(await isChatActive(ctx, chat))) throw new Error("Chat not found")
 
   return { user, chat }
 }
@@ -133,6 +188,7 @@ export async function requireOwnedGenerationRun(
 
   const chat = await ctx.db.get(run.chatId)
   if (!chat || chat.userId !== user._id) throw new Error("Run not found")
+  if (!(await isChatActive(ctx, chat))) throw new Error("Run not found")
 
   return { user, chat, run }
 }
@@ -151,6 +207,7 @@ export async function requireOwnedProject(
   if (!user || project.userId !== user._id) {
     throw new Error("Not authorized")
   }
+  if (project.deletingAt !== undefined) throw new Error("Project not found")
 
   return { user, project }
 }

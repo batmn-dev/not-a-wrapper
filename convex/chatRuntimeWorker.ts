@@ -110,6 +110,17 @@ export async function requireGrantAuthorizedRun(
     throw grantRejection("grant_unauthorized")
   }
 
+  // Root tombstone revokes every outstanding grant without scanning runs. OCC
+  // orders the race: if deletion commits first, this read sees the marker and
+  // rejects; if the worker write commits first, the deletion mutation retries.
+  if (chat.deletingAt !== undefined) throw grantRejection("grant_unauthorized")
+  if (chat.projectId) {
+    const project = await ctx.db.get(chat.projectId)
+    if (!project || project.deletingAt !== undefined) {
+      throw grantRejection("grant_unauthorized")
+    }
+  }
+
   return { user, chat, run }
 }
 

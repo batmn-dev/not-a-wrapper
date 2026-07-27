@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx } from "../_generated/server"
 import {
+  filterActiveChats,
   getAuthorizedChatForRead,
   getCurrentUser,
   requireCurrentUser,
@@ -161,6 +162,60 @@ function createCtx({
 }
 
 describe("Convex auth helpers", () => {
+  describe("Chat activity projection", () => {
+    it("filters child and parent tombstones while de-duplicating project reads", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const activeProject = createProject("project_active", owner._id)
+      const deletingProject = {
+        ...createProject("project_deleting", owner._id),
+        deletingAt: 2,
+      }
+      const personal = createChat("chat_personal", owner._id)
+      const activeSiblings = [
+        {
+          ...createChat("chat_active_1", owner._id),
+          projectId: activeProject._id,
+        },
+        {
+          ...createChat("chat_active_2", owner._id),
+          projectId: activeProject._id,
+        },
+      ]
+      const projectDeleting = {
+        ...createChat("chat_project_deleting", owner._id),
+        projectId: deletingProject._id,
+      }
+      const rootDeleting = {
+        ...createChat("chat_root_deleting", owner._id),
+        deletingAt: 3,
+      }
+      const dangling = {
+        ...createChat("chat_dangling", owner._id),
+        projectId: asId<"projects">("project_missing"),
+      }
+      const reads: string[] = []
+      const ctx = createCtx({
+        projects: [activeProject, deletingProject],
+        onDbGet: (id) => reads.push(id),
+      })
+
+      await expect(
+        filterActiveChats(ctx, [
+          personal,
+          ...activeSiblings,
+          projectDeleting,
+          rootDeleting,
+          dangling,
+        ])
+      ).resolves.toEqual([personal, ...activeSiblings])
+      expect(reads).toEqual([
+        activeProject._id,
+        deletingProject._id,
+        dangling.projectId,
+      ])
+    })
+  })
+
   describe("current user lookup", () => {
     it.each([
       {
@@ -278,6 +333,17 @@ describe("Convex auth helpers", () => {
     }
   )
 
+  it("returns null for a tombstoned public chat just like a missing chat", async () => {
+    const owner = createUser("user_1", "workos_owner")
+    const chat = {
+      ...createChat("chat_1", owner._id, true),
+      deletingAt: 2,
+    }
+    const ctx = createCtx({ users: [owner], chats: [chat] })
+
+    await expect(getAuthorizedChatForRead(ctx, chat._id)).resolves.toBeNull()
+  })
+
   describe("owned chat requirement", () => {
     it.each([
       {
@@ -359,6 +425,28 @@ describe("Convex auth helpers", () => {
         user: owner,
         chat,
       })
+    })
+
+    it("rejects a chat whose linked project is tombstoned as missing", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const project = {
+        ...createProject("project_1", owner._id),
+        deletingAt: 2,
+      }
+      const chat = {
+        ...createChat("chat_1", owner._id),
+        projectId: project._id,
+      }
+      const ctx = createCtx({
+        identitySubject: owner.workosUserId,
+        users: [owner],
+        chats: [chat],
+        projects: [project],
+      })
+
+      await expect(requireOwnedChat(ctx, chat._id)).rejects.toThrow(
+        "Chat not found"
+      )
     })
   })
 
@@ -443,6 +531,23 @@ describe("Convex auth helpers", () => {
         user: owner,
         project,
       })
+    })
+
+    it("rejects a tombstoned project as missing", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const project = {
+        ...createProject("project_1", owner._id),
+        deletingAt: 2,
+      }
+      const ctx = createCtx({
+        identitySubject: owner.workosUserId,
+        users: [owner],
+        projects: [project],
+      })
+
+      await expect(requireOwnedProject(ctx, project._id)).rejects.toThrow(
+        "Project not found"
+      )
     })
   })
 
@@ -625,6 +730,25 @@ describe("Convex auth helpers", () => {
         chat,
         run,
       })
+    })
+
+    it("rejects a run whose chat is tombstoned as missing", async () => {
+      const owner = createUser("user_1", "workos_owner")
+      const chat = {
+        ...createChat("chat_1", owner._id),
+        deletingAt: 2,
+      }
+      const run = createGenerationRun("run_1", chat._id, owner._id)
+      const ctx = createCtx({
+        identitySubject: owner.workosUserId,
+        users: [owner],
+        chats: [chat],
+        generationRuns: [run],
+      })
+
+      await expect(requireOwnedGenerationRun(ctx, run._id)).rejects.toThrow(
+        "Run not found"
+      )
     })
   })
 })

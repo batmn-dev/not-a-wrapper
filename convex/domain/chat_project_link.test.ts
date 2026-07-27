@@ -65,18 +65,45 @@ function createCtx(documents: {
             },
           }
           buildQuery(query)
-          const matching = () =>
-            chats.filter((document) => document.projectId === projectId)
+          let results = chats.filter(
+            (document) => document.projectId === projectId
+          )
 
-          return {
-            collect: async () => matching(),
-            take: async (limit: number) => matching().slice(0, limit),
-            order: () => ({
-              first: async () =>
-                [...matching()].sort((a, b) => b.updatedAt - a.updatedAt)[0] ??
-                null,
-            }),
+          const resultApi = {
+            filter: (
+              buildFilter: (query: {
+                eq: (fieldName: unknown, value: unknown) => boolean
+                field: (fieldName: string) => string
+              }) => unknown
+            ) => {
+              let fieldName = ""
+              let expected: unknown
+              buildFilter({
+                field: (field) => {
+                  fieldName = field
+                  return field
+                },
+                eq: (_field, value) => {
+                  expected = value
+                  return true
+                },
+              })
+              results = results.filter(
+                (document) =>
+                  (document as unknown as Record<string, unknown>)[
+                    fieldName
+                  ] === expected
+              )
+              return resultApi
+            },
+            collect: async () => results,
+            take: async (limit: number) => results.slice(0, limit),
+            order: () => resultApi,
+            first: async () =>
+              [...results].sort((a, b) => b.updatedAt - a.updatedAt)[0] ??
+              null,
           }
+          return resultApi
         },
       }),
     },
