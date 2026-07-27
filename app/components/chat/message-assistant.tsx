@@ -85,8 +85,13 @@ export function MessageAssistant({
   // natural completion drains, and presentedLive keeps caret/footer/growing
   // classification alive until the drain finishes.
   const transportLive = status === "submitted" || status === "streaming"
+  // Every abnormal terminal — including the AI SDK's client-side "error"
+  // status — flushes instantly; only natural completion ("ready") drains.
   const settleMode =
-    status === "aborted" || status === "failed" || status === "awaiting_approval"
+    status === "aborted" ||
+    status === "failed" ||
+    status === "error" ||
+    status === "awaiting_approval"
       ? "immediate"
       : "drain"
   const reveal = usePresentationReveal({

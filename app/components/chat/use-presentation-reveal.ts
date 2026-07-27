@@ -33,7 +33,6 @@ import {
 } from "@/lib/observability/chat-performance-client"
 import {
   createStreamFadeRuntime,
-  NOOP_STREAM_FADE_RUNTIME,
   type StreamFadeRuntime,
 } from "@/lib/markdown/rehype-stream-fade"
 import {
@@ -73,7 +72,13 @@ export function usePresentationReveal(args: {
   settleMode: "drain" | "immediate" // how to finish when live flips false
   revealKey: string // messageId or reasoning entry id
   profile: RevealProfile
-}): { text: string; caughtUp: boolean; fadeRuntime: StreamFadeRuntime } {
+}): {
+  text: string
+  caughtUp: boolean
+  /** Undefined whenever the reveal is disengaged (history rows, reduced
+   * motion): no runtime → no plugin → zero reveal structure in the DOM. */
+  fadeRuntime: StreamFadeRuntime | undefined
+} {
   const { text, live, settleMode, revealKey, profile } = args
   // Subscribed so toggling the OS setting mid-stream takes effect live.
   const reducedMotion = useSyncExternalStore(
@@ -88,6 +93,7 @@ export function usePresentationReveal(args: {
   const backstopRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const phaseRef = useRef<RevealPhase>("streaming")
   const settleStartedAtRef = useRef<number | null>(null)
+  const pendingCommitMarkRef = useRef(false)
   const textRef = useRef(text)
   textRef.current = text
   const profileRef = useRef(profile)
@@ -109,6 +115,12 @@ export function usePresentationReveal(args: {
       backstopRef.current = null
     }
     const canonical = textRef.current
+    if (entry.state.displayedEnd >= canonical.length) {
+      // Already caught up: nothing snaps in, so don't arm the runtime's
+      // one-shot snap — it would suppress the first fade of text that
+      // arrives after (e.g. hiding a drained tab, then returning).
+      return
+    }
     entry.state = createCaughtUpRevealState(canonical)
     entry.runtime.prune(null)
     entry.runtime.snap()
@@ -128,11 +140,13 @@ export function usePresentationReveal(args: {
       phaseRef.current
     )
     entry.state = result.state
+    if (result.lagSnapped) {
+      // Hard lag cap jumped the frontier: the jumped-over text must render
+      // already-revealed — no fade births for this commit's words.
+      entry.runtime.snap()
+    }
     if (result.shouldCommit) {
-      markRevealCommit(
-        result.state.displayedEnd,
-        entry.state.canonical.length - result.state.displayedEnd
-      )
+      pendingCommitMarkRef.current = true
       setDisplayed(entry.state.canonical.slice(0, result.state.displayedEnd))
     }
     if (result.caughtUp) {
@@ -185,9 +199,21 @@ export function usePresentationReveal(args: {
       phaseRef.current = live ? "streaming" : "settling"
       const target = text.slice(0, state.displayedEnd)
       if (displayed !== target) setDisplayed(target)
+    } else if (displayed !== "" && !text.startsWith(displayed)) {
+      // Render-phase resync (assistant-ui): a same-key correction/shrink
+      // must never paint the stale displayed text against the new
+      // canonical — the always-prefix invariant holds within this very
+      // render, not one effect later. A live row restarts from empty; a
+      // settling row shows the corrected canonical instantly.
+      entry.state = live
+        ? createRevealState(text, true)
+        : createCaughtUpRevealState(text)
+      entry.runtime.prune(null)
+      if (!live) entry.runtime.snap()
+      setDisplayed(live ? "" : text)
     } else if (!live && settleMode === "immediate" && displayed !== text) {
-      // Abnormal terminal (Stop/failure/approval): the full text must land
-      // in the SAME commit as the terminal banner — snap during render.
+      // Abnormal terminal (Stop/failure/approval/error): the full text must
+      // land in the SAME commit as the terminal banner — snap during render.
       entry.state = createCaughtUpRevealState(text)
       entry.runtime.prune(null)
       entry.runtime.snap()
@@ -295,6 +321,20 @@ export function usePresentationReveal(args: {
     }
   }, [live, displayed, text])
 
+  // reveal_commit fires post-commit (from the effect the committed
+  // `displayed` value triggers), matching this seam's documented timing —
+  // marks measure commit time, not scheduling time.
+  useEffect(() => {
+    if (!pendingCommitMarkRef.current) return
+    pendingCommitMarkRef.current = false
+    const entry = entryRef.current
+    if (!entry) return
+    markRevealCommit(
+      entry.state.displayedEnd,
+      Math.max(0, entry.state.canonical.length - entry.state.displayedEnd)
+    )
+  }, [displayed])
+
   useEffect(
     () => () => {
       // Refs must be nulled, not just cancelled: under StrictMode's
@@ -314,10 +354,12 @@ export function usePresentationReveal(args: {
   )
 
   if (!engaged) {
+    // No runtime at all: the Markdown pipeline installs no plugin, so a
+    // reduced-motion or never-live row carries zero reveal structure.
     return {
       text,
       caughtUp: true,
-      fadeRuntime: NOOP_STREAM_FADE_RUNTIME,
+      fadeRuntime: undefined,
     }
   }
   return {

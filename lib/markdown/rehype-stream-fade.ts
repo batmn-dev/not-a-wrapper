@@ -66,20 +66,21 @@ export function createStreamFadeRuntime() {
   return {
     /**
      * Assigns monotonically chained births to the words revealed by this
-     * commit. An unchanged `(blockKey, revealedWordCount)` is a no-op
-     * (StrictMode double render); a shrunk count is a block reset (snap).
+     * commit. A count at or below the block's high-water mark is a no-op:
+     * StrictMode double renders repeat the same count, and append-only
+     * Markdown growth can SHRINK the rendered word count (emphasis/link
+     * syntax characters vanish when their closer arrives) — resetting
+     * births there would rewrite every span's delay and restart the whole
+     * block's fades. Kept births are approximate for re-indexed words;
+     * approximate phase is invisible, a mass restart is not.
      */
     noteCommit(
       blockKey: string,
       revealedWordCount: number,
       nowMs: number
     ): void {
-      let block = ensure(blockKey)
-      if (revealedWordCount === block.wordCount) return
-      if (revealedWordCount < block.wordCount) {
-        blocks.delete(blockKey)
-        block = ensure(blockKey)
-      }
+      const block = ensure(blockKey)
+      if (revealedWordCount <= block.wordCount) return
       if (snapPending) {
         // Snapped-in text (hidden tab, mid-stream adoption, terminal flush)
         // renders already revealed: births are back-dated past the fade so
@@ -118,9 +119,13 @@ export function createStreamFadeRuntime() {
     },
 
     /**
-     * Write-once frozen style per `(blockKey, wordIndex)`: elapsed fades get
-     * the revealed class with no style; in-flight (or future-born) words get
-     * `animation-delay: -elapsed` so re-renders and remounts resume the fade.
+     * Frozen-while-in-flight style per `(blockKey, wordIndex)`: an active
+     * fade's `animation-delay` is never recomputed (a rewritten value
+     * restarts the animation on a live node), but once the fade window has
+     * elapsed the entry UPGRADES to the terminal revealed style — a
+     * finished animation sits at opacity 1 either way, and the upgrade is
+     * what lets the plugin unwrap elapsed words and keeps a late-remounted
+     * span from replaying an old fade phase.
      */
     styleFor(
       blockKey: string,
@@ -129,8 +134,20 @@ export function createStreamFadeRuntime() {
     ): StreamFadeStyle {
       const block = ensure(blockKey)
       const cached = block.styles.get(wordIndex)
-      if (cached) return cached
-      const birth = block.births[wordIndex] ?? nowMs
+      if (cached) {
+        if (!cached.style) return cached // terminal: revealed is permanent
+        const birth = block.births[wordIndex] ?? nowMs
+        if (nowMs - birth < FADE_MS) return cached // in flight: frozen
+        block.styles.set(wordIndex, REVEALED_STYLE)
+        return REVEALED_STYLE
+      }
+      let birth = block.births[wordIndex]
+      if (birth === undefined) {
+        // Unknown word (count drift): born now, recorded so the upgrade
+        // check above has a birth to age against.
+        birth = nowMs
+        block.births[wordIndex] = birth
+      }
       const elapsed = nowMs - birth
       const result: StreamFadeStyle =
         elapsed >= FADE_MS
@@ -153,14 +170,6 @@ export function createStreamFadeRuntime() {
       }
     },
   }
-}
-
-/** Inert runtime for the reduced-motion / non-live short-circuit paths. */
-export const NOOP_STREAM_FADE_RUNTIME: StreamFadeRuntime = {
-  noteCommit: () => {},
-  styleFor: () => REVEALED_STYLE,
-  snap: () => {},
-  prune: () => {},
 }
 
 /** Elements whose subtrees must never receive fade spans. */
@@ -212,10 +221,13 @@ function countWords(value: string): number {
 }
 
 /**
- * Wraps the word segments of one block's text nodes in fade spans.
- * Whitespace segments stay plain text nodes (selection/copy fidelity).
- * Word indexes run in document order across the whole block, matching the
- * counting pass that feeds `noteCommit`.
+ * Wraps the word segments of one block's text nodes in fade spans — but
+ * ONLY words whose fade is in flight or scheduled. Words whose fade has
+ * already elapsed render as plain text (merged with whitespace), so the
+ * span count is bounded by the births of the last fade window + the birth
+ * cap, independent of block length. Whitespace stays plain text
+ * (selection/copy fidelity). Word indexes run in document order across the
+ * whole block, matching the counting pass that feeds `noteCommit`.
  */
 export function rehypeStreamFade(options: {
   runtime: StreamFadeRuntime
@@ -237,26 +249,32 @@ export function rehypeStreamFade(options: {
     visitTextNodes(tree, (parent, node, index) => {
       const pieces: ElementContent[] = []
       let hasSpan = false
+      const pushText = (value: string) => {
+        const last = pieces[pieces.length - 1]
+        if (last && last.type === "text") {
+          last.value += value
+        } else {
+          pieces.push({ type: "text", value })
+        }
+      }
       for (const segment of wordSegmenter().segment(node.value)) {
         if (!/\S/.test(segment.segment)) {
-          const last = pieces[pieces.length - 1]
-          if (last && last.type === "text") {
-            last.value += segment.segment
-          } else {
-            pieces.push({ type: "text", value: segment.segment })
-          }
+          pushText(segment.segment)
+          continue
+        }
+        const style = runtime.styleFor(blockKey, wordIndex++, nowMs)
+        if (!style.style) {
+          // Fade already elapsed: plain text, no span retained.
+          pushText(segment.segment)
           continue
         }
         hasSpan = true
-        const style = runtime.styleFor(blockKey, wordIndex++, nowMs)
         pieces.push({
           type: "element",
           tagName: "span",
           properties: {
             className: style.className.split(" "),
-            ...(style.style
-              ? { style: `animation-delay:${style.style.animationDelay}` }
-              : {}),
+            style: `animation-delay:${style.style.animationDelay}`,
           },
           children: [{ type: "text", value: segment.segment }],
         })

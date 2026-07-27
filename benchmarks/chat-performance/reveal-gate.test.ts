@@ -330,7 +330,11 @@ describe("presentation-reveal merge gate (§9)", () => {
     // Fence interiors commit once per canonical notification (~20/s) by
     // decision #5 — the same per-notification render cost as the pre-reveal
     // baseline for code; prose around the fence stays gate-limited.
-    expect(m.commitsPerSecond).toBeLessThanOrEqual(THROTTLE_MS / 2 + 1) // ≤26
+    const canonicalNotificationsPerSecond = 1000 / THROTTLE_MS // 20/s
+    const proseCommitMargin = 6
+    expect(m.commitsPerSecond).toBeLessThanOrEqual(
+      canonicalNotificationsPerSecond + proseCommitMargin
+    )
     expect(m.drainMs).toBeLessThanOrEqual(500)
   })
 

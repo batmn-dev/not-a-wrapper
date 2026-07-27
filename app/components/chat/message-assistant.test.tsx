@@ -671,7 +671,7 @@ describe("MessageAssistant presentation reveal (ADR-0015)", () => {
 
   function renderRow(args: {
     children: string
-    status: "streaming" | "ready" | "aborted"
+    status: "streaming" | "ready" | "aborted" | "error"
     isLast?: boolean
   }) {
     const chatStatus = args.status === "streaming" ? "streaming" : "ready"
@@ -706,6 +706,22 @@ describe("MessageAssistant presentation reveal (ADR-0015)", () => {
     })
     expect(container?.textContent).toContain("unrevealed tail")
     expect(container?.textContent).toContain("Generation stopped.")
+  })
+
+  it("client error status flushes instantly, like every abnormal terminal", () => {
+    renderRow({ children: "Partial answer", status: "streaming" })
+    renderRow({
+      children: "Partial answer plus an error-time tail",
+      status: "streaming",
+    })
+    expect(container?.textContent).not.toContain("error-time tail")
+    // The AI SDK's client-side "error" status must snap in the same
+    // commit — never drain through rAF (which may not be running).
+    renderRow({
+      children: "Partial answer plus an error-time tail",
+      status: "error",
+    })
+    expect(container?.textContent).toContain("error-time tail")
   })
 
   it("footer actions wait for the reveal drain after natural completion", () => {

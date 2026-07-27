@@ -274,9 +274,17 @@ export function advanceReveal(
   nowMs: number,
   profile: RevealProfile,
   phase: RevealPhase
-): { state: RevealState; shouldCommit: boolean; caughtUp: boolean } {
+): {
+  state: RevealState
+  shouldCommit: boolean
+  caughtUp: boolean
+  /** True when the hard lag cap jumped the frontier: the jumped-over text
+   * must render already-revealed (no fade births) — callers arm the fade
+   * runtime's snap for the resulting commit. */
+  lagSnapped: boolean
+} {
   if (!state.live) {
-    return { state, shouldCommit: false, caughtUp: true }
+    return { state, shouldCommit: false, caughtUp: true, lagSnapped: false }
   }
   const length = canonical.length
   const prevDisplayedEnd = state.displayedEnd
@@ -329,13 +337,15 @@ export function advanceReveal(
 
   // Hard lag cap: if the max drain rate cannot clear the backlog within
   // maxLagMs, jump the frontier so projected lag equals maxLagMs. The
-  // jumped-over text renders as already revealed (no fade births for it —
-  // the fade runtime's birth cap bounds what a huge commit can schedule).
+  // jumped-over text renders as already revealed — `lagSnapped` tells the
+  // caller to arm the fade runtime's snap so no fade births are assigned.
+  let lagSnapped = false
   const maxClearableChars = Math.floor(
     profile.maxCharsPerFrame * (profile.maxLagMs / FRAME_MS)
   )
   if (length - frontier > maxClearableChars) {
     frontier = length - maxClearableChars
+    lagSnapped = true
   }
 
   // Word clamp on the segmenter window; end-of-text is a boundary only when
@@ -419,6 +429,7 @@ export function advanceReveal(
     },
     shouldCommit,
     caughtUp,
+    lagSnapped,
   }
 }
 

@@ -100,14 +100,60 @@ describe("rehypeStreamFade placement", () => {
   })
 })
 
+describe("rehypeStreamFade span bound", () => {
+  it("unwraps elapsed words: spans exist only while a fade is in flight", () => {
+    const runtime = createStreamFadeRuntime()
+    const tree = root(paragraph("old words already elapsed plus fresh"))
+    // Six words: five born long ago, the sixth mid-fade "now" — the plugin
+    // transform (which calls noteCommit with the CURRENT count) must keep
+    // only in-flight words wrapped, so span count tracks recent births, not
+    // block length.
+    runtime.noteCommit("block-0", 5, performance.now() - 5000)
+    rehypeStreamFade({ runtime, blockKey: "block-0" })(tree)
+    const p = tree.children[0] as Element
+    expect(spansOf(p)).toHaveLength(1)
+    const flattened = p.children
+      .map((child) =>
+        child.type === "text"
+          ? child.value
+          : ((child as Element).children[0] as Text).value
+      )
+      .join("")
+    expect(flattened).toBe("old words already elapsed plus fresh")
+  })
+})
+
 describe("birth timeline runtime", () => {
-  it("freezes styles per word: identical object identity across repeated reads", () => {
+  it("freezes in-flight styles, then upgrades to revealed once the fade elapses", () => {
     const runtime = createStreamFadeRuntime()
     runtime.noteCommit("block-0", 2, 1000)
     const first = runtime.styleFor("block-0", 1, 1050)
-    const again = runtime.styleFor("block-0", 1, 1300) // much later
-    expect(again).toBe(first) // write-once: never recomputed
     expect(first.style?.animationDelay).toBeDefined()
+    // While the fade is in flight the object is frozen — re-reads must not
+    // rewrite animation-delay on a live node.
+    expect(runtime.styleFor("block-0", 1, 1100)).toBe(first)
+    // Once elapsed, the entry upgrades: a finished animation sits at
+    // opacity 1 either way, and elapsed words can unwrap / remount without
+    // replaying a stale fade phase.
+    const late = runtime.styleFor("block-0", 1, 1400)
+    expect(late.className).toBe("stream-word stream-word-revealed")
+    expect(late.style).toBeUndefined()
+    expect(runtime.styleFor("block-0", 1, 2000)).toBe(late)
+  })
+
+  it("treats a shrunk rendered word count as a no-op, never a reset", () => {
+    const runtime = createStreamFadeRuntime()
+    runtime.noteCommit("block-0", 4, 1000)
+    const frozen = runtime.styleFor("block-0", 1, 1010)
+    // Append-only Markdown growth can shrink the RENDERED word count when
+    // emphasis/link syntax closes; births and frozen styles must survive
+    // or every span's delay would rewrite and the whole block would
+    // re-fade.
+    runtime.noteCommit("block-0", 3, 1050)
+    expect(runtime.styleFor("block-0", 1, 1060)).toBe(frozen)
+    // Regrowth past the high-water mark chains new births normally.
+    runtime.noteCommit("block-0", 6, 1100)
+    expect(runtime.styleFor("block-0", 5, 1100).className).toBe("stream-word")
   })
 
   it("emits negative delays for mid-fade words and no style once elapsed", () => {

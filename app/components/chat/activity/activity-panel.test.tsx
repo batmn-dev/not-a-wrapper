@@ -384,13 +384,14 @@ describe("ActivityPanel coexistence (R6)", () => {
       })
     }
 
-    // Text present at mount adopts instantly; the running entry renders it
-    // through the fade pipeline (spans exist, born already revealed).
+    // Text present at mount adopts instantly with zero reveal structure —
+    // adopted words are born already-revealed and the plugin leaves elapsed
+    // words as plain text.
     renderReasoning("Considering the options carefully.", "running")
     expect(document.body.textContent).toContain(
       "Considering the options carefully."
     )
-    expect(document.querySelectorAll(".stream-word").length).toBeGreaterThan(0)
+    expect(document.querySelectorAll(".stream-word")).toHaveLength(0)
 
     // Growth after mount reveals word-by-word on frames (reasoning profile).
     renderReasoning(
@@ -408,8 +409,9 @@ describe("ActivityPanel coexistence (R6)", () => {
       })
     }
     // The trailing partial word ("now.") is held until settle; the rest of
-    // the appended sentence reveals on frames.
+    // the appended sentence reveals on frames, with in-flight fade spans.
     expect(document.body.textContent).toContain("Weighing the tradeoffs")
+    expect(document.querySelectorAll(".stream-word").length).toBeGreaterThan(0)
 
     // Completion settles the entry: the reveal drains (settle phase frames
     // release the held tail) and the fade wrappers unwrap — zero spans.

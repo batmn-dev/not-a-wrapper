@@ -12,7 +12,6 @@ import {
   PROSE_REVEAL_PROFILE,
   type RevealProfile,
 } from "@/lib/chat-performance/presentation-reveal"
-import { NOOP_STREAM_FADE_RUNTIME } from "@/lib/markdown/rehype-stream-fade"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import {
@@ -143,7 +142,7 @@ describe("usePresentationReveal", () => {
     render({ text: "history text", live: false })
     expect(latest.result?.text).toBe("history text")
     expect(latest.result?.caughtUp).toBe(true)
-    expect(latest.result?.fadeRuntime).toBe(NOOP_STREAM_FADE_RUNTIME)
+    expect(latest.result?.fadeRuntime).toBeUndefined() // no runtime → no plugin
     expect(rafCallbacks.size).toBe(0)
   })
 
@@ -234,14 +233,36 @@ describe("usePresentationReveal", () => {
     expect(rafCallbacks.size).toBe(0)
   })
 
-  it("reduced motion short-circuits: canonical text, no rAF, noop runtime", () => {
+  it("reduced motion short-circuits: canonical text, no rAF, no runtime at all", () => {
     matchMediaMatches = true
     render({ text: "", live: true })
     render({ text: "Streaming with reduced motion.", live: true })
     expect(latest.result?.text).toBe("Streaming with reduced motion.")
     expect(latest.result?.caughtUp).toBe(true)
-    expect(latest.result?.fadeRuntime).toBe(NOOP_STREAM_FADE_RUNTIME)
+    // Undefined (not a noop object): Markdown must install NO plugin, so a
+    // reduced-motion stream carries zero .stream-word structure.
+    expect(latest.result?.fadeRuntime).toBeUndefined()
     expect(rafCallbacks.size).toBe(0)
+  })
+
+  it("never renders stale text on a same-key non-prefix correction", () => {
+    render({ text: "", live: true })
+    render({ text: "Original words revealed ", live: true })
+    flushFrames(8)
+    expect(latest.result?.text).toBe("Original words revealed")
+    // The correction replaces canonical entirely. The very first committed
+    // render must already satisfy the prefix invariant (render-phase
+    // resync) — a live row restarts from empty, never paints "Original…".
+    render({ text: "Corrected text", live: true })
+    expect(latest.result?.text).toBe("")
+    flushFrames(8)
+    expect(latest.result?.text).toBe("Corrected ") // trailing word held
+
+    // A still-settling row (drain pending) snaps to the corrected
+    // canonical instantly instead of re-animating.
+    render({ text: "Corrected text", live: false })
+    render({ text: "Different final", live: false })
+    expect(latest.result?.text).toBe("Different final")
   })
 
   it("resets fully on revealKey change", () => {

@@ -104,11 +104,16 @@ describe("leading edge", () => {
 })
 
 describe("hard lag cap", () => {
-  it("jumps the frontier so projected lag equals maxLagMs", () => {
+  it("jumps the frontier so projected lag equals maxLagMs and reports the jump", () => {
     // maxCharsPerFrame 10 over maxLagMs 167 ≈ 100 clearable chars.
     const text = "hi " + "a".repeat(997)
     const result = tick(liveState(text), text, 0, { maxLagMs: 167 })
     expect(result.state.frontier).toBe(text.length - 100)
+    // Callers arm the fade runtime's snap from this: jumped-over text must
+    // render already-revealed, never as a wall of queued fades.
+    expect(result.lagSnapped).toBe(true)
+    const calm = tick(liveState("short text"), "short text", 0)
+    expect(calm.lagSnapped).toBe(false)
   })
 })
 
