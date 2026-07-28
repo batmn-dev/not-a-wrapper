@@ -1,9 +1,9 @@
 # Streaming Responsiveness and Convex Recovery Implementation Plan
 
-**Repository:** `darknightdesigner/not-a-wrapper`  
-**Prepared:** 2026-07-27  
-**Audience:** Senior design engineer or senior frontend/platform engineer  
-**Primary goals:** response speed, smooth text streaming, and appropriate use of Convex realtime
+- **Repository:** `darknightdesigner/not-a-wrapper`
+- **Prepared:** 2026-07-27
+- **Audience:** Senior design engineer or senior frontend/platform engineer
+- **Primary goals:** response speed, smooth text streaming, and appropriate use of Convex realtime
 
 ## 1. Mission
 

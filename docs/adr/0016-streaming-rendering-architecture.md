@@ -54,18 +54,28 @@ Convex → reactive run/message projection
 
 ### Incremental Markdown projection (`lib/markdown/incremental-block-projection.ts`)
 
-Ordinary append-only growth re-parses only the mutable tail from a
-blank-line-safe restart boundary (terminal block + one context block held
-mutable); identity changes, non-prefix corrections, and parser drift reset
-with all-new block identities; settlement runs one authoritative full parse,
-verifies equivalence against the incremental result, and freezes every
-block. Block identities are monotonic per lineage, so completed blocks never
-re-key, re-parse, or re-render during growth. The remark/unified pipeline
-stays the single semantic authority; the legacy full splitter remains as the
+Ordinary append-only growth re-parses only the mutable tail TOGETHER with
+the trailing stable context blocks (at least two, extended backward to a
+blank-line-preceded block start). A blank line is deliberately NOT trusted
+as a parser reset point — the 2026-07-27 review proved parser state crosses
+it in this remark stack (an indented code block changes how the next block
+parses; footnote definitions absorb later indented content). Correctness
+rests on context reproduction: every re-parsed context block must come back
+byte-identical, otherwise the update falls back to the authoritative full
+parse with a counted `context-divergence` reason. Identity changes,
+non-prefix corrections, and parser drift reset with all-new block
+identities; settlement runs one authoritative full parse, verifies
+equivalence against the incremental result, and freezes every block. Block
+identities are monotonic per lineage, so completed blocks never re-key,
+re-parse, or re-render during growth. The remark/unified pipeline stays the
+single semantic authority; the legacy full splitter remains as the
 reference implementation, reset/settlement path, and test oracle. A
-25-fixture corpus (streamed char-by-char and at seeded random chunk
-boundaries) proves block-for-block equality with the full parser at every
-prefix; anomalies (reset/fallback/settle-mismatch) emit content-free marks.
+30-fixture corpus — including the parser-state counterexamples — streams
+char-by-char and at seeded random chunk boundaries, proving block-for-block
+equality with the full parser at every prefix, and a rendered-DOM corpus
+compares the streamed tree against a fresh authoritative mount at sampled
+mid-stream prefixes and settlement. Anomalies (reset/fallback/
+settle-mismatch) emit content-free marks.
 
 ### Lazy Shiki (`lib/markdown/shiki-client.ts`)
 
@@ -78,12 +88,16 @@ Shiki bytes. The 300 ms growing-block highlight throttle is unchanged.
 
 ### Notification cadence
 
-`CHAT_MESSAGE_THROTTLE_MS = 32` (was 50). With tail-proportional rendering,
-measured per-notification commit cost is ~1–3 ms at every accumulated size;
-32 ms takes ~3.8% of stream main-thread time on the 100 chunks/s replay
-while roughly doubling visible text granularity vs 50 ms. Unthrottled
-measured ~11% — viable on fast hardware but without slow-device headroom.
-The value is a code constant, not a flag.
+`CHAT_MESSAGE_THROTTLE_MS` stays **50 ms**. With tail-proportional
+rendering, the deterministic jsdom replay measures per-notification commit
+cost at ~1–3 ms at every candidate (unthrottled/16/32/50 ms) — the
+renderer no longer needs the throttle to survive, and 32 ms or 16 ms are
+live candidates. But the selection rule requires production-browser paint
+traces (12 KB/100 KB/code payloads, composer typing, autoscroll, 4× CPU)
+before changing a production cadence, and those traces have not been
+collected; jsdom has no layout or paint. The candidate measurement stays in
+CI as a long-task canary; lowering the constant is a follow-up gated on the
+browser matrix. The value is a code constant, not a flag.
 
 ### Provider smoothing
 
@@ -100,15 +114,17 @@ this client path, and never to conceal renderer slowness.
 - Its adaptive scheduler needed terminal flush paths (Stop/error/approval/
   hidden-tab) that re-implemented settlement concerns in the presentation
   layer.
-- After PR B–D, raw deltas at 32 ms paint smoothly; the problem the reveal
-  solved no longer exists. A mutable-tail-only CSS fade (plan PR F) remains
+- After PR B/C, per-notification rendering is cheap enough to present raw
+  deltas directly; the renderer-slowness problem the reveal compensated for
+  no longer exists. A mutable-tail-only CSS fade (plan PR F) remains
   available if a future visual-quality gate fails, but is deliberately
   omitted now.
 
 ## Consequences
 
-- Per-update Markdown work is proportional to the mutable tail: 88.6 ms →
-  0.23 ms per update on a ~100 KB response (M4 Max harness), removing the
+- Per-update Markdown work is proportional to the mutable region plus the
+  verified context: 88.6 ms → ~0.4 ms per update on a ~100 KB response
+  (236×, M4 Max Node harness, context verification included), removing the
   long-task-per-notification failure class at its root.
 - The renderer no longer needs protecting: the throttle is a smoothness/
   batching choice, not a survival mechanism.

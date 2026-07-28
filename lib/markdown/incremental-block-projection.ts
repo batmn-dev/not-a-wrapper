@@ -20,19 +20,30 @@
  *   (previous, source, streaming, identity), so React may call it from any
  *   render path (StrictMode double render, interrupted transitions) safely.
  *
- * Safe restart boundary: the fast path re-parses `source.slice(offset)` where
- * `offset` is the start of a top-level block that is preceded by a blank line
- * (or offset 0). At such a boundary the CommonMark block parser is in its
- * initial state — no paragraph/lazy continuation, setext underline, table
- * delimiter, open fence, container stack, or HTML block can span it — so the
- * standalone tail parse reproduces the full parse exactly. Constructs whose
- * effects can reach BACKWARD from appended text (paragraph/lazy continuation,
- * setext underlines, table delimiter rows, list/blockquote item merges,
- * closing fences) only ever affect the terminal blocks, which stay inside the
- * mutable window. Constructs with document-wide RENDER semantics (reference
- * link definitions, footnote definitions) do not move block boundaries, and
- * the renderer already processes each block in isolation, so per-block
- * rendering is unchanged from the legacy splitter by construction.
+ * Restart safety: a blank-line-preceded top-level block start is NOT by
+ * itself a safe parser restart point for this remark stack — parser state
+ * can survive a blank line. Two verified carriers: an indented code block
+ * leaves "may still continue" state that changes how the NEXT block parses
+ * (`\tcode\n\n2. two\n===` parses the tail as setext heading + paragraph in
+ * context but as one list standalone), and a footnote definition absorbs
+ * later indented content across blank lines. Both reach exactly one block
+ * forward (any intervening block clears them — verified empirically).
+ *
+ * The fast path therefore re-parses the tail TOGETHER with the trailing
+ * stable context blocks (at least `MIN_CONTEXT_BLOCKS`, extended backward
+ * to a blank-line-preceded start) and requires every context block to
+ * re-parse byte-identically. Context reproduction is checked on every
+ * update: if appended text — through any state carrier, known or unknown —
+ * changes how the context region parses, the update falls back to the
+ * authoritative full parse with a counted `context-divergence` reason
+ * instead of committing a divergent tail. Constructs whose effects reach
+ * backward from appended text within the mutable window (paragraph/lazy
+ * continuation, setext underlines, table delimiter rows, list merges,
+ * closing fences) are re-parsed as part of the tail. Constructs with
+ * document-wide RENDER semantics (reference link definitions) do not move
+ * block boundaries, and the renderer already processes each block in
+ * isolation, so per-block rendering is unchanged from the legacy splitter
+ * by construction.
  */
 import remarkGfm from "remark-gfm"
 import remarkMath, { type Options as RemarkMathOptions } from "remark-math"
@@ -63,10 +74,26 @@ const markdownProcessor = unified()
  * How many trailing blocks stay mutable during streaming. The terminal block
  * is where growth lands; the immediately preceding block is kept mutable as
  * the conservative ambiguity window the plan requires (setext underlines,
- * table delimiter rows, and list merges all reach at most one block back,
- * and the equivalence corpus is the proof this window is sufficient).
+ * table delimiter rows, and list merges all reach at most one block back).
+ * The window is NOT the correctness mechanism — context reproduction below
+ * is; the window only bounds how much re-renders churn.
  */
 export const MUTABLE_BLOCK_WINDOW = 2
+
+/**
+ * How many trailing STABLE blocks are re-parsed with the tail as verified
+ * context. Both known cross-blank-line state carriers reach one block
+ * forward; two blocks gives one block of margin, and the byte-identical
+ * reproduction check (not this constant) is what correctness rests on.
+ */
+export const MIN_CONTEXT_BLOCKS = 2
+
+/**
+ * Bound on how far the context start may walk backward looking for a
+ * blank-line-preceded block start before giving up and taking the
+ * authoritative full parse instead.
+ */
+const MAX_CONTEXT_WALK = 8
 
 export type MarkdownProjectionBlock = {
   /** Exact source slice for this block (what the per-block renderer parses). */
@@ -105,6 +132,7 @@ export type MarkdownProjectionResetReason =
 export type MarkdownProjectionFallbackReason =
   | "no-safe-restart-boundary"
   | "tail-misaligned"
+  | "context-divergence"
 
 export type MarkdownProjectionResult = {
   state: MarkdownProjectionState
@@ -502,24 +530,9 @@ export function advanceMarkdownProjection(args: {
     })
   }
 
-  // --- Append-only fast path ------------------------------------------------
-  const restartOffset = previous.mutableStartOffset
-  if (!isSafeRestartBoundary(source, restartOffset)) {
-    // The stored offset is safe by construction; this guards state produced
-    // by older versions or hand-built test states.
-    return fullParseResult({
-      source,
-      streaming,
-      identity,
-      previous,
-      reset: false,
-      resetReason: null,
-      fallbackReason: "no-safe-restart-boundary",
-    })
-  }
-
+  // --- Append-only fast path (context-verified tail parse) ------------------
   const stablePrefix = previous.blocks.filter(
-    (block) => block.endOffset <= restartOffset
+    (block) => block.endOffset <= previous.mutableStartOffset
   )
   if (stablePrefix.length !== previous.stableCount) {
     // Stable bookkeeping does not line up with the restart offset — treat as
@@ -535,8 +548,75 @@ export function advanceMarkdownProjection(args: {
     })
   }
 
-  const tail = source.slice(restartOffset)
-  const tailRaw = splitWithProcessor(tail, restartOffset)
+  // Choose where the mini-parse starts: at least MIN_CONTEXT_BLOCKS stable
+  // blocks before the mutable region, extended backward until the start is
+  // blank-line preceded (or the document start). The context blocks are
+  // re-parsed alongside the tail and must reproduce EXACTLY — that check,
+  // not the boundary choice, carries correctness.
+  let contextStartIndex = Math.max(0, previous.stableCount - MIN_CONTEXT_BLOCKS)
+  let walked = 0
+  while (contextStartIndex > 0) {
+    const start = previous.blocks[contextStartIndex]?.startOffset
+    if (start !== undefined && isSafeRestartBoundary(source, start)) break
+    contextStartIndex--
+    walked++
+    if (walked > MAX_CONTEXT_WALK) {
+      return fullParseResult({
+        source,
+        streaming,
+        identity,
+        previous,
+        reset: false,
+        resetReason: null,
+        fallbackReason: "no-safe-restart-boundary",
+      })
+    }
+  }
+  const parseOffset =
+    contextStartIndex === 0
+      ? 0
+      : (previous.blocks[contextStartIndex]?.startOffset ?? 0)
+  const contextBlocks = previous.blocks.slice(
+    contextStartIndex,
+    previous.stableCount
+  )
+
+  const parsed = splitWithProcessor(source.slice(parseOffset), parseOffset)
+
+  // Context reproduction check: every context block must come back with the
+  // same type, offsets, and text. A mismatch means parser state beyond the
+  // context window influenced this region (or appended text reached further
+  // back than the mutable window) — take the authoritative parse instead of
+  // committing a divergent tail.
+  let contextReproduced = parsed.length >= contextBlocks.length
+  if (contextReproduced) {
+    for (let i = 0; i < contextBlocks.length; i++) {
+      const before = contextBlocks[i]!
+      const after = parsed[i]!
+      if (
+        before.startOffset !== after.startOffset ||
+        before.endOffset !== after.endOffset ||
+        before.nodeType !== after.nodeType ||
+        before.text !== after.text
+      ) {
+        contextReproduced = false
+        break
+      }
+    }
+  }
+  if (!contextReproduced) {
+    return fullParseResult({
+      source,
+      streaming,
+      identity,
+      previous,
+      reset: false,
+      resetReason: null,
+      fallbackReason: "context-divergence",
+    })
+  }
+
+  const tailRaw = parsed.slice(contextBlocks.length)
 
   // The previous mutable blocks, aligned positionally with the re-parsed
   // tail for identity reconciliation.
@@ -552,7 +632,7 @@ export function advanceMarkdownProjection(args: {
     source,
     blocks,
     stablePrefix.length,
-    restartOffset
+    previous.mutableStartOffset
   )
 
   return {
@@ -570,7 +650,7 @@ export function advanceMarkdownProjection(args: {
     resetReason: null,
     fallbackReason: null,
     settleMismatch: false,
-    parsedCharacters: tail.length,
+    parsedCharacters: source.length - parseOffset,
     reusedBlockCount: stablePrefix.length + reconciled.reusedBlockCount,
     changedBlockCount: reconciled.changedBlockCount,
   }

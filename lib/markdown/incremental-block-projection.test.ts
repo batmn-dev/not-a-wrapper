@@ -338,11 +338,13 @@ describe("resets and lifecycle", () => {
     expect(continued.state.blocks[0]?.id).toBe(state.blocks[0]?.id)
   })
 
-  it("falls back with a counted reason instead of trusting a bad restart offset", () => {
+  it("falls back with a counted reason instead of trusting corrupted stable bookkeeping", () => {
     const state = primed()
     const sabotaged: MarkdownProjectionState = {
       ...state,
-      // Point the restart offset mid-paragraph (not blank-line preceded).
+      // Claim one stable block but point the restart offset mid-paragraph:
+      // the stable-prefix check cannot line up.
+      stableCount: 1,
       mutableStartOffset: 3,
     }
     const result = advanceMarkdownProjection({
@@ -351,10 +353,35 @@ describe("resets and lifecycle", () => {
       streaming: true,
       identity: IDENTITY,
     })
-    expect(result.fallbackReason).toBe("no-safe-restart-boundary")
+    expect(result.fallbackReason).toBe("tail-misaligned")
     expect(rawView(result.state.blocks)).toEqual(
       splitMarkdownSource(start + " more")
     )
+  })
+
+  it("live-corrects the review's parser-state counterexample without divergence", () => {
+    // 2026-07-27 review P1: `2. two\n===\n=` after an indented code block
+    // parses as heading + paragraph in context but as one list standalone.
+    // The context-verified tail parse must match the authoritative parser at
+    // every step — never commit the standalone (list) reading.
+    const before = "\tindented\n\n2. two\n===\n="
+    const after = before + "="
+    const state = advanceMarkdownProjection({
+      previous: null,
+      source: before,
+      streaming: true,
+      identity: IDENTITY,
+    }).state
+    const result = advanceMarkdownProjection({
+      previous: state,
+      source: after,
+      streaming: true,
+      identity: IDENTITY,
+    })
+    expect(rawView(result.state.blocks)).toEqual(splitMarkdownSource(after))
+    expect(
+      result.state.blocks.map((block) => block.nodeType)
+    ).toEqual(["code", "heading", "paragraph"])
   })
 })
 

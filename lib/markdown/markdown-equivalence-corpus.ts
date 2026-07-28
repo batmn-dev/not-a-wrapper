@@ -249,6 +249,49 @@ const headingAfterParagraphNoBlank = `Paragraph immediately followed by
 
 const shortProse = `Short prose answer that stays a single growing paragraph, with *light* emphasis and a trailing clause that arrives token by token.`
 
+// --- Cross-blank-line parser-state carriers (2026-07-27 review defect) ------
+// An indented code block leaves "may continue" state that flips how the NEXT
+// block parses: after it, `2. two` + a setext underline parse as heading +
+// paragraph, while the identical text parses as ONE list standalone. The
+// original tab-indented `=`-tail case below is the review's live-DOM
+// reproduction; the variants pin the space-indented form, the `1.` control
+// (which stays a list), and deeper documents where the carrier block is
+// already stable.
+
+const indentedCodeOrderedSetextTab = "\tindented\n\n2. two\n===\n=="
+
+const indentedCodeOrderedSetextSpaces = `    indented code line
+
+2. two
+===
+==`
+
+const indentedCodeOrderedListControl = `\tindented
+
+1. one
+===
+==`
+
+const indentedCodeCarrierDeep = `First paragraph long settled.
+
+Second paragraph settled.
+
+    indented code block
+
+2. two
+===
+== and a growing tail`
+
+const footnoteIndentedContinuation = `Intro paragraph.
+
+[^note]: definition first line
+
+    indented continuation that belongs to the footnote
+
+    second continuation chunk
+
+After the footnote.`
+
 export const EQUIVALENCE_FIXTURES: EquivalenceFixture[] = [
   { name: "paragraph-continuation", source: paragraphContinuation, charByChar: true },
   { name: "headings-atx-setext", source: headings, charByChar: true },
@@ -275,6 +318,11 @@ export const EQUIVALENCE_FIXTURES: EquivalenceFixture[] = [
   { name: "footnotes", source: footnotes, charByChar: true },
   { name: "heading-no-blank-line", source: headingAfterParagraphNoBlank, charByChar: true },
   { name: "short-prose", source: shortProse, charByChar: true },
+  { name: "indented-code-ordered-setext-tab", source: indentedCodeOrderedSetextTab, charByChar: true },
+  { name: "indented-code-ordered-setext-spaces", source: indentedCodeOrderedSetextSpaces, charByChar: true },
+  { name: "indented-code-ordered-list-control", source: indentedCodeOrderedListControl, charByChar: true },
+  { name: "indented-code-carrier-deep", source: indentedCodeCarrierDeep, charByChar: true },
+  { name: "footnote-indented-continuation", source: footnoteIndentedContinuation, charByChar: true },
 ]
 
 /** mulberry32 — matches the benchmark fixtures' deterministic PRNG. */

@@ -35,6 +35,15 @@ export type ShikiClientTheme = "github-dark" | "github-light"
 const LANGUAGE_LOADERS = {
   c: () => import("@shikijs/langs/c"),
   cpp: () => import("@shikijs/langs/cpp"),
+  // Embedded grammars of the historical eager set: the old highlighter
+  // registered these transitively (cpp → cpp-macro/glsl, ruby → haml,
+  // javascript → regexp), so fences using them highlighted. Kept as
+  // first-class loadable ids so that surface does not silently regress
+  // (2026-07-27 review P2).
+  "cpp-macro": () => import("@shikijs/langs/cpp-macro"),
+  glsl: () => import("@shikijs/langs/glsl"),
+  haml: () => import("@shikijs/langs/haml"),
+  regexp: () => import("@shikijs/langs/regexp"),
   csharp: () => import("@shikijs/langs/csharp"),
   css: () => import("@shikijs/langs/css"),
   diff: () => import("@shikijs/langs/diff"),
@@ -79,6 +88,11 @@ const LANGUAGE_ALIASES: Record<string, ShikiSupportedLanguage> = {
   "c++": "cpp",
   cs: "csharp",
   "c#": "csharp",
+  cjs: "javascript",
+  mjs: "javascript",
+  cts: "typescript",
+  mts: "typescript",
+  regex: "regexp",
   docker: "dockerfile",
   golang: "go",
   gql: "graphql",

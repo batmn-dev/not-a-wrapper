@@ -138,7 +138,11 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
     ),
   },
   markdown_projection_fallback: {
-    reason: oneOf("no-safe-restart-boundary", "tail-misaligned"),
+    reason: oneOf(
+      "no-safe-restart-boundary",
+      "tail-misaligned",
+      "context-divergence"
+    ),
   },
   markdown_projection_settle_mismatch: {},
   // --- client navigation marks (plan PR 0 step 3) ---

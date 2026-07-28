@@ -30,6 +30,30 @@ describe("resolveShikiLanguage", () => {
     expect(resolveShikiLanguage("Python")).toBe("python")
   })
 
+  it("covers the ENTIRE historical eager-highlighter language surface", () => {
+    // Enumerated 2026-07-27 from the pre-PR-C highlighter:
+    // createHighlighter({ langs: <the 35-id DEFAULT_LANGS> }) followed by
+    // getLoadedLanguages() — grammar ids, their aliases, AND transitively
+    // embedded grammars (cpp → cpp-macro/glsl, ruby → haml, js → regexp).
+    // Every id that highlighted before the lazy service must still resolve
+    // to a loadable grammar, never to plain text (2026-07-27 review P2).
+    const historicalSurface = [
+      "bash", "c", "c#", "c++", "cjs", "cpp", "cpp-macro", "cs", "csharp",
+      "css", "cts", "diff", "docker", "dockerfile", "glsl", "go", "gql",
+      "graphql", "haml", "html", "ini", "java", "javascript", "js", "json",
+      "jsx", "kotlin", "kt", "kts", "lua", "make", "makefile", "markdown",
+      "md", "mjs", "mts", "perl", "php", "powershell", "properties", "ps",
+      "ps1", "py", "python", "rb", "regex", "regexp", "rs", "ruby", "rust",
+      "scala", "sh", "shell", "shellscript", "sql", "swift", "toml", "ts",
+      "tsx", "typescript", "xml", "yaml", "yml", "zsh",
+    ]
+    for (const id of historicalSurface) {
+      expect(resolveShikiLanguage(id), `lost language id: ${id}`).not.toBe(
+        "text"
+      )
+    }
+  })
+
   it("resolves plain and unknown ids to text", () => {
     expect(resolveShikiLanguage(undefined)).toBe("text")
     expect(resolveShikiLanguage("")).toBe("text")

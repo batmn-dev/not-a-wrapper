@@ -213,7 +213,11 @@ type MarkdownProjectionAnomalySource = {
     | "source-shrunk"
     | "source-diverged"
     | null
-  fallbackReason: "no-safe-restart-boundary" | "tail-misaligned" | null
+  fallbackReason:
+    | "no-safe-restart-boundary"
+    | "tail-misaligned"
+    | "context-divergence"
+    | null
   settleMismatch: boolean
 }
 
