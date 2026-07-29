@@ -15,7 +15,6 @@ import {
   type DurableWorkerWire,
   type ToolFacts,
 } from "./durable-turn-runtime"
-import { createWordChunkingTransform } from "./word-chunking-transform"
 
 // ---------------------------------------------------------------------------
 // Durable turn runtime — the interface IS the test surface (ADR-0009/0011).
@@ -359,93 +358,6 @@ describe("durable turn runtime — handoff loud-miss", () => {
 })
 
 describe("durable turn runtime — settlement ordering", () => {
-  it("cancels word pacing mid-drain before approval and persists exactly the emitted prefix", async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(0)
-
-    const { turn, wire } = await makePreparedTurn()
-    const binding = turn.bind(makeToolFacts())
-    const baselineTimerCount = vi.getTimerCount()
-    const approvalChunk = {
-      type: "tool-approval-request",
-      approvalId: "approval-after-text",
-      toolCall: {
-        toolCallId: "call-after-text",
-        toolName: "send_email",
-        input: { to: "x@example.com" },
-      },
-    } as unknown as TextStreamPart<ToolSet>
-    const slab =
-      "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu"
-    const source = new ReadableStream<TextStreamPart<ToolSet>>({
-      start(controller) {
-        controller.enqueue({ type: "text-delta", id: "t1", text: slab })
-        controller.enqueue(approvalChunk)
-        controller.close()
-      },
-    })
-    const transformed = source
-      .pipeThrough(
-        createWordChunkingTransform<ToolSet>()({
-          tools: {},
-          stopStream: () => {},
-        })
-      )
-      .pipeThrough(
-        binding.streamTextExtras.experimental_transform!({
-          tools: {},
-          stopStream: () => {},
-        } as never)
-      )
-    const reader = transformed.getReader()
-
-    const first = await reader.read()
-    expect(first.done).toBe(false)
-    expect(first.value?.type).toBe("text-delta")
-    const displayedText =
-      first.value?.type === "text-delta" ? first.value.text : ""
-    expect(displayedText).toBe("alpha ")
-    expect(vi.getTimerCount()).toBeGreaterThan(baselineTimerCount)
-
-    // This is the transform-level equivalent of UI Stop: cancellation flows
-    // backward through approval persistence into the pacing transform. The
-    // remaining words and the later approval request must never surface.
-    await reader.cancel("user stop")
-    await vi.advanceTimersByTimeAsync(0)
-    expect(vi.getTimerCount()).toBe(baselineTimerCount)
-    expect(wireCalls(wire, "createToolApprovalRequest")).toHaveLength(0)
-
-    // The prefix was already emitted before Stop, so it is canonical input to
-    // the durability plane even though the paced suffix was discarded.
-    binding.stream.onChunk(first.value as TextStreamPart<ToolSet>)
-    await vi.advanceTimersByTimeAsync(0)
-    await binding.stream.onAbort("stream aborted")
-    const responseMessage = {
-      id: "msg1",
-      role: "assistant",
-      parts: [{ type: "text", text: displayedText }],
-      metadata: {},
-    } as unknown as UIMessage
-    const receipt = await binding.envelope.settle({
-      responseMessage,
-      isAborted: true,
-      finishReason: "stop",
-    })
-
-    expect(receipt).toMatchObject({
-      status: "confirmed",
-      runId: "run1",
-      outcome: "aborted",
-    })
-    const finalSnapshot = wireCalls(wire, "updateAssistantSnapshot").at(-1)
-    expect(finalSnapshot?.args).toMatchObject({
-      textSnapshot: displayedText,
-      partsSnapshot: responseMessage.parts,
-    })
-    expect(wireCalls(wire, "createToolApprovalRequest")).toHaveLength(0)
-    expect(vi.getTimerCount()).toBe(0)
-  })
-
   it("settles approvals → flushes → final full-parts snapshot → completes, awaiting the approval write", async () => {
     const approvalDeferred = createDeferred<undefined>()
     const wire = makeRecordingWire({

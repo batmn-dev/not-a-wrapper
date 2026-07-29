@@ -128,9 +128,12 @@ below 24 chars pass through untouched and synchronously (word-granular
 providers pay nothing), and only oversized slabs are word-split, paced
 against the provider's own observed inter-delta gap so added latency stays
 bounded below one gap (≤ 360 ms). Text deltas only; abort cancels all
-pacing immediately. Wire-verified per provider: OpenAI 188 deltas/med 5
-chars (pass-through), Anthropic Haiku 154 deltas/med 6 chars (was ~16
-slabs of ~360), Gemini 153 deltas/med 5 chars.
+pacing immediately through the runtime execution signal and emits the abort
+terminal itself when the provider has already filled AI SDK's upstream queue.
+That explicit terminal prevents a stopped mid-drain slab from closing as a
+successful completion. Wire-verified per provider: OpenAI 188 deltas/med 5
+chars (pass-through), Anthropic Haiku 154 deltas/med 6 chars (was ~16 slabs of
+~360), Gemini 153 deltas/med 5 chars.
 
 ### Growing single-block shapes (amendment, 2026-07-28)
 

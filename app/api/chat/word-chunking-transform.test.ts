@@ -152,4 +152,43 @@ describe("createWordChunkingTransform", () => {
       vi.useRealTimers()
     }
   })
+
+  it("drops the queued suffix and clears pacing when execution aborts", async () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(0)
+      const execution = new AbortController()
+      const transform = createWordChunkingTransform<ToolSet>(execution.signal)({
+        tools: {},
+        stopStream: () => undefined,
+      })
+      const writer = transform.writable.getWriter()
+      const reader = transform.readable.getReader()
+      const slab = textDelta(
+        Array.from({ length: 20 }, (_, i) => `w${i}`).join(" ")
+      )
+
+      const writePromise = writer.write(slab)
+      const first = await reader.read()
+      await writePromise
+      expect(first.value).toMatchObject({ type: "text-delta", text: "w0 " })
+      expect(vi.getTimerCount()).toBe(1)
+
+      execution.abort(new Error("run stopped"))
+      await vi.advanceTimersByTimeAsync(0)
+      await writer.close().catch(() => undefined)
+
+      expect(vi.getTimerCount()).toBe(0)
+      await expect(reader.read()).resolves.toEqual({
+        done: false,
+        value: { type: "abort", reason: "stream aborted" },
+      })
+      await expect(reader.read()).resolves.toEqual({
+        done: true,
+        value: undefined,
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

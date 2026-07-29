@@ -50,9 +50,9 @@ export function splitIntoWordChunks(text: string): string[] {
   return text.match(/\S+\s*|\s+/g) ?? [text]
 }
 
-export function createWordChunkingTransform<
-  TOOLS extends ToolSet,
->(): StreamTextTransform<TOOLS> {
+export function createWordChunkingTransform<TOOLS extends ToolSet>(
+  abortSignal?: AbortSignal
+): StreamTextTransform<TOOLS> {
   return () => {
     let cancelled = false
     let lastDeltaArrivedAtMs: number | null = null
@@ -63,6 +63,37 @@ export function createWordChunkingTransform<
       arrivedAtMs: number
     }[] = []
     let drainPromise: Promise<void> | null = null
+    let abortListenerAttached = false
+    let streamController:
+      TransformStreamDefaultController<TextStreamPart<TOOLS>> | undefined
+
+    const removeAbortListener = () => {
+      if (!abortListenerAttached || !abortSignal) return
+      abortSignal.removeEventListener("abort", handleExecutionAbort)
+      abortListenerAttached = false
+    }
+
+    const cancelDrain = (emitAbort: boolean) => {
+      if (cancelled) return
+      cancelled = true
+      pending.length = 0
+      wake?.()
+      removeAbortListener()
+      if (emitAbort && streamController) {
+        // The provider may already have filled streamText's upstream queue
+        // while this transform is still pacing. In that state AI SDK's own
+        // abort observer has no remaining upstream pull on which to emit its
+        // abort part, so this transform must terminalize its delayed output
+        // explicitly instead of closing as a successful completion.
+        streamController.enqueue({
+          type: "abort",
+          reason: "stream aborted",
+        })
+        streamController.terminate()
+      }
+    }
+
+    const handleExecutionAbort = () => cancelDrain(true)
 
     const sleep = (ms: number) =>
       new Promise<void>((resolve) => {
@@ -137,6 +168,19 @@ export function createWordChunkingTransform<
       TextStreamPart<TOOLS>,
       TextStreamPart<TOOLS>
     > & { cancel: () => void } = {
+      start(controller) {
+        streamController = controller
+        if (!abortSignal) return
+        if (abortSignal.aborted) {
+          handleExecutionAbort()
+          return
+        }
+        abortSignal.addEventListener("abort", handleExecutionAbort, {
+          once: true,
+        })
+        abortListenerAttached = true
+      },
+
       transform(part, controller) {
         if (cancelled) return
         pending.push({ part, arrivedAtMs: Date.now() })
@@ -144,13 +188,15 @@ export function createWordChunkingTransform<
       },
 
       async flush() {
-        while (drainPromise) await drainPromise
+        try {
+          while (drainPromise) await drainPromise
+        } finally {
+          removeAbortListener()
+        }
       },
 
       cancel() {
-        cancelled = true
-        pending.length = 0
-        wake?.()
+        cancelDrain(false)
       },
     }
 

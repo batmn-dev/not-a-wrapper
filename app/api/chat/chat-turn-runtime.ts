@@ -1196,10 +1196,10 @@ export function createChatTurnRuntime(args: {
         experimental_transform: lifecycle.streamTextExtras
           .experimental_transform
           ? [
-              createWordChunkingTransform(),
+              createWordChunkingTransform(executionSignal),
               lifecycle.streamTextExtras.experimental_transform,
             ]
-          : createWordChunkingTransform(),
+          : createWordChunkingTransform(executionSignal),
 
         onChunk: ({ chunk }) => {
           const now = Date.now()

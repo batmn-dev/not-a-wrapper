@@ -8,7 +8,10 @@ import {
 import { LOCAL_CHAT_ID_PREFIX } from "@/lib/chat-store/identity"
 import { isSelectedPathDivergent } from "@/lib/chat-store/turns/selected-path"
 import type { ChatTurnMessage } from "@/lib/chat-turn/turn-plans"
-import { markChatPerf } from "@/lib/observability/chat-performance"
+import {
+  markChatPerf,
+  type DetachedBindingGaugeEvent,
+} from "@/lib/observability/chat-performance"
 import { takeChatPerfHeader } from "@/lib/observability/chat-performance-client"
 import {
   DefaultChatTransport,
@@ -171,15 +174,7 @@ function classifyBindingChat(
 }
 
 function emitBindingGauge(
-  event:
-    | "created"
-    | "detached"
-    | "adopted"
-    | "readopted"
-    | "readopt_rejected_divergent"
-    | "finished_attached"
-    | "finished_detached"
-    | "watchdog_stop",
+  event: DetachedBindingGaugeEvent,
   chatId: string | null
 ) {
   markChatPerf("detached_binding_gauge", {

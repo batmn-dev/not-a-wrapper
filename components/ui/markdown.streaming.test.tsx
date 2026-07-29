@@ -465,25 +465,31 @@ describe("Markdown terminal-block stability (plan PR 3)", () => {
     )
   })
 
-  it("keeps punctuated language ids identical while growing and settled", async () => {
-    const view = mount("```c++\nint main() { return 0; }", true)
-    await advance(10)
+  it.each([
+    { language: "c++", label: "C++", code: "int main() { return 0; }" },
+    { language: "c#", label: "C#", code: 'Console.WriteLine("hi");' },
+  ])(
+    "keeps $language identical while growing and settled",
+    async ({ language, label, code }) => {
+      const view = mount(`\`\`\`${language}\n${code}`, true)
+      await advance(10)
 
-    const growingBlock = container?.querySelector(".markdown-code-block")
-    expect(growingBlock?.className).toContain("language-c++")
-    expect(growingBlock?.textContent).toContain("C++")
-    await advance(GROWING_HIGHLIGHT_IDLE_MS + 10)
-    expect(shikiMock.highlightCode).toHaveBeenLastCalledWith(
-      expect.objectContaining({ language: "c++" })
-    )
+      const growingBlock = container?.querySelector(".markdown-code-block")
+      expect(growingBlock?.className).toContain(`language-${language}`)
+      expect(growingBlock?.textContent).toContain(label)
+      await advance(GROWING_HIGHLIGHT_IDLE_MS + 10)
+      expect(shikiMock.highlightCode).toHaveBeenLastCalledWith(
+        expect.objectContaining({ language })
+      )
 
-    view.rerender("```c++\nint main() { return 0; }\n```\n", false)
-    await advance(10)
-    const settledBlock = container?.querySelector(".markdown-code-block")
-    expect(settledBlock?.className).toContain("language-c++")
-    expect(settledBlock?.textContent).toContain("C++")
-    expect(shikiMock.highlightCode).toHaveBeenLastCalledWith(
-      expect.objectContaining({ language: "c++" })
-    )
-  })
+      view.rerender(`\`\`\`${language}\n${code}\n\`\`\`\n`, false)
+      await advance(10)
+      const settledBlock = container?.querySelector(".markdown-code-block")
+      expect(settledBlock?.className).toContain(`language-${language}`)
+      expect(settledBlock?.textContent).toContain(label)
+      expect(shikiMock.highlightCode).toHaveBeenLastCalledWith(
+        expect.objectContaining({ language })
+      )
+    }
+  )
 })

@@ -3,6 +3,7 @@ import {
   CHAT_PERF_ID_HEADER,
   createChatPerfCorrelationId,
   createChatPerfServerSession,
+  DETACHED_BINDING_GAUGE_EVENTS,
   getChatPerfServerSampleRate,
   isChatPerfClientEnabled,
   markChatPerf,
@@ -126,22 +127,16 @@ describe("event schema allow-list", () => {
     expect(
       validateChatPerfEvent("checkpoint", { kind: "attempt", payloadBytes: 91 })
     ).toEqual({ ok: true })
-    expect(
-      validateChatPerfEvent("detached_binding_gauge", {
-        event: "created",
-        attachedCount: 1,
-        detachedCount: 0,
-        bindingClass: "durable",
-      })
-    ).toEqual({ ok: true })
-    expect(
-      validateChatPerfEvent("detached_binding_gauge", {
-        event: "readopt_rejected_divergent",
-        attachedCount: 1,
-        detachedCount: 1,
-        bindingClass: "durable",
-      })
-    ).toEqual({ ok: true })
+    for (const event of DETACHED_BINDING_GAUGE_EVENTS) {
+      expect(
+        validateChatPerfEvent("detached_binding_gauge", {
+          event,
+          attachedCount: 1,
+          detachedCount: event === "detached" ? 1 : 0,
+          bindingClass: "durable",
+        })
+      ).toEqual({ ok: true })
+    }
   })
 })
 

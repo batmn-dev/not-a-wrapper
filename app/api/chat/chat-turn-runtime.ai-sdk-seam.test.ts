@@ -1,4 +1,5 @@
 import { api } from "@/convex/_generated/api"
+import { HEARTBEAT_INTERVAL_MS } from "@/convex/domain/generation_run_liveness"
 import { loadUserMcpTools } from "@/lib/mcp/load-tools"
 import { createLanguageModel } from "@/lib/openproviders/create-language-model"
 import {
@@ -184,6 +185,41 @@ function makeSlowTextModel() {
   })
 }
 
+const PACED_STOP_SLAB =
+  "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu"
+
+/**
+ * One coarse text slab followed by an approval-needing tool call. Runtime
+ * transform ordering keeps the later control part behind the paced text.
+ */
+function makePacedTextThenApprovalModel() {
+  return new MockLanguageModelV4({
+    doStream: async () => ({
+      stream: simulateReadableStream<LanguageModelV4StreamPart>({
+        chunks: [
+          { type: "stream-start", warnings: [] },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: PACED_STOP_SLAB },
+          { type: "text-end", id: "t1" },
+          {
+            type: "tool-call",
+            toolCallId: "call-after-text",
+            toolName: "scratch_pad",
+            input: JSON.stringify({ note: "must remain behind paced text" }),
+          },
+          {
+            type: "finish",
+            finishReason: { unified: "tool-calls", raw: "tool_use" },
+            usage: STEP_USAGE,
+          },
+        ],
+        initialDelayInMs: null,
+        chunkDelayInMs: null,
+      }),
+    }),
+  })
+}
+
 function makeReasoningModel() {
   return new MockLanguageModelV4({
     doStream: async () => ({
@@ -360,6 +396,22 @@ function wireCalls<Op extends DurableWorkerCall["op"]>(
   return wire.calls.filter(
     (call): call is Extract<DurableWorkerCall, { op: Op }> => call.op === op
   )
+}
+
+function extractTextDeltasFromSse(sse: string): string {
+  return sse
+    .split("\n")
+    .filter((line) => line.startsWith("data: ") && line !== "data: [DONE]")
+    .map((line) => JSON.parse(line.slice("data: ".length)) as unknown)
+    .filter(
+      (chunk): chunk is { type: "text-delta"; delta: string } =>
+        typeof chunk === "object" &&
+        chunk !== null &&
+        (chunk as { type?: unknown }).type === "text-delta" &&
+        typeof (chunk as { delta?: unknown }).delta === "string"
+    )
+    .map((chunk) => chunk.delta)
+    .join("")
 }
 
 function makeDeps(
@@ -584,5 +636,99 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     })
     expect(wireCalls(wire, "markGenerationRunAborted")).toHaveLength(0)
     expect(wireCalls(wire, "markGenerationRunFailed")).toHaveLength(0)
+  })
+
+  it("stops the real runtime mid-pacing with one displayed, canonical, and durable prefix", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(0)
+    try {
+      const { loadResult } = makeMcpToolsFixture()
+      vi.mocked(loadUserMcpTools).mockResolvedValue(
+        loadResult as unknown as Awaited<ReturnType<typeof loadUserMcpTools>>
+      )
+      vi.mocked(createLanguageModel).mockReturnValue(
+        makePacedTextThenApprovalModel() as unknown as ReturnType<
+          typeof createLanguageModel
+        >
+      )
+      const durableFetchMutation = makeDurableFetchMutation()
+      const calls: DurableWorkerCall[] = []
+      const stopAwareWire = (async (call: DurableWorkerCall) => {
+        calls.push(call)
+        return call.op === "heartbeatGenerationRun"
+          ? { result: { kind: "lost", reason: "stopped-by-user" } }
+          : undefined
+      }) as RecordingWire
+      stopAwareWire.calls = calls
+
+      const runtime = createChatTurnRuntime({
+        input: makeInput({ requestId: "req-seam-paced-stop" }),
+        deps: makeDeps(durableFetchMutation, stopAwareWire),
+      })
+      await runtime.prepare()
+
+      // Put the heartbeat — the durable worker's production Stop/supersession
+      // discovery path — five milliseconds away, then start the real response.
+      await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS - 5)
+      const response = runtime.toResponse(new AbortController().signal)
+      const reader = response.body!.getReader()
+      const decoder = new TextDecoder()
+      let sse = ""
+
+      // Consume independently from the runtime's SSE tee until the first paced
+      // word is genuinely visible on the response branch.
+      while (!sse.includes('"type":"text-delta"')) {
+        const next = await reader.read()
+        expect(next.done).toBe(false)
+        sse += decoder.decode(next.value, { stream: true })
+      }
+      expect(extractTextDeltasFromSse(sse)).toBe("alpha ")
+
+      // The heartbeat now reports Stop while the pacing timer is live. Real
+      // streamText aborts and cancels the remaining text before the queued
+      // approval request can cross its durable persistence boundary.
+      vi.advanceTimersByTime(5)
+      await Promise.resolve()
+      await Promise.resolve()
+      while (true) {
+        const next = await reader.read()
+        if (next.done) break
+        sse += decoder.decode(next.value, { stream: true })
+      }
+      sse += decoder.decode()
+
+      const displayedText = extractTextDeltasFromSse(sse)
+      expect(displayedText).toMatch(/^alpha (?:beta )?$/)
+      expect(PACED_STOP_SLAB.startsWith(displayedText)).toBe(true)
+      expect(displayedText).not.toContain("gamma")
+      expect(sse).toContain('"type":"abort"')
+      expect(sse).not.toContain("tool-approval-request")
+
+      await vi.waitFor(() => {
+        expect(
+          wireCalls(stopAwareWire, "markGenerationRunAborted")
+        ).toHaveLength(2)
+      })
+      const snapshotWrites = wireCalls(stopAwareWire, "updateAssistantSnapshot")
+      expect(snapshotWrites.length).toBeGreaterThanOrEqual(1)
+      expect(snapshotWrites.at(-1)?.args.textSnapshot).toBe(displayedText)
+      expect(
+        snapshotWrites.every((call) =>
+          displayedText.startsWith(call.args.textSnapshot)
+        )
+      ).toBe(true)
+      expect(
+        wireCalls(stopAwareWire, "createToolApprovalRequest")
+      ).toHaveLength(0)
+      expect(
+        wireCalls(stopAwareWire, "markGenerationRunCompleted")
+      ).toHaveLength(0)
+      expect(wireCalls(stopAwareWire, "markGenerationRunFailed")).toHaveLength(
+        0
+      )
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

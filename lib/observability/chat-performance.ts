@@ -105,6 +105,20 @@ export const CHAT_PERF_SPAN_NAMES = [
 
 export type ChatPerfSpanName = (typeof CHAT_PERF_SPAN_NAMES)[number]
 
+export const DETACHED_BINDING_GAUGE_EVENTS = [
+  "created",
+  "detached",
+  "adopted",
+  "readopted",
+  "readopt_rejected_divergent",
+  "finished_attached",
+  "finished_detached",
+  "watchdog_stop",
+] as const
+
+export type DetachedBindingGaugeEvent =
+  (typeof DETACHED_BINDING_GAUGE_EVENTS)[number]
+
 /**
  * Every event this module can emit, with its complete field allow-list.
  * A field absent here cannot be emitted; a string field that is not an
@@ -157,16 +171,7 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
     mappingDurationMs: NUMBER,
   },
   detached_binding_gauge: {
-    event: oneOf(
-      "created",
-      "detached",
-      "adopted",
-      "readopted",
-      "readopt_rejected_divergent",
-      "finished_attached",
-      "finished_detached",
-      "watchdog_stop"
-    ),
+    event: oneOf(...DETACHED_BINDING_GAUGE_EVENTS),
     attachedCount: NUMBER,
     detachedCount: NUMBER,
     bindingClass: oneOf("durable", "guest", "unowned"),
