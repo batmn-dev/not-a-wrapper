@@ -139,7 +139,9 @@ describe("streaming equivalence corpus", () => {
     })
   }
 
-  it("streams the concatenated corpus as one long document (seeded chunks)", () => {
+  // Heavy by design (4 seeded replays over the whole corpus); shared CI
+  // runners exceed the 5 s default. The bound is a ceiling, not a target.
+  it("streams the concatenated corpus as one long document (seeded chunks)", { timeout: 60_000 }, () => {
     const combined = EQUIVALENCE_FIXTURES.filter(
       // CRLF fixture excluded: concatenating mixed EOL styles creates
       // \r\n/\n islands no real stream produces; it has its own fixture.

@@ -111,7 +111,10 @@ describe("notification cadence candidates (measurement)", () => {
     ).IS_REACT_ACT_ENVIRONMENT = true
   })
 
-  it("measures per-notification commit cost at 0/16/32/50 ms and stays under the long-task bound", () => {
+  // Heavy by design (warm-up + 4 full cadence replays through the real
+  // pipeline, ~5 s even on fast hardware); shared CI runners exceed the 5 s
+  // default testTimeout. The bound is a ceiling, not a target.
+  it("measures per-notification commit cost at 0/16/32/50 ms and stays under the long-task bound", { timeout: 120_000 }, () => {
     const payload = buildMarkdownPayload()
     // Warm module/JIT paths once so candidate 0 is not penalized by First-run
     // costs (KaTeX, react-markdown pipeline construction).
