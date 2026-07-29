@@ -7,6 +7,10 @@ import {
   convertToModelMessages,
   toUIMessageStream,
   validateUIMessages,
+  type LanguageModelUsage,
+  type StepResultPerformance,
+  type TextStreamPart,
+  type ToolSet,
 } from "ai"
 import { getFunctionName } from "convex/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -281,6 +285,16 @@ function notAbortedSignal(): AbortSignal {
   // A REAL signal: toResponse composes it via AbortSignal.any (worker-loss +
   // provider-deadline), which rejects plain-object fakes.
   return new AbortController().signal
+}
+
+async function readStream<T>(stream: ReadableStream<T>): Promise<T[]> {
+  const chunks: T[] = []
+  const reader = stream.getReader()
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) return chunks
+    chunks.push(value)
+  }
 }
 
 beforeEach(() => {
@@ -636,6 +650,312 @@ describe("createChatTurnRuntime — reasoning lifecycle timing", () => {
   })
 })
 
+describe("createChatTurnRuntime — UI-message metadata", () => {
+  const toolMetadata = {
+    displayName: "Lookup",
+    source: "mcp" as const,
+    serviceName: "Test service",
+    readOnly: true,
+  }
+  const usage = {
+    inputTokens: 1,
+    inputTokenDetails: {
+      noCacheTokens: 1,
+      cacheReadTokens: undefined,
+      cacheWriteTokens: undefined,
+    },
+    outputTokens: 1,
+    outputTokenDetails: {
+      textTokens: 1,
+      reasoningTokens: 0,
+    },
+    totalTokens: 2,
+  } satisfies LanguageModelUsage
+  const stepPerformance = {
+    effectiveOutputTokensPerSecond: 1,
+    outputTokensPerSecond: 1,
+    inputTokensPerSecond: 1,
+    effectiveTotalTokensPerSecond: 2,
+    stepTimeMs: 1,
+    responseTimeMs: 1,
+    toolExecutionMs: {},
+    timeToFirstOutputMs: 1,
+  } satisfies StepResultPerformance
+
+  it("keeps start/finish metadata and returns undefined for ordinary stream parts", async () => {
+    const dateNow = vi.spyOn(Date, "now").mockReturnValue(0)
+    try {
+      vi.mocked(prepareToolRuntime).mockResolvedValue(
+        makeToolRuntime({
+          metadata: {
+            toInvocationMetadataByName: () => ({ lookup: toolMetadata }),
+            source: () => "mcp",
+          },
+        }) as unknown as Awaited<ReturnType<typeof prepareToolRuntime>>
+      )
+      const harness = makeStreamHarness()
+      const runtime = createChatTurnRuntime({
+        input: makeInput(),
+        deps: makeDeps(harness, makeFetchMutation()),
+      })
+
+      await runtime.prepare()
+      runtime.toResponse(notAbortedSignal())
+      const messageMetadata: (options: {
+        part: TextStreamPart<ToolSet>
+      }) => unknown = harness.captured.responseOpts.messageMetadata
+
+      expect(messageMetadata({ part: { type: "start" } })).toEqual({
+        toolMetadataByName: { lookup: toolMetadata },
+      })
+
+      const toolCall = {
+        type: "tool-call",
+        toolCallId: "call-1",
+        toolName: "lookup",
+        input: {},
+        dynamic: true,
+      } satisfies TextStreamPart<ToolSet>
+      const ordinaryParts = [
+        { type: "text-start", id: "text-1" },
+        { type: "text-delta", id: "text-1", text: "hello" },
+        { type: "text-end", id: "text-1" },
+        { type: "reasoning-start", id: "reasoning-1" },
+        {
+          type: "reasoning-delta",
+          id: "reasoning-1",
+          text: "private reasoning",
+        },
+        { type: "reasoning-end", id: "reasoning-1" },
+        {
+          type: "tool-input-start",
+          id: "call-1",
+          toolName: "lookup",
+        },
+        {
+          type: "tool-input-delta",
+          id: "call-1",
+          delta: '{"query":',
+        },
+        { type: "tool-input-end", id: "call-1" },
+        toolCall,
+        {
+          type: "tool-result",
+          toolCallId: "call-1",
+          toolName: "lookup",
+          input: {},
+          output: { ok: true },
+          dynamic: true,
+        },
+        {
+          type: "tool-error",
+          toolCallId: "call-1",
+          toolName: "lookup",
+          input: {},
+          error: new Error("tool failed"),
+          dynamic: true,
+        },
+        {
+          type: "tool-approval-request",
+          approvalId: "approval-1",
+          toolCall,
+        },
+        {
+          type: "tool-approval-response",
+          approvalId: "approval-1",
+          toolCall,
+          approved: true,
+        },
+        {
+          type: "tool-output-denied",
+          toolCallId: "call-1",
+          toolName: "lookup",
+        },
+        {
+          type: "source",
+          sourceType: "url",
+          id: "source-1",
+          url: "https://example.com",
+        },
+        {
+          type: "file",
+          file: {
+            base64: "",
+            uint8Array: new Uint8Array(),
+            mediaType: "text/plain",
+          },
+        },
+        {
+          type: "reasoning-file",
+          file: {
+            base64: "",
+            uint8Array: new Uint8Array(),
+            mediaType: "text/plain",
+          },
+        },
+        { type: "custom", kind: "test.fixture" },
+        { type: "start-step", request: {}, warnings: [] },
+        {
+          type: "finish-step",
+          response: {
+            id: "response-1",
+            timestamp: new Date(0),
+            modelId: "test-model",
+          },
+          usage,
+          performance: stepPerformance,
+          finishReason: "stop",
+          rawFinishReason: "end_turn",
+          providerMetadata: undefined,
+        },
+        { type: "error", error: new Error("model failed") },
+        { type: "abort" },
+        { type: "raw", rawValue: {} },
+      ] satisfies TextStreamPart<ToolSet>[]
+
+      for (const part of ordinaryParts) {
+        expect(messageMetadata({ part })).toBeUndefined()
+      }
+
+      dateNow.mockReturnValue(100)
+      harness.captured.streamOpts.onChunk({
+        chunk: { type: "reasoning-start", id: "reasoning-1" },
+      })
+      dateNow.mockReturnValue(250)
+      harness.captured.streamOpts.onChunk({
+        chunk: { type: "reasoning-end", id: "reasoning-1" },
+      })
+      await harness.captured.streamOpts.onEnd({
+        text: "done",
+        usage: {},
+        steps: [
+          {
+            rawFinishReason: "end_turn",
+            toolCalls: [{ toolCallId: "call-1", toolName: "lookup" }],
+          },
+        ],
+        finishReason: "stop",
+      })
+
+      expect(
+        messageMetadata({
+          part: {
+            type: "finish",
+            finishReason: "stop",
+            rawFinishReason: "end_turn",
+            totalUsage: usage,
+          },
+        })
+      ).toEqual({
+        toolMetadataByCallId: { "call-1": toolMetadata },
+        reasoningDurationMs: 150,
+      })
+    } finally {
+      dateNow.mockRestore()
+    }
+  })
+
+  it("emits no intermediate message-metadata records for ordinary converted parts", async () => {
+    const harness = makeStreamHarness()
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(harness, makeFetchMutation()),
+    })
+    await runtime.prepare()
+    runtime.toResponse(notAbortedSignal())
+
+    const actualAi = await vi.importActual<typeof import("ai")>("ai")
+    const actualAiTest =
+      await vi.importActual<typeof import("ai/test")>("ai/test")
+    const makeTextResult = () =>
+      actualAi.streamText({
+        model: new actualAiTest.MockLanguageModelV4({
+          doStream: async () => ({
+            stream: actualAiTest.simulateReadableStream({
+              chunks: [
+                { type: "stream-start" as const, warnings: [] },
+                { type: "reasoning-start" as const, id: "reasoning-1" },
+                {
+                  type: "reasoning-delta" as const,
+                  id: "reasoning-1",
+                  delta: "thinking",
+                },
+                { type: "reasoning-end" as const, id: "reasoning-1" },
+                { type: "text-start" as const, id: "text-1" },
+                {
+                  type: "text-delta" as const,
+                  id: "text-1",
+                  delta: "final",
+                },
+                { type: "text-end" as const, id: "text-1" },
+                {
+                  type: "finish" as const,
+                  finishReason: {
+                    unified: "stop" as const,
+                    raw: "end_turn",
+                  },
+                  usage: {
+                    inputTokens: {
+                      total: 1,
+                      noCache: 1,
+                      cacheRead: undefined,
+                      cacheWrite: undefined,
+                    },
+                    outputTokens: {
+                      total: 2,
+                      text: 1,
+                      reasoning: 1,
+                    },
+                  },
+                },
+              ],
+              chunkDelayInMs: null,
+            }),
+          }),
+        }),
+        prompt: "hi",
+      })
+
+    const converted = actualAi.toUIMessageStream({
+      stream: makeTextResult().stream,
+      messageMetadata: harness.captured.responseOpts.messageMetadata,
+    })
+    const amplifiedControl = actualAi.toUIMessageStream({
+      stream: makeTextResult().stream,
+      messageMetadata: () => ({}),
+    })
+    const [chunkStream, wireStream] = converted.tee()
+    const [chunks, controlChunks, wireText] = await Promise.all([
+      readStream(chunkStream),
+      readStream(amplifiedControl),
+      actualAi.createUIMessageStreamResponse({ stream: wireStream }).text(),
+    ])
+
+    expect(chunks.filter((chunk) => chunk.type === "message-metadata")).toEqual(
+      []
+    )
+    expect(wireText).not.toContain('"type":"message-metadata"')
+    expect(chunks.find((chunk) => chunk.type === "start")).toMatchObject({
+      messageMetadata: {},
+    })
+    expect(chunks.find((chunk) => chunk.type === "finish")).toMatchObject({
+      messageMetadata: {},
+    })
+    expect(chunks.some((chunk) => chunk.type === "reasoning-delta")).toBe(true)
+    expect(chunks.some((chunk) => chunk.type === "text-delta")).toBe(true)
+    expect(
+      controlChunks.filter((chunk) => chunk.type === "message-metadata").length
+    ).toBeGreaterThan(0)
+    const decodedText = (streamChunks: typeof chunks) =>
+      streamChunks
+        .filter((chunk) => chunk.type === "text-delta")
+        .map((chunk) => chunk.delta)
+        .join("")
+    expect(decodedText(chunks)).toBe("final")
+    expect(decodedText(chunks)).toBe(decodedText(controlChunks))
+  })
+})
+
 describe("createChatTurnRuntime — Anthropic pause_turn telemetry", () => {
   it("captures one content-free event with model and search dimensions", async () => {
     const harness = makeStreamHarness()
@@ -651,8 +971,9 @@ describe("createChatTurnRuntime — Anthropic pause_turn telemetry", () => {
       input: makeInput(),
       deps: makeDeps(harness, fetchMutation, {
         durableWorkerWire: wire,
-        getPostHogClient: (() =>
-          ({ capture })) as unknown as ChatTurnDeps["getPostHogClient"],
+        getPostHogClient: (() => ({
+          capture,
+        })) as unknown as ChatTurnDeps["getPostHogClient"],
       }),
     })
 
@@ -713,8 +1034,9 @@ describe("createChatTurnRuntime — Anthropic pause_turn telemetry", () => {
       const runtime = createChatTurnRuntime({
         input: makeInput(),
         deps: makeDeps(harness, makeFetchMutation(), {
-          getPostHogClient: (() =>
-            ({ capture })) as unknown as ChatTurnDeps["getPostHogClient"],
+          getPostHogClient: (() => ({
+            capture,
+          })) as unknown as ChatTurnDeps["getPostHogClient"],
         }),
       })
 

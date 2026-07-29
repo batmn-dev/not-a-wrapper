@@ -1,13 +1,14 @@
 /**
  * Streaming code rendering (chat-responsiveness plan, PR 3).
  *
- * The TERMINAL, still-growing code block of a live message keeps its
- * highlighted look but re-highlights at most once per
- * `GROWING_HIGHLIGHT_THROTTLE_MS` (leading edge immediately, then trailing);
- * settled, non-terminal, and non-live blocks highlight immediately. Stale
- * async completions are invalidated by generation token in
- * `components/ui/code-block.tsx`; the stability classification (terminal
- * block of a streaming message) lives in `components/ui/markdown.tsx`.
+ * The TERMINAL, still-growing code block of a live message renders every
+ * canonical code change immediately as escaped plain code. Shiki runs only
+ * after `GROWING_HIGHLIGHT_IDLE_MS` without another tuple change; settled,
+ * non-terminal, and non-live blocks highlight immediately. Completed
+ * highlights are associated with their exact code/language/theme tuple so
+ * stale HTML is never shown for newer canonical code. The stability
+ * classification (terminal block of a streaming message) lives in
+ * `components/ui/markdown.tsx`.
  *
  * This is the sole behavior since the 2026-07-23 pre-launch flag collapse.
  * The former `NEXT_PUBLIC_STREAMING_CODE_RENDER_MODE` flag and its other two
@@ -24,12 +25,13 @@
  */
 
 /**
- * Re-highlight interval for the growing terminal block. A named constant for
- * measurement comparability — deliberately not a public product setting.
+ * Inactivity boundary for the growing terminal block. Every code, language,
+ * or theme change restarts this timer. A named constant for measurement
+ * comparability — deliberately not a public product setting.
  *
  * Language normalization moved to `lib/markdown/shiki-client.ts`
  * (`resolveShikiLanguage`): with demand-loaded grammars (streaming plan
  * PR C) the support surface is the static allowlist, not whatever the old
  * eager highlighter happened to have loaded.
  */
-export const GROWING_HIGHLIGHT_THROTTLE_MS = 300
+export const GROWING_HIGHLIGHT_IDLE_MS = 150

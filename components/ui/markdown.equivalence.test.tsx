@@ -20,11 +20,22 @@
 // through render-phase state adjustment, which StrictMode double-invokes.
 // ---------------------------------------------------------------------------
 
-import { EQUIVALENCE_FIXTURES, seededPrefixOffsets } from "@/lib/markdown/markdown-equivalence-corpus"
-import { GROWING_HIGHLIGHT_THROTTLE_MS } from "@/lib/chat-performance/streaming-code-render"
+import { GROWING_HIGHLIGHT_IDLE_MS } from "@/lib/chat-performance/streaming-code-render"
+import {
+  EQUIVALENCE_FIXTURES,
+  seededPrefixOffsets,
+} from "@/lib/markdown/markdown-equivalence-corpus"
 import React, { act, StrictMode } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
 import { Markdown } from "./markdown"
 
 vi.mock("@/lib/markdown/shiki-client", () => ({
@@ -43,13 +54,15 @@ vi.mock("next-themes", () => ({
 // base-ui and useId generate per-mount ids; they differ between mounts
 // regardless of the projection path.
 function normalize(html: string): string {
-  return html
-    .replace(/base-ui-[_a-z0-9-]+/g, "base-ui-x")
-    .replace(/«[^»]*»/g, "«id»")
-    .replace(/:r[0-9a-z]+:/g, ":rid:")
-    // React leaves an empty style attribute behind when an in-place update
-    // sets and then clears inline styles; a fresh mount never has it.
-    .replace(/ style=""/g, "")
+  return (
+    html
+      .replace(/base-ui-[_a-z0-9-]+/g, "base-ui-x")
+      .replace(/«[^»]*»/g, "«id»")
+      .replace(/:r[0-9a-z]+:/g, ":rid:")
+      // React leaves an empty style attribute behind when an in-place update
+      // sets and then clears inline styles; a fresh mount never has it.
+      .replace(/ style=""/g, "")
+  )
 }
 
 type Mount = {
@@ -88,7 +101,7 @@ function mount(strict = false): Mount {
 
 async function flushHighlights() {
   await act(async () => {
-    await vi.advanceTimersByTimeAsync(GROWING_HIGHLIGHT_THROTTLE_MS + 10)
+    await vi.advanceTimersByTimeAsync(GROWING_HIGHLIGHT_IDLE_MS + 10)
   })
 }
 
@@ -101,7 +114,13 @@ describe("streamed vs authoritative rendered DOM (full corpus)", () => {
 
   beforeEach(() => {
     vi.useFakeTimers({
-      toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"],
+      toFake: [
+        "setTimeout",
+        "clearTimeout",
+        "setInterval",
+        "clearInterval",
+        "Date",
+      ],
     })
   })
 
@@ -115,7 +134,9 @@ describe("streamed vs authoritative rendered DOM (full corpus)", () => {
       // Compare DOM at every 4th prefix plus the final one; every prefix
       // still streams through the incremental path in between.
       const sampled = new Set(
-        offsets.filter((_, i) => i % 4 === 3).concat(offsets[offsets.length - 1]!)
+        offsets
+          .filter((_, i) => i % 4 === 3)
+          .concat(offsets[offsets.length - 1]!)
       )
 
       const streamed = mount()

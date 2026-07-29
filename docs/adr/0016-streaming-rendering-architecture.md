@@ -84,20 +84,32 @@ JavaScript regex engine (no WASM) + the two github themes load behind one
 dynamic-import boundary on first demand; grammars load per-language from an
 explicit typed allowlist of fine-grained `@shikijs/langs` modules. Unknown
 languages render as escaped plain text. No-code conversations ship zero
-Shiki bytes. The 300 ms growing-block highlight throttle is unchanged.
+Shiki bytes. Growing code is always displayed immediately as escaped plain
+code. Every canonical code, language, or theme change invalidates highlighted
+HTML and restarts a 150 ms inactivity timer. Shiki may publish HTML only for
+the exact current tuple after that idle boundary; stable blocks and terminal
+settlement highlight immediately. Obsolete timers and async results are
+discarded.
 
 ### Notification cadence
 
-`CHAT_MESSAGE_THROTTLE_MS` stays **50 ms**. With tail-proportional
-rendering, the deterministic jsdom replay measures per-notification commit
-cost at ~1–3 ms at every candidate (unthrottled/16/32/50 ms) — the
-renderer no longer needs the throttle to survive, and 32 ms or 16 ms are
-live candidates. But the selection rule requires production-browser paint
-traces (12 KB/100 KB/code payloads, composer typing, autoscroll, 4× CPU)
-before changing a production cadence, and those traces have not been
-collected; jsdom has no layout or paint. The candidate measurement stays in
-CI as a long-task canary; lowering the constant is a follow-up gated on the
-browser matrix. The value is a code constant, not a flag.
+The accepted target is one browser-frame coalescing window.
+`CHAT_MESSAGE_THROTTLE_MS` is **16 ms**, with **32 ms** retained only as the
+single rollback value if the production-browser gates fail. The historical
+50 ms setting and 300 ms code-highlight throttle describe the
+pre-implementation baseline, not the accepted architecture. No rAF scheduler,
+displayed-text copy, provider-specific cadence, or feature flag is introduced.
+
+The installed AI SDK continues to own message notification coalescing.
+Status and error subscriptions remain immediate, and a render triggered by
+one of those subscriptions reads the latest message snapshot through
+`useSyncExternalStore`. Terminal-ordering tests cover completion, Stop,
+transport error, and approval pause while a trailing 16 ms notification is
+pending.
+
+Production-browser selection evidence is recorded separately from this
+architectural decision. A candidate build is not release-validated until the
+normal and 4× CPU frame gates in the results document pass.
 
 ### Provider smoothing
 

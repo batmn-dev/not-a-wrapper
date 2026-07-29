@@ -1529,7 +1529,7 @@ export function createChatTurnRuntime(args: {
             reasoningDurationMs: reasoningActivity.getDurationMs() ?? null,
           })
         }
-        return {}
+        return undefined
       },
       // Settlement never rejects (ADR-0011): a persistence failure resolves a
       // degraded receipt — logged and captured inside the module — instead of
