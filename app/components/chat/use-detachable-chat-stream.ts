@@ -141,6 +141,7 @@ type DetachableChatStreamOwner = {
   ) => StreamBinding
   detach: (binding: StreamBinding) => void
   adopt: (binding: StreamBinding, chatId: string) => void
+  readopt: (chatId: string) => StreamBinding | null
   setHandlers: (handlers: ChatStreamHandlers) => void
   setFallbackTurnBodyProvider: (
     provider: (() => ChatTurnBodyFields | null) | null
@@ -172,6 +173,7 @@ function emitBindingGauge(
     | "created"
     | "detached"
     | "adopted"
+    | "readopted"
     | "finished_attached"
     | "finished_detached"
     | "watchdog_stop",
@@ -190,6 +192,16 @@ function createDetachableChatStreamOwner(
   api: string
 ): DetachableChatStreamOwner {
   const lifecycles = new WeakMap<StreamBinding, BindingLifecycle>()
+  // Still-live detached bindings by origin chat id, so a mounted transition
+  // BACK to a generating chat can re-adopt the word-granular stream instead
+  // of rendering the 750 ms durable snapshots (the nav-return chunking of
+  // docs/measurements/2026-07-28-streaming-failures-investigation.md §Issue 2).
+  // At most one entry per chat id can exist: a chat's next binding is only
+  // created when no live detached binding was available to re-adopt. Entries
+  // are removed on re-adoption or by routeFinish — the SDK invokes onFinish
+  // in a `finally`, so every stream (complete, error, abort, watchdog stop)
+  // deregisters and the map cannot leak a dead binding.
+  const detachedByOrigin = new Map<string, StreamBinding>()
   const acceptances = new RequestAcceptanceRegistry()
   let fallbackTurnBodyProvider: (() => ChatTurnBodyFields | null) | null =
     null
@@ -205,6 +217,14 @@ function createDetachableChatStreamOwner(
     lifecycle.watchdog = null
   }
 
+  // Re-adoptable means the binding's request is still in flight. Read from
+  // the SDK chat (not the lifecycle's `finished` flag, which latches after a
+  // binding's FIRST completed turn and says nothing about the current one).
+  const isStreamLive = (binding: StreamBinding) => {
+    const status = binding.chat.status
+    return status === "submitted" || status === "streaming"
+  }
+
   const routeFinish = (
     binding: StreamBinding,
     event: ChatStreamFinishEvent
@@ -213,6 +233,12 @@ function createDetachableChatStreamOwner(
     if (!lifecycle || !handlers) return
     if (lifecycle.state === "detached") {
       clearWatchdog(binding)
+      if (
+        lifecycle.originChatId !== null &&
+        detachedByOrigin.get(lifecycle.originChatId) === binding
+      ) {
+        detachedByOrigin.delete(lifecycle.originChatId)
+      }
       detachedBindingCount = Math.max(0, detachedBindingCount - 1)
       emitBindingGauge("finished_detached", lifecycle.originChatId)
       void handlers.onDetachedFinish(lifecycle.originChatId, event)
@@ -297,6 +323,9 @@ function createDetachableChatStreamOwner(
         watchdog: null,
       }
       lifecycles.set(binding, detached)
+      if (detached.originChatId !== null && isStreamLive(binding)) {
+        detachedByOrigin.set(detached.originChatId, binding)
+      }
       if (!lifecycle.finished) {
         attachedBindingCount = Math.max(0, attachedBindingCount - 1)
       }
@@ -321,6 +350,38 @@ function createDetachableChatStreamOwner(
         lifecycle.ownerChatId = chatId
         emitBindingGauge("adopted", chatId)
       }
+    },
+
+    // The inverse of detach, for a mounted transition BACK to a chat whose
+    // detached binding is still streaming: the binding returns to attached
+    // (identity re-frozen to its origin — which is the destination), its
+    // watchdog is cleared (the attached stuck-stream guard owns the budget
+    // again), and `sendAutomaticallyWhen` re-arms by construction since it
+    // reads the lifecycle at dispatch time. Returns null when no live
+    // detached binding exists for the chat — the caller falls through to
+    // today's fresh-binding + snapshot-projection path.
+    readopt(chatId) {
+      const binding = detachedByOrigin.get(chatId)
+      if (!binding) return null
+      detachedByOrigin.delete(chatId)
+      const lifecycle = lifecycles.get(binding)
+      // Belt-and-braces: registry maintenance keeps entries live (routeFinish
+      // deregisters in the SDK's `finally`), so these guards should never
+      // fire — but re-adopting a dead stream would trade the snapshot path
+      // for a frozen thread, so verify before flipping ownership.
+      if (lifecycle?.state !== "detached" || !isStreamLive(binding)) {
+        return null
+      }
+      clearWatchdog(binding)
+      lifecycles.set(binding, {
+        state: "attached",
+        ownerChatId: chatId,
+        finished: false,
+      })
+      detachedBindingCount = Math.max(0, detachedBindingCount - 1)
+      attachedBindingCount += 1
+      emitBindingGauge("readopted", chatId)
+      return binding
     },
 
     setHandlers(nextHandlers) {
@@ -444,14 +505,36 @@ export function useCommitDetachableChatStream({
     if (committedChatId !== chatId) {
       if (committedChatId === null && chatId !== null) {
         // First-turn route adoption keeps the live binding and optimistic
-        // messages; only its attached owner identity advances.
-        owner.adopt(binding, chatId)
-        stream.commit.replace(chatId, binding)
+        // messages; only its attached owner identity advances. But when the
+        // current binding is idle, this transition can also be a RETURN to a
+        // generating chat through the onboarding surface (Back detached its
+        // stream, then Forward / a sidebar click re-enters) — re-adopt the
+        // destination's live binding then, and discard the idle one exactly
+        // like the transition path below discards its predecessor.
+        const currentStreamIsLive =
+          binding.chat.status === "submitted" ||
+          binding.chat.status === "streaming"
+        const readopted = currentStreamIsLive ? null : owner.readopt(chatId)
+        if (readopted) {
+          owner.detach(binding)
+          stream.commit.replace(chatId, readopted)
+        } else {
+          owner.adopt(binding, chatId)
+          stream.commit.replace(chatId, binding)
+        }
       } else {
         // Freeze the previous origin before the new callback router becomes
-        // observable, then prepare a fresh attached binding for the route.
+        // observable. If the DESTINATION chat's own detached binding is still
+        // streaming (the user navigated away mid-generation and came back),
+        // re-adopt it so the surface resumes the word-granular local stream —
+        // its Chat holds the full canonical array for the origin chat,
+        // strictly fresher than the 750 ms durable snapshots. Otherwise
+        // prepare a fresh attached binding for the route; Convex remains the
+        // recovery plane for reload/second-tab/other-device.
         owner.detach(binding)
-        const nextBinding = owner.createBinding(initialMessages, chatId)
+        const readopted = chatId === null ? null : owner.readopt(chatId)
+        const nextBinding =
+          readopted ?? owner.createBinding(initialMessages, chatId)
         stream.commit.replace(chatId, nextBinding)
       }
       onChatTransition(committedChatId, chatId)

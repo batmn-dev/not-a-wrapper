@@ -12,7 +12,10 @@ import {
   GUEST_CHAT_STORAGE_KEY,
 } from "@/lib/chat-store/identity"
 import { useMessages } from "@/lib/chat-store/messages/provider"
-import { projectSelectedPath } from "@/lib/chat-store/turns/selected-path"
+import {
+  isSelectedPathDivergent,
+  projectSelectedPath,
+} from "@/lib/chat-store/turns/selected-path"
 import {
   createChatTurnController,
   type ChatTurnMessage,
@@ -679,12 +682,24 @@ export function useChatCore({
       // assistant stream that may already have started). Route first entry
       // through the same selected-path seam as later snapshots so an empty or
       // partial server path cannot erase live turn state during that lag.
-      applyMessages((live) =>
-        projectSelectedPath(
-          live as ChatTurnMessage[],
-          initialMessages as ChatTurnMessage[]
-        )
-      )
+      applyMessages((live) => {
+        const liveTurn = live as ChatTurnMessage[]
+        const serverPath = initialMessages as ChatTurnMessage[]
+        // Entry can now happen mid-stream: returning to a generating chat
+        // re-adopts its live binding (use-detachable-chat-stream.ts). The
+        // identity-matched reconcile stays safe there (parts adoption is
+        // monotonic, the lagging snapshot never truncates fresher local
+        // text), but a wholesale branch swap would yank the array out from
+        // under the SDK's active response — defer divergence to the
+        // settle-time projection below, which owns it once status is ready.
+        if (
+          (status === "streaming" || status === "submitted") &&
+          isSelectedPathDivergent(liveTurn, serverPath)
+        ) {
+          return live
+        }
+        return projectSelectedPath(liveTurn, serverPath)
+      })
       return
     }
 

@@ -42,6 +42,11 @@ const chatCoreMocks = vi.hoisted(() => ({
   updateTitle: vi.fn(),
   // Controllable useChat state for the selected-path projection effect tests.
   useChatState: { messages: [] as unknown[], status: "ready" as string },
+  // Every constructed mock Chat instance in creation order, plus the instance
+  // the hook currently renders through — the re-adoption tests assert which
+  // binding survives a mounted A→B→A transition.
+  chatInstances: [] as Array<{ status: string }>,
+  lastUseChatInstance: null as unknown,
   // Controllable Turn context hydration for the auto-submit gate tests.
   turnContextHydrated: true,
   // Controllable selected-run projection for the deferred-Stop tests.
@@ -98,20 +103,25 @@ vi.mock("@ai-sdk/react", () => ({
     chat,
   }: {
     chat: { sendMessage: typeof chatCoreMocks.sendMessage }
-  }) => ({
-    messages: chatCoreMocks.useChatState.messages,
-    sendMessage: chat.sendMessage,
-    regenerate: chatCoreMocks.regenerate,
-    status: chatCoreMocks.useChatState.status,
-    error: undefined,
-    stop: chatCoreMocks.stop,
-    setMessages: chatCoreMocks.setMessages,
-    addToolApprovalResponse: chatCoreMocks.addToolApprovalResponse,
-  }),
+  }) => {
+    chatCoreMocks.lastUseChatInstance = chat
+    return {
+      messages: chatCoreMocks.useChatState.messages,
+      sendMessage: chat.sendMessage,
+      regenerate: chatCoreMocks.regenerate,
+      status: chatCoreMocks.useChatState.status,
+      error: undefined,
+      stop: chatCoreMocks.stop,
+      setMessages: chatCoreMocks.setMessages,
+      addToolApprovalResponse: chatCoreMocks.addToolApprovalResponse,
+    }
+  },
   // The hook constructs its own Chat instances (detachable stream bindings);
   // the mocked useChat ignores them, but the watchdog stops detached
-  // instances directly — route that through a shared spy.
+  // instances directly — route that through a shared spy. `status` feeds the
+  // owner's liveness check (isStreamLive) for detach-registration/re-adoption.
   Chat: class MockChat {
+    status = "ready"
     constructor(
       readonly options: {
         transport: {
@@ -120,7 +130,9 @@ vi.mock("@ai-sdk/react", () => ({
           }) => Promise<ReadableStream>
         }
       }
-    ) {}
+    ) {
+      chatCoreMocks.chatInstances.push(this)
+    }
     sendMessage = (
       message: { messageId?: string },
       options?: { body?: Record<string, unknown> }
@@ -130,7 +142,7 @@ vi.mock("@ai-sdk/react", () => ({
         .sendMessages({ messageId: message.messageId })
         .then(() => undefined)
     }
-    stop = () => chatCoreMocks.bindingStop(this.options)
+    stop = () => chatCoreMocks.bindingStop(this)
   },
 }))
 
@@ -473,6 +485,8 @@ describe("useChatCore selected-path projection", () => {
     vi.clearAllMocks()
     chatCoreMocks.useChatState.messages = []
     chatCoreMocks.useChatState.status = "ready"
+    chatCoreMocks.chatInstances.length = 0
+    chatCoreMocks.lastUseChatInstance = null
   })
 
   afterEach(() => {
@@ -629,6 +643,172 @@ describe("useChatCore selected-path projection", () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it("defers a divergent branch swap to settle when entering a chat mid-stream", () => {
+    mount()
+    render([], "chat_a")
+
+    // A re-adopted binding's array: anchored messages the SDK is actively
+    // streaming into. The entry projection must not wholesale-swap it even
+    // when the server path diverged (e.g. a sibling branch selected in
+    // another tab) — settle-time projection owns divergence.
+    const liveMessages = [
+      {
+        id: "u-live",
+        role: "user" as const,
+        parts: [{ type: "text" as const, text: "hi" }],
+        metadata: { serverMessageId: "u-live" },
+      },
+      {
+        id: "a-live",
+        role: "assistant" as const,
+        parts: [{ type: "text" as const, text: "streaming…" }],
+        metadata: { serverMessageId: "a-live" },
+      },
+    ] as unknown as UIMessage[]
+    const divergentPath = [
+      {
+        id: "s-other",
+        role: "user" as const,
+        parts: [{ type: "text" as const, text: "other branch" }],
+        metadata: { serverMessageId: "s-other" },
+      },
+    ] as unknown as UIMessage[]
+    chatCoreMocks.useChatState.messages = liveMessages
+    chatCoreMocks.useChatState.status = "streaming"
+    chatCoreMocks.setMessages.mockClear()
+
+    render(divergentPath, "chat_b") // mid-stream entry (re-adopted binding)
+
+    const update = chatCoreMocks.setMessages.mock.calls[0]?.[0]
+    expect(update).toBeTypeOf("function")
+    expect(
+      (update as (messages: UIMessage[]) => UIMessage[])(liveMessages)
+    ).toBe(liveMessages)
+  })
+})
+
+describe("useChatCore stream re-adoption on return", () => {
+  let container: HTMLDivElement | null = null
+  let root: Root | null = null
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    chatCoreMocks.useChatState.messages = []
+    chatCoreMocks.useChatState.status = "ready"
+    chatCoreMocks.chatInstances.length = 0
+    chatCoreMocks.lastUseChatInstance = null
+  })
+
+  afterEach(() => {
+    const mountedRoot = root
+    if (mountedRoot) act(() => mountedRoot.unmount())
+    container?.remove()
+    container = null
+    root = null
+  })
+
+  function Harness({
+    initialMessages,
+    chatId,
+  }: {
+    initialMessages: UIMessage[]
+    chatId: string | null
+  }) {
+    useChatCore({
+      initialMessages,
+      cacheAndAddMessage: vi.fn(),
+      chatId,
+      user: authenticatedUser,
+      checkLimitsAndNotify: vi.fn(async () => true),
+      ensureChatExists: vi.fn(async () => ({ chatId: "chat_a" })),
+      bumpChat: chatCoreMocks.bumpChat,
+    })
+    return null
+  }
+
+  function render(chatId: string | null) {
+    act(() => {
+      root?.render(<Harness initialMessages={[]} chatId={chatId} />)
+    })
+  }
+
+  function mount() {
+    window.history.replaceState(null, "", "/c/chat_a")
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+  }
+
+  it("re-adopts a still-streaming detached binding on return, clears its watchdog, and re-arms on the next detach", () => {
+    vi.useFakeTimers()
+    try {
+      mount()
+      render("chat_a")
+      const instances = chatCoreMocks.chatInstances
+      expect(instances).toHaveLength(1)
+      instances[0].status = "streaming" // a live generation in chat_a
+
+      render("chat_b") // away mid-stream → detach + register origin
+      expect(instances).toHaveLength(2)
+
+      render("chat_a") // return → re-adopt, no fresh binding
+      expect(instances).toHaveLength(2)
+      expect(chatCoreMocks.lastUseChatInstance).toBe(instances[0])
+
+      // Re-adoption cleared the origin watchdog: after the full budget only
+      // chat_b's idle detached binding is stopped, never the live stream.
+      act(() => {
+        vi.advanceTimersByTime(
+          CHAT_TURN_EXECUTION_BUDGET.clientStreamWatchdogMs
+        )
+      })
+      expect(chatCoreMocks.bindingStop).not.toHaveBeenCalledWith(instances[0])
+
+      // Navigating away again re-detaches the still-live stream: the
+      // watchdog re-arms with a fresh budget.
+      render("chat_b")
+      act(() => {
+        vi.advanceTimersByTime(
+          CHAT_TURN_EXECUTION_BUDGET.clientStreamWatchdogMs
+        )
+      })
+      expect(chatCoreMocks.bindingStop).toHaveBeenCalledWith(instances[0])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("creates a fresh binding when the origin stream ended while away", () => {
+    mount()
+    render("chat_a")
+    const instances = chatCoreMocks.chatInstances
+    instances[0].status = "streaming"
+
+    render("chat_b") // away mid-stream → registered as re-adoptable
+    instances[0].status = "ready" // …but the stream ends while away
+
+    render("chat_a") // return → liveness re-check refuses the dead binding
+    expect(instances).toHaveLength(3)
+    expect(chatCoreMocks.lastUseChatInstance).toBe(instances[2])
+  })
+
+  it("re-adopts through the onboarding surface (Back mid-stream, then Forward)", () => {
+    mount()
+    render("chat_a")
+    const instances = chatCoreMocks.chatInstances
+    instances[0].status = "streaming"
+
+    render(null) // Back → detach + register; fresh unowned onboarding binding
+    expect(instances).toHaveLength(2)
+
+    // Forward re-enters chat_a through the null → chatId branch: the idle
+    // onboarding binding is discarded and the live origin stream re-adopted,
+    // NOT first-turn-adopted into an empty fresh binding.
+    render("chat_a")
+    expect(instances).toHaveLength(2)
+    expect(chatCoreMocks.lastUseChatInstance).toBe(instances[0])
   })
 })
 
