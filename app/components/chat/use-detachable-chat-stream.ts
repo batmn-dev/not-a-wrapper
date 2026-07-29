@@ -45,6 +45,11 @@ type StreamBinding = {
   chat: Chat<UIMessage>
 }
 
+type ReadoptResult =
+  | { state: "missing" }
+  | { state: "rejected" }
+  | { state: "readopted"; binding: StreamBinding }
+
 type AttachedLifecycle = {
   state: "attached"
   ownerChatId: string | null
@@ -146,7 +151,7 @@ type DetachableChatStreamOwner = {
   ) => StreamBinding
   detach: (binding: StreamBinding) => void
   adopt: (binding: StreamBinding, chatId: string) => void
-  readopt: (chatId: string, selectedPath: UIMessage[]) => StreamBinding | null
+  readopt: (chatId: string, selectedPath: UIMessage[]) => ReadoptResult
   setHandlers: (handlers: ChatStreamHandlers) => void
   setFallbackTurnBodyProvider: (
     provider: (() => ChatTurnBodyFields | null) | null
@@ -356,12 +361,12 @@ function createDetachableChatStreamOwner(
     // (identity re-frozen to its origin — which is the destination), its
     // watchdog is cleared (the attached stuck-stream guard owns the budget
     // again), and `sendAutomaticallyWhen` re-arms by construction since it
-    // reads the lifecycle at dispatch time. Returns null when no live
-    // detached binding exists for the chat — the caller falls through to
-    // today's fresh-binding + snapshot-projection path.
+    // reads the lifecycle at dispatch time. The explicit result distinguishes
+    // an ordinary missing binding from a rejected stale binding: first-turn
+    // route adoption preserves its current binding only in the missing case.
     readopt(chatId, selectedPath) {
       const binding = detachedByOrigin.get(chatId)
-      if (!binding) return null
+      if (!binding) return { state: "missing" }
       detachedByOrigin.delete(chatId)
       const lifecycle = lifecycles.get(binding)
       // Belt-and-braces: registry maintenance keeps entries live (routeFinish
@@ -369,7 +374,7 @@ function createDetachableChatStreamOwner(
       // fire — but re-adopting a dead stream would trade the snapshot path
       // for a frozen thread, so verify before flipping ownership.
       if (lifecycle?.state !== "detached" || !isStreamLive(binding)) {
-        return null
+        return { state: "rejected" }
       }
       // A reactive selected path can change while this binding is detached
       // (another tab regenerated, edited, or selected a sibling). Reject only
@@ -383,7 +388,7 @@ function createDetachableChatStreamOwner(
         )
       ) {
         emitBindingGauge("readopt_rejected_divergent", chatId)
-        return null
+        return { state: "rejected" }
       }
       clearWatchdog(binding)
       lifecycles.set(binding, {
@@ -394,7 +399,7 @@ function createDetachableChatStreamOwner(
       detachedBindingCount = Math.max(0, detachedBindingCount - 1)
       attachedBindingCount += 1
       emitBindingGauge("readopted", chatId)
-      return binding
+      return { state: "readopted", binding }
     },
 
     setHandlers(nextHandlers) {
@@ -527,12 +532,18 @@ export function useCommitDetachableChatStream({
         const currentStreamIsLive =
           binding.chat.status === "submitted" ||
           binding.chat.status === "streaming"
-        const readopted = currentStreamIsLive
+        const readopt = currentStreamIsLive
           ? null
           : owner.readopt(chatId, initialMessages)
-        if (readopted) {
+        if (readopt?.state === "readopted") {
           owner.detach(binding)
-          stream.commit.replace(chatId, readopted)
+          stream.commit.replace(chatId, readopt.binding)
+        } else if (readopt?.state === "rejected") {
+          owner.detach(binding)
+          stream.commit.replace(
+            chatId,
+            owner.createBinding(initialMessages, chatId)
+          )
         } else {
           owner.adopt(binding, chatId)
           stream.commit.replace(chatId, binding)
@@ -547,10 +558,12 @@ export function useCommitDetachableChatStream({
         // prepare a fresh attached binding for the route; Convex remains the
         // recovery plane for reload/second-tab/other-device.
         owner.detach(binding)
-        const readopted =
+        const readopt =
           chatId === null ? null : owner.readopt(chatId, initialMessages)
         const nextBinding =
-          readopted ?? owner.createBinding(initialMessages, chatId)
+          readopt?.state === "readopted"
+            ? readopt.binding
+            : owner.createBinding(initialMessages, chatId)
         stream.commit.replace(chatId, nextBinding)
       }
       onChatTransition(committedChatId, chatId)

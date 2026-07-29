@@ -861,6 +861,46 @@ describe("useChatCore stream re-adoption on return", () => {
     expect(instances).toHaveLength(2)
     expect(chatCoreMocks.lastUseChatInstance).toBe(instances[0])
   })
+
+  it("creates a fresh selected-path binding after a divergent onboarding return", () => {
+    vi.useFakeTimers()
+    try {
+      const originPath = [
+        {
+          id: "user-origin",
+          role: "user",
+          parts: [{ type: "text", text: "origin" }],
+          metadata: { serverMessageId: "user-origin" },
+        },
+      ] as UIMessage[]
+      const otherPath = [
+        {
+          id: "user-other",
+          role: "user",
+          parts: [{ type: "text", text: "other branch" }],
+          metadata: { serverMessageId: "user-other" },
+        },
+      ] as UIMessage[]
+
+      mount()
+      render("chat_a", originPath)
+      const instances = chatCoreMocks.chatInstances
+      instances[0].status = "streaming"
+
+      render(null) // Back → detach origin and create an idle onboarding binding
+      expect(instances).toHaveLength(2)
+
+      // Another tab selects a sibling before Forward re-enters chat_a. The
+      // divergent detached binding is rejected, and the idle onboarding binding
+      // must not be adopted as though no detached binding had existed.
+      render("chat_a", otherPath)
+      expect(instances).toHaveLength(3)
+      expect(chatCoreMocks.lastUseChatInstance).toBe(instances[2])
+      expect(instances[2].messages).toEqual(otherPath)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 describe("useChatCore deferred durable Stop (projection gap)", () => {
