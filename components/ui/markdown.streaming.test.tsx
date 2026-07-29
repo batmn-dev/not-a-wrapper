@@ -334,4 +334,84 @@ describe("Markdown terminal-block stability (plan PR 3)", () => {
     expect(writeText).toHaveBeenCalledTimes(1)
     expect(writeText.mock.calls[0][0]).toContain(hostile)
   })
+
+  // -------------------------------------------------------------------------
+  // Growing single-block shapes (investigation 2026-07-28, fix 1): a large
+  // growing list renders as frozen fragments + bounded tail with the frozen
+  // DOM reference-identical across appends; a growing open fence renders
+  // directly and lands on the pipeline's structure at settle.
+  // -------------------------------------------------------------------------
+
+  function orderedItems(from: number, to: number) {
+    return Array.from(
+      { length: to - from + 1 },
+      (_, i) =>
+        `${from + i}. Item sentence number ${from + i} concerning harbors and tides.`
+    ).join("\n")
+  }
+
+  it("renders a large growing list as frozen fragments whose DOM never changes across appends", async () => {
+    const view = mount(orderedItems(1, 120) + "\n", true)
+    await advance(10)
+
+    const listsBefore = container?.querySelectorAll("ol") ?? []
+    expect(listsBefore.length).toBeGreaterThan(1)
+    // Continuation fragments carry their literal start numbering.
+    const secondList = listsBefore[1] as HTMLOListElement
+    const start = Number(secondList.getAttribute("start"))
+    expect(start).toBeGreaterThan(1)
+    const frozenFirst = listsBefore[0]
+
+    view.rerender(orderedItems(1, 200) + "\n", true)
+    await advance(10)
+
+    // The frozen fragment's DOM node is reference-identical after appends.
+    expect(container?.querySelectorAll("ol")[0]).toBe(frozenFirst)
+    const totalItems = container?.querySelectorAll("li").length
+    expect(totalItems).toBe(200)
+
+    // Settlement collapses to the canonical single list.
+    view.rerender(orderedItems(1, 200) + "\n", false)
+    await advance(10)
+    const settledLists = container?.querySelectorAll("ol") ?? []
+    expect(settledLists.length).toBe(1)
+    expect(container?.querySelectorAll("li").length).toBe(200)
+  })
+
+  it("renders a growing open fence directly and keeps its structure at settle", async () => {
+    const lines = Array.from(
+      { length: 30 },
+      (_, i) => `const line${i} = ${i}`
+    ).join("\n")
+    const view = mount("```ts\n" + lines, true)
+    await advance(10)
+
+    const block = container?.querySelector(".markdown-code-block")
+    expect(block).not.toBeNull()
+    expect(block?.className).toContain("language-ts")
+    expect(block?.textContent).toContain("TypeScript")
+    expect(block?.textContent).toContain("const line29 = 29")
+
+    // Growth updates the code text in place.
+    view.rerender("```ts\n" + lines + "\nconst extra = 99", true)
+    await advance(10)
+    expect(
+      container?.querySelector(".markdown-code-block")?.textContent
+    ).toContain("const extra = 99")
+
+    // Closing the fence and settling lands on the normal pipeline's DOM:
+    // same wrapper classes, same header label, full code highlighted.
+    view.rerender("```ts\n" + lines + "\nconst extra = 99\n```\n", false)
+    await advance(GROWING_HIGHLIGHT_IDLE_MS * 2)
+    const settledBlock = container?.querySelector(".markdown-code-block")
+    expect(settledBlock).not.toBeNull()
+    expect(settledBlock?.className).toContain("language-ts")
+    expect(settledBlock?.textContent).toContain("TypeScript")
+    const highlighted = shikiMock.highlightCode.mock.calls.map(
+      (call) => call[0].code
+    )
+    expect(
+      highlighted.some((code) => code.includes("const extra = 99"))
+    ).toBe(true)
+  })
 })

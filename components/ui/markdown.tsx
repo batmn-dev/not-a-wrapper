@@ -25,6 +25,13 @@ import {
   type MarkdownProjectionResult,
 } from "@/lib/markdown/incremental-block-projection"
 import {
+  advanceGrowingListSegments,
+  analyzeOpenFence,
+  GROWING_LIST_SEGMENT_THRESHOLD,
+  initialGrowingListSegmentsState,
+  type GrowingListSegmentsState,
+} from "@/lib/markdown/growing-block-tail"
+import {
   CODE_BLOCK_ATTRIBUTE,
   remarkCodeBlockAnnotation,
 } from "@/lib/markdown/remark-code-block-annotation"
@@ -318,6 +325,120 @@ const MemoizedMarkdownBlock = memo(
 
 MemoizedMarkdownBlock.displayName = "MemoizedMarkdownBlock"
 
+/**
+ * Direct render for a growing OPEN fenced code block (investigation
+ * 2026-07-28, fix 1): while the fence is open, every appended line is inert
+ * interior text, so running the full Markdown pipeline per update just to
+ * reach the same `CodeBlock` is pure O(block) overhead. This component
+ * mirrors the block branch of `INITIAL_COMPONENTS.code` exactly — same
+ * wrappers, classes, header rule, and copy affordance — so the settle
+ * re-render through the real pipeline lands on identical DOM. Only used when
+ * no consumer `components` override is present.
+ */
+const GrowingFenceBlock = memo(
+  function GrowingFenceBlockComponent({ text }: { text: string }) {
+    const fence = analyzeOpenFence(text)
+    // Caller guarantees an open fence; a closed/absent fence renders nothing
+    // for one frame and the normal pipeline takes over on the next update.
+    if (!fence) return null
+    const language = fence.language === "" ? "plaintext" : fence.language
+    const value = text.slice(fence.interiorStart).replace(/\n$/, "")
+    // Parity with mdast-util-to-hast: the code text child is value + "\n".
+    const code = `${value}\n`
+    const languageLabel = formatLanguageLabel(language)
+    const hasHeader = languageLabel !== null
+
+    return (
+      <CodeBlock
+        className={cn(
+          "markdown-code-block",
+          fence.language !== "" && `language-${fence.language}`
+        )}
+      >
+        {hasHeader ? (
+          <div className="sticky top-[var(--sticky-padding-top,0px)] z-[2] select-none">
+            <CodeBlockGroup className="flex h-12 w-full items-center justify-between bg-[var(--code-block-surface)] py-1.5 ps-4 pe-1.5 font-sans md:ps-5">
+              <div className="flex max-w-[75%] min-w-0 cursor-default items-center gap-2 text-sm font-medium">
+                <Icon icon={RiCodeLine} slotSize={20} />
+                {languageLabel}
+              </div>
+              <div className="flex flex-row items-center gap-0.5">
+                <ButtonCopy code={code} />
+              </div>
+            </CodeBlockGroup>
+          </div>
+        ) : (
+          <div className="pointer-events-none absolute end-[5px] top-[3px] z-[2] md:end-[7px]">
+            <ButtonCopy code={code} />
+          </div>
+        )}
+        <CodeBlockCode
+          className={cn(
+            "markdown-code-block-code leading-5",
+            !hasHeader && "pt-3"
+          )}
+          code={code}
+          language={language}
+          growing
+        />
+      </CodeBlock>
+    )
+  },
+  (prev, next) => prev.text === next.text
+)
+
+GrowingFenceBlock.displayName = "GrowingFenceBlock"
+
+/**
+ * Segmented render for a growing LIST block (investigation 2026-07-28,
+ * fix 1): frozen item fragments render once each as memoized Markdown
+ * fragments — adjacent `<ol start>`/`<ul>` siblings, seamless because this
+ * app zeroes list margins — while only a bounded suffix re-renders per
+ * update. Fragment seams and looseness rules live in
+ * `advanceGrowingListSegments`; settlement replaces this component with the
+ * normal single-block render.
+ */
+function GrowingListSegments({
+  text,
+  blockKeyBase,
+  components,
+}: {
+  text: string
+  blockKeyBase: string
+  components?: Partial<Components>
+}) {
+  // Render-phase adjustment (same pattern as the projection state below):
+  // pure transition, safe under StrictMode/concurrent double renders.
+  const [state, setState] = useState<GrowingListSegmentsState>(() =>
+    advanceGrowingListSegments(initialGrowingListSegmentsState(), text)
+  )
+  let current = state
+  if (current.lastText !== text) {
+    current = advanceGrowingListSegments(state, text)
+    setState(current)
+  }
+  const suffix = text.slice(current.committedLength)
+
+  return (
+    <>
+      {current.fragments.map((fragment) => (
+        <MemoizedMarkdownBlock
+          key={`${blockKeyBase}-${fragment.id}`}
+          content={fragment.text}
+          stability="stable"
+          components={components}
+        />
+      ))}
+      <MemoizedMarkdownBlock
+        key={`${blockKeyBase}-tail`}
+        content={suffix}
+        stability="growing"
+        components={components}
+      />
+    </>
+  )
+}
+
 function MarkdownComponent({
   children,
   id,
@@ -381,16 +502,48 @@ function MarkdownComponent({
   const blocks = current.state.blocks
   return (
     <div className={className}>
-      {blocks.map((block, index) => (
-        <MemoizedMarkdownBlock
-          key={`${blockId}-${block.id}`}
-          content={block.text}
-          stability={
-            streaming && index === blocks.length - 1 ? "growing" : "stable"
+      {blocks.map((block, index) => {
+        const growing = streaming && index === blocks.length - 1
+        // Growing single-block shapes get bounded-cost renders (fix 1): an
+        // open fence renders directly (no consumer override in play only —
+        // the direct render bypasses the `code` component seam), a large
+        // list renders as frozen fragments + bounded suffix. Everything
+        // else — including these same blocks once settled — takes the
+        // normal memoized per-block pipeline.
+        if (growing && !components && block.nodeType === "code") {
+          const fence = analyzeOpenFence(block.text)
+          if (fence) {
+            return (
+              <GrowingFenceBlock
+                key={`${blockId}-${block.id}`}
+                text={block.text}
+              />
+            )
           }
-          components={mergedComponents}
-        />
-      ))}
+        }
+        if (
+          growing &&
+          block.nodeType === "list" &&
+          block.text.length >= GROWING_LIST_SEGMENT_THRESHOLD
+        ) {
+          return (
+            <GrowingListSegments
+              key={`${blockId}-${block.id}`}
+              blockKeyBase={`${blockId}-${block.id}`}
+              text={block.text}
+              components={mergedComponents}
+            />
+          )
+        }
+        return (
+          <MemoizedMarkdownBlock
+            key={`${blockId}-${block.id}`}
+            content={block.text}
+            stability={growing ? "growing" : "stable"}
+            components={mergedComponents}
+          />
+        )
+      })}
     </div>
   )
 }

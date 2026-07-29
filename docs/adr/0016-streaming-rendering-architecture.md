@@ -133,6 +133,36 @@ pacing immediately. Wire-verified per provider: OpenAI 188 deltas/med 5
 chars (pass-through), Anthropic Haiku 154 deltas/med 6 chars (was ~16
 slabs of ~360), Gemini 153 deltas/med 5 chars.
 
+### Growing single-block shapes (amendment, 2026-07-28)
+
+The blank-line stable-boundary rule left one measured degradation class: a
+block that never emits a blank line (a tight or blank-separated list, an
+open fence) pins the restart boundary at its own start, so per-update parse
+AND render cost grow with the block — quadratic over a stream, user-visible
+as "word-by-word at first, chunky later" (live profile: late-half main-thread
+busy 249 s vs early-half 1.7 s on a 300-item list; flat 4.7 s / 4.5 s after
+the fix, worst task 180 s → 0.64 s). Two bounded mechanisms close it, both
+inside the projection/markdown pair:
+
+- **Parse: terminal-block line extension.** When appended lines provably
+  continue the terminal `list`/`code` block (item-marker/lazy/indented
+  continuation rules; open-fence interior with closer detection), the block
+  record extends by a line scan with zero parse. Any unprovable line falls
+  back to the existing authoritative paths, and settlement's equivalence
+  check remains the net. The trailing PARTIAL line is included
+  optimistically only while it could still extend the block — within that
+  line the projection may partition differently from the parser (which
+  itself repartitions such tails char by char); rendering is
+  partition-invariant over the same bytes, and the settle check tolerates
+  exactly this documented case (`blocksEquivalentModuloPartialTail`).
+- **Render: frozen fragments / direct fence.** A large growing list renders
+  as frozen memoized fragments (adjacent `<ol start>`/`<ul>` siblings —
+  seamless because list margins are zeroed) plus a bounded growing suffix;
+  a growing open fence renders its `CodeBlock` directly, mirroring the
+  pipeline's DOM. Both collapse to the canonical single-block render at
+  settlement. Long single paragraphs keep the documented bound (no
+  grammar-safe interior seam).
+
 ### Why the second reveal scheduler was rejected
 
 - It created displayed-text state that intentionally trailed canonical text
