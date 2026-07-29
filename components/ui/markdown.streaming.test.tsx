@@ -464,4 +464,26 @@ describe("Markdown terminal-block stability (plan PR 3)", () => {
       true
     )
   })
+
+  it("keeps punctuated language ids identical while growing and settled", async () => {
+    const view = mount("```c++\nint main() { return 0; }", true)
+    await advance(10)
+
+    const growingBlock = container?.querySelector(".markdown-code-block")
+    expect(growingBlock?.className).toContain("language-c++")
+    expect(growingBlock?.textContent).toContain("C++")
+    await advance(GROWING_HIGHLIGHT_IDLE_MS + 10)
+    expect(shikiMock.highlightCode).toHaveBeenLastCalledWith(
+      expect.objectContaining({ language: "c++" })
+    )
+
+    view.rerender("```c++\nint main() { return 0; }\n```\n", false)
+    await advance(10)
+    const settledBlock = container?.querySelector(".markdown-code-block")
+    expect(settledBlock?.className).toContain("language-c++")
+    expect(settledBlock?.textContent).toContain("C++")
+    expect(shikiMock.highlightCode).toHaveBeenLastCalledWith(
+      expect.objectContaining({ language: "c++" })
+    )
+  })
 })

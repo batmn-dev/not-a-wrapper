@@ -134,6 +134,14 @@ describe("event schema allow-list", () => {
         bindingClass: "durable",
       })
     ).toEqual({ ok: true })
+    expect(
+      validateChatPerfEvent("detached_binding_gauge", {
+        event: "readopt_rejected_divergent",
+        attachedCount: 1,
+        detachedCount: 1,
+        bindingClass: "durable",
+      })
+    ).toEqual({ ok: true })
   })
 })
 

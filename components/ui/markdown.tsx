@@ -119,7 +119,7 @@ export function parseMarkdownIntoBlocks(
 
 function extractLanguage(className?: string): string {
   if (!className) return "plaintext"
-  const match = className.match(/language-(\w+)/)
+  const match = className.match(/(?:^|\s)language-([^\s]+)/)
   return match ? match[1] : "plaintext"
 }
 
@@ -134,6 +134,10 @@ const LANGUAGE_LABELS: Record<string, string | null> = {
   javascript: "JavaScript",
   ts: "TypeScript",
   typescript: "TypeScript",
+  "c++": "C++",
+  cpp: "C++",
+  "c#": "C#",
+  cs: "C#",
   json: "JSON",
   sh: "Bash",
   shell: "Bash",
@@ -157,6 +161,57 @@ function getTableText(table: HTMLTableElement | null): string {
         .join("\t")
     )
     .join("\n")
+}
+
+/**
+ * One rendering shell for both the authoritative Markdown pipeline and the
+ * direct growing-fence fast path. Keeping language parsing, labels, copy, and
+ * code presentation here prevents the two paths from drifting as code-block
+ * behavior evolves.
+ */
+function RenderedCodeBlock({
+  className,
+  code,
+  growing,
+}: {
+  className?: string
+  code: string
+  growing: boolean
+}) {
+  const language = extractLanguage(className)
+  const languageLabel = formatLanguageLabel(language)
+  const hasHeader = languageLabel !== null
+
+  return (
+    <CodeBlock className={cn("markdown-code-block", className)}>
+      {hasHeader ? (
+        <div className="sticky top-[var(--sticky-padding-top,0px)] z-[2] select-none">
+          <CodeBlockGroup className="flex h-12 w-full items-center justify-between bg-[var(--code-block-surface)] py-1.5 ps-4 pe-1.5 font-sans md:ps-5">
+            <div className="flex max-w-[75%] min-w-0 cursor-default items-center gap-2 text-sm font-medium">
+              <Icon icon={RiCodeLine} slotSize={20} />
+              {languageLabel}
+            </div>
+            <div className="flex flex-row items-center gap-0.5">
+              <ButtonCopy code={code} />
+            </div>
+          </CodeBlockGroup>
+        </div>
+      ) : (
+        <div className="pointer-events-none absolute end-[5px] top-[3px] z-[2] md:end-[7px]">
+          <ButtonCopy code={code} />
+        </div>
+      )}
+      <CodeBlockCode
+        className={cn(
+          "markdown-code-block-code leading-5",
+          !hasHeader && "pt-3"
+        )}
+        code={code}
+        language={language}
+        growing={growing}
+      />
+    </CodeBlock>
+  )
 }
 
 const INITIAL_COMPONENTS: Partial<Components> = {
@@ -186,42 +241,15 @@ const INITIAL_COMPONENTS: Partial<Components> = {
       )
     }
 
-    const language = extractLanguage(className)
-    const languageLabel = formatLanguageLabel(language)
-    const hasHeader = languageLabel !== null
-
     // Named code blocks use the reference's sticky 48px language/action row.
     // Plain-text blocks keep only the overlaid copy action, leaving the code
     // surface compact. In both cases the code scrolls inside the rounded box.
     return (
-      <CodeBlock className={cn("markdown-code-block", className)}>
-        {hasHeader ? (
-          <div className="sticky top-[var(--sticky-padding-top,0px)] z-[2] select-none">
-            <CodeBlockGroup className="flex h-12 w-full items-center justify-between bg-[var(--code-block-surface)] py-1.5 ps-4 pe-1.5 font-sans md:ps-5">
-              <div className="flex max-w-[75%] min-w-0 cursor-default items-center gap-2 text-sm font-medium">
-                <Icon icon={RiCodeLine} slotSize={20} />
-                {languageLabel}
-              </div>
-              <div className="flex flex-row items-center gap-0.5">
-                <ButtonCopy code={children as string} />
-              </div>
-            </CodeBlockGroup>
-          </div>
-        ) : (
-          <div className="pointer-events-none absolute end-[5px] top-[3px] z-[2] md:end-[7px]">
-            <ButtonCopy code={children as string} />
-          </div>
-        )}
-        <CodeBlockCode
-          className={cn(
-            "markdown-code-block-code leading-5",
-            !hasHeader && "pt-3"
-          )}
-          code={children as string}
-          language={language}
-          growing={stability === "growing"}
-        />
-      </CodeBlock>
+      <RenderedCodeBlock
+        className={className}
+        code={children as string}
+        growing={stability === "growing"}
+      />
     )
   },
   a: function AComponent({ href, children, node: _, ...props }) {
@@ -329,47 +357,17 @@ const GrowingFenceBlock = memo(
     // Caller guarantees an open fence; a closed/absent fence renders nothing
     // for one frame and the normal pipeline takes over on the next update.
     if (!fence) return null
-    const language = fence.language === "" ? "plaintext" : fence.language
     const value = text.slice(fence.interiorStart).replace(/\n$/, "")
     // Parity with mdast-util-to-hast: the code text child is value + "\n".
     const code = `${value}\n`
-    const languageLabel = formatLanguageLabel(language)
-    const hasHeader = languageLabel !== null
-
     return (
-      <CodeBlock
-        className={cn(
-          "markdown-code-block",
-          fence.language !== "" && `language-${fence.language}`
-        )}
-      >
-        {hasHeader ? (
-          <div className="sticky top-[var(--sticky-padding-top,0px)] z-[2] select-none">
-            <CodeBlockGroup className="flex h-12 w-full items-center justify-between bg-[var(--code-block-surface)] py-1.5 ps-4 pe-1.5 font-sans md:ps-5">
-              <div className="flex max-w-[75%] min-w-0 cursor-default items-center gap-2 text-sm font-medium">
-                <Icon icon={RiCodeLine} slotSize={20} />
-                {languageLabel}
-              </div>
-              <div className="flex flex-row items-center gap-0.5">
-                <ButtonCopy code={code} />
-              </div>
-            </CodeBlockGroup>
-          </div>
-        ) : (
-          <div className="pointer-events-none absolute end-[5px] top-[3px] z-[2] md:end-[7px]">
-            <ButtonCopy code={code} />
-          </div>
-        )}
-        <CodeBlockCode
-          className={cn(
-            "markdown-code-block-code leading-5",
-            !hasHeader && "pt-3"
-          )}
-          code={code}
-          language={language}
-          growing
-        />
-      </CodeBlock>
+      <RenderedCodeBlock
+        className={
+          fence.language === "" ? undefined : `language-${fence.language}`
+        }
+        code={code}
+        growing
+      />
     )
   },
   (prev, next) => prev.text === next.text

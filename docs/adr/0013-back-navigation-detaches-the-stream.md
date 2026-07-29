@@ -104,7 +104,12 @@ binding's first completed turn), and entries are removed on re-adoption or
 in finish routing — the SDK invokes `onFinish` in a `finally`, so a dead
 binding cannot linger. A binding that finished while away fails the
 liveness check and falls through to the fresh-binding + projection path,
-unchanged.
+unchanged. A reactive selected path that **proves divergence** from the
+detached binding (for example, another tab selected a regenerated sibling)
+also refuses re-adoption: the obsolete binding remains detached under its
+existing watchdog and the surface falls back to the fresh-binding + Convex
+projection path. Empty or merely lagging server paths are not proof of
+divergence and do not block the ordinary smooth-return case.
 
 Convex stays the recovery plane for reload / second tab / other device, and
 the 750 ms snapshot cadence is untouched (per ADR-0016, paint cadence never

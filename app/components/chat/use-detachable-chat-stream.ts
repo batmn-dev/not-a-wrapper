@@ -6,6 +6,8 @@ import {
   restoreLocallyResolvedApprovals,
 } from "@/lib/chat-runs/approval-auto-send-gate"
 import { LOCAL_CHAT_ID_PREFIX } from "@/lib/chat-store/identity"
+import { isSelectedPathDivergent } from "@/lib/chat-store/turns/selected-path"
+import type { ChatTurnMessage } from "@/lib/chat-turn/turn-plans"
 import { markChatPerf } from "@/lib/observability/chat-performance"
 import { takeChatPerfHeader } from "@/lib/observability/chat-performance-client"
 import {
@@ -141,7 +143,7 @@ type DetachableChatStreamOwner = {
   ) => StreamBinding
   detach: (binding: StreamBinding) => void
   adopt: (binding: StreamBinding, chatId: string) => void
-  readopt: (chatId: string) => StreamBinding | null
+  readopt: (chatId: string, selectedPath: UIMessage[]) => StreamBinding | null
   setHandlers: (handlers: ChatStreamHandlers) => void
   setFallbackTurnBodyProvider: (
     provider: (() => ChatTurnBodyFields | null) | null
@@ -174,6 +176,7 @@ function emitBindingGauge(
     | "detached"
     | "adopted"
     | "readopted"
+    | "readopt_rejected_divergent"
     | "finished_attached"
     | "finished_detached"
     | "watchdog_stop",
@@ -361,7 +364,7 @@ function createDetachableChatStreamOwner(
     // reads the lifecycle at dispatch time. Returns null when no live
     // detached binding exists for the chat — the caller falls through to
     // today's fresh-binding + snapshot-projection path.
-    readopt(chatId) {
+    readopt(chatId, selectedPath) {
       const binding = detachedByOrigin.get(chatId)
       if (!binding) return null
       detachedByOrigin.delete(chatId)
@@ -371,6 +374,20 @@ function createDetachableChatStreamOwner(
       // fire — but re-adopting a dead stream would trade the snapshot path
       // for a frozen thread, so verify before flipping ownership.
       if (lifecycle?.state !== "detached" || !isStreamLive(binding)) {
+        return null
+      }
+      // A reactive selected path can change while this binding is detached
+      // (another tab regenerated, edited, or selected a sibling). Reject only
+      // a PROVEN mismatch: the shared divergence detector deliberately treats
+      // an empty/lagging server path and unanchored in-flight messages as
+      // compatible, preserving smooth re-adoption for the ordinary case.
+      if (
+        isSelectedPathDivergent(
+          binding.chat.messages as ChatTurnMessage[],
+          selectedPath as ChatTurnMessage[]
+        )
+      ) {
+        emitBindingGauge("readopt_rejected_divergent", chatId)
         return null
       }
       clearWatchdog(binding)
@@ -515,7 +532,9 @@ export function useCommitDetachableChatStream({
         const currentStreamIsLive =
           binding.chat.status === "submitted" ||
           binding.chat.status === "streaming"
-        const readopted = currentStreamIsLive ? null : owner.readopt(chatId)
+        const readopted = currentStreamIsLive
+          ? null
+          : owner.readopt(chatId, initialMessages)
         if (readopted) {
           owner.detach(binding)
           stream.commit.replace(chatId, readopted)
@@ -533,7 +552,8 @@ export function useCommitDetachableChatStream({
         // prepare a fresh attached binding for the route; Convex remains the
         // recovery plane for reload/second-tab/other-device.
         owner.detach(binding)
-        const readopted = chatId === null ? null : owner.readopt(chatId)
+        const readopted =
+          chatId === null ? null : owner.readopt(chatId, initialMessages)
         const nextBinding =
           readopted ?? owner.createBinding(initialMessages, chatId)
         stream.commit.replace(chatId, nextBinding)

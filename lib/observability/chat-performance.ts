@@ -161,6 +161,8 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
       "created",
       "detached",
       "adopted",
+      "readopted",
+      "readopt_rejected_divergent",
       "finished_attached",
       "finished_detached",
       "watchdog_stop"
