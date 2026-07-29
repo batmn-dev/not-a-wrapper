@@ -117,6 +117,22 @@ normal and 4× CPU frame gates in the results document pass.
 provider/model that traces prove emits visually unacceptable bursts after
 this client path, and never to conceal renderer slowness.
 
+**Escape hatch exercised (2026-07-28).** Traces proved Anthropic's serving
+path emits ~90–430-char text slabs every ~100–400 ms
+(`docs/measurements/2026-07-28-streaming-failures-investigation.md`, issue
+3), which this client path faithfully paints as slabs. The implementation is
+`createWordChunkingTransform` (`app/api/chat/word-chunking-transform.ts`) at
+the server `streamText` seam — NOT the SDK's `smoothStream`, whose installed
+version also delays reasoning deltas and holds timers across aborts. The
+gate is the evidence itself rather than a provider allowlist: deltas at or
+below 24 chars pass through untouched and synchronously (word-granular
+providers pay nothing), and only oversized slabs are word-split, paced
+against the provider's own observed inter-delta gap so added latency stays
+bounded below one gap (≤ 360 ms). Text deltas only; abort cancels all
+pacing immediately. Wire-verified per provider: OpenAI 188 deltas/med 5
+chars (pass-through), Anthropic Haiku 154 deltas/med 6 chars (was ~16
+slabs of ~360), Gemini 153 deltas/med 5 chars.
+
 ### Why the second reveal scheduler was rejected
 
 - It created displayed-text state that intentionally trailed canonical text
