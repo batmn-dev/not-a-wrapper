@@ -124,6 +124,27 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
   durable_settlement_receipt: {
     outcome: oneOf("completed", "failed", "aborted"),
   },
+  // --- incremental Markdown projection anomalies (streaming plan §6) ---
+  // Rare by design: resets (non-prefix corrections, identity churn),
+  // incremental fallbacks (fast path could not prove safety), and settlement
+  // mismatches (incremental output disagreed with the authoritative parse —
+  // authoritative wins, this mark is the alarm). Content-free reasons only.
+  markdown_projection_reset: {
+    reason: oneOf(
+      "identity-changed",
+      "parser-version-changed",
+      "source-shrunk",
+      "source-diverged"
+    ),
+  },
+  markdown_projection_fallback: {
+    reason: oneOf(
+      "no-safe-restart-boundary",
+      "tail-misaligned",
+      "context-divergence"
+    ),
+  },
+  markdown_projection_settle_mismatch: {},
   // --- client navigation marks (plan PR 0 step 3) ---
   chat_navigation_intent: {},
   chat_route_state_committed: {},

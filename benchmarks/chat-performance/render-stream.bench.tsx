@@ -21,7 +21,10 @@ import { createHighlighter } from "shiki"
 import { bench, describe } from "vitest"
 import {
   buildCodePayload,
+  buildLongMarkdownPayload,
+  buildManyShortBlocksPayload,
   buildMarkdownPayload,
+  buildShortProsePayload,
   buildStreamScript,
   describeBenchEnvironment,
   foldStreamScript,
@@ -105,6 +108,63 @@ console.log(
     performance.now() - initStart
   ).toFixed(1)} ms`
 )
+
+// Tail-growth states: the SAME small terminal paragraph grows by a few
+// characters per update on top of a fixed completed prefix. Under the full
+// splitter, per-update cost tracks total accumulated size; the plan's §6
+// gate is that incremental projection makes it track the tail instead.
+function sampleTailGrowthStates(base: string, steps = 40): string[] {
+  const states: string[] = []
+  let tail = ""
+  for (let i = 0; i < steps; i++) {
+    tail += ` word${i}`
+    states.push(base + tail)
+  }
+  return states
+}
+
+const shortProse = buildShortProsePayload()
+const longMarkdown = buildLongMarkdownPayload()
+const manyShortBlocks = buildManyShortBlocksPayload()
+const markdownTailGrowth = sampleTailGrowthStates(buildMarkdownPayload())
+const longTailGrowth = sampleTailGrowthStates(longMarkdown)
+const manyBlocksTailGrowth = sampleTailGrowthStates(manyShortBlocks)
+
+describe("markdown splitter scaling (streaming plan §5 baseline)", () => {
+  bench(
+    "per-update split, ~500 B short prose (40 tail-growth states)",
+    () => {
+      for (const state of sampleTailGrowthStates(shortProse)) {
+        parseMarkdownIntoBlocks(state)
+      }
+    },
+    { warmupIterations: 2, iterations: 10, time: 0, warmupTime: 0 }
+  )
+
+  bench(
+    "per-update split, ~12 KB mixed payload (40 tail-growth states)",
+    () => {
+      for (const state of markdownTailGrowth) parseMarkdownIntoBlocks(state)
+    },
+    { warmupIterations: 2, iterations: 10, time: 0, warmupTime: 0 }
+  )
+
+  bench(
+    "per-update split, ~100 KB payload with short tail (40 tail-growth states)",
+    () => {
+      for (const state of longTailGrowth) parseMarkdownIntoBlocks(state)
+    },
+    { warmupIterations: 1, iterations: 5, time: 0, warmupTime: 0 }
+  )
+
+  bench(
+    "per-update split, 400 short blocks with small tail (40 tail-growth states)",
+    () => {
+      for (const state of manyBlocksTailGrowth) parseMarkdownIntoBlocks(state)
+    },
+    { warmupIterations: 1, iterations: 5, time: 0, warmupTime: 0 }
+  )
+})
 
 describe("markdown splitter (components/ui/markdown.tsx)", () => {
   bench(

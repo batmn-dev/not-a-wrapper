@@ -19,14 +19,30 @@
  *   - Verify INITIAL_COMPONENTS customizations are not overwritten
  */
 import {
+  advanceMarkdownProjection,
+  REMARK_MATH_OPTIONS,
+  splitMarkdownSource,
+  type MarkdownProjectionResult,
+} from "@/lib/markdown/incremental-block-projection"
+import {
   CODE_BLOCK_ATTRIBUTE,
   remarkCodeBlockAnnotation,
 } from "@/lib/markdown/remark-code-block-annotation"
 import { remarkLinkPresentation } from "@/lib/markdown/remark-link-presentation"
 import { remarkUnwrapLinkParens } from "@/lib/markdown/remark-unwrap-link-parens"
+import { markMarkdownProjectionAnomaly } from "@/lib/observability/chat-performance-client"
 import { cn } from "@/lib/utils"
 import { RiCodeLine } from "@remixicon/react"
-import { createContext, memo, useContext, useId, useMemo, useRef } from "react"
+import {
+  createContext,
+  memo,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import ReactMarkdown, {
   Components,
   defaultUrlTransform,
@@ -34,9 +50,7 @@ import ReactMarkdown, {
 import rehypeKatex from "rehype-katex"
 import remarkBreaks from "remark-breaks"
 import remarkGfm from "remark-gfm"
-import remarkMath, { type Options as RemarkMathOptions } from "remark-math"
-import remarkParse from "remark-parse"
-import { unified } from "unified"
+import remarkMath from "remark-math"
 import { ButtonCopy } from "./button-copy"
 import { CodeBlock, CodeBlockCode, CodeBlockGroup } from "./code-block"
 import { Icon } from "./icon"
@@ -67,10 +81,10 @@ export type MarkdownProps = {
 export type MarkdownBlockStability = "stable" | "growing"
 
 /**
- * Stable per-block record (plan PR 3): the block's source text, its identity
- * (index-based — streamed Markdown only appends blocks), and its source
- * offsets in the full payload. Stability is derived per render from the
- * terminal-block rule, not stored by the parser.
+ * Legacy per-block record shape kept for the reference splitter below.
+ * Production rendering uses `MarkdownProjectionBlock` from the incremental
+ * projection, whose identities are monotonic per lineage (not index-derived)
+ * so a finalized block keeps its key across every later append.
  */
 export type MarkdownBlockRecord = {
   text: string
@@ -88,37 +102,19 @@ export type MarkdownBlockRecord = {
 const MarkdownBlockStabilityContext =
   createContext<MarkdownBlockStability>("stable")
 
-const REMARK_MATH_OPTIONS = {
-  singleDollarTextMath: false,
-} satisfies RemarkMathOptions
-
-const markdownProcessor = unified()
-  .use(remarkParse)
-  .use(remarkGfm)
-  .use(remarkMath, REMARK_MATH_OPTIONS)
-
-// Exported for benchmarks/chat-performance so the harness measures the real
-// production splitter (plan PR 0a), not a reimplementation.
+/**
+ * Legacy full-source splitter, retained as the reference implementation and
+ * benchmark baseline (plan §6 rollback note). Production rendering now flows
+ * through `advanceMarkdownProjection`, whose reset/settlement paths run this
+ * same authoritative parse.
+ */
 export function parseMarkdownIntoBlocks(markdown: string): MarkdownBlockRecord[] {
-  const tree = markdownProcessor.parse(markdown)
-
-  const blocks: MarkdownBlockRecord[] = []
-  for (const node of tree.children) {
-    const start = node.position?.start.offset
-    const end = node.position?.end.offset
-
-    if (typeof start !== "number" || typeof end !== "number") {
-      continue
-    }
-
-    blocks.push({
-      text: markdown.slice(start, end),
-      id: `block-${blocks.length}`,
-      startOffset: start,
-      endOffset: end,
-    })
-  }
-  return blocks
+  return splitMarkdownSource(markdown).map((block, index) => ({
+    text: block.text,
+    id: `block-${index}`,
+    startOffset: block.startOffset,
+    endOffset: block.endOffset,
+  }))
 }
 
 function extractLanguage(className?: string): string {
@@ -331,7 +327,49 @@ function MarkdownComponent({
 }: MarkdownProps) {
   const generatedId = useId()
   const blockId = id ?? generatedId
-  const blocks = useMemo(() => parseMarkdownIntoBlocks(children), [children])
+
+  // Incremental block projection (streaming plan §6): ordinary append-only
+  // growth re-parses only the mutable tail; identity change, non-prefix
+  // corrections, and parser-version drift reset; `streaming: false` runs the
+  // authoritative settlement parse. The transition advances through React
+  // state via the render-phase adjustment pattern — never a ref — so an
+  // abandoned concurrent render can neither consume a one-shot transition
+  // nor leak a half-advanced projection into a later commit:
+  // `advanceMarkdownProjection` is pure and deterministic, and the setState
+  // below re-runs the render with the adjusted state before committing.
+  const [projection, setProjection] = useState<MarkdownProjectionResult>(() =>
+    advanceMarkdownProjection({
+      previous: null,
+      source: children,
+      streaming,
+      identity: blockId,
+    })
+  )
+  let current = projection
+  if (
+    current.state.source !== children ||
+    current.state.identity !== blockId ||
+    current.state.settled === streaming
+  ) {
+    current = advanceMarkdownProjection({
+      previous: projection.state,
+      source: children,
+      streaming,
+      identity: blockId,
+    })
+    setProjection(current)
+  }
+
+  // Anomaly marks (content-free, rare): resets after the initial parse,
+  // incremental fallbacks, and settlement mismatches. Committed-state effect
+  // so abandoned renders never emit.
+  const lastMarkedRef = useRef<MarkdownProjectionResult | null>(null)
+  useEffect(() => {
+    if (lastMarkedRef.current === projection) return
+    lastMarkedRef.current = projection
+    markMarkdownProjectionAnomaly(projection)
+  }, [projection])
+
   const mergedComponents = useMemo(
     () =>
       components
@@ -340,6 +378,7 @@ function MarkdownComponent({
     [components]
   )
 
+  const blocks = current.state.blocks
   return (
     <div className={className}>
       {blocks.map((block, index) => (

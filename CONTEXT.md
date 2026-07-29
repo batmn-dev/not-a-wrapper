@@ -184,6 +184,38 @@ The deep client module that assembles a **Chat turn** payload: it owns the draft
 _Avoid_: chat-input prop orchestration (the shallow 21-prop interface), parent-owned draft/file state, `quotedText`-style commands modeled as state
 _Status_: implemented 2026-07-03 (branch `darknight/gotham-by-gaslight`).
 
+**Streaming renderer**:
+The active conversation surface that presents canonical assistant text as it arrives. It may coalesce presentation work within one browser frame, but it never owns a second delayed copy of the text or animates prose word by word; durable and shared recovery remain a separate concern.
+_Avoid_: presentation reveal, displayed-text store, prefix scheduler, word queue, prose animation, durable renderer
+
+**Provider stream smoothing**:
+An evidence-gated server transformation for a specific provider whose decoded text deltas arrive in bursts too large for frame-level presentation. It is not a global presentation policy: naturally fine-grained provider output passes through unchanged, and the client never decomposes canonical text into a word-reveal queue.
+_Avoid_: global smoothing, client smoothing, word-by-word mode
+
+**Streaming Markdown projection**:
+The interpretation of canonical assistant text as stable completed blocks plus a context-verified mutable tail. Stable blocks retain their identity while the tail grows; ambiguous Markdown may widen or invalidate the tail, and correctness falls back to the full existing Markdown interpretation rather than changing parser semantics.
+_Avoid_: streaming parser (the parser is unchanged), permanently frozen blocks, parser swap
+
+**Growing code presentation**:
+The streaming state of an unfinished or recently changing fenced code block. Its canonical code appears immediately without syntax highlighting; highlighting begins only after a short idle boundary or terminal settlement, and conversations without code never initialize the highlighter.
+_Avoid_: token-frequency highlighting, eager highlighter startup, withheld code
+
+**Stream metadata**:
+The sparse semantic events that accompany a foreground assistant stream: its start, meaningful metadata changes, and terminal settlement. Ordinary text and reasoning deltas do not emit empty metadata records.
+_Avoid_: per-delta metadata, empty metadata, metadata heartbeat
+
+**Foreground stream authority**:
+The active tab's local AI SDK message state while that tab owns the direct HTTP response. It alone drives foreground token presentation; Convex records run status, periodic durable snapshots, and terminal state for reload, navigation, tab, and device recovery without feeding the owner tab's token-by-token render path.
+_Avoid_: Convex-driven foreground streaming, dual foreground authority, snapshot-as-token-state
+
+**Foreground notification cadence**:
+The maximum one-browser-frame window in which the active AI SDK message state may coalesce notifications before React presents the latest canonical text. It is a client state-notification boundary, not a second presentation queue; the browser may still combine multiple mutations into one painted frame.
+_Avoid_: reveal cadence, token timer, direct DOM cadence, paint guarantee
+
+**Terminal stream flush**:
+The ordering boundary for complete, Stop, error, approval pause, retry replacement, and navigation detachment. Any pending canonical text becomes observable before terminal metadata or status settles, after which final Markdown and code presentation may complete without changing the canonical response.
+_Avoid_: terminal drain (implies a reveal queue), delayed trailing text, settle-before-flush
+
 ### Tools
 
 **Tool runtime**:

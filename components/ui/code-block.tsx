@@ -15,64 +15,11 @@
  */
 "use client"
 
-import {
-  GROWING_HIGHLIGHT_THROTTLE_MS,
-  normalizeShikiLanguage,
-} from "@/lib/chat-performance/streaming-code-render"
+import { GROWING_HIGHLIGHT_IDLE_MS } from "@/lib/chat-performance/streaming-code-render"
+import { highlightCode } from "@/lib/markdown/shiki-client"
 import { cn } from "@/lib/utils"
 import { useTheme } from "next-themes"
 import React, { useEffect, useRef, useState } from "react"
-import type { Highlighter } from "shiki"
-import { createHighlighter } from "shiki"
-
-const DEFAULT_LANGS = [
-  "bash",
-  "c",
-  "cpp",
-  "csharp",
-  "css",
-  "diff",
-  "dockerfile",
-  "go",
-  "graphql",
-  "html",
-  "ini",
-  "java",
-  "javascript",
-  "json",
-  "jsx",
-  "kotlin",
-  "lua",
-  "makefile",
-  "markdown",
-  "perl",
-  "php",
-  "powershell",
-  "python",
-  "ruby",
-  "rust",
-  "scala",
-  "shell",
-  "sql",
-  "swift",
-  "toml",
-  "tsx",
-  "typescript",
-  "xml",
-  "yaml",
-] as const
-
-let highlighterPromise: Promise<Highlighter> | null = null
-
-function getHighlighter(): Promise<Highlighter> {
-  if (!highlighterPromise) {
-    highlighterPromise = createHighlighter({
-      themes: ["github-dark", "github-light"],
-      langs: [...DEFAULT_LANGS],
-    })
-  }
-  return highlighterPromise
-}
 
 export type CodeBlockProps = {
   children?: React.ReactNode
@@ -107,9 +54,10 @@ export type CodeBlockCodeProps = {
   /**
    * True only for the terminal code block of a live (submitted/streaming)
    * message (plan PR 3 stability rule, classified in
-   * `components/ui/markdown.tsx`). Growing blocks re-highlight at most once
-   * per `GROWING_HIGHLIGHT_THROTTLE_MS`; everything else highlights
-   * immediately.
+   * `components/ui/markdown.tsx`). Growing blocks render changed code as
+   * escaped plain text immediately and highlight after
+   * `GROWING_HIGHLIGHT_IDLE_MS` without another tuple change; everything else
+   * highlights immediately.
    */
   growing?: boolean
 } & React.HTMLProps<HTMLDivElement>
@@ -123,13 +71,17 @@ function CodeBlockCode({
 }: CodeBlockCodeProps) {
   const { resolvedTheme: appTheme } = useTheme()
   const theme = appTheme === "dark" ? "github-dark" : "github-light"
-  const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null)
+  const [highlighted, setHighlighted] = useState<{
+    code: string
+    language: string
+    theme: "github-dark" | "github-light"
+    html: string
+  } | null>(null)
 
   // Stale async completions are invalidated by generation token in addition
-  // to the cleanup flag; unmount and every input change clear pending timers.
+  // to the exact tuple carried by `highlighted`; unmount and every input
+  // change clear pending timers.
   const generationRef = useRef(0)
-  // Wall-clock start of the last growing highlight, for the throttle window.
-  const lastGrowingHighlightAtRef = useRef(0)
 
   useEffect(() => {
     const generation = ++generationRef.current
@@ -140,39 +92,27 @@ function CodeBlockCode({
     if (!code) return
 
     const runHighlight = async () => {
-      if (growing) {
-        lastGrowingHighlightAtRef.current = Date.now()
+      try {
+        // Lazy service (plan PR C): Shiki core, themes, and the grammar for
+        // this language load on first demand; unknown/plain ids resolve to
+        // the grammar-less `text` language inside the service.
+        const html = await highlightCode({ code, language, theme })
+        if (cancelled || generation !== generationRef.current) return
+        setHighlighted({ code, language, theme, html })
+      } catch {
+        // Module or grammar loading failed: keep the React-escaped plain
+        // fallback for this tuple; a later input change retries.
       }
-      const highlighter = await getHighlighter()
-      if (cancelled || generation !== generationRef.current) return
-      // Loaded-language query instead of exception-driven fallback: unknown
-      // and plain ids normalize to Shiki's built-in `text` language.
-      const lang = normalizeShikiLanguage(
-        language,
-        highlighter.getLoadedLanguages()
-      )
-      const html = highlighter.codeToHtml(code, { lang, theme })
-      if (cancelled || generation !== generationRef.current) return
-      setHighlightedHtml(html)
     }
 
     if (!growing) {
       // Stable, settled, or become-non-terminal: highlight the final tuple.
       void runHighlight()
     } else {
-      // Growing terminal block: keep the highlighted look, at most one
-      // highlight per interval — leading edge immediately, then trailing.
-      // The visible highlight may lag the raw tail by at most one interval;
-      // the settle pass above always renders the final tuple.
-      const elapsed = Date.now() - lastGrowingHighlightAtRef.current
-      if (elapsed >= GROWING_HIGHLIGHT_THROTTLE_MS) {
-        void runHighlight()
-      } else {
-        timer = setTimeout(
-          () => void runHighlight(),
-          GROWING_HIGHLIGHT_THROTTLE_MS - elapsed
-        )
-      }
+      // True inactivity boundary: every growing tuple change cancels and
+      // restarts this timer. There is no leading or periodic highlight while
+      // canonical code continues changing inside the window.
+      timer = setTimeout(() => void runHighlight(), GROWING_HIGHLIGHT_IDLE_MS)
     }
 
     return () => {
@@ -188,16 +128,23 @@ function CodeBlockCode({
     className
   )
 
-  // Latest completed highlight (throttled growth may lag the raw tail by at
-  // most one interval; the settle pass renders the final tuple).
-  const showHighlighted = highlightedHtml !== null && Boolean(code)
+  // Render highlighted HTML only for the exact current tuple. A code,
+  // language, or theme change therefore exposes the new canonical code
+  // immediately through the escaped plain fallback while any older async
+  // result or idle timer becomes obsolete.
+  const showHighlighted =
+    highlighted !== null &&
+    highlighted.code === code &&
+    highlighted.language === language &&
+    highlighted.theme === theme &&
+    Boolean(code)
 
   // Plain path doubles as the SSR/pre-highlight fallback: React-escaped text
   // in the same wrapper, so `<script>`-like content renders as text.
   return showHighlighted ? (
     <div
       className={classNames}
-      dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+      dangerouslySetInnerHTML={{ __html: highlighted.html }}
       {...props}
     />
   ) : (

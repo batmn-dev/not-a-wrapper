@@ -93,9 +93,8 @@ vi.mock("./turn-context", () => ({
   }),
 }))
 
-// The shipped throttle is a plain constant (50 ms — the 2026-07-23 flag
-// collapse made it permanent). The throttle suite below still needs to pin
-// the SDK's coalescing semantics across 0/32/50/100 ms, so the constant is
+// The shipped throttle is a plain 16 ms constant. The throttle suite below
+// still pins the SDK's coalescing semantics across 0/16/32/50 ms, so it is
 // mocked with a live getter; tests set the value BEFORE mounting and never
 // change it mid-mount (a mounted subscription's interval is stable in
 // production by construction — it's a module constant).
@@ -211,6 +210,39 @@ function makeUiMessageSseResponse(options: {
   return createUIMessageStreamResponse({
     stream: toUIMessageStream({ stream: result.stream }),
   })
+}
+
+function makePartialUiMessageErrorResponse(partialText: string): Response {
+  const encoder = new TextEncoder()
+  const records = [
+    { type: "start", messageId: "partial-error-message" },
+    { type: "text-start", id: "partial-error-text" },
+    {
+      type: "text-delta",
+      id: "partial-error-text",
+      delta: partialText,
+    },
+  ]
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            records
+              .map((record) => `data: ${JSON.stringify(record)}\n\n`)
+              .join("")
+          )
+        )
+        setTimeout(() => controller.error(new Error("stream failed")), 1)
+      },
+    }),
+    {
+      headers: {
+        "content-type": "text/event-stream",
+        "x-vercel-ai-ui-message-stream": "v1",
+      },
+    }
+  )
 }
 
 /**
@@ -818,14 +850,14 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       )
     }
 
-    it("coalesces streamed notifications per interval and delivers the identical final message (0/32/50/100 ms × 10/30/100 chunks/s)", async () => {
+    it("coalesces streamed notifications per interval and delivers the identical final message (0/16/32/50 ms × 10/30/100 chunks/s)", async () => {
       const deltas = Array.from({ length: 30 }, (_, i) => `piece-${i} `)
       const cadences = [
         { cps: 100, delayMs: 10 },
         { cps: 30, delayMs: 33 },
         { cps: 10, delayMs: 100 },
       ]
-      const values = [0, 32, 50, 100]
+      const values = [0, 16, 32, 50]
       type ComboResult = {
         cps: number
         value: number
@@ -930,9 +962,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       // (docs/measurements/2026-07-23-pr2-throttle-selection.md).
       console.log(
         "[pr2-throttle-selection] " +
-          JSON.stringify(
-            results.map(({ final: _final, ...rest }) => rest)
-          )
+          JSON.stringify(results.map(({ final: _final, ...rest }) => rest))
       )
     })
 
@@ -974,10 +1004,10 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       await act(async () => {
         void hookApiRef.current?.sendMessage({ text: "hi" })
       })
-      await waitFake(
-        () => expect(hookApiRef.current?.status).toBe("error"),
-        { stepMs: 5, maxSteps: 10 }
-      )
+      await waitFake(() => expect(hookApiRef.current?.status).toBe("error"), {
+        stepMs: 5,
+        maxSteps: 10,
+      })
       await waitFake(() =>
         expect(
           seamMocks.chatTurnController.finishChatTurn
@@ -986,8 +1016,74 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       errorMount.unmount()
     })
 
-    it("Stop mid-stream at 50 ms settles isAbort and the trailing update preserves exactly the partial output", async () => {
-      throttleMock.value = 50
+    it("terminal status render reads the latest canonical snapshot before the 16 ms trailing notification", async () => {
+      throttleMock.value = 16
+      const finalText = "terminal snapshot"
+      fetchMock.mockImplementation(async (_url, init) =>
+        withAbortSemantics(
+          makeUiMessageSseResponse({
+            deltas: ["terminal ", "snapshot"],
+            chunkDelayInMs: null,
+          }),
+          init?.signal
+        )
+      )
+      framesRecorder.current = []
+      const mounted = mountThrottleHarness()
+
+      await act(async () => {
+        void hookApiRef.current?.sendMessage({ text: "hi" })
+      })
+      // simulateReadableStream schedules its null-delay chunks at 0 ms. Flush
+      // those without crossing the pending 16 ms messages notification.
+      await advanceFake(0)
+
+      // No timer advance: the immediate status transition causes React to
+      // re-read the current message snapshot through useSyncExternalStore.
+      expect(hookApiRef.current?.status).toBe("ready")
+      const frames = framesRecorder.current
+      if (!frames) throw new Error("frames recorder was not installed")
+      const terminalFrame = [...frames]
+        .reverse()
+        .find((frame) => frame.status === "ready")
+      expect(assistantText(terminalFrame?.messages ?? [])).toBe(finalText)
+
+      const frameCountBeforeTrailingTimer = frames.length
+      await advanceFake(16)
+      expect(frames.length).toBe(frameCountBeforeTrailingTimer)
+      expect(assistantText(hookApiRef.current?.messages ?? [])).toBe(finalText)
+      mounted.unmount()
+    })
+
+    it("transport error render preserves delivered partial text before the 16 ms trailing notification", async () => {
+      throttleMock.value = 16
+      const partialText = "delivered partial"
+      fetchMock.mockImplementation(async () =>
+        makePartialUiMessageErrorResponse(partialText)
+      )
+      framesRecorder.current = []
+      const mounted = mountThrottleHarness()
+
+      await act(async () => {
+        void hookApiRef.current?.sendMessage({ text: "hi" })
+      })
+      await advanceFake(1)
+
+      expect(hookApiRef.current?.status).toBe("error")
+      const frames = framesRecorder.current
+      if (!frames) throw new Error("frames recorder was not installed")
+      const errorFrame = [...frames]
+        .reverse()
+        .find((frame) => frame.status === "error")
+      expect(assistantText(errorFrame?.messages ?? [])).toBe(partialText)
+      expect(assistantText(hookApiRef.current?.messages ?? [])).toBe(
+        partialText
+      )
+      mounted.unmount()
+    })
+
+    it("Stop mid-stream at 16 ms settles isAbort and the terminal render preserves exactly the partial output", async () => {
+      throttleMock.value = 16
       fetchMock.mockImplementation(async (_url, init) =>
         withAbortSemantics(
           makeUiMessageSseResponse({
@@ -1002,9 +1098,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       await act(async () => {
         void hookApiRef.current?.sendMessage({ text: "hi" })
       })
-      await waitFake(() =>
-        expect(hookApiRef.current?.status).toBe("streaming")
-      )
+      await waitFake(() => expect(hookApiRef.current?.status).toBe("streaming"))
       await advanceFake(80)
       await act(async () => {
         await hookApiRef.current?.stop()
@@ -1020,15 +1114,15 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       expect(partialText.length).toBeGreaterThan(0)
       expect(deltas20Text().startsWith(partialText)).toBe(true)
 
-      // Trailing flush: the rendered conversation converges on the partial
-      // text and then stays put — no late writes after the stop settled.
-      await advanceFake(150)
       const frames = framesRecorder.current
       if (!frames) throw new Error("frames recorder was not installed")
+      // Before advancing the pending notification window, the immediate
+      // terminal status render already reads the exact partial snapshot.
       expect(assistantText(frames[frames.length - 1].messages)).toBe(
         partialText
       )
       const settledFrameCount = frames.length
+      await advanceFake(150)
       await advanceFake(400)
       expect(frames.length).toBe(settledFrameCount)
       mounted.unmount()
@@ -1038,8 +1132,8 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       }
     })
 
-    it("tool approval and one-shot auto-send continuation survive the throttle at 50 ms", async () => {
-      throttleMock.value = 50
+    it("tool approval and one-shot auto-send continuation survive the throttle at 16 ms", async () => {
+      throttleMock.value = 16
       seamMocks.convexMutation.mockResolvedValue({
         status: "approved",
         alreadyResolved: false,
@@ -1113,8 +1207,10 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       await act(async () => {
         void hookApiRef.current?.sendMessage({ text: "hi" })
       })
+      await advanceFake(0)
 
-      // The approval request must become visible within the bounded window.
+      // The approval terminal render must expose the latest tool part before
+      // the pending 16 ms messages notification is advanced.
       type ApprovalToolPart = {
         type: string
         state?: string
@@ -1129,9 +1225,8 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
           (part) => part.type === "tool-send_note"
         ) as ApprovalToolPart | undefined
       }
-      await waitFake(() =>
-        expect(findToolPart()?.state).toBe("approval-requested")
-      )
+      expect(hookApiRef.current?.status).toBe("ready")
+      expect(findToolPart()?.state).toBe("approval-requested")
       const approvalId = findToolPart()?.approval?.id
       if (!approvalId) throw new Error("approval id missing from tool part")
 
@@ -1143,9 +1238,9 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       // answer lands in the rendered conversation.
       await waitFake(() => expect(fetchMock).toHaveBeenCalledTimes(2))
       await waitFake(() =>
-        expect(
-          assistantText(hookApiRef.current?.messages ?? [])
-        ).toContain("Continued answer.")
+        expect(assistantText(hookApiRef.current?.messages ?? [])).toContain(
+          "Continued answer."
+        )
       )
       expect(findToolPart()?.state).toBe("approval-responded")
       expect(findToolPart()?.approval?.approved).toBe(true)

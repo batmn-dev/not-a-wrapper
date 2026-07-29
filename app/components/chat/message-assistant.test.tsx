@@ -562,6 +562,27 @@ describe("MessageAssistant activity trigger", () => {
     expect(document.body.textContent).toContain("Using GPT-5.5")
   })
 
+  it("renders full canonical text on non-last and settled rows", async () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+    await act(async () => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView([], "ready")}
+            status="ready"
+          >
+            {"A settled answer with **markdown** in it."}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    expect(container?.textContent).toContain(
+      "A settled answer with markdown in it."
+    )
+  })
+
   it("keeps a Retry control on an aborted turn whose only preserved content is a tool card", async () => {
     const store = makeStore({ panelTurnId: "assistant-1" })
     const onReload = vi.fn()

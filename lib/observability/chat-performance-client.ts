@@ -202,6 +202,47 @@ export function useChatTurnPerfMarks(input: TurnPerfInput): void {
 }
 
 // ---------------------------------------------------------------------------
+// Incremental Markdown projection anomaly marks (streaming plan §6)
+// ---------------------------------------------------------------------------
+
+type MarkdownProjectionAnomalySource = {
+  resetReason:
+    | "initial"
+    | "identity-changed"
+    | "parser-version-changed"
+    | "source-shrunk"
+    | "source-diverged"
+    | null
+  fallbackReason:
+    | "no-safe-restart-boundary"
+    | "tail-misaligned"
+    | "context-divergence"
+    | null
+  settleMismatch: boolean
+}
+
+/**
+ * Emits the rare projection anomaly marks for one committed transition:
+ * resets after the initial parse, incremental fallbacks, and settlement
+ * mismatches. Reasons are closed enums — never content.
+ */
+export function markMarkdownProjectionAnomaly(
+  result: MarkdownProjectionAnomalySource
+): void {
+  if (result.resetReason && result.resetReason !== "initial") {
+    markChatPerf("markdown_projection_reset", { reason: result.resetReason })
+  }
+  if (result.fallbackReason) {
+    markChatPerf("markdown_projection_fallback", {
+      reason: result.fallbackReason,
+    })
+  }
+  if (result.settleMismatch) {
+    markChatPerf("markdown_projection_settle_mismatch", {})
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Navigation / chat-switch marks and the settlement receipt
 // ---------------------------------------------------------------------------
 

@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest"
 import {
   assertProjectionEquivalence,
   buildCodePayload,
+  buildCodeStressPayload,
+  buildLongMarkdownPayload,
+  buildManyShortBlocksPayload,
+  buildShortProsePayload,
   buildDeterministicBranchTree,
   buildMarkdownPayload,
   buildRandomBranchTree,
@@ -117,6 +121,35 @@ describe("deterministic payloads", () => {
     expect(lines).toBeGreaterThanOrEqual(250)
     expect(lines).toBeLessThanOrEqual(500)
     expect(buildCodePayload(300).split("\n")).toHaveLength(300)
+  })
+
+  it("keeps the short prose payload near 500 characters with no block markup", () => {
+    const prose = buildShortProsePayload()
+    expect(prose.length).toBeGreaterThanOrEqual(400)
+    expect(prose.length).toBeLessThanOrEqual(650)
+    expect(prose).not.toContain("\n")
+    expect(prose).not.toContain("```")
+  })
+
+  it("keeps the long payload near 100 KB and ending in a short growing paragraph", () => {
+    const long = buildLongMarkdownPayload()
+    const bytes = Buffer.byteLength(long, "utf8")
+    expect(bytes).toBeGreaterThanOrEqual(90 * 1024)
+    expect(bytes).toBeLessThanOrEqual(115 * 1024)
+    expect(long.endsWith("Short growing terminal paragraph under construction")).toBe(true)
+    // The terminal paragraph is its own block: preceded by a blank line.
+    expect(long).toContain("\n\nShort growing terminal paragraph")
+  })
+
+  it("builds many short completed blocks with a small mutable tail", () => {
+    const payload = buildManyShortBlocksPayload()
+    const blocks = payload.split("\n\n")
+    expect(blocks.length).toBe(401)
+    expect(blocks[blocks.length - 1]).toBe("Growing tail paragraph")
+  })
+
+  it("scales the code stress payload to ~4× the 400-line fixture", () => {
+    expect(buildCodeStressPayload().split("\n")).toHaveLength(1600)
   })
 })
 
