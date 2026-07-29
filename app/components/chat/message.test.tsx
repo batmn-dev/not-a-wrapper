@@ -26,6 +26,8 @@ vi.mock("./message-assistant", () => ({
   MessageAssistant: (props: {
     children: React.ReactNode
     messageId: string
+    copied?: boolean
+    copyToClipboard?: () => void
     onReload?: (messageId: string) => void
     retryModelId?: string
   }) => {
@@ -35,6 +37,14 @@ vi.mock("./message-assistant", () => ({
     return (
       <div>
         <div>{children}</div>
+        <button
+          data-copied={Boolean(props.copied)}
+          data-testid="copy"
+          type="button"
+          onClick={props.copyToClipboard}
+        >
+          copy
+        </button>
         <button
           data-can-reload={Boolean(onReload)}
           data-testid="reload"
@@ -149,7 +159,6 @@ describe("Message memoization", () => {
 
     expect(lastAssistantProps.current.retryModelId).toBe("gpt-5.5")
   })
-
 })
 
 describe("Message body memo contract (R3)", () => {
@@ -257,6 +266,232 @@ describe("Message body memo contract (R3)", () => {
       children: "Hi there",
     })
     expect(messageAssistantSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it("copies the complete latest canonical response after settlement", async () => {
+    const originalClipboard = Object.getOwnPropertyDescriptor(
+      navigator,
+      "clipboard"
+    )
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+
+    try {
+      const partial = Array.from(
+        { length: 64 },
+        (_, i) => `1. streamed item ${i + 1}`
+      ).join("\n")
+      const complete = Array.from(
+        { length: 176 },
+        (_, i) => `1. settled item ${i + 1}`
+      ).join("\n")
+
+      renderAssistant({
+        parts: [
+          { type: "text", text: partial },
+        ] as unknown as UIMessage["parts"],
+        status: "streaming",
+        isLast: true,
+        children: partial,
+      })
+      renderAssistant({
+        parts: [
+          { type: "text", text: complete },
+        ] as unknown as UIMessage["parts"],
+        status: "ready",
+        isLast: true,
+        children: complete,
+      })
+
+      const copyButton = container?.querySelector(
+        '[data-testid="copy"]'
+      ) as HTMLButtonElement | null
+      await act(async () => {
+        copyButton?.click()
+        await Promise.resolve()
+      })
+
+      expect(writeText).toHaveBeenCalledTimes(1)
+      expect(writeText).toHaveBeenCalledWith(complete)
+      expect(writeText).not.toHaveBeenCalledWith(partial)
+      expect(copyButton?.dataset.copied).toBe("true")
+    } finally {
+      if (originalClipboard) {
+        Object.defineProperty(navigator, "clipboard", originalClipboard)
+      } else {
+        Reflect.deleteProperty(navigator, "clipboard")
+      }
+    }
+  })
+
+  it("keeps copy feedback idle when the clipboard is unavailable or rejects", async () => {
+    const originalClipboard = Object.getOwnPropertyDescriptor(
+      navigator,
+      "clipboard"
+    )
+
+    try {
+      renderAssistant({
+        parts: [{ type: "text", text: "Canonical answer" }],
+        status: "ready",
+        children: "Canonical answer",
+      })
+      const copyButton = container?.querySelector(
+        '[data-testid="copy"]'
+      ) as HTMLButtonElement | null
+
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: undefined,
+      })
+      await act(async () => {
+        copyButton?.click()
+        await Promise.resolve()
+      })
+      expect(copyButton?.dataset.copied).toBe("false")
+
+      const writeText = vi.fn().mockRejectedValue(new Error("denied"))
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText },
+      })
+      await act(async () => {
+        copyButton?.click()
+        await Promise.resolve()
+      })
+      expect(writeText).toHaveBeenCalledWith("Canonical answer")
+      expect(copyButton?.dataset.copied).toBe("false")
+    } finally {
+      if (originalClipboard) {
+        Object.defineProperty(navigator, "clipboard", originalClipboard)
+      } else {
+        Reflect.deleteProperty(navigator, "clipboard")
+      }
+    }
+  })
+
+  it("lets only the latest repeated click publish copy feedback", async () => {
+    const originalClipboard = Object.getOwnPropertyDescriptor(
+      navigator,
+      "clipboard"
+    )
+    let resolveFirst: (() => void) | undefined
+    let resolveSecond: (() => void) | undefined
+    const writeText = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveFirst = resolve
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveSecond = resolve
+          })
+      )
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+
+    try {
+      renderAssistant({
+        parts: [{ type: "text", text: "Canonical answer" }],
+        status: "ready",
+        children: "Canonical answer",
+      })
+      const copyButton = container?.querySelector(
+        '[data-testid="copy"]'
+      ) as HTMLButtonElement | null
+
+      act(() => {
+        copyButton?.click()
+        copyButton?.click()
+      })
+      expect(writeText).toHaveBeenCalledTimes(2)
+
+      await act(async () => {
+        resolveFirst?.()
+        await Promise.resolve()
+      })
+      expect(copyButton?.dataset.copied).toBe("false")
+
+      await act(async () => {
+        resolveSecond?.()
+        await Promise.resolve()
+      })
+      expect(copyButton?.dataset.copied).toBe("true")
+    } finally {
+      if (originalClipboard) {
+        Object.defineProperty(navigator, "clipboard", originalClipboard)
+      } else {
+        Reflect.deleteProperty(navigator, "clipboard")
+      }
+    }
+  })
+
+  it("invalidates an in-flight copy when canonical text changes", async () => {
+    const originalClipboard = Object.getOwnPropertyDescriptor(
+      navigator,
+      "clipboard"
+    )
+    let resolvePartial: (() => void) | undefined
+    const writeText = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolvePartial = resolve
+          })
+      )
+      .mockResolvedValueOnce(undefined)
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+
+    try {
+      renderAssistant({
+        parts: [{ type: "text", text: "Partial answer" }],
+        status: "ready",
+        children: "Partial answer",
+      })
+      const copyButton = container?.querySelector(
+        '[data-testid="copy"]'
+      ) as HTMLButtonElement | null
+      act(() => {
+        copyButton?.click()
+      })
+
+      renderAssistant({
+        parts: [{ type: "text", text: "Complete answer" }],
+        status: "ready",
+        children: "Complete answer",
+      })
+      await act(async () => {
+        resolvePartial?.()
+        await Promise.resolve()
+      })
+      expect(copyButton?.dataset.copied).toBe("false")
+
+      await act(async () => {
+        copyButton?.click()
+        await Promise.resolve()
+      })
+      expect(writeText).toHaveBeenLastCalledWith("Complete answer")
+      expect(copyButton?.dataset.copied).toBe("true")
+    } finally {
+      if (originalClipboard) {
+        Object.defineProperty(navigator, "clipboard", originalClipboard)
+      } else {
+        Reflect.deleteProperty(navigator, "clipboard")
+      }
+    }
   })
 
   it("re-renders the body when rendered tool input/output mutate in place", () => {

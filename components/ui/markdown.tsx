@@ -18,19 +18,13 @@
  *   - Keep parsing and rendering on the same remark-based pipeline
  *   - Verify INITIAL_COMPONENTS customizations are not overwritten
  */
+import { analyzeOpenFence } from "@/lib/markdown/growing-block-tail"
 import {
   advanceMarkdownProjection,
   REMARK_MATH_OPTIONS,
   splitMarkdownSource,
   type MarkdownProjectionResult,
 } from "@/lib/markdown/incremental-block-projection"
-import {
-  advanceGrowingListSegments,
-  analyzeOpenFence,
-  GROWING_LIST_SEGMENT_THRESHOLD,
-  initialGrowingListSegmentsState,
-  type GrowingListSegmentsState,
-} from "@/lib/markdown/growing-block-tail"
 import {
   CODE_BLOCK_ATTRIBUTE,
   remarkCodeBlockAnnotation,
@@ -50,10 +44,7 @@ import {
   useRef,
   useState,
 } from "react"
-import ReactMarkdown, {
-  Components,
-  defaultUrlTransform,
-} from "react-markdown"
+import ReactMarkdown, { Components, defaultUrlTransform } from "react-markdown"
 import rehypeKatex from "rehype-katex"
 import remarkBreaks from "remark-breaks"
 import remarkGfm from "remark-gfm"
@@ -115,7 +106,9 @@ const MarkdownBlockStabilityContext =
  * through `advanceMarkdownProjection`, whose reset/settlement paths run this
  * same authoritative parse.
  */
-export function parseMarkdownIntoBlocks(markdown: string): MarkdownBlockRecord[] {
+export function parseMarkdownIntoBlocks(
+  markdown: string
+): MarkdownBlockRecord[] {
   return splitMarkdownSource(markdown).map((block, index) => ({
     text: block.text,
     id: `block-${index}`,
@@ -237,15 +230,10 @@ const INITIAL_COMPONENTS: Partial<Components> = {
     const annotatedPresentation = (
       props as typeof props & Record<string, unknown>
     )["data-link-presentation"]
-    const presentation =
-      annotatedPresentation === "pill" ? "pill" : "inline"
+    const presentation = annotatedPresentation === "pill" ? "pill" : "inline"
 
     return (
-      <LinkMarkdown
-        href={href}
-        presentation={presentation}
-        {...props}
-      >
+      <LinkMarkdown href={href} presentation={presentation} {...props}>
         {children}
       </LinkMarkdown>
     )
@@ -389,56 +377,6 @@ const GrowingFenceBlock = memo(
 
 GrowingFenceBlock.displayName = "GrowingFenceBlock"
 
-/**
- * Segmented render for a growing LIST block (investigation 2026-07-28,
- * fix 1): frozen item fragments render once each as memoized Markdown
- * fragments — adjacent `<ol start>`/`<ul>` siblings, seamless because this
- * app zeroes list margins — while only a bounded suffix re-renders per
- * update. Fragment seams and looseness rules live in
- * `advanceGrowingListSegments`; settlement replaces this component with the
- * normal single-block render.
- */
-function GrowingListSegments({
-  text,
-  blockKeyBase,
-  components,
-}: {
-  text: string
-  blockKeyBase: string
-  components?: Partial<Components>
-}) {
-  // Render-phase adjustment (same pattern as the projection state below):
-  // pure transition, safe under StrictMode/concurrent double renders.
-  const [state, setState] = useState<GrowingListSegmentsState>(() =>
-    advanceGrowingListSegments(initialGrowingListSegmentsState(), text)
-  )
-  let current = state
-  if (current.lastText !== text) {
-    current = advanceGrowingListSegments(state, text)
-    setState(current)
-  }
-  const suffix = text.slice(current.committedLength)
-
-  return (
-    <>
-      {current.fragments.map((fragment) => (
-        <MemoizedMarkdownBlock
-          key={`${blockKeyBase}-${fragment.id}`}
-          content={fragment.text}
-          stability="stable"
-          components={components}
-        />
-      ))}
-      <MemoizedMarkdownBlock
-        key={`${blockKeyBase}-tail`}
-        content={suffix}
-        stability="growing"
-        components={components}
-      />
-    </>
-  )
-}
-
 function MarkdownComponent({
   children,
   id,
@@ -504,12 +442,11 @@ function MarkdownComponent({
     <div className={className}>
       {blocks.map((block, index) => {
         const growing = streaming && index === blocks.length - 1
-        // Growing single-block shapes get bounded-cost renders (fix 1): an
-        // open fence renders directly (no consumer override in play only —
-        // the direct render bypasses the `code` component seam), a large
-        // list renders as frozen fragments + bounded suffix. Everything
-        // else — including these same blocks once settled — takes the
-        // normal memoized per-block pipeline.
+        // A growing open fence renders directly when no consumer override is
+        // present. Lists intentionally stay on the canonical Markdown path:
+        // splitting one semantic list into sibling roots changes accessibility
+        // and selection-copy semantics even when sighted numbering is patched
+        // with `start` attributes.
         if (growing && !components && block.nodeType === "code") {
           const fence = analyzeOpenFence(block.text)
           if (fence) {
@@ -520,20 +457,6 @@ function MarkdownComponent({
               />
             )
           }
-        }
-        if (
-          growing &&
-          block.nodeType === "list" &&
-          block.text.length >= GROWING_LIST_SEGMENT_THRESHOLD
-        ) {
-          return (
-            <GrowingListSegments
-              key={`${blockId}-${block.id}`}
-              blockKeyBase={`${blockId}-${block.id}`}
-              text={block.text}
-              components={mergedComponents}
-            />
-          )
         }
         return (
           <MemoizedMarkdownBlock

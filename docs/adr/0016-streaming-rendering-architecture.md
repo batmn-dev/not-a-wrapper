@@ -139,9 +139,8 @@ block that never emits a blank line (a tight or blank-separated list, an
 open fence) pins the restart boundary at its own start, so per-update parse
 AND render cost grow with the block — quadratic over a stream, user-visible
 as "word-by-word at first, chunky later" (live profile: late-half main-thread
-busy 249 s vs early-half 1.7 s on a 300-item list; flat 4.7 s / 4.5 s after
-the fix, worst task 180 s → 0.64 s). Two bounded mechanisms close it, both
-inside the projection/markdown pair:
+busy 249 s vs early-half 1.7 s on a 300-item list). The parser and open-fence
+renderer can be optimized without changing document semantics:
 
 - **Parse: terminal-block line extension.** When appended lines provably
   continue the terminal `list`/`code` block (item-marker/lazy/indented
@@ -154,13 +153,16 @@ inside the projection/markdown pair:
   itself repartitions such tails char by char); rendering is
   partition-invariant over the same bytes, and the settle check tolerates
   exactly this documented case (`blocksEquivalentModuloPartialTail`).
-- **Render: frozen fragments / direct fence.** A large growing list renders
-  as frozen memoized fragments (adjacent `<ol start>`/`<ul>` siblings —
-  seamless because list margins are zeroed) plus a bounded growing suffix;
-  a growing open fence renders its `CodeBlock` directly, mirroring the
-  pipeline's DOM. Both collapse to the canonical single-block render at
-  settlement. Long single paragraphs keep the documented bound (no
-  grammar-safe interior seam).
+- **Render: direct fence, canonical lists.** A growing open fence renders its
+  `CodeBlock` directly, mirroring the pipeline's DOM. Growing lists continue
+  through one authoritative Markdown render. Splitting one source list into
+  adjacent `<ol start>`/`<ul>` siblings can mimic sighted numbering, but it
+  changes the document exposed to assistive technology, structural selectors,
+  and rich selection-copy. Correct single-root semantics take precedence over
+  the prior bounded list-render experiment. List parsing remains linearly
+  extended by the fast path above; list rendering may still grow with the
+  block until an optimization can memoize items beneath one parser-owned list
+  root. Long single paragraphs retain the same documented limitation.
 
 ### Why the second reveal scheduler was rejected
 

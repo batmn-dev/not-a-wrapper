@@ -1,16 +1,10 @@
 import { describe, expect, it } from "vitest"
+import { analyzeFenceOpener, analyzeOpenFence } from "./growing-block-tail"
 import {
   advanceMarkdownProjection,
   splitMarkdownSource,
   type MarkdownProjectionState,
 } from "./incremental-block-projection"
-import {
-  advanceGrowingListSegments,
-  analyzeFenceOpener,
-  analyzeOpenFence,
-  GROWING_LIST_SEGMENT_MIN_CHARS,
-  initialGrowingListSegmentsState,
-} from "./growing-block-tail"
 
 /**
  * Stream `source` through the projection in fixed chunks, asserting at every
@@ -24,11 +18,7 @@ function streamAndVerify(source: string, chunkSize = 3) {
   let state: MarkdownProjectionState | null = null
   let parseSteps = 0
   let steps = 0
-  for (
-    let end = chunkSize;
-    end < source.length + chunkSize;
-    end += chunkSize
-  ) {
+  for (let end = chunkSize; end < source.length + chunkSize; end += chunkSize) {
     const prefix = source.slice(0, Math.min(end, source.length))
     const result = advanceMarkdownProjection({
       previous: state,
@@ -146,67 +136,6 @@ describe("terminal-block line-extension fast path (projection)", () => {
   it("streams word-sized chunks equivalently (throttle-shaped appends)", () => {
     streamAndVerify(orderedList(25), 7)
     streamAndVerify(orderedList(25), 1)
-  })
-})
-
-describe("advanceGrowingListSegments", () => {
-  const bigList = orderedList(300)
-
-  it("freezes fragments append-only with exact concatenation", () => {
-    let state = initialGrowingListSegmentsState()
-    const seenFragments: string[] = []
-    for (let end = 40; end < bigList.length + 40; end += 40) {
-      const text = bigList.slice(0, Math.min(end, bigList.length))
-      state = advanceGrowingListSegments(state, text)
-      // Fragments only append; earlier entries never change.
-      state.fragments.forEach((fragment, i) => {
-        if (i < seenFragments.length) {
-          expect(fragment.text).toBe(seenFragments[i])
-        } else {
-          seenFragments.push(fragment.text)
-        }
-      })
-      const joined = state.fragments.map((f) => f.text).join("")
-      expect(joined).toBe(text.slice(0, state.committedLength))
-      expect(joined + text.slice(state.committedLength)).toBe(text)
-      // Every fragment starts at an item line and meets the size floor.
-      for (const fragment of state.fragments) {
-        expect(fragment.text).toMatch(/^\d+\. /)
-        expect(fragment.text.length).toBeGreaterThanOrEqual(
-          GROWING_LIST_SEGMENT_MIN_CHARS
-        )
-      }
-      if (text.length === bigList.length) break
-    }
-    expect(state.fragments.length).toBeGreaterThan(1)
-  })
-
-  it("keeps loose-list fragments loose (each contains a blank line)", () => {
-    const looseList = orderedList(200, "\n\n")
-    let state = initialGrowingListSegmentsState()
-    for (let end = 64; end < looseList.length + 64; end += 64) {
-      state = advanceGrowingListSegments(
-        state,
-        looseList.slice(0, Math.min(end, looseList.length))
-      )
-    }
-    expect(state.fragments.length).toBeGreaterThan(1)
-    for (const fragment of state.fragments) {
-      expect(fragment).toSatisfy((f: { text: string }) =>
-        /\n[ \t]*\n/.test(f.text)
-      )
-    }
-  })
-
-  it("resets on a non-append text change", () => {
-    let state = advanceGrowingListSegments(
-      initialGrowingListSegmentsState(),
-      bigList
-    )
-    expect(state.fragments.length).toBeGreaterThan(0)
-    state = advanceGrowingListSegments(state, "1. rewritten\n2. differently\n")
-    expect(state.fragments).toEqual([])
-    expect(state.committedLength).toBe(0)
   })
 })
 

@@ -5,6 +5,7 @@ import type { MessageBranchInfo } from "./branch"
 import {
   adoptServerOwned,
   getBranch,
+  getFinishReason,
   getServerMessageId,
   getToolDisplayMetadataRecords,
   SERVER_OWNED_METADATA_KEYS,
@@ -127,6 +128,15 @@ describe("stampServerFields", () => {
       "extended"
     )
     expect(result.reasoningDurationMs).toBe(1234)
+  })
+})
+
+describe("getFinishReason", () => {
+  it("reads only a non-empty durable finish reason", () => {
+    expect(getFinishReason({ finishReason: "length" })).toBe("length")
+    expect(getFinishReason({ finishReason: "" })).toBeUndefined()
+    expect(getFinishReason({ finishReason: 123 })).toBeUndefined()
+    expect(getFinishReason(undefined)).toBeUndefined()
   })
 })
 

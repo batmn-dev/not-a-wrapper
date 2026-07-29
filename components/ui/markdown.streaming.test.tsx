@@ -336,10 +336,9 @@ describe("Markdown terminal-block stability (plan PR 3)", () => {
   })
 
   // -------------------------------------------------------------------------
-  // Growing single-block shapes (investigation 2026-07-28, fix 1): a large
-  // growing list renders as frozen fragments + bounded tail with the frozen
-  // DOM reference-identical across appends; a growing open fence renders
-  // directly and lands on the pipeline's structure at settle.
+  // Growing single-block shapes: lists always retain one authoritative
+  // semantic root; an open fence renders directly and lands on the pipeline's
+  // structure at settle.
   // -------------------------------------------------------------------------
 
   function orderedItems(from: number, to: number) {
@@ -350,32 +349,82 @@ describe("Markdown terminal-block stability (plan PR 3)", () => {
     ).join("\n")
   }
 
-  it("renders a large growing list as frozen fragments whose DOM never changes across appends", async () => {
+  it("keeps one semantic ordered-list root during growth and settlement", async () => {
     const view = mount(orderedItems(1, 120) + "\n", true)
     await advance(10)
 
-    const listsBefore = container?.querySelectorAll("ol") ?? []
-    expect(listsBefore.length).toBeGreaterThan(1)
-    // Continuation fragments carry their literal start numbering.
-    const secondList = listsBefore[1] as HTMLOListElement
-    const start = Number(secondList.getAttribute("start"))
-    expect(start).toBeGreaterThan(1)
-    const frozenFirst = listsBefore[0]
+    expect(container?.querySelectorAll("ol")).toHaveLength(1)
+    expect(container?.querySelectorAll("li")).toHaveLength(120)
 
     view.rerender(orderedItems(1, 200) + "\n", true)
     await advance(10)
 
-    // The frozen fragment's DOM node is reference-identical after appends.
-    expect(container?.querySelectorAll("ol")[0]).toBe(frozenFirst)
-    const totalItems = container?.querySelectorAll("li").length
-    expect(totalItems).toBe(200)
+    expect(container?.querySelectorAll("ol")).toHaveLength(1)
+    expect(container?.querySelectorAll("li")).toHaveLength(200)
 
-    // Settlement collapses to the canonical single list.
     view.rerender(orderedItems(1, 200) + "\n", false)
     await advance(10)
-    const settledLists = container?.querySelectorAll("ol") ?? []
-    expect(settledLists.length).toBe(1)
-    expect(container?.querySelectorAll("li").length).toBe(200)
+    expect(container?.querySelectorAll("ol")).toHaveLength(1)
+    expect(container?.querySelectorAll("li")).toHaveLength(200)
+  })
+
+  it("keeps repeated markers in one sequential CommonMark list", async () => {
+    const repeated =
+      Array.from(
+        { length: 128 },
+        (_, i) =>
+          `1. Item sentence number ${i + 1} concerning harbors and tides.`
+      ).join("\n") + "\n"
+    const view = mount(repeated, true)
+    await advance(10)
+
+    expect(container?.querySelectorAll("ol")).toHaveLength(1)
+    expect(container?.querySelectorAll("li")).toHaveLength(128)
+
+    const withPartialTail = `${repeated}1. Still-streaming repeated marker`
+    view.rerender(withPartialTail, true)
+    await advance(10)
+    expect(container?.querySelectorAll("ol")).toHaveLength(1)
+    expect(container?.querySelectorAll("li")).toHaveLength(129)
+
+    view.rerender(withPartialTail, false)
+    await advance(10)
+    expect(container?.querySelectorAll("ol")).toHaveLength(1)
+    expect(container?.querySelectorAll("li")).toHaveLength(129)
+  })
+
+  it("preserves non-1 starts, looseness, tasks, and nesting in one root", async () => {
+    const zeroStarted =
+      Array.from(
+        { length: 40 },
+        (_, i) => `${i}. Zero-started item ${i} concerning harbors and tides.`
+      ).join("\n") + "\n"
+    const view = mount(zeroStarted, true)
+    await advance(10)
+    expect(container?.querySelectorAll("ol")).toHaveLength(1)
+    expect(container?.querySelector("ol")?.getAttribute("start")).toBe("0")
+
+    const loose = `${orderedItems(5, 6)}\n\n${orderedItems(7, 40)}\n`
+    view.rerender(loose, true)
+    await advance(10)
+    const looseList = container?.querySelector("ol")
+    expect(container?.querySelectorAll("ol")).toHaveLength(1)
+    expect(looseList?.getAttribute("start")).toBe("5")
+    for (const item of looseList?.querySelectorAll(":scope > li") ?? []) {
+      expect(item.firstElementChild?.tagName).toBe("P")
+    }
+    const tasks = "- [ ] open\n- [x] done\n  - nested child\n"
+    view.rerender(tasks, true)
+    await advance(10)
+    const markdownRoot = container?.firstElementChild
+    const topLevelLists = Array.from(markdownRoot?.children ?? []).filter(
+      (element) => element.tagName === "UL"
+    )
+    expect(topLevelLists).toHaveLength(1)
+    expect(topLevelLists[0]?.classList).toContain("contains-task-list")
+    expect(topLevelLists[0]?.querySelectorAll(":scope > li > ul")).toHaveLength(
+      1
+    )
   })
 
   it("renders a growing open fence directly and keeps its structure at settle", async () => {
@@ -411,8 +460,8 @@ describe("Markdown terminal-block stability (plan PR 3)", () => {
     const highlighted = shikiMock.highlightCode.mock.calls.map(
       (call) => call[0].code
     )
-    expect(
-      highlighted.some((code) => code.includes("const extra = 99"))
-    ).toBe(true)
+    expect(highlighted.some((code) => code.includes("const extra = 99"))).toBe(
+      true
+    )
   })
 })

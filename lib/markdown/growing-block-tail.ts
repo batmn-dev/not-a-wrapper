@@ -6,17 +6,18 @@
  * projection's stable boundary stays pinned at the block's start and every
  * streaming update re-parses AND re-renders the entire growing block:
  * per-update cost grows with response length (the measured "smooth at first,
- * chunky later" degradation). This module bounds both halves:
+ * chunky later" degradation). This module bounds the parser work and the
+ * open-fence renderer:
  *
  *  - PARSE: `tryExtendTerminalBlock` lets the projection extend a growing
  *    list/fence block by classifying appended LINES (a scan, not a parse).
  *    Classification is conservative: any line it cannot prove to continue
  *    the block bails to the projection's existing authoritative paths, and
  *    settlement's full-parse equivalence check remains the safety net.
- *  - RENDER: `advanceGrowingListSegments` maintains frozen, append-only
- *    fragments of a growing list so the component memoizes everything but a
- *    bounded suffix; `analyzeOpenFence` lets the component render a growing
- *    fence directly (no per-update Markdown re-parse of the interior).
+ *  - RENDER: `analyzeOpenFence` lets the component render a growing fence
+ *    directly (no per-update Markdown re-parse of the interior). Growing
+ *    lists remain one canonical semantic root; fragmenting them changes
+ *    accessibility and selection-copy semantics.
  *
  * Partition-vs-content invariant: block records only place BOUNDARIES; the
  * renderer re-parses each block's text, so a transiently optimistic boundary
@@ -29,10 +30,6 @@
 
 import type { MarkdownProjectionBlock } from "./incremental-block-projection"
 
-/** Segment activation and frozen-fragment sizing for growing lists. */
-export const GROWING_LIST_SEGMENT_THRESHOLD = 2048
-export const GROWING_LIST_SEGMENT_MIN_CHARS = 2048
-
 export type ListFamily = {
   kind: "ordered" | "bullet"
   /** `.`/`)` for ordered, the literal marker char for bullets — a marker
@@ -40,8 +37,8 @@ export type ListFamily = {
   marker: string
 }
 
-const ORDERED_ITEM_RE = /^ {0,3}(\d{1,9})([.)])[ \t]+\S/
-const BULLET_ITEM_RE = /^ {0,3}([-*+])[ \t]+\S/
+const ORDERED_ITEM_RE = /^( {0,3})(\d{1,9})([.)])[ \t]+\S/
+const BULLET_ITEM_RE = /^( {0,3})([-*+])[ \t]+\S/
 const THEMATIC_BREAK_RE = /^ {0,3}([-*_])([ \t]*\1){2,}[ \t]*$/
 /** Complete-line lazy continuation whitelist: indented continuation, or a
  * paragraph-continuation line starting with clearly inert prose characters.
@@ -49,25 +46,41 @@ const THEMATIC_BREAK_RE = /^ {0,3}([-*_])([ \t]*\1){2,}[ \t]*$/
  * tables, html) is ambiguous and bails to the parser. */
 const LAZY_SAFE_RE = /^(?:[ \t]|[A-Za-z0-9"'‘’“”([{])/
 
-export function listFamilyOf(blockText: string): ListFamily | null {
-  const ordered = ORDERED_ITEM_RE.exec(blockText)
-  if (ordered) return { kind: "ordered", marker: ordered[2] }
-  if (THEMATIC_BREAK_RE.test(blockText.slice(0, blockText.indexOf("\n") + 1 || undefined))) {
-    return null
+type ListItemMarker = {
+  family: ListFamily
+}
+
+function listItemMarkerOf(line: string): ListItemMarker | null {
+  if (THEMATIC_BREAK_RE.test(line)) return null
+  const ordered = ORDERED_ITEM_RE.exec(line)
+  if (ordered) {
+    return {
+      family: { kind: "ordered", marker: ordered[3] },
+    }
   }
-  const bullet = BULLET_ITEM_RE.exec(blockText)
-  if (bullet) return { kind: "bullet", marker: bullet[1] }
+  const bullet = BULLET_ITEM_RE.exec(line)
+  if (bullet) {
+    return {
+      family: { kind: "bullet", marker: bullet[2] },
+    }
+  }
   return null
 }
 
+function sameListFamily(left: ListFamily, right: ListFamily): boolean {
+  return left.kind === right.kind && left.marker === right.marker
+}
+
+export function listFamilyOf(blockText: string): ListFamily | null {
+  const firstNewline = blockText.indexOf("\n")
+  const firstLine =
+    firstNewline === -1 ? blockText : blockText.slice(0, firstNewline)
+  return listItemMarkerOf(firstLine.replace(/\r$/, ""))?.family ?? null
+}
+
 export function isItemLineOf(line: string, family: ListFamily): boolean {
-  if (THEMATIC_BREAK_RE.test(line)) return false
-  if (family.kind === "ordered") {
-    const match = ORDERED_ITEM_RE.exec(line)
-    return match !== null && match[2] === family.marker
-  }
-  const match = BULLET_ITEM_RE.exec(line)
-  return match !== null && match[1] === family.marker
+  const marker = listItemMarkerOf(line)
+  return marker !== null && sameListFamily(marker.family, family)
 }
 
 function isBlankLine(line: string): boolean {
@@ -197,8 +210,7 @@ export function extendListBlockEnd(args: {
   lastLineAfterBlank: boolean
 }): number | null {
   const { source, blockEndOffset, family } = args
-  const lastLineStart =
-    source.lastIndexOf("\n", blockEndOffset - 1) + 1
+  const lastLineStart = source.lastIndexOf("\n", blockEndOffset - 1) + 1
   let committedEnd = blockEndOffset
   let afterBlank = args.lastLineAfterBlank
   let lineStart = lastLineStart
@@ -234,7 +246,11 @@ export function extendListBlockEnd(args: {
       lineStart = newlineIndex + 1
       continue
     }
-    if (!afterBlank && lineStart > args.blockStartOffset && LAZY_SAFE_RE.test(line)) {
+    if (
+      !afterBlank &&
+      lineStart > args.blockStartOffset &&
+      LAZY_SAFE_RE.test(line)
+    ) {
       // Tight continuation (indented or lazy) extends the current item.
       committedEnd = newlineIndex
       lineStart = newlineIndex + 1
@@ -245,99 +261,6 @@ export function extendListBlockEnd(args: {
   // CRLF sources: a committed end sitting just past a \r must not include it.
   if (source[committedEnd - 1] === "\r") committedEnd -= 1
   return committedEnd
-}
-
-// --- Growing list render segmentation --------------------------------------
-
-export type GrowingListSegmentsState = {
-  /** The full block text last observed (prefix guard for append-only). */
-  lastText: string
-  /** Chars of `lastText` covered by frozen fragments. */
-  committedLength: number
-  fragments: { id: string; text: string }[]
-  nextFragmentId: number
-  family: ListFamily | null
-  /** Scan cursor: line start from which new seams are discovered. */
-  scanPos: number
-  /** True once any blank line was seen inside the list (loose list). */
-  sawBlank: boolean
-}
-
-export function initialGrowingListSegmentsState(): GrowingListSegmentsState {
-  return {
-    lastText: "",
-    committedLength: 0,
-    fragments: [],
-    nextFragmentId: 0,
-    family: null,
-    scanPos: 0,
-    sawBlank: false,
-  }
-}
-
-/**
- * Advance the frozen-fragment segmentation for a growing list block. Pure and
- * append-only: committed fragments never change; a non-append text change
- * resets the state (the settle re-render replaces this component anyway).
- *
- * Seams sit at top-level item-start lines of the same list family. A frozen
- * fragment must reach `GROWING_LIST_SEGMENT_MIN_CHARS`, and — once the list
- * has shown any internal blank line (a loose list) — must itself contain a
- * blank line, so the standalone fragment parses loose exactly like the items
- * render inside the full list.
- */
-export function advanceGrowingListSegments(
-  previous: GrowingListSegmentsState,
-  text: string
-): GrowingListSegmentsState {
-  let state = previous
-  if (!text.startsWith(state.lastText)) {
-    state = initialGrowingListSegmentsState()
-  }
-  if (text === state.lastText) return previous
-
-  const family = state.family ?? listFamilyOf(text)
-  if (!family) {
-    return { ...state, lastText: text, family: null }
-  }
-
-  let { committedLength, scanPos, sawBlank, nextFragmentId } = state
-  const fragments = state.fragments.slice()
-
-  // Discover new seams from the scan cursor. Only COMPLETE lines are
-  // considered; the cursor never passes an unterminated line.
-  let cursor = scanPos
-  for (;;) {
-    const newlineIndex = text.indexOf("\n", cursor)
-    if (newlineIndex === -1) break
-    const lineStart = cursor
-    const line = text.slice(lineStart, newlineIndex).replace(/\r$/, "")
-    cursor = newlineIndex + 1
-    if (isBlankLine(line)) {
-      if (lineStart > 0) sawBlank = true
-      continue
-    }
-    if (lineStart === 0) continue
-    if (!isItemLineOf(line, family)) continue
-    // Candidate seam at `lineStart`: commit the pending region when large
-    // enough (and loose-consistent for loose lists).
-    const pending = text.slice(committedLength, lineStart)
-    if (pending.length < GROWING_LIST_SEGMENT_MIN_CHARS) continue
-    if (sawBlank && !/\n[ \t]*\n/.test(pending)) continue
-    fragments.push({ id: `seg${nextFragmentId++}`, text: pending })
-    committedLength = lineStart
-  }
-  scanPos = cursor
-
-  return {
-    lastText: text,
-    committedLength,
-    fragments,
-    nextFragmentId,
-    family,
-    scanPos,
-    sawBlank,
-  }
 }
 
 // --- Partial-tail partition equivalence ------------------------------------
