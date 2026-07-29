@@ -116,7 +116,13 @@ export type OpenFence = {
 
 const FENCE_OPENER_RE = /^ {0,3}(`{3,}|~{3,})[ \t]*([^\n]*)/
 
-export function analyzeOpenFence(text: string): OpenFence | null {
+/**
+ * Parse only the opening line's fence facts. Unlike `analyzeOpenFence`, this
+ * deliberately does not inspect the interior for a closer, so callers that
+ * already validated an accumulated prefix can resume scanning at their saved
+ * line boundary instead of re-scanning the whole block.
+ */
+export function analyzeFenceOpener(text: string): OpenFence | null {
   const opener = FENCE_OPENER_RE.exec(text)
   if (!opener) return null
   const marker = opener[1][0] as "`" | "~"
@@ -132,12 +138,17 @@ export function analyzeOpenFence(text: string): OpenFence | null {
       interiorStart: text.length,
     }
   }
-  const fence: OpenFence = {
+  return {
     marker,
     minCloserLength: opener[1].length,
     language: opener[2].trim().split(/[ \t]/)[0] ?? "",
     interiorStart: openerLineEnd + 1,
   }
+}
+
+export function analyzeOpenFence(text: string): OpenFence | null {
+  const fence = analyzeFenceOpener(text)
+  if (!fence) return null
   return hasFenceCloser(text, fence, fence.interiorStart) ? null : fence
 }
 

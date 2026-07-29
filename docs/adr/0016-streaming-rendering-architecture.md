@@ -117,10 +117,9 @@ normal and 4× CPU frame gates in the results document pass.
 provider/model that traces prove emits visually unacceptable bursts after
 this client path, and never to conceal renderer slowness.
 
-**Escape hatch exercised (2026-07-28).** Traces proved Anthropic's serving
-path emits ~90–430-char text slabs every ~100–400 ms
-(`docs/measurements/2026-07-28-streaming-failures-investigation.md`, issue
-3), which this client path faithfully paints as slabs. The implementation is
+**Escape hatch exercised (2026-07-28).** The investigation found that
+Anthropic's serving path emits ~90–430-char text slabs every ~100–400 ms,
+which this client path faithfully paints as slabs. The implementation is
 `createWordChunkingTransform` (`app/api/chat/word-chunking-transform.ts`) at
 the server `streamText` seam — NOT the SDK's `smoothStream`, whose installed
 version also delays reasoning deltas and holds timers across aborts. The

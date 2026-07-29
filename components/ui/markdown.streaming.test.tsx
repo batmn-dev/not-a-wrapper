@@ -395,6 +395,7 @@ describe("Markdown terminal-block stability (plan PR 3)", () => {
     // Growth updates the code text in place.
     view.rerender("```ts\n" + lines + "\nconst extra = 99", true)
     await advance(10)
+    expect(container?.querySelector(".markdown-code-block")).toBe(block)
     expect(
       container?.querySelector(".markdown-code-block")?.textContent
     ).toContain("const extra = 99")

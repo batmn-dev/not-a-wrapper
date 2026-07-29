@@ -87,8 +87,8 @@ Detach alone left a user-visible cost on the return path: navigating back
 to a generating chat mounted a *fresh* binding (status `ready`), so the
 surface rendered the Convex durability plane at its 750 ms snapshot cadence
 (~350-char slabs) while the detached binding kept the word-granular stream
-nobody rendered (measured in
-`docs/measurements/2026-07-28-streaming-failures-investigation.md`, issue 2).
+nobody rendered. The 2026-07-28 investigation measured the mounted projection
+arriving in ~350-character slabs at the snapshot cadence.
 
 A mounted transition **to** a chat whose detached binding is still streaming
 now **re-adopts** that binding — the inverse of detach, in the same

@@ -631,6 +631,7 @@ describe("useChatCore selected-path projection", () => {
     try {
       mount()
       render([], "chat_projection")
+      chatCoreMocks.chatInstances[0].status = "streaming"
       render([], null) // mounted Back to onboarding → detach
 
       expect(chatCoreMocks.bindingStop).not.toHaveBeenCalled()

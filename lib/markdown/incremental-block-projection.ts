@@ -50,6 +50,7 @@ import remarkMath, { type Options as RemarkMathOptions } from "remark-math"
 import remarkParse from "remark-parse"
 import { unified } from "unified"
 import {
+  analyzeFenceOpener,
   analyzeOpenFence,
   blocksEquivalentModuloPartialTail,
   extendListBlockEnd,
@@ -698,7 +699,11 @@ function tryExtendTerminalBlock(
 
   let newEndOffset: number | null = null
   if (terminal.nodeType === "code") {
-    const fence = analyzeOpenFence(terminal.text)
+    // The prior projection already proved that this terminal code block is an
+    // open fence. Re-read only its bounded opener line for immutable facts;
+    // scanning the whole accumulated interior here would make small appends
+    // quadratic over the life of a long fence.
+    const fence = analyzeFenceOpener(terminal.text)
     if (!fence) return null
     // Re-scan from the start of the block's last line: the previously
     // unterminated line may have completed into a closer.

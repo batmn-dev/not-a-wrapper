@@ -4,11 +4,11 @@ import type { StreamTextTransform, TextStreamPart, ToolSet } from "ai"
  * Word-granular re-chunking of coarse provider text deltas — the ADR-0016
  * "provider smoothing" escape hatch, implemented at the server stream seam.
  *
- * Evidence (docs/measurements/2026-07-28-streaming-failures-investigation.md,
- * issue 3): Anthropic's serving path emits ~90–430-char text deltas every
+ * Evidence (docs/adr/0016-streaming-rendering-architecture.md, "Provider
+ * smoothing"): Anthropic's serving path emits ~90–430-char text deltas every
  * ~100–400 ms, which the client faithfully paints as slabs; OpenAI's emits
- * word-granular deltas that need nothing. Instead of a provider allowlist
- * that rots as the model catalog changes, the gate is the evidence itself:
+ * word-granular deltas that need nothing. Instead of a provider allowlist that
+ * rots as the model catalog changes, the gate is the evidence itself:
  * a delta at or below the pass-through threshold is forwarded untouched and
  * synchronously (zero cost, zero added latency for already-fine providers),
  * and only oversized slabs are split into whitespace-attached word deltas.
@@ -17,14 +17,14 @@ import type { StreamTextTransform, TextStreamPart, ToolSet } from "ai"
  * constraints here:
  *
  *  - TEXT ONLY. Every non-`text-delta` part (reasoning deltas included)
- *    passes through immediately. Ordering is preserved by construction: the
- *    transform awaits each slab's drain before accepting the next part, so
- *    there is no cross-part buffer and nothing to flush.
+ *    passes through immediately. Ordering is preserved by one internal drain
+ *    queue; `flush` waits for that queue before the stream closes.
  *  - BOUNDED LAG. Pacing is adaptive, not fixed: each slab is spread over at
- *    most ~90% of the provider's own observed inter-delta gap (clamped to
- *    [MIN_SPREAD_MS, MAX_SPREAD_MS]), so emission never falls cumulatively
- *    behind the wire and total added latency stays below one provider gap.
- *    A same-instant burst (gap ≈ 0) spreads over the floor only.
+ *    most ~90% of the provider's actual observed inter-delta gap (capped at
+ *    MAX_SPREAD_MS), so emission never falls cumulatively behind the wire and
+ *    total added latency stays below one provider gap. The first oversized
+ *    slab gets a small floor; later slabs arriving within that floor are
+ *    already a burst and drain without another pacing delay.
  *  - ABORT-AWARE. Delays resolve immediately on cancellation (Stop, error,
  *    `stopStream`), the remaining words of the in-flight slab are dropped,
  *    and no timer outlives the stream. What was emitted is what onChunk saw,
@@ -39,7 +39,7 @@ import type { StreamTextTransform, TextStreamPart, ToolSet } from "ai"
 const PASSTHROUGH_MAX_CHARS = 24
 /** Ceiling on per-word spacing — never reveal slower than this. */
 const MAX_WORD_DELAY_MS = 24
-/** Floor/ceiling on the per-slab spread budget derived from the provider gap. */
+/** Initial floor and steady-state ceiling for the per-slab spread budget. */
 const MIN_SPREAD_MS = 40
 const MAX_SPREAD_MS = 360
 /** Fraction of the observed inter-delta gap a slab may spend draining. */
@@ -55,8 +55,14 @@ export function createWordChunkingTransform<
 >(): StreamTextTransform<TOOLS> {
   return () => {
     let cancelled = false
-    let lastDeltaAtMs: number | null = null
+    let lastDeltaArrivedAtMs: number | null = null
+    let hasPacedSlab = false
     let wake: (() => void) | null = null
+    const pending: {
+      part: TextStreamPart<TOOLS>
+      arrivedAtMs: number
+    }[] = []
+    let drainPromise: Promise<void> | null = null
 
     const sleep = (ms: number) =>
       new Promise<void>((resolve) => {
@@ -71,34 +77,35 @@ export function createWordChunkingTransform<
         }
       })
 
-    // `cancel` is part of the runtime Transformer contract (invoked when the
-    // readable side is cancelled — Stop, error, stopStream) but predates this
-    // TS lib's Transformer type; the widened local type keeps it checked.
-    const transformer: Transformer<
-      TextStreamPart<TOOLS>,
-      TextStreamPart<TOOLS>
-    > & { cancel: () => void } = {
-      async transform(part, controller) {
-        if (cancelled) return
+    const drain = async (
+      controller: TransformStreamDefaultController<TextStreamPart<TOOLS>>
+    ) => {
+      while (!cancelled) {
+        const next = pending.shift()
+        if (!next) return
+
+        const { part, arrivedAtMs } = next
         if (part.type !== "text-delta") {
           controller.enqueue(part)
-          return
+          continue
         }
 
-        const now = Date.now()
-        const gapMs = lastDeltaAtMs === null ? 0 : now - lastDeltaAtMs
-        lastDeltaAtMs = now
+        const gapMs =
+          lastDeltaArrivedAtMs === null ? 0 : arrivedAtMs - lastDeltaArrivedAtMs
+        lastDeltaArrivedAtMs = arrivedAtMs
 
         if (part.text.length <= PASSTHROUGH_MAX_CHARS) {
           controller.enqueue(part)
-          return
+          continue
         }
 
         const words = splitIntoWordChunks(part.text)
-        const spreadMs = Math.min(
-          MAX_SPREAD_MS,
-          Math.max(MIN_SPREAD_MS, gapMs * SPREAD_FRACTION)
-        )
+        const spreadMs = !hasPacedSlab
+          ? MIN_SPREAD_MS
+          : gapMs <= MIN_SPREAD_MS
+            ? 0
+            : Math.min(MAX_SPREAD_MS, gapMs * SPREAD_FRACTION)
+        hasPacedSlab = true
         const perWordMs = Math.min(MAX_WORD_DELAY_MS, spreadMs / words.length)
 
         for (let index = 0; index < words.length; index++) {
@@ -110,10 +117,39 @@ export function createWordChunkingTransform<
             await sleep(perWordMs)
           }
         }
+      }
+    }
+
+    const ensureDrain = (
+      controller: TransformStreamDefaultController<TextStreamPart<TOOLS>>
+    ) => {
+      if (drainPromise || cancelled) return
+      drainPromise = drain(controller).finally(() => {
+        drainPromise = null
+        if (pending.length > 0 && !cancelled) ensureDrain(controller)
+      })
+    }
+
+    // `cancel` is part of the runtime Transformer contract (invoked when the
+    // readable side is cancelled — Stop, error, stopStream) but predates this
+    // TS lib's Transformer type; the widened local type keeps it checked.
+    const transformer: Transformer<
+      TextStreamPart<TOOLS>,
+      TextStreamPart<TOOLS>
+    > & { cancel: () => void } = {
+      transform(part, controller) {
+        if (cancelled) return
+        pending.push({ part, arrivedAtMs: Date.now() })
+        ensureDrain(controller)
+      },
+
+      async flush() {
+        while (drainPromise) await drainPromise
       },
 
       cancel() {
         cancelled = true
+        pending.length = 0
         wake?.()
       },
     }

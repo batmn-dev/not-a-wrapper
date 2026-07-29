@@ -195,7 +195,7 @@ function createDetachableChatStreamOwner(
   // Still-live detached bindings by origin chat id, so a mounted transition
   // BACK to a generating chat can re-adopt the word-granular stream instead
   // of rendering the 750 ms durable snapshots (the nav-return chunking of
-  // docs/measurements/2026-07-28-streaming-failures-investigation.md §Issue 2).
+  // docs/adr/0013-back-navigation-detaches-the-stream.md, 2026-07-28 amendment).
   // At most one entry per chat id can exist: a chat's next binding is only
   // created when no live detached binding was available to re-adopt. Entries
   // are removed on re-adoption or by routeFinish — the SDK invokes onFinish
@@ -323,13 +323,14 @@ function createDetachableChatStreamOwner(
         watchdog: null,
       }
       lifecycles.set(binding, detached)
-      if (detached.originChatId !== null && isStreamLive(binding)) {
+      const live = isStreamLive(binding)
+      if (detached.originChatId !== null && live) {
         detachedByOrigin.set(detached.originChatId, binding)
       }
       if (!lifecycle.finished) {
         attachedBindingCount = Math.max(0, attachedBindingCount - 1)
       }
-      if (lifecycle.finished) {
+      if (!live) {
         emitBindingGauge("detached", detached.originChatId)
         return
       }

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest"
 import type { TextStreamPart, ToolSet } from "ai"
+import { describe, expect, it, vi } from "vitest"
 import {
   createWordChunkingTransform,
   splitIntoWordChunks,
@@ -101,26 +101,55 @@ describe("createWordChunkingTransform", () => {
     expect(lastAt).toBeLessThan(500)
   })
 
+  it("applies the pacing floor once to a buffered burst, not once per slab", async () => {
+    const slab = "alpha beta gamma delta epsilon"
+    const toolPart = { type: "tool-call", toolCallId: "c1" } as unknown as Part
+    const parts = [
+      ...Array.from({ length: 100 }, (_, index) =>
+        textDelta(slab, `block-${index}`)
+      ),
+      toolPart,
+    ]
+
+    const outputs = await run(parts)
+    const toolOutput = outputs[outputs.length - 1]
+    expect(toolOutput.part).toBe(toolPart)
+    expect(toolOutput.atMs).toBeLessThan(500)
+    expect(
+      outputs
+        .slice(0, -1)
+        .map(({ part }) => (part as { text: string }).text)
+        .join("")
+    ).toBe(slab.repeat(100))
+  })
+
   it("stops emitting promptly when the stream is cancelled mid-slab", async () => {
-    const transform = makeTransform()
-    const writer = transform.writable.getWriter()
-    const reader = transform.readable.getReader()
-    const slab = textDelta(
-      Array.from({ length: 200 }, (_, i) => `w${i}`).join(" ")
-    )
-    // Force pacing: a prior gap makes the spread budget non-trivial.
-    void writer.write(textDelta("tiny"))
-    await reader.read()
-    await new Promise((resolve) => setTimeout(resolve, 120))
-    const writePromise = writer.write(slab).catch(() => undefined)
-    await reader.read() // first word emitted, slab is draining
-    await reader.cancel()
-    // The abandoned write settles instead of hanging on orphaned timers.
-    await expect(
-      Promise.race([
-        writePromise.then(() => "settled"),
-        new Promise((resolve) => setTimeout(() => resolve("hung"), 400)),
-      ])
-    ).resolves.toBe("settled")
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(0)
+      const transform = makeTransform()
+      const writer = transform.writable.getWriter()
+      const reader = transform.readable.getReader()
+      const slab = textDelta(
+        // Few enough chunks for the 40 ms pacing floor to schedule a sleep.
+        Array.from({ length: 20 }, (_, i) => `w${i}`).join(" ")
+      )
+      void writer.write(textDelta("tiny"))
+      await reader.read()
+      vi.setSystemTime(120)
+      const writePromise = writer.write(slab)
+      await reader.read() // first word emitted, transform is sleeping
+      await writePromise
+      expect(vi.getTimerCount()).toBe(1)
+
+      await reader.cancel()
+      const closePromise = writer.close().catch(() => undefined)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(vi.getTimerCount()).toBe(0)
+      await expect(closePromise).resolves.toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

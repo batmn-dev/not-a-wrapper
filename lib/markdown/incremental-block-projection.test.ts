@@ -37,6 +37,7 @@ import {
 import {
   blocksCoverageEnd,
   lineClippedBlockView,
+  type BlockView,
 } from "./growing-block-tail"
 
 const IDENTITY = "message-under-test"
@@ -50,6 +51,28 @@ function rawView(blocks: readonly MarkdownProjectionBlock[]) {
   }))
 }
 
+function expectValidPartialLineTail(
+  blocks: readonly BlockView[],
+  source: string,
+  label: string
+) {
+  const partialLineStart = source.lastIndexOf("\n") + 1
+  const tailBlocks = blocks.filter(
+    (block) => block.endOffset > partialLineStart
+  )
+  for (let i = 0; i < tailBlocks.length; i++) {
+    const block = tailBlocks[i]!
+    expect(block.text, `${label} block ${i} text`).toBe(
+      source.slice(block.startOffset, block.endOffset)
+    )
+    if (i > 0) {
+      expect(
+        block.startOffset,
+        `${label} block ${i} overlaps prior block`
+      ).toBeGreaterThanOrEqual(tailBlocks[i - 1]!.endOffset)
+    }
+  }
+}
 
 /**
  * Stream `source` through the projection at the given prefix offsets,
@@ -89,6 +112,16 @@ function streamAndVerify(
         blocksCoverageEnd(result.state.blocks),
         `${label} @${offset} (coverage)`
       ).toBe(blocksCoverageEnd(reference))
+      expectValidPartialLineTail(
+        result.state.blocks,
+        prefix,
+        `${label} @${offset} (projection tail)`
+      )
+      expectValidPartialLineTail(
+        reference,
+        prefix,
+        `${label} @${offset} (reference tail)`
+      )
     }
 
     if (state) {

@@ -6,6 +6,7 @@ import {
 } from "./incremental-block-projection"
 import {
   advanceGrowingListSegments,
+  analyzeFenceOpener,
   analyzeOpenFence,
   GROWING_LIST_SEGMENT_MIN_CHARS,
   initialGrowingListSegmentsState,
@@ -210,6 +211,16 @@ describe("advanceGrowingListSegments", () => {
 })
 
 describe("analyzeOpenFence", () => {
+  it("can read opener facts without scanning or rejecting a closed interior", () => {
+    const fence = analyzeFenceOpener("````ts twoslash\n```\n````")
+    expect(fence).toMatchObject({
+      marker: "`",
+      minCloserLength: 4,
+      language: "ts",
+      interiorStart: 16,
+    })
+  })
+
   it("recognizes an open fence and its language", () => {
     const fence = analyzeOpenFence("```ts twoslash\nconst a = 1\n")
     expect(fence).toMatchObject({
