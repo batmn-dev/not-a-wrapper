@@ -81,3 +81,9 @@ bun-debug.log*
 .gstack/
 .gstack/
 .playwright-cli/
+
+# Measurement reports and evidence stay local — raw browser traces belong in
+# the sibling reference-ui repo, not in this repo's history (2026-07-28).
+# Note: the 52 docs/measurements files already tracked before this rule remain
+# tracked; this only keeps NEW measurement artifacts out of commits.
+docs/measurements/
