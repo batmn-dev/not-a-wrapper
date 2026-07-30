@@ -154,19 +154,22 @@ export function Conversation({
   const previousMessage = messages[messages.length - 2]
   const hasPendingAssistantTurn =
     generationActive && lastMessage?.role === "user"
-  // The turn to pin near the viewport top — at ANSWER-START, not at send
-  // (measured reference behavior, 2026-07-11): the viewport stays where the user
-  // left it (their message visible above the composer, thinking indicator
-  // below) until the response's first text token, then jumps to the pinned
-  // position in one step. Branch switches and load hydration never satisfy
-  // this (no active turn), so they never scroll.
+  // Pin the active user turn as soon as its optimistic row is rendered. The
+  // pending assistant row and response gutter already exist at that point, so
+  // scrollIntoView can reserve the response area before first text arrives.
+  // Once the assistant row replaces the pending row, keep the same user target;
+  // ThreadScrollEdge deduplicates the pin for the rest of the active turn.
+  // Branch switches and load hydration never satisfy this (no active turn), so
+  // they never scroll.
   const pinTurnId =
-    generationActive &&
-    lastMessage?.role === "assistant" &&
-    previousMessage?.role === "user" &&
-    getMessageText(lastMessage).trim().length > 0
-      ? previousMessage.id
-      : null
+    !generationActive
+      ? null
+      : lastMessage?.role === "user"
+        ? lastMessage.id
+        : lastMessage?.role === "assistant" &&
+            previousMessage?.role === "user"
+          ? previousMessage.id
+          : null
   const timestampHeaders = deriveConversationTimestampHeaders(messages, now)
 
   return (

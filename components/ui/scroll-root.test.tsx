@@ -185,4 +185,21 @@ describe("ScrollRoot viewport and footer measurement", () => {
 
     expect(spacer.style.height).toBe("0px")
   })
+
+  it("keeps native scroll anchoring enabled while a stream is active", () => {
+    act(() => {
+      root.render(
+        <ScrollRoot data-stream-active="">
+          <div />
+        </ScrollRoot>
+      )
+    })
+
+    const scrollRoot = container.querySelector(
+      "[data-scroll-root]"
+    ) as HTMLElement
+
+    expect(scrollRoot.hasAttribute("data-stream-active")).toBe(true)
+    expect(scrollRoot.className).not.toContain("[overflow-anchor:none]")
+  })
 })

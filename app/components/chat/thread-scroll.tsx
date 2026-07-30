@@ -2,7 +2,7 @@
 
 /**
  * Owns the thread tail's four coupled behaviors: bottom-distance state, a
- * self-sizing response gutter, answer-start pinning with a bounded mount retry,
+ * self-sizing response gutter, submit-time pinning with a bounded mount retry,
  * and once-per-conversation scroll restoration. The gutter writes its raw
  * remaining height intentionally; negative CSS min-height values are ignored.
  * Restoration prefers a saved turn anchor (thread-scroll-anchors.ts) and falls
@@ -75,8 +75,8 @@ type ThreadScrollEdgeProps = {
   /** A turn is in flight (submitted or streaming) — mirrored onto the scroll
    * root as `data-stream-active`. */
   streamActive: boolean
-  /** The user turn to pin near the top of the viewport, set at answer-start
-   * (Conversation withholds it until the response's first text). */
+  /** The active user turn to pin near the top of the viewport, set as soon as
+   * its optimistic row is rendered. */
   pinTurnId: string | null
   /** The conversation's messages are present (load restore waits for them). */
   hydrated: boolean
@@ -204,8 +204,9 @@ export function ThreadScrollEdge({
   }, [])
 
   // (3) Stream lifecycle: `data-stream-active` on the root gives the gutter
-  // its reserved-space height class and disables native scroll anchoring
-  // (both pure CSS). The gutter's observers handle everything else.
+  // its reserved-space height class. Native scroll anchoring remains enabled;
+  // the one-shot pin owns submission, then browser anchoring and manual scroll
+  // ownership govern response growth and layout changes.
   useBrowserLayoutEffect(() => {
     const rootEl = rootRef.current
     if (!rootEl) return
@@ -223,7 +224,7 @@ export function ThreadScrollEdge({
     }
   }, [])
 
-  // (4) Answer-start pinning through the rAF + retry pipeline.
+  // (4) Submit-time pinning through the rAF + retry pipeline.
   useEffect(() => {
     if (!pinTurnId) {
       pinnedTurnRef.current = null

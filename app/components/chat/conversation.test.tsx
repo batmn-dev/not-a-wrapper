@@ -41,7 +41,19 @@ vi.mock("@/lib/chat-store/messages/api", () => ({
 }))
 
 vi.mock("./thread-scroll", () => ({
-  ThreadScrollEdge: () => null,
+  ThreadScrollEdge: ({
+    pinTurnId,
+    streamActive,
+  }: {
+    pinTurnId: string | null
+    streamActive: boolean
+  }) => (
+    <div
+      data-pin-turn-id={pinTurnId ?? ""}
+      data-stream-active={streamActive}
+      data-testid="thread-scroll-edge"
+    />
+  ),
 }))
 
 vi.mock("@/components/ui/thinking-bar", () => ({
@@ -309,6 +321,73 @@ describe("Conversation regeneration availability", () => {
     expect(container?.querySelector('[data-testid="thinking"]')).toBeNull()
     expect(pendingMessage).toBeTruthy()
     expect(pendingMessage?.dataset.status).toBe("submitted")
+  })
+
+  it("pins the optimistic user turn during submission before response text", () => {
+    cleanupRender()
+    const mounted = document.createElement("div")
+    document.body.appendChild(mounted)
+    container = mounted
+    root = createRoot(mounted)
+
+    const userTail = [
+      { id: "user-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+    ] satisfies UIMessage[]
+
+    act(() => {
+      root?.render(
+        <Conversation
+          messages={userTail}
+          status="submitted"
+          onEdit={vi.fn()}
+          onReload={vi.fn()}
+          isDurableChat
+        />
+      )
+    })
+
+    const scrollEdge = container?.querySelector(
+      '[data-testid="thread-scroll-edge"]'
+    ) as HTMLDivElement | null
+
+    expect(scrollEdge?.dataset.streamActive).toBe("true")
+    expect(scrollEdge?.dataset.pinTurnId).toBe("user-1")
+  })
+
+  it("keeps the same user pin target when assistant streaming begins", () => {
+    cleanupRender()
+    const mounted = document.createElement("div")
+    document.body.appendChild(mounted)
+    container = mounted
+    root = createRoot(mounted)
+
+    const streamingTail = [
+      { id: "user-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "hello" }],
+      },
+    ] satisfies UIMessage[]
+
+    act(() => {
+      root?.render(
+        <Conversation
+          messages={streamingTail}
+          status="streaming"
+          onEdit={vi.fn()}
+          onReload={vi.fn()}
+          isDurableChat
+        />
+      )
+    })
+
+    const scrollEdge = container?.querySelector(
+      '[data-testid="thread-scroll-edge"]'
+    ) as HTMLDivElement | null
+
+    expect(scrollEdge?.dataset.streamActive).toBe("true")
+    expect(scrollEdge?.dataset.pinTurnId).toBe("user-1")
   })
 
   it("keeps historical assistant views ready while the current assistant streams", () => {

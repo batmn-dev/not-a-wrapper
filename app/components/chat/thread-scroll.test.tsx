@@ -188,6 +188,10 @@ describe("ThreadScrollEdge", () => {
     flushFrames()
 
     expect(scrollIntoView).toHaveBeenCalledOnce()
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      behavior: "instant",
+      block: "end",
+    })
   })
 
   it("pins a reused turn id in a later pin cycle", () => {
@@ -201,8 +205,94 @@ describe("ThreadScrollEdge", () => {
     expect(scrollIntoView).toHaveBeenCalledTimes(2)
   })
 
+  it("does not repin during optimistic-to-streaming reconciliation or response growth", () => {
+    act(() => {
+      root.render(
+        <>
+          <div data-turn-id="user-1" />
+          <div data-turn-id="pending-assistant" />
+          <ThreadScrollEdge
+            chatId="chat-1"
+            streamActive
+            pinTurnId="user-1"
+            hydrated
+            freshChat
+          />
+        </>
+      )
+    })
+    flushFrames()
+
+    act(() => {
+      root.render(
+        <>
+          <div data-turn-id="user-1" />
+          <div data-turn-id="assistant-1">first content</div>
+          <ThreadScrollEdge
+            chatId="chat-1"
+            streamActive
+            pinTurnId="user-1"
+            hydrated
+            freshChat
+          />
+        </>
+      )
+    })
+    flushFrames()
+
+    act(() => {
+      root.render(
+        <>
+          <div data-turn-id="user-1" />
+          <div data-turn-id="assistant-1">a much taller streamed response</div>
+          <ThreadScrollEdge
+            chatId="chat-1"
+            streamActive
+            pinTurnId="user-1"
+            hydrated
+            freshChat
+          />
+        </>
+      )
+    })
+    flushFrames()
+
+    expect(scrollIntoView).toHaveBeenCalledOnce()
+  })
+
+  it("leaves manual scroll ownership released without threshold reactivation", () => {
+    render("user-1")
+    flushFrames()
+    container.scrollTop = 640
+
+    act(() => {
+      container.dispatchEvent(new Event("scroll"))
+      root.render(
+        <>
+          <div data-turn-id="user-1" />
+          <ThreadScrollEdge
+            chatId="chat-1"
+            streamActive
+            pinTurnId="user-1"
+            hydrated
+            freshChat
+          />
+        </>
+      )
+    })
+    flushFrames()
+
+    container.scrollTop = 12
+    act(() => container.dispatchEvent(new Event("scroll")))
+    flushFrames()
+
+    expect(container.scrollTop).toBe(12)
+    expect(scrollIntoView).toHaveBeenCalledOnce()
+  })
+
   it("recalculates the gutter when the scroll root resizes", () => {
-    render(null)
+    render("user-1")
+    flushFrames()
     const gutter = container.querySelector(
       ".threadScrollVars"
     ) as HTMLDivElement
@@ -223,6 +313,19 @@ describe("ThreadScrollEdge", () => {
     expect(gutter.style.getPropertyValue("--gutter-remaining-height")).toBe(
       "300px"
     )
+    expect(scrollIntoView).toHaveBeenCalledOnce()
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
+
+  it("does not repin when streaming completes", () => {
+    render("user-1")
+    flushFrames()
+
+    render(null, false, { streamActive: false })
+    flushFrames()
+
+    expect(container.hasAttribute("data-stream-active")).toBe(false)
+    expect(scrollIntoView).toHaveBeenCalledOnce()
   })
 
   it("tracks the measured footer height for scroll-button visibility", () => {

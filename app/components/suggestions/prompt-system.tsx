@@ -17,7 +17,7 @@ export const PromptSystem = memo(function PromptSystem({
 }: PromptSystemProps) {
   return (
     <>
-      <div className="relative order-1 w-full md:absolute md:bottom-[-70px] md:order-2 md:h-[70px]">
+      <div className="relative order-1 w-full md:absolute md:top-[calc(100%+1rem)] md:order-2 md:h-[70px]">
         <AnimatePresence mode="popLayout">
           <Suggestions
             onValueChange={onValueChange}

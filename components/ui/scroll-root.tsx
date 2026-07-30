@@ -4,12 +4,11 @@
  * ScrollRoot — the single thread scroll container and owner of the
  * `group/scroll-root` contract.
  *
- * There is deliberately NO JS stick-to-bottom controller here. At rest, native
- * CSS scroll anchoring (`overflow-anchor: auto`, the default) keeps the
- * viewport stable through branch switches, panel reflows and late content;
- * it is disabled only while a turn streams, via the `data-stream-active`
- * attribute the thread lifecycle toggles on this element
- * (`data-stream-active:[overflow-anchor:none]`).
+ * There is deliberately NO JS stick-to-bottom controller here. Native CSS
+ * scroll anchoring (`overflow-anchor: auto`, the default) stays enabled through
+ * submission, streaming, completion, branch switches, panel reflows and late
+ * content. The thread controller performs one submit-time turn pin; after
+ * that, browser anchoring and manual scroll ownership govern layout changes.
  *
  * The element owns the CSS variable system every scroll policy derives from:
  *
@@ -155,7 +154,6 @@ function ScrollRoot({ children, className, ...props }: ScrollRootProps) {
         data-scroll-root=""
         className={cn(
           "group/scroll-root relative flex min-h-0 min-w-0 flex-1 [scrollbar-gutter:stable] flex-col overflow-x-clip overflow-y-auto",
-          "data-stream-active:[overflow-anchor:none]",
           "scroll-pt-(--header-height) [--safe-area-inset-bottom:env(safe-area-inset-bottom,0px)] [--sticky-padding-bottom:var(--safe-area-inset-bottom)] [--sticky-padding-top:var(--header-height)]",
           "[--scroll-root-safe-area-inset-top:calc(var(--sticky-padding-top)+env(safe-area-inset-top,0px))]",
           "[--scroll-root-safe-area-inset-bottom:calc(var(--sticky-padding-bottom)+var(--screen-keyboard-height,0px))]",
