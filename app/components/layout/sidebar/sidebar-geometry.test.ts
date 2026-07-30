@@ -85,13 +85,21 @@ describe("sidebar leading-icon placement contract", () => {
       resolvePx("--sidebar-row-action-width") -
       resolvePx("--sidebar-row-action-margin-inline-start") -
       resolvePx("--sidebar-row-action-margin-inline-end")
+    const trailingCenterInset =
+      resolvePx("--sidebar-row-action-width") / 2 -
+      resolvePx("--sidebar-row-action-margin-inline-end")
     const twoActionRail =
       2 * actionContribution + resolvePx("--sidebar-row-action-gap")
 
     expect(resolvePx("--sidebar-row-action-width")).toBe(34)
     expect(resolvePx("--sidebar-row-action-gap")).toBe(4)
     expect(resolvePx("--sidebar-row-action-content-gap")).toBe(8)
+    expect(actionContribution).toBe(20)
+    expect(trailingCenterInset).toBe(7)
     expect(twoActionRail).toBe(44)
     expect(resolvePx("--sidebar-row-action-rail-width")).toBe(twoActionRail)
+    expect(css).toContain(
+      '.sidebar-row-status-slot[data-sidebar-row-status-slot="compact"]'
+    )
   })
 })

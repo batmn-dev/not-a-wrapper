@@ -31,15 +31,11 @@
  *   data-stream-active     while a turn is in flight
  *   data-scroll-from-end   while the bottom sentinel is out of view
  */
-
+import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { cn } from "@/lib/utils"
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useRef,
-} from "react"
+import { createContext, useCallback, useContext, useMemo, useRef } from "react"
+
+const MIN_VIRTUAL_KEYBOARD_HEIGHT = 80
 
 type ScrollRootContextValue = {
   scrollRef: React.RefObject<HTMLDivElement | null>
@@ -55,8 +51,91 @@ type ScrollRootProps = {
   className?: string
 } & React.HTMLAttributes<HTMLDivElement>
 
+function isVirtualKeyboardTarget(element: Element | null) {
+  return (
+    element instanceof HTMLElement && element.dataset.virtualkeyboard === "true"
+  )
+}
+
+/**
+ * Keeps the scroll-root keyboard token tied to the visual viewport. The
+ * editable element opts in with `data-virtualkeyboard="true"` so browser chrome
+ * and pinch zoom never masquerade as an on-screen keyboard.
+ */
+function useScreenKeyboardHeight(
+  scrollRef: React.RefObject<HTMLDivElement | null>
+) {
+  useBrowserLayoutEffect(() => {
+    const root = scrollRef.current
+    const viewport = window.visualViewport
+    if (!root || !viewport) return
+
+    let layoutViewportHeight = Math.max(
+      window.innerHeight,
+      document.documentElement.clientHeight,
+      viewport.height + viewport.offsetTop
+    )
+    let frame: number | null = null
+
+    const write = () => {
+      frame = null
+      const hasKeyboardTarget = isVirtualKeyboardTarget(document.activeElement)
+
+      if (!hasKeyboardTarget) {
+        layoutViewportHeight = Math.max(
+          window.innerHeight,
+          document.documentElement.clientHeight,
+          viewport.height + viewport.offsetTop
+        )
+      }
+
+      const obscuredHeight =
+        hasKeyboardTarget && viewport.scale === 1
+          ? Math.max(
+              0,
+              layoutViewportHeight - viewport.height - viewport.offsetTop
+            )
+          : 0
+      const keyboardHeight =
+        obscuredHeight >= MIN_VIRTUAL_KEYBOARD_HEIGHT ? obscuredHeight : 0
+
+      root.style.setProperty(
+        "--screen-keyboard-height",
+        `${Math.round(keyboardHeight * 100) / 100}px`
+      )
+      root.toggleAttribute("data-keyboard-open", keyboardHeight > 0)
+    }
+
+    const scheduleWrite = () => {
+      if (frame !== null) cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(write)
+    }
+
+    write()
+    viewport.addEventListener("resize", scheduleWrite)
+    viewport.addEventListener("scroll", scheduleWrite)
+    window.addEventListener("resize", scheduleWrite)
+    window.addEventListener("orientationchange", scheduleWrite)
+    document.addEventListener("focusin", scheduleWrite)
+    document.addEventListener("focusout", scheduleWrite)
+
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame)
+      viewport.removeEventListener("resize", scheduleWrite)
+      viewport.removeEventListener("scroll", scheduleWrite)
+      window.removeEventListener("resize", scheduleWrite)
+      window.removeEventListener("orientationchange", scheduleWrite)
+      document.removeEventListener("focusin", scheduleWrite)
+      document.removeEventListener("focusout", scheduleWrite)
+      root.style.removeProperty("--screen-keyboard-height")
+      root.removeAttribute("data-keyboard-open")
+    }
+  }, [scrollRef])
+}
+
 function ScrollRoot({ children, className, ...props }: ScrollRootProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  useScreenKeyboardHeight(scrollRef)
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const el = scrollRef.current
@@ -75,9 +154,9 @@ function ScrollRoot({ children, className, ...props }: ScrollRootProps) {
         ref={scrollRef}
         data-scroll-root=""
         className={cn(
-          "group/scroll-root relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip overflow-y-auto [scrollbar-gutter:stable]",
+          "group/scroll-root relative flex min-h-0 min-w-0 flex-1 [scrollbar-gutter:stable] flex-col overflow-x-clip overflow-y-auto",
           "data-stream-active:[overflow-anchor:none]",
-          "scroll-pt-(--header-height) [--sticky-padding-top:var(--header-height)] [--sticky-padding-bottom:env(safe-area-inset-bottom,0px)]",
+          "scroll-pt-(--header-height) [--safe-area-inset-bottom:env(safe-area-inset-bottom,0px)] [--sticky-padding-bottom:var(--safe-area-inset-bottom)] [--sticky-padding-top:var(--header-height)]",
           "[--scroll-root-safe-area-inset-top:calc(var(--sticky-padding-top)+env(safe-area-inset-top,0px))]",
           "[--scroll-root-safe-area-inset-bottom:calc(var(--sticky-padding-bottom)+var(--screen-keyboard-height,0px))]",
           "[--scroll-root-safe-area-height:calc(100lvh-var(--scroll-root-safe-area-inset-top)-var(--scroll-root-safe-area-inset-bottom))]",
@@ -108,6 +187,10 @@ function useScrollRoot() {
  * height, response height, the
  * bottom sentinel's offset) derives from it in CSS.
  *
+ * An absolutely positioned `[data-prompt-textarea-header]` sits outside normal
+ * footer flow, so its measured height is first written to the stable overflow
+ * spacer. The root measurement therefore includes the complete visible stack.
+ *
  * Returns a ref callback for the sticky bottom container. Pass
  * `enabled: false` while the composer is in its onboarding (grown/centered)
  * layout, where its height is not a thread inset.
@@ -122,17 +205,49 @@ function useStickyPaddingBottom(enabled: boolean) {
       if (!node || !enabled) return
       const root = node.closest<HTMLElement>("[data-scroll-root]")
       if (!root) return
+      const spacer = node.querySelector<HTMLElement>(
+        "[data-thread-footer-overflow-spacer]"
+      )
+      let promptHeader = node.querySelector<HTMLElement>(
+        "[data-prompt-textarea-header]"
+      )
+
       const write = () => {
+        const overflowHeight =
+          promptHeader && getComputedStyle(promptHeader).position === "absolute"
+            ? promptHeader.getBoundingClientRect().height
+            : 0
+        if (spacer) spacer.style.height = `${overflowHeight}px`
         root.style.setProperty(
           "--sticky-padding-bottom",
           `${node.getBoundingClientRect().height}px`
         )
       }
+
       write()
-      const observer = new ResizeObserver(write)
-      observer.observe(node)
+      const resizeObserver = new ResizeObserver(write)
+      resizeObserver.observe(node, { box: "border-box" })
+      if (promptHeader)
+        resizeObserver.observe(promptHeader, { box: "border-box" })
+
+      const mutationObserver = new MutationObserver(() => {
+        if (promptHeader && node.contains(promptHeader)) return
+        const nextHeader = node.querySelector<HTMLElement>(
+          "[data-prompt-textarea-header]"
+        )
+        if (nextHeader === promptHeader) return
+        if (promptHeader) resizeObserver.unobserve(promptHeader)
+        promptHeader = nextHeader
+        if (promptHeader)
+          resizeObserver.observe(promptHeader, { box: "border-box" })
+        write()
+      })
+      mutationObserver.observe(node, { childList: true, subtree: true })
+
       cleanupRef.current = () => {
-        observer.disconnect()
+        mutationObserver.disconnect()
+        resizeObserver.disconnect()
+        spacer?.style.removeProperty("height")
         root.style.removeProperty("--sticky-padding-bottom")
       }
     },

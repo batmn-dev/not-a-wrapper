@@ -1,33 +1,58 @@
 /** @vitest-environment jsdom */
 
-import { act, type ComponentProps, StrictMode } from "react"
+import { act, StrictMode, type ComponentProps } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
+import { ThreadScrollEdge } from "./thread-scroll"
 import {
   resetThreadAnchorsForTest,
   saveThreadAnchor,
 } from "./thread-scroll-anchors"
-import { ThreadScrollEdge } from "./thread-scroll"
+
+let intersectionObservers: IntersectionObserverStub[] = []
 
 class IntersectionObserverStub {
-  readonly root = null
-  readonly rootMargin = "0px"
-  readonly thresholds = []
-
+  readonly callback: IntersectionObserverCallback
+  readonly root: Element | Document | null
+  readonly rootMargin: string
+  readonly thresholds: readonly number[]
+  readonly observed = new Set<Element>()
   disconnect = vi.fn()
-  observe = vi.fn()
+  observe = vi.fn((element: Element) => this.observed.add(element))
   takeRecords = vi.fn(() => [])
-  unobserve = vi.fn()
+  unobserve = vi.fn((element: Element) => this.observed.delete(element))
+
+  constructor(
+    callback: IntersectionObserverCallback,
+    options: IntersectionObserverInit = {}
+  ) {
+    this.callback = callback
+    this.root = options.root ?? null
+    this.rootMargin = options.rootMargin ?? "0px"
+    this.thresholds = Array.isArray(options.threshold)
+      ? options.threshold
+      : [options.threshold ?? 0]
+    intersectionObservers.push(this)
+  }
 }
 
 let resizeObservers: ResizeObserverStub[] = []
 
 class ResizeObserverStub {
   readonly callback: ResizeObserverCallback
+  readonly observed = new Set<Element>()
 
   disconnect = vi.fn()
-  observe = vi.fn()
-  unobserve = vi.fn()
+  observe = vi.fn((element: Element) => this.observed.add(element))
+  unobserve = vi.fn((element: Element) => this.observed.delete(element))
 
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback
@@ -58,6 +83,7 @@ describe("ThreadScrollEdge", () => {
   })
 
   beforeEach(() => {
+    intersectionObservers = []
     resizeObservers = []
     nextFrameId = 0
     frames = new Map()
@@ -117,11 +143,7 @@ describe("ThreadScrollEdge", () => {
         .scrollIntoView
     }
     if (originalScrollTo) {
-      Object.defineProperty(
-        HTMLElement.prototype,
-        "scrollTo",
-        originalScrollTo
-      )
+      Object.defineProperty(HTMLElement.prototype, "scrollTo", originalScrollTo)
     } else {
       delete (HTMLElement.prototype as { scrollTo?: unknown }).scrollTo
     }
@@ -181,7 +203,9 @@ describe("ThreadScrollEdge", () => {
 
   it("recalculates the gutter when the scroll root resizes", () => {
     render(null)
-    const gutter = container.lastElementChild as HTMLDivElement
+    const gutter = container.querySelector(
+      ".threadScrollVars"
+    ) as HTMLDivElement
     vi.spyOn(container, "getBoundingClientRect").mockReturnValue({
       bottom: 500,
     } as DOMRect)
@@ -189,12 +213,71 @@ describe("ThreadScrollEdge", () => {
       top: 200,
     } as DOMRect)
 
-    act(() => resizeObservers[0].trigger())
+    act(() => {
+      for (const observer of resizeObservers) observer.trigger()
+    })
 
-    expect(resizeObservers[0].observe).toHaveBeenCalledWith(container)
+    expect(
+      resizeObservers.some((observer) => observer.observed.has(container))
+    ).toBe(true)
     expect(gutter.style.getPropertyValue("--gutter-remaining-height")).toBe(
       "300px"
     )
+  })
+
+  it("tracks the measured footer height for scroll-button visibility", () => {
+    let footerHeight = 108
+
+    act(() => {
+      root.render(
+        <>
+          <div
+            id="thread-bottom-container"
+            ref={(element) => {
+              if (!element) return
+              vi.spyOn(element, "getBoundingClientRect").mockImplementation(
+                () =>
+                  ({
+                    height: footerHeight,
+                  }) as DOMRect
+              )
+            }}
+          />
+          <ThreadScrollEdge
+            chatId="chat-1"
+            streamActive={false}
+            pinTurnId={null}
+            hydrated
+            freshChat
+          />
+        </>
+      )
+    })
+
+    expect(
+      intersectionObservers.some(
+        (observer) => observer.rootMargin === "0px 0px 108px"
+      )
+    ).toBe(true)
+
+    footerHeight = 204
+    act(() => {
+      for (const observer of resizeObservers) observer.trigger()
+    })
+
+    expect(intersectionObservers.at(-1)?.rootMargin).toBe("0px 0px 204px")
+  })
+
+  it("keeps the disclaimer in the conversation tail outside the footer", () => {
+    render(null)
+
+    const tail = container.querySelector("[data-thread-tail]")
+    const disclaimer = container.querySelector("[data-thread-disclaimer]")
+
+    expect(tail).not.toBeNull()
+    expect(disclaimer).not.toBeNull()
+    expect(tail?.contains(disclaimer)).toBe(true)
+    expect(disclaimer?.closest("#thread-bottom-container")).toBeNull()
   })
 
   it("restores a saved anchor instead of jumping to the bottom", () => {

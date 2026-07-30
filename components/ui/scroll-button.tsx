@@ -15,16 +15,16 @@ export type ScrollButtonProps = {
 } & React.ButtonHTMLAttributes<HTMLButtonElement>
 
 /**
- * The scroll-to-bottom pill. Visibility is pure CSS: shown whenever the scroll root
- * carries `data-scroll-from-end` (a 300ms-delayed 300ms entrance), hidden
- * otherwise (fast 100ms exit, scaled down and nudged toward the composer).
- * The sentinel in ThreadScrollEdge owns the attribute; no React state here.
- * The pill is a pointer convenience hidden from the
- * accessibility tree — keyboard users scroll the log directly.
+ * The scroll-to-bottom pill. ThreadBottomContainer owns its CSS-only visibility
+ * contract from `data-scroll-from-end`; this component owns the independent
+ * 120ms arrow/wave and streaming-width presentation. The sentinel in
+ * ThreadScrollEdge owns both runtime attributes, with no React visibility state.
+ * The pill is a pointer convenience hidden from the accessibility tree —
+ * keyboard users scroll the log directly.
  */
 function ScrollButton({
   className,
-  variant = "outline",
+  variant = "secondary",
   size = "sm",
   ...props
 }: ScrollButtonProps) {
@@ -37,16 +37,30 @@ function ScrollButton({
       tabIndex={-1}
       variant={variant}
       size={size}
+      data-testid="scroll-to-bottom-button"
       className={cn(
-        "bg-popover hover:bg-popover-bg-hover active:bg-interactive-pressed h-9 w-9 rounded-full backdrop-blur-md pointer-coarse:h-10 pointer-coarse:w-10",
-        "motion-safe:transition-all motion-safe:delay-300 motion-safe:duration-300",
-        "group-[:not([data-scroll-from-end])]/scroll-root:pointer-events-none group-[:not([data-scroll-from-end])]/scroll-root:translate-y-2 group-[:not([data-scroll-from-end])]/scroll-root:scale-50 group-[:not([data-scroll-from-end])]/scroll-root:opacity-0 group-[:not([data-scroll-from-end])]/scroll-root:delay-0 group-[:not([data-scroll-from-end])]/scroll-root:duration-100",
+        "border-border-strong bg-popover/65 hover:bg-popover active:bg-interactive-pressed relative box-content h-8 w-8 overflow-hidden rounded-full border bg-clip-border p-0 shadow-md backdrop-blur-[2px] group-data-stream-active/scroll-root:w-10 dark:shadow-none",
+        "motion-safe:transition-[width] motion-safe:duration-120 motion-safe:ease-out",
         className
       )}
       onClick={() => scrollToBottom("smooth")}
       {...props}
     >
-      <Icon icon={RiArrowDownLine} slotSize={20} glyphSize={22} />
+      <span
+        data-scroll-button-arrow=""
+        className="absolute inset-0 flex items-center justify-center opacity-100 group-data-stream-active/scroll-root:opacity-0 motion-safe:transition-opacity motion-safe:duration-120 motion-safe:ease-out"
+      >
+        <Icon icon={RiArrowDownLine} slotSize={20} glyphSize={20} />
+      </span>
+      <span
+        data-scroll-button-wave=""
+        aria-hidden="true"
+        className="absolute inset-0 flex items-center justify-center gap-0.75 opacity-0 group-data-stream-active/scroll-root:opacity-100 motion-safe:transition-opacity motion-safe:duration-120 motion-safe:ease-out"
+      >
+        <span className="bg-foreground/70 size-1 rounded-full motion-safe:animate-[working-dot-wave_1s_ease-in-out_infinite]" />
+        <span className="bg-foreground/70 size-1 rounded-full motion-safe:animate-[working-dot-wave_1s_ease-in-out_infinite] motion-safe:[animation-delay:100ms]" />
+        <span className="bg-foreground/70 size-1 rounded-full motion-safe:animate-[working-dot-wave_1s_ease-in-out_infinite] motion-safe:[animation-delay:200ms]" />
+      </span>
     </Button>
   )
 }

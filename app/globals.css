@@ -84,6 +84,23 @@
     }
   }
 
+  @keyframes working-dot-wave {
+    0%,
+    10%,
+    100% {
+      transform: translateY(0);
+    }
+    25% {
+      transform: translateY(1.2px);
+    }
+    55% {
+      transform: translateY(-2px);
+    }
+    70% {
+      transform: translateY(0);
+    }
+  }
+
   @keyframes shimmer {
     from {
       background-position: 200% center;
@@ -820,7 +837,8 @@
     gap: var(--sidebar-row-action-gap);
   }
 
-  .sidebar-row-action-group .sidebar-row-trailing-button {
+  .sidebar-row-action-group .sidebar-row-trailing-button,
+  .sidebar-row-status-slot[data-sidebar-row-status-slot="compact"] {
     width: var(--sidebar-row-action-width);
     height: var(--sidebar-row-height);
     margin-block: calc(-1 * var(--sidebar-row-action-margin-block));
@@ -1007,22 +1025,57 @@
     }
   }
 
-  /* Content fade: two-layer gradient pseudo behind sticky composer.
-     Layer 1 (28px): transparent → background (fade zone matching border-radius).
-     Layer 2 (full): transparent for 28px then solid background below. */
+  /* The sticky composer sits on an 80%-opaque surface masked in over 32px. */
   .content-fade::after {
     content: "";
     position: absolute;
-    inset: 0;
+    inset-block: 0;
+    inset-inline-start: 50%;
+    width: 100%;
+    transform: translateX(-50%);
     z-index: -1;
     pointer-events: none;
-    background-image:
-      linear-gradient(transparent, var(--background)),
-      linear-gradient(transparent 28px, var(--background) 28px);
-    background-size:
-      100% 28px,
-      100% 100%;
-    background-repeat: no-repeat;
+    background-color: var(--background);
+    opacity: 0.8;
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      black 32px,
+      black 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      black 32px,
+      black 100%
+    );
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+  }
+
+  @container main (min-width: 720px) {
+    .content-fade::after {
+      -webkit-mask-image:
+        linear-gradient(to bottom, transparent 0, black 32px, black 100%),
+        linear-gradient(
+          to right,
+          transparent 0,
+          black 32px,
+          black calc(100% - 32px),
+          transparent 100%
+        );
+      mask-image:
+        linear-gradient(to bottom, transparent 0, black 32px, black 100%),
+        linear-gradient(
+          to right,
+          transparent 0,
+          black 32px,
+          black calc(100% - 32px),
+          transparent 100%
+        );
+      -webkit-mask-composite: source-in;
+      mask-composite: intersect;
+    }
   }
 
   /* Extends invisible hit target without changing the 36px visible composer control. */
@@ -1051,6 +1104,7 @@
     transform: translate(-50%, -50%);
   }
 
+  .shadow-short-composer,
   .shadow-composer {
     --tw-shadow:
       0px 0px 0px 1px rgba(0, 0, 0, 0.04), 0px 2px 8px 0px rgba(0, 0, 0, 0.04),
@@ -1062,6 +1116,9 @@
       var(--tw-ring-offset-shadow, 0 0 transparent),
       var(--tw-ring-shadow, 0 0 transparent), var(--tw-shadow);
   }
+  .shadow-short-composer:where(.dark, .dark *):not(
+      :where(.dark .light, .dark .light *)
+    ),
   .shadow-composer:where(.dark, .dark *):not(
       :where(.dark .light, .dark .light *)
     ) {
