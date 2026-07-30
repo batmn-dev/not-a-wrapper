@@ -29,6 +29,7 @@ const lifecycleMocks = vi.hoisted(() => ({
       onError: (error: Error) => void
       sendAutomaticallyWhen: (args: { messages: UIMessage[] }) => boolean
     }
+    status: string
     stop: ReturnType<typeof vi.fn>
   }>,
   approvalGate: vi.fn(() => true),
@@ -37,6 +38,7 @@ const lifecycleMocks = vi.hoisted(() => ({
 
 vi.mock("@ai-sdk/react", () => ({
   Chat: class MockChat {
+    status = "ready"
     readonly stop = vi.fn()
 
     constructor(
@@ -244,6 +246,7 @@ describe("detachable chat stream lifecycle", () => {
     const harness = mountHarness("chat-a")
     const originBinding = lifecycleMocks.bindings[0]
     if (!originBinding) throw new Error("origin binding was not created")
+    originBinding.status = "streaming"
 
     harness.setChatId("chat-b", true)
 
@@ -267,6 +270,50 @@ describe("detachable chat stream lifecycle", () => {
     expect(vi.getTimerCount()).toBe(0)
     vi.advanceTimersByTime(120_000)
     expect(originBinding.stop).not.toHaveBeenCalled()
+  })
+
+  it("watchdogs and counts a later-turn stream after finished has latched", () => {
+    vi.useFakeTimers()
+    const harness = mountHarness("chat-a")
+    const originBinding = lifecycleMocks.bindings[0]
+    if (!originBinding) throw new Error("origin binding was not created")
+
+    // The first turn settles the attached gauge and latches `finished`.
+    originBinding.options.onFinish(finishEvent)
+    const firstFinishGauge = lifecycleMocks.markChatPerf.mock.calls.find(
+      ([name, fields]) =>
+        name === "detached_binding_gauge" &&
+        fields.event === "finished_attached"
+    )?.[1]
+    if (!firstFinishGauge) throw new Error("first finish gauge was not emitted")
+
+    // The same SDK Chat starts a later turn. Current liveness, rather than the
+    // first-turn latch, must transfer it into detached ownership.
+    originBinding.status = "streaming"
+    harness.setChatId("chat-b")
+
+    const detachedGauge = lifecycleMocks.markChatPerf.mock.calls.find(
+      ([name, fields]) =>
+        name === "detached_binding_gauge" && fields.event === "detached"
+    )?.[1]
+    expect(detachedGauge).toMatchObject({
+      attachedCount: firstFinishGauge.attachedCount,
+      detachedCount: firstFinishGauge.detachedCount + 1,
+    })
+    expect(vi.getTimerCount()).toBe(1)
+
+    originBinding.status = "ready"
+    originBinding.options.onFinish(finishEvent)
+
+    const detachedFinishGauge = lifecycleMocks.markChatPerf.mock.calls.find(
+      ([name, fields]) =>
+        name === "detached_binding_gauge" &&
+        fields.event === "finished_detached"
+    )?.[1]
+    expect(detachedFinishGauge).toMatchObject({
+      detachedCount: firstFinishGauge.detachedCount,
+    })
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it("adopts null to chatId without detaching or replacing the first-turn binding", () => {

@@ -118,6 +118,17 @@ export function getDurableError(metadata: unknown): string | undefined {
 }
 
 /**
+ * Read the provider's unified terminal reason from durable message metadata.
+ * Unlike mounted-session finish state, this survives navigation, reload, and
+ * the message becoming historical.
+ */
+export function getFinishReason(metadata: unknown): string | undefined {
+  if (!isRecord(metadata)) return undefined
+  const value = metadata.finishReason
+  return typeof value === "string" && value.length > 0 ? value : undefined
+}
+
+/**
  * Read the server-persisted reasoning duration (ms) off a message's metadata.
  * Written by the chat turn runtime at stream completion; renderers must read
  * it through this accessor, never via `metadata.reasoningDurationMs` directly.

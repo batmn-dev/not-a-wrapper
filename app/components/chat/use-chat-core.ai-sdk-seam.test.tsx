@@ -664,6 +664,88 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
     expect(requestSignals[0]?.aborted).toBe(false)
   })
 
+  it("re-adopts the still-live origin stream on return, resuming the word-granular local array", async () => {
+    // The nav-return fix (investigation §Issue 2): A → B → A mid-stream must
+    // hand the mounted surface back the ORIGINAL binding — live status, full
+    // canonical array, deltas continuing — instead of a fresh binding fed by
+    // 750 ms durable snapshots. The finish then routes through the ATTACHED
+    // path with the origin identity, not the detached guest-cache path.
+    const originChatId = "local-readopt-origin"
+    const nextChatId = "local-readopt-next"
+    const expectedText = Array.from({ length: 10 }, (_, i) => `piece-${i} `)
+    const requestSignals: (AbortSignal | null | undefined)[] = []
+    fetchMock.mockImplementation(async (_url, init) => {
+      requestSignals.push(init?.signal)
+      return withAbortSemantics(
+        makeUiMessageSseResponse({
+          deltas: expectedText,
+          chunkDelayInMs: 25,
+        }),
+        init?.signal
+      )
+    })
+    const hook = renderHook(originChatId)
+
+    await act(async () => {
+      void hook.sendMessage({ text: "hi" })
+    })
+    await waitForInAct(() =>
+      expect(hookApiRef.current?.status).toBe("streaming")
+    )
+
+    // Away mid-stream: the mounted surface empties (detach, no abort)…
+    await act(async () => {
+      setChatIdRef.current?.(nextChatId)
+    })
+    expect(hookApiRef.current?.messages).toEqual([])
+    expect(hookApiRef.current?.status).toBe("ready")
+
+    // …and return re-adopts: the surface is streaming again with the origin
+    // chat's canonical array, not an empty fresh binding.
+    await act(async () => {
+      setChatIdRef.current?.(originChatId)
+    })
+    await waitForInAct(() => {
+      expect(hookApiRef.current?.status).toBe("streaming")
+      expect(
+        hookApiRef.current?.messages.some(
+          (message) => message.role === "assistant"
+        )
+      ).toBe(true)
+    })
+
+    // Completion routes through the attached finish with the origin identity.
+    const finish = seamMocks.chatTurnController.finishChatTurn
+    await waitForInAct(() => expect(finish).toHaveBeenCalledTimes(1))
+    expect(finish.mock.calls[0][0]).toMatchObject({
+      isAbort: false,
+      isDisconnect: false,
+      isError: false,
+      chatId: originChatId,
+    })
+    const message = (finish.mock.calls[0][0] as { message: UIMessage }).message
+    expect(
+      message.parts
+        .filter((part) => part.type === "text")
+        .map((part) => (part as { text: string }).text)
+        .join("")
+    ).toBe(expectedText.join(""))
+    // Never aborted, and the detached guest-cache path never ran.
+    expect(requestSignals[0]?.aborted).toBe(false)
+    expect(seamMocks.cacheAndAddMessage).not.toHaveBeenCalled()
+    // The mounted array carries the fully streamed assistant text.
+    await waitForInAct(() =>
+      expect(
+        hookApiRef.current?.messages
+          .filter((m) => m.role === "assistant")
+          .flatMap((m) => m.parts)
+          .filter((part) => part.type === "text")
+          .map((part) => (part as { text: string }).text)
+          .join("")
+      ).toBe(expectedText.join(""))
+    )
+  })
+
   it("finishes an errored turn with isError when the transport fails", async () => {
     fetchMock.mockImplementation(
       async () => new Response("model exploded", { status: 500 })

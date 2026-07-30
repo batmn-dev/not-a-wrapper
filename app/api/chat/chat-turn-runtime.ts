@@ -61,6 +61,7 @@ import {
 } from "convex/nextjs"
 import { after } from "next/server"
 import { adaptHistoryForProvider } from "./adapters"
+import { createWordChunkingTransform } from "./word-chunking-transform"
 import type { AdaptationContext, AdaptationWarning } from "./adapters/types"
 import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
 import {
@@ -1187,6 +1188,18 @@ export function createChatTurnRuntime(args: {
         // approval-persistence transform (its backpressure array
         // module-private). Guest returns `{}` — guest chats run ungated.
         ...lifecycle.streamTextExtras,
+        // Word-granular re-chunking of coarse provider text slabs (ADR-0016
+        // provider-smoothing escape hatch), composed BEFORE the lifecycle's
+        // approval-persistence transform so the durable tracker and the wire
+        // both see the same word-granular deltas. Self-gating: already-fine
+        // deltas pass through synchronously untouched.
+        experimental_transform: lifecycle.streamTextExtras
+          .experimental_transform
+          ? [
+              createWordChunkingTransform(executionSignal),
+              lifecycle.streamTextExtras.experimental_transform,
+            ]
+          : createWordChunkingTransform(executionSignal),
 
         onChunk: ({ chunk }) => {
           const now = Date.now()

@@ -7,6 +7,7 @@ import {
   isDurableMessageStatus,
   type DurableMessageStatus,
 } from "@/lib/chat-messages/durable-contract"
+import { getFinishReason } from "@/lib/chat-messages/metadata"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import type { TurnRowModel } from "@/lib/chat-messages/turn-row"
 import type { EditTurnResult } from "@/lib/chat-turn/chat-turn-controller"
@@ -228,7 +229,9 @@ export function Conversation({
               retryModelId,
               status: messageStatus,
               isDurableChat,
-              finishReason: isLast ? lastFinishReason : undefined,
+              finishReason:
+                getFinishReason(message.metadata) ??
+                (isLast ? lastFinishReason : undefined),
             }
           } else if (message.role === "user") {
             rowModel = {

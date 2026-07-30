@@ -117,6 +117,56 @@ normal and 4× CPU frame gates in the results document pass.
 provider/model that traces prove emits visually unacceptable bursts after
 this client path, and never to conceal renderer slowness.
 
+**Escape hatch exercised (2026-07-28).** The investigation found that
+Anthropic's serving path emits ~90–430-char text slabs every ~100–400 ms,
+which this client path faithfully paints as slabs. The implementation is
+`createWordChunkingTransform` (`app/api/chat/word-chunking-transform.ts`) at
+the server `streamText` seam — NOT the SDK's `smoothStream`, whose installed
+version also delays reasoning deltas and holds timers across aborts. The
+gate is the evidence itself rather than a provider allowlist: deltas at or
+below 24 chars pass through untouched and synchronously (word-granular
+providers pay nothing), and only oversized slabs are word-split, paced
+against the provider's own observed inter-delta gap so added latency stays
+bounded below one gap (≤ 360 ms). Text deltas only; abort cancels all
+pacing immediately through the runtime execution signal and emits the abort
+terminal itself when the provider has already filled AI SDK's upstream queue.
+That explicit terminal prevents a stopped mid-drain slab from closing as a
+successful completion. Wire-verified per provider: OpenAI 188 deltas/med 5
+chars (pass-through), Anthropic Haiku 154 deltas/med 6 chars (was ~16 slabs of
+~360), Gemini 153 deltas/med 5 chars.
+
+### Growing single-block shapes (amendment, 2026-07-28)
+
+The blank-line stable-boundary rule left one measured degradation class: a
+block that never emits a blank line (a tight or blank-separated list, an
+open fence) pins the restart boundary at its own start, so per-update parse
+AND render cost grow with the block — quadratic over a stream, user-visible
+as "word-by-word at first, chunky later" (live profile: late-half main-thread
+busy 249 s vs early-half 1.7 s on a 300-item list). The parser and open-fence
+renderer can be optimized without changing document semantics:
+
+- **Parse: terminal-block line extension.** When appended lines provably
+  continue the terminal `list`/`code` block (item-marker/lazy/indented
+  continuation rules; open-fence interior with closer detection), the block
+  record extends by a line scan with zero parse. Any unprovable line falls
+  back to the existing authoritative paths, and settlement's equivalence
+  check remains the net. The trailing PARTIAL line is included
+  optimistically only while it could still extend the block — within that
+  line the projection may partition differently from the parser (which
+  itself repartitions such tails char by char); rendering is
+  partition-invariant over the same bytes, and the settle check tolerates
+  exactly this documented case (`blocksEquivalentModuloPartialTail`).
+- **Render: direct fence, canonical lists.** A growing open fence renders its
+  `CodeBlock` directly, mirroring the pipeline's DOM. Growing lists continue
+  through one authoritative Markdown render. Splitting one source list into
+  adjacent `<ol start>`/`<ul>` siblings can mimic sighted numbering, but it
+  changes the document exposed to assistive technology, structural selectors,
+  and rich selection-copy. Correct single-root semantics take precedence over
+  the prior bounded list-render experiment. List parsing remains linearly
+  extended by the fast path above; list rendering may still grow with the
+  block until an optimization can memoize items beneath one parser-owned list
+  root. Long single paragraphs retain the same documented limitation.
+
 ### Why the second reveal scheduler was rejected
 
 - It created displayed-text state that intentionally trailed canonical text

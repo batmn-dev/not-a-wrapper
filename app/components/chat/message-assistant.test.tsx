@@ -527,6 +527,84 @@ describe("MessageAssistant activity trigger", () => {
     expect(container?.querySelector('button[aria-label="Sources"]')).toBeNull()
   })
 
+  it("offers Copy Response only when the text is not still active or paused", async () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+    const renderStatus = async (
+      status:
+        | "submitted"
+        | "streaming"
+        | "awaiting_approval"
+        | "ready"
+        | "aborted"
+        | "failed"
+    ) => {
+      await act(async () => {
+        root?.render(
+          <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+            <MessageAssistant
+              messageId="assistant-1"
+              copied={false}
+              copyToClipboard={() => {}}
+              isLast
+              view={makeView(
+                [{ type: "text", text: "Partial or complete answer" }],
+                status === "streaming" ? "streaming" : "ready"
+              )}
+              status={status}
+            >
+              {"Partial or complete answer"}
+            </MessageAssistant>
+          </ActivityPanelStoreProvider>
+        )
+        await Promise.resolve()
+      })
+    }
+
+    for (const status of [
+      "submitted",
+      "streaming",
+      "awaiting_approval",
+    ] as const) {
+      await renderStatus(status)
+      expect(
+        container?.querySelector('button[aria-label="Copy Response"]')
+      ).toBeNull()
+    }
+
+    for (const status of ["ready", "aborted", "failed"] as const) {
+      await renderStatus(status)
+      expect(
+        container?.querySelector('button[aria-label="Copy Response"]')
+      ).toBeTruthy()
+    }
+  })
+
+  it("renders a durable output-length warning on a settled row", async () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+
+    await act(async () => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView(
+              [{ type: "text", text: "Truncated answer" }],
+              "ready"
+            )}
+            status="completed"
+            finishReason="length"
+          >
+            {"Truncated answer"}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    expect(container?.textContent).toContain(
+      "Response may be incomplete due to output length limits."
+    )
+  })
+
   it("names the model the retry action will use", async () => {
     const store = makeStore({ panelTurnId: "assistant-1" })
 

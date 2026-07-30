@@ -57,12 +57,14 @@ vi.mock("./message", () => ({
       id: string
       text: string
       status?: string
+      finishReason?: string
       view?: { reasoning?: { phase?: string } }
     }
     onReload?: (messageId: string) => void
   }) => (
     <button
       data-can-reload={Boolean(onReload)}
+      data-finish-reason={model.finishReason}
       data-reasoning-phase={model.view?.reasoning?.phase}
       data-status={model.status}
       data-testid={`message-${model.id}`}
@@ -193,6 +195,54 @@ describe("Conversation regeneration availability", () => {
     })
 
     expect(onReload).toHaveBeenCalledWith("assistant-1")
+  })
+
+  it("hydrates finish reasons from durable metadata for historical and last rows", () => {
+    cleanupRender()
+    const mounted = document.createElement("div")
+    document.body.appendChild(mounted)
+    container = mounted
+    root = createRoot(mounted)
+
+    const durableMessages = messages.map((message) =>
+      message.role === "assistant"
+        ? {
+            ...message,
+            metadata: {
+              finishReason:
+                message.id === "assistant-1" ? "length" : "content-filter",
+            },
+          }
+        : message
+    ) satisfies UIMessage[]
+
+    act(() => {
+      root?.render(
+        <Conversation
+          messages={durableMessages}
+          status="ready"
+          lastFinishReason="stop"
+          onEdit={vi.fn()}
+          onReload={vi.fn()}
+          isDurableChat
+        />
+      )
+    })
+
+    expect(
+      (
+        container?.querySelector(
+          '[data-testid="message-assistant-1"]'
+        ) as HTMLButtonElement | null
+      )?.dataset.finishReason
+    ).toBe("length")
+    expect(
+      (
+        container?.querySelector(
+          '[data-testid="message-assistant-2"]'
+        ) as HTMLButtonElement | null
+      )?.dataset.finishReason
+    ).toBe("content-filter")
   })
 
   it("routes the submitted pre-stream state through the activity assistant row", () => {

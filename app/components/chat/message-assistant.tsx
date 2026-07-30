@@ -77,7 +77,6 @@ export function MessageAssistant({
     getModelInfo(retryModelId ?? "")?.name ?? retryModelId ?? "selected model"
 
   const contentNullOrEmpty = children === null || children === ""
-  const isLastStreaming = status === "streaming" && isLast
   const hasContent = !contentNullOrEmpty
   // Durable terminal-state presentation inputs: whether any visible response
   // content survived, and the persisted error summary for failed turns.
@@ -161,10 +160,12 @@ export function MessageAssistant({
 
   const didStreamInSession = Boolean(isLast && finishReason)
   const showFooterCaret = hasContent && contentCaretPhase !== "hidden"
+  const copyableStatus =
+    status !== "submitted" &&
+    status !== "streaming" &&
+    status !== "awaiting_approval"
   const showFooterActions =
-    hasContent &&
-    !isLastStreaming &&
-    (!isLast || contentCaretPhase === "hidden")
+    hasContent && copyableStatus && (!isLast || contentCaretPhase === "hidden")
   const showFooterSlot = showFooterCaret || showFooterActions
 
   if (showActiveContentCaret && contentCaretPhase !== "visible") {

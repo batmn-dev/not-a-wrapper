@@ -81,6 +81,43 @@ equivalent of the link-nav remount — via an ownership unit, the
   instance; useChat's own render-time internal ref reassignment self-heals
   on the next committed render.
 
+## Amendment (2026-07-28): return re-adopts a still-live detached binding
+
+Detach alone left a user-visible cost on the return path: navigating back
+to a generating chat mounted a *fresh* binding (status `ready`), so the
+surface rendered the Convex durability plane at its 750 ms snapshot cadence
+(~350-char slabs) while the detached binding kept the word-granular stream
+nobody rendered. The 2026-07-28 investigation measured the mounted projection
+arriving in ~350-character slabs at the snapshot cadence.
+
+A mounted transition **to** a chat whose detached binding is still streaming
+now **re-adopts** that binding — the inverse of detach, in the same
+layout-phase commit: lifecycle back to attached (owner identity re-frozen to
+the origin, which is the destination), watchdog cleared (the attached
+stuck-stream guard owns the budget again), `sendAutomaticallyWhen` re-armed
+by construction (it reads the lifecycle at dispatch time). The surface
+resumes the original word-cadence local array — strictly fresher than the
+snapshot path — and Stop regains a live local target. The owner keeps a
+chatId → detached-binding registry; liveness comes from the SDK chat's
+`status` (not the lifecycle's `finished` flag, which latches after a
+binding's first completed turn), and entries are removed on re-adoption or
+in finish routing — the SDK invokes `onFinish` in a `finally`, so a dead
+binding cannot linger. A binding that finished while away fails the
+liveness check and falls through to the fresh-binding + projection path,
+unchanged. A reactive selected path that **proves divergence** from the
+detached binding (for example, another tab selected a regenerated sibling)
+also refuses re-adoption: the obsolete binding remains detached under its
+existing watchdog and the surface falls back to the fresh-binding + Convex
+projection path. Empty or merely lagging server paths are not proof of
+divergence and do not block the ordinary smooth-return case.
+
+Convex stays the recovery plane for reload / second tab / other device, and
+the 750 ms snapshot cadence is untouched (per ADR-0016, paint cadence never
+couples to the durability plane). One projection consequence: entry
+hydration can now run mid-stream, so the entry-time selected-path pass
+defers a *divergent* (wholesale branch-swap) projection to settle — the
+monotonic identity-matched reconcile remains safe mid-stream.
+
 ## Deferred (not rejected)
 
 - **Durable run-scoped Stop**: re-entering a chat whose run streams in the
@@ -88,6 +125,9 @@ equivalent of the link-nav remount — via an ownership unit, the
   the link-nav remount has always had). A client-initiated abort would
   apply the lifecycle abort verdict directly (first-terminal-wins absorbs
   the racing stream writes). Belongs with ADR-0011's lease/reaper phase.
+  The 2026-07-28 amendment narrows this: same-tab return now re-adopts the
+  live binding, so local Stop works again there; the gap remains for
+  re-entry after a remount or from another tab.
 - **Lease/heartbeat + cron reaper** (ADR-0011): the backstop for a stale
   `live_run_status` after worker death or platform cutoff; the client
   watchdog narrows but does not close that window.

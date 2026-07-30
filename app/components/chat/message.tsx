@@ -3,7 +3,7 @@ import {
   type TurnRowModel,
 } from "@/lib/chat-messages/turn-row"
 import type { EditTurnResult } from "@/lib/chat-turn/chat-turn-controller"
-import React, { useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import { MessageAssistant } from "./message-assistant"
 import { MessageUser } from "./message-user"
 
@@ -37,12 +37,53 @@ function MessageInner({
   onSelectBranch,
   onQuote,
 }: MessageProps) {
-  const [copied, setCopied] = useState(false)
+  const [copiedText, setCopiedText] = useState<string | null>(null)
+  const copied = copiedText === model.text
+  const copyAttemptRef = useRef(0)
+  const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  )
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(model.text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 500)
+  useEffect(() => {
+    // A new canonical value invalidates feedback from an older click. This
+    // also prevents an in-flight clipboard promise from publishing stale
+    // success after the row has adopted a newer durable snapshot.
+    copyAttemptRef.current += 1
+    if (copyFeedbackTimeoutRef.current !== null) {
+      clearTimeout(copyFeedbackTimeoutRef.current)
+      copyFeedbackTimeoutRef.current = null
+    }
+
+    return () => {
+      if (copyFeedbackTimeoutRef.current !== null) {
+        clearTimeout(copyFeedbackTimeoutRef.current)
+        copyFeedbackTimeoutRef.current = null
+      }
+    }
+  }, [model.text])
+
+  const copyToClipboard = async () => {
+    const attempt = ++copyAttemptRef.current
+    const clipboard =
+      typeof navigator === "undefined" ? undefined : navigator.clipboard
+    if (!clipboard?.writeText) return
+
+    try {
+      await clipboard.writeText(model.text)
+    } catch {
+      return
+    }
+
+    // Repeated clicks are allowed, but only the latest attempt owns feedback.
+    if (attempt !== copyAttemptRef.current) return
+    setCopiedText(model.text)
+    if (copyFeedbackTimeoutRef.current !== null) {
+      clearTimeout(copyFeedbackTimeoutRef.current)
+    }
+    copyFeedbackTimeoutRef.current = setTimeout(() => {
+      copyFeedbackTimeoutRef.current = null
+      setCopiedText(null)
+    }, 500)
   }
 
   if (model.kind === "user") {

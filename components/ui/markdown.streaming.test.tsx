@@ -334,4 +334,162 @@ describe("Markdown terminal-block stability (plan PR 3)", () => {
     expect(writeText).toHaveBeenCalledTimes(1)
     expect(writeText.mock.calls[0][0]).toContain(hostile)
   })
+
+  // -------------------------------------------------------------------------
+  // Growing single-block shapes: lists always retain one authoritative
+  // semantic root; an open fence renders directly and lands on the pipeline's
+  // structure at settle.
+  // -------------------------------------------------------------------------
+
+  function orderedItems(from: number, to: number) {
+    return Array.from(
+      { length: to - from + 1 },
+      (_, i) =>
+        `${from + i}. Item sentence number ${from + i} concerning harbors and tides.`
+    ).join("\n")
+  }
+
+  it("keeps one semantic ordered-list root during growth and settlement", async () => {
+    const view = mount(orderedItems(1, 120) + "\n", true)
+    await advance(10)
+
+    expect(container?.querySelectorAll("ol")).toHaveLength(1)
+    expect(container?.querySelectorAll("li")).toHaveLength(120)
+
+    view.rerender(orderedItems(1, 200) + "\n", true)
+    await advance(10)
+
+    expect(container?.querySelectorAll("ol")).toHaveLength(1)
+    expect(container?.querySelectorAll("li")).toHaveLength(200)
+
+    view.rerender(orderedItems(1, 200) + "\n", false)
+    await advance(10)
+    expect(container?.querySelectorAll("ol")).toHaveLength(1)
+    expect(container?.querySelectorAll("li")).toHaveLength(200)
+  })
+
+  it("keeps repeated markers in one sequential CommonMark list", async () => {
+    const repeated =
+      Array.from(
+        { length: 128 },
+        (_, i) =>
+          `1. Item sentence number ${i + 1} concerning harbors and tides.`
+      ).join("\n") + "\n"
+    const view = mount(repeated, true)
+    await advance(10)
+
+    expect(container?.querySelectorAll("ol")).toHaveLength(1)
+    expect(container?.querySelectorAll("li")).toHaveLength(128)
+
+    const withPartialTail = `${repeated}1. Still-streaming repeated marker`
+    view.rerender(withPartialTail, true)
+    await advance(10)
+    expect(container?.querySelectorAll("ol")).toHaveLength(1)
+    expect(container?.querySelectorAll("li")).toHaveLength(129)
+
+    view.rerender(withPartialTail, false)
+    await advance(10)
+    expect(container?.querySelectorAll("ol")).toHaveLength(1)
+    expect(container?.querySelectorAll("li")).toHaveLength(129)
+  })
+
+  it("preserves non-1 starts, looseness, tasks, and nesting in one root", async () => {
+    const zeroStarted =
+      Array.from(
+        { length: 40 },
+        (_, i) => `${i}. Zero-started item ${i} concerning harbors and tides.`
+      ).join("\n") + "\n"
+    const view = mount(zeroStarted, true)
+    await advance(10)
+    expect(container?.querySelectorAll("ol")).toHaveLength(1)
+    expect(container?.querySelector("ol")?.getAttribute("start")).toBe("0")
+
+    const loose = `${orderedItems(5, 6)}\n\n${orderedItems(7, 40)}\n`
+    view.rerender(loose, true)
+    await advance(10)
+    const looseList = container?.querySelector("ol")
+    expect(container?.querySelectorAll("ol")).toHaveLength(1)
+    expect(looseList?.getAttribute("start")).toBe("5")
+    for (const item of looseList?.querySelectorAll(":scope > li") ?? []) {
+      expect(item.firstElementChild?.tagName).toBe("P")
+    }
+    const tasks = "- [ ] open\n- [x] done\n  - nested child\n"
+    view.rerender(tasks, true)
+    await advance(10)
+    const markdownRoot = container?.firstElementChild
+    const topLevelLists = Array.from(markdownRoot?.children ?? []).filter(
+      (element) => element.tagName === "UL"
+    )
+    expect(topLevelLists).toHaveLength(1)
+    expect(topLevelLists[0]?.classList).toContain("contains-task-list")
+    expect(topLevelLists[0]?.querySelectorAll(":scope > li > ul")).toHaveLength(
+      1
+    )
+  })
+
+  it("renders a growing open fence directly and keeps its structure at settle", async () => {
+    const lines = Array.from(
+      { length: 30 },
+      (_, i) => `const line${i} = ${i}`
+    ).join("\n")
+    const view = mount("```ts\n" + lines, true)
+    await advance(10)
+
+    const block = container?.querySelector(".markdown-code-block")
+    expect(block).not.toBeNull()
+    expect(block?.className).toContain("language-ts")
+    expect(block?.textContent).toContain("TypeScript")
+    expect(block?.textContent).toContain("const line29 = 29")
+
+    // Growth updates the code text in place.
+    view.rerender("```ts\n" + lines + "\nconst extra = 99", true)
+    await advance(10)
+    expect(container?.querySelector(".markdown-code-block")).toBe(block)
+    expect(
+      container?.querySelector(".markdown-code-block")?.textContent
+    ).toContain("const extra = 99")
+
+    // Closing the fence and settling lands on the normal pipeline's DOM:
+    // same wrapper classes, same header label, full code highlighted.
+    view.rerender("```ts\n" + lines + "\nconst extra = 99\n```\n", false)
+    await advance(GROWING_HIGHLIGHT_IDLE_MS * 2)
+    const settledBlock = container?.querySelector(".markdown-code-block")
+    expect(settledBlock).not.toBeNull()
+    expect(settledBlock?.className).toContain("language-ts")
+    expect(settledBlock?.textContent).toContain("TypeScript")
+    const highlighted = shikiMock.highlightCode.mock.calls.map(
+      (call) => call[0].code
+    )
+    expect(highlighted.some((code) => code.includes("const extra = 99"))).toBe(
+      true
+    )
+  })
+
+  it.each([
+    { language: "c++", label: "C++", code: "int main() { return 0; }" },
+    { language: "c#", label: "C#", code: 'Console.WriteLine("hi");' },
+  ])(
+    "keeps $language identical while growing and settled",
+    async ({ language, label, code }) => {
+      const view = mount(`\`\`\`${language}\n${code}`, true)
+      await advance(10)
+
+      const growingBlock = container?.querySelector(".markdown-code-block")
+      expect(growingBlock?.className).toContain(`language-${language}`)
+      expect(growingBlock?.textContent).toContain(label)
+      await advance(GROWING_HIGHLIGHT_IDLE_MS + 10)
+      expect(shikiMock.highlightCode).toHaveBeenLastCalledWith(
+        expect.objectContaining({ language })
+      )
+
+      view.rerender(`\`\`\`${language}\n${code}\n\`\`\`\n`, false)
+      await advance(10)
+      const settledBlock = container?.querySelector(".markdown-code-block")
+      expect(settledBlock?.className).toContain(`language-${language}`)
+      expect(settledBlock?.textContent).toContain(label)
+      expect(shikiMock.highlightCode).toHaveBeenLastCalledWith(
+        expect.objectContaining({ language })
+      )
+    }
+  )
 })

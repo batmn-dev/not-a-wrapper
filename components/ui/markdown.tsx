@@ -18,6 +18,7 @@
  *   - Keep parsing and rendering on the same remark-based pipeline
  *   - Verify INITIAL_COMPONENTS customizations are not overwritten
  */
+import { analyzeOpenFence } from "@/lib/markdown/growing-block-tail"
 import {
   advanceMarkdownProjection,
   REMARK_MATH_OPTIONS,
@@ -43,10 +44,7 @@ import {
   useRef,
   useState,
 } from "react"
-import ReactMarkdown, {
-  Components,
-  defaultUrlTransform,
-} from "react-markdown"
+import ReactMarkdown, { Components, defaultUrlTransform } from "react-markdown"
 import rehypeKatex from "rehype-katex"
 import remarkBreaks from "remark-breaks"
 import remarkGfm from "remark-gfm"
@@ -108,7 +106,9 @@ const MarkdownBlockStabilityContext =
  * through `advanceMarkdownProjection`, whose reset/settlement paths run this
  * same authoritative parse.
  */
-export function parseMarkdownIntoBlocks(markdown: string): MarkdownBlockRecord[] {
+export function parseMarkdownIntoBlocks(
+  markdown: string
+): MarkdownBlockRecord[] {
   return splitMarkdownSource(markdown).map((block, index) => ({
     text: block.text,
     id: `block-${index}`,
@@ -119,7 +119,7 @@ export function parseMarkdownIntoBlocks(markdown: string): MarkdownBlockRecord[]
 
 function extractLanguage(className?: string): string {
   if (!className) return "plaintext"
-  const match = className.match(/language-(\w+)/)
+  const match = className.match(/(?:^|\s)language-([^\s]+)/)
   return match ? match[1] : "plaintext"
 }
 
@@ -134,6 +134,10 @@ const LANGUAGE_LABELS: Record<string, string | null> = {
   javascript: "JavaScript",
   ts: "TypeScript",
   typescript: "TypeScript",
+  "c++": "C++",
+  cpp: "C++",
+  "c#": "C#",
+  cs: "C#",
   json: "JSON",
   sh: "Bash",
   shell: "Bash",
@@ -157,6 +161,57 @@ function getTableText(table: HTMLTableElement | null): string {
         .join("\t")
     )
     .join("\n")
+}
+
+/**
+ * One rendering shell for both the authoritative Markdown pipeline and the
+ * direct growing-fence fast path. Keeping language parsing, labels, copy, and
+ * code presentation here prevents the two paths from drifting as code-block
+ * behavior evolves.
+ */
+function RenderedCodeBlock({
+  className,
+  code,
+  growing,
+}: {
+  className?: string
+  code: string
+  growing: boolean
+}) {
+  const language = extractLanguage(className)
+  const languageLabel = formatLanguageLabel(language)
+  const hasHeader = languageLabel !== null
+
+  return (
+    <CodeBlock className={cn("markdown-code-block", className)}>
+      {hasHeader ? (
+        <div className="sticky top-[var(--sticky-padding-top,0px)] z-[2] select-none">
+          <CodeBlockGroup className="flex h-12 w-full items-center justify-between bg-[var(--code-block-surface)] py-1.5 ps-4 pe-1.5 font-sans md:ps-5">
+            <div className="flex max-w-[75%] min-w-0 cursor-default items-center gap-2 text-sm font-medium">
+              <Icon icon={RiCodeLine} slotSize={20} />
+              {languageLabel}
+            </div>
+            <div className="flex flex-row items-center gap-0.5">
+              <ButtonCopy code={code} />
+            </div>
+          </CodeBlockGroup>
+        </div>
+      ) : (
+        <div className="pointer-events-none absolute end-[5px] top-[3px] z-[2] md:end-[7px]">
+          <ButtonCopy code={code} />
+        </div>
+      )}
+      <CodeBlockCode
+        className={cn(
+          "markdown-code-block-code leading-5",
+          !hasHeader && "pt-3"
+        )}
+        code={code}
+        language={language}
+        growing={growing}
+      />
+    </CodeBlock>
+  )
 }
 
 const INITIAL_COMPONENTS: Partial<Components> = {
@@ -186,42 +241,15 @@ const INITIAL_COMPONENTS: Partial<Components> = {
       )
     }
 
-    const language = extractLanguage(className)
-    const languageLabel = formatLanguageLabel(language)
-    const hasHeader = languageLabel !== null
-
     // Named code blocks use the reference's sticky 48px language/action row.
     // Plain-text blocks keep only the overlaid copy action, leaving the code
     // surface compact. In both cases the code scrolls inside the rounded box.
     return (
-      <CodeBlock className={cn("markdown-code-block", className)}>
-        {hasHeader ? (
-          <div className="sticky top-[var(--sticky-padding-top,0px)] z-[2] select-none">
-            <CodeBlockGroup className="flex h-12 w-full items-center justify-between bg-[var(--code-block-surface)] py-1.5 ps-4 pe-1.5 font-sans md:ps-5">
-              <div className="flex max-w-[75%] min-w-0 cursor-default items-center gap-2 text-sm font-medium">
-                <Icon icon={RiCodeLine} slotSize={20} />
-                {languageLabel}
-              </div>
-              <div className="flex flex-row items-center gap-0.5">
-                <ButtonCopy code={children as string} />
-              </div>
-            </CodeBlockGroup>
-          </div>
-        ) : (
-          <div className="pointer-events-none absolute end-[5px] top-[3px] z-[2] md:end-[7px]">
-            <ButtonCopy code={children as string} />
-          </div>
-        )}
-        <CodeBlockCode
-          className={cn(
-            "markdown-code-block-code leading-5",
-            !hasHeader && "pt-3"
-          )}
-          code={children as string}
-          language={language}
-          growing={stability === "growing"}
-        />
-      </CodeBlock>
+      <RenderedCodeBlock
+        className={className}
+        code={children as string}
+        growing={stability === "growing"}
+      />
     )
   },
   a: function AComponent({ href, children, node: _, ...props }) {
@@ -230,15 +258,10 @@ const INITIAL_COMPONENTS: Partial<Components> = {
     const annotatedPresentation = (
       props as typeof props & Record<string, unknown>
     )["data-link-presentation"]
-    const presentation =
-      annotatedPresentation === "pill" ? "pill" : "inline"
+    const presentation = annotatedPresentation === "pill" ? "pill" : "inline"
 
     return (
-      <LinkMarkdown
-        href={href}
-        presentation={presentation}
-        {...props}
-      >
+      <LinkMarkdown href={href} presentation={presentation} {...props}>
         {children}
       </LinkMarkdown>
     )
@@ -318,6 +341,40 @@ const MemoizedMarkdownBlock = memo(
 
 MemoizedMarkdownBlock.displayName = "MemoizedMarkdownBlock"
 
+/**
+ * Direct render for a growing OPEN fenced code block (investigation
+ * 2026-07-28, fix 1): while the fence is open, every appended line is inert
+ * interior text, so running the full Markdown pipeline per update just to
+ * reach the same `CodeBlock` is pure O(block) overhead. This component
+ * mirrors the block branch of `INITIAL_COMPONENTS.code` exactly — same
+ * wrappers, classes, header rule, and copy affordance — so the settle
+ * re-render through the real pipeline lands on identical DOM. Only used when
+ * no consumer `components` override is present.
+ */
+const GrowingFenceBlock = memo(
+  function GrowingFenceBlockComponent({ text }: { text: string }) {
+    const fence = analyzeOpenFence(text)
+    // Caller guarantees an open fence; a closed/absent fence renders nothing
+    // for one frame and the normal pipeline takes over on the next update.
+    if (!fence) return null
+    const value = text.slice(fence.interiorStart).replace(/\n$/, "")
+    // Parity with mdast-util-to-hast: the code text child is value + "\n".
+    const code = `${value}\n`
+    return (
+      <RenderedCodeBlock
+        className={
+          fence.language === "" ? undefined : `language-${fence.language}`
+        }
+        code={code}
+        growing
+      />
+    )
+  },
+  (prev, next) => prev.text === next.text
+)
+
+GrowingFenceBlock.displayName = "GrowingFenceBlock"
+
 function MarkdownComponent({
   children,
   id,
@@ -381,16 +438,33 @@ function MarkdownComponent({
   const blocks = current.state.blocks
   return (
     <div className={className}>
-      {blocks.map((block, index) => (
-        <MemoizedMarkdownBlock
-          key={`${blockId}-${block.id}`}
-          content={block.text}
-          stability={
-            streaming && index === blocks.length - 1 ? "growing" : "stable"
+      {blocks.map((block, index) => {
+        const growing = streaming && index === blocks.length - 1
+        // A growing open fence renders directly when no consumer override is
+        // present. Lists intentionally stay on the canonical Markdown path:
+        // splitting one semantic list into sibling roots changes accessibility
+        // and selection-copy semantics even when sighted numbering is patched
+        // with `start` attributes.
+        if (growing && !components && block.nodeType === "code") {
+          const fence = analyzeOpenFence(block.text)
+          if (fence) {
+            return (
+              <GrowingFenceBlock
+                key={`${blockId}-${block.id}`}
+                text={block.text}
+              />
+            )
           }
-          components={mergedComponents}
-        />
-      ))}
+        }
+        return (
+          <MemoizedMarkdownBlock
+            key={`${blockId}-${block.id}`}
+            content={block.text}
+            stability={growing ? "growing" : "stable"}
+            components={mergedComponents}
+          />
+        )
+      })}
     </div>
   )
 }

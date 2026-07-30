@@ -4,9 +4,17 @@
  * The load-bearing assertion is the streaming equivalence harness: for every
  * corpus fixture, at EVERY streamed prefix (exhaustive char-by-char plus
  * seeded random chunkings), the incremental projection's block records must
- * be identical — text, node type, and offsets — to an authoritative full
- * parse of the same prefix, stable blocks must be frozen, and settlement
- * must verify clean. Seeds are embedded in failure labels for reproduction.
+ * match an authoritative full parse of the same prefix, stable blocks must
+ * be frozen, and settlement must verify clean. "Match" is exact — text,
+ * node type, and offsets — at every line-terminated prefix; within a
+ * TRAILING PARTIAL LINE the two may partition differently (the terminal
+ * line-extension fast path keeps the partial inside the growing block, while
+ * remark itself repartitions such tails char by char — e.g. a lone `-` is
+ * briefly its own paragraph, then merges back into the list at `- x`), so
+ * mid-line prefixes assert equality of the line-clipped views plus identical
+ * total source coverage. Rendering is partition-invariant over the same
+ * bytes (each block's text is re-parsed by the renderer), and settlement
+ * stays byte-exact. Seeds are embedded in failure labels for reproduction.
  */
 import {
   buildLongMarkdownPayload,
@@ -26,6 +34,11 @@ import {
   everyPrefixOffsets,
   seededPrefixOffsets,
 } from "./markdown-equivalence-corpus"
+import {
+  blocksCoverageEnd,
+  lineClippedBlockView,
+  type BlockView,
+} from "./growing-block-tail"
 
 const IDENTITY = "message-under-test"
 
@@ -36,6 +49,29 @@ function rawView(blocks: readonly MarkdownProjectionBlock[]) {
     startOffset,
     endOffset,
   }))
+}
+
+function expectValidPartialLineTail(
+  blocks: readonly BlockView[],
+  source: string,
+  label: string
+) {
+  const partialLineStart = source.lastIndexOf("\n") + 1
+  const tailBlocks = blocks.filter(
+    (block) => block.endOffset > partialLineStart
+  )
+  for (let i = 0; i < tailBlocks.length; i++) {
+    const block = tailBlocks[i]!
+    expect(block.text, `${label} block ${i} text`).toBe(
+      source.slice(block.startOffset, block.endOffset)
+    )
+    if (i > 0) {
+      expect(
+        block.startOffset,
+        `${label} block ${i} overlaps prior block`
+      ).toBeGreaterThanOrEqual(tailBlocks[i - 1]!.endOffset)
+    }
+  }
 }
 
 /**
@@ -61,9 +97,32 @@ function streamAndVerify(
     })
 
     const reference = splitMarkdownSource(prefix)
-    expect(rawView(result.state.blocks), `${label} @${offset}`).toEqual(
-      reference
-    )
+    if (prefix.endsWith("\n") || prefix.length === 0) {
+      expect(rawView(result.state.blocks), `${label} @${offset}`).toEqual(
+        reference
+      )
+    } else {
+      // Mid-line prefix: exact agreement up to the last line boundary,
+      // identical coverage of the partial-line tail.
+      expect(
+        lineClippedBlockView(result.state.blocks, prefix),
+        `${label} @${offset} (line-clipped)`
+      ).toEqual(lineClippedBlockView(reference, prefix))
+      expect(
+        blocksCoverageEnd(result.state.blocks),
+        `${label} @${offset} (coverage)`
+      ).toBe(blocksCoverageEnd(reference))
+      expectValidPartialLineTail(
+        result.state.blocks,
+        prefix,
+        `${label} @${offset} (projection tail)`
+      )
+      expectValidPartialLineTail(
+        reference,
+        prefix,
+        `${label} @${offset} (reference tail)`
+      )
+    }
 
     if (state) {
       expect(result.reset, `${label} unexpected reset @${offset}`).toBe(false)

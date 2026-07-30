@@ -49,6 +49,14 @@ import remarkGfm from "remark-gfm"
 import remarkMath, { type Options as RemarkMathOptions } from "remark-math"
 import remarkParse from "remark-parse"
 import { unified } from "unified"
+import {
+  analyzeFenceOpener,
+  analyzeOpenFence,
+  blocksEquivalentModuloPartialTail,
+  extendListBlockEnd,
+  hasFenceCloser,
+  terminalListFacts,
+} from "./growing-block-tail"
 
 /**
  * Shared remark-math options for BOTH the block splitter and the per-block
@@ -493,10 +501,18 @@ export function advanceMarkdownProjection(args: {
       fallbackReason: null,
     })
     // Verification (plan §6.3): when the incremental projection was current
-    // for this exact source, the authoritative parse must agree with it.
+    // for this exact source, the authoritative parse must agree with it —
+    // exactly, or modulo the trailing-partial-line partition, which the
+    // terminal line-extension fast path holds inside the growing block while
+    // the parser repartitions it char by char (same bytes, same rendering).
     const settleMismatch =
       previous.source === source &&
-      !blockListsEquivalent(previous.blocks, settled.state.blocks)
+      !blockListsEquivalent(previous.blocks, settled.state.blocks) &&
+      !blocksEquivalentModuloPartialTail(
+        previous.blocks,
+        settled.state.blocks,
+        source
+      )
     return { ...settled, settleMismatch }
   }
 
@@ -529,6 +545,18 @@ export function advanceMarkdownProjection(args: {
       fallbackReason: null,
     })
   }
+
+  // --- Terminal-block line-extension fast path ------------------------------
+  // A growing single-block shape (a list without blank-line separators, an
+  // open code fence) pins the safe restart boundary at the block's start, so
+  // the tail parse below would re-parse the WHOLE block on every append —
+  // per-update cost growing with response length (investigation 2026-07-28,
+  // issue 1). When appended lines provably continue the terminal block, the
+  // block record extends by a line scan with NO parse at all; any line the
+  // scan cannot prove falls through to the authoritative paths below, and
+  // settlement's full-parse equivalence check remains the safety net.
+  const extended = tryExtendTerminalBlock(previous, source)
+  if (extended) return extended
 
   // --- Append-only fast path (context-verified tail parse) ------------------
   const stablePrefix = previous.blocks.filter(
@@ -653,5 +681,80 @@ export function advanceMarkdownProjection(args: {
     parsedCharacters: source.length - parseOffset,
     reusedBlockCount: stablePrefix.length + reconciled.reusedBlockCount,
     changedBlockCount: reconciled.changedBlockCount,
+  }
+}
+
+/**
+ * Zero-parse extension of a growing terminal `list`/`code` block (see the
+ * call site above). Returns null whenever anything is not provably a
+ * continuation — the caller's parse paths then own the update.
+ */
+function tryExtendTerminalBlock(
+  previous: MarkdownProjectionState,
+  source: string
+): MarkdownProjectionResult | null {
+  const terminalIndex = previous.blocks.length - 1
+  if (terminalIndex < 0 || terminalIndex < previous.stableCount) return null
+  const terminal = previous.blocks[terminalIndex]!
+
+  let newEndOffset: number | null = null
+  if (terminal.nodeType === "code") {
+    // The prior projection already proved that this terminal code block is an
+    // open fence. Re-read only its bounded opener line for immutable facts;
+    // scanning the whole accumulated interior here would make small appends
+    // quadratic over the life of a long fence.
+    const fence = analyzeFenceOpener(terminal.text)
+    if (!fence) return null
+    // Re-scan from the start of the block's last line: the previously
+    // unterminated line may have completed into a closer.
+    const lastLineStart = source.lastIndexOf("\n", terminal.endOffset - 1) + 1
+    if (
+      hasFenceCloser(source, fence, Math.max(lastLineStart, terminal.startOffset))
+    ) {
+      return null
+    }
+    // An open fence consumes everything to the end of the source (trailing
+    // newline and blank lines included — remark's observed convention).
+    newEndOffset = source.length
+  } else if (terminal.nodeType === "list") {
+    const facts = terminalListFacts(source, terminal)
+    if (!facts) return null
+    newEndOffset = extendListBlockEnd({
+      source,
+      blockStartOffset: terminal.startOffset,
+      blockEndOffset: terminal.endOffset,
+      family: facts.family,
+      lastLineAfterBlank: facts.lastLineAfterBlank,
+    })
+    if (newEndOffset === null) return null
+  } else {
+    return null
+  }
+
+  const changed = newEndOffset !== terminal.endOffset
+  const blocks = changed
+    ? [
+        ...previous.blocks.slice(0, terminalIndex),
+        {
+          ...terminal,
+          endOffset: newEndOffset,
+          text: source.slice(terminal.startOffset, newEndOffset),
+        },
+      ]
+    : previous.blocks
+
+  return {
+    state: {
+      ...previous,
+      source,
+      blocks,
+    },
+    reset: false,
+    resetReason: null,
+    fallbackReason: null,
+    settleMismatch: false,
+    parsedCharacters: 0,
+    reusedBlockCount: previous.blocks.length - (changed ? 1 : 0),
+    changedBlockCount: changed ? 1 : 0,
   }
 }
