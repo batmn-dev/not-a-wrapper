@@ -742,6 +742,19 @@ export function useChatCore({
   const submit = useCallback(
     async ({ text, files, attachments }: ChatTurnPayload): Promise<boolean> => {
       const submittedFiles = [...files]
+      const optimisticAttachments = attachments.flatMap((attachment) =>
+        typeof attachment.name === "string" &&
+        typeof attachment.contentType === "string" &&
+        typeof attachment.url === "string"
+          ? [
+              {
+                name: attachment.name,
+                contentType: attachment.contentType,
+                url: attachment.url,
+              },
+            ]
+          : []
+      )
 
       // Fresh per-turn correlation id + chat_send_intent mark (no-op unless
       // instrumentation is enabled); the transport consumes the armed header.
@@ -754,6 +767,7 @@ export function useChatCore({
           messages,
           submittedFiles,
           submittedAttachments: attachments,
+          optimisticAttachments,
           chatVersion: messages.length + 1, // current messages + 1 for the new message being sent
           onSuccess: (currentChatId) => {
             accepted = true

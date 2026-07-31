@@ -10,6 +10,14 @@ type ThreadBottomContainerProps = {
   children: ReactNode
   className?: string
   isOnboarding?: boolean
+  /**
+   * "project-onboarding" renders the project surface's composer chrome (mobile
+   * fixed gradient strip, desktop in-flow under the title) from THIS component
+   * so the composer occupies one stable tree position across the
+   * onboarding↔thread flip. A position swap would remount the Composer
+   * mid-send and drop its attachment previews, display text, and focus.
+   */
+  variant?: "thread" | "project-onboarding"
 }
 
 /**
@@ -23,16 +31,21 @@ const ThreadBottomContainer = forwardRef<
   HTMLDivElement,
   ThreadBottomContainerProps
 >(function ThreadBottomContainer(
-  { children, className, isOnboarding = false },
+  { children, className, isOnboarding = false, variant = "thread" },
   ref
 ) {
+  const isProjectOnboarding = variant === "project-onboarding"
   return (
     <div
       id="thread-bottom-container"
       ref={ref}
       className={cn(
-        `group/thread-bottom-container pointer-events-none sticky bottom-[var(--screen-keyboard-height,0px)] isolate z-10 flex min-h-0 w-full basis-auto flex-col pb-[var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))] [--thread-component-gap:1.5rem] [--thread-scroll-control-offset:1.5rem] [--thread-scroll-to-bottom-banner-offset:0px] has-data-[has-thread-error]:pt-2 has-data-[has-thread-error]:[box-shadow:var(--sharp-edge-bottom-shadow)] md:pt-0 print:hidden ${THREAD_GUTTER_VARS} ${THREAD_MAXWIDTH_VARS}`,
-        isOnboarding ? "sm:grow" : "content-fade",
+        isProjectOnboarding
+          ? "group/thread-bottom-container fixed inset-x-4 bottom-0 z-30 mx-auto max-w-(--project-detail-composer-width) bg-[linear-gradient(to_top,var(--background)_75%,transparent)] pt-5 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] md:static md:inset-auto md:z-auto md:mt-6 md:w-full md:bg-none md:p-0 md:max-lg:px-4"
+          : cn(
+              `group/thread-bottom-container pointer-events-none sticky bottom-[var(--screen-keyboard-height,0px)] isolate z-10 flex min-h-0 w-full basis-auto flex-col pb-[var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))] [--thread-component-gap:1.5rem] [--thread-scroll-control-offset:1.5rem] [--thread-scroll-to-bottom-banner-offset:0px] has-data-[has-thread-error]:pt-2 has-data-[has-thread-error]:[box-shadow:var(--sharp-edge-bottom-shadow)] md:pt-0 print:hidden ${THREAD_GUTTER_VARS} ${THREAD_MAXWIDTH_VARS}`,
+              isOnboarding ? "sm:grow" : "content-fade"
+            ),
         className
       )}
     >
@@ -69,11 +82,19 @@ const ThreadBottomContainer = forwardRef<
 
       <div
         data-thread-bottom-content=""
-        className="mx-auto w-full px-[var(--thread-content-margin,1rem)] pb-[var(--thread-component-gap)]"
+        className={
+          isProjectOnboarding
+            ? "w-full"
+            : "mx-auto w-full px-[var(--thread-content-margin,1rem)] pb-[var(--thread-component-gap)]"
+        }
       >
         <div
           id="thread-bottom"
-          className="pointer-events-auto mx-auto w-full max-w-[var(--thread-content-max-width,40rem)]"
+          className={
+            isProjectOnboarding
+              ? "pointer-events-auto w-full"
+              : "pointer-events-auto mx-auto w-full max-w-[var(--thread-content-max-width,40rem)]"
+          }
         >
           {children}
         </div>

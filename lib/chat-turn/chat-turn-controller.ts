@@ -298,22 +298,88 @@ async function runSendTurn(
     return
   }
 
+  // Reject an incomplete staged set before presenting a turn. An atomic first
+  // turn must never commit a chat around references it cannot bind, and the
+  // Composer should keep ownership of a payload that was never admissible.
+  const attachmentIds = submittedAttachments.flatMap((attachment) =>
+    attachment.attachmentId ? [attachment.attachmentId] : []
+  )
+  if (attachmentIds.length !== submittedAttachments.length) {
+    adapters.toastError(errorMessage)
+    return
+  }
+
   adapters.setIsSending(true)
   adapters.resetLocalStopIntent?.()
   adapters.setIsSubmitting(true)
+  // Nullable until the insert lands: everything fallible after the guards flip
+  // runs inside the try below, so a synchronous failure can never strand
+  // isSending/isSubmitting armed — and the finally-rollback stays a no-op when
+  // no row was ever inserted.
   let optimisticId: string | null = null
-  let optimisticMessage: (ChatTurnMessage & { role: "user" }) | null = null
+  let keepOptimistic = false
   let finalizeAcceptedTurn: (() => void) | null = null
 
   const removeOptimistic = () => {
-    if (!optimisticId) return
     const id = optimisticId
+    if (id === null) return
     adapters.setMessages((prev) => prev.filter((message) => message.id !== id))
   }
 
   try {
+    const insertedId = (
+      adapters.createOptimisticMessageId ?? createOptimisticMessageId
+    )()
+    let optimisticMessage: ChatTurnMessage & { role: "user" } = {
+      id: insertedId,
+      role: "user",
+      createdAt: (adapters.now ?? (() => new Date()))(),
+      parts: [
+        { type: "text", text },
+        ...(convertAttachmentsToFiles(optimisticAttachments) ?? []),
+      ],
+    }
+
+    // The visible turn is an event-owned fact, not a persistence receipt.
+    // Insert it in the same React batch as isSubmitting so the user row,
+    // pending assistant, and Stop control paint without waiting for rate-limit
+    // I/O, chat creation, routing, attachment binding, or transport acceptance.
+    const initialOptimisticMessage = optimisticMessage
+    adapters.setMessages((prev) => [...prev, initialOptimisticMessage])
+    optimisticId = insertedId
+
+    const reconcileOptimistic = (
+      nextId: string,
+      attachments: UploadedAttachment[]
+    ) => {
+      const previousId = optimisticMessage.id
+      if (
+        previousId === nextId &&
+        attachments.length === 0 &&
+        optimisticAttachments.length === 0
+      ) {
+        return
+      }
+      optimisticId = nextId
+      optimisticMessage = {
+        ...optimisticMessage,
+        id: nextId,
+        parts: [
+          { type: "text", text },
+          ...(convertAttachmentsToFiles(attachments) ?? []),
+        ],
+      }
+      const reconciledMessage = optimisticMessage
+      adapters.setMessages((prev) =>
+        prev.map((message) =>
+          message.id === previousId ? reconciledMessage : message
+        )
+      )
+    }
+
     const userId = await adapters.resolveUserId()
     if (!userId) {
+      adapters.toastError("Could not start your session. Please try again.")
       return
     }
 
@@ -321,22 +387,6 @@ async function runSendTurn(
     if (!allowed) {
       return
     }
-
-    // An incomplete staged set rejects BEFORE chat creation: an atomic first
-    // turn must never commit a chat around references it cannot bind.
-    const attachmentIds = submittedAttachments.flatMap((attachment) =>
-      attachment.attachmentId ? [attachment.attachmentId] : []
-    )
-    if (attachmentIds.length !== submittedAttachments.length) {
-      adapters.toastError(errorMessage)
-      return
-    }
-
-    // Allocated before the chat exists: a durable first turn persists this id
-    // as the message's clientMessageId inside the atomic creation.
-    optimisticId = (
-      adapters.createOptimisticMessageId ?? createOptimisticMessageId
-    )()
 
     const ensured = await adapters.ensureChatExists({
       userId,
@@ -353,9 +403,8 @@ async function runSendTurn(
     // the id allocated above; on a same-payload retry it is the ORIGINAL
     // committed id, so the claim selects the persisted row instead of
     // appending a duplicate.
-    if (ensured.firstTurn) {
-      optimisticId = ensured.firstTurn.clientMessageId
-    }
+    const admittedOptimisticId =
+      ensured.firstTurn?.clientMessageId ?? optimisticId
 
     adapters.setPreviousChatId(currentChatId)
 
@@ -374,16 +423,10 @@ async function runSendTurn(
       }
     }
 
-    optimisticMessage = {
-      id: optimisticId,
-      role: "user",
-      createdAt: (adapters.now ?? (() => new Date()))(),
-      parts: [
-        { type: "text", text },
-        ...(convertAttachmentsToFiles(attachments) ?? []),
-      ],
-    }
-    adapters.setMessages((prev) => [...prev, optimisticMessage!])
+    // The immediate frame can use staged preview URLs. Once admission has
+    // resolved, update that same row with the durable first-turn identity and
+    // canonical bound attachment URLs without changing its createdAt.
+    reconcileOptimistic(admittedOptimisticId, attachments)
 
     const dispatchedMessage = {
       ...optimisticMessage,
@@ -394,13 +437,49 @@ async function runSendTurn(
       // the response races the HTTP-acceptance signal. Consume a first-turn
       // identity too: a later identical prompt is a genuine new turn, not an
       // accidental retry of the intentionally stopped one.
-      ensured.firstTurn?.confirmDispatched?.()
-      adapters.setHasSentFirstMessage(true)
-      void adapters.turnStore.persistTurnMessage(
-        dispatchedMessage,
-        currentChatId
-      )
-      onSuccess?.(currentChatId)
+      //
+      // Idempotent: the acceptance path and the Stop-consuming catch path can
+      // both reach here in one turn; only the first pass may persist and fire
+      // callbacks. keepOptimistic doubles as the ran-once fact.
+      if (keepOptimistic) return
+      keepOptimistic = true
+      try {
+        ensured.firstTurn?.confirmDispatched?.()
+      } catch (error) {
+        adapters.reportError(
+          "Failed to consume accepted first-turn identity:",
+          error
+        )
+      }
+      try {
+        adapters.setHasSentFirstMessage(true)
+      } catch (error) {
+        adapters.reportError(
+          "Failed to record accepted first-message state:",
+          error
+        )
+      }
+      try {
+        const persistence = adapters.turnStore.persistTurnMessage(
+          dispatchedMessage,
+          currentChatId
+        )
+        void Promise.resolve(persistence).catch((error) => {
+          adapters.reportError(
+            "Failed to persist accepted user message:",
+            error
+          )
+        })
+      } catch (error) {
+        adapters.reportError("Failed to persist accepted user message:", error)
+      }
+      // An accepted, dispatched turn must never surface as a send failure
+      // because post-acceptance bookkeeping (e.g. a sidebar bump) threw.
+      try {
+        onSuccess?.(currentChatId)
+      } catch (error) {
+        adapters.reportError("Accepted-turn onSuccess callback failed:", error)
+      }
     }
 
     // Home/project first turns can spend time creating their chat before an
@@ -460,9 +539,11 @@ async function runSendTurn(
       finalizeAcceptedTurn()
       return
     }
-    removeOptimistic()
     adapters.toastError(errorMessage)
   } finally {
+    if (!keepOptimistic) {
+      removeOptimistic()
+    }
     adapters.setIsSending(false)
     adapters.setIsSubmitting(false)
   }

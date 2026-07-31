@@ -19,6 +19,7 @@ import {
 } from "@/lib/chat-store/status/sidebar-chat-status"
 import type { Chats } from "@/lib/chat-store/types"
 import { isRouteDurableChat } from "@/lib/chat-turn/chat-turn-controller"
+import { cn } from "@/lib/utils"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { useUser } from "@/lib/user-store/provider"
 import { AnimatePresence, motion } from "motion/react"
@@ -32,7 +33,10 @@ import {
   useActivityPanelOpen,
   useActivityPanelSelectedTurnId,
 } from "./activity/activity-panel-store"
+import { Header } from "@/app/components/layout/header"
 import { ChatStatusAnnouncer } from "./chat-announcer"
+import { resolveChatChrome } from "./chat-chrome"
+import { ProjectChatDirectory } from "./project-chat-directory"
 import { ProjectDetailSurface } from "./project-detail-surface"
 import { ThreadBottomContainer } from "./thread-bottom-container"
 import { TurnContextProvider, useTurnContext } from "./turn-context"
@@ -343,7 +347,15 @@ function ChatInner({
     router,
   ])
 
-  const showOnboarding = !chatId && messages.length === 0
+  // The single chrome decision (ADR-0017): surface and header derive from one
+  // resolver so a client-side flip can never show a thread without its header.
+  const chrome = resolveChatChrome({
+    chatId,
+    messageCount: messages.length,
+    hasProject: Boolean(project),
+  })
+  const showOnboarding = chrome.surface !== "thread"
+  const projectOnboarding = chrome.surface === "project-onboarding"
 
   // The sticky composer stack's measured footprint becomes
   // `--sticky-padding-bottom` (inline on the scroll root), the value the whole
@@ -400,6 +412,13 @@ function ChatInner({
         // consumes it with the same 1/3 fallback).
         style={{ "--thread-show-context-pct": "1/3" } as React.CSSProperties}
       >
+        {/* Chat owns the app header on chat routes (ADR-0017): the routes pass
+            LayoutApp header={null}, and this renders from the same chrome
+            decision as the surface — so the send-frame flip and the shallow
+            first-turn handoff always carry the right header with them. */}
+        {chrome.appHeader ? (
+          <Header hasSidebar={preferences.layout === "sidebar"} />
+        ) : null}
         <ChatStatusAnnouncer
           status={effectiveStatus}
           isSubmitting={isSubmitting}
@@ -415,17 +434,28 @@ function ChatInner({
           {...panelProps}
         />
 
-        {showOnboarding && project ? (
-          <ProjectDetailSurface
-            project={project}
-            composer={composer}
-            onStartChat={() => composerRef.current?.focus()}
-          />
-        ) : (
-          <div
-            role="presentation"
-            className="composer-parent flex flex-1 flex-col focus-visible:outline-0"
-          >
+        {/* The Composer renders in ONE tree position (the ThreadBottomContainer
+            slot below) across every onboarding↔thread flip. The optimistic
+            insert flips these surfaces in the same frame as the send handoff,
+            so a position swap here would remount the Composer mid-send —
+            dropping its attachment previews, re-showing the sent text from the
+            persisted draft, and losing focus. Only the content above and the
+            slot's chrome variant may change. */}
+        <div
+          role="presentation"
+          data-project-detail-surface={projectOnboarding ? "true" : undefined}
+          className={cn(
+            "composer-parent flex flex-1 flex-col focus-visible:outline-0",
+            projectOnboarding &&
+              "bg-background w-full [--project-detail-composer-width:48rem] [--project-detail-outer-width:51rem] [&_a]:transition-none [&_button]:transition-none"
+          )}
+        >
+          {projectOnboarding && project ? (
+            <ProjectDetailSurface
+              project={project}
+              onStartChat={() => composerRef.current?.focus()}
+            />
+          ) : (
             <AnimatePresence initial={false} mode="popLayout">
               {showOnboarding ? (
                 <motion.div
@@ -455,15 +485,22 @@ function ChatInner({
                 <Conversation key="conversation" {...conversationProps} />
               )}
             </AnimatePresence>
+          )}
 
-            <ThreadBottomContainer
-              ref={threadBottomRef}
-              isOnboarding={showOnboarding}
-            >
-              {composer}
-            </ThreadBottomContainer>
-          </div>
-        )}
+          <ThreadBottomContainer
+            ref={threadBottomRef}
+            isOnboarding={showOnboarding}
+            variant={projectOnboarding ? "project-onboarding" : "thread"}
+          >
+            {composer}
+          </ThreadBottomContainer>
+
+          {projectOnboarding && project ? (
+            <div className="flex-1 pb-[calc(7.5rem+env(safe-area-inset-bottom,0px))] md:pb-10">
+              <ProjectChatDirectory projectId={project.id} />
+            </div>
+          ) : null}
+        </div>
       </div>
     </ActivityPanelStoreProvider>
   )

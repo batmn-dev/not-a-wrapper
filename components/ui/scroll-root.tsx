@@ -62,8 +62,10 @@ function isVirtualKeyboardTarget(element: Element | null) {
 
 /**
  * Keeps the scroll-root keyboard token tied to the visual viewport. The
- * editable element opts in with `data-virtualkeyboard="true"` so browser chrome
- * and pinch zoom never masquerade as an on-screen keyboard.
+ * editable element opts in with `data-virtualkeyboard="true"`, and the inset is
+ * derived from the current layout/visual viewport mismatch. A desktop window
+ * resize changes both viewports together, while an overlaid virtual keyboard
+ * contracts only the visual viewport. Pinch zoom remains excluded.
  */
 function useScreenKeyboardHeight(
   scrollRef: React.RefObject<HTMLDivElement | null>
@@ -73,11 +75,6 @@ function useScreenKeyboardHeight(
     const viewport = window.visualViewport
     if (!root || !viewport) return
 
-    let layoutViewportHeight = Math.max(
-      window.innerHeight,
-      document.documentElement.clientHeight,
-      viewport.height + viewport.offsetTop
-    )
     let frame: number | null = null
 
     const write = () => {
@@ -85,14 +82,12 @@ function useScreenKeyboardHeight(
       if (root.hasAttribute(SCREEN_KEYBOARD_HEIGHT_OVERRIDE_ATTRIBUTE)) return
 
       const hasKeyboardTarget = isVirtualKeyboardTarget(document.activeElement)
-
-      if (!hasKeyboardTarget) {
-        layoutViewportHeight = Math.max(
-          window.innerHeight,
-          document.documentElement.clientHeight,
-          viewport.height + viewport.offsetTop
-        )
-      }
+      const layoutViewportHeight = Math.max(
+        window.innerHeight,
+        document.documentElement.clientHeight,
+        root.getBoundingClientRect().height,
+        viewport.height + viewport.offsetTop
+      )
 
       const obscuredHeight =
         hasKeyboardTarget && viewport.scale === 1

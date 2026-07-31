@@ -19,6 +19,11 @@ export function LayoutApp({
    * Page-header slot: `undefined` renders the default chat `<Header/>`; `null`
    * lets a page own its header composition (e.g. /projects renders its own
    * in-flow compact bar) without pathname conditionals in the shell.
+   *
+   * Chat-bearing routes MUST pass `null` and let Chat render the header from
+   * its chrome resolver (ADR-0017): their visible surface flips on client
+   * state within shallow route handoffs, which a slot fixed at page render
+   * cannot follow.
    */
   header?: React.ReactNode
 }) {
