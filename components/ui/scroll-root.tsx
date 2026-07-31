@@ -35,6 +35,10 @@ import { cn } from "@/lib/utils"
 import { createContext, useCallback, useContext, useMemo, useRef } from "react"
 
 const MIN_VIRTUAL_KEYBOARD_HEIGHT = 80
+// Keeps deterministic fixtures on the same root-owned token/cascade as runtime
+// viewport measurement instead of introducing a descendant override system.
+const SCREEN_KEYBOARD_HEIGHT_OVERRIDE_ATTRIBUTE =
+  "data-screen-keyboard-height-override"
 
 type ScrollRootContextValue = {
   scrollRef: React.RefObject<HTMLDivElement | null>
@@ -78,6 +82,8 @@ function useScreenKeyboardHeight(
 
     const write = () => {
       frame = null
+      if (root.hasAttribute(SCREEN_KEYBOARD_HEIGHT_OVERRIDE_ATTRIBUTE)) return
+
       const hasKeyboardTarget = isVirtualKeyboardTarget(document.activeElement)
 
       if (!hasKeyboardTarget) {

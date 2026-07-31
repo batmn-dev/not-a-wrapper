@@ -371,6 +371,77 @@ describe("ThreadScrollEdge", () => {
     expect(intersectionObservers.at(-1)?.rootMargin).toBe("0px 0px 204px")
   })
 
+  it("coalesces streamed child mutations without remeasuring a stable footer", async () => {
+    const measureFooter = vi.fn(() => ({ height: 108 }) as DOMRect)
+
+    act(() => {
+      root.render(
+        <>
+          <div data-turn-id="assistant-1" />
+          <div
+            id="thread-bottom-container"
+            ref={(element) => {
+              if (element) element.getBoundingClientRect = measureFooter
+            }}
+          />
+          <ThreadScrollEdge
+            chatId="chat-1"
+            streamActive
+            pinTurnId={null}
+            hydrated
+            freshChat
+          />
+        </>
+      )
+    })
+    flushFrames()
+    expect(measureFooter).toHaveBeenCalledOnce()
+
+    const streamedTurn = container.querySelector(
+      '[data-turn-id="assistant-1"]'
+    ) as HTMLElement
+    const queryRoot = vi.spyOn(container, "querySelector")
+    await act(async () => {
+      streamedTurn.appendChild(document.createElement("span"))
+      await Promise.resolve()
+      streamedTurn.appendChild(document.createElement("span"))
+      await Promise.resolve()
+    })
+
+    expect(frames.size).toBe(1)
+    expect(measureFooter).toHaveBeenCalledOnce()
+    expect(
+      queryRoot.mock.calls.filter(
+        ([selector]) => selector === "#thread-bottom-container"
+      )
+    ).toHaveLength(0)
+
+    flushFrames()
+    expect(
+      queryRoot.mock.calls.filter(
+        ([selector]) => selector === "#thread-bottom-container"
+      )
+    ).toHaveLength(1)
+    expect(measureFooter).toHaveBeenCalledOnce()
+  })
+
+  it("cancels a pending footer refresh during cleanup", async () => {
+    render(null)
+    const turn = container.querySelector(
+      '[data-turn-id="user-1"]'
+    ) as HTMLElement
+
+    await act(async () => {
+      turn.appendChild(document.createElement("span"))
+      await Promise.resolve()
+    })
+    expect(frames.size).toBe(1)
+
+    act(() => root.render(<></>))
+
+    expect(frames.size).toBe(0)
+  })
+
   it("keeps the disclaimer in the conversation tail outside the footer", () => {
     render(null)
 

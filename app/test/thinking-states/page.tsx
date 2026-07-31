@@ -428,7 +428,11 @@ export default function ThinkingStatesTestPage() {
       "--screen-keyboard-height"
     )
     const wasKeyboardOpen = scrollRoot.hasAttribute("data-keyboard-open")
+    const hadKeyboardHeightOverride = scrollRoot.hasAttribute(
+      "data-screen-keyboard-height-override"
+    )
 
+    scrollRoot.setAttribute("data-screen-keyboard-height-override", "")
     scrollRoot.style.setProperty(
       "--safe-area-inset-bottom",
       threadInset.safeArea
@@ -459,6 +463,10 @@ export default function ThinkingStatesTestPage() {
       } else {
         scrollRoot.style.removeProperty("--screen-keyboard-height")
       }
+      scrollRoot.toggleAttribute(
+        "data-screen-keyboard-height-override",
+        hadKeyboardHeightOverride
+      )
       scrollRoot.toggleAttribute("data-keyboard-open", wasKeyboardOpen)
     }
   }, [threadInset])

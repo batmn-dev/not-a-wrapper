@@ -142,16 +142,20 @@ export function ThreadScrollEdge({
     resizeObserver.observe(root)
     if (footer) resizeObserver.observe(footer)
 
+    let footerRefreshFrame: number | null = null
     const childObserver = new MutationObserver(() => {
-      const nextFooter = root.querySelector<HTMLElement>(
-        "#thread-bottom-container"
-      )
-      if (nextFooter !== footer) {
+      if (footerRefreshFrame !== null) return
+      footerRefreshFrame = requestAnimationFrame(() => {
+        footerRefreshFrame = null
+        const nextFooter = root.querySelector<HTMLElement>(
+          "#thread-bottom-container"
+        )
+        if (nextFooter === footer) return
         if (footer) resizeObserver.unobserve(footer)
         footer = nextFooter
         if (footer) resizeObserver.observe(footer)
-      }
-      observeSentinel()
+        observeSentinel()
+      })
     })
     childObserver.observe(root, { childList: true, subtree: true })
 
@@ -170,6 +174,7 @@ export function ThreadScrollEdge({
       observer?.disconnect()
       resizeObserver.disconnect()
       childObserver.disconnect()
+      if (footerRefreshFrame !== null) cancelAnimationFrame(footerRefreshFrame)
       rootStyleObserver.disconnect()
       viewport?.removeEventListener("resize", observeSentinel)
       viewport?.removeEventListener("scroll", observeSentinel)

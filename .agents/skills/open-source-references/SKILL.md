@@ -14,13 +14,25 @@ because another project uses it.
 Keep the Convex and AI SDK skills authoritative for current first-party
 guidance. Use these repositories as complementary implementation evidence.
 
+For product behavior, interaction, or visual parity, inspect the user's existing
+authenticated ChatGPT session first. If it is unavailable, use checked-in
+ChatGPT reference artifacts and state that fallback. Do not let an open-source
+implementation override behavior observed in ChatGPT.
 
-| Question                                                        | Inspect first                                         | GitHub fallback                                               | Use as evidence for                                                                                                                 |
-| --------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Next.js, App Router, or Vercel AI SDK                           | `/Users/andresgonzalez/Github/Projects/VercelChatbot` | [Vercel Chatbot](https://github.com/vercel/ai-chatbot)        | Streaming, tools, generative UI, persistence, auth, and attachments; verify durability and recovery behavior                        |
-| Broad providers, agents, MCP, or production architecture        | `/Users/andresgonzalez/Github/Projects/LibreChat`     | [LibreChat](https://github.com/danny-avila/LibreChat)         | Backend breadth, provider configuration, auth, files, search, RAG, and persistence; do not treat it as the default visual reference |
-| Coding-agent control surfaces, multi-provider orchestration, or remote access | `/Users/andresgonzalez/Github/Projects/T3Code`        | [T3 Code](https://github.com/pingdotgg/t3code)                | Agent-session UX, provider adapters, event-sourced orchestration, approvals, worktrees, checkpoints, source control, and cross-device resilience |
-| Product design, agent UX, settings, or knowledge UX             | `/Users/andresgonzalez/Github/Projects/LobeHub`       | [LobeHub](https://github.com/lobehub/lobehub)                 | Agent discovery, tools and plugins, model management, design-system organization, and extensibility                                 |
-| Local models, self-hosting, admin, or permissions               | `/Users/andresgonzalez/Github/Projects/OpenWebUI`     | [Open WebUI](https://github.com/open-webui/open-webui)        | Model administration, multi-user controls, RAG, extensions, compatible APIs, and operations                                         |
-| Workspaces, document ingestion, RAG, or local agents            | `/Users/andresgonzalez/Github/Projects/AnythingLLM`   | [AnythingLLM](https://github.com/Mintplex-Labs/anything-llm)  | Workspace and knowledge workflows, permissions, scheduled work, and local-first deployment                                          |
-| Lean OpenAI-compatible chat architecture                        | `/Users/andresgonzalez/Github/Projects/HuggingChat`   | [HuggingChat Chat UI](https://github.com/huggingface/chat-ui) | Smaller conversation UI and model-gateway boundaries that clarify necessary abstractions                                            |
+Resolve local clones by exact directory name. First check
+`NAW_REFERENCE_ROOT/<clone>` when `NAW_REFERENCE_ROOT` is configured; otherwise
+check available workspace roots and siblings of the current Not A Wrapper
+worktree. Use a local directory only when it is a Git worktree whose origin
+matches the repository targeted by the row's GitHub fallback, allowing for
+SSH/HTTPS URL forms and GitHub redirects. If no matching clone is available,
+use the GitHub fallback.
+
+| Question                                                                      | Local clone (if available) | GitHub fallback                                               | Use as evidence for                                                                                                                              |
+| ----------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Next.js, App Router, or Vercel AI SDK                                         | `VercelChatbot`            | [Vercel Chatbot](https://github.com/vercel/ai-chatbot)        | Streaming, tools, generative UI, persistence, auth, and attachments; verify durability and recovery behavior                                     |
+| Broad providers, agents, MCP, or production architecture                      | `LibreChat`                | [LibreChat](https://github.com/danny-avila/LibreChat)         | Backend breadth, provider configuration, auth, files, search, RAG, and persistence; do not treat it as the default visual reference              |
+| Coding-agent control surfaces, multi-provider orchestration, or remote access | `T3Code`                   | [T3 Code](https://github.com/pingdotgg/t3code)                | Agent-session UX, provider adapters, event-sourced orchestration, approvals, worktrees, checkpoints, source control, and cross-device resilience |
+| Product design, agent UX, settings, or knowledge UX                           | `LobeHub`                  | [LobeHub](https://github.com/lobehub/lobehub)                 | Agent discovery, tools and plugins, model management, design-system organization, and extensibility                                              |
+| Local models, self-hosting, admin, or permissions                             | `OpenWebUI`                | [Open WebUI](https://github.com/open-webui/open-webui)        | Model administration, multi-user controls, RAG, extensions, compatible APIs, and operations                                                      |
+| Workspaces, document ingestion, RAG, or local agents                          | `AnythingLLM`              | [AnythingLLM](https://github.com/Mintplex-Labs/anything-llm)  | Workspace and knowledge workflows, permissions, scheduled work, and local-first deployment                                                       |
+| Lean OpenAI-compatible chat architecture                                      | `HuggingChat`              | [HuggingChat Chat UI](https://github.com/huggingface/chat-ui) | Smaller conversation UI and model-gateway boundaries that clarify necessary abstractions                                                         |

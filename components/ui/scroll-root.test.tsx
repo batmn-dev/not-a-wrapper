@@ -128,6 +128,33 @@ describe("ScrollRoot viewport and footer measurement", () => {
     expect(scrollRoot.hasAttribute("data-keyboard-open")).toBe(true)
   })
 
+  it("preserves an explicit root-level keyboard fixture override", () => {
+    viewport.height = 500
+
+    act(() => {
+      root.render(
+        <ScrollRoot
+          data-screen-keyboard-height-override=""
+          style={
+            {
+              "--screen-keyboard-height": "280px",
+            } as React.CSSProperties
+          }
+        >
+          <textarea data-virtualkeyboard="true" autoFocus />
+        </ScrollRoot>
+      )
+    })
+
+    const scrollRoot = container.querySelector(
+      "[data-scroll-root]"
+    ) as HTMLElement
+
+    expect(scrollRoot.style.getPropertyValue("--screen-keyboard-height")).toBe(
+      "280px"
+    )
+  })
+
   it("reserves an absolute prompt header before measuring the sticky root", () => {
     act(() => {
       root.render(
