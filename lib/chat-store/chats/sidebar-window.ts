@@ -20,6 +20,8 @@ export function mapConvexChat(chat: Doc<"chats">): Chats {
     id: chat._id,
     user_id: chat.userId,
     title: chat.title ?? null,
+    title_source: chat.titleSource,
+    title_generation: chat.titleGeneration,
     model: chat.model ? resolveModelId(chat.model) : null,
     system_prompt: chat.systemPrompt ?? null,
     project_id: chat.projectId ?? null,

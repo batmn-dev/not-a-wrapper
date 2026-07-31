@@ -4,6 +4,12 @@ import type {
   ChatTurnEditRequest,
   ChatTurnRegenerationRequest,
 } from "@/lib/chat-messages/chat-turn-contract"
+import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
+import {
+  generateChatTitle,
+  INITIAL_CHAT_TITLE_GENERATION,
+  selectChatTitleModelConfig,
+} from "@/lib/chat-title"
 import {
   ANONYMOUS_MAX_STEP_COUNT,
   DEFAULT_MAX_STEP_COUNT,
@@ -48,12 +54,15 @@ import * as Sentry from "@sentry/nextjs"
 import {
   consumeStream,
   convertToModelMessages,
+  createUIMessageStream,
   createUIMessageStreamResponse,
+  generateText as defaultGenerateText,
   isStepCount,
   UIMessage as MessageAISDK,
   toUIMessageStream,
   validateUIMessages,
   type ModelMessage,
+  type UIMessageChunk,
 } from "ai"
 import {
   fetchMutation as defaultFetchMutation,
@@ -140,6 +149,7 @@ export type ChatTurnInput = {
  */
 export type ChatTurnDeps = {
   streamText: typeof import("ai").streamText
+  generateText: typeof import("ai").generateText
   fetchMutation: typeof defaultFetchMutation
   fetchQuery: typeof defaultFetchQuery
   after: typeof after
@@ -157,6 +167,7 @@ export type ChatTurnDeps = {
 function resolveDeps(overrides?: Partial<ChatTurnDeps>): ChatTurnDeps {
   return {
     streamText: overrides?.streamText ?? getBraintrustStreamText(),
+    generateText: overrides?.generateText ?? defaultGenerateText,
     fetchMutation: overrides?.fetchMutation ?? defaultFetchMutation,
     fetchQuery: overrides?.fetchQuery ?? defaultFetchQuery,
     after: overrides?.after ?? after,
@@ -174,6 +185,7 @@ type ToolExecutionOutcome =
 
 type PreparedTurn = {
   aiModel: ReturnType<typeof createLanguageModel>
+  titleModel: ReturnType<typeof createLanguageModel>
   modelConfig: ModelConfig
   provider: Provider
   normalizedChatVersion: number
@@ -189,6 +201,7 @@ type PreparedTurn = {
   enrichedSystemPrompt: string
   braintrustMetadata: BraintrustChatMetadata
   phClient: ReturnType<typeof getPostHogClient>
+  titleRequest: { userText: string; generation: number } | null
 }
 
 function normalizeChatVersion(
@@ -203,6 +216,12 @@ function normalizeChatVersion(
     return Math.floor(chatVersion)
   }
   return fallbackMessages.length
+}
+
+function getFirstUserText(messages: MessageAISDK[]): string {
+  const firstUserMessage = messages.find((message) => message.role === "user")
+  if (!firstUserMessage) return ""
+  return extractTextFromMessageParts(firstUserMessage.parts).trim()
 }
 
 function bucketChatVersion(chatVersion: number): string {
@@ -473,6 +492,10 @@ export function createChatTurnRuntime(args: {
 
     // Search is provided only through visible, auditable tool calls.
     const aiModel = createLanguageModel(modelConfig, apiKey)
+    const titleModel = createLanguageModel(
+      selectChatTitleModelConfig(allModels, modelConfig),
+      apiKey
+    )
 
     const phClient = deps.getPostHogClient()
     const normalizedChatVersion = normalizeChatVersion(chatVersion, messages)
@@ -890,8 +913,25 @@ export function createChatTurnRuntime(args: {
       },
     }
 
+    const durableTitleGeneration = durableTurn.getTitleGeneration()
+    const titleGeneration =
+      durableTitleGeneration ??
+      (durableTurn.mode === "guest" &&
+      normalizedChatVersion === 1 &&
+      !edit &&
+      !regeneration
+        ? INITIAL_CHAT_TITLE_GENERATION
+        : null)
+    const titleUserText =
+      titleGeneration === null
+        ? ""
+        : edit?.replacementMessage.content.trim() ||
+          getFirstUserText(validatedMessages) ||
+          getFirstUserText(messages)
+
     prepared = {
       aiModel,
+      titleModel,
       modelConfig,
       provider: resolvedProvider,
       normalizedChatVersion,
@@ -907,6 +947,10 @@ export function createChatTurnRuntime(args: {
       enrichedSystemPrompt,
       braintrustMetadata,
       phClient,
+      titleRequest:
+        titleGeneration !== null && titleUserText
+          ? { userText: titleUserText, generation: titleGeneration }
+          : null,
     }
     phase = "prepared"
   }
@@ -928,6 +972,7 @@ export function createChatTurnRuntime(args: {
     }
     const {
       aiModel,
+      titleModel,
       provider: resolvedProvider,
       normalizedChatVersion,
       hasAnyTools,
@@ -942,6 +987,7 @@ export function createChatTurnRuntime(args: {
       enrichedSystemPrompt,
       braintrustMetadata,
       phClient,
+      titleRequest,
     } = prepared
 
     // The AI SDK lifecycle binding (ADR-0011, Design 2): both callback halves
@@ -1525,6 +1571,68 @@ export function createChatTurnRuntime(args: {
       runGeneration
     )
 
+    // Title generation is independent of answer generation: it starts once
+    // durable prepare has accepted the first turn (or first-message edit), but
+    // failure is absorbed so naming can never fail the conversation. Durable
+    // chats receive an early transient CAS payload and also commit after the
+    // response as a disconnect-safe backstop; guest chats apply it to IndexedDB.
+    const titleTask = titleRequest
+      ? generateChatTitle({
+          generateText: deps.generateText,
+          model: titleModel,
+          userText: titleRequest.userText,
+          abortSignal: executionSignal,
+        }).catch((error: unknown) => {
+          // Stop, grant loss, and the provider deadline cancel the title
+          // alongside the answer — a normal shutdown, not a title failure.
+          // (A still-provisional chat re-requests a title on its next turn.)
+          if (executionSignal.aborted) return null
+          console.warn(
+            JSON.stringify({
+              _tag: "chat_title_generation_failed",
+              requestId,
+              chatId,
+              provider: resolvedProvider,
+              model,
+              errorType: error instanceof Error ? error.name : typeof error,
+            })
+          )
+          return null
+        })
+      : null
+
+    if (
+      titleTask &&
+      titleRequest &&
+      durableTurn.mode === "durable" &&
+      convexToken
+    ) {
+      deps.after(async () => {
+        const title = await titleTask
+        if (!title) return
+        try {
+          await deps.fetchMutation(
+            api.chats.applyGeneratedTitle,
+            {
+              chatId: chatId as Id<"chats">,
+              title,
+              generation: titleRequest.generation,
+            },
+            { token: convexToken }
+          )
+        } catch (error) {
+          console.warn(
+            JSON.stringify({
+              _tag: "chat_title_persistence_failed",
+              requestId,
+              chatId,
+              errorType: error instanceof Error ? error.name : typeof error,
+            })
+          )
+        }
+      })
+    }
+
     // Stream conversion owns UI-message completion; response construction owns
     // the HTTP envelope. Both completion callbacks share this closure (ADR-0006).
     const uiMessageStream = toUIMessageStream({
@@ -1590,8 +1698,51 @@ export function createChatTurnRuntime(args: {
       },
     })
 
+    const responseStream =
+      titleTask && titleRequest
+        ? createUIMessageStream({
+            execute: async ({ writer }) => {
+              let markAnswerFinished: () => void = () => {}
+              const answerFinished = new Promise<null>((resolve) => {
+                markAnswerFinished = () => resolve(null)
+              })
+              const observedAnswerStream = uiMessageStream.pipeThrough(
+                new TransformStream<UIMessageChunk, UIMessageChunk>({
+                  transform(chunk, controller) {
+                    controller.enqueue(chunk)
+                  },
+                  flush() {
+                    markAnswerFinished()
+                  },
+                })
+              )
+              writer.merge(observedAnswerStream)
+              // Durable turns stop waiting once the answer closes — the
+              // after() backstop commits the title without holding the
+              // response open. Guest turns have no backstop: the transient
+              // part is the only delivery path, so the stream's close waits
+              // for the bounded title call even when a short answer finishes
+              // first. The answer itself is already fully delivered by then.
+              const title =
+                durableTurn.mode === "guest"
+                  ? await titleTask
+                  : await Promise.race([titleTask, answerFinished])
+              if (!title) return
+              writer.write({
+                type: "data-chatTitle",
+                data: {
+                  chatId,
+                  title,
+                  generation: titleRequest.generation,
+                },
+                transient: true,
+              })
+            },
+          })
+        : uiMessageStream
+
     return createUIMessageStreamResponse({
-      stream: uiMessageStream,
+      stream: responseStream,
       consumeSseStream: consumeStream,
     })
   }

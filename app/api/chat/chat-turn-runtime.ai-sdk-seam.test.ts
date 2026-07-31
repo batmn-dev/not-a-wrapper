@@ -420,6 +420,9 @@ function makeDeps(
 ): ChatTurnDeps {
   return {
     streamText,
+    generateText: vi.fn(async () => ({
+      text: "Weather in Berlin",
+    })) as unknown as ChatTurnDeps["generateText"],
     fetchMutation: fetchMutation as unknown as ChatTurnDeps["fetchMutation"],
     fetchQuery: vi.fn(async () => []) as unknown as ChatTurnDeps["fetchQuery"],
     after: vi.fn() as unknown as ChatTurnDeps["after"],

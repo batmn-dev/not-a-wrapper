@@ -148,6 +148,7 @@ describe("chat turn plans", () => {
     expect(buildEditRequest(clientMessageId, plan)).toMatchObject({
       editedMessageId: clientMessageId,
       editCutoffTimestamp: targetCreatedAt.getTime(),
+      regenerateTitle: true,
       replacementMessage: {
         id: "optimistic-edit",
         role: "user",

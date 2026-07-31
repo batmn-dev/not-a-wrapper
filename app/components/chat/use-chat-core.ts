@@ -211,7 +211,30 @@ export function useChatCore({
   const shouldAutoSubmitPrompt = searchParams.get("autoSubmit") === "1"
 
   // Chats operations
-  const { updateTitle } = useChats()
+  const { updateTitle, applyGeneratedTitle } = useChats()
+
+  const handleStreamData = useCallback(
+    (part: { type: string; data: unknown }) => {
+      if (part.type !== "data-chatTitle") return
+      if (!part.data || typeof part.data !== "object") return
+
+      const data = part.data as {
+        chatId?: unknown
+        title?: unknown
+        generation?: unknown
+      }
+      if (
+        typeof data.chatId !== "string" ||
+        typeof data.title !== "string" ||
+        typeof data.generation !== "number"
+      ) {
+        return
+      }
+
+      void applyGeneratedTitle(data.chatId, data.title, data.generation)
+    },
+    [applyGeneratedTitle]
+  )
 
   // Handle errors directly in onError callback
   const handleError = useCallback((error: Error) => {
@@ -595,6 +618,7 @@ export function useChatCore({
     chatId,
     initialMessages,
     handlers: {
+      onData: handleStreamData,
       onAttachedFinish: handleAttachedFinish,
       onDetachedFinish: finishDetachedTurn,
       onAttachedError: (streamError) => {

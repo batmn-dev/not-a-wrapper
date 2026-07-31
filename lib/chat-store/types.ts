@@ -8,6 +8,8 @@ export type Chat = {
   id: string
   user_id: string
   title: string | null
+  title_source?: "provisional" | "generated" | "user"
+  title_generation?: number
   model: string | null
   system_prompt?: string | null
   project_id: string | null
@@ -46,6 +48,8 @@ export function convexChatToChat(convexChat: ConvexChat): Chat {
     id: convexChat._id,
     user_id: convexChat.userId,
     title: convexChat.title ?? null,
+    title_source: convexChat.titleSource,
+    title_generation: convexChat.titleGeneration,
     model: convexChat.model ?? null,
     system_prompt: convexChat.systemPrompt ?? null,
     project_id: convexChat.projectId ?? null,

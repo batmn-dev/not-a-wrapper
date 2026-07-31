@@ -165,7 +165,6 @@ export function useChatOperations({
 
     try {
       const created = await createFirstTurnChat({
-        title: text,
         model: selectedModel,
         systemPrompt,
         ...(projectId ? { projectId } : {}),

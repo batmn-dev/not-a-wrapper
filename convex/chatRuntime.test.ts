@@ -17,6 +17,7 @@ import {
   resolveToolCallDecision,
   stopGenerationRunForChat,
   updateAssistantSnapshotForChat,
+  vEditIntent,
 } from "./chatRuntime"
 import {
   APPROVAL_EXPIRY_MS,
@@ -608,6 +609,17 @@ function createApprovalContinuationFixture(
   }
 }
 
+describe("edit intent wire validator", () => {
+  it("still accepts the legacy `title` field from pre-title-generation clients", () => {
+    // Convex object validators reject unknown fields, and the wire parser +
+    // durable runtime forward the client's edit object verbatim. Stale tabs
+    // built before generated titles send `title` on first-message edits;
+    // removing this compat field 400s those edits for the whole deploy window.
+    expect(vEditIntent.fields.title?.kind).toBe("string")
+    expect(vEditIntent.fields.title?.isOptional).toBe("optional")
+  })
+})
+
 describe("prepareGenerationForChat", () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -616,6 +628,9 @@ describe("prepareGenerationForChat", () => {
   it("applies durable edit intent and creates the run in the same mutation path", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1700000000000)
     const { user, chat, userId, chatId } = createOwnerFixture()
+    chat.title = "Old generated title"
+    chat.titleSource = "generated"
+    chat.titleGeneration = 1
     const messages: Doc<"messages">[] = [
       createStoredMessage({
         id: "message_user_1",
@@ -675,7 +690,7 @@ describe("prepareGenerationForChat", () => {
           content: "new text",
           parts: [{ type: "text", text: "new text" }],
         },
-        title: "new text",
+        regenerateTitle: true,
       },
     })
 
@@ -717,9 +732,12 @@ describe("prepareGenerationForChat", () => {
       assistantMessageId: result.assistantMessageId,
     })
     expect(chat).toMatchObject({
-      title: "new text",
+      title: "New chat",
+      titleSource: "provisional",
+      titleGeneration: 2,
       updatedAt: 1700000000000,
     })
+    expect(result.titleGeneration).toBe(2)
     expect(result.messages.map((message) => message.clientMessageId)).toEqual([
       "replacement-user",
     ])

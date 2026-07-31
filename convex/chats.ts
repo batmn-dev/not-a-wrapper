@@ -319,6 +319,8 @@ async function insertChatForUser(
   const chatId = await ctx.db.insert("chats", {
     userId: user._id,
     title: args.title ?? "New chat",
+    titleSource: "provisional",
+    titleGeneration: 1,
     model: args.model,
     systemPrompt: args.systemPrompt,
     projectId: args.projectId,
@@ -444,7 +446,47 @@ export const createWithFirstTurn = authenticatedMutation({
 export const updateTitle = ownedChatMutation({
   args: { title: v.string() },
   handler: async (ctx, { title }) => {
-    await patchChatActivity(ctx, ctx.chat, { title }, Date.now())
+    await patchChatActivity(
+      ctx,
+      ctx.chat,
+      { title, titleSource: "user" },
+      Date.now()
+    )
+  },
+})
+
+export async function applyGeneratedTitleForOwnedChat(
+  ctx: Pick<MutationCtx, "db">,
+  chat: Doc<"chats">,
+  args: { title: string; generation: number }
+): Promise<boolean> {
+  if (
+    chat.titleSource !== "provisional" ||
+    chat.titleGeneration !== args.generation
+  ) {
+    return false
+  }
+
+  await ctx.db.patch(chat._id, {
+    title: args.title,
+    titleSource: "generated",
+  })
+  return true
+}
+
+/**
+ * Commit a model-generated title only if it still targets the provisional
+ * version that requested it. This protects manual renames and newer
+ * first-message edits from slow or duplicated model calls. Generated titles
+ * do not count as conversation activity, so the sidebar's recency is stable.
+ */
+export const applyGeneratedTitle = ownedChatMutation({
+  args: { title: v.string(), generation: v.number() },
+  handler: async (ctx, { title, generation }) => {
+    return await applyGeneratedTitleForOwnedChat(ctx, ctx.chat, {
+      title,
+      generation,
+    })
   },
 })
 

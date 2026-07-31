@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { Doc, Id } from "./_generated/dataModel"
 import type { MutationCtx } from "./_generated/server"
 import {
+  applyGeneratedTitleForOwnedChat,
   createChatWithFirstTurnForUser,
   getPinnedForCurrentUserHandler,
   getProjectChatDirectoryForProject,
@@ -861,6 +862,8 @@ describe("createChatWithFirstTurnForUser", () => {
       _id: result.chatId,
       userId: user._id,
       title: "Read this",
+      titleSource: "provisional",
+      titleGeneration: 1,
       model: "model-1",
       public: false,
       pinned: false,
@@ -903,6 +906,48 @@ describe("createChatWithFirstTurnForUser", () => {
         attachmentId: "att_1",
       },
     ])
+  })
+
+  it("commits only the current provisional title generation", async () => {
+    const { ctx, tables } = createFirstTurnHarness([])
+    const result = await createChatWithFirstTurnForUser(ctx, user, {
+      title: "New chat",
+      message: { clientMessageId: "optimistic-1", text: "hello" },
+      attachmentIds: [],
+    })
+    const chat = tables.chats.find(
+      (candidate) => candidate._id === result.chatId
+    )! as Doc<"chats">
+
+    await expect(
+      applyGeneratedTitleForOwnedChat(ctx, chat, {
+        title: "Stale title",
+        generation: 2,
+      })
+    ).resolves.toBe(false)
+    expect(chat.title).toBe("New chat")
+
+    await expect(
+      applyGeneratedTitleForOwnedChat(ctx, chat, {
+        title: "Greeting Exchange",
+        generation: 1,
+      })
+    ).resolves.toBe(true)
+    expect(chat).toMatchObject({
+      title: "Greeting Exchange",
+      titleSource: "generated",
+      titleGeneration: 1,
+    })
+
+    chat.title = "My custom name"
+    chat.titleSource = "user"
+    await expect(
+      applyGeneratedTitleForOwnedChat(ctx, chat, {
+        title: "Late model result",
+        generation: 1,
+      })
+    ).resolves.toBe(false)
+    expect(chat.title).toBe("My custom name")
   })
 
   it("validates the whole set before any binding patch when it contains another user's attachment", async () => {

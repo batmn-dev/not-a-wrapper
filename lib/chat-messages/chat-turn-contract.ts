@@ -32,7 +32,9 @@ export type ChatTurnEditRequest = {
     content: string
     parts: UIMessage["parts"]
   }
-  title?: string
+  /** First-user-message edits request a fresh generated title. The server
+   * ignores this when the owner has manually renamed the chat. */
+  regenerateTitle?: boolean
 }
 
 /**

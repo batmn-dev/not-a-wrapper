@@ -349,6 +349,10 @@ export type DurableTurnRuntime = {
    */
   prepare(args: { provider: string }): Promise<MessageAISDK[]>
 
+  /** The provisional title version authorized by durable prepare. Guest turns
+   * return null and let the parent derive the first-turn version locally. */
+  getTitleGeneration(): number | null
+
   /**
    * Binds `ToolFacts` for the stream lifetime and returns the AI SDK
    * lifecycle binding. One-shot, after `prepare()`, before the stream starts.
@@ -803,6 +807,9 @@ export function createGuestDurableTurn(
     async prepare() {
       return sanitizeModelHistoryMessages(input.messages) as MessageAISDK[]
     },
+    getTitleGeneration() {
+      return null
+    },
     bind() {
       return {
         streamTextExtras: {},
@@ -860,6 +867,7 @@ export function createConvexDurableTurn(args: {
   // The durable run — assigned once at prepare(), then read by the timeline.
   let runId: Id<"generationRuns"> | null = null
   let assistantMessageId: Id<"messages"> | null = null
+  let titleGeneration: number | null = null
   let originalMessages: DurableUiMessage[] = []
   let snapshotTracker: ReturnType<typeof createDurableSnapshotTracker> | null =
     null
@@ -1287,6 +1295,7 @@ export function createConvexDurableTurn(args: {
 
       runId = generation.runId
       assistantMessageId = generation.assistantMessageId
+      titleGeneration = generation.titleGeneration ?? null
       originalMessages = durableMessages
       const snapshotBase = {
         messageId: generation.assistantMessageId,
@@ -1368,6 +1377,10 @@ export function createConvexDurableTurn(args: {
       )
 
       return durableMessages as MessageAISDK[]
+    },
+
+    getTitleGeneration() {
+      return titleGeneration
     },
 
     bind(toolFacts) {

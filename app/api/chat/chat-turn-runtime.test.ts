@@ -270,6 +270,9 @@ function makeDeps(
 ) {
   return {
     streamText: harness.streamText as unknown as ChatTurnDeps["streamText"],
+    generateText: vi.fn(async () => ({
+      text: "Greeting Exchange",
+    })) as unknown as ChatTurnDeps["generateText"],
     fetchMutation: fetchMutation as unknown as ChatTurnDeps["fetchMutation"],
     fetchQuery: vi.fn(async () => []) as unknown as ChatTurnDeps["fetchQuery"],
     after: vi.fn() as unknown as ChatTurnDeps["after"],
@@ -412,6 +415,112 @@ describe("createChatTurnRuntime — prepare()", () => {
     })
     await runtime.prepare()
     await expect(runtime.prepare()).rejects.toThrow("only be called once")
+  })
+})
+
+describe("createChatTurnRuntime — generated titles", () => {
+  it("persists an accepted durable first-turn title through the versioned mutation", async () => {
+    const harness = makeStreamHarness()
+    const fetchMutation = vi.fn(async (ref: unknown) => {
+      if (sameRef(ref, api.chatRuntime.prepareGeneration)) {
+        return {
+          runId: "run1",
+          assistantMessageId: "msg1",
+          assistantOrder: 1,
+          messages: [],
+          titleGeneration: 1,
+        }
+      }
+      return undefined
+    })
+    const afterCallbacks: Array<() => unknown> = []
+    const generateText = vi.fn(async () => ({
+      text: "Friendly Greeting",
+    }))
+    const deps = makeDeps(harness, fetchMutation, {
+      generateText: generateText as unknown as ChatTurnDeps["generateText"],
+      after: vi.fn((callback: () => unknown) => {
+        afterCallbacks.push(callback)
+      }) as unknown as ChatTurnDeps["after"],
+    })
+    const runtime = createChatTurnRuntime({ input: makeInput(), deps })
+
+    await runtime.prepare()
+    runtime.toResponse(notAbortedSignal())
+    for (const callback of afterCallbacks) await callback()
+
+    expect(generateText).toHaveBeenCalledTimes(1)
+    expect(findCall(fetchMutation, api.chats.applyGeneratedTitle)?.[1]).toEqual(
+      {
+        chatId: SERVER_CHAT_ID,
+        title: "Friendly Greeting",
+        generation: 1,
+      }
+    )
+  })
+
+  it("streams a transient title update for a guest first turn", async () => {
+    const harness = makeStreamHarness()
+    const fetchMutation = makeFetchMutation()
+    const deps = makeDeps(harness, fetchMutation, {
+      generateText: vi.fn(async () => ({
+        text: "Greeting Exchange",
+      })) as unknown as ChatTurnDeps["generateText"],
+    })
+    const runtime = createChatTurnRuntime({
+      input: makeInput({
+        chatId: "local-chat-1",
+        userId: "guest-1",
+        anonymousId: "guest-1",
+        isAuthenticated: false,
+        convexToken: undefined,
+      }),
+      deps,
+    })
+
+    await runtime.prepare()
+    const response = runtime.toResponse(notAbortedSignal())
+
+    await expect(response.text()).resolves.toContain('"type":"data-chatTitle"')
+    expect(
+      findCall(fetchMutation, api.chats.applyGeneratedTitle)
+    ).toBeUndefined()
+  })
+
+  it("delivers the guest title even when the answer finishes first", async () => {
+    // Guests have no after() backstop: if the answer beats the title, the
+    // stream's close is the only remaining delivery window. The response tail
+    // must wait for the bounded title call instead of dropping it — otherwise
+    // every short first answer leaves the guest chat named "New chat" forever.
+    const harness = makeStreamHarness()
+    let titleSignal: AbortSignal | undefined
+    const generateText = vi.fn(
+      ({ abortSignal }: { abortSignal?: AbortSignal }) =>
+        new Promise((resolve) => {
+          titleSignal = abortSignal
+          setTimeout(() => resolve({ text: "Guest Conversation" }), 25)
+        })
+    )
+    const runtime = createChatTurnRuntime({
+      input: makeInput({
+        chatId: "local-chat-1",
+        userId: "guest-1",
+        anonymousId: "guest-1",
+        isAuthenticated: false,
+        convexToken: undefined,
+      }),
+      deps: makeDeps(harness, makeFetchMutation(), {
+        generateText: generateText as unknown as ChatTurnDeps["generateText"],
+      }),
+    })
+
+    await runtime.prepare()
+    const response = runtime.toResponse(notAbortedSignal())
+
+    const body = await response.text()
+    expect(body).toContain('"type":"data-chatTitle"')
+    expect(body).toContain("Guest Conversation")
+    expect(titleSignal?.aborted).toBe(false)
   })
 })
 

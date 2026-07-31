@@ -161,7 +161,7 @@ const vStoredMessage = v.object({
   parts: v.any(),
 })
 
-const vEditIntent = v.object({
+export const vEditIntent = v.object({
   editedMessageId: v.string(),
   editCutoffTimestamp: v.number(),
   expectedChatVersion: v.number(),
@@ -171,6 +171,11 @@ const vEditIntent = v.object({
     content: v.string(),
     parts: v.any(),
   }),
+  regenerateTitle: v.optional(v.boolean()),
+  // Deploy-compat only: pre-title-generation clients send the edited text as
+  // `title`. Convex object validators reject unknown fields, so dropping this
+  // would 400 every first-message edit from a stale tab. Accepted and ignored;
+  // remove once no deployed client builds the legacy edit shape.
   title: v.optional(v.string()),
 })
 
@@ -799,7 +804,7 @@ type GenerationEditIntent = {
   editCutoffTimestamp: number
   expectedChatVersion: number
   replacementMessage: StoredUserMessage & { content: string }
-  title?: string
+  regenerateTitle?: boolean
 }
 
 type GenerationRegenerationIntent = {
@@ -957,7 +962,7 @@ export async function applyEditIntentForGeneration(
     edit: GenerationEditIntent
   },
   now: number
-) {
+): Promise<number | undefined> {
   // Same guard contract as the regeneration guard above: raw projection,
   // matching the client's rendered count; never normalize before guarding.
   const currentMessages = await listMessages(ctx, args.chatId)
@@ -1005,9 +1010,17 @@ export async function applyEditIntentForGeneration(
     replaces: editedMessage?._id,
   })
 
-  if (args.edit.title) {
-    await ctx.db.patch(args.chatId, { title: args.edit.title })
+  if (args.edit.regenerateTitle && owner.chat.titleSource !== "user") {
+    const titleGeneration = (owner.chat.titleGeneration ?? 0) + 1
+    await ctx.db.patch(args.chatId, {
+      title: "New chat",
+      titleSource: "provisional",
+      titleGeneration,
+    })
+    return titleGeneration
   }
+
+  return undefined
 }
 
 function applyApprovalResponseToParts(
@@ -1389,6 +1402,8 @@ export async function prepareGenerationForChat(
   const continuation = await applyApprovalResponses(ctx, owner, approvalResponses)
   const continuationMessage = continuation?.message ?? null
 
+  let titleGeneration: number | undefined
+
   if (latestUserMessage) {
     await denyPendingApprovalsForChat(
       ctx,
@@ -1398,7 +1413,7 @@ export async function prepareGenerationForChat(
     )
 
     if (args.edit) {
-      await applyEditIntentForGeneration(
+      titleGeneration = await applyEditIntentForGeneration(
         ctx,
         owner,
         {
@@ -1418,6 +1433,9 @@ export async function prepareGenerationForChat(
         latestUserMessage as StoredUserMessage,
         now
       )
+      if (owner.chat.titleSource === "provisional") {
+        titleGeneration = owner.chat.titleGeneration
+      }
     }
   }
 
@@ -1603,6 +1621,7 @@ export async function prepareGenerationForChat(
     assistantMessageId,
     assistantOrder,
     messages: modelHistory,
+    titleGeneration,
   }
 }
 

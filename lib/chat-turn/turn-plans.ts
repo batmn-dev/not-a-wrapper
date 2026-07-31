@@ -175,7 +175,7 @@ export function buildEditRequest(
       content: plan.title,
       parts: plan.optimisticEditedMessage.parts,
     },
-    ...(plan.shouldUpdateTitle ? { title: plan.title } : {}),
+    ...(plan.shouldUpdateTitle ? { regenerateTitle: true } : {}),
   }
 }
 
