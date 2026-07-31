@@ -381,8 +381,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       // creates (§4.1.4). A resolver-declined Stop (e.g. one already pending)
       // is NOT overridden: isSubmitting has settled false by then.
       // Never present an enabled Stop without an actionable handler.
-      const presentStop =
-        Boolean(stop) && (canStop || Boolean(isSubmitting))
+      const presentStop = Boolean(stop) && (canStop || Boolean(isSubmitting))
       return resolveComposerPrimaryActionState({
         // Stop presents for a live LOCAL stream or any resolver-stoppable
         // run (background, awaiting-approval, possibly-stale — §8/§11):
@@ -541,7 +540,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     )
 
     return (
-      <div className="relative flex w-full flex-col gap-4">
+      <div
+        className="relative flex w-full flex-col gap-4"
+        data-has-thread-error={status === "error" ? "" : undefined}
+      >
+        <div
+          data-prompt-textarea-header=""
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-full z-20"
+        />
         {hasSuggestions && (
           <PromptSystem
             onValueChange={handleValueChange}

@@ -54,7 +54,10 @@ export function SidebarRowEndSlot({
   const contents = (
     <>
       {status ? (
-        <div className="sidebar-row-status-slot" data-sidebar-row-status-slot>
+        <div
+          className="sidebar-row-status-slot"
+          data-sidebar-row-status-slot={layout}
+        >
           {status}
         </div>
       ) : null}

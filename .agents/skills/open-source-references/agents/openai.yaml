@@ -1,0 +1,4 @@
+interface:
+  display_name: "Open-Source References"
+  short_description: "Route AI chat research to proven repositories"
+  default_prompt: "Use $open-source-references to inspect focused open-source AI chat references for this Not A Wrapper task."

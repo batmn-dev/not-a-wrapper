@@ -128,7 +128,7 @@ function PromptInput({
           <div
             data-composer-surface="true"
             data-slot="prompt-input-surface"
-            className="shadow-composer border-border-subtle relative grid cursor-text grid-cols-[auto_1fr_auto] overflow-clip rounded-[28px] border-0 bg-[var(--composer-bg)] bg-clip-padding px-2 py-[9px] contain-inline-size [grid-template-areas:'header_header_header'_'leading_primary_trailing'_'._footer_.'] group-not-data-[expanded]/composer:min-h-[52px] group-not-data-[expanded]/composer:py-[5px] group-data-[expanded]/composer:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out max-sm:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing']"
+            className="shadow-short-composer border-border-subtle relative grid cursor-text grid-cols-[auto_1fr_auto] overflow-clip rounded-[28px] border-0 bg-[var(--composer-bg)] bg-clip-padding px-2 py-[9px] contain-inline-size [grid-template-areas:'header_header_header'_'leading_primary_trailing'_'._footer_.'] group-not-data-[expanded]/composer:min-h-[52px] group-not-data-[expanded]/composer:py-[5px] group-data-[expanded]/composer:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out max-sm:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing']"
             onClick={() => {
               textareaRef.current?.focus()
             }}
@@ -361,6 +361,7 @@ function PromptInputTextarea({
         <Textarea
           ref={setTextareaRefs}
           autoFocus
+          data-virtualkeyboard="true"
           value={value}
           onChange={handleChange}
           onKeyDown={handleKeyDown}

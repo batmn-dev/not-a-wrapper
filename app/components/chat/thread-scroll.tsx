@@ -2,7 +2,7 @@
 
 /**
  * Owns the thread tail's four coupled behaviors: bottom-distance state, a
- * self-sizing response gutter, answer-start pinning with a bounded mount retry,
+ * self-sizing response gutter, submit-time pinning with a bounded mount retry,
  * and once-per-conversation scroll restoration. The gutter writes its raw
  * remaining height intentionally; negative CSS min-height values are ignored.
  * Restoration prefers a saved turn anchor (thread-scroll-anchors.ts) and falls
@@ -10,12 +10,9 @@
  */
 import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { useCallback, useEffect, useRef } from "react"
-import {
-  restoreThreadAnchor,
-  saveThreadAnchor,
-} from "./thread-scroll-anchors"
+import { ThreadTail } from "./thread-bottom-container"
+import { restoreThreadAnchor, saveThreadAnchor } from "./thread-scroll-anchors"
 
-const SCROLL_FROM_END_ROOT_MARGIN = "0px 0px 72px"
 const GUTTER_THRESHOLDS = Array.from({ length: 101 }, (_, i) => i / 100)
 const PIN_RETRY_TIMEOUT_MS = 10_000
 /** Trailing-idle fallback for browsers without native `scrollend`. */
@@ -27,6 +24,22 @@ function closestScrollRoot(el: Element | null): HTMLElement | null {
 
 function setScrollFromEnd(root: HTMLElement, scrolledFromEnd: boolean) {
   root.toggleAttribute("data-scroll-from-end", scrolledFromEnd)
+}
+
+function readPixelValue(value: string) {
+  const parsed = Number.parseFloat(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function getScrollFromEndRootMargin(root: HTMLElement) {
+  const footerHeight =
+    root
+      .querySelector<HTMLElement>("#thread-bottom-container")
+      ?.getBoundingClientRect().height ?? 0
+  const keyboardHeight = readPixelValue(
+    root.style.getPropertyValue("--screen-keyboard-height")
+  )
+  return `0px 0px ${footerHeight + keyboardHeight}px`
 }
 
 function pinTurn(root: HTMLElement, turnId: string): boolean {
@@ -62,8 +75,8 @@ type ThreadScrollEdgeProps = {
   /** A turn is in flight (submitted or streaming) — mirrored onto the scroll
    * root as `data-stream-active`. */
   streamActive: boolean
-  /** The user turn to pin near the top of the viewport, set at answer-start
-   * (Conversation withholds it until the response's first text). */
+  /** The active user turn to pin near the top of the viewport, set as soon as
+   * its optimistic row is rendered. */
   pinTurnId: string | null
   /** The conversation's messages are present (load restore waits for them). */
   hydrated: boolean
@@ -94,8 +107,10 @@ export function ThreadScrollEdge({
     chatKeyRef.current = chatId
   }, [chatId])
 
-  // (1) The at-end sentinel: `data-scroll-from-end` on the
-  // root whenever the sentinel is not within 72px below the scrollport.
+  // (1) The at-end sentinel: `data-scroll-from-end` on the root whenever the
+  // sentinel is beyond the actual sticky footer/keyboard footprint. The
+  // observer is rebuilt when that footprint changes, so compact, mobile,
+  // attachment, error, and multiline composer states share one threshold.
   const sentinelCleanupRef = useRef<(() => void) | null>(null)
   const sentinelRef = useCallback((el: HTMLDivElement | null) => {
     sentinelCleanupRef.current?.()
@@ -103,16 +118,66 @@ export function ThreadScrollEdge({
     const root = closestScrollRoot(el)
     if (!el || !root) return
     rootRef.current = root
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const { isIntersecting } = entries[entries.length - 1]
-        setScrollFromEnd(root, !isIntersecting)
-      },
-      { root, rootMargin: SCROLL_FROM_END_ROOT_MARGIN }
-    )
-    observer.observe(el)
+
+    let footer = root.querySelector<HTMLElement>("#thread-bottom-container")
+    let observer: IntersectionObserver | null = null
+    let rootMargin = ""
+
+    const observeSentinel = () => {
+      const nextRootMargin = getScrollFromEndRootMargin(root)
+      if (observer && nextRootMargin === rootMargin) return
+      observer?.disconnect()
+      rootMargin = nextRootMargin
+      observer = new IntersectionObserver(
+        (entries) => {
+          const { isIntersecting } = entries[entries.length - 1]
+          setScrollFromEnd(root, !isIntersecting)
+        },
+        { root, rootMargin }
+      )
+      observer.observe(el)
+    }
+
+    const resizeObserver = new ResizeObserver(observeSentinel)
+    resizeObserver.observe(root)
+    if (footer) resizeObserver.observe(footer)
+
+    let footerRefreshFrame: number | null = null
+    const childObserver = new MutationObserver(() => {
+      if (footerRefreshFrame !== null) return
+      footerRefreshFrame = requestAnimationFrame(() => {
+        footerRefreshFrame = null
+        const nextFooter = root.querySelector<HTMLElement>(
+          "#thread-bottom-container"
+        )
+        if (nextFooter === footer) return
+        if (footer) resizeObserver.unobserve(footer)
+        footer = nextFooter
+        if (footer) resizeObserver.observe(footer)
+        observeSentinel()
+      })
+    })
+    childObserver.observe(root, { childList: true, subtree: true })
+
+    const rootStyleObserver = new MutationObserver(observeSentinel)
+    rootStyleObserver.observe(root, {
+      attributes: true,
+      attributeFilter: ["style"],
+    })
+
+    const viewport = window.visualViewport
+    viewport?.addEventListener("resize", observeSentinel)
+    viewport?.addEventListener("scroll", observeSentinel)
+
+    observeSentinel()
     sentinelCleanupRef.current = () => {
-      observer.disconnect()
+      observer?.disconnect()
+      resizeObserver.disconnect()
+      childObserver.disconnect()
+      if (footerRefreshFrame !== null) cancelAnimationFrame(footerRefreshFrame)
+      rootStyleObserver.disconnect()
+      viewport?.removeEventListener("resize", observeSentinel)
+      viewport?.removeEventListener("scroll", observeSentinel)
       root.removeAttribute("data-scroll-from-end")
     }
   }, [])
@@ -144,8 +209,9 @@ export function ThreadScrollEdge({
   }, [])
 
   // (3) Stream lifecycle: `data-stream-active` on the root gives the gutter
-  // its reserved-space height class and disables native scroll anchoring
-  // (both pure CSS). The gutter's observers handle everything else.
+  // its reserved-space height class. Native scroll anchoring remains enabled;
+  // the one-shot pin owns submission, then browser anchoring and manual scroll
+  // ownership govern response growth and layout changes.
   useBrowserLayoutEffect(() => {
     const rootEl = rootRef.current
     if (!rootEl) return
@@ -163,7 +229,7 @@ export function ThreadScrollEdge({
     }
   }, [])
 
-  // (4) Answer-start pinning through the rAF + retry pipeline.
+  // (4) Submit-time pinning through the rAF + retry pipeline.
   useEffect(() => {
     if (!pinTurnId) {
       pinnedTurnRef.current = null
@@ -255,11 +321,13 @@ export function ThreadScrollEdge({
         aria-hidden="true"
         className="pointer-events-none -mt-px h-px translate-y-(--scroll-root-safe-area-inset-bottom)"
       />
-      <div
-        ref={gutterRef}
-        aria-hidden="true"
-        className="threadScrollVars pointer-events-none min-h-[var(--gutter-remaining-height,0px)] translate-y-(--scroll-root-safe-area-inset-bottom) group-data-stream-active/scroll-root:h-[calc(var(--thread-response-height)-16*var(--spacing))]"
-      />
+      <ThreadTail>
+        <div
+          ref={gutterRef}
+          aria-hidden="true"
+          className="threadScrollVars pointer-events-none min-h-[var(--gutter-remaining-height,0px)] translate-y-(--scroll-root-safe-area-inset-bottom) group-data-stream-active/scroll-root:h-[calc(var(--thread-response-height)-16*var(--spacing))]"
+        />
+      </ThreadTail>
     </>
   )
 }

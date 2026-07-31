@@ -7,18 +7,6 @@ vi.mock("@/app/components/chat/chat", () => ({
   Chat: () => <div data-testid="chat" />,
 }))
 
-vi.mock("@/app/components/layout/layout-app", () => ({
-  LayoutApp: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="layout-app">{children}</div>
-  ),
-}))
-
-vi.mock("@/lib/chat-store/messages/provider", () => ({
-  MessagesProvider: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="messages-provider">{children}</div>
-  ),
-}))
-
 vi.mock("@/lib/auth/workos", () => ({
   getAuthenticatedWorkosSession: vi.fn(),
 }))

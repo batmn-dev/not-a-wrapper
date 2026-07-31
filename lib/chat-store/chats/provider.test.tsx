@@ -57,6 +57,8 @@ const persistMocks = vi.hoisted(() => {
 const convexMocks = vi.hoisted(() => ({
   isAuthenticated: false,
   isLoading: false,
+  paginationStatus: "Exhausted" as
+    "LoadingFirstPage" | "CanLoadMore" | "LoadingMore" | "Exhausted",
   queryValue: undefined as unknown,
   mutationFn: vi.fn(),
   toast: vi.fn(),
@@ -84,7 +86,7 @@ vi.mock("convex/react", () => ({
   // exist.
   usePaginatedQuery: () => ({
     results: [],
-    status: "Exhausted" as const,
+    status: convexMocks.paginationStatus,
     isLoading: false,
     loadMore: () => {},
   }),
@@ -167,6 +169,7 @@ describe("ChatsProvider guest local chats", () => {
     persistMocks.deleteFromIndexedDB.mockClear()
     convexMocks.isAuthenticated = false
     convexMocks.isLoading = false
+    convexMocks.paginationStatus = "Exhausted"
     convexMocks.queryValue = undefined
     convexMocks.mutationFn.mockReset()
     convexMocks.toast.mockReset()
@@ -227,6 +230,28 @@ describe("ChatsProvider guest local chats", () => {
       "local-existing",
     ])
     expect(convexMocks.useQuery).toHaveBeenCalledWith(expect.anything(), "skip")
+  })
+
+  it("keeps initial and loading-more states distinct", async () => {
+    convexMocks.isAuthenticated = true
+    convexMocks.queryValue = []
+    convexMocks.paginationStatus = "LoadingMore"
+    const capture: { current: ReturnType<typeof useChats> | null } = {
+      current: null,
+    }
+
+    renderProvider(capture, "user-1")
+    await flushPromises()
+
+    expect(capture.current?.isLoading).toBe(false)
+    expect(capture.current?.isLoadingMore).toBe(true)
+    expect(capture.current?.canLoadMore).toBe(false)
+
+    convexMocks.paginationStatus = "Exhausted"
+    rerenderProvider(capture, "user-1")
+
+    expect(capture.current?.isLoadingMore).toBe(false)
+    expect(capture.current?.canLoadMore).toBe(false)
   })
 
   it("updates, pins, bumps, and deletes local chats through IndexedDB without Convex mutations", async () => {

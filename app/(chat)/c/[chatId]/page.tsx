@@ -1,8 +1,6 @@
 import { Chat } from "@/app/components/chat/chat"
-import { LayoutApp } from "@/app/components/layout/layout-app"
 import { getAuthenticatedWorkosSession } from "@/lib/auth/workos"
 import { isLocalChatId } from "@/lib/chat-store/identity"
-import { MessagesProvider } from "@/lib/chat-store/messages/provider"
 import { redirect } from "next/navigation"
 
 type Props = {
@@ -21,11 +19,5 @@ export default async function Page({ params }: Props) {
     }
   }
 
-  return (
-    <MessagesProvider>
-      <LayoutApp>
-        <Chat />
-      </LayoutApp>
-    </MessagesProvider>
-  )
+  return <Chat />
 }

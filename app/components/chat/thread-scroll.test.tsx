@@ -1,33 +1,58 @@
 /** @vitest-environment jsdom */
 
-import { act, type ComponentProps, StrictMode } from "react"
+import { act, StrictMode, type ComponentProps } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
+import { ThreadScrollEdge } from "./thread-scroll"
 import {
   resetThreadAnchorsForTest,
   saveThreadAnchor,
 } from "./thread-scroll-anchors"
-import { ThreadScrollEdge } from "./thread-scroll"
+
+let intersectionObservers: IntersectionObserverStub[] = []
 
 class IntersectionObserverStub {
-  readonly root = null
-  readonly rootMargin = "0px"
-  readonly thresholds = []
-
+  readonly callback: IntersectionObserverCallback
+  readonly root: Element | Document | null
+  readonly rootMargin: string
+  readonly thresholds: readonly number[]
+  readonly observed = new Set<Element>()
   disconnect = vi.fn()
-  observe = vi.fn()
+  observe = vi.fn((element: Element) => this.observed.add(element))
   takeRecords = vi.fn(() => [])
-  unobserve = vi.fn()
+  unobserve = vi.fn((element: Element) => this.observed.delete(element))
+
+  constructor(
+    callback: IntersectionObserverCallback,
+    options: IntersectionObserverInit = {}
+  ) {
+    this.callback = callback
+    this.root = options.root ?? null
+    this.rootMargin = options.rootMargin ?? "0px"
+    this.thresholds = Array.isArray(options.threshold)
+      ? options.threshold
+      : [options.threshold ?? 0]
+    intersectionObservers.push(this)
+  }
 }
 
 let resizeObservers: ResizeObserverStub[] = []
 
 class ResizeObserverStub {
   readonly callback: ResizeObserverCallback
+  readonly observed = new Set<Element>()
 
   disconnect = vi.fn()
-  observe = vi.fn()
-  unobserve = vi.fn()
+  observe = vi.fn((element: Element) => this.observed.add(element))
+  unobserve = vi.fn((element: Element) => this.observed.delete(element))
 
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback
@@ -58,6 +83,7 @@ describe("ThreadScrollEdge", () => {
   })
 
   beforeEach(() => {
+    intersectionObservers = []
     resizeObservers = []
     nextFrameId = 0
     frames = new Map()
@@ -117,11 +143,7 @@ describe("ThreadScrollEdge", () => {
         .scrollIntoView
     }
     if (originalScrollTo) {
-      Object.defineProperty(
-        HTMLElement.prototype,
-        "scrollTo",
-        originalScrollTo
-      )
+      Object.defineProperty(HTMLElement.prototype, "scrollTo", originalScrollTo)
     } else {
       delete (HTMLElement.prototype as { scrollTo?: unknown }).scrollTo
     }
@@ -166,6 +188,10 @@ describe("ThreadScrollEdge", () => {
     flushFrames()
 
     expect(scrollIntoView).toHaveBeenCalledOnce()
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      behavior: "instant",
+      block: "end",
+    })
   })
 
   it("pins a reused turn id in a later pin cycle", () => {
@@ -179,9 +205,97 @@ describe("ThreadScrollEdge", () => {
     expect(scrollIntoView).toHaveBeenCalledTimes(2)
   })
 
+  it("does not repin during optimistic-to-streaming reconciliation or response growth", () => {
+    act(() => {
+      root.render(
+        <>
+          <div data-turn-id="user-1" />
+          <div data-turn-id="pending-assistant" />
+          <ThreadScrollEdge
+            chatId="chat-1"
+            streamActive
+            pinTurnId="user-1"
+            hydrated
+            freshChat
+          />
+        </>
+      )
+    })
+    flushFrames()
+
+    act(() => {
+      root.render(
+        <>
+          <div data-turn-id="user-1" />
+          <div data-turn-id="assistant-1">first content</div>
+          <ThreadScrollEdge
+            chatId="chat-1"
+            streamActive
+            pinTurnId="user-1"
+            hydrated
+            freshChat
+          />
+        </>
+      )
+    })
+    flushFrames()
+
+    act(() => {
+      root.render(
+        <>
+          <div data-turn-id="user-1" />
+          <div data-turn-id="assistant-1">a much taller streamed response</div>
+          <ThreadScrollEdge
+            chatId="chat-1"
+            streamActive
+            pinTurnId="user-1"
+            hydrated
+            freshChat
+          />
+        </>
+      )
+    })
+    flushFrames()
+
+    expect(scrollIntoView).toHaveBeenCalledOnce()
+  })
+
+  it("leaves manual scroll ownership released without threshold reactivation", () => {
+    render("user-1")
+    flushFrames()
+    container.scrollTop = 640
+
+    act(() => {
+      container.dispatchEvent(new Event("scroll"))
+      root.render(
+        <>
+          <div data-turn-id="user-1" />
+          <ThreadScrollEdge
+            chatId="chat-1"
+            streamActive
+            pinTurnId="user-1"
+            hydrated
+            freshChat
+          />
+        </>
+      )
+    })
+    flushFrames()
+
+    container.scrollTop = 12
+    act(() => container.dispatchEvent(new Event("scroll")))
+    flushFrames()
+
+    expect(container.scrollTop).toBe(12)
+    expect(scrollIntoView).toHaveBeenCalledOnce()
+  })
+
   it("recalculates the gutter when the scroll root resizes", () => {
-    render(null)
-    const gutter = container.lastElementChild as HTMLDivElement
+    render("user-1")
+    flushFrames()
+    const gutter = container.querySelector(
+      ".threadScrollVars"
+    ) as HTMLDivElement
     vi.spyOn(container, "getBoundingClientRect").mockReturnValue({
       bottom: 500,
     } as DOMRect)
@@ -189,12 +303,155 @@ describe("ThreadScrollEdge", () => {
       top: 200,
     } as DOMRect)
 
-    act(() => resizeObservers[0].trigger())
+    act(() => {
+      for (const observer of resizeObservers) observer.trigger()
+    })
 
-    expect(resizeObservers[0].observe).toHaveBeenCalledWith(container)
+    expect(
+      resizeObservers.some((observer) => observer.observed.has(container))
+    ).toBe(true)
     expect(gutter.style.getPropertyValue("--gutter-remaining-height")).toBe(
       "300px"
     )
+    expect(scrollIntoView).toHaveBeenCalledOnce()
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
+
+  it("does not repin when streaming completes", () => {
+    render("user-1")
+    flushFrames()
+
+    render(null, false, { streamActive: false })
+    flushFrames()
+
+    expect(container.hasAttribute("data-stream-active")).toBe(false)
+    expect(scrollIntoView).toHaveBeenCalledOnce()
+  })
+
+  it("tracks the measured footer height for scroll-button visibility", () => {
+    let footerHeight = 108
+
+    act(() => {
+      root.render(
+        <>
+          <div
+            id="thread-bottom-container"
+            ref={(element) => {
+              if (!element) return
+              vi.spyOn(element, "getBoundingClientRect").mockImplementation(
+                () =>
+                  ({
+                    height: footerHeight,
+                  }) as DOMRect
+              )
+            }}
+          />
+          <ThreadScrollEdge
+            chatId="chat-1"
+            streamActive={false}
+            pinTurnId={null}
+            hydrated
+            freshChat
+          />
+        </>
+      )
+    })
+
+    expect(
+      intersectionObservers.some(
+        (observer) => observer.rootMargin === "0px 0px 108px"
+      )
+    ).toBe(true)
+
+    footerHeight = 204
+    act(() => {
+      for (const observer of resizeObservers) observer.trigger()
+    })
+
+    expect(intersectionObservers.at(-1)?.rootMargin).toBe("0px 0px 204px")
+  })
+
+  it("coalesces streamed child mutations without remeasuring a stable footer", async () => {
+    const measureFooter = vi.fn(() => ({ height: 108 }) as DOMRect)
+
+    act(() => {
+      root.render(
+        <>
+          <div data-turn-id="assistant-1" />
+          <div
+            id="thread-bottom-container"
+            ref={(element) => {
+              if (element) element.getBoundingClientRect = measureFooter
+            }}
+          />
+          <ThreadScrollEdge
+            chatId="chat-1"
+            streamActive
+            pinTurnId={null}
+            hydrated
+            freshChat
+          />
+        </>
+      )
+    })
+    flushFrames()
+    expect(measureFooter).toHaveBeenCalledOnce()
+
+    const streamedTurn = container.querySelector(
+      '[data-turn-id="assistant-1"]'
+    ) as HTMLElement
+    const queryRoot = vi.spyOn(container, "querySelector")
+    await act(async () => {
+      streamedTurn.appendChild(document.createElement("span"))
+      await Promise.resolve()
+      streamedTurn.appendChild(document.createElement("span"))
+      await Promise.resolve()
+    })
+
+    expect(frames.size).toBe(1)
+    expect(measureFooter).toHaveBeenCalledOnce()
+    expect(
+      queryRoot.mock.calls.filter(
+        ([selector]) => selector === "#thread-bottom-container"
+      )
+    ).toHaveLength(0)
+
+    flushFrames()
+    expect(
+      queryRoot.mock.calls.filter(
+        ([selector]) => selector === "#thread-bottom-container"
+      )
+    ).toHaveLength(1)
+    expect(measureFooter).toHaveBeenCalledOnce()
+  })
+
+  it("cancels a pending footer refresh during cleanup", async () => {
+    render(null)
+    const turn = container.querySelector(
+      '[data-turn-id="user-1"]'
+    ) as HTMLElement
+
+    await act(async () => {
+      turn.appendChild(document.createElement("span"))
+      await Promise.resolve()
+    })
+    expect(frames.size).toBe(1)
+
+    act(() => root.render(<></>))
+
+    expect(frames.size).toBe(0)
+  })
+
+  it("keeps the disclaimer in the conversation tail outside the footer", () => {
+    render(null)
+
+    const tail = container.querySelector("[data-thread-tail]")
+    const disclaimer = container.querySelector("[data-thread-disclaimer]")
+
+    expect(tail).not.toBeNull()
+    expect(disclaimer).not.toBeNull()
+    expect(tail?.contains(disclaimer)).toBe(true)
+    expect(disclaimer?.closest("#thread-bottom-container")).toBeNull()
   })
 
   it("restores a saved anchor instead of jumping to the bottom", () => {

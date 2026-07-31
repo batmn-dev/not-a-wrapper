@@ -69,9 +69,10 @@ import { useInfiniteScroll } from "../../history/use-history-view"
 import { UserMenu } from "../user-menu"
 import { useChatOrganization } from "./chat-organization"
 import { deriveSidebarComposition } from "./sidebar-composition"
-import { SidebarList } from "./sidebar-list"
 import { SidebarLeadingIcon } from "./sidebar-leading-icon"
+import { SidebarList } from "./sidebar-list"
 import { SidebarMenuItem } from "./sidebar-menu-item"
+import { SidebarPaginationState } from "./sidebar-pagination-skeleton"
 import { SidebarProject } from "./sidebar-project"
 import { SidebarProjectItem } from "./sidebar-project-item"
 
@@ -270,7 +271,7 @@ function MobileAppSidebarDrawer() {
 
 function useAppSidebarData() {
   const { isHistoryOpen } = useHistorySearch()
-  const { chats, isLoading, loadMore, canLoadMore } = useChats()
+  const { chats, isLoading, isLoadingMore, loadMore, canLoadMore } = useChats()
   const { user } = useUser()
   const params = useParams<{ chatId: string }>()
   const pathname = usePathname()
@@ -308,6 +309,7 @@ function useAppSidebarData() {
       !isOrganizationHydrated ||
       isLoading ||
       (isLoggedIn && projectDocs === undefined),
+    isLoadingMore,
     isLoggedIn,
     isNewChatActive,
     isProjectPinPending: isPinPending,
@@ -477,62 +479,70 @@ function SidebarExpandedNav({
           {data.isLoading ? (
             <div className="h-full" />
           ) : data.isLoggedIn ? (
-            <div className="mt-(--sidebar-section-stack-margin-top) flex flex-col gap-(--sidebar-section-stack-gap)">
-              {(data.composition.pinnedChats.length > 0 ||
-                data.composition.pinnedProjects.length > 0) && (
+            <>
+              <div className="mt-(--sidebar-section-stack-margin-top) flex flex-col gap-(--sidebar-section-stack-gap)">
+                {(data.composition.pinnedChats.length > 0 ||
+                  data.composition.pinnedProjects.length > 0) && (
+                  <SidebarList
+                    key="pinned"
+                    title="Pinned"
+                    items={data.composition.pinnedChats}
+                    presentation={{
+                      kind: "pinned",
+                      projectNames: data.composition.projectNames,
+                    }}
+                    beforeItems={data.composition.pinnedProjects.map(
+                      (project) => (
+                        <SidebarProjectItem
+                          key={project._id}
+                          project={project}
+                          isPinPending={data.isProjectPinPending(project._id)}
+                          onTogglePinned={() =>
+                            data.toggleProjectPinned(project)
+                          }
+                        />
+                      )
+                    )}
+                    currentChatId={data.currentChatId}
+                    storageKey="sidebar-section-pinned"
+                  />
+                )}
+                {data.chatOrganization === "by-project" ? (
+                  <SidebarProject
+                    isAuthenticated={data.isLoggedIn}
+                    organization={data.chatOrganization}
+                    projects={data.composition.sectionProjects}
+                    isPinPending={data.isProjectPinPending}
+                    onTogglePinned={data.toggleProjectPinned}
+                    onOrganizationChange={data.setChatOrganization}
+                  />
+                ) : null}
                 <SidebarList
-                  key="pinned"
-                  title="Pinned"
-                  items={data.composition.pinnedChats}
-                  presentation={{
-                    kind: "pinned",
-                    projectNames: data.composition.projectNames,
-                  }}
-                  beforeItems={data.composition.pinnedProjects.map(
-                    (project) => (
-                      <SidebarProjectItem
-                        key={project._id}
-                        project={project}
-                        isPinPending={data.isProjectPinPending(project._id)}
-                        onTogglePinned={() => data.toggleProjectPinned(project)}
-                      />
-                    )
-                  )}
+                  title={
+                    data.chatOrganization === "one-list" ? "Recents" : "Chats"
+                  }
+                  items={data.composition.historyChats}
+                  presentation={
+                    data.chatOrganization === "one-list"
+                      ? {
+                          kind: "history",
+                          projectNames: data.composition.projectNames,
+                        }
+                      : undefined
+                  }
                   currentChatId={data.currentChatId}
-                  storageKey="sidebar-section-pinned"
-                />
-              )}
-              {data.chatOrganization === "by-project" ? (
-                <SidebarProject
-                  isAuthenticated={data.isLoggedIn}
+                  storageKey="sidebar-section-your-chats"
+                  showHeaderActions
                   organization={data.chatOrganization}
-                  projects={data.composition.sectionProjects}
-                  isPinPending={data.isProjectPinPending}
-                  onTogglePinned={data.toggleProjectPinned}
                   onOrganizationChange={data.setChatOrganization}
+                  onNewChat={onMobileClose}
                 />
-              ) : null}
-              <SidebarList
-                title={
-                  data.chatOrganization === "one-list" ? "Recents" : "Chats"
-                }
-                items={data.composition.historyChats}
-                presentation={
-                  data.chatOrganization === "one-list"
-                    ? {
-                        kind: "history",
-                        projectNames: data.composition.projectNames,
-                      }
-                    : undefined
-                }
-                currentChatId={data.currentChatId}
-                storageKey="sidebar-section-your-chats"
-                showHeaderActions
-                organization={data.chatOrganization}
-                onOrganizationChange={data.setChatOrganization}
-                onNewChat={onMobileClose}
+              </div>
+              <SidebarPaginationState
+                isLoadingMore={data.isLoadingMore}
+                seed={data.composition.historyChats.length}
               />
-            </div>
+            </>
           ) : null}
         </div>
 

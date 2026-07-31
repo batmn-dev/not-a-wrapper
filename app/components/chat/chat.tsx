@@ -7,7 +7,6 @@ import {
 import { Conversation } from "@/app/components/chat/conversation"
 import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { useGlobalPromptFocus } from "@/app/hooks/use-global-prompt-focus"
-import { ScrollButton } from "@/components/ui/scroll-button"
 import { useStickyPaddingBottom } from "@/components/ui/scroll-root"
 import type { Id } from "@/convex/_generated/dataModel"
 import { useChats } from "@/lib/chat-store/chats/provider"
@@ -22,7 +21,6 @@ import type { Chats } from "@/lib/chat-store/types"
 import { isRouteDurableChat } from "@/lib/chat-turn/chat-turn-controller"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { useUser } from "@/lib/user-store/provider"
-import { cn } from "@/lib/utils"
 import { AnimatePresence, motion } from "motion/react"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
@@ -36,7 +34,7 @@ import {
 } from "./activity/activity-panel-store"
 import { ChatStatusAnnouncer } from "./chat-announcer"
 import { ProjectDetailSurface } from "./project-detail-surface"
-import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
+import { ThreadBottomContainer } from "./thread-bottom-container"
 import { TurnContextProvider, useTurnContext } from "./turn-context"
 import { useActivityPanel } from "./use-activity-panel"
 import { useChatCore } from "./use-chat-core"
@@ -366,7 +364,7 @@ function ChatInner({
       draftScopeId={project ? `project-${project.id}` : undefined}
       placeholder={projectComposerPlaceholder}
       ariaLabel={projectComposerLabel}
-      bottomSpacing={project ? "none" : undefined}
+      bottomSpacing="none"
       onTurn={submit}
       onSuggestion={handleSuggestion}
       isSubmitting={isSubmitting}
@@ -458,41 +456,12 @@ function ChatInner({
               )}
             </AnimatePresence>
 
-            <div
-              id="thread-bottom-container"
+            <ThreadBottomContainer
               ref={threadBottomRef}
-              className={cn(
-                `group/thread-bottom-container sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col px-[var(--thread-content-margin,1rem)] pb-[env(safe-area-inset-bottom,0px)] ${THREAD_GUTTER_VARS}`,
-                showOnboarding ? "sm:grow" : "content-fade"
-              )}
+              isOnboarding={showOnboarding}
             >
-              {!showOnboarding && (
-                <div className="relative h-0">
-                  <div className="pointer-events-none absolute inset-x-0 bottom-[calc(100%+1.5rem)] z-30 flex justify-center">
-                    <div className="pointer-events-auto">
-                      <ScrollButton />
-                    </div>
-                  </div>
-                </div>
-              )}
-              <div
-                id="thread-bottom"
-                className={`mx-auto w-full max-w-[var(--thread-content-max-width,40rem)] ${THREAD_MAXWIDTH_VARS}`}
-              >
-                {composer}
-              </div>
-              {!showOnboarding && (
-                <div className="text-muted-foreground relative -mt-4 w-full overflow-hidden text-center text-xs md:px-[60px]">
-                  <div className="flex min-h-8 w-full items-center justify-center p-2 select-none">
-                    <div className="pointer-events-auto">
-                      <div>
-                        Not A Wrapper can make mistakes. Check important info.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+              {composer}
+            </ThreadBottomContainer>
           </div>
         )}
       </div>
