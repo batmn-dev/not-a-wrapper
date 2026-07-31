@@ -10,6 +10,7 @@ export type ReplayCompileContext = {
 
 export type ReplayCompileWarningCode =
   | "tool_non_replayable"
+  | "tool_lowered_to_text"
   | "tool_dropped_invalid_role"
   | "invariant_block_dropped"
   | "invariant_reasoning_injected"

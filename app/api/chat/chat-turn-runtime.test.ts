@@ -406,6 +406,135 @@ describe("createChatTurnRuntime — prepare()", () => {
     expect(validateOrder).toBeGreaterThan(0)
     expect(convertOrder).toBeGreaterThan(0)
     expect(validateOrder).toBeLessThan(convertOrder)
+    // Boundary 1 is STRUCTURAL: the current turn's tool registry must never
+    // judge historical provider-native tool outputs (cross-provider
+    // `web_search` schemas are incompatible).
+    expect(
+      vi.mocked(validateUIMessages).mock.calls[0]?.[0]
+    ).not.toHaveProperty("tools")
+  })
+
+  it("lowers foreign hosted web_search history instead of failing validation (cross-provider regression)", async () => {
+    // The production incident: an Anthropic native web-search result in
+    // durable history, replayed on a turn whose registry holds the OpenAI
+    // `web_search` tool. Boundary 1 runs the REAL validateUIMessages here —
+    // pre-fix, it threw AI_TypeValidationError (Anthropic array output vs
+    // OpenAI object schema) before the request ever reached the provider.
+    const actualAi = await vi.importActual<typeof import("ai")>("ai")
+    vi.mocked(validateUIMessages).mockImplementationOnce(
+      actualAi.validateUIMessages as never
+    )
+    // Pass-through seams so the lowered history is observable at adaptation.
+    vi.mocked(prepareTextFilePartsForModelInput).mockImplementation(
+      async (messages: unknown) =>
+        ({
+          messages,
+          convertedCount: 0,
+          failedCount: 0,
+          truncatedCount: 0,
+          skippedCount: 0,
+        }) as never
+    )
+    vi.mocked(adaptHistoryForProvider).mockImplementation(
+      async (messages: unknown) =>
+        ({
+          messages,
+          stats: {
+            originalMessageCount: 0,
+            adaptedMessageCount: 0,
+            droppedMessages: 0,
+            partsDropped: {},
+            partsTransformed: {},
+            partsPreserved: {},
+            totalPartsOriginal: 0,
+            totalPartsAdapted: 0,
+            providerIdsStripped: 0,
+          },
+          warnings: [],
+        }) as never
+    )
+    const { openai } = await import("@ai-sdk/openai")
+    vi.mocked(prepareToolRuntime).mockResolvedValue(
+      makeToolRuntime({
+        tools: { web_search: openai.tools.webSearch({}) },
+        hasTools: true,
+      }) as unknown as Awaited<ReturnType<typeof prepareToolRuntime>>
+    )
+
+    const ENCRYPTED = "ENCRYPTED_CONTENT_SENTINEL"
+    const fetchMutation = vi.fn(async (ref: unknown) => {
+      if (sameRef(ref, api.chatRuntime.prepareGeneration)) {
+        return {
+          runId: "run1",
+          assistantMessageId: "msg2",
+          assistantOrder: 3,
+          messages: [
+            {
+              _id: "doc1",
+              role: "user",
+              content: "search for batman merch",
+              parts: [{ type: "text", text: "search for batman merch" }],
+              createdAt: Date.now() - 2000,
+              status: "completed",
+              metadata: {},
+            },
+            {
+              _id: "doc2",
+              role: "assistant",
+              content: "Here is what I found.",
+              parts: [
+                { type: "step-start" },
+                {
+                  type: "tool-web_search",
+                  state: "output-available",
+                  toolCallId: "srvtoolu_abc123",
+                  providerExecuted: true,
+                  input: { query: "batman merch" },
+                  output: [
+                    {
+                      type: "web_search_result",
+                      url: "https://example.com/merch",
+                      title: "Merch",
+                      pageAge: null,
+                      encryptedContent: ENCRYPTED,
+                    },
+                  ],
+                },
+                { type: "text", text: "Here is what I found." },
+              ],
+              createdAt: Date.now() - 1000,
+              status: "completed",
+              metadata: {},
+            },
+          ],
+        }
+      }
+      return undefined
+    })
+
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(makeStreamHarness(), fetchMutation),
+    })
+
+    // Pre-fix this rejected with AI_TypeValidationError; the raw message
+    // (embedding the full output value) then reached the HTTP 500 body.
+    await expect(runtime.prepare()).resolves.toBeUndefined()
+
+    // The lowering ran BEFORE adaptation: the adapter saw citation text, not
+    // the foreign hosted tool part, and no opaque payload survived.
+    const adapterInput = vi.mocked(adaptHistoryForProvider).mock
+      .calls[0]?.[0] as unknown as Array<{ parts: Array<{ type: string }> }>
+    expect(adapterInput).toBeDefined()
+    const adapterInputJson = JSON.stringify(adapterInput)
+    expect(adapterInputJson).not.toContain("tool-web_search")
+    expect(adapterInputJson).not.toContain(ENCRYPTED)
+    expect(adapterInputJson).not.toContain("srvtoolu_")
+    expect(adapterInputJson).toContain("https://example.com/merch")
+
+    // Boundary 2 accepted the lowered history — conversion ran, no plaintext
+    // degradation.
+    expect(vi.mocked(convertToModelMessages)).toHaveBeenCalled()
   })
 
   it("rejects a second prepare() — the runtime is one-shot", async () => {

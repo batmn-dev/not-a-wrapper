@@ -58,35 +58,33 @@ function splitByStepStart(parts: MessagePart[]): MessagePart[][] {
   return blocks
 }
 
-function buildToolReplayPart(
-  tool: ReplayToolExchange,
-  messageIndex: number,
-  partIndex: number
-): MessagePart | null {
-  if (!tool.replayable || tool.toolName !== "web_search" || !tool.webSearch)
-    return null
+// OpenAI web_search replay is LOWERED to provider-neutral text, never
+// reconstructed as a hosted tool part: the installed @ai-sdk/openai Responses
+// conversion turns provider-executed tool results into server-side
+// `item_reference` lookups keyed by item id, so a fabricated or foreign
+// toolCallId (srvtoolu_/replay_ws_) is a guaranteed 400 — and genuine ws_ ids
+// trip the runtime's provider-linked-id plaintext fallback anyway. Text
+// context with citations is the only replay shape that reliably reaches the
+// model.
+function synthesizeWebSearchContext(tool: ReplayToolExchange): string | null {
+  const webSearch = tool.webSearch
+  if (!webSearch) return null
 
-  const toolCallId =
-    tool.toolCallId?.trim() || `replay_ws_${messageIndex}_${partIndex}`
-  const query = tool.webSearch.query
-  const sources = tool.webSearch.results.map((result) => ({
-    url: result.url,
-    title: result.title,
-    snippet: result.snippet,
-  }))
+  const queryLabel =
+    webSearch.query.trim().length > 0 ? ` for "${webSearch.query}"` : ""
+  if (webSearch.results.length === 0) {
+    return `Replay note: web_search${queryLabel} was omitted for OpenAI-safe replay.`
+  }
 
-  return {
-    type: "tool-web_search",
-    state: "output-available",
-    toolCallId,
-    toolName: "web_search",
-    providerExecuted: true,
-    input: { query },
-    output: {
-      action: "search",
-      sources,
-    },
-  } as MessagePart
+  const lines = webSearch.results.slice(0, 3).map((result) => {
+    const title = result.title?.trim().length ? result.title.trim() : "Result"
+    const snippet = result.snippet?.trim().length
+      ? ` - ${result.snippet.trim()}`
+      : ""
+    return `- ${title} (${result.url})${snippet}`
+  })
+
+  return `Replay context from prior web_search${queryLabel}:\n${lines.join("\n")}`
 }
 
 function compileAssistantParts(
@@ -124,40 +122,39 @@ function compileAssistantParts(
     }
 
     stats.toolExchangesSeen += 1
-    const replayToolPart = buildToolReplayPart(
-      part.tool,
-      messageIndex,
-      partIndex
-    )
+    const tool = part.tool
 
-    if (!replayToolPart) {
-      stats.toolExchangesDropped += 1
-
-      const platformFallback = synthesizePlatformToolFallback(part.tool)
-      if (platformFallback) {
-        compiled.push({ type: "text", text: platformFallback } as MessagePart)
+    if (tool.replayable && tool.toolName === "web_search" && tool.webSearch) {
+      const contextText = synthesizeWebSearchContext(tool)
+      if (contextText) {
+        compiled.push({ type: "text", text: contextText } as MessagePart)
+        stats.toolExchangesCompiled += 1
+        warnings.push({
+          code: "tool_lowered_to_text",
+          messageIndex,
+          partIndex,
+          detail:
+            "Lowered web_search replay to text context for OpenAI (hosted-tool activity does not replay as tool parts).",
+        })
+        return
       }
-
-      warnings.push({
-        code: "tool_non_replayable",
-        messageIndex,
-        partIndex,
-        detail:
-          part.tool.nonReplayableReason ??
-          `Tool "${part.tool.toolName}" is not replayable for OpenAI.`,
-      })
-      return
     }
 
-    compiled.push({ type: "step-start" } as MessagePart)
-    compiled.push({
-      type: "reasoning",
-      state: "done",
-      text: "",
-      reasoning: `Replay tool result for "${part.tool.toolName}" continuity.`,
-    } as unknown as MessagePart)
-    compiled.push(replayToolPart)
-    stats.toolExchangesCompiled += 1
+    stats.toolExchangesDropped += 1
+
+    const platformFallback = synthesizePlatformToolFallback(tool)
+    if (platformFallback) {
+      compiled.push({ type: "text", text: platformFallback } as MessagePart)
+    }
+
+    warnings.push({
+      code: "tool_non_replayable",
+      messageIndex,
+      partIndex,
+      detail:
+        tool.nonReplayableReason ??
+        `Tool "${tool.toolName}" is not replayable for OpenAI.`,
+    })
   })
 
   return compiled

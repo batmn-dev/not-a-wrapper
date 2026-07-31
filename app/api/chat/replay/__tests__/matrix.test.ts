@@ -81,7 +81,7 @@ describe("replay compiler matrix", () => {
     ).toBe(true)
   })
 
-  it("Anthropic -> OpenAI preserves reasoning-before-tool replay invariants", async () => {
+  it("Anthropic -> OpenAI lowers web_search replay to text context", async () => {
     const history: UIMessage[] = [
       {
         id: "msg-matrix-a2o-user",
@@ -122,20 +122,31 @@ describe("replay compiler matrix", () => {
       { useReplayCompiler: true }
     )
     const assistant = findAssistant(result.messages)
-    const toolIndex =
-      assistant?.parts.findIndex(
-        (part) => part.type.startsWith("tool-") || part.type === "dynamic-tool"
-      ) ?? -1
 
     expect(
       result.warnings.some(
         (warning) => warning.code === "replay_compile_fallback"
       )
     ).toBe(false)
-    expect(toolIndex).toBeGreaterThan(0)
+    // Foreign hosted search never replays as an OpenAI tool part — it lowers
+    // to provider-neutral text context carrying the citations.
     expect(
-      (assistant?.parts.slice(0, toolIndex) ?? []).some(
-        (part) => part.type === "reasoning"
+      assistant?.parts.some(
+        (part) => part.type.startsWith("tool-") || part.type === "dynamic-tool"
+      )
+    ).toBe(false)
+    const contextText = (assistant?.parts ?? [])
+      .filter(
+        (part): part is { type: "text"; text: string } => part.type === "text"
+      )
+      .map((part) => part.text)
+      .join("\n")
+    expect(contextText).toContain("https://example.com/batman-availability")
+    expect(
+      result.warnings.some(
+        (warning) =>
+          warning.code === "replay_compile_warning" &&
+          warning.detail.includes("tool_lowered_to_text")
       )
     ).toBe(true)
   })

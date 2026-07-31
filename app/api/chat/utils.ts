@@ -238,9 +238,16 @@ export function extractErrorMessage(
 }
 
 /**
- * Create error response for API endpoints
- * @param error - Error object with optional statusCode and code
- * @returns Response object with proper status and JSON body
+ * Create error response for API endpoints.
+ *
+ * Message passthrough is a TRUST decision: only errors carrying our own
+ * `statusCode`/`code` contract (thrown deliberately by the runtime with
+ * client-safe messages — missing key, invalid model, admission rejections)
+ * echo their message. Anything else — SDK validation errors, provider
+ * failures, unexpected exceptions — is redacted to a generic body, because
+ * raw messages can embed request payloads (e.g. an AI SDK
+ * `TypeValidationError` serializes the entire offending value, including
+ * opaque provider content, into `error.message`).
  */
 export function createErrorResponse(error: {
   code?: string
@@ -255,7 +262,8 @@ export function createErrorResponse(error: {
     )
   }
 
-  // Handle stream errors with proper status codes
+  // Errors on our internal contract: an explicit statusCode marks a message
+  // written for the client.
   if (error.statusCode) {
     return new Response(
       JSON.stringify({
@@ -266,9 +274,12 @@ export function createErrorResponse(error: {
     )
   }
 
-  // Fallback for other errors
+  // Everything else is an internal failure — never echo its message.
   return new Response(
-    JSON.stringify({ error: error.message || "Internal server error" }),
+    JSON.stringify({
+      error: "An unexpected error occurred. Please try again.",
+      code: "INTERNAL_ERROR",
+    }),
     { status: 500 }
   )
 }

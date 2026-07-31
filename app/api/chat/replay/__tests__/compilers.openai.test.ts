@@ -14,7 +14,7 @@ function hasToolPart(parts: Array<{ type: string }>): boolean {
 }
 
 describe("openai replay compiler", () => {
-  it("injects reasoning before replayed tool blocks and keeps final tool output", async () => {
+  it("lowers replayable web_search exchanges to text context with citations", async () => {
     const messages: ReplayMessage[] = [
       {
         id: "msg-openai-compile-1",
@@ -46,22 +46,24 @@ describe("openai replay compiler", () => {
 
     const result = await compileReplay(messages, "openai", context)
     const assistant = result.messages[0]
-    const toolIndex = assistant.parts.findIndex(
-      (part) => part.type.startsWith("tool-") || part.type === "dynamic-tool"
-    )
-    const toolPart = assistant.parts[toolIndex] as {
-      state?: string
-      output?: unknown
-    }
 
-    expect(toolIndex).toBeGreaterThan(0)
+    // Never fabricate an OpenAI hosted tool call: the Responses conversion
+    // would replay it as an item_reference with a foreign id and 400.
+    expect(hasToolPart(assistant.parts)).toBe(false)
+    const contextText = assistant.parts
+      .filter(
+        (part): part is { type: "text"; text: string } => part.type === "text"
+      )
+      .map((part) => part.text)
+      .join("\n")
+    expect(contextText).toContain('web_search for "Batman Amazon links"')
+    expect(contextText).toContain("https://amazon.com/batman-item")
+    expect(contextText).toContain("Batman Item")
     expect(
-      assistant.parts
-        .slice(0, toolIndex)
-        .some((part) => part.type === "reasoning")
+      result.warnings.some(
+        (warning) => warning.code === "tool_lowered_to_text"
+      )
     ).toBe(true)
-    expect(toolPart.state).toBe("output-available")
-    expect(toolPart.output).toBeDefined()
     expect(result.stats.toolExchangesSeen).toBe(1)
     expect(result.stats.toolExchangesCompiled).toBe(1)
     expect(result.stats.toolExchangesDropped).toBe(0)

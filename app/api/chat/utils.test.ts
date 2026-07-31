@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai"
 import { describe, expect, it } from "vitest"
 import {
+  createErrorResponse,
   excludeSystemRoleMessages,
   hasProviderLinkedResponseIds,
   isConvexArgumentValidationError,
@@ -119,5 +120,48 @@ describe("excludeSystemRoleMessages", () => {
     const result = excludeSystemRoleMessages(messages)
     expect(result.excludedCount).toBe(1)
     expect(result.messages.map((m) => m.role)).toEqual(["user", "assistant"])
+  })
+})
+
+describe("createErrorResponse", () => {
+  it("echoes messages only for errors on the internal statusCode contract", async () => {
+    const response = createErrorResponse({
+      message: "No API key configured for OpenAI.",
+      statusCode: 401,
+      code: "MISSING_API_KEY",
+    })
+    expect(response.status).toBe(401)
+    await expect(response.json()).resolves.toEqual({
+      error: "No API key configured for OpenAI.",
+      code: "MISSING_API_KEY",
+    })
+  })
+
+  it("redacts messages from errors without a statusCode (internal failures)", async () => {
+    // A raw AI SDK TypeValidationError message embeds the entire offending
+    // value — encrypted provider payloads included. It must never reach the
+    // client.
+    const response = createErrorResponse({
+      message:
+        'Type validation failed for messages[3].parts[2].output (web_search, id: "srvtoolu_x"): Value: [{"encryptedContent":"SECRET"}].',
+    })
+    expect(response.status).toBe(500)
+    const body = (await response.json()) as { error: string; code: string }
+    expect(body.code).toBe("INTERNAL_ERROR")
+    expect(body.error).not.toContain("SECRET")
+    expect(body.error).not.toContain("srvtoolu_")
+    expect(body.error).toBe("An unexpected error occurred. Please try again.")
+  })
+
+  it("keeps the DAILY_LIMIT_REACHED passthrough", async () => {
+    const response = createErrorResponse({
+      message: "Daily limit reached.",
+      code: "DAILY_LIMIT_REACHED",
+    })
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      error: "Daily limit reached.",
+      code: "DAILY_LIMIT_REACHED",
+    })
   })
 })

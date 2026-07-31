@@ -59,6 +59,7 @@ import {
   generateText as defaultGenerateText,
   isStepCount,
   UIMessage as MessageAISDK,
+  safeValidateUIMessages,
   toUIMessageStream,
   validateUIMessages,
   type ModelMessage,
@@ -70,6 +71,7 @@ import {
 } from "convex/nextjs"
 import { after } from "next/server"
 import { adaptHistoryForProvider } from "./adapters"
+import { lowerForeignHostedToolParts } from "./hosted-tool-lowering"
 import { createWordChunkingTransform } from "./word-chunking-transform"
 import type { AdaptationContext, AdaptationWarning } from "./adapters/types"
 import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
@@ -613,12 +615,16 @@ export function createChatTurnRuntime(args: {
     }
     canonicalMessages = systemRoleExclusion.messages
 
+    // Boundary 1 — STRUCTURAL validation of canonical durable history. The
+    // current turn's tool registry is deliberately absent: history may carry
+    // provider-executed tool outputs in a FOREIGN provider's wire shape (the
+    // shared `web_search` key has an incompatible schema per provider), and
+    // judging historical outputs by the newly selected provider's schema
+    // rejects valid conversations. Tool-schema validation runs at Boundary 2
+    // below, after history has been adapted for the target provider.
     const validatedMessages = await perf.span("message_validation", () =>
       validateUIMessages({
         messages: canonicalMessages,
-        tools: tool.tools as unknown as Parameters<
-          typeof validateUIMessages
-        >[0]["tools"],
       })
     )
 
@@ -682,9 +688,32 @@ export function createChatTurnRuntime(args: {
         ? textFileModelInput.messages.slice(0, -1)
         : textFileModelInput.messages
 
+    // Foreign hosted-tool lowering: provider-executed tool activity the
+    // CURRENT registry does not accept (cross-provider `web_search`, schema
+    // drift, tool absent this turn) is lowered to provider-neutral continuity
+    // text before adaptation. Target-native tool calls are never fabricated
+    // and foreign provider ids never replay (the OpenAI Responses conversion
+    // would turn them into server-side `item_reference` lookups that 400).
+    const hostedLowering = await lowerForeignHostedToolParts(
+      historyForAdaptation,
+      tool.tools
+    )
+    if (hostedLowering.loweredCount > 0) {
+      console.log(
+        JSON.stringify({
+          _tag: "hosted_tool_history_lowered",
+          chatId,
+          provider: resolvedProvider,
+          model,
+          loweredCount: hostedLowering.loweredCount,
+          details: hostedLowering.details,
+        })
+      )
+    }
+
     const adaptStartTime = Date.now()
     const adapterResult = await adaptHistoryForProvider(
-      historyForAdaptation,
+      hostedLowering.messages,
       resolvedProvider,
       adaptationContext,
       {
@@ -795,14 +824,74 @@ export function createChatTurnRuntime(args: {
       })
     }
 
-    // Convert UIMessage[] to ModelMessage[] for streamText
-    let modelMessages: ModelMessage[] = await convertToModelMessages(
-      adaptedMessagesWithTail,
-      {
+    // Boundary 2 — MODEL-BOUND validation: the adapted history plus the live
+    // continuation tail, checked against the CURRENT tool registry immediately
+    // before conversion. After lowering + adaptation this should always pass;
+    // a failure means a pipeline bug, so the turn degrades to a plaintext
+    // transcript (tail preserved) instead of 500ing, and the log carries only
+    // the error's context prefix — never the payload-bearing `Value:` section.
+    // An empty array skips validation: there are no parts to schema-check and
+    // the SDK's structural min-1 rule belongs to Boundary 1 admission, not to
+    // this pre-conversion invariant.
+    const modelBoundValidation =
+      adaptedMessagesWithTail.length === 0
+        ? { success: true as const }
+        : await perf.span("model_bound_validation", () =>
+            safeValidateUIMessages({
+              messages: adaptedMessagesWithTail,
+              tools: tool.tools as unknown as Parameters<
+                typeof safeValidateUIMessages
+              >[0]["tools"],
+            })
+          )
+
+    let modelMessages: ModelMessage[]
+    if (modelBoundValidation.success) {
+      // Convert UIMessage[] to ModelMessage[] for streamText
+      modelMessages = await convertToModelMessages(adaptedMessagesWithTail, {
         tools: tool.tools,
         ignoreIncompleteToolCalls: true,
-      }
-    )
+      })
+    } else {
+      const validationError = modelBoundValidation.error
+      const errorContext =
+        validationError.message.split(": Value:")[0]?.slice(0, 300) ??
+        validationError.name
+      console.warn(
+        JSON.stringify({
+          _tag: "model_bound_validation_failed",
+          chatId,
+          provider: resolvedProvider,
+          model,
+          compilerEnabled: HISTORY_REPLAY_COMPILER_V1,
+          errorName: validationError.name,
+          errorContext,
+        })
+      )
+      Sentry.captureMessage("chat_model_bound_validation_failed", {
+        level: "warning",
+        tags: {
+          route: "api/chat",
+          chat_provider: resolvedProvider,
+          chat_model: model,
+        },
+        extra: { requestId, chatId, errorName: validationError.name, errorContext },
+      })
+      const tailModelMessages =
+        continuationTail.length > 0
+          ? await convertToModelMessages(
+              continuationTail.map(stripProviderLinkedMetadataFromMessage),
+              {
+                tools: tool.tools,
+                ignoreIncompleteToolCalls: true,
+              }
+            )
+          : []
+      modelMessages = [
+        ...toPlainTextModelMessages(adapterResult.messages),
+        ...tailModelMessages,
+      ]
+    }
 
     // OpenAI responses replay hardening:
     // If conversion output still contains provider-linked response IDs
