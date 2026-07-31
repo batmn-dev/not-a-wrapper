@@ -1,6 +1,10 @@
 # 17. Chat surface owns its chrome
 
-- Status: accepted
+- Status: accepted (amended 2026-07-30: header DOM moved back OUTSIDE the
+  `<main>` landmark — review found the original in-`#thread` placement made
+  the `#main` skip link land before the header's nav controls and stripped
+  `<header>`'s implicit banner role. The decision stays Chat's; the DOM
+  position is the shell's, bridged by `chat-chrome-host.tsx`.)
 - Date: 2026-07-30
 - Related: ADR-0012 (atomic first-turn creation — the shallow pushState handoff
   this decision accommodates), ADR-0013 (back-navigation detach — the other
@@ -25,13 +29,21 @@ avoided this because its header choice coincidentally matched the thread's.
 
 ## Decision
 
-Chat-bearing routes (`/`, `/c/[chatId]`, `/p/[projectId]`) pass
-`header={null}` and delegate the app header to Chat. Chat derives BOTH the
-surface and its header from one pure resolver,
+Chat derives BOTH the surface and its header from one pure resolver,
 `resolveChatChrome({ chatId, messageCount, hasProject })`
-(`app/components/chat/chat-chrome.ts`), and renders `<Header/>` inside its own
-tree (first child of `#thread`, sticky within the shared ScrollRoot — the same
-placement the project surface's mobile header already proved out).
+(`app/components/chat/chat-chrome.ts`). The DECISION is Chat's; the header's
+DOM POSITION is the shell's: chat-bearing routes (`/`, `/c/[chatId]`,
+`/p/[projectId]`) wrap LayoutApp in `<ChatChromeProvider initialAppHeader=…>`
+and pass `header={<ChatChromeHeader/>}` (`chat-chrome-host.tsx`, mirroring the
+ActivityPanelDockSlot host pattern). Chat publishes the resolved `appHeader`
+fact from a pre-paint layout effect; the slot renders it BEFORE
+`<main id="main">`, so the `#main` skip link bypasses the header and
+`<header>` keeps its implicit banner role — nesting it inside `<main>`
+forfeits both (found in review of the first cut, which rendered it inside
+`#thread`). ChatGPT's live DOM uses the same skip-link + header-before-main
+structure (verified 2026-07-30). `initialAppHeader` mirrors the route's
+SSR-known first surface (`/p/` false — always project onboarding; `/` and
+`/c/` true), so server HTML, hydration, and the first client render agree.
 
 Rules:
 
@@ -49,11 +61,10 @@ Rules:
 
 - A client-side flip can never show a thread without the thread's header; the
   invariant is pinned by `chat-chrome.test.ts`.
-- The header moved from a ScrollRoot sibling of `<main>` into `#thread`.
-  Sticky/scroll-shadow behavior is unchanged (`useScrollRoot` is
-  context-based, and the `/main` container queries name their container), but
-  the header now shares the thread's stacking context — future z-index work
-  should account for it.
+- The header's DOM position is unchanged from pre-ADR days (ScrollRoot child
+  before `<main>`): sticky, scroll-shadow, stacking context, skip link, and
+  banner landmark all behave as they always did. Only the visibility decision
+  moved (into Chat's resolver, bridged by the chrome host context).
 - Alternatives considered: a slot-fill context (keeps header DOM in the shell
   but preserves two agreeing-by-convention sites); a real Next.js navigation on
   first turn (rejected — the shallow handoff is load-bearing for stream,

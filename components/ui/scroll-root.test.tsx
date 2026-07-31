@@ -147,9 +147,7 @@ describe("ScrollRoot viewport and footer measurement", () => {
         originalClientHeight
       )
     } else {
-      delete (
-        document.documentElement as HTMLElement & { clientHeight?: number }
-      ).clientHeight
+      Reflect.deleteProperty(document.documentElement, "clientHeight")
     }
     vi.restoreAllMocks()
     vi.unstubAllGlobals()

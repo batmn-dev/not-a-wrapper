@@ -6,9 +6,23 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import ChatLayout from "./layout"
 
 vi.mock("@/app/components/layout/layout-app", () => ({
-  LayoutApp: ({ children }: { children: React.ReactNode }) => (
-    <nav aria-label="Chat history">{children}</nav>
+  LayoutApp: ({
+    children,
+    header,
+  }: {
+    children: React.ReactNode
+    header?: React.ReactNode
+  }) => (
+    <nav aria-label="Chat history">
+      {header}
+      {children}
+    </nav>
   ),
+}))
+
+vi.mock("@/app/components/chat/chat-chrome-host", () => ({
+  ChatChromeProvider: ({ children }: { children: React.ReactNode }) => children,
+  ChatChromeHeader: () => <div data-chat-chrome-header="" />,
 }))
 
 vi.mock("@/lib/chat-store/messages/provider", () => ({
@@ -63,6 +77,7 @@ describe("chat route layout ownership", () => {
 
     expect(settledScrollRoot).toBe(originalScrollRoot)
     expect(settledScrollRoot?.scrollTop).toBe(312)
+    expect(container.querySelector("[data-chat-chrome-header]")).not.toBeNull()
     expect(container.querySelector("[data-route='first']")).toBeNull()
     expect(container.querySelector("[data-route='second']")).not.toBeNull()
   })

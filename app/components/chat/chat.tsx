@@ -33,9 +33,9 @@ import {
   useActivityPanelOpen,
   useActivityPanelSelectedTurnId,
 } from "./activity/activity-panel-store"
-import { Header } from "@/app/components/layout/header"
 import { ChatStatusAnnouncer } from "./chat-announcer"
 import { resolveChatChrome } from "./chat-chrome"
+import { useSetChatChromeAppHeader } from "./chat-chrome-host"
 import { ProjectChatDirectory } from "./project-chat-directory"
 import { ProjectDetailSurface } from "./project-detail-surface"
 import { ThreadBottomContainer } from "./thread-bottom-container"
@@ -357,6 +357,16 @@ function ChatInner({
   const showOnboarding = chrome.surface !== "thread"
   const projectOnboarding = chrome.surface === "project-onboarding"
 
+  // Publish the header fact to the shell's pre-<main> slot (chat-chrome-host).
+  // The header must stay OUTSIDE the main landmark for the skip link and
+  // banner role; layout-effect timing keeps the flip in the same paint as the
+  // surface swap. The route's SSR initialAppHeader matches this value on first
+  // render, so the effect is a no-op until a real client-side flip.
+  const setAppHeader = useSetChatChromeAppHeader()
+  useBrowserLayoutEffect(() => {
+    setAppHeader?.(chrome.appHeader)
+  }, [setAppHeader, chrome.appHeader])
+
   // The sticky composer stack's measured footprint becomes
   // `--sticky-padding-bottom` (inline on the scroll root), the value the whole
   // scroll-margin/gutter system derives its bottom inset from. Disabled during
@@ -412,13 +422,6 @@ function ChatInner({
         // consumes it with the same 1/3 fallback).
         style={{ "--thread-show-context-pct": "1/3" } as React.CSSProperties}
       >
-        {/* Chat owns the app header on chat routes (ADR-0017): the routes pass
-            LayoutApp header={null}, and this renders from the same chrome
-            decision as the surface — so the send-frame flip and the shallow
-            first-turn handoff always carry the right header with them. */}
-        {chrome.appHeader ? (
-          <Header hasSidebar={preferences.layout === "sidebar"} />
-        ) : null}
         <ChatStatusAnnouncer
           status={effectiveStatus}
           isSubmitting={isSubmitting}

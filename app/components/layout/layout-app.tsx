@@ -20,10 +20,12 @@ export function LayoutApp({
    * lets a page own its header composition (e.g. /projects renders its own
    * in-flow compact bar) without pathname conditionals in the shell.
    *
-   * Chat-bearing routes MUST pass `null` and let Chat render the header from
-   * its chrome resolver (ADR-0017): their visible surface flips on client
-   * state within shallow route handoffs, which a slot fixed at page render
-   * cannot follow.
+   * Chat-bearing routes MUST pass `<ChatChromeHeader/>` inside a
+   * `<ChatChromeProvider/>` (ADR-0017): their visible surface flips on client
+   * state within shallow route handoffs, which a static slot cannot follow —
+   * and the header must render HERE, before the `<main>` landmark, so the
+   * skip-to-content link bypasses it and it keeps its implicit banner role.
+   * Never render the app header inside `<main>`.
    */
   header?: React.ReactNode
 }) {
