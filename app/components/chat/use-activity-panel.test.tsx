@@ -237,6 +237,25 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.panelCanOpen).toBe(false)
   })
 
+  it("keeps one timing value for mixed search activity", () => {
+    render({
+      messages: [
+        user("u1"),
+        assistant("a1", {
+          durationMs: 1600,
+          reasoningText: "",
+          sourceUrl: "https://example.com",
+        }),
+      ],
+      status: "ready",
+      isSubmitting: false,
+    })
+
+    expect(latest!.panelCanOpen).toBe(true)
+    expect(latest!.panelProps.activity?.completion?.title).toBe("Worked for 1s")
+    expect(latest!.panelProps.durationSeconds).toBe(1)
+  })
+
   it("keeps a historical stopped turn terminal while a newer turn streams", () => {
     render({
       messages: [

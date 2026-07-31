@@ -19,7 +19,7 @@
  * 2026-07-23-pr2-pr3-verification.md,
  * 2026-07-23-section6-freeze-rootcause.md). Note the throttled highlight only
  * bounds Shiki work — the per-delta React commit cost is bounded by the
- * message throttle (`lib/chat-performance/message-throttle.ts`); the
+ * frame-aligned message subscription (`lib/chat-performance/message-throttle.ts`); the
  * mode-only cell without it froze like legacy
  * (2026-07-23-perf-followup-measurements.md §3).
  */

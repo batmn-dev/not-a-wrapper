@@ -1188,11 +1188,11 @@ export function createChatTurnRuntime(args: {
         // approval-persistence transform (its backpressure array
         // module-private). Guest returns `{}` — guest chats run ungated.
         ...lifecycle.streamTextExtras,
-        // Word-granular re-chunking of coarse provider text slabs (ADR-0016
-        // provider-smoothing escape hatch), composed BEFORE the lifecycle's
-        // approval-persistence transform so the durable tracker and the wire
-        // both see the same word-granular deltas. Self-gating: already-fine
-        // deltas pass through synchronously untouched.
+        // Adaptive text smoothing across arbitrary provider delta boundaries
+        // (ADR-0016), composed BEFORE the lifecycle's approval-persistence
+        // transform so the durable tracker and the wire observe the same
+        // paced bytes. Partial words have a bounded holdback; abort clears
+        // both holdback and pacing timers before later control parts surface.
         experimental_transform: lifecycle.streamTextExtras
           .experimental_transform
           ? [

@@ -93,18 +93,6 @@ vi.mock("./turn-context", () => ({
   }),
 }))
 
-// The shipped throttle is a plain 16 ms constant. The throttle suite below
-// still pins the SDK's coalescing semantics across 0/16/32/50 ms, so it is
-// mocked with a live getter; tests set the value BEFORE mounting and never
-// change it mid-mount (a mounted subscription's interval is stable in
-// production by construction — it's a module constant).
-const throttleMock = vi.hoisted(() => ({ value: 0 }))
-vi.mock("@/lib/chat-performance/message-throttle", () => ({
-  get CHAT_MESSAGE_THROTTLE_MS() {
-    return throttleMock.value
-  },
-}))
-
 vi.mock("@/convex/_generated/api", () => ({
   api: {
     chatRuntime: {
@@ -301,7 +289,10 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
     ;(
       globalThis as { requestAnimationFrame?: typeof requestAnimationFrame }
     ).requestAnimationFrame = (callback: FrameRequestCallback) =>
-      window.setTimeout(() => callback(performance.now()), 0)
+      window.setTimeout(() => callback(performance.now()), 16)
+    ;(
+      globalThis as { cancelAnimationFrame?: typeof cancelAnimationFrame }
+    ).cancelAnimationFrame = (id: number) => window.clearTimeout(id)
     // lib/chat-store/persist touches indexedDB at module scope — shim it
     // before the hook module (and its chat-store chain) loads.
     const objectStoreNames = Object.assign(["chats", "messages", "sync"], {
@@ -359,7 +350,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
 
   // Delivered-message-notification recorder (plan PR 2): one entry per render
   // in which React observed a NEW messages array identity — the exact seam the
-  // throttle batches. `atMs` is the (fake-timer) virtual clock at delivery.
+  // frame subscription batches. `atMs` is the virtual clock at delivery.
   type MessagesFrame = { messages: UIMessage[]; status: string; atMs: number }
   const framesRecorder: { current: MessagesFrame[] | null } = { current: null }
 
@@ -836,16 +827,14 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
   })
 
   // -------------------------------------------------------------------------
-  // Message-notification throttle (chat-responsiveness plan, PR 2).
+  // Frame-aligned message publication.
   //
-  // Pins the installed @ai-sdk/react@4.0.23 seam the flag relies on: a
-  // SUPPLIED Chat receives `throttle` on its messages callback registration
-  // (leading + trailing via throttleit), while status/error subscriptions,
-  // onFinish, Stop, approvals, and auto-send continuation stay immediate.
-  // All timers are fake, so notification counts and delivery times are exact
-  // virtual-clock facts, not race outcomes.
+  // AI SDK's Chat remains canonical per stream part. The adapter publishes
+  // that latest snapshot once per paint while status/error, onFinish, Stop,
+  // approvals, and auto-send continuation stay immediate. All timers are fake,
+  // so delivery counts and times are exact virtual-clock facts.
   // -------------------------------------------------------------------------
-  describe("message-notification throttle (plan PR 2)", () => {
+  describe("frame-aligned message publication", () => {
     beforeEach(() => {
       vi.useFakeTimers({
         toFake: [
@@ -861,12 +850,11 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
 
     afterEach(() => {
       vi.useRealTimers()
-      throttleMock.value = 0
       framesRecorder.current = null
     })
 
     /** Local mount that a test can unmount mid-test (matrix runs, remounts). */
-    function mountThrottleHarness() {
+    function mountFrameHarness() {
       const localContainer = document.createElement("div")
       document.body.appendChild(localContainer)
       const localRoot = createRoot(localContainer)
@@ -932,127 +920,65 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       )
     }
 
-    it("coalesces streamed notifications per interval and delivers the identical final message (0/16/32/50 ms × 10/30/100 chunks/s)", async () => {
-      const deltas = Array.from({ length: 30 }, (_, i) => `piece-${i} `)
-      const cadences = [
-        { cps: 100, delayMs: 10 },
-        { cps: 30, delayMs: 33 },
-        { cps: 10, delayMs: 100 },
-      ]
-      const values = [0, 16, 32, 50]
-      type ComboResult = {
-        cps: number
-        value: number
-        notifications: number
-        firstTextDelayMs: number
-        final: unknown
-      }
-      const results: ComboResult[] = []
-
-      for (const cadence of cadences) {
-        for (const value of values) {
-          throttleMock.value = value
-          fetchMock.mockImplementation(async (_url, init) =>
-            withAbortSemantics(
-              makeUiMessageSseResponse({
-                deltas,
-                chunkDelayInMs: cadence.delayMs,
-              }),
-              init?.signal
-            )
-          )
-          framesRecorder.current = []
-          const mounted = mountThrottleHarness()
-          const startedAtMs = Date.now()
-          await act(async () => {
-            void hookApiRef.current?.sendMessage({ text: "hi" })
-          })
-          // Whole stream (30 deltas + protocol chunks), then the trailing
-          // window of the largest candidate.
-          await advanceFake(cadence.delayMs * (deltas.length + 4) + 50)
-          await advanceFake(value + 50)
-
-          const finish = seamMocks.chatTurnController.finishChatTurn
-          expect(finish).toHaveBeenCalledTimes(1)
-          const finishArgs = finish.mock.calls[0][0] as { message: UIMessage }
-
-          const frames = framesRecorder.current
-          if (!frames) throw new Error("frames recorder was not installed")
-          const lastFrame = frames[frames.length - 1]
-          // The trailing update must leave the RENDERED conversation exactly
-          // at the finished message — nothing lost, nothing stale.
-          expect(assistantText(lastFrame.messages)).toBe(deltas.join(""))
-          expect(assistantText([finishArgs.message])).toBe(deltas.join(""))
-
-          const firstTextFrame = frames.find(
-            (frame) => assistantText(frame.messages).length > 0
-          )
-          if (!firstTextFrame) throw new Error("no assistant text frame seen")
-
-          results.push({
-            cps: cadence.cps,
-            value,
-            notifications: frames.length,
-            firstTextDelayMs: firstTextFrame.atMs - startedAtMs,
-            final: normalizeMessage(finishArgs.message),
-          })
-          mounted.unmount()
-          finish.mockClear()
-        }
-      }
-
-      for (const cadence of cadences) {
-        const byValue = new Map(
-          results
-            .filter((result) => result.cps === cadence.cps)
-            .map((result) => [result.value, result])
+    it("coalesces a high-cadence stream to paint frames and delivers the identical final message", async () => {
+      const deltas = Array.from({ length: 60 }, (_, i) => `piece-${i} `)
+      fetchMock.mockImplementation(async (_url, init) =>
+        withAbortSemantics(
+          makeUiMessageSseResponse({
+            deltas,
+            chunkDelayInMs: 1,
+          }),
+          init?.signal
         )
-        const baseline = byValue.get(0)
-        if (!baseline) throw new Error("missing 0 ms baseline")
-
-        // Unthrottled: at least one delivered notification per delta.
-        expect(baseline.notifications).toBeGreaterThanOrEqual(deltas.length)
-
-        for (const value of values) {
-          const result = byValue.get(value)
-          if (!result) throw new Error(`missing result for ${value} ms`)
-          // Universal correctness gate: the final UIMessage is byte-identical
-          // to the 0 ms baseline (modulo per-run random ids).
-          expect(result.final).toEqual(baseline.final)
-          // First-chunk-to-visible-text bounded by the interval plus the
-          // stream's own first-text arrival (start + text-start chunks) and a
-          // fixed allowance (plan PR 2 acceptance).
-          expect(result.firstTextDelayMs).toBeLessThanOrEqual(
-            2 * cadence.delayMs + value + 60
-          )
-          // Coalescing: whenever the interval exceeds the chunk period, the
-          // delivered count is bounded by the theoretical window count (one
-          // leading/trailing delivery per interval over the stream's virtual
-          // duration) plus a fixed protocol/status-render overhead — and is
-          // strictly below the per-delta baseline.
-          if (value > cadence.delayMs) {
-            const streamDurationMs = cadence.delayMs * (deltas.length + 4)
-            expect(result.notifications).toBeLessThanOrEqual(
-              Math.ceil(streamDurationMs / value) + 8
-            )
-            expect(result.notifications).toBeLessThan(baseline.notifications)
-          }
-        }
-      }
-
-      // Raw matrix for the PR 2 selection note
-      // (docs/measurements/2026-07-23-pr2-throttle-selection.md).
-      console.log(
-        "[pr2-throttle-selection] " +
-          JSON.stringify(results.map(({ final: _final, ...rest }) => rest))
       )
+      framesRecorder.current = []
+      const mounted = mountFrameHarness()
+      const startedAtMs = Date.now()
+
+      await act(async () => {
+        void hookApiRef.current?.sendMessage({ text: "hi" })
+      })
+      await advanceFake(250)
+
+      const finish = seamMocks.chatTurnController.finishChatTurn
+      expect(finish).toHaveBeenCalledTimes(1)
+      const finishMessage = (finish.mock.calls[0][0] as { message: UIMessage })
+        .message
+      const frames = framesRecorder.current
+      if (!frames) throw new Error("frames recorder was not installed")
+      const lastFrame = frames[frames.length - 1]
+      const renderedAssistant = [...lastFrame.messages]
+        .reverse()
+        .find((message) => message.role === "assistant")
+      if (!renderedAssistant) throw new Error("assistant frame missing")
+
+      expect(assistantText(lastFrame.messages)).toBe(deltas.join(""))
+      expect(normalizeMessage(renderedAssistant)).toEqual(
+        normalizeMessage(finishMessage)
+      )
+      expect(frames.length).toBeLessThan(deltas.length / 2)
+
+      const firstTextFrame = frames.find(
+        (frame) => assistantText(frame.messages).length > 0
+      )
+      if (!firstTextFrame) throw new Error("first text frame missing")
+      expect(firstTextFrame.atMs - startedAtMs).toBeLessThanOrEqual(32)
+
+      const streamingTextFrames = frames.filter(
+        (frame) =>
+          frame.status === "streaming" &&
+          assistantText(frame.messages).length > 0
+      )
+      for (let index = 1; index < streamingTextFrames.length; index++) {
+        expect(
+          streamingTextFrames[index].atMs - streamingTextFrames[index - 1].atMs
+        ).toBeGreaterThanOrEqual(16)
+      }
+      mounted.unmount()
     })
 
-    it("keeps status and error subscriptions immediate while messages are throttled at 100 ms", async () => {
-      throttleMock.value = 100
-
-      // (a) Status flips to "streaming" mid-window, long before the next
-      // throttled messages notification is due.
+    it("keeps status and error subscriptions immediate between paints", async () => {
+      // (a) Status flips to "streaming" before the next frame publication.
       fetchMock.mockImplementation(async (_url, init) =>
         withAbortSemantics(
           makeUiMessageSseResponse({
@@ -1063,7 +989,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
         )
       )
       framesRecorder.current = []
-      const mounted = mountThrottleHarness()
+      const mounted = mountFrameHarness()
       await act(async () => {
         void hookApiRef.current?.sendMessage({ text: "hi" })
       })
@@ -1078,11 +1004,11 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       seamMocks.chatTurnController.finishChatTurn.mockClear()
 
       // (b) A transport error surfaces without any timer advance: the error
-      // subscription is not throttled.
+      // subscription is not frame-coalesced.
       fetchMock.mockImplementation(
         async () => new Response("model exploded", { status: 500 })
       )
-      const errorMount = mountThrottleHarness()
+      const errorMount = mountFrameHarness()
       await act(async () => {
         void hookApiRef.current?.sendMessage({ text: "hi" })
       })
@@ -1098,8 +1024,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       errorMount.unmount()
     })
 
-    it("terminal status render reads the latest canonical snapshot before the 16 ms trailing notification", async () => {
-      throttleMock.value = 16
+    it("terminal status flushes the latest canonical snapshot before the pending frame", async () => {
       const finalText = "terminal snapshot"
       fetchMock.mockImplementation(async (_url, init) =>
         withAbortSemantics(
@@ -1111,13 +1036,13 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
         )
       )
       framesRecorder.current = []
-      const mounted = mountThrottleHarness()
+      const mounted = mountFrameHarness()
 
       await act(async () => {
         void hookApiRef.current?.sendMessage({ text: "hi" })
       })
       // simulateReadableStream schedules its null-delay chunks at 0 ms. Flush
-      // those without crossing the pending 16 ms messages notification.
+      // those without crossing the pending frame publication.
       await advanceFake(0)
 
       // No timer advance: the immediate status transition causes React to
@@ -1137,14 +1062,13 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       mounted.unmount()
     })
 
-    it("transport error render preserves delivered partial text before the 16 ms trailing notification", async () => {
-      throttleMock.value = 16
+    it("transport error flushes delivered partial text before the pending frame", async () => {
       const partialText = "delivered partial"
       fetchMock.mockImplementation(async () =>
         makePartialUiMessageErrorResponse(partialText)
       )
       framesRecorder.current = []
-      const mounted = mountThrottleHarness()
+      const mounted = mountFrameHarness()
 
       await act(async () => {
         void hookApiRef.current?.sendMessage({ text: "hi" })
@@ -1164,8 +1088,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       mounted.unmount()
     })
 
-    it("Stop mid-stream at 16 ms settles isAbort and the terminal render preserves exactly the partial output", async () => {
-      throttleMock.value = 16
+    it("Stop mid-stream settles isAbort and synchronously preserves the exact partial output", async () => {
       fetchMock.mockImplementation(async (_url, init) =>
         withAbortSemantics(
           makeUiMessageSseResponse({
@@ -1176,7 +1099,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
         )
       )
       framesRecorder.current = []
-      const mounted = mountThrottleHarness()
+      const mounted = mountFrameHarness()
       await act(async () => {
         void hookApiRef.current?.sendMessage({ text: "hi" })
       })
@@ -1214,8 +1137,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       }
     })
 
-    it("tool approval and one-shot auto-send continuation survive the throttle at 16 ms", async () => {
-      throttleMock.value = 16
+    it("tool approval and one-shot auto-send continuation survive frame coalescing", async () => {
       seamMocks.convexMutation.mockResolvedValue({
         status: "approved",
         alreadyResolved: false,
@@ -1285,14 +1207,14 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       })
 
       framesRecorder.current = []
-      const mounted = mountThrottleHarness()
+      const mounted = mountFrameHarness()
       await act(async () => {
         void hookApiRef.current?.sendMessage({ text: "hi" })
       })
       await advanceFake(0)
 
       // The approval terminal render must expose the latest tool part before
-      // the pending 16 ms messages notification is advanced.
+      // the pending frame publication is advanced.
       type ApprovalToolPart = {
         type: string
         state?: string
@@ -1316,7 +1238,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
         await hookApiRef.current?.handleToolApproval(approvalId, true)
       })
       // The approval response and the continuation dispatch are not lost to
-      // the throttle: exactly one second request, and the continuation's
+      // frame coalescing: exactly one second request, and the continuation's
       // answer lands in the rendered conversation.
       await waitFake(() => expect(fetchMock).toHaveBeenCalledTimes(2))
       await waitFake(() =>
@@ -1337,7 +1259,6 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       // Unmount while a trailing notification is still scheduled: the late
       // timer must be inert (no throw, no state corruption), and a fresh
       // mount starts clean.
-      throttleMock.value = 100
       fetchMock.mockImplementation(async (_url, init) =>
         withAbortSemantics(
           makeUiMessageSseResponse({
@@ -1348,7 +1269,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
         )
       )
       framesRecorder.current = []
-      const secondMount = mountThrottleHarness()
+      const secondMount = mountFrameHarness()
       await act(async () => {
         void hookApiRef.current?.sendMessage({ text: "hi" })
       })
@@ -1357,7 +1278,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       await advanceFake(500) // fire the orphaned trailing timer
 
       framesRecorder.current = null
-      const remount = mountThrottleHarness()
+      const remount = mountFrameHarness()
       expect(hookApiRef.current?.status).toBe("ready")
       expect(hookApiRef.current?.messages).toEqual([])
       remount.unmount()

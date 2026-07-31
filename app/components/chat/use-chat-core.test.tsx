@@ -99,27 +99,10 @@ vi.mock("@/lib/chat-store/messages/provider", () => ({
 }))
 
 vi.mock("@ai-sdk/react", () => ({
-  useChat: ({
-    chat,
-  }: {
-    chat: { sendMessage: typeof chatCoreMocks.sendMessage }
-  }) => {
-    chatCoreMocks.lastUseChatInstance = chat
-    return {
-      messages: chatCoreMocks.useChatState.messages,
-      sendMessage: chat.sendMessage,
-      regenerate: chatCoreMocks.regenerate,
-      status: chatCoreMocks.useChatState.status,
-      error: undefined,
-      stop: chatCoreMocks.stop,
-      setMessages: chatCoreMocks.setMessages,
-      addToolApprovalResponse: chatCoreMocks.addToolApprovalResponse,
-    }
-  },
   // The hook constructs its own Chat instances (detachable stream bindings);
-  // the mocked useChat ignores them, but the watchdog stops detached
-  // instances directly — route that through a shared spy. `status` feeds the
-  // owner's liveness check (isStreamLive) for detach-registration/re-adoption.
+  // the mocked frame adapter below projects their state, while the watchdog
+  // stops detached instances directly through a shared spy. `status` feeds
+  // the owner's liveness check for detach-registration/re-adoption.
   Chat: class MockChat {
     status = "ready"
     readonly messages: UIMessage[]
@@ -146,6 +129,26 @@ vi.mock("@ai-sdk/react", () => ({
         .then(() => undefined)
     }
     stop = () => chatCoreMocks.bindingStop(this)
+  },
+}))
+
+vi.mock("./use-frame-aligned-chat", () => ({
+  useFrameAlignedChat: ({
+    chat,
+  }: {
+    chat: { sendMessage: typeof chatCoreMocks.sendMessage }
+  }) => {
+    chatCoreMocks.lastUseChatInstance = chat
+    return {
+      messages: chatCoreMocks.useChatState.messages,
+      sendMessage: chat.sendMessage,
+      regenerate: chatCoreMocks.regenerate,
+      status: chatCoreMocks.useChatState.status,
+      error: undefined,
+      stop: chatCoreMocks.stop,
+      setMessages: chatCoreMocks.setMessages,
+      addToolApprovalResponse: chatCoreMocks.addToolApprovalResponse,
+    }
   },
 }))
 

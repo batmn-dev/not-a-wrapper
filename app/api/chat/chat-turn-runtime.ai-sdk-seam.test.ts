@@ -468,7 +468,7 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     const sse = await runtime.toResponse(new AbortController().signal).text()
 
     expect(sse).toContain("Check the facts.")
-    expect(sse).toContain("Final answer.")
+    expect(extractTextDeltasFromSse(sse)).toBe("Final answer.")
     expect(sse).toMatch(/"reasoningDurationMs":\d+/)
   })
 
@@ -495,7 +495,7 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     expect(response.status).toBe(200)
     const sse = await response.text()
     expect(sse).toContain('"messageId":"msg1"') // durable assistant id
-    expect(sse).toContain("The weather is ")
+    expect(extractTextDeltasFromSse(sse)).toBe("The weather is sunny.")
     expect(sse).toContain('"type":"finish"')
     expect(sse.trimEnd().endsWith("data: [DONE]")).toBe(true)
 

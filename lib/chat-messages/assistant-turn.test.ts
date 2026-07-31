@@ -1104,7 +1104,7 @@ describe("deriveAssistantActivityPresentation", () => {
     }
   })
 
-  it("keeps mixed non-reasoning activity inspectable beside passive timing", () => {
+  it("uses one timed disclosure for mixed non-reasoning activity", () => {
     const view = viewOf(
       [
         { type: "reasoning", text: "", state: "done" },
@@ -1125,7 +1125,12 @@ describe("deriveAssistantActivityPresentation", () => {
     expect(presentation).toMatchObject({
       kind: "disclosure",
       label: "Worked for 1s",
-      passiveLabel: "Thought for 1s",
+      durationSeconds: 1,
+      activity: {
+        completion: {
+          title: "Worked for 1s",
+        },
+      },
     })
   })
 
