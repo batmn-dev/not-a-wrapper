@@ -1,4 +1,8 @@
 import { Chat } from "@/app/components/chat/chat"
+import {
+  ChatChromeHeader,
+  ChatChromeProvider,
+} from "@/app/components/chat/chat-chrome-host"
 import { LayoutApp } from "@/app/components/layout/layout-app"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
@@ -75,19 +79,24 @@ export default async function Page({ params }: Props) {
 
   return (
     <MessagesProvider>
-      <LayoutApp header={null}>
-        {/* The project surface IS the Chat surface: the first turn allocates
+      {/* initialAppHeader={false}: /p/ always mounts as project onboarding,
+          which owns its chrome (no app header). Chat publishes the flip to
+          the shell's pre-<main> header slot after a first send (ADR-0017). */}
+      <ChatChromeProvider initialAppHeader={false}>
+        <LayoutApp header={<ChatChromeHeader />}>
+          {/* The project surface IS the Chat surface: the first turn allocates
             its chat (with projectId) inside the accepted turn and hands off
             the route shallowly — same pipeline as home. */}
-        <Chat
-          project={{
-            id: project._id,
-            name: project.name,
-            pinned: project.pinned,
-          }}
-          key={projectId}
-        />
-      </LayoutApp>
+          <Chat
+            project={{
+              id: project._id,
+              name: project.name,
+              pinned: project.pinned,
+            }}
+            key={projectId}
+          />
+        </LayoutApp>
+      </ChatChromeProvider>
     </MessagesProvider>
   )
 }

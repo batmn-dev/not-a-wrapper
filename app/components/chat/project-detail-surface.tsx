@@ -10,8 +10,7 @@ import type { Id } from "@/convex/_generated/dataModel"
 import { useInlineRename } from "@/hooks/use-inline-rename"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { RiArrowDownSLine, RiFolderLine, RiMoreFill } from "@remixicon/react"
-import { useState, type ReactNode } from "react"
-import { ProjectChatDirectory } from "./project-chat-directory"
+import { useState } from "react"
 
 type ProjectDetailSurfaceProps = {
   project: {
@@ -19,16 +18,20 @@ type ProjectDetailSurfaceProps = {
     name: string
     pinned?: boolean
   }
-  composer: ReactNode
   onStartChat: () => void
 }
 
 const projectActionsTriggerClassName =
   "text-[var(--text-primary)] hover:bg-interactive-hover focus-visible:ring-border-strong flex size-9 shrink-0 items-center justify-center rounded-full border border-border-strong bg-background text-sm/5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
 
+// The project-onboarding surface's HEADER region only: the mobile compact
+// header and the desktop title block. The composer chrome and the chat
+// directory are composed around a stable composer slot by Chat
+// (chat.tsx) — the composer must NOT live inside this component, or the
+// onboarding→thread flip would remount it mid-send and drop its attachment
+// previews, display text, and focus.
 export function ProjectDetailSurface({
   project,
-  composer,
   onStartChat,
 }: ProjectDetailSurfaceProps) {
   const [projectName, setProjectName] = useState(project.name)
@@ -91,10 +94,7 @@ export function ProjectDetailSurface({
   )
 
   return (
-    <div
-      data-project-detail-surface="true"
-      className="bg-background flex min-h-full w-full flex-col [--project-detail-composer-width:48rem] [--project-detail-outer-width:51rem] [&_a]:transition-none [&_button]:transition-none"
-    >
+    <>
       <header className="bg-background h-app-header sticky top-0 z-30 flex shrink-0 items-center justify-between gap-2 px-2 [box-shadow:var(--sharp-edge-top-shadow-placeholder)] md:hidden">
         <div className="flex min-w-0 flex-1 items-center">
           <div className="relative flex shrink-0">
@@ -195,14 +195,6 @@ export function ProjectDetailSurface({
           />
         </div>
       </div>
-
-      <div className="fixed inset-x-4 bottom-0 z-30 mx-auto max-w-(--project-detail-composer-width) bg-[linear-gradient(to_top,var(--background)_75%,transparent)] pt-5 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] md:static md:inset-auto md:z-auto md:mt-6 md:w-full md:bg-none md:p-0 md:max-lg:px-4">
-        {composer}
-      </div>
-
-      <div className="flex-1 pb-[calc(7.5rem+env(safe-area-inset-bottom,0px))] md:pb-10">
-        <ProjectChatDirectory projectId={project.id} />
-      </div>
-    </div>
+    </>
   )
 }

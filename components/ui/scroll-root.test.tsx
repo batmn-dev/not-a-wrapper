@@ -37,6 +37,8 @@ class VisualViewportStub extends EventTarget {
 }
 
 let resizeObservers: ResizeObserverStub[] = []
+let animationFrames = new Map<number, FrameRequestCallback>()
+let nextAnimationFrameId = 1
 
 function StickyFooterFixture({
   headerPosition,
@@ -62,6 +64,30 @@ describe("ScrollRoot viewport and footer measurement", () => {
   let viewport: VisualViewportStub
   let originalVisualViewport: PropertyDescriptor | undefined
   let originalInnerHeight: PropertyDescriptor | undefined
+  let originalClientHeight: PropertyDescriptor | undefined
+
+  function setLayoutViewportHeight(height: number) {
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: height,
+    })
+    Object.defineProperty(document.documentElement, "clientHeight", {
+      configurable: true,
+      value: height,
+    })
+  }
+
+  function flushViewportResize() {
+    act(() => {
+      window.dispatchEvent(new Event("resize"))
+      viewport.dispatchEvent(new Event("resize"))
+    })
+    act(() => {
+      const callbacks = [...animationFrames.values()]
+      animationFrames.clear()
+      for (const callback of callbacks) callback(0)
+    })
+  }
 
   beforeAll(() => {
     ;(
@@ -71,19 +97,30 @@ describe("ScrollRoot viewport and footer measurement", () => {
 
   beforeEach(() => {
     resizeObservers = []
+    animationFrames = new Map()
+    nextAnimationFrameId = 1
     viewport = new VisualViewportStub()
     originalVisualViewport = Object.getOwnPropertyDescriptor(
       window,
       "visualViewport"
     )
     originalInnerHeight = Object.getOwnPropertyDescriptor(window, "innerHeight")
+    originalClientHeight = Object.getOwnPropertyDescriptor(
+      document.documentElement,
+      "clientHeight"
+    )
     Object.defineProperty(window, "visualViewport", {
       configurable: true,
       value: viewport,
     })
-    Object.defineProperty(window, "innerHeight", {
-      configurable: true,
-      value: 800,
+    setLayoutViewportHeight(800)
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      const id = nextAnimationFrameId++
+      animationFrames.set(id, callback)
+      return id
+    })
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => {
+      animationFrames.delete(id)
     })
     vi.stubGlobal("ResizeObserver", ResizeObserverStub)
 
@@ -103,11 +140,78 @@ describe("ScrollRoot viewport and footer measurement", () => {
     if (originalInnerHeight) {
       Object.defineProperty(window, "innerHeight", originalInnerHeight)
     }
+    if (originalClientHeight) {
+      Object.defineProperty(
+        document.documentElement,
+        "clientHeight",
+        originalClientHeight
+      )
+    } else {
+      Reflect.deleteProperty(document.documentElement, "clientHeight")
+    }
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 
-  it("writes the visual-viewport keyboard inset only for opted-in editors", () => {
+  it("ignores a desktop viewport resize while the editor is focused", () => {
+    act(() => {
+      root.render(
+        <ScrollRoot>
+          <textarea data-virtualkeyboard="true" autoFocus />
+        </ScrollRoot>
+      )
+    })
+
+    const scrollRoot = container.querySelector(
+      "[data-scroll-root]"
+    ) as HTMLElement
+
+    setLayoutViewportHeight(500)
+    viewport.height = 500
+    flushViewportResize()
+
+    expect(scrollRoot.style.getPropertyValue("--screen-keyboard-height")).toBe(
+      "0px"
+    )
+    expect(scrollRoot.hasAttribute("data-keyboard-open")).toBe(false)
+
+    setLayoutViewportHeight(800)
+    viewport.height = 800
+    flushViewportResize()
+    setLayoutViewportHeight(500)
+    viewport.height = 500
+    flushViewportResize()
+
+    expect(scrollRoot.style.getPropertyValue("--screen-keyboard-height")).toBe(
+      "0px"
+    )
+    expect(scrollRoot.hasAttribute("data-keyboard-open")).toBe(false)
+  })
+
+  it("ignores a desktop viewport resize while the editor is unfocused", () => {
+    act(() => {
+      root.render(
+        <ScrollRoot>
+          <textarea data-virtualkeyboard="true" />
+        </ScrollRoot>
+      )
+    })
+
+    const scrollRoot = container.querySelector(
+      "[data-scroll-root]"
+    ) as HTMLElement
+
+    setLayoutViewportHeight(500)
+    viewport.height = 500
+    flushViewportResize()
+
+    expect(scrollRoot.style.getPropertyValue("--screen-keyboard-height")).toBe(
+      "0px"
+    )
+    expect(scrollRoot.hasAttribute("data-keyboard-open")).toBe(false)
+  })
+
+  it("writes an inset for a focused editor when only the visual viewport contracts", () => {
     viewport.height = 500
 
     act(() => {
@@ -126,6 +230,46 @@ describe("ScrollRoot viewport and footer measurement", () => {
       "300px"
     )
     expect(scrollRoot.hasAttribute("data-keyboard-open")).toBe(true)
+  })
+
+  it("restores and recomputes the keyboard inset without retaining stale state", () => {
+    act(() => {
+      root.render(
+        <ScrollRoot>
+          <textarea data-virtualkeyboard="true" autoFocus />
+        </ScrollRoot>
+      )
+    })
+
+    const scrollRoot = container.querySelector(
+      "[data-scroll-root]"
+    ) as HTMLElement
+
+    viewport.height = 500
+    flushViewportResize()
+    expect(scrollRoot.style.getPropertyValue("--screen-keyboard-height")).toBe(
+      "300px"
+    )
+
+    viewport.height = 800
+    flushViewportResize()
+    expect(scrollRoot.style.getPropertyValue("--screen-keyboard-height")).toBe(
+      "0px"
+    )
+    expect(scrollRoot.hasAttribute("data-keyboard-open")).toBe(false)
+
+    viewport.height = 620
+    flushViewportResize()
+    expect(scrollRoot.style.getPropertyValue("--screen-keyboard-height")).toBe(
+      "180px"
+    )
+
+    viewport.height = 800
+    flushViewportResize()
+    expect(scrollRoot.style.getPropertyValue("--screen-keyboard-height")).toBe(
+      "0px"
+    )
+    expect(scrollRoot.hasAttribute("data-keyboard-open")).toBe(false)
   })
 
   it("preserves an explicit root-level keyboard fixture override", () => {

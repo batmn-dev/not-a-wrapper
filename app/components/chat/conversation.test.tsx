@@ -701,7 +701,24 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
     })
     expect(
       api().messages.some((message) => message.id === "optimistic-user")
-    ).toBe(false)
+    ).toBe(true)
+    const immediateUser = api().messages.find(
+      (message) => message.id === "optimistic-user"
+    )
+    expect(immediateUser?.parts).toContainEqual(
+      expect.objectContaining({ url: "blob:optimistic-notes" })
+    )
+    const originalWrapper = assertLifecycleFrame(api(), qualifies ? 1 : 0)
+    const originalTurn = originalWrapper.querySelector('[data-turn="user"]')
+    const originalSeparator = qualifies
+      ? originalWrapper.querySelector('[role="separator"]')
+      : null
+    const pendingAssistant = container?.querySelector(
+      `[data-turn-id="${PENDING_ACTIVITY_TURN_ID}"]`
+    )
+    expect(pendingAssistant).toBeTruthy()
+    expect(pendingAssistant?.querySelector('[role="separator"]')).toBeNull()
+    expect(pendingAssistant?.closest("[data-turn-id-container]")).toBeNull()
 
     await act(async () => {
       lifecycle.authGate.resolve("fixture-user")
@@ -721,11 +738,6 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
         api().messages.some((message) => message.id === "optimistic-user")
       ).toBe(true)
     )
-    const originalWrapper = assertLifecycleFrame(api(), qualifies ? 1 : 0)
-    const originalTurn = originalWrapper.querySelector('[data-turn="user"]')
-    const originalSeparator = qualifies
-      ? originalWrapper.querySelector('[role="separator"]')
-      : null
     const assertStableDomIdentity = () => {
       expect(originalWrapper.querySelector('[data-turn="user"]')).toBe(
         originalTurn
@@ -736,12 +748,6 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
         )
       }
     }
-    const pendingAssistant = container?.querySelector(
-      `[data-turn-id="${PENDING_ACTIVITY_TURN_ID}"]`
-    )
-    expect(pendingAssistant).toBeTruthy()
-    expect(pendingAssistant?.querySelector('[role="separator"]')).toBeNull()
-    expect(pendingAssistant?.closest("[data-turn-id-container]")).toBeNull()
 
     await waitFor(() => expect(api().status).toBe("submitted"))
     assertLifecycleFrame(api(), qualifies ? 1 : 0, originalWrapper)

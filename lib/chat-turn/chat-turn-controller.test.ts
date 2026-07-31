@@ -168,7 +168,7 @@ describe("chat turn controller", () => {
     vi.clearAllMocks()
   })
 
-  it("creates optimistic state only after admission and local persistence only for local routes", async () => {
+  it("creates optimistic state before admission and locally persists only local routes", async () => {
     const local = createHarness()
     const onSuccess = vi.fn((chatId) => {
       local.events.push(`onSuccess:${chatId}`)
@@ -183,7 +183,13 @@ describe("chat turn controller", () => {
     })
 
     expect(local.snapshots[0]).toEqual(["optimistic-message"])
-    expect(local.events.indexOf("setMessages")).toBeGreaterThan(
+    expect(local.events.indexOf("setMessages")).toBeLessThan(
+      local.events.indexOf("resolveUserId")
+    )
+    expect(local.events.indexOf("setMessages")).toBeLessThan(
+      local.events.indexOf("checkLimitsAndNotify")
+    )
+    expect(local.events.indexOf("setMessages")).toBeLessThan(
       local.events.indexOf("ensureChatExists")
     )
     const optimisticMessage = local.getMessages()[0]
@@ -227,11 +233,17 @@ describe("chat turn controller", () => {
     expect(durable.storeAdapters.cacheAndAddMessage).not.toHaveBeenCalled()
   })
 
-  it("creates no optimistic state when send is limit-denied", async () => {
+  it("rolls back the immediate optimistic state when send is limit-denied", async () => {
     const { adapters, controller, getMessages } = createHarness()
-    adapters.checkLimitsAndNotify = vi.fn(async () => false)
+    let resolveLimit!: (allowed: boolean) => void
+    adapters.checkLimitsAndNotify = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveLimit = resolve
+        })
+    )
 
-    await controller.runSendTurn({
+    const turn = controller.runSendTurn({
       text: "Hello with file",
       optimisticAttachments: [
         {
@@ -242,7 +254,21 @@ describe("chat turn controller", () => {
       ],
     })
 
+    await vi.waitFor(() =>
+      expect(getMessages()).toEqual([
+        expect.objectContaining({
+          id: "optimistic-message",
+          parts: expect.arrayContaining([
+            expect.objectContaining({ url: "blob:local-image" }),
+          ]),
+        }),
+      ])
+    )
+    resolveLimit(false)
+    await turn
+
     expect(getMessages()).toEqual([])
+    expect(adapters.setMessages).toHaveBeenCalledTimes(2)
     expect(adapters.sendMessage).not.toHaveBeenCalled()
     expect(adapters.cleanupOptimisticAttachments).not.toHaveBeenCalled()
   })
@@ -278,7 +304,12 @@ describe("chat turn controller", () => {
 
     const optimisticMessage = getMessages()[0]
     const dispatchedMessage = vi.mocked(adapters.sendMessage).mock.calls[0]?.[0]
-    expect(snapshots).toEqual([["optimistic-message"]])
+    // First paint uses the staged preview; admission reconciles canonical
+    // attachment URLs in place under the same stable row identity.
+    expect(snapshots).toEqual([
+      ["optimistic-message"],
+      ["optimistic-message"],
+    ])
     expect(adapters.attachStagedFiles).toHaveBeenCalledWith("chat-1", [
       "attachment-1",
     ])
@@ -308,6 +339,33 @@ describe("chat turn controller", () => {
         ]),
       }),
       "chat-1"
+    )
+  })
+
+  it("keeps an accepted turn accepted when local persistence throws synchronously", async () => {
+    const { adapters, controller, getMessages, storeAdapters } = createHarness()
+    const persistenceError = new Error("IndexedDB unavailable")
+    const onSuccess = vi.fn()
+    storeAdapters.cacheAndAddMessage.mockImplementation(() => {
+      throw persistenceError
+    })
+
+    await controller.runSendTurn({
+      text: "Keep this accepted turn",
+      onSuccess,
+    })
+
+    expect(getMessages()).toEqual([
+      expect.objectContaining({
+        id: "optimistic-message",
+        role: "user",
+      }),
+    ])
+    expect(onSuccess).toHaveBeenCalledWith("chat-1")
+    expect(adapters.toastError).not.toHaveBeenCalled()
+    expect(adapters.reportError).toHaveBeenCalledWith(
+      "Failed to persist accepted user message:",
+      persistenceError
     )
   })
 
@@ -376,7 +434,7 @@ describe("chat turn controller", () => {
 
       expect(adapters.toastError).toHaveBeenCalledWith("Failed to send message")
       expect(getMessages()).toEqual([])
-      expect(adapters.setMessages).not.toHaveBeenCalled()
+      expect(adapters.setMessages).toHaveBeenCalledTimes(2)
       expect(adapters.sendMessage).not.toHaveBeenCalled()
     }
   )
@@ -605,6 +663,14 @@ describe("chat turn controller", () => {
     await vi.waitFor(() =>
       expect(adapters.ensureChatExists).toHaveBeenCalledTimes(1)
     )
+    expect(getMessages()).toEqual([
+      expect.objectContaining({
+        id: "optimistic-message",
+        role: "user",
+      }),
+    ])
+    expect(adapters.setIsSubmitting).toHaveBeenCalledWith(true)
+    expect(adapters.sendMessageAndWaitForAcceptance).not.toHaveBeenCalled()
 
     stopRequested = true
     resolveChat({
@@ -705,7 +771,7 @@ describe("chat turn controller", () => {
     expect(confirmDispatched).toHaveBeenCalledTimes(1)
   })
 
-  it("creates no optimistic state when no user id resolves", async () => {
+  it("rolls back optimistic state when no user id resolves", async () => {
     // The Composer restores the payload on a rejected turn — a lingering
     // optimistic bubble would show the text twice (and leak its blob: URLs).
     const { adapters, controller, getMessages } = createHarness()
@@ -723,8 +789,48 @@ describe("chat turn controller", () => {
     })
 
     expect(getMessages()).toEqual([])
+    expect(adapters.toastError).toHaveBeenCalledWith(
+      "Could not start your session. Please try again."
+    )
     expect(adapters.sendMessage).not.toHaveBeenCalled()
     expect(adapters.cleanupOptimisticAttachments).not.toHaveBeenCalled()
+  })
+
+  it("releases the send guard when the optimistic insert throws", async () => {
+    const { adapters, controller } = createHarness()
+    vi.mocked(adapters.setMessages).mockImplementationOnce(() => {
+      throw new Error("render store unavailable")
+    })
+
+    await controller.runSendTurn({ text: "Hello" })
+
+    expect(adapters.toastError).toHaveBeenCalledWith("Failed to send message")
+    expect(adapters.setIsSending).toHaveBeenLastCalledWith(false)
+    expect(adapters.setIsSubmitting).toHaveBeenLastCalledWith(false)
+    expect(adapters.sendMessage).not.toHaveBeenCalled()
+
+    // The guard was not left armed: the next send dispatches normally.
+    await controller.runSendTurn({ text: "Hello again" })
+    expect(adapters.sendMessage).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps an accepted turn accepted when onSuccess throws", async () => {
+    const { adapters, controller, getMessages } = createHarness()
+    const callbackError = new Error("sidebar bump failed")
+    const onSuccess = vi.fn(() => {
+      throw callbackError
+    })
+
+    await controller.runSendTurn({ text: "Keep accepted", onSuccess })
+
+    expect(getMessages()).toEqual([
+      expect.objectContaining({ id: "optimistic-message", role: "user" }),
+    ])
+    expect(adapters.toastError).not.toHaveBeenCalled()
+    expect(adapters.reportError).toHaveBeenCalledWith(
+      "Accepted-turn onSuccess callback failed:",
+      callbackError
+    )
   })
 
   it("sends normal turns with the rendered selected-path server tail", async () => {

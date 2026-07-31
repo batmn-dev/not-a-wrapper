@@ -333,31 +333,22 @@ describe("project detail presentation", () => {
     container.remove()
   })
 
-  it("renders the project title, composer copy, compact header, and backed actions", async () => {
+  it("renders the project title, compact header, and backed actions", async () => {
     act(() => {
       root.render(
         <ProjectDetailSurface
           project={{ id: projectId(), name: "Investing", pinned: false }}
-          composer={<textarea placeholder="New chat in Investing" />}
           onStartChat={vi.fn()}
         />
       )
     })
 
     expect(container.textContent).toContain("Investing")
-    expect(
-      container.querySelector('textarea[placeholder="New chat in Investing"]')
-    ).not.toBeNull()
     expect(container.textContent).toContain("Chat")
     expect(container.querySelector("header")?.className).toContain("gap-2")
     expect(
       container.querySelector('[data-testid="project-folder-icon"]')
     ).not.toBeNull()
-    const surface = container.querySelector(
-      '[data-project-detail-surface="true"]'
-    )
-    expect(surface?.className).toContain("[&_a]:transition-none")
-    expect(surface?.className).toContain("[&_button]:transition-none")
 
     const titleButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Edit the title of Investing"]'
@@ -406,7 +397,6 @@ describe("project detail presentation", () => {
       root.render(
         <ProjectDetailSurface
           project={{ id: projectId(), name: longName, pinned: false }}
-          composer={<textarea placeholder={`New chat in ${longName}`} />}
           onStartChat={vi.fn()}
         />
       )

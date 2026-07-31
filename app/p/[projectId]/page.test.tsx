@@ -32,6 +32,18 @@ vi.mock("@/app/components/chat/chat", () => ({
     <div data-project-id={project?.id}>{project?.name}</div>
   ),
 }))
+vi.mock("@/app/components/chat/chat-chrome-host", () => ({
+  ChatChromeProvider: ({
+    children,
+    initialAppHeader,
+  }: {
+    children: React.ReactNode
+    initialAppHeader: boolean
+  }) => (
+    <div data-initial-app-header={String(initialAppHeader)}>{children}</div>
+  ),
+  ChatChromeHeader: () => <div data-chat-chrome-header="" />,
+}))
 vi.mock("@/lib/auth/workos", () => ({
   getAuthenticatedWorkosSession: () => ({
     accessToken: pageMocks.accessToken,
@@ -73,7 +85,10 @@ describe("project page", () => {
     })
     expect(html).toContain('data-project-id="project-123456"')
     expect(html).toContain("Authorized project")
-    expect(pageMocks.layoutHeader).toBeNull()
+    expect(html).toContain('data-initial-app-header="false"')
+    expect(renderToStaticMarkup(pageMocks.layoutHeader)).toContain(
+      "data-chat-chrome-header"
+    )
   })
 
   it("continues to hide missing or unauthorized projects as not found", async () => {
