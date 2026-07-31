@@ -1,0 +1,69 @@
+/** @vitest-environment jsdom */
+
+import React, { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
+import ChatLayout from "./layout"
+
+vi.mock("@/app/components/layout/layout-app", () => ({
+  LayoutApp: ({ children }: { children: React.ReactNode }) => (
+    <nav aria-label="Chat history">{children}</nav>
+  ),
+}))
+
+vi.mock("@/lib/chat-store/messages/provider", () => ({
+  MessagesProvider: ({ children }: { children: React.ReactNode }) => children,
+}))
+
+describe("chat route layout ownership", () => {
+  let container: HTMLDivElement | null = null
+  let root: Root | null = null
+
+  beforeAll(() => {
+    ;(
+      globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true
+  })
+
+  afterEach(() => {
+    act(() => root?.unmount())
+    container?.remove()
+    container = null
+    root = null
+  })
+
+  it("keeps the shell node and native offset while route content reconciles", () => {
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+
+    act(() => {
+      root?.render(
+        <ChatLayout>
+          <div data-route="first" />
+        </ChatLayout>
+      )
+    })
+    const originalScrollRoot = container.querySelector<HTMLElement>(
+      'nav[aria-label="Chat history"]'
+    )
+    expect(originalScrollRoot).not.toBeNull()
+    if (originalScrollRoot) originalScrollRoot.scrollTop = 312
+
+    act(() => {
+      root?.render(
+        <ChatLayout>
+          <div data-route="second" />
+        </ChatLayout>
+      )
+    })
+    const settledScrollRoot = container.querySelector<HTMLElement>(
+      'nav[aria-label="Chat history"]'
+    )
+
+    expect(settledScrollRoot).toBe(originalScrollRoot)
+    expect(settledScrollRoot?.scrollTop).toBe(312)
+    expect(container.querySelector("[data-route='first']")).toBeNull()
+    expect(container.querySelector("[data-route='second']")).not.toBeNull()
+  })
+})

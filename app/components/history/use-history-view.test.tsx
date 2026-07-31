@@ -197,4 +197,54 @@ describe("useInfiniteScroll", () => {
 
     expect(loadMore).toHaveBeenCalledTimes(1)
   })
+
+  it("loads below 240px without duplicating an unchanged scroll snapshot", async () => {
+    const loadMore = vi.fn()
+
+    await renderHarness({
+      canLoadMore: true,
+      metrics: { scrollHeight: 900, clientHeight: 500, scrollTop: 160 },
+      onLoadMore: loadMore,
+    })
+    const viewport = container?.querySelector<HTMLDivElement>(
+      "[data-testid='viewport']"
+    )
+    expect(viewport).not.toBeNull()
+
+    act(() => {
+      viewport?.dispatchEvent(new Event("scroll"))
+    })
+    expect(loadMore).not.toHaveBeenCalled()
+
+    setScrollMetrics(viewport as HTMLDivElement, {
+      scrollHeight: 900,
+      clientHeight: 500,
+      scrollTop: 161,
+    })
+    act(() => {
+      viewport?.dispatchEvent(new Event("scroll"))
+      viewport?.dispatchEvent(new Event("scroll"))
+    })
+
+    expect(loadMore).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not load when pagination is exhausted", async () => {
+    const loadMore = vi.fn()
+
+    await renderHarness({
+      canLoadMore: false,
+      metrics: { scrollHeight: 900, clientHeight: 500, scrollTop: 400 },
+      onLoadMore: loadMore,
+    })
+    const viewport = container?.querySelector<HTMLDivElement>(
+      "[data-testid='viewport']"
+    )
+
+    act(() => {
+      viewport?.dispatchEvent(new Event("scroll"))
+    })
+
+    expect(loadMore).not.toHaveBeenCalled()
+  })
 })

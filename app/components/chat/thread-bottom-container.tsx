@@ -31,7 +31,7 @@ const ThreadBottomContainer = forwardRef<
       id="thread-bottom-container"
       ref={ref}
       className={cn(
-        `group/thread-bottom-container pointer-events-none sticky bottom-[var(--screen-keyboard-height,0px)] isolate z-10 flex min-h-0 w-full basis-auto flex-col pb-[var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))] [--thread-component-gap:1.5rem] [--thread-scroll-control-offset:0.75rem] [--thread-scroll-to-bottom-banner-offset:0px] has-data-[has-thread-error]:pt-2 has-data-[has-thread-error]:[box-shadow:var(--sharp-edge-bottom-shadow)] max-sm:[--thread-scroll-control-offset:0.25rem] md:pt-0 print:hidden ${THREAD_GUTTER_VARS} ${THREAD_MAXWIDTH_VARS}`,
+        `group/thread-bottom-container pointer-events-none sticky bottom-[var(--screen-keyboard-height,0px)] isolate z-10 flex min-h-0 w-full basis-auto flex-col pb-[var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))] [--thread-component-gap:1.5rem] [--thread-scroll-control-offset:1.5rem] [--thread-scroll-to-bottom-banner-offset:0px] has-data-[has-thread-error]:pt-2 has-data-[has-thread-error]:[box-shadow:var(--sharp-edge-bottom-shadow)] md:pt-0 print:hidden ${THREAD_GUTTER_VARS} ${THREAD_MAXWIDTH_VARS}`,
         isOnboarding ? "sm:grow" : "content-fade",
         className
       )}

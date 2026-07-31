@@ -78,6 +78,9 @@ describe("ThreadBottomContainer", () => {
     )
     expect(footer?.classList.contains("pointer-events-none")).toBe(true)
     expect(footer?.classList.contains("print:hidden")).toBe(true)
+    expect(footer?.classList).toContain(
+      "[--thread-scroll-control-offset:1.5rem]"
+    )
     expect(composer?.closest("#thread-bottom")?.classList).toContain(
       "pointer-events-auto"
     )

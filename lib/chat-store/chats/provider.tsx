@@ -146,6 +146,8 @@ export type FirstTurnChat =
 type ChatsContextType = {
   chats: Chats[]
   isLoading: boolean
+  /** True only while the bounded sidebar appends another window page. */
+  isLoadingMore: boolean
   /** Load the next page of the bounded sidebar window (no-op when the flag is off). */
   loadMore: () => void
   /** True when more sidebar window pages can be loaded. */
@@ -613,6 +615,7 @@ export function ChatsProvider({
     recentWindow.loadMore(SIDEBAR_WINDOW_PAGE_SIZE)
   }, [recentWindow])
   const canLoadMore = recentWindow.status === "CanLoadMore"
+  const isLoadingMore = recentWindow.status === "LoadingMore"
 
   return (
     <>
@@ -635,6 +638,7 @@ export function ChatsProvider({
           isLoading,
           togglePinned,
           pinnedChats,
+          isLoadingMore,
           loadMore,
           canLoadMore,
         }}
