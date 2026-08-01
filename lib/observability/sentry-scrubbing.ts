@@ -18,7 +18,7 @@ const AI_SENSITIVE_PATH_PREFIXES = [
 ]
 
 const SENSITIVE_KEY_PATTERN =
-  /(authorization|cookie|set-cookie|api[-_]?key|access[-_]?token|refresh[-_]?token|id[-_]?token|password|secret|session|bearer)/i
+  /(authorization|cookie|set-cookie|api[-_]?key|access[-_]?token|refresh[-_]?token|id[-_]?token|password|secret|session|bearer|encrypted[-_]?content)/i
 
 type Scrubbable = Record<string, unknown> | unknown[] | null
 
@@ -42,6 +42,56 @@ function shouldRedactField(path: string[], key: string): boolean {
   }
 
   return pathHasSensitivePrefix([...path, key])
+}
+
+function isExceptionValuePath(path: string[]): boolean {
+  return (
+    path.length >= 4 &&
+    path[0] === "exception" &&
+    path[1] === "values" &&
+    path[path.length - 1] === "value"
+  )
+}
+
+/**
+ * Retain error classification while removing validation payloads and entity
+ * ids. AI SDK validation messages append the complete offending value after
+ * `: Value:`, which can contain prompts, tool outputs, or encrypted provider
+ * content.
+ */
+export function sanitizeExceptionMessage(message: string): string {
+  const withoutValidationPayload = message.split(": Value:")[0] ?? message
+  const withoutEntityIds = withoutValidationPayload
+    .replace(/\bid:\s*"[^"]*"/gi, "id: [REDACTED]")
+    .replace(/\b(?:toolCallId|approvalId)\s*[:=]\s*"[^"]*"/gi, (match) => {
+      const separator = match.includes(":") ? ":" : "="
+      return `${match.split(separator)[0]}${separator} [REDACTED]`
+    })
+  return redactSecretsInString(withoutEntityIds).slice(0, 500)
+}
+
+export function sanitizeExceptionForTelemetry(error: unknown): Error {
+  if (!(error instanceof Error)) {
+    return new Error(`Non-Error exception (${typeof error})`)
+  }
+
+  const sanitized = new Error(sanitizeExceptionMessage(error.message))
+  sanitized.name = error.name
+  if (typeof error.stack === "string") {
+    sanitized.stack = error.stack.replace(
+      error.message,
+      sanitizeExceptionMessage(error.message)
+    )
+  }
+  return sanitized
+}
+
+export function getSanitizedExceptionSummary(error: unknown): {
+  errorName: string
+  errorMessage: string
+} {
+  const sanitized = sanitizeExceptionForTelemetry(error)
+  return { errorName: sanitized.name, errorMessage: sanitized.message }
 }
 
 function scrubValue(
@@ -77,7 +127,9 @@ function scrubValue(
     // Value-level pass: a credential can appear inside an otherwise-innocuous
     // string (e.g. a provider 401 message under `exception.values[].value`),
     // which key-name/path redaction never reaches.
-    return redactSecretsInString(value)
+    return isExceptionValuePath(path)
+      ? sanitizeExceptionMessage(value)
+      : redactSecretsInString(value)
   }
 
   if (typeof value !== "object") {

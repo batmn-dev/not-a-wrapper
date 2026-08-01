@@ -10,6 +10,7 @@ import {
   INITIAL_CHAT_TITLE_GENERATION,
   selectChatTitleModelConfig,
 } from "@/lib/chat-title"
+import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
 import {
   ANONYMOUS_MAX_STEP_COUNT,
   DEFAULT_MAX_STEP_COUNT,
@@ -33,6 +34,14 @@ import {
   classifyChatError,
   getToolDimensionForError,
 } from "@/lib/observability/chat-error-taxonomy"
+import {
+  createChatPerfServerSession,
+  type ChatPerfServerSession,
+} from "@/lib/observability/chat-performance"
+import {
+  getSanitizedExceptionSummary,
+  sanitizeExceptionForTelemetry,
+} from "@/lib/observability/sentry-scrubbing"
 import { createLanguageModel } from "@/lib/openproviders/create-language-model"
 import { getProviderForModel } from "@/lib/openproviders/provider-map"
 import { shapeRequest } from "@/lib/openproviders/request-shaping"
@@ -71,39 +80,30 @@ import {
 } from "convex/nextjs"
 import { after } from "next/server"
 import { adaptHistoryForProvider } from "./adapters"
-import { lowerForeignHostedToolParts } from "./hosted-tool-lowering"
-import { createWordChunkingTransform } from "./word-chunking-transform"
 import type { AdaptationContext, AdaptationWarning } from "./adapters/types"
-import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
-import {
-  createChatPerfServerSession,
-  type ChatPerfServerSession,
-} from "@/lib/observability/chat-performance"
+import { splitAndValidateApprovalContinuation } from "./approval-continuation"
 import {
   createDurableTurnRuntime,
-  hasApprovalResponse,
   isDurableConvexChat,
   type DurableStreamBinding,
   type DurableTurnRuntime,
   type DurableWorkerWire,
 } from "./durable-turn-runtime"
+import { lowerForeignHostedToolParts } from "./hosted-tool-lowering"
 import {
   createPostHogToolCallSink,
   createToolCallLogSink,
   createToolTraceLogSink,
 } from "./outcome-sinks"
 import { normalizeChatError, type PublicChatError } from "./public-error"
+import { PublicChatHttpError } from "./public-http-error"
 import { createReasoningActivityTracker } from "./reasoning-activity-tracker"
 import {
   getTextFilePartReferences,
   prepareTextFilePartsForModelInput,
 } from "./text-file-parts"
-import {
-  excludeSystemRoleMessages,
-  hasProviderLinkedResponseIds,
-  stripProviderLinkedMetadataFromMessage,
-  toPlainTextModelMessages,
-} from "./utils"
+import { excludeSystemRoleMessages } from "./utils"
+import { createWordChunkingTransform } from "./word-chunking-transform"
 
 // Request-scoped execution behind the route's HTTP adapter. `prepare()` may
 // fail before model execution; `toResponse()` owns the stream lifecycle; and
@@ -317,9 +317,9 @@ function summarizeReplayWarningDetails(
 export type ChatTurnRuntime = {
   /**
    * Resolve the execution plan: model/key, Tool runtime, durable-prepare,
-   * history adaptation, request shaping. May throw errors carrying
-   * `{ statusCode, code }` (missing key → 401, durable concurrency → 4xx) which
-   * the route maps via `createErrorResponse`. Must run before `toResponse`.
+   * history adaptation, request shaping. Intentional client-safe failures use
+   * PublicChatHttpError (missing key → 401, durable concurrency → 4xx); all
+   * other exceptions are redacted by the route. Must run before `toResponse`.
    */
   prepare(): Promise<void>
   /**
@@ -457,7 +457,8 @@ export function createChatTurnRuntime(args: {
     const modelConfig = allModels.find((m) => m.id === model)
 
     if (!modelConfig) {
-      throw Object.assign(new Error(`Model ${model} not found`), {
+      throw new PublicChatHttpError({
+        message: `Model ${model} not found`,
         statusCode: 400,
         code: "INVALID_REQUEST",
       })
@@ -483,12 +484,11 @@ export function createChatTurnRuntime(args: {
     // provider's platform env key exists, fail before constructing the SDK.
     if (!apiKey || !credentialSource) {
       const providerName = modelConfig.provider || resolvedProvider
-      throw Object.assign(
-        new Error(
-          `No API key configured for ${providerName}. Please add your ${providerName} API key in settings.`
-        ),
-        { statusCode: 401, code: "MISSING_API_KEY" }
-      )
+      throw new PublicChatHttpError({
+        message: `No API key configured for ${providerName}. Please add your ${providerName} API key in settings.`,
+        statusCode: 401,
+        code: "MISSING_API_KEY",
+      })
     }
     const providerToolKeyMode: ToolKeyMode = credentialSource
 
@@ -542,19 +542,19 @@ export function createChatTurnRuntime(args: {
     // -----------------------------------------------------------------------
     const tool = await perf.span("tool_preparation", () =>
       prepareToolRuntime({
-      isAuthenticated,
-      convexToken,
-      anonymousId,
-      provider: resolvedProvider,
-      apiKey,
-      providerToolKeyMode,
-      modelTools: modelConfig.tools,
-      enableSearch,
-      logContext: { requestId, chatId, userId, model },
-      onMcpClientsOpened: (clientCount) => {
-        openedMcpClientCount = clientCount
-      },
-      outcomeSinks,
+        isAuthenticated,
+        convexToken,
+        anonymousId,
+        provider: resolvedProvider,
+        apiKey,
+        providerToolKeyMode,
+        modelTools: modelConfig.tools,
+        enableSearch,
+        logContext: { requestId, chatId, userId, model },
+        onMcpClientsOpened: (clientCount) => {
+          openedMcpClientCount = clientCount
+        },
+        outcomeSinks,
       })
     )
     toolRuntime = tool
@@ -570,6 +570,30 @@ export function createChatTurnRuntime(args: {
     const hasAnyTools = tool.hasTools
     const shouldInjectSearch = tool.policySummary.searchInjected
 
+    const durableRuntimeEnabled = isDurableConvexChat({
+      isAuthenticated,
+      convexToken,
+      chatId,
+    })
+
+    // Reject stale/provider-switched approval responses before durable prepare
+    // mutates approval state or creates a continuation run. Durable prepare
+    // independently verifies the paused run's provider server-side; this early
+    // check also proves the current registry still contains the exact tool.
+    const requestApprovalContinuation = splitAndValidateApprovalContinuation({
+      messages,
+      targetProvider: resolvedProvider,
+      tools: tool.tools,
+    })
+    if (requestApprovalContinuation.tail.length > 0 && !durableRuntimeEnabled) {
+      throw new PublicChatHttpError({
+        statusCode: 409,
+        code: "APPROVAL_CONTINUATION_UNVERIFIABLE",
+        message:
+          "This approval can no longer be verified. Start a new request instead.",
+      })
+    }
+
     // Anonymous users get a lower step count to limit tool call cost exposure.
     // Authenticated users get the full MCP_MAX_STEP_COUNT (20).
     const maxSteps = hasAnyTools
@@ -584,12 +608,6 @@ export function createChatTurnRuntime(args: {
     // MCP disposal (disposeTurnResources) — flush() (not shutdown()) allows
     // client reuse in warm containers. No separate after() registrations: the
     // backstop above already covers never-started turns.
-
-    const durableRuntimeEnabled = isDurableConvexChat({
-      isAuthenticated,
-      convexToken,
-      chatId,
-    })
 
     // Durable prepare returns canonical history and rejects invalid turn input.
     let canonicalMessages = await perf.span("durable_prepare", () =>
@@ -669,36 +687,29 @@ export function createChatTurnRuntime(args: {
       sourceProviderHint: resolvedProvider,
     }
 
-    // The live continuation tail — a trailing assistant message carrying
-    // approval-responded tool parts the SDK executes on THIS turn — is not
-    // history. History adaptation must never touch it: the replay compilers
-    // summarize non-replayable tool exchanges away, which strips the very
-    // tool call being continued and leaves a thinking-final assistant message
-    // Anthropic rejects outright.
-    const trailingMessage =
-      textFileModelInput.messages[textFileModelInput.messages.length - 1]
-    const continuationTail =
-      trailingMessage !== undefined &&
-      trailingMessage.role === "assistant" &&
-      hasApprovalResponse([trailingMessage])
-        ? [trailingMessage]
-        : []
-    const historyForAdaptation =
-      continuationTail.length > 0
-        ? textFileModelInput.messages.slice(0, -1)
-        : textFileModelInput.messages
+    // A live approval response is the only tool activity exempt from history
+    // projection. Prove provider, registry, execution-kind, and provider-tool
+    // identity continuity before separating it from history. This prevents a
+    // same-named foreign tool or a disabled tool from inheriting an approval.
+    const approvalContinuation = splitAndValidateApprovalContinuation({
+      messages: textFileModelInput.messages,
+      targetProvider: resolvedProvider,
+      tools: tool.tools,
+    })
+    const continuationTail = approvalContinuation.tail
+    const historyForAdaptation = approvalContinuation.history
 
-    // Foreign hosted-tool lowering: provider-executed tool activity the
-    // CURRENT registry does not accept (cross-provider `web_search`, schema
-    // drift, tool absent this turn) is lowered to provider-neutral continuity
-    // text before adaptation. Target-native tool calls are never fabricated
-    // and foreign provider ids never replay (the OpenAI Responses conversion
-    // would turn them into server-side `item_reference` lookups that 400).
-    const hostedLowering = await lowerForeignHostedToolParts(
-      historyForAdaptation,
-      tool.tools
-    )
-    if (hostedLowering.loweredCount > 0) {
+    // Provider-hosted activity is evidence, not a portable call/result pair.
+    // Project every historical static/dynamic provider-executed part and every
+    // provider grounding source to safe text before any target adapter runs.
+    const hostedLowering = lowerForeignHostedToolParts(historyForAdaptation, {
+      targetProvider: resolvedProvider,
+      tools: tool.tools,
+    })
+    if (
+      hostedLowering.loweredCount > 0 ||
+      hostedLowering.sourceProjectionCount > 0
+    ) {
       console.log(
         JSON.stringify({
           _tag: "hosted_tool_history_lowered",
@@ -706,6 +717,7 @@ export function createChatTurnRuntime(args: {
           provider: resolvedProvider,
           model,
           loweredCount: hostedLowering.loweredCount,
+          sourceProjectionCount: hostedLowering.sourceProjectionCount,
           details: hostedLowering.details,
         })
       )
@@ -824,39 +836,22 @@ export function createChatTurnRuntime(args: {
       })
     }
 
-    // Boundary 2 — MODEL-BOUND validation: the adapted history plus the live
-    // continuation tail, checked against the CURRENT tool registry immediately
-    // before conversion. After lowering + adaptation this should always pass;
-    // a failure means a pipeline bug, so the turn degrades to a plaintext
-    // transcript (tail preserved) instead of 500ing, and the log carries only
-    // the error's context prefix — never the payload-bearing `Value:` section.
-    // An empty array skips validation: there are no parts to schema-check and
-    // the SDK's structural min-1 rule belongs to Boundary 1 admission, not to
-    // this pre-conversion invariant.
-    const modelBoundValidation =
-      adaptedMessagesWithTail.length === 0
-        ? { success: true as const }
-        : await perf.span("model_bound_validation", () =>
-            safeValidateUIMessages({
-              messages: adaptedMessagesWithTail,
-              tools: tool.tools as unknown as Parameters<
-                typeof safeValidateUIMessages
-              >[0]["tools"],
-            })
-          )
-
-    let modelMessages: ModelMessage[]
-    if (modelBoundValidation.success) {
-      // Convert UIMessage[] to ModelMessage[] for streamText
-      modelMessages = await convertToModelMessages(adaptedMessagesWithTail, {
-        tools: tool.tools,
-        ignoreIncompleteToolCalls: true,
+    // Boundary 2 — MODEL-BOUND validation. Boundary 1 already enforces the
+    // SDK's non-empty structural contract; after projection/adaptation this
+    // validation must pass against the current own-property tool registry.
+    // Failure is an internal replay invariant breach. Do not silently flatten
+    // files, images, sources, reasoning, or continuation state.
+    const modelBoundValidation = await perf.span("model_bound_validation", () =>
+      safeValidateUIMessages({
+        messages: adaptedMessagesWithTail,
+        tools: tool.tools as unknown as Parameters<
+          typeof safeValidateUIMessages
+        >[0]["tools"],
       })
-    } else {
+    )
+
+    if (!modelBoundValidation.success) {
       const validationError = modelBoundValidation.error
-      const errorContext =
-        validationError.message.split(": Value:")[0]?.slice(0, 300) ??
-        validationError.name
       console.warn(
         JSON.stringify({
           _tag: "model_bound_validation_failed",
@@ -865,7 +860,6 @@ export function createChatTurnRuntime(args: {
           model,
           compilerEnabled: HISTORY_REPLAY_COMPILER_V1,
           errorName: validationError.name,
-          errorContext,
         })
       )
       Sentry.captureMessage("chat_model_bound_validation_failed", {
@@ -875,66 +869,20 @@ export function createChatTurnRuntime(args: {
           chat_provider: resolvedProvider,
           chat_model: model,
         },
-        extra: { requestId, chatId, errorName: validationError.name, errorContext },
+        extra: { requestId, errorName: validationError.name },
       })
-      const tailModelMessages =
-        continuationTail.length > 0
-          ? await convertToModelMessages(
-              continuationTail.map(stripProviderLinkedMetadataFromMessage),
-              {
-                tools: tool.tools,
-                ignoreIncompleteToolCalls: true,
-              }
-            )
-          : []
-      modelMessages = [
-        ...toPlainTextModelMessages(adapterResult.messages),
-        ...tailModelMessages,
-      ]
+      const invariantError = new Error("Model-bound replay invariant failed")
+      invariantError.name = "ModelBoundReplayInvariantError"
+      throw invariantError
     }
 
-    // OpenAI responses replay hardening:
-    // If conversion output still contains provider-linked response IDs
-    // (msg_/rs_/ws_), fall back to a plain-text transcript to avoid
-    // pairing invariant failures on follow-up turns.
-    // TODO: Preserve multimodal parts in OpenAI replay fallback; see docs/openai-image-attachment-replay-fallback-investigation.md.
-    if (
-      resolvedProvider === "openai" &&
-      hasProviderLinkedResponseIds(modelMessages)
-    ) {
-      console.warn(
-        JSON.stringify({
-          _tag: "replay_plaintext_fallback_activated",
-          chatId,
-          provider: resolvedProvider,
-          model,
-          reason: "provider_linked_response_ids_detected_post_conversion",
-          messageCount: modelMessages.length,
-          compilerEnabled: HISTORY_REPLAY_COMPILER_V1,
-          continuationTailPreserved: continuationTail.length > 0,
-        })
-      )
-      // Flatten HISTORY only. The live continuation tail (already exempted
-      // from adaptation above) carries the approval-responded tool part the
-      // SDK executes THIS turn — flattening it to text silently drops the
-      // very tool call being continued. The tail keeps its full parts; only
-      // its provider-linked metadata is stripped, so the pairing ids this
-      // fallback exists to remove cannot ride back in through it.
-      const tailModelMessages =
-        continuationTail.length > 0
-          ? await convertToModelMessages(
-              continuationTail.map(stripProviderLinkedMetadataFromMessage),
-              {
-                tools: tool.tools,
-                ignoreIncompleteToolCalls: true,
-              }
-            )
-          : []
-      modelMessages = [
-        ...toPlainTextModelMessages(adapterResult.messages),
-        ...tailModelMessages,
-      ]
-    }
+    const modelMessages: ModelMessage[] = await convertToModelMessages(
+      adaptedMessagesWithTail,
+      {
+        tools: tool.tools,
+        ignoreIncompleteToolCalls: true,
+      }
+    )
 
     // Request shaping (CONTEXT.md; lib/openproviders/request-shaping.ts):
     // provider options and beta headers behind one seam. The module owns the
@@ -1356,7 +1304,13 @@ export function createChatTurnRuntime(args: {
           streamCompleted = true
           reasoningActivity.close()
           resolvePostToolContinuation()
-          console.error("Streaming error occurred:", err)
+          console.error(
+            JSON.stringify({
+              _tag: "chat_stream_provider_error",
+              requestId,
+              ...getSanitizedExceptionSummary(err),
+            })
+          )
           const publicError = normalizeTurnError(err)
           const errorMessage = publicError.message
           const errorType = classifyChatError(err)
@@ -1403,8 +1357,11 @@ export function createChatTurnRuntime(args: {
               })
             } catch (captureErr) {
               console.error(
-                "[PostHog] Failed to capture error event:",
-                captureErr
+                JSON.stringify({
+                  _tag: "posthog_error_capture_failed",
+                  requestId,
+                  ...getSanitizedExceptionSummary(captureErr),
+                })
               )
             }
           }
@@ -1443,8 +1400,11 @@ export function createChatTurnRuntime(args: {
             } catch (captureErr) {
               // Analytics is observational and must never break stream finalization.
               console.error(
-                "[PostHog] Failed to capture anthropic_pause_turn event:",
-                captureErr
+                JSON.stringify({
+                  _tag: "posthog_pause_turn_capture_failed",
+                  requestId,
+                  ...getSanitizedExceptionSummary(captureErr),
+                })
               )
             }
           }
@@ -1634,8 +1594,11 @@ export function createChatTurnRuntime(args: {
             } catch (captureErr) {
               // Analytics failure should never break the response
               console.error(
-                "[PostHog] Failed to capture generation event:",
-                captureErr
+                JSON.stringify({
+                  _tag: "posthog_generation_capture_failed",
+                  requestId,
+                  ...getSanitizedExceptionSummary(captureErr),
+                })
               )
             }
           }
@@ -1731,7 +1694,14 @@ export function createChatTurnRuntime(args: {
       sendSources: true,
       messageMetadata: ({ part }) => {
         if (part.type === "start") {
-          return buildStartToolInvocationStreamMetadata(toolMetadataByName)
+          return {
+            ...buildStartToolInvocationStreamMetadata(toolMetadataByName),
+            // Provider provenance is required to prove that a later approval
+            // response is continuing on the provider that created it. The
+            // persistence projector drops this transient copy because the
+            // durable message already owns `provider` as a first-class field.
+            provider: resolvedProvider,
+          }
         }
         if (part.type === "finish") {
           return buildFinishToolInvocationStreamMetadata({
@@ -1761,9 +1731,15 @@ export function createChatTurnRuntime(args: {
       },
       onError: (error: unknown) => {
         reasoningActivity.close()
-        console.error("Error forwarded to client:", error)
+        console.error(
+          JSON.stringify({
+            _tag: "chat_stream_error",
+            requestId,
+            ...getSanitizedExceptionSummary(error),
+          })
+        )
         const errorType = classifyChatError(error)
-        Sentry.captureException(error, {
+        Sentry.captureException(sanitizeExceptionForTelemetry(error), {
           tags: {
             route: "api/chat",
             chat_model: model,
@@ -1774,7 +1750,6 @@ export function createChatTurnRuntime(args: {
           },
           extra: {
             requestId,
-            chatId,
             model,
             provider: resolvedProvider,
             errorType,
@@ -1851,7 +1826,7 @@ export function createChatTurnRuntime(args: {
     await durableTurn.fail(publicError.message)
 
     const errorType = classifyChatError(err)
-    Sentry.captureException(err, {
+    Sentry.captureException(sanitizeExceptionForTelemetry(err), {
       tags: {
         route: "api/chat",
         chat_model: model,
@@ -1862,7 +1837,6 @@ export function createChatTurnRuntime(args: {
       },
       extra: {
         requestId,
-        chatId,
         model,
         provider,
         errorType,

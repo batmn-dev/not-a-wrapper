@@ -150,6 +150,30 @@ describe("sentryBeforeSend", () => {
     expect(message).toBe("STS credentials failed for access key [REDACTED]")
   })
 
+  it("removes AI SDK validation payloads and entity ids from exception values", () => {
+    const sentinel = "OPAQUE_ENCRYPTED_CONTENT_SENTINEL"
+    const toolId = "srvtoolu_PRIVATE_ENTITY_ID"
+    const event = {
+      exception: {
+        values: [
+          {
+            type: "AI_TypeValidationError",
+            value: `Type validation failed for messages[3].parts[2].output (web_search, id: "${toolId}"): Value: [{"encryptedContent":"${sentinel}","url":"https://private.invalid"}].`,
+          },
+        ],
+      },
+    }
+
+    const scrubbed = sentryBeforeSend(event)
+    const serialized = JSON.stringify(scrubbed)
+    expect(serialized).not.toContain(sentinel)
+    expect(serialized).not.toContain(toolId)
+    expect(serialized).not.toContain("private.invalid")
+    expect(scrubbed.exception.values[0].value).toContain(
+      "Type validation failed"
+    )
+  })
+
   it("still redacts by sensitive key name", () => {
     const event = {
       request: {

@@ -1,4 +1,3 @@
-import type { ChatPerfServerSession } from "@/lib/observability/chat-performance"
 import { createHash, randomBytes } from "node:crypto"
 import { api } from "@/convex/_generated/api"
 import type { Doc, Id } from "@/convex/_generated/dataModel"
@@ -18,6 +17,7 @@ import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import { durableStoredMessageToUiMessage } from "@/lib/chat-messages/ui-message-adapter"
 import { isServerChatId } from "@/lib/chat-store/identity"
+import type { ChatPerfServerSession } from "@/lib/observability/chat-performance"
 import type { ToolSource } from "@/lib/tools/types"
 import * as Sentry from "@sentry/nextjs"
 import type {
@@ -32,6 +32,7 @@ import type {
 } from "ai"
 import { getToolName, isToolUIPart } from "ai"
 import { fetchMutation as defaultFetchMutation } from "convex/nextjs"
+import { PublicChatHttpError } from "./public-http-error"
 import { isConvexArgumentValidationError } from "./utils"
 
 // Owns durable preparation, snapshots, tool invocations, approvals, and turn
@@ -454,20 +455,32 @@ function isApprovalRespondedToolPart(
 export function extractApprovalResponses(
   messages: UIMessage[]
 ): ApprovalResponseForPersistence[] {
-  const responses: ApprovalResponseForPersistence[] = []
+  // ONLY the trailing assistant message is a live approval continuation —
+  // the same scope splitAndValidateApprovalContinuation validates against the
+  // tool registry. Historical approval-responded parts are persisted evidence
+  // (deny-on-new-send writes `approved:false` parts into durable history via
+  // denyPendingApprovalsForChat) and re-arrive with every later request; if
+  // they were extracted here, every subsequent send would be misclassified as
+  // a continuation: the user's new message would be dropped
+  // (latestUserMessage gating below) and the turn would 409 on the already
+  // settled run — silently, since the client swallows
+  // APPROVAL_CONTINUATION_CONFLICT as a lost tab race.
+  const trailingMessage = messages[messages.length - 1]
+  if (!trailingMessage || trailingMessage.role !== "assistant") {
+    return []
+  }
 
-  for (const message of messages) {
-    for (const part of message.parts) {
-      if (!isApprovalRespondedToolPart(part)) continue
-      responses.push({
-        messageId: message.id,
-        approvalId: part.approval.id,
-        toolCallId: part.toolCallId,
-        toolName: String(getToolName(part)),
-        approved: part.approval.approved,
-        ...(part.approval.reason ? { reason: part.approval.reason } : {}),
-      })
-    }
+  const responses: ApprovalResponseForPersistence[] = []
+  for (const part of trailingMessage.parts) {
+    if (!isApprovalRespondedToolPart(part)) continue
+    responses.push({
+      messageId: trailingMessage.id,
+      approvalId: part.approval.id,
+      toolCallId: part.toolCallId,
+      toolName: String(getToolName(part)),
+      approved: part.approval.approved,
+      ...(part.approval.reason ? { reason: part.approval.reason } : {}),
+    })
   }
 
   return responses
@@ -1217,10 +1230,11 @@ export function createConvexDurableTurn(args: {
 
       const approvalResponses = extractApprovalResponses(messages)
       if (regeneration && approvalResponses.length > 0) {
-        throw Object.assign(
-          new Error("Regeneration cannot continue pending approvals"),
-          { statusCode: 400, code: "INVALID_REQUEST" }
-        )
+        throw new PublicChatHttpError({
+          message: "Regeneration cannot continue pending approvals",
+          statusCode: 400,
+          code: "INVALID_REQUEST",
+        })
       }
 
       const latestUserMessage =
@@ -1260,14 +1274,22 @@ export function createConvexDurableTurn(args: {
         // recognizes and swallows — never a failed repaint.
         const conflictCode = (
           (error as { data?: { code?: unknown } } | null)?.data as
-            | { code?: unknown }
-            | undefined
+            { code?: unknown } | undefined
         )?.code
         if (conflictCode === "approval_continuation_conflict") {
-          throw Object.assign(
-            new Error("Approval continuation already dispatched"),
-            { statusCode: 409, code: "APPROVAL_CONTINUATION_CONFLICT" }
-          )
+          throw new PublicChatHttpError({
+            message: "Approval continuation already dispatched",
+            statusCode: 409,
+            code: "APPROVAL_CONTINUATION_CONFLICT",
+          })
+        }
+        if (conflictCode === "approval_provider_mismatch") {
+          throw new PublicChatHttpError({
+            message:
+              "This approval belongs to a different provider. Switch back to the original model and try again.",
+            statusCode: 409,
+            code: "APPROVAL_PROVIDER_MISMATCH",
+          })
         }
         // `isServerChatId` only rules out local/optimistic prefixes, so a
         // crafted or corrupted id reaches the durable contract here and Convex
@@ -1281,10 +1303,11 @@ export function createConvexDurableTurn(args: {
             chatId,
             error: describeError(error),
           })
-          throw Object.assign(
-            new Error("Request does not reference a valid durable chat"),
-            { statusCode: 400, code: "INVALID_REQUEST" }
-          )
+          throw new PublicChatHttpError({
+            message: "Request does not reference a valid durable chat",
+            statusCode: 400,
+            code: "INVALID_REQUEST",
+          })
         }
         throw error
       })
@@ -1352,7 +1375,8 @@ export function createConvexDurableTurn(args: {
               }
               perfSession?.counter("failed")
               throw error
-            })
+            }
+          )
         },
       })
 
@@ -1578,7 +1602,9 @@ export function createConvexDurableTurn(args: {
                 })
 
               if (isAborted) {
-                const aborted = await markRunAborted("ui message stream aborted")
+                const aborted = await markRunAborted(
+                  "ui message stream aborted"
+                )
                 if (aborted === "failed") return degrade("abort write failed")
                 deps.perf?.counter("settlement_receipt_confirmed")
                 return {

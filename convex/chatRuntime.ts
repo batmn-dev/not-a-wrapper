@@ -1061,16 +1061,30 @@ export function resolveCanonicalApprovalDecision(
   approval: StoredApprovalDecision,
   response: ApprovalResponse
 ): CanonicalApprovalDecision {
+  // Every rejection here is a CONTINUATION CONFLICT, not a server fault: the
+  // request carries a decision the durable record cannot honor (not yet
+  // resolved, expired, or — the real race — a second tab that decided the
+  // OTHER way). Branded so the HTTP boundary answers with the intentional 409
+  // contract instead of redacting an unbranded Error to 500.
   if (approval.status === "pending") {
-    throw new Error("Approval has not been resolved")
+    throw new ConvexError({
+      code: "approval_continuation_conflict",
+      message: "Approval has not been resolved",
+    })
   }
   if (approval.status === "expired") {
-    throw new Error("Approval has expired")
+    throw new ConvexError({
+      code: "approval_continuation_conflict",
+      message: "Approval has expired",
+    })
   }
 
   const approved = approval.status === "approved"
   if (response.approved !== approved) {
-    throw new Error("Approval response does not match stored approval decision")
+    throw new ConvexError({
+      code: "approval_continuation_conflict",
+      message: "Approval response does not match stored approval decision",
+    })
   }
 
   return {
@@ -1200,6 +1214,7 @@ export async function denyPendingApprovalsForChat(
 export async function applyApprovalResponses(
   ctx: MutationCtx,
   owner: AuthenticatedChatOwner,
+  continuationProvider: string,
   responses: Array<{
     messageId: string
     approvalId: string
@@ -1246,9 +1261,29 @@ export async function applyApprovalResponses(
       !approval ||
       approval.chatId !== owner.chat._id ||
       approval.userId !== owner.user._id ||
-      approval.toolCallId !== response.toolCallId
+      approval.toolCallId !== response.toolCallId ||
+      approval.toolName !== response.toolName
     ) {
-      throw new Error("Approval not found")
+      throw new ConvexError({
+        code: "approval_continuation_conflict",
+        message: "Approval continuation does not match the paused tool call",
+      })
+    }
+
+    // Approval responses continue the exact paused provider protocol. The
+    // request's message metadata is client-controlled, so the authoritative
+    // pin is the provider stored on the approval's generation run. Check it
+    // before patching the message, invocation, approval, or run.
+    const approvalRun = await ctx.db.get(approval.runId)
+    if (
+      !approvalRun ||
+      approvalRun.chatId !== owner.chat._id ||
+      approvalRun.provider !== continuationProvider
+    ) {
+      throw new ConvexError({
+        code: "approval_provider_mismatch",
+        message: "Approval continuation provider changed",
+      })
     }
 
     const canonicalDecision = resolveCanonicalApprovalDecision(
@@ -1263,7 +1298,13 @@ export async function applyApprovalResponses(
 
     const message = findMessageByUiId(messages, response.messageId)
     if (!message || message.chatId !== owner.chat._id) {
-      throw new Error("Approval message not found")
+      // The continuation names a message this chat no longer has (branched
+      // away, deleted, or client-fabricated). Client-supplied identity that
+      // cannot be honored is a conflict contract, not a server fault.
+      throw new ConvexError({
+        code: "approval_continuation_conflict",
+        message: "Approval continuation does not match a message in this chat",
+      })
     }
 
     const currentMessage = messageById.get(message._id) ?? message
@@ -1399,7 +1440,12 @@ export async function prepareGenerationForChat(
 
   await closeSupersededGenerationsForChat(ctx, args.chatId, owner.user._id, now)
 
-  const continuation = await applyApprovalResponses(ctx, owner, approvalResponses)
+  const continuation = await applyApprovalResponses(
+    ctx,
+    owner,
+    args.provider,
+    approvalResponses
+  )
   const continuationMessage = continuation?.message ?? null
 
   let titleGeneration: number | undefined

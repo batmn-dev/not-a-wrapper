@@ -1,100 +1,11 @@
 import type { UIMessage } from "ai"
 import { describe, expect, it } from "vitest"
+import { PublicChatHttpError } from "./public-http-error"
 import {
   createErrorResponse,
   excludeSystemRoleMessages,
-  hasProviderLinkedResponseIds,
   isConvexArgumentValidationError,
-  stripProviderLinkedMetadataFromMessage,
-  toPlainTextModelMessages,
 } from "./utils"
-
-describe("hasProviderLinkedResponseIds", () => {
-  it("distinguishes provider-linked response ids from ordinary text", () => {
-    const modelMessages = [
-      { role: "assistant", content: "msg_abc123 and rs_def456 and ws_ghi789" },
-    ] as const
-    expect(hasProviderLinkedResponseIds(modelMessages as any)).toBe(true)
-    const ordinaryMessages = [
-      { role: "assistant", content: "normal response text" },
-    ] as const
-    expect(hasProviderLinkedResponseIds(ordinaryMessages as any)).toBe(false)
-  })
-})
-
-describe("toPlainTextModelMessages", () => {
-  it("converts UI messages to plain text model messages", () => {
-    const messages = [
-      {
-        id: "a",
-        role: "assistant",
-        parts: [
-          { type: "text", text: "line 1" },
-          { type: "reasoning", text: "internal" },
-          { type: "text", text: "line 2" },
-        ],
-      },
-      {
-        id: "u",
-        role: "user",
-        parts: [{ type: "text", text: "follow-up" }],
-      },
-    ] as unknown as UIMessage[]
-
-    const result = toPlainTextModelMessages(messages)
-    expect(result).toEqual([
-      { role: "assistant", content: "line 1\n\nline 2" },
-      { role: "user", content: "follow-up" },
-    ])
-  })
-})
-
-describe("stripProviderLinkedMetadataFromMessage", () => {
-  it("removes provider metadata carriers but keeps part semantics intact", () => {
-    const message = {
-      id: "tail",
-      role: "assistant",
-      parts: [
-        {
-          type: "reasoning",
-          text: "thinking",
-          providerMetadata: { openai: { itemId: "rs_abc123" } },
-        },
-        {
-          type: "dynamic-tool",
-          toolName: "deepwiki_ask_question",
-          toolCallId: "call_1",
-          state: "approval-responded",
-          input: { question: "q" },
-          approval: { id: "approval_1", approved: true },
-          callProviderMetadata: { openai: { itemId: "msg_def456" } },
-        },
-        { type: "text", text: "plain" },
-      ],
-    } as unknown as UIMessage
-
-    const stripped = stripProviderLinkedMetadataFromMessage(message)
-
-    expect(stripped.parts).toEqual([
-      { type: "reasoning", text: "thinking" },
-      {
-        type: "dynamic-tool",
-        toolName: "deepwiki_ask_question",
-        toolCallId: "call_1",
-        state: "approval-responded",
-        input: { question: "q" },
-        approval: { id: "approval_1", approved: true },
-      },
-      { type: "text", text: "plain" },
-    ])
-    // The pairing-id detector no longer fires on the stripped message.
-    expect(
-      hasProviderLinkedResponseIds([
-        { role: "assistant", content: JSON.stringify(stripped.parts) },
-      ] as never)
-    ).toBe(false)
-  })
-})
 
 describe("isConvexArgumentValidationError", () => {
   it("matches Convex argument-validation rejections and nothing else", () => {
@@ -124,12 +35,14 @@ describe("excludeSystemRoleMessages", () => {
 })
 
 describe("createErrorResponse", () => {
-  it("echoes messages only for errors on the internal statusCode contract", async () => {
-    const response = createErrorResponse({
-      message: "No API key configured for OpenAI.",
-      statusCode: 401,
-      code: "MISSING_API_KEY",
-    })
+  it("echoes messages only for branded public errors", async () => {
+    const response = createErrorResponse(
+      new PublicChatHttpError({
+        message: "No API key configured for OpenAI.",
+        statusCode: 401,
+        code: "MISSING_API_KEY",
+      })
+    )
     expect(response.status).toBe(401)
     await expect(response.json()).resolves.toEqual({
       error: "No API key configured for OpenAI.",
@@ -153,15 +66,15 @@ describe("createErrorResponse", () => {
     expect(body.error).toBe("An unexpected error occurred. Please try again.")
   })
 
-  it("keeps the DAILY_LIMIT_REACHED passthrough", async () => {
+  it("does not trust an arbitrary statusCode property", async () => {
     const response = createErrorResponse({
-      message: "Daily limit reached.",
-      code: "DAILY_LIMIT_REACHED",
+      message: "UNTRUSTED_PROVIDER_DETAIL_SENTINEL",
+      statusCode: 400,
+      code: "PROVIDER_ERROR",
     })
-    expect(response.status).toBe(403)
-    await expect(response.json()).resolves.toEqual({
-      error: "Daily limit reached.",
-      code: "DAILY_LIMIT_REACHED",
-    })
+    expect(response.status).toBe(500)
+    await expect(response.text()).resolves.not.toContain(
+      "UNTRUSTED_PROVIDER_DETAIL_SENTINEL"
+    )
   })
 })

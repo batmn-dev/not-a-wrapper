@@ -5,6 +5,7 @@ import { resolveModelId } from "@/lib/models/model-id-migration"
 import { getProviderForModel } from "@/lib/openproviders/provider-map"
 import { hasUserKey } from "@/lib/user-keys"
 import { fetchMutation, fetchQuery } from "convex/nextjs"
+import { PublicChatHttpError } from "./public-http-error"
 
 const USAGE_ERROR_CODES = {
   ANONYMOUS_ID_REQUIRED: "ANONYMOUS_ID_REQUIRED",
@@ -14,11 +15,6 @@ const USAGE_ERROR_CODES = {
 const INTERNAL_SERVER_ERROR_MESSAGE = "Internal server error"
 
 type UsageErrorCode = (typeof USAGE_ERROR_CODES)[keyof typeof USAGE_ERROR_CODES]
-
-type ChatApiError = Error & {
-  statusCode: number
-  code: string
-}
 
 function normalizeUsageErrorCode(
   error: string,
@@ -45,25 +41,28 @@ function normalizeUsageErrorCode(
 function createUsageCheckApiError(
   error: string,
   errorCode?: unknown
-): ChatApiError {
+): PublicChatHttpError {
   const normalizedCode = normalizeUsageErrorCode(error, errorCode)
 
   if (normalizedCode === USAGE_ERROR_CODES.ANONYMOUS_ID_REQUIRED) {
-    return Object.assign(new Error(error), {
+    return new PublicChatHttpError({
+      message: error,
       statusCode: 400,
       code: "INVALID_REQUEST",
     })
   }
 
   if (normalizedCode === USAGE_ERROR_CODES.USER_NOT_FOUND) {
-    return Object.assign(new Error(INTERNAL_SERVER_ERROR_MESSAGE), {
+    return new PublicChatHttpError({
+      message: INTERNAL_SERVER_ERROR_MESSAGE,
       cause: new Error(error),
       statusCode: 500,
       code: "USER_NOT_FOUND",
     })
   }
 
-  return Object.assign(new Error(INTERNAL_SERVER_ERROR_MESSAGE), {
+  return new PublicChatHttpError({
+    message: INTERNAL_SERVER_ERROR_MESSAGE,
     cause: new Error(error),
     statusCode: 500,
     code: "USAGE_CHECK_FAILED",
@@ -100,12 +99,11 @@ export async function checkServerSideUsage(
       )
     }
     const modelType = isPro ? "pro model" : "message"
-    throw Object.assign(
-      new Error(
-        `Daily ${modelType} limit reached (${usage.limit}). Please try again tomorrow or upgrade your plan.`
-      ),
-      { statusCode: 403, code: "DAILY_LIMIT_REACHED" }
-    )
+    throw new PublicChatHttpError({
+      message: `Daily ${modelType} limit reached (${usage.limit}). Please try again tomorrow or upgrade your plan.`,
+      statusCode: 403,
+      code: "DAILY_LIMIT_REACHED",
+    })
   }
 }
 
@@ -135,23 +133,22 @@ export async function validateAndTrackUsage({
 
   if (!isAuthenticated) {
     if (!NON_AUTH_ALLOWED_MODELS.includes(resolvedModel)) {
-      throw Object.assign(
-        new Error(
-          "This model requires authentication. Please sign in to access more models."
-        ),
-        { statusCode: 401, code: "AUTH_REQUIRED" }
-      )
+      throw new PublicChatHttpError({
+        message:
+          "This model requires authentication. Please sign in to access more models.",
+        statusCode: 401,
+        code: "AUTH_REQUIRED",
+      })
     }
   } else {
     const provider = getProviderForModel(resolvedModel)
     const hasKey = await hasUserKey(provider, token)
     if (!hasKey && !FREE_MODELS_IDS.includes(resolvedModel)) {
-      throw Object.assign(
-        new Error(
-          `This model requires an API key for ${provider}. Please add your API key in settings or use a free model.`
-        ),
-        { statusCode: 401, code: "MISSING_API_KEY" }
-      )
+      throw new PublicChatHttpError({
+        message: `This model requires an API key for ${provider}. Please add your API key in settings or use a free model.`,
+        statusCode: 401,
+        code: "MISSING_API_KEY",
+      })
     }
   }
 

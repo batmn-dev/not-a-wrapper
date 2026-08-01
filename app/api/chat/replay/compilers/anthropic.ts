@@ -1,5 +1,4 @@
 import type { UIMessage } from "ai"
-import { z } from "zod"
 import type { ReplayMessage, ReplayToolExchange } from "../types"
 import { synthesizePlatformToolFallback } from "./platform-tool-fallback"
 import type {
@@ -11,31 +10,6 @@ import type {
 } from "./types"
 
 type MessagePart = UIMessage["parts"][number]
-
-const anthropicSearchResultSchema = z.object({
-  url: z.string().min(1),
-  title: z.string().nullable(),
-  pageAge: z.string().nullable(),
-  encryptedContent: z.string().min(1),
-  type: z.literal("web_search_result"),
-})
-
-const anthropicToolPartSchema = z.object({
-  type: z.literal("tool-web_search"),
-  state: z.literal("output-available"),
-  toolName: z.literal("web_search"),
-  toolCallId: z.string().min(1),
-  providerExecuted: z.boolean(),
-  input: z.object({
-    query: z.string(),
-  }),
-  output: z.array(anthropicSearchResultSchema),
-})
-
-const textPartSchema = z.object({
-  type: z.literal("text"),
-  text: z.string(),
-})
 
 function createStats(messages: readonly ReplayMessage[]): ReplayCompileStats {
   return {
@@ -75,46 +49,6 @@ function synthesizeWebSearchFallback(tool: ReplayToolExchange): string | null {
   return `Replay context from prior web_search${queryLabel}:\n${lines.join("\n")}`
 }
 
-function compileWebSearchToolPart(
-  tool: ReplayToolExchange,
-  messageId: string,
-  partIndex: number
-) {
-  if (!tool.webSearch) return null
-
-  const hasNativeAnthropicResults = tool.webSearch.results.every(
-    (result) =>
-      result.resultType === "web_search_result" &&
-      typeof result.encryptedContent === "string" &&
-      result.encryptedContent.length > 0
-  )
-  if (!hasNativeAnthropicResults) return null
-
-  const toolCallId =
-    typeof tool.toolCallId === "string" && tool.toolCallId.length > 0
-      ? tool.toolCallId
-      : `${messageId}-web-search-${partIndex}`
-
-  const candidate = {
-    type: "tool-web_search",
-    state: "output-available",
-    toolName: "web_search",
-    toolCallId,
-    providerExecuted: true,
-    input: { query: tool.webSearch.query },
-    output: tool.webSearch.results.map((result) => ({
-      url: result.url,
-      title: result.title ?? null,
-      pageAge: result.pageAge ?? null,
-      encryptedContent: result.encryptedContent,
-      type: result.resultType,
-    })),
-  }
-
-  const parsed = anthropicToolPartSchema.safeParse(candidate)
-  return parsed.success ? (parsed.data as MessagePart) : null
-}
-
 function compileMessageParts(
   message: ReplayMessage,
   messageIndex: number,
@@ -124,126 +58,66 @@ function compileMessageParts(
   const nextParts: MessagePart[] = []
 
   message.parts.forEach((part, partIndex) => {
-    if (part.type !== "tool-exchange") {
-      if (part.type === "text") {
-        const validatedPart = textPartSchema.safeParse(part)
-        if (!validatedPart.success) {
-          stats.invariantsRepaired += 1
-          warnings.push({
-            code: "invariant_block_dropped",
-            messageIndex,
-            partIndex,
-            detail: `Dropped invalid compiled part of type "${part.type}"`,
-          })
-          return
-        }
-
-        nextParts.push(validatedPart.data as MessagePart)
-        return
-      }
-
-      if (part.type === "source-url") {
-        warnings.push({
-          code: "source_url_dropped",
-          messageIndex,
-          partIndex,
-          detail: "Dropped source-url part for Anthropic-safe replay.",
-        })
-        return
-      }
-
-      if (part.type === "file") {
-        const label = part.filename?.trim().length
-          ? part.filename
-          : "attached file"
-        nextParts.push({
-          type: "text",
-          text: `Replay note: ${label} was present in prior context.`,
-        } as MessagePart)
-        stats.invariantsRepaired += 1
-        warnings.push({
-          code: "invariant_reasoning_injected",
-          messageIndex,
-          partIndex,
-          detail: "Converted file part to text for Anthropic-safe replay",
-        })
-        return
-      }
-
-      {
-        const unsupportedPartType =
-          (part as { type?: string }).type ?? "unknown"
-        stats.invariantsRepaired += 1
-        warnings.push({
-          code: "invariant_block_dropped",
-          messageIndex,
-          partIndex,
-          detail: `Dropped unsupported replay part "${unsupportedPartType}"`,
-        })
-        return
-      }
+    if (part.type === "text") {
+      nextParts.push({ type: "text", text: part.text } as MessagePart)
+      return
     }
 
-    const tool = part.tool
+    if (part.type === "file") {
+      nextParts.push({
+        type: "file",
+        mediaType: part.mediaType,
+        filename: part.filename,
+        url: part.url,
+      } as MessagePart)
+      return
+    }
+
+    if (part.type === "source-url") {
+      nextParts.push({
+        type: "text",
+        text: `[Earlier cited source: ${part.title ?? "Source"} (${part.url})]`,
+      } as MessagePart)
+      warnings.push({
+        code: "source_url_projected",
+        messageIndex,
+        partIndex,
+        detail: "Projected source-url to replay-safe citation text.",
+      })
+      return
+    }
+
     stats.toolExchangesSeen += 1
-
-    if (tool.toolName !== "web_search") {
-      stats.toolExchangesDropped += 1
-
-      const platformFallback = synthesizePlatformToolFallback(tool)
-      if (platformFallback) {
-        nextParts.push({ type: "text", text: platformFallback } as MessagePart)
-      }
-
-      warnings.push({
-        code: "tool_non_replayable",
-        messageIndex,
-        partIndex,
-        detail: platformFallback
-          ? `Dropped platform tool "${tool.toolName}" with continuity summary for Anthropic compiler`
-          : `Dropped unsupported replay tool "${tool.toolName}" for Anthropic compiler`,
-      })
-      return
-    }
-
-    if (!tool.replayable || !tool.webSearch) {
-      stats.toolExchangesDropped += 1
-      warnings.push({
-        code: "tool_non_replayable",
-        messageIndex,
-        partIndex,
-        detail:
-          tool.nonReplayableReason ?? "web_search payload is non-replayable",
-      })
-
+    const tool = part.tool
+    if (tool.toolName === "web_search") {
       const fallbackText = synthesizeWebSearchFallback(tool)
       if (fallbackText) {
         nextParts.push({ type: "text", text: fallbackText } as MessagePart)
+        stats.toolExchangesCompiled += 1
+        warnings.push({
+          code: "tool_lowered_to_text",
+          messageIndex,
+          partIndex,
+          detail:
+            "Lowered web_search replay to text; the compiler never fabricates Anthropic hosted-tool payloads.",
+        })
+        return
       }
-      return
     }
 
-    const compiledPart = compileWebSearchToolPart(tool, message.id, partIndex)
-    if (!compiledPart) {
-      stats.toolExchangesDropped += 1
-      stats.invariantsRepaired += 1
-      warnings.push({
-        code: "invariant_block_dropped",
-        messageIndex,
-        partIndex,
-        detail:
-          "Dropped web_search replay part because Anthropic output validation failed",
-      })
-
-      const fallbackText = synthesizeWebSearchFallback(tool)
-      if (fallbackText) {
-        nextParts.push({ type: "text", text: fallbackText } as MessagePart)
-      }
-      return
+    stats.toolExchangesDropped += 1
+    const platformFallback = synthesizePlatformToolFallback(tool)
+    if (platformFallback) {
+      nextParts.push({ type: "text", text: platformFallback } as MessagePart)
     }
-
-    nextParts.push(compiledPart)
-    stats.toolExchangesCompiled += 1
+    warnings.push({
+      code: "tool_non_replayable",
+      messageIndex,
+      partIndex,
+      detail:
+        tool.nonReplayableReason ??
+        `Dropped unsupported replay tool "${tool.toolName}" for Anthropic compiler`,
+    })
   })
 
   if (nextParts.length === 0) {
@@ -257,50 +131,6 @@ function compileMessageParts(
   }
 
   return nextParts
-}
-
-function validateCompiledMessage(
-  message: UIMessage,
-  messageIndex: number,
-  warnings: ReplayCompileWarning[],
-  stats: ReplayCompileStats
-): UIMessage {
-  const validatedParts: MessagePart[] = []
-
-  message.parts.forEach((part, partIndex) => {
-    const toolCheck =
-      part.type === "tool-web_search"
-        ? anthropicToolPartSchema.safeParse(part).success
-        : true
-    const textCheck =
-      part.type === "text" ? textPartSchema.safeParse(part).success : true
-    if (toolCheck && textCheck) {
-      validatedParts.push(part)
-      return
-    }
-
-    stats.invariantsRepaired += 1
-    warnings.push({
-      code: "invariant_block_dropped",
-      messageIndex,
-      partIndex,
-      detail: `Dropped invalid part during Anthropic output validation (${part.type})`,
-    })
-  })
-
-  if (validatedParts.length === 0) {
-    validatedParts.push({ type: "text", text: "" } as MessagePart)
-    warnings.push({
-      code: "message_empty_fallback",
-      messageIndex,
-      detail: "Injected empty text fallback after Anthropic output validation",
-    })
-  }
-
-  return {
-    ...message,
-    parts: validatedParts,
-  }
 }
 
 export const anthropicReplayCompiler: ReplayCompiler = {
@@ -324,17 +154,11 @@ export const anthropicReplayCompiler: ReplayCompiler = {
         stats.invariantsRepaired += 1
       }
 
-      const compiledMessage: UIMessage = {
+      return {
         id: message.id,
         role,
         parts: compileMessageParts(message, messageIndex, warnings, stats),
-      }
-      return validateCompiledMessage(
-        compiledMessage,
-        messageIndex,
-        warnings,
-        stats
-      )
+      } as UIMessage
     })
 
     stats.compiledMessageCount = compiled.length
@@ -347,10 +171,6 @@ export const anthropicReplayCompiler: ReplayCompiler = {
       0
     )
 
-    return {
-      messages: compiled,
-      warnings,
-      stats,
-    }
+    return { messages: compiled, warnings, stats }
   },
 }

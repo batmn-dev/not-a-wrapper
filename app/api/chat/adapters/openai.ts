@@ -159,21 +159,39 @@ function validateOpenAIBlock(block: MessagePart[]): BlockValidationResult {
   return { keep: true, parts: sanitized }
 }
 
-function stripProviderMetadataFromToolPart(part: MessagePart): {
+// OpenAI replay must be SELF-CONTAINED. With the Responses API default
+// `store: true`, any history part carrying `providerMetadata.openai.itemId`
+// (msg_/rs_ ids on text and reasoning parts) is serialized as a server-side
+// `item_reference` lookup instead of its actual content — and the API 400s
+// (`invalid_value` on `input`) whenever the referenced items are not
+// retrievable under the current key. Strip BOTH metadata carriers from every
+// history part so replay always sends real content and never provider-linked
+// ids. The live continuation tail never passes through this adapter, so
+// approval-protocol metadata is unaffected.
+function stripProviderMetadataFromPart(part: MessagePart): {
   part: MessagePart
   hadProviderMetadata: boolean
 } {
-  if (!isToolPart(part)) {
+  const record = part as PartWithToolFields & {
+    providerMetadata?: Record<string, unknown>
+  }
+  const hadCallProviderMetadata = record.callProviderMetadata != null
+  const hadProviderMetadata = record.providerMetadata != null
+  if (!hadCallProviderMetadata && !hadProviderMetadata) {
     return { part, hadProviderMetadata: false }
   }
 
-  const toolPart = part as PartWithToolFields
-  const hadProviderMetadata = toolPart.callProviderMetadata != null
-  const stripped = stripCallProviderMetadata(toolPart) as MessagePart
+  const stripped = stripCallProviderMetadata(record) as MessagePart & {
+    providerMetadata?: Record<string, unknown>
+  }
+  if (hadProviderMetadata) {
+    const { providerMetadata: _providerMetadata, ...rest } = stripped
+    return { part: rest as MessagePart, hadProviderMetadata: true }
+  }
 
   return {
     part: stripped,
-    hadProviderMetadata,
+    hadProviderMetadata: true,
   }
 }
 
@@ -223,7 +241,7 @@ export const openaiAdapter: ProviderHistoryAdapter = {
             continue
           }
 
-          const stripped = stripProviderMetadataFromToolPart(part)
+          const stripped = stripProviderMetadataFromPart(part)
           if (stripped.hadProviderMetadata) {
             stats.providerIdsStripped += 1
             incrementStat(stats.partsTransformed, part.type)
@@ -303,7 +321,7 @@ export const openaiAdapter: ProviderHistoryAdapter = {
             continue
           }
 
-          const stripped = stripProviderMetadataFromToolPart(part)
+          const stripped = stripProviderMetadataFromPart(part)
           if (stripped.hadProviderMetadata) {
             stats.providerIdsStripped += 1
             incrementStat(stats.partsTransformed, part.type)

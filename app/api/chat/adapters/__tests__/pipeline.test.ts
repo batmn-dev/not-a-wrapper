@@ -1,7 +1,6 @@
 import type { ModelMessage } from "ai"
 import { convertToModelMessages } from "ai"
 import { describe, expect, it } from "vitest"
-import { hasProviderLinkedResponseIds } from "../../utils"
 import { adaptHistoryForProvider } from "../index"
 import {
   abortedToolConversation,
@@ -66,8 +65,9 @@ function assertStructuralValidity(messages: ModelMessage[]): void {
 }
 
 function assertNoProviderLinkedIds(messages: ModelMessage[]): void {
-  expect(hasProviderLinkedResponseIds(messages)).toBe(false)
-  expect(JSON.stringify(messages)).not.toMatch(/\bfc_[a-zA-Z0-9]+\b/)
+  expect(JSON.stringify(messages)).not.toMatch(
+    /\b(?:msg|rs|ws|fc)_[a-zA-Z0-9]+\b/
+  )
 }
 
 function assertToolCallsHaveResults(messages: ModelMessage[]): void {

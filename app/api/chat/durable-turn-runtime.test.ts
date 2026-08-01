@@ -151,7 +151,9 @@ function orderedOps(wire: RecordingWire): string[] {
   return wire.calls.map((call) => call.op)
 }
 
-function makeInput(overrides: Partial<DurableTurnInput> = {}): DurableTurnInput {
+function makeInput(
+  overrides: Partial<DurableTurnInput> = {}
+): DurableTurnInput {
   return {
     chatId: "convexchatid000000000000",
     requestId: "req-1",
@@ -512,12 +514,12 @@ describe("durable turn runtime — settlement ordering", () => {
     expect(lastSnapshot).toBeLessThan(
       ops.lastIndexOf("markGenerationRunAborted")
     )
-    expect(wireCalls(wire, "updateAssistantSnapshot").at(-1)?.args).toMatchObject(
-      {
-        textSnapshot: "done",
-        partsSnapshot: RESPONSE_MESSAGE.parts,
-      }
-    )
+    expect(
+      wireCalls(wire, "updateAssistantSnapshot").at(-1)?.args
+    ).toMatchObject({
+      textSnapshot: "done",
+      partsSnapshot: RESPONSE_MESSAGE.parts,
+    })
   })
 })
 
@@ -556,9 +558,7 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
       expect(wireCalls(wire, "markGenerationRunCompleted")).toHaveLength(3)
       const terminalWarnings = warn.mock.calls
         .map(([message]) => JSON.parse(String(message)))
-        .filter(
-          (message) => message._tag === "durable_completion_write_failed"
-        )
+        .filter((message) => message._tag === "durable_completion_write_failed")
       expect(terminalWarnings).toEqual([
         expect.objectContaining({
           requestId: "req-1",
@@ -706,9 +706,7 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
       // The first attempt still warned — retries are observable, not silent.
       const attemptWarnings = warn.mock.calls
         .map(([message]) => JSON.parse(String(message)))
-        .filter(
-          (message) => message._tag === "durable_completion_write_failed"
-        )
+        .filter((message) => message._tag === "durable_completion_write_failed")
       expect(attemptWarnings).toEqual([expect.objectContaining({ attempt: 1 })])
       expect(Sentry.captureMessage).not.toHaveBeenCalledWith(
         "durable_settlement_degraded",
@@ -866,7 +864,9 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
       expect(wireCalls(wire, "markGenerationRunAborted")).toHaveLength(0)
       const revokedWarnings = warn.mock.calls
         .map(([message]) => JSON.parse(String(message)))
-        .filter((message) => message._tag === "durable_worker_authority_revoked")
+        .filter(
+          (message) => message._tag === "durable_worker_authority_revoked"
+        )
       expect(revokedWarnings).toHaveLength(1)
       expect(Sentry.captureMessage).not.toHaveBeenCalled()
     } finally {
@@ -1156,10 +1156,12 @@ describe("durable turn runtime — prepare() error mapping and grant minting", (
     }) as DurableTurnInput & { convexToken: string }
     const turn = makeConvexTurn(input, fetchMutation, makeRecordingWire())
 
-    await expect(turn.prepare({ provider: "anthropic" })).rejects.toMatchObject({
-      statusCode: 400,
-      code: "INVALID_REQUEST",
-    })
+    await expect(turn.prepare({ provider: "anthropic" })).rejects.toMatchObject(
+      {
+        statusCode: 400,
+        code: "INVALID_REQUEST",
+      }
+    )
     expect(fetchMutation).not.toHaveBeenCalled()
   })
 
@@ -1189,6 +1191,47 @@ describe("durable turn runtime — prepare() error mapping and grant minting", (
     } finally {
       warn.mockRestore()
     }
+  })
+
+  it("maps an approval continuation race to the branded 409 contract", async () => {
+    const fetchMutation = makeRecordingFetchMutation({
+      prepareResponder: () => {
+        throw { data: { code: "approval_continuation_conflict" } }
+      },
+    })
+    const turn = makeConvexTurn(
+      makeInput() as DurableTurnInput & { convexToken: string },
+      fetchMutation,
+      makeRecordingWire()
+    )
+
+    await expect(turn.prepare({ provider: "anthropic" })).rejects.toMatchObject(
+      {
+        name: "PublicChatHttpError",
+        statusCode: 409,
+        code: "APPROVAL_CONTINUATION_CONFLICT",
+        message: "Approval continuation already dispatched",
+      }
+    )
+  })
+
+  it("maps an authoritative approval provider mismatch to branded 409", async () => {
+    const fetchMutation = makeRecordingFetchMutation({
+      prepareResponder: () => {
+        throw { data: { code: "approval_provider_mismatch" } }
+      },
+    })
+    const turn = makeConvexTurn(
+      makeInput() as DurableTurnInput & { convexToken: string },
+      fetchMutation,
+      makeRecordingWire()
+    )
+
+    await expect(turn.prepare({ provider: "google" })).rejects.toMatchObject({
+      name: "PublicChatHttpError",
+      statusCode: 409,
+      code: "APPROVAL_PROVIDER_MISMATCH",
+    })
   })
 
   it("passes a concurrency-guard rejection through untouched (no 400 remap)", async () => {
@@ -1256,6 +1299,117 @@ describe("durable turn runtime — prepare() error mapping and grant minting", (
   })
 })
 
+describe("durable turn runtime — approval continuation scope (trailing tail only)", () => {
+  const staleDeniedAssistant = {
+    id: "a-stale",
+    role: "assistant",
+    metadata: { provider: "openai" },
+    parts: [
+      {
+        type: "dynamic-tool",
+        toolName: "deepwiki_ask_question",
+        toolCallId: "call-stale",
+        state: "approval-responded",
+        input: { question: "q" },
+        approval: { id: "approval-stale", approved: false, reason: "denied" },
+      },
+      { type: "text", text: "" },
+    ],
+  } as unknown as UIMessage
+
+  it("does not classify a stale mid-history approval part as a continuation (regression: silent message loss)", async () => {
+    // denyPendingApprovalsForChat persists approval-responded{approved:false}
+    // parts into durable history; they arrive with every later POST. Before
+    // the fix, extractApprovalResponses scanned ALL messages, so the user's
+    // NEW trailing message was never persisted (latestUserMessage suppressed)
+    // and the turn 409ed against the settled run — swallowed by the client.
+    const fetchMutation = makeRecordingFetchMutation()
+    const turn = makeConvexTurn(
+      makeInput({
+        messages: [
+          {
+            id: "u1",
+            role: "user",
+            parts: [{ type: "text", text: "hi" }],
+          },
+          staleDeniedAssistant,
+          {
+            id: "u2",
+            role: "user",
+            parts: [{ type: "text", text: "world" }],
+          },
+        ] as UIMessage[],
+      }) as DurableTurnInput & { convexToken: string },
+      fetchMutation,
+      makeRecordingWire()
+    )
+
+    await turn.prepare({ provider: "openai" })
+
+    const prepareCall = fetchMutation.mock.calls.find(([ref]) =>
+      getFunctionName(ref as never).includes("prepareGeneration")
+    )
+    expect(prepareCall).toBeDefined()
+    const args = prepareCall?.[1] as {
+      approvalResponses: unknown[]
+      latestUserMessage?: { id: string }
+    }
+    expect(args.approvalResponses).toEqual([])
+    expect(args.latestUserMessage?.id).toBe("u2")
+  })
+
+  it("still extracts a live trailing approval tail as a continuation", async () => {
+    const fetchMutation = makeRecordingFetchMutation()
+    const turn = makeConvexTurn(
+      makeInput({
+        messages: [
+          {
+            id: "u1",
+            role: "user",
+            parts: [{ type: "text", text: "run it" }],
+          },
+          {
+            id: "a-live",
+            role: "assistant",
+            metadata: { provider: "openai" },
+            parts: [
+              {
+                type: "dynamic-tool",
+                toolName: "deepwiki_ask_question",
+                toolCallId: "call-live",
+                state: "approval-responded",
+                input: { question: "q" },
+                approval: { id: "approval-live", approved: true },
+              },
+            ],
+          },
+        ] as unknown as UIMessage[],
+      }) as DurableTurnInput & { convexToken: string },
+      fetchMutation,
+      makeRecordingWire()
+    )
+
+    await turn.prepare({ provider: "openai" })
+
+    const prepareCall = fetchMutation.mock.calls.find(([ref]) =>
+      getFunctionName(ref as never).includes("prepareGeneration")
+    )
+    const args = prepareCall?.[1] as {
+      approvalResponses: Array<{ approvalId: string; approved: boolean }>
+      latestUserMessage?: unknown
+    }
+    expect(args.approvalResponses).toEqual([
+      expect.objectContaining({
+        approvalId: "approval-live",
+        approved: true,
+        toolCallId: "call-live",
+        toolName: "deepwiki_ask_question",
+      }),
+    ])
+    expect(args.latestUserMessage).toBeUndefined()
+  })
+})
+
 describe("durable turn runtime — guest inertness", () => {
   it("drives the full lifecycle with zero network and identity passthrough", async () => {
     const guest = createGuestDurableTurn(
@@ -1295,7 +1449,9 @@ describe("durable turn runtime — guest inertness", () => {
       finishReason: "stop",
       toolCounts: { totalToolCalls: 0, failedToolCalls: 0 },
     })
-    await expect(binding.stream.onAbort("stream aborted")).resolves.toBeUndefined()
+    await expect(
+      binding.stream.onAbort("stream aborted")
+    ).resolves.toBeUndefined()
     await expect(
       binding.envelope.settle({
         responseMessage: {

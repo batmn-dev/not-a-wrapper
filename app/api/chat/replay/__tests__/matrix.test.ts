@@ -76,7 +76,8 @@ describe("replay compiler matrix", () => {
       result.warnings.some(
         (warning) =>
           warning.code === "replay_compile_warning" &&
-          warning.detail.includes("invariant_block_dropped")
+          warning.detail.includes("tool_lowered_to_text") &&
+          warning.detail.includes("never fabricates Anthropic hosted-tool")
       )
     ).toBe(true)
   })

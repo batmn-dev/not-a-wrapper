@@ -67,10 +67,10 @@ describe("stampServerFields", () => {
     expect(result.usage).toEqual({ totalTokens: 10 })
   })
 
-  it("projects only id, status, and error in runtime mode", () => {
+  it("projects only id, provider, status, and error in runtime mode", () => {
     const result = stampServerFields({}, fullSource, "runtime")
     expect(new Set(Object.keys(result))).toEqual(
-      new Set(["serverMessageId", "durableStatus", "durableError"])
+      new Set(["serverMessageId", "durableStatus", "durableError", "provider"])
     )
   })
 

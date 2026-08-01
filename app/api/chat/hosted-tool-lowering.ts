@@ -1,32 +1,20 @@
-import {
-  isToolUIPart,
-  safeValidateUIMessages,
-  type ToolSet,
-  type UIMessage,
-} from "ai"
+import { isToolUIPart, type ToolSet, type UIMessage } from "ai"
 
-// Hosted-tool history lowering (cross-provider replay safety).
-//
-// Provider-executed ("hosted") tool activity — Anthropic/OpenAI/Google/xAI
-// native web search — is persisted in durable history in the ORIGIN provider's
-// wire shape, under the shared application tool key (`web_search`). A later
-// turn may target a different provider whose same-named tool has an
-// incompatible schema, and whose SDK cannot replay foreign hosted activity at
-// all (the OpenAI Responses conversion turns provider-executed results into
-// server-side `item_reference` lookups, which 400 on foreign or synthesized
-// ids). Such parts must never reach tool-schema validation or the target
-// provider as tool parts.
-//
-// This pass runs on HISTORY only (never the live continuation tail) and lowers
-// any provider-executed tool part the CURRENT registry does not provably
-// accept into a neutral text part carrying the query and titled citations —
-// provider-neutral continuity, no fabricated hosted calls, no foreign ids, and
-// never opaque payloads such as Anthropic's `encryptedContent`.
+// Provider-executed activity is canonical evidence of what an origin provider
+// did, not a portable tool exchange. Installed targets disagree on how such
+// parts replay: OpenAI emits server-side item references, Anthropic requires
+// opaque encrypted results, Google has separate grounding/server-tool shapes,
+// and xAI drops provider-executed calls from request history. Consequently no
+// provider-hosted history is sent back as a tool part. This model-bound pass
+// projects it to provider-neutral text while leaving canonical persistence
+// untouched. Approval continuations are checked separately because they are a
+// live, provider-pinned protocol continuation rather than history.
 
 type MessagePart = UIMessage["parts"][number]
 
 type HostedToolPartLike = {
   type: string
+  toolName?: string
   state?: string
   toolCallId?: string
   providerExecuted?: boolean
@@ -34,21 +22,89 @@ type HostedToolPartLike = {
   output?: unknown
 }
 
+export type HostedToolLoweringReason =
+  | "dynamic_provider_tool"
+  | "provider_hosted_history"
+  | "provider_mismatch"
+  | "tool_identity_mismatch"
+  | "tool_not_registered"
+  | "unsafe_state"
+  | "untrusted_provenance"
+
 export type HostedToolLoweringDetail = {
   messageIndex: number
   partIndex: number
   toolName: string
-  reason: "tool_not_registered" | "schema_mismatch"
+  originProvider?: string
+  targetProvider: string
+  reason: HostedToolLoweringReason
+}
+
+export type HostedSourceProjectionDetail = {
+  messageIndex: number
+  partIndex: number
 }
 
 export type HostedToolLoweringResult = {
   messages: UIMessage[]
   loweredCount: number
+  sourceProjectionCount: number
   details: HostedToolLoweringDetail[]
+  sourceDetails: HostedSourceProjectionDetail[]
+}
+
+export type HostedToolLoweringOptions = {
+  targetProvider: string
+  tools: ToolSet
+}
+
+function inferTargetProvider(tools: ToolSet): string {
+  for (const tool of Object.values(tools)) {
+    if (tool.type !== "provider" || typeof tool.id !== "string") continue
+    const [provider] = tool.id.split(".")
+    if (provider) return provider
+  }
+  return "unknown"
+}
+
+function normalizeOptions(
+  options: HostedToolLoweringOptions | ToolSet
+): HostedToolLoweringOptions {
+  if (
+    Object.prototype.hasOwnProperty.call(options, "targetProvider") &&
+    typeof options.targetProvider === "string" &&
+    Object.prototype.hasOwnProperty.call(options, "tools")
+  ) {
+    return options as HostedToolLoweringOptions
+  }
+  return {
+    targetProvider: inferTargetProvider(options as ToolSet),
+    tools: options as ToolSet,
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object"
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+}
+
+function getMessageOriginProvider(message: UIMessage): string | undefined {
+  if (!isRecord(message.metadata)) return undefined
+  const provider = message.metadata.provider
+  return typeof provider === "string" && provider.length > 0
+    ? provider
+    : undefined
+}
+
+function hasOwnTool(tools: ToolSet, toolName: string): boolean {
+  return Object.prototype.hasOwnProperty.call(tools, toolName)
+}
+
+function getToolName(part: HostedToolPartLike): string {
+  return part.type === "dynamic-tool"
+    ? typeof part.toolName === "string" && part.toolName.length > 0
+      ? part.toolName
+      : "unknown"
+    : part.type.slice("tool-".length)
 }
 
 type Citation = { url: string; title?: string }
@@ -59,16 +115,12 @@ function toCitation(value: unknown): Citation | null {
   }
   return {
     url: value.url,
-    title: typeof value.title === "string" && value.title ? value.title : undefined,
+    title:
+      typeof value.title === "string" && value.title ? value.title : undefined,
   }
 }
 
-/**
- * Extract url/title citations from any known provider search-output shape:
- * Anthropic (array of results), OpenAI ({sources: [...]}), xAI
- * ({query, sources: [...]}), generic ({results: [...]}). Unknown shapes yield
- * no citations — the lowered text still records that a search happened.
- */
+/** Extract only display-safe citation fields; opaque provider payloads drop. */
 export function extractHostedSearchCitations(output: unknown): Citation[] {
   if (Array.isArray(output)) {
     return output.map(toCitation).filter((item): item is Citation => !!item)
@@ -87,9 +139,8 @@ export function extractHostedSearchCitations(output: unknown): Citation[] {
 const MAX_LOWERED_CITATIONS = 5
 
 function synthesizeLoweredText(part: HostedToolPartLike): string {
-  const toolName = part.type.startsWith("tool-")
-    ? part.type.slice("tool-".length)
-    : part.type
+  const toolName = getToolName(part)
+  const state = typeof part.state === "string" ? part.state : "unknown"
   const query =
     isRecord(part.input) && typeof part.input.query === "string"
       ? part.input.query.trim()
@@ -97,7 +148,7 @@ function synthesizeLoweredText(part: HostedToolPartLike): string {
   const queryLabel = query ? ` for "${query}"` : ""
 
   if (toolName !== "web_search") {
-    return `[A provider-hosted "${toolName}" tool ran in an earlier turn on a different provider; its raw result is not replayable here.]`
+    return `[A provider-hosted "${toolName}" tool reached ${state} in an earlier turn; its provider-native payload was omitted from replay.]`
   }
 
   const citations = extractHostedSearchCitations(part.output).slice(
@@ -105,7 +156,7 @@ function synthesizeLoweredText(part: HostedToolPartLike): string {
     MAX_LOWERED_CITATIONS
   )
   if (citations.length === 0) {
-    return `[A web search${queryLabel} ran in an earlier turn; its results are not replayable on this provider.]`
+    return `[A web search${queryLabel} reached ${state} in an earlier turn; its provider-native payload was omitted from replay.]`
   }
 
   const lines = citations.map(
@@ -114,94 +165,113 @@ function synthesizeLoweredText(part: HostedToolPartLike): string {
   return `[Earlier web search${queryLabel} found:\n${lines.join("\n")}]`
 }
 
-/**
- * True when the current registry provably accepts this part: the tool exists
- * under the same name and the part passes the SDK's own tool-schema validation
- * (input for input/output-available states, output for output-available). Uses
- * `safeValidateUIMessages` on a single-part probe message so the acceptance
- * predicate is exactly the one `validateUIMessages` applies later.
- */
-async function registryAcceptsPart(
-  part: HostedToolPartLike,
-  tools: ToolSet
-): Promise<{ accepted: boolean; reason: HostedToolLoweringDetail["reason"] }> {
-  const toolName = part.type.slice("tool-".length)
-  if (!(toolName in tools)) {
-    return { accepted: false, reason: "tool_not_registered" }
-  }
-  const probe = await safeValidateUIMessages({
-    messages: [
-      { id: "hosted-tool-probe", role: "assistant", parts: [part as MessagePart] },
-    ],
-    tools: tools as unknown as Parameters<
-      typeof safeValidateUIMessages
-    >[0]["tools"],
-  })
-  return { accepted: probe.success, reason: "schema_mismatch" }
+function synthesizeSourceText(part: MessagePart): string | null {
+  if (part.type !== "source-url") return null
+  const title =
+    typeof part.title === "string" && part.title ? part.title : "Source"
+  return `[Earlier cited source: ${title} (${part.url})]`
 }
 
 function isHostedToolPart(
   part: MessagePart
-): part is MessagePart & HostedToolPartLike & { type: `tool-${string}` } {
-  // Static `tool-*` parts only: dynamic-tool parts (MCP) are client-executed
-  // and never schema-validated by the SDK; client tool parts replay as
-  // ordinary tool-call/result pairs.
-  return (
-    isToolUIPart(part) &&
-    part.type !== "dynamic-tool" &&
-    (part as HostedToolPartLike).providerExecuted === true
-  )
+): part is MessagePart & HostedToolPartLike {
+  return isToolUIPart(part) && part.providerExecuted === true
+}
+
+const SAFE_HISTORICAL_STATES = new Set([
+  "output-available",
+  "output-error",
+  "output-denied",
+])
+
+function classifyHostedPart(options: {
+  part: HostedToolPartLike
+  originProvider?: string
+  targetProvider: string
+  tools: ToolSet
+}): HostedToolLoweringReason {
+  const { part, originProvider, targetProvider, tools } = options
+  const toolName = getToolName(part)
+  if (!originProvider) return "untrusted_provenance"
+  if (!SAFE_HISTORICAL_STATES.has(part.state ?? "")) return "unsafe_state"
+  if (part.type === "dynamic-tool") return "dynamic_provider_tool"
+  if (!hasOwnTool(tools, toolName)) return "tool_not_registered"
+  if (originProvider !== targetProvider) return "provider_mismatch"
+
+  const registeredTool = tools[toolName] as
+    { type?: string; id?: string; isProviderExecuted?: boolean } | undefined
+  if (
+    registeredTool?.type !== "provider" ||
+    registeredTool.isProviderExecuted !== true ||
+    typeof registeredTool.id !== "string" ||
+    !registeredTool.id.startsWith(`${targetProvider}.`)
+  ) {
+    return "tool_identity_mismatch"
+  }
+
+  // Even an exact same-provider registry match is schema acceptance, not
+  // replay compatibility. Historical hosted activity is always projected.
+  return "provider_hosted_history"
 }
 
 /**
- * Lower foreign provider-hosted tool activity in history to neutral text.
- * Same-provider hosted parts that the current registry accepts pass through
- * untouched; everything else — foreign origin, changed schema, tool absent
- * this turn — becomes provider-neutral continuity text.
+ * Project provider-hosted history and provider grounding sources to safe text.
+ * Client-executed tool pairs are left for the normal provider adapters.
  */
-export async function lowerForeignHostedToolParts(
+export function lowerForeignHostedToolParts(
   messages: readonly UIMessage[],
-  tools: ToolSet
-): Promise<HostedToolLoweringResult> {
+  rawOptions: HostedToolLoweringOptions | ToolSet
+): HostedToolLoweringResult {
+  const options = normalizeOptions(rawOptions)
   const details: HostedToolLoweringDetail[] = []
+  const sourceDetails: HostedSourceProjectionDetail[] = []
   const lowered: UIMessage[] = []
 
   for (const [messageIndex, message] of messages.entries()) {
-    if (
-      message.role !== "assistant" ||
-      !message.parts.some((part) => isHostedToolPart(part))
-    ) {
-      lowered.push(message)
-      continue
-    }
-
+    const originProvider = getMessageOriginProvider(message)
     const parts: MessagePart[] = []
+    let changed = false
+
     for (const [partIndex, part] of message.parts.entries()) {
-      if (!isHostedToolPart(part)) {
-        parts.push(part)
+      if (isHostedToolPart(part)) {
+        const toolName = getToolName(part)
+        details.push({
+          messageIndex,
+          partIndex,
+          toolName,
+          originProvider,
+          targetProvider: options.targetProvider,
+          reason: classifyHostedPart({
+            part,
+            originProvider,
+            targetProvider: options.targetProvider,
+            tools: options.tools,
+          }),
+        })
+        parts.push({ type: "text", text: synthesizeLoweredText(part) })
+        changed = true
         continue
       }
 
-      const verdict = await registryAcceptsPart(part, tools)
-      if (verdict.accepted) {
-        parts.push(part)
+      const sourceText = synthesizeSourceText(part)
+      if (sourceText !== null) {
+        sourceDetails.push({ messageIndex, partIndex })
+        parts.push({ type: "text", text: sourceText })
+        changed = true
         continue
       }
 
-      details.push({
-        messageIndex,
-        partIndex,
-        toolName: part.type.slice("tool-".length),
-        reason: verdict.reason,
-      })
-      parts.push({
-        type: "text",
-        text: synthesizeLoweredText(part),
-      } as MessagePart)
+      parts.push(part)
     }
 
-    lowered.push({ ...message, parts })
+    lowered.push(changed ? ({ ...message, parts } as UIMessage) : message)
   }
 
-  return { messages: lowered, loweredCount: details.length, details }
+  return {
+    messages: lowered,
+    loweredCount: details.length,
+    sourceProjectionCount: sourceDetails.length,
+    details,
+    sourceDetails,
+  }
 }
