@@ -121,6 +121,11 @@ describe("chat turn plans", () => {
     ])
     expect(plan.expectedChatVersion).toBe(4)
     expect(plan.chatVersion).toBe(3)
+    // Only a first-user-message edit may retitle the chat; a mid-conversation
+    // edit must not carry the flag at all.
+    expect(buildEditRequest("user-2", plan)).not.toHaveProperty(
+      "regenerateTitle"
+    )
   })
 
   it("builds edit intents for AI SDK client message IDs", () => {
