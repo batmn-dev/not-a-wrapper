@@ -1291,6 +1291,16 @@ export function createConvexDurableTurn(args: {
             code: "APPROVAL_PROVIDER_MISMATCH",
           })
         }
+        // Unlike a continuation conflict, no winning decision exists to
+        // observe through the projection — the client must surface this one.
+        if (conflictCode === "approval_unresolved") {
+          throw new PublicChatHttpError({
+            message:
+              "Your approval decision was not recorded. Approve or deny it again.",
+            statusCode: 409,
+            code: "APPROVAL_UNRESOLVED",
+          })
+        }
         // `isServerChatId` only rules out local/optimistic prefixes, so a
         // crafted or corrupted id reaches the durable contract here and Convex
         // rejects it with argument validation. That is a request-shape fault:

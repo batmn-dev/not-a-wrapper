@@ -1234,6 +1234,25 @@ describe("durable turn runtime — prepare() error mapping and grant minting", (
     })
   })
 
+  it("maps an unresolved approval to the surfaced branded 409, not the swallowed conflict", async () => {
+    const fetchMutation = makeRecordingFetchMutation({
+      prepareResponder: () => {
+        throw { data: { code: "approval_unresolved" } }
+      },
+    })
+    const turn = makeConvexTurn(
+      makeInput() as DurableTurnInput & { convexToken: string },
+      fetchMutation,
+      makeRecordingWire()
+    )
+
+    await expect(turn.prepare({ provider: "openai" })).rejects.toMatchObject({
+      name: "PublicChatHttpError",
+      statusCode: 409,
+      code: "APPROVAL_UNRESOLVED",
+    })
+  })
+
   it("passes a concurrency-guard rejection through untouched (no 400 remap)", async () => {
     const guardError = new Error("expectedVisibleMessageCount mismatch")
     const fetchMutation = makeRecordingFetchMutation({

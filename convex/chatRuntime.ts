@@ -1061,14 +1061,17 @@ export function resolveCanonicalApprovalDecision(
   approval: StoredApprovalDecision,
   response: ApprovalResponse
 ): CanonicalApprovalDecision {
-  // Every rejection here is a CONTINUATION CONFLICT, not a server fault: the
-  // request carries a decision the durable record cannot honor (not yet
-  // resolved, expired, or — the real race — a second tab that decided the
-  // OTHER way). Branded so the HTTP boundary answers with the intentional 409
-  // contract instead of redacting an unbranded Error to 500.
+  // Rejections here are branded so the HTTP boundary answers with an
+  // intentional 409 contract instead of redacting an unbranded Error to 500.
+  // Expired and divergent decisions are CONTINUATION CONFLICTS — a winner
+  // exists and this tab observes it through the projection, so the client
+  // swallows them. A still-pending approval is NOT a conflict: no decision
+  // ever landed (the resolve mutation failed or was skipped), nothing will
+  // repaint, and the user must be told to decide again — its distinct brand
+  // keeps it out of the client's swallow path.
   if (approval.status === "pending") {
     throw new ConvexError({
-      code: "approval_continuation_conflict",
+      code: "approval_unresolved",
       message: "Approval has not been resolved",
     })
   }

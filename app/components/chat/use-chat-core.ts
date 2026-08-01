@@ -1,3 +1,4 @@
+import { presentChatStreamError } from "@/app/components/chat/public-chat-error"
 import { useChatEdit } from "@/app/components/chat/use-chat-edit"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
@@ -238,26 +239,19 @@ export function useChatCore({
 
   // Handle errors directly in onError callback
   const handleError = useCallback((error: Error) => {
-    // A losing approval-continuation POST (another tab's auto-send won —
-    // structured 409, gameplan §10) is swallowed without a failed repaint;
-    // this tab simply observes the winner's run through the projection.
-    if (
-      error.message.includes("APPROVAL_CONTINUATION_CONFLICT") ||
-      error.message.includes("Approval continuation already dispatched")
-    ) {
+    const presentation = presentChatStreamError(error)
+    if (presentation.kind === "swallow") {
+      // A losing approval-continuation POST (another tab's auto-send won —
+      // structured 409, gameplan §10) is swallowed without a failed repaint;
+      // this tab simply observes the winner's run through the projection.
       console.warn("Approval continuation conflict (another tab won):", error)
       return
     }
     console.error("Chat error:", error)
     console.error("Error message:", error.message)
-    let errorMsg = error.message || "Something went wrong."
-
-    if (errorMsg === "An error occurred" || errorMsg === "fetch failed") {
-      errorMsg = "Something went wrong. Please try again."
-    }
 
     toast({
-      title: errorMsg,
+      title: presentation.title,
       status: "error",
     })
   }, [])

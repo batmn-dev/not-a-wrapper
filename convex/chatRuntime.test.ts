@@ -4762,6 +4762,30 @@ describe("applyApprovalResponses", () => {
     expect(fixture.run.status).toBe("awaiting_approval")
     expect(fixture.tables.messages[0]?.status).toBe("awaiting_approval")
   })
+
+  it("brands a continuation against a still-pending approval as unresolved, not a conflict", async () => {
+    // No decision ever landed, so there is no winning tab whose run the
+    // client could observe — the conflict brand (which the client swallows)
+    // would silence a failed resolve. The distinct code surfaces it.
+    const fixture = createApprovalContinuationFixture([
+      {
+        approvalId: "approval_1",
+        approved: true,
+        toolCallId: "call_1",
+        toolName: "read_file",
+      },
+    ])
+    fixture.tables.toolApprovalRequests[0]!.status = "pending"
+    const { ctx, patches } = createMutationCtx(fixture.tables)
+
+    await expect(
+      applyApprovalResponses(ctx, fixture.owner, "openai", fixture.responses)
+    ).rejects.toMatchObject({
+      data: { code: "approval_unresolved" },
+    })
+    expect(patches).toEqual([])
+    expect(fixture.run.status).toBe("awaiting_approval")
+  })
 })
 
 describe("denyPendingApprovalsForChat", () => {
