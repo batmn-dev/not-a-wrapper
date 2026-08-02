@@ -60,20 +60,18 @@ describe("openai replay compiler", () => {
     expect(contextText).toContain("https://amazon.com/batman-item")
     expect(contextText).toContain("Batman Item")
     expect(
-      result.warnings.some(
-        (warning) => warning.code === "tool_lowered_to_text"
-      )
+      result.warnings.some((warning) => warning.code === "tool_lowered_to_text")
     ).toBe(true)
     expect(result.stats.toolExchangesSeen).toBe(1)
     expect(result.stats.toolExchangesCompiled).toBe(1)
     expect(result.stats.toolExchangesDropped).toBe(0)
   })
 
-  it("preserves every normalized web_search result when lowering to text", async () => {
+  it("bounds normalized web_search replay while retaining useful citations", async () => {
     const results = Array.from({ length: 4 }, (_, index) => ({
-      url: `https://example.com/result-${index + 1}`,
-      title: `Result ${index + 1}`,
-      snippet: `Snippet ${index + 1}`,
+      url: `https://example.com/result-${index + 1}${index === 0 ? "/" + "u".repeat(3_000) : ""}`,
+      title: `Result ${index + 1}${index === 0 ? "t".repeat(1_000) : ""}`,
+      snippet: `Snippet ${index + 1}${index === 0 ? "s".repeat(3_000) : ""}`,
     }))
     const messages: ReplayMessage[] = [
       {
@@ -100,11 +98,21 @@ describe("openai replay compiler", () => {
       .map((part) => part.text)
       .join("\n")
 
-    for (const searchResult of results) {
-      expect(contextText).toContain(searchResult.url)
-      expect(contextText).toContain(searchResult.title)
-      expect(contextText).toContain(searchResult.snippet)
+    for (const searchResult of results.slice(0, 3)) {
+      expect(contextText).toContain(
+        searchResult.url.slice(0, "https://example.com/result-1".length)
+      )
+      expect(contextText).toContain(searchResult.title.slice(0, 8))
+      expect(contextText).toContain(searchResult.snippet.slice(0, 9))
     }
+    expect(contextText).not.toContain(results[3].url)
+    expect(contextText).not.toContain(results[0].url)
+    expect(contextText).not.toContain(results[0].title)
+    expect(contextText).not.toContain(results[0].snippet)
+    expect(contextText).toContain(
+      "[1 additional web_search result omitted from replay.]"
+    )
+    expect(contextText.length).toBeLessThan(6_000)
   })
 
   it("drops non-replayable tool exchanges and injects an empty text fallback", async () => {

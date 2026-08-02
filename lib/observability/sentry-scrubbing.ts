@@ -164,6 +164,29 @@ export function sanitizeExceptionMessage(message: string): string {
   return redactSecretsInString(withoutEntityIds).slice(0, 500)
 }
 
+function extractTrustedStackFrames(error: Error): string[] {
+  if (typeof error.stack !== "string") {
+    return []
+  }
+
+  const rawHeader = error.message
+    ? `${error.name}: ${error.message}`
+    : error.name
+  if (!error.stack.startsWith(rawHeader)) {
+    return []
+  }
+
+  const stackBody = error.stack.slice(rawHeader.length)
+  if (!stackBody.startsWith("\n")) {
+    return []
+  }
+
+  return stackBody
+    .slice(1)
+    .split("\n")
+    .filter((line) => /^\s*at\s/.test(line))
+}
+
 export function sanitizeExceptionForTelemetry(error: unknown): Error {
   if (!(error instanceof Error)) {
     return new Error(`Non-Error exception (${typeof error})`)
@@ -174,7 +197,7 @@ export function sanitizeExceptionForTelemetry(error: unknown): Error {
   const sanitized = new Error(sanitizedMessage)
   sanitized.name = sanitizedName
   if (typeof error.stack === "string") {
-    const stackFrames = error.stack.split("\n").slice(1)
+    const stackFrames = extractTrustedStackFrames(error)
     const stackHeader = sanitizedMessage
       ? `${sanitizedName}: ${sanitizedMessage}`
       : sanitizedName

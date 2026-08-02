@@ -19,7 +19,12 @@ async function serializeCachedChatMutation<T>(
   mutation: () => Promise<T>
 ): Promise<T> {
   const previous = cachedChatMutationTails.get(id) ?? Promise.resolve()
-  const operation = previous.then(mutation)
+  const operation = previous.then(async () => {
+    // Hydration replaces the whole snapshot, so let that one-time read commit
+    // before publishing a newer per-chat mutation.
+    await hydrateCachedChats()
+    return await mutation()
+  })
   const tail = operation.then(
     () => undefined,
     () => undefined
@@ -149,7 +154,7 @@ export async function updateCachedChat(
     if (!isCachedChat(stored)) return false
 
     const updated = update(stored)
-    if (!updated) return false
+    if (!updated || updated.id !== id) return false
 
     cachedChatsHydrated = true
     updateCachedChatsSnapshot([

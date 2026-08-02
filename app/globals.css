@@ -1143,12 +1143,19 @@ code {
   font-variation-settings: var(--default-mono-font-variation-settings);
 }
 
-/* Typography: balanced headings, pretty body text (progressive enhancement) */
+/* Typography: balanced headings and stable prose wrapping.
+   Streaming prose must keep greedy line breaks so appending text does not
+   rebalance words across previously rendered lines. Static editorial surfaces
+   can opt back into pretty wrapping with `.prose-static`. */
 .prose :is(h1, h2, h3, h4) {
   text-wrap: balance;
 }
 .prose p,
 .prose li {
+  text-wrap: wrap;
+}
+.prose.prose-static p,
+.prose.prose-static li {
   text-wrap: pretty;
 }
 

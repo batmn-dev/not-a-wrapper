@@ -1,7 +1,6 @@
 import type { UIMessage } from "ai"
 import type { ReplayMessage, ReplayPart } from "../types"
 import { synthesizePlatformToolFallback } from "./platform-tool-fallback"
-import { synthesizeWebSearchReplayContext } from "./web-search-context"
 import type {
   ReplayCompileContext,
   ReplayCompiler,
@@ -9,8 +8,17 @@ import type {
   ReplayCompileStats,
   ReplayCompileWarning,
 } from "./types"
+import { synthesizeWebSearchReplayContext } from "./web-search-context"
 
 type MessagePart = UIMessage["parts"][number]
+
+const OPENAI_WEB_SEARCH_REPLAY_LIMITS = {
+  maxResults: 3,
+  maxQueryChars: 512,
+  maxTitleChars: 512,
+  maxUrlChars: 2_048,
+  maxSnippetChars: 2_000,
+} as const
 
 // OpenAI web_search replay is LOWERED to provider-neutral text, never
 // reconstructed as a hosted tool part: the installed @ai-sdk/openai Responses
@@ -65,7 +73,8 @@ function compileAssistantParts(
     if (tool.replayable && tool.toolName === "web_search" && tool.webSearch) {
       const contextText = synthesizeWebSearchReplayContext(
         tool,
-        "OpenAI-safe replay"
+        "OpenAI-safe replay",
+        OPENAI_WEB_SEARCH_REPLAY_LIMITS
       )
       if (contextText) {
         compiled.push({ type: "text", text: contextText } as MessagePart)

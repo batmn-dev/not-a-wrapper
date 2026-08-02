@@ -258,4 +258,31 @@ describe("sanitizeExceptionForTelemetry", () => {
     const error = new TypeError("Invalid input")
     expect(sanitizeExceptionForTelemetry(error).name).toBe("TypeError")
   })
+
+  it("removes every multiline message line before retaining stack frames", () => {
+    const messageSentinel = "PRIVATE_MULTILINE_PAYLOAD"
+    const frameShapedSentinel = "PRIVATE_FRAME_SHAPED_PAYLOAD"
+    const error = new Error(
+      `Type validation failed: Value: {\n    at ${frameShapedSentinel} (private.ts:1:1)\n    "prompt": "${messageSentinel}"\n}`
+    )
+    error.stack = `${error.name}: ${error.message}\n    at providerCall (provider.ts:1:1)`
+
+    const sanitized = sanitizeExceptionForTelemetry(error)
+
+    expect(sanitized.stack).toBe(
+      "Error: Type validation failed\n    at providerCall (provider.ts:1:1)"
+    )
+    expect(sanitized.stack).not.toContain(messageSentinel)
+    expect(sanitized.stack).not.toContain(frameShapedSentinel)
+  })
+
+  it("omits raw frames when the original stack header cannot be verified", () => {
+    const stackSentinel = "PRIVATE_CUSTOM_STACK_PAYLOAD"
+    const error = new Error("Provider failed")
+    error.stack = `Custom stack\n    at ${stackSentinel} (private.ts:1:1)`
+
+    expect(sanitizeExceptionForTelemetry(error).stack).toBe(
+      "Error: Provider failed"
+    )
+  })
 })

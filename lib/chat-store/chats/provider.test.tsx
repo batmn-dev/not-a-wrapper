@@ -22,15 +22,9 @@ const persistMocks = vi.hoisted(() => {
     messages: new Map<string, unknown>(),
     sync: new Map<string, unknown>(),
   }
-  const state = {
-    beforeWrite: undefined as
-      | ((table: keyof typeof tables, data: unknown) => Promise<void>)
-      | undefined,
-  }
 
   return {
     tables,
-    state,
     readFromIndexedDB: vi.fn(
       async (table: keyof typeof tables, key?: string) => {
         if (key) return tables[table].get(key) ?? null
@@ -42,7 +36,6 @@ const persistMocks = vi.hoisted(() => {
         table: keyof typeof tables,
         data: { id: string | number } | Array<{ id: string | number }>
       ) => {
-        await state.beforeWrite?.(table, data)
         const rows = Array.isArray(data) ? data : [data]
         for (const row of rows) {
           tables[table].set(String(row.id), row)
@@ -174,7 +167,6 @@ describe("ChatsProvider guest local chats", () => {
     persistMocks.readFromIndexedDB.mockClear()
     persistMocks.writeToIndexedDB.mockClear()
     persistMocks.deleteFromIndexedDB.mockClear()
-    persistMocks.state.beforeWrite = undefined
     convexMocks.isAuthenticated = false
     convexMocks.isLoading = false
     convexMocks.paginationStatus = "Exhausted"
@@ -400,7 +392,7 @@ describe("ChatsProvider guest local chats", () => {
     })
   })
 
-  it("preserves a guest rename when an earlier generated-title write finishes late", async () => {
+  it("preserves a guest rename when a generated title arrives late", async () => {
     persistMocks.tables.chats.set(
       "local-existing",
       localChat({
@@ -416,54 +408,21 @@ describe("ChatsProvider guest local chats", () => {
     renderProvider(capture)
     await flushPromises()
 
-    let generatedWriteStartedResolve: (() => void) | undefined
-    const generatedWriteStarted = new Promise<void>((resolve) => {
-      generatedWriteStartedResolve = resolve
-    })
-    let releaseGeneratedWrite: (() => void) | undefined
-    const generatedWriteGate = new Promise<void>((resolve) => {
-      releaseGeneratedWrite = resolve
-    })
-    persistMocks.state.beforeWrite = async (table, data) => {
-      if (
-        table === "chats" &&
-        !Array.isArray(data) &&
-        (data as Chats).title === "Generated title"
-      ) {
-        generatedWriteStartedResolve?.()
-        await generatedWriteGate
-      }
-    }
-
-    let generatedTitlePromise: Promise<boolean> | undefined
+    let applied: boolean | undefined
     await act(async () => {
-      generatedTitlePromise = capture.current?.applyGeneratedTitle(
+      await capture.current?.updateTitle("local-existing", "My custom title")
+      applied = await capture.current?.applyGeneratedTitle(
         "local-existing",
-        "Generated title",
+        "Late generated title",
         1
       )
-      await generatedWriteStarted
     })
 
-    let renamePromise: Promise<void> | undefined
-    await act(async () => {
-      renamePromise = capture.current?.updateTitle(
-        "local-existing",
-        "My custom title"
-      )
-      await Promise.resolve()
-    })
-
-    await act(async () => {
-      releaseGeneratedWrite?.()
-      await Promise.all([generatedTitlePromise, renamePromise])
-    })
-
-    expect(generatedTitlePromise).toBeDefined()
-    await expect(generatedTitlePromise).resolves.toBe(true)
+    expect(applied).toBe(false)
     expect(persistMocks.tables.chats.get("local-existing")).toMatchObject({
       title: "My custom title",
       title_source: "user",
+      title_generation: 1,
     })
   })
 
