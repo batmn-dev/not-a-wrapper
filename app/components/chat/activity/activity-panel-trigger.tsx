@@ -43,7 +43,7 @@ export function ActivityPanelTrigger({
       aria-expanded={open}
       aria-controls={controlsId}
       className={cn(
-        "group/activity text-muted-foreground hover:text-foreground inline-flex w-fit rounded-full text-start transition-colors",
+        "group/activity text-muted-foreground hover:text-foreground inline-flex w-fit min-w-0 max-w-full rounded-full text-start transition-colors",
         className
       )}
     >

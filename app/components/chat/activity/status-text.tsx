@@ -5,7 +5,8 @@ import { cn } from "@/lib/utils"
 import type { ComponentPropsWithoutRef, ReactNode } from "react"
 
 const STATUS_TEXT_CLASS = "text-base leading-6 font-normal"
-const ACTIVITY_STATUS_ROW_CLASS = "inline-flex h-6 items-center gap-0.5"
+const ACTIVITY_STATUS_ROW_CLASS =
+  "inline-flex h-6 min-w-0 max-w-full items-center gap-0.5"
 
 /**
  * StatusText — the one shimmer-or-plain status label shared by the assistant
@@ -60,7 +61,11 @@ export function ActivityStatusRow({
       data-slot="activity-status-row"
       className={cn(ACTIVITY_STATUS_ROW_CLASS, className)}
     >
-      <StatusText label={label} shimmer={shimmer} className="truncate" />
+      <StatusText
+        label={label}
+        shimmer={shimmer}
+        className="min-w-0 flex-1 truncate"
+      />
       {trailing}
     </span>
   )

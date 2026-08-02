@@ -1,6 +1,5 @@
 # To Do
 
-- **Assistant message highlighting:** When highlighting text from an asssitant response, add a clear "Add to chat" button that adds it to the chat composer.
 - **Dynamic Activity-panel source presentation:** adapt each source item to the
   metadata available instead of forcing every source into one fixed layout.
   Prefer a readable headline when available; include useful supporting details
