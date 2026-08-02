@@ -10,7 +10,12 @@ import {
 
 const persistMocks = vi.hoisted(() => ({
   deleteFromIndexedDB: vi.fn(async () => {}),
-  readFromIndexedDB: vi.fn(async () => null as Chats | null),
+  readFromIndexedDB: vi.fn(
+    async (
+      _table: "chats" | "messages" | "sync",
+      _key?: string
+    ): Promise<Chats | Chats[] | null> => null
+  ),
   writeToIndexedDB: vi.fn(async () => {}),
 }))
 
