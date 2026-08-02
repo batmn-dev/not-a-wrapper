@@ -25,7 +25,11 @@
 import type { UIMessage } from "ai"
 import { isToolEvidencePart, type ToolEvidenceUIPart } from "./turn-evidence"
 import type { DurableMessageStatus } from "./durable-contract"
-import { getReasoningDurationMs, getServerMessageId } from "./metadata"
+import {
+  getReasoningDurationMs,
+  getServerMessageId,
+  getWorkDurationMs,
+} from "./metadata"
 import { extractTextFromMessageParts, getToolRenderSignature } from "./parts"
 import type { AssistantSourceResult } from "./sources"
 import { deriveTurnEvidence, type ToolCallEvidence } from "./turn-evidence"
@@ -88,6 +92,8 @@ export type AssistantTurnView = {
   /** Image-search results extracted from tool outputs. */
   searchImageResults: SearchImageResult[]
   reasoning: ReasoningView
+  /** Server-persisted provider-stream lifecycle duration. */
+  persistedWorkDurationMs: number | undefined
   /** Durable identity, read via the metadata module. */
   serverMessageId: string | undefined
   /**
@@ -200,6 +206,7 @@ export function deriveAssistantTurnView(
     sources: [...evidence.sources],
     searchImageResults: [...evidence.searchImageResults],
     reasoning: deriveReasoningView(parts, status, message.metadata),
+    persistedWorkDurationMs: getWorkDurationMs(message.metadata),
     serverMessageId: getServerMessageId(message.metadata),
     metadata: message.metadata,
   }

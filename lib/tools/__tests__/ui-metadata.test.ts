@@ -31,8 +31,9 @@ describe("tool invocation stream metadata", () => {
       buildFinishToolInvocationStreamMetadata({
         toolMetadataByCallId: {},
         reasoningDurationMs: null,
+        workDurationMs: 436,
       })
-    ).toEqual({})
+    ).toEqual({ workDurationMs: 436 })
   })
 
   it("emits finish payload only for call-id metadata and reasoning duration", () => {
@@ -49,10 +50,12 @@ describe("tool invocation stream metadata", () => {
       buildFinishToolInvocationStreamMetadata({
         toolMetadataByCallId: byCallId,
         reasoningDurationMs: 1234,
+        workDurationMs: 5678,
       })
     ).toEqual({
       toolMetadataByCallId: byCallId,
       reasoningDurationMs: 1234,
+      workDurationMs: 5678,
     })
   })
 

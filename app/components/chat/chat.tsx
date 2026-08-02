@@ -214,6 +214,7 @@ function ChatInner({
     defaultActivityTurnId,
     panelActivityTurnId,
     defaultActivityDurationMs,
+    defaultReasoningDurationMs,
     selectedTurnPresent,
     panelCanOpen,
     panelProps,
@@ -221,6 +222,7 @@ function ChatInner({
     messages,
     status: effectiveStatus,
     isSubmitting,
+    isApprovalPaused: presentation.state === "awaiting-approval",
     selectedActivityTurnId,
   })
 
@@ -249,6 +251,7 @@ function ChatInner({
       panelTurnId: panelActivityTurnId,
       defaultTurnId: defaultActivityTurnId,
       defaultDurationMs: defaultActivityDurationMs,
+      defaultReasoningDurationMs,
     })
     // An explicit selection whose turn left the rendered path (branch switch,
     // local delete) is dropped so it cannot resurrect on a later path change.
@@ -263,6 +266,7 @@ function ChatInner({
     panelActivityTurnId,
     defaultActivityTurnId,
     defaultActivityDurationMs,
+    defaultReasoningDurationMs,
     selectedActivityTurnId,
     selectedTurnPresent,
     panelCanOpen,

@@ -127,6 +127,7 @@ describe("Markdown response controls and semantics", () => {
     expect(link?.getAttribute("rel")).toBe("noopener noreferrer")
     expect(link?.dataset.linkPresentation).toBe("pill")
     expect(link?.dataset.external).toBe("true")
+    expect(link?.className).toContain("select-none")
     expect(link?.hasAttribute("node")).toBe(false)
     expect(link?.querySelector('[data-slot="external-link-icon"]')).toBeNull()
     expect(
@@ -159,6 +160,7 @@ describe("Markdown response controls and semantics", () => {
     )
     expect(link?.dataset.linkPresentation).toBe("inline")
     expect(link?.dataset.external).toBe("true")
+    expect(link?.className).not.toContain("select-none")
     expect(link?.getAttribute("target")).toBe("_blank")
     expect(icon?.getAttribute("aria-hidden")).toBe("true")
     expect(icon?.querySelector("svg")?.getAttribute("focusable")).toBe("false")

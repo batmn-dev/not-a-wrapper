@@ -32,6 +32,11 @@ const WORKER_OPS: {
     args: DurableWorkerPayloads[Op] & GrantAuthArgs
   ) => Promise<unknown>
 } = {
+  markGenerationWorkStarted: (ctx, args) =>
+    ctx.runMutation(
+      internal.chatRuntimeWorker.markGenerationWorkStarted,
+      args
+    ),
   updateAssistantSnapshot: (ctx, args) =>
     ctx.runMutation(internal.chatRuntimeWorker.updateAssistantSnapshot, args),
   recordToolInvocations: (ctx, args) =>

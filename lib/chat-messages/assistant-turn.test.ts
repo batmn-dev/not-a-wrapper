@@ -108,7 +108,7 @@ describe("deriveAssistantActivityModel chronology", () => {
         { type: "reasoning", text: "**Reviewing**\nLast step", state: "done" },
       ],
       "ready",
-      { reasoningDurationMs: 4200 }
+      { reasoningDurationMs: 4200, workDurationMs: 4800 }
     )
 
     const activity = deriveAssistantActivityModel(view, { kind: "settled" })
@@ -1044,7 +1044,7 @@ describe("deriveAssistantActivityPresentation", () => {
 
   it.each([
     [undefined, "none", undefined],
-    [999, "none", undefined],
+    [999, "passive", "Thought"],
     [1000, "passive", "Thought for 1s"],
     [1999, "passive", "Thought for 1s"],
     [2000, "passive", "Thought for 2s"],
@@ -1068,7 +1068,7 @@ describe("deriveAssistantActivityPresentation", () => {
     }
   )
 
-  it("keeps visible reasoning inspectable below the duration threshold", () => {
+  it("keeps visible sub-second reasoning inspectable without a duration", () => {
     const view = viewOf(
       [{ type: "reasoning", text: "Visible reasoning", state: "done" }],
       "ready",
@@ -1080,10 +1080,12 @@ describe("deriveAssistantActivityPresentation", () => {
     expect(presentation.kind).toBe("disclosure")
     if (presentation.kind === "disclosure") {
       expect(presentation.label).toBe("Thought")
+      expect(presentation.durationSeconds).toBeUndefined()
       expect(presentation.activity.entries.map((entry) => entry.kind)).toEqual([
         "reasoning",
       ])
       expect(presentation.activity.completion).toMatchObject({
+        title: "Thought",
         status: "complete",
       })
     }
@@ -1117,20 +1119,98 @@ describe("deriveAssistantActivityPresentation", () => {
         },
       ],
       "ready",
-      { reasoningDurationMs: 1600 }
+      { reasoningDurationMs: 436, workDurationMs: 4600 }
     )
     const presentation = deriveAssistantActivityPresentation(view, {
       kind: "settled",
     })
     expect(presentation).toMatchObject({
       kind: "disclosure",
-      label: "Worked for 1s",
-      durationSeconds: 1,
+      label: "Worked for 4s",
+      durationSeconds: 4,
       activity: {
         completion: {
-          title: "Worked for 1s",
+          title: "Worked for 4s",
         },
       },
+    })
+  })
+
+  it("uses total work for tool activity without displayable reasoning", () => {
+    const view = viewOf(
+      [
+        {
+          type: "tool-web_search",
+          toolCallId: "search-only",
+          state: "output-available",
+          input: { query: "provider-neutral timing" },
+          output: {},
+        },
+      ],
+      "ready",
+      { workDurationMs: 7300 }
+    )
+
+    expect(
+      deriveAssistantActivityPresentation(view, { kind: "settled" })
+    ).toMatchObject({
+      kind: "disclosure",
+      label: "Worked for 7s",
+      durationSeconds: 7,
+    })
+  })
+
+  it.each([
+    ["failed", "Run failed", "error"],
+    ["aborted", "Generation stopped", "stopped"],
+  ] as const)(
+    "retains work-duration evidence for %s tool turns",
+    (status, completionTitle, completionStatus) => {
+      const view = viewOf(
+        [
+          {
+            type: "tool-web_search",
+            toolCallId: `${status}-search`,
+            state: status === "failed" ? "output-error" : "input-available",
+            input: { query: "terminal timing" },
+            ...(status === "failed" ? { errorText: "failed" } : {}),
+          },
+        ],
+        "ready",
+        { workDurationMs: 5300 }
+      )
+      const presentation = deriveAssistantActivityPresentation(
+        view,
+        { kind: "settled" },
+        { status }
+      )
+      expect(presentation).toMatchObject({
+        kind: "disclosure",
+        label: "Worked for 5s",
+        durationSeconds: 5,
+        activity: {
+          completion: {
+            title: completionTitle,
+            status: completionStatus,
+          },
+        },
+      })
+    }
+  )
+
+  it("keeps OpenAI-style multi-second reasoning labeled as thought", () => {
+    const view = viewOf(
+      [{ type: "reasoning", text: "Analyzing", state: "done" }],
+      "ready",
+      { reasoningDurationMs: 25_500, workDurationMs: 28_000 }
+    )
+
+    expect(
+      deriveAssistantActivityPresentation(view, { kind: "settled" })
+    ).toMatchObject({
+      kind: "disclosure",
+      label: "Thought for 25s",
+      durationSeconds: 25,
     })
   })
 

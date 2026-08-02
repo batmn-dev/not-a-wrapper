@@ -315,13 +315,22 @@ function deriveCompletion(
       status: "stopped",
     }
   }
+  const hasNonReasoningActivity = entries.some(
+    (entry) => entry.kind !== "reasoning"
+  )
   return {
     id: "completion",
     kind: "completion",
     title:
       durationSeconds === undefined
         ? "Finished"
-        : `Worked for ${formatDuration(durationSeconds)}`,
+        : durationSeconds < 1
+          ? hasNonReasoningActivity
+            ? "Finished"
+            : "Thought"
+          : hasNonReasoningActivity
+          ? `Worked for ${formatDuration(durationSeconds)}`
+          : `Thought for ${formatDuration(durationSeconds)}`,
     detail: "Done",
     status: "complete",
   }
@@ -337,7 +346,8 @@ export function deriveAssistantActivityModel(
   view: AssistantTurnView,
   phase: AssistantTurnPhase,
   options?: {
-    durationMs?: number
+    workDurationMs?: number
+    reasoningDurationMs?: number
     status?: AssistantTurnRenderStatus
   }
 ): AssistantActivityModel | undefined {
@@ -451,8 +461,13 @@ export function deriveAssistantActivityModel(
   const nonEmptyEntries = asNonEmpty(entries)
   if (!nonEmptyEntries) return undefined
 
+  const hasNonReasoningActivity = nonEmptyEntries.some(
+    (entry) => entry.kind !== "reasoning"
+  )
   const durationSeconds = toCompletedDurationSeconds(
-    options?.durationMs ?? view.reasoning.persistedDurationMs
+    hasNonReasoningActivity
+      ? (options?.workDurationMs ?? view.persistedWorkDurationMs)
+      : (options?.reasoningDurationMs ?? view.reasoning.persistedDurationMs)
   )
   const completion =
     phase.kind === "settled" || phase.kind === "responding"
@@ -538,7 +553,7 @@ function resolveLiveStatus(
 }
 
 function completedReasoningLabel(durationSeconds: number | undefined): string {
-  return durationSeconds === undefined
+  return durationSeconds === undefined || durationSeconds < 1
     ? "Thought"
     : `Thought for ${formatDuration(durationSeconds)}`
 }
@@ -547,14 +562,25 @@ export function deriveAssistantActivityPresentation(
   view: AssistantTurnView,
   phase: AssistantTurnPhase,
   options?: {
-    durationMs?: number
+    workDurationMs?: number
+    reasoningDurationMs?: number
     status?: AssistantTurnRenderStatus
   }
 ): AssistantActivityPresentation {
-  const durationMs = options?.durationMs ?? view.reasoning.persistedDurationMs
-  const durationSeconds = toCompletedDurationSeconds(durationMs)
   const activity = deriveAssistantActivityModel(view, phase, options)
   const isLive = phase.kind !== "settled" && phase.kind !== "responding"
+  const hasNonReasoningActivity = activity?.entries.some(
+    (entry) => entry.kind !== "reasoning"
+  )
+  const durationSeconds = toCompletedDurationSeconds(
+    isLive || hasNonReasoningActivity
+      ? (options?.workDurationMs ?? view.persistedWorkDurationMs)
+      : (options?.reasoningDurationMs ?? view.reasoning.persistedDurationMs)
+  )
+  const displayDurationSeconds =
+    durationSeconds !== undefined && durationSeconds > 0
+      ? durationSeconds
+      : undefined
 
   if (isLive) {
     const status = resolveLiveStatus(view, phase, activity)
@@ -564,7 +590,7 @@ export function deriveAssistantActivityPresentation(
         label: status.label,
         motion: status.motion,
         activity,
-        durationSeconds,
+        durationSeconds: displayDurationSeconds,
       }
     }
     return { kind: "live-status", ...status }
@@ -573,21 +599,23 @@ export function deriveAssistantActivityPresentation(
   if (phase.kind === "responding" && !activity) return { kind: "none" }
 
   if (activity) {
-    const hasReasoning = activity.entries.some(
-      (entry) => entry.kind === "reasoning"
-    )
+    const hasReasoning = activity.entries.some((entry) => entry.kind === "reasoning")
     const label =
-      durationSeconds !== undefined
-        ? `Worked for ${formatDuration(durationSeconds)}`
-        : hasReasoning
-          ? "Thought"
-          : "Activity"
+      displayDurationSeconds !== undefined
+        ? hasNonReasoningActivity
+          ? `Worked for ${formatDuration(displayDurationSeconds)}`
+          : `Thought for ${formatDuration(displayDurationSeconds)}`
+        : durationSeconds === 0 && hasNonReasoningActivity
+          ? "Activity"
+          : hasReasoning
+            ? "Thought"
+            : "Activity"
     return {
       kind: "disclosure",
       label,
       motion: "none",
       activity,
-      durationSeconds,
+      durationSeconds: displayDurationSeconds,
     }
   }
 

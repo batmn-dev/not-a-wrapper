@@ -16,7 +16,7 @@ import * as Sentry from "@sentry/nextjs"
 import {
   checkServerSideUsage,
   incrementServerSideUsage,
-  validateAndTrackUsage,
+  validateAndResolveChatCredential,
 } from "./api"
 import { parseChatTurnRequest } from "@/lib/chat-messages/chat-turn-contract"
 import {
@@ -174,7 +174,7 @@ export async function POST(req: Request) {
     const anonymousId = !isAuthenticated ? clientUserId! : undefined
 
     // Server-side usage admission — enforces rate limits before a turn runs.
-    await Sentry.startSpan(
+    const credential = await Sentry.startSpan(
       {
         name: "chat.usage_checks",
         op: "chat.validation",
@@ -187,13 +187,17 @@ export async function POST(req: Request) {
       () =>
         perf.span("usage_admission", async () => {
           await checkServerSideUsage(convexToken, model, anonymousId)
-          await validateAndTrackUsage({
-            userId,
-            model,
-            isAuthenticated,
-            token: convexToken,
-          })
+          const resolvedCredential = await perf.span(
+            "credential_resolution",
+            () =>
+              validateAndResolveChatCredential({
+                model,
+                isAuthenticated,
+                token: convexToken,
+              })
+          )
           await incrementServerSideUsage(convexToken, model, anonymousId)
+          return resolvedCredential
         })
     )
 
@@ -214,12 +218,13 @@ export async function POST(req: Request) {
         anonymousId,
         isAuthenticated,
         convexToken,
+        credential,
         perf,
       },
     })
 
     await perf.span("prepare_total", () => turn!.prepare())
-    return turn.toResponse(req.signal)
+    return await turn.toResponse(req.signal)
   } catch (err: unknown) {
     console.error(
       JSON.stringify({

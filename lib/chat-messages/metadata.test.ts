@@ -6,6 +6,7 @@ import {
   adoptServerOwned,
   getBranch,
   getFinishReason,
+  getWorkDurationMs,
   getServerMessageId,
   getToolDisplayMetadataRecords,
   SERVER_OWNED_METADATA_KEYS,
@@ -140,6 +141,14 @@ describe("getFinishReason", () => {
   })
 })
 
+describe("getWorkDurationMs", () => {
+  it("reads only finite non-negative work durations", () => {
+    expect(getWorkDurationMs({ workDurationMs: 4360 })).toBe(4360)
+    expect(getWorkDurationMs({ workDurationMs: -1 })).toBeUndefined()
+    expect(getWorkDurationMs({ workDurationMs: Number.NaN })).toBeUndefined()
+  })
+})
+
 describe("adoptServerOwned", () => {
   const serverMetadata = stampServerFields({ branch }, fullSource, "extended")
 
@@ -174,6 +183,26 @@ describe("adoptServerOwned", () => {
       serverMetadata
     ) as Record<string, unknown>
     expect(result.reasoningDurationMs).toBe(99)
+  })
+
+  it("adopts persisted terminal durations without clearing a live-only value", () => {
+    const adopted = adoptServerOwned(
+      { reasoningDurationMs: 99, workDurationMs: 2000 },
+      {
+        serverMessageId: "server_1",
+        reasoningDurationMs: 436,
+        workDurationMs: 5200,
+      }
+    ) as Record<string, unknown>
+    expect(adopted).toMatchObject({
+      reasoningDurationMs: 436,
+      workDurationMs: 5200,
+    })
+
+    const liveOnly = { serverMessageId: "s", workDurationMs: 5200 }
+    expect(adoptServerOwned(liveOnly, { serverMessageId: "s" })).toBe(
+      liveOnly
+    )
   })
 
   it("returns the original reference on a no-op (idempotent)", () => {

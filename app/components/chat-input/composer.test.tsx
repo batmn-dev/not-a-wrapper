@@ -27,6 +27,9 @@ const promptInputActionMockCalls: Array<{
   disabled?: boolean
   tooltip: React.ReactNode
 }> = []
+const modelSelectorMockCalls: Array<{
+  onSelectionCommitted?: () => void
+}> = []
 
 // Controllable module state for the Composer's internal seams.
 const composerMocks = vi.hoisted(() => ({
@@ -142,7 +145,10 @@ vi.mock("@/app/components/chat/use-file-upload", () => ({
 }))
 
 vi.mock("@/components/common/model-selector/base", () => ({
-  ModelSelector: () => null,
+  ModelSelector: (props: { onSelectionCommitted?: () => void }) => {
+    modelSelectorMockCalls.push(props)
+    return null
+  },
 }))
 
 vi.mock("server-only", () => ({}))
@@ -217,6 +223,7 @@ describe("Composer primary action", () => {
   beforeEach(() => {
     promptInputMockCalls.length = 0
     promptInputActionMockCalls.length = 0
+    modelSelectorMockCalls.length = 0
     composerMocks.draftValue = ""
     composerMocks.draftById.clear()
     composerMocks.setDraftFns.clear()
@@ -383,6 +390,26 @@ describe("Composer primary action", () => {
         .querySelector("textarea")
         ?.closest<HTMLDivElement>('div[class*="order-2"]')?.className
     ).toContain("sm:pb-0")
+  })
+
+  it("restores editor focus without moving the caret after model selection", () => {
+    const mounted = renderComposer({ status: "ready" })
+    const textarea = mounted.querySelector("textarea") as HTMLTextAreaElement
+    const outsideButton = document.createElement("button")
+    mounted.appendChild(outsideButton)
+
+    textarea.value = "draft text"
+    textarea.setSelectionRange(5, 5)
+    outsideButton.focus()
+    expect(document.activeElement).toBe(outsideButton)
+
+    act(() => {
+      modelSelectorMockCalls.at(-1)?.onSelectionCommitted?.()
+    })
+
+    expect(document.activeElement).toBe(textarea)
+    expect(textarea.selectionStart).toBe(5)
+    expect(textarea.selectionEnd).toBe(5)
   })
 
   it("does not resurrect Stop from local streaming while the resolver says a Stop is pending", () => {

@@ -1,9 +1,11 @@
-import type { ChatApiParams } from "@/app/types/api.types"
 import { api } from "@/convex/_generated/api"
 import { FREE_MODELS_IDS, NON_AUTH_ALLOWED_MODELS } from "@/lib/config"
 import { resolveModelId } from "@/lib/models/model-id-migration"
 import { getProviderForModel } from "@/lib/openproviders/provider-map"
-import { hasUserKey } from "@/lib/user-keys"
+import {
+  getEffectiveProviderApiKey,
+  type ProviderCredentialResolution,
+} from "@/lib/user-keys"
 import { fetchMutation, fetchQuery } from "convex/nextjs"
 import { PublicChatHttpError } from "./public-http-error"
 
@@ -122,36 +124,49 @@ export async function incrementServerSideUsage(
   )
 }
 
-/** Validate authentication and BYOK access; usage limits are checked separately. */
-export async function validateAndTrackUsage({
-  userId,
+type ChatCredentialAdmissionParams = {
+  model: string
+  isAuthenticated: boolean
+  token?: string
+}
+
+/** Validate access and resolve the one credential snapshot used by the turn. */
+export async function validateAndResolveChatCredential({
   model,
   isAuthenticated,
   token,
-}: ChatApiParams): Promise<null> {
+}: ChatCredentialAdmissionParams): Promise<ProviderCredentialResolution> {
   const resolvedModel = resolveModelId(model)
 
-  if (!isAuthenticated) {
-    if (!NON_AUTH_ALLOWED_MODELS.includes(resolvedModel)) {
-      throw new PublicChatHttpError({
-        message:
-          "This model requires authentication. Please sign in to access more models.",
-        statusCode: 401,
-        code: "AUTH_REQUIRED",
-      })
-    }
-  } else {
-    const provider = getProviderForModel(resolvedModel)
-    const hasKey = await hasUserKey(provider, token)
-    if (!hasKey && !FREE_MODELS_IDS.includes(resolvedModel)) {
-      throw new PublicChatHttpError({
-        message: `This model requires an API key for ${provider}. Please add your API key in settings or use a free model.`,
-        statusCode: 401,
-        code: "MISSING_API_KEY",
-      })
-    }
+  if (
+    !isAuthenticated &&
+    !NON_AUTH_ALLOWED_MODELS.includes(resolvedModel)
+  ) {
+    throw new PublicChatHttpError({
+      message:
+        "This model requires authentication. Please sign in to access more models.",
+      statusCode: 401,
+      code: "AUTH_REQUIRED",
+    })
   }
 
-  void userId // userId kept for type compatibility but not used here
-  return null
+  const provider = getProviderForModel(resolvedModel)
+  const credential = await getEffectiveProviderApiKey(
+    provider,
+    isAuthenticated ? token : undefined
+  )
+
+  if (
+    isAuthenticated &&
+    !FREE_MODELS_IDS.includes(resolvedModel) &&
+    credential.source !== "byok"
+  ) {
+    throw new PublicChatHttpError({
+      message: `This model requires an API key for ${provider}. Please add your API key in settings or use a free model.`,
+      statusCode: 401,
+      code: "MISSING_API_KEY",
+    })
+  }
+
+  return credential
 }

@@ -1,7 +1,6 @@
 import { api } from "@/convex/_generated/api"
 import { getAllModels } from "@/lib/models"
 import { prepareToolRuntime } from "@/lib/tools/runtime"
-import { getEffectiveProviderApiKey } from "@/lib/user-keys"
 import * as Sentry from "@sentry/nextjs"
 import {
   convertToModelMessages,
@@ -43,10 +42,6 @@ vi.mock("@/lib/models", () => ({
   getAllModels: vi.fn(),
 }))
 
-vi.mock("@/lib/openproviders/provider-map", () => ({
-  getProviderForModel: vi.fn(() => "anthropic"),
-}))
-
 vi.mock("@/lib/openproviders/create-language-model", () => ({
   createLanguageModel: vi.fn(() => ({})),
 }))
@@ -56,10 +51,6 @@ vi.mock("@/lib/openproviders/request-shaping", () => ({
 }))
 
 vi.mock("@/lib/openproviders/env", () => ({ env: {} }))
-
-vi.mock("@/lib/user-keys", () => ({
-  getEffectiveProviderApiKey: vi.fn(),
-}))
 
 vi.mock("@/lib/tools/runtime", () => ({
   prepareToolRuntime: vi.fn(),
@@ -173,6 +164,11 @@ function makeInput(overrides: Partial<ChatTurnInput> = {}): ChatTurnInput {
     anonymousId: undefined,
     isAuthenticated: true,
     convexToken: "tok",
+    credential: {
+      provider: "anthropic",
+      apiKey: "byok-key",
+      source: "byok",
+    },
     ...overrides,
   }
 }
@@ -308,10 +304,6 @@ beforeEach(() => {
   vi.mocked(getAllModels).mockResolvedValue([
     { id: "test-model", provider: "anthropic", tools: false },
   ] as unknown as Awaited<ReturnType<typeof getAllModels>>)
-  vi.mocked(getEffectiveProviderApiKey).mockResolvedValue({
-    apiKey: "byok-key",
-    source: "byok",
-  })
   vi.mocked(prepareToolRuntime).mockResolvedValue(
     makeToolRuntime() as unknown as Awaited<
       ReturnType<typeof prepareToolRuntime>
@@ -343,11 +335,12 @@ beforeEach(() => {
 
 describe("createChatTurnRuntime — prepare()", () => {
   it("throws a 401 MISSING_API_KEY when neither a BYOK nor an env key exists", async () => {
-    vi.mocked(getEffectiveProviderApiKey).mockResolvedValue({})
     const harness = makeStreamHarness()
     const fetchMutation = makeFetchMutation()
     const runtime = createChatTurnRuntime({
-      input: makeInput(),
+      input: makeInput({
+        credential: { provider: "anthropic" },
+      }),
       deps: makeDeps(harness, fetchMutation),
     })
 
@@ -358,12 +351,14 @@ describe("createChatTurnRuntime — prepare()", () => {
   })
 
   it("passes authoritative platform key provenance to the Tool runtime", async () => {
-    vi.mocked(getEffectiveProviderApiKey).mockResolvedValue({
-      apiKey: "platform-key",
-      source: "platform",
-    })
     const runtime = createChatTurnRuntime({
-      input: makeInput(),
+      input: makeInput({
+        credential: {
+          provider: "anthropic",
+          apiKey: "platform-key",
+          source: "platform",
+        },
+      }),
       deps: makeDeps(makeStreamHarness(), makeFetchMutation()),
     })
 
@@ -746,7 +741,7 @@ describe("createChatTurnRuntime — generated titles", () => {
     const runtime = createChatTurnRuntime({ input: makeInput(), deps })
 
     await runtime.prepare()
-    runtime.toResponse(notAbortedSignal())
+    await runtime.toResponse(notAbortedSignal())
     for (const callback of afterCallbacks) await callback()
 
     expect(generateText).toHaveBeenCalledTimes(1)
@@ -779,7 +774,7 @@ describe("createChatTurnRuntime — generated titles", () => {
     })
 
     await runtime.prepare()
-    const response = runtime.toResponse(notAbortedSignal())
+    const response = await runtime.toResponse(notAbortedSignal())
 
     await expect(response.text()).resolves.toContain('"type":"data-chatTitle"')
     expect(
@@ -810,7 +805,7 @@ describe("createChatTurnRuntime — generated titles", () => {
     })
 
     await runtime.prepare()
-    const response = runtime.toResponse(notAbortedSignal())
+    const response = await runtime.toResponse(notAbortedSignal())
 
     const body = await response.text()
     expect(body).toContain('"type":"data-chatTitle"')
@@ -850,7 +845,7 @@ describe("createChatTurnRuntime — evidence-gated word chunking", () => {
       })
 
       await runtime.prepare()
-      runtime.toResponse(notAbortedSignal())
+      await runtime.toResponse(notAbortedSignal())
 
       if (expectedTransform) {
         expect(harness.captured.streamOpts.experimental_transform).toEqual(
@@ -866,6 +861,45 @@ describe("createChatTurnRuntime — evidence-gated word chunking", () => {
 })
 
 describe("createChatTurnRuntime — durable completion handoff", () => {
+  it("does not delay response construction on the best-effort work-start write", async () => {
+    const harness = makeStreamHarness()
+    let releaseWorkStart: (() => void) | undefined
+    const workStartPending = new Promise<void>((resolve) => {
+      releaseWorkStart = resolve
+    })
+    const wire = makeWorkerWire({
+      markGenerationWorkStarted: () => workStartPending,
+    })
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(harness, makeFetchMutation(), {
+        durableWorkerWire: wire,
+      }),
+    })
+
+    await runtime.prepare()
+    let responseReturned = false
+    const responsePending = runtime
+      .toResponse(notAbortedSignal())
+      .then((response) => {
+        responseReturned = true
+        return response
+      })
+
+    try {
+      await vi.waitFor(() => {
+        expect(wireCall(wire, "markGenerationWorkStarted")).toBeDefined()
+      })
+      await vi.waitFor(() => {
+        expect(responseReturned).toBe(true)
+      })
+    } finally {
+      releaseWorkStart?.()
+    }
+
+    await expect(responsePending).resolves.toBeInstanceOf(Response)
+  })
+
   it("completes with durableFinal tool counts from streamText onEnd, not the countToolParts fallback", async () => {
     const harness = makeStreamHarness()
     const fetchMutation = makeFetchMutation()
@@ -891,7 +925,7 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     })
 
     await runtime.prepare()
-    runtime.toResponse(notAbortedSignal())
+    await runtime.toResponse(notAbortedSignal())
 
     // Durable run: the Tool runtime's call-site approval config reaches
     // streamText (guest runs omit it — the spread is durable-gated).
@@ -945,7 +979,7 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     })
 
     await runtime.prepare()
-    runtime.toResponse(notAbortedSignal())
+    await runtime.toResponse(notAbortedSignal())
 
     await harness.captured.responseOpts.onEnd({
       responseMessage: {
@@ -985,7 +1019,7 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
       })
 
       await runtime.prepare()
-      runtime.toResponse(notAbortedSignal())
+      await runtime.toResponse(notAbortedSignal())
 
       await expect(
         harness.captured.streamOpts.onAbort()
@@ -1054,7 +1088,7 @@ describe("createChatTurnRuntime — reasoning lifecycle timing", () => {
       })
 
       await runtime.prepare()
-      runtime.toResponse(notAbortedSignal())
+      await runtime.toResponse(notAbortedSignal())
 
       dateNow.mockReturnValue(50)
       harness.captured.streamOpts.onChunk({
@@ -1093,7 +1127,7 @@ describe("createChatTurnRuntime — reasoning lifecycle timing", () => {
         harness.captured.responseOpts.messageMetadata({
           part: { type: "finish" },
         })
-      ).toMatchObject({ reasoningDurationMs: 600 })
+      ).toMatchObject({ reasoningDurationMs: 600, workDurationMs: 900 })
     } finally {
       dateNow.mockRestore()
     }
@@ -1150,7 +1184,7 @@ describe("createChatTurnRuntime — UI-message metadata", () => {
       })
 
       await runtime.prepare()
-      runtime.toResponse(notAbortedSignal())
+      await runtime.toResponse(notAbortedSignal())
       const messageMetadata: (options: {
         part: TextStreamPart<ToolSet>
       }) => unknown = harness.captured.responseOpts.messageMetadata
@@ -1300,6 +1334,7 @@ describe("createChatTurnRuntime — UI-message metadata", () => {
       ).toEqual({
         toolMetadataByCallId: { "call-1": toolMetadata },
         reasoningDurationMs: 150,
+        workDurationMs: 250,
       })
     } finally {
       dateNow.mockRestore()
@@ -1313,7 +1348,7 @@ describe("createChatTurnRuntime — UI-message metadata", () => {
       deps: makeDeps(harness, makeFetchMutation()),
     })
     await runtime.prepare()
-    runtime.toResponse(notAbortedSignal())
+    await runtime.toResponse(notAbortedSignal())
 
     const actualAi = await vi.importActual<typeof import("ai")>("ai")
     const actualAiTest =
@@ -1429,7 +1464,7 @@ describe("createChatTurnRuntime — Anthropic pause_turn telemetry", () => {
     })
 
     await runtime.prepare()
-    runtime.toResponse(notAbortedSignal())
+    await runtime.toResponse(notAbortedSignal())
     await harness.captured.streamOpts.onEnd({
       text: "private generated content",
       usage: {},
@@ -1494,7 +1529,7 @@ describe("createChatTurnRuntime — Anthropic pause_turn telemetry", () => {
       })
 
       await runtime.prepare()
-      runtime.toResponse(notAbortedSignal())
+      await runtime.toResponse(notAbortedSignal())
 
       await expect(
         harness.captured.streamOpts.onEnd({
@@ -1524,7 +1559,7 @@ describe("createChatTurnRuntime — abort telemetry", () => {
 
     await runtime.prepare()
     const controller = new AbortController()
-    runtime.toResponse(controller.signal)
+    await runtime.toResponse(controller.signal)
 
     // Reload/disconnect durability (gameplan §12 scenario 9, §14 "Reload
     // mid-text → same run ID"): the request abort is telemetry only; Stop and
@@ -1539,13 +1574,21 @@ describe("createChatTurnRuntime — abort telemetry", () => {
   it("keeps the request signal authoritative for GUEST turns", async () => {
     const harness = makeStreamHarness()
     const runtime = createChatTurnRuntime({
-      input: makeInput({ isAuthenticated: false, convexToken: undefined }),
+      input: makeInput({
+        isAuthenticated: false,
+        convexToken: undefined,
+        credential: {
+          provider: "anthropic",
+          apiKey: "platform-key",
+          source: "platform",
+        },
+      }),
       deps: makeDeps(harness, makeFetchMutation()),
     })
 
     await runtime.prepare()
     const controller = new AbortController()
-    runtime.toResponse(controller.signal)
+    await runtime.toResponse(controller.signal)
 
     // Nobody is left to receive or settle a disconnected guest stream — the
     // request signal IS the guest lifecycle.
@@ -1566,7 +1609,7 @@ describe("createChatTurnRuntime — abort telemetry", () => {
     await runtime.prepare()
     const abortedController = new AbortController()
     abortedController.abort()
-    runtime.toResponse(abortedController.signal)
+    await runtime.toResponse(abortedController.signal)
 
     // Stream then completes — the streamCompleted/abortCaptured guards must
     // prevent any second chat_client_abort capture.
@@ -1581,14 +1624,20 @@ describe("createChatTurnRuntime — abort telemetry", () => {
       .mocked(Sentry.captureMessage)
       .mock.calls.filter((call) => call[0] === "chat_client_abort")
     expect(clientAborts).toHaveLength(1)
+    expect(clientAborts[0]?.[1]).toMatchObject({
+      extra: {
+        elapsedMs: 0,
+        timeSinceLastProgressMs: 0,
+      },
+    })
   })
 
-  it("rejects toResponse() before prepare() — phase guard", () => {
+  it("rejects toResponse() before prepare() — phase guard", async () => {
     const runtime = createChatTurnRuntime({
       input: makeInput(),
       deps: makeDeps(makeStreamHarness(), makeFetchMutation()),
     })
-    expect(() => runtime.toResponse(notAbortedSignal())).toThrow(
+    await expect(runtime.toResponse(notAbortedSignal())).rejects.toThrow(
       "requires a completed prepare()"
     )
   })

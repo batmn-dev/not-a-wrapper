@@ -312,6 +312,7 @@ export type ActivityFixtureKey =
 export type ActivityFixtureRecord = {
   label: string
   activity: AssistantActivityModel
+  /** Total active assistant work, not reasoning-only time. */
   durationSeconds?: number
   approvalActionsEnabled: boolean
 }

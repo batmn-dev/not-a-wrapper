@@ -480,7 +480,7 @@ describe("durable turn runtime — settlement ordering", () => {
     const binding = turn.bind(makeToolFacts())
 
     // The stream `onAbort` half flushes + marks aborted ("stream aborted")...
-    await binding.stream.onAbort("stream aborted")
+    await binding.stream.onAbort("stream aborted", 2500)
     // ...then the envelope half marks aborted again ("ui message stream
     // aborted"). Both fire by design; the Generation run lifecycle's
     // first-terminal-wins absorbs the second, and settle never rejects.
@@ -1462,14 +1462,14 @@ describe("durable turn runtime — guest inertness", () => {
       toolCalls: [{ toolCallId: "c", toolName: "t", input: {} }],
       toolResults: [],
     })
-    binding.stream.noteStreamError("boom")
+    binding.stream.noteStreamError("boom", 2500)
     binding.stream.captureFinish({
       usage: {},
       finishReason: "stop",
       toolCounts: { totalToolCalls: 0, failedToolCalls: 0 },
     })
     await expect(
-      binding.stream.onAbort("stream aborted")
+      binding.stream.onAbort("stream aborted", 2500)
     ).resolves.toBeUndefined()
     await expect(
       binding.envelope.settle({

@@ -1,7 +1,5 @@
 import { Button } from "@/components/ui/button"
-import { Icon } from "@/components/ui/icon"
 import useClickOutside from "@/hooks/useClickOutside"
-import { RiDoubleQuotesL } from "@remixicon/react"
 import { RefObject, useLayoutEffect, useRef, useState } from "react"
 
 type QuoteButtonProps = {
@@ -39,7 +37,7 @@ export function QuoteButton({
   return (
     <div
       ref={buttonRef}
-      className="absolute z-50 flex gap-2 rounded-full"
+      className="absolute z-50"
       style={{
         top: position.top,
         left: position.left,
@@ -47,11 +45,11 @@ export function QuoteButton({
       }}
     >
       <Button
+        type="button"
         onClick={onQuote}
-        className="flex size-10 items-center gap-1 rounded-full px-3 py-1 text-base"
-        aria-label="Ask follow up"
+        className="bg-popover text-popover-foreground hover:bg-popover-bg-hover shadow-border-md h-9 rounded-[12px] px-3 text-sm"
       >
-        <Icon icon={RiDoubleQuotesL} slotSize={16} />
+        Add to chat
       </Button>
     </div>
   )

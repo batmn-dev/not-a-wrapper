@@ -5,6 +5,7 @@ import {
   createToolApprovalRequestForChat,
   generationRunWriteArgs,
   heartbeatGenerationRunForChat,
+  markGenerationWorkStartedForChat,
   markGenerationRunAbortedForChat,
   markGenerationRunCompletedForChat,
   markGenerationRunFailedForChat,
@@ -129,6 +130,14 @@ export const updateAssistantSnapshot = internalMutation({
   handler: async (ctx, { runId, grantDigest, ...args }) => {
     const owner = await requireGrantAuthorizedRun(ctx, { runId, grantDigest })
     return updateAssistantSnapshotForChat(ctx, owner, args)
+  },
+})
+
+export const markGenerationWorkStarted = internalMutation({
+  args: { ...grantArgs, ...generationRunWriteArgs.markGenerationWorkStarted },
+  handler: async (ctx, { runId, grantDigest, ...args }) => {
+    const owner = await requireGrantAuthorizedRun(ctx, { runId, grantDigest })
+    return markGenerationWorkStartedForChat(ctx, owner, args)
   },
 })
 

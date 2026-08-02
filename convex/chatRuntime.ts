@@ -95,6 +95,10 @@ const vUsage = v.object({
  * compile + validator change on both — the Chat turn wire contract pattern.
  */
 export const generationRunWriteArgs = {
+  markGenerationWorkStarted: {
+    messageId: v.id("messages"),
+    startedAt: v.number(),
+  },
   updateAssistantSnapshot: {
     messageId: v.id("messages"),
     order: v.number(),
@@ -144,10 +148,12 @@ export const generationRunWriteArgs = {
   markGenerationRunFailed: {
     messageId: v.optional(v.id("messages")),
     error: v.string(),
+    workDurationMs: v.optional(v.number()),
   },
   markGenerationRunAborted: {
     messageId: v.optional(v.id("messages")),
     reason: v.optional(v.string()),
+    workDurationMs: v.optional(v.number()),
   },
   // The lease heartbeat (gameplan §6) — no payload beyond the run identity
   // the wire adds; the server clock is authoritative.
@@ -636,8 +642,14 @@ async function applyLifecycleVerdict(
   run: Doc<"generationRuns">,
   verdict: Extract<LifecycleVerdict, { kind: "transition" }>,
   resolved: ResolvedAssistantMessage | null,
-  now: number
+  now: number,
+  explicitWorkDurationMs?: number
 ): Promise<Id<"messages"> | undefined> {
+  const workDurationMs = resolveWorkDurationMs(
+    run,
+    now,
+    explicitWorkDurationMs
+  )
   let assistantMessageId = run.assistantMessageId
   if (resolved) {
     const survivingId = await applyMessageResolution(
@@ -652,6 +664,15 @@ async function applyLifecycleVerdict(
       (run.assistantMessageId === resolved.message._id
         ? undefined
         : run.assistantMessageId)
+
+    if (survivingId && workDurationMs !== undefined) {
+      await ctx.db.patch(survivingId, {
+        metadata: {
+          ...(resolved.message.metadata ?? {}),
+          workDurationMs,
+        },
+      })
+    }
   }
 
   await ctx.db.patch(run._id, {
@@ -666,6 +687,7 @@ async function applyLifecycleVerdict(
     ...grantRevocationForStatus(verdict.run.status),
     ...LEASE_CLEAR,
     assistantMessageId,
+    ...(workDurationMs !== undefined ? { workDurationMs } : {}),
   })
 
   // Mirror the terminal phase onto the chat row (fail/abort/supersede all reach
@@ -674,6 +696,29 @@ async function applyLifecycleVerdict(
   await projectRunStatusToChat(ctx, run, verdict.run.status, now)
 
   return assistantMessageId
+}
+
+function resolveWorkDurationMs(
+  run: Doc<"generationRuns">,
+  now: number,
+  explicit?: number
+): number | undefined {
+  if (explicit !== undefined && Number.isFinite(explicit)) {
+    return Math.max(0, explicit)
+  }
+  // Only a worker-executing run has an active provider segment. Completion
+  // freezes workDurationMs before an approval pause, so later Stop/reaper
+  // settlement must not add the human wait from the retained start marker.
+  if (
+    run.workStartedAt === undefined ||
+    !isWorkerExecutingStatus(run.status)
+  ) {
+    return run.workDurationMs
+  }
+  return (
+    Math.max(0, run.workDurationMs ?? 0) +
+    Math.max(0, now - run.workStartedAt)
+  )
 }
 
 async function closeSupersededGenerationsForChat(
@@ -1712,6 +1757,41 @@ export const updateAssistantSnapshot = ownedGenerationRunMutation({
     ),
 })
 
+export const markGenerationWorkStarted = ownedGenerationRunMutation({
+  args: generationRunWriteArgs.markGenerationWorkStarted,
+  handler: async (ctx, args) =>
+    markGenerationWorkStartedForChat(
+      ctx,
+      { user: ctx.user, chat: ctx.chat, run: ctx.run },
+      args
+    ),
+})
+
+/**
+ * Records the exact provider-consumption boundary for server-side duration
+ * fallback. Approval continuations inherit the prior frozen total from the
+ * reused assistant message; the human pause itself is excluded.
+ */
+export async function markGenerationWorkStartedForChat(
+  ctx: MutationCtx,
+  owner: AuthenticatedRunOwner,
+  args: { messageId: Id<"messages">; startedAt: number }
+) {
+  const { run } = owner
+  if (run.workStartedAt !== undefined) return
+  await requireAssistantMessageForRun(ctx, run, args.messageId)
+  const message = await ctx.db.get(args.messageId)
+  const priorWorkDurationMs = Math.max(
+    0,
+    message?.metadata?.workDurationMs ?? 0
+  )
+  await ctx.db.patch(run._id, {
+    workStartedAt: args.startedAt,
+    workDurationMs: priorWorkDurationMs,
+    updatedAt: nowMs(),
+  })
+}
+
 export async function updateAssistantSnapshotForChat(
   ctx: MutationCtx,
   owner: AuthenticatedRunOwner,
@@ -1938,6 +2018,9 @@ export async function markGenerationRunCompletedForChat(
     outputTokens: args.usage?.outputTokens,
     totalToolCalls: args.totalToolCalls,
     failedToolCalls: args.failedToolCalls,
+    ...(args.metadata?.workDurationMs !== undefined
+      ? { workDurationMs: Math.max(0, args.metadata.workDurationMs) }
+      : {}),
     activeStreamId: undefined,
     ...(verdict.run.terminalReason
       ? { terminalReason: verdict.run.terminalReason }
@@ -1968,6 +2051,7 @@ export async function markGenerationRunFailedForChat(
   args: {
     messageId?: Id<"messages">
     error: string
+    workDurationMs?: number
   }
 ) {
   const { run } = owner
@@ -1983,7 +2067,14 @@ export async function markGenerationRunFailedForChat(
     { kind: "fail", error: args.error }
   )
   if (verdict.kind === "ignore") return
-  await applyLifecycleVerdict(ctx, run, verdict, resolved, now)
+  await applyLifecycleVerdict(
+    ctx,
+    run,
+    verdict,
+    resolved,
+    now,
+    args.workDurationMs
+  )
 }
 
 export const markGenerationRunAborted = ownedGenerationRunMutation({
@@ -2002,6 +2093,7 @@ export async function markGenerationRunAbortedForChat(
   args: {
     messageId?: Id<"messages">
     reason?: string
+    workDurationMs?: number
   }
 ) {
   const { run } = owner
@@ -2017,7 +2109,14 @@ export async function markGenerationRunAbortedForChat(
     { kind: "abort", reason: args.reason }
   )
   if (verdict.kind === "ignore") return
-  await applyLifecycleVerdict(ctx, run, verdict, resolved, now)
+  await applyLifecycleVerdict(
+    ctx,
+    run,
+    verdict,
+    resolved,
+    now,
+    args.workDurationMs
+  )
 }
 
 export const createToolApprovalRequest = ownedGenerationRunMutation({

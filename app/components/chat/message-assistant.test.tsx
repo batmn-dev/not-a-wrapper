@@ -69,6 +69,7 @@ function makeStore({
     panelTurnId,
     defaultTurnId: defaultTurnId ?? panelTurnId,
     defaultDurationMs,
+    defaultReasoningDurationMs: defaultDurationMs,
   })
   if (open) store.setOpen(true)
   return store
@@ -139,7 +140,10 @@ describe("MessageAssistant activity trigger", () => {
         <ActivityPanelStoreProvider store={store} panelId="activity-panel">
           <MessageAssistant
             messageId="assistant-1"
-            view={makeView(parts, "ready", { reasoningDurationMs: 1600 })}
+            view={makeView(parts, "ready", {
+              reasoningDurationMs: 436,
+              workDurationMs: 4600,
+            })}
             status="ready"
           >
             {"Answer"}
@@ -151,10 +155,10 @@ describe("MessageAssistant activity trigger", () => {
     const indicator = container?.querySelector(
       '[data-activity-presentation="disclosure"]'
     )
-    expect(indicator?.textContent).toBe("Worked for 1s")
+    expect(indicator?.textContent).toBe("Worked for 4s")
     expect(
       container?.querySelector(
-        'button[aria-label="Open activity: Worked for 1s"]'
+        'button[aria-label="Open activity: Worked for 4s"]'
       )
     ).toBeTruthy()
     expect(container?.textContent).not.toContain("Thought for")
@@ -188,7 +192,7 @@ describe("MessageAssistant activity trigger", () => {
     expect(container?.querySelector("button[aria-expanded]")).toBeNull()
   })
 
-  it("suppresses completed opaque reasoning below one second", () => {
+  it("omits completed opaque sub-second reasoning duration", () => {
     const store = makeStore({ panelTurnId: "assistant-1" })
     const parts = [
       { type: "reasoning", text: "", state: "done" },
@@ -208,7 +212,8 @@ describe("MessageAssistant activity trigger", () => {
       )
     })
 
-    expect(container?.textContent).not.toContain("Thought")
+    expect(container?.textContent).toContain("Thought")
+    expect(container?.textContent).not.toContain("<1s")
     expect(container?.querySelector("button[aria-expanded]")).toBeNull()
   })
 
@@ -319,7 +324,7 @@ describe("MessageAssistant activity trigger", () => {
     })
 
     const trigger = container?.querySelector(
-      'button[aria-label="Open activity: Worked for 2s"]'
+      'button[aria-label="Open activity: Thought for 2s"]'
     ) as HTMLButtonElement | null
 
     expect(trigger).toBeTruthy()
@@ -362,8 +367,8 @@ describe("MessageAssistant activity trigger", () => {
     expect(triggers).toHaveLength(2)
     expect(triggers[0]?.getAttribute("aria-expanded")).toBe("false")
     expect(triggers[1]?.getAttribute("aria-expanded")).toBe("true")
-    expect(container?.textContent).toContain("Worked for 1s")
-    expect(container?.textContent).toContain("Worked for 2s")
+    expect(container?.textContent).toContain("Thought for 1s")
+    expect(container?.textContent).toContain("Thought for 2s")
   })
 
   it("retargets the open panel when a different trigger is clicked", () => {
@@ -391,7 +396,7 @@ describe("MessageAssistant activity trigger", () => {
     })
 
     const trigger = container?.querySelector(
-      'button[aria-label="Open activity: Worked for 2s"]'
+      'button[aria-label="Open activity: Thought for 2s"]'
     ) as HTMLButtonElement | null
 
     act(() => {
@@ -430,7 +435,7 @@ describe("MessageAssistant activity trigger", () => {
     })
 
     const trigger = container?.querySelector(
-      'button[aria-label="Close activity: Worked for 2s"]'
+      'button[aria-label="Close activity: Thought for 2s"]'
     ) as HTMLButtonElement | null
     expect(trigger?.getAttribute("aria-expanded")).toBe("true")
 

@@ -46,4 +46,23 @@ describe("createReasoningActivityTracker", () => {
     tracker.end("a")
     expect(tracker.getDurationMs()).toBe(0)
   })
+
+  it("preserves an explicit zero continuation seed without new blocks", () => {
+    const seeded = createReasoningActivityTracker(() => 42, 0)
+    expect(seeded.getDurationMs()).toBe(0)
+  })
+
+  // Approval continuation: terminal metadata replaces the message metadata
+  // wholesale, so the seed must survive even when the continuation segment
+  // never reasons — otherwise the pre-pause total is erased.
+  it("accumulates a continuation seed under the new segment's intervals", () => {
+    let now = 0
+    const seeded = createReasoningActivityTracker(() => now, 5000)
+    expect(seeded.getDurationMs()).toBe(5000)
+
+    seeded.start("a")
+    now = 2000
+    seeded.end("a")
+    expect(seeded.getDurationMs()).toBe(7000)
+  })
 })

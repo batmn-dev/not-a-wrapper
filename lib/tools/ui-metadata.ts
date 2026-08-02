@@ -25,6 +25,14 @@ export type ToolInvocationMetadataByCallId = Record<
 
 export type ToolInvocationStreamMetadata = {
   reasoningDurationMs?: number
+  /**
+   * Cumulative active assistant generation time across provider-stream segments
+   * for this assistant turn. Each segment runs from provider-stream start
+   * through its terminal generation signal; approval continuations add to the
+   * persisted prior total without counting the approval wait. Also excludes
+   * request preparation, persistence, analytics, and resource cleanup.
+   */
+  workDurationMs?: number
   toolMetadataByName?: ToolInvocationMetadataByName
   toolMetadataByCallId?: ToolInvocationMetadataByCallId
 }
@@ -102,6 +110,7 @@ export function buildStartToolInvocationStreamMetadata(
 export function buildFinishToolInvocationStreamMetadata(options: {
   toolMetadataByCallId: ToolInvocationMetadataByCallId
   reasoningDurationMs: number | null
+  workDurationMs: number
 }): ToolInvocationStreamMetadata {
   const metadata: ToolInvocationStreamMetadata = {}
   if (Object.keys(options.toolMetadataByCallId).length > 0) {
@@ -110,6 +119,7 @@ export function buildFinishToolInvocationStreamMetadata(options: {
   if (options.reasoningDurationMs !== null) {
     metadata.reasoningDurationMs = options.reasoningDurationMs
   }
+  metadata.workDurationMs = options.workDurationMs
   return metadata
 }
 

@@ -32,13 +32,6 @@ export type Message = {
   reasoningText?: string
 }
 
-export type ChatApiParams = {
-  userId: string
-  model: string
-  isAuthenticated: boolean
-  token?: string
-}
-
 export type ApiErrorResponse = {
   error: string
   details?: string

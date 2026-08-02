@@ -159,7 +159,7 @@ export function LinkMarkdown({
         data-link-presentation="pill"
         data-external={isExternal ? "true" : undefined}
         className={cn(
-          "bg-muted text-muted-foreground hover:bg-muted-bg-hover hover:text-foreground focus-visible:ring-focus-ring inline-flex h-5 max-w-48 items-center gap-1 overflow-hidden rounded-full py-0 pr-2 pl-0.5 text-xs leading-none text-ellipsis whitespace-nowrap no-underline outline-none focus-visible:ring-3",
+          "bg-muted text-muted-foreground hover:bg-muted-bg-hover hover:text-foreground focus-visible:ring-focus-ring inline-flex h-5 max-w-48 items-center gap-1 overflow-hidden rounded-full py-0 pr-2 pl-0.5 text-xs leading-none text-ellipsis whitespace-nowrap no-underline outline-none select-none focus-visible:ring-3",
           className
         )}
       >

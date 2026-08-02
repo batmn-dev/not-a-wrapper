@@ -49,8 +49,10 @@ export type ActivityPanelStoreState = {
   panelTurnId: string | undefined
   /** The generation-following default turn id. */
   defaultTurnId: string | undefined
-  /** Current-session duration for the generation-following default turn. */
+  /** Current-session total work duration for the generation-following turn. */
   defaultDurationMs: number | undefined
+  /** Current-session reasoning-only duration for the default turn. */
+  defaultReasoningDurationMs: number | undefined
   /**
    * One-shot section target set by `openTurn` (the sources badge opens "on
    * the Sources section"). The panel body consumes it — scrolls the section
@@ -72,6 +74,7 @@ export type ActivityPanelStore = {
     panelTurnId: string | undefined
     defaultTurnId: string | undefined
     defaultDurationMs?: number
+    defaultReasoningDurationMs?: number
   }) => void
   /**
    * Select a turn and open the panel. Explicit-vs-default classification runs
@@ -101,6 +104,7 @@ export function createActivityPanelStore(): ActivityPanelStore {
     panelTurnId: undefined,
     defaultTurnId: undefined,
     defaultDurationMs: undefined,
+    defaultReasoningDurationMs: undefined,
     openSection: undefined,
   }
   const listeners = new Set<() => void>()
@@ -113,6 +117,7 @@ export function createActivityPanelStore(): ActivityPanelStore {
       next.panelTurnId === state.panelTurnId &&
       next.defaultTurnId === state.defaultTurnId &&
       next.defaultDurationMs === state.defaultDurationMs &&
+      next.defaultReasoningDurationMs === state.defaultReasoningDurationMs &&
       next.openSection === state.openSection
     ) {
       return
@@ -133,8 +138,14 @@ export function createActivityPanelStore(): ActivityPanelStore {
       panelTurnId,
       defaultTurnId,
       defaultDurationMs,
+      defaultReasoningDurationMs,
     }) => {
-      setState({ panelTurnId, defaultTurnId, defaultDurationMs })
+      setState({
+        panelTurnId,
+        defaultTurnId,
+        defaultDurationMs,
+        defaultReasoningDurationMs,
+      })
     },
     clearStaleSelection: (staleTurnId) => {
       if (state.selectedTurnId !== staleTurnId) return
@@ -238,7 +249,7 @@ export function useIsActivityPanelTurnOpen(
 }
 
 /**
- * Row subscription to the one chat-owned live reasoning timer. Only the
+ * Row subscription to the one chat-owned live assistant-work timer. Only the
  * generation-following row receives the changing duration snapshot; historical
  * rows keep deriving their terminal duration from persisted metadata.
  */
@@ -254,6 +265,25 @@ export function useDefaultActivityDurationMs(
       const state = store.getState()
       return matchesTurn(state.defaultTurnId, messageId, serverMessageId)
         ? state.defaultDurationMs
+        : undefined
+    },
+    () => undefined
+  )
+}
+
+/** Reasoning-only companion to the default turn's continuous work clock. */
+export function useDefaultReasoningDurationMs(
+  messageId: string,
+  serverMessageId?: string
+): number | undefined {
+  const store = useContext(ActivityPanelStoreContext)
+  return useSyncExternalStore(
+    store ? store.subscribe : noopSubscribe,
+    () => {
+      if (!store) return undefined
+      const state = store.getState()
+      return matchesTurn(state.defaultTurnId, messageId, serverMessageId)
+        ? state.defaultReasoningDurationMs
         : undefined
     },
     () => undefined

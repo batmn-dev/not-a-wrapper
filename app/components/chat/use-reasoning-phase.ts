@@ -5,6 +5,11 @@ import type { ReasoningView } from "@/lib/chat-messages/assistant-turn"
 import { toCompletedDurationSeconds } from "@/lib/format-duration"
 import { useState } from "react"
 
+export type AssistantWorkDuration = {
+  durationMs: number | undefined
+  durationSeconds: number | undefined
+}
+
 export type ReasoningPhase = {
   phase: "idle" | "thinking" | "complete"
   reasoningText: string
@@ -14,10 +19,13 @@ export type ReasoningPhase = {
   isOpaqueReasoning: boolean
 }
 
-type UseReasoningPhaseParams = {
-  /** The pure reasoning derivation from the Assistant turn view. */
-  reasoning: ReasoningView
-  isLast: boolean
+type UseAssistantWorkDurationParams = {
+  /** Server terminal authority, including a frozen approval-pause segment. */
+  persistedWorkDurationMs: number | undefined
+  /** True for the entire provider generation, not just reasoning blocks. */
+  isActive: boolean
+  /** An approval pause resumes the same accumulated assistant-work clock. */
+  isPaused: boolean
   /**
    * Identity of the turn `reasoning` derives from. The panel's single hook
    * instance re-targets across turns (default-follow, explicit selection); a
@@ -29,42 +37,33 @@ type UseReasoningPhaseParams = {
 
 type TimerState = {
   turnKey: string | undefined
-  phase: ReasoningView["phase"]
+  wasActive: boolean
+  wasPaused: boolean
   displayMs: number
   frozenMs: number
 }
 
 /**
- * The stateful remainder of the reasoning derivation: the live "thinking"
- * timer. Everything pure (phase, text, opacity, persisted duration) moved to
- * `deriveReasoningView` in lib/chat-messages/assistant-turn.ts — this hook
- * consumes that view and owns only the tick/freeze/resume timer semantics.
+ * The single chat-owned assistant-work timer. The file name is retained to
+ * avoid a destructive rename, but the clock now spans reasoning, tools,
+ * searches, continuations, and answer generation. It pauses only while the
+ * generation itself is paused (for example, awaiting approval).
  */
-export function useReasoningPhase({
-  reasoning,
-  isLast,
+export function useAssistantWorkDuration({
+  persistedWorkDurationMs,
+  isActive,
+  isPaused,
   turnKey,
-}: UseReasoningPhaseParams): ReasoningPhase {
-  const {
-    phase,
-    text: reasoningText,
-    isOpaque,
-    persistedDurationMs,
-  } = reasoning
-
-  // Client-side timer.
-  // React 19 render-sync pattern: reset timer state when entering thinking.
-  // The browser layout-sync interval ticks while shouldRunTimer is true.
-  // When phase leaves "thinking", the interval stops and freezes the final
-  // value into the state used by the next resume.
+}: UseAssistantWorkDurationParams): AssistantWorkDuration {
   const [timerState, setTimerState] = useState<TimerState>(() => ({
     turnKey,
-    phase,
-    displayMs: 0,
-    frozenMs: 0,
+    wasActive: isActive,
+    wasPaused: isPaused,
+    displayMs: persistedWorkDurationMs ?? 0,
+    frozenMs: persistedWorkDurationMs ?? 0,
   }))
 
-  const shouldRunTimer = isLast && reasoning.isStreaming
+  const shouldRunTimer = isActive && !isPaused
 
   // React 19 render-sync: restart the timer on a turn handoff. The phase
   // transition below cannot catch every handoff — the swap may render before
@@ -74,21 +73,23 @@ export function useReasoningPhase({
   if (turnKey !== timerState.turnKey) {
     setTimerState({
       turnKey,
-      phase,
-      displayMs: 0,
-      frozenMs: 0,
+      wasActive: isActive,
+      wasPaused: isPaused,
+      displayMs: persistedWorkDurationMs ?? 0,
+      frozenMs: persistedWorkDurationMs ?? 0,
     })
-  } else if (phase !== timerState.phase) {
-    // Reset timer state when entering thinking phase. This fires only on a
-    // genuine phase transition into "thinking" (idle/complete → thinking),
-    // e.g. a same-turn regenerate — never during an isLast bounce where the
-    // phase stays "thinking".
-    const resetElapsed = phase === "thinking" && isLast
+  } else if (
+    isActive !== timerState.wasActive ||
+    isPaused !== timerState.wasPaused
+  ) {
+    const authoritativeBase = persistedWorkDurationMs ?? 0
+    const nextBase = Math.max(timerState.frozenMs, authoritativeBase)
     setTimerState({
       turnKey,
-      phase,
-      displayMs: resetElapsed ? 0 : timerState.displayMs,
-      frozenMs: resetElapsed ? 0 : timerState.frozenMs,
+      wasActive: isActive,
+      wasPaused: isPaused,
+      displayMs: nextBase,
+      frozenMs: nextBase,
     })
   }
 
@@ -103,12 +104,8 @@ export function useReasoningPhase({
   useBrowserLayoutEffect(() => {
     if (!shouldRunTimer) return
 
-    // R1: anchor the wall clock to the already-accumulated elapsed time so a
-    // same-turn `isLast` true→false→true bounce (while the phase stays
-    // "thinking") RESUMES the timer instead of restarting it from 0 —
-    // elapsed milliseconds must never regress mid-stream. On a fresh "thinking"
-    // entry or a turn handoff the render-sync resets above have already
-    // zeroed `frozenMs`, so `start` collapses to `Date.now()`.
+    // Anchor to the already accumulated work so approval resume and transient
+    // liveness bounces never regress the displayed elapsed time.
     const activeTurnKey = turnKey
     const start = Date.now() - frozenMs
 
@@ -146,23 +143,116 @@ export function useReasoningPhase({
     // still anchored to the previous turn.
   }, [frozenMs, shouldRunTimer, turnKey])
 
-  // Persisted duration is terminal authority. Before finish metadata arrives,
-  // retain the current session's monotonic handoff so settlement never flashes
-  // backward or loses its elapsed value.
+  // Live shows the estimate, settled shows the truth: while the turn runs (or
+  // is paused awaiting approval) the local ticker owns the label; once the
+  // turn settles, the persisted server total owns it — never blended, so the
+  // settled label is identical in-session, after reload, and as history. The
+  // ticker remains the fallback for settled turns with no persisted total
+  // (aborts/failures that never wrote metadata).
+  const tickedFallbackMs = tickedMs > 0 ? tickedMs : undefined
   const durationMs =
-    phase === "complete" && persistedDurationMs !== undefined
-      ? persistedDurationMs
-      : tickedMs > 0
-        ? tickedMs
-        : persistedDurationMs
+    isActive || isPaused
+      ? tickedFallbackMs
+      : (persistedWorkDurationMs ?? tickedFallbackMs)
   const durationSeconds = toCompletedDurationSeconds(durationMs)
 
   return {
-    phase,
-    reasoningText,
     durationMs,
     durationSeconds,
+  }
+}
+
+type ReasoningTimerState = {
+  turnKey: string | undefined
+  phase: ReasoningView["phase"]
+  displayMs: number
+  frozenMs: number
+}
+
+/**
+ * Reasoning-only interval timer retained alongside the continuous work clock.
+ * It pauses across tools/gaps and hands off to server reasoningDurationMs.
+ */
+export function useReasoningPhase({
+  reasoning,
+  isLast,
+  turnKey,
+}: {
+  reasoning: ReasoningView
+  isLast: boolean
+  turnKey: string | undefined
+}): ReasoningPhase {
+  // Seed from the persisted total (mirrors the work clock) so an approval
+  // continuation mounted fresh — reload, second device — resumes the ticker
+  // from the pre-pause reasoning time instead of 0.
+  const [timerState, setTimerState] = useState<ReasoningTimerState>(() => ({
+    turnKey,
+    phase: reasoning.phase,
+    displayMs: reasoning.persistedDurationMs ?? 0,
+    frozenMs: reasoning.persistedDurationMs ?? 0,
+  }))
+  const shouldRunTimer = isLast && reasoning.isStreaming
+
+  if (turnKey !== timerState.turnKey) {
+    setTimerState({
+      turnKey,
+      phase: reasoning.phase,
+      displayMs: reasoning.persistedDurationMs ?? 0,
+      frozenMs: reasoning.persistedDurationMs ?? 0,
+    })
+  } else if (reasoning.phase !== timerState.phase) {
+    const enteringFirstReasoning =
+      reasoning.phase === "thinking" && timerState.phase === "idle"
+    setTimerState({
+      turnKey,
+      phase: reasoning.phase,
+      displayMs: enteringFirstReasoning ? 0 : timerState.displayMs,
+      frozenMs: enteringFirstReasoning ? 0 : timerState.frozenMs,
+    })
+  }
+
+  const tickedMs = timerState.turnKey === turnKey ? timerState.displayMs : 0
+  const frozenMs = timerState.turnKey === turnKey ? timerState.frozenMs : 0
+
+  useBrowserLayoutEffect(() => {
+    if (!shouldRunTimer) return
+    const activeTurnKey = turnKey
+    const startedAt = Date.now() - frozenMs
+    const interval = setInterval(() => {
+      const elapsedMs = Math.max(0, Date.now() - startedAt)
+      setTimerState((current) =>
+        current.turnKey === activeTurnKey
+          ? { ...current, displayMs: elapsedMs }
+          : current
+      )
+    }, 1000)
+    return () => {
+      clearInterval(interval)
+      const elapsedMs = Math.max(0, Date.now() - startedAt)
+      setTimerState((current) =>
+        current.turnKey === activeTurnKey
+          ? { ...current, displayMs: elapsedMs, frozenMs: elapsedMs }
+          : current
+      )
+    }
+  }, [frozenMs, shouldRunTimer, turnKey])
+
+  // Same contract as the work clock: the ticker owns the label only while
+  // reasoning is literally streaming; otherwise the persisted server total
+  // does (with the frozen ticker as fallback for mid-turn gaps and turns that
+  // never persisted a total).
+  const persistedDurationMs = reasoning.persistedDurationMs
+  const tickedFallbackMs = tickedMs > 0 ? tickedMs : undefined
+  const durationMs = reasoning.isStreaming
+    ? tickedFallbackMs
+    : (persistedDurationMs ?? tickedFallbackMs)
+
+  return {
+    phase: reasoning.phase,
+    reasoningText: reasoning.text,
+    durationMs,
+    durationSeconds: toCompletedDurationSeconds(durationMs),
     isReasoningStreaming: reasoning.isStreaming,
-    isOpaqueReasoning: isOpaque,
+    isOpaqueReasoning: reasoning.isOpaque,
   }
 }

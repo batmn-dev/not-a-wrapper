@@ -207,6 +207,12 @@ export default defineSchema({
     // older run docs. Drop only after preflight proves zero legacy documents.
     chatVersion: v.optional(v.number()),
     startedAt: v.optional(v.number()),
+    // Provider-consumption boundary for assistant work timing. Optional for
+    // compatibility with runs created before work-duration persistence.
+    workStartedAt: v.optional(v.number()),
+    // Accumulated active work. While streaming this is the pre-segment base;
+    // once terminal it is the frozen total for this run/message lifecycle.
+    workDurationMs: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     updatedAt: v.number(),
     error: v.optional(v.string()),

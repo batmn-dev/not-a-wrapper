@@ -10,10 +10,17 @@ export type { Provider } from "./openproviders/types"
 export type ApiKeySource = "platform" | "byok"
 export type ToolKeyMode = ApiKeySource
 
-export type ProviderApiKeyResolution = {
-  apiKey?: string
-  source?: ApiKeySource
-}
+export type ProviderCredentialResolution =
+  | {
+      provider: Provider
+      apiKey: string
+      source: ApiKeySource
+    }
+  | {
+      provider: Provider
+      apiKey?: undefined
+      source?: undefined
+    }
 
 // Stale-format rows (written before the ADR-0010 AAD hardening) are a per-row
 // constant, not a transient fault: they will fail on every request until the
@@ -27,35 +34,6 @@ function warnStaleCiphertextOnce(provider: string) {
   console.warn(
     `Stored ${provider} API key predates the current encryption format and is ignored; re-save it in Settings.`
   )
-}
-
-/**
- * Check if user has a usable API key for a provider via Convex.
- * Rows in a pre-ADR-0010 ciphertext format can never decrypt, so they count
- * as absent — keeping this check consistent with getUserKeyFromConvex.
- */
-export async function hasUserKey(
-  provider: Provider,
-  token?: string
-): Promise<boolean> {
-  if (!token) return false
-
-  try {
-    const userKey = await fetchQuery(
-      api.userKeys.getByProvider,
-      { provider },
-      { token }
-    )
-    if (!userKey) return false
-    if (!userKey.iv || !isSupportedCiphertext(userKey.encryptedKey ?? "")) {
-      warnStaleCiphertextOnce(provider)
-      return false
-    }
-    return true
-  } catch (error) {
-    console.error("Error checking user key:", error)
-    return false
-  }
 }
 
 /**
@@ -79,7 +57,12 @@ export async function getUserKeyFromConvex(
       { token }
     )
 
-    if (!userKey?.encryptedKey || !userKey?.iv) {
+    if (!userKey) {
+      return null
+    }
+
+    if (!userKey.encryptedKey || !userKey.iv) {
+      warnStaleCiphertextOnce(provider)
       return null
     }
 
@@ -106,12 +89,12 @@ export async function getUserKeyFromConvex(
 export async function getEffectiveProviderApiKey(
   provider: Provider,
   token?: string
-): Promise<ProviderApiKeyResolution> {
+): Promise<ProviderCredentialResolution> {
   // Try user key first if token is provided
   if (token) {
     const userKey = await getUserKeyFromConvex(provider, token)
     if (userKey) {
-      return { apiKey: userKey, source: "byok" }
+      return { provider, apiKey: userKey, source: "byok" }
     }
   }
 
@@ -120,8 +103,8 @@ export async function getEffectiveProviderApiKey(
   // factory and the 401 preflight used to each restate); resolution stays here.
   const platformKey = process.env[getProviderStrategy(provider).envVarName]
   return platformKey
-    ? { apiKey: platformKey, source: "platform" }
-    : { apiKey: undefined, source: undefined }
+    ? { provider, apiKey: platformKey, source: "platform" }
+    : { provider, apiKey: undefined, source: undefined }
 }
 
 /**
@@ -137,14 +120,14 @@ export async function getEffectiveApiKey(
 }
 
 /**
- * @deprecated Use hasUserKey or getUserKeyFromConvex instead
+ * @deprecated Use getUserKeyFromConvex instead
  */
 export async function getUserKey(
   _userId: string,
   _provider: Provider
 ): Promise<string | null> {
   console.warn(
-    "getUserKey is deprecated, use hasUserKey or getUserKeyFromConvex instead"
+    "getUserKey is deprecated, use getUserKeyFromConvex instead"
   )
   return null
 }

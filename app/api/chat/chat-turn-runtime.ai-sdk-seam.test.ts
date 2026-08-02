@@ -2,10 +2,7 @@ import { api } from "@/convex/_generated/api"
 import { HEARTBEAT_INTERVAL_MS } from "@/convex/domain/generation_run_liveness"
 import { loadUserMcpTools } from "@/lib/mcp/load-tools"
 import { createLanguageModel } from "@/lib/openproviders/create-language-model"
-import {
-  getEffectiveProviderApiKey,
-  getEffectiveToolKeyWithMode,
-} from "@/lib/user-keys"
+import { getEffectiveToolKeyWithMode } from "@/lib/user-keys"
 import type { LanguageModelV4StreamPart } from "@ai-sdk/provider"
 import { jsonSchema, streamText, tool } from "ai"
 import { MockLanguageModelV4, simulateReadableStream } from "ai/test"
@@ -32,7 +29,7 @@ import type {
 //   - the provider model (MockLanguageModelV4 at the createLanguageModel seam),
 //   - Convex (deps.fetchMutation for durable writes; convex/nextjs for the
 //     budget store and audit sink), MCP servers (loadUserMcpTools),
-//   - key resolution, Sentry/PostHog/Braintrust.
+//   - tool-key resolution, Sentry/PostHog/Braintrust.
 // vi.mock("ai") is deliberately absent.
 // ---------------------------------------------------------------------------
 
@@ -62,7 +59,6 @@ vi.mock("@/lib/posthog", () => ({
 }))
 
 vi.mock("@/lib/user-keys", () => ({
-  getEffectiveProviderApiKey: vi.fn(),
   getEffectiveToolKeyWithMode: vi.fn(),
 }))
 
@@ -328,6 +324,11 @@ function makeInput(overrides: Partial<ChatTurnInput> = {}): ChatTurnInput {
     anonymousId: undefined,
     isAuthenticated: true,
     convexToken: "tok",
+    credential: {
+      provider: "anthropic",
+      apiKey: "sk-test",
+      source: "byok",
+    },
     ...overrides,
   }
 }
@@ -436,10 +437,6 @@ function makeDeps(
 beforeEach(() => {
   vi.clearAllMocks()
   vi.spyOn(console, "log").mockImplementation(() => {})
-  vi.mocked(getEffectiveProviderApiKey).mockResolvedValue({
-    apiKey: "sk-test",
-    source: "byok",
-  })
   vi.mocked(getEffectiveToolKeyWithMode).mockResolvedValue({
     key: undefined,
     keyMode: undefined,
@@ -468,7 +465,9 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     })
 
     await runtime.prepare()
-    const sse = await runtime.toResponse(new AbortController().signal).text()
+    const sse = await (
+      await runtime.toResponse(new AbortController().signal)
+    ).text()
 
     expect(sse).toContain("Check the facts.")
     expect(extractTextDeltasFromSse(sse)).toBe("Final answer.")
@@ -492,7 +491,7 @@ describe("chat turn runtime × real ai@7 streamText", () => {
       deps: makeDeps(durableFetchMutation, wire),
     })
     await runtime.prepare()
-    const response = runtime.toResponse(new AbortController().signal)
+    const response = await runtime.toResponse(new AbortController().signal)
 
     // The HTTP envelope streams to completion with a finish state.
     expect(response.status).toBe(200)
@@ -613,7 +612,7 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     await runtime.prepare()
 
     const abortController = new AbortController()
-    const response = runtime.toResponse(abortController.signal)
+    const response = await runtime.toResponse(abortController.signal)
     const reader = response.body!.getReader()
 
     // Wait for the stream to actually start, then abort the request signal —
@@ -673,7 +672,7 @@ describe("chat turn runtime × real ai@7 streamText", () => {
       // Put the heartbeat — the durable worker's production Stop/supersession
       // discovery path — five milliseconds away, then start the real response.
       await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS - 5)
-      const response = runtime.toResponse(new AbortController().signal)
+      const response = await runtime.toResponse(new AbortController().signal)
       const reader = response.body!.getReader()
       const decoder = new TextDecoder()
       let sse = ""

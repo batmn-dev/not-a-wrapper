@@ -24,11 +24,12 @@ function Harness(props: {
   messages: UIMessage[]
   status: Status
   isSubmitting: boolean
+  isApprovalPaused?: boolean
   selectedActivityTurnId?: string
   onResult: (result: UseActivityPanelResult) => void
 }) {
-  const { onResult, ...params } = props
-  const result = useActivityPanel(params)
+  const { onResult, isApprovalPaused = false, ...params } = props
+  const result = useActivityPanel({ ...params, isApprovalPaused })
   React.useEffect(() => {
     onResult(result)
   })
@@ -71,8 +72,9 @@ function assistant(
     status: opts.messageStatus,
     metadata:
       opts.durationMs !== undefined || opts.serverMessageId !== undefined
-        ? {
+          ? {
             reasoningDurationMs: opts.durationMs,
+            workDurationMs: opts.durationMs,
             serverMessageId: opts.serverMessageId,
           }
         : undefined,
@@ -121,6 +123,7 @@ describe("useActivityPanel ownership", () => {
     messages: UIMessage[]
     status: Status
     isSubmitting: boolean
+    isApprovalPaused?: boolean
     selectedActivityTurnId?: string
   }) {
     act(() => {
@@ -383,6 +386,72 @@ describe("useActivityPanel ownership", () => {
       expect(latest!.panelProps.durationSeconds).toBe(4)
       expect(latest!.defaultActivityTurnId).toBe("a2")
       expect(latest!.defaultActivityDurationMs).toBe(2000)
+    } finally {
+      const rootToUnmount = root
+      if (rootToUnmount) {
+        act(() => {
+          rootToUnmount.unmount()
+        })
+      }
+      root = null
+      vi.useRealTimers()
+    }
+  })
+
+  it("pauses approval wait while transport streams and resumes from the resolved run state", () => {
+    vi.useFakeTimers()
+    try {
+      render({
+        messages: [
+          user("u1"),
+          assistant("a1", {
+            reasoningState: "streaming",
+            reasoningText: "",
+          }),
+        ],
+        status: "streaming",
+        isSubmitting: false,
+      })
+      act(() => {
+        vi.advanceTimersByTime(2000)
+      })
+      expect(latest!.defaultActivityDurationMs).toBe(2000)
+
+      render({
+        messages: [
+          user("u1"),
+          assistant("a1", {
+            durationMs: 2000,
+            messageStatus: "awaiting_approval",
+          }),
+        ],
+        status: "streaming",
+        isSubmitting: false,
+        isApprovalPaused: true,
+      })
+      act(() => {
+        vi.advanceTimersByTime(10_000)
+      })
+      expect(latest!.defaultActivityDurationMs).toBe(2000)
+
+      // The durable message can retain awaiting_approval for a projection
+      // frame after continuation; the canonical presentation has resumed.
+      render({
+        messages: [
+          user("u1"),
+          assistant("a1", {
+            durationMs: 2000,
+            messageStatus: "awaiting_approval",
+          }),
+        ],
+        status: "streaming",
+        isSubmitting: false,
+        isApprovalPaused: false,
+      })
+      act(() => {
+        vi.advanceTimersByTime(3000)
+      })
+      expect(latest!.defaultActivityDurationMs).toBe(5000)
     } finally {
       const rootToUnmount = root
       if (rootToUnmount) {

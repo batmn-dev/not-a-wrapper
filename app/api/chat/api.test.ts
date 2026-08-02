@@ -1,11 +1,19 @@
 import { fetchQuery } from "convex/nextjs"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { checkServerSideUsage, validateAndTrackUsage } from "./api"
+import { getEffectiveProviderApiKey } from "@/lib/user-keys"
+import {
+  checkServerSideUsage,
+  validateAndResolveChatCredential,
+} from "./api"
 import { createErrorResponse } from "./utils"
 
 vi.mock("convex/nextjs", () => ({
   fetchMutation: vi.fn(),
   fetchQuery: vi.fn(),
+}))
+
+vi.mock("@/lib/user-keys", () => ({
+  getEffectiveProviderApiKey: vi.fn(),
 }))
 
 describe("checkServerSideUsage", () => {
@@ -135,19 +143,100 @@ describe("checkServerSideUsage", () => {
   })
 })
 
-describe("validateAndTrackUsage", () => {
-  it("preserves the branded authentication contract", async () => {
-    await expect(
-      validateAndTrackUsage({
-        userId: "guest-id",
+describe("validateAndResolveChatCredential", () => {
+  it("enforces the essential paid, free, and guest policy table", async () => {
+    const cases = [
+      {
+        name: "paid model with BYOK",
+        model: "gpt-5.2",
+        isAuthenticated: true,
+        token: "convex-token",
+        credential: {
+          provider: "openai",
+          apiKey: "byok-key",
+          source: "byok",
+        },
+        expected: "resolve",
+      },
+      {
+        name: "paid model with platform credential",
+        model: "gpt-5.2",
+        isAuthenticated: true,
+        token: "convex-token",
+        credential: {
+          provider: "openai",
+          apiKey: "platform-key",
+          source: "platform",
+        },
+        expected: "MISSING_API_KEY",
+      },
+      {
+        name: "free model with platform credential",
+        model: "gpt-5-mini",
+        isAuthenticated: true,
+        token: "convex-token",
+        credential: {
+          provider: "openai",
+          apiKey: "platform-key",
+          source: "platform",
+        },
+        expected: "resolve",
+      },
+      {
+        name: "allowed guest model",
+        model: "gpt-5-mini",
+        isAuthenticated: false,
+        token: undefined,
+        credential: {
+          provider: "openai",
+          apiKey: "platform-key",
+          source: "platform",
+        },
+        expected: "resolve",
+      },
+      {
+        name: "disallowed guest model",
         model: "gpt-5.2",
         isAuthenticated: false,
         token: undefined,
+        credential: undefined,
+        expected: "AUTH_REQUIRED",
+      },
+    ] as const
+
+    for (const testCase of cases) {
+      vi.mocked(getEffectiveProviderApiKey).mockReset()
+      if (testCase.credential) {
+        vi.mocked(getEffectiveProviderApiKey).mockResolvedValue(
+          testCase.credential
+        )
+      }
+
+      const result = validateAndResolveChatCredential({
+        model: testCase.model,
+        isAuthenticated: testCase.isAuthenticated,
+        token: testCase.token,
       })
-    ).rejects.toMatchObject({
-      statusCode: 401,
-      code: "AUTH_REQUIRED",
-      message: expect.stringContaining("requires authentication"),
-    })
+
+      if (testCase.expected === "resolve") {
+        await expect(result, testCase.name).resolves.toEqual(
+          testCase.credential
+        )
+      } else {
+        await expect(result, testCase.name).rejects.toMatchObject({
+          statusCode: 401,
+          code: testCase.expected,
+        })
+      }
+
+      if (testCase.expected === "AUTH_REQUIRED") {
+        expect(getEffectiveProviderApiKey, testCase.name).not.toHaveBeenCalled()
+      } else {
+        expect(getEffectiveProviderApiKey, testCase.name).toHaveBeenCalledWith(
+          "openai",
+          testCase.isAuthenticated ? testCase.token : undefined
+        )
+      }
+    }
   })
 })

@@ -4,7 +4,13 @@ import { Icon } from "@/components/ui/icon"
 import type { AssistantActivityPresentation } from "@/lib/chat-messages/assistant-activity"
 import { cn } from "@/lib/utils"
 import { RiArrowRightSLine } from "@remixicon/react"
-import { StatusText } from "./status-text"
+import { ActivityStatusRow } from "./status-text"
+
+// The Remix arrow occupies only part of its 24px viewBox. A 17px SVG inside
+// the stable 16px layout slot keeps the painted chevron optically balanced
+// while preserving the shared row geometry.
+const ACTIVITY_CHEVRON_SLOT_SIZE = 16
+const ACTIVITY_CHEVRON_GLYPH_SIZE = 17
 
 export type ActivityDisclosurePresentation = Extract<
   AssistantActivityPresentation,
@@ -37,19 +43,21 @@ export function ActivityPanelTrigger({
       aria-expanded={open}
       aria-controls={controlsId}
       className={cn(
-        "group/activity text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-0.5 rounded-full text-start text-base leading-6 font-normal transition-colors",
+        "group/activity text-muted-foreground hover:text-foreground inline-flex w-fit min-w-0 max-w-full rounded-full text-start transition-colors",
         className
       )}
     >
-      <StatusText
+      <ActivityStatusRow
         label={label}
         shimmer={motion === "shimmer"}
-        className="truncate"
-      />
-      <Icon
-        icon={RiArrowRightSLine}
-        slotSize={16}
-        className="text-[var(--text-tertiary)] transition-transform group-hover/activity:translate-x-0.5 motion-reduce:transition-none"
+        trailing={
+          <Icon
+            icon={RiArrowRightSLine}
+            slotSize={ACTIVITY_CHEVRON_SLOT_SIZE}
+            glyphSize={ACTIVITY_CHEVRON_GLYPH_SIZE}
+            className="text-current transition-transform group-hover/activity:translate-x-0.5 motion-reduce:transition-none"
+          />
+        }
       />
     </button>
   )

@@ -70,6 +70,28 @@ describe("reconcileSelectedPath", () => {
     expect(result[3].metadata).toMatchObject({ serverMessageId: "s4" })
   })
 
+  it("promotes persisted terminal durations over the live handoff snapshot", () => {
+    const live = [
+      message("a1", "assistant", "answer", {
+        serverMessageId: "s1",
+        reasoningDurationMs: 400,
+        workDurationMs: 4800,
+      }),
+    ]
+    const server = [
+      message("a1", "assistant", "answer", {
+        serverMessageId: "s1",
+        reasoningDurationMs: 436,
+        workDurationMs: 5200,
+      }),
+    ]
+
+    expect(reconcileSelectedPath(live, server)[0]?.metadata).toMatchObject({
+      reasoningDurationMs: 436,
+      workDurationMs: 5200,
+    })
+  })
+
   it("does not mis-associate an optimistic send with a prior same-role message", () => {
     // The pre-send window: optimistic user added, server not updated yet. The
     // optimistic message must not adopt the earlier user's server identity.

@@ -6,7 +6,6 @@ import {
   getEffectiveApiKey,
   getEffectiveProviderApiKey,
   getUserKeyFromConvex,
-  hasUserKey,
 } from "./user-keys"
 
 vi.mock("convex/nextjs", () => ({ fetchQuery: vi.fn() }))
@@ -29,30 +28,94 @@ describe("provider API key resolution", () => {
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     vi.unstubAllEnvs()
   })
 
-  it("returns user BYOK provenance before a configured platform key", async () => {
+  it("resolves one provider-bound credential with essential outcomes and exact read counts", async () => {
     vi.stubEnv("OPENAI_API_KEY", "platform-key")
-    vi.mocked(fetchQuery).mockResolvedValue({
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const currentRow = {
       encryptedKey: "v3:deadbeef:cafef00d",
       iv: "iv",
       ownerId: "user-1",
-    } as never)
-    vi.mocked(decryptSecret).mockReturnValue("user-key")
+    }
+    const cases = [
+      {
+        name: "valid BYOK",
+        token: "convex-token",
+        row: currentRow,
+        decrypted: "user-key",
+        expected: {
+          provider: "openai",
+          apiKey: "user-key",
+          source: "byok",
+        },
+        reads: 1,
+        decryptions: 1,
+      },
+      {
+        name: "absent BYOK with platform fallback",
+        token: "convex-token",
+        row: null,
+        expected: {
+          provider: "openai",
+          apiKey: "platform-key",
+          source: "platform",
+        },
+        reads: 1,
+        decryptions: 0,
+      },
+      {
+        name: "decryption failure with platform fallback",
+        token: "convex-token",
+        row: currentRow,
+        decryptError: new Error("decrypt failed"),
+        expected: {
+          provider: "openai",
+          apiKey: "platform-key",
+          source: "platform",
+        },
+        reads: 1,
+        decryptions: 1,
+      },
+      {
+        name: "tokenless guest with platform fallback",
+        token: undefined,
+        row: null,
+        expected: {
+          provider: "openai",
+          apiKey: "platform-key",
+          source: "platform",
+        },
+        reads: 0,
+        decryptions: 0,
+      },
+    ] as const
 
-    await expect(
-      getEffectiveProviderApiKey("openai", "convex-token")
-    ).resolves.toEqual({ apiKey: "user-key", source: "byok" })
-  })
+    for (const testCase of cases) {
+      vi.mocked(fetchQuery).mockReset()
+      vi.mocked(decryptSecret).mockReset()
+      vi.mocked(fetchQuery).mockResolvedValue(testCase.row as never)
+      if ("decryptError" in testCase) {
+        vi.mocked(decryptSecret).mockImplementation(() => {
+          throw testCase.decryptError
+        })
+      } else if ("decrypted" in testCase) {
+        vi.mocked(decryptSecret).mockReturnValue(testCase.decrypted)
+      }
 
-  it("returns platform provenance when no usable user key exists", async () => {
-    vi.stubEnv("OPENAI_API_KEY", "platform-key")
-    vi.mocked(fetchQuery).mockResolvedValue(null)
+      const resolution = await getEffectiveProviderApiKey(
+        "openai",
+        testCase.token
+      )
 
-    await expect(
-      getEffectiveProviderApiKey("openai", "convex-token")
-    ).resolves.toEqual({ apiKey: "platform-key", source: "platform" })
+      expect(resolution, testCase.name).toEqual(testCase.expected)
+      expect(fetchQuery, testCase.name).toHaveBeenCalledTimes(testCase.reads)
+      expect(decryptSecret, testCase.name).toHaveBeenCalledTimes(
+        testCase.decryptions
+      )
+    }
   })
 
   it("returns an empty resolution when neither source is configured", async () => {
@@ -60,6 +123,7 @@ describe("provider API key resolution", () => {
     vi.mocked(fetchQuery).mockResolvedValue(null)
 
     await expect(getEffectiveProviderApiKey("openai")).resolves.toEqual({
+      provider: "openai",
       apiKey: undefined,
       source: undefined,
     })
@@ -77,15 +141,19 @@ describe("provider API key resolution", () => {
 
     await expect(
       getEffectiveProviderApiKey("openai", "convex-token")
-    ).resolves.toEqual({ apiKey: "platform-key", source: "platform" })
-    await expect(hasUserKey("openai", "convex-token")).resolves.toBe(false)
+    ).resolves.toEqual({
+      provider: "openai",
+      apiKey: "platform-key",
+      source: "platform",
+    })
+    await expect(
+      getUserKeyFromConvex("openai", "convex-token")
+    ).resolves.toBeNull()
 
     expect(decryptSecret).not.toHaveBeenCalled()
     expect(errorSpy).not.toHaveBeenCalled()
     // Warn-once dedupe: two stale reads for the same provider, one warning.
     expect(warnSpy).toHaveBeenCalledTimes(1)
-    errorSpy.mockRestore()
-    warnSpy.mockRestore()
   })
 
   it("treats a current-format row without an IV as unusable", async () => {
@@ -96,14 +164,12 @@ describe("provider API key resolution", () => {
       ownerId: "user-1",
     } as never)
 
-    await expect(hasUserKey("anthropic", "convex-token")).resolves.toBe(false)
     await expect(
       getUserKeyFromConvex("anthropic", "convex-token")
     ).resolves.toBeNull()
 
     expect(decryptSecret).not.toHaveBeenCalled()
     expect(warnSpy).toHaveBeenCalledTimes(1)
-    warnSpy.mockRestore()
   })
 
   it("keeps the legacy key-only accessor compatible", async () => {
