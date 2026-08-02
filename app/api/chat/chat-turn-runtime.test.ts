@@ -861,6 +861,45 @@ describe("createChatTurnRuntime — evidence-gated word chunking", () => {
 })
 
 describe("createChatTurnRuntime — durable completion handoff", () => {
+  it("does not delay response construction on the best-effort work-start write", async () => {
+    const harness = makeStreamHarness()
+    let releaseWorkStart: (() => void) | undefined
+    const workStartPending = new Promise<void>((resolve) => {
+      releaseWorkStart = resolve
+    })
+    const wire = makeWorkerWire({
+      markGenerationWorkStarted: () => workStartPending,
+    })
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(harness, makeFetchMutation(), {
+        durableWorkerWire: wire,
+      }),
+    })
+
+    await runtime.prepare()
+    let responseReturned = false
+    const responsePending = runtime
+      .toResponse(notAbortedSignal())
+      .then((response) => {
+        responseReturned = true
+        return response
+      })
+
+    try {
+      await vi.waitFor(() => {
+        expect(wireCall(wire, "markGenerationWorkStarted")).toBeDefined()
+      })
+      await vi.waitFor(() => {
+        expect(responseReturned).toBe(true)
+      })
+    } finally {
+      releaseWorkStart?.()
+    }
+
+    await expect(responsePending).resolves.toBeInstanceOf(Response)
+  })
+
   it("completes with durableFinal tool counts from streamText onEnd, not the countToolParts fallback", async () => {
     const harness = makeStreamHarness()
     const fetchMutation = makeFetchMutation()

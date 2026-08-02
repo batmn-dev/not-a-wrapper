@@ -205,11 +205,14 @@ export function useActivityPanel({
   messages,
   status,
   isSubmitting,
+  isApprovalPaused,
   selectedActivityTurnId,
 }: {
   messages: UIMessage[]
   status: ChatStatus
   isSubmitting: boolean
+  /** Canonical run-presentation pause, independent of local transport lag. */
+  isApprovalPaused: boolean
   selectedActivityTurnId?: string
 }): UseActivityPanelResult {
   const {
@@ -247,15 +250,13 @@ export function useActivityPanel({
       ? deriveAssistantTurnView(panelMessage, "ready")
       : undefined
 
-  const defaultMessageStatus = messageRenderStatus(defaultMessage)
   const defaultWorkDuration = useAssistantWorkDuration({
     persistedWorkDurationMs: defaultView?.persistedWorkDurationMs,
     isActive: Boolean(defaultMessage) && generationActive,
-    // A continuation resumes immediately when the client generation becomes
-    // active, even if the durable message projection still carries the prior
-    // awaiting_approval status for a frame.
-    isPaused:
-      !generationActive && defaultMessageStatus === "awaiting_approval",
+    // The run-presentation resolver owns approval liveness. Local transport
+    // can remain streaming after the durable run pauses, and the durable
+    // message can retain awaiting_approval briefly after continuation.
+    isPaused: Boolean(defaultMessage) && isApprovalPaused,
     // Turn identity for the timer: a new generation or branch default must
     // restart from zero and never inherit the previous turn's frozen duration.
     turnKey: defaultActivityTurnId,

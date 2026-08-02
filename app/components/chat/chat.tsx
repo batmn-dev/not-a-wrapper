@@ -222,6 +222,7 @@ function ChatInner({
     messages,
     status: effectiveStatus,
     isSubmitting,
+    isApprovalPaused: presentation.state === "awaiting-approval",
     selectedActivityTurnId,
   })
 

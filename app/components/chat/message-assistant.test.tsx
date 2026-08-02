@@ -192,7 +192,7 @@ describe("MessageAssistant activity trigger", () => {
     expect(container?.querySelector("button[aria-expanded]")).toBeNull()
   })
 
-  it("reports completed opaque sub-second reasoning honestly", () => {
+  it("omits completed opaque sub-second reasoning duration", () => {
     const store = makeStore({ panelTurnId: "assistant-1" })
     const parts = [
       { type: "reasoning", text: "", state: "done" },
@@ -212,7 +212,8 @@ describe("MessageAssistant activity trigger", () => {
       )
     })
 
-    expect(container?.textContent).toContain("Thought for <1s")
+    expect(container?.textContent).toContain("Thought")
+    expect(container?.textContent).not.toContain("<1s")
     expect(container?.querySelector("button[aria-expanded]")).toBeNull()
   })
 

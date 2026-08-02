@@ -1768,9 +1768,9 @@ export const markGenerationWorkStarted = ownedGenerationRunMutation({
 })
 
 /**
- * Records the exact provider-consumption boundary before the response becomes
- * stoppable by the client. Approval continuations inherit the prior frozen
- * total from the reused assistant message; the human pause itself is excluded.
+ * Records the exact provider-consumption boundary for server-side duration
+ * fallback. Approval continuations inherit the prior frozen total from the
+ * reused assistant message; the human pause itself is excluded.
  */
 export async function markGenerationWorkStartedForChat(
   ctx: MutationCtx,

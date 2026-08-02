@@ -82,13 +82,8 @@ export function useAssistantWorkDuration({
     isActive !== timerState.wasActive ||
     isPaused !== timerState.wasPaused
   ) {
-    const resumingPause = isActive && timerState.wasPaused
     const authoritativeBase = persistedWorkDurationMs ?? 0
-    const nextBase = resumingPause
-      ? Math.max(timerState.frozenMs, authoritativeBase)
-      : isActive
-        ? authoritativeBase
-        : Math.max(timerState.frozenMs, authoritativeBase)
+    const nextBase = Math.max(timerState.frozenMs, authoritativeBase)
     setTimerState({
       turnKey,
       wasActive: isActive,

@@ -15,12 +15,12 @@ export type ReasoningActivityTracker = {
  */
 export function createReasoningActivityTracker(
   now: () => number = Date.now,
-  initialDurationMs = 0
+  initialDurationMs?: number
 ): ReasoningActivityTracker {
   const activeBlockIds = new Set<string>()
   let intervalStartMs: number | undefined
-  let elapsedMs = Math.max(0, initialDurationMs)
-  let observed = elapsedMs > 0
+  let elapsedMs = Math.max(0, initialDurationMs ?? 0)
+  let observed = initialDurationMs !== undefined
   let closed = false
 
   const finishInterval = () => {

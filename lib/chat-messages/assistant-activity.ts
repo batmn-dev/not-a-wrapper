@@ -315,13 +315,20 @@ function deriveCompletion(
       status: "stopped",
     }
   }
+  const hasNonReasoningActivity = entries.some(
+    (entry) => entry.kind !== "reasoning"
+  )
   return {
     id: "completion",
     kind: "completion",
     title:
       durationSeconds === undefined
         ? "Finished"
-        : entries.some((entry) => entry.kind !== "reasoning")
+        : durationSeconds < 1
+          ? hasNonReasoningActivity
+            ? "Finished"
+            : "Thought"
+          : hasNonReasoningActivity
           ? `Worked for ${formatDuration(durationSeconds)}`
           : `Thought for ${formatDuration(durationSeconds)}`,
     detail: "Done",
@@ -546,7 +553,7 @@ function resolveLiveStatus(
 }
 
 function completedReasoningLabel(durationSeconds: number | undefined): string {
-  return durationSeconds === undefined
+  return durationSeconds === undefined || durationSeconds < 1
     ? "Thought"
     : `Thought for ${formatDuration(durationSeconds)}`
 }
@@ -570,6 +577,10 @@ export function deriveAssistantActivityPresentation(
       ? (options?.workDurationMs ?? view.persistedWorkDurationMs)
       : (options?.reasoningDurationMs ?? view.reasoning.persistedDurationMs)
   )
+  const displayDurationSeconds =
+    durationSeconds !== undefined && durationSeconds > 0
+      ? durationSeconds
+      : undefined
 
   if (isLive) {
     const status = resolveLiveStatus(view, phase, activity)
@@ -579,7 +590,7 @@ export function deriveAssistantActivityPresentation(
         label: status.label,
         motion: status.motion,
         activity,
-        durationSeconds,
+        durationSeconds: displayDurationSeconds,
       }
     }
     return { kind: "live-status", ...status }
@@ -590,19 +601,21 @@ export function deriveAssistantActivityPresentation(
   if (activity) {
     const hasReasoning = activity.entries.some((entry) => entry.kind === "reasoning")
     const label =
-      durationSeconds !== undefined
+      displayDurationSeconds !== undefined
         ? hasNonReasoningActivity
-          ? `Worked for ${formatDuration(durationSeconds)}`
-          : `Thought for ${formatDuration(durationSeconds)}`
-        : hasReasoning
-          ? "Thought"
-          : "Activity"
+          ? `Worked for ${formatDuration(displayDurationSeconds)}`
+          : `Thought for ${formatDuration(displayDurationSeconds)}`
+        : durationSeconds === 0 && hasNonReasoningActivity
+          ? "Activity"
+          : hasReasoning
+            ? "Thought"
+            : "Activity"
     return {
       kind: "disclosure",
       label,
       motion: "none",
       activity,
-      durationSeconds,
+      durationSeconds: displayDurationSeconds,
     }
   }
 

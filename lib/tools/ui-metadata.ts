@@ -26,9 +26,11 @@ export type ToolInvocationMetadataByCallId = Record<
 export type ToolInvocationStreamMetadata = {
   reasoningDurationMs?: number
   /**
-   * Active assistant generation time from provider-stream start through the
-   * terminal generation signal. Excludes request preparation, approval wait,
-   * persistence, analytics, and resource cleanup.
+   * Cumulative active assistant generation time across provider-stream segments
+   * for this assistant turn. Each segment runs from provider-stream start
+   * through its terminal generation signal; approval continuations add to the
+   * persisted prior total without counting the approval wait. Also excludes
+   * request preparation, persistence, analytics, and resource cleanup.
    */
   workDurationMs?: number
   toolMetadataByName?: ToolInvocationMetadataByName

@@ -215,7 +215,7 @@ type PreparedTurn = {
   startTime: number
   validatedMessages: MessageAISDK[]
   initialWorkDurationMs: number
-  initialReasoningDurationMs: number
+  initialReasoningDurationMs: number | undefined
   modelMessages: ModelMessage[]
   providerOptions: ReturnType<typeof shapeRequest>["providerOptions"]
   requestHeaders: ReturnType<typeof shapeRequest>["headers"]
@@ -659,8 +659,8 @@ export function createChatTurnRuntime(args: {
       })
     )
     // An approval continuation reuses the paused assistant turn, so both
-    // duration clocks resume from the persisted pre-pause totals; a fresh turn
-    // starts both from zero.
+    // duration clocks resume from the persisted pre-pause totals. Work always
+    // starts from zero; reasoning preserves absence versus an observed zero.
     const continuationBaseMetadata =
       requestApprovalContinuation.tail.length > 0
         ? validatedMessages.findLast((message) => message.role === "assistant")
@@ -668,8 +668,9 @@ export function createChatTurnRuntime(args: {
         : undefined
     const initialWorkDurationMs =
       getWorkDurationMs(continuationBaseMetadata) ?? 0
-    const initialReasoningDurationMs =
-      getReasoningDurationMs(continuationBaseMetadata) ?? 0
+    const initialReasoningDurationMs = getReasoningDurationMs(
+      continuationBaseMetadata
+    )
 
     const textFileReferences = getTextFilePartReferences(validatedMessages)
     const trustedTextAttachments =
@@ -1687,10 +1688,10 @@ export function createChatTurnRuntime(args: {
       runGeneration
     )
 
-    // Persist the exact start before exposing Stop to the client. Failure is
-    // observational: it is logged by the durable adapter and must not fail an
-    // otherwise healthy provider generation.
-    await lifecycle.stream.startWork(streamStartMs)
+    // Begin persisting the exact start before exposing Stop to the client.
+    // Failure and latency are observational: the durable adapter logs either,
+    // and this best-effort write must not delay a healthy provider stream.
+    void lifecycle.stream.startWork(streamStartMs)
 
     // Title generation is independent of answer generation: it starts once
     // durable prepare has accepted the first turn (or first-message edit), but

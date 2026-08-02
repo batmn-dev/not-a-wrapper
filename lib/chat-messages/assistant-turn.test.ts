@@ -1044,7 +1044,7 @@ describe("deriveAssistantActivityPresentation", () => {
 
   it.each([
     [undefined, "none", undefined],
-    [999, "passive", "Thought for <1s"],
+    [999, "passive", "Thought"],
     [1000, "passive", "Thought for 1s"],
     [1999, "passive", "Thought for 1s"],
     [2000, "passive", "Thought for 2s"],
@@ -1068,7 +1068,7 @@ describe("deriveAssistantActivityPresentation", () => {
     }
   )
 
-  it("keeps visible sub-second reasoning inspectable with honest copy", () => {
+  it("keeps visible sub-second reasoning inspectable without a duration", () => {
     const view = viewOf(
       [{ type: "reasoning", text: "Visible reasoning", state: "done" }],
       "ready",
@@ -1079,11 +1079,13 @@ describe("deriveAssistantActivityPresentation", () => {
     })
     expect(presentation.kind).toBe("disclosure")
     if (presentation.kind === "disclosure") {
-      expect(presentation.label).toBe("Thought for <1s")
+      expect(presentation.label).toBe("Thought")
+      expect(presentation.durationSeconds).toBeUndefined()
       expect(presentation.activity.entries.map((entry) => entry.kind)).toEqual([
         "reasoning",
       ])
       expect(presentation.activity.completion).toMatchObject({
+        title: "Thought",
         status: "complete",
       })
     }

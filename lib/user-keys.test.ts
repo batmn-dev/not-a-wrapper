@@ -28,12 +28,13 @@ describe("provider API key resolution", () => {
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     vi.unstubAllEnvs()
   })
 
   it("resolves one provider-bound credential with essential outcomes and exact read counts", async () => {
     vi.stubEnv("OPENAI_API_KEY", "platform-key")
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    vi.spyOn(console, "error").mockImplementation(() => {})
     const currentRow = {
       encryptedKey: "v3:deadbeef:cafef00d",
       iv: "iv",
@@ -115,8 +116,6 @@ describe("provider API key resolution", () => {
         testCase.decryptions
       )
     }
-
-    errorSpy.mockRestore()
   })
 
   it("returns an empty resolution when neither source is configured", async () => {
@@ -155,8 +154,6 @@ describe("provider API key resolution", () => {
     expect(errorSpy).not.toHaveBeenCalled()
     // Warn-once dedupe: two stale reads for the same provider, one warning.
     expect(warnSpy).toHaveBeenCalledTimes(1)
-    errorSpy.mockRestore()
-    warnSpy.mockRestore()
   })
 
   it("treats a current-format row without an IV as unusable", async () => {
@@ -173,7 +170,6 @@ describe("provider API key resolution", () => {
 
     expect(decryptSecret).not.toHaveBeenCalled()
     expect(warnSpy).toHaveBeenCalledTimes(1)
-    warnSpy.mockRestore()
   })
 
   it("keeps the legacy key-only accessor compatible", async () => {

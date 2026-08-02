@@ -277,7 +277,7 @@ export type DurableStreamBinding = {
   streamTextExtras: DurableStreamTextExtras
   /** The streamText-callback half. void = fire-and-forget BY CONTRACT. */
   stream: {
-    /** Persist the provider-consumption boundary before the response is exposed. */
+    /** Begin persisting the provider-consumption boundary before response exposure. */
     startWork(startedAt: number): Promise<void>
     onChunk(chunk: TextStreamPart<ToolSet>): void
     recordStep(step: DurableStepRecord): void
