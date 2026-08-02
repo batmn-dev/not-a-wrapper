@@ -23,6 +23,7 @@ vi.mock("server-only", () => ({}))
 
 let ModelSelector: typeof import("./base").ModelSelector
 let testDom: JSDOM | null = null
+let completeDropdownOpenChange: ((open: boolean) => void) | undefined
 
 function installDomIfNeeded() {
   if (typeof document !== "undefined") return
@@ -119,9 +120,16 @@ vi.mock("./pro-dialog", () => ({
 }))
 
 vi.mock("@/components/ui/dropdown-menu", () => ({
-  DropdownMenu: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
+  DropdownMenu: ({
+    children,
+    onOpenChangeComplete,
+  }: {
+    children: React.ReactNode
+    onOpenChangeComplete?: (open: boolean) => void
+  }) => {
+    completeDropdownOpenChange = onOpenChangeComplete
+    return <div>{children}</div>
+  },
   DropdownMenuTrigger: ({
     render,
   }: {
@@ -196,16 +204,19 @@ describe("ModelSelector", () => {
     modelSelectorMocks.isModelHidden.mockClear()
     breakpointMocks.isMobile = false
     useKeyShortcutMock.mockClear()
+    completeDropdownOpenChange = undefined
   })
 
   function renderSelector({
     isUserAuthenticated,
     onSelect = vi.fn(),
+    onSelectionCommitted,
     disabled = false,
     selectedModelId = "gpt-5-mini",
   }: {
     isUserAuthenticated: boolean
     onSelect?: (modelId: string) => void
+    onSelectionCommitted?: () => void
     disabled?: boolean
     selectedModelId?: string
   }) {
@@ -223,6 +234,7 @@ describe("ModelSelector", () => {
             setSelectedModelId={onSelect}
             isUserAuthenticated={isUserAuthenticated}
             onLockedGuestModelSelect={() => setIsAuthPromptOpen(true)}
+            onSelectionCommitted={onSelectionCommitted}
             disabled={disabled}
           />
           {isAuthPromptOpen ? (
@@ -305,6 +317,35 @@ describe("ModelSelector", () => {
     expect(
       document.body.querySelector('[data-testid="pro-model-dialog"]')
     ).toBeNull()
+  })
+
+  it("notifies the owner only after a desktop selection finishes closing", () => {
+    const onSelectionCommitted = vi.fn()
+    const onSelect = renderSelector({
+      isUserAuthenticated: false,
+      onSelectionCommitted,
+    })
+
+    act(() => {
+      completeDropdownOpenChange?.(false)
+    })
+    expect(onSelectionCommitted).not.toHaveBeenCalled()
+
+    act(() => {
+      getModelOption("GPT-5 Mini").click()
+    })
+    expect(onSelect).toHaveBeenCalledWith("gpt-5-mini")
+    expect(onSelectionCommitted).not.toHaveBeenCalled()
+
+    act(() => {
+      completeDropdownOpenChange?.(false)
+    })
+    expect(onSelectionCommitted).toHaveBeenCalledTimes(1)
+
+    act(() => {
+      completeDropdownOpenChange?.(false)
+    })
+    expect(onSelectionCommitted).toHaveBeenCalledTimes(1)
   })
 
   it("uses the same model list and selection rules in the mobile drawer", () => {

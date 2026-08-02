@@ -226,6 +226,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const isFileUploadAvailable = Boolean(selectModelConfig?.vision)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const handleModelSelectionCommitted = useCallback(() => {
+      textareaRef.current?.focus({ preventScroll: true })
+    }, [])
 
     // Anonymous chat cannot use authenticated storage, so guests' generated
     // pastes cross the turn seam as ordinary turn text.
@@ -643,6 +646,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                     setSelectedModelId={handleModelChange}
                     isUserAuthenticated={isUserAuthenticated}
                     onLockedGuestModelSelect={onLockedGuestModelSelect}
+                    onSelectionCommitted={handleModelSelectionCommitted}
                   />
                 </div>
                 <div className="cant-hover:gap-1.5 ms-auto flex items-center gap-2">

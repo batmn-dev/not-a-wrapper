@@ -45,6 +45,8 @@ type ModelSelectorProps = {
   selectedModelId: string | null
   setSelectedModelId: (modelId: string) => void
   onLockedGuestModelSelect?: (modelId: string) => void
+  /** Called after a desktop model selection closes so the owning surface can restore task focus. */
+  onSelectionCommitted?: () => void
   disabled?: boolean
   /** Composer pill matches ChatGPT reference: content width, max-w-40 label, asymmetric padding. */
   variant?: "default" | "composer"
@@ -164,6 +166,7 @@ export function ModelSelector({
   selectedModelId,
   setSelectedModelId,
   onLockedGuestModelSelect,
+  onSelectionCommitted,
   disabled = false,
   variant = "default",
 }: ModelSelectorProps) {
@@ -178,6 +181,7 @@ export function ModelSelector({
   const [selectedProModel, setSelectedProModel] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const selectionCommittedRef = useRef(false)
 
   const currentModel = selectedModelId
     ? (models.find((model) => model.id === selectedModelId) ??
@@ -214,6 +218,7 @@ export function ModelSelector({
       return
     }
 
+    selectionCommittedRef.current = !isMobile
     setSelectedModelId(modelId)
     setIsDrawerOpen(false)
     setIsDropdownOpen(false)
@@ -341,6 +346,11 @@ export function ModelSelector({
           if (!open) {
             setSearchQuery("")
           }
+        }}
+        onOpenChangeComplete={(open) => {
+          if (open || !selectionCommittedRef.current) return
+          selectionCommittedRef.current = false
+          onSelectionCommitted?.()
         }}
       >
         {isComposerVariant ? (

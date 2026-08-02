@@ -15,7 +15,9 @@
  *     a pure function of (value, derived compact width) — it must not read
  *     layout that `textareaExpanded` itself influences; the passive effect
  *     skips values the change handler already laid out (consume-once ref);
- *     clone measurement is capped to a bounded prefix of the value
+ *     clone measurement is capped to a bounded prefix of the value; a single
+ *     callback-ref-owned ResizeObserver remeasures when the expansion-
+ *     invariant surface or side-control inline sizes change
  * @upgradeNotes
  *   - Preserve autoFocus default on PromptInputTextarea
  *   - Do NOT re-add TooltipProvider wrapper in PromptInputAction
@@ -128,7 +130,7 @@ function PromptInput({
           <div
             data-composer-surface="true"
             data-slot="prompt-input-surface"
-            className="shadow-short-composer border-border-subtle relative grid cursor-text grid-cols-[auto_1fr_auto] overflow-clip rounded-[28px] border-0 bg-[var(--composer-bg)] bg-clip-padding px-2 py-[9px] contain-inline-size [grid-template-areas:'header_header_header'_'leading_primary_trailing'_'._footer_.'] group-not-data-[expanded]/composer:min-h-[52px] group-not-data-[expanded]/composer:py-[5px] group-data-[expanded]/composer:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out max-sm:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing']"
+            className="shadow-short-composer border-border-subtle relative grid cursor-text grid-cols-[auto_1fr_auto] overflow-clip rounded-[28px] border-0 bg-[var(--composer-bg)] bg-clip-padding px-2 py-[9px] contain-inline-size [--composer-compact-editor-padding-end:6px] [--composer-compact-editor-padding-start:7px] [grid-template-areas:'header_header_header'_'leading_primary_trailing'_'._footer_.'] group-not-data-[expanded]/composer:min-h-[52px] group-not-data-[expanded]/composer:py-[5px] group-data-[expanded]/composer:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out max-sm:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing']"
             onClick={() => {
               textareaRef.current?.focus()
             }}
@@ -163,16 +165,13 @@ function getCompactTextareaWidth(textarea: HTMLTextAreaElement) {
   const surface = textarea.closest<HTMLElement>(
     '[data-composer-surface="true"]'
   )
-  const wrapper = textarea.closest<HTMLElement>(
-    '[data-composer-editor-wrapper="true"]'
-  )
-
-  if (!surface || !wrapper) {
+  if (!surface) {
     return textarea.getBoundingClientRect().width
   }
 
   const surfaceStyle = getComputedStyle(surface)
-  const wrapperStyle = getComputedStyle(wrapper)
+  // These insets live on the surface so compact-width measurement remains
+  // stable after the editor wrapper switches to its expanded padding.
   const contentWidth =
     surface.getBoundingClientRect().width -
     readPixels(surfaceStyle.paddingLeft) -
@@ -191,8 +190,14 @@ function getCompactTextareaWidth(textarea: HTMLTextAreaElement) {
     contentWidth -
       leadingWidth -
       trailingWidth -
-      readPixels(wrapperStyle.paddingLeft) -
-      readPixels(wrapperStyle.paddingRight)
+      readPixels(
+        surfaceStyle.getPropertyValue(
+          "--composer-compact-editor-padding-start"
+        )
+      ) -
+      readPixels(
+        surfaceStyle.getPropertyValue("--composer-compact-editor-padding-end")
+      )
   )
 }
 
@@ -322,8 +327,61 @@ function PromptInputTextarea({
     (node: HTMLTextAreaElement | null) => {
       textareaRef.current = node
       assignRef(ref, node)
+
+      if (!node || disableAutosize) return
+
+      const surface = node.closest<HTMLElement>(
+        '[data-composer-surface="true"]'
+      )
+      if (!surface) return
+
+      const leading = surface.querySelector<HTMLElement>(
+        '[data-composer-leading="true"]'
+      )
+      const trailing = surface.querySelector<HTMLElement>(
+        '[data-composer-trailing="true"]'
+      )
+      const compactMedia = window.matchMedia("(max-width: 639px)")
+      const readInlineSizes = () =>
+        [
+          surface.getBoundingClientRect().width,
+          leading?.getBoundingClientRect().width ?? 0,
+          trailing?.getBoundingClientRect().width ?? 0,
+          compactMedia.matches ? 1 : 0,
+        ].map((width) => Math.round(width * 100) / 100)
+      let lastInlineSizes = readInlineSizes()
+
+      const remeasureForGeometryChange = () => {
+        const nextInlineSizes = readInlineSizes()
+        if (
+          nextInlineSizes.every(
+            (inlineSize, index) => inlineSize === lastInlineSizes[index]
+          )
+        ) {
+          return
+        }
+
+        lastInlineSizes = nextInlineSizes
+        applyTextareaLayout(node, node.value)
+      }
+
+      const resizeObserver =
+        typeof ResizeObserver === "undefined"
+          ? null
+          : new ResizeObserver(remeasureForGeometryChange)
+      resizeObserver?.observe(surface)
+      if (leading) resizeObserver?.observe(leading)
+      if (trailing) resizeObserver?.observe(trailing)
+      compactMedia.addEventListener("change", remeasureForGeometryChange)
+
+      return () => {
+        resizeObserver?.disconnect()
+        compactMedia.removeEventListener("change", remeasureForGeometryChange)
+        if (textareaRef.current === node) textareaRef.current = null
+        assignRef(ref, null)
+      }
     },
-    [ref, textareaRef]
+    [applyTextareaLayout, disableAutosize, ref, textareaRef]
   )
 
   const handleChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -348,7 +406,7 @@ function PromptInputTextarea({
       data-composer-editor-wrapper="true"
       data-slot="prompt-input-editor-wrapper"
       className={cn(
-        "-my-2.5 flex min-h-14 min-w-0 items-center overflow-x-hidden ps-1.75 pe-1.5 group-data-[expanded]/composer:mb-0 group-data-[expanded]/composer:px-2.5",
+        "-my-2.5 flex min-h-14 min-w-0 items-center overflow-x-hidden ps-[var(--composer-compact-editor-padding-start)] pe-[var(--composer-compact-editor-padding-end)] group-data-[expanded]/composer:mb-0 group-data-[expanded]/composer:px-2.5",
         containerClassName
       )}
     >
