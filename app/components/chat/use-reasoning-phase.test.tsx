@@ -249,10 +249,10 @@ describe("useReasoningPhase", () => {
       status: "ready",
       isLast: true,
       turnKey: "a",
-      persistedDurationMs: 1250,
+      persistedDurationMs: 6250,
     })
 
-    expect(latest!.durationMs).toBe(1250)
-    expect(latest!.durationSeconds).toBe(1)
+    expect(latest!.durationMs).toBe(6250)
+    expect(latest!.durationSeconds).toBe(6)
   })
 })

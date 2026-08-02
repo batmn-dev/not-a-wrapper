@@ -71,8 +71,9 @@ function assistant(
     status: opts.messageStatus,
     metadata:
       opts.durationMs !== undefined || opts.serverMessageId !== undefined
-        ? {
+          ? {
             reasoningDurationMs: opts.durationMs,
+            workDurationMs: opts.durationMs,
             serverMessageId: opts.serverMessageId,
           }
         : undefined,

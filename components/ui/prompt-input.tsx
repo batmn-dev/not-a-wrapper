@@ -366,7 +366,7 @@ function PromptInputTextarea({
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           className={cn(
-            "text-foreground mt-4 block min-h-[42px] resize-none overflow-y-visible rounded-none border-none bg-transparent px-0 pt-0 pb-4 text-base leading-[26px] shadow-none transition-none focus-visible:ring-0 focus-visible:ring-offset-0 dark:bg-transparent",
+            "text-foreground placeholder:text-[var(--text-tertiary)] mt-4 block min-h-[42px] resize-none overflow-y-visible rounded-none border-none bg-transparent px-0 pt-0 pb-4 text-base leading-[26px] shadow-none transition-none focus-visible:ring-0 focus-visible:ring-offset-0 dark:bg-transparent",
             className
           )}
           style={{

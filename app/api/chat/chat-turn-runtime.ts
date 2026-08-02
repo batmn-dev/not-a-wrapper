@@ -5,6 +5,7 @@ import type {
   ChatTurnRegenerationRequest,
 } from "@/lib/chat-messages/chat-turn-contract"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
+import { getWorkDurationMs } from "@/lib/chat-messages/metadata"
 import {
   fallbackChatTitle,
   generateChatTitle,
@@ -99,6 +100,10 @@ import {
 import { normalizeChatError, type PublicChatError } from "./public-error"
 import { PublicChatHttpError } from "./public-http-error"
 import { createReasoningActivityTracker } from "./reasoning-activity-tracker"
+import {
+  createWorkDurationTracker,
+  type WorkDurationTracker,
+} from "./work-duration-tracker"
 import {
   getTextFilePartReferences,
   prepareTextFilePartsForModelInput,
@@ -200,6 +205,7 @@ type PreparedTurn = {
   maxSteps: number
   startTime: number
   validatedMessages: MessageAISDK[]
+  initialWorkDurationMs: number
   modelMessages: ModelMessage[]
   providerOptions: ReturnType<typeof shapeRequest>["providerOptions"]
   requestHeaders: ReturnType<typeof shapeRequest>["headers"]
@@ -331,7 +337,7 @@ export type ChatTurnRuntime = {
    * layers, and return the streaming Response. The abort signal is wired to the
    * stream and to the chat lifecycle telemetry here.
    */
-  toResponse(signal: AbortSignal): Response
+  toResponse(signal: AbortSignal): Promise<Response>
   /**
    * Finalize a failed turn for the route's outer catch: dispose MCP clients,
    * mark the durable run failed (if one started), and capture to Sentry. Safe
@@ -649,6 +655,14 @@ export function createChatTurnRuntime(args: {
         messages: canonicalMessages,
       })
     )
+    const initialWorkDurationMs =
+      requestApprovalContinuation.tail.length > 0
+        ? (getWorkDurationMs(
+            validatedMessages.findLast(
+              (message) => message.role === "assistant"
+            )?.metadata
+          ) ?? 0)
+        : 0
 
     const textFileReferences = getTextFilePartReferences(validatedMessages)
     const trustedTextAttachments =
@@ -981,6 +995,7 @@ export function createChatTurnRuntime(args: {
       maxSteps,
       startTime,
       validatedMessages,
+      initialWorkDurationMs,
       modelMessages,
       providerOptions,
       requestHeaders,
@@ -996,7 +1011,7 @@ export function createChatTurnRuntime(args: {
     phase = "prepared"
   }
 
-  function toResponse(signal: AbortSignal): Response {
+  async function toResponse(signal: AbortSignal): Promise<Response> {
     if (phase !== "prepared") {
       throw new Error(
         "Chat turn runtime: toResponse() requires a completed prepare()"
@@ -1021,6 +1036,7 @@ export function createChatTurnRuntime(args: {
       maxSteps,
       startTime,
       validatedMessages,
+      initialWorkDurationMs,
       modelMessages,
       providerOptions,
       requestHeaders,
@@ -1061,15 +1077,18 @@ export function createChatTurnRuntime(args: {
       AbortSignal.timeout(providerDeadlineRemainingMs),
     ])
 
-    const streamStartMs = Date.now()
-    providerStreamStarted = true
+    let streamStartMs = 0
+    let workDuration: WorkDurationTracker | null = null
+    const closeWorkDuration = () => workDuration?.close()
+    const currentWorkDurationMs = () =>
+      workDuration?.getDurationMs() ?? initialWorkDurationMs
     let stepCounter = 0
     let toolMetadataByCallId: ToolInvocationMetadataByCallId = {}
 
     const reasoningActivity = createReasoningActivityTracker()
     let firstChunkLatencyMs: number | null = null
     let lastChunkAtMs: number | null = null
-    let lastProgressAtMs = streamStartMs
+    let lastProgressAtMs = 0
     let observedToolCalls = 0
     let lastStepFinishReason: string | null = null
     let lastToolStepNumber: number | null = null
@@ -1120,7 +1139,7 @@ export function createChatTurnRuntime(args: {
           isAuthenticated,
           messageCount: validatedMessages.length,
           chatVersion: normalizedChatVersion,
-          elapsedMs: now - streamStartMs,
+          elapsedMs: providerStreamStarted ? now - streamStartMs : 0,
           firstTokenLatencyMs: firstChunkLatencyMs,
           timeSinceLastChunkMs:
             lastChunkAtMs === null ? null : now - lastChunkAtMs,
@@ -1181,6 +1200,7 @@ export function createChatTurnRuntime(args: {
       if (abortCaptured || streamCompleted) return
       abortCaptured = true
       reasoningActivity.close()
+      closeWorkDuration()
       resolvePostToolContinuation()
     }
 
@@ -1217,12 +1237,19 @@ export function createChatTurnRuntime(args: {
         : wordChunkingTransform
       : lifecycleTransform
 
-    // Request-to-provider-start (plan §7.4): request receipt → immediately
-    // before provider consumption begins. Content-free; no-op unless sampled.
-    perf.record("stream_start", Date.now() - turnStartedAtMs)
-
-    const runGeneration = (braintrustSpan: BraintrustTraceSpan) =>
-      streamText({
+    const runGeneration = (braintrustSpan: BraintrustTraceSpan) => {
+      // Exact assistant-work start: every preparatory step above is complete,
+      // and the next operation begins provider consumption.
+      streamStartMs = Date.now()
+      lastProgressAtMs = streamStartMs
+      workDuration = createWorkDurationTracker({
+        initialDurationMs: initialWorkDurationMs,
+      })
+      providerStreamStarted = true
+      // Request-to-provider-start (plan §7.4): request receipt → immediately
+      // before provider consumption begins. Content-free; no-op unless sampled.
+      perf.record("stream_start", streamStartMs - turnStartedAtMs)
+      return streamText({
         model: aiModel,
         instructions: enrichedSystemPrompt,
         messages: modelMessages,
@@ -1314,6 +1341,7 @@ export function createChatTurnRuntime(args: {
         onError: (err: unknown) => {
           streamCompleted = true
           reasoningActivity.close()
+          closeWorkDuration()
           resolvePostToolContinuation()
           console.error(
             JSON.stringify({
@@ -1327,7 +1355,10 @@ export function createChatTurnRuntime(args: {
           const errorType = classifyChatError(err)
           // Mark the durable run failed (guest: inert). The parent already
           // computed `errorMessage` for its telemetry below — pass the string.
-          lifecycle.stream.noteStreamError(errorMessage)
+          lifecycle.stream.noteStreamError(
+            errorMessage,
+            currentWorkDurationMs()
+          )
           logBraintrustTraceMetadata(braintrustSpan, {
             ...braintrustMetadata,
             ...getBraintrustErrorMetadata(err),
@@ -1381,14 +1412,19 @@ export function createChatTurnRuntime(args: {
         onAbort: async () => {
           streamCompleted = true
           reasoningActivity.close()
+          closeWorkDuration()
           resolvePostToolContinuation()
           // Flush the latest snapshot, then mark the run aborted (guest: inert).
-          await lifecycle.stream.onAbort("stream aborted")
+          await lifecycle.stream.onAbort(
+            "stream aborted",
+            currentWorkDurationMs()
+          )
         },
 
         onEnd: async ({ text, usage, steps, finishReason }) => {
           streamCompleted = true
           reasoningActivity.close()
+          closeWorkDuration()
           lastProgressAtMs = Date.now()
           resolvePostToolContinuation()
           const rawFinishReason = steps?.[steps.length - 1]?.rawFinishReason
@@ -1490,6 +1526,7 @@ export function createChatTurnRuntime(args: {
               outputTokens: usage?.outputTokens ?? null,
             },
             reasoningDurationMs: reasoningActivity.getDurationMs() ?? null,
+            workDurationMs: currentWorkDurationMs(),
           })
           Sentry.setTag("chat_finish_reason", finishReason ?? "unknown")
           Sentry.setTag("chat_error_type", "none")
@@ -1515,6 +1552,7 @@ export function createChatTurnRuntime(args: {
             firstTokenLatencyMs: firstChunkLatencyMs,
             totalLatencyMs,
             reasoningDurationMs: reasoningActivity.getDurationMs() ?? null,
+            workDurationMs: currentWorkDurationMs(),
             inputTokens: usage?.inputTokens,
             outputTokens: usage?.outputTokens,
           })
@@ -1618,6 +1656,7 @@ export function createChatTurnRuntime(args: {
           // runtime's audit outcome sink — all sources, one unified path.
         },
       })
+    }
 
     const result = withBraintrustTrace(
       {
@@ -1633,6 +1672,11 @@ export function createChatTurnRuntime(args: {
       },
       runGeneration
     )
+
+    // Persist the exact start before exposing Stop to the client. Failure is
+    // observational: it is logged by the durable adapter and must not fail an
+    // otherwise healthy provider generation.
+    await lifecycle.stream.startWork(streamStartMs)
 
     // Title generation is independent of answer generation: it starts once
     // durable prepare has accepted the first turn (or first-message edit), but
@@ -1720,9 +1764,11 @@ export function createChatTurnRuntime(args: {
           }
         }
         if (part.type === "finish") {
+          closeWorkDuration()
           return buildFinishToolInvocationStreamMetadata({
             toolMetadataByCallId,
             reasoningDurationMs: reasoningActivity.getDurationMs() ?? null,
+            workDurationMs: currentWorkDurationMs(),
           })
         }
         return undefined
@@ -1747,6 +1793,7 @@ export function createChatTurnRuntime(args: {
       },
       onError: (error: unknown) => {
         reasoningActivity.close()
+        closeWorkDuration()
         console.error(
           JSON.stringify({
             _tag: "chat_stream_error",

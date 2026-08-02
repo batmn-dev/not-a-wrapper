@@ -258,11 +258,11 @@ export function ModelSelector({
       </span>
       <Icon
         icon={RiArrowDownSLine}
-        slotSize={isComposerVariant ? 14 : 16}
-        glyphSize={isComposerVariant ? 14 : undefined}
+        slotSize={16}
+        glyphSize={isComposerVariant ? 16 : undefined}
         className={cn(
           "shrink-0",
-          isComposerVariant ? "text-muted-foreground -me-0.5" : "opacity-50"
+          isComposerVariant ? "-me-0.5" : "opacity-50"
         )}
       />
     </Button>

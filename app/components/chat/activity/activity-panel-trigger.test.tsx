@@ -54,6 +54,16 @@ describe("ActivityPanelTrigger", () => {
     expect(button?.getAttribute("aria-expanded")).toBe("false")
     expect(button?.getAttribute("aria-controls")).toBe("activity-panel")
 
+    const statusRow = button?.querySelector(
+      '[data-slot="activity-status-row"]'
+    )
+    const icon = button?.querySelector<HTMLElement>('[data-slot="icon"]')
+    expect(statusRow?.className).toContain("h-6")
+    expect(statusRow?.className).toContain("gap-0.5")
+    expect(icon?.className).toContain("text-current")
+    expect(icon?.style.getPropertyValue("--icon-slot-size")).toBe("16px")
+    expect(icon?.style.getPropertyValue("--icon-glyph-size")).toBe("18px")
+
     act(() => button?.click())
     expect(onOpenChange).toHaveBeenCalledWith(true)
 

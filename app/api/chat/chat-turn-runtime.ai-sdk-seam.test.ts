@@ -468,7 +468,9 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     })
 
     await runtime.prepare()
-    const sse = await runtime.toResponse(new AbortController().signal).text()
+    const sse = await (
+      await runtime.toResponse(new AbortController().signal)
+    ).text()
 
     expect(sse).toContain("Check the facts.")
     expect(extractTextDeltasFromSse(sse)).toBe("Final answer.")
@@ -492,7 +494,7 @@ describe("chat turn runtime × real ai@7 streamText", () => {
       deps: makeDeps(durableFetchMutation, wire),
     })
     await runtime.prepare()
-    const response = runtime.toResponse(new AbortController().signal)
+    const response = await runtime.toResponse(new AbortController().signal)
 
     // The HTTP envelope streams to completion with a finish state.
     expect(response.status).toBe(200)
@@ -613,7 +615,7 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     await runtime.prepare()
 
     const abortController = new AbortController()
-    const response = runtime.toResponse(abortController.signal)
+    const response = await runtime.toResponse(abortController.signal)
     const reader = response.body!.getReader()
 
     // Wait for the stream to actually start, then abort the request signal —
@@ -673,7 +675,7 @@ describe("chat turn runtime × real ai@7 streamText", () => {
       // Put the heartbeat — the durable worker's production Stop/supersession
       // discovery path — five milliseconds away, then start the real response.
       await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS - 5)
-      const response = runtime.toResponse(new AbortController().signal)
+      const response = await runtime.toResponse(new AbortController().signal)
       const reader = response.body!.getReader()
       const decoder = new TextDecoder()
       let sse = ""

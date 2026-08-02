@@ -3,7 +3,7 @@
 import type { AssistantActivityPresentation } from "@/lib/chat-messages/assistant-activity"
 import { cn } from "@/lib/utils"
 import { ActivityPanelTrigger } from "./activity/activity-panel-trigger"
-import { StatusText } from "./activity/status-text"
+import { ActivityStatusRow } from "./activity/status-text"
 
 export type AssistantActivityIndicatorProps = {
   presentation: AssistantActivityPresentation
@@ -27,7 +27,7 @@ export function AssistantActivityIndicator({
     case "live-status":
       return (
         <div className={className} data-activity-presentation="live-status">
-          <StatusText
+          <ActivityStatusRow
             label={presentation.label}
             shimmer={presentation.motion === "shimmer"}
             className="text-muted-foreground"
@@ -36,15 +36,12 @@ export function AssistantActivityIndicator({
       )
     case "passive":
       return (
-        <span
-          className={cn(
-            "text-muted-foreground text-base leading-6 font-normal",
-            className
-          )}
+        <ActivityStatusRow
+          label={presentation.label}
+          shimmer={false}
+          className={cn("text-muted-foreground", className)}
           data-activity-presentation="passive"
-        >
-          {presentation.label}
-        </span>
+        />
       )
     case "disclosure":
       return (
@@ -60,7 +57,7 @@ export function AssistantActivityIndicator({
               presentation={presentation}
             />
           ) : (
-            <StatusText
+            <ActivityStatusRow
               label={presentation.label}
               shimmer={presentation.motion === "shimmer"}
               className="text-muted-foreground"

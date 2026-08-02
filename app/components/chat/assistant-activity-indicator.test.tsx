@@ -45,6 +45,15 @@ describe("AssistantActivityIndicator", () => {
     expect(container.querySelector("[aria-expanded]")).toBeNull()
     expect(container.querySelector("[aria-controls]")).toBeNull()
 
+    const statusRows = container.querySelectorAll(
+      '[data-slot="activity-status-row"]'
+    )
+    expect(statusRows).toHaveLength(2)
+    for (const statusRow of statusRows) {
+      expect(statusRow.className).toContain("h-6")
+      expect(statusRow.className).toContain("gap-0.5")
+    }
+
     act(() => root.unmount())
   })
 })

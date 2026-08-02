@@ -277,11 +277,13 @@ export type DurableStreamBinding = {
   streamTextExtras: DurableStreamTextExtras
   /** The streamText-callback half. void = fire-and-forget BY CONTRACT. */
   stream: {
+    /** Persist the provider-consumption boundary before the response is exposed. */
+    startWork(startedAt: number): Promise<void>
     onChunk(chunk: TextStreamPart<ToolSet>): void
     recordStep(step: DurableStepRecord): void
-    noteStreamError(errorMessage: string): void
+    noteStreamError(errorMessage: string, workDurationMs: number): void
     /** Flush the snapshot, then mark the run aborted. */
-    onAbort(reason: string): Promise<void>
+    onAbort(reason: string, workDurationMs: number): Promise<void>
     /** Stream-onEnd half of the finish handoff (sync capture). */
     captureFinish(facts: StreamFinishFacts): void
   }
@@ -827,6 +829,7 @@ export function createGuestDurableTurn(
       return {
         streamTextExtras: {},
         stream: {
+          async startWork() {},
           onChunk() {},
           recordStep() {},
           noteStreamError() {},
@@ -1017,13 +1020,15 @@ export function createConvexDurableTurn(args: {
   }
 
   const markRunAborted = async (
-    reason: string
+    reason: string,
+    workDurationMs?: number
   ): Promise<TerminalWriteResult> => {
     const currentMessageId = assistantMessageId
     if (!runId || !currentMessageId) return "landed"
     return writeTerminal("markGenerationRunAborted", {
       messageId: currentMessageId,
       reason,
+      workDurationMs,
     })
   }
 
@@ -1461,6 +1466,24 @@ export function createConvexDurableTurn(args: {
         streamTextExtras,
 
         stream: {
+          async startWork(startedAt) {
+            await withWorkerWriteTimeout(
+              workerWrite("markGenerationWorkStarted", {
+                messageId: currentMessageId,
+                startedAt,
+              }),
+              "writing provider work start"
+            ).catch((error: unknown) => {
+              if (noteIfGrantRejection(error, "work-start")) return
+              warnDurable("durable_work_start_write_failed", {
+                requestId,
+                chatId,
+                runId: currentRunId,
+                error: describeError(error),
+              })
+            })
+          },
+
           onChunk(chunk) {
             tracker.onChunk(chunk)
           },
@@ -1508,10 +1531,11 @@ export function createConvexDurableTurn(args: {
             })
           },
 
-          noteStreamError(errorMessage) {
+          noteStreamError(errorMessage, workDurationMs) {
             void workerWrite("markGenerationRunFailed", {
               messageId: currentMessageId,
               error: errorMessage,
+              workDurationMs,
             }).catch((error: unknown) => {
               if (noteIfGrantRejection(error, "stream-error")) return
               warnDurable("durable_run_failed_write_failed", {
@@ -1523,9 +1547,9 @@ export function createConvexDurableTurn(args: {
             })
           },
 
-          async onAbort(reason) {
+          async onAbort(reason, workDurationMs) {
             await tracker.flush().catch(() => {})
-            await markRunAborted(reason)
+            await markRunAborted(reason, workDurationMs)
             // The run is settled (or unreachable); the envelope settle that
             // follows re-stops idempotently.
             stopHeartbeat()
@@ -1612,8 +1636,12 @@ export function createConvexDurableTurn(args: {
                 })
 
               if (isAborted) {
+                const terminalMetadata = projectPersistedMessageMetadata(
+                  responseMessage.metadata
+                )
                 const aborted = await markRunAborted(
-                  "ui message stream aborted"
+                  "ui message stream aborted",
+                  terminalMetadata?.workDurationMs
                 )
                 if (aborted === "failed") return degrade("abort write failed")
                 deps.perf?.counter("settlement_receipt_confirmed")

@@ -762,14 +762,15 @@ export default function ThinkingStatesTestPage() {
                   <AssistantActivityIndicator
                     presentation={{
                       kind: "passive",
-                      label: "Thought for 1s",
-                      durationSeconds: 1,
+                      label: "Thought for <1s",
+                      durationSeconds: 0,
                     }}
                     open={false}
                   />
                   <StateAnnotation title="Assistant activity — passive opaque timing">
-                    Opaque completed reasoning at or above one second is
-                    ordinary text: no focus target, chevron, or disclosure ARIA.
+                    Sub-second opaque reasoning stays honest instead of being
+                    suppressed or rounded up: no focus target, chevron, or
+                    disclosure ARIA.
                   </StateAnnotation>
                 </AssistantShell>
 

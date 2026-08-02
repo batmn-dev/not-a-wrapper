@@ -11,9 +11,11 @@ import {
   type AssistantTurnRenderStatus,
 } from "@/lib/chat-messages/assistant-turn"
 import { getServerMessageId } from "@/lib/chat-messages/metadata"
-import { toCompletedDurationSeconds } from "@/lib/format-duration"
 import type { UIMessage } from "@ai-sdk/react"
-import { useReasoningPhase } from "./use-reasoning-phase"
+import {
+  useAssistantWorkDuration,
+  useReasoningPhase,
+} from "./use-reasoning-phase"
 
 type ChatStatus = "streaming" | "ready" | "submitted" | "error"
 
@@ -51,8 +53,10 @@ export type UseActivityPanelResult = {
   defaultActivityTurnId: string | undefined
   /** The turn whose content is currently projected into the panel. */
   panelActivityTurnId: string | undefined
-  /** Current-session reasoning duration for the generation-following turn. */
+  /** Current-session total work duration for the generation-following turn. */
   defaultActivityDurationMs: number | undefined
+  /** Current-session reasoning-only duration for the default turn. */
+  defaultReasoningDurationMs: number | undefined
   /** True while a generation is in flight (covers the pre-stream submitted state). */
   isGenerationActive: boolean
   /** False when an explicit selection no longer resolves to a rendered turn
@@ -223,7 +227,7 @@ export function useActivityPanel({
     selectedActivityTurnId,
   })
 
-  // The reasoning timer belongs to the generation-following default turn, not
+  // The work timer belongs to the generation-following default turn, not
   // the currently selected panel turn. A historical panel selection must not
   // pause timing for the live row; this single timer feeds both the default row
   // and the panel whenever the panel follows that row.
@@ -243,11 +247,22 @@ export function useActivityPanel({
       ? deriveAssistantTurnView(panelMessage, "ready")
       : undefined
 
-  const defaultReasoningPhase = useReasoningPhase({
-    reasoning: defaultView?.reasoning ?? IDLE_REASONING_VIEW,
-    isLast: Boolean(defaultMessage),
+  const defaultMessageStatus = messageRenderStatus(defaultMessage)
+  const defaultWorkDuration = useAssistantWorkDuration({
+    persistedWorkDurationMs: defaultView?.persistedWorkDurationMs,
+    isActive: Boolean(defaultMessage) && generationActive,
+    // A continuation resumes immediately when the client generation becomes
+    // active, even if the durable message projection still carries the prior
+    // awaiting_approval status for a frame.
+    isPaused:
+      !generationActive && defaultMessageStatus === "awaiting_approval",
     // Turn identity for the timer: a new generation or branch default must
     // restart from zero and never inherit the previous turn's frozen duration.
+    turnKey: defaultActivityTurnId,
+  })
+  const defaultReasoningDuration = useReasoningPhase({
+    reasoning: defaultView?.reasoning ?? IDLE_REASONING_VIEW,
+    isLast: Boolean(defaultMessage),
     turnKey: defaultActivityTurnId,
   })
 
@@ -261,12 +276,15 @@ export function useActivityPanel({
         isLast: isPanelDefaultTurn,
       })
     : ({ kind: "submitted" } as const)
-  const panelDurationMs = isPanelDefaultTurn
-    ? defaultReasoningPhase.durationMs
-    : panelView?.reasoning.persistedDurationMs
+  const panelWorkDurationMs = isPanelDefaultTurn
+    ? defaultWorkDuration.durationMs
+    : panelView?.persistedWorkDurationMs
   const presentation = panelView
     ? deriveAssistantActivityPresentation(panelView, panelPhase, {
-        durationMs: panelDurationMs,
+        workDurationMs: panelWorkDurationMs,
+        reasoningDurationMs: isPanelDefaultTurn
+          ? defaultReasoningDuration.durationMs
+          : panelView?.reasoning.persistedDurationMs,
         status: panelStatus,
       })
     : undefined
@@ -284,7 +302,10 @@ export function useActivityPanel({
           presentation?.kind === "disclosure"
             ? presentation.activity
             : undefined,
-        durationSeconds: toCompletedDurationSeconds(panelDurationMs),
+        durationSeconds:
+          presentation?.kind === "disclosure"
+            ? presentation.durationSeconds
+            : undefined,
         turnKey: panelActivityTurnId,
         followLatest: isPanelDefaultTurn && generationActive,
       }
@@ -292,7 +313,8 @@ export function useActivityPanel({
   return {
     defaultActivityTurnId,
     panelActivityTurnId,
-    defaultActivityDurationMs: defaultReasoningPhase.durationMs,
+    defaultActivityDurationMs: defaultWorkDuration.durationMs,
+    defaultReasoningDurationMs: defaultReasoningDuration.durationMs,
     isGenerationActive: generationActive,
     selectedTurnPresent,
     panelCanOpen,

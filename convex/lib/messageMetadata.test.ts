@@ -25,11 +25,13 @@ describe("projectPersistedMessageMetadata", () => {
   it("keeps the known stream keys", () => {
     const result = projectPersistedMessageMetadata({
       reasoningDurationMs: 1200,
+      workDurationMs: 5200,
       toolMetadataByName: { web_search: display },
       toolMetadataByCallId: { call_1: display },
     })
     expect(result).toEqual({
       reasoningDurationMs: 1200,
+      workDurationMs: 5200,
       toolMetadataByName: { web_search: display },
       toolMetadataByCallId: { call_1: display },
     })
@@ -41,6 +43,16 @@ describe("projectPersistedMessageMetadata", () => {
       sdkInternal: { secret: true },
     })
     expect(result).toEqual({ reasoningDurationMs: 1 })
+  })
+
+  it("drops invalid durations without overwriting unrelated metadata", () => {
+    expect(
+      projectPersistedMessageMetadata({
+        reasoningDurationMs: -1,
+        workDurationMs: Number.NaN,
+        toolMetadataByName: { web_search: display },
+      })
+    ).toEqual({ toolMetadataByName: { web_search: display } })
   })
 
   it("drops a display entry with an unknown tool source", () => {

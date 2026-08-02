@@ -746,7 +746,7 @@ describe("createChatTurnRuntime — generated titles", () => {
     const runtime = createChatTurnRuntime({ input: makeInput(), deps })
 
     await runtime.prepare()
-    runtime.toResponse(notAbortedSignal())
+    await runtime.toResponse(notAbortedSignal())
     for (const callback of afterCallbacks) await callback()
 
     expect(generateText).toHaveBeenCalledTimes(1)
@@ -779,7 +779,7 @@ describe("createChatTurnRuntime — generated titles", () => {
     })
 
     await runtime.prepare()
-    const response = runtime.toResponse(notAbortedSignal())
+    const response = await runtime.toResponse(notAbortedSignal())
 
     await expect(response.text()).resolves.toContain('"type":"data-chatTitle"')
     expect(
@@ -810,7 +810,7 @@ describe("createChatTurnRuntime — generated titles", () => {
     })
 
     await runtime.prepare()
-    const response = runtime.toResponse(notAbortedSignal())
+    const response = await runtime.toResponse(notAbortedSignal())
 
     const body = await response.text()
     expect(body).toContain('"type":"data-chatTitle"')
@@ -850,7 +850,7 @@ describe("createChatTurnRuntime — evidence-gated word chunking", () => {
       })
 
       await runtime.prepare()
-      runtime.toResponse(notAbortedSignal())
+      await runtime.toResponse(notAbortedSignal())
 
       if (expectedTransform) {
         expect(harness.captured.streamOpts.experimental_transform).toEqual(
@@ -891,7 +891,7 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     })
 
     await runtime.prepare()
-    runtime.toResponse(notAbortedSignal())
+    await runtime.toResponse(notAbortedSignal())
 
     // Durable run: the Tool runtime's call-site approval config reaches
     // streamText (guest runs omit it — the spread is durable-gated).
@@ -945,7 +945,7 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     })
 
     await runtime.prepare()
-    runtime.toResponse(notAbortedSignal())
+    await runtime.toResponse(notAbortedSignal())
 
     await harness.captured.responseOpts.onEnd({
       responseMessage: {
@@ -985,7 +985,7 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
       })
 
       await runtime.prepare()
-      runtime.toResponse(notAbortedSignal())
+      await runtime.toResponse(notAbortedSignal())
 
       await expect(
         harness.captured.streamOpts.onAbort()
@@ -1054,7 +1054,7 @@ describe("createChatTurnRuntime — reasoning lifecycle timing", () => {
       })
 
       await runtime.prepare()
-      runtime.toResponse(notAbortedSignal())
+      await runtime.toResponse(notAbortedSignal())
 
       dateNow.mockReturnValue(50)
       harness.captured.streamOpts.onChunk({
@@ -1093,7 +1093,7 @@ describe("createChatTurnRuntime — reasoning lifecycle timing", () => {
         harness.captured.responseOpts.messageMetadata({
           part: { type: "finish" },
         })
-      ).toMatchObject({ reasoningDurationMs: 600 })
+      ).toMatchObject({ reasoningDurationMs: 600, workDurationMs: 900 })
     } finally {
       dateNow.mockRestore()
     }
@@ -1150,7 +1150,7 @@ describe("createChatTurnRuntime — UI-message metadata", () => {
       })
 
       await runtime.prepare()
-      runtime.toResponse(notAbortedSignal())
+      await runtime.toResponse(notAbortedSignal())
       const messageMetadata: (options: {
         part: TextStreamPart<ToolSet>
       }) => unknown = harness.captured.responseOpts.messageMetadata
@@ -1300,6 +1300,7 @@ describe("createChatTurnRuntime — UI-message metadata", () => {
       ).toEqual({
         toolMetadataByCallId: { "call-1": toolMetadata },
         reasoningDurationMs: 150,
+        workDurationMs: 250,
       })
     } finally {
       dateNow.mockRestore()
@@ -1313,7 +1314,7 @@ describe("createChatTurnRuntime — UI-message metadata", () => {
       deps: makeDeps(harness, makeFetchMutation()),
     })
     await runtime.prepare()
-    runtime.toResponse(notAbortedSignal())
+    await runtime.toResponse(notAbortedSignal())
 
     const actualAi = await vi.importActual<typeof import("ai")>("ai")
     const actualAiTest =
@@ -1429,7 +1430,7 @@ describe("createChatTurnRuntime — Anthropic pause_turn telemetry", () => {
     })
 
     await runtime.prepare()
-    runtime.toResponse(notAbortedSignal())
+    await runtime.toResponse(notAbortedSignal())
     await harness.captured.streamOpts.onEnd({
       text: "private generated content",
       usage: {},
@@ -1494,7 +1495,7 @@ describe("createChatTurnRuntime — Anthropic pause_turn telemetry", () => {
       })
 
       await runtime.prepare()
-      runtime.toResponse(notAbortedSignal())
+      await runtime.toResponse(notAbortedSignal())
 
       await expect(
         harness.captured.streamOpts.onEnd({
@@ -1524,7 +1525,7 @@ describe("createChatTurnRuntime — abort telemetry", () => {
 
     await runtime.prepare()
     const controller = new AbortController()
-    runtime.toResponse(controller.signal)
+    await runtime.toResponse(controller.signal)
 
     // Reload/disconnect durability (gameplan §12 scenario 9, §14 "Reload
     // mid-text → same run ID"): the request abort is telemetry only; Stop and
@@ -1545,7 +1546,7 @@ describe("createChatTurnRuntime — abort telemetry", () => {
 
     await runtime.prepare()
     const controller = new AbortController()
-    runtime.toResponse(controller.signal)
+    await runtime.toResponse(controller.signal)
 
     // Nobody is left to receive or settle a disconnected guest stream — the
     // request signal IS the guest lifecycle.
@@ -1566,7 +1567,7 @@ describe("createChatTurnRuntime — abort telemetry", () => {
     await runtime.prepare()
     const abortedController = new AbortController()
     abortedController.abort()
-    runtime.toResponse(abortedController.signal)
+    await runtime.toResponse(abortedController.signal)
 
     // Stream then completes — the streamCompleted/abortCaptured guards must
     // prevent any second chat_client_abort capture.
@@ -1583,12 +1584,12 @@ describe("createChatTurnRuntime — abort telemetry", () => {
     expect(clientAborts).toHaveLength(1)
   })
 
-  it("rejects toResponse() before prepare() — phase guard", () => {
+  it("rejects toResponse() before prepare() — phase guard", async () => {
     const runtime = createChatTurnRuntime({
       input: makeInput(),
       deps: makeDeps(makeStreamHarness(), makeFetchMutation()),
     })
-    expect(() => runtime.toResponse(notAbortedSignal())).toThrow(
+    await expect(runtime.toResponse(notAbortedSignal())).rejects.toThrow(
       "requires a completed prepare()"
     )
   })

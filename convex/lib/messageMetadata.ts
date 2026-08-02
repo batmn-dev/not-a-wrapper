@@ -43,6 +43,8 @@ const vToolInvocationDisplayMetadata = v.object({
 
 export const vToolInvocationStreamMetadata = v.object({
   reasoningDurationMs: v.optional(v.number()),
+  // Optional while production may contain rows written before work timing.
+  workDurationMs: v.optional(v.number()),
   toolMetadataByName: v.optional(
     v.record(v.string(), vToolInvocationDisplayMetadata)
   ),
@@ -66,6 +68,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function optionalNumber(value: unknown): number | undefined {
   return typeof value === "number" ? value : undefined
+}
+
+function optionalDurationMs(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : undefined
 }
 
 function optionalBoolean(value: unknown): boolean | undefined {
@@ -137,7 +145,12 @@ export function projectPersistedMessageMetadata(
   setIfDefined(
     result,
     "reasoningDurationMs",
-    optionalNumber(raw.reasoningDurationMs)
+    optionalDurationMs(raw.reasoningDurationMs)
+  )
+  setIfDefined(
+    result,
+    "workDurationMs",
+    optionalDurationMs(raw.workDurationMs)
   )
   setIfDefined(
     result,

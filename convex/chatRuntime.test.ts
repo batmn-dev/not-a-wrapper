@@ -6,6 +6,7 @@ import {
   createToolApprovalRequestForChat,
   denyPendingApprovalsForChat,
   heartbeatGenerationRunForChat,
+  markGenerationWorkStartedForChat,
   markGenerationRunAbortedForChat,
   markGenerationRunCompletedForChat,
   markGenerationRunFailedForChat,
@@ -4185,6 +4186,64 @@ describe("pending-only approval resolution (gameplan §10, PR 8)", () => {
   })
 })
 
+describe("assistant work-duration lifecycle", () => {
+  it("records the provider boundary once and carries approval-pause work", async () => {
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.message.metadata = {
+      reasoningDurationMs: 436,
+      workDurationMs: 2400,
+    }
+    const { ctx } = createMutationCtx(fixture.tables)
+    const owner = { user: fixture.user, chat: fixture.chat, run: fixture.run }
+
+    await markGenerationWorkStartedForChat(ctx, owner, {
+      messageId: fixture.messageId,
+      startedAt: 20_000,
+    })
+    await markGenerationWorkStartedForChat(ctx, owner, {
+      messageId: fixture.messageId,
+      startedAt: 99_000,
+    })
+
+    expect(fixture.run).toMatchObject({
+      workStartedAt: 20_000,
+      workDurationMs: 2400,
+    })
+  })
+
+  it.each([
+    ["failed", 5300],
+    ["aborted", 6100],
+  ] as const)("persists %s terminal work without overwriting reasoning", async (outcome, workDurationMs) => {
+    const fixture = createGenerationRunLinkageFixture()
+    fixture.message.content = "partial"
+    fixture.message.parts = [{ type: "text", text: "partial" }]
+    fixture.message.metadata = { reasoningDurationMs: 436 }
+    const { ctx } = createMutationCtx(fixture.tables)
+    const owner = { user: fixture.user, chat: fixture.chat, run: fixture.run }
+
+    if (outcome === "failed") {
+      await markGenerationRunFailedForChat(ctx, owner, {
+        messageId: fixture.messageId,
+        error: "provider failed",
+        workDurationMs,
+      })
+    } else {
+      await markGenerationRunAbortedForChat(ctx, owner, {
+        messageId: fixture.messageId,
+        reason: "stream aborted",
+        workDurationMs,
+      })
+    }
+
+    expect(fixture.message.metadata).toEqual({
+      reasoningDurationMs: 436,
+      workDurationMs,
+    })
+    expect(fixture.run.workDurationMs).toBe(workDurationMs)
+  })
+})
+
 describe("stopGenerationRun (gameplan §9, PR 6)", () => {
   const NOW = 1700000000000
 
@@ -4201,8 +4260,11 @@ describe("stopGenerationRun (gameplan §9, PR 6)", () => {
     fixture.run.grantExpiresAt = NOW + 400_000
     fixture.run.heartbeatAt = NOW - 5_000
     fixture.run.leaseExpiresAt = NOW + 40_000
+    fixture.run.workStartedAt = NOW - 3600
+    fixture.run.workDurationMs = 2400
     fixture.message.content = "partial answer"
     fixture.message.parts = [{ type: "text", text: "partial answer" }]
+    fixture.message.metadata = { reasoningDurationMs: 436 }
     return fixture
   }
 
@@ -4273,9 +4335,14 @@ describe("stopGenerationRun (gameplan §9, PR 6)", () => {
       stopRequestedBy: fixture.userId,
       grantDigest: undefined,
       leaseExpiresAt: undefined,
+      workDurationMs: 6000,
     })
     expect(fixture.message.status).toBe("aborted")
     expect(fixture.message.content).toBe("partial answer")
+    expect(fixture.message.metadata).toEqual({
+      reasoningDurationMs: 436,
+      workDurationMs: 6000,
+    })
     expect(fixture.tables.toolApprovalRequests[0]).toMatchObject({
       status: "denied",
       resolvedByUserId: fixture.userId,

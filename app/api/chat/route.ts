@@ -219,7 +219,7 @@ export async function POST(req: Request) {
     })
 
     await perf.span("prepare_total", () => turn!.prepare())
-    return turn.toResponse(req.signal)
+    return await turn.toResponse(req.signal)
   } catch (err: unknown) {
     console.error(
       JSON.stringify({

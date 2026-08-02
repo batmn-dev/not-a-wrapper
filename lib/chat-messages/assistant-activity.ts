@@ -321,7 +321,9 @@ function deriveCompletion(
     title:
       durationSeconds === undefined
         ? "Finished"
-        : `Worked for ${formatDuration(durationSeconds)}`,
+        : entries.some((entry) => entry.kind !== "reasoning")
+          ? `Worked for ${formatDuration(durationSeconds)}`
+          : `Thought for ${formatDuration(durationSeconds)}`,
     detail: "Done",
     status: "complete",
   }
@@ -337,7 +339,8 @@ export function deriveAssistantActivityModel(
   view: AssistantTurnView,
   phase: AssistantTurnPhase,
   options?: {
-    durationMs?: number
+    workDurationMs?: number
+    reasoningDurationMs?: number
     status?: AssistantTurnRenderStatus
   }
 ): AssistantActivityModel | undefined {
@@ -451,8 +454,13 @@ export function deriveAssistantActivityModel(
   const nonEmptyEntries = asNonEmpty(entries)
   if (!nonEmptyEntries) return undefined
 
+  const hasNonReasoningActivity = nonEmptyEntries.some(
+    (entry) => entry.kind !== "reasoning"
+  )
   const durationSeconds = toCompletedDurationSeconds(
-    options?.durationMs ?? view.reasoning.persistedDurationMs
+    hasNonReasoningActivity
+      ? (options?.workDurationMs ?? view.persistedWorkDurationMs)
+      : (options?.reasoningDurationMs ?? view.reasoning.persistedDurationMs)
   )
   const completion =
     phase.kind === "settled" || phase.kind === "responding"
@@ -547,14 +555,21 @@ export function deriveAssistantActivityPresentation(
   view: AssistantTurnView,
   phase: AssistantTurnPhase,
   options?: {
-    durationMs?: number
+    workDurationMs?: number
+    reasoningDurationMs?: number
     status?: AssistantTurnRenderStatus
   }
 ): AssistantActivityPresentation {
-  const durationMs = options?.durationMs ?? view.reasoning.persistedDurationMs
-  const durationSeconds = toCompletedDurationSeconds(durationMs)
   const activity = deriveAssistantActivityModel(view, phase, options)
   const isLive = phase.kind !== "settled" && phase.kind !== "responding"
+  const hasNonReasoningActivity = activity?.entries.some(
+    (entry) => entry.kind !== "reasoning"
+  )
+  const durationSeconds = toCompletedDurationSeconds(
+    isLive || hasNonReasoningActivity
+      ? (options?.workDurationMs ?? view.persistedWorkDurationMs)
+      : (options?.reasoningDurationMs ?? view.reasoning.persistedDurationMs)
+  )
 
   if (isLive) {
     const status = resolveLiveStatus(view, phase, activity)
@@ -573,12 +588,12 @@ export function deriveAssistantActivityPresentation(
   if (phase.kind === "responding" && !activity) return { kind: "none" }
 
   if (activity) {
-    const hasReasoning = activity.entries.some(
-      (entry) => entry.kind === "reasoning"
-    )
+    const hasReasoning = activity.entries.some((entry) => entry.kind === "reasoning")
     const label =
       durationSeconds !== undefined
-        ? `Worked for ${formatDuration(durationSeconds)}`
+        ? hasNonReasoningActivity
+          ? `Worked for ${formatDuration(durationSeconds)}`
+          : `Thought for ${formatDuration(durationSeconds)}`
         : hasReasoning
           ? "Thought"
           : "Activity"

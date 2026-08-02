@@ -21,9 +21,9 @@
  *         a live one (the branch projection's job), idempotent on no-op.
  *
  * Branch stays a transient, droppable descriptor; both writers normalize /
- * clear it rather than assuming it round-trips. Client-owned transient keys
- * (e.g. `reasoningDurationMs`) are preserved untouched — the writers only ever
- * touch the keys they own.
+ * clear it rather than assuming it round-trips. Live duration keys are
+ * preserved until a durable terminal value is available; adoption then
+ * promotes the persisted reasoning/work clocks.
  */
 
 import {
@@ -138,6 +138,15 @@ export function getFinishReason(metadata: unknown): string | undefined {
 export function getReasoningDurationMs(metadata: unknown): number | undefined {
   if (!isRecord(metadata)) return undefined
   const value = metadata.reasoningDurationMs
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : undefined
+}
+
+/** Read the server-persisted total assistant work duration (ms). */
+export function getWorkDurationMs(metadata: unknown): number | undefined {
+  if (!isRecord(metadata)) return undefined
+  const value = metadata.workDurationMs
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? value
     : undefined
@@ -297,8 +306,27 @@ export function adoptServerOwned(
     if (!serverHasKey || !localRecord || !serverRecord) return false
     return !metadataValueEquals(localRecord[key], serverRecord[key])
   })
+  // Terminal stream durations are persisted inside the validated metadata
+  // blob rather than as top-level message fields. Adopt them when the durable
+  // snapshot has a value, but never clear a fresher live finish value merely
+  // because an intermediate server snapshot has not landed it yet.
+  const terminalDurationKeys = [
+    "reasoningDurationMs",
+    "workDurationMs",
+  ] as const
+  const terminalDurationChanged = terminalDurationKeys.some(
+    (key) =>
+      serverRecord &&
+      Object.prototype.hasOwnProperty.call(serverRecord, key) &&
+      !Object.is(localRecord?.[key], serverRecord[key])
+  )
 
-  if (!messageIdChanged && !branchChanged && !serverOwnedChanged) {
+  if (
+    !messageIdChanged &&
+    !branchChanged &&
+    !serverOwnedChanged &&
+    !terminalDurationChanged
+  ) {
     return localMetadata
   }
 
@@ -310,6 +338,9 @@ export function adoptServerOwned(
   for (const key of SERVER_OWNED_METADATA_KEYS) {
     if (serverRecord && key in serverRecord) next[key] = serverRecord[key]
     else delete next[key]
+  }
+  for (const key of terminalDurationKeys) {
+    if (serverRecord && key in serverRecord) next[key] = serverRecord[key]
   }
 
   return next

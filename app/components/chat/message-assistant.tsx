@@ -25,6 +25,7 @@ import {
   useActivityPanelActions,
   useActivityPanelId,
   useDefaultActivityDurationMs,
+  useDefaultReasoningDurationMs,
   useIsActivityPanelTurnOpen,
 } from "./activity/activity-panel-store"
 import { AssistantActivityIndicator } from "./assistant-activity-indicator"
@@ -97,6 +98,10 @@ export function MessageAssistant({
     messageId,
     view.serverMessageId
   )
+  const currentSessionReasoningDurationMs = useDefaultReasoningDurationMs(
+    messageId,
+    view.serverMessageId
+  )
 
   // The canonical phase feeds the normalized activity presentation. The row
   // renderer never inspects raw parts to choose label or interaction semantics.
@@ -108,7 +113,8 @@ export function MessageAssistant({
     view,
     phase,
     {
-      durationMs: currentSessionDurationMs,
+      workDurationMs: currentSessionDurationMs,
+      reasoningDurationMs: currentSessionReasoningDurationMs,
       status: status ?? "ready",
     }
   )
