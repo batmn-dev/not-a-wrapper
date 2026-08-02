@@ -743,9 +743,12 @@ describe("prepareGenerationForChat", () => {
     ])
   })
 
-  it("resolves durable edit targets by _id and reconstructs model history from persisted messages", async () => {
+  it("reconstructs history by _id and ignores later-message retitling", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1700000000000)
     const { user, chat, userId, chatId } = createOwnerFixture()
+    chat.title = "Existing generated title"
+    chat.titleSource = "generated"
+    chat.titleGeneration = 1
     const messages: Doc<"messages">[] = [
       createStoredMessage({
         id: "message_user_0",
@@ -823,6 +826,7 @@ describe("prepareGenerationForChat", () => {
           content: "new text",
           parts: [{ type: "text", text: "new text" }],
         },
+        regenerateTitle: true,
       },
     })
 
@@ -857,6 +861,12 @@ describe("prepareGenerationForChat", () => {
       parentMessageId: "message_assistant_0",
       selected: true,
     })
+    expect(chat).toMatchObject({
+      title: "Existing generated title",
+      titleSource: "generated",
+      titleGeneration: 1,
+    })
+    expect(result.titleGeneration).toBeUndefined()
   })
 
   it("keeps legacy descendants selectable after editing the first user message", async () => {

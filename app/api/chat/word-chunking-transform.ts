@@ -31,9 +31,31 @@ const MAX_BUFFERED_MS = 400
 const MAX_PARTIAL_WORD_WAIT_MS = 80
 const MAX_PARTIAL_WORD_CHARS = 64
 
+const MEASURED_WORD_CHUNKING_TARGETS = [
+  {
+    provider: "anthropic",
+    model: "claude-haiku-4-5-20251001",
+  },
+] as const
+
 const wordSegmenter = new Intl.Segmenter(undefined, {
   granularity: "word",
 })
+
+/**
+ * Keep server-side smoothing evidence-gated. Adding a target requires a trace
+ * through this app that demonstrates coarse provider deltas after the
+ * frame-aligned client path (ADR-0016).
+ */
+export function isWordChunkingEligible(options: {
+  provider: string
+  model: string
+}): boolean {
+  return MEASURED_WORD_CHUNKING_TARGETS.some(
+    (target) =>
+      target.provider === options.provider && target.model === options.model
+  )
+}
 
 /** Split into whitespace-attached word chunks; concatenation is identity. */
 export function splitIntoWordChunks(text: string): string[] {

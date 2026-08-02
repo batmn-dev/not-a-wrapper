@@ -996,6 +996,13 @@ export async function applyEditIntentForGeneration(
     throw new Error("Edited message version changed")
   }
 
+  const firstSelectedUserMessage = selectedMessages.find(
+    (message) => message.role === "user"
+  )
+  const isEditingFirstSelectedUserMessage =
+    editedMessage !== undefined &&
+    firstSelectedUserMessage?._id === editedMessage._id
+
   await createMessageBranchWriter(ctx, {
     chatId: args.chatId,
     now,
@@ -1010,7 +1017,11 @@ export async function applyEditIntentForGeneration(
     replaces: editedMessage?._id,
   })
 
-  if (args.edit.regenerateTitle && owner.chat.titleSource !== "user") {
+  if (
+    args.edit.regenerateTitle &&
+    isEditingFirstSelectedUserMessage &&
+    owner.chat.titleSource !== "user"
+  ) {
     const titleGeneration = (owner.chat.titleGeneration ?? 0) + 1
     await ctx.db.patch(args.chatId, {
       title: "New chat",

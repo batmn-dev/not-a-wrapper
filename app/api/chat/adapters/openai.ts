@@ -170,15 +170,24 @@ function validateOpenAIBlock(block: MessagePart[]): BlockValidationResult {
 // approval-protocol metadata is unaffected.
 function stripProviderMetadataFromPart(part: MessagePart): {
   part: MessagePart
-  hadProviderMetadata: boolean
+  removedMetadataFields: Array<"callProviderMetadata" | "providerMetadata">
 } {
   const record = part as PartWithToolFields & {
     providerMetadata?: Record<string, unknown>
   }
   const hadCallProviderMetadata = record.callProviderMetadata != null
   const hadProviderMetadata = record.providerMetadata != null
+  const removedMetadataFields: Array<
+    "callProviderMetadata" | "providerMetadata"
+  > = []
+  if (hadCallProviderMetadata) {
+    removedMetadataFields.push("callProviderMetadata")
+  }
+  if (hadProviderMetadata) {
+    removedMetadataFields.push("providerMetadata")
+  }
   if (!hadCallProviderMetadata && !hadProviderMetadata) {
-    return { part, hadProviderMetadata: false }
+    return { part, removedMetadataFields }
   }
 
   const stripped = stripCallProviderMetadata(record) as MessagePart & {
@@ -186,12 +195,12 @@ function stripProviderMetadataFromPart(part: MessagePart): {
   }
   if (hadProviderMetadata) {
     const { providerMetadata: _providerMetadata, ...rest } = stripped
-    return { part: rest as MessagePart, hadProviderMetadata: true }
+    return { part: rest as MessagePart, removedMetadataFields }
   }
 
   return {
     part: stripped,
-    hadProviderMetadata: true,
+    removedMetadataFields,
   }
 }
 
@@ -242,13 +251,13 @@ export const openaiAdapter: ProviderHistoryAdapter = {
           }
 
           const stripped = stripProviderMetadataFromPart(part)
-          if (stripped.hadProviderMetadata) {
+          if (stripped.removedMetadataFields.length > 0) {
             stats.providerIdsStripped += 1
             incrementStat(stats.partsTransformed, part.type)
             warnings.push({
               code: "provider_ids_stripped",
               messageIndex,
-              detail: `Stripped callProviderMetadata from ${part.type}`,
+              detail: `Stripped ${stripped.removedMetadataFields.join(" and ")} from ${part.type}`,
             })
           } else {
             incrementStat(stats.partsPreserved, part.type)
@@ -322,13 +331,13 @@ export const openaiAdapter: ProviderHistoryAdapter = {
           }
 
           const stripped = stripProviderMetadataFromPart(part)
-          if (stripped.hadProviderMetadata) {
+          if (stripped.removedMetadataFields.length > 0) {
             stats.providerIdsStripped += 1
             incrementStat(stats.partsTransformed, part.type)
             warnings.push({
               code: "provider_ids_stripped",
               messageIndex,
-              detail: `Stripped callProviderMetadata from ${part.type}`,
+              detail: `Stripped ${stripped.removedMetadataFields.join(" and ")} from ${part.type}`,
             })
           } else {
             incrementStat(stats.partsPreserved, part.type)

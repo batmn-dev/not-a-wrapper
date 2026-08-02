@@ -33,6 +33,10 @@ describe("presentChatStreamError", () => {
       kind: "toast",
       title: "Something went wrong. Please try again.",
     })
+    expect(presentChatStreamError(new Error("Failed to fetch"))).toEqual({
+      kind: "toast",
+      title: "Something went wrong. Please try again.",
+    })
     expect(presentChatStreamError(new Error("Rate limit exceeded"))).toEqual({
       kind: "toast",
       title: "Rate limit exceeded",

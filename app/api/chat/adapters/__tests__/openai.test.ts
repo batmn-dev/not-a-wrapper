@@ -24,8 +24,83 @@ describe("openaiAdapter", () => {
     ).toBe(false)
     expect(result.stats.providerIdsStripped).toBe(1)
     expect(
-      result.warnings.some((w) => w.code === "provider_ids_stripped")
+      result.warnings.find((w) => w.code === "provider_ids_stripped")?.detail
+    ).toBe("Stripped callProviderMetadata from tool-web_search")
+  })
+
+  it("reports the metadata carriers stripped from every message role", async () => {
+    const messages = [
+      {
+        id: "user-provider-metadata",
+        role: "user",
+        parts: [
+          {
+            type: "text",
+            text: "user content",
+            providerMetadata: { openai: { itemId: "msg_user" } },
+          },
+        ],
+      },
+      {
+        id: "assistant-provider-metadata",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "assistant content",
+            providerMetadata: { openai: { itemId: "msg_assistant" } },
+          },
+        ],
+      },
+      {
+        id: "assistant-both-metadata-carriers",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "assistant content with both carriers",
+            callProviderMetadata: { openai: { responseId: "resp_1" } },
+            providerMetadata: { openai: { itemId: "msg_both" } },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[]
+
+    const result = await openaiAdapter.adaptMessages(messages, context)
+
+    expect(result.stats.providerIdsStripped).toBe(3)
+    expect(
+      result.messages
+        .flatMap((message) => message.parts)
+        .every((part) => {
+          const record = part as Record<string, unknown>
+          return (
+            !("callProviderMetadata" in record) &&
+            !("providerMetadata" in record)
+          )
+        })
     ).toBe(true)
+    expect(
+      result.warnings
+        .filter((warning) => warning.code === "provider_ids_stripped")
+        .map((warning) => ({
+          messageIndex: warning.messageIndex,
+          detail: warning.detail,
+        }))
+    ).toEqual([
+      {
+        messageIndex: 0,
+        detail: "Stripped providerMetadata from text",
+      },
+      {
+        messageIndex: 1,
+        detail: "Stripped providerMetadata from text",
+      },
+      {
+        messageIndex: 2,
+        detail: "Stripped callProviderMetadata and providerMetadata from text",
+      },
+    ])
   })
 
   it("drops incomplete atomic block without required reasoning", async () => {

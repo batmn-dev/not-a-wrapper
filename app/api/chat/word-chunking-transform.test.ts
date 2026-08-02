@@ -2,6 +2,7 @@ import type { TextStreamPart, ToolSet } from "ai"
 import { describe, expect, it, vi } from "vitest"
 import {
   createWordChunkingTransform,
+  isWordChunkingEligible,
   splitIntoWordChunks,
 } from "./word-chunking-transform"
 
@@ -46,6 +47,33 @@ describe("splitIntoWordChunks", () => {
     const chunks = splitIntoWordChunks(text)
     expect(chunks.join("")).toBe(text)
     expect(chunks.length).toBeGreaterThan(3)
+  })
+})
+
+describe("isWordChunkingEligible", () => {
+  it("enables only the provider/model pair measured through this app", () => {
+    expect(
+      isWordChunkingEligible({
+        provider: "anthropic",
+        model: "claude-haiku-4-5-20251001",
+      })
+    ).toBe(true)
+
+    expect(
+      isWordChunkingEligible({
+        provider: "anthropic",
+        model: "claude-sonnet-5",
+      })
+    ).toBe(false)
+    expect(
+      isWordChunkingEligible({
+        provider: "openrouter",
+        model: "openrouter:anthropic/claude-haiku-4.5",
+      })
+    ).toBe(false)
+    expect(
+      isWordChunkingEligible({ provider: "openai", model: "gpt-5-mini" })
+    ).toBe(false)
   })
 })
 

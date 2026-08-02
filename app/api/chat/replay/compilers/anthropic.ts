@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai"
-import type { ReplayMessage, ReplayToolExchange } from "../types"
+import type { ReplayMessage } from "../types"
 import { synthesizePlatformToolFallback } from "./platform-tool-fallback"
+import { synthesizeWebSearchReplayContext } from "./web-search-context"
 import type {
   ReplayCompileContext,
   ReplayCompiler,
@@ -28,27 +29,6 @@ function createStats(messages: readonly ReplayMessage[]): ReplayCompileStats {
   }
 }
 
-function synthesizeWebSearchFallback(tool: ReplayToolExchange): string | null {
-  const webSearch = tool.webSearch
-  if (!webSearch) return null
-
-  const queryLabel =
-    webSearch.query.trim().length > 0 ? ` for "${webSearch.query}"` : ""
-  if (webSearch.results.length === 0) {
-    return `Replay note: web_search${queryLabel} was omitted for Anthropic-safe replay.`
-  }
-
-  const lines = webSearch.results.slice(0, 3).map((result) => {
-    const title = result.title?.trim().length ? result.title.trim() : "Result"
-    const snippet = result.snippet?.trim().length
-      ? ` - ${result.snippet.trim()}`
-      : ""
-    return `- ${title} (${result.url})${snippet}`
-  })
-
-  return `Replay context from prior web_search${queryLabel}:\n${lines.join("\n")}`
-}
-
 function compileMessageParts(
   message: ReplayMessage,
   messageIndex: number,
@@ -64,12 +44,24 @@ function compileMessageParts(
     }
 
     if (part.type === "file") {
+      if (part.mediaType && part.url) {
+        nextParts.push({
+          type: "file",
+          mediaType: part.mediaType,
+          filename: part.filename,
+          url: part.url,
+        })
+        return
+      }
+
+      const label = part.filename?.trim().length
+        ? part.filename
+        : "attached file"
       nextParts.push({
-        type: "file",
-        mediaType: part.mediaType,
-        filename: part.filename,
-        url: part.url,
-      } as MessagePart)
+        type: "text",
+        text: `Replay note: ${label} was present in prior context.`,
+      })
+      stats.invariantsRepaired += 1
       return
     }
 
@@ -90,7 +82,10 @@ function compileMessageParts(
     stats.toolExchangesSeen += 1
     const tool = part.tool
     if (tool.toolName === "web_search") {
-      const fallbackText = synthesizeWebSearchFallback(tool)
+      const fallbackText = synthesizeWebSearchReplayContext(
+        tool,
+        "Anthropic-safe replay"
+      )
       if (fallbackText) {
         nextParts.push({ type: "text", text: fallbackText } as MessagePart)
         stats.toolExchangesCompiled += 1

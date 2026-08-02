@@ -2,7 +2,11 @@ import {
   containsSecret,
   redactSecretsInString,
 } from "@/lib/observability/secret-patterns"
-import { sentryBeforeSend } from "@/lib/observability/sentry-scrubbing"
+import {
+  getSanitizedExceptionSummary,
+  sanitizeExceptionForTelemetry,
+  sentryBeforeSend,
+} from "@/lib/observability/sentry-scrubbing"
 import { describe, expect, it } from "vitest"
 
 describe("secret value detection", () => {
@@ -114,6 +118,29 @@ describe("chat-performance scrub corpus (plan PR 0b step 8)", () => {
 })
 
 describe("sentryBeforeSend", () => {
+  it("allow-lists exception types at the final event boundary", () => {
+    const sentinel = "PRIVATE_PROVIDER_PAYLOAD"
+    const event = {
+      exception: {
+        values: [
+          {
+            type: `ProviderError: ${sentinel}`,
+            value: "Provider request failed",
+          },
+          {
+            type: "AI_TypeValidationError",
+            value: "Validation failed",
+          },
+        ],
+      },
+    }
+
+    const scrubbed = sentryBeforeSend(event)
+    expect(scrubbed.exception.values[0].type).toBe("Error")
+    expect(scrubbed.exception.values[1].type).toBe("AI_TypeValidationError")
+    expect(JSON.stringify(scrubbed)).not.toContain(sentinel)
+  })
+
   it("redacts a key embedded in an exception message (value-level, innocuous path)", () => {
     const event = {
       exception: {
@@ -198,5 +225,37 @@ describe("sentryBeforeSend", () => {
   it("leaves non-sensitive content intact", () => {
     const event = { tags: { route: "api/chat", model: "gpt-5" } }
     expect(sentryBeforeSend(event)).toEqual(event)
+  })
+})
+
+describe("sanitizeExceptionForTelemetry", () => {
+  it("replaces an untrusted error name in summaries and the stack header", () => {
+    const nameSentinel = "PRIVATE_NAME_PAYLOAD"
+    const messageSentinel = "PRIVATE_MESSAGE_PAYLOAD"
+    const error = new Error(
+      `Type validation failed: Value: ${messageSentinel}`
+    )
+    error.name = `ProviderError: ${nameSentinel}`
+    error.stack = `${error.name}: ${error.message}\n    at providerCall (provider.ts:1:1)`
+
+    const sanitized = sanitizeExceptionForTelemetry(error)
+    expect(sanitized.name).toBe("Error")
+    expect(sanitized.message).toBe("Type validation failed")
+    expect(sanitized.stack).toBe(
+      "Error: Type validation failed\n    at providerCall (provider.ts:1:1)"
+    )
+    expect(getSanitizedExceptionSummary(error)).toEqual({
+      errorName: "Error",
+      errorMessage: "Type validation failed",
+    })
+    expect(JSON.stringify(getSanitizedExceptionSummary(error))).not.toContain(
+      nameSentinel
+    )
+    expect(sanitized.stack).not.toContain(messageSentinel)
+  })
+
+  it("preserves an allow-listed exception name", () => {
+    const error = new TypeError("Invalid input")
+    expect(sanitizeExceptionForTelemetry(error).name).toBe("TypeError")
   })
 })

@@ -99,8 +99,7 @@ function assertContinuationPart(options: {
       throw toolUnavailable()
     }
   } else if (
-    part.type === "dynamic-tool" &&
-    registeredTool.type !== "dynamic"
+    (part.type === "dynamic-tool") !== (registeredTool.type === "dynamic")
   ) {
     throw toolUnavailable()
   }

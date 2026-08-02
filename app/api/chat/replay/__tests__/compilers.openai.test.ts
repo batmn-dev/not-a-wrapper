@@ -69,6 +69,44 @@ describe("openai replay compiler", () => {
     expect(result.stats.toolExchangesDropped).toBe(0)
   })
 
+  it("preserves every normalized web_search result when lowering to text", async () => {
+    const results = Array.from({ length: 4 }, (_, index) => ({
+      url: `https://example.com/result-${index + 1}`,
+      title: `Result ${index + 1}`,
+      snippet: `Snippet ${index + 1}`,
+    }))
+    const messages: ReplayMessage[] = [
+      {
+        id: "msg-openai-all-search-results",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-exchange",
+            tool: {
+              toolName: "web_search",
+              replayable: true,
+              webSearch: { query: "all results", results },
+            },
+          },
+        ],
+      },
+    ]
+
+    const result = await compileReplay(messages, "openai", context)
+    const contextText = result.messages[0].parts
+      .filter(
+        (part): part is { type: "text"; text: string } => part.type === "text"
+      )
+      .map((part) => part.text)
+      .join("\n")
+
+    for (const searchResult of results) {
+      expect(contextText).toContain(searchResult.url)
+      expect(contextText).toContain(searchResult.title)
+      expect(contextText).toContain(searchResult.snippet)
+    }
+  })
+
   it("drops non-replayable tool exchanges and injects an empty text fallback", async () => {
     const messages: ReplayMessage[] = [
       {

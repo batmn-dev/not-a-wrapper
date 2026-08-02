@@ -1,3 +1,4 @@
+import { safeValidateUIMessages } from "ai"
 import { describe, expect, it } from "vitest"
 import { anthropicReplayCompiler } from "../compilers/anthropic"
 import type { ReplayMessage } from "../types"
@@ -140,5 +141,55 @@ describe("anthropicReplayCompiler", () => {
       },
     ])
     expect(JSON.stringify(result.messages)).not.toContain("private-source-id")
+  })
+
+  it("lowers incomplete legacy files to replay notes", async () => {
+    const messages: ReplayMessage[] = [
+      {
+        id: "missing-url",
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            mediaType: "image/png",
+            filename: "legacy-image.png",
+          },
+        ],
+      },
+      {
+        id: "missing-media-type",
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            url: "https://example.com/legacy-file.pdf",
+          },
+        ],
+      },
+    ]
+
+    const result = await anthropicReplayCompiler.compileReplay(
+      messages,
+      context
+    )
+
+    expect(result.messages.map((message) => message.parts)).toEqual([
+      [
+        {
+          type: "text",
+          text: "Replay note: legacy-image.png was present in prior context.",
+        },
+      ],
+      [
+        {
+          type: "text",
+          text: "Replay note: attached file was present in prior context.",
+        },
+      ],
+    ])
+    expect(result.stats.invariantsRepaired).toBe(2)
+    await expect(
+      safeValidateUIMessages({ messages: result.messages })
+    ).resolves.toMatchObject({ success: true })
   })
 })

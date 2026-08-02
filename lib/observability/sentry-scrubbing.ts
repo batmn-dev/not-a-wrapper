@@ -2,6 +2,87 @@ import { redactSecretsInString } from "./secret-patterns"
 
 const REDACTED_VALUE = "[REDACTED]"
 
+// Exception names become Sentry grouping/type data and structured log fields.
+// Keep this list explicit: accepting an arbitrary identifier-shaped string
+// would still allow a payload or secret consisting of a single token through.
+const SAFE_EXCEPTION_NAMES = new Set([
+  // JavaScript and browser built-ins.
+  "AbortError",
+  "AggregateError",
+  "DOMException",
+  "Error",
+  "EvalError",
+  "RangeError",
+  "ReferenceError",
+  "SyntaxError",
+  "TypeError",
+  "URIError",
+
+  // Application-owned errors that can reach the chat telemetry boundary.
+  "DurableWorkerWriteError",
+  "FileUploadLimitError",
+  "McpUrlValidationError",
+  "ModelBoundReplayInvariantError",
+  "PublicChatHttpError",
+  "ToolAbortError",
+  "ToolExecutionError",
+  "ToolPolicyError",
+  "ToolTimeoutError",
+  "UsageLimitError",
+  "WorkerWriteTimeoutError",
+
+  // Error types exposed by the currently installed AI SDK packages.
+  "AI_APICallError",
+  "AI_DownloadError",
+  "AI_EmptyResponseBodyError",
+  "AI_InvalidArgumentError",
+  "AI_InvalidDataContentError",
+  "AI_InvalidMessageRoleError",
+  "AI_InvalidPromptError",
+  "AI_InvalidResponseDataError",
+  "AI_InvalidStreamPartError",
+  "AI_InvalidToolApprovalError",
+  "AI_InvalidToolApprovalSignatureError",
+  "AI_InvalidToolInputError",
+  "AI_JSONParseError",
+  "AI_LoadAPIKeyError",
+  "AI_LoadSettingError",
+  "AI_MCPClientError",
+  "AI_MCPClientOAuthError",
+  "AI_MessageConversionError",
+  "AI_MissingToolResultsError",
+  "AI_NoContentGeneratedError",
+  "AI_NoImageGeneratedError",
+  "AI_NoObjectGeneratedError",
+  "AI_NoOutputGeneratedError",
+  "AI_NoSpeechGeneratedError",
+  "AI_NoSuchModelError",
+  "AI_NoSuchProviderError",
+  "AI_NoSuchProviderReferenceError",
+  "AI_NoSuchToolError",
+  "AI_NoTranscriptGeneratedError",
+  "AI_NoVideoGeneratedError",
+  "AI_RetryError",
+  "AI_TooManyEmbeddingValuesForCallError",
+  "AI_ToolCallNotFoundForApprovalError",
+  "AI_ToolCallRepairError",
+  "AI_TypeValidationError",
+  "AI_UIMessageStreamError",
+  "AI_UnsupportedFunctionalityError",
+  "AI_UnsupportedModelVersionError",
+  "GatewayAuthenticationError",
+  "GatewayFailedDependencyError",
+  "GatewayForbiddenError",
+  "GatewayInternalServerError",
+  "GatewayInvalidRequestError",
+  "GatewayModelNotFoundError",
+  "GatewayRateLimitError",
+  "GatewayResponseError",
+  "GatewayTimeoutError",
+  "ParseError",
+  "UnauthorizedError",
+])
+
 const AI_SENSITIVE_PATH_PREFIXES = [
   "ai.prompt",
   "ai.prompt.messages",
@@ -53,6 +134,19 @@ function isExceptionValuePath(path: string[]): boolean {
   )
 }
 
+function isExceptionTypePath(path: string[]): boolean {
+  return (
+    path.length >= 4 &&
+    path[0] === "exception" &&
+    path[1] === "values" &&
+    path[path.length - 1] === "type"
+  )
+}
+
+function sanitizeExceptionName(name: string): string {
+  return SAFE_EXCEPTION_NAMES.has(name) ? name : "Error"
+}
+
 /**
  * Retain error classification while removing validation payloads and entity
  * ids. AI SDK validation messages append the complete offending value after
@@ -75,13 +169,16 @@ export function sanitizeExceptionForTelemetry(error: unknown): Error {
     return new Error(`Non-Error exception (${typeof error})`)
   }
 
-  const sanitized = new Error(sanitizeExceptionMessage(error.message))
-  sanitized.name = error.name
+  const sanitizedMessage = sanitizeExceptionMessage(error.message)
+  const sanitizedName = sanitizeExceptionName(error.name)
+  const sanitized = new Error(sanitizedMessage)
+  sanitized.name = sanitizedName
   if (typeof error.stack === "string") {
-    sanitized.stack = error.stack.replace(
-      error.message,
-      sanitizeExceptionMessage(error.message)
-    )
+    const stackFrames = error.stack.split("\n").slice(1)
+    const stackHeader = sanitizedMessage
+      ? `${sanitizedName}: ${sanitizedMessage}`
+      : sanitizedName
+    sanitized.stack = [stackHeader, ...stackFrames].join("\n")
   }
   return sanitized
 }
@@ -127,9 +224,13 @@ function scrubValue(
     // Value-level pass: a credential can appear inside an otherwise-innocuous
     // string (e.g. a provider 401 message under `exception.values[].value`),
     // which key-name/path redaction never reaches.
-    return isExceptionValuePath(path)
-      ? sanitizeExceptionMessage(value)
-      : redactSecretsInString(value)
+    if (isExceptionValuePath(path)) {
+      return sanitizeExceptionMessage(value)
+    }
+    if (isExceptionTypePath(path)) {
+      return sanitizeExceptionName(value)
+    }
+    return redactSecretsInString(value)
   }
 
   if (typeof value !== "object") {

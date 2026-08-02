@@ -787,18 +787,13 @@ describe("createChatTurnRuntime — generated titles", () => {
     ).toBeUndefined()
   })
 
-  it("delivers the guest title even when the answer finishes first", async () => {
-    // Guests have no after() backstop: if the answer beats the title, the
-    // stream's close is the only remaining delivery window. The response tail
-    // must wait for the bounded title call instead of dropping it — otherwise
-    // every short first answer leaves the guest chat named "New chat" forever.
+  it("closes a guest stream without waiting for a slower title request", async () => {
     const harness = makeStreamHarness()
     let titleSignal: AbortSignal | undefined
     const generateText = vi.fn(
       ({ abortSignal }: { abortSignal?: AbortSignal }) =>
-        new Promise((resolve) => {
+        new Promise(() => {
           titleSignal = abortSignal
-          setTimeout(() => resolve({ text: "Guest Conversation" }), 25)
         })
     )
     const runtime = createChatTurnRuntime({
@@ -819,9 +814,55 @@ describe("createChatTurnRuntime — generated titles", () => {
 
     const body = await response.text()
     expect(body).toContain('"type":"data-chatTitle"')
-    expect(body).toContain("Guest Conversation")
-    expect(titleSignal?.aborted).toBe(false)
+    expect(body).toContain("Greeting Exchange")
+    expect(titleSignal?.aborted).toBe(true)
   })
+})
+
+describe("createChatTurnRuntime — evidence-gated word chunking", () => {
+  it.each([
+    {
+      model: "claude-haiku-4-5-20251001",
+      expectedTransform: true,
+    },
+    {
+      model: "claude-sonnet-5",
+      expectedTransform: false,
+    },
+  ])(
+    "sets smoothing to $expectedTransform for Anthropic $model",
+    async ({ model, expectedTransform }) => {
+      vi.mocked(getAllModels).mockResolvedValue([
+        { id: model, provider: "anthropic", tools: false },
+      ] as unknown as Awaited<ReturnType<typeof getAllModels>>)
+      const harness = makeStreamHarness()
+      const runtime = createChatTurnRuntime({
+        input: makeInput({
+          chatId: "local-guest-chat",
+          model,
+          chatVersion: 2,
+          userId: "anonymous-user",
+          anonymousId: "anonymous-user",
+          isAuthenticated: false,
+          convexToken: undefined,
+        }),
+        deps: makeDeps(harness, makeFetchMutation()),
+      })
+
+      await runtime.prepare()
+      runtime.toResponse(notAbortedSignal())
+
+      if (expectedTransform) {
+        expect(harness.captured.streamOpts.experimental_transform).toEqual(
+          expect.any(Function)
+        )
+      } else {
+        expect(harness.captured.streamOpts).not.toHaveProperty(
+          "experimental_transform"
+        )
+      }
+    }
+  )
 })
 
 describe("createChatTurnRuntime — durable completion handoff", () => {

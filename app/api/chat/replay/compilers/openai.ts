@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai"
-import type { ReplayMessage, ReplayPart, ReplayToolExchange } from "../types"
+import type { ReplayMessage, ReplayPart } from "../types"
 import { synthesizePlatformToolFallback } from "./platform-tool-fallback"
+import { synthesizeWebSearchReplayContext } from "./web-search-context"
 import type {
   ReplayCompileContext,
   ReplayCompiler,
@@ -19,26 +20,6 @@ type MessagePart = UIMessage["parts"][number]
 // trip the runtime's provider-linked-id plaintext fallback anyway. Text
 // context with citations is the only replay shape that reliably reaches the
 // model.
-function synthesizeWebSearchContext(tool: ReplayToolExchange): string | null {
-  const webSearch = tool.webSearch
-  if (!webSearch) return null
-
-  const queryLabel =
-    webSearch.query.trim().length > 0 ? ` for "${webSearch.query}"` : ""
-  if (webSearch.results.length === 0) {
-    return `Replay note: web_search${queryLabel} was omitted for OpenAI-safe replay.`
-  }
-
-  const lines = webSearch.results.slice(0, 3).map((result) => {
-    const title = result.title?.trim().length ? result.title.trim() : "Result"
-    const snippet = result.snippet?.trim().length
-      ? ` - ${result.snippet.trim()}`
-      : ""
-    return `- ${title} (${result.url})${snippet}`
-  })
-
-  return `Replay context from prior web_search${queryLabel}:\n${lines.join("\n")}`
-}
 
 function compileAssistantParts(
   parts: ReplayPart[],
@@ -82,7 +63,10 @@ function compileAssistantParts(
     const tool = part.tool
 
     if (tool.replayable && tool.toolName === "web_search" && tool.webSearch) {
-      const contextText = synthesizeWebSearchContext(tool)
+      const contextText = synthesizeWebSearchReplayContext(
+        tool,
+        "OpenAI-safe replay"
+      )
       if (contextText) {
         compiled.push({ type: "text", text: contextText } as MessagePart)
         stats.toolExchangesCompiled += 1

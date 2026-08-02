@@ -286,13 +286,6 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
     ;(
       globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
     ).IS_REACT_ACT_ENVIRONMENT = true
-    ;(
-      globalThis as { requestAnimationFrame?: typeof requestAnimationFrame }
-    ).requestAnimationFrame = (callback: FrameRequestCallback) =>
-      window.setTimeout(() => callback(performance.now()), 16)
-    ;(
-      globalThis as { cancelAnimationFrame?: typeof cancelAnimationFrame }
-    ).cancelAnimationFrame = (id: number) => window.clearTimeout(id)
     // lib/chat-store/persist touches indexedDB at module scope — shim it
     // before the hook module (and its chat-store chain) loads.
     const objectStoreNames = Object.assign(["chats", "messages", "sync"], {
@@ -324,6 +317,14 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      (callback: FrameRequestCallback) =>
+        window.setTimeout(() => callback(performance.now()), 16)
+    )
+    vi.stubGlobal("cancelAnimationFrame", (id: number) =>
+      window.clearTimeout(id)
+    )
     vi.stubGlobal("fetch", fetchMock)
     window.history.replaceState(null, "", `/c/${CHAT_ID}`)
   })

@@ -34,12 +34,12 @@ import type { Chats } from "../types"
 import {
   cacheChat,
   deleteCachedChat,
-  getCachedChat,
   getCachedChatsHydratedSnapshot,
   getCachedChatsServerSnapshot,
   getCachedChatsSnapshot,
   resetCachedChatsSnapshot,
   subscribeCachedChats,
+  updateCachedChat,
 } from "./api"
 import {
   applyOptimisticOps,
@@ -293,12 +293,7 @@ export function ChatsProvider({
       }
 
       if (isLocalChatId(id)) {
-        const chat =
-          (await getCachedChat(id)) ??
-          chats.find((candidate) => candidate.id === id)
-        if (!chat) return
-
-        await cacheChat({ ...chat, ...changes })
+        await updateCachedChat(id, (chat) => ({ ...chat, ...changes }))
         return
       }
 
@@ -321,7 +316,7 @@ export function ChatsProvider({
         toast({ title: "Failed to update title", status: "error" })
       }
     },
-    [chats, updateTitleMutation, removeOp]
+    [updateTitleMutation, removeOp]
   )
 
   const applyGeneratedTitle = useCallback(
@@ -341,25 +336,22 @@ export function ChatsProvider({
         }
       }
 
-      const chat =
-        (await getCachedChat(id)) ??
-        chats.find((candidate) => candidate.id === id)
-      if (
-        !chat ||
-        chat.title_source !== "provisional" ||
-        chat.title_generation !== generation
-      ) {
-        return false
-      }
+      return await updateCachedChat(id, (chat) => {
+        if (
+          chat.title_source !== "provisional" ||
+          chat.title_generation !== generation
+        ) {
+          return undefined
+        }
 
-      await cacheChat({
-        ...chat,
-        title,
-        title_source: "generated",
+        return {
+          ...chat,
+          title,
+          title_source: "generated",
+        }
       })
-      return true
     },
-    [applyGeneratedTitleMutation, chats]
+    [applyGeneratedTitleMutation]
   )
 
   const deleteChat = useCallback(
@@ -556,12 +548,7 @@ export function ChatsProvider({
       }
 
       if (isLocalChatId(id)) {
-        const chat =
-          (await getCachedChat(id)) ??
-          chats.find((candidate) => candidate.id === id)
-        if (!chat) return
-
-        await cacheChat({ ...chat, ...changes })
+        await updateCachedChat(id, (chat) => ({ ...chat, ...changes }))
         return
       }
 
@@ -589,19 +576,14 @@ export function ChatsProvider({
         throw error
       }
     },
-    [chats, updateModelMutation, removeOp]
+    [updateModelMutation, removeOp]
   )
 
   const bumpChat = useCallback(
     async (id: string) => {
       const changes = { updated_at: new Date().toISOString() }
       if (isLocalChatId(id)) {
-        const chat =
-          (await getCachedChat(id)) ??
-          chats.find((candidate) => candidate.id === id)
-        if (!chat) return
-
-        await cacheChat({ ...chat, ...changes })
+        await updateCachedChat(id, (chat) => ({ ...chat, ...changes }))
         return
       }
 
@@ -617,7 +599,7 @@ export function ChatsProvider({
         )
       }, 100)
     },
-    [chats, removeOp]
+    [removeOp]
   )
 
   const togglePinned = useCallback(
@@ -630,12 +612,7 @@ export function ChatsProvider({
       }
 
       if (isLocalChatId(id)) {
-        const chat =
-          (await getCachedChat(id)) ??
-          chats.find((candidate) => candidate.id === id)
-        if (!chat) return
-
-        await cacheChat({ ...chat, ...changes })
+        await updateCachedChat(id, (chat) => ({ ...chat, ...changes }))
         return
       }
 
@@ -656,7 +633,7 @@ export function ChatsProvider({
         toast({ title: "Failed to update pin", status: "error" })
       }
     },
-    [chats, togglePinMutation, removeOp]
+    [togglePinMutation, removeOp]
   )
 
   const pinnedChats = useMemo(

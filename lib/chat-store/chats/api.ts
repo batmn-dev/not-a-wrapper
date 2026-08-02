@@ -12,6 +12,29 @@ let cachedChatsSnapshot: Chats[] = emptyChats
 let cachedChatsHydrated = false
 let hydrateCachedChatsPromise: Promise<void> | null = null
 const cachedChatsListeners = new Set<() => void>()
+const cachedChatMutationTails = new Map<string, Promise<void>>()
+
+async function serializeCachedChatMutation<T>(
+  id: string,
+  mutation: () => Promise<T>
+): Promise<T> {
+  const previous = cachedChatMutationTails.get(id) ?? Promise.resolve()
+  const operation = previous.then(mutation)
+  const tail = operation.then(
+    () => undefined,
+    () => undefined
+  )
+
+  cachedChatMutationTails.set(id, tail)
+
+  try {
+    return await operation
+  } finally {
+    if (cachedChatMutationTails.get(id) === tail) {
+      cachedChatMutationTails.delete(id)
+    }
+  }
+}
 
 function sortChats(chats: Chats[]): Chats[] {
   return chats
@@ -103,24 +126,52 @@ export async function getCachedChat(id: string): Promise<Chats | undefined> {
 export async function cacheChat(chat: Chats): Promise<void> {
   if (!isLocalChatId(chat.id)) return
 
-  cachedChatsHydrated = true
-  updateCachedChatsSnapshot([
-    chat,
-    ...cachedChatsSnapshot.filter((candidate) => candidate.id !== chat.id),
-  ])
+  await serializeCachedChatMutation(chat.id, async () => {
+    cachedChatsHydrated = true
+    updateCachedChatsSnapshot([
+      chat,
+      ...cachedChatsSnapshot.filter((candidate) => candidate.id !== chat.id),
+    ])
 
-  await writeToIndexedDB("chats", chat)
+    await writeToIndexedDB("chats", chat)
+  })
+}
+
+export async function updateCachedChat(
+  id: string,
+  update: (chat: Chats) => Chats | undefined
+): Promise<boolean> {
+  if (!isLocalChatId(id)) return false
+
+  return await serializeCachedChatMutation(id, async () => {
+    const cached = cachedChatsSnapshot.find((chat) => chat.id === id)
+    const stored = cached ?? (await readFromIndexedDB<Chats>("chats", id))
+    if (!isCachedChat(stored)) return false
+
+    const updated = update(stored)
+    if (!updated) return false
+
+    cachedChatsHydrated = true
+    updateCachedChatsSnapshot([
+      updated,
+      ...cachedChatsSnapshot.filter((candidate) => candidate.id !== id),
+    ])
+    await writeToIndexedDB("chats", updated)
+    return true
+  })
 }
 
 export async function deleteCachedChat(id: string): Promise<void> {
   if (!isLocalChatId(id)) return
 
-  cachedChatsHydrated = true
-  updateCachedChatsSnapshot(
-    cachedChatsSnapshot.filter((candidate) => candidate.id !== id)
-  )
+  await serializeCachedChatMutation(id, async () => {
+    cachedChatsHydrated = true
+    updateCachedChatsSnapshot(
+      cachedChatsSnapshot.filter((candidate) => candidate.id !== id)
+    )
 
-  await deleteFromIndexedDB("chats", id)
+    await deleteFromIndexedDB("chats", id)
+  })
 }
 
 export function resetCachedChatsSnapshot(): void {

@@ -8,7 +8,11 @@ export type ChatStreamErrorPresentation =
   | { kind: "swallow"; reason: "approval-continuation-lost-race" }
   | { kind: "toast"; title: string }
 
-const GENERIC_MESSAGES = new Set(["An error occurred", "fetch failed"])
+const GENERIC_MESSAGES = new Set([
+  "an error occurred",
+  "fetch failed",
+  "failed to fetch",
+])
 const GENERIC_FALLBACK = "Something went wrong. Please try again."
 
 function parsePublicBody(message: string): { error?: string; code?: string } {
@@ -47,7 +51,7 @@ export function presentChatStreamError(
   return {
     kind: "toast",
     title:
-      title.length === 0 || GENERIC_MESSAGES.has(title)
+      title.length === 0 || GENERIC_MESSAGES.has(title.toLowerCase())
         ? GENERIC_FALLBACK
         : title,
   }

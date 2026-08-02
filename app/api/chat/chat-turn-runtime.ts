@@ -6,6 +6,7 @@ import type {
 } from "@/lib/chat-messages/chat-turn-contract"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import {
+  fallbackChatTitle,
   generateChatTitle,
   INITIAL_CHAT_TITLE_GENERATION,
   selectChatTitleModelConfig,
@@ -103,7 +104,10 @@ import {
   prepareTextFilePartsForModelInput,
 } from "./text-file-parts"
 import { excludeSystemRoleMessages } from "./utils"
-import { createWordChunkingTransform } from "./word-chunking-transform"
+import {
+  createWordChunkingTransform,
+  isWordChunkingEligible,
+} from "./word-chunking-transform"
 
 // Request-scoped execution behind the route's HTTP adapter. `prepare()` may
 // fail before model execution; `toResponse()` owns the stream lifecycle; and
@@ -1200,6 +1204,18 @@ export function createChatTurnRuntime(args: {
     }
 
     const streamText = deps.streamText
+    const lifecycleTransform = lifecycle.streamTextExtras.experimental_transform
+    const wordChunkingTransform = isWordChunkingEligible({
+      provider: resolvedProvider,
+      model,
+    })
+      ? createWordChunkingTransform(executionSignal)
+      : undefined
+    const experimentalTransform = wordChunkingTransform
+      ? lifecycleTransform
+        ? [wordChunkingTransform, lifecycleTransform]
+        : wordChunkingTransform
+      : lifecycleTransform
 
     // Request-to-provider-start (plan §7.4): request receipt → immediately
     // before provider consumption begins. Content-free; no-op unless sampled.
@@ -1271,18 +1287,13 @@ export function createChatTurnRuntime(args: {
         // approval-persistence transform (its backpressure array
         // module-private). Guest returns `{}` — guest chats run ungated.
         ...lifecycle.streamTextExtras,
-        // Adaptive text smoothing across arbitrary provider delta boundaries
-        // (ADR-0016), composed BEFORE the lifecycle's approval-persistence
-        // transform so the durable tracker and the wire observe the same
-        // paced bytes. Partial words have a bounded holdback; abort clears
-        // both holdback and pacing timers before later control parts surface.
-        experimental_transform: lifecycle.streamTextExtras
-          .experimental_transform
-          ? [
-              createWordChunkingTransform(executionSignal),
-              lifecycle.streamTextExtras.experimental_transform,
-            ]
-          : createWordChunkingTransform(executionSignal),
+        // Evidence-gated text smoothing (ADR-0016), composed BEFORE the
+        // lifecycle's approval-persistence transform so the durable tracker
+        // and wire observe the same paced bytes. Unmeasured provider/model
+        // pairs retain their raw text-delta behavior.
+        ...(experimentalTransform
+          ? { experimental_transform: experimentalTransform }
+          : {}),
 
         onChunk: ({ chunk }) => {
           const now = Date.now()
@@ -1628,17 +1639,22 @@ export function createChatTurnRuntime(args: {
     // failure is absorbed so naming can never fail the conversation. Durable
     // chats receive an early transient CAS payload and also commit after the
     // response as a disconnect-safe backstop; guest chats apply it to IndexedDB.
+    const guestTitleAbortController =
+      durableTurn.mode === "guest" ? new AbortController() : null
+    const titleSignal = guestTitleAbortController
+      ? AbortSignal.any([executionSignal, guestTitleAbortController.signal])
+      : executionSignal
     const titleTask = titleRequest
       ? generateChatTitle({
           generateText: deps.generateText,
           model: titleModel,
           userText: titleRequest.userText,
-          abortSignal: executionSignal,
+          abortSignal: titleSignal,
         }).catch((error: unknown) => {
           // Stop, grant loss, and the provider deadline cancel the title
           // alongside the answer — a normal shutdown, not a title failure.
           // (A still-provisional chat re-requests a title on its next turn.)
-          if (executionSignal.aborted) return null
+          if (titleSignal.aborted) return null
           console.warn(
             JSON.stringify({
               _tag: "chat_title_generation_failed",
@@ -1781,16 +1797,22 @@ export function createChatTurnRuntime(args: {
                 })
               )
               writer.merge(observedAnswerStream)
-              // Durable turns stop waiting once the answer closes — the
-              // after() backstop commits the title without holding the
-              // response open. Guest turns have no backstop: the transient
-              // part is the only delivery path, so the stream's close waits
-              // for the bounded title call even when a short answer finishes
-              // first. The answer itself is already fully delivered by then.
+              // Title generation never extends the answer stream lifetime.
+              // Durable turns have an after() persistence backstop. Guests use
+              // the existing deterministic fallback when the answer wins so
+              // their IndexedDB chat still leaves its provisional title.
+              const generatedTitle = await Promise.race([
+                titleTask,
+                answerFinished,
+              ])
+              if (durableTurn.mode === "guest" && generatedTitle === null) {
+                guestTitleAbortController?.abort()
+              }
               const title =
-                durableTurn.mode === "guest"
-                  ? await titleTask
-                  : await Promise.race([titleTask, answerFinished])
+                generatedTitle ??
+                (durableTurn.mode === "guest"
+                  ? fallbackChatTitle(titleRequest.userText)
+                  : null)
               if (!title) return
               writer.write({
                 type: "data-chatTitle",

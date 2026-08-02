@@ -187,6 +187,19 @@ describe("splitAndValidateApprovalContinuation", () => {
     expect(() =>
       split(
         tail({
+          toolName: "mcp_tool",
+          providerExecuted: false,
+        }),
+        "openai",
+        clientDynamic
+      )
+    ).toThrowError(
+      expect.objectContaining({ code: "APPROVAL_TOOL_UNAVAILABLE" })
+    )
+
+    expect(() =>
+      split(
+        tail({
           toolName: "web_search",
           providerExecuted: false,
         }),

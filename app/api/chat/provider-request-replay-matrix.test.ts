@@ -285,6 +285,11 @@ describe("hosted replay final provider-request matrix", () => {
             expect(bodyJson, label).not.toMatch(
               /ws_openai_foreign_id|srvtoolu_anthropic_foreign_id|xai_foreign_response_id|google-grounding-private-id/
             )
+            expect(bodyJson, label).toContain("Find one source")
+            expect(bodyJson, label).toContain(
+              origin === "google" ? "Grounded answer" : `${origin} answer`
+            )
+            expect(bodyJson, label).toContain("Now inspect this image")
             expect(bodyJson, label).toContain(CURRENT_IMAGE_URL)
             expect(bodyJson, label).toContain("example.com/")
             expect(hasSearchDeclaration(result.body, target), label).toBe(
