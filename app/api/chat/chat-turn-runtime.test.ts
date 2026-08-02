@@ -1,7 +1,6 @@
 import { api } from "@/convex/_generated/api"
 import { getAllModels } from "@/lib/models"
 import { prepareToolRuntime } from "@/lib/tools/runtime"
-import { getEffectiveProviderApiKey } from "@/lib/user-keys"
 import * as Sentry from "@sentry/nextjs"
 import {
   convertToModelMessages,
@@ -43,10 +42,6 @@ vi.mock("@/lib/models", () => ({
   getAllModels: vi.fn(),
 }))
 
-vi.mock("@/lib/openproviders/provider-map", () => ({
-  getProviderForModel: vi.fn(() => "anthropic"),
-}))
-
 vi.mock("@/lib/openproviders/create-language-model", () => ({
   createLanguageModel: vi.fn(() => ({})),
 }))
@@ -56,10 +51,6 @@ vi.mock("@/lib/openproviders/request-shaping", () => ({
 }))
 
 vi.mock("@/lib/openproviders/env", () => ({ env: {} }))
-
-vi.mock("@/lib/user-keys", () => ({
-  getEffectiveProviderApiKey: vi.fn(),
-}))
 
 vi.mock("@/lib/tools/runtime", () => ({
   prepareToolRuntime: vi.fn(),
@@ -173,6 +164,11 @@ function makeInput(overrides: Partial<ChatTurnInput> = {}): ChatTurnInput {
     anonymousId: undefined,
     isAuthenticated: true,
     convexToken: "tok",
+    credential: {
+      provider: "anthropic",
+      apiKey: "byok-key",
+      source: "byok",
+    },
     ...overrides,
   }
 }
@@ -308,10 +304,6 @@ beforeEach(() => {
   vi.mocked(getAllModels).mockResolvedValue([
     { id: "test-model", provider: "anthropic", tools: false },
   ] as unknown as Awaited<ReturnType<typeof getAllModels>>)
-  vi.mocked(getEffectiveProviderApiKey).mockResolvedValue({
-    apiKey: "byok-key",
-    source: "byok",
-  })
   vi.mocked(prepareToolRuntime).mockResolvedValue(
     makeToolRuntime() as unknown as Awaited<
       ReturnType<typeof prepareToolRuntime>
@@ -343,11 +335,12 @@ beforeEach(() => {
 
 describe("createChatTurnRuntime — prepare()", () => {
   it("throws a 401 MISSING_API_KEY when neither a BYOK nor an env key exists", async () => {
-    vi.mocked(getEffectiveProviderApiKey).mockResolvedValue({})
     const harness = makeStreamHarness()
     const fetchMutation = makeFetchMutation()
     const runtime = createChatTurnRuntime({
-      input: makeInput(),
+      input: makeInput({
+        credential: { provider: "anthropic" },
+      }),
       deps: makeDeps(harness, fetchMutation),
     })
 
@@ -358,12 +351,14 @@ describe("createChatTurnRuntime — prepare()", () => {
   })
 
   it("passes authoritative platform key provenance to the Tool runtime", async () => {
-    vi.mocked(getEffectiveProviderApiKey).mockResolvedValue({
-      apiKey: "platform-key",
-      source: "platform",
-    })
     const runtime = createChatTurnRuntime({
-      input: makeInput(),
+      input: makeInput({
+        credential: {
+          provider: "anthropic",
+          apiKey: "platform-key",
+          source: "platform",
+        },
+      }),
       deps: makeDeps(makeStreamHarness(), makeFetchMutation()),
     })
 
@@ -1540,7 +1535,15 @@ describe("createChatTurnRuntime — abort telemetry", () => {
   it("keeps the request signal authoritative for GUEST turns", async () => {
     const harness = makeStreamHarness()
     const runtime = createChatTurnRuntime({
-      input: makeInput({ isAuthenticated: false, convexToken: undefined }),
+      input: makeInput({
+        isAuthenticated: false,
+        convexToken: undefined,
+        credential: {
+          provider: "anthropic",
+          apiKey: "platform-key",
+          source: "platform",
+        },
+      }),
       deps: makeDeps(harness, makeFetchMutation()),
     })
 

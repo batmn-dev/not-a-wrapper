@@ -2,10 +2,7 @@ import { api } from "@/convex/_generated/api"
 import { HEARTBEAT_INTERVAL_MS } from "@/convex/domain/generation_run_liveness"
 import { loadUserMcpTools } from "@/lib/mcp/load-tools"
 import { createLanguageModel } from "@/lib/openproviders/create-language-model"
-import {
-  getEffectiveProviderApiKey,
-  getEffectiveToolKeyWithMode,
-} from "@/lib/user-keys"
+import { getEffectiveToolKeyWithMode } from "@/lib/user-keys"
 import type { LanguageModelV4StreamPart } from "@ai-sdk/provider"
 import { jsonSchema, streamText, tool } from "ai"
 import { MockLanguageModelV4, simulateReadableStream } from "ai/test"
@@ -32,7 +29,7 @@ import type {
 //   - the provider model (MockLanguageModelV4 at the createLanguageModel seam),
 //   - Convex (deps.fetchMutation for durable writes; convex/nextjs for the
 //     budget store and audit sink), MCP servers (loadUserMcpTools),
-//   - key resolution, Sentry/PostHog/Braintrust.
+//   - tool-key resolution, Sentry/PostHog/Braintrust.
 // vi.mock("ai") is deliberately absent.
 // ---------------------------------------------------------------------------
 
@@ -62,7 +59,6 @@ vi.mock("@/lib/posthog", () => ({
 }))
 
 vi.mock("@/lib/user-keys", () => ({
-  getEffectiveProviderApiKey: vi.fn(),
   getEffectiveToolKeyWithMode: vi.fn(),
 }))
 
@@ -328,6 +324,11 @@ function makeInput(overrides: Partial<ChatTurnInput> = {}): ChatTurnInput {
     anonymousId: undefined,
     isAuthenticated: true,
     convexToken: "tok",
+    credential: {
+      provider: "anthropic",
+      apiKey: "sk-test",
+      source: "byok",
+    },
     ...overrides,
   }
 }
@@ -436,10 +437,6 @@ function makeDeps(
 beforeEach(() => {
   vi.clearAllMocks()
   vi.spyOn(console, "log").mockImplementation(() => {})
-  vi.mocked(getEffectiveProviderApiKey).mockResolvedValue({
-    apiKey: "sk-test",
-    source: "byok",
-  })
   vi.mocked(getEffectiveToolKeyWithMode).mockResolvedValue({
     key: undefined,
     keyMode: undefined,

@@ -2,6 +2,11 @@ import { getWorkosSession } from "@/lib/auth/workos"
 import { getToolDimensionForError } from "@/lib/observability/chat-error-taxonomy"
 import * as Sentry from "@sentry/nextjs"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+  checkServerSideUsage,
+  incrementServerSideUsage,
+  validateAndResolveChatCredential,
+} from "./api"
 import { createChatTurnRuntime } from "./chat-turn-runtime"
 import { PublicChatHttpError } from "./public-http-error"
 import { maxDuration, POST } from "./route"
@@ -36,7 +41,7 @@ vi.mock("@/lib/observability/chat-error-taxonomy", async (importActual) => {
 vi.mock("./api", () => ({
   checkServerSideUsage: vi.fn(),
   incrementServerSideUsage: vi.fn(),
-  validateAndTrackUsage: vi.fn(),
+  validateAndResolveChatCredential: vi.fn(),
 }))
 
 vi.mock("./chat-turn-runtime", () => ({
@@ -66,6 +71,11 @@ describe("/api/chat route", () => {
       user: { id: "user-1" },
       accessToken: "convex-token",
     } as Awaited<ReturnType<typeof getWorkosSession>>)
+    vi.mocked(validateAndResolveChatCredential).mockResolvedValue({
+      provider: "openai",
+      apiKey: "test-key",
+      source: "byok",
+    })
   })
 
   afterEach(() => {
@@ -79,6 +89,54 @@ describe("/api/chat route", () => {
     const { CHAT_ROUTE_MAX_DURATION_SECONDS } =
       await import("@/lib/chat-turn/execution-budget")
     expect(maxDuration).toBe(CHAT_ROUTE_MAX_DURATION_SECONDS)
+  })
+
+  it("preserves check-resolve-increment ordering and passes one credential snapshot to the runtime", async () => {
+    const order: string[] = []
+    const credential = {
+      provider: "openai",
+      apiKey: "credential-snapshot",
+      source: "byok",
+    } as const
+    vi.mocked(checkServerSideUsage).mockImplementation(async () => {
+      order.push("check")
+    })
+    vi.mocked(validateAndResolveChatCredential).mockImplementation(async () => {
+      order.push("resolve")
+      return credential
+    })
+    vi.mocked(incrementServerSideUsage).mockImplementation(async () => {
+      order.push("increment")
+    })
+    const prepare = vi.fn(async () => {
+      order.push("prepare")
+    })
+    const toResponse = vi.fn(async () => {
+      order.push("response")
+      return new Response("ok")
+    })
+    vi.mocked(createChatTurnRuntime).mockImplementation((args) => {
+      order.push("runtime")
+      expect(args.input.credential).toBe(credential)
+      return { prepare, toResponse, fail: vi.fn() }
+    })
+
+    const response = await POST(makeRequest())
+
+    expect(await response.text()).toBe("ok")
+    expect(order).toEqual([
+      "check",
+      "resolve",
+      "increment",
+      "runtime",
+      "prepare",
+      "response",
+    ])
+    expect(validateAndResolveChatCredential).toHaveBeenCalledWith({
+      model: "test-model",
+      isAuthenticated: true,
+      token: "convex-token",
+    })
   })
 
   it("returns the original fallback response when turn.fail throws", async () => {

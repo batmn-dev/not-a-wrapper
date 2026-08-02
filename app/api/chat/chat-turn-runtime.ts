@@ -45,7 +45,6 @@ import {
   sanitizeExceptionForTelemetry,
 } from "@/lib/observability/sentry-scrubbing"
 import { createLanguageModel } from "@/lib/openproviders/create-language-model"
-import { getProviderForModel } from "@/lib/openproviders/provider-map"
 import { shapeRequest } from "@/lib/openproviders/request-shaping"
 import {
   captureGeneration,
@@ -60,7 +59,12 @@ import {
   type ToolInvocationMetadataByCallId,
   type ToolInvocationMetadataByName,
 } from "@/lib/tools/ui-metadata"
-import type { ApiKeySource, Provider, ToolKeyMode } from "@/lib/user-keys"
+import type {
+  ApiKeySource,
+  Provider,
+  ProviderCredentialResolution,
+  ToolKeyMode,
+} from "@/lib/user-keys"
 import * as Sentry from "@sentry/nextjs"
 import {
   consumeStream,
@@ -145,6 +149,8 @@ export type ChatTurnInput = {
   anonymousId: string | undefined
   isAuthenticated: boolean
   convexToken: string | undefined
+  /** Server-only credential fact resolved once during route admission. */
+  credential: ProviderCredentialResolution
   /**
    * Sampled chat-performance session (PR 0b). Absent/no-op by default; when
    * sampled it wraps preparation stages in content-free spans and receives
@@ -374,6 +380,7 @@ export function createChatTurnRuntime(args: {
     anonymousId,
     isAuthenticated,
     convexToken,
+    credential,
   } = input
   // No-op unless the route sampled this request (rate 0 short-circuits).
   const perf = input.perf ?? createChatPerfServerSession(null, { rate: 0 })
@@ -416,8 +423,8 @@ export function createChatTurnRuntime(args: {
   // on a partial prepare (it is computed before the plan is assembled).
   let toolRuntime: ToolRuntime | null = null
   let openedMcpClientCount = 0
-  let provider: Provider | undefined
-  let credentialSource: ApiKeySource | undefined
+  let provider: Provider | undefined = credential.provider
+  let credentialSource: ApiKeySource | undefined = credential.source
   let lastPublicError: PublicChatError | null = null
 
   // Request-scoped resource teardown (MCP clients, analytics flushes) is
@@ -460,6 +467,9 @@ export function createChatTurnRuntime(args: {
     }
     phase = "preparing"
 
+    const resolvedProvider = credential.provider
+    Sentry.setTag("chat_provider", resolvedProvider)
+
     const allModels = await Sentry.startSpan(
       { name: "chat.load_models", op: "chat.config" },
       async () => getAllModels()
@@ -476,19 +486,8 @@ export function createChatTurnRuntime(args: {
 
     const effectiveSystemPrompt = systemPrompt || SYSTEM_PROMPT_DEFAULT
 
-    const resolvedProvider = getProviderForModel(model)
-    provider = resolvedProvider
-    Sentry.setTag("chat_provider", resolvedProvider)
-
-    const { getEffectiveProviderApiKey } = await import("@/lib/user-keys")
-    const keyResolution = await perf.span("credential_resolution", () =>
-      getEffectiveProviderApiKey(
-        resolvedProvider,
-        isAuthenticated ? convexToken : undefined
-      )
-    )
-    const apiKey = keyResolution.apiKey
-    credentialSource = keyResolution.source
+    const apiKey = credential.apiKey
+    credentialSource = credential.source
 
     // Resolve key and provenance together. If neither user BYOK nor the
     // provider's platform env key exists, fail before constructing the SDK.

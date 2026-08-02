@@ -28,12 +28,16 @@ _Avoid_: submission, send flow, message lifecycle
 
 **Chat turn runtime**:
 The request-scoped server module that executes one **Chat turn**. `prepare()`
-resolves the model and key, adapts history, prepares tools, and asks the
+consumes the route-admitted provider credential, resolves the model, adapts
+history, prepares tools, and asks the
 **Durable turn runtime** to enforce concurrency and create the generation run
 before any model call. `toResponse(signal)` owns `streamText`, response shaping,
 abort telemetry, and both stream-completion callbacks in one closure; durable
 snapshot, approval, and terminal-write policy remain in the **Durable turn
-runtime**. The route is only the HTTP adapter. The implementation uses
+runtime**. The route is the HTTP adapter and owns the one provider-credential
+resolution between usage check and increment; the runtime reuses that same
+server-only provider/key/source fact for model, tool, error, and telemetry
+consumers without reading user-key storage again. The implementation uses
 the standalone `toUIMessageStream({ stream: result.stream, ... })` converter,
 while `createUIMessageStreamResponse(...)` retains ownership of the HTTP
 envelope. See `docs/adr/0006-chat-turn-runtime.md`.
