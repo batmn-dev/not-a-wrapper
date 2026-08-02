@@ -6,6 +6,16 @@ type SelectionInfo = {
   messageId: string
 }
 
+export const constrainSelectionPosition = (
+  rect: DOMRect,
+  mousePosition: { x: number; y: number }
+) => {
+  return {
+    x: Math.max(rect.left, Math.min(mousePosition.x, rect.right)),
+    y: Math.max(rect.top, Math.min(mousePosition.y, rect.bottom)),
+  }
+}
+
 export const useAssistantMessageSelection = (
   ref: RefObject<HTMLElement | null>,
   enabled: boolean
@@ -50,22 +60,12 @@ export const useAssistantMessageSelection = (
       if (range) {
         const rect = range.getBoundingClientRect()
 
-        // Constrain mouse position to the selection bounds
-        const constrainedX = Math.max(
-          rect.left,
-          Math.min(event.clientX, rect.right)
-        )
-        const constrainedY = Math.max(
-          rect.top,
-          Math.min(event.clientY, rect.bottom)
-        )
-
         setSelectionInfo({
           text: selectedText.trim(),
-          position: {
-            x: constrainedX,
-            y: constrainedY,
-          },
+          position: constrainSelectionPosition(rect, {
+            x: event.clientX,
+            y: event.clientY,
+          }),
           messageId,
         })
       } else {

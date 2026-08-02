@@ -6,11 +6,11 @@ import { cn } from "@/lib/utils"
 import { RiArrowRightSLine } from "@remixicon/react"
 import { ActivityStatusRow } from "./status-text"
 
-// The Remix arrow occupies only part of its 24px viewBox. An 18px SVG inside
+// The Remix arrow occupies only part of its 24px viewBox. A 17px SVG inside
 // the stable 16px layout slot keeps the painted chevron optically balanced
 // while preserving the shared row geometry.
 const ACTIVITY_CHEVRON_SLOT_SIZE = 16
-const ACTIVITY_CHEVRON_GLYPH_SIZE = 18
+const ACTIVITY_CHEVRON_GLYPH_SIZE = 17
 
 export type ActivityDisclosurePresentation = Extract<
   AssistantActivityPresentation,

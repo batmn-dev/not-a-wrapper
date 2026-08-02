@@ -62,7 +62,7 @@ describe("ActivityPanelTrigger", () => {
     expect(statusRow?.className).toContain("gap-0.5")
     expect(icon?.className).toContain("text-current")
     expect(icon?.style.getPropertyValue("--icon-slot-size")).toBe("16px")
-    expect(icon?.style.getPropertyValue("--icon-glyph-size")).toBe("18px")
+    expect(icon?.style.getPropertyValue("--icon-glyph-size")).toBe("17px")
 
     act(() => button?.click())
     expect(onOpenChange).toHaveBeenCalledWith(true)
