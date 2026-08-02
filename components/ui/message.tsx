@@ -121,12 +121,12 @@ const MessageActions = ({
 )
 
 /**
- * Delayed reveal contract for user-message actions only.
+ * Reveal contract for user-message actions only.
  *
- * Hover waits 300ms before fading the full action family in over 300ms, while
- * focus and an open tooltip reveal it immediately. Leaving starts the 300ms
- * fade-out immediately and disables hit testing at once. Coarse pointers keep
- * the controls visible because hover is not a reliable interaction there.
+ * Hover fades the full action family in over 50ms with no delay, while focus
+ * and an open tooltip reveal it immediately. Leaving starts the 300ms fade-out
+ * immediately and disables hit testing at once. Coarse pointers keep the
+ * controls visible because hover is not a reliable interaction there.
  *
  * Assistant actions intentionally do not use this contract: their one-time
  * streamed reveal and settled-visible behavior live in message-assistant.tsx.
@@ -134,7 +134,7 @@ const MessageActions = ({
 const userMessageFooterRevealClassName = cn(
   "pointer-events-none opacity-0 select-none",
   "motion-safe:transition-opacity duration-300",
-  "group-hover/turn-messages:delay-300",
+  "group-hover/turn-messages:duration-[50ms]",
   "group-hover/turn-messages:pointer-events-auto",
   "group-hover/turn-messages:opacity-100",
   "group-focus-within/turn-messages:pointer-events-auto",
