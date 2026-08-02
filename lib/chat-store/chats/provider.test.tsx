@@ -361,6 +361,71 @@ describe("ChatsProvider guest local chats", () => {
     expect(convexMocks.toast).not.toHaveBeenCalled()
   })
 
+  it("absorbs a failed durable generated-title commit instead of rejecting", async () => {
+    // The server's after() backstop owns durable title delivery; the client
+    // commit is only the low-latency path, so its failure must resolve false
+    // (a CAS miss) rather than escape as an unhandled rejection.
+    convexMocks.isAuthenticated = true
+    convexMocks.queryValue = [durableChat()]
+    convexMocks.mutationFn.mockRejectedValue(new Error("network down"))
+    const capture: { current: ReturnType<typeof useChats> | null } = {
+      current: null,
+    }
+
+    renderProvider(capture, "user-1")
+    await flushPromises()
+
+    let applied: boolean | undefined
+    await act(async () => {
+      applied = await capture.current?.applyGeneratedTitle(
+        "chat-server",
+        "Late Title",
+        1
+      )
+    })
+
+    expect(applied).toBe(false)
+    expect(convexMocks.mutationFn).toHaveBeenCalledWith({
+      chatId: "chat-server",
+      title: "Late Title",
+      generation: 1,
+    })
+  })
+
+  it("preserves a guest rename when a generated title arrives late", async () => {
+    persistMocks.tables.chats.set(
+      "local-existing",
+      localChat({
+        title: "New chat",
+        title_source: "provisional",
+        title_generation: 1,
+      })
+    )
+    const capture: { current: ReturnType<typeof useChats> | null } = {
+      current: null,
+    }
+
+    renderProvider(capture)
+    await flushPromises()
+
+    let applied: boolean | undefined
+    await act(async () => {
+      await capture.current?.updateTitle("local-existing", "My custom title")
+      applied = await capture.current?.applyGeneratedTitle(
+        "local-existing",
+        "Late generated title",
+        1
+      )
+    })
+
+    expect(applied).toBe(false)
+    expect(persistMocks.tables.chats.get("local-existing")).toMatchObject({
+      title: "My custom title",
+      title_source: "user",
+      title_generation: 1,
+    })
+  })
+
   it("creates authenticated first-turn chats through the atomic Convex mutation", async () => {
     convexMocks.isAuthenticated = true
     convexMocks.mutationFn.mockResolvedValue({
@@ -378,7 +443,6 @@ describe("ChatsProvider guest local chats", () => {
     let created: FirstTurnChat | undefined
     await act(async () => {
       created = await capture.current?.createFirstTurnChat({
-        title: "Question",
         model: "gpt-5-mini",
         systemPrompt: "system",
         message: { clientMessageId: "optimistic-1", text: "Question" },
@@ -387,7 +451,7 @@ describe("ChatsProvider guest local chats", () => {
     })
 
     expect(convexMocks.mutationFn).toHaveBeenCalledWith({
-      title: "Question",
+      title: "New chat",
       model: "gpt-5-mini",
       systemPrompt: "system",
       projectId: undefined,
@@ -418,7 +482,6 @@ describe("ChatsProvider guest local chats", () => {
     await act(async () => {
       created = await capture.current?.createFirstTurnChat({
         guestUserId: "guest_1",
-        title: "Guest question",
         message: { clientMessageId: "optimistic-1", text: "Guest question" },
         attachmentIds: [],
       })
@@ -429,7 +492,9 @@ describe("ChatsProvider guest local chats", () => {
       chat: {
         id: expect.stringMatching(/^local-/),
         user_id: "guest_1",
-        title: "Guest question",
+        title: "New chat",
+        title_source: "provisional",
+        title_generation: 1,
         model: "gpt-5-mini",
       },
     })
@@ -438,6 +503,37 @@ describe("ChatsProvider guest local chats", () => {
       "chats",
       expect.objectContaining({ user_id: "guest_1" })
     )
+    if (!created || created.kind !== "local")
+      throw new Error("Expected local chat")
+    const localChatId = created.chat.id
+
+    await act(async () => {
+      await expect(
+        capture.current?.applyGeneratedTitle(localChatId, "Stale title", 2)
+      ).resolves.toBe(false)
+      await expect(
+        capture.current?.applyGeneratedTitle(
+          localChatId,
+          "Guest Conversation",
+          1
+        )
+      ).resolves.toBe(true)
+    })
+    expect(persistMocks.tables.chats.get(localChatId)).toMatchObject({
+      title: "Guest Conversation",
+      title_source: "generated",
+    })
+
+    await act(async () => {
+      await capture.current?.updateTitle(localChatId, "My custom title")
+      await expect(
+        capture.current?.applyGeneratedTitle(localChatId, "Late title", 1)
+      ).resolves.toBe(false)
+    })
+    expect(persistMocks.tables.chats.get(localChatId)).toMatchObject({
+      title: "My custom title",
+      title_source: "user",
+    })
   })
 
   it("fails closed on a guest first turn carrying staged attachments", async () => {
@@ -453,7 +549,6 @@ describe("ChatsProvider guest local chats", () => {
     await expect(
       capture.current?.createFirstTurnChat({
         guestUserId: "guest_1",
-        title: "Guest question",
         message: { clientMessageId: "optimistic-1", text: "Guest question" },
         attachmentIds: ["attachment-1"],
       })
@@ -485,7 +580,6 @@ describe("ChatsProvider guest local chats", () => {
     act(() => {
       creationPromise = capture.current?.createFirstTurnChat({
         guestUserId: "guest-should-be-ignored",
-        title: "During auth sync",
         message: { clientMessageId: "optimistic-1", text: "During auth sync" },
         attachmentIds: [],
       })
@@ -528,7 +622,6 @@ describe("ChatsProvider guest local chats", () => {
     let creationPromise: Promise<FirstTurnChat | undefined> | undefined
     act(() => {
       creationPromise = capture.current?.createFirstTurnChat({
-        title: "During stalled auth sync",
         message: {
           clientMessageId: "optimistic-1",
           text: "During stalled auth sync",
@@ -590,7 +683,6 @@ describe("ChatsProvider guest local chats", () => {
     let created: FirstTurnChat | undefined
     await act(async () => {
       created = await capture.current?.createFirstTurnChat({
-        title: "Project question",
         projectId: "project-1",
         message: { clientMessageId: "optimistic-1", text: "Project question" },
         attachmentIds: [],
@@ -619,7 +711,6 @@ describe("ChatsProvider guest local chats", () => {
     await act(async () => {
       await expect(
         capture.current?.createFirstTurnChat({
-          title: "Question",
           message: { clientMessageId: "optimistic-1", text: "Question" },
           attachmentIds: [],
         })

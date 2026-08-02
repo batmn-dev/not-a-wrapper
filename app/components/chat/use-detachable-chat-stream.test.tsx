@@ -132,6 +132,7 @@ describe("detachable chat stream lifecycle", () => {
         chatId,
         initialMessages: [],
         handlers: {
+          onData: () => {},
           onAttachedFinish: () => {
             events.push({ route: "attached-finish", visibleChatId: chatId })
           },

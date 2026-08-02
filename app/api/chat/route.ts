@@ -8,6 +8,10 @@ import {
   CHAT_PERF_ID_HEADER,
   createChatPerfServerSession,
 } from "@/lib/observability/chat-performance"
+import {
+  getSanitizedExceptionSummary,
+  sanitizeExceptionForTelemetry,
+} from "@/lib/observability/sentry-scrubbing"
 import * as Sentry from "@sentry/nextjs"
 import {
   checkServerSideUsage,
@@ -35,10 +39,6 @@ function setChatConversationCorrelation(chatId: string): void {
     sentryWithConversationApi.setConversationId(chatId)
   }
   Sentry.setContext("chat_conversation", { id: chatId })
-}
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 // Thin HTTP adapter over the Chat turn runtime (CONTEXT.md;
@@ -221,12 +221,13 @@ export async function POST(req: Request) {
     await perf.span("prepare_total", () => turn!.prepare())
     return turn.toResponse(req.signal)
   } catch (err: unknown) {
-    console.error("Error in /api/chat:", err)
-    const error = err as {
-      code?: string
-      message?: string
-      statusCode?: number
-    }
+    console.error(
+      JSON.stringify({
+        _tag: "chat_route_error",
+        requestId,
+        ...getSanitizedExceptionSummary(err),
+      })
+    )
 
     if (turn) {
       // Post-runtime error: the turn owns MCP cleanup, the durable-run failure
@@ -235,15 +236,15 @@ export async function POST(req: Request) {
         await turn.fail(err)
       } catch (failError) {
         const originalErrorType = classifyChatError(err)
+        const failSummary = getSanitizedExceptionSummary(failError)
         console.warn(
           JSON.stringify({
             _tag: "chat_turn_fail_failed",
             requestId,
-            chatId: telemetryChatId,
-            error: getErrorMessage(failError),
+            ...failSummary,
           })
         )
-        Sentry.captureException(failError, {
+        Sentry.captureException(sanitizeExceptionForTelemetry(failError), {
           tags: {
             route: "api/chat",
             ...(telemetryModel ? { chat_model: telemetryModel } : {}),
@@ -258,12 +259,11 @@ export async function POST(req: Request) {
           },
           extra: {
             requestId,
-            chatId: telemetryChatId,
             model: telemetryModel,
             errorType: originalErrorType,
             isAuthenticated: telemetryIsAuthenticated,
             messageCount: telemetryMessageCount,
-            originalError: getErrorMessage(err),
+            originalErrorName: getSanitizedExceptionSummary(err).errorName,
           },
         })
       }
@@ -275,7 +275,7 @@ export async function POST(req: Request) {
       // `turn != null` and routes to `turn.fail()`; this branch only captures.
       // Keep durable-state creation inside the runtime to preserve that split.
       const errorType = classifyChatError(err)
-      Sentry.captureException(err, {
+      Sentry.captureException(sanitizeExceptionForTelemetry(err), {
         tags: {
           route: "api/chat",
           ...(telemetryModel ? { chat_model: telemetryModel } : {}),
@@ -288,7 +288,6 @@ export async function POST(req: Request) {
         },
         extra: {
           requestId,
-          chatId: telemetryChatId,
           model: telemetryModel,
           errorType,
           isAuthenticated: telemetryIsAuthenticated,
@@ -298,6 +297,6 @@ export async function POST(req: Request) {
       })
     }
 
-    return createErrorResponse(error)
+    return createErrorResponse(err)
   }
 }

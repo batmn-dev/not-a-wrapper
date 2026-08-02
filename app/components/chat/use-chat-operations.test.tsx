@@ -174,7 +174,6 @@ describe("useChatOperations", () => {
 
     expect(ensured).toEqual({ chatId: "local-fresh" })
     expect(createFirstTurnChat).toHaveBeenCalledWith({
-      title: "Question",
       model: "openai/gpt-5-mini",
       systemPrompt: "system",
       guestUserId: "guest_1",
@@ -232,7 +231,6 @@ describe("useChatOperations", () => {
       },
     })
     expect(createFirstTurnChat).toHaveBeenCalledWith({
-      title: "Read this",
       model: "openai/gpt-5-mini",
       systemPrompt: "system",
       projectId: "project-1",

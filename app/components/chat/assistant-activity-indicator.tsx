@@ -52,11 +52,6 @@ export function AssistantActivityIndicator({
           className={cn("flex min-w-0 items-center gap-2", className)}
           data-activity-presentation="disclosure"
         >
-          {presentation.passiveLabel ? (
-            <span className="text-muted-foreground text-base leading-6 font-normal">
-              {presentation.passiveLabel}
-            </span>
-          ) : null}
           {onOpenChange ? (
             <ActivityPanelTrigger
               open={open}

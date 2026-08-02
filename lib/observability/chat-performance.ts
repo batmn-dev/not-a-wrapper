@@ -97,6 +97,7 @@ export const CHAT_PERF_SPAN_NAMES = [
   "tool_preparation",
   "durable_prepare",
   "message_validation",
+  "model_bound_validation",
   "attachment_resolution",
   "history_adaptation",
   "stream_start",

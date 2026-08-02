@@ -1,5 +1,25 @@
 # OpenAI image attachment loss after web-search replay
 
+> Resolved on 2026-08-01: model-bound replay now projects historical
+> provider-executed activity before validation and fails closed if the projected
+> history violates the target registry. The plaintext fallback described below
+> was removed, so supported files, images, text, and citations are preserved.
+> The remainder of this document is retained as historical investigation
+> evidence.
+>
+> Review addendum (2026-08-01, live-verified): removing the fallback alone
+> regressed every same-provider OpenAI follow-up turn — history text/reasoning
+> parts persist `providerMetadata.openai.itemId` (msg_/rs_), which the
+> Responses serializer turns into server-side `item_reference` lookups under
+> the default `store: true`, and the API 400s (`invalid_value` on `input`).
+> The completing fix lives in the OpenAI history adapter
+> (`app/api/chat/adapters/openai.ts`): strip BOTH `providerMetadata` and
+> `callProviderMetadata` from every history part so OpenAI replay is always
+> self-contained. Regression coverage:
+> `app/api/chat/provider-request-replay-matrix.test.ts` ("replays
+> same-provider OpenAI text/reasoning history as content, never
+> item_reference lookups").
+
 | Field | Value |
 | --- | --- |
 | Investigation date | 2026-07-15 |

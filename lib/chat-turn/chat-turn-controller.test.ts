@@ -1000,9 +1000,14 @@ describe("chat turn controller", () => {
           systemPrompt: "custom system",
           enableSearch: true,
           chatVersion: 1,
+          // First-user-message edit: the client only FLAGS the title for
+          // regeneration — the server owns the race-safe title write.
           edit: expect.objectContaining({
             editedMessageId: "user-1",
-            title: "new text",
+            regenerateTitle: true,
+            replacementMessage: expect.objectContaining({
+              parts: [{ type: "text", text: "new text" }, targetFile],
+            }),
           }),
         }),
       }
@@ -1111,16 +1116,20 @@ describe("chat turn controller", () => {
           systemPrompt: "custom system",
           enableSearch: true,
           chatVersion: 1,
+          // Exact shape on purpose: a resurrected client-side `title` (the
+          // pre-race-safe contract) must fail this assertion — the server
+          // regenerates the title from the regenerateTitle flag alone.
           edit: {
             editedMessageId: "user-1",
             editCutoffTimestamp: targetCreatedAt.getTime(),
             expectedChatVersion: 4,
-            replacementMessage: expect.objectContaining({
+            replacementMessage: {
               id: "optimistic-edit-message",
               role: "user",
               content: "new text",
-            }),
-            title: "new text",
+              parts: [{ type: "text", text: "new text" }],
+            },
+            regenerateTitle: true,
           },
         }),
       }

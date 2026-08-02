@@ -17,6 +17,8 @@ import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
   type ChatTransport,
+  type DataUIPart,
+  type UIDataTypes,
 } from "ai"
 import { useCallback, useLayoutEffect, useState } from "react"
 
@@ -29,6 +31,7 @@ export type ChatStreamFinishEvent = {
 }
 
 export type ChatStreamHandlers = {
+  onData: (part: DataUIPart<UIDataTypes>) => void
   onAttachedFinish: (event: ChatStreamFinishEvent) => void | Promise<void>
   onDetachedFinish: (
     originChatId: string | null,
@@ -306,6 +309,7 @@ function createDetachableChatStreamOwner(
           armedContinuationApprovalIds = []
           routeFinish(binding, event)
         },
+        onData: (part) => handlers?.onData(part),
         onError: (error) => {
           if (armedContinuationApprovalIds.length > 0) {
             restoreLocallyResolvedApprovals(armedContinuationApprovalIds)

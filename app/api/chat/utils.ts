@@ -1,6 +1,10 @@
 import { UIMessage as MessageAISDK } from "ai"
 import type { ModelMessage } from "ai"
 import { normalizeChatError, type PublicChatErrorContext } from "./public-error"
+import {
+  isPublicChatHttpError,
+  type PublicChatHttpError,
+} from "./public-http-error"
 
 /**
  * Check if a part is tool-related (v5 uses parts with type starting with 'tool-')
@@ -131,6 +135,21 @@ export function isConvexArgumentValidationError(error: unknown): boolean {
 }
 
 /**
+ * Legacy diagnostic helper retained for repository-local offline probes. The
+ * production replay path no longer scans serialized content or branches on
+ * identifier-looking text; provider-hosted parts are projected structurally.
+ */
+export function hasProviderLinkedResponseIds(
+  modelMessages: ModelMessage[]
+): boolean {
+  try {
+    return /\b(?:msg|rs|ws)_[a-zA-Z0-9]+\b/.test(JSON.stringify(modelMessages))
+  } catch {
+    return false
+  }
+}
+
+/**
  * Drop system-role history rather than enabling `allowSystemInMessages`.
  * These entries are legacy or client-controlled artifacts, not trusted
  * instructions; promoting them would cross a privilege boundary. Returns the
@@ -147,84 +166,6 @@ export function excludeSystemRoleMessages(messages: MessageAISDK[]): {
 }
 
 /**
- * Detect provider-linked response item identifiers in converted model messages.
- * These IDs (msg_/rs_/ws_) can trigger replay pairing errors in Responses APIs
- * when the required companion items are not present.
- */
-export function hasProviderLinkedResponseIds(
-  modelMessages: ModelMessage[]
-): boolean {
-  try {
-    const serialized = JSON.stringify(modelMessages)
-    return /\b(?:msg|rs|ws)_[a-zA-Z0-9]+\b/.test(serialized)
-  } catch {
-    return false
-  }
-}
-
-/**
- * Build a conservative plain-text transcript from UI messages.
- * Used as a safety fallback when provider-linked replay artifacts are detected.
- */
-export function toPlainTextModelMessages(
-  messages: MessageAISDK[]
-): ModelMessage[] {
-  const modelMessages: ModelMessage[] = []
-
-  for (const message of messages) {
-    if (
-      message.role !== "system" &&
-      message.role !== "user" &&
-      message.role !== "assistant"
-    ) {
-      continue
-    }
-
-    const text = (message.parts || [])
-      .filter((part) => part.type === "text")
-      .map((part) => ("text" in part ? (part.text ?? "") : ""))
-      .join("\n\n")
-
-    modelMessages.push({
-      role: message.role,
-      content: text,
-    })
-  }
-
-  return modelMessages
-}
-
-/**
- * Strip provider-linked metadata (`callProviderMetadata` / `providerMetadata`)
- * from every part of a UI message WITHOUT touching part semantics. Used on the
- * live continuation tail when the plaintext replay fallback fires: the tail
- * must keep its full parts — the approval-responded tool call the SDK executes
- * THIS turn — so only the replay-pairing ids (msg_/rs_/ws_ carriers) are
- * removed instead of flattening the message to text.
- */
-export function stripProviderLinkedMetadataFromMessage(
-  message: MessageAISDK
-): MessageAISDK {
-  const parts = message.parts.map((part) => {
-    if (!part || typeof part !== "object") return part
-    const record = part as Record<string, unknown>
-    if (
-      !("callProviderMetadata" in record) &&
-      !("providerMetadata" in record)
-    ) {
-      return part
-    }
-    const {
-      callProviderMetadata: _callProviderMetadata,
-      providerMetadata: _providerMetadata,
-      ...rest
-    } = record
-    return rest as typeof part
-  })
-  return { ...message, parts }
-}
-
-/**
  * Extract a user-friendly error message from various error types
  * Used for streaming errors that need to be forwarded to the client
  * @param error - The error from AI SDK or other sources
@@ -238,37 +179,30 @@ export function extractErrorMessage(
 }
 
 /**
- * Create error response for API endpoints
- * @param error - Error object with optional statusCode and code
- * @returns Response object with proper status and JSON body
+ * Create error response for API endpoints.
+ *
+ * Message passthrough is a TRUST decision: only PublicChatHttpError instances
+ * are app-authored, client-safe contracts. Arbitrary statusCode/code fields do
+ * not confer trust because provider and SDK errors use the same property names.
  */
-export function createErrorResponse(error: {
-  code?: string
-  message?: string
-  statusCode?: number
-}): Response {
-  // Handle daily limit first (existing logic)
-  if (error.code === "DAILY_LIMIT_REACHED") {
-    return new Response(
-      JSON.stringify({ error: error.message, code: error.code }),
-      { status: 403 }
-    )
-  }
-
-  // Handle stream errors with proper status codes
-  if (error.statusCode) {
+export function createErrorResponse(error: unknown): Response {
+  if (isPublicChatHttpError(error)) {
+    const publicError: PublicChatHttpError = error
     return new Response(
       JSON.stringify({
-        error: error.message || "Request failed",
-        code: error.code || "REQUEST_ERROR",
+        error: publicError.message,
+        code: publicError.code,
       }),
-      { status: error.statusCode }
+      { status: publicError.statusCode }
     )
   }
 
-  // Fallback for other errors
+  // Everything else is an internal failure — never echo its message.
   return new Response(
-    JSON.stringify({ error: error.message || "Internal server error" }),
+    JSON.stringify({
+      error: "An unexpected error occurred. Please try again.",
+      code: "INTERNAL_ERROR",
+    }),
     { status: 500 }
   )
 }

@@ -67,6 +67,17 @@ export default defineSchema({
   chats: defineTable({
     userId: v.id("users"),
     title: v.optional(v.string()),
+    // Title generation is compare-and-set: a late model result may replace
+    // only the provisional title version it was created for. A manual rename
+    // becomes authoritative and is never overwritten by background work.
+    titleSource: v.optional(
+      v.union(
+        v.literal("provisional"),
+        v.literal("generated"),
+        v.literal("user")
+      )
+    ),
+    titleGeneration: v.optional(v.number()),
     model: v.optional(v.string()),
     systemPrompt: v.optional(v.string()),
     projectId: v.optional(v.id("projects")),

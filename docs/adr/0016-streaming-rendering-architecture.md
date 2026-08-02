@@ -1,6 +1,6 @@
 # 16. Streaming rendering: direct HTTP foreground, incremental projection, Convex durability
 
-- Status: accepted (2026-07-27)
+- Status: accepted (2026-07-27), amended (2026-07-31)
 - Date: 2026-07-27
 - Related: ADR-0009 (durable turn runtime — 750 ms snapshot cadence, unchanged),
   ADR-0011 (settlement, unchanged), ADR-0013 (back-navigation detach, unchanged),
@@ -93,19 +93,21 @@ discarded.
 
 ### Notification cadence
 
-The accepted target is one browser-frame coalescing window.
-`CHAT_MESSAGE_THROTTLE_MS` is **16 ms**, with **32 ms** retained only as the
-single rollback value if the production-browser gates fail. The historical
-50 ms setting and 300 ms code-highlight throttle describe the
-pre-implementation baseline, not the accepted architecture. No rAF scheduler,
-displayed-text copy, provider-specific cadence, or feature flag is introduced.
+The accepted target is one frame-aligned message publication, implemented by
+`useFrameAlignedChat`. AI SDK continues to update its `Chat.messages`
+canonical snapshot for every stream part; the adapter coalesces only React's
+message-subscriber notification with `requestAnimationFrame`. This follows
+60 Hz, 90 Hz, 120 Hz, and variable-refresh displays instead of treating a
+fixed 16 ms wall-clock interval as a frame. There is no displayed-text copy,
+provider-specific client cadence, or feature flag.
 
-The installed AI SDK continues to own message notification coalescing.
-Status and error subscriptions remain immediate, and a render triggered by
-one of those subscriptions reads the latest message snapshot through
-`useSyncExternalStore`. Terminal-ordering tests cover completion, Stop,
-transport error, and approval pause while a trailing 16 ms notification is
-pending.
+Writes outside an active stream publish synchronously. Status and error keep
+their own immediate subscriptions, and any transition out of `streaming`
+flushes the latest message snapshot synchronously after cancelling the pending
+frame. Terminal-ordering tests cover completion, Stop, transport error, and
+approval pause and prove that no trailing notification survives settlement.
+The historical 50/16 ms settings describe earlier implementations, not the
+current architecture.
 
 Production-browser selection evidence is recorded separately from this
 architectural decision. A candidate build is not release-validated until the
@@ -117,23 +119,36 @@ normal and 4× CPU frame gates in the results document pass.
 provider/model that traces prove emits visually unacceptable bursts after
 this client path, and never to conceal renderer slowness.
 
-**Escape hatch exercised (2026-07-28).** The investigation found that
-Anthropic's serving path emits ~90–430-char text slabs every ~100–400 ms,
+**Escape hatch exercised (2026-07-28; adaptive amendment 2026-07-31).** The
+investigation found that direct Anthropic Haiku 4.5
+(`claude-haiku-4-5-20251001`) emits ~90–430-char text slabs every ~100–400 ms,
 which this client path faithfully paints as slabs. The implementation is
 `createWordChunkingTransform` (`app/api/chat/word-chunking-transform.ts`) at
 the server `streamText` seam — NOT the SDK's `smoothStream`, whose installed
-version also delays reasoning deltas and holds timers across aborts. The
-gate is the evidence itself rather than a provider allowlist: deltas at or
-below 24 chars pass through untouched and synchronously (word-granular
-providers pay nothing), and only oversized slabs are word-split, paced
-against the provider's own observed inter-delta gap so added latency stays
-bounded below one gap (≤ 360 ms). Text deltas only; abort cancels all
-pacing immediately through the runtime execution signal and emits the abort
+version also delays reasoning deltas and holds timers across aborts. Runtime
+eligibility is limited to that measured provider/model pair; every other
+provider/model retains its raw text-delta behavior until equivalent traces
+justify another entry. Once eligible, word-like segments are reconstructed
+across arbitrary provider delta boundaries using `Intl.Segmenter`, so both one
+large slab and many small deltas delivered in a network burst enter the same
+pacing queue. Drain rate follows an exponential
+arrival-rate estimate with 1.1× headroom; queue pressure accelerates it enough
+to cap intentional lag at 400 ms. Word spacing normally stays between 5 and
+80 ms. Already-slow complete, boundary-terminated word chunks avoid further
+pacing when their next scheduled reveal time has already passed. An incomplete
+terminal word is held for at most 80 ms to reconstruct cross-delta words
+without making time-to-first-visible-text depend on the provider's next
+boundary. The deadline is per held word: it arms on the word's first fragment,
+is never extended by later fragments of the same word, and restarts only when a
+completed word leaves the buffer — so a word that completes within its own
+80 ms window is never flushed mid-word by a timer armed for an earlier word.
+
+Text deltas only; non-text parts preserve their order behind preceding text.
+Abort cancels all pacing immediately through the runtime execution signal,
+drops both the queued suffix and any partial word, and emits the abort
 terminal itself when the provider has already filled AI SDK's upstream queue.
-That explicit terminal prevents a stopped mid-drain slab from closing as a
-successful completion. Wire-verified per provider: OpenAI 188 deltas/med 5
-chars (pass-through), Anthropic Haiku 154 deltas/med 6 chars (was ~16 slabs of
-~360), Gemini 153 deltas/med 5 chars.
+That explicit terminal prevents a stopped mid-drain response from closing as
+a successful completion.
 
 ### Growing single-block shapes (amendment, 2026-07-28)
 
@@ -188,8 +203,8 @@ renderer can be optimized without changing document semantics:
   verified context: 88.6 ms → ~0.4 ms per update on a ~100 KB response
   (236×, M4 Max Node harness, context verification included), removing the
   long-task-per-notification failure class at its root.
-- The renderer no longer needs protecting: the throttle is a smoothness/
-  batching choice, not a survival mechanism.
+- The renderer no longer needs protecting: frame-aligned publication is a
+  smoothness/batching choice, not a survival mechanism.
 - Recovery semantics are unchanged and re-verified: reload, navigation,
   second-tab projection, cross-tab durable Stop, and settlement convergence
   behave identically on the production build.

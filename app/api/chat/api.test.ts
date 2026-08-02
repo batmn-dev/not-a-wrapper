@@ -1,6 +1,6 @@
 import { fetchQuery } from "convex/nextjs"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { checkServerSideUsage } from "./api"
+import { checkServerSideUsage, validateAndTrackUsage } from "./api"
 import { createErrorResponse } from "./utils"
 
 vi.mock("convex/nextjs", () => ({
@@ -107,6 +107,47 @@ describe("checkServerSideUsage", () => {
     await expect(response.json()).resolves.toEqual({
       error: "Internal server error",
       code: "USAGE_CHECK_FAILED",
+    })
+  })
+
+  it("preserves the branded DAILY_LIMIT_REACHED public contract", async () => {
+    vi.mocked(fetchQuery).mockResolvedValue({
+      canSend: false,
+      remaining: 0,
+      limit: 5,
+      isAnonymous: true,
+    })
+
+    const error = await checkServerSideUsage(
+      undefined,
+      "gpt-5-mini",
+      "guest-id"
+    ).then(
+      () => null,
+      (caught) => caught
+    )
+    const response = createErrorResponse(error)
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({
+      code: "DAILY_LIMIT_REACHED",
+      error: expect.stringContaining("Daily message limit reached"),
+    })
+  })
+})
+
+describe("validateAndTrackUsage", () => {
+  it("preserves the branded authentication contract", async () => {
+    await expect(
+      validateAndTrackUsage({
+        userId: "guest-id",
+        model: "gpt-5.2",
+        isAuthenticated: false,
+        token: undefined,
+      })
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: "AUTH_REQUIRED",
+      message: expect.stringContaining("requires authentication"),
     })
   })
 })

@@ -121,6 +121,45 @@ describe("MessageAssistant activity trigger", () => {
     expect(store.getState().open).toBe(false)
   })
 
+  it("renders one timed disclosure for opaque reasoning with search activity", () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+    const parts = [
+      { type: "reasoning", text: "", state: "done" },
+      {
+        type: "tool-web_search",
+        toolCallId: "search-1",
+        state: "output-available",
+        input: { query: "Tommy Geoco" },
+        output: {},
+      },
+    ] as unknown as UIMessage["parts"]
+
+    act(() => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView(parts, "ready", { reasoningDurationMs: 1600 })}
+            status="ready"
+          >
+            {"Answer"}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    const indicator = container?.querySelector(
+      '[data-activity-presentation="disclosure"]'
+    )
+    expect(indicator?.textContent).toBe("Worked for 1s")
+    expect(
+      container?.querySelector(
+        'button[aria-label="Open activity: Worked for 1s"]'
+      )
+    ).toBeTruthy()
+    expect(container?.textContent).not.toContain("Thought for")
+  })
+
   it("preserves the current-session duration while finish metadata hydrates", () => {
     const store = makeStore({
       panelTurnId: "assistant-1",

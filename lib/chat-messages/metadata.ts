@@ -47,8 +47,9 @@ export {
  * The metadata mode a durable message is projected into.
  *  - `extended`: the full set of server-owned telemetry keys (the default for
  *    rendered, persisted chats).
- *  - `runtime`: a minimal subset for in-flight replay — identity, status, and
- *    error only — so streaming replay does not carry stale telemetry.
+ *  - `runtime`: a minimal subset for in-flight replay — identity, origin
+ *    provider, status, and error only — so provider-linked continuations can
+ *    be pinned without carrying stale telemetry.
  */
 export type MetadataMode = "extended" | "runtime"
 
@@ -86,6 +87,7 @@ export const SERVER_OWNED_METADATA_KEYS: readonly ServerOwnedMetadataKey[] =
 const RUNTIME_METADATA_KEYS: readonly ServerOwnedMetadataKey[] = [
   "durableStatus",
   "durableError",
+  "provider",
 ]
 
 /**
@@ -227,7 +229,7 @@ function clearServerOwnedMetadata(metadata: Record<string, unknown>): void {
  * message id stamp, and branch normalization. Returns a fresh metadata object.
  *
  * `extended` projects the full server-owned set; `runtime` projects identity,
- * status, and error only.
+ * origin provider, status, and error only.
  */
 export function stampServerFields(
   baseMetadata: unknown,

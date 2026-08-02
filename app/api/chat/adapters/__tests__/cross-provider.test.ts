@@ -131,10 +131,11 @@ describe("cross-provider replay matrix", () => {
             (part as { text: string }).text.includes("Amazon links")
         )
       )
-      const replayDropWarning = result.warnings.some(
+      const replayProjectionWarning = result.warnings.some(
         (warning) =>
           warning.code === "replay_compile_warning" &&
-          warning.detail.includes("invariant_block_dropped")
+          warning.detail.includes("tool_lowered_to_text") &&
+          warning.detail.includes("never fabricates Anthropic hosted-tool")
       )
 
       expect(
@@ -143,7 +144,7 @@ describe("cross-provider replay matrix", () => {
         )
       ).toBe(false)
       expect(hasCompiledWebSearch).toBe(false)
-      expect(replayDropWarning).toBe(true)
+      expect(replayProjectionWarning).toBe(true)
       expect(continuityTextKept).toBe(true)
       expect(
         assistant?.parts.some(

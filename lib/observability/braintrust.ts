@@ -1,5 +1,6 @@
 import "server-only"
 import { redactSecretsInString } from "@/lib/observability/secret-patterns"
+import { sanitizeExceptionMessage } from "@/lib/observability/sentry-scrubbing"
 import { scrubForAnalytics } from "@/lib/posthog/scrub"
 import * as ai from "ai"
 import {
@@ -287,7 +288,9 @@ export function getBraintrustErrorMetadata(
         ? maybeRecord.statusCode
         : null,
     errorMessage:
-      typeof maybeRecord?.message === "string" ? maybeRecord.message : null,
+      typeof maybeRecord?.message === "string"
+        ? sanitizeExceptionMessage(maybeRecord.message)
+        : null,
   })
 }
 

@@ -14,7 +14,7 @@ function hasToolPart(parts: Array<{ type: string }>): boolean {
 }
 
 describe("openai replay compiler", () => {
-  it("injects reasoning before replayed tool blocks and keeps final tool output", async () => {
+  it("lowers replayable web_search exchanges to text context with citations", async () => {
     const messages: ReplayMessage[] = [
       {
         id: "msg-openai-compile-1",
@@ -46,25 +46,73 @@ describe("openai replay compiler", () => {
 
     const result = await compileReplay(messages, "openai", context)
     const assistant = result.messages[0]
-    const toolIndex = assistant.parts.findIndex(
-      (part) => part.type.startsWith("tool-") || part.type === "dynamic-tool"
-    )
-    const toolPart = assistant.parts[toolIndex] as {
-      state?: string
-      output?: unknown
-    }
 
-    expect(toolIndex).toBeGreaterThan(0)
+    // Never fabricate an OpenAI hosted tool call: the Responses conversion
+    // would replay it as an item_reference with a foreign id and 400.
+    expect(hasToolPart(assistant.parts)).toBe(false)
+    const contextText = assistant.parts
+      .filter(
+        (part): part is { type: "text"; text: string } => part.type === "text"
+      )
+      .map((part) => part.text)
+      .join("\n")
+    expect(contextText).toContain('web_search for "Batman Amazon links"')
+    expect(contextText).toContain("https://amazon.com/batman-item")
+    expect(contextText).toContain("Batman Item")
     expect(
-      assistant.parts
-        .slice(0, toolIndex)
-        .some((part) => part.type === "reasoning")
+      result.warnings.some((warning) => warning.code === "tool_lowered_to_text")
     ).toBe(true)
-    expect(toolPart.state).toBe("output-available")
-    expect(toolPart.output).toBeDefined()
     expect(result.stats.toolExchangesSeen).toBe(1)
     expect(result.stats.toolExchangesCompiled).toBe(1)
     expect(result.stats.toolExchangesDropped).toBe(0)
+  })
+
+  it("bounds normalized web_search replay while retaining useful citations", async () => {
+    const results = Array.from({ length: 4 }, (_, index) => ({
+      url: `https://example.com/result-${index + 1}${index === 0 ? "/" + "u".repeat(3_000) : ""}`,
+      title: `Result ${index + 1}${index === 0 ? "t".repeat(1_000) : ""}`,
+      snippet: `Snippet ${index + 1}${index === 0 ? "s".repeat(3_000) : ""}`,
+    }))
+    const messages: ReplayMessage[] = [
+      {
+        id: "msg-openai-all-search-results",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-exchange",
+            tool: {
+              toolName: "web_search",
+              replayable: true,
+              webSearch: { query: "all results", results },
+            },
+          },
+        ],
+      },
+    ]
+
+    const result = await compileReplay(messages, "openai", context)
+    const contextText = result.messages[0].parts
+      .filter(
+        (part): part is { type: "text"; text: string } => part.type === "text"
+      )
+      .map((part) => part.text)
+      .join("\n")
+
+    for (const searchResult of results.slice(0, 3)) {
+      expect(contextText).toContain(
+        searchResult.url.slice(0, "https://example.com/result-1".length)
+      )
+      expect(contextText).toContain(searchResult.title.slice(0, 8))
+      expect(contextText).toContain(searchResult.snippet.slice(0, 9))
+    }
+    expect(contextText).not.toContain(results[3].url)
+    expect(contextText).not.toContain(results[0].url)
+    expect(contextText).not.toContain(results[0].title)
+    expect(contextText).not.toContain(results[0].snippet)
+    expect(contextText).toContain(
+      "[1 additional web_search result omitted from replay.]"
+    )
+    expect(contextText.length).toBeLessThan(6_000)
   })
 
   it("drops non-replayable tool exchanges and injects an empty text fallback", async () => {

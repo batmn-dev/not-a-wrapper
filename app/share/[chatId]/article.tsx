@@ -91,7 +91,7 @@ export default function Article({
                   <MessageContent
                     markdown={true}
                     className={cn(
-                      "markdown prose",
+                      "markdown prose prose-static",
                       message.role === "user" && "bg-blue-600 text-white",
                       message.role === "assistant" &&
                         "w-full min-w-full bg-transparent"

@@ -1,5 +1,5 @@
 import type { UIMessage } from "ai"
-import type { ReplayMessage, ReplayPart, ReplayToolExchange } from "../types"
+import type { ReplayMessage, ReplayPart } from "../types"
 import { synthesizePlatformToolFallback } from "./platform-tool-fallback"
 import type {
   ReplayCompileContext,
@@ -8,86 +8,26 @@ import type {
   ReplayCompileStats,
   ReplayCompileWarning,
 } from "./types"
+import { synthesizeWebSearchReplayContext } from "./web-search-context"
 
 type MessagePart = UIMessage["parts"][number]
-type ToolPart = MessagePart & {
-  type: string
-  state?: string
-  toolCallId?: string
-  output?: unknown
-}
 
-const OPENAI_FINAL_TOOL_STATES = new Set([
-  "output-available",
-  "output-error",
-  "output-denied",
-])
+const OPENAI_WEB_SEARCH_REPLAY_LIMITS = {
+  maxResults: 3,
+  maxQueryChars: 512,
+  maxTitleChars: 512,
+  maxUrlChars: 2_048,
+  maxSnippetChars: 2_000,
+} as const
 
-function isReasoningPart(part: MessagePart): boolean {
-  return part.type === "reasoning"
-}
-
-function isToolPart(part: MessagePart): part is ToolPart {
-  return part.type === "dynamic-tool" || part.type.startsWith("tool-")
-}
-
-function hasToolOutput(part: MessagePart): boolean {
-  return isToolPart(part) && "output" in (part as Record<string, unknown>)
-}
-
-function hasFinalToolState(part: MessagePart): boolean {
-  if (!isToolPart(part)) return true
-  if (typeof part.state !== "string") return true
-  return OPENAI_FINAL_TOOL_STATES.has(part.state)
-}
-
-function splitByStepStart(parts: MessagePart[]): MessagePart[][] {
-  const blocks: MessagePart[][] = []
-  let current: MessagePart[] = []
-
-  for (const part of parts) {
-    if (part.type === "step-start") {
-      if (current.length > 0) blocks.push(current)
-      current = []
-      continue
-    }
-    current.push(part)
-  }
-
-  if (current.length > 0) blocks.push(current)
-  return blocks
-}
-
-function buildToolReplayPart(
-  tool: ReplayToolExchange,
-  messageIndex: number,
-  partIndex: number
-): MessagePart | null {
-  if (!tool.replayable || tool.toolName !== "web_search" || !tool.webSearch)
-    return null
-
-  const toolCallId =
-    tool.toolCallId?.trim() || `replay_ws_${messageIndex}_${partIndex}`
-  const query = tool.webSearch.query
-  const sources = tool.webSearch.results.map((result) => ({
-    url: result.url,
-    title: result.title,
-    snippet: result.snippet,
-  }))
-
-  return {
-    type: "tool-web_search",
-    state: "output-available",
-    toolCallId,
-    toolName: "web_search",
-    providerExecuted: true,
-    input: { query },
-    output: {
-      action: "search",
-      sources,
-    },
-  } as MessagePart
-}
+// OpenAI web_search replay is LOWERED to provider-neutral text, never
+// reconstructed as a hosted tool part: the installed @ai-sdk/openai Responses
+// conversion turns provider-executed tool results into server-side
+// `item_reference` lookups keyed by item id, so a fabricated or foreign
+// toolCallId (srvtoolu_/replay_ws_) is a guaranteed 400 — and genuine ws_ ids
+// trip the runtime's provider-linked-id plaintext fallback anyway. Text
+// context with citations is the only replay shape that reliably reaches the
+// model.
 
 function compileAssistantParts(
   parts: ReplayPart[],
@@ -114,113 +54,57 @@ function compileAssistantParts(
     }
 
     if (part.type === "source-url") {
+      compiled.push({
+        type: "text",
+        text: `[Earlier cited source: ${part.title ?? "Source"} (${part.url})]`,
+      } as MessagePart)
       warnings.push({
-        code: "source_url_dropped",
+        code: "source_url_projected",
         messageIndex,
         partIndex,
-        detail: "Dropped source-url part for OpenAI replay invariants.",
+        detail: "Projected source-url to replay-safe citation text.",
       })
       return
     }
 
     stats.toolExchangesSeen += 1
-    const replayToolPart = buildToolReplayPart(
-      part.tool,
-      messageIndex,
-      partIndex
-    )
+    const tool = part.tool
 
-    if (!replayToolPart) {
-      stats.toolExchangesDropped += 1
-
-      const platformFallback = synthesizePlatformToolFallback(part.tool)
-      if (platformFallback) {
-        compiled.push({ type: "text", text: platformFallback } as MessagePart)
+    if (tool.replayable && tool.toolName === "web_search" && tool.webSearch) {
+      const contextText = synthesizeWebSearchReplayContext(
+        tool,
+        "OpenAI-safe replay",
+        OPENAI_WEB_SEARCH_REPLAY_LIMITS
+      )
+      if (contextText) {
+        compiled.push({ type: "text", text: contextText } as MessagePart)
+        stats.toolExchangesCompiled += 1
+        warnings.push({
+          code: "tool_lowered_to_text",
+          messageIndex,
+          partIndex,
+          detail:
+            "Lowered web_search replay to text context for OpenAI (hosted-tool activity does not replay as tool parts).",
+        })
+        return
       }
-
-      warnings.push({
-        code: "tool_non_replayable",
-        messageIndex,
-        partIndex,
-        detail:
-          part.tool.nonReplayableReason ??
-          `Tool "${part.tool.toolName}" is not replayable for OpenAI.`,
-      })
-      return
     }
 
-    compiled.push({ type: "step-start" } as MessagePart)
-    compiled.push({
-      type: "reasoning",
-      state: "done",
-      text: "",
-      reasoning: `Replay tool result for "${part.tool.toolName}" continuity.`,
-    } as unknown as MessagePart)
-    compiled.push(replayToolPart)
-    stats.toolExchangesCompiled += 1
-  })
+    stats.toolExchangesDropped += 1
 
-  return compiled
-}
-
-function enforceAssistantInvariants(
-  parts: MessagePart[],
-  messageIndex: number,
-  warnings: ReplayCompileWarning[],
-  stats: ReplayCompileStats
-): MessagePart[] {
-  const blocks = splitByStepStart(parts)
-  if (blocks.length === 0) return parts
-
-  const compiled: MessagePart[] = []
-
-  blocks.forEach((block) => {
-    const hasTool = block.some((part) => isToolPart(part))
-    if (!hasTool) {
-      compiled.push(...block)
-      return
+    const platformFallback = synthesizePlatformToolFallback(tool)
+    if (platformFallback) {
+      compiled.push({ type: "text", text: platformFallback } as MessagePart)
     }
 
-    const firstToolIndex = block.findIndex((part) => isToolPart(part))
-    const hasReasoningBeforeTool = block
-      .slice(0, firstToolIndex)
-      .some((part) => isReasoningPart(part))
-    const hasReasoningAfterTool = block
-      .slice(firstToolIndex + 1)
-      .some((part) => isReasoningPart(part))
-    const hasInvalidToolParts = block.some(
-      (part) =>
-        isToolPart(part) && (!hasToolOutput(part) || !hasFinalToolState(part))
-    )
-
-    if (hasReasoningAfterTool || hasInvalidToolParts) {
-      warnings.push({
-        code: "invariant_block_dropped",
-        messageIndex,
-        detail:
-          "Dropped replay tool block violating OpenAI invariants (reasoning-after-tool or missing final output).",
-      })
-      stats.invariantsRepaired += 1
-      return
-    }
-
-    if (!hasReasoningBeforeTool) {
-      compiled.push({
-        type: "reasoning",
-        state: "done",
-        text: "",
-        reasoning:
-          "Replay reasoning context injected to preserve OpenAI tool/result invariants.",
-      } as unknown as MessagePart)
-      warnings.push({
-        code: "invariant_reasoning_injected",
-        messageIndex,
-        detail: "Injected missing reasoning part before replayed tool block.",
-      })
-      stats.invariantsRepaired += 1
-    }
-
-    compiled.push(...block)
+    warnings.push({
+      code: "tool_non_replayable",
+      messageIndex,
+      partIndex,
+      detail:
+        tool.nonReplayableReason ??
+        `Tool "${tool.toolName}" is not replayable for OpenAI.`,
+    })
   })
 
   return compiled
@@ -262,12 +146,15 @@ function compileMessage(
       }
 
       if (part.type === "source-url") {
+        nonAssistantParts.push({
+          type: "text",
+          text: `[Earlier cited source: ${part.title ?? "Source"} (${part.url})]`,
+        } as MessagePart)
         warnings.push({
-          code: "source_url_dropped",
+          code: "source_url_projected",
           messageIndex,
           partIndex,
-          detail:
-            "Dropped source-url part in non-assistant message for OpenAI replay.",
+          detail: "Projected source-url to replay-safe citation text.",
         })
       }
     })
@@ -293,14 +180,7 @@ function compileMessage(
     warnings,
     stats
   )
-  const invariantSafe = enforceAssistantInvariants(
-    assistantCompiled,
-    messageIndex,
-    warnings,
-    stats
-  )
-
-  if (invariantSafe.length === 0) {
+  if (assistantCompiled.length === 0) {
     warnings.push({
       code: "message_empty_fallback",
       messageIndex,
@@ -318,7 +198,7 @@ function compileMessage(
   return {
     id: message.id,
     role: message.role,
-    parts: invariantSafe,
+    parts: assistantCompiled,
   } as UIMessage
 }
 

@@ -159,21 +159,48 @@ function validateOpenAIBlock(block: MessagePart[]): BlockValidationResult {
   return { keep: true, parts: sanitized }
 }
 
-function stripProviderMetadataFromToolPart(part: MessagePart): {
+// OpenAI replay must be SELF-CONTAINED. With the Responses API default
+// `store: true`, any history part carrying `providerMetadata.openai.itemId`
+// (msg_/rs_ ids on text and reasoning parts) is serialized as a server-side
+// `item_reference` lookup instead of its actual content — and the API 400s
+// (`invalid_value` on `input`) whenever the referenced items are not
+// retrievable under the current key. Strip BOTH metadata carriers from every
+// history part so replay always sends real content and never provider-linked
+// ids. The live continuation tail never passes through this adapter, so
+// approval-protocol metadata is unaffected.
+function stripProviderMetadataFromPart(part: MessagePart): {
   part: MessagePart
-  hadProviderMetadata: boolean
+  removedMetadataFields: Array<"callProviderMetadata" | "providerMetadata">
 } {
-  if (!isToolPart(part)) {
-    return { part, hadProviderMetadata: false }
+  const record = part as PartWithToolFields & {
+    providerMetadata?: Record<string, unknown>
+  }
+  const hadCallProviderMetadata = record.callProviderMetadata != null
+  const hadProviderMetadata = record.providerMetadata != null
+  const removedMetadataFields: Array<
+    "callProviderMetadata" | "providerMetadata"
+  > = []
+  if (hadCallProviderMetadata) {
+    removedMetadataFields.push("callProviderMetadata")
+  }
+  if (hadProviderMetadata) {
+    removedMetadataFields.push("providerMetadata")
+  }
+  if (!hadCallProviderMetadata && !hadProviderMetadata) {
+    return { part, removedMetadataFields }
   }
 
-  const toolPart = part as PartWithToolFields
-  const hadProviderMetadata = toolPart.callProviderMetadata != null
-  const stripped = stripCallProviderMetadata(toolPart) as MessagePart
+  const stripped = stripCallProviderMetadata(record) as MessagePart & {
+    providerMetadata?: Record<string, unknown>
+  }
+  if (hadProviderMetadata) {
+    const { providerMetadata: _providerMetadata, ...rest } = stripped
+    return { part: rest as MessagePart, removedMetadataFields }
+  }
 
   return {
     part: stripped,
-    hadProviderMetadata,
+    removedMetadataFields,
   }
 }
 
@@ -223,14 +250,14 @@ export const openaiAdapter: ProviderHistoryAdapter = {
             continue
           }
 
-          const stripped = stripProviderMetadataFromToolPart(part)
-          if (stripped.hadProviderMetadata) {
+          const stripped = stripProviderMetadataFromPart(part)
+          if (stripped.removedMetadataFields.length > 0) {
             stats.providerIdsStripped += 1
             incrementStat(stats.partsTransformed, part.type)
             warnings.push({
               code: "provider_ids_stripped",
               messageIndex,
-              detail: `Stripped callProviderMetadata from ${part.type}`,
+              detail: `Stripped ${stripped.removedMetadataFields.join(" and ")} from ${part.type}`,
             })
           } else {
             incrementStat(stats.partsPreserved, part.type)
@@ -303,14 +330,14 @@ export const openaiAdapter: ProviderHistoryAdapter = {
             continue
           }
 
-          const stripped = stripProviderMetadataFromToolPart(part)
-          if (stripped.hadProviderMetadata) {
+          const stripped = stripProviderMetadataFromPart(part)
+          if (stripped.removedMetadataFields.length > 0) {
             stats.providerIdsStripped += 1
             incrementStat(stats.partsTransformed, part.type)
             warnings.push({
               code: "provider_ids_stripped",
               messageIndex,
-              detail: `Stripped callProviderMetadata from ${part.type}`,
+              detail: `Stripped ${stripped.removedMetadataFields.join(" and ")} from ${part.type}`,
             })
           } else {
             incrementStat(stats.partsPreserved, part.type)

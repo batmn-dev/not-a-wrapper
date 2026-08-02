@@ -2,6 +2,7 @@ import type { TextStreamPart, ToolSet } from "ai"
 import { describe, expect, it, vi } from "vitest"
 import {
   createWordChunkingTransform,
+  isWordChunkingEligible,
   splitIntoWordChunks,
 } from "./word-chunking-transform"
 
@@ -49,11 +50,143 @@ describe("splitIntoWordChunks", () => {
   })
 })
 
+describe("isWordChunkingEligible", () => {
+  it("enables only the provider/model pair measured through this app", () => {
+    expect(
+      isWordChunkingEligible({
+        provider: "anthropic",
+        model: "claude-haiku-4-5-20251001",
+      })
+    ).toBe(true)
+
+    expect(
+      isWordChunkingEligible({
+        provider: "anthropic",
+        model: "claude-sonnet-5",
+      })
+    ).toBe(false)
+    expect(
+      isWordChunkingEligible({
+        provider: "openrouter",
+        model: "openrouter:anthropic/claude-haiku-4.5",
+      })
+    ).toBe(false)
+    expect(
+      isWordChunkingEligible({ provider: "openai", model: "gpt-5-mini" })
+    ).toBe(false)
+  })
+})
+
 describe("createWordChunkingTransform", () => {
   it("passes word-granular deltas through untouched and in order", async () => {
     const parts = [textDelta("Hello "), textDelta("world.")]
     const outputs = await run(parts)
     expect(outputs.map((o) => o.part)).toEqual(parts)
+  })
+
+  it("reconstructs word chunks across arbitrary provider delta boundaries", async () => {
+    const outputs = await run([
+      textDelta("Hel"),
+      textDelta("lo "),
+      textDelta("wor"),
+      textDelta("ld."),
+    ])
+    expect(outputs.map(({ part }) => (part as { text: string }).text)).toEqual([
+      "Hello ",
+      "world.",
+    ])
+  })
+
+  it("flushes an unfinished word within the partial-word holdback budget", async () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(0)
+      const transform = makeTransform()
+      const writer = transform.writable.getWriter()
+      const reader = transform.readable.getReader()
+      let delivered = false
+      const firstRead = reader.read().then((result) => {
+        delivered = true
+        return result
+      })
+
+      await writer.write(textDelta("Hello"))
+      await vi.advanceTimersByTimeAsync(79)
+      expect(delivered).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(1)
+      await expect(firstRead).resolves.toMatchObject({
+        done: false,
+        value: { type: "text-delta", id: "t1", text: "Hello" },
+      })
+
+      await writer.close()
+      await expect(reader.read()).resolves.toEqual({
+        done: true,
+        value: undefined,
+      })
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("restarts the holdback deadline per held word, not per timer cycle", async () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(0)
+      const transform = makeTransform()
+      const writer = transform.writable.getWriter()
+      const reader = transform.readable.getReader()
+      const texts: string[] = []
+      const pump = (async () => {
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) return
+          texts.push((value as { text: string }).text)
+        }
+      })()
+
+      // Leading-space token cadence: each delta completes the previous word
+      // and starts holding a new one.
+      await writer.write(textDelta("The"))
+      await vi.advanceTimersByTimeAsync(30)
+      await writer.write(textDelta(" quick"))
+      await vi.advanceTimersByTimeAsync(30)
+      await writer.write(textDelta(" brown"))
+
+      // "brown" arrived at t=60, so its deadline is t=140. A timer surviving
+      // from t=0 would flush it mid-cycle at t=80 after only 20 ms of hold.
+      await vi.advanceTimersByTimeAsync(79)
+      expect(texts).toEqual(["The ", "quick "])
+      await vi.advanceTimersByTimeAsync(1)
+      expect(texts).toEqual(["The ", "quick ", "brown"])
+
+      await writer.close()
+      await pump
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("uses word segmentation for text without spaces", async () => {
+    const text = "你好世界，欢迎回来。"
+    const outputs = await run([textDelta(text)])
+    expect(
+      outputs.map(({ part }) => (part as { text: string }).text).join("")
+    ).toBe(text)
+    expect(outputs.length).toBeGreaterThan(2)
+  })
+
+  it("paces a burst made entirely of small provider deltas", async () => {
+    const parts = Array.from({ length: 80 }, () => textDelta("word "))
+    const outputs = await run(parts)
+    expect(
+      outputs.map(({ part }) => (part as { text: string }).text).join("")
+    ).toBe("word ".repeat(parts.length))
+    expect(outputs[outputs.length - 1].atMs).toBeGreaterThan(150)
+    expect(outputs[outputs.length - 1].atMs).toBeLessThan(500)
   })
 
   it("splits an oversized slab into word deltas with exact content and identity fields", async () => {
@@ -92,12 +225,13 @@ describe("createWordChunkingTransform", () => {
   })
 
   it("bounds total added latency below one spread budget even for large slabs", async () => {
-    // A same-instant slab (no prior gap) must drain within the MIN_SPREAD
-    // floor plus slack — the bounded-lag guarantee, not a fixed per-word tax.
+    // A same-instant slab must drain within the queue-lag budget plus slack —
+    // the bounded-lag guarantee, not a fixed per-word tax.
     const slab = textDelta(Array.from({ length: 120 }, () => "word").join(" "))
     const outputs = await run([slab])
     expect(outputs.length).toBeGreaterThan(100)
     const lastAt = outputs[outputs.length - 1].atMs
+    expect(lastAt).toBeGreaterThan(150)
     expect(lastAt).toBeLessThan(500)
   })
 
@@ -131,16 +265,16 @@ describe("createWordChunkingTransform", () => {
       const writer = transform.writable.getWriter()
       const reader = transform.readable.getReader()
       const slab = textDelta(
-        // Few enough chunks for the 40 ms pacing floor to schedule a sleep.
+        // Few enough chunks for adaptive pacing to schedule a sleep.
         Array.from({ length: 20 }, (_, i) => `w${i}`).join(" ")
       )
-      void writer.write(textDelta("tiny"))
+      void writer.write(textDelta("tiny "))
       await reader.read()
       vi.setSystemTime(120)
       const writePromise = writer.write(slab)
       await reader.read() // first word emitted, transform is sleeping
       await writePromise
-      expect(vi.getTimerCount()).toBe(1)
+      expect(vi.getTimerCount()).toBeGreaterThan(0)
 
       await reader.cancel()
       const closePromise = writer.close().catch(() => undefined)
@@ -172,7 +306,7 @@ describe("createWordChunkingTransform", () => {
       const first = await reader.read()
       await writePromise
       expect(first.value).toMatchObject({ type: "text-delta", text: "w0 " })
-      expect(vi.getTimerCount()).toBe(1)
+      expect(vi.getTimerCount()).toBeGreaterThan(0)
 
       execution.abort(new Error("run stopped"))
       await vi.advanceTimersByTimeAsync(0)

@@ -161,7 +161,7 @@ const vStoredMessage = v.object({
   parts: v.any(),
 })
 
-const vEditIntent = v.object({
+export const vEditIntent = v.object({
   editedMessageId: v.string(),
   editCutoffTimestamp: v.number(),
   expectedChatVersion: v.number(),
@@ -171,6 +171,11 @@ const vEditIntent = v.object({
     content: v.string(),
     parts: v.any(),
   }),
+  regenerateTitle: v.optional(v.boolean()),
+  // Deploy-compat only: pre-title-generation clients send the edited text as
+  // `title`. Convex object validators reject unknown fields, so dropping this
+  // would 400 every first-message edit from a stale tab. Accepted and ignored;
+  // remove once no deployed client builds the legacy edit shape.
   title: v.optional(v.string()),
 })
 
@@ -799,7 +804,7 @@ type GenerationEditIntent = {
   editCutoffTimestamp: number
   expectedChatVersion: number
   replacementMessage: StoredUserMessage & { content: string }
-  title?: string
+  regenerateTitle?: boolean
 }
 
 type GenerationRegenerationIntent = {
@@ -957,7 +962,7 @@ export async function applyEditIntentForGeneration(
     edit: GenerationEditIntent
   },
   now: number
-) {
+): Promise<number | undefined> {
   // Same guard contract as the regeneration guard above: raw projection,
   // matching the client's rendered count; never normalize before guarding.
   const currentMessages = await listMessages(ctx, args.chatId)
@@ -991,6 +996,13 @@ export async function applyEditIntentForGeneration(
     throw new Error("Edited message version changed")
   }
 
+  const firstSelectedUserMessage = selectedMessages.find(
+    (message) => message.role === "user"
+  )
+  const isEditingFirstSelectedUserMessage =
+    editedMessage !== undefined &&
+    firstSelectedUserMessage?._id === editedMessage._id
+
   await createMessageBranchWriter(ctx, {
     chatId: args.chatId,
     now,
@@ -1005,9 +1017,21 @@ export async function applyEditIntentForGeneration(
     replaces: editedMessage?._id,
   })
 
-  if (args.edit.title) {
-    await ctx.db.patch(args.chatId, { title: args.edit.title })
+  if (
+    args.edit.regenerateTitle &&
+    isEditingFirstSelectedUserMessage &&
+    owner.chat.titleSource !== "user"
+  ) {
+    const titleGeneration = (owner.chat.titleGeneration ?? 0) + 1
+    await ctx.db.patch(args.chatId, {
+      title: "New chat",
+      titleSource: "provisional",
+      titleGeneration,
+    })
+    return titleGeneration
   }
+
+  return undefined
 }
 
 function applyApprovalResponseToParts(
@@ -1048,16 +1072,33 @@ export function resolveCanonicalApprovalDecision(
   approval: StoredApprovalDecision,
   response: ApprovalResponse
 ): CanonicalApprovalDecision {
+  // Rejections here are branded so the HTTP boundary answers with an
+  // intentional 409 contract instead of redacting an unbranded Error to 500.
+  // Expired and divergent decisions are CONTINUATION CONFLICTS — a winner
+  // exists and this tab observes it through the projection, so the client
+  // swallows them. A still-pending approval is NOT a conflict: no decision
+  // ever landed (the resolve mutation failed or was skipped), nothing will
+  // repaint, and the user must be told to decide again — its distinct brand
+  // keeps it out of the client's swallow path.
   if (approval.status === "pending") {
-    throw new Error("Approval has not been resolved")
+    throw new ConvexError({
+      code: "approval_unresolved",
+      message: "Approval has not been resolved",
+    })
   }
   if (approval.status === "expired") {
-    throw new Error("Approval has expired")
+    throw new ConvexError({
+      code: "approval_continuation_conflict",
+      message: "Approval has expired",
+    })
   }
 
   const approved = approval.status === "approved"
   if (response.approved !== approved) {
-    throw new Error("Approval response does not match stored approval decision")
+    throw new ConvexError({
+      code: "approval_continuation_conflict",
+      message: "Approval response does not match stored approval decision",
+    })
   }
 
   return {
@@ -1187,6 +1228,7 @@ export async function denyPendingApprovalsForChat(
 export async function applyApprovalResponses(
   ctx: MutationCtx,
   owner: AuthenticatedChatOwner,
+  continuationProvider: string,
   responses: Array<{
     messageId: string
     approvalId: string
@@ -1233,9 +1275,29 @@ export async function applyApprovalResponses(
       !approval ||
       approval.chatId !== owner.chat._id ||
       approval.userId !== owner.user._id ||
-      approval.toolCallId !== response.toolCallId
+      approval.toolCallId !== response.toolCallId ||
+      approval.toolName !== response.toolName
     ) {
-      throw new Error("Approval not found")
+      throw new ConvexError({
+        code: "approval_continuation_conflict",
+        message: "Approval continuation does not match the paused tool call",
+      })
+    }
+
+    // Approval responses continue the exact paused provider protocol. The
+    // request's message metadata is client-controlled, so the authoritative
+    // pin is the provider stored on the approval's generation run. Check it
+    // before patching the message, invocation, approval, or run.
+    const approvalRun = await ctx.db.get(approval.runId)
+    if (
+      !approvalRun ||
+      approvalRun.chatId !== owner.chat._id ||
+      approvalRun.provider !== continuationProvider
+    ) {
+      throw new ConvexError({
+        code: "approval_provider_mismatch",
+        message: "Approval continuation provider changed",
+      })
     }
 
     const canonicalDecision = resolveCanonicalApprovalDecision(
@@ -1250,7 +1312,13 @@ export async function applyApprovalResponses(
 
     const message = findMessageByUiId(messages, response.messageId)
     if (!message || message.chatId !== owner.chat._id) {
-      throw new Error("Approval message not found")
+      // The continuation names a message this chat no longer has (branched
+      // away, deleted, or client-fabricated). Client-supplied identity that
+      // cannot be honored is a conflict contract, not a server fault.
+      throw new ConvexError({
+        code: "approval_continuation_conflict",
+        message: "Approval continuation does not match a message in this chat",
+      })
     }
 
     const currentMessage = messageById.get(message._id) ?? message
@@ -1386,8 +1454,15 @@ export async function prepareGenerationForChat(
 
   await closeSupersededGenerationsForChat(ctx, args.chatId, owner.user._id, now)
 
-  const continuation = await applyApprovalResponses(ctx, owner, approvalResponses)
+  const continuation = await applyApprovalResponses(
+    ctx,
+    owner,
+    args.provider,
+    approvalResponses
+  )
   const continuationMessage = continuation?.message ?? null
+
+  let titleGeneration: number | undefined
 
   if (latestUserMessage) {
     await denyPendingApprovalsForChat(
@@ -1398,7 +1473,7 @@ export async function prepareGenerationForChat(
     )
 
     if (args.edit) {
-      await applyEditIntentForGeneration(
+      titleGeneration = await applyEditIntentForGeneration(
         ctx,
         owner,
         {
@@ -1418,6 +1493,9 @@ export async function prepareGenerationForChat(
         latestUserMessage as StoredUserMessage,
         now
       )
+      if (owner.chat.titleSource === "provisional") {
+        titleGeneration = owner.chat.titleGeneration
+      }
     }
   }
 
@@ -1603,6 +1681,7 @@ export async function prepareGenerationForChat(
     assistantMessageId,
     assistantOrder,
     messages: modelHistory,
+    titleGeneration,
   }
 }
 

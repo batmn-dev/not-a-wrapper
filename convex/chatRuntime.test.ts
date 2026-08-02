@@ -17,6 +17,7 @@ import {
   resolveToolCallDecision,
   stopGenerationRunForChat,
   updateAssistantSnapshotForChat,
+  vEditIntent,
 } from "./chatRuntime"
 import {
   APPROVAL_EXPIRY_MS,
@@ -608,6 +609,17 @@ function createApprovalContinuationFixture(
   }
 }
 
+describe("edit intent wire validator", () => {
+  it("still accepts the legacy `title` field from pre-title-generation clients", () => {
+    // Convex object validators reject unknown fields, and the wire parser +
+    // durable runtime forward the client's edit object verbatim. Stale tabs
+    // built before generated titles send `title` on first-message edits;
+    // removing this compat field 400s those edits for the whole deploy window.
+    expect(vEditIntent.fields.title?.kind).toBe("string")
+    expect(vEditIntent.fields.title?.isOptional).toBe("optional")
+  })
+})
+
 describe("prepareGenerationForChat", () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -616,6 +628,9 @@ describe("prepareGenerationForChat", () => {
   it("applies durable edit intent and creates the run in the same mutation path", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1700000000000)
     const { user, chat, userId, chatId } = createOwnerFixture()
+    chat.title = "Old generated title"
+    chat.titleSource = "generated"
+    chat.titleGeneration = 1
     const messages: Doc<"messages">[] = [
       createStoredMessage({
         id: "message_user_1",
@@ -675,7 +690,7 @@ describe("prepareGenerationForChat", () => {
           content: "new text",
           parts: [{ type: "text", text: "new text" }],
         },
-        title: "new text",
+        regenerateTitle: true,
       },
     })
 
@@ -717,17 +732,23 @@ describe("prepareGenerationForChat", () => {
       assistantMessageId: result.assistantMessageId,
     })
     expect(chat).toMatchObject({
-      title: "new text",
+      title: "New chat",
+      titleSource: "provisional",
+      titleGeneration: 2,
       updatedAt: 1700000000000,
     })
+    expect(result.titleGeneration).toBe(2)
     expect(result.messages.map((message) => message.clientMessageId)).toEqual([
       "replacement-user",
     ])
   })
 
-  it("resolves durable edit targets by _id and reconstructs model history from persisted messages", async () => {
+  it("reconstructs history by _id and ignores later-message retitling", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1700000000000)
     const { user, chat, userId, chatId } = createOwnerFixture()
+    chat.title = "Existing generated title"
+    chat.titleSource = "generated"
+    chat.titleGeneration = 1
     const messages: Doc<"messages">[] = [
       createStoredMessage({
         id: "message_user_0",
@@ -805,6 +826,7 @@ describe("prepareGenerationForChat", () => {
           content: "new text",
           parts: [{ type: "text", text: "new text" }],
         },
+        regenerateTitle: true,
       },
     })
 
@@ -839,6 +861,12 @@ describe("prepareGenerationForChat", () => {
       parentMessageId: "message_assistant_0",
       selected: true,
     })
+    expect(chat).toMatchObject({
+      title: "Existing generated title",
+      titleSource: "generated",
+      titleGeneration: 1,
+    })
+    expect(result.titleGeneration).toBeUndefined()
   })
 
   it("keeps legacy descendants selectable after editing the first user message", async () => {
@@ -2066,10 +2094,14 @@ describe("prepareGenerationForChat", () => {
         precedingUserMessageId: "user-1",
       },
     })
-    await markGenerationRunAbortedForChat(ctx, await runOwner(ctx, result.runId), {
-      messageId: result.assistantMessageId,
-      reason: "stream aborted",
-    })
+    await markGenerationRunAbortedForChat(
+      ctx,
+      await runOwner(ctx, result.runId),
+      {
+        messageId: result.assistantMessageId,
+        reason: "stream aborted",
+      }
+    )
 
     expect(deletes).toEqual([result.assistantMessageId])
     expect(branchOne).toMatchObject({ selected: true })
@@ -2137,10 +2169,14 @@ describe("prepareGenerationForChat", () => {
       createdAt: 1700000000000,
     })
 
-    await markGenerationRunAbortedForChat(ctx, await runOwner(ctx, result.runId), {
-      messageId: result.assistantMessageId,
-      reason: "stream aborted",
-    })
+    await markGenerationRunAbortedForChat(
+      ctx,
+      await runOwner(ctx, result.runId),
+      {
+        messageId: result.assistantMessageId,
+        reason: "stream aborted",
+      }
+    )
 
     expect(regeneratedAssistant).toMatchObject({
       content: "partial new answer",
@@ -2640,10 +2676,14 @@ describe("generation run linkage validation", () => {
     const fixture = createGenerationRunLinkageFixture()
     const { ctx } = createMutationCtx(fixture.tables)
 
-    await markGenerationRunAbortedForChat(ctx, await runOwner(ctx, fixture.runId), {
-      messageId: fixture.messageId,
-      reason: "stream aborted",
-    })
+    await markGenerationRunAbortedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        reason: "stream aborted",
+      }
+    )
     expect(fixture.run.status).toBe("aborted")
 
     const approvalRequestId = await createToolApprovalRequestForChat(
@@ -2709,10 +2749,14 @@ describe("generation run linkage validation", () => {
         precedingUserMessageId: "user-1",
       },
     })
-    await markGenerationRunAbortedForChat(ctx, await runOwner(ctx, result.runId), {
-      messageId: result.assistantMessageId,
-      reason: "stream aborted",
-    })
+    await markGenerationRunAbortedForChat(
+      ctx,
+      await runOwner(ctx, result.runId),
+      {
+        messageId: result.assistantMessageId,
+        reason: "stream aborted",
+      }
+    )
     expect(deletes).toEqual([result.assistantMessageId])
     expect(
       tables.messages.some(
@@ -2829,17 +2873,21 @@ describe("generation run linkage validation", () => {
     )
     expect(fixture.run.status).toBe("aborted")
 
-    await recordToolInvocationsForChat(ctx, await runOwner(ctx, fixture.runId), {
-      messageId: fixture.messageId,
-      invocations: [
-        {
-          toolCallId: "call_late",
-          toolName: "send_email",
-          source: "mcp",
-          status: "called",
-        },
-      ],
-    })
+    await recordToolInvocationsForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        invocations: [
+          {
+            toolCallId: "call_late",
+            toolName: "send_email",
+            source: "mcp",
+            status: "called",
+          },
+        ],
+      }
+    )
 
     expect(fixture.tables.toolInvocations).toEqual([])
     expect(
@@ -3048,7 +3096,10 @@ describe("lease lifecycle (gameplan §6)", () => {
     const { ctx } = createMutationCtx(fixture.tables)
 
     expect(
-      await heartbeatGenerationRunForChat(ctx, await runOwner(ctx, fixture.runId))
+      await heartbeatGenerationRunForChat(
+        ctx,
+        await runOwner(ctx, fixture.runId)
+      )
     ).toEqual({ kind: "lost", reason: "not-owner" })
     expect(fixture.run.heartbeatAt).toBeUndefined()
   })
@@ -4412,7 +4463,9 @@ describe("updateAssistantSnapshotForChat", () => {
     expect(
       patches.filter((patch) => patch.id === fixture.messageId)
     ).toHaveLength(1)
-    expect(patches.filter((patch) => patch.id === fixture.runId)).toHaveLength(2)
+    expect(patches.filter((patch) => patch.id === fixture.runId)).toHaveLength(
+      2
+    )
     vi.restoreAllMocks()
   })
 
@@ -4459,13 +4512,17 @@ describe("updateAssistantSnapshotForChat", () => {
     fixture.run.status = "aborted"
     const { ctx, inserts, patches } = createMutationCtx(fixture.tables)
 
-    await updateAssistantSnapshotForChat(ctx, await runOwner(ctx, fixture.runId), {
-      messageId: fixture.messageId,
-      order: 1,
-      sequence: 2,
-      textSnapshot: "late write",
-      partsSnapshot: [{ type: "text", text: "late write" }],
-    })
+    await updateAssistantSnapshotForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        order: 1,
+        sequence: 2,
+        textSnapshot: "late write",
+        partsSnapshot: [{ type: "text", text: "late write" }],
+      }
+    )
 
     expect(inserts).toEqual([])
     expect(patches).toEqual([])
@@ -4496,7 +4553,12 @@ describe("applyApprovalResponses", () => {
     ])
     const { ctx, patches } = createMutationCtx(fixture.tables)
 
-    await applyApprovalResponses(ctx, fixture.owner, fixture.responses)
+    await applyApprovalResponses(
+      ctx,
+      fixture.owner,
+      "openai",
+      fixture.responses
+    )
 
     expect(fixture.run).toMatchObject({
       status: "aborted",
@@ -4545,7 +4607,12 @@ describe("applyApprovalResponses", () => {
     ])
     const { ctx } = createMutationCtx(fixture.tables)
 
-    await applyApprovalResponses(ctx, fixture.owner, fixture.responses)
+    await applyApprovalResponses(
+      ctx,
+      fixture.owner,
+      "openai",
+      fixture.responses
+    )
 
     expect(fixture.run).toMatchObject({
       status: "completed",
@@ -4573,7 +4640,12 @@ describe("applyApprovalResponses", () => {
     ])
     const { ctx } = createMutationCtx(fixture.tables, { cloneReads: true })
 
-    await applyApprovalResponses(ctx, fixture.owner, fixture.responses)
+    await applyApprovalResponses(
+      ctx,
+      fixture.owner,
+      "openai",
+      fixture.responses
+    )
 
     expect(fixture.tables.messages[0]?.parts).toEqual([
       {
@@ -4618,7 +4690,12 @@ describe("applyApprovalResponses", () => {
     fixture.run.activeStreamId = undefined
     const { ctx, patches } = createMutationCtx(fixture.tables)
 
-    await applyApprovalResponses(ctx, fixture.owner, fixture.responses)
+    await applyApprovalResponses(
+      ctx,
+      fixture.owner,
+      "openai",
+      fixture.responses
+    )
 
     expect(fixture.run).toMatchObject({
       status: "aborted",
@@ -4626,6 +4703,98 @@ describe("applyApprovalResponses", () => {
     })
     // The run is left untouched — no close patch fires against the settled run.
     expect(patches.filter((patch) => patch.id === fixture.run._id)).toEqual([])
+  })
+
+  it("rejects a provider-switched continuation before mutating approval state", async () => {
+    const fixture = createApprovalContinuationFixture([
+      {
+        approvalId: "approval_1",
+        approved: true,
+        toolCallId: "call_1",
+        toolName: "read_file",
+      },
+    ])
+    const { ctx, patches } = createMutationCtx(fixture.tables)
+
+    await expect(
+      applyApprovalResponses(ctx, fixture.owner, "google", fixture.responses)
+    ).rejects.toMatchObject({
+      data: { code: "approval_provider_mismatch" },
+    })
+    expect(patches).toEqual([])
+    expect(fixture.run.status).toBe("awaiting_approval")
+    expect(fixture.tables.messages[0]?.status).toBe("awaiting_approval")
+  })
+
+  it("brands a divergent duplicate decision as a continuation conflict, not a server fault", async () => {
+    // Two tabs decide the SAME approval differently: the loser's POST carries
+    // the opposite decision. That is a race, not an internal error — an
+    // unbranded throw here would be redacted to 500 at the HTTP boundary
+    // instead of the intentional 409 contract the client already handles.
+    const fixture = createApprovalContinuationFixture([
+      {
+        approvalId: "approval_1",
+        approved: true,
+        toolCallId: "call_1",
+        toolName: "read_file",
+      },
+    ])
+    const { ctx, patches } = createMutationCtx(fixture.tables)
+    const divergent = [{ ...fixture.responses[0]!, approved: false }]
+
+    await expect(
+      applyApprovalResponses(ctx, fixture.owner, "openai", divergent)
+    ).rejects.toMatchObject({
+      data: { code: "approval_continuation_conflict" },
+    })
+    expect(patches).toEqual([])
+    expect(fixture.run.status).toBe("awaiting_approval")
+  })
+
+  it("rejects a same-id continuation with a different tool identity", async () => {
+    const fixture = createApprovalContinuationFixture([
+      {
+        approvalId: "approval_1",
+        approved: true,
+        toolCallId: "call_1",
+        toolName: "read_file",
+      },
+    ])
+    const { ctx, patches } = createMutationCtx(fixture.tables)
+    const mismatched = [{ ...fixture.responses[0]!, toolName: "send_email" }]
+
+    await expect(
+      applyApprovalResponses(ctx, fixture.owner, "openai", mismatched)
+    ).rejects.toMatchObject({
+      data: { code: "approval_continuation_conflict" },
+    })
+    expect(patches).toEqual([])
+    expect(fixture.run.status).toBe("awaiting_approval")
+    expect(fixture.tables.messages[0]?.status).toBe("awaiting_approval")
+  })
+
+  it("brands a continuation against a still-pending approval as unresolved, not a conflict", async () => {
+    // No decision ever landed, so there is no winning tab whose run the
+    // client could observe — the conflict brand (which the client swallows)
+    // would silence a failed resolve. The distinct code surfaces it.
+    const fixture = createApprovalContinuationFixture([
+      {
+        approvalId: "approval_1",
+        approved: true,
+        toolCallId: "call_1",
+        toolName: "read_file",
+      },
+    ])
+    fixture.tables.toolApprovalRequests[0]!.status = "pending"
+    const { ctx, patches } = createMutationCtx(fixture.tables)
+
+    await expect(
+      applyApprovalResponses(ctx, fixture.owner, "openai", fixture.responses)
+    ).rejects.toMatchObject({
+      data: { code: "approval_unresolved" },
+    })
+    expect(patches).toEqual([])
+    expect(fixture.run.status).toBe("awaiting_approval")
   })
 })
 
@@ -4819,7 +4988,11 @@ describe("chat status projection", () => {
         createdAt: 1001,
       }),
     ]
-    const { ctx } = createMutationCtx({ users: [user], chats: [chat], messages })
+    const { ctx } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages,
+    })
 
     const result = await prepareGenerationForChat(ctx, {
       chatId,

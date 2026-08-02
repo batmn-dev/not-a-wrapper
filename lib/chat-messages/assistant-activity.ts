@@ -138,7 +138,6 @@ export type AssistantActivityPresentation =
       label: string
       motion: ActivityMotionIntent
       activity: AssistantActivityModel
-      passiveLabel?: string
       durationSeconds?: number
     }
 
@@ -589,10 +588,6 @@ export function deriveAssistantActivityPresentation(
       motion: "none",
       activity,
       durationSeconds,
-      passiveLabel:
-        !hasReasoning && durationSeconds !== undefined
-          ? completedReasoningLabel(durationSeconds)
-          : undefined,
     }
   }
 

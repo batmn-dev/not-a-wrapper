@@ -5,6 +5,7 @@ import { getEffectiveProviderApiKey } from "@/lib/user-keys"
 import * as Sentry from "@sentry/nextjs"
 import {
   convertToModelMessages,
+  safeValidateUIMessages,
   toUIMessageStream,
   validateUIMessages,
   type LanguageModelUsage,
@@ -105,6 +106,7 @@ vi.mock("ai", async (importActual) => {
     validateUIMessages: vi.fn(
       async ({ messages }: { messages: unknown[] }) => messages
     ),
+    safeValidateUIMessages: vi.fn(actual.safeValidateUIMessages),
     convertToModelMessages: vi.fn(async () => []),
     toUIMessageStream: vi.fn(actual.toUIMessageStream),
   }
@@ -270,6 +272,9 @@ function makeDeps(
 ) {
   return {
     streamText: harness.streamText as unknown as ChatTurnDeps["streamText"],
+    generateText: vi.fn(async () => ({
+      text: "Greeting Exchange",
+    })) as unknown as ChatTurnDeps["generateText"],
     fetchMutation: fetchMutation as unknown as ChatTurnDeps["fetchMutation"],
     fetchQuery: vi.fn(async () => []) as unknown as ChatTurnDeps["fetchQuery"],
     after: vi.fn() as unknown as ChatTurnDeps["after"],
@@ -299,6 +304,7 @@ async function readStream<T>(stream: ReadableStream<T>): Promise<T[]> {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  const preparedMessages = makeInput().messages
   vi.mocked(getAllModels).mockResolvedValue([
     { id: "test-model", provider: "anthropic", tools: false },
   ] as unknown as Awaited<ReturnType<typeof getAllModels>>)
@@ -312,7 +318,7 @@ beforeEach(() => {
     >
   )
   vi.mocked(adaptHistoryForProvider).mockResolvedValue({
-    messages: [],
+    messages: preparedMessages,
     stats: {
       originalMessageCount: 0,
       adaptedMessageCount: 0,
@@ -327,7 +333,7 @@ beforeEach(() => {
     warnings: [],
   })
   vi.mocked(prepareTextFilePartsForModelInput).mockResolvedValue({
-    messages: [],
+    messages: preparedMessages,
     convertedCount: 0,
     failedCount: 0,
     truncatedCount: 0,
@@ -368,6 +374,92 @@ describe("createChatTurnRuntime — prepare()", () => {
     )
   })
 
+  it("rejects a provider-switched approval before durable prepare mutates state", async () => {
+    const { anthropic } = await import("@ai-sdk/anthropic")
+    vi.mocked(prepareToolRuntime).mockResolvedValue(
+      makeToolRuntime({
+        tools: {
+          web_search: anthropic.tools.webSearch_20250305(),
+        },
+        hasTools: true,
+      }) as unknown as Awaited<ReturnType<typeof prepareToolRuntime>>
+    )
+    const fetchMutation = makeFetchMutation()
+    const runtime = createChatTurnRuntime({
+      input: makeInput({
+        messages: [
+          {
+            id: "foreign-approval",
+            role: "assistant",
+            metadata: { provider: "openai" },
+            parts: [
+              {
+                type: "tool-web_search",
+                state: "approval-responded",
+                toolCallId: "foreign-call-id",
+                providerExecuted: true,
+                input: {},
+                approval: { id: "foreign-approval-id", approved: true },
+              },
+            ],
+          },
+        ] as ChatTurnInput["messages"],
+      }),
+      deps: makeDeps(makeStreamHarness(), fetchMutation),
+    })
+
+    await expect(runtime.prepare()).rejects.toMatchObject({
+      statusCode: 409,
+      code: "APPROVAL_PROVIDER_MISMATCH",
+    })
+    expect(fetchMutation).not.toHaveBeenCalled()
+  })
+
+  it("rejects an approval when no durable run can authenticate its provenance", async () => {
+    const { anthropic } = await import("@ai-sdk/anthropic")
+    vi.mocked(prepareToolRuntime).mockResolvedValue(
+      makeToolRuntime({
+        tools: {
+          web_search: anthropic.tools.webSearch_20250305(),
+        },
+        hasTools: true,
+      }) as unknown as Awaited<ReturnType<typeof prepareToolRuntime>>
+    )
+    const fetchMutation = makeFetchMutation()
+    const runtime = createChatTurnRuntime({
+      input: makeInput({
+        chatId: "local-anonymous-chat",
+        isAuthenticated: false,
+        convexToken: undefined,
+        anonymousId: "anonymous-user",
+        messages: [
+          {
+            id: "untrusted-approval",
+            role: "assistant",
+            metadata: { provider: "anthropic" },
+            parts: [
+              {
+                type: "tool-web_search",
+                state: "approval-responded",
+                toolCallId: "untrusted-call-id",
+                providerExecuted: true,
+                input: { query: "query" },
+                approval: { id: "untrusted-approval-id", approved: true },
+              },
+            ],
+          },
+        ] as ChatTurnInput["messages"],
+      }),
+      deps: makeDeps(makeStreamHarness(), fetchMutation),
+    })
+
+    await expect(runtime.prepare()).rejects.toMatchObject({
+      statusCode: 409,
+      code: "APPROVAL_CONTINUATION_UNVERIFIABLE",
+    })
+    expect(fetchMutation).not.toHaveBeenCalled()
+  })
+
   it("throws a 400 INVALID_REQUEST error when the model is unknown", async () => {
     vi.mocked(getAllModels).mockResolvedValue(
       [] as unknown as Awaited<ReturnType<typeof getAllModels>>
@@ -403,6 +495,217 @@ describe("createChatTurnRuntime — prepare()", () => {
     expect(validateOrder).toBeGreaterThan(0)
     expect(convertOrder).toBeGreaterThan(0)
     expect(validateOrder).toBeLessThan(convertOrder)
+    // Boundary 1 is STRUCTURAL: the current turn's tool registry must never
+    // judge historical provider-native tool outputs (cross-provider
+    // `web_search` schemas are incompatible).
+    expect(vi.mocked(validateUIMessages).mock.calls[0]?.[0]).not.toHaveProperty(
+      "tools"
+    )
+  })
+
+  it("fails closed at Boundary 2 without flattening multimodal history", async () => {
+    const multimodal = [
+      {
+        id: "u-multimodal",
+        role: "user",
+        parts: [
+          { type: "text", text: "Inspect this image" },
+          {
+            type: "file",
+            mediaType: "image/png",
+            url: "https://example.com/image.png",
+          },
+        ],
+      },
+    ] as ChatTurnInput["messages"]
+    vi.mocked(prepareTextFilePartsForModelInput).mockResolvedValue({
+      messages: multimodal,
+      convertedCount: 0,
+      failedCount: 0,
+      truncatedCount: 0,
+      skippedCount: 0,
+    })
+    vi.mocked(adaptHistoryForProvider).mockResolvedValue({
+      messages: multimodal,
+      stats: {
+        originalMessageCount: 1,
+        adaptedMessageCount: 1,
+        droppedMessages: 0,
+        partsDropped: {},
+        partsTransformed: {},
+        partsPreserved: { text: 1, file: 1 },
+        totalPartsOriginal: 2,
+        totalPartsAdapted: 2,
+        providerIdsStripped: 0,
+      },
+      warnings: [],
+    })
+    vi.mocked(safeValidateUIMessages).mockResolvedValueOnce({
+      success: false,
+      error: new Error(
+        'Type validation failed: Value: {"file":"PRIVATE_FILE_SENTINEL"}'
+      ),
+    })
+
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(makeStreamHarness(), makeFetchMutation()),
+    })
+
+    await expect(runtime.prepare()).rejects.toMatchObject({
+      name: "ModelBoundReplayInvariantError",
+      message: "Model-bound replay invariant failed",
+    })
+    expect(convertToModelMessages).not.toHaveBeenCalled()
+    expect(Sentry.captureMessage).toHaveBeenCalledWith(
+      "chat_model_bound_validation_failed",
+      expect.not.objectContaining({
+        extra: expect.objectContaining({
+          errorContext: expect.anything(),
+        }),
+      })
+    )
+  })
+
+  it("enforces non-empty history at structural Boundary 1", async () => {
+    const actualAi = await vi.importActual<typeof import("ai")>("ai")
+    vi.mocked(validateUIMessages).mockImplementationOnce(
+      actualAi.validateUIMessages as never
+    )
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(makeStreamHarness(), makeFetchMutation()),
+    })
+
+    await expect(runtime.prepare()).rejects.toThrow(
+      "Messages array must not be empty"
+    )
+    expect(prepareTextFilePartsForModelInput).not.toHaveBeenCalled()
+  })
+
+  it("lowers foreign hosted web_search history instead of failing validation (cross-provider regression)", async () => {
+    // The production incident: an Anthropic native web-search result in
+    // durable history, replayed on a turn whose registry holds the OpenAI
+    // `web_search` tool. Boundary 1 runs the REAL validateUIMessages here —
+    // pre-fix, it threw AI_TypeValidationError (Anthropic array output vs
+    // OpenAI object schema) before the request ever reached the provider.
+    const actualAi = await vi.importActual<typeof import("ai")>("ai")
+    vi.mocked(validateUIMessages).mockImplementationOnce(
+      actualAi.validateUIMessages as never
+    )
+    // Pass-through seams so the lowered history is observable at adaptation.
+    vi.mocked(prepareTextFilePartsForModelInput).mockImplementation(
+      async (messages: unknown) =>
+        ({
+          messages,
+          convertedCount: 0,
+          failedCount: 0,
+          truncatedCount: 0,
+          skippedCount: 0,
+        }) as never
+    )
+    vi.mocked(adaptHistoryForProvider).mockImplementation(
+      async (messages: unknown) =>
+        ({
+          messages,
+          stats: {
+            originalMessageCount: 0,
+            adaptedMessageCount: 0,
+            droppedMessages: 0,
+            partsDropped: {},
+            partsTransformed: {},
+            partsPreserved: {},
+            totalPartsOriginal: 0,
+            totalPartsAdapted: 0,
+            providerIdsStripped: 0,
+          },
+          warnings: [],
+        }) as never
+    )
+    const { openai } = await import("@ai-sdk/openai")
+    vi.mocked(prepareToolRuntime).mockResolvedValue(
+      makeToolRuntime({
+        tools: { web_search: openai.tools.webSearch({}) },
+        hasTools: true,
+      }) as unknown as Awaited<ReturnType<typeof prepareToolRuntime>>
+    )
+
+    const ENCRYPTED = "ENCRYPTED_CONTENT_SENTINEL"
+    const fetchMutation = vi.fn(async (ref: unknown) => {
+      if (sameRef(ref, api.chatRuntime.prepareGeneration)) {
+        return {
+          runId: "run1",
+          assistantMessageId: "msg2",
+          assistantOrder: 3,
+          messages: [
+            {
+              _id: "doc1",
+              role: "user",
+              content: "search for batman merch",
+              parts: [{ type: "text", text: "search for batman merch" }],
+              createdAt: Date.now() - 2000,
+              status: "completed",
+              metadata: {},
+              provider: "anthropic",
+            },
+            {
+              _id: "doc2",
+              role: "assistant",
+              content: "Here is what I found.",
+              parts: [
+                { type: "step-start" },
+                {
+                  type: "tool-web_search",
+                  state: "output-available",
+                  toolCallId: "srvtoolu_abc123",
+                  providerExecuted: true,
+                  input: { query: "batman merch" },
+                  output: [
+                    {
+                      type: "web_search_result",
+                      url: "https://example.com/merch",
+                      title: "Merch",
+                      pageAge: null,
+                      encryptedContent: ENCRYPTED,
+                    },
+                  ],
+                },
+                { type: "text", text: "Here is what I found." },
+              ],
+              createdAt: Date.now() - 1000,
+              status: "completed",
+              metadata: {},
+              provider: "anthropic",
+            },
+          ],
+        }
+      }
+      return undefined
+    })
+
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(makeStreamHarness(), fetchMutation),
+    })
+
+    // Pre-fix this rejected with AI_TypeValidationError; the raw message
+    // (embedding the full output value) then reached the HTTP 500 body.
+    await expect(runtime.prepare()).resolves.toBeUndefined()
+
+    // The lowering ran BEFORE adaptation: the adapter saw citation text, not
+    // the foreign hosted tool part, and no opaque payload survived.
+    const adapterInput = vi.mocked(adaptHistoryForProvider).mock
+      .calls[0]?.[0] as unknown as Array<{ parts: Array<{ type: string }> }>
+    expect(adapterInput).toBeDefined()
+    const adapterInputJson = JSON.stringify(adapterInput)
+    expect(adapterInputJson).not.toContain("tool-web_search")
+    expect(adapterInputJson).not.toContain(ENCRYPTED)
+    expect(adapterInputJson).not.toContain("srvtoolu_")
+    expect(adapterInputJson).toContain("https://example.com/merch")
+
+    // Boundary 2 accepted the lowered history — conversion ran, no plaintext
+    // degradation.
+    expect(vi.mocked(convertToModelMessages)).toHaveBeenCalled()
   })
 
   it("rejects a second prepare() — the runtime is one-shot", async () => {
@@ -413,6 +716,153 @@ describe("createChatTurnRuntime — prepare()", () => {
     await runtime.prepare()
     await expect(runtime.prepare()).rejects.toThrow("only be called once")
   })
+})
+
+describe("createChatTurnRuntime — generated titles", () => {
+  it("persists an accepted durable first-turn title through the versioned mutation", async () => {
+    const harness = makeStreamHarness()
+    const fetchMutation = vi.fn(async (ref: unknown) => {
+      if (sameRef(ref, api.chatRuntime.prepareGeneration)) {
+        return {
+          runId: "run1",
+          assistantMessageId: "msg1",
+          assistantOrder: 1,
+          messages: [],
+          titleGeneration: 1,
+        }
+      }
+      return undefined
+    })
+    const afterCallbacks: Array<() => unknown> = []
+    const generateText = vi.fn(async () => ({
+      text: "Friendly Greeting",
+    }))
+    const deps = makeDeps(harness, fetchMutation, {
+      generateText: generateText as unknown as ChatTurnDeps["generateText"],
+      after: vi.fn((callback: () => unknown) => {
+        afterCallbacks.push(callback)
+      }) as unknown as ChatTurnDeps["after"],
+    })
+    const runtime = createChatTurnRuntime({ input: makeInput(), deps })
+
+    await runtime.prepare()
+    runtime.toResponse(notAbortedSignal())
+    for (const callback of afterCallbacks) await callback()
+
+    expect(generateText).toHaveBeenCalledTimes(1)
+    expect(findCall(fetchMutation, api.chats.applyGeneratedTitle)?.[1]).toEqual(
+      {
+        chatId: SERVER_CHAT_ID,
+        title: "Friendly Greeting",
+        generation: 1,
+      }
+    )
+  })
+
+  it("streams a transient title update for a guest first turn", async () => {
+    const harness = makeStreamHarness()
+    const fetchMutation = makeFetchMutation()
+    const deps = makeDeps(harness, fetchMutation, {
+      generateText: vi.fn(async () => ({
+        text: "Greeting Exchange",
+      })) as unknown as ChatTurnDeps["generateText"],
+    })
+    const runtime = createChatTurnRuntime({
+      input: makeInput({
+        chatId: "local-chat-1",
+        userId: "guest-1",
+        anonymousId: "guest-1",
+        isAuthenticated: false,
+        convexToken: undefined,
+      }),
+      deps,
+    })
+
+    await runtime.prepare()
+    const response = runtime.toResponse(notAbortedSignal())
+
+    await expect(response.text()).resolves.toContain('"type":"data-chatTitle"')
+    expect(
+      findCall(fetchMutation, api.chats.applyGeneratedTitle)
+    ).toBeUndefined()
+  })
+
+  it("closes a guest stream without waiting for a slower title request", async () => {
+    const harness = makeStreamHarness()
+    let titleSignal: AbortSignal | undefined
+    const generateText = vi.fn(
+      ({ abortSignal }: { abortSignal?: AbortSignal }) =>
+        new Promise(() => {
+          titleSignal = abortSignal
+        })
+    )
+    const runtime = createChatTurnRuntime({
+      input: makeInput({
+        chatId: "local-chat-1",
+        userId: "guest-1",
+        anonymousId: "guest-1",
+        isAuthenticated: false,
+        convexToken: undefined,
+      }),
+      deps: makeDeps(harness, makeFetchMutation(), {
+        generateText: generateText as unknown as ChatTurnDeps["generateText"],
+      }),
+    })
+
+    await runtime.prepare()
+    const response = runtime.toResponse(notAbortedSignal())
+
+    const body = await response.text()
+    expect(body).toContain('"type":"data-chatTitle"')
+    expect(body).toContain("Greeting Exchange")
+    expect(titleSignal?.aborted).toBe(true)
+  })
+})
+
+describe("createChatTurnRuntime — evidence-gated word chunking", () => {
+  it.each([
+    {
+      model: "claude-haiku-4-5-20251001",
+      expectedTransform: true,
+    },
+    {
+      model: "claude-sonnet-5",
+      expectedTransform: false,
+    },
+  ])(
+    "sets smoothing to $expectedTransform for Anthropic $model",
+    async ({ model, expectedTransform }) => {
+      vi.mocked(getAllModels).mockResolvedValue([
+        { id: model, provider: "anthropic", tools: false },
+      ] as unknown as Awaited<ReturnType<typeof getAllModels>>)
+      const harness = makeStreamHarness()
+      const runtime = createChatTurnRuntime({
+        input: makeInput({
+          chatId: "local-guest-chat",
+          model,
+          chatVersion: 2,
+          userId: "anonymous-user",
+          anonymousId: "anonymous-user",
+          isAuthenticated: false,
+          convexToken: undefined,
+        }),
+        deps: makeDeps(harness, makeFetchMutation()),
+      })
+
+      await runtime.prepare()
+      runtime.toResponse(notAbortedSignal())
+
+      if (expectedTransform) {
+        expect(harness.captured.streamOpts.experimental_transform).toEqual(
+          expect.any(Function)
+        )
+      } else {
+        expect(harness.captured.streamOpts).not.toHaveProperty(
+          "experimental_transform"
+        )
+      }
+    }
+  )
 })
 
 describe("createChatTurnRuntime — durable completion handoff", () => {
@@ -707,6 +1157,7 @@ describe("createChatTurnRuntime — UI-message metadata", () => {
 
       expect(messageMetadata({ part: { type: "start" } })).toEqual({
         toolMetadataByName: { lookup: toolMetadata },
+        provider: "anthropic",
       })
 
       const toolCall = {
@@ -1023,7 +1474,9 @@ describe("createChatTurnRuntime — Anthropic pause_turn telemetry", () => {
 
   it("does not let a telemetry capture failure break stream completion", async () => {
     const harness = makeStreamHarness()
-    const captureError = new Error("analytics unavailable")
+    const captureError = new Error(
+      'analytics unavailable: Value: {"encryptedContent":"TELEMETRY_SENTINEL"}'
+    )
     const capture = vi.fn((event: { event: string }) => {
       if (event.event === "anthropic_pause_turn") {
         throw captureError
@@ -1051,10 +1504,10 @@ describe("createChatTurnRuntime — Anthropic pause_turn telemetry", () => {
           finishReason: "stop",
         })
       ).resolves.toBeUndefined()
-      expect(consoleError).toHaveBeenCalledWith(
-        "[PostHog] Failed to capture anthropic_pause_turn event:",
-        captureError
-      )
+      const logged = String(consoleError.mock.calls.at(-1)?.[0])
+      expect(logged).toContain("posthog_pause_turn_capture_failed")
+      expect(logged).toContain("analytics unavailable")
+      expect(logged).not.toContain("TELEMETRY_SENTINEL")
     } finally {
       consoleError.mockRestore()
     }

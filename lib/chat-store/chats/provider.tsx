@@ -4,6 +4,10 @@ import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import {
+  CHAT_TITLE_PLACEHOLDER,
+  INITIAL_CHAT_TITLE_GENERATION,
+} from "@/lib/chat-title"
+import {
   usePerUserPaginatedQuery,
   usePerUserQuery,
 } from "@/lib/convex/use-per-user-query"
@@ -30,12 +34,12 @@ import type { Chats } from "../types"
 import {
   cacheChat,
   deleteCachedChat,
-  getCachedChat,
   getCachedChatsHydratedSnapshot,
   getCachedChatsServerSnapshot,
   getCachedChatsSnapshot,
   resetCachedChatsSnapshot,
   subscribeCachedChats,
+  updateCachedChat,
 } from "./api"
 import {
   applyOptimisticOps,
@@ -113,7 +117,6 @@ function ConvexAuthReadySignal({
 }
 
 export type CreateFirstTurnChatInput = {
-  title?: string
   model?: string
   systemPrompt?: string
   projectId?: string
@@ -153,6 +156,11 @@ type ChatsContextType = {
   /** True when more sidebar window pages can be loaded. */
   canLoadMore: boolean
   updateTitle: (id: string, title: string) => Promise<void>
+  applyGeneratedTitle: (
+    id: string,
+    title: string,
+    generation: number
+  ) => Promise<boolean>
   deleteChat: (
     id: string,
     currentChatId?: string,
@@ -215,6 +223,7 @@ export function ChatsProvider({
   // Convex mutations
   const createFirstTurnMutation = useMutation(api.chats.createWithFirstTurn)
   const updateTitleMutation = useMutation(api.chats.updateTitle)
+  const applyGeneratedTitleMutation = useMutation(api.chats.applyGeneratedTitle)
   const updateModelMutation = useMutation(api.chats.updateModel)
   const togglePinMutation = useMutation(api.chats.togglePin)
   const deleteChatMutation = useMutation(api.chats.remove)
@@ -277,15 +286,14 @@ export function ChatsProvider({
 
   const updateTitle = useCallback(
     async (id: string, title: string) => {
-      const changes = { title, updated_at: new Date().toISOString() }
+      const changes = {
+        title,
+        title_source: "user" as const,
+        updated_at: new Date().toISOString(),
+      }
 
       if (isLocalChatId(id)) {
-        const chat =
-          (await getCachedChat(id)) ??
-          chats.find((candidate) => candidate.id === id)
-        if (!chat) return
-
-        await cacheChat({ ...chat, ...changes })
+        await updateCachedChat(id, (chat) => ({ ...chat, ...changes }))
         return
       }
 
@@ -308,7 +316,42 @@ export function ChatsProvider({
         toast({ title: "Failed to update title", status: "error" })
       }
     },
-    [chats, updateTitleMutation, removeOp]
+    [updateTitleMutation, removeOp]
+  )
+
+  const applyGeneratedTitle = useCallback(
+    async (id: string, title: string, generation: number) => {
+      if (!isLocalChatId(id)) {
+        try {
+          return await applyGeneratedTitleMutation({
+            chatId: id as Id<"chats">,
+            title,
+            generation,
+          })
+        } catch {
+          // The server's after() backstop owns durable title delivery; this
+          // client commit is only the low-latency path. A network failure or
+          // a chat deleted mid-turn must not surface as an unhandled error.
+          return false
+        }
+      }
+
+      return await updateCachedChat(id, (chat) => {
+        if (
+          chat.title_source !== "provisional" ||
+          chat.title_generation !== generation
+        ) {
+          return undefined
+        }
+
+        return {
+          ...chat,
+          title,
+          title_source: "generated",
+        }
+      })
+    },
+    [applyGeneratedTitleMutation]
   )
 
   const deleteChat = useCallback(
@@ -343,7 +386,6 @@ export function ChatsProvider({
 
   const createFirstTurnChat = useCallback(
     async ({
-      title,
       model,
       systemPrompt,
       projectId,
@@ -379,7 +421,9 @@ export function ChatsProvider({
         const localChatId = createLocalChatId()
         const localChat: Chats = {
           id: localChatId,
-          title: title || "New chat",
+          title: CHAT_TITLE_PLACEHOLDER,
+          title_source: "provisional",
+          title_generation: INITIAL_CHAT_TITLE_GENERATION,
           created_at: new Date().toISOString(),
           model: normalizedModel,
           system_prompt: systemPrompt || SYSTEM_PROMPT_DEFAULT,
@@ -409,7 +453,9 @@ export function ChatsProvider({
       const optimisticId = createOptimisticChatId()
       const optimisticChat: Chats = {
         id: optimisticId,
-        title: title || "New chat",
+        title: CHAT_TITLE_PLACEHOLDER,
+        title_source: "provisional",
+        title_generation: INITIAL_CHAT_TITLE_GENERATION,
         created_at: new Date().toISOString(),
         model: normalizedModel,
         system_prompt: systemPrompt || SYSTEM_PROMPT_DEFAULT,
@@ -432,7 +478,7 @@ export function ChatsProvider({
         // message in one Convex transaction, so a failure leaves NO chat behind
         // (the empty-chat abandonment class). See chats.createWithFirstTurn.
         const created = await createFirstTurnMutation({
-          title: title || "New chat",
+          title: CHAT_TITLE_PLACEHOLDER,
           model: normalizedModel,
           systemPrompt: systemPrompt || SYSTEM_PROMPT_DEFAULT,
           projectId: projectId as Id<"projects"> | undefined,
@@ -502,12 +548,7 @@ export function ChatsProvider({
       }
 
       if (isLocalChatId(id)) {
-        const chat =
-          (await getCachedChat(id)) ??
-          chats.find((candidate) => candidate.id === id)
-        if (!chat) return
-
-        await cacheChat({ ...chat, ...changes })
+        await updateCachedChat(id, (chat) => ({ ...chat, ...changes }))
         return
       }
 
@@ -535,19 +576,14 @@ export function ChatsProvider({
         throw error
       }
     },
-    [chats, updateModelMutation, removeOp]
+    [updateModelMutation, removeOp]
   )
 
   const bumpChat = useCallback(
     async (id: string) => {
       const changes = { updated_at: new Date().toISOString() }
       if (isLocalChatId(id)) {
-        const chat =
-          (await getCachedChat(id)) ??
-          chats.find((candidate) => candidate.id === id)
-        if (!chat) return
-
-        await cacheChat({ ...chat, ...changes })
+        await updateCachedChat(id, (chat) => ({ ...chat, ...changes }))
         return
       }
 
@@ -563,7 +599,7 @@ export function ChatsProvider({
         )
       }, 100)
     },
-    [chats, removeOp]
+    [removeOp]
   )
 
   const togglePinned = useCallback(
@@ -576,12 +612,7 @@ export function ChatsProvider({
       }
 
       if (isLocalChatId(id)) {
-        const chat =
-          (await getCachedChat(id)) ??
-          chats.find((candidate) => candidate.id === id)
-        if (!chat) return
-
-        await cacheChat({ ...chat, ...changes })
+        await updateCachedChat(id, (chat) => ({ ...chat, ...changes }))
         return
       }
 
@@ -602,7 +633,7 @@ export function ChatsProvider({
         toast({ title: "Failed to update pin", status: "error" })
       }
     },
-    [chats, togglePinMutation, removeOp]
+    [togglePinMutation, removeOp]
   )
 
   const pinnedChats = useMemo(
@@ -629,6 +660,7 @@ export function ChatsProvider({
         value={{
           chats,
           updateTitle,
+          applyGeneratedTitle,
           deleteChat,
           createFirstTurnChat,
           resetChats,

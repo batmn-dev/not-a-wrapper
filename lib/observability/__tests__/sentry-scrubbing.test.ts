@@ -2,7 +2,11 @@ import {
   containsSecret,
   redactSecretsInString,
 } from "@/lib/observability/secret-patterns"
-import { sentryBeforeSend } from "@/lib/observability/sentry-scrubbing"
+import {
+  getSanitizedExceptionSummary,
+  sanitizeExceptionForTelemetry,
+  sentryBeforeSend,
+} from "@/lib/observability/sentry-scrubbing"
 import { describe, expect, it } from "vitest"
 
 describe("secret value detection", () => {
@@ -114,6 +118,29 @@ describe("chat-performance scrub corpus (plan PR 0b step 8)", () => {
 })
 
 describe("sentryBeforeSend", () => {
+  it("allow-lists exception types at the final event boundary", () => {
+    const sentinel = "PRIVATE_PROVIDER_PAYLOAD"
+    const event = {
+      exception: {
+        values: [
+          {
+            type: `ProviderError: ${sentinel}`,
+            value: "Provider request failed",
+          },
+          {
+            type: "AI_TypeValidationError",
+            value: "Validation failed",
+          },
+        ],
+      },
+    }
+
+    const scrubbed = sentryBeforeSend(event)
+    expect(scrubbed.exception.values[0].type).toBe("Error")
+    expect(scrubbed.exception.values[1].type).toBe("AI_TypeValidationError")
+    expect(JSON.stringify(scrubbed)).not.toContain(sentinel)
+  })
+
   it("redacts a key embedded in an exception message (value-level, innocuous path)", () => {
     const event = {
       exception: {
@@ -150,6 +177,30 @@ describe("sentryBeforeSend", () => {
     expect(message).toBe("STS credentials failed for access key [REDACTED]")
   })
 
+  it("removes AI SDK validation payloads and entity ids from exception values", () => {
+    const sentinel = "OPAQUE_ENCRYPTED_CONTENT_SENTINEL"
+    const toolId = "srvtoolu_PRIVATE_ENTITY_ID"
+    const event = {
+      exception: {
+        values: [
+          {
+            type: "AI_TypeValidationError",
+            value: `Type validation failed for messages[3].parts[2].output (web_search, id: "${toolId}"): Value: [{"encryptedContent":"${sentinel}","url":"https://private.invalid"}].`,
+          },
+        ],
+      },
+    }
+
+    const scrubbed = sentryBeforeSend(event)
+    const serialized = JSON.stringify(scrubbed)
+    expect(serialized).not.toContain(sentinel)
+    expect(serialized).not.toContain(toolId)
+    expect(serialized).not.toContain("private.invalid")
+    expect(scrubbed.exception.values[0].value).toContain(
+      "Type validation failed"
+    )
+  })
+
   it("still redacts by sensitive key name", () => {
     const event = {
       request: {
@@ -174,5 +225,64 @@ describe("sentryBeforeSend", () => {
   it("leaves non-sensitive content intact", () => {
     const event = { tags: { route: "api/chat", model: "gpt-5" } }
     expect(sentryBeforeSend(event)).toEqual(event)
+  })
+})
+
+describe("sanitizeExceptionForTelemetry", () => {
+  it("replaces an untrusted error name in summaries and the stack header", () => {
+    const nameSentinel = "PRIVATE_NAME_PAYLOAD"
+    const messageSentinel = "PRIVATE_MESSAGE_PAYLOAD"
+    const error = new Error(
+      `Type validation failed: Value: ${messageSentinel}`
+    )
+    error.name = `ProviderError: ${nameSentinel}`
+    error.stack = `${error.name}: ${error.message}\n    at providerCall (provider.ts:1:1)`
+
+    const sanitized = sanitizeExceptionForTelemetry(error)
+    expect(sanitized.name).toBe("Error")
+    expect(sanitized.message).toBe("Type validation failed")
+    expect(sanitized.stack).toBe(
+      "Error: Type validation failed\n    at providerCall (provider.ts:1:1)"
+    )
+    expect(getSanitizedExceptionSummary(error)).toEqual({
+      errorName: "Error",
+      errorMessage: "Type validation failed",
+    })
+    expect(JSON.stringify(getSanitizedExceptionSummary(error))).not.toContain(
+      nameSentinel
+    )
+    expect(sanitized.stack).not.toContain(messageSentinel)
+  })
+
+  it("preserves an allow-listed exception name", () => {
+    const error = new TypeError("Invalid input")
+    expect(sanitizeExceptionForTelemetry(error).name).toBe("TypeError")
+  })
+
+  it("removes every multiline message line before retaining stack frames", () => {
+    const messageSentinel = "PRIVATE_MULTILINE_PAYLOAD"
+    const frameShapedSentinel = "PRIVATE_FRAME_SHAPED_PAYLOAD"
+    const error = new Error(
+      `Type validation failed: Value: {\n    at ${frameShapedSentinel} (private.ts:1:1)\n    "prompt": "${messageSentinel}"\n}`
+    )
+    error.stack = `${error.name}: ${error.message}\n    at providerCall (provider.ts:1:1)`
+
+    const sanitized = sanitizeExceptionForTelemetry(error)
+
+    expect(sanitized.stack).toBe(
+      "Error: Type validation failed\n    at providerCall (provider.ts:1:1)"
+    )
+    expect(sanitized.stack).not.toContain(messageSentinel)
+    expect(sanitized.stack).not.toContain(frameShapedSentinel)
+  })
+
+  it("omits raw frames when the original stack header cannot be verified", () => {
+    const stackSentinel = "PRIVATE_CUSTOM_STACK_PAYLOAD"
+    const error = new Error("Provider failed")
+    error.stack = `Custom stack\n    at ${stackSentinel} (private.ts:1:1)`
+
+    expect(sanitizeExceptionForTelemetry(error).stack).toBe(
+      "Error: Provider failed"
+    )
   })
 })

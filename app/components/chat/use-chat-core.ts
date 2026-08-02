@@ -1,3 +1,4 @@
+import { presentChatStreamError } from "@/app/components/chat/public-chat-error"
 import { useChatEdit } from "@/app/components/chat/use-chat-edit"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
@@ -27,7 +28,6 @@ import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
 import { buildChatTurnRequestBody } from "@/lib/chat-turn/turn-plans"
 import { routePersistsChatMessages } from "@/lib/chat-turn/turn-store"
 import { attachStagedFilesToChat } from "@/lib/file-handling"
-import { CHAT_MESSAGE_THROTTLE_MS } from "@/lib/chat-performance/message-throttle"
 import { isChatPerfClientEnabled } from "@/lib/observability/chat-performance"
 import {
   beginChatPerfTurn,
@@ -38,7 +38,6 @@ import {
 import { API_ROUTE_CHAT } from "@/lib/routes"
 import type { UserProfile } from "@/lib/user/types"
 import type { UIMessage } from "@ai-sdk/react"
-import { useChat } from "@ai-sdk/react"
 import { useConvex, useConvexConnectionState, useMutation } from "convex/react"
 import { useSearchParams } from "next/navigation"
 import {
@@ -55,6 +54,7 @@ import {
   useDetachableChatStream,
   type ChatStreamFinishEvent,
 } from "./use-detachable-chat-stream"
+import { useFrameAlignedChat } from "./use-frame-aligned-chat"
 import { useGenerationPresentationController } from "./use-generation-presentation-controller"
 
 /** One send-type Chat turn's inputs, assembled by the Composer. */
@@ -212,30 +212,46 @@ export function useChatCore({
   const shouldAutoSubmitPrompt = searchParams.get("autoSubmit") === "1"
 
   // Chats operations
-  const { updateTitle } = useChats()
+  const { updateTitle, applyGeneratedTitle } = useChats()
+
+  const handleStreamData = useCallback(
+    (part: { type: string; data: unknown }) => {
+      if (part.type !== "data-chatTitle") return
+      if (!part.data || typeof part.data !== "object") return
+
+      const data = part.data as {
+        chatId?: unknown
+        title?: unknown
+        generation?: unknown
+      }
+      if (
+        typeof data.chatId !== "string" ||
+        typeof data.title !== "string" ||
+        typeof data.generation !== "number"
+      ) {
+        return
+      }
+
+      void applyGeneratedTitle(data.chatId, data.title, data.generation)
+    },
+    [applyGeneratedTitle]
+  )
 
   // Handle errors directly in onError callback
   const handleError = useCallback((error: Error) => {
-    // A losing approval-continuation POST (another tab's auto-send won —
-    // structured 409, gameplan §10) is swallowed without a failed repaint;
-    // this tab simply observes the winner's run through the projection.
-    if (
-      error.message.includes("APPROVAL_CONTINUATION_CONFLICT") ||
-      error.message.includes("Approval continuation already dispatched")
-    ) {
+    const presentation = presentChatStreamError(error)
+    if (presentation.kind === "swallow") {
+      // A losing approval-continuation POST (another tab's auto-send won —
+      // structured 409, gameplan §10) is swallowed without a failed repaint;
+      // this tab simply observes the winner's run through the projection.
       console.warn("Approval continuation conflict (another tab won):", error)
       return
     }
     console.error("Chat error:", error)
     console.error("Error message:", error.message)
-    let errorMsg = error.message || "Something went wrong."
-
-    if (errorMsg === "An error occurred" || errorMsg === "fetch failed") {
-      errorMsg = "Something went wrong. Please try again."
-    }
 
     toast({
-      title: errorMsg,
+      title: presentation.title,
       status: "error",
     })
   }, [])
@@ -308,10 +324,10 @@ export function useChatCore({
     stop,
     setMessages,
     addToolApprovalResponse,
-    // The SDK applies the throttle to the messages callback only —
-    // status/error subscriptions, onFinish, Stop, and approval mutations stay
-    // immediate, and the trailing notification always delivers final state.
-  } = useChat({ chat: detachableStream.chat, throttle: CHAT_MESSAGE_THROTTLE_MS })
+    // Canonical AI SDK state updates per stream part; React observes the
+    // latest snapshot once per paint, with synchronous non-streaming and
+    // terminal publication.
+  } = useFrameAlignedChat({ chat: detachableStream.chat })
 
   // The local stream's assistant identity: durable runs stream the durable
   // assistantMessageId as the SDK message id, so this match is exact. Known
@@ -596,6 +612,7 @@ export function useChatCore({
     chatId,
     initialMessages,
     handlers: {
+      onData: handleStreamData,
       onAttachedFinish: handleAttachedFinish,
       onDetachedFinish: finishDetachedTurn,
       onAttachedError: (streamError) => {

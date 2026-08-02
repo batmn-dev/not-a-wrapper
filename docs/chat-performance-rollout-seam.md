@@ -24,6 +24,13 @@ exactly the capabilities documented here.
 > verification scaffold; the durable-turn checklist passed the same day, and
 > the flag, its disabled path, and `lib/flags.ts` were removed — the
 > presentation now ships unconditionally.
+>
+> **Streaming cadence update (2026-07-31).** The fixed
+> `CHAT_MESSAGE_THROTTLE_MS` constant has been replaced by frame-aligned
+> message publication. AI SDK still owns canonical message state; React
+> subscriber notifications coalesce with the browser's actual paint cadence,
+> and terminal/non-streaming changes flush synchronously. ADR-0016 is the
+> current source of truth; the earlier flag-collapse note above is historical.
 
 ## Selected seam: build/deploy-time environment flags
 

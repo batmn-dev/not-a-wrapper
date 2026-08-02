@@ -141,6 +141,19 @@ describe("Braintrust observability helpers", () => {
     )
   })
 
+  it("removes validation payloads before optional error-content logging", () => {
+    process.env.BRAINTRUST_LOG_CONTENT = "true"
+
+    const metadata = getBraintrustErrorMetadata(
+      new Error(
+        'Type validation failed: Value: {"encryptedContent":"BRAINTRUST_SENTINEL"}'
+      )
+    )
+
+    expect(metadata.errorMessage).toBe("Type validation failed")
+    expect(JSON.stringify(metadata)).not.toContain("BRAINTRUST_SENTINEL")
+  })
+
   it("hashes identifiers without returning the raw value", async () => {
     const first = await hashBraintrustIdentifier("chat_123")
     const second = await hashBraintrustIdentifier("chat_123")
