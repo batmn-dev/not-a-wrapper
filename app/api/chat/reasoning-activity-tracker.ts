@@ -8,15 +8,19 @@ export type ReasoningActivityTracker = {
 /**
  * Request-local interval-union accounting for reasoning lifecycle blocks.
  * Overlapping blocks share one wall-clock interval, while gaps between blocks
- * (for example, tool execution) are excluded.
+ * (for example, tool execution) are excluded. `initialDurationMs` carries a
+ * prior segment's total across an approval pause — terminal metadata replaces
+ * the message's metadata wholesale, so a continuation that starts from zero
+ * would erase the pre-pause reasoning time.
  */
 export function createReasoningActivityTracker(
-  now: () => number = Date.now
+  now: () => number = Date.now,
+  initialDurationMs = 0
 ): ReasoningActivityTracker {
   const activeBlockIds = new Set<string>()
   let intervalStartMs: number | undefined
-  let elapsedMs = 0
-  let observed = false
+  let elapsedMs = Math.max(0, initialDurationMs)
+  let observed = elapsedMs > 0
   let closed = false
 
   const finishInterval = () => {

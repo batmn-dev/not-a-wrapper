@@ -706,7 +706,15 @@ function resolveWorkDurationMs(
   if (explicit !== undefined && Number.isFinite(explicit)) {
     return Math.max(0, explicit)
   }
-  if (run.workStartedAt === undefined) return run.workDurationMs
+  // Only a worker-executing run has an active provider segment. Completion
+  // freezes workDurationMs before an approval pause, so later Stop/reaper
+  // settlement must not add the human wait from the retained start marker.
+  if (
+    run.workStartedAt === undefined ||
+    !isWorkerExecutingStatus(run.status)
+  ) {
+    return run.workDurationMs
+  }
   return (
     Math.max(0, run.workDurationMs ?? 0) +
     Math.max(0, now - run.workStartedAt)

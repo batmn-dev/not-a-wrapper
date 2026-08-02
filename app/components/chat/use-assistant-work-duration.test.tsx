@@ -103,6 +103,22 @@ describe("useAssistantWorkDuration", () => {
     expect(latest?.durationMs).toBe(5000)
   })
 
+  // Inverse coverage (removed by the Math.max blend): a ticker that ran AHEAD
+  // of the server total must yield to it at settlement, so the settled label
+  // matches reload and history exactly.
+  it("settles to the persisted total even when the live ticker ran ahead", () => {
+    render({ turnKey: "a", isActive: true, isPaused: false })
+    act(() => vi.advanceTimersByTime(5000))
+
+    render({
+      turnKey: "a",
+      isActive: false,
+      isPaused: false,
+      persistedWorkDurationMs: 4200,
+    })
+    expect(latest?.durationMs).toBe(4200)
+  })
+
   it.each(["abort", "failure", "Stop"])(
     "freezes elapsed evidence on %s",
     () => {

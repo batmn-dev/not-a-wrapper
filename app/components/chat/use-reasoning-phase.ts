@@ -148,14 +148,17 @@ export function useAssistantWorkDuration({
     // still anchored to the previous turn.
   }, [frozenMs, shouldRunTimer, turnKey])
 
-  // Persisted duration is terminal authority. The monotonic floor only guards
-  // the handoff frame against a visually backward client/server clock skew.
+  // Live shows the estimate, settled shows the truth: while the turn runs (or
+  // is paused awaiting approval) the local ticker owns the label; once the
+  // turn settles, the persisted server total owns it — never blended, so the
+  // settled label is identical in-session, after reload, and as history. The
+  // ticker remains the fallback for settled turns with no persisted total
+  // (aborts/failures that never wrote metadata).
+  const tickedFallbackMs = tickedMs > 0 ? tickedMs : undefined
   const durationMs =
-    persistedWorkDurationMs !== undefined
-      ? Math.max(tickedMs, persistedWorkDurationMs)
-      : tickedMs > 0
-        ? tickedMs
-        : undefined
+    isActive || isPaused
+      ? tickedFallbackMs
+      : (persistedWorkDurationMs ?? tickedFallbackMs)
   const durationSeconds = toCompletedDurationSeconds(durationMs)
 
   return {
@@ -184,11 +187,14 @@ export function useReasoningPhase({
   isLast: boolean
   turnKey: string | undefined
 }): ReasoningPhase {
+  // Seed from the persisted total (mirrors the work clock) so an approval
+  // continuation mounted fresh — reload, second device — resumes the ticker
+  // from the pre-pause reasoning time instead of 0.
   const [timerState, setTimerState] = useState<ReasoningTimerState>(() => ({
     turnKey,
     phase: reasoning.phase,
-    displayMs: 0,
-    frozenMs: 0,
+    displayMs: reasoning.persistedDurationMs ?? 0,
+    frozenMs: reasoning.persistedDurationMs ?? 0,
   }))
   const shouldRunTimer = isLast && reasoning.isStreaming
 
@@ -196,8 +202,8 @@ export function useReasoningPhase({
     setTimerState({
       turnKey,
       phase: reasoning.phase,
-      displayMs: 0,
-      frozenMs: 0,
+      displayMs: reasoning.persistedDurationMs ?? 0,
+      frozenMs: reasoning.persistedDurationMs ?? 0,
     })
   } else if (reasoning.phase !== timerState.phase) {
     const enteringFirstReasoning =
@@ -236,13 +242,15 @@ export function useReasoningPhase({
     }
   }, [frozenMs, shouldRunTimer, turnKey])
 
+  // Same contract as the work clock: the ticker owns the label only while
+  // reasoning is literally streaming; otherwise the persisted server total
+  // does (with the frozen ticker as fallback for mid-turn gaps and turns that
+  // never persisted a total).
   const persistedDurationMs = reasoning.persistedDurationMs
-  const durationMs =
-    persistedDurationMs !== undefined
-      ? Math.max(tickedMs, persistedDurationMs)
-      : tickedMs > 0
-        ? tickedMs
-        : undefined
+  const tickedFallbackMs = tickedMs > 0 ? tickedMs : undefined
+  const durationMs = reasoning.isStreaming
+    ? tickedFallbackMs
+    : (persistedDurationMs ?? tickedFallbackMs)
 
   return {
     phase: reasoning.phase,

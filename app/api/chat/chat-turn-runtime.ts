@@ -5,7 +5,10 @@ import type {
   ChatTurnRegenerationRequest,
 } from "@/lib/chat-messages/chat-turn-contract"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
-import { getWorkDurationMs } from "@/lib/chat-messages/metadata"
+import {
+  getReasoningDurationMs,
+  getWorkDurationMs,
+} from "@/lib/chat-messages/metadata"
 import {
   fallbackChatTitle,
   generateChatTitle,
@@ -212,6 +215,7 @@ type PreparedTurn = {
   startTime: number
   validatedMessages: MessageAISDK[]
   initialWorkDurationMs: number
+  initialReasoningDurationMs: number
   modelMessages: ModelMessage[]
   providerOptions: ReturnType<typeof shapeRequest>["providerOptions"]
   requestHeaders: ReturnType<typeof shapeRequest>["headers"]
@@ -654,14 +658,18 @@ export function createChatTurnRuntime(args: {
         messages: canonicalMessages,
       })
     )
-    const initialWorkDurationMs =
+    // An approval continuation reuses the paused assistant turn, so both
+    // duration clocks resume from the persisted pre-pause totals; a fresh turn
+    // starts both from zero.
+    const continuationBaseMetadata =
       requestApprovalContinuation.tail.length > 0
-        ? (getWorkDurationMs(
-            validatedMessages.findLast(
-              (message) => message.role === "assistant"
-            )?.metadata
-          ) ?? 0)
-        : 0
+        ? validatedMessages.findLast((message) => message.role === "assistant")
+            ?.metadata
+        : undefined
+    const initialWorkDurationMs =
+      getWorkDurationMs(continuationBaseMetadata) ?? 0
+    const initialReasoningDurationMs =
+      getReasoningDurationMs(continuationBaseMetadata) ?? 0
 
     const textFileReferences = getTextFilePartReferences(validatedMessages)
     const trustedTextAttachments =
@@ -995,6 +1003,7 @@ export function createChatTurnRuntime(args: {
       startTime,
       validatedMessages,
       initialWorkDurationMs,
+      initialReasoningDurationMs,
       modelMessages,
       providerOptions,
       requestHeaders,
@@ -1036,6 +1045,7 @@ export function createChatTurnRuntime(args: {
       startTime,
       validatedMessages,
       initialWorkDurationMs,
+      initialReasoningDurationMs,
       modelMessages,
       providerOptions,
       requestHeaders,
@@ -1084,7 +1094,10 @@ export function createChatTurnRuntime(args: {
     let stepCounter = 0
     let toolMetadataByCallId: ToolInvocationMetadataByCallId = {}
 
-    const reasoningActivity = createReasoningActivityTracker()
+    const reasoningActivity = createReasoningActivityTracker(
+      Date.now,
+      initialReasoningDurationMs
+    )
     let firstChunkLatencyMs: number | null = null
     let lastChunkAtMs: number | null = null
     let lastProgressAtMs = 0
@@ -1142,7 +1155,9 @@ export function createChatTurnRuntime(args: {
           firstTokenLatencyMs: firstChunkLatencyMs,
           timeSinceLastChunkMs:
             lastChunkAtMs === null ? null : now - lastChunkAtMs,
-          timeSinceLastProgressMs: now - lastProgressAtMs,
+          timeSinceLastProgressMs: providerStreamStarted
+            ? now - lastProgressAtMs
+            : 0,
           stalledThresholdMs: stalledContinuationThresholdMs,
           stepCounter,
           observedToolCalls,

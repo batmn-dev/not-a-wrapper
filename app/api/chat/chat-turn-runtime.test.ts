@@ -1585,6 +1585,12 @@ describe("createChatTurnRuntime — abort telemetry", () => {
       .mocked(Sentry.captureMessage)
       .mock.calls.filter((call) => call[0] === "chat_client_abort")
     expect(clientAborts).toHaveLength(1)
+    expect(clientAborts[0]?.[1]).toMatchObject({
+      extra: {
+        elapsedMs: 0,
+        timeSinceLastProgressMs: 0,
+      },
+    })
   })
 
   it("rejects toResponse() before prepare() — phase guard", async () => {

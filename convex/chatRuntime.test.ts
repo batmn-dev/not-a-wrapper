@@ -4375,6 +4375,31 @@ describe("stopGenerationRun (gameplan §9, PR 6)", () => {
     })
   })
 
+  it("does not count approval wait as work when stopping a paused run", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW)
+    const fixture = makeStoppableFixture()
+    fixture.run.status = "awaiting_approval"
+    fixture.run.workDurationMs = 2400
+    fixture.message.status = "awaiting_approval"
+    fixture.message.metadata = {
+      reasoningDurationMs: 436,
+      workDurationMs: 2400,
+    }
+    const { ctx } = createMutationCtx(fixture.tables)
+
+    await stopGenerationRunForChat(ctx, {
+      user: fixture.user,
+      chat: fixture.chat,
+      run: fixture.run,
+    })
+
+    expect(fixture.run.workDurationMs).toBe(2400)
+    expect(fixture.message.metadata).toEqual({
+      reasoningDurationMs: 436,
+      workDurationMs: 2400,
+    })
+  })
+
   it("returns not-current for a run that lost the chat slot — the newer owner is never touched", async () => {
     const fixture = makeStoppableFixture()
     fixture.chat.statusRunId = fixture.otherRunId
