@@ -93,9 +93,9 @@ function CodeBlockCode({
 
     const runHighlight = async () => {
       try {
-        // Lazy service (plan PR C): Shiki core, themes, and the grammar for
-        // this language load on first demand; unknown/plain ids resolve to
-        // the grammar-less `text` language inside the service.
+        // Lazy service (ADR-0016 "Lazy Shiki"): Shiki core, themes, and the
+        // grammar for this language load on first demand; unknown/plain ids
+        // resolve to the grammar-less `text` language inside the service.
         const html = await highlightCode({ code, language, theme })
         if (cancelled || generation !== generationRef.current) return
         setHighlighted({ code, language, theme, html })

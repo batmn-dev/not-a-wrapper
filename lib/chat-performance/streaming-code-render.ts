@@ -30,8 +30,8 @@
  * comparability — deliberately not a public product setting.
  *
  * Language normalization moved to `lib/markdown/shiki-client.ts`
- * (`resolveShikiLanguage`): with demand-loaded grammars (streaming plan
- * PR C) the support surface is the static allowlist, not whatever the old
+ * (`resolveShikiLanguage`): with demand-loaded grammars (ADR-0016 "Lazy
+ * Shiki") the support surface is the static allowlist, not whatever the old
  * eager highlighter happened to have loaded.
  */
 export const GROWING_HIGHLIGHT_IDLE_MS = 150

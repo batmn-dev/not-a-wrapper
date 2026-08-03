@@ -2,8 +2,8 @@
 
 - Status: accepted
 - Date: 2026-07-23
-- Related: [chat-deletion failure analysis](../convex-chat-deletion-failure-analysis.md),
-  [implementation plan](../gameplans/chat-deletion-and-snapshot-retention-implementation-plan.md)
+- Related: implementation shipped in PR #128; this ADR retains the operating
+  decision and blocked-job runbook.
 
 ## Context
 

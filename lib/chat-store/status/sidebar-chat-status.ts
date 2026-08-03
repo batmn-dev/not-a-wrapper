@@ -17,7 +17,7 @@ import { isConvexId, type Chat } from "../types"
  * awaiting_approval/completed/aborted/failed…). That keeps the visual language
  * stable while the data feeding it evolves.
  *
- * How a row gets its status (docs/design/sidebar-status-backend-wiring.md):
+ * How a row gets its status (CONTEXT.md "Sidebar status projection"):
  *  - The generation lifecycle **projects** run state onto the `chats` doc
  *    (`liveRunStatus`, plus the unread/error mirror). Each row already
  *    subscribes to its chat, so it derives its indicator from the object it

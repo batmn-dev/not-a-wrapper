@@ -88,7 +88,7 @@ export default defineSchema({
     // hide chats from paginated history/sidebar windows). chats.create has
     // always set this; backfill: scripts/backfill-chat-updated-at.mjs.
     updatedAt: v.number(), // Unix timestamp — last activity (turn start)
-    // --- Sidebar status projection (docs/design/sidebar-status-backend-wiring.md)
+    // --- Sidebar status projection (CONTEXT.md "Sidebar status projection")
     // A few run-lifecycle fields mirrored onto the chat doc so each sidebar row
     // derives its indicator from the chat it already subscribes to — no separate
     // query/store/hydrator. All five are OWNER-ONLY: they ride a doc public reads

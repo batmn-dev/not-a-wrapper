@@ -1,5 +1,5 @@
 /**
- * Incremental Markdown projection tests (plan §6).
+ * Incremental Markdown projection tests (ADR-0016).
  *
  * The load-bearing assertion is the streaming equivalence harness: for every
  * corpus fixture, at EVERY streamed prefix (exhaustive char-by-char plus

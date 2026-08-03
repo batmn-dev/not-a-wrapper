@@ -1,5 +1,7 @@
 # To Do
 
+## Product backlog
+
 - **Dynamic Activity-panel source presentation:** adapt each source item to the
   metadata available instead of forcing every source into one fixed layout.
   Prefer a readable headline when available; include useful supporting details
@@ -32,6 +34,9 @@
 - **Agent-first file library:** Create a computer-like environment where agents can easily discover files?
 - **Connectors:** Integrations with Google, YouTube, Figma, and personal tools
 - **Agentic Design System:** A customizable design system that helps agents ship consistent and high quality UI
+
+## Dependency watch
+
 - **AI SDK stable approval-persistence hook:** retain the Durable turn runtime's
   `experimental_transform` while it is the only released pre-callback,
   backpressure-preserving seam for persisting approval requests before forwarding
@@ -53,11 +58,12 @@
   noncanonical client history. Do not introduce application-owned signing while
   Convex remains the canonical authenticated approval authority without a
   demonstrated threat gap.
+
+## Correctness and maintenance
+
 - **Edit/regeneration freshness:** replace the selected-message count proxy with
   a server-issued revision or equivalent identity-bearing token. Verify that a
   rapid regenerate → branch-switch → send → regenerate sequence cannot
   falsely reject a subsequent in-session edit as stale.
-- **Exa verification:** after saving a valid BYOK Exa key, verify one search turn
-  and one `extract_content` turn. The current stored key was rejected by Exa.
 - **Model presentation:** centralize route labels and icon precedence currently
   duplicated across model selectors and settings.

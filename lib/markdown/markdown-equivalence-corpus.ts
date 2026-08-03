@@ -1,5 +1,5 @@
 /**
- * Equivalence corpus for the incremental Markdown projection (plan §6).
+ * Equivalence corpus for the ADR-0016 incremental Markdown projection.
  *
  * Every fixture is a deterministic, content-safe Markdown source chosen
  * because its grammar can RECLASSIFY nearby source as it streams in —

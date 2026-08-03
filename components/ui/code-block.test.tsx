@@ -2,7 +2,7 @@
 
 // ---------------------------------------------------------------------------
 // CodeBlockCode streaming rendering (chat-responsiveness plan PR 3 +
-// streaming plan PR C).
+// ADR-0016 "Lazy Shiki").
 //
 // The lazy highlighter SERVICE (lib/markdown/shiki-client.ts) is mocked at
 // the module seam so highlight CALL COUNTS and inputs are exact and module

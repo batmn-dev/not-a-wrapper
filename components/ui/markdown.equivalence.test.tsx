@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 // ---------------------------------------------------------------------------
-// Rendered-DOM equivalence for the incremental projection (plan §6 corpus
+// Rendered-DOM equivalence for the ADR-0016 incremental-projection corpus
 // steps 6–7; added for the 2026-07-27 review, which showed block-record
 // equality alone let a live DOM divergence ship).
 //
