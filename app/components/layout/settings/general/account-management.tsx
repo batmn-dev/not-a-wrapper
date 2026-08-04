@@ -1,14 +1,14 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Icon } from "@/components/ui/icon"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useMessages } from "@/lib/chat-store/messages/provider"
 import { RiLogoutBoxRLine } from "@remixicon/react"
 import { useAuth } from "@workos-inc/authkit-nextjs/components"
+import { SidebarLeadingIcon } from "../../sidebar/sidebar-leading-icon"
 import { signOutAndClearLocalState } from "../../sign-out"
 
-export function AccountManagement() {
+export function SettingsSignOutButton() {
   const { signOut } = useAuth()
   const { resetChats } = useChats()
   const { resetMessages } = useMessages()
@@ -18,22 +18,14 @@ export function AccountManagement() {
   }
 
   return (
-    <div className="flex items-center justify-between">
-      <div>
-        <h3 className="text-sm font-medium text-balance">Account</h3>
-        <p className="text-muted-foreground text-xs text-pretty">
-          Log out on this device
-        </p>
-      </div>
-      <Button
-        variant="outline"
-        size="sm"
-        className="flex items-center gap-2"
-        onClick={handleSignOut}
-      >
-        <Icon icon={RiLogoutBoxRLine} slotSize={16} />
-        <span>Sign out</span>
-      </Button>
-    </div>
+    <Button
+      variant="ghost"
+      size="sm"
+      className="sidebar-row sidebar-menu-row sidebar-row-content sidebar-row-primary-control menu-item-hoverable text-destructive hover:text-destructive w-full justify-start gap-0 text-left font-normal hover:bg-[var(--sidebar-row-active-background)] focus-visible:shadow-none! focus-visible:ring-0! active:scale-100 active:bg-[var(--sidebar-row-active-background)]"
+      onClick={handleSignOut}
+    >
+      <SidebarLeadingIcon icon={RiLogoutBoxRLine} />
+      <span>Sign out</span>
+    </Button>
   )
 }

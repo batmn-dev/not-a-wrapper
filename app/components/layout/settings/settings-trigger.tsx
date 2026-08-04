@@ -1,16 +1,10 @@
 "use client"
 
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Drawer, DrawerContent } from "@/components/ui/drawer"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
-import { Icon } from "@/components/ui/icon"
-import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { RiSettings3Line } from "@remixicon/react"
+import { useRef } from "react"
+import { SidebarLeadingIcon } from "../sidebar/sidebar-leading-icon"
 import { SettingsContent } from "./settings-content"
 
 /**
@@ -19,8 +13,8 @@ import { SettingsContent } from "./settings-content"
  */
 export function SettingsMenuItem({ onClick }: { onClick: () => void }) {
   return (
-    <DropdownMenuItem onClick={onClick}>
-      <Icon icon={RiSettings3Line} slotSize={20} />
+    <DropdownMenuItem onClick={onClick} className="gap-0">
+      <SidebarLeadingIcon icon={RiSettings3Line} />
       <span>Settings</span>
     </DropdownMenuItem>
   )
@@ -37,24 +31,23 @@ export function SettingsDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const isMobile = useBreakpoint(768)
-
-  if (isMobile) {
-    return (
-      <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent>
-          <SettingsContent isDrawer />
-        </DrawerContent>
-      </Drawer>
-    )
-  }
+  const dialogContentRef = useRef<HTMLDivElement>(null)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[80%] min-h-[480px] w-full flex-col gap-0 p-0 sm:max-w-[768px]">
-        <DialogHeader className="border-border border-b px-6 py-5">
-          <DialogTitle>Settings</DialogTitle>
-        </DialogHeader>
+      <DialogContent
+        ref={dialogContentRef}
+        initialFocus={dialogContentRef}
+        showCloseButton={false}
+        className="flex flex-col gap-0 overflow-hidden rounded-2xl p-0"
+        style={{
+          height: "calc(100dvh - 2rem)",
+          maxHeight: "720px",
+          width: "calc(100vw - 2rem)",
+          maxWidth: "824px",
+        }}
+      >
+        <DialogTitle className="sr-only">Settings</DialogTitle>
         <SettingsContent />
       </DialogContent>
     </Dialog>

@@ -1,4 +1,7 @@
 import { v } from "convex/values"
+import { MAX_FILE_SIZE, normalizeFileMimeType } from "../lib/file/policy"
+import type { Doc, Id } from "./_generated/dataModel"
+import type { MutationCtx } from "./_generated/server"
 import {
   authenticatedMutation,
   identityMutation,
@@ -7,6 +10,55 @@ import {
   maybeAuthQuery,
 } from "./lib/authedFunctions"
 import { upsertAppUserFromWorkOS } from "./userSync"
+
+const PROFILE_IMAGE_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+])
+
+export function isProfileImageMetadataValid(
+  metadata: { size: number; contentType?: string | null } | null,
+  declaredType: string
+): boolean {
+  if (!metadata || metadata.size > MAX_FILE_SIZE) return false
+
+  const storedType = normalizeFileMimeType(metadata.contentType)
+  return (
+    PROFILE_IMAGE_MIME_TYPES.has(storedType) &&
+    storedType === normalizeFileMimeType(declaredType)
+  )
+}
+
+type SaveProfileImageCtx = MutationCtx & {
+  user: Doc<"users">
+}
+
+export async function saveProfileImageHandler(
+  ctx: SaveProfileImageCtx,
+  { storageId, fileType }: { storageId: Id<"_storage">; fileType: string }
+) {
+  const metadata = await ctx.db.system.get("_storage", storageId)
+  if (!isProfileImageMetadataValid(metadata, fileType)) {
+    throw new Error("Profile image failed server validation")
+  }
+
+  const profileImageUrl = await ctx.storage.getUrl(storageId)
+  if (!profileImageUrl) throw new Error("Failed to get profile image URL")
+
+  const previousStorageId = ctx.user.profileImageStorageId
+  await ctx.db.patch(ctx.user._id, {
+    profileImageOverride: profileImageUrl,
+    profileImageStorageId: storageId,
+  })
+
+  if (previousStorageId && previousStorageId !== storageId) {
+    await ctx.storage.delete(previousStorageId)
+  }
+
+  return profileImageUrl
+}
 
 /**
  * Get the authenticated caller by WorkOS user ID. Self-identity-match: the
@@ -117,4 +169,19 @@ export const updateProfile = authenticatedMutation({
 
     return { success: true }
   },
+})
+
+/** Generate a one-time upload URL for the authenticated user's profile image. */
+export const generateProfileImageUploadUrl = authenticatedMutation({
+  args: {},
+  handler: async (ctx) => await ctx.storage.generateUploadUrl(),
+})
+
+/** Validate and persist a newly uploaded profile image for the current user. */
+export const saveProfileImage = authenticatedMutation({
+  args: {
+    storageId: v.id("_storage"),
+    fileType: v.string(),
+  },
+  handler: saveProfileImageHandler,
 })

@@ -41,6 +41,8 @@ export default defineSchema({
     email: v.string(),
     displayName: v.optional(v.string()),
     profileImage: v.optional(v.string()),
+    profileImageOverride: v.optional(v.string()),
+    profileImageStorageId: v.optional(v.id("_storage")),
 
     anonymous: v.optional(v.boolean()),
     premium: v.optional(v.boolean()),
