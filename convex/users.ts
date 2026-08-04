@@ -1,7 +1,11 @@
 import { v } from "convex/values"
-import { MAX_FILE_SIZE, normalizeFileMimeType } from "../lib/file/policy"
+import {
+  isAllowedProfileImageMimeType,
+  MAX_FILE_SIZE,
+  normalizeFileMimeType,
+} from "../lib/file/policy"
 import type { Doc, Id } from "./_generated/dataModel"
-import type { MutationCtx } from "./_generated/server"
+import { internalMutation, type MutationCtx } from "./_generated/server"
 import {
   authenticatedMutation,
   identityMutation,
@@ -11,13 +15,6 @@ import {
 } from "./lib/authedFunctions"
 import { upsertAppUserFromWorkOS } from "./userSync"
 
-const PROFILE_IMAGE_MIME_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-])
-
 export function isProfileImageMetadataValid(
   metadata: { size: number; contentType?: string | null } | null,
   declaredType: string
@@ -26,17 +23,17 @@ export function isProfileImageMetadataValid(
 
   const storedType = normalizeFileMimeType(metadata.contentType)
   return (
-    PROFILE_IMAGE_MIME_TYPES.has(storedType) &&
+    isAllowedProfileImageMimeType(storedType) &&
     storedType === normalizeFileMimeType(declaredType)
   )
 }
 
-type SaveProfileImageCtx = MutationCtx & {
+type CommitProfileImageCtx = MutationCtx & {
   user: Doc<"users">
 }
 
-export async function saveProfileImageHandler(
-  ctx: SaveProfileImageCtx,
+export async function commitProfileImageHandler(
+  ctx: CommitProfileImageCtx,
   { storageId, fileType }: { storageId: Id<"_storage">; fileType: string }
 ) {
   const metadata = await ctx.db.system.get("_storage", storageId)
@@ -171,17 +168,26 @@ export const updateProfile = authenticatedMutation({
   },
 })
 
-/** Generate a one-time upload URL for the authenticated user's profile image. */
-export const generateProfileImageUploadUrl = authenticatedMutation({
-  args: {},
-  handler: async (ctx) => await ctx.storage.generateUploadUrl(),
-})
-
-/** Validate and persist a newly uploaded profile image for the current user. */
-export const saveProfileImage = authenticatedMutation({
+/**
+ * Bind a profile image created inside the authenticated HTTP upload action.
+ * Internal-only so clients can never nominate an arbitrary storage id.
+ */
+export const commitUploadedProfileImage = internalMutation({
   args: {
+    workosUserId: v.string(),
     storageId: v.id("_storage"),
     fileType: v.string(),
   },
-  handler: saveProfileImageHandler,
+  handler: async (ctx, { workosUserId, storageId, fileType }) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_workos_user_id", (q) => q.eq("workosUserId", workosUserId))
+      .unique()
+    if (!user) throw new Error("User not found")
+
+    return await commitProfileImageHandler(
+      { ...ctx, user },
+      { storageId, fileType }
+    )
+  },
 })

@@ -26,6 +26,10 @@ describe("evaluateFixedWindow", () => {
       limit: 10,
       windowMs: WINDOW,
     })
+    expect(getRateLimitPolicy("profile_image_upload")).toEqual({
+      limit: 10,
+      windowMs: WINDOW,
+    })
   })
 
   it("allows and decrements remaining when under the limit", () => {

@@ -8,37 +8,19 @@ import { userProfileFixture } from "./fixtures/user-profile.fixture"
 import { UserProfile } from "./user-profile"
 
 const profileMocks = vi.hoisted(() => ({
-  generateProfileImageUploadUrl: vi.fn(async () => "https://upload.test"),
   isLoading: false,
-  saveProfileImage: vi.fn(async () => "https://images.test/avatar.png"),
-  uploadBinaryWithProgress: vi.fn(async () => "storage-profile-image"),
+  uploadProfileImage: vi.fn(async () => "https://images.test/avatar.png"),
   updateUser: vi.fn(async () => {}),
   user: null as typeof userProfileFixture | null,
   validateFile: vi.fn(async () => ({ isValid: true })),
 }))
 
-vi.mock("@/convex/_generated/api", () => ({
-  api: {
-    users: {
-      generateProfileImageUploadUrl: "generateProfileImageUploadUrl",
-      saveProfileImage: "saveProfileImage",
-    },
-  },
-}))
-
-vi.mock("convex/react", () => ({
-  useMutation: (reference: string) =>
-    reference === "generateProfileImageUploadUrl"
-      ? profileMocks.generateProfileImageUploadUrl
-      : profileMocks.saveProfileImage,
-}))
-
-vi.mock("@/lib/file-handling", () => ({
-  uploadBinaryWithProgress: profileMocks.uploadBinaryWithProgress,
-}))
-
 vi.mock("@/lib/file/validation", () => ({
   validateFile: profileMocks.validateFile,
+}))
+
+vi.mock("@/lib/user/profile-image", () => ({
+  uploadProfileImage: profileMocks.uploadProfileImage,
 }))
 
 vi.mock("@/lib/user-store/provider", () => ({
@@ -128,6 +110,23 @@ describe("UserProfile", () => {
     ).toBe("24px")
   })
 
+  it("disables profile-image selection while the profile is loading", () => {
+    profileMocks.user = userProfileFixture
+    profileMocks.isLoading = true
+    renderProfile()
+
+    const button = container?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Change profile picture"]'
+    )
+    const input = container?.querySelector<HTMLInputElement>(
+      "#settings-profile-image"
+    )
+
+    expect(button?.disabled).toBe(true)
+    expect(button?.hasAttribute("data-disabled")).toBe(true)
+    expect(input?.disabled).toBe(true)
+  })
+
   it("uploads and persists a selected profile image", async () => {
     profileMocks.user = userProfileFixture
     renderProfile()
@@ -146,15 +145,7 @@ describe("UserProfile", () => {
     })
 
     expect(profileMocks.validateFile).toHaveBeenCalledWith(file)
-    expect(profileMocks.generateProfileImageUploadUrl).toHaveBeenCalledWith({})
-    expect(profileMocks.uploadBinaryWithProgress).toHaveBeenCalledWith(
-      "https://upload.test",
-      file
-    )
-    expect(profileMocks.saveProfileImage).toHaveBeenCalledWith({
-      storageId: "storage-profile-image",
-      fileType: "image/png",
-    })
+    expect(profileMocks.uploadProfileImage).toHaveBeenCalledWith(file)
     expect(profileMocks.updateUser).toHaveBeenCalledWith({
       profile_image: "https://images.test/avatar.png",
     })

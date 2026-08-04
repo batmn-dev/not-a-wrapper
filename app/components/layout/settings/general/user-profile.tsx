@@ -3,16 +3,14 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
-import { api } from "@/convex/_generated/api"
-import { uploadBinaryWithProgress } from "@/lib/file-handling"
 import { validateFile } from "@/lib/file/validation"
 import { useUser } from "@/lib/user-store/provider"
+import { uploadProfileImage } from "@/lib/user/profile-image"
 import {
   RiArrowRightSLine,
   RiLoader4Line,
   RiPencilFill,
 } from "@remixicon/react"
-import { useMutation } from "convex/react"
 import { useRef, useState, type ChangeEvent, type FormEvent } from "react"
 import {
   SettingsField,
@@ -36,10 +34,6 @@ function ProfileFields({
   const { isLoading, updateUser } = useUser()
   const nameInputRef = useRef<HTMLInputElement>(null)
   const profileImageInputRef = useRef<HTMLInputElement>(null)
-  const generateProfileImageUploadUrl = useMutation(
-    api.users.generateProfileImageUploadUrl
-  )
-  const saveProfileImage = useMutation(api.users.saveProfileImage)
   const [nameDraft, setNameDraft] = useState(displayName)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isUploadingProfileImage, setIsUploadingProfileImage] = useState(false)
@@ -67,13 +61,7 @@ function ProfileFields({
         return
       }
 
-      const uploadUrl = await generateProfileImageUploadUrl({})
-      const storageId = await uploadBinaryWithProgress(uploadUrl, file)
-      const profileImageUrl = await saveProfileImage({
-        storageId:
-          storageId as unknown as typeof api.users.saveProfileImage._args.storageId,
-        fileType: file.type,
-      })
+      const profileImageUrl = await uploadProfileImage(file)
 
       await updateUser({ profile_image: profileImageUrl })
     } catch {
@@ -131,12 +119,12 @@ function ProfileFields({
           render={
             <button
               type="button"
+              disabled={isLoading || isUploadingProfileImage}
               onClick={() => profileImageInputRef.current?.click()}
             />
           }
           data-interactive
           data-disabled={isLoading || isUploadingProfileImage ? "" : undefined}
-          disabled={isLoading || isUploadingProfileImage}
           aria-label="Change profile picture"
           aria-describedby={
             profileImageError ? "settings-profile-image-error" : undefined

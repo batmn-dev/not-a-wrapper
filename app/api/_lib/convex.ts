@@ -11,6 +11,21 @@ export function createConvexHttpClient() {
   return new ConvexHttpClient(url)
 }
 
+export function getConvexSiteUrl() {
+  const explicit = process.env.CONVEX_SITE_URL
+  if (explicit) return explicit
+
+  const generated = process.env.NEXT_PUBLIC_CONVEX_SITE_URL
+  if (generated) return generated
+
+  const url = process.env.NEXT_PUBLIC_CONVEX_URL
+  if (!url) {
+    throw new Error("NEXT_PUBLIC_CONVEX_URL is not set")
+  }
+
+  return url.replace(/\.convex\.cloud$/, ".convex.site")
+}
+
 export function createAuthenticatedConvexClient(accessToken: string) {
   const convex = createConvexHttpClient()
   convex.setAuth(accessToken)

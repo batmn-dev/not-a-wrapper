@@ -1,5 +1,6 @@
 import { httpRouter } from "convex/server"
-import { internal } from "./_generated/api"
+import { MAX_FILE_SIZE, normalizeFileMimeType } from "../lib/file/policy"
+import { api, internal } from "./_generated/api"
 import { httpAction, type ActionCtx } from "./_generated/server"
 import {
   GRANT_REJECTION_MESSAGES,
@@ -7,7 +8,9 @@ import {
   type DurableWorkerPayloads,
   type GrantAuthArgs,
 } from "./chatRuntimeWorker"
+import { requireIdentity } from "./lib/auth"
 import { sha256Hex } from "./lib/sha256"
+import { isProfileImageMetadataValid } from "./users"
 import { authKit } from "./workosAuth"
 
 const http = httpRouter()
@@ -56,11 +59,112 @@ const WORKER_OPS: {
     ctx.runMutation(internal.chatRuntimeWorker.heartbeatGenerationRun, args),
 }
 
-function jsonResponse(status: number, body: Record<string, unknown>) {
+function jsonResponse(
+  status: number,
+  body: Record<string, unknown>,
+  headers?: HeadersInit
+) {
+  const responseHeaders = new Headers(headers)
+  responseHeaders.set("Content-Type", "application/json")
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: responseHeaders,
   })
+}
+
+type ProfileImageUploadCtx = Pick<ActionCtx, "auth" | "runMutation" | "storage">
+
+export async function handleProfileImageUploadRequest(
+  ctx: ProfileImageUploadCtx,
+  request: Request
+): Promise<Response> {
+  let identity: Awaited<ReturnType<typeof requireIdentity>>
+  try {
+    identity = await requireIdentity(ctx)
+  } catch {
+    return jsonResponse(401, { error: "Unauthorized" })
+  }
+
+  const fileType = normalizeFileMimeType(request.headers.get("Content-Type"))
+  if (
+    !isProfileImageMetadataValid({ size: 0, contentType: fileType }, fileType)
+  ) {
+    return jsonResponse(415, { error: "Unsupported profile image type" })
+  }
+
+  const contentLength = Number(request.headers.get("Content-Length"))
+  if (Number.isFinite(contentLength) && contentLength > MAX_FILE_SIZE) {
+    return jsonResponse(413, { error: "Profile image is too large" })
+  }
+
+  let rateLimit: {
+    allowed: boolean
+    retryAfterMs: number
+  }
+  try {
+    rateLimit = await ctx.runMutation(api.rateLimits.consume, {
+      bucket: "profile_image_upload",
+    })
+  } catch {
+    console.warn(JSON.stringify({ _tag: "profile_image_rate_limit_failed" }))
+    return jsonResponse(500, { error: "Profile image upload failed" })
+  }
+  if (!rateLimit.allowed) {
+    const retryAfterSeconds = Math.max(
+      1,
+      Math.ceil(rateLimit.retryAfterMs / 1000)
+    )
+    return jsonResponse(
+      429,
+      { error: "Profile image upload rate limit exceeded" },
+      { "Retry-After": String(retryAfterSeconds) }
+    )
+  }
+
+  let blob: Blob
+  try {
+    blob = await request.blob()
+  } catch {
+    return jsonResponse(400, { error: "Invalid profile image body" })
+  }
+  if (blob.size > MAX_FILE_SIZE) {
+    return jsonResponse(413, { error: "Profile image is too large" })
+  }
+  if (
+    !isProfileImageMetadataValid(
+      { size: blob.size, contentType: blob.type },
+      fileType
+    )
+  ) {
+    return jsonResponse(415, { error: "Unsupported profile image type" })
+  }
+
+  let storageId:
+    Awaited<ReturnType<ProfileImageUploadCtx["storage"]["store"]>> | undefined
+  try {
+    storageId = await ctx.storage.store(blob)
+    const profileImageUrl: string = await ctx.runMutation(
+      internal.users.commitUploadedProfileImage,
+      {
+        workosUserId: identity.subject,
+        storageId,
+        fileType,
+      }
+    )
+    return jsonResponse(200, { profileImageUrl })
+  } catch {
+    if (storageId !== undefined) {
+      try {
+        await ctx.storage.delete(storageId)
+      } catch {
+        console.warn(
+          JSON.stringify({ _tag: "profile_image_upload_cleanup_failed" })
+        )
+      }
+    }
+    console.warn(JSON.stringify({ _tag: "profile_image_upload_failed" }))
+    return jsonResponse(500, { error: "Profile image upload failed" })
+  }
 }
 
 http.route({
@@ -130,6 +234,12 @@ http.route({
       return jsonResponse(400, { ok: false, error: "Invalid worker call" })
     }
   }),
+})
+
+http.route({
+  path: "/profile-image",
+  method: "POST",
+  handler: httpAction(handleProfileImageUploadRequest),
 })
 
 export default http

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import type { Doc, Id } from "./_generated/dataModel"
-import { isProfileImageMetadataValid, saveProfileImageHandler } from "./users"
+import { commitProfileImageHandler, isProfileImageMetadataValid } from "./users"
 
 const userId = "user-1" as Id<"users">
 const storageId = "storage-new" as Id<"_storage">
@@ -59,10 +59,10 @@ describe("profile image validation", () => {
         delete: deleteStoredFile,
         getUrl: vi.fn().mockResolvedValue("https://images.test/avatar.png"),
       },
-    } as unknown as Parameters<typeof saveProfileImageHandler>[0]
+    } as unknown as Parameters<typeof commitProfileImageHandler>[0]
 
     await expect(
-      saveProfileImageHandler(ctx, { storageId, fileType: "image/png" })
+      commitProfileImageHandler(ctx, { storageId, fileType: "image/png" })
     ).resolves.toBe("https://images.test/avatar.png")
     expect(patch).toHaveBeenCalledWith(userId, {
       profileImageOverride: "https://images.test/avatar.png",
@@ -89,10 +89,10 @@ describe("profile image validation", () => {
         },
       },
       storage: { delete: deleteStoredFile, getUrl: vi.fn() },
-    } as unknown as Parameters<typeof saveProfileImageHandler>[0]
+    } as unknown as Parameters<typeof commitProfileImageHandler>[0]
 
     await expect(
-      saveProfileImageHandler(ctx, {
+      commitProfileImageHandler(ctx, {
         storageId,
         fileType: "application/pdf",
       })

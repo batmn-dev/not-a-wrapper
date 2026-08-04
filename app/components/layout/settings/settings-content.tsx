@@ -182,8 +182,13 @@ export function SettingsContent() {
           {!isMobile ? <SettingsPageHeader title={activeTabLabel} /> : null}
 
           <div className="p-4">
-            <TabsContent value="general" className="mt-0">
+            <TabsContent value="general" className="mt-0 space-y-6">
               <UserProfile />
+              {isMobile ? (
+                <div className="[--sidebar-row-outer-inset:0px]">
+                  <SettingsSignOutButton />
+                </div>
+              ) : null}
             </TabsContent>
 
             <TabsContent value="appearance" className="mt-0 space-y-6">

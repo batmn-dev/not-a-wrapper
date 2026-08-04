@@ -64,6 +64,7 @@ describe("settings field primitives", () => {
     const singleRow = container?.querySelector<HTMLElement>(
       '[data-testid="only"]'
     )
+    const firstSurface = rows[0]?.firstElementChild
 
     expect(group?.className).toContain("overflow-hidden")
     expect(group?.className).toContain(
@@ -82,6 +83,10 @@ describe("settings field primitives", () => {
     )
     expect(singleRow?.className).toContain(
       "last:[&>[data-slot=settings-field-surface]]:rounded-b-2xl"
+    )
+    expect(firstSurface).toBeInstanceOf(HTMLDivElement)
+    expect(firstSurface?.getAttribute("data-slot")).toBe(
+      "settings-field-surface"
     )
   })
 

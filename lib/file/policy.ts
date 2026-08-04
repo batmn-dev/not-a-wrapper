@@ -14,12 +14,27 @@ export const ALLOWED_FILE_TYPES = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ] as const
 
+export const ALLOWED_PROFILE_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+] as const
+
 export function normalizeFileMimeType(mimeType: string | null | undefined) {
   return mimeType?.split(";")[0]?.trim().toLowerCase() ?? ""
 }
 
 export function isAllowedFileMimeType(mimeType: string | null | undefined) {
   return (ALLOWED_FILE_TYPES as readonly string[]).includes(
+    normalizeFileMimeType(mimeType)
+  )
+}
+
+export function isAllowedProfileImageMimeType(
+  mimeType: string | null | undefined
+) {
+  return (ALLOWED_PROFILE_IMAGE_TYPES as readonly string[]).includes(
     normalizeFileMimeType(mimeType)
   )
 }

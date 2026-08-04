@@ -3,6 +3,7 @@ import type { MutationCtx, QueryCtx } from "../_generated/server"
 
 type ConvexCtx = QueryCtx | MutationCtx
 type ChatActivityCtx = Pick<QueryCtx, "db">
+type IdentityCtx = Pick<QueryCtx, "auth">
 
 export type AuthenticatedChatOwner = {
   user: Doc<"users">
@@ -109,7 +110,7 @@ export async function getOptionalAuth(ctx: ConvexCtx): Promise<{
  * to a client argument, and the create-user bootstrap path where the row may not
  * exist yet.
  */
-export async function requireIdentity(ctx: ConvexCtx) {
+export async function requireIdentity(ctx: IdentityCtx) {
   const identity = await ctx.auth.getUserIdentity()
   if (!identity) throw new Error("Not authenticated")
   return identity
