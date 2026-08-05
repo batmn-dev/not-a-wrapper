@@ -1,10 +1,21 @@
 # Extend the existing Convex-native durable-turn architecture
 
-The research report’s architecture remains materially valid against the current branch. The plan below refines it into an implementation contract; no files were changed. *(This preamble and the body below were written before ADR-0011 landed; the §0 addendum governs wherever they conflict.)*
+> **Status: historical implementation plan.** PRs 0–8 landed; the optional PR 9
+> browser harness remained out of scope. Do not treat unchecked boxes,
+> “proposed” language, or rollout instructions below as current backlog. Current
+> architecture and operating guidance live in ADR-0009, ADR-0011, `CONTEXT.md`,
+> and source; the companion implementation notes preserve accepted deviations
+> and verification evidence.
+
+The research report’s architecture was materially valid against the branch on
+which this plan was written. The plan below is preserved as the implementation
+contract that produced the landed system. *(This preamble and the body below
+were written before ADR-0011 landed; the §0 addendum governed wherever they
+conflicted during implementation.)*
 
 ## 0. Addendum — re-based on ADR-0011 durable turn settlement (2026-07-19)
 
-[ADR-0011](../adr/0011-durable-turn-settlement.md) (accepted 2026-07-18, PR #121) landed after this plan was written and changes its substrate. **This addendum governs wherever the body conflicts; the body text below is preserved unedited.** This is now the single forward plan for the 2026-07-14 incident class; the [incident report](../chat-turn-token-expiry-orphaned-run-incident-2026-07-14.md) is a frozen historical record with its own reconciliation section.
+[ADR-0011](../adr/0011-durable-turn-settlement.md) (accepted 2026-07-18, PR #121) landed after this plan was written and changed its substrate. **This addendum governed wherever the body conflicted; the body text below is preserved unedited.** During implementation this became the single forward plan for the 2026-07-14 incident class. It is now historical alongside the [incident report](../chat-turn-token-expiry-orphaned-run-incident-2026-07-14.md); current guidance lives in the accepted ADRs, `CONTEXT.md`, and source.
 
 ### Presentation decision — one unconditional path after local proof (2026-07-27)
 

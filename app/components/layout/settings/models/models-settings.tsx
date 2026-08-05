@@ -122,13 +122,6 @@ export function ModelsSettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="mb-2 text-lg font-medium text-balance">Models</h3>
-        <p className="text-muted-foreground mb-4 text-sm text-pretty">
-          Reorder and manage the models shown in your selector.
-        </p>
-      </div>
-
       {/* Favorite Models - Drag and Drop List */}
       <div>
         <h4 className="mb-3 text-sm font-medium text-balance">

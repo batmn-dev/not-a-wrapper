@@ -60,6 +60,13 @@ export function UserProvider({
   const { data: convexUser } = usePerUserQuery(api.users.getCurrent)
 
   const syncAttemptedRef = useRef<string | null>(null)
+  // The HTTP upload commits before returning, but its Convex subscription
+  // update can arrive after the client applies the returned URL. Key pending
+  // images by user so late callbacks cannot replace another session's handoff.
+  const pendingProfileImagesRef = useRef(new Map<string, string>())
+  // Async upload handlers can resume with an updateUser function from an older
+  // render, so confirmation checks read the latest committed subscription.
+  const convexUserRef = useRef(convexUser)
 
   // Sync the first WorkOS session load into Convex for local dev and webhook-free auth.
   useEffect(() => {
@@ -131,8 +138,24 @@ export function UserProvider({
   useEffect(() => {
     if (isAuthLoading || !workosUser) return
     if (convexUser === undefined) return
+    convexUserRef.current = convexUser
+
+    const pendingProfileImageUrl = pendingProfileImagesRef.current.get(
+      workosUser.id
+    )
+    if (
+      pendingProfileImageUrl !== undefined &&
+      convexUser?.profileImageOverride === pendingProfileImageUrl
+    ) {
+      pendingProfileImagesRef.current.delete(workosUser.id)
+    }
+
     setUser((prevUser) =>
-      mergeUserProfileWithConvexFields(prevUser, convexUser)
+      mergeUserProfileWithConvexFields(
+        prevUser,
+        convexUser,
+        pendingProfileImageUrl
+      )
     )
   }, [convexUser, isAuthLoading, workosUser])
 
@@ -155,7 +178,18 @@ export function UserProvider({
           await updateProfileMutation(convexUpdates)
         }
 
-        setUser((prev) => (prev ? { ...prev, ...updates } : null))
+        if (
+          typeof updates.profile_image === "string" &&
+          (convexUserRef.current?.workosUserId !== user.id ||
+            convexUserRef.current.profileImageOverride !==
+              updates.profile_image)
+        ) {
+          pendingProfileImagesRef.current.set(user.id, updates.profile_image)
+        }
+
+        setUser((prev) =>
+          prev?.id === user.id ? { ...prev, ...updates } : prev
+        )
       } finally {
         setIsLoading(false)
       }

@@ -102,7 +102,7 @@ const MarkdownBlockStabilityContext =
 
 /**
  * Legacy full-source splitter, retained as the reference implementation and
- * benchmark baseline (plan §6 rollback note). Production rendering now flows
+ * benchmark baseline and full-parse oracle. Production rendering now flows
  * through `advanceMarkdownProjection`, whose reset/settlement paths run this
  * same authoritative parse.
  */
@@ -385,7 +385,7 @@ function MarkdownComponent({
   const generatedId = useId()
   const blockId = id ?? generatedId
 
-  // Incremental block projection (streaming plan §6): ordinary append-only
+  // Incremental block projection (ADR-0016): ordinary append-only
   // growth re-parses only the mutable tail; identity change, non-prefix
   // corrections, and parser-version drift reset; `streaming: false` runs the
   // authoritative settlement parse. The transition advances through React

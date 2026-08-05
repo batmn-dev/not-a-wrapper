@@ -41,6 +41,8 @@ export default defineSchema({
     email: v.string(),
     displayName: v.optional(v.string()),
     profileImage: v.optional(v.string()),
+    profileImageOverride: v.optional(v.string()),
+    profileImageStorageId: v.optional(v.id("_storage")),
 
     anonymous: v.optional(v.boolean()),
     premium: v.optional(v.boolean()),
@@ -88,7 +90,7 @@ export default defineSchema({
     // hide chats from paginated history/sidebar windows). chats.create has
     // always set this; backfill: scripts/backfill-chat-updated-at.mjs.
     updatedAt: v.number(), // Unix timestamp — last activity (turn start)
-    // --- Sidebar status projection (docs/design/sidebar-status-backend-wiring.md)
+    // --- Sidebar status projection (CONTEXT.md "Sidebar status projection")
     // A few run-lifecycle fields mirrored onto the chat doc so each sidebar row
     // derives its indicator from the chat it already subscribes to — no separate
     // query/store/hydrator. All five are OWNER-ONLY: they ride a doc public reads

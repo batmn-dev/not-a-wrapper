@@ -1,5 +1,5 @@
 /**
- * Incremental Markdown block projection (streaming-rendering plan §6, PR B).
+ * Incremental Markdown block projection (ADR-0016).
  *
  * Pure, deterministic state transition that turns an accumulating Markdown
  * source into a stable list of block records without re-parsing the full
@@ -9,7 +9,7 @@
  * full parse the legacy splitter performed (`splitMarkdownSource`, kept as
  * the reference implementation, reset path, and settlement oracle).
  *
- * Invariants (plan §3):
+ * Invariants:
  * - Ordinary append-only growth parses work proportional to the mutable
  *   region plus appended text, never total accumulated source.
  * - A block that has been marked stable NEVER changes text, offsets, type,
@@ -500,7 +500,7 @@ export function advanceMarkdownProjection(args: {
       resetReason: null,
       fallbackReason: null,
     })
-    // Verification (plan §6.3): when the incremental projection was current
+    // Settlement verification: when the incremental projection was current
     // for this exact source, the authoritative parse must agree with it —
     // exactly, or modulo the trailing-partial-line partition, which the
     // terminal line-extension fast path holds inside the growing block while

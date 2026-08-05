@@ -8,7 +8,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Icon } from "@/components/ui/icon"
 import {
   Tooltip,
   TooltipContent,
@@ -22,6 +21,7 @@ import { useAuth } from "@workos-inc/authkit-nextjs/components"
 import { useState } from "react"
 import { AppInfoDialog, AppInfoMenuItem } from "./app-info/app-info-trigger"
 import { FeedbackDialog, FeedbackMenuItem } from "./feedback/feedback-trigger"
+import { SidebarLeadingIcon } from "./sidebar/sidebar-leading-icon"
 import { SettingsDialog, SettingsMenuItem } from "./settings/settings-trigger"
 import { signOutAndClearLocalState } from "./sign-out"
 
@@ -63,9 +63,9 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
       <DropdownMenuSeparator />
       <DropdownMenuItem
         onClick={handleSignOut}
-        className="flex items-center gap-2"
+        className="flex items-center gap-0"
       >
-        <Icon icon={RiLogoutBoxRLine} slotSize={20} />
+        <SidebarLeadingIcon icon={RiLogoutBoxRLine} />
         <span>Sign out</span>
       </DropdownMenuItem>
     </>

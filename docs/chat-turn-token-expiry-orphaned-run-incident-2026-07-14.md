@@ -4,14 +4,14 @@
 | --- | --- |
 | Incident date | 2026-07-14 |
 | Investigation date | 2026-07-14 |
-| Status | Historical report (frozen 2026-07-19). Root cause confirmed. Core remediation landed 2026-07-18 as [ADR-0011](./adr/0011-durable-turn-settlement.md); remaining work lives in the [durable-turn gameplan](./gameplans/extend-the-existing-convex-native-durable-turn-architecture.md) addendum. Do not implement from this document — see "Post-remediation reconciliation" below. |
+| Status | Historical report. Root cause confirmed; core remediation landed as [ADR-0011](./adr/0011-durable-turn-settlement.md), and the follow-on durable-turn plan's PRs 0–8 later landed. Do not implement from this document or treat its 2026-07-19 status labels as current backlog. Use ADR-0009, ADR-0011, `CONTEXT.md`, and current source instead. |
 | Affected chat | `jh7cysfnkqjwsjd01nnjmt96ds8ajpjk` |
 | Affected generation run | `js726yecyxdbyvx0s3vgwky1jd8akn7x` |
 | Affected assistant message | `k571pjr8grk0jwvxy531gefvwn8ajptm` |
 
 ## Post-remediation reconciliation (2026-07-19)
 
-This document is a historical incident record. The diagnosis, evidence, and timeline sections remain accurate as written on 2026-07-14; code references in the historical sections describe the 2026-07-14 tree and may no longer match current `HEAD`. The recommendation and phase sections are frozen and partially superseded: the core remediation landed on 2026-07-18 as [ADR-0011 — Durable turn settlement](./adr/0011-durable-turn-settlement.md) (PR #121), and the single forward-looking plan is now the [durable-turn gameplan](./gameplans/extend-the-existing-convex-native-durable-turn-architecture.md) and its 2026-07-19 ADR-0011 addendum. **Implement from the gameplan, not from this report.**
+This document is a historical incident record. The diagnosis, evidence, and timeline sections remain accurate as written on 2026-07-14; code references in the historical sections describe the 2026-07-14 tree and may no longer match current `HEAD`. The recommendation, outcome table, and phase labels below are frozen checkpoints from 2026-07-19: they may call work “remaining” that later landed through PRs 0–8 of the [durable-turn gameplan](./gameplans/extend-the-existing-convex-native-durable-turn-architecture.md). The optional PR 9 browser harness remained out of scope. Current implementation guidance lives in [ADR-0009](./adr/0009-durable-turn-runtime.md), [ADR-0011](./adr/0011-durable-turn-settlement.md), `CONTEXT.md`, and current source—not in this report or the historical gameplan.
 
 ### Outcome of each recommendation
 

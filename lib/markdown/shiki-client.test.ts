@@ -1,7 +1,8 @@
 /**
- * Lazy Shiki service tests (plan §7) — run against the REAL fine-grained
- * modules so grammar loading, alias resolution, JS-engine highlighting, and
- * plain-text degradation are exercised end to end, not against a mock.
+ * Lazy Shiki service tests (ADR-0016 "Lazy Shiki") — run against the REAL
+ * fine-grained modules so grammar loading, alias resolution, JS-engine
+ * highlighting, and plain-text degradation are exercised end to end, not
+ * against a mock.
  */
 import { afterEach, describe, expect, it } from "vitest"
 import {

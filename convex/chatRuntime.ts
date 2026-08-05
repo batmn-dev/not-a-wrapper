@@ -561,7 +561,7 @@ async function applyMessageResolution(
 // Sidebar status projection — mirror a run's lifecycle phase onto its chat doc
 // so every sidebar row derives its indicator from the chat it already subscribes
 // to, with no separate query/store/hydrator
-// (docs/design/sidebar-status-backend-wiring.md). These fields are owner-only;
+// (CONTEXT.md "Sidebar status projection"). These fields are owner-only;
 // chats.getById/getPublicById strip them from non-owner reads.
 //
 // `queued`/`running`/`streaming` map to the live spinner (only the run-start

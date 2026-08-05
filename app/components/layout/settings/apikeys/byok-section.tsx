@@ -40,22 +40,7 @@ export function ByokSection() {
       defaultProvider="openrouter"
       keyStatus={userKeyStatus}
       noun="API key"
-      header={
-        <>
-          <h3 className="relative mb-2 inline-flex text-lg font-medium text-balance">
-            Model Providers{" "}
-            <span className="text-muted-foreground absolute top-0 -right-7 text-xs">
-              new
-            </span>
-          </h3>
-          <p className="text-muted-foreground text-sm text-pretty">
-            Add your own API keys to unlock access to models.
-          </p>
-          <p className="text-muted-foreground text-sm text-pretty">
-            Your keys are encrypted before being stored.
-          </p>
-        </>
-      }
+      header={null}
       tilesClassName="grid grid-cols-2 gap-3 min-[400px]:grid-cols-3 min-[500px]:grid-cols-4"
       renderTile={(provider, { selected, hasKey, onSelect }) => (
         <button

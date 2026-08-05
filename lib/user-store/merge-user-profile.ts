@@ -14,6 +14,8 @@ type ConvexUserProfileFields = Pick<
   | "lastActiveAt"
   | "favoriteModels"
   | "systemPrompt"
+  | "profileImage"
+  | "profileImageOverride"
 > & {
   displayName?: string
 }
@@ -27,13 +29,19 @@ function timestampToUserProfileString(
 
 export function mergeUserProfileWithConvexFields(
   user: UserProfile | null,
-  convexUser: ConvexUserProfileFields | null | undefined
+  convexUser: ConvexUserProfileFields | null | undefined,
+  pendingProfileImage?: string
 ): UserProfile | null {
   if (!user || !convexUser) return user
 
   return {
     ...user,
     display_name: convexUser.displayName ?? user.display_name,
+    profile_image:
+      pendingProfileImage ??
+      convexUser.profileImageOverride ??
+      convexUser.profileImage ??
+      null,
     anonymous: convexUser.anonymous ?? user.anonymous,
     premium: convexUser.premium ?? user.premium,
     message_count: convexUser.messageCount ?? user.message_count,

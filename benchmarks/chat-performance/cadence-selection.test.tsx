@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 // ---------------------------------------------------------------------------
-// Streaming cadence measurement (streaming plan §8, PR D).
+// Streaming cadence measurement (ADR-0016 "Notification cadence").
 //
 // Replays the deterministic ~12 KB mixed-Markdown stream into the REAL
 // <Markdown> component (incremental projection + memoized blocks; Shiki

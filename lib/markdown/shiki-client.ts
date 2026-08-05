@@ -1,5 +1,5 @@
 /**
- * Lazy, demand-loaded Shiki highlighter service (streaming plan §7, PR C).
+ * Lazy, demand-loaded Shiki highlighter service (ADR-0016 "Lazy Shiki").
  *
  * The ONLY module allowed to load Shiki on the client, and it loads nothing
  * until the first code block asks for a highlight:

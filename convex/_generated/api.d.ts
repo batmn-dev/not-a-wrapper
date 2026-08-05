@@ -35,6 +35,7 @@ import type * as lib_sha256 from "../lib/sha256.js";
 import type * as mcpServers from "../mcpServers.js";
 import type * as mcpToolApprovals from "../mcpToolApprovals.js";
 import type * as messages from "../messages.js";
+import type * as profileImageValidation from "../profileImageValidation.js";
 import type * as projects from "../projects.js";
 import type * as rateLimits from "../rateLimits.js";
 import type * as toolCallLog from "../toolCallLog.js";
@@ -80,6 +81,7 @@ declare const fullApi: ApiFromModules<{
   mcpServers: typeof mcpServers;
   mcpToolApprovals: typeof mcpToolApprovals;
   messages: typeof messages;
+  profileImageValidation: typeof profileImageValidation;
   projects: typeof projects;
   rateLimits: typeof rateLimits;
   toolCallLog: typeof toolCallLog;

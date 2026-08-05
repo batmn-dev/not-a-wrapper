@@ -571,7 +571,7 @@ export function buildSectionedMarkdownPayload(sectionCount: number): string {
 }
 
 /**
- * Short prose payload (~500 characters, streaming-renderer plan §5 payload 1):
+ * Short prose payload (~500 characters) for the ADR-0016 renderer corpus:
  * plain sentences, no Markdown constructs beyond emphasis, single paragraph.
  */
 export function buildShortProsePayload(): string {
@@ -587,7 +587,7 @@ export function buildShortProsePayload(): string {
 }
 
 /**
- * Long mixed payload (~100 KB, plan §5 payload 3): the same section shape as
+ * Long mixed payload (~100 KB): the same section shape as
  * the 12 KB fixture repeated until ~100 KB of COMPLETED blocks, ending in a
  * short growing terminal paragraph. Per-update projection cost on this
  * payload must track the terminal region, not the accumulated size.
@@ -600,7 +600,7 @@ export function buildLongMarkdownPayload(): string {
 }
 
 /**
- * Many short completed blocks with a small mutable tail (plan §5 payload 8):
+ * Many short completed blocks with a small mutable tail:
  * block COUNT is the stressor (memo/reconciliation overhead per block),
  * where the ~100 KB payload stresses accumulated BYTES.
  */
@@ -614,7 +614,7 @@ export function buildManyShortBlocksPayload(): string {
 }
 
 /**
- * Code stress payload (plan §5 payload 5): a single fenced block large enough
+ * Code stress payload: a single fenced block large enough
  * to reproduce the historical full-rehighlight tab pressure (the section-6
  * freeze class) without crashing CI. 1600 lines ≈ 4× the 400-line fixture.
  */

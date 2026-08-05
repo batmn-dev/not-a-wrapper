@@ -754,6 +754,11 @@
   * {
     @apply border-border outline-ring;
   }
+  /* Search fields use product-owned clear controls instead of browser chrome. */
+  input[type="search"]::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+  }
   button:not(:disabled):not([aria-disabled="true"]):not([data-disabled]),
   [role="button"]:not([aria-disabled="true"]):not([data-disabled]) {
     cursor: pointer;

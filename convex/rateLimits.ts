@@ -19,11 +19,15 @@ import { authenticatedMutation } from "./lib/authedFunctions"
 
 export const API_RATE_LIMIT_POLICIES = {
   mcp_test: { limit: 10, windowMs: 60_000 },
+  profile_image_upload: { limit: 10, windowMs: 60_000 },
 } as const
 
 export type RateLimitBucket = keyof typeof API_RATE_LIMIT_POLICIES
 
-const rateLimitBucketValidator = v.literal("mcp_test")
+const rateLimitBucketValidator = v.union(
+  v.literal("mcp_test"),
+  v.literal("profile_image_upload")
+)
 
 export function getRateLimitPolicy(bucket: RateLimitBucket): {
   limit: number

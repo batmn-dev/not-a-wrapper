@@ -1,5 +1,10 @@
 # Durable-turn implementation notes — 2026-07-19
 
+> **Status: historical implementation record.** PRs 0–8 landed; PR 9 was
+> intentionally out of scope. “Remaining” language records the state at the
+> dated review and is not current backlog. Use ADR-0009, ADR-0011, `CONTEXT.md`,
+> and source for current behavior.
+
 Companion record to
 [extend-the-existing-convex-native-durable-turn-architecture.md](./extend-the-existing-convex-native-durable-turn-architecture.md)
 (the plan file has unrelated local edits in flight, so accepted deviations are

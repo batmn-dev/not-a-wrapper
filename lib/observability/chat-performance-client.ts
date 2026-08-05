@@ -202,7 +202,7 @@ export function useChatTurnPerfMarks(input: TurnPerfInput): void {
 }
 
 // ---------------------------------------------------------------------------
-// Incremental Markdown projection anomaly marks (streaming plan §6)
+// Incremental Markdown projection anomaly marks (ADR-0016)
 // ---------------------------------------------------------------------------
 
 type MarkdownProjectionAnomalySource = {

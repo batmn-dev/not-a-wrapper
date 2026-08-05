@@ -4,10 +4,8 @@
 - Date: 2026-07-27
 - Related: ADR-0009 (durable turn runtime — 750 ms snapshot cadence, unchanged),
   ADR-0011 (settlement, unchanged), ADR-0013 (back-navigation detach, unchanged),
-  ADR-0015 (presentation reveal — superseded by this decision);
-  `docs/gameplans/streaming-rendering-convex-implementation-plan.md` (the plan),
-  `docs/measurements/2026-07-27-streaming-renderer-baseline.md` (before),
-  `docs/measurements/2026-07-27-streaming-renderer-results.md` (after).
+  ADR-0015 (presentation reveal — superseded by this decision). Implementation
+  and verification history lives in PRs #130 and #131.
 
 ## Context
 
@@ -193,9 +191,8 @@ renderer can be optimized without changing document semantics:
   layer.
 - After PR B/C, per-notification rendering is cheap enough to present raw
   deltas directly; the renderer-slowness problem the reveal compensated for
-  no longer exists. A mutable-tail-only CSS fade (plan PR F) remains
-  available if a future visual-quality gate fails, but is deliberately
-  omitted now.
+  no longer exists. A mutable-tail-only CSS fade remains available if a future
+  visual-quality gate fails, but is deliberately omitted now.
 
 ## Consequences
 

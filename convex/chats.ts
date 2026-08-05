@@ -246,7 +246,7 @@ export const searchByTitle = maybeAuthQuery({
     await searchByTitleForCurrentUserHandler(ctx, term),
 })
 
-// The sidebar status-projection fields (docs/design/sidebar-status-backend-wiring.md)
+// The sidebar status-projection fields (CONTEXT.md "Sidebar status projection")
 // are owner-only, but they ride the chat doc that public/shared reads return. Strip
 // them from any read that can hand a chat to a non-owner, so a shared-chat viewer
 // never receives the owner's read cursor or live/last-run state (nor reactive

@@ -2,6 +2,8 @@ import "server-only"
 import { ConvexHttpClient } from "convex/browser"
 import { NextResponse } from "next/server"
 
+export { getConvexSiteUrl } from "./convex-site-url"
+
 export function createConvexHttpClient() {
   const url = process.env.NEXT_PUBLIC_CONVEX_URL
   if (!url) {

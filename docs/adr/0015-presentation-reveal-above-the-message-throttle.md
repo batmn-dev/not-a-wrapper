@@ -1,23 +1,15 @@
 # 15. Presentation reveal commits above the message throttle
 
-- Status: superseded by ADR-0016 (2026-07-27 — the reveal was removed
-  unmerged the same day it passed its gate; the streaming-architecture
-  review in
-  `docs/gameplans/streaming-rendering-convex-implementation-plan.md` rejected
-  the second prefix-reveal scheduler in favor of making the raw rendering
-  path fast enough to present provider deltas directly. The implementation
-  lives on PR #130 (`darknight/the-black-glove` pre-revert history) for
-  fixture/measurement salvage. Accepted earlier that day with merge gate
-  passed, see `docs/measurements/2026-07-27-presentation-reveal-decision.md`)
+- Status: superseded by ADR-0016 (2026-07-27). The reveal was removed after
+  the streaming-architecture review rejected a second prefix scheduler in
+  favor of making the raw rendering path fast enough to present provider
+  deltas directly. Its historical implementation remains in PR #130.
 - Date: 2026-07-27
 - Related: ADR-0009 (durable turn runtime — 750 ms snapshot cadence, unchanged),
-  ADR-0011 (settlement — terminal writes the reveal must flush on, unchanged);
+  ADR-0011 (settlement — terminal writes the reveal must flush on, unchanged),
+  ADR-0016 (the replacement architecture);
   `docs/measurements/2026-07-23-pr2-throttle-selection.md` (the 50 ms throttle
-  this deliberately renders more often than),
-  `docs/measurements/2026-07-27-presentation-reveal-decision.md` (the measured
-  merge-gate artifact for this decision),
-  `docs/gameplans/smooth-text-streaming-implementation-plan.md` (the plan this
-  records the decision for).
+  this deliberately rendered more often than).
 
 ## Context
 
@@ -25,7 +17,7 @@ The 50 ms AI SDK message throttle (`lib/chat-performance/message-throttle.ts`)
 ended the tab-freezing renderer saturation, but it makes streamed prose arrive
 in visible multi-word lumps. The product bar chosen for fixing this is ChatGPT
 word-fade parity: text appears word-by-word with a brief fade, at ≤ 1 word per
-visual update at typical token rates. That requires visual updates *more*
+visual update at typical token rates. That requires visual updates _more_
 frequent than every 50 ms — which reads as a contradiction of the throttle the
 codebase just fought to keep.
 
@@ -37,12 +29,12 @@ newly revealed words faded in via CSS. It deliberately issues React commits
 more often than the 50 ms throttle delivers canonical updates — that is not a
 regression of the throttle's purpose, because the two bound different costs:
 
-- The **throttle** bounds *canonical reconciliation* cost: each AI SDK
+- The **throttle** bounds _canonical reconciliation_ cost: each AI SDK
   notification re-renders every part renderer, re-parses the full Markdown
   block split, and re-enters the code-block effect. It stays at 50 ms,
   permanent, untouched.
 - The **reveal** bounds nothing and costs little by construction: each reveal
-  commit changes only the displayed prefix of the *terminal prose block* of
+  commit changes only the displayed prefix of the _terminal prose block_ of
   the one live message (per-block memoization isolates it), never a code
   block, never a settled block, never any other row.
 

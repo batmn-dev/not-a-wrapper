@@ -139,7 +139,7 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
   durable_settlement_receipt: {
     outcome: oneOf("completed", "failed", "aborted"),
   },
-  // --- incremental Markdown projection anomalies (streaming plan §6) ---
+  // --- incremental Markdown projection anomalies (ADR-0016) ---
   // Rare by design: resets (non-prefix corrections, identity churn),
   // incremental fallbacks (fast path could not prove safety), and settlement
   // mismatches (incremental output disagreed with the authoritative parse —

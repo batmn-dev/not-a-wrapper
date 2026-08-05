@@ -130,7 +130,7 @@ const markdownTailGrowth = sampleTailGrowthStates(buildMarkdownPayload())
 const longTailGrowth = sampleTailGrowthStates(longMarkdown)
 const manyBlocksTailGrowth = sampleTailGrowthStates(manyShortBlocks)
 
-describe("markdown splitter scaling (streaming plan §5 baseline)", () => {
+describe("markdown splitter scaling (pre-ADR-0016 baseline)", () => {
   bench(
     "per-update split, ~500 B short prose (40 tail-growth states)",
     () => {
