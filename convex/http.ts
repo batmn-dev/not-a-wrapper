@@ -1,5 +1,11 @@
 import { httpRouter } from "convex/server"
-import { MAX_FILE_SIZE, normalizeFileMimeType } from "../lib/file/policy"
+import {
+  isAllowedProfileImageMimeType,
+  MAX_FILE_SIZE,
+  normalizeFileMimeType,
+  PROFILE_IMAGE_SNIFF_BYTES,
+  sniffProfileImageMimeType,
+} from "../lib/file/policy"
 import { api, internal } from "./_generated/api"
 import { httpAction, type ActionCtx } from "./_generated/server"
 import {
@@ -10,7 +16,6 @@ import {
 } from "./chatRuntimeWorker"
 import { requireIdentity } from "./lib/auth"
 import { sha256Hex } from "./lib/sha256"
-import { isProfileImageMetadataValid } from "./users"
 import { authKit } from "./workosAuth"
 
 const http = httpRouter()
@@ -86,9 +91,7 @@ export async function handleProfileImageUploadRequest(
   }
 
   const fileType = normalizeFileMimeType(request.headers.get("Content-Type"))
-  if (
-    !isProfileImageMetadataValid({ size: 0, contentType: fileType }, fileType)
-  ) {
+  if (!isAllowedProfileImageMimeType(fileType)) {
     return jsonResponse(415, { error: "Unsupported profile image type" })
   }
 
@@ -130,12 +133,14 @@ export async function handleProfileImageUploadRequest(
   if (blob.size > MAX_FILE_SIZE) {
     return jsonResponse(413, { error: "Profile image is too large" })
   }
-  if (
-    !isProfileImageMetadataValid(
-      { size: blob.size, contentType: blob.type },
-      fileType
-    )
-  ) {
+  // The declared type has already been allowlisted; now require the actual
+  // bytes to match it. `blob.type` derives from the same Content-Type header
+  // as `fileType`, so comparing those would validate nothing — the magic
+  // bytes are the only server-side signal not controlled by a header.
+  const header = new Uint8Array(
+    await blob.slice(0, PROFILE_IMAGE_SNIFF_BYTES).arrayBuffer()
+  )
+  if (sniffProfileImageMimeType(header) !== fileType) {
     return jsonResponse(415, { error: "Unsupported profile image type" })
   }
 

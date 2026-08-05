@@ -19,9 +19,15 @@ vi.mock("@/lib/file/validation", () => ({
   validateFile: profileMocks.validateFile,
 }))
 
-vi.mock("@/lib/user/profile-image", () => ({
-  uploadProfileImage: profileMocks.uploadProfileImage,
-}))
+vi.mock("@/lib/user/profile-image", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/user/profile-image")
+  >("@/lib/user/profile-image")
+  return {
+    ProfileImageUploadError: actual.ProfileImageUploadError,
+    uploadProfileImage: profileMocks.uploadProfileImage,
+  }
+})
 
 vi.mock("@/lib/user-store/provider", () => ({
   useUser: () => profileMocks,
@@ -149,6 +155,32 @@ describe("UserProfile", () => {
     expect(profileMocks.updateUser).toHaveBeenCalledWith({
       profile_image: "https://images.test/avatar.png",
     })
+  })
+
+  it("shows the upload's own message when it fails with a known reason", async () => {
+    const { ProfileImageUploadError } = await import("@/lib/user/profile-image")
+    profileMocks.user = userProfileFixture
+    profileMocks.uploadProfileImage.mockRejectedValueOnce(
+      new ProfileImageUploadError("Choose an image under 10MB.")
+    )
+    renderProfile()
+
+    const input = container?.querySelector<HTMLInputElement>(
+      "#settings-profile-image"
+    )
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [new File(["image"], "avatar.png", { type: "image/png" })],
+    })
+
+    await act(async () => {
+      input?.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+
+    expect(
+      container?.querySelector("#settings-profile-image-error")?.textContent
+    ).toBe("Choose an image under 10MB.")
+    expect(profileMocks.updateUser).not.toHaveBeenCalled()
   })
 
   it("focuses the full-name editor when its row is clicked", () => {

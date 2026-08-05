@@ -5,7 +5,10 @@ import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
 import { validateFile } from "@/lib/file/validation"
 import { useUser } from "@/lib/user-store/provider"
-import { uploadProfileImage } from "@/lib/user/profile-image"
+import {
+  ProfileImageUploadError,
+  uploadProfileImage,
+} from "@/lib/user/profile-image"
 import {
   RiArrowRightSLine,
   RiLoader4Line,
@@ -64,8 +67,12 @@ function ProfileFields({
       const profileImageUrl = await uploadProfileImage(file)
 
       await updateUser({ profile_image: profileImageUrl })
-    } catch {
-      setProfileImageError("Your profile picture couldn't be saved. Try again.")
+    } catch (error) {
+      setProfileImageError(
+        error instanceof ProfileImageUploadError
+          ? error.message
+          : "Your profile picture couldn't be saved. Try again."
+      )
     } finally {
       setIsUploadingProfileImage(false)
     }

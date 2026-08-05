@@ -35,10 +35,15 @@ function createUploadHarness() {
   }
 }
 
-function imageRequest(
-  body: Blob = new Blob(["image"], { type: "image/png" }),
-  headers: HeadersInit = {}
-) {
+const PNG_MAGIC = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+])
+
+function pngBlob() {
+  return new Blob([PNG_MAGIC], { type: "image/png" })
+}
+
+function imageRequest(body: Blob = pngBlob(), headers: HeadersInit = {}) {
   return new Request("https://convex.test/profile-image", {
     method: "POST",
     headers: { "Content-Type": body.type, ...headers },
@@ -99,6 +104,18 @@ describe("profile image HTTP upload", () => {
     expect(harness.runMutation.mock.calls[0]?.[1]).toEqual({
       bucket: "profile_image_upload",
     })
+    expect(harness.store).not.toHaveBeenCalled()
+  })
+
+  it("rejects bodies whose bytes don't match the declared image type", async () => {
+    const harness = createUploadHarness()
+
+    const response = await handleProfileImageUploadRequest(
+      harness.ctx,
+      imageRequest(new Blob(["not a png"], { type: "image/png" }))
+    )
+
+    expect(response.status).toBe(415)
     expect(harness.store).not.toHaveBeenCalled()
   })
 

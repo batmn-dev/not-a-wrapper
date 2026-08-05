@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto"
+import { getConvexSiteUrl } from "@/app/api/_lib/convex-site-url"
 import { api } from "@/convex/_generated/api"
 import type { Doc, Id } from "@/convex/_generated/dataModel"
 import type { GenerationRunHeartbeatResult } from "@/convex/chatRuntime"
@@ -136,19 +137,6 @@ function parseGrantRejectionCode(
   }
 }
 
-function resolveConvexSiteUrl(): string {
-  const explicit = process.env.CONVEX_SITE_URL
-  if (explicit) return explicit
-  const generated = process.env.NEXT_PUBLIC_CONVEX_SITE_URL
-  if (generated) return generated
-  const url = process.env.NEXT_PUBLIC_CONVEX_URL
-  if (!url) {
-    throw new Error("NEXT_PUBLIC_CONVEX_URL is not set")
-  }
-  // Convex HTTP actions live on the deployment's .convex.site origin.
-  return url.replace(/\.convex\.cloud$/, ".convex.site")
-}
-
 export function createHttpDurableWorkerWire(options: {
   secret: string
   fetchImpl?: typeof fetch
@@ -156,7 +144,7 @@ export function createHttpDurableWorkerWire(options: {
   const fetchImpl = options.fetchImpl ?? fetch
   return async ({ op, args }) => {
     const response = await fetchImpl(
-      `${resolveConvexSiteUrl()}/chat-turn/worker`,
+      `${getConvexSiteUrl()}/chat-turn/worker`,
       {
         method: "POST",
         headers: {

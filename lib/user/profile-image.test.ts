@@ -1,6 +1,6 @@
 import { fetchClient } from "@/lib/fetch"
 import { describe, expect, it, vi } from "vitest"
-import { uploadProfileImage } from "./profile-image"
+import { ProfileImageUploadError, uploadProfileImage } from "./profile-image"
 
 vi.mock("@/lib/fetch", () => ({
   fetchClient: vi.fn(),
@@ -36,5 +36,23 @@ describe("uploadProfileImage", () => {
     await expect(uploadProfileImage(file)).rejects.toThrow(
       "Profile image upload response was invalid"
     )
+  })
+
+  it("maps known failure statuses to user-facing messages", async () => {
+    const file = new File(["image"], "avatar.png", { type: "image/png" })
+    const cases: Array<[number, string]> = [
+      [413, "Choose an image under 10MB."],
+      [415, "Choose a JPEG, PNG, GIF, or WebP image."],
+      [429, "You're updating your picture too quickly. Try again in a minute."],
+    ]
+
+    for (const [status, message] of cases) {
+      vi.mocked(fetchClient).mockResolvedValueOnce(
+        Response.json({ error: "upstream detail" }, { status })
+      )
+      await expect(uploadProfileImage(file)).rejects.toThrow(
+        new ProfileImageUploadError(message)
+      )
+    }
   })
 })
