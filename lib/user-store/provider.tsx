@@ -61,11 +61,9 @@ export function UserProvider({
 
   const syncAttemptedRef = useRef<string | null>(null)
   // The HTTP upload commits before returning, but its Convex subscription
-  // update can arrive after the client applies the returned URL.
-  const pendingProfileImageRef = useRef<{
-    userId: string
-    url: string
-  } | null>(null)
+  // update can arrive after the client applies the returned URL. Key pending
+  // images by user so late callbacks cannot replace another session's handoff.
+  const pendingProfileImagesRef = useRef(new Map<string, string>())
   // Async upload handlers can resume with an updateUser function from an older
   // render, so confirmation checks read the latest committed subscription.
   const convexUserRef = useRef(convexUser)
@@ -142,16 +140,14 @@ export function UserProvider({
     if (convexUser === undefined) return
     convexUserRef.current = convexUser
 
-    const pendingProfileImage = pendingProfileImageRef.current
-    const pendingProfileImageUrl =
-      pendingProfileImage?.userId === workosUser.id
-        ? pendingProfileImage.url
-        : undefined
+    const pendingProfileImageUrl = pendingProfileImagesRef.current.get(
+      workosUser.id
+    )
     if (
       pendingProfileImageUrl !== undefined &&
       convexUser?.profileImageOverride === pendingProfileImageUrl
     ) {
-      pendingProfileImageRef.current = null
+      pendingProfileImagesRef.current.delete(workosUser.id)
     }
 
     setUser((prevUser) =>
@@ -188,13 +184,12 @@ export function UserProvider({
             convexUserRef.current.profileImageOverride !==
               updates.profile_image)
         ) {
-          pendingProfileImageRef.current = {
-            userId: user.id,
-            url: updates.profile_image,
-          }
+          pendingProfileImagesRef.current.set(user.id, updates.profile_image)
         }
 
-        setUser((prev) => (prev ? { ...prev, ...updates } : null))
+        setUser((prev) =>
+          prev?.id === user.id ? { ...prev, ...updates } : prev
+        )
       } finally {
         setIsLoading(false)
       }

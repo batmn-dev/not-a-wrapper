@@ -24,6 +24,11 @@ const providerMocks = vi.hoisted(() => ({
 }))
 
 const pendingProfileImageUrl = "https://images.test/new-avatar.png"
+const secondPendingProfileImageUrl =
+  "https://images.test/second-user-avatar.png"
+let capturedUpdateUser:
+  | ((updates: Partial<UserProfile>) => Promise<void>)
+  | null = null
 
 vi.mock("@workos-inc/authkit-nextjs/components", () => ({
   useAuth: () => ({
@@ -143,6 +148,17 @@ function UserSnapshot() {
     React.createElement("button", {
       "data-update-profile-image": "",
       onClick: () => void updateUser({ profile_image: pendingProfileImageUrl }),
+    }),
+    React.createElement("button", {
+      "data-update-second-profile-image": "",
+      onClick: () =>
+        void updateUser({ profile_image: secondPendingProfileImageUrl }),
+    }),
+    React.createElement("button", {
+      "data-capture-update-user": "",
+      onClick: () => {
+        capturedUpdateUser = updateUser
+      },
     })
   )
 }
@@ -168,6 +184,7 @@ describe("UserProvider", () => {
     }
     providerMocks.workosUser = null
     providerMocks.mutation.mockReset()
+    capturedUpdateUser = null
   })
 
   afterEach(() => {
@@ -309,6 +326,86 @@ describe("UserProvider", () => {
     const snapshot = container?.querySelector("div")
     expect(snapshot?.getAttribute("data-profile-image")).toBe(
       "https://workos.test/avatar.png"
+    )
+  })
+
+  it("does not apply one user's pending profile image to another user", async () => {
+    setAuthenticatedProfileUser()
+    renderProvider()
+
+    await act(async () => {
+      container
+        ?.querySelector<HTMLButtonElement>("[data-update-profile-image]")
+        ?.click()
+    })
+
+    providerMocks.workosUser = {
+      id: "user-2",
+      email: "other@example.com",
+      firstName: "Other",
+      lastName: "User",
+      profilePictureUrl: "https://workos.test/other-avatar.png",
+      updatedAt: "2026-06-07T00:00:00.000Z",
+    }
+    providerMocks.convexUser = {
+      _creationTime: 200,
+      workosUserId: "user-2",
+      profileImage: "https://workos.test/other-avatar.png",
+      lastActiveAt: 200,
+    }
+    renderProvider()
+
+    const snapshot = container?.querySelector("div")
+    expect(snapshot?.getAttribute("data-profile-image")).toBe(
+      "https://workos.test/other-avatar.png"
+    )
+  })
+
+  it("isolates a profile image callback that resumes after an account switch", async () => {
+    setAuthenticatedProfileUser()
+    renderProvider()
+
+    container
+      ?.querySelector<HTMLButtonElement>("[data-capture-update-user]")
+      ?.click()
+
+    providerMocks.workosUser = {
+      id: "user-2",
+      email: "other@example.com",
+      firstName: "Other",
+      lastName: "User",
+      profilePictureUrl: "https://workos.test/other-avatar.png",
+      updatedAt: "2026-06-07T00:00:00.000Z",
+    }
+    providerMocks.convexUser = {
+      _creationTime: 200,
+      workosUserId: "user-2",
+      profileImage: "https://workos.test/other-avatar.png",
+      lastActiveAt: 200,
+    }
+    renderProvider()
+
+    await act(async () => {
+      container
+        ?.querySelector<HTMLButtonElement>(
+          "[data-update-second-profile-image]"
+        )
+        ?.click()
+    })
+
+    await act(async () => {
+      await capturedUpdateUser?.({ profile_image: pendingProfileImageUrl })
+    })
+
+    providerMocks.convexUser = {
+      ...providerMocks.convexUser,
+      lastActiveAt: 300,
+    }
+    renderProvider()
+
+    const snapshot = container?.querySelector("div")
+    expect(snapshot?.getAttribute("data-profile-image")).toBe(
+      secondPendingProfileImageUrl
     )
   })
 })
