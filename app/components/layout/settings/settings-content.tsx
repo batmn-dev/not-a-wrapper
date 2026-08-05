@@ -46,7 +46,7 @@ export function SettingsContent() {
   const [searchQuery, setSearchQuery] = useState("")
   useScrollAttributes(contentScrollRef, { threshold: 0 })
   const normalizedQuery = searchQuery.trim().toLowerCase()
-  const visibleTabs = normalizedQuery
+  const matchingTabs = normalizedQuery
     ? SETTINGS_TABS.filter((tab) =>
         tab.label.toLowerCase().includes(normalizedQuery)
       )
@@ -151,9 +151,11 @@ export function SettingsContent() {
                   }
                   className={cn(
                     "sidebar-row sidebar-menu-row sidebar-row-content sidebar-row-primary-control menu-item-hoverable text-foreground hover:text-foreground data-active:text-foreground dark:text-foreground flex-none justify-start gap-0 text-left font-normal hover:bg-[var(--sidebar-row-active-background)] focus-visible:shadow-none! focus-visible:ring-0! active:bg-[var(--sidebar-row-active-background)] group-data-[variant=default]/tabs-list:data-active:shadow-none!",
-                    !visibleTabs.some(
-                      (visibleTab) => visibleTab.value === tab.value
-                    ) && "hidden"
+                    tab.value !== activeTab &&
+                      !matchingTabs.some(
+                        (matchingTab) => matchingTab.value === tab.value
+                      ) &&
+                      "hidden"
                   )}
                 >
                   <SidebarLeadingIcon icon={tab.icon} />
@@ -161,9 +163,9 @@ export function SettingsContent() {
                 </TabsTrigger>
               ))}
             </TabsList>
-            {visibleTabs.length === 0 && (
+            {matchingTabs.length === 0 && (
               <p className="text-muted-foreground px-2 py-2 text-xs">
-                No settings found
+                No matching settings found
               </p>
             )}
 

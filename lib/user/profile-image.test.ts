@@ -7,6 +7,13 @@ vi.mock("@/lib/fetch", () => ({
 }))
 
 describe("uploadProfileImage", () => {
+  it("identifies user-safe upload failures by their custom error name", () => {
+    expect(new ProfileImageUploadError("Upload failed")).toMatchObject({
+      name: "ProfileImageUploadError",
+      message: "Upload failed",
+    })
+  })
+
   it("posts the raw image and returns the owner-bound profile URL", async () => {
     vi.mocked(fetchClient).mockResolvedValue(
       Response.json({ profileImageUrl: "https://images.test/avatar.png" })

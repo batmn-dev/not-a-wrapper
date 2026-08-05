@@ -21,5 +21,8 @@
   },
   "aiFiles": {
     "enabled": false
+  },
+  "node": {
+    "externalPackages": ["sharp"]
   }
 }

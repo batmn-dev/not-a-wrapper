@@ -6,17 +6,17 @@ describe("getConvexSiteUrl", () => {
     vi.unstubAllEnvs()
   })
 
-  it("prefers the explicit CONVEX_SITE_URL", () => {
-    vi.stubEnv("CONVEX_SITE_URL", "https://site.example")
+  it("prefers and normalizes the explicit CONVEX_SITE_URL", () => {
+    vi.stubEnv("CONVEX_SITE_URL", "https://site.example/")
     vi.stubEnv("NEXT_PUBLIC_CONVEX_SITE_URL", "http://127.0.0.1:3211")
     vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://deployment.convex.cloud")
 
     expect(getConvexSiteUrl()).toBe("https://site.example")
   })
 
-  it("falls back to the generated NEXT_PUBLIC_CONVEX_SITE_URL", () => {
+  it("falls back to and normalizes NEXT_PUBLIC_CONVEX_SITE_URL", () => {
     vi.stubEnv("CONVEX_SITE_URL", "")
-    vi.stubEnv("NEXT_PUBLIC_CONVEX_SITE_URL", "http://127.0.0.1:3211")
+    vi.stubEnv("NEXT_PUBLIC_CONVEX_SITE_URL", "http://127.0.0.1:3211/")
     vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "http://127.0.0.1:3210")
 
     expect(getConvexSiteUrl()).toBe("http://127.0.0.1:3211")

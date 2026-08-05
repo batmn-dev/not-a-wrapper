@@ -1,6 +1,5 @@
 /** @vitest-environment jsdom */
 
-import { readFileSync } from "node:fs"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
@@ -81,6 +80,54 @@ describe("UserProfile", () => {
         'button[aria-label="Change profile picture"]'
       )
     ).toBeInstanceOf(HTMLButtonElement)
+  })
+
+  it("reflects profile name updates for the same authenticated user", async () => {
+    profileMocks.user = userProfileFixture
+    renderProfile()
+
+    profileMocks.user = {
+      ...userProfileFixture,
+      display_name: "Avery Morgan",
+    }
+    act(() => root?.render(<UserProfile />))
+
+    const input = container?.querySelector<HTMLInputElement>(
+      "#settings-full-name"
+    )
+    expect(input?.value).toBe("Avery Morgan")
+
+    await act(async () => {
+      input?.dispatchEvent(new FocusEvent("focusout", { bubbles: true }))
+    })
+
+    expect(profileMocks.updateUser).not.toHaveBeenCalled()
+  })
+
+  it("preserves an edited name draft across same-user profile updates", () => {
+    profileMocks.user = userProfileFixture
+    renderProfile()
+
+    const input = container?.querySelector<HTMLInputElement>(
+      "#settings-full-name"
+    )
+    act(() => {
+      if (!input) throw new Error("Full name input missing")
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value"
+      )?.set
+      valueSetter?.call(input, "Avery Draft")
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+
+    profileMocks.user = {
+      ...userProfileFixture,
+      display_name: "Avery Morgan",
+    }
+    act(() => root?.render(<UserProfile />))
+
+    expect(input?.value).toBe("Avery Draft")
   })
 
   it("opens the profile-image picker from the complete row", () => {
@@ -248,28 +295,24 @@ describe("UserProfile", () => {
     })
   })
 
-  it("uses responsive semantic-token classes without hardcoded colors", () => {
-    const implementation = ["settings-row.tsx", "user-profile.tsx"]
-      .map((fileName) =>
-        readFileSync(new URL(fileName, import.meta.url), "utf8")
-      )
-      .join("\n")
+  it("applies the responsive visual contract to the rendered name editor", () => {
+    profileMocks.user = userProfileFixture
+    renderProfile()
 
-    expect(implementation).toContain("border-border")
-    expect(implementation).toContain("bg-popover")
-    expect(implementation).toContain("bg-row-hover")
-    expect(implementation).not.toContain("bg-interactive-hover")
-    expect(implementation).not.toContain("bg-input-bg")
-    expect(implementation).toContain("border-input-border")
-    expect(implementation).toContain("hover:border-foreground")
-    expect(implementation).toContain("sm:field-sizing-content")
-    expect(implementation).toContain("sm:min-w-56")
-    expect(implementation).toContain("sm:pr-2.5")
-    expect(implementation).not.toContain("sm:min-w-40")
-    expect(implementation).toContain("transition-none")
-    expect(implementation).not.toContain("transition-colors")
-    expect(implementation).not.toContain("transition-opacity")
-    expect(implementation).not.toMatch(/#[0-9a-f]{3,8}\b/i)
-    expect(implementation).not.toMatch(/\b(?:rgb|hsl|oklch|oklab)a?\(/i)
+    const input = container?.querySelector<HTMLInputElement>(
+      "#settings-full-name"
+    )
+    const surface = input?.closest<HTMLElement>(
+      "[data-slot=settings-field-surface]"
+    )
+
+    expect(surface?.classList).toContain("focus-within:bg-row-hover")
+    expect(surface?.classList).toContain("sm:pr-2.5")
+    expect(input?.classList).toContain("border-input-border")
+    expect(input?.classList).toContain("bg-popover")
+    expect(input?.classList).toContain("hover:border-foreground")
+    expect(input?.classList).toContain("sm:field-sizing-content")
+    expect(input?.classList).toContain("sm:min-w-56")
+    expect(input?.classList).toContain("transition-none")
   })
 })

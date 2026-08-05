@@ -2,7 +2,12 @@ import { fetchClient } from "@/lib/fetch"
 import { MAX_FILE_SIZE } from "@/lib/file/policy"
 
 /** Upload failure whose message is safe to show directly in the settings UI. */
-export class ProfileImageUploadError extends Error {}
+export class ProfileImageUploadError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "ProfileImageUploadError"
+  }
+}
 
 const UPLOAD_ERROR_MESSAGES: Record<number, string> = {
   413: `Choose an image under ${MAX_FILE_SIZE / (1024 * 1024)}MB.`,

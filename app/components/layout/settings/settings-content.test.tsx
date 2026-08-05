@@ -72,6 +72,19 @@ beforeAll(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true
 })
 
+function changeInputValue(input: HTMLInputElement, value: string) {
+  const valueSetter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value"
+  )?.set
+  if (!valueSetter) throw new Error("HTMLInputElement value setter unavailable")
+
+  act(() => {
+    valueSetter.call(input, value)
+    input.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+}
+
 describe("SettingsContent", () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
@@ -98,5 +111,54 @@ describe("SettingsContent", () => {
     ).find((button) => button.textContent === "Sign out")
 
     expect(signOutButton).toBeTruthy()
+  })
+
+  it("keeps the selected desktop tab visible while filtering", async () => {
+    settingsContentMocks.isMobile = false
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+
+    await act(async () => {
+      root?.render(<SettingsContent />)
+    })
+
+    const searchInput = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Search settings"]'
+    )
+    const tabTriggers = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(
+        'button[data-slot="tabs-trigger"]'
+      )
+    )
+    const generalTab = tabTriggers.find(
+      (trigger) => trigger.textContent === "General"
+    )
+    const appearanceTab = tabTriggers.find(
+      (trigger) => trigger.textContent === "Appearance"
+    )
+    const apiKeysTab = tabTriggers.find(
+      (trigger) => trigger.textContent === "API Keys"
+    )
+
+    expect(searchInput).toBeTruthy()
+    expect(generalTab).toBeTruthy()
+    expect(appearanceTab).toBeTruthy()
+    expect(apiKeysTab).toBeTruthy()
+    if (!searchInput || !generalTab || !appearanceTab || !apiKeysTab) return
+
+    changeInputValue(searchInput, "Appearance")
+
+    expect(generalTab.classList.contains("hidden")).toBe(false)
+    expect(appearanceTab.classList.contains("hidden")).toBe(false)
+    expect(apiKeysTab.classList.contains("hidden")).toBe(true)
+    expect(container.querySelector("h1")?.textContent).toBe("General")
+
+    changeInputValue(searchInput, "missing")
+
+    expect(generalTab.classList.contains("hidden")).toBe(false)
+    expect(appearanceTab.classList.contains("hidden")).toBe(true)
+    expect(container.textContent).toContain("No matching settings found")
+    expect(container.querySelector("h1")?.textContent).toBe("General")
   })
 })

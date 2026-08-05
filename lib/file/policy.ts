@@ -39,7 +39,7 @@ export function isAllowedProfileImageMimeType(
   )
 }
 
-/** Bytes needed to distinguish every ALLOWED_PROFILE_IMAGE_TYPES signature. */
+/** Bytes needed to prefilter every ALLOWED_PROFILE_IMAGE_TYPES signature. */
 export const PROFILE_IMAGE_SNIFF_BYTES = 12
 
 function bytesAt(bytes: Uint8Array, offset: number, signature: number[]) {
@@ -48,9 +48,9 @@ function bytesAt(bytes: Uint8Array, offset: number, signature: number[]) {
 }
 
 /**
- * Magic-byte sniff limited to the profile-image formats. Dependency-free so
- * the Convex isolate runtime can enforce it server-side (the richer
- * `file-type`-based check in validation.ts stays browser-only).
+ * Magic-byte prefilter limited to the profile-image formats. This rejects
+ * obvious mismatches cheaply; the server must still fully decode the image
+ * before committing it because a signature alone does not prove validity.
  */
 export function sniffProfileImageMimeType(bytes: Uint8Array): string | null {
   if (bytesAt(bytes, 0, [0xff, 0xd8, 0xff])) return "image/jpeg"

@@ -14,6 +14,7 @@ type ConvexUserProfileFields = Pick<
   | "lastActiveAt"
   | "favoriteModels"
   | "systemPrompt"
+  | "profileImage"
   | "profileImageOverride"
 > & {
   displayName?: string
@@ -35,7 +36,8 @@ export function mergeUserProfileWithConvexFields(
   return {
     ...user,
     display_name: convexUser.displayName ?? user.display_name,
-    profile_image: convexUser.profileImageOverride ?? user.profile_image,
+    profile_image:
+      convexUser.profileImageOverride ?? convexUser.profileImage ?? null,
     anonymous: convexUser.anonymous ?? user.anonymous,
     premium: convexUser.premium ?? user.premium,
     message_count: convexUser.messageCount ?? user.message_count,

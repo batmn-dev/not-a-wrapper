@@ -6,12 +6,16 @@
  * Kept free of `import "server-only"` so modules under test (which import this
  * directly) load in vitest's node environment.
  */
+function removeTrailingSlashes(url: string): string {
+  return url.replace(/\/+$/, "")
+}
+
 export function getConvexSiteUrl(): string {
   const explicit = process.env.CONVEX_SITE_URL
-  if (explicit) return explicit
+  if (explicit) return removeTrailingSlashes(explicit)
 
   const generated = process.env.NEXT_PUBLIC_CONVEX_SITE_URL
-  if (generated) return generated
+  if (generated) return removeTrailingSlashes(generated)
 
   const url = process.env.NEXT_PUBLIC_CONVEX_URL
   if (!url) {

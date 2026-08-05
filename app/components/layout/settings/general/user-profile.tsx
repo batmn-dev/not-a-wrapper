@@ -37,12 +37,13 @@ function ProfileFields({
   const { isLoading, updateUser } = useUser()
   const nameInputRef = useRef<HTMLInputElement>(null)
   const profileImageInputRef = useRef<HTMLInputElement>(null)
-  const [nameDraft, setNameDraft] = useState(displayName)
+  const [nameDraft, setNameDraft] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isUploadingProfileImage, setIsUploadingProfileImage] = useState(false)
   const [profileImageError, setProfileImageError] = useState<string | null>(
     null
   )
+  const displayedName = nameDraft ?? displayName
 
   const handleProfileImageChange = async (
     event: ChangeEvent<HTMLInputElement>
@@ -81,7 +82,7 @@ function ProfileFields({
   const saveDisplayName = async () => {
     if (isLoading) return
 
-    const nextDisplayName = nameDraft.trim()
+    const nextDisplayName = displayedName.trim()
 
     if (!nextDisplayName) {
       setSaveError("Enter your full name.")
@@ -89,14 +90,14 @@ function ProfileFields({
     }
 
     if (nextDisplayName === displayName) {
-      setNameDraft(displayName)
+      setNameDraft(null)
       setSaveError(null)
       return
     }
 
     try {
       await updateUser({ display_name: nextDisplayName })
-      setNameDraft(nextDisplayName)
+      setNameDraft(null)
       setSaveError(null)
     } catch {
       setSaveError("Your name couldn't be saved. Try again.")
@@ -215,7 +216,7 @@ function ProfileFields({
               id="settings-full-name"
               name="full-name"
               autoComplete="name"
-              value={nameDraft}
+              value={displayedName}
               disabled={isLoading}
               aria-invalid={saveError ? true : undefined}
               aria-describedby={

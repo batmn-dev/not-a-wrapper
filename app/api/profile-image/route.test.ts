@@ -35,6 +35,7 @@ function imageRequest(headers: HeadersInit = {}) {
 
 describe("POST /api/profile-image", () => {
   afterEach(() => {
+    vi.restoreAllMocks()
     vi.unstubAllGlobals()
     vi.clearAllMocks()
   })
@@ -169,6 +170,5 @@ describe("POST /api/profile-image", () => {
       "Profile image upload proxy failed",
       expect.any(Error)
     )
-    consoleErrorSpy.mockRestore()
   })
 })

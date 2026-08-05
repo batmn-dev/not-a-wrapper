@@ -19,17 +19,20 @@ function createUploadHarness() {
     .fn()
     .mockResolvedValueOnce({ allowed: true, retryAfterMs: 0 })
     .mockResolvedValueOnce("https://images.test/avatar.png")
+  const runAction = vi.fn().mockResolvedValue({ valid: true })
   const store = vi.fn().mockResolvedValue(storageId)
   const deleteStoredFile = vi.fn()
 
   return {
     ctx: {
       auth: { getUserIdentity },
+      runAction,
       runMutation,
       storage: { delete: deleteStoredFile, store },
     } as unknown as Parameters<typeof handleProfileImageUploadRequest>[0],
     deleteStoredFile,
     getUserIdentity,
+    runAction,
     runMutation,
     store,
   }
@@ -70,6 +73,7 @@ describe("profile image HTTP upload", () => {
     )
 
     expect(response.status).toBe(401)
+    expect(harness.runAction).not.toHaveBeenCalled()
     expect(harness.runMutation).not.toHaveBeenCalled()
     expect(harness.store).not.toHaveBeenCalled()
   })
@@ -83,6 +87,7 @@ describe("profile image HTTP upload", () => {
     )
 
     expect(response.status).toBe(415)
+    expect(harness.runAction).not.toHaveBeenCalled()
     expect(harness.runMutation).not.toHaveBeenCalled()
     expect(harness.store).not.toHaveBeenCalled()
   })
@@ -104,6 +109,7 @@ describe("profile image HTTP upload", () => {
     expect(harness.runMutation.mock.calls[0]?.[1]).toEqual({
       bucket: "profile_image_upload",
     })
+    expect(harness.runAction).not.toHaveBeenCalled()
     expect(harness.store).not.toHaveBeenCalled()
   })
 
@@ -116,6 +122,7 @@ describe("profile image HTTP upload", () => {
     )
 
     expect(response.status).toBe(415)
+    expect(harness.runAction).not.toHaveBeenCalled()
     expect(harness.store).not.toHaveBeenCalled()
   })
 
@@ -132,12 +139,62 @@ describe("profile image HTTP upload", () => {
       profileImageUrl: "https://images.test/avatar.png",
     })
     expect(harness.store).toHaveBeenCalledWith(expect.any(Blob))
+    expect(harness.runAction.mock.calls[0]?.[1]).toEqual({
+      storageId,
+      fileType: "image/png",
+    })
     expect(harness.runMutation.mock.calls[1]?.[1]).toEqual({
       workosUserId: "workos-user-1",
       storageId,
       fileType: "image/png",
     })
+    expect(harness.runAction.mock.invocationCallOrder[0]).toBeLessThan(
+      harness.runMutation.mock.invocationCallOrder[1] ??
+        Number.POSITIVE_INFINITY
+    )
     expect(harness.deleteStoredFile).not.toHaveBeenCalled()
+  })
+
+  it("deletes a signature-matching JPEG that fails full decoding", async () => {
+    const harness = createUploadHarness()
+    harness.runAction.mockResolvedValue({ valid: false })
+    const fakeJpeg = new Blob(
+      [new Uint8Array([0xff, 0xd8, 0xff]), "not an image"],
+      { type: "image/jpeg" }
+    )
+
+    const response = await handleProfileImageUploadRequest(
+      harness.ctx,
+      imageRequest(fakeJpeg)
+    )
+
+    expect(response.status).toBe(415)
+    await expect(response.json()).resolves.toEqual({
+      error: "Unsupported profile image type",
+    })
+    expect(harness.runAction).toHaveBeenCalledTimes(1)
+    expect(harness.deleteStoredFile).toHaveBeenCalledWith(storageId)
+    expect(harness.runMutation).toHaveBeenCalledTimes(1)
+  })
+
+  it("cleans up and returns a generic error when decoder validation fails", async () => {
+    const harness = createUploadHarness()
+    harness.runAction.mockRejectedValue(new Error("Decoder unavailable"))
+
+    const response = await handleProfileImageUploadRequest(
+      harness.ctx,
+      imageRequest()
+    )
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({
+      error: "Profile image upload failed",
+    })
+    expect(harness.deleteStoredFile).toHaveBeenCalledWith(storageId)
+    expect(harness.runMutation).toHaveBeenCalledTimes(1)
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      JSON.stringify({ _tag: "profile_image_upload_failed" })
+    )
   })
 
   it("deletes the newly stored file when the owner-bound commit fails", async () => {

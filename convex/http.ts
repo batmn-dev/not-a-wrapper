@@ -77,7 +77,23 @@ function jsonResponse(
   })
 }
 
-type ProfileImageUploadCtx = Pick<ActionCtx, "auth" | "runMutation" | "storage">
+type ProfileImageUploadCtx = Pick<
+  ActionCtx,
+  "auth" | "runAction" | "runMutation" | "storage"
+>
+
+async function cleanupStoredProfileImage(
+  ctx: ProfileImageUploadCtx,
+  storageId: Awaited<ReturnType<ProfileImageUploadCtx["storage"]["store"]>>
+) {
+  try {
+    await ctx.storage.delete(storageId)
+  } catch {
+    console.warn(
+      JSON.stringify({ _tag: "profile_image_upload_cleanup_failed" })
+    )
+  }
+}
 
 export async function handleProfileImageUploadRequest(
   ctx: ProfileImageUploadCtx,
@@ -133,10 +149,9 @@ export async function handleProfileImageUploadRequest(
   if (blob.size > MAX_FILE_SIZE) {
     return jsonResponse(413, { error: "Profile image is too large" })
   }
-  // The declared type has already been allowlisted; now require the actual
-  // bytes to match it. `blob.type` derives from the same Content-Type header
-  // as `fileType`, so comparing those would validate nothing — the magic
-  // bytes are the only server-side signal not controlled by a header.
+  // Cheaply reject obvious mismatches before staging the body. This signature
+  // check is only a prefilter; the staged image is fully decoded below before
+  // any user record or storage URL can reference it.
   const header = new Uint8Array(
     await blob.slice(0, PROFILE_IMAGE_SNIFF_BYTES).arrayBuffer()
   )
@@ -148,6 +163,15 @@ export async function handleProfileImageUploadRequest(
     Awaited<ReturnType<ProfileImageUploadCtx["storage"]["store"]>> | undefined
   try {
     storageId = await ctx.storage.store(blob)
+    const validation = await ctx.runAction(
+      internal.profileImageValidation.validateStoredProfileImage,
+      { storageId, fileType }
+    )
+    if (!validation.valid) {
+      await cleanupStoredProfileImage(ctx, storageId)
+      return jsonResponse(415, { error: "Unsupported profile image type" })
+    }
+
     const profileImageUrl: string = await ctx.runMutation(
       internal.users.commitUploadedProfileImage,
       {
@@ -159,13 +183,7 @@ export async function handleProfileImageUploadRequest(
     return jsonResponse(200, { profileImageUrl })
   } catch {
     if (storageId !== undefined) {
-      try {
-        await ctx.storage.delete(storageId)
-      } catch {
-        console.warn(
-          JSON.stringify({ _tag: "profile_image_upload_cleanup_failed" })
-        )
-      }
+      await cleanupStoredProfileImage(ctx, storageId)
     }
     console.warn(JSON.stringify({ _tag: "profile_image_upload_failed" }))
     return jsonResponse(500, { error: "Profile image upload failed" })

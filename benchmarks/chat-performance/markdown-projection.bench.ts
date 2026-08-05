@@ -72,7 +72,7 @@ const CASES: Array<{ name: string; base: string }> = [
   { name: "~12 KB mixed payload", base: buildMarkdownPayload() },
   { name: "~100 KB payload, short tail", base: buildLongMarkdownPayload() },
   { name: "400 short blocks, small tail", base: buildManyShortBlocksPayload() },
-  // Remaining projection cases: one very long paragraph (the whole
+  // Additional projection cases: one very long paragraph (the whole
   // block is the mutable region — the honest lower bound), growing table
   // construction, and a growing fenced block on a completed prefix.
   {
