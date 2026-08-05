@@ -23,6 +23,8 @@ const providerMocks = vi.hoisted(() => ({
   mutation: vi.fn(),
 }))
 
+const pendingProfileImageUrl = "https://images.test/new-avatar.png"
+
 vi.mock("@workos-inc/authkit-nextjs/components", () => ({
   useAuth: () => ({
     loading: providerMocks.authLoading,
@@ -127,14 +129,22 @@ describe("mergeUserProfileWithConvexFields", () => {
 })
 
 function UserSnapshot() {
-  const { user } = useUser()
+  const { user, updateUser } = useUser()
 
-  return React.createElement("div", {
-    "data-created-at": user?.created_at ?? "",
-    "data-display-name": user?.display_name ?? "",
-    "data-premium": String(user?.premium ?? ""),
-    "data-system-prompt": user?.system_prompt ?? "",
-  })
+  return React.createElement(
+    "div",
+    {
+      "data-created-at": user?.created_at ?? "",
+      "data-display-name": user?.display_name ?? "",
+      "data-profile-image": user?.profile_image ?? "",
+      "data-premium": String(user?.premium ?? ""),
+      "data-system-prompt": user?.system_prompt ?? "",
+    },
+    React.createElement("button", {
+      "data-update-profile-image": "",
+      onClick: () => void updateUser({ profile_image: pendingProfileImageUrl }),
+    })
+  )
 }
 
 describe("UserProvider", () => {
@@ -194,6 +204,24 @@ describe("UserProvider", () => {
     })
   }
 
+  function setAuthenticatedProfileUser() {
+    providerMocks.authLoading = false
+    providerMocks.workosUser = {
+      id: "user-1",
+      email: "user@example.com",
+      firstName: "WorkOS",
+      lastName: "User",
+      profilePictureUrl: "https://workos.test/avatar.png",
+      updatedAt: "2026-06-07T00:00:00.000Z",
+    }
+    providerMocks.convexUser = {
+      _creationTime: 100,
+      workosUserId: "user-1",
+      profileImage: "https://workos.test/avatar.png",
+      lastActiveAt: 100,
+    }
+  }
+
   it("applies Convex-managed fields after WorkOS hydrates later", () => {
     renderProvider()
 
@@ -215,5 +243,72 @@ describe("UserProvider", () => {
     expect(snapshot?.getAttribute("data-premium")).toBe("true")
     expect(snapshot?.getAttribute("data-system-prompt")).toBe("Be concise")
     expect(snapshot?.getAttribute("data-created-at")).toBe("100")
+  })
+
+  it("keeps a local profile image until Convex confirms it", async () => {
+    setAuthenticatedProfileUser()
+    renderProvider()
+
+    await act(async () => {
+      container
+        ?.querySelector<HTMLButtonElement>("[data-update-profile-image]")
+        ?.click()
+    })
+
+    providerMocks.convexUser = {
+      ...providerMocks.convexUser,
+      lastActiveAt: 200,
+    }
+    renderProvider()
+
+    let snapshot = container?.querySelector("div")
+    expect(snapshot?.getAttribute("data-profile-image")).toBe(
+      pendingProfileImageUrl
+    )
+
+    providerMocks.convexUser = {
+      ...providerMocks.convexUser,
+      profileImageOverride: pendingProfileImageUrl,
+    }
+    renderProvider()
+
+    providerMocks.convexUser = {
+      ...providerMocks.convexUser,
+      profileImageOverride: undefined,
+    }
+    renderProvider()
+
+    snapshot = container?.querySelector("div")
+    expect(snapshot?.getAttribute("data-profile-image")).toBe(
+      "https://workos.test/avatar.png"
+    )
+  })
+
+  it("does not retain a pending image when Convex already confirmed it", async () => {
+    setAuthenticatedProfileUser()
+    renderProvider()
+
+    providerMocks.convexUser = {
+      ...providerMocks.convexUser,
+      profileImageOverride: pendingProfileImageUrl,
+    }
+    renderProvider()
+
+    await act(async () => {
+      container
+        ?.querySelector<HTMLButtonElement>("[data-update-profile-image]")
+        ?.click()
+    })
+
+    providerMocks.convexUser = {
+      ...providerMocks.convexUser,
+      profileImageOverride: undefined,
+    }
+    renderProvider()
+
+    const snapshot = container?.querySelector("div")
+    expect(snapshot?.getAttribute("data-profile-image")).toBe(
+      "https://workos.test/avatar.png"
+    )
   })
 })

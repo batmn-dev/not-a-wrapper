@@ -9,6 +9,7 @@ import {
 import { internalAction } from "./_generated/server"
 
 const PROFILE_IMAGE_DECODE_TIMEOUT_SECONDS = 5
+export const PROFILE_IMAGE_MAX_INPUT_PIXELS = 4096 * 4096
 
 const PROFILE_IMAGE_MIME_BY_SHARP_FORMAT: Readonly<Record<string, string>> = {
   gif: "image/gif",
@@ -32,7 +33,7 @@ export async function isDecodableProfileImage(
   const inputOptions = {
     animated: true,
     failOn: "warning" as const,
-    limitInputPixels: true,
+    limitInputPixels: PROFILE_IMAGE_MAX_INPUT_PIXELS,
   }
 
   try {

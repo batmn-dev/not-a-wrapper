@@ -60,6 +60,15 @@ export function UserProvider({
   const { data: convexUser } = usePerUserQuery(api.users.getCurrent)
 
   const syncAttemptedRef = useRef<string | null>(null)
+  // The HTTP upload commits before returning, but its Convex subscription
+  // update can arrive after the client applies the returned URL.
+  const pendingProfileImageRef = useRef<{
+    userId: string
+    url: string
+  } | null>(null)
+  // Async upload handlers can resume with an updateUser function from an older
+  // render, so confirmation checks read the latest committed subscription.
+  const convexUserRef = useRef(convexUser)
 
   // Sync the first WorkOS session load into Convex for local dev and webhook-free auth.
   useEffect(() => {
@@ -131,8 +140,26 @@ export function UserProvider({
   useEffect(() => {
     if (isAuthLoading || !workosUser) return
     if (convexUser === undefined) return
+    convexUserRef.current = convexUser
+
+    const pendingProfileImage = pendingProfileImageRef.current
+    const pendingProfileImageUrl =
+      pendingProfileImage?.userId === workosUser.id
+        ? pendingProfileImage.url
+        : undefined
+    if (
+      pendingProfileImageUrl !== undefined &&
+      convexUser?.profileImageOverride === pendingProfileImageUrl
+    ) {
+      pendingProfileImageRef.current = null
+    }
+
     setUser((prevUser) =>
-      mergeUserProfileWithConvexFields(prevUser, convexUser)
+      mergeUserProfileWithConvexFields(
+        prevUser,
+        convexUser,
+        pendingProfileImageUrl
+      )
     )
   }, [convexUser, isAuthLoading, workosUser])
 
@@ -153,6 +180,18 @@ export function UserProvider({
 
         if (Object.keys(convexUpdates).length > 0) {
           await updateProfileMutation(convexUpdates)
+        }
+
+        if (
+          typeof updates.profile_image === "string" &&
+          (convexUserRef.current?.workosUserId !== user.id ||
+            convexUserRef.current.profileImageOverride !==
+              updates.profile_image)
+        ) {
+          pendingProfileImageRef.current = {
+            userId: user.id,
+            url: updates.profile_image,
+          }
         }
 
         setUser((prev) => (prev ? { ...prev, ...updates } : null))

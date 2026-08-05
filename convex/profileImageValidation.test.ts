@@ -1,6 +1,9 @@
 import sharp from "sharp"
 import { describe, expect, it } from "vitest"
-import { isDecodableProfileImage } from "./profileImageValidation"
+import {
+  isDecodableProfileImage,
+  PROFILE_IMAGE_MAX_INPUT_PIXELS,
+} from "./profileImageValidation"
 
 const FORMAT_CASES = [
   ["jpeg", "image/jpeg"],
@@ -57,6 +60,24 @@ describe("profile image decoding", () => {
     await expect(
       isDecodableProfileImage(image.subarray(0, 24), "image/jpeg")
     ).resolves.toBe(false)
+  })
+
+  it("rejects an image above the decoded pixel limit", async () => {
+    const squareEdge = Math.sqrt(PROFILE_IMAGE_MAX_INPUT_PIXELS)
+    const image = await sharp({
+      create: {
+        width: squareEdge + 1,
+        height: squareEdge,
+        channels: 4,
+        background: { r: 12, g: 34, b: 56, alpha: 1 },
+      },
+    })
+      .png()
+      .toBuffer()
+
+    await expect(isDecodableProfileImage(image, "image/png")).resolves.toBe(
+      false
+    )
   })
 
   it("rejects a valid image whose decoded format differs from its declared type", async () => {
