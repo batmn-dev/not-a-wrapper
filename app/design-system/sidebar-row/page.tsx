@@ -1,5 +1,6 @@
 import { ComponentPager } from "@/app/design-system/_components/component-pager"
 import { ComponentPreview } from "@/app/design-system/_components/component-preview"
+import { readComponentSource } from "@/app/design-system/_lib/component-source"
 import {
   Table,
   TableBody,
@@ -117,6 +118,8 @@ export const metadata: Metadata = {
 }
 
 export default function SidebarRowPage() {
+  const sidebarRowSource = readComponentSource("app/components/layout/sidebar/sidebar-row.tsx")
+
   return (
     <main id="main" className="w-full max-w-[680px] px-6 pt-10 pb-24 md:pt-28">
       <header className="flex items-start justify-between gap-6">
@@ -145,7 +148,7 @@ export default function SidebarRowPage() {
           click-outside.
         </p>
         <div className="mt-3">
-          <ComponentPreview code={statesCode}>
+          <ComponentPreview code={statesCode} sourceCode={sidebarRowSource}>
             <SidebarRowStates />
           </ComponentPreview>
         </div>
@@ -161,7 +164,7 @@ export default function SidebarRowPage() {
           long titles may truncate earlier while the actions are revealed.
         </p>
         <div className="mt-3">
-          <ComponentPreview code={statusesCode}>
+          <ComponentPreview code={statusesCode} sourceCode={sidebarRowSource}>
             <SidebarRowStatuses />
           </ComponentPreview>
         </div>

@@ -6,6 +6,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -16,8 +19,17 @@ import {
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useMessages } from "@/lib/chat-store/messages/provider"
 import { useUser } from "@/lib/user-store/provider"
-import { RiLogoutBoxRLine } from "@remixicon/react"
+import { APP_DOMAIN } from "@/lib/config"
+import {
+  RiBugLine,
+  RiFileTextLine,
+  RiLifebuoyLine,
+  RiLogoutBoxRLine,
+  RiPaletteLine,
+  RiShieldLine,
+} from "@remixicon/react"
 import { useAuth } from "@workos-inc/authkit-nextjs/components"
+import Link from "next/link"
 import { useState } from "react"
 import { AppInfoDialog, AppInfoMenuItem } from "./app-info/app-info-trigger"
 import { FeedbackDialog, FeedbackMenuItem } from "./feedback/feedback-trigger"
@@ -57,16 +69,71 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
         </span>
       </DropdownMenuItem>
       <DropdownMenuSeparator />
+      <DropdownMenuItem
+        render={<Link href="/design-system" />}
+        className="gap-0"
+      >
+        <SidebarLeadingIcon icon={RiPaletteLine} />
+        <span>Design System</span>
+      </DropdownMenuItem>
       <SettingsMenuItem onClick={() => setSettingsOpen(true)} />
-      <FeedbackMenuItem onClick={() => setFeedbackOpen(true)} />
-      <AppInfoMenuItem onClick={() => setAppInfoOpen(true)} />
       <DropdownMenuSeparator />
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger className="gap-0">
+          <SidebarLeadingIcon icon={RiLifebuoyLine} />
+          <span>Help</span>
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="w-56 rounded-2xl p-1.5">
+          <AppInfoMenuItem onClick={() => setAppInfoOpen(true)} />
+          <FeedbackMenuItem onClick={() => setFeedbackOpen(true)} />
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            render={
+              <a
+                href={`${APP_DOMAIN}/terms`}
+                target="_blank"
+                rel="noopener noreferrer"
+              />
+            }
+            className="gap-0"
+          >
+            <SidebarLeadingIcon icon={RiFileTextLine} />
+            <span>Terms of Service</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            render={
+              <a
+                href={`${APP_DOMAIN}/privacy`}
+                target="_blank"
+                rel="noopener noreferrer"
+              />
+            }
+            className="gap-0"
+          >
+            <SidebarLeadingIcon icon={RiShieldLine} />
+            <span>Privacy Policy</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            render={
+              <a
+                href="https://github.com/darknightdesigner/not-a-wrapper/issues/new"
+                target="_blank"
+                rel="noopener noreferrer"
+              />
+            }
+            className="gap-0"
+          >
+            <SidebarLeadingIcon icon={RiBugLine} />
+            <span>Report a bug</span>
+          </DropdownMenuItem>
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
       <DropdownMenuItem
         onClick={handleSignOut}
         className="flex items-center gap-0"
       >
         <SidebarLeadingIcon icon={RiLogoutBoxRLine} />
-        <span>Sign out</span>
+        <span>Log out</span>
       </DropdownMenuItem>
     </>
   )

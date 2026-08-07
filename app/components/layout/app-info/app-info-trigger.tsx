@@ -26,7 +26,7 @@ export function AppInfoMenuItem({ onClick }: { onClick: () => void }) {
   return (
     <DropdownMenuItem onClick={onClick} className="gap-0">
       <SidebarLeadingIcon icon={RiInformationLine} />
-      <span>About {APP_NAME}</span>
+      <span>About</span>
     </DropdownMenuItem>
   )
 }

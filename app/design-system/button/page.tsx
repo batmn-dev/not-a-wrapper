@@ -1,5 +1,6 @@
 import { ComponentPager } from "@/app/design-system/_components/component-pager"
 import { ComponentPreview } from "@/app/design-system/_components/component-preview"
+import { readComponentSource } from "@/app/design-system/_lib/component-source"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -60,6 +61,8 @@ export const metadata: Metadata = {
 }
 
 export default function ButtonPage() {
+  const buttonSource = readComponentSource("components/ui/button.tsx")
+
   return (
     <main id="main" className="w-full max-w-[680px] px-6 pt-10 pb-24 md:pt-28">
       <header className="flex items-start justify-between gap-6">
@@ -80,7 +83,7 @@ export default function ButtonPage() {
           Variants
         </h2>
         <div className="mt-3">
-          <ComponentPreview code={variantsCode}>
+          <ComponentPreview code={variantsCode} sourceCode={buttonSource}>
             <div className="flex flex-wrap items-center justify-center gap-2">
               <Button type="button">Default</Button>
               <Button type="button" variant="outline">

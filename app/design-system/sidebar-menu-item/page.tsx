@@ -1,5 +1,6 @@
 import { ComponentPager } from "@/app/design-system/_components/component-pager"
 import { ComponentPreview } from "@/app/design-system/_components/component-preview"
+import { readComponentSource } from "@/app/design-system/_lib/component-source"
 import {
   Table,
   TableBody,
@@ -117,6 +118,8 @@ export const metadata: Metadata = {
 }
 
 export default function SidebarMenuItemPage() {
+  const sidebarMenuItemSource = readComponentSource("app/components/layout/sidebar/sidebar-menu-item.tsx")
+
   return (
     <main id="main" className="w-full max-w-[680px] px-6 pt-10 pb-24 md:pt-28">
       <header className="flex items-start justify-between gap-6">
@@ -139,7 +142,7 @@ export default function SidebarMenuItemPage() {
           States
         </h2>
         <div className="mt-3">
-          <ComponentPreview code={statesCode}>
+          <ComponentPreview code={statesCode} sourceCode={sidebarMenuItemSource}>
             <SidebarMenuItemStates />
           </ComponentPreview>
         </div>
@@ -150,7 +153,7 @@ export default function SidebarMenuItemPage() {
           Trailing content
         </h2>
         <div className="mt-3">
-          <ComponentPreview code={trailingCode}>
+          <ComponentPreview code={trailingCode} sourceCode={sidebarMenuItemSource}>
             <SidebarMenuItemTrailing />
           </ComponentPreview>
         </div>
