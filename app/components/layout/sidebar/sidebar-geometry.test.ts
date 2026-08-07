@@ -60,6 +60,16 @@ describe("sidebar leading-icon placement contract", () => {
     expect(resolvePx("--sidebar-leading-slot-size")).toBe(20)
     expect(resolvePx("--sidebar-collapsed-item-width")).toBe(40)
     expect(resolvePx("--sidebar-rail-width")).toBe(52)
+    expect(resolvePx("--sidebar-width")).toBe(260)
+  })
+
+  it("keeps the collapsed frame width equal to the rail width", () => {
+    // The ui/sidebar frame animates to --sidebar-width-icon while the app
+    // renders its collapsed rail at --sidebar-rail-width inside it. Widths are
+    // CSS-owned (no TS constants), so this equality is the whole contract.
+    expect(resolvePx("--sidebar-width-icon")).toBe(
+      resolvePx("--sidebar-rail-width")
+    )
   })
 
   it("gives both organizer modes one section-stack rhythm", () => {

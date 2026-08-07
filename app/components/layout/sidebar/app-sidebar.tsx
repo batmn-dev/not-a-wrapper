@@ -31,6 +31,7 @@ import {
   SIDEBAR_CONTAINER_ID,
   SidebarTrigger,
   useSidebar,
+  useSidebarShortcutScope,
 } from "@/components/ui/sidebar"
 import {
   Tooltip,
@@ -78,6 +79,9 @@ import { SidebarProjectItem } from "./sidebar-project-item"
 
 export function AppSidebar() {
   const { isMobile } = useSidebar()
+  // This sidebar responds to ⌘⇧S (desktop collapse / mobile drawer), so it
+  // enables the provider's shortcut while mounted.
+  useSidebarShortcutScope()
 
   if (isMobile) {
     return <MobileAppSidebarDrawer />
@@ -109,7 +113,6 @@ function DesktopAppSidebar() {
   return (
     <Sidebar
       collapsible="icon"
-      variant="sidebar"
       className="bg-sidebar border-sidebar-border border-r"
     >
       {/* 
