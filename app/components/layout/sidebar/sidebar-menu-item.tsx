@@ -17,7 +17,7 @@ type SidebarMenuItemProps = Omit<
   "children" | "className" | "type" | "onClick"
 > & {
   /** Icon rendered through the shared sidebar leading slot. */
-  icon: IconProps["icon"]
+  icon?: IconProps["icon"]
   /** Icon used when active; the shared slot keeps its geometry fixed. */
   activeIcon?: IconProps["icon"]
   /** Label text */
@@ -84,11 +84,13 @@ export const SidebarMenuItem = forwardRef<
   const hasTrailing = Boolean(trailing)
   const primaryContent = (
     <>
-      <SidebarLeadingIcon
-        icon={icon}
-        activeIcon={activeIcon}
-        isActive={isActive}
-      />
+      {icon ? (
+        <SidebarLeadingIcon
+          icon={icon}
+          activeIcon={activeIcon}
+          isActive={isActive}
+        />
+      ) : null}
       <div className="flex min-w-0 grow items-center gap-(--sidebar-item-gap)">
         <span className="truncate">{label}</span>
       </div>
