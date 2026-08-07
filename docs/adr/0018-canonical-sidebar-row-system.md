@@ -4,8 +4,8 @@
 - Date: 2026-08-07
 - Related: `app/components/layout/sidebar/sidebar-geometry.test.ts` (the token
   contract this decision makes canonical),
-  `docs/chatgpt-thread-box-model-audit.md` (the parity program the row system
-  belongs to), ADR-0005 (chat list window — the data the rows render).
+  `docs/sidebar-chat-grouping-reference.md` (the live parity evidence for row
+  anatomy and geometry), ADR-0005 (chat list window — the data the rows render).
 
 ## Context
 

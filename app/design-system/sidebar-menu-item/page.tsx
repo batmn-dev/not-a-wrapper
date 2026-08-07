@@ -106,7 +106,7 @@ const apiRows = [
     type: "boolean",
     defaultValue: "false",
     description:
-      "Applies the active row tint, aria-current, and the activeIcon swap.",
+      "Applies the active row tint and activeIcon swap. For Link rows, it also sets aria-current to page.",
   },
 ] as const
 

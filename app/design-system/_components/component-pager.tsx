@@ -1,7 +1,5 @@
-"use client"
-
 import { getAdjacentComponents } from "@/app/design-system/_lib/catalog"
-import { buttonVariants } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 import { RiArrowLeftLine, RiArrowRightLine } from "@remixicon/react"

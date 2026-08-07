@@ -5,9 +5,10 @@ import { SidebarRow } from "@/app/components/layout/sidebar/sidebar-row"
 import { SidebarRowEndSlot } from "@/app/components/layout/sidebar/sidebar-row-actions"
 import {
   SidebarPinAction,
-  TrailingIconChip,
   trailingIconButtonClassName,
+  TrailingIconChip,
 } from "@/app/components/layout/sidebar/trailing-icon-button"
+import { SidebarDemoColumn } from "@/app/design-system/_components/sidebar-demo-column"
 import { Icon } from "@/components/ui/icon"
 import {
   Tooltip,
@@ -16,7 +17,7 @@ import {
 } from "@/components/ui/tooltip"
 import type { SidebarChatStatus } from "@/lib/chat-store/status/sidebar-chat-status"
 import { RiEditLine } from "@remixicon/react"
-import { useState, type ReactNode } from "react"
+import { useState } from "react"
 
 /**
  * Client-side demos with a stub persistence adapter: rename commits to local
@@ -24,14 +25,6 @@ import { useState, type ReactNode } from "react"
  * row. The trailing cluster uses the real SidebarPinAction plus a rename
  * button in the SidebarItemMenu position (the real menu needs the chat store).
  */
-
-function SidebarDemoColumn({ children }: { children: ReactNode }) {
-  return (
-    <div className="bg-sidebar w-(--sidebar-width) max-w-full rounded-lg py-1">
-      {children}
-    </div>
-  )
-}
 
 function RenameAction({ onStartRename }: { onStartRename: () => void }) {
   return (
@@ -88,7 +81,7 @@ function DemoChatRow({
       secondaryLabel={secondaryLabel}
       renameValue={title}
       renameLabel="Chat title"
-      onRename={(next) => setTitle(next || title)}
+      onRename={(next) => setTitle(next)}
       trailing={({ startRename }) => (
         <SidebarRowEndSlot
           status={
@@ -119,9 +112,7 @@ export function SidebarRowStates() {
         initialTitle="Quarterly report draft"
         secondaryLabel="Work notes"
       />
-      <DemoChatRow
-        initialTitle="A very long title that truncates before the trailing lane"
-      />
+      <DemoChatRow initialTitle="A very long title that truncates before the trailing lane" />
     </SidebarDemoColumn>
   )
 }

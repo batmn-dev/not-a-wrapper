@@ -60,6 +60,7 @@ describe("sidebar leading-icon placement contract", () => {
     expect(resolvePx("--sidebar-leading-slot-size")).toBe(20)
     expect(resolvePx("--sidebar-collapsed-item-width")).toBe(40)
     expect(resolvePx("--sidebar-rail-width")).toBe(52)
+    expect(resolvePx("--sidebar-width")).toBe(260)
   })
 
   it("keeps the collapsed frame width equal to the rail width", () => {
@@ -69,7 +70,6 @@ describe("sidebar leading-icon placement contract", () => {
     expect(resolvePx("--sidebar-width-icon")).toBe(
       resolvePx("--sidebar-rail-width")
     )
-    expect(resolvePx("--sidebar-width")).toBe(260)
   })
 
   it("gives both organizer modes one section-stack rhythm", () => {

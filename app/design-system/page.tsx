@@ -1,5 +1,6 @@
+import { designSystemComponents } from "@/app/design-system/_lib/catalog"
 import { redirect } from "next/navigation"
 
 export default function DesignSystemPage() {
-  redirect("/design-system/button")
+  redirect(designSystemComponents[0].href)
 }
