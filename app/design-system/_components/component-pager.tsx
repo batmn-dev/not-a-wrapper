@@ -1,5 +1,5 @@
 import { getAdjacentComponents } from "@/app/design-system/_lib/catalog"
-import { buttonVariants } from "@/components/ui/button-variants"
+import { buttonVariants } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 import { RiArrowLeftLine, RiArrowRightLine } from "@remixicon/react"
