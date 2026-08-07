@@ -44,7 +44,7 @@ export function ButtonCopy({
             className={cn(
               "code-copy-button inline-flex cursor-pointer items-center justify-center bg-transparent",
               variant === "code"
-                ? "text-foreground pointer-events-auto size-9 rounded-full p-2"
+                ? "text-foreground hover:bg-interactive-hover active:bg-interactive-pressed pointer-events-auto size-9 rounded-full p-2"
                 : "pointer-events-none relative z-10 my-1 size-7 rounded-[4px] p-1 text-[var(--text-secondary)] opacity-0 transition-opacity group-focus-within/markdown-table:pointer-events-auto group-focus-within/markdown-table:opacity-100 group-hover/markdown-table:pointer-events-auto group-hover/markdown-table:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100"
             )}
           />

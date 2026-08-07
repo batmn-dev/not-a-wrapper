@@ -78,7 +78,7 @@ export function SettingsContent() {
         <div className="bg-popover border-border flex shrink-0 border-b pt-3 pr-12 pb-2 pl-3">
           <TabsList
             variant="line"
-            className="h-8 w-full [scrollbar-width:none] justify-start overflow-x-auto rounded-none p-0 [&::-webkit-scrollbar]:hidden"
+            className="group-data-horizontal/tabs:h-8 w-full [scrollbar-width:none] justify-start overflow-x-auto rounded-none p-0 [&::-webkit-scrollbar]:hidden"
           >
             {SETTINGS_TABS.map((tab) => (
               <TabsTrigger

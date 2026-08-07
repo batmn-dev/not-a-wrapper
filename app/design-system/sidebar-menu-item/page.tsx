@@ -1,14 +1,12 @@
-import { ComponentPager } from "@/app/design-system/_components/component-pager"
 import { ComponentPreview } from "@/app/design-system/_components/component-preview"
-import { readComponentSource } from "@/app/design-system/_lib/component-source"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+  DsApiTable,
+  DsPage,
+  DsPageHeader,
+  DsParagraph,
+  DsSection,
+} from "@/app/design-system/_components/ds-page"
+import { readComponentSource } from "@/app/design-system/_lib/component-source"
 import type { Metadata } from "next"
 import { SidebarMenuItemStates, SidebarMenuItemTrailing } from "./demos"
 
@@ -64,14 +62,14 @@ const apiRows = [
   },
   {
     prop: "icon",
-    type: "IconProps[\"icon\"]",
+    type: 'IconProps["icon"]',
     defaultValue: "—",
     description:
       "Optional leading glyph, rendered through the shared SidebarLeadingIcon geometry slot.",
   },
   {
     prop: "activeIcon",
-    type: "IconProps[\"icon\"]",
+    type: 'IconProps["icon"]',
     defaultValue: "—",
     description: "Glyph swapped in while the row is active.",
   },
@@ -118,93 +116,41 @@ export const metadata: Metadata = {
 }
 
 export default function SidebarMenuItemPage() {
-  const sidebarMenuItemSource = readComponentSource("app/components/layout/sidebar/sidebar-menu-item.tsx")
+  const sidebarMenuItemSource = readComponentSource(
+    "app/components/layout/sidebar/sidebar-menu-item.tsx"
+  )
 
   return (
-    <main id="main" className="w-full max-w-[680px] px-6 pt-10 pb-24 md:pt-28">
-      <header className="flex items-start justify-between gap-6">
-        <div>
-          <h1 className="text-[28px] leading-8 font-semibold tracking-tight">
-            Sidebar Menu Item
-          </h1>
-          <p className="text-muted-foreground mt-2 text-sm leading-5">
-            The canonical static navigation row of the app sidebar: leading
-            glyph slot, truncating label, hover-revealed trailing content, and
-            link or button rendering. Geometry comes from the shared
-            --sidebar-* tokens pinned by sidebar-geometry.test.ts.
-          </p>
-        </div>
-        <ComponentPager slug="sidebar-menu-item" />
-      </header>
+    <DsPage>
+      <DsPageHeader
+        slug="sidebar-menu-item"
+        title="Sidebar Menu Item"
+        description="The app sidebar's static navigation row: leading glyph, truncating label, hover-revealed trailing content, link or button rendering."
+      />
 
-      <section aria-labelledby="states-heading" className="mt-10">
-        <h2 id="states-heading" className="text-base font-semibold">
-          States
-        </h2>
-        <div className="mt-3">
-          <ComponentPreview code={statesCode} sourceCode={sidebarMenuItemSource}>
-            <SidebarMenuItemStates />
-          </ComponentPreview>
-        </div>
-      </section>
+      <DsSection id="states" title="States">
+        <ComponentPreview code={statesCode} sourceCode={sidebarMenuItemSource}>
+          <SidebarMenuItemStates />
+        </ComponentPreview>
+      </DsSection>
 
-      <section aria-labelledby="trailing-heading" className="mt-16">
-        <h2 id="trailing-heading" className="text-base font-semibold">
-          Trailing content
-        </h2>
-        <div className="mt-3">
-          <ComponentPreview code={trailingCode} sourceCode={sidebarMenuItemSource}>
-            <SidebarMenuItemTrailing />
-          </ComponentPreview>
-        </div>
-      </section>
+      <DsSection id="trailing" title="Trailing content">
+        <ComponentPreview
+          code={trailingCode}
+          sourceCode={sidebarMenuItemSource}
+        >
+          <SidebarMenuItemTrailing />
+        </ComponentPreview>
+      </DsSection>
 
-      <section aria-labelledby="api-heading" className="mt-16">
-        <h2 id="api-heading" className="text-base font-semibold">
-          API Reference
-        </h2>
-        <div className="mt-3 overflow-hidden rounded-xl border">
-          <Table className="min-w-[38rem] table-fixed">
-            <colgroup>
-              <col className="w-[20%]" />
-              <col className="w-[24%]" />
-              <col className="w-[12%]" />
-              <col className="w-[44%]" />
-            </colgroup>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="px-3">Prop</TableHead>
-                <TableHead className="px-3">Type</TableHead>
-                <TableHead className="px-3">Default</TableHead>
-                <TableHead className="px-3">Description</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {apiRows.map((row) => (
-                <TableRow key={row.prop} className="hover:bg-transparent">
-                  <TableCell className="px-3 font-mono text-xs font-medium">
-                    {row.prop}
-                  </TableCell>
-                  <TableCell className="px-3 font-mono text-xs whitespace-normal">
-                    {row.type}
-                  </TableCell>
-                  <TableCell className="px-3 font-mono text-xs whitespace-normal">
-                    {row.defaultValue}
-                  </TableCell>
-                  <TableCell className="px-3 whitespace-normal">
-                    {row.description}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-        <p className="text-muted-foreground mt-3 text-sm leading-5">
+      <DsSection id="api" title="API Reference">
+        <DsApiTable columnWidths={[20, 24, 12, 44]} rows={apiRows} />
+        <DsParagraph className="mt-3">
           Remaining button attributes are forwarded when the row renders as a
-          button. For editable list rows (rename, trailing actions, status),
-          see SidebarRow in app/components/layout/sidebar/sidebar-row.tsx.
-        </p>
-      </section>
-    </main>
+          button. For editable list rows (rename, trailing actions, status), see
+          SidebarRow in app/components/layout/sidebar/sidebar-row.tsx.
+        </DsParagraph>
+      </DsSection>
+    </DsPage>
   )
 }

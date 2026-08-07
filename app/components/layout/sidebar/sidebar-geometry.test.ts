@@ -76,8 +76,10 @@ describe("sidebar leading-icon placement contract", () => {
     // Cluster -> first section, and section -> section. Both "In one list" and
     // "By project" flow through the single stack container in app-sidebar.tsx;
     // these pins keep the rhythm from being re-derived per mode.
-    expect(resolvePx("--sidebar-section-stack-margin-top")).toBe(20)
-    expect(resolvePx("--sidebar-section-stack-gap")).toBe(16)
+    // ChatGPT rhythm: first gap = section-margin (20) - first-margin (8);
+    // adjacent sections sit a full section-margin apart.
+    expect(resolvePx("--sidebar-section-stack-margin-top")).toBe(12)
+    expect(resolvePx("--sidebar-section-stack-gap")).toBe(20)
   })
 
   it("compensates the row border on the block axis only", () => {

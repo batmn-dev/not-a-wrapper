@@ -20,6 +20,11 @@ export const designSystemComponents = [
     slug: "sidebar-row",
     href: "/design-system/sidebar-row",
   },
+  {
+    name: "Tabs",
+    slug: "tabs",
+    href: "/design-system/tabs",
+  },
 ] as const satisfies readonly DesignSystemComponent[]
 
 export function getAdjacentComponents(slug: string) {
