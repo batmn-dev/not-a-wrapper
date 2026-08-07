@@ -156,9 +156,9 @@ export default function SidebarRowPage() {
           Status slot
         </h2>
         <p className="text-muted-foreground mt-2 text-sm leading-5">
-          At rest the trailing lane shows the run status; hover swaps it for
-          the actions in the same footprint, so the title never reflows
-          between states.
+          At rest the trailing lane shows the run status; hover, focus, or an
+          open menu replaces it with actions that rejoin the flex layout, so
+          long titles may truncate earlier while the actions are revealed.
         </p>
         <div className="mt-3">
           <ComponentPreview code={statusesCode}>
