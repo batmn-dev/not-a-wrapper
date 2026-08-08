@@ -8,19 +8,49 @@ import {
 } from "@/app/design-system/_components/ds-page"
 import { readComponentSource } from "@/app/design-system/_lib/component-source"
 import { Button } from "@/components/ui/button"
+import { RiAddLine, RiArrowRightLine } from "@remixicon/react"
 import type { Metadata } from "next"
 
 const variantsCode = `import { Button } from "@/components/ui/button"
+import { RiAddLine, RiArrowRightLine } from "@remixicon/react"
 
 export function ButtonVariants() {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button type="button">Default</Button>
-      <Button type="button" variant="outline">Outline</Button>
-      <Button type="button" variant="secondary">Secondary</Button>
-      <Button type="button" variant="ghost">Ghost</Button>
-      <Button type="button" variant="destructive">Destructive</Button>
-      <Button type="button" variant="link">Link</Button>
+    <div className="flex flex-col items-center gap-6">
+      <div className="flex items-center gap-6">
+        <Button type="button">
+          <RiAddLine data-icon="inline-start" />
+          Default
+          <RiArrowRightLine data-icon="inline-end" />
+        </Button>
+        <Button type="button" variant="outline">
+          <RiAddLine data-icon="inline-start" />
+          Outline
+          <RiArrowRightLine data-icon="inline-end" />
+        </Button>
+        <Button type="button" variant="secondary">
+          <RiAddLine data-icon="inline-start" />
+          Secondary
+          <RiArrowRightLine data-icon="inline-end" />
+        </Button>
+      </div>
+      <div className="flex items-center gap-6">
+        <Button type="button" variant="ghost">
+          <RiAddLine data-icon="inline-start" />
+          Ghost
+          <RiArrowRightLine data-icon="inline-end" />
+        </Button>
+        <Button type="button" variant="destructive">
+          <RiAddLine data-icon="inline-start" />
+          Destructive
+          <RiArrowRightLine data-icon="inline-end" />
+        </Button>
+        <Button type="button" variant="link">
+          <RiAddLine data-icon="inline-start" />
+          Link
+          <RiArrowRightLine data-icon="inline-end" />
+        </Button>
+      </div>
     </div>
   )
 }`
@@ -71,23 +101,41 @@ export default function ButtonPage() {
 
       <DsSection id="variants" title="Variants">
         <ComponentPreview code={variantsCode} sourceCode={buttonSource}>
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            <Button type="button">Default</Button>
-            <Button type="button" variant="outline">
-              Outline
-            </Button>
-            <Button type="button" variant="secondary">
-              Secondary
-            </Button>
-            <Button type="button" variant="ghost">
-              Ghost
-            </Button>
-            <Button type="button" variant="destructive">
-              Destructive
-            </Button>
-            <Button type="button" variant="link">
-              Link
-            </Button>
+          <div className="flex flex-col items-center gap-6">
+            <div className="flex items-center gap-6">
+              <Button type="button">
+                <RiAddLine data-icon="inline-start" />
+                Default
+                <RiArrowRightLine data-icon="inline-end" />
+              </Button>
+              <Button type="button" variant="outline">
+                <RiAddLine data-icon="inline-start" />
+                Outline
+                <RiArrowRightLine data-icon="inline-end" />
+              </Button>
+              <Button type="button" variant="secondary">
+                <RiAddLine data-icon="inline-start" />
+                Secondary
+                <RiArrowRightLine data-icon="inline-end" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-6">
+              <Button type="button" variant="ghost">
+                <RiAddLine data-icon="inline-start" />
+                Ghost
+                <RiArrowRightLine data-icon="inline-end" />
+              </Button>
+              <Button type="button" variant="destructive">
+                <RiAddLine data-icon="inline-start" />
+                Destructive
+                <RiArrowRightLine data-icon="inline-end" />
+              </Button>
+              <Button type="button" variant="link">
+                <RiAddLine data-icon="inline-start" />
+                Link
+                <RiArrowRightLine data-icon="inline-end" />
+              </Button>
+            </div>
           </div>
         </ComponentPreview>
       </DsSection>

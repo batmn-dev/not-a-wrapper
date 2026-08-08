@@ -21,6 +21,7 @@ export function AuthShell({ title, description, children }: AuthShellProps) {
         <Button
           variant="ghost"
           size="sm"
+          nativeButton={false}
           render={<Link href="/" />}
           className="text-muted-foreground hover:text-foreground gap-2 rounded-full px-3"
         >

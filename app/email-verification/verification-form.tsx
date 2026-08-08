@@ -112,6 +112,7 @@ export function VerificationForm({ email }: VerificationFormProps) {
 
       <Button
         className="h-[52px] w-full rounded-full text-base shadow-none"
+        nativeButton={false}
         render={<Link href={passwordHref} />}
         variant="outline"
       >
