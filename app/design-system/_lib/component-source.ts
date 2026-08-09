@@ -8,5 +8,5 @@ import { join } from "node:path"
  * client component fails the build (node:fs has no browser shim).
  */
 export function readComponentSource(repoRelativePath: string): string {
-  return readFileSync(join(process.cwd(), repoRelativePath), "utf8").trimEnd()
+  return readFileSync(join(process.cwd(), repoRelativePath), "utf8")
 }

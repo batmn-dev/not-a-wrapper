@@ -1,19 +1,14 @@
 "use client"
 
 import {
-  type ChartConfig,
   ChartContainer,
   ChartLegend,
   ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
+  type ChartConfig,
 } from "@/components/ui/chart"
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts"
-
-/**
- * Client-side demo: Recharts renders through browser layout measurement, so
- * the chart composition lives here and the server page imports it.
- */
 
 const chartData = [
   { month: "Jan", desktop: 186, mobile: 80 },

@@ -8,66 +8,9 @@ import {
 } from "@/app/design-system/_components/ds-page"
 import { readComponentSource } from "@/app/design-system/_lib/component-source"
 import type { Metadata } from "next"
-import { SonnerPresetsDemo, ToastActionDemo, ToastStatusDemo } from "./demos"
-
-const statusCode = `import { Button } from "@/components/ui/button"
-import { toast } from "@/components/ui/toast"
-
-export function ToastStatus() {
-  return (
-    <div className="flex items-center gap-6">
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() =>
-          toast({
-            title: "Chat renamed",
-            description: "The new title is visible in the sidebar.",
-            status: "success",
-          })
-        }
-      >
-        Show toast
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() =>
-          toast({
-            title: "Could not save changes",
-            description: "Check your connection and try again.",
-            status: "error",
-          })
-        }
-      >
-        Show error
-      </Button>
-    </div>
-  )
-}`
-
-const actionCode = `import { Button } from "@/components/ui/button"
-import { toast } from "@/components/ui/toast"
-
-export function ToastAction() {
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      onClick={() =>
-        toast({
-          title: "Project deleted",
-          button: {
-            label: "Undo",
-            onClick: () => toast({ title: "Project restored" }),
-          },
-        })
-      }
-    >
-      Delete project
-    </Button>
-  )
-}`
+import { SonnerPresetsDemo } from "./demos/sonner-presets-demo"
+import { ToastActionDemo } from "./demos/toast-action-demo"
+import { ToastStatusDemo } from "./demos/toast-status-demo"
 
 const toasterCode = `// app/layout.tsx — mounted once for the whole app
 import { Toaster } from "@/components/ui/sonner"
@@ -118,6 +61,12 @@ export const metadata: Metadata = {
 
 export default function ToastPage() {
   const toastSource = readComponentSource("components/ui/toast.tsx")
+  const statusCode = readComponentSource(
+    "app/design-system/toast/demos/toast-status-demo.tsx"
+  )
+  const actionCode = readComponentSource(
+    "app/design-system/toast/demos/toast-action-demo.tsx"
+  )
   const sonnerSource = readComponentSource("components/ui/sonner.tsx")
 
   return (

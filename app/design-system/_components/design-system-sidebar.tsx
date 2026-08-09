@@ -69,7 +69,7 @@ export function DesignSystemSidebar() {
           />
         </div>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pt-(--sidebar-section-first-margin-top) pb-8">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pt-(--sidebar-section-stack-margin-top) pb-8">
         <nav aria-label="Component navigation">
           {/* An active query bypasses the collapsible so a collapsed section
               can't hide matches. */}

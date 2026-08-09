@@ -4,7 +4,11 @@ import type { ReactNode } from "react"
 
 type ComponentPreviewProps = {
   children: ReactNode
-  /** Copy-paste usage snippet shown under Code → Usage. */
+  /**
+   * Copy-paste usage snippet shown under Code → Usage. When the preview is
+   * backed by a demo file, pass that file's source (readComponentSource) so
+   * the snippet cannot drift from what renders.
+   */
   code: string
   /** Verbatim component source shown under Code → Source. */
   sourceCode: string

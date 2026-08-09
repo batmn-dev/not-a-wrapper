@@ -10,7 +10,9 @@ import { readComponentSource } from "@/app/design-system/_lib/component-source"
 import type { Metadata } from "next"
 import { SidebarRowStates, SidebarRowStatuses } from "./demos"
 
-const statesCode = `import { SidebarRow } from "@/app/components/layout/sidebar/sidebar-row"
+const statesCode = `"use client"
+
+import { SidebarRow } from "@/app/components/layout/sidebar/sidebar-row"
 import { SidebarRowEndSlot } from "@/app/components/layout/sidebar/sidebar-row-actions"
 import { SidebarPinAction } from "@/app/components/layout/sidebar/trailing-icon-button"
 

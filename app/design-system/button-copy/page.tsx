@@ -7,22 +7,8 @@ import {
   DsSection,
 } from "@/app/design-system/_components/ds-page"
 import { readComponentSource } from "@/app/design-system/_lib/component-source"
-import { ButtonCopy } from "@/components/ui/button-copy"
 import type { Metadata } from "next"
-
-const defaultCode = `import { ButtonCopy } from "@/components/ui/button-copy"
-
-export function ButtonCopyDefault() {
-  return (
-    <div className="flex items-center gap-6">
-      <ButtonCopy code="bun add @base-ui/react" />
-      <ButtonCopy
-        code={() => document.querySelector("pre")?.innerText ?? ""}
-        label="Copy code"
-      />
-    </div>
-  )
-}`
+import { ButtonCopyDemo } from "./demos/button-copy-demo"
 
 const apiRows = [
   {
@@ -56,6 +42,9 @@ export const metadata: Metadata = {
 
 export default function ButtonCopyPage() {
   const buttonCopySource = readComponentSource("components/ui/button-copy.tsx")
+  const defaultCode = readComponentSource(
+    "app/design-system/button-copy/demos/button-copy-demo.tsx"
+  )
 
   return (
     <DsPage>
@@ -71,10 +60,7 @@ export default function ButtonCopyPage() {
         description="The code variant: a round icon chip that copies its code value and swaps the copy glyph for a check while the confirmation shows."
       >
         <ComponentPreview code={defaultCode} sourceCode={buttonCopySource}>
-          <div className="flex items-center gap-6">
-            <ButtonCopy code="bun add @base-ui/react" />
-            <ButtonCopy code="npx create-next-app@latest" label="Copy command" />
-          </div>
+          <ButtonCopyDemo />
         </ComponentPreview>
       </DsSection>
 

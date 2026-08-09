@@ -69,6 +69,13 @@ const groupsCode = `import {
   SelectValue,
 } from "@/components/ui/select"
 
+const models = {
+  "claude-sonnet-4-5": "Claude Sonnet 4.5",
+  "claude-haiku-4-5": "Claude Haiku 4.5",
+  "gpt-5": "GPT-5",
+  "gpt-5-mini": "GPT-5 Mini",
+}
+
 export function SelectGroups() {
   return (
     <Select defaultValue="claude-sonnet-4-5" items={models}>

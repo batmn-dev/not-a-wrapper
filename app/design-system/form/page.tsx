@@ -8,52 +8,7 @@ import {
 } from "@/app/design-system/_components/ds-page"
 import { readComponentSource } from "@/app/design-system/_lib/component-source"
 import type { Metadata } from "next"
-import { FormDemo } from "./demos"
-
-const formCode = `import { Button } from "@/components/ui/button"
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
-import { useForm } from "react-hook-form"
-
-export function ProfileForm() {
-  const form = useForm({ defaultValues: { username: "" } })
-
-  return (
-    <Form {...form}>
-      <form
-        onSubmit={form.handleSubmit(onSubmit)}
-        className="flex w-72 flex-col gap-5"
-      >
-        <FormField
-          control={form.control}
-          name="username"
-          rules={{ required: "Username is required." }}
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Username</FormLabel>
-              <FormControl>
-                <Input placeholder="ada" {...field} />
-              </FormControl>
-              <FormDescription>Your public handle.</FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <Button type="submit" className="self-start">
-          Submit
-        </Button>
-      </form>
-    </Form>
-  )
-}`
+import { FormDemo } from "./demos/form-demo"
 
 const apiRows = [
   {
@@ -108,6 +63,9 @@ export const metadata: Metadata = {
 
 export default function FormPage() {
   const formSource = readComponentSource("components/ui/form.tsx")
+  const formCode = readComponentSource(
+    "app/design-system/form/demos/form-demo.tsx"
+  )
 
   return (
     <DsPage>

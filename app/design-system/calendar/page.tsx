@@ -8,46 +8,8 @@ import {
 } from "@/app/design-system/_components/ds-page"
 import { readComponentSource } from "@/app/design-system/_lib/component-source"
 import type { Metadata } from "next"
-import { CalendarRangeDemo, CalendarSingleDemo } from "./demos"
-
-const singleCode = `import { Calendar } from "@/components/ui/calendar"
-import { useState } from "react"
-
-export function CalendarSingle() {
-  const [date, setDate] = useState<Date | undefined>(new Date(2026, 7, 12))
-
-  return (
-    <Calendar
-      mode="single"
-      selected={date}
-      onSelect={setDate}
-      defaultMonth={date}
-      className="rounded-xl border"
-    />
-  )
-}`
-
-const rangeCode = `import { Calendar } from "@/components/ui/calendar"
-import { useState } from "react"
-import type { DateRange } from "react-day-picker"
-
-export function CalendarRange() {
-  const [range, setRange] = useState<DateRange | undefined>({
-    from: new Date(2026, 7, 10),
-    to: new Date(2026, 7, 16),
-  })
-
-  return (
-    <Calendar
-      mode="range"
-      selected={range}
-      onSelect={setRange}
-      defaultMonth={range?.from}
-      captionLayout="dropdown"
-      className="rounded-xl border"
-    />
-  )
-}`
+import { CalendarRangeDemo } from "./demos/calendar-range-demo"
+import { CalendarSingleDemo } from "./demos/calendar-single-demo"
 
 const apiRows = [
   {
@@ -103,6 +65,12 @@ export const metadata: Metadata = {
 
 export default function CalendarPage() {
   const calendarSource = readComponentSource("components/ui/calendar.tsx")
+  const singleCode = readComponentSource(
+    "app/design-system/calendar/demos/calendar-single-demo.tsx"
+  )
+  const rangeCode = readComponentSource(
+    "app/design-system/calendar/demos/calendar-range-demo.tsx"
+  )
 
   return (
     <DsPage>

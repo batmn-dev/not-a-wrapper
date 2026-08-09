@@ -10,7 +10,9 @@ import { readComponentSource } from "@/app/design-system/_lib/component-source"
 import type { Metadata } from "next"
 import { SidebarMenuItemStates, SidebarMenuItemTrailing } from "./demos"
 
-const statesCode = `import { SidebarMenuItem } from "@/app/components/layout/sidebar/sidebar-menu-item"
+const statesCode = `"use client"
+
+import { SidebarMenuItem } from "@/app/components/layout/sidebar/sidebar-menu-item"
 import { RiAddCircleFill, RiAddCircleLine, RiSearchLine, RiSettings3Line } from "@remixicon/react"
 
 export function SidebarMenuItemStates() {
@@ -34,7 +36,9 @@ export function SidebarMenuItemStates() {
   )
 }`
 
-const trailingCode = `import { SidebarMenuItem } from "@/app/components/layout/sidebar/sidebar-menu-item"
+const trailingCode = `"use client"
+
+import { SidebarMenuItem } from "@/app/components/layout/sidebar/sidebar-menu-item"
 import { Kbd, KbdGroup } from "@/components/ui/kbd"
 import { RiSearchLine } from "@remixicon/react"
 

@@ -74,14 +74,14 @@ export function ComponentPreviewCode({
       </div>
       <TabsContent value="usage" className="m-0 min-h-32">
         <CodeBlockCode
-          code={code}
+          code={code.trimEnd()}
           language="tsx"
           className={cn("py-1", wrapClassName)}
         />
       </TabsContent>
       <TabsContent value="source" className="m-0 min-h-32">
         <CodeBlockCode
-          code={sourceCode}
+          code={sourceCode.trimEnd()}
           language="tsx"
           className={cn("py-1", wrapClassName)}
         />

@@ -20,8 +20,11 @@ export function KbdDemo() {
         <Kbd>K</Kbd>
       </KbdGroup>
       <p className="text-muted-foreground text-sm">
-        Press <Kbd label="Shift">⇧</Kbd>
-        <Kbd label="Enter">⏎</Kbd> for a new line
+        Press{" "}
+        <KbdGroup>
+          <Kbd label="Shift">⇧</Kbd> <Kbd label="Enter">⏎</Kbd>
+        </KbdGroup>{" "}
+        for a new line
       </p>
     </div>
   )
@@ -52,8 +55,7 @@ const apiRows = [
 
 export const metadata: Metadata = {
   title: "Kbd | Design System",
-  description:
-    "Documentation and usage for the Not A Wrapper Kbd component.",
+  description: "Documentation and usage for the Not A Wrapper Kbd component.",
 }
 
 export default function KbdPage() {
@@ -79,8 +81,11 @@ export default function KbdPage() {
               <Kbd>K</Kbd>
             </KbdGroup>
             <p className="text-muted-foreground text-sm">
-              Press <Kbd label="Shift">⇧</Kbd>
-              <Kbd label="Enter">⏎</Kbd> for a new line
+              Press{" "}
+              <KbdGroup>
+                <Kbd label="Shift">⇧</Kbd> <Kbd label="Enter">⏎</Kbd>
+              </KbdGroup>{" "}
+              for a new line
             </p>
           </div>
         </ComponentPreview>

@@ -14,10 +14,11 @@ function Progress({
           className
         )}
       >
+        {/* Base UI sets the indicator width itself (min/max-aware); a manual
+            transform would re-hardcode the 0–100 assumption. */}
         <ProgressPrimitive.Indicator
           data-slot="progress-indicator"
-          className="bg-primary h-full w-full flex-1 transition-all"
-          style={{ transform: `translateX(-${100 - (value || 0)}%)` }}
+          className="bg-primary h-full transition-all"
         />
       </ProgressPrimitive.Track>
     </ProgressPrimitive.Root>
