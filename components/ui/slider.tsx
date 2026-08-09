@@ -12,15 +12,13 @@ function Slider({
   max = 100,
   ...props
 }: SliderPrimitive.Root.Props) {
-  const _values = React.useMemo(
-    () =>
-      Array.isArray(value)
-        ? value
-        : Array.isArray(defaultValue)
-          ? defaultValue
-          : [min, max],
-    [value, defaultValue, min, max]
-  )
+  const _values = React.useMemo(() => {
+    if (Array.isArray(value)) return value
+    if (typeof value === "number") return [value]
+    if (Array.isArray(defaultValue)) return defaultValue
+    if (typeof defaultValue === "number") return [defaultValue]
+    return [min, max]
+  }, [value, defaultValue, min, max])
 
   return (
     <SliderPrimitive.Root

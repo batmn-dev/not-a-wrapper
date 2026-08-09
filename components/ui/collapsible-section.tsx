@@ -157,9 +157,9 @@ export function CollapsibleSection({
           "data-[closed]:animate-collapsible-up"
         )}
       >
-        <div className={cn(isSidebarVariant ? "pt-0.5" : "pt-1")}>
-          {children}
-        </div>
+        {/* Sidebar sections keep items flush under the 32px header trigger
+            (ChatGPT parity: the header's own padding is the entire gap). */}
+        <div className={cn(!isSidebarVariant && "pt-1")}>{children}</div>
       </CollapsibleContent>
     </Collapsible>
   )

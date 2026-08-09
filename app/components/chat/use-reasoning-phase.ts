@@ -95,9 +95,8 @@ export function useAssistantWorkDuration({
 
   const tickedMs = timerState.turnKey === turnKey ? timerState.displayMs : 0
 
-  // The elapsed time used to anchor a new interval changes only when the timer
-  // stops/resumes or is synchronously reset. It does not change on every tick,
-  // so it is safe to depend on without restarting the interval every second.
+  // The elapsed time used to anchor a new interval. Read by the effect below
+  // but intentionally kept out of its deps — see the note on the dep array.
   const frozenMs = timerState.turnKey === turnKey ? timerState.frozenMs : 0
 
   // Tick every second while thinking.
@@ -141,7 +140,15 @@ export function useAssistantWorkDuration({
     // (thinking→thinking swap) tears down the old turn's interval and
     // re-anchors — the render-sync reset alone can't stop a running interval
     // still anchored to the previous turn.
-  }, [frozenMs, shouldRunTimer, turnKey])
+    //
+    // `frozenMs` is deliberately NOT a dep: it only changes alongside a
+    // `shouldRunTimer`/`turnKey` transition (the render-sync branches) or via
+    // this cleanup's own freeze write. Depending on it turns that freeze write
+    // into a teardown trigger — cleanup → setState(frozenMs) → deps changed →
+    // cleanup — an infinite layout-effect loop (max update depth) as long as
+    // Date.now() keeps advancing between commits. Every setup that needs a
+    // fresh anchor is already forced by the remaining deps.
+  }, [shouldRunTimer, turnKey])
 
   // Live shows the estimate, settled shows the truth: while the turn runs (or
   // is paused awaiting approval) the local ticker owns the label; once the
@@ -235,7 +242,10 @@ export function useReasoningPhase({
           : current
       )
     }
-  }, [frozenMs, shouldRunTimer, turnKey])
+    // `frozenMs` is deliberately NOT a dep — same feedback-loop hazard as the
+    // work clock above: the cleanup writes frozenMs, so listing it re-triggers
+    // the cleanup indefinitely. Re-anchoring is covered by the remaining deps.
+  }, [shouldRunTimer, turnKey])
 
   // Same contract as the work clock: the ticker owns the label only while
   // reasoning is literally streaming; otherwise the persisted server total

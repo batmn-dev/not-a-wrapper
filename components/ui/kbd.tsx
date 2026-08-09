@@ -47,7 +47,7 @@ type KbdGroupProps = {
  */
 export function KbdGroup({ children, className }: KbdGroupProps) {
   return (
-    <div
+    <span
       data-slot="kbd-group"
       className={cn(
         "text-muted-foreground inline-flex whitespace-pre pointer-coarse:hidden",
@@ -55,6 +55,6 @@ export function KbdGroup({ children, className }: KbdGroupProps) {
       )}
     >
       {children}
-    </div>
+    </span>
   )
 }

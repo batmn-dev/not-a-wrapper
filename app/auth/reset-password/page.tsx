@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 import { getWorkosSession } from "@/lib/auth/workos"
 import Link from "next/link"
 import { redirect } from "next/navigation"
@@ -29,9 +29,9 @@ export default async function ResetPasswordPage({
           <p className="text-muted-foreground text-sm">
             This reset link is invalid or expired.
           </p>
-          <Button render={<Link href="/auth/forgot-password" />}>
+          <Link href="/auth/forgot-password" className={buttonVariants()}>
             Request a new link
-          </Button>
+          </Link>
         </div>
       )}
     </AuthShell>

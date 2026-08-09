@@ -1,5 +1,3 @@
-"use client"
-
 import { cn } from "@/lib/utils"
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover"
 import * as React from "react"

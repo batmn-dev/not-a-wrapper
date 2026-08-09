@@ -1,17 +1,18 @@
-import { ComponentPager } from "@/app/design-system/_components/component-pager"
 import { ComponentPreview } from "@/app/design-system/_components/component-preview"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+  DsApiTable,
+  DsPage,
+  DsPageHeader,
+  DsParagraph,
+  DsSection,
+} from "@/app/design-system/_components/ds-page"
+import { readComponentSource } from "@/app/design-system/_lib/component-source"
 import type { Metadata } from "next"
 import { SidebarRowStates, SidebarRowStatuses } from "./demos"
 
-const statesCode = `import { SidebarRow } from "@/app/components/layout/sidebar/sidebar-row"
+const statesCode = `"use client"
+
+import { SidebarRow } from "@/app/components/layout/sidebar/sidebar-row"
 import { SidebarRowEndSlot } from "@/app/components/layout/sidebar/sidebar-row-actions"
 import { SidebarPinAction } from "@/app/components/layout/sidebar/trailing-icon-button"
 
@@ -117,102 +118,46 @@ export const metadata: Metadata = {
 }
 
 export default function SidebarRowPage() {
+  const sidebarRowSource = readComponentSource(
+    "app/components/layout/sidebar/sidebar-row.tsx"
+  )
+
   return (
-    <main id="main" className="w-full max-w-[680px] px-6 pt-10 pb-24 md:pt-28">
-      <header className="flex items-start justify-between gap-6">
-        <div>
-          <h1 className="text-[28px] leading-8 font-semibold tracking-tight">
-            Sidebar Row
-          </h1>
-          <p className="text-muted-foreground mt-2 text-sm leading-5">
-            The single editable/navigable compact row behind the sidebar&apos;s
-            chat and project lists: full-row link, inline rename with
-            click-outside-commit, and a trailing lane where resting status and
-            hover-revealed actions share one geometry. Demos stub persistence
-            with local state; everything else is the production component.
-          </p>
-        </div>
-        <ComponentPager slug="sidebar-row" />
-      </header>
+    <DsPage>
+      <DsPageHeader
+        slug="sidebar-row"
+        title="Sidebar Row"
+        description="The editable, navigable row behind the sidebar's chat and project lists: full-row link, inline rename, and a shared trailing lane."
+      />
 
-      <section aria-labelledby="states-heading" className="mt-10">
-        <h2 id="states-heading" className="text-base font-semibold">
-          States and rename
-        </h2>
-        <p className="text-muted-foreground mt-2 text-sm leading-5">
-          Hover a row to reveal the pin and rename actions; the rename pencil
-          swaps the row for an inline editor that commits on Enter or
-          click-outside.
-        </p>
-        <div className="mt-3">
-          <ComponentPreview code={statesCode}>
-            <SidebarRowStates />
-          </ComponentPreview>
-        </div>
-      </section>
+      <DsSection
+        id="states"
+        title="States and rename"
+        description="Hover a row to reveal the pin and rename actions; the rename pencil swaps the row for an inline editor that commits on Enter or click-outside."
+      >
+        <ComponentPreview code={statesCode} sourceCode={sidebarRowSource}>
+          <SidebarRowStates />
+        </ComponentPreview>
+      </DsSection>
 
-      <section aria-labelledby="statuses-heading" className="mt-16">
-        <h2 id="statuses-heading" className="text-base font-semibold">
-          Status slot
-        </h2>
-        <p className="text-muted-foreground mt-2 text-sm leading-5">
-          At rest the trailing lane shows the run status; hover, focus, or an
-          open menu replaces it with actions that rejoin the flex layout, so
-          long titles may truncate earlier while the actions are revealed.
-        </p>
-        <div className="mt-3">
-          <ComponentPreview code={statusesCode}>
-            <SidebarRowStatuses />
-          </ComponentPreview>
-        </div>
-      </section>
+      <DsSection
+        id="statuses"
+        title="Status slot"
+        description="At rest the trailing lane shows the run status; hover, focus, or an open menu replaces it with actions that rejoin the flex layout, so long titles may truncate earlier while the actions are revealed."
+      >
+        <ComponentPreview code={statusesCode} sourceCode={sidebarRowSource}>
+          <SidebarRowStatuses />
+        </ComponentPreview>
+      </DsSection>
 
-      <section aria-labelledby="api-heading" className="mt-16">
-        <h2 id="api-heading" className="text-base font-semibold">
-          API Reference
-        </h2>
-        <div className="mt-3 overflow-hidden rounded-xl border">
-          <Table className="min-w-[38rem] table-fixed">
-            <colgroup>
-              <col className="w-[24%]" />
-              <col className="w-[28%]" />
-              <col className="w-[8%]" />
-              <col className="w-[40%]" />
-            </colgroup>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="px-3">Prop</TableHead>
-                <TableHead className="px-3">Type</TableHead>
-                <TableHead className="px-3">Default</TableHead>
-                <TableHead className="px-3">Description</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {apiRows.map((row) => (
-                <TableRow key={row.prop} className="hover:bg-transparent">
-                  <TableCell className="px-3 font-mono text-xs font-medium whitespace-normal">
-                    {row.prop}
-                  </TableCell>
-                  <TableCell className="px-3 font-mono text-xs whitespace-normal">
-                    {row.type}
-                  </TableCell>
-                  <TableCell className="px-3 font-mono text-xs whitespace-normal">
-                    {row.defaultValue}
-                  </TableCell>
-                  <TableCell className="px-3 whitespace-normal">
-                    {row.description}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-        <p className="text-muted-foreground mt-3 text-sm leading-5">
+      <DsSection id="api" title="API Reference">
+        <DsApiTable columnWidths={[24, 28, 8, 40]} rows={apiRows} />
+        <DsParagraph className="mt-3">
           Production adapters: SidebarItem (chats) and SidebarProjectItem
           (projects) in app/components/layout/sidebar/ supply hrefs, mutations,
           and the actions menu.
-        </p>
-      </section>
-    </main>
+        </DsParagraph>
+      </DsSection>
+    </DsPage>
   )
 }

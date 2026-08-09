@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 import { getWorkosSession } from "@/lib/auth/workos"
 import Link from "next/link"
 import { redirect } from "next/navigation"
@@ -35,7 +35,9 @@ export default async function VerifyEmailPage({
             That verification session expired. Sign in again to request a new
             code.
           </p>
-          <Button render={<Link href="/auth/login" />}>Log in</Button>
+          <Link href="/auth/login" className={buttonVariants()}>
+            Log in
+          </Link>
         </div>
       )}
     </AuthShell>

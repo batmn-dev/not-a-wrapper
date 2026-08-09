@@ -24,6 +24,13 @@
 @custom-variant tall (@media (min-height: 40rem));
 @custom-variant not-tall (@media (max-height: 39.99rem));
 
+/* Base UI orientation shorthands (basecn convention). Base UI components emit
+   data-orientation="…", so the bare data-horizontal:/data-vertical: utilities
+   in ui/tabs.tsx, ui/button-group.tsx, and ui/field.tsx never match without
+   these mappings. */
+@custom-variant data-horizontal (&[data-orientation="horizontal"]);
+@custom-variant data-vertical (&[data-orientation="vertical"]);
+
 @keyframes collapsible-down {
   from {
     height: 0;
@@ -61,6 +68,9 @@
   --text-body-regular--line-height: 1.625rem;
   --activity-panel-width: 25rem;
   --spacing-panel-header: 56px;
+  /* Design-system docs: shared horizontal inset aligning the Preview/Code tab
+     row, section headings, and page heading clear of panel rounded corners. */
+  --ds-align-spacer: 1.25rem;
   --animate-collapsible-down: collapsible-down 200ms ease-out;
   --animate-collapsible-up: collapsible-up 200ms ease-out;
   --animate-show: show 150ms ease-in;
@@ -394,14 +404,20 @@
 
   /* Sidebar spacing */
   --sidebar-section-first-margin-top: 0.5rem;
+  --sidebar-section-margin-top: 1.25rem;
   /* The scrollable section stack below the sticky action cluster. Both
      organizer modes ("In one list" / "By project") flow through one stack
      container in app-sidebar.tsx: margin-top is the gap from the cluster (or
      from the one-list Projects row, which stays flush with the cluster) to the
-     first section; gap separates adjacent sections. Values pinned in
-     sidebar-geometry.test.ts so the two modes cannot drift apart again. */
-  --sidebar-section-stack-margin-top: 1.25rem;
-  --sidebar-section-stack-gap: 1rem;
+     first section; gap separates adjacent sections. ChatGPT derives the first
+     gap as section-margin minus the first-margin already spent above the
+     cluster (20px - 8px = 12px); sections then sit a full section-margin
+     apart. Values pinned in sidebar-geometry.test.ts so the two modes cannot
+     drift apart again. */
+  --sidebar-section-stack-margin-top: calc(
+    var(--sidebar-section-margin-top) - var(--sidebar-section-first-margin-top)
+  );
+  --sidebar-section-stack-gap: var(--sidebar-section-margin-top);
   --sidebar-item-gap: 0.375rem;
   --sidebar-row-height: 2.25rem;
   --sidebar-row-outer-inset: 0.375rem;

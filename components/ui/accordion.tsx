@@ -1,5 +1,3 @@
-"use client"
-
 import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion"

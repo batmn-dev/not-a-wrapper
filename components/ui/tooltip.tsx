@@ -1,5 +1,3 @@
-"use client"
-
 import { cn } from "@/lib/utils"
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 
