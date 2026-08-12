@@ -1531,3 +1531,55 @@ code {
 [data-sonner-toaster] > li {
   width: 100%;
 }
+
+/* Streaming color-decay overlay (ADR-0016 amendment 2026-08-11).
+   Painted via the CSS Custom Highlight API by
+   lib/markdown/streaming-decay-overlay.ts: bucket 0 is the newest appended
+   text (most transparent), later buckets decay toward full foreground; the
+   overlay drops a cohort entirely once its decay window ends, so settled
+   paint is plain canonical color. The overlay also no-ops under reduced
+   motion; this media gate is defense in depth. */
+@media (prefers-reduced-motion: no-preference) {
+  /* 12 buckets × 33ms ≈ 400ms LINEAR, matching claude.ai's measured run fade
+     (400ms linear opacity 0→1, docs/measurements/2026-08-12-claude-streaming-fade.md)
+     expressed through color alpha (the only channel ::highlight() paints).
+     Bucket k paints at the midpoint of its age slice, (k + 0.5) / 12 — so
+     bucket 0 starts near-invisible like their opacity-0 insert while every
+     character stays painted, selectable, and a11y-exposed from frame one. */
+  ::highlight(naw-stream-decay-0) {
+    color: color-mix(in oklab, var(--foreground) 4%, transparent);
+  }
+  ::highlight(naw-stream-decay-1) {
+    color: color-mix(in oklab, var(--foreground) 13%, transparent);
+  }
+  ::highlight(naw-stream-decay-2) {
+    color: color-mix(in oklab, var(--foreground) 21%, transparent);
+  }
+  ::highlight(naw-stream-decay-3) {
+    color: color-mix(in oklab, var(--foreground) 29%, transparent);
+  }
+  ::highlight(naw-stream-decay-4) {
+    color: color-mix(in oklab, var(--foreground) 38%, transparent);
+  }
+  ::highlight(naw-stream-decay-5) {
+    color: color-mix(in oklab, var(--foreground) 46%, transparent);
+  }
+  ::highlight(naw-stream-decay-6) {
+    color: color-mix(in oklab, var(--foreground) 54%, transparent);
+  }
+  ::highlight(naw-stream-decay-7) {
+    color: color-mix(in oklab, var(--foreground) 63%, transparent);
+  }
+  ::highlight(naw-stream-decay-8) {
+    color: color-mix(in oklab, var(--foreground) 71%, transparent);
+  }
+  ::highlight(naw-stream-decay-9) {
+    color: color-mix(in oklab, var(--foreground) 79%, transparent);
+  }
+  ::highlight(naw-stream-decay-10) {
+    color: color-mix(in oklab, var(--foreground) 88%, transparent);
+  }
+  ::highlight(naw-stream-decay-11) {
+    color: color-mix(in oklab, var(--foreground) 96%, transparent);
+  }
+}

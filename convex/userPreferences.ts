@@ -27,6 +27,7 @@ export const update = authenticatedMutation({
     showToolInvocations: v.optional(v.boolean()),
     showConversationPreviews: v.optional(v.boolean()),
     webSearchEnabled: v.optional(v.boolean()),
+    streamingPresentation: v.optional(v.string()),
     hiddenModels: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {

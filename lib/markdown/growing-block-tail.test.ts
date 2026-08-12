@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { analyzeFenceOpener, analyzeOpenFence } from "./growing-block-tail"
+import {
+  analyzeFenceOpener,
+  analyzeOpenFence,
+  clipUnprovenTableTail,
+  mendGrowingBlockTail,
+} from "./growing-block-tail"
 import {
   advanceMarkdownProjection,
   splitMarkdownSource,
@@ -163,5 +168,90 @@ describe("analyzeOpenFence", () => {
     expect(analyzeOpenFence("```\ncode\n```")).toBeNull()
     expect(analyzeOpenFence("    indented code")).toBeNull()
     expect(analyzeOpenFence("```a`b\ncode\n")).toBeNull()
+  })
+})
+
+describe("render-boundary tail mending (ADR-0016 amendment 2026-08-11)", () => {
+  it("completes unclosed inline delimiters at the tail", () => {
+    expect(mendGrowingBlockTail("selecting the right **Apache Fl")).toBe(
+      "selecting the right **Apache Fl**"
+    )
+    expect(mendGrowingBlockTail("a *forming ital")).toBe("a *forming ital*")
+    expect(mendGrowingBlockTail("run `bun ad")).toBe("run `bun ad`")
+    expect(mendGrowingBlockTail("was ~~drop")).toBe("was ~~drop~~")
+  })
+
+  it("renders a partial link as its label text only", () => {
+    const mended = mendGrowingBlockTail(
+      "see [Apache Spark Documentation](https://spark.apa"
+    )
+    expect(mended).not.toContain("](")
+    expect(mended).toContain("Apache Spark Documentation")
+  })
+
+  it("leaves complete text, snake_case, and code-span delimiters alone", () => {
+    expect(mendGrowingBlockTail("**bold** and *italic* done.")).toBe(
+      "**bold** and *italic* done."
+    )
+    expect(mendGrowingBlockTail("uses snake_case_name here")).toBe(
+      "uses snake_case_name here"
+    )
+    expect(mendGrowingBlockTail("markers like `**` stay")).toBe(
+      "markers like `**` stay"
+    )
+  })
+
+  it("gates an unproven table candidate (header, partial delimiter row)", () => {
+    expect(clipUnprovenTableTail("| Benchmark | Input Size |")).toBe("")
+    expect(
+      clipUnprovenTableTail("| Benchmark | Input Size |\n|-----------|----")
+    ).toBe("")
+    expect(clipUnprovenTableTail("Intro prose.\n| A | B |")).toBe(
+      "Intro prose."
+    )
+  })
+
+  it("gates a newline-terminated header row awaiting its delimiter row", () => {
+    // Regression: the empty split segment after a trailing newline must not
+    // break the pipe-led run scan — this exact state (header emitted, next
+    // row not started) previously rendered the raw row.
+    expect(clipUnprovenTableTail("| A | B |\n")).toBe("")
+    expect(clipUnprovenTableTail("Intro prose.\n| A | B |\n")).toBe(
+      "Intro prose."
+    )
+  })
+
+  it("gates and proves blockquoted tables like top-level ones", () => {
+    expect(clipUnprovenTableTail("> | A | B |")).toBe("")
+    expect(clipUnprovenTableTail("Quote intro.\n> | A | B |\n")).toBe(
+      "Quote intro."
+    )
+    const provenQuoted = "> | A | B |\n> |---|---|\n> | a1 | b"
+    expect(clipUnprovenTableTail(provenQuoted)).toBe(provenQuoted)
+  })
+
+  it("keeps a proven table (complete delimiter row) intact", () => {
+    const proven = "| A | B |\n|---|---|\n| a1 | b"
+    expect(clipUnprovenTableTail(proven)).toBe(proven)
+    const provenNewline = "| A | B |\n|---|---|\n"
+    expect(clipUnprovenTableTail(provenNewline)).toBe(provenNewline)
+  })
+
+  it("does not treat a terminal partial delimiter row as proof", () => {
+    expect(clipUnprovenTableTail("| A | B |\n|---|---|")).toBe("")
+  })
+
+  it("leaves pipe-free text and non-trailing pipes untouched", () => {
+    expect(clipUnprovenTableTail("plain prose line")).toBe("plain prose line")
+    const settledTableThenProse = "| A | B |\n|---|---|\n| a | b |\n\ndone"
+    expect(clipUnprovenTableTail(settledTableThenProse)).toBe(
+      settledTableThenProse
+    )
+  })
+
+  it("mend = clip + remend composed", () => {
+    expect(mendGrowingBlockTail("Results below **matter\n| A | B |")).toBe(
+      "Results below **matter**"
+    )
   })
 })
