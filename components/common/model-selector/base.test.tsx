@@ -213,12 +213,14 @@ describe("ModelSelector", () => {
     onSelectionCommitted,
     disabled = false,
     selectedModelId = "gpt-5-mini",
+    variant = "default",
   }: {
     isUserAuthenticated: boolean
     onSelect?: (modelId: string) => void
     onSelectionCommitted?: () => void
     disabled?: boolean
     selectedModelId?: string
+    variant?: "default" | "composer"
   }) {
     container = document.createElement("div")
     document.body.appendChild(container)
@@ -236,6 +238,7 @@ describe("ModelSelector", () => {
             onLockedGuestModelSelect={() => setIsAuthPromptOpen(true)}
             onSelectionCommitted={onSelectionCommitted}
             disabled={disabled}
+            variant={variant}
           />
           {isAuthPromptOpen ? (
             <div role="dialog">Log in to unlock models</div>
@@ -391,6 +394,26 @@ describe("ModelSelector", () => {
           option.textContent.includes("OpenRouter")
       )
     ).toBe(true)
+  })
+
+  it("shows the selected model icon instead of a chevron in the composer", () => {
+    renderSelector({
+      isUserAuthenticated: false,
+      selectedModelId: "openrouter:openai/gpt-5.4",
+      variant: "composer",
+    })
+
+    const trigger = document.body.querySelector<HTMLButtonElement>(
+      '[data-testid="model-trigger"]'
+    )
+
+    expect(
+      trigger?.querySelector('[data-slot="selected-model-icon"]')
+    ).not.toBeNull()
+    expect(trigger?.querySelectorAll('[data-slot="icon"]')).toHaveLength(0)
+    expect(trigger?.firstElementChild?.getAttribute("data-slot")).toBe(
+      "selected-model-icon"
+    )
   })
 
   it("disables the trigger and ignores option clicks when disabled", () => {

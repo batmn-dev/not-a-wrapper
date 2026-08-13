@@ -12,7 +12,7 @@ import { SidebarRowEndSlot } from "./sidebar-row-actions"
 
 type SidebarItemProps = {
   chat: Chat
-  currentChatId: string
+  currentChatId?: string
   presentation?:
     | { kind: "history" }
     | { kind: "pinned"; projectName?: string }

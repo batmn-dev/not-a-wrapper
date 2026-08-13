@@ -69,7 +69,10 @@ import { HistoryTrigger } from "../../history/history-trigger"
 import { useInfiniteScroll } from "../../history/use-history-view"
 import { UserMenu } from "../user-menu"
 import { useChatOrganization } from "./chat-organization"
-import { deriveSidebarComposition } from "./sidebar-composition"
+import {
+  deriveSidebarComposition,
+  deriveSidebarSelection,
+} from "./sidebar-composition"
 import { SidebarLeadingIcon } from "./sidebar-leading-icon"
 import { SidebarList } from "./sidebar-list"
 import { SidebarMenuItem } from "./sidebar-menu-item"
@@ -276,11 +279,14 @@ function useAppSidebarData() {
   const { isHistoryOpen } = useHistorySearch()
   const { chats, isLoading, isLoadingMore, loadMore, canLoadMore } = useChats()
   const { user } = useUser()
-  const params = useParams<{ chatId: string }>()
+  const params = useParams<{ chatId?: string }>()
   const pathname = usePathname()
-  const currentChatId = params.chatId
   const isLoggedIn = !!user
-  const isNewChatActive = pathname === "/"
+  const { currentChatId, isNewChatActive } = deriveSidebarSelection({
+    chats,
+    pathname,
+    routeChatId: params.chatId,
+  })
   const [chatOrganization, setChatOrganization, isOrganizationHydrated] =
     useChatOrganization()
   const { data: projectDocs } = usePerUserQuery(api.projects.getForCurrentUser)

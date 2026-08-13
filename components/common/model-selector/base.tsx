@@ -258,18 +258,25 @@ export function ModelSelector({
       disabled={disabled || isLoadingModels}
       aria-label={`Select model, current model ${currentModel?.name || "unknown"}`}
     >
+      {isComposerVariant && currentModel ? (
+        <Icon
+          icon={getVendorIcon(currentModel.icon)}
+          slotSize={16}
+          glyphSize={16}
+          data-slot="selected-model-icon"
+          className="shrink-0"
+        />
+      ) : null}
       <span className={cn("min-w-0 truncate", isComposerVariant && "max-w-40")}>
         {currentModel?.name || "Select model"}
       </span>
-      <Icon
-        icon={RiArrowDownSLine}
-        slotSize={16}
-        glyphSize={isComposerVariant ? 16 : undefined}
-        className={cn(
-          "shrink-0",
-          isComposerVariant ? "-me-0.5" : "opacity-50"
-        )}
-      />
+      {!isComposerVariant ? (
+        <Icon
+          icon={RiArrowDownSLine}
+          slotSize={16}
+          className="shrink-0 opacity-50"
+        />
+      ) : null}
     </Button>
   )
 

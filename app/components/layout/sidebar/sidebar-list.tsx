@@ -32,7 +32,7 @@ type SidebarListProps = {
   presentation?:
     | { kind: "history"; projectNames?: ReadonlyMap<string, string> }
     | { kind: "pinned"; projectNames: ReadonlyMap<string, string> }
-  currentChatId: string
+  currentChatId?: string
   /** Initial expanded state (default: true) */
   defaultOpen?: boolean
   /** localStorage key for persistence */
