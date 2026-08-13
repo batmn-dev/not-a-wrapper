@@ -162,7 +162,8 @@ describe("sidebar selection", () => {
     expect(
       deriveSidebarSelection({
         chats: [optimistic, existing],
-        pathname: "/",
+        isNewChatSurface: true,
+        sessionChatId: null,
       })
     ).toEqual({
       currentChatId: "optimistic-first-turn",
@@ -172,7 +173,11 @@ describe("sidebar selection", () => {
 
   it("keeps the new-chat action selected before a chat row exists", () => {
     expect(
-      deriveSidebarSelection({ chats: [existing], pathname: "/" })
+      deriveSidebarSelection({
+        chats: [existing],
+        isNewChatSurface: true,
+        sessionChatId: null,
+      })
     ).toEqual({
       currentChatId: undefined,
       isNewChatActive: true,
@@ -183,8 +188,8 @@ describe("sidebar selection", () => {
     expect(
       deriveSidebarSelection({
         chats: [optimistic, existing],
-        pathname: "/c/existing",
-        routeChatId: "existing",
+        isNewChatSurface: false,
+        sessionChatId: "existing",
       })
     ).toEqual({
       currentChatId: "existing",
@@ -196,7 +201,8 @@ describe("sidebar selection", () => {
     expect(
       deriveSidebarSelection({
         chats: [optimistic, existing],
-        pathname: "/projects",
+        isNewChatSurface: false,
+        sessionChatId: null,
       })
     ).toEqual({
       currentChatId: undefined,

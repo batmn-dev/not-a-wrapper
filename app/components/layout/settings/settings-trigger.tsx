@@ -2,9 +2,9 @@
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
+import { MenuLeadingIcon } from "@/components/ui/menu-leading-icon"
 import { RiSettings3Line } from "@remixicon/react"
 import { useRef } from "react"
-import { SidebarLeadingIcon } from "../sidebar/sidebar-leading-icon"
 import { SettingsContent } from "./settings-content"
 
 /**
@@ -13,8 +13,8 @@ import { SettingsContent } from "./settings-content"
  */
 export function SettingsMenuItem({ onClick }: { onClick: () => void }) {
   return (
-    <DropdownMenuItem onClick={onClick} className="gap-0">
-      <SidebarLeadingIcon icon={RiSettings3Line} />
+    <DropdownMenuItem onClick={onClick}>
+      <MenuLeadingIcon icon={RiSettings3Line} />
       <span>Settings</span>
     </DropdownMenuItem>
   )

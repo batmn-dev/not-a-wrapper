@@ -9,6 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useChats } from "@/lib/chat-store/chats/provider"
+import { useChatSession } from "@/lib/chat-store/session/provider"
 import { Chats } from "@/lib/chat-store/types"
 import { Pin, PinOff } from "@/lib/icons"
 import {
@@ -19,7 +20,6 @@ import {
   RiSearchLine,
 } from "@remixicon/react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
 import React, { useCallback, useRef, useState } from "react"
 import { HistoryAuthPrompt } from "./history-auth-prompt"
 import { useInfiniteScroll, type HistoryView } from "./use-history-view"
@@ -50,7 +50,7 @@ export function DrawerHistory({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState("")
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const params = useParams<{ chatId: string }>()
+  const { chatId: currentChatId } = useChatSession()
 
   // Browse mode loads more pages as the user scrolls (search returns a single
   // bounded page). The provider clears the search term when the drawer closes.
@@ -200,7 +200,7 @@ export function DrawerHistory({
             <div
               className="group flex items-center justify-between rounded-lg px-2 py-1.5"
               onClick={() => {
-                if (params.chatId === chat.id) {
+                if (currentChatId === chat.id) {
                   handleOpenChange(false)
                 }
               }}
@@ -266,7 +266,7 @@ export function DrawerHistory({
     ),
     [
       handleOpenChange,
-      params.chatId,
+      currentChatId,
       editingId,
       deletingId,
       editTitle,

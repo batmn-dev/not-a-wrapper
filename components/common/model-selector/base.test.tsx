@@ -135,17 +135,41 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   }: {
     render: React.ReactElement<Record<string, unknown>>
   }) => React.cloneElement(render, { "data-testid": "model-trigger" }),
-  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="model-menu">{children}</div>
+  DropdownMenuContent: ({
+    children,
+    className,
+    geometry,
+  }: {
+    children: React.ReactNode
+    className?: string
+    geometry?: "menu" | "custom"
+  }) => (
+    <div
+      data-testid="model-menu"
+      data-geometry={geometry}
+      className={className}
+    >
+      {children}
+    </div>
   ),
   DropdownMenuItem: ({
     children,
+    className,
+    geometry,
     onClick,
   }: {
     children: React.ReactNode
+    className?: string
+    geometry?: "menu" | "custom"
     onClick?: () => void
   }) => (
-    <button data-testid="model-option" type="button" onClick={onClick}>
+    <button
+      data-testid="model-option"
+      data-geometry={geometry}
+      className={className}
+      type="button"
+      onClick={onClick}
+    >
       {children}
     </button>
   ),
@@ -258,8 +282,7 @@ describe("ModelSelector", () => {
     renderSelector({ isUserAuthenticated: false })
 
     const matchesShortcut = useKeyShortcutMock.mock.calls.at(-1)?.[0] as
-      | ((event: KeyboardEvent) => boolean)
-      | undefined
+      ((event: KeyboardEvent) => boolean) | undefined
 
     expect(matchesShortcut).toBeTypeOf("function")
     expect(
@@ -300,6 +323,22 @@ describe("ModelSelector", () => {
     expect(document.body.textContent).toContain("GPT-5.4")
     expect(document.body.textContent).toContain("Claude Opus 4.6")
     expect(document.body.textContent).toContain("Locked")
+  })
+
+  it("owns its composite menu inset and row geometry", () => {
+    renderSelector({ isUserAuthenticated: false })
+
+    const menu = document.body.querySelector<HTMLElement>(
+      '[data-testid="model-menu"]'
+    )
+    const option = getModelOption("GPT-5 Mini")
+
+    expect(menu?.dataset.geometry).toBe("custom")
+    expect(menu?.className).toContain("p-1.5")
+    expect(option.dataset.geometry).toBe("custom")
+    expect(option.className).toContain("h-9")
+    expect(option.className).toContain("rounded-lg")
+    expect(option.className).not.toContain("mx-2.5")
   })
 
   it("selects the anonymous model but opens auth for locked guest models", () => {

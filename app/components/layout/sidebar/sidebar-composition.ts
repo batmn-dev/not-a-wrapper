@@ -15,29 +15,29 @@ export type SidebarComposition = {
 }
 
 /**
- * Resolve the sidebar's single selected chat row. The route remains the
- * authority for durable/local chats. On the new-chat surface only, bridge the
- * short interval where the chat store has inserted its optimistic first-turn
- * row but atomic creation has not handed navigation a durable chat id yet.
+ * Resolve the sidebar's single selected chat row. ChatSession remains the
+ * authority for durable/local chats, including shallow first-turn navigation.
+ * On the new-chat surface only, bridge the earlier interval where the store has
+ * inserted its optimistic row but atomic creation has not produced a chat id.
  */
 export function deriveSidebarSelection({
   chats,
-  pathname,
-  routeChatId,
+  isNewChatSurface,
+  sessionChatId,
 }: {
   chats: Chat[]
-  pathname: string
-  routeChatId?: string
+  isNewChatSurface: boolean
+  sessionChatId: string | null
 }) {
   const optimisticChatId =
-    routeChatId === undefined && pathname === "/"
+    isNewChatSurface
       ? chats.find((chat) => isOptimisticChatId(chat.id))?.id
       : undefined
-  const currentChatId = routeChatId ?? optimisticChatId
+  const currentChatId = sessionChatId ?? optimisticChatId
 
   return {
     currentChatId,
-    isNewChatActive: pathname === "/" && currentChatId === undefined,
+    isNewChatActive: isNewChatSurface && currentChatId === undefined,
   }
 }
 

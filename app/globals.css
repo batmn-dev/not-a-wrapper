@@ -334,6 +334,9 @@
   --color-input-bg-hover: var(--input-bg-hover);
   --color-input-border: var(--input-border);
   --color-popover-bg-hover: var(--popover-bg-hover);
+  --color-floating-surface: var(--floating-surface);
+  --color-floating-surface-foreground: var(--floating-surface-foreground);
+  --color-floating-menu-divider: var(--floating-menu-divider);
   --color-muted-bg-hover: var(--muted-bg-hover);
   --color-control-track: var(--control-track-bg);
   --color-border: var(--border);
@@ -395,6 +398,7 @@
   --shadow-border-md: var(--shadow-border-md-value);
   --shadow-border-lg: var(--shadow-border-lg-value);
   --shadow-border-xl: var(--shadow-border-xl-value);
+  --shadow-floating-surface: var(--floating-surface-edge-shadow);
 }
 
 :root {
@@ -474,6 +478,15 @@
   --card-foreground: var(--foreground);
   --popover: oklch(1 0 0);
   --popover-foreground: var(--foreground);
+  /* Floating overlays have their own semantic surface so changing menu
+     elevation never recolors settings panels, inputs, cards, or dialogs. */
+  --floating-surface: var(--popover);
+  --floating-surface-foreground: var(--popover-foreground);
+  --floating-surface-edge-shadow: var(--shadow-border-md-value);
+  --floating-menu-divider: var(--border-default);
+  --floating-menu-radius: 1.25rem;
+  --floating-menu-item-radius: 0.75rem;
+  --floating-menu-leading-slot-size: 1.25rem;
   --primary: oklch(0 0 0);
   --primary-foreground: oklch(1 0 0);
   --primary-bg-hover: oklch(0.31 0 0);
@@ -626,6 +639,13 @@
   --card-foreground: var(--foreground);
   --popover: oklch(0.222 0 0);
   --popover-foreground: var(--foreground);
+  /* Live ChatGPT dark floating surface: #353535 with only its translucent
+     inset optical edge; exterior elevation would make it too heavy on black. */
+  --floating-surface: oklch(0.329 0 0);
+  --floating-surface-foreground: var(--foreground);
+  --floating-surface-edge-shadow: inset 0 0 1px
+    color-mix(in oklab, var(--foreground) 20%, transparent);
+  --floating-menu-divider: var(--border-default);
   --primary: oklch(1 0 0);
   --primary-foreground: oklch(0.159 0 0);
   --primary-bg-hover: oklch(0.922 0 0);

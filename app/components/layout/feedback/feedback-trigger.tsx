@@ -4,10 +4,10 @@ import { FeedbackForm } from "@/components/common/feedback-form"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Drawer, DrawerContent } from "@/components/ui/drawer"
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
+import { MenuLeadingIcon } from "@/components/ui/menu-leading-icon"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { useUser } from "@/lib/user-store/provider"
 import { RiQuestionLine } from "@remixicon/react"
-import { SidebarLeadingIcon } from "../sidebar/sidebar-leading-icon"
 
 /**
  * Menu item that opens the feedback dialog.
@@ -15,8 +15,8 @@ import { SidebarLeadingIcon } from "../sidebar/sidebar-leading-icon"
  */
 export function FeedbackMenuItem({ onClick }: { onClick: () => void }) {
   return (
-    <DropdownMenuItem onClick={onClick} className="gap-0">
-      <SidebarLeadingIcon icon={RiQuestionLine} />
+    <DropdownMenuItem onClick={onClick}>
+      <MenuLeadingIcon icon={RiQuestionLine} />
       <span>Feedback</span>
     </DropdownMenuItem>
   )

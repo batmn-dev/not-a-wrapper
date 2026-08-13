@@ -1,3 +1,10 @@
+import {
+  floatingMenuContentClassName,
+  floatingMenuItemClassName,
+  floatingMenuLabelClassName,
+  floatingMenuSeparatorClassName,
+  floatingSurfaceClassName,
+} from "@/components/ui/floating-surface"
 import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu"
@@ -51,7 +58,9 @@ function ContextMenuContent({
         <ContextMenuPrimitive.Popup
           data-slot="context-menu-content"
           className={cn(
-            "bg-popover text-popover-foreground shadow-border-md z-50 max-h-(--available-height) min-w-36 overflow-x-hidden overflow-y-auto rounded-md p-1 outline-none",
+            floatingSurfaceClassName,
+            floatingMenuContentClassName,
+            "z-50 max-h-(--available-height) min-w-36 overflow-x-hidden overflow-y-auto outline-none",
             className
           )}
           {...props}
@@ -79,7 +88,8 @@ function ContextMenuLabel({
       data-slot="context-menu-label"
       data-inset={inset}
       className={cn(
-        "text-muted-foreground px-2 py-1.5 text-xs font-medium data-inset:pl-8",
+        floatingMenuLabelClassName,
+        "text-muted-foreground text-xs font-medium data-inset:pl-8",
         className
       )}
       {...props}
@@ -102,7 +112,8 @@ function ContextMenuItem({
       data-inset={inset}
       data-variant={variant}
       className={cn(
-        "menu-item-hoverable group/context-menu-item focus:bg-interactive-selected focus:text-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 focus:*:[svg]:text-foreground data-[variant=destructive]:*:[svg]:text-destructive relative flex cursor-pointer items-center gap-2 rounded-sm px-2 py-[5px] text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        floatingMenuItemClassName,
+        "menu-item-hoverable group/context-menu-item focus:bg-interactive-selected focus:text-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 focus:*:[svg]:text-foreground data-[variant=destructive]:*:[svg]:text-destructive relative flex cursor-pointer items-center gap-2 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
@@ -129,7 +140,8 @@ function ContextMenuSubTrigger({
       data-slot="context-menu-sub-trigger"
       data-inset={inset}
       className={cn(
-        "menu-item-hoverable focus:bg-interactive-selected focus:text-foreground data-open:bg-interactive-selected data-open:text-foreground flex cursor-pointer items-center rounded-sm px-2 py-[5px] text-sm outline-hidden select-none data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        floatingMenuItemClassName,
+        "menu-item-hoverable focus:bg-interactive-selected focus:text-foreground data-open:bg-interactive-selected data-open:text-foreground flex cursor-pointer items-center gap-2 text-sm outline-hidden select-none data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
@@ -146,7 +158,6 @@ function ContextMenuSubContent({
   return (
     <ContextMenuContent
       data-slot="context-menu-sub-content"
-      className="shadow-border-md"
       side="right"
       {...props}
     />
@@ -167,7 +178,8 @@ function ContextMenuCheckboxItem({
       data-slot="context-menu-checkbox-item"
       data-inset={inset}
       className={cn(
-        "menu-item-hoverable focus:bg-interactive-selected focus:text-foreground relative flex cursor-pointer items-center gap-2 rounded-sm py-[5px] pr-8 pl-2 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        floatingMenuItemClassName,
+        "menu-item-hoverable focus:bg-interactive-selected focus:text-foreground relative flex cursor-pointer items-center gap-2 pr-8 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       checked={checked}
@@ -207,7 +219,8 @@ function ContextMenuRadioItem({
       data-slot="context-menu-radio-item"
       data-inset={inset}
       className={cn(
-        "menu-item-hoverable focus:bg-interactive-selected focus:text-foreground relative flex cursor-pointer items-center gap-2 rounded-sm py-[5px] pr-8 pl-2 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        floatingMenuItemClassName,
+        "menu-item-hoverable focus:bg-interactive-selected focus:text-foreground relative flex cursor-pointer items-center gap-2 pr-8 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
@@ -229,7 +242,7 @@ function ContextMenuSeparator({
   return (
     <ContextMenuPrimitive.Separator
       data-slot="context-menu-separator"
-      className={cn("bg-border -mx-1 my-1 h-px", className)}
+      className={cn(floatingMenuSeparatorClassName, className)}
       {...props}
     />
   )
