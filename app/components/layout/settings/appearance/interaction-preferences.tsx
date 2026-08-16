@@ -28,8 +28,8 @@ export function InteractionPreferences() {
             Smooth text streaming
           </FieldTitle>
           <FieldDescription className="text-xs text-pretty">
-            Fade new words in as responses stream. Turn off to show each word at
-            full color instantly.
+            Fade newly streamed text in as responses stream. Turn off to show it
+            at full color instantly.
           </FieldDescription>
         </FieldContent>
         <Switch

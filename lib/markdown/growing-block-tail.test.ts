@@ -221,6 +221,13 @@ describe("render-boundary tail mending (ADR-0016 amendment 2026-08-11)", () => {
     )
   })
 
+  it("does not gate consecutive pipe-led shell pipeline prose", () => {
+    const pipeline =
+      'curl https://api.example.com/items\n| jq ".items[]"\n| sort\n'
+    expect(clipUnprovenTableTail(pipeline)).toBe(pipeline)
+    expect(clipUnprovenTableTail(pipeline.trimEnd())).toBe(pipeline.trimEnd())
+  })
+
   it("gates and proves blockquoted tables like top-level ones", () => {
     expect(clipUnprovenTableTail("> | A | B |")).toBe("")
     expect(clipUnprovenTableTail("Quote intro.\n> | A | B |\n")).toBe(

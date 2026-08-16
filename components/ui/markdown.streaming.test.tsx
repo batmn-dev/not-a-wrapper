@@ -528,4 +528,17 @@ describe("Markdown terminal-block stability (plan PR 3)", () => {
     expect(table).not.toBeNull()
     expect(table?.textContent).toContain("a1")
   })
+
+  it("streams consecutive pipe-led shell pipeline prose without gating it", async () => {
+    mount(
+      'curl https://api.example.com/items\n| jq ".items[]"\n| sort\n',
+      true
+    )
+    await advance(10)
+
+    expect(container?.textContent).toContain('curl https://api.example.com/items')
+    expect(container?.textContent).toContain('| jq ".items[]"')
+    expect(container?.textContent).toContain("| sort")
+    expect(container?.querySelector("table")).toBeNull()
+  })
 })

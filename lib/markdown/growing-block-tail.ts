@@ -409,13 +409,41 @@ const TABLE_DELIMITER_ROW_RE =
  * so quoted tables gate and prove the same way top-level ones do. */
 const BLOCKQUOTE_PREFIX_RE = /^ {0,3}(?:> ?)+/
 
+function isEscaped(text: string, index: number): boolean {
+  let backslashCount = 0
+  for (let i = index - 1; i >= 0 && text[i] === "\\"; i--) {
+    backslashCount++
+  }
+  return backslashCount % 2 === 1
+}
+
+/** Require two non-empty cells before treating a pipe-led line as a table
+ * header. A leading pipe alone is also valid shell-pipeline prose. */
+function isPlausibleTableHeaderRow(line: string): boolean {
+  const trimmed = line.trimEnd()
+  const leadingPipe = trimmed.indexOf("|")
+  if (leadingPipe === -1) return false
+
+  const cells: string[] = []
+  let cellStart = leadingPipe + 1
+  for (let i = cellStart; i < trimmed.length; i++) {
+    if (trimmed[i] !== "|" || isEscaped(trimmed, i)) continue
+    cells.push(trimmed.slice(cellStart, i).trim())
+    cellStart = i + 1
+  }
+  if (cellStart < trimmed.length) {
+    cells.push(trimmed.slice(cellStart).trim())
+  }
+  return cells.length >= 2 && cells.every((cell) => cell.length > 0)
+}
+
 /**
- * Clip an UNPROVEN trailing table candidate: the trailing run of pipe-led
- * lines, unless the run contains a COMPLETE (newline-terminated) delimiter
- * row — once the delimiter row lands, remark parses a real table and its
- * own partial-trailing-row tolerance takes over. Pure text-in/text-out;
- * callers must not pass open-fence (`code`) blocks, whose interiors may
- * legitimately contain pipe-led lines.
+ * Clip an UNPROVEN trailing table candidate: a trailing run whose first line
+ * has a plausible multi-cell header shape, unless the run contains a COMPLETE
+ * (newline-terminated) delimiter row — once the delimiter row lands, remark
+ * parses a real table and its own partial-trailing-row tolerance takes over.
+ * Pure text-in/text-out; callers must not pass open-fence (`code`) blocks,
+ * whose interiors may legitimately contain pipe-led lines.
  */
 export function clipUnprovenTableTail(text: string): string {
   const lines = text.split("\n")
@@ -431,6 +459,7 @@ export function clipUnprovenTableTail(text: string): string {
     runStart--
   }
   if (runStart === lineCount) return text
+  if (!isPlausibleTableHeaderRow(rowText(lines[runStart]!))) return text
   for (let i = runStart; i < lineCount; i++) {
     const isTerminalPartial = i === lineCount - 1 && !endsWithNewline
     if (

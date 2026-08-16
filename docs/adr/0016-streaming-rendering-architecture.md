@@ -182,15 +182,27 @@ renderer can be optimized without changing document semantics:
 
 ### Render-boundary tail mending (amendment, 2026-08-11)
 
-Live measurement (docs/measurements/2026-08-11-streaming-markdown-chatgpt-vs-
-naw.md) showed the remaining visual-quality gap against ChatGPT was raw
-trailing-delimiter exposure: 15–23 windows per response (`**`, `](`, `|`
-header rows; 100–500 ms, roughly doubling under CPU load), even though
-provider delivery was fine-grained — a render property, not a transport
-property. ChatGPT never exposes inline delimiters (686-sample probe, zero
-hits); the OSS survey (2026-08-11-oss-streaming-survey.md) found the two
-reference stacks that treat this as a first-class problem both converged on
-the same mechanism: `remend`, a pure completion pass at the render boundary.
+A 2026-08-11 signed-in Chrome comparison used an assistant-scoped
+MutationObserver, a chat-stream `fetch` tee, rAF and long-task observers, and a
+100 ms text sampler. Across three mixed-Markdown Not A Wrapper runs
+(4,865–7,367 visible characters, including one under approximately 75%
+synthetic main-thread load), it recorded 15–23 raw trailing-delimiter windows
+per response (`**`, `](`, `|` header rows); a 6,684-character list-only
+control containing none of those constructs recorded zero. Windows lasted
+100–500 ms and roughly doubled under load even though GPT-5 Mini delivery
+remained fine-grained (11–37 ms median inter-chunk gaps across runs, 62–233
+average bytes per chunk). An
+emphasis-heavy ChatGPT control recorded 686 samples across 2,368 characters
+and at least 45 inline emphasis constructs with zero raw inline-delimiter
+hits. The gap was therefore a render property, not a transport property.
+
+A same-day code survey compared seven open-source chat stacks: VercelChatbot,
+HuggingChat, LibreChat, OpenWebUI, LobeHub, AnythingLLM, and T3Code. Of those,
+the two that treated incomplete Markdown as a first-class concern
+(VercelChatbot and HuggingChat) both used `remend`, a pure completion pass at
+the render boundary; the others painted incomplete syntax, paced or faded the
+reveal, or buffered delivery without completing the Markdown tail. This
+convergence supported a render-boundary mend rather than another pacing store.
 
 The fix is `mendGrowingBlockTail` (`lib/markdown/growing-block-tail.ts`),
 applied by the Markdown component to exactly one block: the terminal growing
@@ -229,14 +241,18 @@ like ChatGPT's paced reveal or Claude's word fade. The accepted mechanism is
 `lib/markdown/streaming-decay-overlay.ts`: newly appended rendered text is
 painted at reduced foreground alpha through the CSS Custom Highlight API
 (`CSS.highlights` + `::highlight(naw-stream-decay-N)` rules, 12 buckets ×
-33 ms ≈ 400 ms on a linear near-transparent→full ramp). Curve parameters
-follow claude.ai's live-measured fade (2026-08-12,
-`docs/measurements/2026-08-12-claude-streaming-fade.md`): each append cohort
-fades as one unit over 400 ms linear with no per-word stagger — the trailing
-gradient users perceive there is nothing but consecutive flush cohorts'
-overlapping fades. (An earlier revision staggered words 24 ms apart inside a
-cohort; the measurement showed Claude has no stagger — even a 211-char run
-fades uniformly — so it was removed along with its paint-span splitting.)
+33 ms ≈ 400 ms on a linear near-transparent→full ramp). A 2026-08-12
+signed-in Claude capture instrumented two streamed responses with a
+MutationObserver, synchronous `getComputedStyle`/`getAnimations()` sampling at
+node insertion, and CSSOM extraction. It found append cohorts averaging 32
+characters (maximum 211), with 91 of 124 inter-cohort gaps between 60 and
+120 ms. Every sampled run used one 400 ms linear opacity animation with zero
+delay; all 125 spans in the larger response had no inline stagger. Each append
+cohort therefore fades as one unit, and the trailing gradient comes from
+consecutive cohorts' overlapping fades. An earlier revision staggered words
+24 ms apart inside a cohort, but the capture showed no such stagger—even the
+211-character run faded uniformly—so the stagger and its paint-span splitting
+were removed.
 The tint is applied in a layout effect — before the browser paints the
 appended text — so new text never flashes a full-color frame first. Mid-word
 appends ("hel" + "lo") merge into one fading unit only within a bounded
