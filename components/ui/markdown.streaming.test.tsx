@@ -492,4 +492,53 @@ describe("Markdown terminal-block stability (plan PR 3)", () => {
       )
     }
   )
+
+  // Render-boundary tail mending (ADR-0016 amendment 2026-08-11), pinned at
+  // the component seam: these fail if markdown.tsx stops routing the growing
+  // terminal block through mendGrowingBlockTail — the pure-function tests in
+  // growing-block-tail.test.ts cannot see that wiring.
+  it("mends the growing terminal block and restores canonical bytes at settlement", async () => {
+    const view = mount("Prose intro.\n\nselecting the right **Apache Fl", true)
+    await advance(10)
+    // Mid-stream the unclosed strong is COMPLETED: bold "Apache Fl", no raw
+    // delimiters painted.
+    expect(container?.querySelector("strong")?.textContent).toBe("Apache Fl")
+    expect(container?.textContent).not.toContain("**")
+
+    // Stop mid-construct: the settled render shows the exact canonical
+    // bytes — the raw delimiters are settled content, not a transient.
+    view.rerender("Prose intro.\n\nselecting the right **Apache Fl", false)
+    await advance(10)
+    expect(container?.querySelector("strong")).toBeNull()
+    expect(container?.textContent).toContain("**Apache Fl")
+  })
+
+  it("gates an unproven growing table (newline-terminated header) until its delimiter row proves it", async () => {
+    const view = mount("Results:\n\n| A | B |\n", true)
+    await advance(10)
+    // The pipe-led candidate is clipped from the render — no raw pipes, no
+    // premature table.
+    expect(container?.textContent).toContain("Results:")
+    expect(container?.textContent).not.toContain("|")
+    expect(container?.querySelector("table")).toBeNull()
+
+    view.rerender("Results:\n\n| A | B |\n|---|---|\n| a1 | b1 |", true)
+    await advance(10)
+    const table = container?.querySelector("table")
+    expect(table).not.toBeNull()
+    expect(table?.textContent).toContain("a1")
+  })
+
+  it("streams consecutive pipe-led shell pipeline prose without gating it", async () => {
+    mount(
+      'curl https://api.example.com/items\n| jq ".items[]"\n| sort\n',
+      true
+    )
+    await advance(10)
+
+    expect(container?.textContent).toContain('curl https://api.example.com/items')
+    expect(container?.textContent).toContain('| jq ".items[]"')
+    expect(container?.textContent).toContain("| sort")
+    expect(container?.querySelector("table")).toBeNull()
+  })
 })

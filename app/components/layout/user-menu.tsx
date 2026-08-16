@@ -11,6 +11,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { MenuLeadingIcon } from "@/components/ui/menu-leading-icon"
 import {
   Tooltip,
   TooltipContent,
@@ -18,8 +19,8 @@ import {
 } from "@/components/ui/tooltip"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useMessages } from "@/lib/chat-store/messages/provider"
-import { useUser } from "@/lib/user-store/provider"
 import { APP_DOMAIN } from "@/lib/config"
+import { useUser } from "@/lib/user-store/provider"
 import {
   RiBugLine,
   RiFileTextLine,
@@ -33,7 +34,6 @@ import Link from "next/link"
 import { useState } from "react"
 import { AppInfoDialog, AppInfoMenuItem } from "./app-info/app-info-trigger"
 import { FeedbackDialog, FeedbackMenuItem } from "./feedback/feedback-trigger"
-import { SidebarLeadingIcon } from "./sidebar/sidebar-leading-icon"
 import { SettingsDialog, SettingsMenuItem } from "./settings/settings-trigger"
 import { signOutAndClearLocalState } from "./sign-out"
 
@@ -69,21 +69,18 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
         </span>
       </DropdownMenuItem>
       <DropdownMenuSeparator />
-      <DropdownMenuItem
-        render={<Link href="/design-system" />}
-        className="gap-0"
-      >
-        <SidebarLeadingIcon icon={RiPaletteLine} />
+      <DropdownMenuItem render={<Link href="/design-system" />}>
+        <MenuLeadingIcon icon={RiPaletteLine} />
         <span>Design System</span>
       </DropdownMenuItem>
       <SettingsMenuItem onClick={() => setSettingsOpen(true)} />
       <DropdownMenuSeparator />
       <DropdownMenuSub>
-        <DropdownMenuSubTrigger className="gap-0">
-          <SidebarLeadingIcon icon={RiLifebuoyLine} />
+        <DropdownMenuSubTrigger>
+          <MenuLeadingIcon icon={RiLifebuoyLine} />
           <span>Help</span>
         </DropdownMenuSubTrigger>
-        <DropdownMenuSubContent className="w-56 rounded-2xl p-1.5">
+        <DropdownMenuSubContent className="w-56">
           <AppInfoMenuItem onClick={() => setAppInfoOpen(true)} />
           <FeedbackMenuItem onClick={() => setFeedbackOpen(true)} />
           <DropdownMenuSeparator />
@@ -95,9 +92,8 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
                 rel="noopener noreferrer"
               />
             }
-            className="gap-0"
           >
-            <SidebarLeadingIcon icon={RiFileTextLine} />
+            <MenuLeadingIcon icon={RiFileTextLine} />
             <span>Terms of Service</span>
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -108,9 +104,8 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
                 rel="noopener noreferrer"
               />
             }
-            className="gap-0"
           >
-            <SidebarLeadingIcon icon={RiShieldLine} />
+            <MenuLeadingIcon icon={RiShieldLine} />
             <span>Privacy Policy</span>
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -121,18 +116,14 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
                 rel="noopener noreferrer"
               />
             }
-            className="gap-0"
           >
-            <SidebarLeadingIcon icon={RiBugLine} />
+            <MenuLeadingIcon icon={RiBugLine} />
             <span>Report a bug</span>
           </DropdownMenuItem>
         </DropdownMenuSubContent>
       </DropdownMenuSub>
-      <DropdownMenuItem
-        onClick={handleSignOut}
-        className="flex items-center gap-0"
-      >
-        <SidebarLeadingIcon icon={RiLogoutBoxRLine} />
+      <DropdownMenuItem onClick={handleSignOut}>
+        <MenuLeadingIcon icon={RiLogoutBoxRLine} />
         <span>Log out</span>
       </DropdownMenuItem>
     </>
@@ -186,7 +177,7 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
             side="top"
             align="start"
             animated={false}
-            className="w-(--anchor-width)"
+            className="w-[calc(var(--sidebar-width)-0.75rem)]"
           >
             {menuContent}
           </DropdownMenuContent>

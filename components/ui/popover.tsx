@@ -1,3 +1,4 @@
+import { floatingSurfaceClassName } from "@/components/ui/floating-surface"
 import { cn } from "@/lib/utils"
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover"
 import * as React from "react"
@@ -22,9 +23,9 @@ function PopoverTrigger({
   )
 }
 
-// PopoverContent owns the surface outline through shadow-border. Consumers may
-// change size, radius, spacing, and placement, but should not add border classes
-// unless they also intentionally replace shadow-border to avoid double outlines.
+// PopoverContent owns its optical edge through the shared floating-surface
+// recipe. Consumers may change size, radius, spacing, and placement, but should
+// not add border/shadow classes unless they intentionally replace that edge.
 function PopoverContent({
   className,
   align = "center",
@@ -49,7 +50,8 @@ function PopoverContent({
         <PopoverPrimitive.Popup
           data-slot="popover-content"
           className={cn(
-            "bg-popover text-popover-foreground shadow-border-md z-50 flex w-72 flex-col gap-4 rounded-2xl p-1.5 text-sm outline-hidden",
+            floatingSurfaceClassName,
+            "z-50 flex w-72 flex-col gap-4 rounded-2xl p-1.5 text-sm outline-hidden",
             className
           )}
           {...props}

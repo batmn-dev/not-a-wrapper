@@ -180,6 +180,101 @@ renderer can be optimized without changing document semantics:
   block until an optimization can memoize items beneath one parser-owned list
   root. Long single paragraphs retain the same documented limitation.
 
+### Render-boundary tail mending (amendment, 2026-08-11)
+
+A 2026-08-11 signed-in Chrome comparison used an assistant-scoped
+MutationObserver, a chat-stream `fetch` tee, rAF and long-task observers, and a
+100 ms text sampler. Across three mixed-Markdown Not A Wrapper runs
+(4,865–7,367 visible characters, including one under approximately 75%
+synthetic main-thread load), it recorded 15–23 raw trailing-delimiter windows
+per response (`**`, `](`, `|` header rows); a 6,684-character list-only
+control containing none of those constructs recorded zero. Windows lasted
+100–500 ms and roughly doubled under load even though GPT-5 Mini delivery
+remained fine-grained (11–37 ms median inter-chunk gaps across runs, 62–233
+average bytes per chunk). An
+emphasis-heavy ChatGPT control recorded 686 samples across 2,368 characters
+and at least 45 inline emphasis constructs with zero raw inline-delimiter
+hits. The gap was therefore a render property, not a transport property.
+
+A same-day code survey compared seven open-source chat stacks: VercelChatbot,
+HuggingChat, LibreChat, OpenWebUI, LobeHub, AnythingLLM, and T3Code. Of those,
+the two that treated incomplete Markdown as a first-class concern
+(VercelChatbot and HuggingChat) both used `remend`, a pure completion pass at
+the render boundary; the others painted incomplete syntax, paced or faded the
+reveal, or buffered delivery without completing the Markdown tail. This
+convergence supported a render-boundary mend rather than another pacing store.
+
+The fix is `mendGrowingBlockTail` (`lib/markdown/growing-block-tail.ts`),
+applied by the Markdown component to exactly one block: the terminal growing
+block of a live message, when its nodeType is not `code`. Inline constructs
+are COMPLETED, not withheld — `**bol` renders as bold "bol", a partial
+`[label](url…` renders its label as plain text (remend `linkMode:
+"text-only"`), `inlineKatex` stays off to match `singleDollarTextMath:
+false`. Tables are the one construct completion cannot fake: an unproven
+trailing pipe-led run — blockquoted rows included, and a newline-terminated
+header row still awaiting its delimiter row — is clipped from the render
+until a completed GFM delimiter row proves the table
+(`clipUnprovenTableTail`).
+
+Residual exposure is one token gap, not a construct-wide window: a chunk
+ending exactly on a bare opener (`foo **`) renders those delimiter bytes raw
+until the next chunk arrives, because only a full inline parse can
+distinguish an unmatched opener from a legitimate literal (stripping
+blindly would corrupt a _closed_ construct ending in the same bytes). The
+measured 100–500 ms windows came from the construct's whole lifetime
+(`**Apache Fl…` until the closer landed); those are what this closes.
+
+Invariants preserved: the mend is a pure function of the block's tail bytes,
+evaluated during render — the canonical AI SDK store, projection boundaries,
+settlement equivalence, and durable snapshots never observe mended text.
+Stable blocks, settled messages, and terminal outcome stubs render exact
+canonical bytes; a Stop mid-`**bold` displays the raw characters because
+they are settled content, not a transient. There is still no displayed-text
+copy, no timer, and no pacing: this amendment closes the exposure gap
+without revisiting the rejected reveal scheduler below.
+
+### Streaming decay overlay (amendment, 2026-08-11)
+
+The remaining aesthetic gap after tail mending was the reveal feel: paints
+track provider commits, so a burst appears instantly instead of flowing in
+like ChatGPT's paced reveal or Claude's word fade. The accepted mechanism is
+`lib/markdown/streaming-decay-overlay.ts`: newly appended rendered text is
+painted at reduced foreground alpha through the CSS Custom Highlight API
+(`CSS.highlights` + `::highlight(naw-stream-decay-N)` rules, 12 buckets ×
+33 ms ≈ 400 ms on a linear near-transparent→full ramp). A 2026-08-12
+signed-in Claude capture instrumented two streamed responses with a
+MutationObserver, synchronous `getComputedStyle`/`getAnimations()` sampling at
+node insertion, and CSSOM extraction. It found append cohorts averaging 32
+characters (maximum 211), with 91 of 124 inter-cohort gaps between 60 and
+120 ms. Every sampled run used one 400 ms linear opacity animation with zero
+delay; all 125 spans in the larger response had no inline stagger. Each append
+cohort therefore fades as one unit, and the trailing gradient comes from
+consecutive cohorts' overlapping fades. An earlier revision staggered words
+24 ms apart inside a cohort, but the capture showed no such stagger—even the
+211-character run faded uniformly—so the stagger and its paint-span splitting
+were removed.
+The tint is applied in a layout effect — before the browser paints the
+appended text — so new text never flashes a full-color frame first. Mid-word
+appends ("hel" + "lo") merge into one fading unit only within a bounded
+window (`MAX_WORD_MERGE_CHARS`): unspaced scripts (CJK, Thai) never hit a
+word boundary, and an unbounded merge re-timed the entire streamed run to
+the newest bucket on every append, pinning whole sentences near-transparent;
+bounded, their appends fade as independent cohorts.
+
+This deliberately differs from both the rejected reveal scheduler and the
+rejected per-word span wrapping: the overlay owns NO DOM (the React tree is
+untouched, so the rendered-DOM equivalence corpus is unaffected and settled
+content is canonical by construction), holds no displayed-text copy (its
+only state is append cohorts over rendered textContent, derived by
+per-commit diffing), and never gates text — every character is painted,
+selectable, and exposed to assistive technology from the first frame; only
+paint alpha varies for under a second. Adopted text (reload, nav-return)
+and non-append changes seed a fresh baseline with no animation; settlement
+and unmount clear all ranges synchronously; the rAF driver self-terminates
+when no cohorts remain; the overlay no-ops without `CSS.highlights` support
+and under `prefers-reduced-motion: reduce` (the stylesheet media-gates the
+same rules as defense in depth).
+
 ### Why the second reveal scheduler was rejected
 
 - It created displayed-text state that intentionally trailed canonical text

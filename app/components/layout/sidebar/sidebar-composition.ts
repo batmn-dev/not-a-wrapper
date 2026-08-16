@@ -1,4 +1,5 @@
 import type { Doc } from "@/convex/_generated/dataModel"
+import { isOptimisticChatId } from "@/lib/chat-store/identity"
 import { sortByRecency } from "@/lib/chat-store/chats/sidebar-window"
 import type { Chat } from "@/lib/chat-store/types"
 import type { ChatOrganization } from "./chat-organization"
@@ -11,6 +12,33 @@ export type SidebarComposition = {
   sectionProjects: SidebarProjectModel[]
   historyChats: Chat[]
   projectNames: ReadonlyMap<string, string>
+}
+
+/**
+ * Resolve the sidebar's single selected chat row. ChatSession remains the
+ * authority for durable/local chats, including shallow first-turn navigation.
+ * On the new-chat surface only, bridge the earlier interval where the store has
+ * inserted its optimistic row but atomic creation has not produced a chat id.
+ */
+export function deriveSidebarSelection({
+  chats,
+  isNewChatSurface,
+  sessionChatId,
+}: {
+  chats: Chat[]
+  isNewChatSurface: boolean
+  sessionChatId: string | null
+}) {
+  const optimisticChatId =
+    isNewChatSurface
+      ? chats.find((chat) => isOptimisticChatId(chat.id))?.id
+      : undefined
+  const currentChatId = sessionChatId ?? optimisticChatId
+
+  return {
+    currentChatId,
+    isNewChatActive: isNewChatSurface && currentChatId === undefined,
+  }
 }
 
 export function deriveSidebarComposition({

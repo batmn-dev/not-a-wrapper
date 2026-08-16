@@ -104,6 +104,7 @@ function ChatInner({
   project?: ChatProjectContext
 }) {
   const router = useRouter()
+  const { navigateToChat } = useChatSession()
   const {
     createFirstTurnChat,
     bumpChat,
@@ -131,10 +132,6 @@ function ChatInner({
     () => isRouteDurableChat(chatId, isAuthenticated),
     [chatId, isAuthenticated]
   )
-  const navigateToChat = useCallback((nextChatId: string) => {
-    window.history.pushState(null, "", `/c/${nextChatId}`)
-  }, [])
-
   // The Composer's imperative handle — quote insertion, ?prompt= hydration,
   // and global focus are commands into the Composer, not state threaded
   // through props.

@@ -3,6 +3,7 @@ import type { Chat } from "@/lib/chat-store/types"
 import { describe, expect, it } from "vitest"
 import {
   deriveSidebarComposition,
+  deriveSidebarSelection,
   type SidebarProjectModel,
 } from "./sidebar-composition"
 
@@ -146,5 +147,66 @@ describe("sidebar grouping composition", () => {
       "pinned-project-recent",
       "regular",
     ])
+  })
+})
+
+describe("sidebar selection", () => {
+  const existing = chat("existing", {
+    updated_at: "2026-01-01T00:00:00.000Z",
+  })
+  const optimistic = chat("optimistic-first-turn", {
+    updated_at: "2026-01-02T00:00:00.000Z",
+  })
+
+  it("selects the optimistic first-turn row on the new-chat surface", () => {
+    expect(
+      deriveSidebarSelection({
+        chats: [optimistic, existing],
+        isNewChatSurface: true,
+        sessionChatId: null,
+      })
+    ).toEqual({
+      currentChatId: "optimistic-first-turn",
+      isNewChatActive: false,
+    })
+  })
+
+  it("keeps the new-chat action selected before a chat row exists", () => {
+    expect(
+      deriveSidebarSelection({
+        chats: [existing],
+        isNewChatSurface: true,
+        sessionChatId: null,
+      })
+    ).toEqual({
+      currentChatId: undefined,
+      isNewChatActive: true,
+    })
+  })
+
+  it("keeps route identity authoritative once navigation has a chat id", () => {
+    expect(
+      deriveSidebarSelection({
+        chats: [optimistic, existing],
+        isNewChatSurface: false,
+        sessionChatId: "existing",
+      })
+    ).toEqual({
+      currentChatId: "existing",
+      isNewChatActive: false,
+    })
+  })
+
+  it("does not project an optimistic row outside the new-chat surface", () => {
+    expect(
+      deriveSidebarSelection({
+        chats: [optimistic, existing],
+        isNewChatSurface: false,
+        sessionChatId: null,
+      })
+    ).toEqual({
+      currentChatId: undefined,
+      isNewChatActive: false,
+    })
   })
 })

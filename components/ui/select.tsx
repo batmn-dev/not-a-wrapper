@@ -1,3 +1,10 @@
+import {
+  floatingMenuContentClassName,
+  floatingMenuItemClassName,
+  floatingMenuLabelClassName,
+  floatingMenuSeparatorClassName,
+  floatingSurfaceClassName,
+} from "@/components/ui/floating-surface"
 import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 import { Select as SelectPrimitive } from "@base-ui/react/select"
@@ -10,7 +17,7 @@ function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (
     <SelectPrimitive.Group
       data-slot="select-group"
-      className={cn("scroll-my-1 p-1", className)}
+      className={cn("scroll-my-2.5", className)}
       {...props}
     />
   )
@@ -86,7 +93,9 @@ function SelectContent({
           data-slot="select-content"
           data-align-trigger={alignItemWithTrigger}
           className={cn(
-            "bg-popover text-popover-foreground shadow-border-md relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 overflow-x-hidden overflow-y-auto rounded-md",
+            floatingSurfaceClassName,
+            floatingMenuContentClassName,
+            "relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 overflow-x-hidden overflow-y-auto",
             className
           )}
           {...props}
@@ -107,7 +116,11 @@ function SelectLabel({
   return (
     <SelectPrimitive.GroupLabel
       data-slot="select-label"
-      className={cn("text-muted-foreground px-2 py-1.5 text-xs", className)}
+      className={cn(
+        floatingMenuLabelClassName,
+        "text-muted-foreground text-xs",
+        className
+      )}
       {...props}
     />
   )
@@ -122,7 +135,8 @@ function SelectItem({
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        "focus:bg-interactive-selected focus:text-foreground not-data-[variant=destructive]:focus:**:text-foreground relative flex w-full cursor-pointer items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-base outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        floatingMenuItemClassName,
+        "focus:bg-interactive-selected focus:text-foreground not-data-[variant=destructive]:focus:**:text-foreground relative flex cursor-pointer items-center gap-2 pr-8 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
         className
       )}
       {...props}
@@ -148,7 +162,11 @@ function SelectSeparator({
   return (
     <SelectPrimitive.Separator
       data-slot="select-separator"
-      className={cn("bg-border pointer-events-none -mx-1 my-1 h-px", className)}
+      className={cn(
+        floatingMenuSeparatorClassName,
+        "pointer-events-none",
+        className
+      )}
       {...props}
     />
   )
@@ -162,7 +180,7 @@ function SelectScrollUpButton({
     <SelectPrimitive.ScrollUpArrow
       data-slot="select-scroll-up-button"
       className={cn(
-        "bg-popover top-0 z-10 flex w-full cursor-pointer items-center justify-center py-1 [&_svg:not([class*='size-'])]:size-4",
+        "bg-floating-surface top-0 z-10 flex w-full cursor-pointer items-center justify-center py-1 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
@@ -180,7 +198,7 @@ function SelectScrollDownButton({
     <SelectPrimitive.ScrollDownArrow
       data-slot="select-scroll-down-button"
       className={cn(
-        "bg-popover bottom-0 z-10 flex w-full cursor-pointer items-center justify-center py-1 [&_svg:not([class*='size-'])]:size-4",
+        "bg-floating-surface bottom-0 z-10 flex w-full cursor-pointer items-center justify-center py-1 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}

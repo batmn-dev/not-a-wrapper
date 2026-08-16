@@ -2,12 +2,14 @@
 
 import { api } from "@/convex/_generated/api"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
+import { setStreamingDecayEnabled } from "@/lib/markdown/streaming-decay-overlay"
 import { useMutation as useConvexMutation } from "convex/react"
 import {
   createContext,
   ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   useSyncExternalStore,
@@ -16,12 +18,15 @@ import {
   convertFromApiFormat,
   convertToApiFormat,
   defaultPreferences,
+  normalizeStreamingPresentation,
   type LayoutType,
+  type StreamingPresentation,
   type UserPreferences,
 } from "./utils"
 
 export {
   type LayoutType,
+  type StreamingPresentation,
   type UserPreferences,
   convertFromApiFormat,
   convertToApiFormat,
@@ -41,6 +46,7 @@ type UserPreferencesContextType = {
   setShowToolInvocations: (enabled: boolean) => void
   setShowConversationPreviews: (enabled: boolean) => void
   setWebSearchEnabled: (enabled: boolean) => void
+  setStreamingPresentation: (presentation: StreamingPresentation) => void
   toggleModelVisibility: (modelId: string) => void
   isModelHidden: (modelId: string) => boolean
   isLoading: boolean
@@ -66,7 +72,15 @@ function getLocalStoragePreferences(): UserPreferences {
   if (stored) {
     try {
       const parsed = JSON.parse(stored) as Partial<UserPreferences>
-      localPreferencesSnapshot = { ...defaultPreferences, ...parsed }
+      localPreferencesSnapshot = {
+        ...defaultPreferences,
+        ...parsed,
+        // Stored JSON is unvalidated: normalize here so a legacy/corrupted
+        // value never reaches the typed TurnSnapshot or the wire.
+        streamingPresentation: normalizeStreamingPresentation(
+          parsed.streamingPresentation
+        ),
+      }
       return localPreferencesSnapshot
     } catch {
       // fallback to legacy layout storage if JSON parsing fails
@@ -156,6 +170,9 @@ export function UserPreferencesProvider({
         webSearchEnabled:
           convexPreferences.webSearchEnabled ??
           defaultPreferences.webSearchEnabled,
+        streamingPresentation: normalizeStreamingPresentation(
+          convexPreferences.streamingPresentation
+        ),
         hiddenModels:
           convexPreferences.hiddenModels ?? defaultPreferences.hiddenModels,
       }
@@ -257,6 +274,22 @@ export function UserPreferencesProvider({
     [updatePreferences]
   )
 
+  const setStreamingPresentation = useCallback(
+    (presentation: StreamingPresentation) => {
+      updatePreferences({ streamingPresentation: presentation })
+    },
+    [updatePreferences]
+  )
+
+  // Centralized sync for the paint-only decay overlay: one effect keyed on
+  // the resolved preference keeps every Markdown consumer on one switch —
+  // app load, settings toggle, cross-tab localStorage change, and Convex
+  // updates from another device all land here. Flipping to "quick" clears
+  // live tint immediately (see setStreamingDecayEnabled).
+  useEffect(() => {
+    setStreamingDecayEnabled(preferences.streamingPresentation !== "quick")
+  }, [preferences.streamingPresentation])
+
   const toggleModelVisibility = useCallback(
     (modelId: string) => {
       const currentHidden = preferences.hiddenModels || []
@@ -286,6 +319,7 @@ export function UserPreferencesProvider({
         setShowToolInvocations,
         setShowConversationPreviews,
         setWebSearchEnabled,
+        setStreamingPresentation,
         toggleModelVisibility,
         isModelHidden,
         isLoading,

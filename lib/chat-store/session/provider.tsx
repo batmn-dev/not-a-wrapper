@@ -11,6 +11,8 @@ import {
 
 type ChatSessionContextValue = {
   chatId: string | null
+  isNewChatSurface: boolean
+  navigateToChat: (chatId: string) => void
   selectedModelOverride: string | null
   setSelectedModelOverride: (modelId: string) => void
   clearSelectedModelOverride: (expectedModelId: string) => void
@@ -18,6 +20,8 @@ type ChatSessionContextValue = {
 
 const ChatSessionContext = createContext<ChatSessionContextValue>({
   chatId: null,
+  isNewChatSurface: false,
+  navigateToChat: () => undefined,
   selectedModelOverride: null,
   setSelectedModelOverride: () => undefined,
   clearSelectedModelOverride: () => undefined,
@@ -31,11 +35,53 @@ export function ChatSessionProvider({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
-  const chatId = useMemo(() => {
+  const pathnameChatId = useMemo(() => {
     if (!pathname?.startsWith("/c/")) return null
     const segments = pathname.split("/").filter(Boolean)
     return segments[0] === "c" ? (segments[1] ?? null) : null
   }, [pathname])
+
+  const [shallowHandoff, setShallowHandoff] = useState<{
+    fromPathname: string
+    targetPathname: string
+    chatId: string
+  } | null>(null)
+  const isHandoffPending = Boolean(
+    shallowHandoff &&
+      shallowHandoff.fromPathname === pathname &&
+      typeof window !== "undefined" &&
+      window.location.pathname === shallowHandoff.targetPathname
+  )
+  const handoffChatId = isHandoffPending
+    ? (shallowHandoff?.chatId ?? null)
+    : null
+
+  // Once Next observes the pushed pathname (or navigation goes elsewhere),
+  // the canonical path owns identity again. Reset during render so consumers
+  // never receive a stale handoff for a later Back/Forward transition.
+  if (shallowHandoff && !isHandoffPending) {
+    setShallowHandoff(null)
+  }
+
+  const chatId = pathnameChatId ?? handoffChatId
+  const isNewChatSurface = pathname === "/" && chatId === null
+
+  // First-turn navigation deliberately preserves the mounted chat surface.
+  // Keep that shallow handoff beside the pathname parser so every consumer
+  // observes one route identity through this provider instead of mixing
+  // `useParams`, `usePathname`, and direct History API calls.
+  const navigateToChat = useCallback(
+    (nextChatId: string) => {
+      const targetPathname = `/c/${nextChatId}`
+      window.history.pushState(null, "", targetPathname)
+      setShallowHandoff({
+        fromPathname: pathname,
+        targetPathname,
+        chatId: nextChatId,
+      })
+    },
+    [pathname]
+  )
 
   const [modelSelection, setModelSelection] = useState<{
     chatId: string | null
@@ -74,12 +120,16 @@ export function ChatSessionProvider({
   const value = useMemo<ChatSessionContextValue>(
     () => ({
       chatId,
+      isNewChatSurface,
+      navigateToChat,
       selectedModelOverride,
       setSelectedModelOverride,
       clearSelectedModelOverride,
     }),
     [
       chatId,
+      isNewChatSurface,
+      navigateToChat,
       selectedModelOverride,
       setSelectedModelOverride,
       clearSelectedModelOverride,

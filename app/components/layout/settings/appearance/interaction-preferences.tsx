@@ -17,10 +17,28 @@ export function InteractionPreferences() {
     setShowToolInvocations,
     setShowConversationPreviews,
     setWebSearchEnabled,
+    setStreamingPresentation,
   } = useUserPreferences()
 
   return (
     <FieldGroup className="gap-6 pb-12">
+      <Field orientation="horizontal">
+        <FieldContent>
+          <FieldTitle className="text-balance">
+            Smooth text streaming
+          </FieldTitle>
+          <FieldDescription className="text-xs text-pretty">
+            Fade newly streamed text in as responses stream. Turn off to show it
+            at full color instantly.
+          </FieldDescription>
+        </FieldContent>
+        <Switch
+          checked={preferences.streamingPresentation !== "quick"}
+          onCheckedChange={(enabled) =>
+            setStreamingPresentation(enabled ? "smooth" : "quick")
+          }
+        />
+      </Field>
       <Field orientation="horizontal">
         <FieldContent>
           <FieldTitle className="text-balance">Prompt suggestions</FieldTitle>

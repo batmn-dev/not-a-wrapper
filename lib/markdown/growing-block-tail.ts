@@ -28,6 +28,7 @@
  * re-classified once terminated.
  */
 
+import remend, { type RemendOptions } from "remend"
 import type { MarkdownProjectionBlock } from "./incremental-block-projection"
 
 export type ListFamily = {
@@ -366,6 +367,122 @@ export function isPrecededByBlankLine(source: string, offset: number): boolean {
   }
   if (index < 0) return true
   return source[index] === "\n"
+}
+
+// --- Render-boundary tail mending (ADR-0016 amendment, 2026-08-11) ---------
+
+/**
+ * Live measurement (docs/measurements/2026-08-11-streaming-markdown-chatgpt-
+ * vs-naw.md) showed 15–23 raw-delimiter exposure windows per response
+ * (`**`, `](`, `|` header rows; 100–500 ms, ~2× under CPU load) because the
+ * terminal growing block paints its canonical tail verbatim every frame.
+ * The fix is a RENDER-BOUNDARY transform of the growing block's text only:
+ * the canonical store, projection boundaries, settlement, and durable
+ * snapshots never see mended text, and a settled block always renders its
+ * exact canonical bytes (a Stop mid-`**bold` shows the raw characters — they
+ * are settled content, not a transient).
+ *
+ * Inline constructs are COMPLETED, not withheld (`**bol` renders as bold
+ * "bol"), matching ChatGPT's observed streaming behavior. `remend` (Vercel's
+ * streamdown engine) owns that completion; it guards code spans, open
+ * fences, math regions, and escaped delimiters internally. Tables are the
+ * one construct completion cannot fake: a pipe-led trailing run is GATED
+ * (clipped from the render) until a completed GFM delimiter row proves the
+ * table — the same construct ChatGPT itself briefly exposes.
+ */
+const MEND_REMEND_OPTIONS = {
+  // `[label](partial-url` renders the label as plain text; the anchor
+  // appears when the URL completes. The default sentinel-URL mode relies on
+  // the consumer's urlTransform to neutralize an unknown protocol — clipping
+  // the markup instead keeps the contract local to this module.
+  linkMode: "text-only",
+  // Matches REMARK_MATH_OPTIONS.singleDollarTextMath: false — a lone `$` is
+  // currency, not math, in this pipeline.
+  inlineKatex: false,
+} satisfies RemendOptions
+
+const PIPE_LED_LINE_RE = /^ {0,3}\|/
+/** GFM table delimiter row: `|---|:--:|` etc — at least one dash cell. */
+const TABLE_DELIMITER_ROW_RE =
+  /^ {0,3}\|?[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/
+/** Blockquote prefix (`> `, `> > `, `>`), stripped before row classification
+ * so quoted tables gate and prove the same way top-level ones do. */
+const BLOCKQUOTE_PREFIX_RE = /^ {0,3}(?:> ?)+/
+
+function isEscaped(text: string, index: number): boolean {
+  let backslashCount = 0
+  for (let i = index - 1; i >= 0 && text[i] === "\\"; i--) {
+    backslashCount++
+  }
+  return backslashCount % 2 === 1
+}
+
+/** Require two non-empty cells before treating a pipe-led line as a table
+ * header. A leading pipe alone is also valid shell-pipeline prose. */
+function isPlausibleTableHeaderRow(line: string): boolean {
+  const trimmed = line.trimEnd()
+  const leadingPipe = trimmed.indexOf("|")
+  if (leadingPipe === -1) return false
+
+  const cells: string[] = []
+  let cellStart = leadingPipe + 1
+  for (let i = cellStart; i < trimmed.length; i++) {
+    if (trimmed[i] !== "|" || isEscaped(trimmed, i)) continue
+    cells.push(trimmed.slice(cellStart, i).trim())
+    cellStart = i + 1
+  }
+  if (cellStart < trimmed.length) {
+    cells.push(trimmed.slice(cellStart).trim())
+  }
+  return cells.length >= 2 && cells.every((cell) => cell.length > 0)
+}
+
+/**
+ * Clip an UNPROVEN trailing table candidate: a trailing run whose first line
+ * has a plausible multi-cell header shape, unless the run contains a COMPLETE
+ * (newline-terminated) delimiter row — once the delimiter row lands, remark
+ * parses a real table and its own partial-trailing-row tolerance takes over.
+ * Pure text-in/text-out; callers must not pass open-fence (`code`) blocks,
+ * whose interiors may legitimately contain pipe-led lines.
+ */
+export function clipUnprovenTableTail(text: string): string {
+  const lines = text.split("\n")
+  // A trailing newline produces a final empty split segment that is NOT a
+  // line — the newline terminates the pipe-led line before it. Scanning from
+  // that empty segment would break the run and let a newline-terminated
+  // header row (`"| A | B |\n"`, awaiting its delimiter row) render raw.
+  const endsWithNewline = text.endsWith("\n")
+  const lineCount = endsWithNewline ? lines.length - 1 : lines.length
+  const rowText = (line: string) => line.replace(BLOCKQUOTE_PREFIX_RE, "")
+  let runStart = lineCount
+  while (runStart > 0 && PIPE_LED_LINE_RE.test(rowText(lines[runStart - 1]!))) {
+    runStart--
+  }
+  if (runStart === lineCount) return text
+  if (!isPlausibleTableHeaderRow(rowText(lines[runStart]!))) return text
+  for (let i = runStart; i < lineCount; i++) {
+    const isTerminalPartial = i === lineCount - 1 && !endsWithNewline
+    if (
+      !isTerminalPartial &&
+      TABLE_DELIMITER_ROW_RE.test(rowText(lines[i]!).replace(/\r$/, ""))
+    ) {
+      return text
+    }
+  }
+  return lines
+    .slice(0, runStart)
+    .join("\n")
+    .replace(/[ \t]*$/, "")
+}
+
+/**
+ * The render-boundary mend for the growing terminal block. Applied by the
+ * Markdown component ONLY while the block is growing (`streaming` message,
+ * terminal block, non-`code` nodeType); every other render path — stable
+ * blocks, settlement, terminal outcomes — renders exact canonical text.
+ */
+export function mendGrowingBlockTail(text: string): string {
+  return remend(clipUnprovenTableTail(text), MEND_REMEND_OPTIONS)
 }
 
 /** Convenience: family + blank facts derived once per fast-path attempt. */

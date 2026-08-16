@@ -48,7 +48,7 @@ type ModelSelectorProps = {
   /** Called after a desktop model selection closes so the owning surface can restore task focus. */
   onSelectionCommitted?: () => void
   disabled?: boolean
-  /** Composer pill matches ChatGPT reference: content width, max-w-40 label, asymmetric padding. */
+  /** Composer pill uses content width, a max-w-40 label, and symmetric padding. */
   variant?: "default" | "composer"
 }
 
@@ -133,7 +133,7 @@ function ModelSelectorList({
     const isLocked = !isModelSelectableForAuthState(model, isUserAuthenticated)
     const className = cn(
       "flex w-full items-center justify-between gap-2",
-      isMobile ? "px-3 py-2" : "px-2",
+      isMobile ? "px-3 py-2" : "h-9 rounded-lg px-2 py-1.5",
       selectedModelId === model.id && "bg-interactive-selected"
     )
     const content = <ModelOptionContent model={model} isLocked={isLocked} />
@@ -151,6 +151,7 @@ function ModelSelectorList({
     ) : (
       <DropdownMenuItem
         key={model.id}
+        geometry="custom"
         className={className}
         onClick={() => onSelect(model.id, isLocked)}
       >
@@ -251,25 +252,32 @@ export function ModelSelector({
       className={cn(
         "min-w-0 shrink overflow-hidden font-normal",
         isComposerVariant
-          ? "cant-hover:ps-4 text-muted-foreground active:bg-interactive-pressed aria-expanded:bg-interactive-selected pointer-fine:hover:bg-interactive-hover h-9 max-w-none justify-start gap-1.5 rounded-full py-0 ps-3.5 pe-3 text-sm active:scale-100"
+          ? "text-muted-foreground active:bg-interactive-pressed aria-expanded:bg-interactive-selected pointer-fine:hover:bg-interactive-hover h-9 max-w-none justify-start gap-1.5 rounded-full px-3 py-0 text-sm active:scale-100"
           : "max-w-full justify-between rounded-lg text-lg",
         className
       )}
       disabled={disabled || isLoadingModels}
       aria-label={`Select model, current model ${currentModel?.name || "unknown"}`}
     >
+      {isComposerVariant && currentModel ? (
+        <Icon
+          icon={getVendorIcon(currentModel.icon)}
+          slotSize={16}
+          glyphSize={16}
+          data-slot="selected-model-icon"
+          className="shrink-0"
+        />
+      ) : null}
       <span className={cn("min-w-0 truncate", isComposerVariant && "max-w-40")}>
         {currentModel?.name || "Select model"}
       </span>
-      <Icon
-        icon={RiArrowDownSLine}
-        slotSize={16}
-        glyphSize={isComposerVariant ? 16 : undefined}
-        className={cn(
-          "shrink-0",
-          isComposerVariant ? "-me-0.5" : "opacity-50"
-        )}
-      />
+      {!isComposerVariant ? (
+        <Icon
+          icon={RiArrowDownSLine}
+          slotSize={16}
+          className="shrink-0 opacity-50"
+        />
+      ) : null}
     </Button>
   )
 
@@ -370,7 +378,8 @@ export function ModelSelector({
           <DropdownMenuTrigger render={trigger} />
         )}
         <DropdownMenuContent
-          className="w-[300px] overflow-hidden [--model-selector-fixed-height:3rem] [--model-selector-list-max-height:18rem]"
+          geometry="custom"
+          className="w-[300px] overflow-hidden rounded-(--floating-menu-radius) p-1.5 [--model-selector-fixed-height:3rem] [--model-selector-list-max-height:18rem]"
           align={isComposerVariant ? "end" : "start"}
           sideOffset={4}
           animated={false}
@@ -395,7 +404,7 @@ export function ModelSelector({
               />
             </div>
           </div>
-          <div className="before:from-popover after:from-popover relative mt-[2px] rounded-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-3 before:bg-gradient-to-b before:to-transparent before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:z-10 after:h-4 after:bg-gradient-to-t after:to-transparent after:content-['']">
+          <div className="before:from-floating-surface after:from-floating-surface relative mt-[2px] rounded-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-3 before:bg-gradient-to-b before:to-transparent before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:z-10 after:h-4 after:bg-gradient-to-t after:to-transparent after:content-['']">
             <div className="[&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 max-h-[min(var(--model-selector-list-max-height),max(0px,calc(var(--available-height)-var(--model-selector-fixed-height))))] scroll-py-2 [scrollbar-width:thin] [scrollbar-color:color-mix(in_oklab,var(--muted-foreground)_35%,transparent)_transparent] [scrollbar-gutter:stable] overflow-x-hidden overflow-y-auto overscroll-contain py-1 pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent">
               <ModelSelectorList
                 models={filteredModels}

@@ -18,7 +18,11 @@
  *   - Keep parsing and rendering on the same remark-based pipeline
  *   - Verify INITIAL_COMPONENTS customizations are not overwritten
  */
-import { analyzeOpenFence } from "@/lib/markdown/growing-block-tail"
+import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
+import {
+  analyzeOpenFence,
+  mendGrowingBlockTail,
+} from "@/lib/markdown/growing-block-tail"
 import {
   advanceMarkdownProjection,
   REMARK_MATH_OPTIONS,
@@ -31,6 +35,10 @@ import {
 } from "@/lib/markdown/remark-code-block-annotation"
 import { remarkLinkPresentation } from "@/lib/markdown/remark-link-presentation"
 import { remarkUnwrapLinkParens } from "@/lib/markdown/remark-unwrap-link-parens"
+import {
+  observeStreamingDecay,
+  settleStreamingDecay,
+} from "@/lib/markdown/streaming-decay-overlay"
 import { markMarkdownProjectionAnomaly } from "@/lib/observability/chat-performance-client"
 import { cn } from "@/lib/utils"
 import { RiCodeLine } from "@remixicon/react"
@@ -435,9 +443,33 @@ function MarkdownComponent({
     [components]
   )
 
+  // Streaming color-decay overlay (ADR-0016 amendment 2026-08-11): after
+  // every streamed commit the overlay diffs this container's rendered text
+  // and paints appended cohorts via CSS Custom Highlights — paint only, no
+  // DOM ownership. Layout effect on purpose: a passive effect runs after the
+  // browser paints, so appended text would flash one frame at full color and
+  // then dim to bucket 0 — worst under CPU load, exactly the condition the
+  // overlay exists to smooth. Deliberately no dependency array: the observe
+  // must run per committed text update, and it is idempotent when nothing
+  // changed.
+  const containerRef = useRef<HTMLDivElement>(null)
+  useBrowserLayoutEffect(() => {
+    if (!streaming || !containerRef.current) return
+    observeStreamingDecay(containerRef.current)
+  })
+  // Settlement, streaming→false, and unmount all clear this container's
+  // cohorts before the settled content paints, so settled paint is plain
+  // canonical color from its first frame.
+  useBrowserLayoutEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    if (!streaming) settleStreamingDecay(container)
+    return () => settleStreamingDecay(container)
+  }, [streaming])
+
   const blocks = current.state.blocks
   return (
-    <div className={className}>
+    <div className={className} ref={containerRef}>
       {blocks.map((block, index) => {
         const growing = streaming && index === blocks.length - 1
         // A growing open fence renders directly when no consumer override is
@@ -456,10 +488,26 @@ function MarkdownComponent({
             )
           }
         }
+        // Render-boundary mend (ADR-0016 amendment 2026-08-11): the growing
+        // terminal block completes provably-incomplete trailing inline
+        // constructs and gates unproven table candidates, closing the
+        // measured construct-wide raw-delimiter windows (`**Apache Fl`,
+        // `](url…`, `|` header rows). Residual exposure is one token gap: a
+        // chunk ending exactly on a bare opener (`foo **`) renders it raw
+        // until the next chunk, because only an inline parse can tell an
+        // unmatched opener from a legitimate literal. Canonical text is
+        // untouched — stability flips to "stable" at settlement and this
+        // branch re-renders exact canonical bytes. `code` blocks are
+        // excluded: open-fence interiors are inert text the mend must not
+        // rewrite, and the fence fast path above already renders them.
+        const content =
+          growing && block.nodeType !== "code"
+            ? mendGrowingBlockTail(block.text)
+            : block.text
         return (
           <MemoizedMarkdownBlock
             key={`${blockId}-${block.id}`}
-            content={block.text}
+            content={content}
             stability={growing ? "growing" : "stable"}
             components={mergedComponents}
           />

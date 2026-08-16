@@ -1,6 +1,13 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import {
+  floatingMenuContentClassName,
+  floatingMenuItemClassName,
+  floatingMenuLabelClassName,
+  floatingMenuSeparatorClassName,
+  floatingSurfaceClassName,
+} from "@/components/ui/floating-surface"
 import { Icon } from "@/components/ui/icon"
 import {
   InputGroup,
@@ -118,7 +125,8 @@ function ComboboxContent({
           data-slot="combobox-content"
           data-chips={!!anchor}
           className={cn(
-            "group/combobox-content bg-popover text-popover-foreground shadow-border-md *:data-[slot=input-group]:bg-input-bg relative max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) min-w-[calc(var(--anchor-width)+--spacing(7))] overflow-hidden rounded-md data-[chips=true]:min-w-(--anchor-width) *:data-[slot=input-group]:m-1 *:data-[slot=input-group]:mb-0 *:data-[slot=input-group]:h-9 *:data-[slot=input-group]:shadow-none",
+            floatingSurfaceClassName,
+            "group/combobox-content *:data-[slot=input-group]:bg-input-bg relative max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) min-w-[calc(var(--anchor-width)+--spacing(7))] overflow-hidden rounded-(--floating-menu-radius) data-[chips=true]:min-w-(--anchor-width) *:data-[slot=input-group]:m-1 *:data-[slot=input-group]:mb-0 *:data-[slot=input-group]:h-9 *:data-[slot=input-group]:shadow-none",
             className
           )}
           {...props}
@@ -133,7 +141,8 @@ function ComboboxList({ className, ...props }: ComboboxPrimitive.List.Props) {
     <ComboboxPrimitive.List
       data-slot="combobox-list"
       className={cn(
-        "no-scrollbar max-h-[min(calc(--spacing(72)---spacing(9)),calc(var(--available-height)---spacing(9)))] scroll-py-1 overflow-y-auto overscroll-contain p-1 data-empty:p-0",
+        floatingMenuContentClassName,
+        "no-scrollbar max-h-[min(calc(--spacing(72)---spacing(9)),calc(var(--available-height)---spacing(9)))] scroll-py-2.5 overflow-y-auto overscroll-contain data-empty:p-0",
         className
       )}
       {...props}
@@ -150,7 +159,8 @@ function ComboboxItem({
     <ComboboxPrimitive.Item
       data-slot="combobox-item"
       className={cn(
-        "menu-item-hoverable data-highlighted:bg-interactive-selected data-highlighted:text-foreground not-data-[variant=destructive]:data-highlighted:**:text-foreground relative flex w-full cursor-pointer items-center gap-2 rounded-sm py-[5px] pr-8 pl-2 text-base outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        floatingMenuItemClassName,
+        "menu-item-hoverable data-highlighted:bg-interactive-selected data-highlighted:text-foreground not-data-[variant=destructive]:data-highlighted:**:text-foreground relative flex cursor-pointer items-center gap-2 pr-8 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
@@ -184,7 +194,11 @@ function ComboboxLabel({
   return (
     <ComboboxPrimitive.GroupLabel
       data-slot="combobox-label"
-      className={cn("text-muted-foreground px-2 py-1.5 text-xs", className)}
+      className={cn(
+        floatingMenuLabelClassName,
+        "text-muted-foreground text-xs",
+        className
+      )}
       {...props}
     />
   )
@@ -216,7 +230,7 @@ function ComboboxSeparator({
   return (
     <ComboboxPrimitive.Separator
       data-slot="combobox-separator"
-      className={cn("bg-border -mx-1 my-1 h-px", className)}
+      className={cn(floatingMenuSeparatorClassName, className)}
       {...props}
     />
   )

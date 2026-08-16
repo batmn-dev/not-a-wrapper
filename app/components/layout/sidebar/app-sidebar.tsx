@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/tooltip"
 import { api } from "@/convex/_generated/api"
 import { useChats } from "@/lib/chat-store/chats/provider"
+import { useChatSession } from "@/lib/chat-store/session/provider"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
@@ -61,7 +62,6 @@ import {
   RiUserLine,
 } from "@remixicon/react"
 import Link from "next/link"
-import { useParams, usePathname } from "next/navigation"
 import React, { useMemo, useRef } from "react"
 import { PopoverContentAuth } from "../../chat-input/popover-content-auth"
 import { useHistorySearch } from "../../history/history-search-provider"
@@ -69,7 +69,10 @@ import { HistoryTrigger } from "../../history/history-trigger"
 import { useInfiniteScroll } from "../../history/use-history-view"
 import { UserMenu } from "../user-menu"
 import { useChatOrganization } from "./chat-organization"
-import { deriveSidebarComposition } from "./sidebar-composition"
+import {
+  deriveSidebarComposition,
+  deriveSidebarSelection,
+} from "./sidebar-composition"
 import { SidebarLeadingIcon } from "./sidebar-leading-icon"
 import { SidebarList } from "./sidebar-list"
 import { SidebarMenuItem } from "./sidebar-menu-item"
@@ -275,12 +278,14 @@ function MobileAppSidebarDrawer() {
 function useAppSidebarData() {
   const { isHistoryOpen } = useHistorySearch()
   const { chats, isLoading, isLoadingMore, loadMore, canLoadMore } = useChats()
+  const { chatId, isNewChatSurface } = useChatSession()
   const { user } = useUser()
-  const params = useParams<{ chatId: string }>()
-  const pathname = usePathname()
-  const currentChatId = params.chatId
   const isLoggedIn = !!user
-  const isNewChatActive = pathname === "/"
+  const { currentChatId, isNewChatActive } = deriveSidebarSelection({
+    chats,
+    isNewChatSurface,
+    sessionChatId: chatId,
+  })
   const [chatOrganization, setChatOrganization, isOrganizationHydrated] =
     useChatOrganization()
   const { data: projectDocs } = usePerUserQuery(api.projects.getForCurrentUser)
@@ -895,7 +900,7 @@ function SignedOutAccountPopoverContent() {
         icon={<Icon icon={RiSettings3Line} slotSize={20} />}
         label="Settings"
       />
-      <DropdownMenuSeparator className="mx-3" />
+      <DropdownMenuSeparator />
       <SignedOutAccountDropdownItem
         icon={<Icon icon={RiQuestionLine} slotSize={20} />}
         label="Help center"
@@ -911,7 +916,7 @@ function SignedOutAccountPopoverContent() {
         label="Download apps"
         showTrailingIcon
       />
-      <DropdownMenuSeparator className="mx-3" />
+      <DropdownMenuSeparator />
       <SignedOutAccountDropdownItem
         icon={<Icon icon={RiFileTextLine} slotSize={20} />}
         label="Terms of Service"
