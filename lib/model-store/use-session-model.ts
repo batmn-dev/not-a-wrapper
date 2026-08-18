@@ -31,7 +31,6 @@ export function useSessionModel({
   chatId,
   isChatLoading = false,
 }: UseSessionModelProps) {
-  // Get favorite models and last-used model from ModelProvider
   const {
     models,
     favoriteModels,

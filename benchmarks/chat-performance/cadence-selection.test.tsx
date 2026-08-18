@@ -1,6 +1,5 @@
 /** @vitest-environment jsdom */
 
-// ---------------------------------------------------------------------------
 // Streaming cadence measurement (ADR-0016 "Notification cadence").
 //
 // Replays the deterministic ~12 KB mixed-Markdown stream into the REAL
@@ -16,7 +15,6 @@
 // at any candidate cadence. Numbers print for the measurement report; the
 // browser-trace verification of the CHOSEN value happens in the production
 // verification pass.
-// ---------------------------------------------------------------------------
 
 import React, { act } from "react"
 import { createRoot } from "react-dom/client"

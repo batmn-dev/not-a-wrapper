@@ -14,7 +14,7 @@
  * The former `NEXT_PUBLIC_STREAMING_CODE_RENDER_MODE` flag and its other two
  * modes were removed after verification: `legacy` (full re-highlight per
  * delta) froze and crashed tabs on large code streams, and
- * `plain-while-growing` lost the variant bake-off on ChatGPT-fidelity
+ * `plain-while-growing` lost the visual-fidelity bake-off
  * (docs/measurements/2026-07-23-pr3-streaming-code-decision.md,
  * 2026-07-23-pr2-pr3-verification.md,
  * 2026-07-23-section6-freeze-rootcause.md). Note the throttled highlight only

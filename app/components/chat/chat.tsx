@@ -123,7 +123,6 @@ function ChatInner({
   // same values at run time through the context's snapshot getter.
   const { selectedModel, isAuthenticated, systemPrompt } = useTurnContext()
 
-  // State to pass between hooks
   const [hasDialogAuth, setHasDialogAuth] = useState(false)
   // Edit and regeneration are server-owned Chat turns, available only on a
   // durable chat. Drives whether the message tree shows those controls so the
@@ -143,7 +142,6 @@ function ChatInner({
     composerRef.current?.insertQuote(text)
   }, [])
 
-  // Chat operations (pure async utilities) - created first
   const { checkLimitsAndNotify, ensureChatExists } = useChatOperations({
     isAuthenticated,
     chatId,
@@ -316,7 +314,6 @@ function ChatInner({
     ]
   )
 
-  // Track if we should redirect - use ref to track if redirect was triggered
   const hasRedirectedRef = useRef(false)
 
   // Handle redirect for invalid chatId - only redirect if we're certain the chat doesn't exist

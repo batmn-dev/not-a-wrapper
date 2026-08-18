@@ -8,7 +8,6 @@ import Article from "./article"
 
 export const dynamic = "force-dynamic"
 
-// Lazy initialization to avoid build-time errors when env var is not set
 function getConvexClient() {
   const url = process.env.NEXT_PUBLIC_CONVEX_URL
   if (!url) {
@@ -19,13 +18,7 @@ function getConvexClient() {
   return new ConvexHttpClient(url)
 }
 
-/**
- * Helper to safely convert string to Convex ID
- * Returns null if the string is not a valid Convex ID format
- */
 function toConvexId(chatId: string): Id<"chats"> | null {
-  // Convex IDs are base64-like strings, typically 32 chars
-  // Basic validation to avoid throwing errors on invalid IDs
   if (!chatId || chatId.length < 10) return null
   try {
     return chatId as Id<"chats">
@@ -33,11 +26,6 @@ function toConvexId(chatId: string): Id<"chats"> | null {
     return null
   }
 }
-
-/**
- * Public chat sharing page
- * Fetches public chat data server-side using Convex HTTP client
- */
 
 export async function generateMetadata({
   params,
@@ -61,7 +49,6 @@ export async function generateMetadata({
         description = `Read this conversation: ${chat.title}`
       }
     } catch {
-      // Fall back to defaults on error
     }
   }
 
@@ -96,7 +83,6 @@ export default async function ShareChat({
     notFound()
   }
 
-  // Fetch chat and messages from Convex
   // Wrap in try/catch because toConvexId only does basic length validation—
   // invalid ID formats will cause Convex to throw
   const convex = getConvexClient()
@@ -111,7 +97,6 @@ export default async function ShareChat({
     notFound()
   }
 
-  // If chat doesn't exist or is not public, return 404
   if (!chat) {
     notFound()
   }

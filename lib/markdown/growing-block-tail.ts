@@ -372,23 +372,20 @@ export function isPrecededByBlankLine(source: string, offset: number): boolean {
 // --- Render-boundary tail mending (ADR-0016 amendment, 2026-08-11) ---------
 
 /**
- * Live measurement (docs/measurements/2026-08-11-streaming-markdown-chatgpt-
- * vs-naw.md) showed 15–23 raw-delimiter exposure windows per response
- * (`**`, `](`, `|` header rows; 100–500 ms, ~2× under CPU load) because the
- * terminal growing block paints its canonical tail verbatim every frame.
+ * A terminal growing block can expose raw delimiters (`**`, `](`, and `|`
+ * header rows) because it paints its canonical tail verbatim every frame.
  * The fix is a RENDER-BOUNDARY transform of the growing block's text only:
  * the canonical store, projection boundaries, settlement, and durable
  * snapshots never see mended text, and a settled block always renders its
  * exact canonical bytes (a Stop mid-`**bold` shows the raw characters — they
  * are settled content, not a transient).
  *
- * Inline constructs are COMPLETED, not withheld (`**bol` renders as bold
- * "bol"), matching ChatGPT's observed streaming behavior. `remend` (Vercel's
- * streamdown engine) owns that completion; it guards code spans, open
+ * Inline constructs are completed, not withheld (`**bol` renders as bold
+ * "bol"). `remend` owns that completion; it guards code spans, open
  * fences, math regions, and escaped delimiters internally. Tables are the
  * one construct completion cannot fake: a pipe-led trailing run is GATED
  * (clipped from the render) until a completed GFM delimiter row proves the
- * table — the same construct ChatGPT itself briefly exposes.
+ * table.
  */
 const MEND_REMEND_OPTIONS = {
   // `[label](partial-url` renders the label as plain text; the anchor

@@ -11,9 +11,7 @@ import { createContext, useContext, useMemo, useState } from "react"
  * flips with client state inside shallow route handoffs. The header's DOM
  * POSITION belongs to the shell: it must precede the `<main id="main">`
  * landmark so the skip-to-content link actually bypasses it and `<header>`
- * keeps its implicit banner role — nesting it inside main forfeits both
- * (the a11y regression this split exists to prevent; ChatGPT's live DOM uses
- * the same skip-link + header-before-main structure).
+ * keeps its implicit banner role; nesting it inside main forfeits both.
  *
  * Chat publishes the resolved appHeader fact pre-paint, and the shell's
  * header slot renders it. `initialAppHeader` mirrors the route's SSR-known

@@ -1,6 +1,5 @@
 import type { UIMessage } from "ai"
 
-// ---------------------------------------------------------------------------
 // Chat turn wire contract (CONTEXT.md): the single statement of the
 // POST /api/chat request shape. The Chat turn controller's plan builders
 // (`lib/chat-turn/turn-plans.ts`) produce `ChatTurnBodyFields`;
@@ -15,7 +14,6 @@ import type { UIMessage } from "ai"
 // (unauthenticated) turns, as a stable rate-limit key; for authenticated
 // sessions it is ignored. There is deliberately no `isAuthenticated` field on
 // the wire.
-// ---------------------------------------------------------------------------
 
 /**
  * Server-owned edit: a durable Chat turn that rewrites a prior user message,

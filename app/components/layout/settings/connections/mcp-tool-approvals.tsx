@@ -9,17 +9,12 @@ import type { Id } from "@/convex/_generated/dataModel"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
 import { useMutation } from "convex/react"
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 type McpToolApprovalsProps = {
   serverId: Id<"mcpServers">
 }
 
-// ---------------------------------------------------------------------------
 // Component
-// ---------------------------------------------------------------------------
 
 /**
  * Per-server expandable list of tool approvals.

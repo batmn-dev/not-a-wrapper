@@ -132,7 +132,6 @@ export async function getUserKey(
   return null
 }
 
-// -----------------------------------------------------------------------
 // Tool Provider Key Management
 //
 // Tool providers (Exa, Firecrawl) use the same encrypted key storage as
@@ -141,8 +140,6 @@ export async function getUserKey(
 // alongside AI provider IDs without schema changes. Their ids and static
 // facts (including the platform env-var name) live in the Provider
 // identity module; resolution stays here.
-// -----------------------------------------------------------------------
-
 export { TOOL_PROVIDER_IDS as TOOL_PROVIDERS } from "./provider-identity"
 export type { ToolProvider } from "./provider-identity"
 

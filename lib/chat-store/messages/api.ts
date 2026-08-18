@@ -10,9 +10,7 @@ export type ExtendedUIMessage = UIMessage & {
   metadata?: unknown
 }
 
-// ============================================================================
 // Cache Operations (IndexedDB)
-// ============================================================================
 
 type ChatMessageEntry = {
   id: string
@@ -182,11 +180,9 @@ export async function cacheMessages(
   await writeToIndexedDB("messages", { id: chatId, messages })
 }
 
-// ============================================================================
 // Convex-backed Operations (via provider)
 // Note: With Convex, real-time queries handle most data fetching.
 // These functions primarily manage the local IndexedDB cache.
-// ============================================================================
 
 export async function getMessagesFromDb(
   chatId: string

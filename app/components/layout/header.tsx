@@ -40,7 +40,6 @@ export function Header({ hasSidebar }: { hasSidebar: boolean }) {
       data-scrolled={isScrolled || undefined}
     >
       <div className="relative mx-auto flex h-full max-w-full items-center justify-between px-2 pointer-coarse:px-2.5">
-        {/* LEFT SECTION - natural width, not flex-1 */}
         <div className="flex shrink-0 items-center gap-2">
           {/* Hide logo/text when sidebar is present on desktop (sidebar has its own home link) */}
           {!hasSidebar && (
@@ -56,7 +55,6 @@ export function Header({ hasSidebar }: { hasSidebar: boolean }) {
           {hasSidebar && isMobile && <HeaderSidebarTrigger />}
         </div>
 
-        {/* RIGHT SECTION - natural width, not flex-1 */}
         <div className="flex shrink-0 items-center justify-end gap-0 [&>*]:pointer-events-auto">
           {!isLoggedIn ? (
             <div className="flex items-center gap-2">

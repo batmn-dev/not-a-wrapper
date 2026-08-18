@@ -9,9 +9,7 @@ import {
 // Mirror of lib/config.ts MAX_MCP_SERVERS_PER_USER — keep in sync
 const MAX_MCP_SERVERS_PER_USER = 10
 
-// =============================================================================
 // SSRF Validation
-// =============================================================================
 
 // These helpers mirror lib/mcp/url-validation.ts — keep both in sync.
 // Convex runtime cannot import from lib/, so the logic is duplicated here.
@@ -92,7 +90,6 @@ function validateServerUrl(url: string): string | null {
 
   const hostname = parsed.hostname.toLowerCase()
 
-  // Block localhost and special hostnames
   if (
     hostname === "localhost" ||
     hostname === "0.0.0.0" ||
@@ -101,7 +98,6 @@ function validateServerUrl(url: string): string | null {
     return "Localhost and local network URLs are not allowed"
   }
 
-  // Block private/reserved IPv6 addresses (URL parser wraps IPv6 in brackets)
   if (hostname.startsWith("[") && hostname.endsWith("]")) {
     const ipv6 = hostname.slice(1, -1)
     if (isPrivateIPv6(ipv6)) {
@@ -109,12 +105,10 @@ function validateServerUrl(url: string): string | null {
     }
   }
 
-  // Block private IPv4 ranges
   if (isPrivateIPv4(hostname)) {
     return "Private IP addresses are not allowed"
   }
 
-  // Must be http or https
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     return "Only HTTP and HTTPS URLs are supported"
   }
@@ -122,9 +116,7 @@ function validateServerUrl(url: string): string | null {
   return null // valid
 }
 
-// =============================================================================
 // Queries
-// =============================================================================
 
 /**
  * List all MCP servers for the authenticated user.
@@ -158,9 +150,7 @@ export const get = maybeAuthQuery({
   },
 })
 
-// =============================================================================
 // Mutations
-// =============================================================================
 
 /**
  * Create a new MCP server configuration.
@@ -184,11 +174,9 @@ export const create = authenticatedMutation({
   handler: async (ctx, args) => {
     const user = ctx.user
 
-    // SSRF validation
     const urlError = validateServerUrl(args.url)
     if (urlError) throw new Error(urlError)
 
-    // Server limit enforcement
     const existingServers = await ctx.db
       .query("mcpServers")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
@@ -200,7 +188,6 @@ export const create = authenticatedMutation({
       )
     }
 
-    // Validate auth fields consistency
     if (
       (args.authType === "bearer" || args.authType === "header") &&
       (!args.encryptedAuthValue || !args.authIv)
@@ -252,13 +239,11 @@ export const update = ownedMcpServerMutation({
     const server = ctx.server
     const serverId = server._id
 
-    // SSRF validation if URL is being changed
     if (updates.url) {
       const urlError = validateServerUrl(updates.url)
       if (urlError) throw new Error(urlError)
     }
 
-    // Validate auth fields consistency for the final state
     const finalAuthType = updates.authType ?? server.authType
     if (finalAuthType === "bearer" || finalAuthType === "header") {
       const finalEncrypted =
@@ -278,7 +263,6 @@ export const update = ownedMcpServerMutation({
       }
     }
 
-    // Build patch object with only provided fields
     const patch: Record<string, unknown> = {}
     if (updates.name !== undefined) patch.name = updates.name
     if (updates.url !== undefined) patch.url = updates.url
@@ -289,7 +273,6 @@ export const update = ownedMcpServerMutation({
     if (updates.authIv !== undefined) patch.authIv = updates.authIv
     if (updates.headerName !== undefined) patch.headerName = updates.headerName
 
-    // Clear auth fields when switching to "none"
     if (updates.authType === "none") {
       patch.encryptedAuthValue = undefined
       patch.authIv = undefined
@@ -309,7 +292,6 @@ export const remove = ownedMcpServerMutation({
   handler: async (ctx) => {
     const serverId = ctx.server._id
 
-    // Cascade delete: remove all tool approvals for this server
     const approvals = await ctx.db
       .query("mcpToolApprovals")
       .withIndex("by_server", (q) => q.eq("serverId", serverId))
@@ -319,7 +301,6 @@ export const remove = ownedMcpServerMutation({
       await ctx.db.delete(approval._id)
     }
 
-    // Delete the server
     await ctx.db.delete(serverId)
   },
 })
@@ -348,7 +329,6 @@ export const updateConnectionStatus = ownedMcpServerMutation({
     if (lastConnectedAt !== undefined) patch.lastConnectedAt = lastConnectedAt
     if (lastError !== undefined) patch.lastError = lastError
 
-    // Clear error on successful connection
     if (lastConnectedAt && !lastError) {
       patch.lastError = undefined
     }
@@ -357,9 +337,7 @@ export const updateConnectionStatus = ownedMcpServerMutation({
   },
 })
 
-// =============================================================================
 // Internal Mutations (for server-side use from Convex actions/scheduled jobs)
-// =============================================================================
 
 /**
  * Internal: update connection status without auth check.

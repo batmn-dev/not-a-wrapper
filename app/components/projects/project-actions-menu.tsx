@@ -81,8 +81,6 @@ export function ProjectActionsMenu({
     },
   ]
 
-  // ChatGPT's directory menu does not expose Rename. Keep the backed rename
-  // action on the sidebar surface, where it already belongs.
   if (!isDirectory && onStartEditing) {
     items.push({
       key: "rename",

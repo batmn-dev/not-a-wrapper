@@ -280,7 +280,7 @@ export function ThreadScrollEdge({
   // settle, then capture the top-visible turn into the module anchor map. A
   // later settle cancels and replaces a pending save. Cleanup never performs
   // a final save: navigating away before the scroll settles keeps the
-  // previous settled anchor (ChatGPT-parity, accepted edge).
+  // previous settled anchor.
   useEffect(() => {
     const rootEl = rootRef.current
     if (!rootEl || chatId === null) return

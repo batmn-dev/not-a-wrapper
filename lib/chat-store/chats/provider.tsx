@@ -191,7 +191,6 @@ export function ChatsProvider({
   userId?: string
   children: React.ReactNode
 }) {
-  // Check if Convex auth is ready (JWT token synced from WorkOS AuthKit)
   const {
     isAuthenticated: isConvexAuthenticated,
     isLoading: isConvexAuthLoading,
@@ -220,7 +219,6 @@ export function ChatsProvider({
     api.chats.getPinnedForCurrentUser,
     {}
   )
-  // Convex mutations
   const createFirstTurnMutation = useMutation(api.chats.createWithFirstTurn)
   const updateTitleMutation = useMutation(api.chats.updateTitle)
   const applyGeneratedTitleMutation = useMutation(api.chats.applyGeneratedTitle)
@@ -257,7 +255,6 @@ export function ChatsProvider({
   const isLoading = deriveSidebarLoading({
     isConvexAuthLoading,
     isConvexAuthenticated,
-    // Ready once the first window page AND pinned read arrive.
     firstPagePending:
       recentWindow.status === "LoadingFirstPage" ||
       pinnedServerChats === undefined,
@@ -265,7 +262,6 @@ export function ChatsProvider({
     cachedChatsHydrated,
   })
 
-  // Track optimistic operations (adds, updates, deletes)
   const [optimisticOps, setOptimisticOps] = useState<OptimisticOperation[]>([])
 
   // Derive displayed chats from server data + the id-keyed optimistic overlay.
@@ -276,7 +272,6 @@ export function ChatsProvider({
     return applyOptimisticOps([...localChats, ...serverChats], optimisticOps)
   }, [cachedLocalChats, serverChats, optimisticOps, shouldUseLocalChats])
 
-  // Helper to remove an optimistic operation
   const removeOp = useCallback(
     (predicate: (op: OptimisticOperation) => boolean) => {
       setOptimisticOps((prev) => prev.filter((op) => !predicate(op)))
@@ -297,18 +292,15 @@ export function ChatsProvider({
         return
       }
 
-      // Optimistic update
       setOptimisticOps((prev) => [...prev, { type: "update", id, changes }])
 
       try {
         await updateTitleMutation({ chatId: id as Id<"chats">, title })
-        // Remove optimistic op after success (server data will have the update)
         removeOp(
           (op) =>
             op.type === "update" && op.id === id && op.changes.title === title
         )
       } catch {
-        // Revert optimistic update
         removeOp(
           (op) =>
             op.type === "update" && op.id === id && op.changes.title === title
@@ -363,16 +355,13 @@ export function ChatsProvider({
         return true
       }
 
-      // Optimistic delete
       setOptimisticOps((prev) => [...prev, { type: "delete", id }])
 
       try {
         await deleteChatMutation({ chatId: id as Id<"chats"> })
         if (id === currentChatId && redirect) redirect()
-        // Keep the delete op until server confirms (real-time will remove the chat)
         return true
       } catch (error) {
-        // Revert optimistic delete
         removeOp((op) => op.type === "delete" && op.id === id)
         // Keep the toast generic, but retain Convex's request/error details in
         // developer diagnostics so runtime failures are actionable.
@@ -467,7 +456,6 @@ export function ChatsProvider({
         pinned_at: null,
       }
 
-      // Optimistic add
       setOptimisticOps((prev) => [
         ...prev,
         { type: "add", chat: optimisticChat },
@@ -491,7 +479,6 @@ export function ChatsProvider({
           id: created.chatId,
         }
 
-        // Replace optimistic with real chat
         setOptimisticOps((prev) => {
           const filtered = prev.filter(
             (op) => !(op.type === "add" && op.chat.id === optimisticId)
@@ -499,7 +486,6 @@ export function ChatsProvider({
           return [...filtered, { type: "add", chat: newChat }]
         })
 
-        // Clean up after server sync
         setTimeout(() => {
           removeOp((op) => op.type === "add" && op.chat.id === created.chatId)
         }, 1000)
@@ -511,7 +497,6 @@ export function ChatsProvider({
           attachments: created.attachments,
         }
       } catch {
-        // Revert optimistic add
         removeOp((op) => op.type === "add" && op.chat.id === optimisticId)
         toast({ title: "Failed to create chat", status: "error" })
         return undefined
@@ -552,7 +537,6 @@ export function ChatsProvider({
         return
       }
 
-      // Optimistic update
       setOptimisticOps((prev) => [...prev, { type: "update", id, changes }])
 
       try {
@@ -589,7 +573,6 @@ export function ChatsProvider({
 
       setOptimisticOps((prev) => [...prev, { type: "update", id, changes }])
       // This is a local-only operation for UI ordering, no server call needed
-      // Clean up after a short delay
       setTimeout(() => {
         removeOp(
           (op) =>
@@ -616,7 +599,6 @@ export function ChatsProvider({
         return
       }
 
-      // Optimistic update
       setOptimisticOps((prev) => [...prev, { type: "update", id, changes }])
 
       try {
@@ -641,7 +623,6 @@ export function ChatsProvider({
     [chats]
   )
 
-  // Load-more for the bounded sidebar window.
   const loadMore = useCallback(() => {
     recentWindow.loadMore(SIDEBAR_WINDOW_PAGE_SIZE)
   }, [recentWindow])

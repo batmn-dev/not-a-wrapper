@@ -18,8 +18,8 @@ type SidebarChatStatusIndicatorProps = {
  * `idle`; the end-slot owns placement and width so status cannot drift away
  * from the action columns.
  *
- * The slot is a fixed 16px square (ChatGPT sizes it to `icon-sm`) so the title
- * baseline never shifts as the indicator swaps between a ring and a dot.
+ * The slot is a fixed 16px square so the title baseline never shifts as the
+ * indicator swaps between a ring and a dot.
  */
 export function SidebarChatStatusIndicator({
   status,
@@ -35,7 +35,6 @@ export function SidebarChatStatusIndicator({
       )}
     >
       {status === "streaming" ? (
-        // Rotating ring — muted/tertiary to match ChatGPT's subtle spinner.
         <span
           className="text-muted-foreground size-3.5 animate-spin rounded-full border-[1.5px] border-current border-t-transparent"
           aria-hidden
@@ -50,7 +49,6 @@ export function SidebarChatStatusIndicator({
       ) : status === "error" ? (
         <span className="bg-destructive size-2 rounded-full" aria-hidden />
       ) : (
-        // unread / just finished — a solid blue dot, matching ChatGPT.
         <span className="bg-info size-2 rounded-full" aria-hidden />
       )}
       <span className="sr-only">{STATUS_LABEL[status]}</span>

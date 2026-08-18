@@ -2,15 +2,11 @@ import * as dns from "node:dns/promises"
 import { decryptSecret } from "@/lib/encryption"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { recordFailure, resetAllCircuits } from "../circuit-breaker"
-// =============================================================================
 // Import after mocks
-// =============================================================================
 
 import { describeMcpConnectionError, loadUserMcpTools } from "../load-tools"
 
-// =============================================================================
 // Module mocks — must be before imports that use them
-// =============================================================================
 
 const mockCreateMCPClient = vi.fn()
 const mockFetchQuery = vi.fn()
@@ -65,9 +61,7 @@ vi.mock("@/lib/config", () => ({
   MCP_TRUSTED_RETRY_SERVER_ALLOWLIST: mockTrustedRetryAllowlist,
 }))
 
-// =============================================================================
 // Test Helpers
-// =============================================================================
 
 /** Create a mock MCP server config (matches Convex document shape) */
 function mockServer(overrides: Partial<Record<string, unknown>> = {}) {
@@ -116,9 +110,7 @@ function mockTool(name: string) {
   }
 }
 
-// =============================================================================
 // Tests
-// =============================================================================
 
 describe("describeMcpConnectionError", () => {
   it("rewrites redirect rejections into an actionable message", () => {
@@ -171,9 +163,7 @@ describe("loadUserMcpTools", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {})
   })
 
-  // ===========================================================================
   // Empty / no servers
-  // ===========================================================================
 
   describe("empty results", () => {
     it("returns empty result when no servers exist", async () => {
@@ -200,9 +190,7 @@ describe("loadUserMcpTools", () => {
     })
   })
 
-  // ===========================================================================
   // Single server tool loading
-  // ===========================================================================
 
   describe("single server", () => {
     it("loads and namespaces tools from a single server", async () => {
@@ -327,9 +315,7 @@ describe("loadUserMcpTools", () => {
     })
   })
 
-  // ===========================================================================
   // Auth headers
-  // ===========================================================================
 
   describe("auth headers", () => {
     it("passes decrypted bearer auth headers to the MCP transport", async () => {
@@ -423,9 +409,7 @@ describe("loadUserMcpTools", () => {
     })
   })
 
-  // ===========================================================================
   // Multi-server tool merging
-  // ===========================================================================
 
   describe("multi-server merging", () => {
     it("merges tools from multiple servers with different namespaces", async () => {
@@ -541,9 +525,7 @@ describe("loadUserMcpTools", () => {
     })
   })
 
-  // ===========================================================================
   // Approval filtering
-  // ===========================================================================
 
   describe("approval filtering", () => {
     it("excludes tools that are explicitly not approved", async () => {
@@ -595,9 +577,7 @@ describe("loadUserMcpTools", () => {
     })
   })
 
-  // ===========================================================================
   // Tool limit enforcement
-  // ===========================================================================
 
   describe("tool limit", () => {
     it("stops adding tools after reaching MCP_MAX_TOOLS_PER_REQUEST", async () => {
@@ -621,9 +601,7 @@ describe("loadUserMcpTools", () => {
     })
   })
 
-  // ===========================================================================
   // Error handling / graceful degradation
-  // ===========================================================================
 
   describe("error handling", () => {
     it("skips failed server connections gracefully", async () => {
@@ -705,9 +683,7 @@ describe("loadUserMcpTools", () => {
     })
   })
 
-  // ===========================================================================
   // Circuit breaker integration
-  // ===========================================================================
 
   describe("circuit breaker", () => {
     it("skips servers with open circuits", async () => {
@@ -765,9 +741,7 @@ describe("loadUserMcpTools", () => {
     })
   })
 
-  // ===========================================================================
   // Timeout orphan cleanup (resource leak prevention)
-  // ===========================================================================
 
   describe("timeout orphan cleanup", () => {
     it("closes orphaned client when timeout wins the race", async () => {

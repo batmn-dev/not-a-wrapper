@@ -10,12 +10,10 @@ import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import type { UIMessage } from "ai"
 
-// ---------------------------------------------------------------------------
 // Chat turn controller internals — the pure planning half: given the visible
 // messages and the turn's inputs, produce the validated plan (edit trim,
 // regeneration target, staleness token) and the wire-contract body. No state,
 // no dispatch; the runners in chat-turn-controller.ts consume these.
-// ---------------------------------------------------------------------------
 
 export type ChatTurnMessage = UIMessage & {
   createdAt?: Date

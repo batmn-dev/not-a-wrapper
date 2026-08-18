@@ -18,9 +18,6 @@ import {
   ownedProjectMutation,
 } from "./lib/authedFunctions"
 
-/**
- * Get all projects for the current user
- */
 export const getForCurrentUser = maybeAuthQuery({
   args: {},
   handler: async (ctx) => {
@@ -75,9 +72,6 @@ export const getByIdWithOwner = internalQuery({
   },
 })
 
-/**
- * Create a new project
- */
 export const create = authenticatedMutation({
   args: {
     name: v.string(),
@@ -92,9 +86,6 @@ export const create = authenticatedMutation({
   },
 })
 
-/**
- * Update a project name
- */
 export const updateName = ownedProjectMutation({
   args: { name: v.string() },
   handler: async (ctx, { name }) => {

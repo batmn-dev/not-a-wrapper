@@ -13,7 +13,6 @@ export default async function Page({ params }: Props) {
   if (!isLocalChatId(chatId)) {
     const authSession = await getAuthenticatedWorkosSession()
 
-    // Redirect to home if not authenticated
     if (!authSession) {
       redirect("/")
     }

@@ -25,9 +25,7 @@
  */
 import { containsSecret } from "./secret-patterns"
 
-// ---------------------------------------------------------------------------
 // Enablement and sampling
-// ---------------------------------------------------------------------------
 
 export function isChatPerfClientEnabled(): boolean {
   return process.env.NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION === "true"
@@ -41,9 +39,7 @@ export function getChatPerfServerSampleRate(): number {
   return Math.min(1, Math.max(0, parsed))
 }
 
-// ---------------------------------------------------------------------------
 // Correlation id (x-chat-perf-id)
-// ---------------------------------------------------------------------------
 
 export const CHAT_PERF_ID_HEADER = "x-chat-perf-id"
 
@@ -66,9 +62,7 @@ export function parseChatPerfIdHeader(
   return CORRELATION_ID_PATTERN.test(normalized) ? normalized : undefined
 }
 
-// ---------------------------------------------------------------------------
 // Event schema (allow-list; unknown fields and free-form strings rejected)
-// ---------------------------------------------------------------------------
 
 type FieldSpec =
   | { kind: "number" }
@@ -256,9 +250,7 @@ export function validateChatPerfEvent(
   return { ok: true }
 }
 
-// ---------------------------------------------------------------------------
 // Client marks (User Timing)
-// ---------------------------------------------------------------------------
 
 const CLIENT_MARK_PREFIX = "chat-perf:"
 
@@ -283,9 +275,7 @@ export function markChatPerf(
   }
 }
 
-// ---------------------------------------------------------------------------
 // Server session (spans + counters, per-request sampling)
-// ---------------------------------------------------------------------------
 
 export type ChatPerfServerSession = {
   sampled: boolean

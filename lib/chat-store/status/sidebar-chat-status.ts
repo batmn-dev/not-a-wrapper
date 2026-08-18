@@ -8,9 +8,8 @@ import { create } from "zustand"
 import { isConvexId, type Chat } from "../types"
 
 /**
- * Front-end status for a sidebar chat row's trailing indicator slot — our take
- * on ChatGPT's "dynamic slot" model, where each conversation row can surface a
- * small indicator (or nothing) based on the chat's live state.
+ * Front-end status for the sidebar chat row's trailing indicator slot. Each
+ * conversation can surface a small indicator based on its live state.
  *
  * The values are deliberately *semantic* and few, not a 1:1 mirror of the
  * backend `generationRun` / `message` status enums (queued/running/streaming/

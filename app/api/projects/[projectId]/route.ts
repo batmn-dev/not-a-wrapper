@@ -6,13 +6,7 @@ import { NextResponse } from "next/server"
 
 type ProjectRouteArg = { params: Promise<{ projectId: string }> }
 
-/**
- * Helper to safely convert string to Convex ID
- * Returns null if the string is not a valid Convex ID format
- */
 function toConvexId(projectId: string): Id<"projects"> | null {
-  // Convex IDs are base64-like strings, typically 32 chars
-  // Basic validation to avoid throwing errors on invalid IDs
   if (!projectId || projectId.length < 10) return null
   try {
     return projectId as Id<"projects">
@@ -21,17 +15,11 @@ function toConvexId(projectId: string): Id<"projects"> | null {
   }
 }
 
-/**
- * Single Project API
- * Fetches project from Convex with ownership verification
- */
-
 export const GET = authenticatedRoute(
   async (_request, { session, convex }, { params }: ProjectRouteArg) => {
     try {
       const { projectId } = await params
 
-      // Validate project ID format
       const convexId = toConvexId(projectId)
       if (!convexId) {
         return jsonError("Invalid project ID", 400)
@@ -83,7 +71,6 @@ export const PUT = authenticatedRoute(
         return jsonError("Project name is required", 400)
       }
 
-      // Validate project ID format
       const convexId = toConvexId(projectId)
       if (!convexId) {
         return jsonError("Invalid project ID", 400)
@@ -104,7 +91,6 @@ export const PUT = authenticatedRoute(
       console.error("Error updating project:", err)
       const message = (err as Error).message || "Internal server error"
 
-      // Handle specific Convex errors
       if (
         message.includes("Not authorized") ||
         message.includes("Not authenticated")
@@ -125,7 +111,6 @@ export const DELETE = authenticatedRoute(
     try {
       const { projectId } = await params
 
-      // Validate project ID format
       const convexId = toConvexId(projectId)
       if (!convexId) {
         return jsonError("Invalid project ID", 400)
@@ -140,7 +125,6 @@ export const DELETE = authenticatedRoute(
       console.error("Error deleting project:", err)
       const message = (err as Error).message || "Internal server error"
 
-      // Handle specific Convex errors
       if (
         message.includes("Not authorized") ||
         message.includes("Not authenticated")

@@ -376,10 +376,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       // is already pending. The status fallback preserves standalone/local
       // callers that do not participate in durable presentation.
       const canStop = stoppable ?? status === "streaming"
-      // The pre-acceptance dispatch window (submit in flight, run identity
-      // not yet known) also presents Stop — ChatGPT keeps a Stop control up
-      // for the whole in-flight turn. The orchestrated stop() already covers
-      // this phase: it cancels a pre-transport dispatch locally and otherwise
+      // The pre-acceptance dispatch window also presents Stop. The orchestrated
+      // stop() cancels a pre-transport dispatch locally and otherwise
       // arms a deferred Stop that only ever targets the run this dispatch
       // creates (§4.1.4). A resolver-declined Stop (e.g. one already pending)
       // is NOT overridden: isSubmitting has settled false by then.
@@ -664,7 +662,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   >
                     <Button
                       size="sm"
-                      className="size-9 rounded-full p-0 transition-colors duration-150 ease-out"
+                      className="size-9 rounded-full p-0 transition-colors duration-150 ease-out pointer-fine:relative pointer-fine:after:absolute pointer-fine:after:-inset-x-1 pointer-fine:after:inset-y-0 pointer-fine:after:content-['']"
                       disabled={primaryAction.disabled}
                       type="button"
                       id="composer-submit-button"

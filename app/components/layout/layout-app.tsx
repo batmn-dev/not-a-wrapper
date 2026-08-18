@@ -37,19 +37,8 @@ export function LayoutApp({
       <ActivityPanelHostProvider>
         <div className="flex h-svh w-full overflow-hidden">
           {hasSidebar && <AppSidebar />}
-          {/* `@container/main` spans the scroll column AND the activity dock slot,
-              so the container's inline-size is panel-INDEPENDENT (= viewport −
-              sidebar). Opening the panel only redistributes width between the
-              column (flex-1) and the slot; the container width never changes, so
-              the thread's container-query tiers (gutter + max-width) cannot flip
-              mid-animation and the conversation reflows continuously at EVERY
-              viewport. This realizes ChatGPT's stated goal — "continuous
-              width-only reflow, no discrete max-width flip during the sweep"
-              (research/activity-panel-open-close-animation.md) — universally,
-              rather than only where the tiers happen to sit outside the sweep
-              range (ChatGPT keys its tiers off the panel-dependent column, so its
-              own reflow is smooth only at widths where the column stays above the
-              @w-lg/512px flip; ours holds at all widths by construction). */}
+          {/* The container spans the scroll column and activity dock, so opening
+              the panel redistributes width without crossing container-query tiers. */}
           <div className="@container/main relative flex min-w-0 flex-1">
             <div className="relative flex min-w-0 flex-1 flex-col">
               <ScrollRoot className="@[40rem]/main:[scrollbar-gutter:stable_both-edges] print:overflow-visible pointer-coarse:[scrollbar-width:none]">

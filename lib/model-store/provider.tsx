@@ -86,11 +86,8 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, [])
 
-  // Fetch provider status from Convex (reactive query, gated on Convex auth).
-  // Uses getProviderStatus which returns only provider identifiers, not encrypted key material
   const { data: providers } = usePerUserQuery(api.userKeys.getProviderStatus)
 
-  // Transform provider array into status object
   const userKeyStatus = useMemo<UserKeyStatus>(() => {
     if (!providers) return DEFAULT_KEY_STATUS
 
@@ -103,14 +100,10 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
     )
   }, [providers])
 
-  // Enhance model accessibility based on user's API keys
-  // Models are accessible if: already marked accessible (free) OR user has the provider's API key
   const models = useMemo<ModelConfig[]>(() => {
     return rawModels.map((model) => {
-      // If model is already accessible (free model), keep it
       if (model.accessible) return model
 
-      // Check if user has API key for this model's provider
       const hasProviderKey = userKeyStatus[model.providerId] === true
 
       return {

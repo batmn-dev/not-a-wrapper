@@ -50,7 +50,7 @@ export function ComponentPreview({
 
       <TabsContent
         value="preview"
-        className="m-0 flex aspect-[5/4] items-center justify-center rounded-2xl border p-8"
+        className="bg-background m-0 flex aspect-[5/4] items-center justify-center rounded-2xl border p-8"
       >
         {children}
       </TabsContent>

@@ -21,10 +21,8 @@ export function ProjectSearch({ value, onValueChange }: ProjectSearchProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [hasKeyboardFocus, setHasKeyboardFocus] = useState(false)
 
-  // Text inputs match :focus-visible after a mouse click in Chromium, so that
-  // pseudo-class cannot express ChatGPT's keyboard-only outline. Track the
-  // modality that led into focus, but do not promote an already pointer-focused
-  // input when the user starts typing.
+  // Chromium can match :focus-visible after a mouse click. Track the modality
+  // that led into focus without promoting an already pointer-focused input.
   const attachModalityListeners = useCallback(
     (node: HTMLInputElement | null) => {
       if (!node) return

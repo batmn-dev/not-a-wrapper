@@ -31,7 +31,6 @@ export async function getMessageUsage(
     : NON_AUTH_DAILY_MESSAGE_LIMIT
 
   try {
-    // Fetch regular model usage
     const regularUsage = await fetchQuery(
       api.usage.checkUsage,
       { isProModel: false, anonymousId },

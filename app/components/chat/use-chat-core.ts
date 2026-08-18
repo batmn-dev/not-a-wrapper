@@ -102,7 +102,6 @@ export function useChatCore({
   bumpChat,
   setComposerText,
 }: UseChatCoreProps) {
-  // State management
   const [isSubmitting, setIsSubmitting] = useState(false)
   const approveToolCall = useMutation(api.chatRuntime.approveToolCall)
   const denyToolCall = useMutation(api.chatRuntime.denyToolCall)
@@ -155,8 +154,6 @@ export function useChatCore({
 
   const [hasDialogAuth, setHasDialogAuth] = useState(false)
 
-  // Track the finish reason of the last assistant message.
-  // Used to show a truncation indicator when finishReason is "length".
   const [lastFinishReasonState, setLastFinishReasonState] = useState<{
     chatId: string | null
     finishReason: string | undefined
@@ -169,7 +166,6 @@ export function useChatCore({
       ? lastFinishReasonState.finishReason
       : undefined
 
-  // State for tracking first message sent (prevents redirect after sending)
   const [sentFirstMessageChatId, setSentFirstMessageChatId] = useState<
     string | null
   >(null)
@@ -211,7 +207,6 @@ export function useChatCore({
   const prompt = searchParams.get("prompt")
   const shouldAutoSubmitPrompt = searchParams.get("autoSubmit") === "1"
 
-  // Chats operations
   const { updateTitle, applyGeneratedTitle } = useChats()
 
   const handleStreamData = useCallback(
@@ -237,7 +232,6 @@ export function useChatCore({
     [applyGeneratedTitle]
   )
 
-  // Handle errors directly in onError callback
   const handleError = useCallback((error: Error) => {
     const presentation = presentChatStreamError(error)
     if (presentation.kind === "swallow") {
@@ -858,13 +852,12 @@ export function useChatCore({
     getIsSubmitting,
   })
 
-  // Handle suggestion
   const handleSuggestion = useCallback(
     async (suggestion: string) => {
       await chatTurn.runSuggestionTurn({
         text: suggestion,
         messages,
-        chatVersion: messages.length + 1, // current messages + 1 for the new message being sent
+        chatVersion: messages.length + 1,
       })
     },
     [chatTurn, messages]
@@ -902,18 +895,15 @@ export function useChatCore({
     hasSentFirstMessage,
     setHasSentFirstMessage,
 
-    // v5 API functions (exposed for direct access if needed)
     sendMessage,
     regenerate,
 
-    // Component state
     isSubmitting,
     setIsSubmitting,
     hasDialogAuth,
     setHasDialogAuth,
     lastFinishReason,
 
-    // Actions
     submit,
     handleSuggestion,
     handleReload,

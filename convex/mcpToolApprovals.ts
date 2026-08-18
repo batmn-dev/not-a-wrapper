@@ -6,9 +6,7 @@ import {
   ownedMcpServerMutation,
 } from "./lib/authedFunctions"
 
-// =============================================================================
 // Queries
-// =============================================================================
 
 /**
  * List all tool approvals for a specific MCP server the caller owns. Returns []
@@ -20,7 +18,6 @@ export const listByServer = maybeAuthQuery({
     const user = ctx.user
     if (!user) return []
 
-    // Verify server ownership
     const server = await ctx.db.get(serverId)
     if (!server || server.userId !== user._id) return []
 
@@ -49,9 +46,7 @@ export const listByUser = maybeAuthQuery({
   },
 })
 
-// =============================================================================
 // Mutations
-// =============================================================================
 
 /**
  * Upsert a tool approval. Uses by_user_server_tool index to avoid duplicates.
@@ -66,7 +61,6 @@ export const upsertApproval = ownedMcpServerMutation({
     const userId = ctx.user._id
     const serverId = ctx.server._id
 
-    // Check for existing approval
     const existing = await ctx.db
       .query("mcpToolApprovals")
       .withIndex("by_user_server_tool", (q) =>
@@ -109,7 +103,6 @@ export const bulkApprove = ownedMcpServerMutation({
     const now = Date.now()
 
     for (const toolName of toolNames) {
-      // Check if approval already exists (avoid duplicates)
       const existing = await ctx.db
         .query("mcpToolApprovals")
         .withIndex("by_user_server_tool", (q) =>
@@ -154,9 +147,7 @@ export const toggleApproval = authenticatedMutation({
   },
 })
 
-// =============================================================================
 // Internal Mutations
-// =============================================================================
 
 /**
  * Remove all approvals for a server. Called during server deletion cleanup

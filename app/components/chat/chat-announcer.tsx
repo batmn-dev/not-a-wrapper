@@ -20,9 +20,8 @@ const AnnouncerContext = createContext<{
 } | null>(null)
 
 /**
- * Holds the body-level live-region elements so the chat surface can portal
- * announcement text into them. Mirrors ChatGPT's persistent `#live-region-*`
- * nodes: the regions live at the document root (`<ChatAnnouncerOutlet />`) so
+ * Holds body-level live-region elements so the chat surface can portal
+ * announcement text into them. The regions live at the document root so
  * announcements survive route changes, while the announced text is derived from
  * chat status deep in the tree (`<ChatStatusAnnouncer />`). The bridge shares a
  * DOM element via context — no prop-drilling and no effect.

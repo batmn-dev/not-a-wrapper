@@ -95,7 +95,6 @@ export const PATCH = authenticatedRoute(
         return jsonError("Server ID is required", 400)
       }
 
-      // Build typed update object — only include fields that were provided
       const updates: {
         name?: string
         url?: string

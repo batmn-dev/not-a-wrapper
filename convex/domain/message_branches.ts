@@ -364,12 +364,9 @@ export function getBranchInfoForMessageFromContext(
   }
 }
 
-// ---------------------------------------------------------------------------
 // Test/benchmark-only array adapters — one-line delegations to the context
 // primitives above. Each builds a throwaway context; production hot paths use
 // the shared `*FromContext` primitives instead.
-// ---------------------------------------------------------------------------
-
 export function getEffectiveParentId(
   messages: ChatMessage[],
   message: ChatMessage

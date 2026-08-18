@@ -2,9 +2,6 @@ import { createMCPClient } from "@ai-sdk/mcp"
 import { createPinnedMcpFetch } from "./pinned-fetch"
 import { resolveMcpUrlForConnection } from "./url-validation"
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 export type McpTransportConfig = {
   url: string
@@ -14,9 +11,7 @@ export type McpTransportConfig = {
   headers?: Record<string, string>
 }
 
-// ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
 
 /**
  * Create an MCP client from a URL with optional transport type and auth headers.

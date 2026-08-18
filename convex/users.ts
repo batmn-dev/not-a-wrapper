@@ -75,9 +75,6 @@ export const getByWorkosUserId = identityQuery({
   },
 })
 
-/**
- * Get current authenticated user
- */
 export const getCurrent = maybeAuthQuery({
   args: {},
   handler: async (ctx) => ctx.user,
@@ -116,9 +113,6 @@ export const createOrUpdate = identityMutation({
   },
 })
 
-/**
- * Update user's last active timestamp
- */
 export const updateLastActive = maybeAuthMutation({
   args: {},
   handler: async (ctx) => {
@@ -128,9 +122,6 @@ export const updateLastActive = maybeAuthMutation({
   },
 })
 
-/**
- * Update user's favorite models
- */
 export const updateFavoriteModels = authenticatedMutation({
   args: {
     favoriteModels: v.array(v.string()),
@@ -141,17 +132,12 @@ export const updateFavoriteModels = authenticatedMutation({
   },
 })
 
-/**
- * Update user profile fields
- * Supports updating: systemPrompt, displayName
- */
 export const updateProfile = authenticatedMutation({
   args: {
     systemPrompt: v.optional(v.string()),
     displayName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // Build update object with only provided fields
     const updates: Record<string, string | undefined> = {}
     if (args.systemPrompt !== undefined) {
       updates.systemPrompt = args.systemPrompt

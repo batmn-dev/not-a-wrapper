@@ -61,9 +61,6 @@ export function SidebarItem({
         presentation.kind === "pinned" ? RiChatSmile2Fill : undefined
       }
       trailing={({ startRename }) => (
-        // Trailing slot (ChatGPT's dynamic right-hand slot). At rest it shows the
-        // status indicator; on hover/focus/menu-open the indicator hides and the
-        // actions reveal in its place (reveal-by-reflow, globals.css).
         <SidebarRowEndSlot
           key={chat.id}
           status={

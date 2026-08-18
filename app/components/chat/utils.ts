@@ -1,17 +1,14 @@
 export const addUTM = (url: string) => {
   try {
-    // Check if the URL is valid
     const u = new URL(url)
-    // Ensure it's using HTTP or HTTPS protocol
     if (!["http:", "https:"].includes(u.protocol)) {
-      return url // Return original URL for non-http(s) URLs
+      return url
     }
 
     u.searchParams.set("utm_source", "not-a-wrapper.com")
     u.searchParams.set("utm_medium", "research")
     return u.toString()
   } catch {
-    // If URL is invalid, return the original URL without modification
     return url
   }
 }

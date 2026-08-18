@@ -61,6 +61,25 @@ describe("sidebar leading-icon placement contract", () => {
     expect(resolvePx("--sidebar-collapsed-item-width")).toBe(40)
     expect(resolvePx("--sidebar-rail-width")).toBe(52)
     expect(resolvePx("--sidebar-width")).toBe(260)
+    expect(resolvePx("--sidebar-header-height")).toBe(52)
+  })
+
+  it("gives both sidebar layers the same footer avatar center", () => {
+    // The expanded footer row (h-12) and the collapsed rail button (h-10)
+    // differ in height; the rail footer's bottom margin is derived from that
+    // difference in globals.css. Both layers share --sidebar-footer-inset as
+    // their bottom inset (expanded sticky-footer padding, rail nav padding),
+    // so the avatar center must land the same distance from the bottom edge —
+    // otherwise the avatar jumps vertically during the collapse crossfade.
+    const expandedCenter =
+      resolvePx("--sidebar-footer-inset") +
+      resolvePx("--sidebar-footer-row-height") / 2
+    const railCenter =
+      resolvePx("--sidebar-footer-inset") +
+      resolvePx("--sidebar-rail-footer-margin-bottom") +
+      resolvePx("--sidebar-footer-collapsed-button-size") / 2
+    expect(railCenter).toBe(expandedCenter)
+    expect(expandedCenter).toBe(30)
   })
 
   it("keeps the collapsed frame width equal to the rail width", () => {
@@ -74,12 +93,19 @@ describe("sidebar leading-icon placement contract", () => {
 
   it("gives both organizer modes one section-stack rhythm", () => {
     // Cluster -> first section, and section -> section. Both "In one list" and
-    // "By project" flow through the single stack container in app-sidebar.tsx;
-    // these pins keep the rhythm from being re-derived per mode.
-    // ChatGPT rhythm: first gap = section-margin (20) - first-margin (8);
-    // adjacent sections sit a full section-margin apart.
+    // "By project" flow through the shared .sidebar-section-stack class (also
+    // used by the design-system registry sidebar); these pins keep the rhythm
+    // from being re-derived per mode or per surface.
+    // First gap = section-margin (20) - first-margin (8); adjacent sections
+    // sit a full section-margin apart.
     expect(resolvePx("--sidebar-section-stack-margin-top")).toBe(12)
     expect(resolvePx("--sidebar-section-stack-gap")).toBe(20)
+
+    // The class must consume the tokens (not re-literalized values), so every
+    // surface that applies it inherits rhythm changes from one place.
+    const stackRule = css.match(/\.sidebar-section-stack\s*\{[^}]*\}/)?.[0]
+    expect(stackRule).toContain("var(--sidebar-section-stack-gap)")
+    expect(stackRule).toContain("var(--sidebar-section-stack-margin-top)")
   })
 
   it("compensates the row border on the block axis only", () => {

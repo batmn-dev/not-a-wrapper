@@ -204,11 +204,9 @@ function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
         })}
       </span>
       {hiddenSources.length > 0 ? (
-        // The reference overflow control is a free toggle (measured
-        // 2026-07-13): collapsed, an "N more" chip leads with a stacked
+        // Collapsed, an "N more" chip leads with a stacked
         // favicon preview of the first three hidden sources; expanded, a
-        // text-only "Show less" chip collapses back. ChatGPT ships neither
-        // state with disclosure ARIA; we keep it.
+        // text-only "Show less" chip collapses back.
         <button
           type="button"
           aria-expanded={expanded}

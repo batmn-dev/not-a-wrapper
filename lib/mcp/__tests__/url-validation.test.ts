@@ -13,9 +13,7 @@ import {
 vi.mock("node:dns/promises")
 
 describe("validateServerUrl", () => {
-  // ===========================================================================
   // Valid URLs
-  // ===========================================================================
 
   describe("valid URLs", () => {
     it("accepts HTTPS URLs with valid hostnames", () => {
@@ -58,9 +56,7 @@ describe("validateServerUrl", () => {
     })
   })
 
-  // ===========================================================================
   // Localhost rejection
-  // ===========================================================================
 
   describe("localhost rejection", () => {
     it("rejects localhost", () => {
@@ -94,9 +90,7 @@ describe("validateServerUrl", () => {
     })
   })
 
-  // ===========================================================================
   // IPv6 private range rejection (SSRF bypass prevention)
-  // ===========================================================================
 
   describe("IPv6 private range rejection", () => {
     const blocked = "Private IPv6 addresses are not allowed"
@@ -140,9 +134,7 @@ describe("validateServerUrl", () => {
     })
   })
 
-  // ===========================================================================
   // Private IP rejection
-  // ===========================================================================
 
   describe("private IP rejection", () => {
     it("rejects 10.0.0.0/8 range", () => {
@@ -207,9 +199,7 @@ describe("validateServerUrl", () => {
     })
   })
 
-  // ===========================================================================
   // Invalid URL format
-  // ===========================================================================
 
   describe("invalid URL format", () => {
     it("rejects empty string", () => {
@@ -231,9 +221,7 @@ describe("validateServerUrl", () => {
     })
   })
 
-  // ===========================================================================
   // Protocol restrictions
-  // ===========================================================================
 
   describe("protocol restrictions", () => {
     it("rejects ftp:// protocol", () => {
@@ -255,9 +243,7 @@ describe("validateServerUrl", () => {
     })
   })
 
-  // ===========================================================================
   // Edge cases
-  // ===========================================================================
 
   describe("edge cases", () => {
     it("handles URLs with authentication in them", () => {
@@ -278,9 +264,7 @@ describe("validateServerUrl", () => {
   })
 })
 
-// =============================================================================
 // isPrivateIP
-// =============================================================================
 
 describe("isPrivateIP", () => {
   it("detects private IPs", () => {
@@ -303,9 +287,7 @@ describe("isPrivateIP", () => {
   })
 })
 
-// =============================================================================
 // isPrivateIPv6
-// =============================================================================
 
 describe("isPrivateIPv6", () => {
   it("detects loopback ::1", () => {
@@ -396,9 +378,7 @@ describe("isPrivateIPv6", () => {
   })
 })
 
-// =============================================================================
 // validateResolvedUrl (DNS rebinding protection)
-// =============================================================================
 
 describe("validateResolvedUrl", () => {
   const mockResolve4 = vi.mocked(dns.resolve4)
@@ -498,9 +478,7 @@ describe("validateResolvedUrl", () => {
   })
 })
 
-// =============================================================================
 // assertMcpUrlAllowed — the single SSRF chokepoint (string + DNS)
-// =============================================================================
 
 describe("assertMcpUrlAllowed", () => {
   const mockResolve4 = vi.mocked(dns.resolve4)
@@ -557,9 +535,7 @@ describe("assertMcpUrlAllowed", () => {
   })
 })
 
-// =============================================================================
 // resolveMcpUrlForConnection — returns the public addresses that transport code pins
-// =============================================================================
 
 describe("resolveMcpUrlForConnection", () => {
   const mockResolve4 = vi.mocked(dns.resolve4)

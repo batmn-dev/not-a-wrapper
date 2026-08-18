@@ -22,9 +22,7 @@ import {
 
 export type BenchMessage = Doc<"messages">
 
-// ---------------------------------------------------------------------------
 // Seeded randomness and stable hashing
-// ---------------------------------------------------------------------------
 
 /** mulberry32 — small, fast, fully deterministic PRNG. */
 export function createSeededRandom(seed: number): () => number {
@@ -67,9 +65,7 @@ export function hashValue(value: unknown): string {
   )
 }
 
-// ---------------------------------------------------------------------------
 // Branch tree fixtures
-// ---------------------------------------------------------------------------
 
 const FIXTURE_CHAT_ID = "bench_chat" as Id<"chats">
 const FIXTURE_USER_ID = "bench_user" as Id<"users">
@@ -380,9 +376,7 @@ export function buildRandomBranchTreeSeeds(
   return Array.from({ length: count }, (_, i) => baseSeed + i * 7919)
 }
 
-// ---------------------------------------------------------------------------
 // Branch projection harness (legacy/candidate equivalence)
-// ---------------------------------------------------------------------------
 
 /**
  * The canonical serializable projection compared between implementations:
@@ -519,9 +513,7 @@ export function assertProjectionEquivalence(
   return first!.hash
 }
 
-// ---------------------------------------------------------------------------
 // Deterministic Markdown / code payloads
-// ---------------------------------------------------------------------------
 
 /**
  * Fixed mixed-Markdown payload (headings, lists, table, math, links, inline
@@ -646,9 +638,7 @@ export function buildCodePayload(lineCount = 400): string {
   return lines.join("\n")
 }
 
-// ---------------------------------------------------------------------------
 // Deterministic stream fixture
-// ---------------------------------------------------------------------------
 
 export type StreamChunkRate = 10 | 30 | 100
 
@@ -999,9 +989,7 @@ export function foldStreamScript(events: StreamChunkEvent[]): FoldedStream {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Measurement helpers and environment recording
-// ---------------------------------------------------------------------------
 
 export type MeasureResult = {
   warmupIterations: number

@@ -1,6 +1,5 @@
 /** @vitest-environment jsdom */
 
-// ---------------------------------------------------------------------------
 // CodeBlockCode streaming rendering (chat-responsiveness plan PR 3 +
 // ADR-0016 "Lazy Shiki").
 //
@@ -10,7 +9,6 @@
 // a deterministic virtual-clock fact. Language normalization lives inside
 // the service (tested in lib/markdown/shiki-client.test.ts) — the component
 // passes the fenced language through verbatim.
-// ---------------------------------------------------------------------------
 
 import { buildCodePayload } from "@/benchmarks/chat-performance/fixtures"
 import { GROWING_HIGHLIGHT_IDLE_MS } from "@/lib/chat-performance/streaming-code-render"

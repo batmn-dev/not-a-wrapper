@@ -1,7 +1,13 @@
 "use client"
 
 import { SidebarMenuItem } from "@/app/components/layout/sidebar/sidebar-menu-item"
-import { designSystemComponents } from "@/app/design-system/_lib/catalog"
+import { SidebarRowActions } from "@/app/components/layout/sidebar/sidebar-row-actions"
+import { SidebarPinAction } from "@/app/components/layout/sidebar/trailing-icon-button"
+import {
+  designSystemComponents,
+  type DesignSystemComponent,
+} from "@/app/design-system/_lib/catalog"
+import { usePinnedDesignSystemComponents } from "@/app/design-system/_lib/component-pinning"
 import { NawIcon } from "@/components/icons/naw"
 import { CollapsibleSection } from "@/components/ui/collapsible-section"
 import { Icon } from "@/components/ui/icon"
@@ -24,11 +30,48 @@ import { useState } from "react"
 export function DesignSystemSidebar() {
   const pathname = usePathname()
   const [query, setQuery] = useState("")
+  const { pinnedSlugs, togglePinned } = usePinnedDesignSystemComponents()
 
   const normalizedQuery = query.trim().toLowerCase()
   const filteredComponents = designSystemComponents.filter((component) =>
     component.name.toLowerCase().includes(normalizedQuery)
   )
+  const componentBySlug = new Map<string, DesignSystemComponent>(
+    designSystemComponents.map((component) => [component.slug, component])
+  )
+  const pinnedComponents = pinnedSlugs.flatMap((slug) => {
+    const component = componentBySlug.get(slug)
+    return component ? [component] : []
+  })
+  const pinnedSlugSet = new Set(pinnedComponents.map(({ slug }) => slug))
+  const unpinnedComponents = designSystemComponents.filter(
+    ({ slug }) => !pinnedSlugSet.has(slug)
+  )
+
+  const renderComponentRow = (component: DesignSystemComponent) => {
+    const pinned = pinnedSlugSet.has(component.slug)
+
+    return (
+      <SidebarMenuItem
+        key={component.slug}
+        label={component.name}
+        href={component.href}
+        isActive={pathname === component.href}
+        className="sidebar-row"
+        trailingInteractive
+        trailing={
+          <SidebarRowActions>
+            <SidebarPinAction
+              pinned={pinned}
+              title={component.name}
+              itemType="Component"
+              onTogglePinned={() => togglePinned(component.slug)}
+            />
+          </SidebarRowActions>
+        }
+      />
+    )
+  }
 
   return (
     <Sidebar
@@ -63,46 +106,46 @@ export function DesignSystemSidebar() {
             type="search"
             placeholder="Search"
             aria-label="Search components"
-            className="h-9 pl-7 text-sm"
+            className="border-input-border h-9 border pl-7 text-sm shadow-none"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pt-(--sidebar-section-stack-margin-top) pb-8">
-        <nav aria-label="Component navigation">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-8">
+        <nav aria-label="Component navigation" className="sidebar-section-stack">
           {/* An active query bypasses the collapsible so a collapsed section
-              can't hide matches. */}
+              can't hide matches. The wrapper div keeps the stack gap between
+              sections from separating individual result rows. */}
           {normalizedQuery ? (
-            filteredComponents.length > 0 ? (
-              filteredComponents.map((component) => (
-                <SidebarMenuItem
-                  key={component.slug}
-                  label={component.name}
-                  href={component.href}
-                  isActive={pathname === component.href}
-                />
-              ))
-            ) : (
-              <p className="text-muted-foreground px-4 py-1.5 text-sm">
-                No components found
-              </p>
-            )
+            <div>
+              {filteredComponents.length > 0 ? (
+                filteredComponents.map(renderComponentRow)
+              ) : (
+                <p className="text-muted-foreground px-4 py-1.5 text-sm">
+                  No components found
+                </p>
+              )}
+            </div>
           ) : (
-            <CollapsibleSection
-              title="Components"
-              variant="sidebar"
-              storageKey="sidebar-section-design-system-components"
-            >
-              {designSystemComponents.map((component) => (
-                <SidebarMenuItem
-                  key={component.slug}
-                  label={component.name}
-                  href={component.href}
-                  isActive={pathname === component.href}
-                />
-              ))}
-            </CollapsibleSection>
+            <>
+              {pinnedComponents.length > 0 ? (
+                <CollapsibleSection
+                  title="Pinned"
+                  variant="sidebar"
+                  storageKey="sidebar-section-design-system-pinned"
+                >
+                  {pinnedComponents.map(renderComponentRow)}
+                </CollapsibleSection>
+              ) : null}
+              <CollapsibleSection
+                title="Primitives"
+                variant="sidebar"
+                storageKey="sidebar-section-design-system-components"
+              >
+                {unpinnedComponents.map(renderComponentRow)}
+              </CollapsibleSection>
+            </>
           )}
         </nav>
       </div>

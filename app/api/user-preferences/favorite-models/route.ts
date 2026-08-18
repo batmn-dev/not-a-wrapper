@@ -3,18 +3,11 @@ import { api } from "@/convex/_generated/api"
 import { resolveModelIds } from "@/lib/models/model-id-migration"
 import { NextResponse } from "next/server"
 
-/**
- * Favorite Models API
- * Fetches and updates favorite models via Convex. Auth + CSRF via the seam.
- */
-
 export const POST = authenticatedRoute(async (request, { convex }) => {
   try {
-    // Parse the request body
     const body = await request.json()
     const { favorite_models } = body
 
-    // Validate the favorite_models array
     if (!Array.isArray(favorite_models)) {
       return NextResponse.json(
         { error: "favorite_models must be an array" },
@@ -22,7 +15,6 @@ export const POST = authenticatedRoute(async (request, { convex }) => {
       )
     }
 
-    // Validate that all items in the array are strings
     if (!favorite_models.every((model) => typeof model === "string")) {
       return NextResponse.json(
         { error: "All favorite_models must be strings" },

@@ -743,7 +743,6 @@ describe("markChatReadForOwner", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
 // Atomic first-turn creation (createChatWithFirstTurnForUser).
 //
 // Scope honesty: this array-backed fake has NO transaction semantics, so these
@@ -752,8 +751,6 @@ describe("markChatReadForOwner", () => {
 // guarantee. What IS proved here: the handler's composition (chat + binding +
 // message + return shape) and the validate-all-before-any-patch ordering that
 // makes the rolled-back transaction contain no partial binding writes.
-// ---------------------------------------------------------------------------
-
 type AnyDoc = { _id: string; _creationTime: number } & Record<string, unknown>
 
 function createFirstTurnHarness(

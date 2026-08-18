@@ -101,7 +101,6 @@ export function ModelVisibilitySettings() {
         Choose which models appear in your model selector.
       </p>
 
-      {/* Search input */}
       <div className="mb-4">
         <input
           type="text"
@@ -112,7 +111,6 @@ export function ModelVisibilitySettings() {
         />
       </div>
 
-      {/* Models grouped by icon/type */}
       <div className="space-y-6 pb-6">
         {Object.entries(modelsByProvider).map(([iconKey, modelsGroup]) => {
           const vendor = getVendor(iconKey)

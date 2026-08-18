@@ -4,11 +4,9 @@ import { getMessageUsage } from "./api"
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
-  // anonymousId is used for unauthenticated users to track their usage
   const anonymousId = searchParams.get("userId") ?? undefined
 
   try {
-    // Get auth state from WorkOS AuthKit
     const authSession = await getWorkosSession()
     const isAuthenticated = !!authSession.user
 
@@ -25,7 +23,6 @@ export async function GET(req: Request) {
       )
     }
 
-    // Get Convex token for authenticated users
     const convexToken = isAuthenticated ? authSession.accessToken : undefined
 
     const usage = await getMessageUsage(
