@@ -39,7 +39,8 @@ export function SettingsDialog({
         ref={dialogContentRef}
         initialFocus={dialogContentRef}
         showCloseButton={false}
-        className="flex flex-col gap-0 overflow-hidden rounded-2xl p-0"
+        surface="centered"
+        className="flex flex-col gap-0 overflow-hidden p-0"
         style={{
           height: "calc(100dvh - 2rem)",
           maxHeight: "720px",

@@ -41,6 +41,8 @@ type UserMenuProps = {
   variant?: "header" | "sidebar" | "sidebar-collapsed"
 }
 
+const sidebarAccountMenuClassName = "w-[calc(var(--sidebar-width)-0.75rem)]"
+
 export function UserMenu({ variant = "header" }: UserMenuProps) {
   const { user } = useUser()
   const { signOut } = useAuth()
@@ -175,7 +177,7 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
             side="top"
             align="start"
             animated={false}
-            className="w-[calc(var(--sidebar-width)-0.75rem)]"
+            className={sidebarAccountMenuClassName}
           >
             {menuContent}
           </DropdownMenuContent>
@@ -226,7 +228,7 @@ export function UserMenu({ variant = "header" }: UserMenuProps) {
             side="top"
             align="start"
             animated={false}
-            className="w-[calc(var(--sidebar-width)-0.75rem)] [box-shadow:0_0_0_1px_#0000000a,0_2px_8px_#0000000a,0_4px_80px_8px_#00000006] dark:[box-shadow:var(--floating-surface-edge-shadow)]"
+            className={sidebarAccountMenuClassName}
           >
             {menuContent}
           </DropdownMenuContent>

@@ -97,7 +97,7 @@ function MenubarItem({
       data-inset={inset}
       data-variant={variant}
       className={cn(
-        "group/menubar-item focus:bg-interactive-selected focus:text-foreground not-data-[variant=destructive]:focus:**:text-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:*:[svg]:text-destructive! gap-2 text-sm data-disabled:opacity-50 data-inset:pl-8 [&_svg:not([class*='size-'])]:size-5",
+        "group/menubar-item focus:text-foreground not-data-[variant=destructive]:focus:**:text-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:*:[svg]:text-destructive! gap-2 text-sm data-disabled:opacity-50 data-inset:pl-8 [&_svg:not([class*='size-'])]:size-5",
         className
       )}
       {...props}
@@ -120,7 +120,7 @@ function MenubarCheckboxItem({
       data-inset={inset}
       className={cn(
         floatingMenuItemClassName,
-        "focus:bg-interactive-selected focus:text-foreground focus:**:text-foreground relative flex cursor-pointer items-center gap-2 pr-2 pl-8 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "focus:text-foreground focus:**:text-foreground relative flex cursor-pointer items-center gap-2 pr-2 pl-8 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         className
       )}
       checked={checked}
@@ -156,7 +156,7 @@ function MenubarRadioItem({
       data-inset={inset}
       className={cn(
         floatingMenuItemClassName,
-        "focus:bg-interactive-selected focus:text-foreground focus:**:text-foreground relative flex cursor-pointer items-center gap-2 pr-2 pl-8 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-5",
+        "focus:text-foreground focus:**:text-foreground relative flex cursor-pointer items-center gap-2 pr-2 pl-8 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-5",
         className
       )}
       {...props}
@@ -238,7 +238,7 @@ function MenubarSubTrigger({
       data-slot="menubar-sub-trigger"
       data-inset={inset}
       className={cn(
-        "focus:bg-interactive-selected focus:text-foreground data-open:bg-interactive-selected data-open:text-foreground gap-2 text-sm data-inset:pl-8 [&_svg:not([class*='size-'])]:size-5",
+        "focus:text-foreground data-open:text-foreground gap-2 text-sm data-inset:pl-8 [&_svg:not([class*='size-'])]:size-5",
         className
       )}
       {...props}

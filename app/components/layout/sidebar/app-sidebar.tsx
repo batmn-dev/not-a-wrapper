@@ -100,9 +100,6 @@ const sidebarHeaderActionClassName =
 
 const sidebarHeaderActionOpenClassName = "bg-black/[0.07] dark:bg-white/10"
 
-const sidebarRailMenuShadow =
-  "[box-shadow:0_0_0_1px_#0000000a,0_2px_8px_#0000000a,0_4px_80px_8px_#00000006] dark:[box-shadow:var(--floating-surface-edge-shadow)]"
-
 function DesktopAppSidebar() {
   const { state, toggleSidebar } = useSidebar()
   const sidebarData = useAppSidebarData()
@@ -893,13 +890,14 @@ function CollapsedSectionMenu({
         alignOffset={-5}
         initialFocus={(openType) => openType === "keyboard"}
         className={cn(
-          "max-h-[calc(100dvh-1rem)] w-(--sidebar-width) min-w-(--sidebar-width) gap-0 rounded-[20px] p-0 py-2.5",
-          sidebarRailMenuShadow
+          "max-h-[calc(100dvh-1rem)] w-(--sidebar-width) min-w-(--sidebar-width) gap-0 rounded-[20px] p-0 py-2.5"
         )}
       >
         <div
           className="max-w-(--sidebar-width) overflow-x-auto"
-          onClick={handleContentClick}
+          // SidebarRow stops click propagation after marking navigation intent,
+          // so close the rail menu during capture before that handler runs.
+          onClickCapture={handleContentClick}
         >
           <div className="w-(--sidebar-width)">
             <div className="mx-1.5 h-9 px-2.5 py-2 text-sm leading-5 font-normal text-[var(--text-tertiary)]">
@@ -1073,10 +1071,7 @@ function SignedOutCollapsedAccountPopover({
         align="start"
         sideOffset={6}
         animated={false}
-        className={cn(
-          "w-[calc(var(--sidebar-width)-0.75rem)] max-w-xs",
-          sidebarRailMenuShadow
-        )}
+        className="w-[calc(var(--sidebar-width)-0.75rem)] max-w-xs"
         onPointerDown={(event) => event.stopPropagation()}
       >
         <SignedOutAccountPopoverContent />

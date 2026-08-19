@@ -1,5 +1,6 @@
 "use client"
 
+import { floatingSurfaceClassName } from "@/components/ui/floating-surface"
 import useClickOutside from "@/hooks/useClickOutside"
 import { cn } from "@/lib/utils"
 import { mergeProps } from "@base-ui/react/merge-props"
@@ -127,6 +128,7 @@ function MorphingPopoverTrigger({
     onClick: context.open,
     "aria-expanded": context.isOpen,
     "aria-controls": `popover-content-${context.uniqueId}`,
+    "aria-haspopup": "dialog",
   }
 
   const trigger = useRender({
@@ -192,9 +194,9 @@ function MorphingPopoverContent({
             key={context.uniqueId}
             id={`popover-content-${context.uniqueId}`}
             role="dialog"
-            aria-modal="true"
             className={cn(
-              "absolute overflow-hidden rounded-md border border-zinc-950/10 bg-white p-2 text-zinc-950 shadow-md dark:border-zinc-50/10 dark:bg-zinc-700 dark:text-zinc-50",
+              floatingSurfaceClassName,
+              "absolute overflow-hidden rounded-(--floating-menu-radius) p-2",
               className
             )}
             initial="initial"

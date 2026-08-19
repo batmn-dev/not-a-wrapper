@@ -94,7 +94,8 @@ function AuthModalContent({
   return (
     <DialogContent
       showCloseButton={false}
-      className="bg-background text-foreground z-[100] max-h-[calc(100svh-20px)] w-[calc(100vw-20px)] max-w-[373px] gap-0 overflow-hidden rounded-2xl p-0 shadow-[0_18px_60px_rgba(0,0,0,0.18)] sm:max-w-[388px] dark:shadow-[0_18px_60px_rgba(0,0,0,0.45)]"
+      surface="centered"
+      className="z-[100] max-h-[calc(100svh-20px)] w-[calc(100vw-20px)] max-w-[373px] gap-0 overflow-hidden p-0 sm:max-w-[388px]"
     >
       <header className="flex min-h-12 items-start justify-end p-2.5 pb-0">
         <DialogClose

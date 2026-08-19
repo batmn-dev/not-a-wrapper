@@ -3,7 +3,7 @@ import {
   floatingMenuItemClassName,
   floatingMenuLabelClassName,
   floatingMenuSeparatorClassName,
-  floatingSurfaceClassName,
+  floatingSelectSurfaceClassName,
 } from "@/components/ui/floating-surface"
 import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
@@ -93,7 +93,7 @@ function SelectContent({
           data-slot="select-content"
           data-align-trigger={alignItemWithTrigger}
           className={cn(
-            floatingSurfaceClassName,
+            floatingSelectSurfaceClassName,
             floatingMenuContentClassName,
             "relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 overflow-x-hidden overflow-y-auto",
             className
@@ -136,7 +136,7 @@ function SelectItem({
       data-slot="select-item"
       className={cn(
         floatingMenuItemClassName,
-        "focus:bg-interactive-selected focus:text-foreground not-data-[variant=destructive]:focus:**:text-foreground relative flex cursor-pointer items-center gap-2 pr-8 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        "focus:text-foreground not-data-[variant=destructive]:focus:**:text-foreground relative flex cursor-pointer items-center gap-2 pr-8 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
         className
       )}
       {...props}

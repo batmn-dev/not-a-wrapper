@@ -333,7 +333,14 @@
   --color-popover-bg-hover: var(--popover-bg-hover);
   --color-floating-surface: var(--floating-surface);
   --color-floating-surface-foreground: var(--floating-surface-foreground);
+  --color-floating-menu-item-active: var(--floating-menu-item-active);
   --color-floating-menu-divider: var(--floating-menu-divider);
+  --color-modal-centered: var(--modal-centered-surface);
+  --color-modal-centered-foreground: var(--modal-centered-foreground);
+  --color-modal-search: var(--modal-search-surface);
+  --color-modal-search-foreground: var(--modal-search-foreground);
+  --color-modal-search-border: var(--modal-search-border);
+  --color-modal-search-row-active: var(--modal-search-row-active);
   --color-muted-bg-hover: var(--muted-bg-hover);
   --color-control-track: var(--control-track-bg);
   --color-border: var(--border);
@@ -390,6 +397,10 @@
   --shadow-border-lg: var(--shadow-border-lg-value);
   --shadow-border-xl: var(--shadow-border-xl-value);
   --shadow-floating-surface: var(--floating-surface-edge-shadow);
+  --shadow-floating-select: var(--floating-select-edge-shadow);
+  --shadow-modal-centered: var(--modal-centered-edge-shadow);
+  --shadow-modal-search: var(--modal-search-edge-shadow);
+  --shadow-tooltip: var(--tooltip-edge-shadow);
 }
 
 :root {
@@ -456,13 +467,30 @@
   --card-foreground: var(--foreground);
   --popover: oklch(1 0 0);
   --popover-foreground: var(--foreground);
-  --floating-surface: var(--popover);
-  --floating-surface-foreground: var(--popover-foreground);
-  --floating-surface-edge-shadow: var(--shadow-border-md-value);
+  --floating-surface: #ffffff;
+  --floating-surface-foreground: #0d0d0d;
+  --floating-surface-edge-shadow:
+    0 0 0 1px #0000000a, 0 2px 8px #0000000a, 0 4px 80px 8px #00000006;
+  --floating-select-edge-shadow:
+    0 8px 12px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.62);
+  --floating-menu-item-active: rgba(0, 0, 0, 0.04);
   --floating-menu-divider: var(--border-default);
   --floating-menu-radius: 1.25rem;
   --floating-menu-item-radius: 0.75rem;
   --floating-menu-leading-slot-size: 1.25rem;
+  --modal-centered-surface: #ffffff;
+  --modal-centered-foreground: #0d0d0d;
+  --modal-centered-edge-shadow:
+    0 8px 12px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.62);
+  --modal-centered-radius: 1rem;
+  --modal-centered-scrim: oklab(0.915826 0.0000416 0.0000184 / 0.5);
+  --modal-centered-backdrop-blur: 1px;
+  --modal-search-surface: #ffffff;
+  --modal-search-foreground: #0d0d0d;
+  --modal-search-border: rgba(0, 0, 0, 0.1);
+  --modal-search-row-active: rgba(0, 0, 0, 0.05);
+  --modal-search-edge-shadow: 0 14px 62px rgba(0, 0, 0, 0.25);
+  --modal-search-radius: 1rem;
   --primary: oklch(0 0 0);
   --primary-foreground: oklch(1 0 0);
   --primary-bg-hover: oklch(0.31 0 0);
@@ -489,8 +517,10 @@
   --surface-hover: var(--interactive-bg-hover);
   --popover-bg-hover: oklch(0.964 0 0);
   --muted-bg-hover: oklch(0.931 0 0);
-  --bg-tooltip: oklch(0 0 0);
-  --border-tooltip: oklch(0 0 0 / 0);
+  --bg-tooltip: #1b1b1b;
+  --border-tooltip: rgba(255, 255, 255, 0.05);
+  --tooltip-edge-shadow: 0 8px 18px rgba(15, 23, 42, 0.2);
+  --tooltip-radius: 9999px;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
   --info: oklch(0.626 0.188 259.456);
@@ -589,11 +619,25 @@
   --card-foreground: var(--foreground);
   --popover: oklch(0.222 0 0);
   --popover-foreground: var(--foreground);
-  --floating-surface: oklch(0.329 0 0);
-  --floating-surface-foreground: var(--foreground);
-  --floating-surface-edge-shadow: inset 0 0 1px
-    color-mix(in oklab, var(--foreground) 20%, transparent);
+  --floating-surface: #353535;
+  --floating-surface-foreground: #ffffff;
+  --floating-surface-edge-shadow: inset 0 0 1px rgba(255, 255, 255, 0.2);
+  --floating-select-edge-shadow:
+    0 8px 16px rgba(0, 0, 0, 0.32), inset 0 0 1px rgba(255, 255, 255, 0.2),
+    0 0 1px rgba(0, 0, 0, 0.62);
+  --floating-menu-item-active: rgba(255, 255, 255, 0.1);
   --floating-menu-divider: var(--border-default);
+  --modal-centered-surface: #212121;
+  --modal-centered-foreground: #ffffff;
+  --modal-centered-edge-shadow:
+    0 8px 16px rgba(0, 0, 0, 0.32), inset 0 0 1px rgba(255, 255, 255, 0.2),
+    0 0 1px rgba(0, 0, 0, 0.62);
+  --modal-centered-scrim: rgba(0, 0, 0, 0.5);
+  --modal-search-surface: #212121;
+  --modal-search-foreground: #ffffff;
+  --modal-search-border: rgba(255, 255, 255, 0.15);
+  --modal-search-row-active: rgba(255, 255, 255, 0.05);
+  --modal-search-edge-shadow: 0 14px 62px rgba(0, 0, 0, 0.25);
   --primary: oklch(1 0 0);
   --primary-foreground: oklch(0.159 0 0);
   --primary-bg-hover: oklch(0.922 0 0);
@@ -618,8 +662,8 @@
   --surface-hover: var(--interactive-bg-hover);
   --popover-bg-hover: oklch(0.309 0 0);
   --muted-bg-hover: oklch(0.375 0 0);
-  --bg-tooltip: oklch(0.222 0 0);
-  --border-tooltip: oklch(1 0 0 / 0.051);
+  --bg-tooltip: #1b1b1b;
+  --border-tooltip: rgba(255, 255, 255, 0.05);
   --destructive: oklch(0.6 0.18 15);
   --destructive-foreground: oklch(0.95 0.01 20);
   --info: oklch(0.72 0.137 253.307);

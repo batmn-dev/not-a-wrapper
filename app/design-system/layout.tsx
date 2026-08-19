@@ -16,7 +16,7 @@ export default function DesignSystemLayout({
   children: React.ReactNode
 }>) {
   return (
-    <div className="bg-muted text-foreground flex min-h-svh w-full min-w-0 [--sidebar:var(--muted)]">
+    <div className="text-foreground flex min-h-svh w-full min-w-0">
       <DesignSystemSidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <DesignSystemMobileNav />

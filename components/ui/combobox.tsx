@@ -160,7 +160,7 @@ function ComboboxItem({
       data-slot="combobox-item"
       className={cn(
         floatingMenuItemClassName,
-        "menu-item-hoverable data-highlighted:bg-interactive-selected data-highlighted:text-foreground not-data-[variant=destructive]:data-highlighted:**:text-foreground relative flex cursor-pointer items-center gap-2 pr-8 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "menu-item-hoverable data-highlighted:text-foreground not-data-[variant=destructive]:data-highlighted:**:text-foreground relative flex cursor-pointer items-center gap-2 pr-8 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}

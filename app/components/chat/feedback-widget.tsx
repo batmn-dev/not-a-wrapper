@@ -1,13 +1,13 @@
 "use client"
 
-import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { FeedbackForm } from "@/components/common/feedback-form"
+import { Icon } from "@/components/ui/icon"
 import {
   MorphingPopover,
   MorphingPopoverContent,
   MorphingPopoverTrigger,
 } from "@/components/ui/morphing-popover"
-import { Icon } from "@/components/ui/icon"
+import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { RiQuestionLine } from "@remixicon/react"
 import { motion } from "motion/react"
 import { useState } from "react"
@@ -66,7 +66,7 @@ export function FeedbackWidget({ authUserId }: FeedbackWidgetProps) {
           </motion.span>
         </MorphingPopoverTrigger>
         <MorphingPopoverContent
-          className="border-border bg-popover fixed right-1 bottom-1 min-w-[320px] rounded-xl border p-0 shadow-[0_9px_9px_0px_rgba(0,0,0,0.01),_0_2px_5px_0px_rgba(0,0,0,0.06)]"
+          className="fixed right-1 bottom-1 min-w-[320px] p-0"
           style={{
             transformOrigin: "bottom right",
           }}

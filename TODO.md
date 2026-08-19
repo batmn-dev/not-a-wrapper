@@ -33,7 +33,8 @@
 - **Admin Portal:** A way to manage users, controls, features, etc...
 - **Agent-first file library:** Create a computer-like environment where agents can easily discover files?
 - **Connectors:** Integrations with Google, YouTube, Figma, and personal tools
-- **Agentic Design System:** A customizable design system that helps agents ship consistent and high quality UI
+- **Agentic design system (future):** Define an agent-readable, customizable
+  visual system after the product's core interaction patterns stabilize.
 
 ## Dependency watch
 

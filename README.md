@@ -127,6 +127,10 @@ bun run test         # Vitest
 
 Contributions are welcome. Please open an issue first to discuss what you'd like to change.
 
+For UI work, see [DESIGN.md](./DESIGN.md). Its visual direction is provisional;
+prioritize functionality, accessibility, reusable primitives, and consistent
+interaction patterns while the formal design rules evolve.
+
 ## Based On
 
 This project is a fork of [Zola](https://github.com/ibelick/zola), the open-source AI chat interface. Special thanks to the Zola team for creating an excellent foundation.

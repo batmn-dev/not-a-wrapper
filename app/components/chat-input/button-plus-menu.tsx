@@ -35,16 +35,7 @@ const authenticatedPlusTriggerClassName = cn(
   "aria-expanded:bg-interactive-selected"
 )
 
-const composerPlusMenuContentClassName =
-  "w-[228px] min-w-[228px] overflow-hidden rounded-[16px] px-0 py-1.5"
-
-const composerPlusMenuStyle = {
-  boxShadow:
-    "rgba(0, 0, 0, 0.08) 0px 8px 12px 0px, rgba(0, 0, 0, 0.62) 0px 0px 1px 0px",
-}
-
-const composerPlusMenuItemClassName =
-  "mx-1.5 h-9 rounded-[10px] px-2.5 py-1.5 text-sm leading-5 hover:bg-interactive-hover focus:bg-interactive-selected data-[highlighted]:bg-interactive-selected active:bg-interactive-pressed"
+const composerPlusMenuContentClassName = "w-[228px] min-w-[228px]"
 
 type ButtonPlusMenuProps = {
   onOpenFilePicker: () => void
@@ -130,7 +121,6 @@ export function ButtonPlusMenu({
           align="start"
           animated={false}
           className={composerPlusMenuContentClassName}
-          style={composerPlusMenuStyle}
         >
           <Tooltip>
             <TooltipTrigger
@@ -138,7 +128,6 @@ export function ButtonPlusMenu({
                 <DropdownMenuItem
                   aria-disabled={!isFileUploadAvailable || undefined}
                   className={cn(
-                    composerPlusMenuItemClassName,
                     !isFileUploadAvailable && "cursor-not-allowed opacity-50"
                   )}
                   onClick={() => {
@@ -166,7 +155,6 @@ export function ButtonPlusMenu({
                 <DropdownMenuItem
                   closeOnClick={false}
                   className={cn(
-                    composerPlusMenuItemClassName,
                     isSearchDisabled && "cursor-not-allowed opacity-50"
                   )}
                   onClick={() => {
