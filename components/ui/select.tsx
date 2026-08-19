@@ -136,7 +136,7 @@ function SelectItem({
       data-slot="select-item"
       className={cn(
         floatingMenuItemClassName,
-        "focus:text-foreground not-data-[variant=destructive]:focus:**:text-foreground relative flex cursor-pointer items-center gap-2 pr-8 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        "focus:text-foreground relative flex cursor-pointer items-center gap-2 pr-8 text-sm outline-hidden select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
         className
       )}
       {...props}

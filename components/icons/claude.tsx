@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils"
 import { forwardRef, type SVGProps } from "react"
 
 export type ClaudeIconProps = {
@@ -5,7 +6,7 @@ export type ClaudeIconProps = {
 } & SVGProps<SVGSVGElement>
 
 export const ClaudeIcon = forwardRef<SVGSVGElement, ClaudeIconProps>(
-  ({ size = 24, width, height, ...props }, ref) => (
+  ({ size = 24, width, height, className, ...props }, ref) => (
     <svg
       ref={ref}
       xmlns="http://www.w3.org/2000/svg"
@@ -13,6 +14,7 @@ export const ClaudeIcon = forwardRef<SVGSVGElement, ClaudeIconProps>(
       height={height ?? size}
       viewBox="0 0 64 64"
       fill="none"
+      className={cn("text-claude-logo", className)}
       {...props}
     >
       <g clipPath="url(#claude)">

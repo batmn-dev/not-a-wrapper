@@ -265,7 +265,7 @@ export function ModelSelector({
           slotSize={16}
           glyphSize={16}
           data-slot="selected-model-icon"
-          className="shrink-0"
+          className="text-foreground shrink-0 opacity-100"
         />
       ) : null}
       <span className={cn("min-w-0 truncate", isComposerVariant && "max-w-40")}>

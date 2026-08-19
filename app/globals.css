@@ -355,6 +355,7 @@
   --color-success: var(--success);
   --color-status-success-bg: var(--status-success-bg);
   --color-status-success-foreground: var(--status-success-foreground);
+  --color-claude-logo: var(--claude-logo);
   --color-link: var(--link);
   --color-link-hover: var(--link-hover);
   --color-disabled-foreground: var(--text-disabled);
@@ -529,6 +530,11 @@
   --status-success-bg: oklch(0.945 0.029 156.629);
   --status-success-foreground: oklch(0.38 0.085 146.171);
   --success: var(--status-success-foreground);
+
+  /* Provider brand colors */
+  /* Claude logo color (--cds-clay in their web browser) */
+  --claude-logo: oklch(0.6724 0.1308 38.76);
+
   --border-subtle: oklch(0 0 0 / 0.05);
   --border-default: oklch(0 0 0 / 0.1);
   --border-strong: oklch(0 0 0 / 0.15);
@@ -672,6 +678,11 @@
   --status-success-bg: oklch(0.38 0.085 146.171);
   --status-success-foreground: oklch(0.975 0.015 158.255);
   --success: var(--status-success-foreground);
+
+  /* Provider brand colors */
+  /* Claude logo color (--cds-clay in their web browser) */
+  --claude-logo: oklch(0.6724 0.1308 38.76);
+
   --border-subtle: oklch(1 0 0 / 0.05);
   --border-default: oklch(1 0 0 / 0.15);
   --border-strong: oklch(1 0 0 / 0.2);

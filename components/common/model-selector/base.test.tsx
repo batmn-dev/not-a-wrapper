@@ -453,6 +453,8 @@ describe("ModelSelector", () => {
     expect(trigger?.firstElementChild?.getAttribute("data-slot")).toBe(
       "selected-model-icon"
     )
+    expect(trigger?.firstElementChild?.className).toContain("text-foreground")
+    expect(trigger?.firstElementChild?.className).toContain("opacity-100")
     expect(trigger?.className).toContain("pointer-fine:relative")
     expect(trigger?.className).toContain("pointer-fine:after:absolute")
     expect(trigger?.className).toContain("pointer-fine:after:-inset-x-1")

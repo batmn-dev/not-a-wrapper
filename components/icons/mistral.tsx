@@ -11,34 +11,20 @@ export const MistralIcon = forwardRef<SVGSVGElement, MistralIconProps>(
       xmlns="http://www.w3.org/2000/svg"
       width={width ?? size}
       height={height ?? size}
-      viewBox="0 0 64 64"
+      viewBox="0 0 21 15"
       fill="none"
       {...props}
     >
-      <g clipPath="url(#mistral)">
-        <path
-          fill="currentColor"
-          d="M9.141 9.067h9.144v9.141H9.141zm36.571 0h9.147v9.141h-9.147z"
-        />
-        <path
-          fill="currentColor"
-          d="M9.141 18.208h18.286v9.144H9.144zm27.43 0h18.285v9.144H36.571z"
-        />
-        <path fill="currentColor" d="M9.141 27.355H54.86v9.141H9.14z" />
-        <path
-          fill="currentColor"
-          d="M9.141 36.496h9.144v9.141H9.141zm18.288 0h9.144v9.141H27.43zm18.283 0h9.147v9.141h-9.147z"
-        />
-        <path
-          fill="currentColor"
-          d="M0 45.637h27.43v9.144H0zm36.57 0H64v9.144H36.57z"
-        />
-      </g>
-      <defs>
-        <clipPath id="mistral">
-          <path fill="#fff" d="M0 0h64v64H0z" />
-        </clipPath>
-      </defs>
+      <path d="M6 0H3V3H6V0Z" fill="#FFAF01" />
+      <path d="M6 9H3V12H6V9Z" fill="#E61300" />
+      <path d="M9 12H0V15H9V12Z" fill="#C4001D" />
+      <path d="M9 3H3V6H9V3Z" fill="#FF8204" />
+      <path d="M12 9H9V12H12V9Z" fill="#E61300" />
+      <path d="M18 6H3V9H18V6Z" fill="#FA500F" />
+      <path d="M18 3H12V6H18V3Z" fill="#FF8204" />
+      <path d="M18 0H15V3H18V0Z" fill="#FFAF01" />
+      <path d="M18 9H15V12H18V9Z" fill="#E61300" />
+      <path d="M21 12H12V15H21V12Z" fill="#C4001D" />
     </svg>
   )
 )
