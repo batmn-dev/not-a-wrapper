@@ -34,14 +34,12 @@ export function useScrollAttributes(
     const update = () => {
       const { scrollTop, scrollHeight, clientHeight } = el
 
-      // Set/remove data-scrolled-from-top
       if (scrollTop > threshold) {
         el.dataset.scrolledFromTop = ""
       } else {
         delete el.dataset.scrolledFromTop
       }
 
-      // Set/remove data-scrolled-from-end
       if (scrollTop + clientHeight < scrollHeight - threshold) {
         el.dataset.scrolledFromEnd = ""
       } else {
@@ -49,13 +47,10 @@ export function useScrollAttributes(
       }
     }
 
-    // Initial check
     update()
 
-    // Scroll listener (passive for performance)
     el.addEventListener("scroll", update, { passive: true })
 
-    // ResizeObserver for dynamic content changes (chat list loading, sections expanding)
     const resizeObserver = new ResizeObserver(update)
     resizeObserver.observe(el)
 

@@ -37,12 +37,11 @@ function AlertDialogOverlay({
     <AlertDialogPrimitive.Backdrop
       data-slot="alert-dialog-overlay"
       className={cn(
-        "bg-scrim-modal fixed inset-0 z-50",
-        "data-[starting-style]:opacity-0",
-        "data-[ending-style]:opacity-0",
+        "fixed inset-0 z-50 bg-[var(--modal-centered-scrim)] [backdrop-filter:blur(var(--modal-centered-backdrop-blur))] transition-[opacity,backdrop-filter] duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
+        "data-[starting-style]:opacity-0 data-[starting-style]:[backdrop-filter:blur(0)]",
+        "data-[ending-style]:opacity-0 data-[ending-style]:[backdrop-filter:blur(0)]",
         className
       )}
-      style={{ transition: "opacity 100ms ease-out" }}
       {...props}
     />
   )
@@ -58,12 +57,9 @@ function AlertDialogContent({
       <AlertDialogPrimitive.Popup
         data-slot="alert-dialog-content"
         className={cn(
-          "bg-popover shadow-border-lg fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg p-6 sm:max-w-lg",
-          "data-[starting-style]:opacity-0",
-          "data-[ending-style]:opacity-0",
+          "bg-modal-centered text-modal-centered-foreground shadow-modal-centered fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-(--modal-centered-radius) p-6 sm:max-w-lg",
           className
         )}
-        style={{ transition: "opacity 100ms ease-out" }}
         {...props}
       />
     </AlertDialogPortal>

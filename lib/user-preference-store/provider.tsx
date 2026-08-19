@@ -83,7 +83,6 @@ function getLocalStoragePreferences(): UserPreferences {
       }
       return localPreferencesSnapshot
     } catch {
-      // fallback to legacy layout storage if JSON parsing fails
     }
   }
 
@@ -139,20 +138,16 @@ export function UserPreferencesProvider({
   // executes a wrong-empty read during the auth-sync window.
   const isAuthenticated = !!userId
 
-  // Convex real-time query for authenticated users
   const { data: convexPreferences } = usePerUserQuery(api.userPreferences.get)
 
-  // Convex mutation for updating preferences
   const updatePreferencesMutation = useConvexMutation(
     api.userPreferences.update
   )
 
-  // Track optimistic updates (pending changes)
   const [optimisticUpdates, setOptimisticUpdates] = useState<
     Partial<UserPreferences>
   >({})
 
-  // Derive server preferences from Convex data
   const serverPreferences: UserPreferences = useMemo(() => {
     if (convexPreferences && isAuthenticated) {
       return {
@@ -180,15 +175,12 @@ export function UserPreferencesProvider({
     return defaultPreferences
   }, [convexPreferences, isAuthenticated])
 
-  // For unauthenticated users, use localStorage
   const localStoragePrefs = useSyncExternalStore(
     subscribeLocalStoragePreferences,
     getLocalStoragePreferences,
     () => initialPreferences || defaultPreferences
   )
 
-  // Derive final preferences: server data + optimistic updates (for authenticated)
-  // or localStorage prefs (for unauthenticated)
   const preferences = useMemo(() => {
     if (isAuthenticated) {
       return { ...serverPreferences, ...optimisticUpdates }
@@ -198,23 +190,18 @@ export function UserPreferencesProvider({
 
   const isLoading = isAuthenticated && convexPreferences === undefined
 
-  // Update preferences handler
   const updatePreferences = useCallback(
     async (update: Partial<UserPreferences>) => {
       if (!isAuthenticated) {
-        // For unauthenticated users, update localStorage directly
         const updated = { ...localStoragePrefs, ...update }
         saveToLocalStorage(updated)
         return
       }
 
-      // For authenticated users, use optimistic updates
       setOptimisticUpdates((prev) => ({ ...prev, ...update }))
 
       try {
-        // Persist to Convex for authenticated users
         await updatePreferencesMutation(update)
-        // Clear optimistic update on success (server data will reflect the change)
         setOptimisticUpdates((prev) => {
           const next = { ...prev }
           for (const key of Object.keys(update)) {
@@ -224,7 +211,6 @@ export function UserPreferencesProvider({
         })
       } catch (error) {
         console.error("Failed to update user preferences in Convex:", error)
-        // Revert optimistic update on error
         setOptimisticUpdates((prev) => {
           const next = { ...prev }
           for (const key of Object.keys(update)) {

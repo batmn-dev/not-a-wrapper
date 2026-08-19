@@ -3,20 +3,15 @@
 /**
  * Streaming color-decay overlay (ADR-0016 amendment, 2026-08-11).
  *
- * Claude-style streaming reveal: newly arrived words paint near-transparent
- * and materialize to full foreground color (an alpha ramp — the mechanism
- * also covers ChatGPT's measured `streaming-text-color-decay` with a curve
- * change), WITHOUT owning any DOM: cohorts of appended rendered text are painted
+ * Newly arrived words paint near-transparent and materialize to full foreground
+ * color without owning any DOM: cohorts of appended rendered text are painted
  * through the CSS Custom Highlight API (`CSS.highlights` +
  * `::highlight(naw-stream-decay-N)` rules in globals.css). The DOM the React
  * tree renders is untouched, so settled content is canonical by construction
  * and the rendered-DOM equivalence corpus is unaffected.
  *
- * Curve parameters match claude.ai's measured fade (2026-08-12,
- * docs/measurements/2026-08-12-claude-streaming-fade.md): each append cohort
- * fades as ONE unit on a ~400ms linear alpha ramp, with NO per-word stagger —
- * their trailing gradient is nothing but consecutive flush cohorts'
- * overlapping fades, and so is ours.
+ * Each append cohort fades as one unit on a ~400ms linear alpha ramp with no
+ * per-word stagger. Consecutive flush cohorts create the trailing gradient.
  *
  * Invariant boundaries:
  * - Paint only. Text is never gated, reordered, or delayed — this is not a
@@ -44,9 +39,7 @@ export type DecayCohort = {
   arrivedAt: number
 }
 
-/* 12 × 33ms ≈ 400ms — claude.ai's measured run fade is 400ms linear; at a
- * 33ms bucket grid (roughly every other 60Hz frame) the quantized ramp reads
- * as continuous. */
+/* 12 × 33ms ≈ 400ms; the quantized ramp reads as continuous. */
 export const DECAY_BUCKET_COUNT = 12
 export const DECAY_BUCKET_MS = 33
 export const DECAY_TOTAL_MS = DECAY_BUCKET_COUNT * DECAY_BUCKET_MS
@@ -57,9 +50,8 @@ export const DECAY_TOTAL_MS = DECAY_BUCKET_COUNT * DECAY_BUCKET_MS
  * fade as independent cohorts instead of re-timing an ever-growing run —
  * without this cap, continuous CJK streaming collapsed into ONE cohort whose
  * decay clock reset on every append, holding the entire streamed run near
- * bucket 0 (near-transparent) until the stream paused. claude.ai never hits
- * this case — their client flushes on word boundaries — but our commits are
- * raw provider deltas, which do split words.
+ * bucket 0 (near-transparent) until the stream paused. Provider deltas can
+ * split words, so the merge must stay bounded.
  */
 export const MAX_WORD_MERGE_CHARS = 16
 /**
@@ -132,8 +124,7 @@ export function advanceDecayCohorts(args: {
   let start = prefix
   if (start >= nextText.length) return kept
 
-  // Snap to a word boundary so a word always fades as a unit (ChatGPT/Claude
-  // parity — their pacing makes words appear atomically). Only on PURE
+  // Snap to a word boundary so a word always fades as a unit. Only on pure
   // appends whose boundary chars are both word characters: a provider token
   // split mid-word ("hel" + "lo"). A parse flip never snaps (its suffix
   // starts at a structural boundary), and punctuation adjacency from block
@@ -329,8 +320,8 @@ function collectCohortRanges(
   buckets: StaticRange[][]
 ): void {
   type PaintSpan = { start: number; end: number; bucket: number }
-  // One span per cohort: the whole cohort fades as a unit (Claude parity —
-  // no per-word stagger), so per-word range splitting would only multiply
+  // One span per cohort: the whole cohort fades as a unit, so per-word range
+  // splitting would only multiply
   // identical-bucket StaticRanges.
   const spans: PaintSpan[] = []
   for (const cohort of cohorts) {

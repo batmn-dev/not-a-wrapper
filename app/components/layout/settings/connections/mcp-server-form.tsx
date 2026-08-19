@@ -28,10 +28,6 @@ import { RiLoader4Line } from "@remixicon/react"
 import { useMutation } from "convex/react"
 import { useCallback, useState } from "react"
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 type McpServerData = {
   _id: Id<"mcpServers">
   name: string
@@ -82,10 +78,6 @@ type McpServerFormProps = {
   server: McpServerData | null
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 export function McpServerForm({
   open,
   onOpenChange,
@@ -93,7 +85,6 @@ export function McpServerForm({
 }: McpServerFormProps) {
   const isEditMode = !!server
 
-  // Form state — initialized from server prop (or empty for create)
   const [name, setName] = useState(server?.name ?? "")
   const [url, setUrl] = useState(server?.url ?? "")
   const [transport, setTransport] = useState<"http" | "sse">(
@@ -105,12 +96,10 @@ export function McpServerForm({
   const [authValue, setAuthValue] = useState("")
   const [headerName, setHeaderName] = useState(server?.headerName ?? "")
 
-  // Async state
   const [isTesting, setIsTesting] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [testResult, setTestResult] = useState<TestResult | null>(null)
 
-  // Convex mutation for bulk-approving discovered tools
   const bulkApprove = useMutation(api.mcpToolApprovals.bulkApprove)
 
   const getConnectionDetails = (): McpConnectionDetails => ({
@@ -136,10 +125,6 @@ export function McpServerForm({
     if (!open) resetForm()
     onOpenChange(open)
   }
-
-  // -------------------------------------------------------------------------
-  // Test Connection
-  // -------------------------------------------------------------------------
 
   const handleTestConnection = async () => {
     if (!url.trim()) return
@@ -190,10 +175,6 @@ export function McpServerForm({
       setIsTesting(false)
     }
   }
-
-  // -------------------------------------------------------------------------
-  // Save (Create or Update)
-  // -------------------------------------------------------------------------
 
   const handleSave = async () => {
     if (!name.trim() || !url.trim()) {
@@ -290,7 +271,6 @@ export function McpServerForm({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Name */}
           <div className="space-y-2">
             <Label htmlFor="mcp-name">Name</Label>
             <Input
@@ -302,7 +282,6 @@ export function McpServerForm({
             />
           </div>
 
-          {/* URL */}
           <div className="space-y-2">
             <Label htmlFor="mcp-url">URL</Label>
             <Input
@@ -321,7 +300,6 @@ export function McpServerForm({
             </p>
           </div>
 
-          {/* Transport */}
           <div className="space-y-2">
             <Label>Transport</Label>
             <Select
@@ -342,7 +320,6 @@ export function McpServerForm({
             </Select>
           </div>
 
-          {/* Auth Type */}
           <div className="space-y-2">
             <Label>Authentication</Label>
             <Select
@@ -364,7 +341,6 @@ export function McpServerForm({
             </Select>
           </div>
 
-          {/* Header Name (for custom header auth) */}
           {authType === "header" && (
             <div className="space-y-2">
               <Label htmlFor="mcp-header-name">Header Name</Label>
@@ -381,7 +357,6 @@ export function McpServerForm({
             </div>
           )}
 
-          {/* Auth Value (for bearer or custom header) */}
           {(authType === "bearer" || authType === "header") && (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
@@ -417,7 +392,6 @@ export function McpServerForm({
             </div>
           )}
 
-          {/* Test Connection */}
           <div className="flex items-center gap-3">
             <Button
               variant="outline"

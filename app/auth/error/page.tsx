@@ -9,7 +9,6 @@ import { Suspense } from "react"
 
 export const dynamic = "force-dynamic"
 
-// Create a separate component that uses useSearchParams
 function AuthErrorContent() {
   const searchParams = useSearchParams()
   const message =
@@ -43,7 +42,6 @@ function AuthErrorContent() {
 export default function AuthErrorPage() {
   return (
     <div className="flex h-screen flex-col bg-zinc-800 text-white">
-      {/* Header */}
       <header className="p-4">
         <Link
           href="/"

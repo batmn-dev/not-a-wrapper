@@ -49,7 +49,6 @@ export function normalizeStreamingPresentation(
   return value === "quick" ? "quick" : "smooth"
 }
 
-// Helper functions to convert between API format (snake_case) and frontend format (camelCase)
 export function convertFromApiFormat(
   apiData: UserPreferencesApiFormat
 ): UserPreferences {

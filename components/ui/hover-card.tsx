@@ -1,4 +1,3 @@
-import { floatingSurfaceClassName } from "@/components/ui/floating-surface"
 import { cn } from "@/lib/utils"
 import { PreviewCard as HoverCardPrimitive } from "@base-ui/react/preview-card"
 
@@ -41,8 +40,7 @@ function HoverCardContent({
         <HoverCardPrimitive.Popup
           data-slot="hover-card-content"
           className={cn(
-            floatingSurfaceClassName,
-            "z-50 w-64 origin-(--transform-origin) rounded-md p-4 outline-hidden data-[ending-style]:[transform:scale(0.95)] data-[ending-style]:opacity-0 data-[starting-style]:[transform:scale(0.95)] data-[starting-style]:opacity-0",
+            "bg-floating-surface text-floating-surface-foreground shadow-border-md z-50 w-64 origin-(--transform-origin) rounded-md p-4 outline-hidden data-[ending-style]:[transform:scale(0.95)] data-[ending-style]:opacity-0 data-[starting-style]:[transform:scale(0.95)] data-[starting-style]:opacity-0",
             className
           )}
           style={{

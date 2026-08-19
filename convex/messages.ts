@@ -150,9 +150,7 @@ export async function getLastMessagesHandler(
   return stripRunLinkageForViewer(tail)
 }
 
-// ---------------------------------------------------------------------------
 // Atomic selected-conversation projection (durable-turn gameplan §7, PR 4).
-// ---------------------------------------------------------------------------
 
 const ACTIVE_TOOL_INVOCATION_STATUSES = new Set<
   Doc<"toolInvocations">["status"]
@@ -332,9 +330,6 @@ export const getSelectedConversation = readableChatQuery({
     }),
 })
 
-/**
- * Get all messages for a chat
- */
 export const getForChat = query({
   args: { chatId: v.id("chats") },
   handler: getForChatHandler,
@@ -349,9 +344,6 @@ export const getPublicForChat = query({
   handler: getPublicForChatHandler,
 })
 
-/**
- * Get last N messages for a chat (for context)
- */
 export const getLastMessages = query({
   args: {
     chatId: v.id("chats"),
@@ -395,9 +387,6 @@ export const selectBranch = mutation({
   handler: selectBranchForChat,
 })
 
-/**
- * Add a single message
- */
 export const add = ownedChatMutation({
   args: {
     role: v.union(
@@ -435,9 +424,6 @@ export const add = ownedChatMutation({
   },
 })
 
-/**
- * Add multiple messages at once
- */
 export const addBatch = ownedChatMutation({
   args: {
     messages: v.array(

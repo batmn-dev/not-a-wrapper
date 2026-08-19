@@ -16,17 +16,11 @@ type SidebarMenuItemProps = Omit<
   ComponentPropsWithoutRef<"button">,
   "children" | "className" | "type" | "onClick"
 > & {
-  /** Icon rendered through the shared sidebar leading slot. */
   icon?: IconProps["icon"]
-  /** Icon used when active; the shared slot keeps its geometry fixed. */
   activeIcon?: IconProps["icon"]
-  /** Label text */
   label: string
-  /** Navigation href - renders as Link if provided */
   href?: string
-  /** Click handler - used for navigation close behavior or button actions */
   onClick?: MouseEventHandler<HTMLAnchorElement | HTMLButtonElement>
-  /** Trailing content (keyboard shortcuts, badges, etc.) */
   trailing?: ReactNode
   /**
    * Set when `trailing` is an interactive control (not a passive hint): keeps
@@ -34,11 +28,8 @@ type SidebarMenuItemProps = Omit<
    * hover-only reveal would make it inoperable.
    */
   trailingInteractive?: boolean
-  /** Test ID for e2e testing */
   testId?: string
-  /** Additional className */
   className?: string
-  /** Whether item is currently active */
   isActive?: boolean
 }
 
@@ -54,14 +45,6 @@ const baseClassName = cn(
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2"
 )
 
-/**
- * Unified sidebar menu item component.
- *
- * Features:
- * - Icon wrapper pattern for consistent alignment
- * - motion-safe: transitions for reduced motion support
- * - CSS variables for spacing
- */
 export const SidebarMenuItem = forwardRef<
   HTMLAnchorElement | HTMLButtonElement,
   SidebarMenuItemProps

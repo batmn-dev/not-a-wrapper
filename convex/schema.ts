@@ -479,9 +479,7 @@ export default defineSchema({
     count: v.number(),
   }).index("by_actor_bucket_window", ["actorKey", "bucket", "windowStartMs"]),
 
-  // ============================================================================
   // MCP (Model Context Protocol) Integration
-  // ============================================================================
 
   mcpServers: defineTable({
     userId: v.id("users"),

@@ -1,9 +1,7 @@
 export type SuggestionIconId =
   "code" | "research" | "analysis" | "creative" | "learning"
 
-// ============================================================================
 // Rate Limits & Usage
-// ============================================================================
 
 export const NON_AUTH_DAILY_MESSAGE_LIMIT = 5
 export const AUTH_DAILY_MESSAGE_LIMIT = 1000
@@ -122,7 +120,6 @@ For mathematical notation, use double-dollar delimiters ($$...$$) for inline mat
 You respect the user's time by being concise when appropriate and thorough when the situation calls for it.`
 
 
-// ============================================================================
 // Context Management (Anthropic Best Practices)
 /**
  * Anthropic API beta headers used by the chat route.
@@ -132,9 +129,7 @@ export const ANTHROPIC_BETA_HEADERS = {
   tokenEfficient: "token-efficient-tools-2025-02-19",
 } as const
 
-// ============================================================================
 // MCP Integration
-// ============================================================================
 
 export const MAX_MCP_SERVERS_PER_USER = 10
 export const MAX_TOOL_RESULT_SIZE = 100 * 1024 // 100KB
@@ -163,9 +158,7 @@ export const MCP_TRUSTED_RETRY_SERVER_ALLOWLIST = (
 /** Bounds calls to arbitrary user-configured MCP servers. */
 export const MCP_TOOL_EXECUTION_TIMEOUT_MS = 30_000
 
-// ============================================================================
 // Tool Infrastructure
-// ============================================================================
 
 /** Maximum generation steps when no tools are available. */
 export const DEFAULT_MAX_STEP_COUNT = 10
@@ -235,28 +228,19 @@ export const TOOL_BUDGET_LIMITS = {
   },
 } as const
 
-// ============================================================================
 // History Replay Compiler
-// ============================================================================
 
 export const HISTORY_REPLAY_COMPILER_V1 =
   process.env.HISTORY_REPLAY_COMPILER_V1 === "1" ||
   process.env.HISTORY_REPLAY_COMPILER_V1 === "true"
 export const HISTORY_REPLAY_NORMALIZER_VERSION = 1
 
-// ============================================================================
 // Sub-Agent Model Configuration
-// ============================================================================
 
 export const SUB_AGENT_MODELS = {
-  /** Main orchestrator - complex reasoning */
   orchestrator: "claude-opus-4-5-20250929",
-  /** Code assistance - fast, cost-effective */
   codeAssistant: "claude-haiku-4-5-20250929",
-  /** Writing and editing - balanced */
   writingEditor: "claude-sonnet-4-5-20250929",
-  /** Research and analysis - needs reasoning */
   researchAnalyst: "claude-sonnet-4-5-20250929",
-  /** Data interpretation - data analysis */
   dataAnalyst: "claude-sonnet-4-5-20250929",
 } as const

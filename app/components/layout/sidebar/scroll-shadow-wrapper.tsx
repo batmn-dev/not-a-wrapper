@@ -47,7 +47,6 @@ export function ScrollShadowWrapper({
 
   return (
     <div className={cn("relative", className)}>
-      {/* Top shadow */}
       <div
         className={cn(
           "pointer-events-none absolute inset-x-0 top-0 z-10 h-4",
@@ -60,7 +59,6 @@ export function ScrollShadowWrapper({
 
       {children}
 
-      {/* Bottom shadow */}
       <div
         className={cn(
           "pointer-events-none absolute inset-x-0 bottom-0 z-10 h-4",

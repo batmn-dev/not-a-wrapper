@@ -5,6 +5,8 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { RiCloseLargeLine } from "@remixicon/react"
 import * as React from "react"
 
+type DialogSurface = "default" | "centered"
+
 function Dialog({
   ...props
 }: Omit<DialogPrimitive.Root.Props, "children"> & {
@@ -36,13 +38,20 @@ function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
 
 function DialogOverlay({
   className,
+  surface = "default",
   ...props
-}: DialogPrimitive.Backdrop.Props) {
+}: DialogPrimitive.Backdrop.Props & {
+  surface?: DialogSurface
+}) {
   return (
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
+      data-surface={surface}
       className={cn(
-        "bg-scrim-modal data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 fixed inset-0 isolate z-50 duration-100 supports-backdrop-filter:backdrop-blur-[1px]",
+        "fixed inset-0 isolate z-50",
+        surface === "centered"
+          ? "bg-[var(--modal-centered-scrim)] [backdrop-filter:blur(var(--modal-centered-backdrop-blur))] transition-[opacity,backdrop-filter] duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)] data-[ending-style]:opacity-0 data-[ending-style]:[backdrop-filter:blur(0)] data-[starting-style]:opacity-0 data-[starting-style]:[backdrop-filter:blur(0)]"
+          : "bg-scrim-modal data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 duration-100 supports-backdrop-filter:backdrop-blur-[1px]",
         className
       )}
       {...props}
@@ -54,17 +63,23 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  surface = "default",
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
+  surface?: DialogSurface
 }) {
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay surface={surface} />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
+        data-surface={surface}
         className={cn(
-          "bg-popover text-popover-foreground shadow-border-lg data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 rounded-xl p-6 text-sm duration-100 outline-none sm:max-w-md",
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 p-6 text-sm outline-none sm:max-w-md",
+          surface === "centered"
+            ? "bg-modal-centered text-modal-centered-foreground shadow-modal-centered rounded-(--modal-centered-radius)"
+            : "bg-popover text-popover-foreground shadow-border-lg data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 rounded-xl duration-100",
           className
         )}
         {...props}

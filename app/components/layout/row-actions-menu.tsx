@@ -58,11 +58,6 @@ export function RowActionsMenu({
   const defaultTrigger = (
     <button
       type="button"
-      // ChatGPT's __menu-item-trailing-btn: a 34×36 hit area with NO background —
-      // only the icon color shifts (tertiary→foreground); the keyboard focus ring
-      // lives on the inner chip (TrailingIconChip). Nested inside the row's
-      // <Link>, so a bare click would navigate — preventDefault cancels the nav
-      // (and tells Next's Link to skip), stopPropagation keeps it off the row.
       className={trailingIconButtonClassName}
       onClick={(e) => {
         e.preventDefault()

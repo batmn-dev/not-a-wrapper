@@ -126,11 +126,12 @@ function TooltipContent({
       >
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
+          data-variant={variant}
           className={cn(
-            "z-50 inline-flex w-fit max-w-xs items-center gap-2 rounded-[8px] px-2 py-1 [font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,'Segoe_UI',Helvetica,'Apple_Color_Emoji',Arial,sans-serif,'Segoe_UI_Emoji','Segoe_UI_Symbol'] text-xs leading-4 font-semibold transition-opacity",
+            "z-50 inline-flex w-fit max-w-xs items-center gap-2 rounded-(--tooltip-radius) px-3 py-[5px] [font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,'Segoe_UI',Helvetica,'Apple_Color_Emoji',Arial,sans-serif,'Segoe_UI_Emoji','Segoe_UI_Symbol'] text-sm leading-[18px] font-semibold tracking-[-0.15px] transition-opacity duration-150 ease-[cubic-bezier(0.4,0,0.2,1)]",
             variant === "default"
-              ? "dark border border-[var(--border-tooltip)] bg-[var(--bg-tooltip)] text-[var(--text-primary)] shadow-none"
-              : "bg-popover text-popover-foreground shadow-border-md",
+              ? "dark shadow-tooltip border border-[var(--border-tooltip)] bg-[var(--bg-tooltip)] text-white"
+              : "bg-popover text-popover-foreground shadow-floating-surface font-medium",
             className
           )}
           {...props}
@@ -142,7 +143,7 @@ function TooltipContent({
                 "z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5",
                 variant === "default"
                   ? "bg-[var(--bg-tooltip)] fill-[var(--bg-tooltip)]"
-                  : "fill-popover bg-popover"
+                  : "bg-popover fill-popover"
               )}
             />
           )}

@@ -102,7 +102,6 @@ export function DrawerHistory({
     setDeletingId(null)
   }, [])
 
-  // Render chat item
   const renderChatItem = useCallback(
     (chat: Chats) => (
       <div key={chat.id}>

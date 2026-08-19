@@ -25,8 +25,6 @@ export const POST = authenticatedRoute(async (request) => {
   }
 
   try {
-    // With Convex, key checking should be done client-side
-    // Check if environment has a key for this provider
     const envKeyMap: Record<Provider, string | undefined> = {
       openai: process.env.OPENAI_API_KEY,
       mistral: process.env.MISTRAL_API_KEY,
@@ -40,7 +38,7 @@ export const POST = authenticatedRoute(async (request) => {
     const hasEnvKey = !!envKeyMap[provider as Provider]
 
     return NextResponse.json({
-      hasUserKey: false, // User keys should be checked via Convex
+      hasUserKey: false,
       hasEnvKey,
       provider,
     })

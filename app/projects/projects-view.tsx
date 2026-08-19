@@ -287,12 +287,8 @@ export function ProjectsView() {
     return () => el.removeEventListener("scroll", onScroll)
   }, [scrollRef])
 
-  // Toolbar hairline trigger, ChatGPT's sentinel recipe: a 1px marker sits
-  // directly above the sticky toolbar, and the divider shows only while the
-  // marker has scrolled out under the toolbar's sticky edge — i.e. exactly
-  // when the toolbar is pinned with the list sliding beneath it, not on the
-  // first scrolled pixel. On mobile the toolbar pins below the 52px compact
-  // bar, so the sentinel "exits" 52px (--header-height) before the top.
+  // A 1px sentinel shows the divider only while the list passes behind the
+  // sticky toolbar. On mobile it exits below the 52px compact header.
   const isMobile = useBreakpoint(768)
   const toolbarSentinelRef = useRef<HTMLDivElement | null>(null)
   const [isToolbarStuck, setIsToolbarStuck] = useState(false)

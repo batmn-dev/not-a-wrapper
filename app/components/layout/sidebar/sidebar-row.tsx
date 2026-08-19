@@ -80,9 +80,7 @@ export function SidebarRow({
     [isMobile, setOpenMobile]
   )
 
-  // hover == selected == menu-open, all driven off the one translucent
-  // --sidebar-row-active-background token (ChatGPT uses the same value for every
-  // state — no stronger active tint, no /80 hover). Editing pins the tint on.
+  // Hover, selected, and menu-open use one translucent token. Editing pins it.
   // The trailing reveal keys off `.sidebar-row`, so a single `group/row` scope
   // is enough (the old per-row group/chat·group/project names were vestigial).
   const containerClassName = useMemo(
@@ -142,8 +140,8 @@ export function SidebarRow({
     </div>
   )
 
-  // ChatGPT renders the title lane and trailing controls inside one full-row
-  // anchor. At rest the trailing item is visually clipped and absolutely
+  // The title lane and trailing controls share one full-row anchor. At rest
+  // the trailing item is visually clipped and absolutely
   // positioned; on hover/focus/menu-open it returns to flex flow, contributing
   // 44px plus the row's 8px gap. Short labels therefore remain unchanged while
   // only labels wider than the remaining lane truncate earlier.

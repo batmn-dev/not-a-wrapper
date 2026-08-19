@@ -15,7 +15,6 @@ import {
 import type { AuthenticatedRunOwner } from "./lib/auth"
 import { timingSafeEqualHex } from "./lib/sha256"
 
-// ---------------------------------------------------------------------------
 // Chat-turn worker mutations (ADR-0011): the execution-grant half of durable
 // settlement. The /chat-turn/worker HTTP action authenticates a Bearer secret
 // by digest and dispatches here; each mutation re-verifies the grant against
@@ -25,7 +24,6 @@ import { timingSafeEqualHex } from "./lib/sha256"
 // arguments; only its digest does, and internal mutations are unreachable
 // from clients. Arg shapes are spread from `generationRunWriteArgs` — the one
 // declaration both authenticators share.
-// ---------------------------------------------------------------------------
 
 const grantArgs = {
   runId: v.id("generationRuns"),

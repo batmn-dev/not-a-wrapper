@@ -71,9 +71,7 @@ export type DurableTurnInput = {
   tailMessageId?: string
 }
 
-// ---------------------------------------------------------------------------
 // Durable worker wire — the post-prepare write channel (ADR-0011).
-// ---------------------------------------------------------------------------
 
 /**
  * The op list and per-op payloads have ONE source of truth: the shared
@@ -530,10 +528,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-// ---------------------------------------------------------------------------
 // Durable snapshot tracker — throttled assistant-snapshot writes plus the
 // final full-parts snapshot settlement takes before any terminal transition.
-// ---------------------------------------------------------------------------
 
 type SnapshotPart =
   { type: "text"; text: string } | { type: "reasoning"; text: string }
@@ -686,11 +682,9 @@ export function createDurableSnapshotTracker(
   }
 }
 
-// ---------------------------------------------------------------------------
 // Approval-persistence transform — writes a tool-approval request before the
 // approval chunk streams, so the client never renders an approval prompt that
 // isn't yet durable.
-// ---------------------------------------------------------------------------
 
 export type ToolInvocationForPersistence = {
   toolCallId: string
@@ -792,11 +786,9 @@ export function createRuntimeApprovalPersistenceTransform({
     })
 }
 
-// ---------------------------------------------------------------------------
 // Guest adapter — the null object of durability. Identity passthrough, `{}`
 // extras, no-op writes, zero network, `guest` receipt. "Guest chats run
 // ungated" is structural.
-// ---------------------------------------------------------------------------
 
 export function createGuestDurableTurn(
   input: DurableTurnInput
@@ -838,9 +830,7 @@ export function createGuestDurableTurn(
   }
 }
 
-// ---------------------------------------------------------------------------
 // Convex adapter — the full durable timeline for one authenticated Chat turn.
-// ---------------------------------------------------------------------------
 
 export function createConvexDurableTurn(args: {
   input: DurableTurnInput & { convexToken: string }
@@ -1020,7 +1010,6 @@ export function createConvexDurableTurn(args: {
     })
   }
 
-  // -------------------------------------------------------------------------
   // Heartbeat loop (gameplan §6): recursive and non-overlapping — the next
   // beat is scheduled only after the previous one settles. Three-way branch:
   // renewed → continue; paused → stop the loop WITHOUT aborting (the approval
@@ -1029,7 +1018,6 @@ export function createConvexDurableTurn(args: {
   // consecutive tolerated, jittered retry); an explicit `lost` is never
   // retried. The loop also aborts if the last confirmed lease is about to
   // lapse — continuing to stream against an expired lease invites the reaper.
-  // -------------------------------------------------------------------------
   const HEARTBEAT_TRANSPORT_RETRY_LIMIT = 2
   const executionAbortController = new AbortController()
   let heartbeatTimer: ReturnType<typeof setTimeout> | null = null
@@ -1726,11 +1714,9 @@ export function createConvexDurableTurn(args: {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Selecting factory — sync, pure. Internalizes `isDurableConvexChat`; returns
 // the Convex adapter or the inert guest adapter. The caller never asks "is this
 // turn durable"; the convex token crosses here, once.
-// ---------------------------------------------------------------------------
 
 export function createDurableTurnRuntime(args: {
   input: DurableTurnInput

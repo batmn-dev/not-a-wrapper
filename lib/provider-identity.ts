@@ -24,9 +24,7 @@
  * (`lib/provider-icons.tsx`), keyed by the same vendor ids.
  */
 
-// ---------------------------------------------------------------------------
 // Key-bearing provider ids
-// ---------------------------------------------------------------------------
 
 /** Order is the key-settings tile order. */
 export const MODEL_PROVIDER_IDS = [
@@ -48,9 +46,7 @@ export type ToolProvider = (typeof TOOL_PROVIDER_IDS)[number]
 /** Every id that may own a row in the encrypted `userKeys` storage. */
 export type KeyedProvider = Provider | ToolProvider
 
-// ---------------------------------------------------------------------------
 // Vendor registry
-// ---------------------------------------------------------------------------
 
 export type KnownVendorId =
   | "openrouter"
@@ -95,9 +91,7 @@ export function getVendor(id: string): VendorIdentity | undefined {
   return isKnownVendorId(id) ? VENDORS[id] : undefined
 }
 
-// ---------------------------------------------------------------------------
 // Model-provider identity
-// ---------------------------------------------------------------------------
 
 export type ProviderKeySetup = {
   placeholder: string
@@ -189,9 +183,7 @@ export const MODEL_PROVIDER_IDENTITY: Record<Provider, ModelProviderIdentity> =
     },
   }
 
-// ---------------------------------------------------------------------------
 // Tool-provider identity
-// ---------------------------------------------------------------------------
 
 export type ToolProviderIdentity = {
   id: ToolProvider

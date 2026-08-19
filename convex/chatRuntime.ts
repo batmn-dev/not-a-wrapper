@@ -2218,10 +2218,8 @@ export async function createToolApprovalRequestForChat(
   return approvalRequestId
 }
 
-// ---------------------------------------------------------------------------
 // Durable Stop (gameplan §9, PR 6): authenticated, idempotent, explicitly
 // run-scoped — Stop targets `(chatId, runId)`, never "the active run".
-// ---------------------------------------------------------------------------
 
 export type StopGenerationRunResult = {
   outcome: "stopped" | "already-terminal" | "not-current"
@@ -2596,7 +2594,6 @@ export async function recordToolInvocationsForChat(
   }
 }
 
-// ---------------------------------------------------------------------------
 // Reconciliation reapers (durable-turn gameplan §6, PR 3). Internal MUTATIONS
 // (transactional, exactly-once per invocation — never actions), invoked by
 // convex/crons.ts. Bounded per status per tick (REAPER_BATCH_LIMIT); the
@@ -2611,7 +2608,6 @@ export async function recordToolInvocationsForChat(
 // in-flight run started by a pre-heartbeat deploy has drained. With the
 // `undefined` exclusion this is belt-and-suspenders; pre-launch it is
 // trivially satisfied (dev data is disposable).
-// ---------------------------------------------------------------------------
 
 // Modest by design: each reaped run also settles its auxiliary records
 // (pending approvals + non-terminal tool invocations) inside the SAME

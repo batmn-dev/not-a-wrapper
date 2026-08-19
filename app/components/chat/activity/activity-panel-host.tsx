@@ -75,15 +75,8 @@ export function ActivityPanelDockSlot({ className }: { className?: string }) {
       data-testid="stage-thread-flyout"
       data-state="closed"
       className={cn(
-        // Width is the ONLY animated dimension (the conversation + composer reflow
-        // into the freed/used width). Timing is measured from the live reference
-        // (research/activity-panel-open-close-animation.md): ChatGPT springs the
-        // stage width ~480ms open / ~515ms close. A single ease-out cubic (we used
-        // easeOutQuint) front-loads ~90% of the slide into the first ~150ms, so the
-        // panel *reads* as a ~150ms snap even at 500ms. ChatGPT's spring starts from
-        // rest and spreads the motion across the full duration, so it reads smooth.
-        // We replicate that with a `linear()` easing sampled from a critically-damped
-        // (no-overshoot) spring — gentle ease-in from rest, strong decelerate, ~520ms.
+        // Width is the only animated dimension, so the conversation and composer
+        // reflow continuously. The linear() curve approximates a no-overshoot spring.
         // `max-lg:transition-none` keeps the lg-boundary snap instant; `motion-reduce`
         // disables it (the hook also unmounts immediately under reduced motion, so no
         // transitionend is awaited).

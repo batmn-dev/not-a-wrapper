@@ -440,9 +440,6 @@ export const createWithFirstTurn = authenticatedMutation({
     createChatWithFirstTurnForUser(ctx, ctx.user, args),
 })
 
-/**
- * Update chat title
- */
 export const updateTitle = ownedChatMutation({
   args: { title: v.string() },
   handler: async (ctx, { title }) => {
@@ -490,9 +487,6 @@ export const applyGeneratedTitle = ownedChatMutation({
   },
 })
 
-/**
- * Update chat model
- */
 export const updateModel = ownedChatMutation({
   args: { model: v.string() },
   handler: async (ctx, { model }) => {
@@ -500,9 +494,6 @@ export const updateModel = ownedChatMutation({
   },
 })
 
-/**
- * Toggle chat pin status
- */
 export const togglePin = ownedChatMutation({
   args: { pinned: v.boolean() },
   handler: async (ctx, { pinned }) => {
@@ -516,9 +507,6 @@ export const togglePin = ownedChatMutation({
   },
 })
 
-/**
- * Make a chat public (shareable via link)
- */
 export const makePublic = ownedChatMutation({
   args: {},
   handler: async (ctx) => {

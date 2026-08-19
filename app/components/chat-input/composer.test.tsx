@@ -306,6 +306,7 @@ describe("Composer primary action", () => {
 
     expect(button).toBeTruthy()
     expect(button?.disabled).toBe(false)
+    expect(button?.className).toContain("pointer-fine:after:-inset-x-1")
 
     act(() => {
       button?.click()
@@ -356,6 +357,7 @@ describe("Composer primary action", () => {
     ) as HTMLButtonElement | null
     expect(sendButton).toBeTruthy()
     expect(sendButton?.disabled).toBe(true)
+    expect(sendButton?.className).toContain("pointer-fine:after:-inset-x-1")
   })
 
   it("keeps the shared default placeholder and accepts narrow surface copy", () => {

@@ -259,7 +259,6 @@ export async function saveStagedAttachmentHandler(
     }
   }
 
-  // Get the public URL
   const fileUrl = await ctx.storage.getUrl(args.storageId)
   if (!fileUrl) throw new Error("Failed to get file URL")
 
@@ -481,12 +480,10 @@ export const deleteFile = authenticatedMutation({
 
     assertAttachmentCanBeDeletedIndependently(attachment)
 
-    // Delete from storage
     if (attachment.storageId) {
       await ctx.storage.delete(attachment.storageId)
     }
 
-    // Delete metadata
     await ctx.db.delete(attachmentId)
   },
 })

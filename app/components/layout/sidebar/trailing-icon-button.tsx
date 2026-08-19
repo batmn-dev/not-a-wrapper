@@ -9,8 +9,8 @@ import { Pin, PinFilled, PinOff, PinOffOutline } from "@/lib/icons"
 import type { ReactNode } from "react"
 
 /**
- * Shared recipe for a sidebar chat-row trailing button (ChatGPT's
- * `__menu-item-trailing-btn`): a 34×36 hit area with no background — only the
+ * Shared recipe for a sidebar row's trailing button: a 34×36 hit area with no
+ * background. Only the
  * icon color shifts, muted→foreground, on hover / menu-open. The icon is wrapped
  * in a `TrailingIconChip` (24×24) that owns the keyboard focus ring, so the ring
  * hugs the inner chip instead of the whole button. Glyph size is unchanged (18px).
@@ -22,11 +22,10 @@ export const trailingIconButtonClassName =
   "sidebar-row-trailing-button group/pin text-[var(--text-tertiary)] hover:text-foreground data-popup-open:text-foreground flex shrink-0 items-center justify-center outline-none"
 
 /**
- * The inner 24×24 chip that hosts the keyboard-only focus ring — ChatGPT outlines
- * this chip (1.5px, offset 2.5px, text-primary color), not the full button, and
+ * The inner 24×24 chip hosts the keyboard-only focus ring (1.5px, offset 2.5px,
+ * text-primary color), not the full button, and
  * only under keyboard focus. The ring itself is a CSS rule keyed off the button's
- * `:focus-visible` (see `.trailing-icon-chip` in globals.css) — same mechanism as
- * ChatGPT, and more reliable than a stacked arbitrary-property Tailwind variant.
+ * `:focus-visible` (see `.trailing-icon-chip` in globals.css).
  */
 export function TrailingIconChip({ children }: { children: ReactNode }) {
   return (
@@ -39,7 +38,7 @@ export function TrailingIconChip({ children }: { children: ReactNode }) {
 type SidebarPinActionProps = {
   pinned: boolean
   title: string
-  itemType: "Chat" | "Project"
+  itemType: "Chat" | "Component" | "Project"
   onTogglePinned: () => void
   isPending?: boolean
 }
@@ -102,12 +101,7 @@ export function SidebarPinAction({
           )}
         </TrailingIconChip>
       </TooltipTrigger>
-      <TooltipContent
-        side="top"
-        sideOffset={-6}
-        variant="outline"
-        className="text-sm font-normal"
-      >
+      <TooltipContent side="top" sideOffset={-6} variant="outline">
         {actionLabel}
       </TooltipContent>
     </Tooltip>

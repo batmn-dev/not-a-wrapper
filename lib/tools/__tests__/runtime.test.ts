@@ -1,9 +1,7 @@
 import type { ServerInfo } from "@/lib/mcp/load-tools"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ToolPolicyError } from "../policy"
-// =============================================================================
 // Imports after mocks
-// =============================================================================
 
 import {
   prepareToolRuntime,
@@ -13,11 +11,9 @@ import {
 } from "../runtime"
 import type { ToolMetadata } from "../types"
 
-// =============================================================================
 // Module mocks — must be declared before importing the runtime. The loader
 // seams are mocked; the policy module keeps its real degradation logic with
 // only the Convex-backed limit store swapped for a controllable fake.
-// =============================================================================
 
 const mocks = vi.hoisted(() => ({
   getProviderTools: vi.fn(),
@@ -89,9 +85,7 @@ vi.mock("@/lib/tools/utils", async () => {
   }
 })
 
-// =============================================================================
 // Fixtures
-// =============================================================================
 
 function meta(overrides: Partial<ToolMetadata> = {}): ToolMetadata {
   return {
@@ -195,9 +189,7 @@ beforeEach(() => {
   })
 })
 
-// =============================================================================
 // Tests
-// =============================================================================
 
 describe("prepareToolRuntime — Tool layer loading & gating", () => {
   it("anonymous user: search tools load, MCP never loads", async () => {
@@ -534,11 +526,9 @@ describe("prepareToolRuntime — MCP client lifecycle", () => {
   })
 })
 
-// =============================================================================
 // Tool outcomes — recorded at step finish, dispatched through injected sinks.
 // The interface is the test surface: outcomes are observed through in-memory
 // sinks (the seam's test adapter) and outcomeSummary(), never via internals.
-// =============================================================================
 
 describe("prepareToolRuntime — Tool outcome recording", () => {
   it("assembles one outcome per call with unified metadata and dispatches to every sink", async () => {
@@ -833,11 +823,9 @@ describe("prepareToolRuntime — Tool outcome recording", () => {
   })
 })
 
-// =============================================================================
 // PR 7b — conditional Exa resolution (unconditional since the 2026-07-23 flag
 // collapse): the key is read only when the Layer 2 search-fallback or content-
 // extraction door can open.
-// =============================================================================
 
 describe("prepareToolRuntime — conditional Exa resolution", () => {
   it("zero Exa reads when no Exa-backed tool can be exposed; tool set unchanged", async () => {

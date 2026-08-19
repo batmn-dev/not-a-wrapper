@@ -1,9 +1,6 @@
 import { v } from "convex/values"
 import { authenticatedMutation, maybeAuthQuery } from "./lib/authedFunctions"
 
-/**
- * Get preferences for current user
- */
 export const get = maybeAuthQuery({
   args: {},
   handler: async (ctx) => {
@@ -17,9 +14,6 @@ export const get = maybeAuthQuery({
   },
 })
 
-/**
- * Update preferences
- */
 export const update = authenticatedMutation({
   args: {
     layout: v.optional(v.string()),

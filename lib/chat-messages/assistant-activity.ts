@@ -212,10 +212,8 @@ type BrowseAction = Extract<
 >
 
 /**
- * Browse-row copy is a local product decision pending a settled ChatGPT
- * exemplar (see research/chatgpt-activity-timeline-2026-07-12.md): the
- * reference's live idiom is "Reading {domain}", and its settled panels never
- * show a bare generic tool row.
+ * Browse rows use "Reading {domain}" while live and "Read {domain}" once
+ * settled instead of showing a bare generic tool row.
  */
 function browseTitle(action: BrowseAction, status: ActivityEntryStatus): string {
   const domain = browsedDomain(action.url)

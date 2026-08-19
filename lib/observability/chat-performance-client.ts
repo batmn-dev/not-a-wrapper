@@ -19,9 +19,7 @@ import {
   type ChatPerfFields,
 } from "./chat-performance"
 
-// ---------------------------------------------------------------------------
 // Per-turn correlation id
-// ---------------------------------------------------------------------------
 
 let currentTurnId: string | undefined
 let pendingHeaderTurnId: string | undefined
@@ -65,9 +63,7 @@ function turnFields(): ChatPerfFields {
   return currentTurnId ? { correlationId: currentTurnId } : {}
 }
 
-// ---------------------------------------------------------------------------
 // Turn facts (pure derivation over the live message list)
-// ---------------------------------------------------------------------------
 
 type TurnFactMessage = {
   id: string
@@ -124,9 +120,7 @@ export function bucketTextLength(length: number): number {
   return 2 ** Math.ceil(Math.log2(capped))
 }
 
-// ---------------------------------------------------------------------------
 // Turn marks (status-transition driven)
-// ---------------------------------------------------------------------------
 
 type ChatStreamStatus = "submitted" | "streaming" | "ready" | "error"
 
@@ -201,9 +195,7 @@ export function useChatTurnPerfMarks(input: TurnPerfInput): void {
   ])
 }
 
-// ---------------------------------------------------------------------------
 // Incremental Markdown projection anomaly marks (ADR-0016)
-// ---------------------------------------------------------------------------
 
 type MarkdownProjectionAnomalySource = {
   resetReason:
@@ -242,9 +234,7 @@ export function markMarkdownProjectionAnomaly(
   }
 }
 
-// ---------------------------------------------------------------------------
 // Navigation / chat-switch marks and the settlement receipt
-// ---------------------------------------------------------------------------
 
 type NavigationPerfInput = {
   chatId: string | null

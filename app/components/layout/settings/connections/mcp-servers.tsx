@@ -30,9 +30,6 @@ import { ConnectionCardsSkeleton } from "./connection-cards-skeleton"
 import { McpServerForm } from "./mcp-server-form"
 import { McpToolApprovals } from "./mcp-tool-approvals"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function formatTimeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000)
@@ -54,9 +51,7 @@ function maskUrl(url: string): string {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Component
-// ---------------------------------------------------------------------------
 
 export function McpServers() {
   const { data, isLoading } = usePerUserQuery(api.mcpServers.list)
@@ -122,7 +117,6 @@ export function McpServers() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <h3 className="mb-1 text-lg font-medium text-balance">MCP Servers</h3>
@@ -136,10 +130,8 @@ export function McpServers() {
         </Button>
       </div>
 
-      {/* Loading state */}
       {isLoading && <ConnectionCardsSkeleton />}
 
-      {/* Empty state */}
       {!isLoading && servers.length === 0 && (
         <div className="py-8 text-center">
           <Icon
@@ -161,7 +153,6 @@ export function McpServers() {
         </div>
       )}
 
-      {/* Server list */}
       {servers.length > 0 && (
         <div className="space-y-3">
           {servers.map((server) => (
@@ -232,7 +223,6 @@ export function McpServers() {
                   </div>
                 </div>
 
-                {/* Expandable tool approvals */}
                 <div className="mt-3 border-t pt-3">
                   <button
                     type="button"
@@ -253,7 +243,6 @@ export function McpServers() {
         </div>
       )}
 
-      {/* Add/Edit Form Dialog */}
       <McpServerForm
         key={editingServer?._id ?? "new"}
         open={formOpen}
@@ -264,7 +253,6 @@ export function McpServers() {
         server={editingServer}
       />
 
-      {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

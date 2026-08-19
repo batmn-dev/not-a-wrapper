@@ -25,14 +25,12 @@ export function ModelsSettings() {
   const { isModelHidden } = useUserPreferences()
   const [searchQuery, setSearchQuery] = useState("")
 
-  // Use TanStack Query for favorite models with optimistic updates
   const {
     favoriteModels: currentFavoriteModels,
     updateFavoriteModels,
     updateFavoriteModelsDebounced,
   } = useFavoriteModels()
 
-  // Create favorite models list with additional metadata
   const favoriteModels: FavoriteModelItem[] = useMemo(() => {
     if (!currentFavoriteModels || !Array.isArray(currentFavoriteModels)) {
       return []
@@ -47,7 +45,6 @@ export function ModelsSettings() {
       .filter(Boolean) as FavoriteModelItem[]
   }, [currentFavoriteModels, models, isModelHidden])
 
-  // Available models that aren't favorites yet, filtered and grouped by provider
   const availableModelsByProvider = useMemo(() => {
     if (!currentFavoriteModels || !Array.isArray(currentFavoriteModels)) {
       return {}
@@ -82,11 +79,9 @@ export function ModelsSettings() {
     )
   }, [models, currentFavoriteModels, isModelHidden, searchQuery])
 
-  // Handle reorder - immediate state update with debounced API call
   const handleReorder = (newOrder: FavoriteModelItem[]) => {
     const newOrderIds = newOrder.map((item) => item.id)
 
-    // Immediate optimistic update with debounced API call
     updateFavoriteModelsDebounced(newOrderIds)
   }
 
@@ -100,7 +95,6 @@ export function ModelsSettings() {
       ? currentFavoriteModels.filter((id: string) => id !== modelId)
       : [...currentFavoriteModels, modelId]
 
-    // Optimistic update - immediately updates UI
     updateFavoriteModels(newIds)
   }
 
@@ -111,7 +105,6 @@ export function ModelsSettings() {
 
     const newIds = currentFavoriteModels.filter((id: string) => id !== modelId)
 
-    // Optimistic update - immediately updates UI
     updateFavoriteModels(newIds)
   }
 
@@ -122,7 +115,6 @@ export function ModelsSettings() {
 
   return (
     <div className="space-y-6">
-      {/* Favorite Models - Drag and Drop List */}
       <div>
         <h4 className="mb-3 text-sm font-medium text-balance">
           Your favorites ({favoriteModels.length})
@@ -141,15 +133,12 @@ export function ModelsSettings() {
                 return (
                   <Reorder.Item key={model.id} value={model} className="group">
                     <div className="border-border flex items-center gap-3 rounded-lg border bg-transparent p-3">
-                      {/* Drag Handle */}
                       <div className="text-muted-foreground cursor-grab opacity-60 transition-opacity group-hover:opacity-100 active:cursor-grabbing">
                         <Icon icon={RiDraggable} slotSize={16} />
                       </div>
 
-                      {/* Provider Icon */}
                       {VendorIcon && <VendorIcon className="size-5 shrink-0" />}
 
-                      {/* Model Info */}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="truncate font-medium">
@@ -166,7 +155,6 @@ export function ModelsSettings() {
                         )}
                       </div>
 
-                      {/* Remove Button */}
                       <button
                         onClick={() => removeFavorite(model.id)}
                         type="button"
@@ -200,7 +188,6 @@ export function ModelsSettings() {
         </AnimatePresence>
       </div>
 
-      {/* Available Models */}
       <div>
         <h4 className="mb-3 text-sm font-medium text-balance">
           Available models
@@ -209,7 +196,6 @@ export function ModelsSettings() {
           Choose models to add to your favorites.
         </p>
 
-        {/* Search */}
         <div className="mb-4">
           <input
             type="text"
@@ -220,7 +206,6 @@ export function ModelsSettings() {
           />
         </div>
 
-        {/* Models grouped by provider */}
         <div className="space-y-6 pb-6">
           {Object.entries(availableModelsByProvider).map(
             ([iconKey, modelsGroup]) => {
@@ -267,7 +252,6 @@ export function ModelsSettings() {
                         >
                           <div className="flex flex-col">
                             <div className="flex items-center gap-2">
-                              {/* Show underlying vendor icon for OpenRouter models */}
                               {UnderlyingVendorIcon && (
                                 <UnderlyingVendorIcon className="size-4 shrink-0" />
                               )}

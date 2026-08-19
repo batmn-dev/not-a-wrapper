@@ -453,6 +453,28 @@ describe("ModelSelector", () => {
     expect(trigger?.firstElementChild?.getAttribute("data-slot")).toBe(
       "selected-model-icon"
     )
+    expect(trigger?.firstElementChild?.className).toContain("text-foreground")
+    expect(trigger?.firstElementChild?.className).toContain("opacity-100")
+    expect(trigger?.className).toContain("pointer-fine:relative")
+    expect(trigger?.className).toContain("pointer-fine:after:absolute")
+    expect(trigger?.className).toContain("pointer-fine:after:-inset-x-1")
+    expect(trigger?.className).toContain("overflow-visible")
+    expect(trigger?.className).toContain("px-3")
+    expect(trigger?.className).not.toContain("overflow-hidden")
+  })
+
+  it("keeps the hover bridge scoped to the composer trigger", () => {
+    renderSelector({
+      isUserAuthenticated: false,
+      selectedModelId: "gpt-5-mini",
+    })
+
+    const trigger = document.body.querySelector<HTMLButtonElement>(
+      '[data-testid="model-trigger"]'
+    )
+
+    expect(trigger?.className).toContain("overflow-hidden")
+    expect(trigger?.className).not.toContain("pointer-fine:after:-inset-x-1")
   })
 
   it("disables the trigger and ignores option clicks when disabled", () => {

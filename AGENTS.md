@@ -1,31 +1,89 @@
-# Not A Wrapper
+I'm Andres Gonzalez, also known as Andres The Designer or Batman online. You are my agent and I'm really excited to work with you.
 
-Open-source multi-AI chat app with a unified model interface across providers.
+I'm a designer and entrepreneur at heart. I have a YouTube Channel (90k+) and Instagram (50K+) where I make videos about design, building websites & software.
 
-## Primary Objective
+I'm currently obsessed with you and this new historical era of software development. Agents are transforming the way people consume and build software all across the world and I want to build something for the future.
 
-Deliver correct, maintainable, well-researched, best practice changes.
+I focus on building complex things as simple as possible. I love to find ways to reduce complexity when solving problems.
 
-## Pre-Launch: The Database Is Disposable (MUST)
+Right now, we're building a high quality open-source multi-AI chat app with a unified model interface across providers.
+
+I want to share some of my preferences here so we can be more aligned when working together.
+
+## General
+
+- **My highest priority preference** is to leverage popular open source repos as quality reference material for researching system architecture, data model and backend behavior. This doesn't mean we should always copy them, but we should consider their approach first before inventing something from scratch. You can use the open-source-references skill AND do your own research online to find relevant open source projects. 
+- I'm a designer with some front-end experience. I'm not a software engineer. This means I need your responses to be clear, concise and easy to understand. The highest form of intelligence is explaining complex ideas simply. You are very smart.
+- Extend existing project patterns instead of introducing parallel systems.
+- Fix root causes instead of symptoms.
+- Optimize for maintainability and clarity over short-term speed.
+- If unsure, consult repo-local docs, remaining `.agents/skills/`, and official references; document non-trivial trade-offs.
+- Before proposing architecture, check `docs/adr/` for a decision that already covers it. Significant new decisions get a new ADR.
+- Typesafety is useful, take advantage of it.
+- Don't be scared to propose bold ideas if they can meaningfully and CLEARLY benefit our work
+- Testing essential backend behavior is good! However, endless smoke tests, "regression tests" for feature deletions, etc... is BAD. Tests should be concise, focused and meaningful. Don't add tests just because or if there isn't a clear benefit.
+- Adding essential comments to clarify functionality and intended behavior is good. But don't comment every line, keep it concise, essential, and meaningful. 
+- Keep comments and documentation up to date. When making changes, it's important to keep things in sync to prevent future agents from getting confused.
+- No `// @ts-ignore`.
+- No lint-rule bypassing (`eslint-disable`) without explicit documented approval.
+- Do not downgrade or disable checks to "make it pass."
+- When extending an existing feature to a new state, audience, or route, identify the current source-of-truth pattern before editing. Match its component ownership, placement logic, accessibility, and interaction model by default.
+- Keep future restyling centralized: prefer shared primitives and semantic tokens over hard-coded, call-site-specific styling. Equivalent controls should preserve shared behavior and structure while the visual language evolves.
+
+## Typescript preferences
+
+- `any` is the enemy. Inferred types are our friend. Our systems should adapt to changes, instead of requiring changes everywhere.
+- If your TS code looks like a Python dev wrote it, it is bad TS code.
+- Avoid one-line functions that are just casting wrappers.
+- Write TypeScript in ways that Matt Pocock and Theo would be proud of.
+- If not already specified in project, I generally like to use the following tech: Convex, Tailwind, React, Vite, bun
+- When building more complex web and react native apps, I like to pull in Zustand, React Query, Tanstack Start, Workos or Clerk (or better-auth if selfhosting), and ArkType (or zod if perf isn't an issue)
+
+
+## Commands and local dev
+
+- Verify with `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run build:next`.
+- **`bun run build` is NOT a build — it deploys to production Convex.** Never run it to verify a change; use `bun run build:next`.
+- My long-running `bun dev` owns port 3000. Verify through it and never kill or restart it, and don't start a competing dev server.
+
+## Match ceremony to the task
+
+- Do not spawn subagents or a multi-agent panel for work a single agent finishes in one pass. Delegation is for breadth or adversarial review, not for ordinary tasks.
+- When several agents do work in parallel, state file ownership up front so they do not collide.
+
+## Front-end work
+
+- Don't overly index your changes on one-off component overrides. Most front-end work should change the primitive component when appropriate to keep the design system focused and extendable.
+- If there is a opportunity to centralize front-end changes to prevent UI drift between two or more obvious UI surfaces, then take that opportunity and tell me about it so I can review it.
+- Information-dense, no decorative card/pill chrome, no light-gray subtitle lines above sections. Minimal copy. No em dashes.
+- Avoid continuously repainting CSS animations (pulse, shimmer, blur, spinners); they peg the GPU on high-refresh displays.
+
+## Database
 
 This project has **no users**. The development database is disposable. Production
 Convex can still contain smoke-test or manually created rows, so production
 deploy validation treats it as stateful unless explicitly marked disposable.
 
 - Change `convex/schema.ts` directly for development data: add, remove, rename,
-  retype, or narrow fields as the design needs. For fields that have reached
-  production, keep removed/narrowed fields optional until production is cleaned
-  or wiped and the deploy preflight can prove compatibility.
+retype, or narrow fields as the design needs. For fields that have reached
+production, keep removed/narrowed fields optional until production is cleaned
+or wiped and the deploy preflight can prove compatibility.
 - If existing dev data conflicts with a schema change, wipe it (Convex dashboard
-  or a one-off `bunx convex run`/clear) and move on. Losing dev data is not a risk.
+or a one-off `bunx convex run`/clear) and move on. Losing dev data is not a risk.
 - Schema and data-model changes are **not** high-risk and require **no** approval
-  gate while pre-launch.
+gate while pre-launch.
 - The expand/migrate/contract workflow (`docs/convex-migrations.md`), the
-  migration manifests (`convex/migrations/`), and the schema-guard ceremony are
-  dormant for non-production pre-launch work. Production deploy preflight and CI
-  dry-run checks stay active to prevent strict schemas from rejecting existing
-  production documents. Set `CONVEX_PROD_DB_DISPOSABLE=true` only when the
-  production data can intentionally be wiped or ignored.
+migration manifests (`convex/migrations/`), and the schema-guard ceremony are
+dormant for non-production pre-launch work. Production deploy preflight and CI
+dry-run checks stay active to prevent strict schemas from rejecting existing
+production documents. Set `CONVEX_PROD_DB_DISPOSABLE=true` only when the
+production data can intentionally be wiped or ignored.
+  - `docs/convex-access.md` — **read before querying Convex** (MCP/CLI/dashboard).
+  The app's data lives only in the deployment `NEXT_PUBLIC_CONVEX_URL` /
+  `CONVEX_DEPLOYMENT` point to; the Convex MCP can silently resolve to a
+  different, empty backend. If a read returns `0 users`/`0 chats` for an app in
+  active use, the tool is pointed at the wrong deployment — verify against the
+  dashboard, don't trust it.
 
 Scope: **the database only.** This does NOT relax working-tree/file hygiene (do
 not delete user-owned or untracked files — see "Dirty Worktree And Generated
@@ -35,20 +93,7 @@ encrypted-at-rest), or auth correctness.
 When the app gains real users, revert this section and fully re-activate the
 migration discipline.
 
-## Implementation Philosophy (SHOULD)
-
-- Prefer well-researched, industry-standard solutions over quick fixes.
-- Extend existing project patterns instead of introducing parallel systems.
-- Fix root causes instead of symptoms.
-- Optimize for maintainability and clarity over short-term speed.
-- If unsure, consult repo-local docs, remaining `.agents/skills/`, and official references; document non-trivial trade-offs.
-
-## Product Pattern Consistency (MUST)
-
-- When extending an existing feature to a new state, audience, or route, identify the current source-of-truth pattern before editing. Match its component ownership, placement logic, visual weight, and interaction model by default.
-- Do not solve local layout or state-specific constraints with one-off styling that makes equivalent functionality feel like a different product. If consistency conflicts with another requirement, state the trade-off before coding and preserve the established product pattern unless instructed otherwise.
-
-## Correctness-First Escalation (MUST)
+## Correctness-First Escalation
 
 - Use risk-based rigor: keep low-risk tasks lightweight, increase rigor for medium/high-risk tasks.
 - Medium/high-risk changes require a brief approach decision before coding (options, trade-offs, chosen approach).
@@ -57,129 +102,29 @@ migration discipline.
 - Validation depth must scale with risk; do not treat successful compilation as sufficient evidence of correctness.
 - For medium/high-risk changes, follow the decision process in this section and document the chosen approach before coding.
 
-## Non-Negotiable Rules
-
-### Security (MUST)
+## Security
 
 - Never log or expose secrets, tokens, or credentials.
 - Treat BYOK/API key data as encrypted-at-rest.
 
-### Code Quality (MUST)
-
-- No `// @ts-ignore`.
-- No lint-rule bypassing (`eslint-disable`) without explicit documented approval.
-- Do not downgrade or disable checks to "make it pass."
-- Prefer source fixes over workarounds.
-
-### Git Safety (MUST)
+## Git Safety
 
 - Never create branches unless explicitly asked.
 - Never force-push to shared branches.
 - Avoid destructive git commands unless explicitly requested.
 
-### Dirty Worktree And Generated Files (MUST)
+## Dirty Worktree And Generated Files
 
 - Treat all existing modified, deleted, and untracked files as user-owned unless the user explicitly says they are disposable.
 - Before running tools that may write files, inspect `git status --short` and note the existing dirty state.
-- After running browser, QA, codegen, or agent-helper tools, inspect `git status --short` again and identify any new side effects separately from the requested code change.
 - Do not delete, revert, rewrite, or "clean up" out-of-scope files just to make the final diff look cleaner.
-- If a tool creates generated artifacts such as `.gstack/`, screenshots, logs, traces, or audit files, leave them in place and report them unless the user explicitly asks to remove them.
 - Never delete untracked files to restore scope. Untracked files are not recoverable from git.
 - If accidental out-of-scope edits occur, stop and report the exact paths before attempting repair.
 
-## Ask Before Making These Changes (MUST)
-
-- Adding dependencies (`bun add ...`)
-- Modifying `package.json`, `tsconfig*`, `next.config.*`
-- Editing auth-critical paths (`app/auth/`, `middleware.ts`)
-- Changing CI/CD (`.github/workflows/`)
-- Deleting files
-
-## Required Project Patterns (MUST When Applicable)
-
-### Streaming Responses (AI SDK v7)
-
-```typescript
-return createUIMessageStreamResponse({
-  stream: toUIMessageStream({
-    stream: result.stream,
-    sendReasoning: true,
-    sendSources: true,
-    onError: (error) => extractErrorMessage(error),
-  }),
-})
-```
-
-The `StreamTextResult` instance helpers (`result.toUIMessageStream(...)` and
-`result.toUIMessageStreamResponse(...)`) are deprecated in AI SDK v7 and are
-removed in the next major. Pass `result.stream` to the standalone
-`toUIMessageStream(...)` converter, then use
-`createUIMessageStreamResponse(...)`.
-
-### Convex Auth Pattern
-
-```typescript
-const identity = await ctx.auth.getUserIdentity()
-if (!identity) throw new Error("Not authenticated")
-// verify ownership before user-scoped mutations
-```
-
-### Convex Schema Contractions
-
-**Dormant for non-production pre-launch work.** The development database is
-disposable, so change `convex/schema.ts` directly and wipe dev data if it
-conflicts. Production deploy preflight remains active unless
-`CONVEX_PROD_DB_DISPOSABLE=true` is deliberately set.
-
-### Optimistic Update Pattern
-
-```typescript
-let previous = null
-setState((prev) => {
-  previous = prev
-  return updated
-})
-try {
-  await mutation()
-} catch {
-  if (previous) setState(previous)
-}
-```
-
-## Smoke Testing (MUST)
-
-- Always try the user's existing local authenticated session first when smoke testing. Use a guest or new session only if the authenticated session is unavailable, and report the fallback.
-
-## On-Demand Context
-
-Load only when needed:
-
-- `.agents/skills/`
-- `README.md` and `INSTALL.md`
-- `docs/convex-access.md` — **read before querying Convex** (MCP/CLI/dashboard).
-  The app's data lives only in the deployment `NEXT_PUBLIC_CONVEX_URL` /
-  `CONVEX_DEPLOYMENT` point to; the Convex MCP can silently resolve to a
-  different, empty backend. If a read returns `0 users`/`0 chats` for an app in
-  active use, the tool is pointed at the wrong deployment — verify against the
-  dashboard, don't trust it.
-
-## Output Preferences (SHOULD)
+## Other Preferences
 
 - If asked to create a prompt, return it directly in chat unless a file is explicitly requested.
 - Do not include timeline or effort estimates unless explicitly requested.
+- Do not stage, delete, or normalize unrelated files when making narrow changes.
+- If you need to live smoketest or verify changes, always use my authenticated chrome browser, never use your own.
 
-## Pull Request Baseline (SHOULD When Preparing PRs)
-
-1. Run `git fetch origin` before branch comparisons.
-2. Diff and log against `origin/main` (not local `main`).
-3. Scope PR descriptions to commits in `origin/main..HEAD`.
-
-## Scope Verification (MUST)
-
-When making a narrow change, final verification must include:
-
-1. `git diff -- <intended paths>` to confirm the intended change.
-2. `git status --short` to list unrelated dirty files separately.
-3. A final note distinguishing requested edits from pre-existing or tool-generated changes.
-
-Do not stage, delete, or normalize unrelated files during this process.

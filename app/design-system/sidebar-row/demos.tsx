@@ -47,12 +47,7 @@ function RenameAction({ onStartRename }: { onStartRename: () => void }) {
           <Icon icon={RiEditLine} slotSize={18} />
         </TrailingIconChip>
       </TooltipTrigger>
-      <TooltipContent
-        side="top"
-        sideOffset={-6}
-        variant="outline"
-        className="text-sm font-normal"
-      >
+      <TooltipContent side="top" sideOffset={-6} variant="outline">
         Rename
       </TooltipContent>
     </Tooltip>

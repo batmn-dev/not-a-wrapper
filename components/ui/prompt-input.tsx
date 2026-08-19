@@ -8,7 +8,7 @@
  *   - Removes redundant `TooltipProvider` wrapper in `PromptInputAction`
  *   - Not A Wrapper uses app-level TooltipProvider for consistency and smaller bundle
  *   - Upstream uses useLayoutEffect; Not A Wrapper uses standard useEffect for SSR safety
- *   - ChatGPT-parity editor layout: a grid/alignment wrapper contains a
+ *   - Editor layout: a grid/alignment wrapper contains a
  *     separate capped overflow scroller, while the textarea uses native
  *     `field-sizing: content` instead of an imperative pixel height
  *   - Layout-loop hardening in PromptInputTextarea: the expansion decision is

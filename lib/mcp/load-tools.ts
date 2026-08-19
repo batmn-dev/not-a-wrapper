@@ -12,9 +12,6 @@ import { buildStoredMcpAuthHeaders } from "./auth-headers"
 import { createPinnedMcpFetch } from "./pinned-fetch"
 import { resolveMcpUrlForConnection } from "./url-validation"
 
-// =============================================================================
-// Types
-// =============================================================================
 
 /** MCP client instance — inferred from createMCPClient return type */
 type MCPClient = Awaited<ReturnType<typeof createMCPClient>>
@@ -79,9 +76,6 @@ type RetryTrustServer = {
   url: string
 }
 
-// =============================================================================
-// Helpers
-// =============================================================================
 
 /**
  * Minimal runtime guard — confirms a tool value has the shape streamText() expects.
@@ -224,7 +218,6 @@ function updateConnectionStatus(
   })
 }
 
-// =============================================================================
 /**
  * Load MCP tools for a user's enabled servers.
  *
@@ -244,9 +237,7 @@ export async function loadUserMcpTools(
     failedServerCount: 0,
   }
 
-  // -------------------------------------------------------------------------
   // 1. Load server configs + tool approvals in parallel (~50-100ms Convex RTT)
-  // -------------------------------------------------------------------------
   const [allServers, allApprovals, currentUser] = await Promise.all([
     fetchQuery(api.mcpServers.list, {}, { token: convexToken }),
     fetchQuery(api.mcpToolApprovals.listByUser, {}, { token: convexToken }),
@@ -269,9 +260,7 @@ export async function loadUserMcpTools(
     )
   }
 
-  // -------------------------------------------------------------------------
   // 2. Filter out servers with open circuits (too many consecutive failures)
-  // -------------------------------------------------------------------------
   let circuitBreakerSkipped = 0
   const serversToConnect = enabledServers.filter((server) => {
     if (isCircuitOpen(server._id)) {
@@ -288,11 +277,9 @@ export async function loadUserMcpTools(
     return { ...emptyResult, failedServerCount: circuitBreakerSkipped }
   }
 
-  // -------------------------------------------------------------------------
   // 3. Create MCP clients in parallel with per-server timeout
   //    Total time = max(individual server times), not sum.
   //    A slow server doesn't block fast servers.
-  // -------------------------------------------------------------------------
   const clientResults = await Promise.allSettled(
     serversToConnect.map(async (server) => {
       // SSRF gate — string + DNS-rebinding checks. The returned address is also
@@ -339,9 +326,7 @@ export async function loadUserMcpTools(
     })
   )
 
-  // -------------------------------------------------------------------------
   // 4. Collect tools from successful clients
-  // -------------------------------------------------------------------------
   const clients: MCPClient[] = []
   // MCPToolSet is an opaque mapped type from @ai-sdk/mcp that does not expose a
   // mutable builder interface. We accumulate tools as Record<string, unknown> and

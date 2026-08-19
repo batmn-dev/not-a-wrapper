@@ -305,9 +305,7 @@ async function buildToolRuntime(
   let builtInTools: ToolSet = {} as ToolSet
   let builtInToolMetadata = new Map<string, ToolMetadata>()
 
-  // -----------------------------------------------------------------------
   // Capability policy — phase 1 (search injection gating)
-  // -----------------------------------------------------------------------
   const initialCapabilityPolicy = resolveCapabilityPolicy({
     modelTools,
     isAuthenticated,
@@ -328,9 +326,7 @@ async function buildToolRuntime(
     })
   )
 
-  // -----------------------------------------------------------------------
   // Tool layer 1 — provider-native tools
-  // -----------------------------------------------------------------------
   if (shouldInjectSearch) {
     const { getProviderTools } = await import("@/lib/tools/provider")
     const providerResult = await getProviderTools(provider, apiKey)
@@ -338,7 +334,6 @@ async function buildToolRuntime(
     builtInToolMetadata = providerResult.metadata
   }
 
-  // -----------------------------------------------------------------------
   // Exa API key resolution (shared by Layer 2 capabilities)
   //
   // Conditional resolution (plan PR 7b; unconditional since the 2026-07-23
@@ -349,7 +344,6 @@ async function buildToolRuntime(
   // lookup, so when neither door can open the key read is skipped entirely:
   // built-in provider search never pays for Exa, while extraction still
   // resolves the key even when the search toggle is off.
-  // -----------------------------------------------------------------------
   const builtInHasSearch = Object.keys(builtInTools).length > 0
   const exaBackedToolPossible =
     (shouldInjectSearch && !builtInHasSearch) || capabilities.extract
@@ -363,9 +357,7 @@ async function buildToolRuntime(
     resolvedExaKeyMode = resolvedExa.keyMode
   }
 
-  // -----------------------------------------------------------------------
   // Tool budget — policy guards + outage-tolerant enforcers
-  // -----------------------------------------------------------------------
   const {
     createOutageTolerantToolBudgetEnforcer,
     createConvexToolLimitStore,
@@ -467,9 +459,7 @@ async function buildToolRuntime(
     onEvent: (event) => logOutageTolerantBudgetEvent("mcp", event),
   })
 
-  // -----------------------------------------------------------------------
   // Tool layer 2 — search fallback (Layer-1-XOR-Layer-2)
-  // -----------------------------------------------------------------------
   let thirdPartyTools: ToolSet = {} as ToolSet
   let thirdPartyToolMetadata = new Map<string, ToolMetadata>()
 
@@ -485,9 +475,7 @@ async function buildToolRuntime(
     }
   }
 
-  // -----------------------------------------------------------------------
   // Tool layer 2 — content extraction (independent of search gating)
-  // -----------------------------------------------------------------------
   let contentTools: ToolSet = {} as ToolSet
   let contentToolMetadata = new Map<string, ToolMetadata>()
 
@@ -502,9 +490,7 @@ async function buildToolRuntime(
     contentToolMetadata = contentResult.metadata
   }
 
-  // -----------------------------------------------------------------------
   // Tool layer 3 — MCP tools
-  // -----------------------------------------------------------------------
   let mcpTools: ToolSet = {} as ToolSet
 
   if (isAuthenticated && convexToken && capabilities.mcp) {
@@ -535,9 +521,7 @@ async function buildToolRuntime(
     // and exposes dispose(); the route registers `after(() => runtime.dispose())`.
   }
 
-  // -----------------------------------------------------------------------
   // Capability policy — phase 2 (per-tool decisions on the pre-filter maps)
-  // -----------------------------------------------------------------------
   const toolPolicyInputs: ToolPolicyInput[] = [
     ...Object.keys(builtInTools).map((toolName) => {
       const meta = builtInToolMetadata.get(toolName)
@@ -656,9 +640,7 @@ async function buildToolRuntime(
   )
   mcpToolServerMap = filterMetadataMapByPolicy(mcpToolServerMap, toolPolicy)
 
-  // -----------------------------------------------------------------------
   // Tracing + MCP wrapping
-  // -----------------------------------------------------------------------
   const traceCollector = new ToolTraceCollector()
 
   if (Object.keys(mcpTools).length > 0) {
@@ -698,9 +680,7 @@ async function buildToolRuntime(
     )
   }
 
-  // -----------------------------------------------------------------------
   // Tool naming governance
-  // -----------------------------------------------------------------------
   const toolLayers: ToolLayerMap = {
     "built-in": builtInTools,
     "third-party-search": thirdPartyTools,
@@ -771,7 +751,6 @@ async function buildToolRuntime(
     )
   )
 
-  // -----------------------------------------------------------------------
   // Tool budget — Layer 1 (provider-executed) state machine
   //
   // Provider-native tools are provider-executed and do not expose a local
@@ -779,7 +758,6 @@ async function buildToolRuntime(
   // probe budget during prepareStep (consume:false) and account actual usage in
   // onStepFinish. This preserves centralized budget policy semantics, with a
   // bounded request-local soft cap when policy is unavailable.
-  // -----------------------------------------------------------------------
   const builtInToolNames = new Set(Object.keys(builtInTools))
   const exhaustedBuiltInTools = new Set<string>()
   const degradedBuiltInTools = new Set<string>()
@@ -868,13 +846,11 @@ async function buildToolRuntime(
     }
   }
 
-  // -----------------------------------------------------------------------
   // Final merge:
   //   - Search: Layer 1 (built-in) XOR Layer 2 (Exa fallback) — never both
   //   - Content: Layer 2 content extraction — independent of search gating
   //   - MCP: Layer 3 (user-configured servers)
   // Spread order = conflict resolution priority (last wins).
-  // -----------------------------------------------------------------------
   const searchTools = { ...builtInTools, ...thirdPartyTools }
   const mergedTools = {
     ...searchTools,
@@ -882,10 +858,8 @@ async function buildToolRuntime(
     ...mcpTools,
   } as ToolSet
 
-  // -----------------------------------------------------------------------
   // Metadata resolver — built from the runtime's own post-filter maps. The
   // four maps never escape; downstream call sites read this one shape.
-  // -----------------------------------------------------------------------
   const metadata = createToolMetadataResolver({
     builtIn: builtInToolMetadata,
     thirdParty: thirdPartyToolMetadata,
@@ -893,9 +867,7 @@ async function buildToolRuntime(
     mcpToolServerMap,
   })
 
-  // -----------------------------------------------------------------------
   // Runtime-approval decisions (computed eagerly — tools are final).
-  // -----------------------------------------------------------------------
   const approvalDecisionsByToolName = new Map<
     string,
     RuntimeToolApprovalDecision
@@ -933,9 +905,7 @@ async function buildToolRuntime(
       ? toolApprovalEntries
       : undefined
 
-  // -----------------------------------------------------------------------
   // dispose() — idempotent MCP client cleanup.
-  // -----------------------------------------------------------------------
   let disposePromise: Promise<void> | null = null
   const dispose = (): Promise<void> => {
     if (!disposePromise) {
@@ -946,7 +916,6 @@ async function buildToolRuntime(
     return disposePromise
   }
 
-  // -----------------------------------------------------------------------
   // Stream-lifecycle hooks — alive for the whole stream (see CONTEXT.md).
   //
   // The runtime owns step gating, budget accounting, and Tool outcome
@@ -955,7 +924,6 @@ async function buildToolRuntime(
   // `onStepFinish` accounts actual provider-executed usage, then records one
   // Tool outcome per call through the injected sinks. The route composes
   // `onStepFinish` with its durable-run persistence only.
-  // -----------------------------------------------------------------------
   let loggedLateStepPolicy = false
   const activeToolsForStep = async (stepNumber: number): Promise<string[]> => {
     const isLateStep = stepNumber > PREPARE_STEP_THRESHOLD
@@ -1063,11 +1031,9 @@ async function buildToolRuntime(
         })
       : undefined
 
-  // -----------------------------------------------------------------------
   // Tool outcome recording (see CONTEXT.md). One outcome per call, assembled
   // at step finish from the call, its result, and its trace, then dispatched
   // to every injected sink. Outcomes accumulate into the request summary.
-  // -----------------------------------------------------------------------
   const outcomeTotals: ToolOutcomeSummary = {
     totalToolCalls: 0,
     failedToolCalls: 0,
@@ -1165,9 +1131,7 @@ async function buildToolRuntime(
     }
   }
 
-  // -----------------------------------------------------------------------
   // Telemetry views (read-only).
-  // -----------------------------------------------------------------------
   const policySummary: ToolRuntimePolicySummary = {
     capabilities: toolPolicy.capabilities,
     capabilityReasons: toolPolicy.capabilityReasons,

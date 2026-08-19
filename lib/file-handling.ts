@@ -21,9 +21,7 @@ export type UploadFileOptions = {
   uploadBinary?: typeof uploadBinaryWithProgress
 }
 
-// ============================================================================
 // Convex File Operations
-// ============================================================================
 
 /**
  * Upload a file to Convex storage

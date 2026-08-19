@@ -1,16 +1,8 @@
 import { getAllModels, getVisibleModelsWithAccessFlags } from "@/lib/models"
 import { NextResponse } from "next/server"
 
-/**
- * Get available AI models with base access flags.
- * Free models are marked accessible; paid models are locked by default.
- * Client-side enhances accessibility based on user's API keys from Convex.
- */
 export async function GET() {
   try {
-    // Return the curated selector catalog with base access flags.
-    // Free models (from FREE_MODELS_IDS) are marked accessible
-    // Paid/provider-specific models are locked until client verifies user has API keys
     const models = await getVisibleModelsWithAccessFlags()
 
     return new Response(JSON.stringify({ models }), {

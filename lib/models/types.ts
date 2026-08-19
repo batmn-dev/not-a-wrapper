@@ -20,15 +20,15 @@ export type ModelReasoningSettings =
   | { maxTokens: number; effort?: never }
 
 type ModelConfig = {
-  id: string // "gpt-5-mini" // same from AI SDKs
-  name: string // "GPT-4.1 Nano"
-  provider: string // "OpenAI", "Mistral", etc.
-  providerId: Provider // "openai", "mistral", etc.
-  modelFamily?: string // "GPT-4", "Claude 3", etc.
-  baseProviderId: string // "gemini" // same from AI SDKs
+  id: string
+  name: string
+  provider: string
+  providerId: Provider
+  modelFamily?: string
+  baseProviderId: string
 
-  description?: string // Short 1–2 line summary
-  tags?: string[] // ["fast", "cheap", "vision", "OSS"]
+  description?: string
+  tags?: string[]
 
   catalogStatus: ModelCatalogStatus
   idKind: Exclude<ModelIdKind, "alias">
@@ -36,11 +36,11 @@ type ModelConfig = {
   verifiedAgainst?: string
   lastVerifiedAt?: string
 
-  contextWindow?: number // in tokens
-  maxOutput?: number // max output tokens (used for thinking budget allocation)
-  inputCost?: number // USD per 1M input tokens
-  outputCost?: number // USD per 1M output tokens
-  priceUnit?: string // "per 1M tokens", "per image", etc.
+  contextWindow?: number
+  maxOutput?: number
+  inputCost?: number
+  outputCost?: number
+  priceUnit?: string
 
   vision?: boolean
   tools?: boolean | ToolCapabilities
@@ -86,14 +86,14 @@ type ModelConfig = {
   speed?: "Fast" | "Medium" | "Slow"
   intelligence?: "Low" | "Medium" | "High"
 
-  website?: string // official website (e.g. https://openai.com)
-  apiDocs?: string // official API docs (e.g. https://platform.openai.com/docs/api-reference)
-  modelPage?: string // official product page (e.g. https://x.ai/news/grok-2)
-  releasedAt?: string // "2024-12-01" (optional, for tracking changes)
+  website?: string
+  apiDocs?: string
+  modelPage?: string
+  releasedAt?: string
 
-  icon?: string // e.g. "gpt-4", "claude", "mistral", or custom string
+  icon?: string
 
-  accessible?: boolean // true if the model is accessible to the user
+  accessible?: boolean
 }
 
 export type { ModelConfig }

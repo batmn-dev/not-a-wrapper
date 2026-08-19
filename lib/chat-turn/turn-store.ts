@@ -9,7 +9,6 @@ import {
 } from "@/lib/chat-store/messages/api"
 import type { ChatTurnMessage } from "./turn-plans"
 
-// ---------------------------------------------------------------------------
 // Chat turn controller internals — the persistence half: guest/local chats
 // cache turn messages in IndexedDB; durable chats are route-persisted and skip
 // the local cache entirely. Composed inside createChatTurnController; the
@@ -24,7 +23,6 @@ import type { ChatTurnMessage } from "./turn-plans"
 // IndexedDB only for localOnly chats). Do not "fix" a durable persistence gap
 // here by caching; that recreates the split-brain the 2026-07-14 incident doc
 // warns about.
-// ---------------------------------------------------------------------------
 
 export type SetChatTurnMessages = (
   updater: (messages: ChatTurnMessage[]) => ChatTurnMessage[]

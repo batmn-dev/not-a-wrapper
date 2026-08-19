@@ -16,8 +16,8 @@ type ComposerPasteInput = {
  * One policy for every Composer paste. Image/file paste retains priority over
  * text, while long plain text becomes a recoverable generated attachment.
  *
- * ChatGPT's current genuine-clipboard boundary is inclusive: 9,999 characters
- * stay inline and exactly 10,000 characters become a generated attachment.
+ * The boundary is inclusive: 9,999 characters stay inline and exactly 10,000
+ * characters become a generated attachment.
  */
 export function coordinateComposerPaste({
   text,

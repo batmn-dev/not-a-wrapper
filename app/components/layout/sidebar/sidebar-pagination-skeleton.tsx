@@ -11,9 +11,9 @@ export function getSidebarPaginationSkeletonWidths(seed: number) {
 /**
  * Pagination-only history placeholder.
  *
- * This intentionally does not use the shared pulse Skeleton: ChatGPT's
- * pagination state is a three-row, text-only, 3s linear shimmer appended below
- * retained history. Initial sidebar loading remains a separate state.
+ * This intentionally does not use the shared pulse Skeleton: pagination is a
+ * three-row, text-only, 3s linear shimmer appended below retained history.
+ * Initial sidebar loading remains a separate state.
  */
 export function SidebarPaginationSkeleton({ seed }: { seed: number }) {
   const widths = getSidebarPaginationSkeletonWidths(seed)

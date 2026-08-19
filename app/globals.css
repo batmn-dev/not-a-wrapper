@@ -14,10 +14,8 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Touch device detection - hides elements on coarse pointer (touch) devices */
 @custom-variant pointer-coarse (@media (pointer: coarse));
 @custom-variant pointer-fine (@media (pointer: fine));
-/* Devices without hover (touch-primary), matching ChatGPT cant-hover: utilities */
 @custom-variant cant-hover (@media (hover: none));
 
 /* Viewport height variants for conditional sticky behavior */
@@ -60,7 +58,6 @@
      existing h-app-header utility stays in lockstep. */
   --header-height: 3.25rem;
   --spacing-app-header: var(--header-height);
-  /* Captured ChatGPT --text-heading-app (28px/34px): directory page headings. */
   --text-heading-app: 1.75rem;
   --text-heading-app--line-height: 2.125rem;
   /* Captured assistant-prose line-height token: 26px body rhythm
@@ -336,7 +333,14 @@
   --color-popover-bg-hover: var(--popover-bg-hover);
   --color-floating-surface: var(--floating-surface);
   --color-floating-surface-foreground: var(--floating-surface-foreground);
+  --color-floating-menu-item-active: var(--floating-menu-item-active);
   --color-floating-menu-divider: var(--floating-menu-divider);
+  --color-modal-centered: var(--modal-centered-surface);
+  --color-modal-centered-foreground: var(--modal-centered-foreground);
+  --color-modal-search: var(--modal-search-surface);
+  --color-modal-search-foreground: var(--modal-search-foreground);
+  --color-modal-search-border: var(--modal-search-border);
+  --color-modal-search-row-active: var(--modal-search-row-active);
   --color-muted-bg-hover: var(--muted-bg-hover);
   --color-control-track: var(--control-track-bg);
   --color-border: var(--border);
@@ -345,24 +349,20 @@
   --color-border-strong: var(--border-strong);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive: var(--destructive);
-  /* Info/accent-blue: the one chromatic non-red in an otherwise neutral
-     system. Used by the sidebar "new / unread" status dot (ChatGPT's blue). */
   --color-info: var(--info);
-  /* Warning/amber: "needs your attention" cue — sidebar "awaiting" status dot. */
   --color-warning: var(--warning);
-  /* Readable dark-amber companion for warning TEXT (the fill token is too light). */
   --color-warning-foreground: var(--warning-foreground);
-  /* Success/green: "done" cue — completed tool-call status chip. */
   --color-success: var(--success);
   --color-status-success-bg: var(--status-success-bg);
   --color-status-success-foreground: var(--status-success-foreground);
+  --color-claude-logo: var(--claude-logo);
+  --color-deepseek-logo: var(--deepseek-logo);
   --color-link: var(--link);
   --color-link-hover: var(--link-hover);
   --color-disabled-foreground: var(--text-disabled);
   --color-interactive-hover: var(--interactive-bg-hover);
   --color-interactive-selected: var(--interactive-bg-selected);
   --color-interactive-pressed: var(--interactive-bg-pressed);
-  /* Opaque list-row hover surface (ChatGPT --interactive-bg-tertiary-hover). */
   --color-row-hover: var(--row-hover-surface);
   --color-sidebar-row: var(--sidebar-row-bg);
   --color-activity-panel-border: var(--activity-panel-border);
@@ -399,25 +399,17 @@
   --shadow-border-lg: var(--shadow-border-lg-value);
   --shadow-border-xl: var(--shadow-border-xl-value);
   --shadow-floating-surface: var(--floating-surface-edge-shadow);
+  --shadow-floating-select: var(--floating-select-edge-shadow);
+  --shadow-modal-centered: var(--modal-centered-edge-shadow);
+  --shadow-modal-search: var(--modal-search-edge-shadow);
+  --shadow-tooltip: var(--tooltip-edge-shadow);
 }
 
 :root {
-  /* Sidebar dimensions */
   --sidebar-width: 16.25rem;
   --sidebar-header-height: 3.25rem;
-
-  /* Sidebar spacing */
   --sidebar-section-first-margin-top: 0.5rem;
   --sidebar-section-margin-top: 1.25rem;
-  /* The scrollable section stack below the sticky action cluster. Both
-     organizer modes ("In one list" / "By project") flow through one stack
-     container in app-sidebar.tsx: margin-top is the gap from the cluster (or
-     from the one-list Projects row, which stays flush with the cluster) to the
-     first section; gap separates adjacent sections. ChatGPT derives the first
-     gap as section-margin minus the first-margin already spent above the
-     cluster (20px - 8px = 12px); sections then sit a full section-margin
-     apart. Values pinned in sidebar-geometry.test.ts so the two modes cannot
-     drift apart again. */
   --sidebar-section-stack-margin-top: calc(
     var(--sidebar-section-margin-top) - var(--sidebar-section-first-margin-top)
   );
@@ -427,8 +419,6 @@
   --sidebar-row-outer-inset: 0.375rem;
   --sidebar-row-content-block: 0.375rem;
   --sidebar-row-content-inline: 0.625rem;
-  /* Bordered rows compensate only on the block axis: .sidebar-menu-row draws
-     border-block, never border-inline, so inline padding has no inner variant. */
   --sidebar-row-inner-content-block: calc(
     var(--sidebar-row-content-block) - var(--sidebar-row-separator-size)
   );
@@ -444,10 +434,6 @@
   --sidebar-row-card-action-rail-width: 3.625rem;
   --sidebar-row-separator-size: 1px;
   --sidebar-row-radius: 0.625rem;
-
-  /* Leading-glyph placement contract. Both sidebar layers derive from the same
-     tokens so the icon center is identical by construction:
-     rail-width / 2 == outer-inset + content-inline + slot / 2. */
   --sidebar-leading-slot-size: 1.25rem;
   --sidebar-collapsed-item-width: calc(
     var(--sidebar-leading-slot-size) + 2 * var(--sidebar-row-content-inline)
@@ -455,21 +441,26 @@
   --sidebar-rail-width: calc(
     var(--sidebar-collapsed-item-width) + 2 * var(--sidebar-row-outer-inset)
   );
-  /* Collapsed width of the ui/sidebar frame. Derived from the rail so the
-     frame the shell animates to and the rail the app renders inside it cannot
-     drift apart (equality pinned in sidebar-geometry.test.ts). */
   --sidebar-width-icon: var(--sidebar-rail-width);
+  --sidebar-footer-inset: 0.375rem;
+  --sidebar-footer-row-height: 3rem;
+  --sidebar-footer-collapsed-button-size: 2.5rem;
+  --sidebar-rail-footer-margin-bottom: calc(
+    (
+        var(--sidebar-footer-row-height) -
+          var(--sidebar-footer-collapsed-button-size)
+      ) /
+      2
+  );
 
   /* Icon sizing: wrappers keep the layout slot while Remix SVG glyphs render 2px smaller. */
   --icon-slot-size: 1rem;
   --icon-glyph-inset: 2px;
 
-  /* Composer control tap slop (ChatGPT composer-btn ::before contract). */
   --tap-padding-mobile: 44px;
   --tap-padding-pointer: 32px;
   --tap-padding: var(--tap-padding-mobile);
 
-  /* Sticky header z-index */
   --header-z-index: 20;
 
   --background: oklch(0.991 0 0);
@@ -478,15 +469,30 @@
   --card-foreground: var(--foreground);
   --popover: oklch(1 0 0);
   --popover-foreground: var(--foreground);
-  /* Floating overlays have their own semantic surface so changing menu
-     elevation never recolors settings panels, inputs, cards, or dialogs. */
-  --floating-surface: var(--popover);
-  --floating-surface-foreground: var(--popover-foreground);
-  --floating-surface-edge-shadow: var(--shadow-border-md-value);
+  --floating-surface: #ffffff;
+  --floating-surface-foreground: #0d0d0d;
+  --floating-surface-edge-shadow:
+    0 0 0 1px #0000000a, 0 2px 8px #0000000a, 0 4px 80px 8px #00000006;
+  --floating-select-edge-shadow:
+    0 8px 12px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.62);
+  --floating-menu-item-active: rgba(0, 0, 0, 0.04);
   --floating-menu-divider: var(--border-default);
   --floating-menu-radius: 1.25rem;
   --floating-menu-item-radius: 0.75rem;
   --floating-menu-leading-slot-size: 1.25rem;
+  --modal-centered-surface: #ffffff;
+  --modal-centered-foreground: #0d0d0d;
+  --modal-centered-edge-shadow:
+    0 8px 12px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.62);
+  --modal-centered-radius: 1rem;
+  --modal-centered-scrim: oklab(0.915826 0.0000416 0.0000184 / 0.5);
+  --modal-centered-backdrop-blur: 1px;
+  --modal-search-surface: #ffffff;
+  --modal-search-foreground: #0d0d0d;
+  --modal-search-border: rgba(0, 0, 0, 0.1);
+  --modal-search-row-active: rgba(0, 0, 0, 0.05);
+  --modal-search-edge-shadow: 0 14px 62px rgba(0, 0, 0, 0.25);
+  --modal-search-radius: 1rem;
   --primary: oklch(0 0 0);
   --primary-foreground: oklch(1 0 0);
   --primary-bg-hover: oklch(0.31 0 0);
@@ -497,28 +503,15 @@
   --muted-foreground: var(--text-secondary);
   --accent: var(--interactive-bg-selected);
   --accent-foreground: var(--foreground);
-
-  /* Text hierarchy. Disabled text is a UI-only color, not body copy. */
   --text-primary: var(--foreground);
   --text-secondary: oklch(0.478 0 0);
   --text-tertiary: oklch(0.65 0 0);
   --text-disabled: oklch(0.65 0 0);
   --link: oklch(0.501 0.127 254.712);
   --link-hover: oklch(0.419 0.106 255.109);
-
-  /* Projects directory metrics (captured: 810px content column, 60px sticky
-     toolbar). Page-scoped aliases, not global layout tokens. */
   --projects-content-max-width: 50.625rem;
   --projects-toolbar-min-height: 3.75rem;
-
-  /* Opaque row-hover surface for full-bleed list rows (ChatGPT's
-     --interactive-bg-tertiary-hover, measured #f9f9f9 on white). Deliberately
-     OPAQUE — the hover pill overlaps the row hairlines by 1px and must conceal
-     them. oklch(0.981) ≈ #f9f9f9, a lighter lift than the tab pill (#f2f2f2),
-     mirroring ChatGPT's distinct row-hover vs bg-tertiary tokens. */
   --row-hover-surface: oklch(0.981 0 0);
-
-  /* Interactive states remain translucent so they composite with their surface. */
   --interactive-bg-hover: oklch(0 0 0 / 0.05);
   --interactive-bg-selected: oklch(0 0 0 / 0.05);
   --interactive-bg-pressed: oklch(0 0 0 / 0.1);
@@ -526,23 +519,24 @@
   --surface-hover: var(--interactive-bg-hover);
   --popover-bg-hover: oklch(0.964 0 0);
   --muted-bg-hover: oklch(0.931 0 0);
-
-  /* Reference tokens. Tooltips opt into the dark token scope in both themes. */
-  --bg-tooltip: oklch(0 0 0);
-  --border-tooltip: oklch(0 0 0 / 0);
+  --bg-tooltip: #1b1b1b;
+  --border-tooltip: rgba(255, 255, 255, 0.05);
+  --tooltip-edge-shadow: 0 8px 18px rgba(15, 23, 42, 0.2);
+  --tooltip-radius: 9999px;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  /* Accent blue, matching ChatGPT's informational/file accent. */
   --info: oklch(0.626 0.188 259.456);
-  /* Amber (~#f59e0b) — "needs your attention" cue. */
   --warning: oklch(0.769 0.188 70.08);
-  /* Dark amber (~amber-700) for readable chip TEXT; --warning stays a fill. */
   --warning-foreground: oklch(0.52 0.13 65);
   --status-success-bg: oklch(0.945 0.029 156.629);
   --status-success-foreground: oklch(0.38 0.085 146.171);
   --success: var(--status-success-foreground);
 
-  /* Effect strengths and form-control roles. */
+  /* Provider brand colors */
+  /* Claude logo color (--cds-clay in their web browser) */
+  --claude-logo: oklch(0.6724 0.1308 38.76);
+  --deepseek-logo: oklch(0.5703 0.2334 266.6);
+
   --border-subtle: oklch(0 0 0 / 0.05);
   --border-default: oklch(0 0 0 / 0.1);
   --border-strong: oklch(0 0 0 / 0.15);
@@ -558,8 +552,6 @@
   --scrim-sidebar: oklch(0.982 0 0 / 0.5);
   --control-track-bg: var(--secondary);
   --drawer-handle-bg: var(--secondary);
-
-  /* Message surfaces are not generic interaction states. */
   --user-message-bg: oklch(0.934 0 0 / 0.502);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
@@ -570,7 +562,7 @@
   --sidebar: var(--background);
   --sidebar-foreground: var(--foreground);
   --sidebar-border: var(--border-subtle);
-  /* Shadow borders compose a theme-aware optical edge with realistic depth. */
+
   --shadow-border-value: var(--shadow-border-sm-value);
   --shadow-border-hover-value:
     0 0 0 1px color-mix(in oklab, var(--foreground) 32%, transparent),
@@ -613,7 +605,6 @@
     rgba(0, 0, 0, 0.06) 0px 32px 45.25px -2.5px,
     rgba(0, 0, 0, 0.04) 0px 52px 73.54px -3px;
 
-  /* Composer surface */
   --composer-bg: oklch(1 0 0);
   --sharp-edge-top-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
   --sharp-edge-top-shadow-placeholder: 0 1px 0 transparent;
@@ -622,12 +613,9 @@
   --sharp-edge-left-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.05);
   --activity-sheet-shadow:
     0 8px 12px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.62);
-  /* ChatGPT desktop Activity flyout is a measured #fcfcfc, not pure white. */
   --activity-panel-surface: oklch(0.991 0 0);
   --activity-panel-border: oklch(0 0 0 / 0.05);
   --activity-panel-raised-surface: var(--muted);
-
-  /* Activity panel overlay scrim — mobile black/30, tablet gray/50 */
   --overlay-scrim-mobile: var(--scrim-modal);
   --overlay-scrim-tablet: oklch(0.92 0.004 286 / 0.5);
 }
@@ -639,13 +627,25 @@
   --card-foreground: var(--foreground);
   --popover: oklch(0.222 0 0);
   --popover-foreground: var(--foreground);
-  /* Live ChatGPT dark floating surface: #353535 with only its translucent
-     inset optical edge; exterior elevation would make it too heavy on black. */
-  --floating-surface: oklch(0.329 0 0);
-  --floating-surface-foreground: var(--foreground);
-  --floating-surface-edge-shadow: inset 0 0 1px
-    color-mix(in oklab, var(--foreground) 20%, transparent);
+  --floating-surface: #353535;
+  --floating-surface-foreground: #ffffff;
+  --floating-surface-edge-shadow: inset 0 0 1px rgba(255, 255, 255, 0.2);
+  --floating-select-edge-shadow:
+    0 8px 16px rgba(0, 0, 0, 0.32), inset 0 0 1px rgba(255, 255, 255, 0.2),
+    0 0 1px rgba(0, 0, 0, 0.62);
+  --floating-menu-item-active: rgba(255, 255, 255, 0.1);
   --floating-menu-divider: var(--border-default);
+  --modal-centered-surface: #212121;
+  --modal-centered-foreground: #ffffff;
+  --modal-centered-edge-shadow:
+    0 8px 16px rgba(0, 0, 0, 0.32), inset 0 0 1px rgba(255, 255, 255, 0.2),
+    0 0 1px rgba(0, 0, 0, 0.62);
+  --modal-centered-scrim: rgba(0, 0, 0, 0.5);
+  --modal-search-surface: #212121;
+  --modal-search-foreground: #ffffff;
+  --modal-search-border: rgba(255, 255, 255, 0.15);
+  --modal-search-row-active: rgba(255, 255, 255, 0.05);
+  --modal-search-edge-shadow: 0 14px 62px rgba(0, 0, 0, 0.25);
   --primary: oklch(1 0 0);
   --primary-foreground: oklch(0.159 0 0);
   --primary-bg-hover: oklch(0.922 0 0);
@@ -660,12 +660,8 @@
   --text-secondary: oklch(0.848 0 0);
   --text-tertiary: oklch(0.754 0 0);
   --text-disabled: oklch(1 0 0 / 0.412);
-  /* Dark opaque row-hover: a subtle raise off the black surface, matching the
-     strength of the existing translucent hover tokens. */
   --row-hover-surface: oklch(0.2 0 0);
   --link: oklch(0.767 0.122 253.354);
-  /* Preserve AA contrast on every dark raised surface; hover is also conveyed
-     by the link decoration, rather than by lowering the link's lightness. */
   --link-hover: var(--link);
   --interactive-bg-hover: oklch(1 0 0 / 0.1);
   --interactive-bg-selected: oklch(1 0 0 / 0.1);
@@ -674,19 +670,22 @@
   --surface-hover: var(--interactive-bg-hover);
   --popover-bg-hover: oklch(0.309 0 0);
   --muted-bg-hover: oklch(0.375 0 0);
-  --bg-tooltip: oklch(0.222 0 0);
-  --border-tooltip: oklch(1 0 0 / 0.051);
+  --bg-tooltip: #1b1b1b;
+  --border-tooltip: rgba(255, 255, 255, 0.05);
   --destructive: oklch(0.6 0.18 15);
   --destructive-foreground: oklch(0.95 0.01 20);
-  /* Lighter blue so it reads on the dark sidebar surface. */
   --info: oklch(0.72 0.137 253.307);
-  /* Brighter amber-400 (~#fbbf24) for the dark sidebar surface. */
   --warning: oklch(0.828 0.189 84.429);
-  /* Light amber (~amber-400) chip text on the dark tint. */
   --warning-foreground: oklch(0.85 0.16 84);
   --status-success-bg: oklch(0.38 0.085 146.171);
   --status-success-foreground: oklch(0.975 0.015 158.255);
   --success: var(--status-success-foreground);
+
+  /* Provider brand colors */
+  /* Claude logo color (--cds-clay in their web browser) */
+  --claude-logo: oklch(0.6724 0.1308 38.76);
+  --deepseek-logo: oklch(0.6473 0.1858 265.19);
+
   --border-subtle: oklch(1 0 0 / 0.05);
   --border-default: oklch(1 0 0 / 0.15);
   --border-strong: oklch(1 0 0 / 0.2);
@@ -770,7 +769,6 @@
   --activity-panel-border: oklch(0.248 0 0);
   --activity-panel-raised-surface: var(--card);
 
-  /* Activity panel overlay scrim — mobile black/30, tablet black/50 */
   --overlay-scrim-mobile: var(--scrim-modal);
   --overlay-scrim-tablet: oklch(0 0 0 / 0.5);
 }
@@ -820,11 +818,14 @@
   }
 
   .sidebar-row {
-    /* Hover == selected == menu-open, one translucent token (ChatGPT uses the
-       same --interactive-bg-secondary value for all three). Composites over the
-       sidebar surface rather than painting the opaque --accent, so the light-mode
-       tint reads at the intended strength instead of a flat near-white. */
     --sidebar-row-active-background: var(--sidebar-row-bg);
+  }
+
+  .sidebar-section-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sidebar-section-stack-gap);
+    margin-top: var(--sidebar-section-stack-margin-top);
   }
 
   .sidebar-menu-row {
@@ -915,10 +916,6 @@
     --sidebar-row-active-background: var(--sidebar-row-bg);
   }
 
-  /* Keyboard-only focus ring on the trailing button's inner 24×24 chip (pin +
-     options), mirroring ChatGPT: 1.5px, offset 2.5px, text-primary color — and
-     NOT on the button box or the row. Keyed off the button's :focus-visible so it
-     never shows on mouse/pointer focus. */
   .sidebar-row-action-rail :is(button, a):focus-visible {
     outline: none;
   }
@@ -928,8 +925,6 @@
     outline-offset: 2.5px;
   }
 
-  /* Chat-group header actions use the same keyboard-only 24px inner-chip ring
-     as row actions. The outer 34x36 hit target stays visually transparent. */
   .sidebar-group-header-action:focus-visible {
     outline: none;
   }
@@ -940,9 +935,6 @@
   }
 
   .sidebar-row-action-rail[data-sidebar-row-actions="compact"] {
-    /* ChatGPT's `.trailing.highlight` visually-hidden state. Because the item
-       is absolute, the parent's 8px flex gap contributes nothing at rest; the
-       title receives the entire 228px inner lane. */
     position: absolute;
     width: 1px;
     height: 1px;
@@ -954,8 +946,6 @@
     pointer-events: none;
   }
 
-  /* Project-directory chat cards keep their existing sibling end-slot shell;
-     only compact sidebar rows use ChatGPT's absolute-to-static structure. */
   .sidebar-row-action-rail[data-sidebar-row-actions="card"] {
     width: 0;
     overflow: hidden;
@@ -1055,7 +1045,6 @@
     }
   }
 
-  /* The sticky composer sits on an 80%-opaque surface masked in over 32px. */
   .content-fade::after {
     content: "";
     position: absolute;
@@ -1173,10 +1162,6 @@ code {
   font-variation-settings: var(--default-mono-font-variation-settings);
 }
 
-/* Typography: balanced headings and stable prose wrapping.
-   Streaming prose must keep greedy line breaks so appending text does not
-   rebalance words across previously rendered lines. Static editorial surfaces
-   can opt back into pretty wrapping with `.prose-static`. */
 .prose :is(h1, h2, h3, h4) {
   text-wrap: balance;
 }
@@ -1189,11 +1174,6 @@ code {
   text-wrap: pretty;
 }
 
-/* Typography plugin → design token bridge
-   Maps @tailwindcss/typography color variables to our design tokens
-   so prose content (chat messages) uses the same palette as the UI.
-   Must target .prose (not :root) because the plugin sets these vars
-   on .prose elements directly — a direct declaration beats inheritance. */
 .prose {
   --tw-prose-body: var(--foreground);
   --tw-prose-headings: var(--foreground);
@@ -1258,15 +1238,10 @@ code {
   text-decoration: none;
 }
 
-/* Captured `.markdown` thread prose metrics (2026-07-11). Values for margins,
-   sizes, weights, and radii are preserved; colors map onto our tokens. Applied
-   on top of `.prose` so these element selectors (0,1,1) outweigh the
-   typography plugin's `.prose :where(el)` (0,1,0). */
 .markdown {
   max-width: unset;
   font-size: 1rem;
   line-height: var(--text-body-regular--line-height);
-  /* Their --border-light / --border-medium hierarchy, mapped to our palette. */
   --markdown-border-light: color-mix(
     in srgb,
     var(--foreground) 5%,
@@ -1386,8 +1361,6 @@ code {
   margin-top: 0;
 }
 
-/* GFM emits native disabled inputs; keep the reference treatment scoped to
-   those renderer-owned controls instead of changing application checkboxes. */
 .markdown .contains-task-list input[type="checkbox"] {
   width: 1rem;
   height: 1rem;
@@ -1482,10 +1455,6 @@ code {
   margin-bottom: 0.25rem;
 }
 
-/* Reference table layout: the container breaks out of the centered content column to
-   the full thread width (100cqw against the `thread` inline-size container on
-   #thread) and scrolls horizontally; the wrapper re-indents the table to the
-   content edge. Their formula verbatim. */
 .markdown-table-container {
   --thread-content-width: min(
     calc(100cqw - 2 * var(--thread-content-margin, 0px)),
@@ -1533,10 +1502,6 @@ code {
   padding-bottom: 1.5rem;
 }
 
-/* Thread scroll variables applied to every turn section and to the trailing gutter.
-   --thread-stream-context-height — how much prior conversation stays visible
-   above a just-sent message: 1/3 of the usable viewport, floor 5.5rem.
-   --thread-response-height — the space reserved below it for the response. */
 .threadScrollVars {
   --thread-stream-context-height: max(
     22 * var(--spacing),
@@ -1552,20 +1517,9 @@ code {
   width: 100%;
 }
 
-/* Streaming color-decay overlay (ADR-0016 amendment 2026-08-11).
-   Painted via the CSS Custom Highlight API by
-   lib/markdown/streaming-decay-overlay.ts: bucket 0 is the newest appended
-   text (most transparent), later buckets decay toward full foreground; the
-   overlay drops a cohort entirely once its decay window ends, so settled
-   paint is plain canonical color. The overlay also no-ops under reduced
-   motion; this media gate is defense in depth. */
+
 @media (prefers-reduced-motion: no-preference) {
-  /* 12 buckets × 33ms ≈ 400ms LINEAR, matching claude.ai's measured run fade
-     (400ms linear opacity 0→1, docs/measurements/2026-08-12-claude-streaming-fade.md)
-     expressed through color alpha (the only channel ::highlight() paints).
-     Bucket k paints at the midpoint of its age slice, (k + 0.5) / 12 — so
-     bucket 0 starts near-invisible like their opacity-0 insert while every
-     character stays painted, selectable, and a11y-exposed from frame one. */
+
   ::highlight(naw-stream-decay-0) {
     color: color-mix(in oklab, var(--foreground) 4%, transparent);
   }

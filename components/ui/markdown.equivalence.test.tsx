@@ -1,6 +1,5 @@
 /** @vitest-environment jsdom */
 
-// ---------------------------------------------------------------------------
 // Rendered-DOM equivalence for the ADR-0016 incremental-projection corpus
 // steps 6–7; added for the 2026-07-27 review, which showed block-record
 // equality alone let a live DOM divergence ship).
@@ -18,7 +17,6 @@
 // A StrictMode pass streams fixtures under <StrictMode> and must produce
 // the same settled DOM as the plain control — the projection advances
 // through render-phase state adjustment, which StrictMode double-invokes.
-// ---------------------------------------------------------------------------
 
 import { GROWING_HIGHLIGHT_IDLE_MS } from "@/lib/chat-performance/streaming-code-render"
 import {

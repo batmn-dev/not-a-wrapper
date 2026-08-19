@@ -81,7 +81,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     ? getMessagePersistenceMode(chatId)
     : null
 
-  // Only query if chatId is a valid Convex ID (not optimistic or local guest chat)
   const isValidConvexId = messagePersistenceMode === "server"
 
   // Convex real-time query for the selected conversation — messages AND the
@@ -101,11 +100,9 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
   const selectedRun =
     (canSubscribeToMessages ? selectedConversation?.selectedRun : null) ?? null
 
-  // Convex mutations
   const addMessageMutation = useMutation(api.messages.add)
   const selectBranchMutation = useMutation(api.messages.selectBranch)
 
-  // Convert Convex messages to AI SDK format
   const serverMessages: ExtendedUIMessage[] = useMemo(() => {
     if (!canSubscribeToMessages || !convexMessages) return []
     return convexMessages.map((msg) =>
@@ -150,32 +147,26 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     getCachedMessagesServerSnapshot
   )
 
-  // Track optimistic messages per chat (keyed by chatId for natural isolation)
   const [optimisticMessagesMap, setOptimisticMessagesMap] = useState<
     Map<string, ExtendedUIMessage[]>
   >(new Map())
 
-  // Get optimistic messages for current chat (memoized to prevent unnecessary re-renders)
   const optimisticMessages = useMemo(
     () => (chatId ? (optimisticMessagesMap.get(chatId) ?? []) : []),
     [chatId, optimisticMessagesMap]
   )
 
-  // Derive displayed messages from server data + optimistic messages
   const messages = useMemo(() => {
-    // If chatId is null, return empty
     if (chatId === null) return []
 
     const storedMessages =
       messagePersistenceMode === "localOnly" ? localMessages : serverMessages
 
-    // Merge stored messages with optimistic messages for this chat
     // Deduplicate by ID to prevent duplicate-key React errors when optimistic
     // messages overlap with stored messages or with each other (e.g. rapid submissions)
     const seenIds = new Set<string>()
     const result: ExtendedUIMessage[] = []
 
-    // Stored messages take priority
     for (const m of storedMessages) {
       if (!seenIds.has(m.id)) {
         seenIds.add(m.id)
@@ -183,7 +174,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Append optimistic messages that aren't already represented
     for (const m of optimisticMessages) {
       if (!seenIds.has(m.id)) {
         seenIds.add(m.id)
@@ -210,7 +200,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     selectedRunStatus: selectedRun?.status ?? null,
   })
 
-  // Helper to update optimistic messages for current chat
   const updateOptimisticMessages = useCallback(
     (updater: (prev: ExtendedUIMessage[]) => ExtendedUIMessage[]) => {
       if (!chatId) return
@@ -226,7 +215,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
 
   const cacheAndAddMessage = useCallback(
     async (message: ExtendedUIMessage, overrideChatId?: string) => {
-      // Use overrideChatId to handle stale closures during chat creation flow
       const effectiveChatId = overrideChatId || chatId
       if (!effectiveChatId) return
 
@@ -235,9 +223,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
         ? message
         : { ...message, createdAt: new Date() }
 
-      // Optimistic update - add to pending messages (use effectiveChatId for map key)
       if (effectiveChatId === chatId) {
-        // Only update optimistic state if we're in the same chat context
         // Guard against duplicate IDs from rapid submissions or re-renders
         updateOptimisticMessages((prev) =>
           prev.some((m) => m.id === messageToCache.id)
@@ -260,8 +246,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
       })
       await cacheMessages(effectiveChatId, updated)
 
-      // Persist to Convex for authenticated users (valid Convex IDs only)
-      // Guest users will silently skip this (auth required for mutations)
       if (getMessagePersistenceMode(effectiveChatId) === "server") {
         try {
           const textContent =
@@ -277,9 +261,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
             parts: messageToCache.parts,
           })
         } catch (error) {
-          // Silently fail for guests (no auth) - they only get local storage
-          // For authenticated users, log the error but don't block the UI
-          // The optimistic update keeps the UI responsive
           console.debug("Message persistence skipped:", error)
         }
       }

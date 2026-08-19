@@ -544,7 +544,6 @@ export function createChatTurnRuntime(args: {
         : []),
     ]
 
-    // -----------------------------------------------------------------------
     // Tool runtime (CONTEXT.md; lib/tools/runtime.ts)
     //
     // Loads the three Tool layers (Layer 1 provider-native, Layer 2 Exa
@@ -552,7 +551,6 @@ export function createChatTurnRuntime(args: {
     // Tool budget, applies naming governance, and prepares runtime-approval
     // decisions — all behind one interface. It owns the stream-lifecycle hooks
     // (`prepareStep`, `onStepFinish`) the turn composes with durable persistence.
-    // -----------------------------------------------------------------------
     const tool = await perf.span("tool_preparation", () =>
       prepareToolRuntime({
         isAuthenticated,

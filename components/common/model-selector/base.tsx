@@ -250,10 +250,10 @@ export function ModelSelector({
     <Button
       variant="ghost"
       className={cn(
-        "min-w-0 shrink overflow-hidden font-normal",
+        "min-w-0 shrink font-normal",
         isComposerVariant
-          ? "text-muted-foreground active:bg-interactive-pressed aria-expanded:bg-interactive-selected pointer-fine:hover:bg-interactive-hover h-9 max-w-none justify-start gap-1.5 rounded-full px-3 py-0 text-sm active:scale-100"
-          : "max-w-full justify-between rounded-lg text-lg",
+          ? "text-muted-foreground active:bg-interactive-pressed aria-expanded:bg-interactive-selected pointer-fine:hover:bg-interactive-hover h-9 max-w-none justify-start gap-1.5 overflow-visible rounded-full px-3 py-0 text-sm active:scale-100 pointer-fine:relative pointer-fine:after:absolute pointer-fine:after:-inset-x-1 pointer-fine:after:inset-y-0 pointer-fine:after:content-['']"
+          : "max-w-full justify-between overflow-hidden rounded-lg text-lg",
         className
       )}
       disabled={disabled || isLoadingModels}
@@ -265,7 +265,7 @@ export function ModelSelector({
           slotSize={16}
           glyphSize={16}
           data-slot="selected-model-icon"
-          className="shrink-0"
+          className="text-foreground shrink-0 opacity-100"
         />
       ) : null}
       <span className={cn("min-w-0 truncate", isComposerVariant && "max-w-40")}>

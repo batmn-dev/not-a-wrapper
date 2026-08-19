@@ -31,7 +31,6 @@ export const useAssistantMessageSelection = (
       const selection = window.getSelection()
       const selectedText = selection?.toString()
 
-      // Find the closest ancestor with data-message-id attribute for the current selection
       let messageElement: HTMLElement | null = null
       const range = selection?.rangeCount ? selection.getRangeAt(0) : null
       if (range) {

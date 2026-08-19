@@ -31,7 +31,7 @@ const grokModels: ModelConfig[] = [
     website: "https://x.ai",
     apiDocs: "https://docs.x.ai/docs/models",
     releasedAt: "2026-04-30",
-    icon: "xai",
+    icon: "grok",
   },
   {
     id: "grok-4-0709",
@@ -61,7 +61,7 @@ const grokModels: ModelConfig[] = [
     website: "https://x.ai",
     apiDocs: "https://docs.x.ai/docs/models",
     releasedAt: "2025-07-09",
-    icon: "xai",
+    icon: "grok",
   },
   {
     // Absent from xAI's current models page (2026-07-05) but still routable —
@@ -95,7 +95,7 @@ const grokModels: ModelConfig[] = [
     website: "https://x.ai",
     apiDocs: "https://docs.x.ai/docs/models",
     releasedAt: "2025-11-19",
-    icon: "xai",
+    icon: "grok",
   },
   {
     id: "grok-4-1-fast-non-reasoning",
@@ -123,7 +123,7 @@ const grokModels: ModelConfig[] = [
     intelligence: "High",
     website: "https://x.ai",
     apiDocs: "https://docs.x.ai/docs/models",
-    icon: "xai",
+    icon: "grok",
   },
   {
     id: "grok-code-fast-1",
@@ -152,7 +152,7 @@ const grokModels: ModelConfig[] = [
     intelligence: "High",
     website: "https://x.ai",
     apiDocs: "https://docs.x.ai/docs/models",
-    icon: "xai",
+    icon: "grok",
   },
 ]
 

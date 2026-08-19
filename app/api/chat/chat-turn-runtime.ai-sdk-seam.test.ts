@@ -19,7 +19,6 @@ import type {
   DurableWorkerWire,
 } from "./durable-turn-runtime"
 
-// ---------------------------------------------------------------------------
 // AI SDK seam tests (PR #97 regression class): run the REAL `ai` package —
 // streamText, its v7 callback names (onStepEnd/onEnd/prepareStep), tool
 // execution, and the UI-message Response — against the real Chat turn runtime
@@ -31,7 +30,6 @@ import type {
 //     budget store and audit sink), MCP servers (loadUserMcpTools),
 //   - tool-key resolution, Sentry/PostHog/Braintrust.
 // vi.mock("ai") is deliberately absent.
-// ---------------------------------------------------------------------------
 
 vi.mock("@sentry/nextjs", () => ({
   setTag: vi.fn(),

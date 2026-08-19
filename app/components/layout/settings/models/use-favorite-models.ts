@@ -76,15 +76,12 @@ export function useFavoriteModels() {
       // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: ["favorite-models"] })
 
-      // Snapshot the previous value
       const previousFavoriteModels = queryClient.getQueryData<string[]>([
         "favorite-models",
       ])
 
-      // Optimistically update to the new value
       queryClient.setQueryData(["favorite-models"], newFavoriteModels)
 
-      // Return a context object with the snapshotted value
       return { previousFavoriteModels }
     },
     onError: (

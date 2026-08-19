@@ -16,7 +16,7 @@ export function DesignSystemMobileNav() {
   return (
     <nav
       aria-label="Component navigation"
-      className="bg-background/90 sticky top-0 z-30 flex gap-1 overflow-x-auto border-b px-3 py-2 backdrop-blur-sm md:hidden"
+      className="bg-muted/90 sticky top-0 z-30 flex gap-1 overflow-x-auto border-b px-3 py-2 backdrop-blur-sm md:hidden"
     >
       {designSystemComponents.map((component) => {
         const isCurrent = pathname === component.href

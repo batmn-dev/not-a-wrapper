@@ -11,21 +11,13 @@ import { RiArrowRightSLine } from "@remixicon/react"
 import * as React from "react"
 
 type CollapsibleSectionProps = {
-  /** Section title */
   title: string
-  /** Optional icon before title */
   icon?: React.ReactNode
-  /** Section content */
   children: React.ReactNode
-  /** Optional controls rendered to the right of the sidebar header trigger */
   headerActions?: React.ReactNode
-  /** Initial expanded state */
   defaultOpen?: boolean
-  /** localStorage key for persistence */
   storageKey?: string
-  /** Additional className for the container */
   className?: string
-  /** Visual style variant */
   variant?: "default" | "sidebar"
 }
 
@@ -92,9 +84,6 @@ export function CollapsibleSection({
           ? [
               "w-full min-w-0 justify-start gap-[0.5px] px-4 py-1.5",
               hasSidebarHeaderActions && "rounded-none",
-              // Button is muted (ChatGPT: text-token-text-tertiary) so the
-              // chevron inherits the muted tint; the label overrides back to
-              // primary below.
               "text-[var(--text-tertiary)] transition-none",
             ]
           : [
@@ -157,8 +146,7 @@ export function CollapsibleSection({
           "data-[closed]:animate-collapsible-up"
         )}
       >
-        {/* Sidebar sections keep items flush under the 32px header trigger
-            (ChatGPT parity: the header's own padding is the entire gap). */}
+        {/* The header padding is the entire gap, so sidebar items stay flush. */}
         <div className={cn(!isSidebarVariant && "pt-1")}>{children}</div>
       </CollapsibleContent>
     </Collapsible>

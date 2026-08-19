@@ -12,7 +12,7 @@ import * as React from "react"
  * shortcut), the desktop frame, and the toggle trigger.
  *
  * This file deliberately owns NO row/menu vocabulary. The canonical sidebar
- * rows are the ChatGPT-parity components in `app/components/layout/sidebar/`
+ * rows are the components in `app/components/layout/sidebar/`
  * (`SidebarMenuItem`, `SidebarRow`, `SidebarLeadingIcon`, …), styled by the
  * `--sidebar-*` token contract in `app/globals.css` and pinned by
  * `sidebar-geometry.test.ts`. Do not reintroduce a parallel menu system here.
@@ -27,7 +27,6 @@ const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_KEYBOARD_SHORTCUT = "s"
 const SIDEBAR_CONTAINER_ID = "sidebar-container"
 
-// Helper to read sidebar state from cookie (only call after mount)
 function getSidebarStateFromCookie(): boolean | undefined {
   if (typeof document === "undefined") return undefined
   const match = document.cookie.match(
@@ -76,13 +75,9 @@ function SidebarProvider({
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
 
-  // This is the internal state of the sidebar.
-  // We use openProp and setOpenProp for control from outside the component.
-  // Initialize with defaultOpen to ensure server/client match during hydration
   const [_open, _setOpen] = React.useState(defaultOpen)
   const open = openProp ?? _open
 
-  // Sync with cookie value after mount to avoid hydration mismatch
   React.useEffect(() => {
     const cookieValue = getSidebarStateFromCookie()
     if (cookieValue !== undefined && cookieValue !== _open) {
@@ -99,13 +94,11 @@ function SidebarProvider({
         _setOpen(openState)
       }
 
-      // This sets the cookie to keep the sidebar state.
       document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
     },
     [setOpenProp, open]
   )
 
-  // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {
     return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)
   }, [isMobile, setOpen, setOpenMobile])
@@ -146,8 +139,6 @@ function SidebarProvider({
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [shortcutEnabled, toggleSidebar])
 
-  // We add a state so that we can do data-state="expanded" or "collapsed".
-  // This makes it easier to style the sidebar with Tailwind classes.
   const state = open ? "expanded" : "collapsed"
 
   const contextValue = React.useMemo<SidebarContextProps>(
@@ -240,12 +231,12 @@ function Sidebar({
       data-collapsible={state === "collapsed" ? collapsible : ""}
       data-slot="sidebar"
     >
-      {/* This is what handles the sidebar gap on desktop */}
+      {/* The gap and fixed container must use identical motion so both width
+          owners stay in lockstep. */}
       <div
         data-slot="sidebar-gap"
         className={cn(
-          // Slightly snappier timing keeps the sidebar responsive without changing behavior.
-          "relative w-(--sidebar-width) bg-transparent motion-safe:transition-[width] motion-safe:duration-[220ms] motion-safe:ease-[cubic-bezier(.2,0,0,1)]",
+          "relative w-(--sidebar-width) bg-transparent motion-safe:transition-[width] motion-safe:duration-[450ms] motion-safe:ease-[linear(0,0.126,0.3555,0.5713,0.7361,0.8485,0.9191,0.9603,0.9828,0.9941,0.9992,1.0011,1.0015,1.0013,1.001,1.0007,1.0004,1.0002,1.0001)]",
           "group-data-[collapsible=icon]:w-(--sidebar-width-icon)"
         )}
       />
@@ -253,7 +244,7 @@ function Sidebar({
         id={SIDEBAR_CONTAINER_ID}
         data-slot="sidebar-container"
         className={cn(
-          "fixed inset-y-0 left-0 z-10 hidden h-svh w-(--sidebar-width) overflow-hidden motion-safe:transition-[left,right,width,background-color] motion-safe:duration-[220ms] motion-safe:ease-[cubic-bezier(.2,0,0,1)] md:flex",
+          "fixed inset-y-0 left-0 z-10 hidden h-svh w-(--sidebar-width) overflow-hidden motion-safe:transition-[left,right,width,background-color] motion-safe:duration-[450ms] motion-safe:ease-[linear(0,0.126,0.3555,0.5713,0.7361,0.8485,0.9191,0.9603,0.9828,0.9941,0.9992,1.0011,1.0015,1.0013,1.001,1.0007,1.0004,1.0002,1.0001)] md:flex",
           "group-data-[collapsible=icon]:w-(--sidebar-width-icon)",
           className
         )}

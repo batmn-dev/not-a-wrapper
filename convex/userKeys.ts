@@ -75,7 +75,6 @@ export const upsert = authenticatedMutation({
     iv: v.string(),
   },
   handler: async (ctx, args) => {
-    // Check for existing key
     const existing = await ctx.db
       .query("userKeys")
       .withIndex("by_user_provider", (q) =>
@@ -100,9 +99,6 @@ export const upsert = authenticatedMutation({
   },
 })
 
-/**
- * Delete API key for a provider
- */
 export const remove = authenticatedMutation({
   args: { provider: v.string() },
   handler: async (ctx, { provider }) => {

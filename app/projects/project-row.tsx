@@ -21,8 +21,7 @@ import { projectsGridColumnsClassName } from "./projects-grid-columns"
 const rowShellClassName = cn(
   projectsGridColumnsClassName,
   "group/project-row relative z-0 min-h-11 cursor-pointer items-center py-3.5 ps-0 pe-2",
-  // Pill radius is the captured 16px (ChatGPT --radius-2xl), which no local
-  // radius token hits (our 2xl computes 18px).
+  // No local radius token maps to the required 16px.
   "before:bg-row-hover before:pointer-events-none before:absolute before:-inset-x-4 before:-inset-y-px before:z-0 before:rounded-[1rem] before:opacity-0 before:transition-opacity before:duration-150 motion-reduce:before:transition-none",
   "hover:z-[1] hover:before:opacity-100",
   "after:border-foreground after:pointer-events-none after:absolute after:-inset-x-4 after:-inset-y-px after:z-[1] after:rounded-[1rem] after:border-2 after:opacity-0",

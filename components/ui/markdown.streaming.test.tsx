@@ -1,6 +1,5 @@
 /** @vitest-environment jsdom */
 
-// ---------------------------------------------------------------------------
 // Terminal-block stability through the full Markdown pipeline (plan PR 3).
 //
 // The stability rule under test — a code block is `growing` iff it is the
@@ -10,7 +9,6 @@
 // change while stable blocks highlight immediately. Shiki is mocked, so
 // highlight calls are exact; there is deliberately no fence parser, so an
 // unclosed terminal fence settles the moment the message does.
-// ---------------------------------------------------------------------------
 
 import { GROWING_HIGHLIGHT_IDLE_MS } from "@/lib/chat-performance/streaming-code-render"
 import React, { act } from "react"
@@ -335,11 +333,9 @@ describe("Markdown terminal-block stability (plan PR 3)", () => {
     expect(writeText.mock.calls[0][0]).toContain(hostile)
   })
 
-  // -------------------------------------------------------------------------
   // Growing single-block shapes: lists always retain one authoritative
   // semantic root; an open fence renders directly and lands on the pipeline's
   // structure at settle.
-  // -------------------------------------------------------------------------
 
   function orderedItems(from: number, to: number) {
     return Array.from(

@@ -23,7 +23,7 @@ import type { ReactNode } from "react"
 
 export function DsPage({ children }: { children: ReactNode }) {
   return (
-    <main id="main" className="w-full max-w-[680px] px-6 pt-10 pb-24 md:pt-28">
+    <main id="main" className="w-full max-w-[960px] px-6 pt-10 pb-24 md:pt-28">
       {children}
     </main>
   )

@@ -25,9 +25,7 @@ vi.mock("@/lib/config", () => ({
 }))
 
 describe("truncateToolResult", () => {
-  // ===========================================================================
   // No truncation needed — results pass through unchanged
-  // ===========================================================================
 
   describe("results within size limit", () => {
     it("returns representative small values unchanged", () => {
@@ -46,9 +44,7 @@ describe("truncateToolResult", () => {
     })
   })
 
-  // ===========================================================================
   // Oversized string truncation
-  // ===========================================================================
 
   describe("oversized string truncation", () => {
     it("truncates strings over the byte limit with marker", () => {
@@ -73,9 +69,7 @@ describe("truncateToolResult", () => {
     })
   })
 
-  // ===========================================================================
   // Oversized array truncation (shape-preserving)
-  // ===========================================================================
 
   describe("oversized array truncation", () => {
     it("returns shape-preserved truncation with metadata", () => {
@@ -117,9 +111,7 @@ describe("truncateToolResult", () => {
     })
   })
 
-  // ===========================================================================
   // Oversized object truncation
-  // ===========================================================================
 
   describe("oversized object truncation", () => {
     it("returns truncated representation with metadata", () => {
@@ -281,9 +273,7 @@ describe("truncateToolResult", () => {
     })
   })
 
-  // ===========================================================================
   // Edge cases
-  // ===========================================================================
 
   describe("edge cases", () => {
     it("logs a warning when truncation occurs", () => {
@@ -300,9 +290,7 @@ describe("truncateToolResult", () => {
   })
 })
 
-// =============================================================================
 // isTruncated
-// =============================================================================
 
 describe("isTruncated", () => {
   it("recognizes only explicit truncation envelopes", () => {
@@ -331,9 +319,7 @@ describe("isTruncated", () => {
   })
 })
 
-// =============================================================================
 // wrapToolsWithTruncation
-// =============================================================================
 
 describe("wrapToolsWithTruncation", () => {
   it("wraps execute functions with truncation", async () => {

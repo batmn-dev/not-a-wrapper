@@ -33,6 +33,9 @@ type DesktopSearchModalProps = {
   isAuthenticated: boolean
 }
 
+const desktopSearchSurfaceClassName =
+  "border-modal-search-border bg-modal-search text-modal-search-foreground shadow-modal-search rounded-(--modal-search-radius) border bg-clip-padding"
+
 type FlatRow =
   | {
       type: "new-chat"
@@ -207,9 +210,9 @@ export function DesktopSearchModal({
           {isAuthenticated ? (
             <div
               className={cn(
-                "pointer-events-auto col-start-2 row-start-2 mx-auto flex h-[440px] w-full flex-col overflow-hidden rounded-2xl",
-                "bg-popover text-popover-foreground shadow-border-xl bg-clip-padding",
-                "max-w-md md:max-w-[680px] md:min-w-[680px]"
+                "pointer-events-auto col-start-2 row-start-2 mx-auto flex h-[462px] max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden",
+                desktopSearchSurfaceClassName,
+                "max-w-md md:max-w-[720px] md:min-w-[720px]"
               )}
             >
               <div className="me-4 flex h-16 shrink-0 items-center justify-between">
@@ -332,8 +335,8 @@ export function DesktopSearchModal({
           ) : (
             <div
               className={cn(
-                "pointer-events-auto col-start-2 row-start-2 mx-auto w-[calc(100vw-20px)] max-w-[388px] overflow-hidden rounded-2xl",
-                "bg-background text-foreground shadow-border-xl"
+                "pointer-events-auto col-start-2 row-start-2 mx-auto w-[calc(100vw-20px)] max-w-[388px] overflow-hidden",
+                desktopSearchSurfaceClassName
               )}
             >
               <header className="flex min-h-12 items-start justify-end p-2.5 pb-0">
@@ -391,9 +394,9 @@ function SearchRow({
     >
       <div
         className={cn(
-          "group text-foreground relative flex items-center rounded-xl px-4 py-3",
-          "hover:bg-interactive-hover hover:text-foreground active:bg-interactive-pressed",
-          active && "bg-interactive-selected text-foreground"
+          "group text-foreground relative flex h-12 items-center rounded-xl px-3 py-2",
+          "hover:bg-modal-search-row-active hover:text-foreground active:bg-modal-search-row-active",
+          active && "bg-modal-search-row-active text-foreground"
         )}
       >
         {icon}

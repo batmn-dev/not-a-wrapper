@@ -1,6 +1,5 @@
 /**
- * Turn-anchor scroll restoration (ChatGPT parity — see
- * docs/chatgpt-scroll-restoration-source-research.md).
+ * Turn-anchor scroll restoration.
  *
  * A saved position is semantic: the top-visible turn's id plus its signed
  * pixel offset from the scroll root's top edge — never a raw scrollTop.
@@ -10,8 +9,7 @@
  *
  * The map is module-scoped and in-memory BY DESIGN: it survives client-side
  * navigation, and a full reload deliberately starts empty (the caller's
- * bottom fallback runs). No eviction, no serialization — matching the
- * audited ChatGPT behavior.
+ * bottom fallback runs). No eviction and no serialization.
  */
 
 type SavedThreadAnchor = {

@@ -53,7 +53,6 @@ export const POST = authenticatedRoute(
         )
       }
 
-      // Build auth headers from raw values
       let headers: Record<string, string> | undefined
       if (authType === "bearer" && authValue) {
         headers = { Authorization: `Bearer ${authValue}` }
