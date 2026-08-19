@@ -18,15 +18,15 @@ I want to share some of my preferences here so we can be more aligned when worki
 - Fix root causes instead of symptoms.
 - Optimize for maintainability and clarity over short-term speed.
 - If unsure, consult repo-local docs, remaining `.agents/skills/`, and official references; document non-trivial trade-offs.
-- Typesaftey is useful, take advantage of it.
+- Before proposing architecture, check `docs/adr/` for a decision that already covers it. Significant new decisions get a new ADR.
+- Typesafety is useful, take advantage of it.
 - Don't be scared to propose bold ideas if they can meaningfully and CLEARLY benefit our work
 - Testing essential backend behavior is good! However, endless smoke tests, "regression tests" for feature deletions, etc... is BAD. Tests should be concise, focused and meaningful. Don't add tests just because or if there isn't a clear benefit.
 - Adding essential comments to clarify functionality and intended behavior is good. But don't comment every line, keep it concise, essential, and meaningful. 
-- Keep comments and documentation up to date. When making changes, its important to keep things in sync to prevent future agents from getting confused.
+- Keep comments and documentation up to date. When making changes, it's important to keep things in sync to prevent future agents from getting confused.
 - No `// @ts-ignore`.
 - No lint-rule bypassing (`eslint-disable`) without explicit documented approval.
 - Do not downgrade or disable checks to "make it pass."
-- Prefer root cause fixes over workarounds.
 - When extending an existing feature to a new state, audience, or route, identify the current source-of-truth pattern before editing. Match its component ownership, placement logic, accessibility, and interaction model by default.
 - Keep future restyling centralized: prefer shared primitives and semantic tokens over hard-coded, call-site-specific styling. Equivalent controls should preserve shared behavior and structure while the visual language evolves.
 
@@ -39,6 +39,12 @@ I want to share some of my preferences here so we can be more aligned when worki
 - If not already specified in project, I generally like to use the following tech: Convex, Tailwind, React, Vite, bun
 - When building more complex web and react native apps, I like to pull in Zustand, React Query, Tanstack Start, Workos or Clerk (or better-auth if selfhosting), and ArkType (or zod if perf isn't an issue)
 
+
+## Commands and local dev
+
+- Verify with `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run build:next`.
+- **`bun run build` is NOT a build — it deploys to production Convex.** Never run it to verify a change; use `bun run build:next`.
+- My long-running `bun dev` owns port 3000. Verify through it and never kill or restart it, and don't start a competing dev server.
 
 ## Match ceremony to the task
 
@@ -87,7 +93,7 @@ encrypted-at-rest), or auth correctness.
 When the app gains real users, revert this section and fully re-activate the
 migration discipline.
 
-## Correctness-First Escalation (MUST)
+## Correctness-First Escalation
 
 - Use risk-based rigor: keep low-risk tasks lightweight, increase rigor for medium/high-risk tasks.
 - Medium/high-risk changes require a brief approach decision before coding (options, trade-offs, chosen approach).
@@ -119,6 +125,6 @@ migration discipline.
 
 - If asked to create a prompt, return it directly in chat unless a file is explicitly requested.
 - Do not include timeline or effort estimates unless explicitly requested.
-- Do not stage, delete, or normalize unrelated files during this process.
+- Do not stage, delete, or normalize unrelated files when making narrow changes.
 - Always use my authenticated chrome browser, never use your own.
 
