@@ -126,5 +126,5 @@ migration discipline.
 - If asked to create a prompt, return it directly in chat unless a file is explicitly requested.
 - Do not include timeline or effort estimates unless explicitly requested.
 - Do not stage, delete, or normalize unrelated files when making narrow changes.
-- Always use my authenticated chrome browser, never use your own.
+- If you need to live smoketest or verify changes, always use my authenticated chrome browser, never use your own.
 

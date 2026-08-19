@@ -356,6 +356,7 @@
   --color-status-success-bg: var(--status-success-bg);
   --color-status-success-foreground: var(--status-success-foreground);
   --color-claude-logo: var(--claude-logo);
+  --color-deepseek-logo: var(--deepseek-logo);
   --color-link: var(--link);
   --color-link-hover: var(--link-hover);
   --color-disabled-foreground: var(--text-disabled);
@@ -534,6 +535,7 @@
   /* Provider brand colors */
   /* Claude logo color (--cds-clay in their web browser) */
   --claude-logo: oklch(0.6724 0.1308 38.76);
+  --deepseek-logo: oklch(0.5703 0.2334 266.6);
 
   --border-subtle: oklch(0 0 0 / 0.05);
   --border-default: oklch(0 0 0 / 0.1);
@@ -682,6 +684,7 @@
   /* Provider brand colors */
   /* Claude logo color (--cds-clay in their web browser) */
   --claude-logo: oklch(0.6724 0.1308 38.76);
+  --deepseek-logo: oklch(0.6473 0.1858 265.19);
 
   --border-subtle: oklch(1 0 0 / 0.05);
   --border-default: oklch(1 0 0 / 0.15);
