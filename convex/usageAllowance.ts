@@ -1,5 +1,6 @@
 import { v } from "convex/values"
 import type { Doc, Id } from "./_generated/dataModel"
+import type { GenerationRunTerminalReason } from "./domain/generation_run_lifecycle"
 import {
   internalMutation,
   internalQuery,
@@ -230,6 +231,27 @@ export type ReserveUsageResult =
 export type ReserveUsageArgs = UsageReservationArgs
 
 /**
+ * The reservation row's semantic payload — exactly the fields the fingerprint
+ * covers, projected back out of a stored row. Shared by replay detection and
+ * the fingerprint self-migration so the projection cannot drift from the
+ * reserve-time args shape.
+ */
+function reservationPayloadOf(row: Doc<"usageReservations">): ReserveUsageArgs {
+  return {
+    requestId: row.requestId,
+    chatId: row.chatId,
+    modelId: row.modelId,
+    routeId: row.routeId,
+    providerId: row.providerId,
+    estimatedCredits: row.estimatedCredits,
+    estimatedInputTokens: row.estimatedInputTokens,
+    estimatedOutputTokens: row.estimatedOutputTokens,
+    titleEstimatedCredits: row.titleEstimatedCredits,
+    pricingSnapshot: row.pricingSnapshot,
+  }
+}
+
+/**
  * Trusted handler core, exported for tests. The registered public wrapper must
  * verify server authorization before calling it; other callers must not bypass
  * that boundary.
@@ -254,18 +276,9 @@ export async function reserveUsageForUser(
       )
       .unique()
     if (existing) {
-      const existingSemanticFingerprint = reservationPayloadFingerprint({
-        requestId: existing.requestId,
-        chatId: existing.chatId,
-        modelId: existing.modelId,
-        routeId: existing.routeId,
-        providerId: existing.providerId,
-        estimatedCredits: existing.estimatedCredits,
-        estimatedInputTokens: existing.estimatedInputTokens,
-        estimatedOutputTokens: existing.estimatedOutputTokens,
-        titleEstimatedCredits: existing.titleEstimatedCredits,
-        pricingSnapshot: existing.pricingSnapshot,
-      })
+      const existingSemanticFingerprint = reservationPayloadFingerprint(
+        reservationPayloadOf(existing)
+      )
       if (
         existing.payloadFingerprint !== fingerprint &&
         existingSemanticFingerprint !== fingerprint
@@ -288,7 +301,15 @@ export async function reserveUsageForUser(
         return { kind: "conflict" }
       }
       if (existing.payloadFingerprint !== fingerprint) {
+        // Deploy-skew shim (ADR-0021 rollout): the stored fingerprint was
+        // written by an older serializer; semantic equality proved the replay,
+        // so upgrade the row in place. Audited — remove once the rollout
+        // preflight confirms no old-format live rows remain.
         await ctx.db.patch(existing._id, { payloadFingerprint: fingerprint })
+        logUsage("usage_reserve_fingerprint_migrated", {
+          requestId: args.requestId,
+          reservationId: existing._id,
+        })
       }
       logUsage("usage_reserve_replay", {
         requestId: args.requestId,
@@ -696,7 +717,13 @@ export async function settleUsageForTerminalRun(
   ctx: MutationCtx,
   run: Doc<"generationRuns">,
   evidence: TerminalUsageEvidence = {},
-  reason = "terminal"
+  auditReason = "terminal",
+  // Boundary discriminator, typed: the run's terminal cause decides the
+  // release-vs-settle branch; `auditReason` is ledger text only and never
+  // drives billing. Live callers pass verdict.run.terminalReason explicitly
+  // (their in-memory `run` predates the terminal patch); the reconciler
+  // omits it and the stored value on the run doc is used.
+  terminalReason: GenerationRunTerminalReason | undefined = run.terminalReason
 ): Promise<void> {
   const reservation = await ctx.db
     .query("usageReservations")
@@ -704,7 +731,27 @@ export async function settleUsageForTerminalRun(
     .unique()
   if (!reservation) return
   if (reservation.status === "settled") {
-    // Duplicate terminal delivery — the first settlement stands.
+    // Duplicate terminal delivery — the first settlement stands. Evidence-free
+    // duplicates (reaper re-delivery) are the benign idempotent case; a
+    // duplicate whose evidence DISAGREES with the settled facts is a
+    // conflicting second settlement (ADR-0021): logged as an invariant
+    // violation and rejected — never re-billed.
+    const conflicting =
+      evidence.usage !== undefined &&
+      (evidence.usage.inputTokens !== reservation.inputTokens ||
+        evidence.usage.outputTokens !== reservation.outputTokens)
+    if (conflicting) {
+      warnUsage("usage_settle_conflict_rejected", {
+        reservationId: reservation._id,
+        runId: run._id,
+        storedBasis: reservation.settlementBasis,
+        storedInputTokens: reservation.inputTokens,
+        storedOutputTokens: reservation.outputTokens,
+        incomingInputTokens: evidence.usage?.inputTokens,
+        incomingOutputTokens: evidence.usage?.outputTokens,
+        reason: auditReason,
+      })
+    }
     return
   }
   if (reservation.status === "released") {
@@ -712,7 +759,7 @@ export async function settleUsageForTerminalRun(
     warnUsage("usage_settle_after_release_rejected", {
       reservationId: reservation._id,
       runId: run._id,
-      reason,
+      reason: auditReason,
     })
     return
   }
@@ -760,7 +807,7 @@ export async function settleUsageForTerminalRun(
         inputTokens: evidence.usage.inputTokens,
         outputTokens: evidence.usage.outputTokens,
         titleCredits,
-        reason,
+        reason: auditReason,
       },
       now
     )
@@ -787,7 +834,7 @@ export async function settleUsageForTerminalRun(
         inputTokens: observed.inputTokens,
         outputTokens: observed.outputTokens,
         titleCredits: titleEstimate,
-        reason,
+        reason: auditReason,
       },
       now
     )
@@ -802,10 +849,13 @@ export async function settleUsageForTerminalRun(
   // Stop or a reaped lease keeps the conservative estimate — the provider
   // may have generated tokens nobody observed.
   if (run.workStartedAt === undefined) {
-    await releaseReservation(ctx, reservation, reason, now)
+    await releaseReservation(ctx, reservation, auditReason, now)
     return
   }
-  if (reason === "provider_error" && (run.lastSnapshotSequence ?? 0) === 0) {
+  if (
+    terminalReason === "provider_error" &&
+    (run.lastSnapshotSequence ?? 0) === 0
+  ) {
     await releaseReservation(
       ctx,
       reservation,
@@ -822,7 +872,7 @@ export async function settleUsageForTerminalRun(
       actualCredits: reservation.reservedCredits,
       basis: "estimated_after_unknown_usage",
       titleCredits: titleEstimate,
-      reason,
+      reason: auditReason,
     },
     now
   )

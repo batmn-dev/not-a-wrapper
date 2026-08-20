@@ -52,7 +52,9 @@ confirmation; changing them is a one-constant edit:
 
 - **Bucket identity:** `(userId, bucketKind: "included", periodKey)` where
   `periodKey` is the UTC month (`"2026-08"`). Lazy creation: the first
-  reservation (or allowance read) of a period materializes the bucket; the
+  **reservation** of a period materializes the bucket; allowance **reads**
+  project the plan's would-be grant virtually until then (Convex queries
+  cannot write, and a reactive subscription must not mint rows). The
   grant ledger entry's idempotency key is `grant:{userId}:{periodKey}`, so
   the grant is idempotent by construction.
 - Unused allowance does **not** roll over; a new period starts a new bucket.
@@ -99,7 +101,12 @@ race-free without SQL unique constraints.
   EVERY immutable reservation fact → ensure current bucket → idempotency
   check on `(userId, requestId)` (an identical fingerprint on a STILL-RESERVED
   row replays; a different fingerprint, or any replay of a settled/released
-  row, is a typed conflict — settled or refunded money is never re-admitted)
+  row, is a typed conflict — settled or refunded money is never re-admitted.
+  Rolling-deploy exception: a stored fingerprint written by an older
+  serializer is accepted when recomputing the fingerprint from the stored
+  row's semantic fields matches the incoming one; the row's fingerprint is
+  upgraded in place and the migration is logged. Remove this shim once the
+  rollout preflight confirms no old-format live rows remain)
   → admission check → atomically decrement available, increment reserved,
   insert reservation + `reserve` ledger entry. Typed results are `reserved`,
   `insufficient_allowance`, `idempotent_replay`, `conflict`, and `rate_limited`.

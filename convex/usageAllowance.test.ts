@@ -256,6 +256,7 @@ describe("reserve", () => {
   })
 
   it("semantically replays and upgrades a reservation with the legacy fingerprint", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
     const { ctx, tables } = createCtx({ users: [user] })
     const first = await reserveUsageForUser(ctx, user, reserveArgs())
     tables.usageReservations[0]!.payloadFingerprint = "v2|legacy"
@@ -270,6 +271,13 @@ describe("reserve", () => {
       "usage-reservation-fingerprint-v3"
     )
     expect(tables.usageReservations).toHaveLength(1)
+    // The in-place upgrade is audited, never silent.
+    expect(
+      log.mock.calls.some((call) =>
+        String(call[0]).includes("usage_reserve_fingerprint_migrated")
+      )
+    ).toBe(true)
+    log.mockRestore()
   })
 
   it("rejects a reused request id whose payload changed", async () => {
@@ -489,6 +497,7 @@ describe("settlement", () => {
   })
 
   it("absorbs duplicate terminal delivery without a second charge", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
     const { ctx, tables } = createCtx({ users: [user] })
     const run = await reservedRunFixture(ctx, { workStartedAt: 1 })
     await settleUsageForTerminalRun(ctx, run, {
@@ -496,6 +505,32 @@ describe("settlement", () => {
       titleUsage: "not-run",
     })
     const spentAfterFirst = bucketOf(tables).spentCredits
+    // Same facts re-delivered (reaper/verdict race): benign, silent.
+    await settleUsageForTerminalRun(ctx, run, {
+      usage: { inputTokens: 1_000, outputTokens: 100 },
+      titleUsage: "not-run",
+    })
+    // Evidence-free re-delivery is equally benign.
+    await settleUsageForTerminalRun(ctx, run, {}, "reconciled_terminal_run")
+    expect(bucketOf(tables).spentCredits).toBe(spentAfterFirst)
+    expect(
+      tables.usageLedgerEntries.filter((e) => e.type === "settle")
+    ).toHaveLength(1)
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it("logs a conflicting second settlement and keeps the first", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    const { ctx, tables } = createCtx({ users: [user] })
+    const run = await reservedRunFixture(ctx, { workStartedAt: 1 })
+    await settleUsageForTerminalRun(ctx, run, {
+      usage: { inputTokens: 1_000, outputTokens: 100 },
+      titleUsage: "not-run",
+    })
+    const spentAfterFirst = bucketOf(tables).spentCredits
+    // A second settlement whose evidence DISAGREES: rejected, never re-billed,
+    // logged as an invariant violation (ADR-0021).
     await settleUsageForTerminalRun(ctx, run, {
       usage: { inputTokens: 9_999_999, outputTokens: 9_999_999 },
       titleUsage: "not-run",
@@ -504,6 +539,12 @@ describe("settlement", () => {
     expect(
       tables.usageLedgerEntries.filter((e) => e.type === "settle")
     ).toHaveLength(1)
+    expect(
+      warn.mock.calls.some((call) =>
+        String(call[0]).includes("usage_settle_conflict_rejected")
+      )
+    ).toBe(true)
+    warn.mockRestore()
   })
 
   it("rejects settle-after-release as an invariant violation", async () => {
@@ -600,7 +641,15 @@ describe("provider rejection before any output", () => {
       workStartedAt: 1,
       lastSnapshotSequence: undefined,
     })
-    await settleUsageForTerminalRun(ctx, run, {}, "provider_error")
+    // Live path: the caller passes the verdict's terminal reason explicitly
+    // (its in-memory run doc predates the terminal patch).
+    await settleUsageForTerminalRun(
+      ctx,
+      run,
+      {},
+      "provider_error",
+      "provider_error"
+    )
     const bucket = bucketOf(tables)
     expect(tables.usageReservations[0]).toMatchObject({
       status: "released",
@@ -616,7 +665,13 @@ describe("provider rejection before any output", () => {
       workStartedAt: 1,
       lastSnapshotSequence: 3,
     })
-    await settleUsageForTerminalRun(ctx, run, {}, "provider_error")
+    await settleUsageForTerminalRun(
+      ctx,
+      run,
+      {},
+      "provider_error",
+      "provider_error"
+    )
     expect(tables.usageReservations[0]).toMatchObject({
       status: "settled",
       settlementBasis: "estimated_after_unknown_usage",
@@ -626,7 +681,7 @@ describe("provider rejection before any output", () => {
   it("never applies the rejection release to a user Stop", async () => {
     const { ctx, tables } = createCtx({ users: [user] })
     const run = await reservedRunFixture(ctx, { workStartedAt: 1 })
-    await settleUsageForTerminalRun(ctx, run, {}, "user_stop")
+    await settleUsageForTerminalRun(ctx, run, {}, "user_stop", "user_stop")
     expect(tables.usageReservations[0]).toMatchObject({
       status: "settled",
       settlementBasis: "estimated_after_unknown_usage",
@@ -851,5 +906,31 @@ describe("reconciler", () => {
     // Idempotent: a second pass changes nothing.
     const second = await reconcileStaleUsageReservationsPass(ctx)
     expect(second.reconciled).toBe(0)
+  })
+
+  it("applies the provider-error release to a stale failed-before-output run", async () => {
+    // A run that died on an instant 400/401/429 whose live settlement was
+    // lost: the boundary rule must read the run's stored terminalReason and
+    // release, not settle the full estimate (over-charging for an outage).
+    const { ctx, tables } = createCtx({ users: [user] })
+    await reservedRunFixture(ctx, {
+      workStartedAt: 1,
+      status: "failed",
+      terminalReason: "provider_error",
+      lastSnapshotSequence: undefined,
+    })
+    await ctx.db.patch(tables.usageReservations[0]!._id, {
+      reservedAt: Date.now() - STALE_RESERVATION_MS - 1,
+    })
+
+    const { reconciled } = await reconcileStaleUsageReservationsPass(ctx)
+    expect(reconciled).toBe(1)
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "released",
+      terminalReason: "provider_error_before_output",
+    })
+    const bucket = bucketOf(tables)
+    expect(bucket.spentCredits).toBe(0)
+    expect(bucket.availableCredits).toBe(bucket.grantedCredits)
   })
 })

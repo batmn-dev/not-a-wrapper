@@ -738,7 +738,8 @@ async function applyLifecycleVerdict(
       ctx,
       run,
       {},
-      verdict.run.terminalReason ?? verdict.run.status
+      verdict.run.terminalReason ?? verdict.run.status,
+      verdict.run.terminalReason
     )
   }
 
@@ -875,7 +876,13 @@ async function closeSupersededGenerationsForChat(
             assistantMessageId: supersededMessageId,
           })
           if (verdict.run.settle) {
-            await settleUsageForTerminalRun(ctx, run, {}, "superseded")
+            await settleUsageForTerminalRun(
+              ctx,
+              run,
+              {},
+              "superseded",
+              verdict.run.terminalReason
+            )
           }
         }
       }
@@ -1338,7 +1345,13 @@ export async function denyPendingApprovalsForChat(
           ...LEASE_CLEAR,
         })
         if (verdict.run.settle) {
-          await settleUsageForTerminalRun(ctx, run, {}, "approvals_denied")
+          await settleUsageForTerminalRun(
+            ctx,
+            run,
+            {},
+            "approvals_denied",
+            verdict.run.terminalReason
+          )
         }
       }
     }
@@ -1506,7 +1519,13 @@ export async function applyApprovalResponses(
     // Normally settled at the approval pause (the completion-downgrade write);
     // this defensive call only lands when that settlement never arrived.
     if (verdict.run.settle) {
-      await settleUsageForTerminalRun(ctx, run, {}, "approvals_resolved")
+      await settleUsageForTerminalRun(
+        ctx,
+        run,
+        {},
+        "approvals_resolved",
+        verdict.run.terminalReason
+      )
     }
   }
 
@@ -2447,7 +2466,8 @@ export async function markGenerationRunCompletedForChat(
         : {}),
       titleUsage: args.titleUsage ?? "unknown",
     },
-    verdict.run.status === "awaiting_approval" ? "approval_pause" : "completed"
+    verdict.run.status === "awaiting_approval" ? "approval_pause" : "completed",
+    verdict.run.terminalReason
   )
 }
 
