@@ -141,6 +141,22 @@ Use a Convex preview deploy key for `CONVEX_DEPLOY_KEY`.
 preview deploys run a dry-run schema preflight. Set it only if
 `CONVEX_SCHEMA_PREFLIGHT_MODE=prod` is deliberately enabled for a preview.
 
+Vercel variables are not copied into Convex. Before creating a preview, set
+every required Convex variable declared in `convex/convex.config.ts` as a
+[project Preview default](https://docs.convex.dev/production/environment-variables#project-environment-variable-defaults).
+In particular, `CHAT_ADMISSION_SECRET` must use the exact Vercel Preview value:
+
+```bash
+pbpaste | bunx convex env default set CHAT_ADMISSION_SECRET --type preview
+```
+
+Defaults apply only to new deployments. Update any existing preview directly,
+then redeploy it:
+
+```bash
+pbpaste | bunx convex env set --deployment <preview-deployment> CHAT_ADMISSION_SECRET
+```
+
 Vercel provides `VERCEL_BRANCH_URL` and
 `VERCEL_PROJECT_PRODUCTION_URL`. `convex.json` uses those values to configure
 preview redirect URIs and CORS origins. The Vercel build command runs:
