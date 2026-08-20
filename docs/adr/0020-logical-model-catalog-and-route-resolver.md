@@ -1,8 +1,10 @@
 # 0020 — Logical model catalog and the server route resolver
 
 **Status:** accepted **Date:** 2026-08-19 **Amends:** ADR-0007 (implements the
-logical-model/route layer it deferred; the snapshot-generated OpenRouter
-workflow is unchanged and remains authoritative for wrapped route facts)
+logical-model/route layer it deferred) and ADR-0011 (the user token still
+authorizes admission, but server-resolved admission facts now also require a
+server proof); the snapshot-generated OpenRouter workflow is unchanged and
+remains authoritative for wrapped route facts
 
 **Context.** The selector shows 46 route-shaped entries (18 direct + 28
 OpenRouter), 11 of which are second routes to a model already present
@@ -89,6 +91,18 @@ store the logical id). The run additionally stores the receipt — `routeId`,
 messages keep `model` + `provider` for replay and link to the run's full
 receipt via `generationRunId`. All new fields are optional for compatibility
 with existing production documents.
+
+The Next.js server signs the complete trusted admission tuple immediately
+before calling `prepareGeneration`: chat id, request id, logical model,
+provider, route receipt, execution-grant digest, and issuance time. The public
+Convex mutation verifies the HMAC-SHA-256 proof with the shared
+`CHAT_ADMISSION_SECRET` and rejects invalid or older-than-60-second proofs
+before entering the prepare transaction. The secret exists only in the Next.js
+server and the target Convex deployment and must match in both environments.
+An authenticated chat owner can still call the public mutation directly, but
+cannot mint a run, route receipt, provider pin, or worker grant without the
+server proof. The route resolver remains the one decision owner; Convex verifies
+its attestation rather than duplicating credential resolution.
 
 ## Compatibility and continuations
 

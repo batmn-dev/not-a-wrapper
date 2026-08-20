@@ -56,6 +56,10 @@ import {
   ownedGenerationRunMutation,
 } from "./lib/authedFunctions"
 import {
+  verifyChatAdmissionProof,
+  type ChatAdmissionRouteReceipt,
+} from "./lib/chatAdmissionProof"
+import {
   vToolInvocationStreamMetadata,
   type PersistedMessageMetadata,
 } from "./lib/messageMetadata"
@@ -1447,15 +1451,7 @@ type GenerationApprovalResponse = {
   reason?: string
 }
 
-type GenerationRouteReceipt = {
-  routeId: string
-  credentialSource: "platform" | "byok"
-  routeReason:
-    | "priority_byok"
-    | "platform"
-    | "fallback_byok"
-    | "legacy_route_hint"
-}
+type GenerationRouteReceipt = ChatAdmissionRouteReceipt
 
 type PrepareGenerationForChatArgs = {
   chatId: Id<"chats">
@@ -1752,6 +1748,39 @@ export async function prepareGenerationForChat(
   }
 }
 
+type VerifiedPrepareGenerationArgs = PrepareGenerationForChatArgs & {
+  admissionIssuedAt: number
+  admissionProof: string
+}
+
+export async function prepareGenerationWithVerifiedAdmission(
+  ctx: MutationCtx,
+  args: VerifiedPrepareGenerationArgs,
+  options: { secret?: string; now?: number } = {}
+) {
+  const { admissionIssuedAt, admissionProof, ...prepareArgs } = args
+  const isVerified = verifyChatAdmissionProof(
+    {
+      chatId: args.chatId,
+      requestId: args.requestId,
+      model: args.model,
+      provider: args.provider,
+      route: args.route,
+      grantDigest: args.grantDigest,
+      issuedAt: admissionIssuedAt,
+    },
+    admissionProof,
+    options
+  )
+  if (!isVerified) {
+    throw new ConvexError({
+      code: "admission_proof_invalid",
+      message: "Chat admission proof is invalid or expired",
+    })
+  }
+  return prepareGenerationForChat(ctx, prepareArgs)
+}
+
 export const prepareGeneration = mutation({
   args: {
     chatId: v.id("chats"),
@@ -1777,8 +1806,11 @@ export const prepareGeneration = mutation({
     regeneration: v.optional(vRegenerationIntent),
     approvalResponses: v.optional(v.array(vApprovalResponse)),
     grantDigest: v.optional(v.string()),
+    admissionIssuedAt: v.number(),
+    admissionProof: v.string(),
   },
-  handler: async (ctx, args) => prepareGenerationForChat(ctx, args),
+  handler: async (ctx, args) =>
+    prepareGenerationWithVerifiedAdmission(ctx, args),
 })
 
 /**

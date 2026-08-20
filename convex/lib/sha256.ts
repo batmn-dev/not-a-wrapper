@@ -1,9 +1,8 @@
-// Pure synchronous SHA-256 (FIPS 180-4) over a UTF-8 string, returning
-// lowercase hex. Used by the execution-grant path (ADR-0011): the worker HTTP
-// action hashes the presented Bearer secret before it ever reaches a mutation
-// argument, and the grant verifier compares digests. A hand-rolled
-// implementation because it must run identically in every Convex runtime
-// (mutations included) without reaching for `crypto.subtle`.
+// Pure synchronous SHA-256 (FIPS 180-4) and HMAC-SHA-256 (RFC 2104) over UTF-8
+// strings. Used by the execution-grant path (ADR-0011) and signed chat
+// admission (ADR-0020). A hand-rolled implementation because it must run
+// identically in every Convex runtime (mutations included) without reaching
+// for `crypto.subtle`.
 
 const K = [
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
@@ -23,8 +22,7 @@ function rotr(value: number, bits: number): number {
   return (value >>> bits) | (value << (32 - bits))
 }
 
-export function sha256Hex(input: string): string {
-  const bytes = new TextEncoder().encode(input)
+function sha256Bytes(bytes: Uint8Array): Uint8Array {
   const bitLength = bytes.length * 8
 
   // Pad to a multiple of 64 bytes: 0x80, zeros, 64-bit big-endian bit length.
@@ -93,9 +91,51 @@ export function sha256Hex(input: string): string {
     h7 = (h7 + h) >>> 0
   }
 
-  return [h0, h1, h2, h3, h4, h5, h6, h7]
-    .map((word) => word.toString(16).padStart(8, "0"))
-    .join("")
+  const digest = new Uint8Array(32)
+  const digestView = new DataView(digest.buffer)
+  ;[h0, h1, h2, h3, h4, h5, h6, h7].forEach((word, index) => {
+    digestView.setUint32(index * 4, word)
+  })
+  return digest
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    ""
+  )
+}
+
+function concatBytes(...parts: Uint8Array[]): Uint8Array {
+  const result = new Uint8Array(
+    parts.reduce((length, part) => length + part.length, 0)
+  )
+  let offset = 0
+  for (const part of parts) {
+    result.set(part, offset)
+    offset += part.length
+  }
+  return result
+}
+
+export function sha256Hex(input: string): string {
+  return bytesToHex(sha256Bytes(new TextEncoder().encode(input)))
+}
+
+/** HMAC-SHA-256 with a UTF-8 key and message, returned as lowercase hex. */
+export function hmacSha256Hex(key: string, message: string): string {
+  const blockSize = 64
+  const encodedKey = new TextEncoder().encode(key)
+  const normalizedKey =
+    encodedKey.length > blockSize ? sha256Bytes(encodedKey) : encodedKey
+  const keyBlock = new Uint8Array(blockSize)
+  keyBlock.set(normalizedKey)
+
+  const innerPad = keyBlock.map((byte) => byte ^ 0x36)
+  const outerPad = keyBlock.map((byte) => byte ^ 0x5c)
+  const innerDigest = sha256Bytes(
+    concatBytes(innerPad, new TextEncoder().encode(message))
+  )
+  return bytesToHex(sha256Bytes(concatBytes(outerPad, innerDigest)))
 }
 
 /**

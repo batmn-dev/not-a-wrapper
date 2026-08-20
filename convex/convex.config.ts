@@ -8,6 +8,7 @@ const app = defineApp({
     WORKOS_CLIENT_ID: v.string(),
     WORKOS_API_KEY: v.string(),
     WORKOS_WEBHOOK_SECRET: v.string(),
+    CHAT_ADMISSION_SECRET: v.string(),
   },
 })
 

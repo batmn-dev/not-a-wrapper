@@ -437,6 +437,7 @@ function makeDeps(
       null) as unknown as ChatTurnDeps["getPostHogClient"],
     durableWorkerWire: wire,
     durableSettleRetryDelaysMs: [0],
+    chatAdmissionProofSigner: () => "f".repeat(64),
   }
 }
 

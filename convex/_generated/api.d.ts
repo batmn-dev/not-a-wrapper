@@ -30,6 +30,7 @@ import type * as files from "../files.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_authedFunctions from "../lib/authedFunctions.js";
+import type * as lib_chatAdmissionProof from "../lib/chatAdmissionProof.js";
 import type * as lib_messageMetadata from "../lib/messageMetadata.js";
 import type * as lib_sha256 from "../lib/sha256.js";
 import type * as mcpServers from "../mcpServers.js";
@@ -76,6 +77,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/auth": typeof lib_auth;
   "lib/authedFunctions": typeof lib_authedFunctions;
+  "lib/chatAdmissionProof": typeof lib_chatAdmissionProof;
   "lib/messageMetadata": typeof lib_messageMetadata;
   "lib/sha256": typeof lib_sha256;
   mcpServers: typeof mcpServers;

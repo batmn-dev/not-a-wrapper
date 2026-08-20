@@ -9,6 +9,10 @@ import {
   LEASE_DURATION_MS,
 } from "@/convex/domain/generation_run_liveness"
 import { sanitizeModelHistoryMessages as sanitizeSemanticModelHistoryMessages } from "@/convex/domain/message_visibility"
+import {
+  signChatAdmissionProof,
+  type ChatAdmissionProofPayload,
+} from "@/convex/lib/chatAdmissionProof"
 import { projectPersistedMessageMetadata } from "@/convex/lib/messageMetadata"
 import type {
   ChatTurnEditRequest,
@@ -41,11 +45,12 @@ import { isConvexArgumentValidationError } from "./utils"
 // terminal persistence (ADR-0011, superseding parts of ADR-0009). Guest turns
 // use an inert adapter.
 //
-// Authority model: the user's Convex token authorizes exactly one call —
-// `prepareGeneration` (admission). Every write after prepare travels over the
-// Durable worker wire, authenticated by a run-scoped execution grant whose
-// raw secret exists only in this process's memory. A mid-run user-token
-// expiry can no longer reject a worker write (the 2026-07-14 incident class).
+// Authority model: the user's Convex token and the server's signed admission
+// proof authorize exactly one call — `prepareGeneration`. Every write after
+// prepare travels over the Durable worker wire, authenticated by a run-scoped
+// execution grant whose raw secret exists only in this process's memory. A
+// mid-run user-token expiry can no longer reject a worker write (the
+// 2026-07-14 incident class).
 
 export type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 
@@ -176,6 +181,8 @@ export type DurableTurnDeps = {
   fetchMutation: typeof defaultFetchMutation
   workerWire?: DurableWorkerWire
   settleRetryDelaysMs?: number[]
+  /** Server-only admission signer; tests inject a deterministic fake. */
+  admissionProofSigner?: (payload: ChatAdmissionProofPayload) => string
   /** Sampled chat-performance session (PR 0b) — checkpoint counters only. */
   perf?: ChatPerfServerSession
 }
@@ -869,6 +876,8 @@ export function createConvexDurableTurn(args: {
   const wire: DurableWorkerWire =
     deps.workerWire ?? createHttpDurableWorkerWire({ secret: grantSecret })
   const settleRetryDelaysMs = deps.settleRetryDelaysMs ?? [250, 1000]
+  const admissionProofSigner =
+    deps.admissionProofSigner ?? signChatAdmissionProof
 
   // The durable run — assigned once at prepare(), then read by the timeline.
   let runId: Id<"generationRuns"> | null = null
@@ -1234,6 +1243,16 @@ export function createConvexDurableTurn(args: {
         edit || regeneration || hasApprovalResponse(messages)
           ? undefined
           : getLatestUserMessage(messages)
+      const admissionIssuedAt = Date.now()
+      const admissionProof = admissionProofSigner({
+        chatId,
+        requestId,
+        model,
+        provider,
+        route,
+        grantDigest,
+        issuedAt: admissionIssuedAt,
+      })
 
       const generation = await fetchMutation(
         api.chatRuntime.prepareGeneration,
@@ -1260,6 +1279,8 @@ export function createConvexDurableTurn(args: {
           regeneration,
           approvalResponses,
           grantDigest,
+          admissionIssuedAt,
+          admissionProof,
         },
         { token: convexToken }
       ).catch((error: unknown) => {

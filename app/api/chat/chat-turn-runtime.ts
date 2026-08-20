@@ -1,5 +1,6 @@
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
+import type { ChatAdmissionProofPayload } from "@/convex/lib/chatAdmissionProof"
 import type {
   ChatTurnEditRequest,
   ChatTurnRegenerationRequest,
@@ -187,6 +188,8 @@ export type ChatTurnDeps = {
   durableWorkerWire?: DurableWorkerWire
   /** Terminal-write retry backoff override — tests pass zeros. */
   durableSettleRetryDelaysMs?: number[]
+  /** Server-only admission signer override for tests. */
+  chatAdmissionProofSigner?: (payload: ChatAdmissionProofPayload) => string
 }
 
 function resolveDeps(overrides?: Partial<ChatTurnDeps>): ChatTurnDeps {
@@ -199,6 +202,7 @@ function resolveDeps(overrides?: Partial<ChatTurnDeps>): ChatTurnDeps {
     getPostHogClient: overrides?.getPostHogClient ?? getPostHogClient,
     durableWorkerWire: overrides?.durableWorkerWire,
     durableSettleRetryDelaysMs: overrides?.durableSettleRetryDelaysMs,
+    chatAdmissionProofSigner: overrides?.chatAdmissionProofSigner,
   }
 }
 
@@ -423,6 +427,7 @@ export function createChatTurnRuntime(args: {
       fetchMutation: deps.fetchMutation,
       workerWire: deps.durableWorkerWire,
       settleRetryDelaysMs: deps.durableSettleRetryDelaysMs,
+      admissionProofSigner: deps.chatAdmissionProofSigner,
       perf,
     },
   })
