@@ -1,6 +1,6 @@
 import { api } from "@/convex/_generated/api"
-import { FREE_MODELS_IDS } from "@/lib/config"
-import { resolveModelId } from "@/lib/models/model-id-migration"
+import type { Id } from "@/convex/_generated/dataModel"
+import { isServerChatId } from "@/lib/chat-store/identity"
 import {
   resolveModelRoute,
   type ResolvedModelRoute,
@@ -75,22 +75,19 @@ function createUsageCheckApiError(
   })
 }
 
-/** Whether the model uses the stricter usage tier. */
-export function isProModel(modelId: string): boolean {
-  return !FREE_MODELS_IDS.includes(resolveModelId(modelId))
-}
-
-/** Enforce the Convex-backed usage limit before model execution. */
+/**
+ * Enforce the daily-message ABUSE limit before model execution (ADR-0021).
+ * This is not economic admission — platform spend is admitted by the atomic
+ * allowance reservation inside the route resolver, and BYOK messages never
+ * touch allowance while still counting here as ordinary requests.
+ */
 export async function checkServerSideUsage(
   token: string | undefined,
-  modelId: string,
   anonymousId?: string
 ): Promise<void> {
-  const isPro = isProModel(modelId)
-
   const usage = await fetchQuery(
     api.usage.checkUsage,
-    { isProModel: isPro, anonymousId },
+    { anonymousId },
     { token }
   )
 
@@ -104,28 +101,20 @@ export async function checkServerSideUsage(
         "errorCode" in usage ? usage.errorCode : undefined
       )
     }
-    const modelType = isPro ? "pro model" : "message"
     throw new PublicChatHttpError({
-      message: `Daily ${modelType} limit reached (${usage.limit}). Please try again tomorrow or upgrade your plan.`,
+      message: `Daily message limit reached (${usage.limit}). Please try again tomorrow.`,
       statusCode: 403,
       code: "DAILY_LIMIT_REACHED",
     })
   }
 }
 
-/** Record admitted usage after request validation. */
+/** Record an admitted request against the abuse counter. */
 export async function incrementServerSideUsage(
   token: string | undefined,
-  modelId: string,
   anonymousId?: string
 ): Promise<void> {
-  const isPro = isProModel(modelId)
-
-  await fetchMutation(
-    api.usage.incrementUsage,
-    { isProModel: isPro, anonymousId },
-    { token }
-  )
+  await fetchMutation(api.usage.incrementUsage, { anonymousId }, { token })
 }
 
 type ChatCredentialAdmissionParams = {
@@ -135,6 +124,11 @@ type ChatCredentialAdmissionParams = {
   token?: string
   /** The turn's wire messages: capability requirements + approval pinning. */
   messages: UIMessage[]
+  /** Platform-funding admission facts (ADR-0021). */
+  requestId: string
+  chatId: string
+  systemPrompt?: string
+  enableSearch: boolean
 }
 
 export type ChatRouteAdmission = {
@@ -142,6 +136,8 @@ export type ChatRouteAdmission = {
   route: ResolvedModelRoute
   /** Server-only credential fact the turn runtime consumes. Never logged. */
   credential: ProviderCredentialResolution
+  /** Platform allowance reservation admitted with the route (ADR-0021). */
+  reservationId?: Id<"usageReservations">
 }
 
 function turnRequiresVision(messages: UIMessage[]): boolean {
@@ -193,6 +189,21 @@ async function getPinnedContinuationProvider(
 function toAdmissionError(
   failure: RouteResolutionFailure
 ): PublicChatHttpError {
+  if (failure.reason === "insufficient_allowance") {
+    // Reached only when no usable fallback BYOK route existed — allowance
+    // exhaustion WITH a valid fallback key transparently chose BYOK instead.
+    const providerNames = failure.keyProviders
+      .map((provider) => MODEL_PROVIDER_IDENTITY[provider].name)
+      .join(" or ")
+    const addKeyHint = providerNames
+      ? ` Add your ${providerNames} API key in Settings to keep using this model, or wait for your allowance to refill.`
+      : " Wait for your allowance to refill."
+    return new PublicChatHttpError({
+      message: `You've used your included platform allowance for this period.${addKeyHint}`,
+      statusCode: 403,
+      code: "ALLOWANCE_EXHAUSTED",
+    })
+  }
   if (failure.reason === "auth_required") {
     return new PublicChatHttpError({
       message:
@@ -236,10 +247,20 @@ export async function validateAndResolveChatCredential({
   isAuthenticated,
   token,
   messages,
+  requestId,
+  chatId,
+  systemPrompt,
+  enableSearch,
 }: ChatCredentialAdmissionParams): Promise<ChatRouteAdmission> {
   const pinnedProviderId = isAuthenticated
     ? await getPinnedContinuationProvider(messages, token)
     : undefined
+
+  // Platform funding requires the durable accounting lifecycle (ADR-0021):
+  // authenticated turns against a local/optimistic chat id cannot reserve or
+  // settle, so they get no funding context and skip the platform tier.
+  const canReservePlatformUsage =
+    isAuthenticated && Boolean(token) && isServerChatId(chatId)
 
   const resolution = await resolveModelRoute({
     modelId: model,
@@ -249,6 +270,17 @@ export async function validateAndResolveChatCredential({
       ? { vision: true }
       : undefined,
     pinnedProviderId,
+    ...(canReservePlatformUsage
+      ? {
+          platformFunding: {
+            requestId,
+            chatId,
+            messages,
+            systemPrompt,
+            toolsLikely: enableSearch,
+          },
+        }
+      : {}),
   })
 
   if (!resolution.ok) {
@@ -262,5 +294,8 @@ export async function validateAndResolveChatCredential({
       apiKey: resolution.apiKey,
       source: resolution.route.credentialSource,
     },
+    ...(resolution.reservationId
+      ? { reservationId: resolution.reservationId }
+      : {}),
   }
 }

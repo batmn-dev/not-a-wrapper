@@ -1,6 +1,8 @@
 # 0020 — Logical model catalog and the server route resolver
 
-**Status:** accepted **Date:** 2026-08-19 **Amends:** ADR-0007 (implements the
+**Status:** accepted **Date:** 2026-08-19 **Amended by:** ADR-0021 (the
+platform-entitlement seam gains its planned balance implementation: platform
+candidacy now also requires an atomic usage reservation) **Amends:** ADR-0007 (implements the
 logical-model/route layer it deferred) and ADR-0011 (the user token still
 authorizes admission, but server-resolved admission facts now also require a
 server proof); the snapshot-generated OpenRouter workflow is unchanged and

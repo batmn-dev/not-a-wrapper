@@ -35,7 +35,7 @@ describe("checkServerSideUsage", () => {
       errorCode: "ANONYMOUS_ID_REQUIRED",
     })
 
-    const error = await checkServerSideUsage(undefined, "gpt-5-mini").then(
+    const error = await checkServerSideUsage(undefined).then(
       () => null,
       (err) => err
     )
@@ -57,7 +57,7 @@ describe("checkServerSideUsage", () => {
       errorCode: "USER_NOT_FOUND",
     })
 
-    const error = await checkServerSideUsage("convex-token", "gpt-5-mini").then(
+    const error = await checkServerSideUsage("convex-token").then(
       () => null,
       (err) => err
     )
@@ -82,7 +82,7 @@ describe("checkServerSideUsage", () => {
     })
 
     await expect(
-      checkServerSideUsage("convex-token", "gpt-5-mini")
+      checkServerSideUsage("convex-token")
     ).rejects.toMatchObject({
       message: "Internal server error",
       statusCode: 500,
@@ -98,7 +98,7 @@ describe("checkServerSideUsage", () => {
       error: "Convex internal diagnostics: shard=usage-primary",
     })
 
-    const error = await checkServerSideUsage("convex-token", "gpt-5-mini").then(
+    const error = await checkServerSideUsage("convex-token").then(
       () => null,
       (err) => err
     )
@@ -130,11 +130,7 @@ describe("checkServerSideUsage", () => {
       isAnonymous: true,
     })
 
-    const error = await checkServerSideUsage(
-      undefined,
-      "gpt-5-mini",
-      "guest-id"
-    ).then(
+    const error = await checkServerSideUsage(undefined, "guest-id").then(
       () => null,
       (caught) => caught
     )
@@ -148,6 +144,14 @@ describe("checkServerSideUsage", () => {
 })
 
 describe("validateAndResolveChatCredential", () => {
+  // A local chat id keeps the platform-funding context absent (ADR-0021):
+  // funding requires a durable chat; these tests exercise the pre-existing
+  // admission contract unchanged.
+  const admissionBase = {
+    requestId: "req-1",
+    chatId: "local-chat-1",
+    enableSearch: false,
+  }
   const textMessages = [
     {
       id: "u1",
@@ -178,6 +182,7 @@ describe("validateAndResolveChatCredential", () => {
 
     await expect(
       validateAndResolveChatCredential({
+        ...admissionBase,
         model: "openrouter:anthropic/claude-sonnet-5",
         isAuthenticated: true,
         token: "convex-token",
@@ -253,6 +258,7 @@ describe("validateAndResolveChatCredential", () => {
       vi.mocked(resolveModelRoute).mockResolvedValue(testCase.failure)
 
       const error = await validateAndResolveChatCredential({
+        ...admissionBase,
         model: "claude-sonnet-5",
         isAuthenticated: true,
         token: "convex-token",
@@ -268,6 +274,66 @@ describe("validateAndResolveChatCredential", () => {
     }
   })
 
+  it("maps insufficient allowance to the ALLOWANCE_EXHAUSTED contract", async () => {
+    vi.mocked(resolveModelRoute).mockResolvedValue({
+      ok: false,
+      reason: "insufficient_allowance",
+      modelId: "gpt-5-mini",
+      keyProviders: ["openai"],
+    })
+
+    const error = await validateAndResolveChatCredential({
+      ...admissionBase,
+      model: "gpt-5-mini",
+      isAuthenticated: true,
+      token: "convex-token",
+      messages: textMessages,
+    }).then(
+      () => null,
+      (caught) => caught
+    )
+
+    expect(error).toMatchObject({
+      statusCode: 403,
+      code: "ALLOWANCE_EXHAUSTED",
+      message: expect.stringContaining("included platform allowance"),
+    })
+    expect((error as Error).message).toContain("OpenAI")
+  })
+
+  it("passes the platform-funding context only for durable chats", async () => {
+    vi.mocked(resolveModelRoute).mockResolvedValue({
+      ok: true,
+      route: { ...resolvedRoute, credentialSource: "platform" },
+      apiKey: "platform-key",
+      reservationId: "res-1" as never,
+    })
+
+    const admitted = await validateAndResolveChatCredential({
+      model: "gpt-5-mini",
+      isAuthenticated: true,
+      token: "convex-token",
+      messages: textMessages,
+      requestId: "req-42",
+      chatId: "j57abc123", // server chat id (no local-/optimistic prefix)
+      systemPrompt: "be brief",
+      enableSearch: true,
+    })
+
+    expect(resolveModelRoute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        platformFunding: {
+          requestId: "req-42",
+          chatId: "j57abc123",
+          messages: textMessages,
+          systemPrompt: "be brief",
+          toolsLikely: true,
+        },
+      })
+    )
+    expect(admitted.reservationId).toBe("res-1")
+  })
+
   it("requires vision routes when the turn carries image attachments", async () => {
     vi.mocked(resolveModelRoute).mockResolvedValue({
       ok: true,
@@ -276,6 +342,7 @@ describe("validateAndResolveChatCredential", () => {
     })
 
     await validateAndResolveChatCredential({
+      ...admissionBase,
       model: "claude-sonnet-5",
       isAuthenticated: true,
       token: "convex-token",
@@ -308,6 +375,7 @@ describe("validateAndResolveChatCredential", () => {
     })
 
     await validateAndResolveChatCredential({
+      ...admissionBase,
       model: "sonar",
       isAuthenticated: true,
       token: "convex-token",
@@ -355,6 +423,7 @@ describe("validateAndResolveChatCredential", () => {
     })
 
     await validateAndResolveChatCredential({
+      ...admissionBase,
       model: "claude-sonnet-5",
       isAuthenticated: true,
       token: "convex-token",
@@ -398,6 +467,7 @@ describe("validateAndResolveChatCredential", () => {
 
     await expect(
       validateAndResolveChatCredential({
+        ...admissionBase,
         model: "claude-sonnet-5",
         isAuthenticated: true,
         token: "convex-token",

@@ -952,6 +952,38 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
       warn.mockRestore()
     }
   })
+
+  it("forwards per-step token usage as durable settlement evidence (ADR-0021)", async () => {
+    const wire = makeRecordingWire()
+    const { turn } = await makePreparedTurn({ wire })
+    const binding = turn.bind(makeToolFacts())
+
+    binding.stream.recordStep({
+      stepNumber: 1,
+      usage: { inputTokens: 111, outputTokens: 22 },
+      toolCalls: [] as never,
+      toolResults: [] as never,
+    })
+    // A step whose usage carries no numeric field crosses WITHOUT a usage
+    // payload — the accumulator must never see an all-undefined object.
+    binding.stream.recordStep({
+      stepNumber: 2,
+      usage: { inputTokens: undefined, outputTokens: undefined },
+      toolCalls: [] as never,
+      toolResults: [] as never,
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const calls = wireCalls(wire, "recordToolInvocations")
+    expect(calls).toHaveLength(2)
+    expect(calls[0]!.args).toMatchObject({
+      stepNumber: 1,
+      usage: { inputTokens: 111, outputTokens: 22 },
+    })
+    expect(
+      (calls[1]!.args as { usage?: unknown }).usage
+    ).toBeUndefined()
+  })
 })
 
 describe("durable turn runtime — heartbeat loop (gameplan §6)", () => {

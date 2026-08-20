@@ -86,8 +86,8 @@ function ByokProviderDetails({
               <div className="font-medium">Key usage</div>
               <p className="text-muted-foreground text-xs">
                 {preference === "priority"
-                  ? "Your key is used first, before included platform access."
-                  : "Included platform access is used first; your key covers the rest."}
+                  ? "Your key is used first and never spends included allowance."
+                  : "Included allowance is used while available; your key covers the rest."}
               </p>
             </div>
             <div

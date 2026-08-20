@@ -108,14 +108,9 @@ export function useChatOperations({
         })
       }
 
-      if (rateData.remainingPro === REMAINING_QUERY_ALERT_THRESHOLD) {
-        toast({
-          title: `Only ${rateData.remainingPro} pro quer${
-            rateData.remainingPro === 1 ? "y" : "ies"
-          } remaining today.`,
-          status: "info",
-        })
-      }
+      // The pro-model query tier is retired (ADR-0021): platform spend is
+      // governed by the included allowance; exhaustion surfaces as the typed
+      // ALLOWANCE_EXHAUSTED chat error and the settings usage meter.
 
       return true
     } catch (err) {

@@ -40,9 +40,10 @@ describe("chat title generation", () => {
     ).toBe("Compare local speech")
   })
 
-  it("uses a small bounded generation request", async () => {
+  it("uses a small bounded generation request and reports usage", async () => {
     const generateText = vi.fn(async () => ({
       text: "Streaming Response Optimization",
+      usage: { inputTokens: 120, outputTokens: 6 },
     }))
     const model = {} as Parameters<typeof generateChatTitle>[0]["model"]
 
@@ -52,9 +53,14 @@ describe("chat title generation", () => {
           typeof generateChatTitle
         >[0]["generateText"],
         model,
+        modelId: "gpt-5.4-mini",
         userText: "How can I improve response streaming?",
       })
-    ).resolves.toBe("Streaming Response Optimization")
+    ).resolves.toEqual({
+      title: "Streaming Response Optimization",
+      modelId: "gpt-5.4-mini",
+      usage: { inputTokens: 120, outputTokens: 6 },
+    })
 
     expect(generateText).toHaveBeenCalledWith(
       expect.objectContaining({

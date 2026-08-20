@@ -18,12 +18,15 @@ import { timingSafeEqualHex } from "./lib/sha256"
 // Chat-turn worker mutations (ADR-0011): the execution-grant half of durable
 // settlement. The /chat-turn/worker HTTP action authenticates a Bearer secret
 // by digest and dispatches here; each mutation re-verifies the grant against
-// the run row transactionally, reconstructs the same `AuthenticatedRunOwner`
-// the user-token wrappers inject, and reuses the `...ForChat` handlers — one
-// policy, two authenticators. The raw secret never appears in mutation
+// the run row transactionally, reconstructs an `AuthenticatedRunOwner`, and
+// calls the shared `...ForChat` handlers. Since ADR-0021 this wire is the
+// ONLY authenticator for post-prepare run writes (the former user-token
+// twins were deregistered — client-supplied settlement `usage` must never be
+// user-callable; `stopGenerationRun`, which carries no usage input, is the
+// one user-token run write left). The raw secret never appears in mutation
 // arguments; only its digest does, and internal mutations are unreachable
-// from clients. Arg shapes are spread from `generationRunWriteArgs` — the one
-// declaration both authenticators share.
+// from clients. Arg shapes are spread from `generationRunWriteArgs` — the
+// one declaration the wire contract shares with the logic cores.
 
 const grantArgs = {
   runId: v.id("generationRuns"),

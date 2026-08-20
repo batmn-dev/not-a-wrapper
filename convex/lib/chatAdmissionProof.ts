@@ -17,6 +17,9 @@ export type ChatAdmissionProofPayload = {
   provider: string
   route?: ChatAdmissionRouteReceipt
   grantDigest?: string
+  /** Platform-usage reservation attached at prepare (ADR-0021). Signing it
+   * makes a forged or swapped reservation attach unrepresentable. */
+  reservationId?: string
   issuedAt: number
 }
 
@@ -28,6 +31,35 @@ function requireAdmissionSecret(secret: string | undefined): string {
 }
 
 function serializeAdmission(payload: ChatAdmissionProofPayload): string {
+  return JSON.stringify([
+    "chat-admission-v1",
+    payload.chatId,
+    payload.requestId,
+    payload.model,
+    payload.provider,
+    payload.route
+      ? [
+          payload.route.routeId,
+          payload.route.credentialSource,
+          payload.route.routeReason,
+        ]
+      : null,
+    payload.grantDigest ?? null,
+    payload.reservationId ?? null,
+    payload.issuedAt,
+  ])
+}
+
+/**
+ * Deploy-skew shim (delete after one full Next+Convex deploy cycle carrying
+ * the reservationId slot): the pre-ADR-0021 serialization, without the
+ * reservationId element. A stale signer paired with a fresh verifier — or
+ * vice versa — would otherwise reject EVERY proof during the deploy window,
+ * an availability outage for all chat turns. Only proofs WITHOUT a
+ * reservation may verify against this shape: a reservation-carrying proof is
+ * new-format by construction.
+ */
+function serializeAdmissionLegacy(payload: ChatAdmissionProofPayload): string {
   return JSON.stringify([
     "chat-admission-v1",
     payload.chatId,
@@ -71,6 +103,21 @@ export function verifyChatAdmissionProof(
   }
   if (!/^[0-9a-f]{64}$/.test(proof)) return false
 
-  const expected = signChatAdmissionProof(payload, options.secret)
-  return timingSafeEqualHex(expected, proof)
+  const secret = requireAdmissionSecret(
+    options.secret ?? process.env.CHAT_ADMISSION_SECRET
+  )
+  if (
+    timingSafeEqualHex(hmacSha256Hex(secret, serializeAdmission(payload)), proof)
+  ) {
+    return true
+  }
+  // Deploy-skew fallback: a proof minted by a signer that predates the
+  // reservationId slot. Never applicable to reservation-carrying proofs.
+  return (
+    payload.reservationId === undefined &&
+    timingSafeEqualHex(
+      hmacSha256Hex(secret, serializeAdmissionLegacy(payload)),
+      proof
+    )
+  )
 }

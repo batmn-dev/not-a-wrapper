@@ -158,6 +158,10 @@ describe("/api/chat route", () => {
       isAuthenticated: true,
       token: "convex-token",
       messages: expect.any(Array),
+      requestId: expect.any(String),
+      chatId: "chat-1",
+      systemPrompt: undefined,
+      enableSearch: false,
     })
   })
 

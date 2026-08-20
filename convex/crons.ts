@@ -47,4 +47,15 @@ crons.interval(
   internal.deletionCleanup.reconcileStalledDeletionJobs
 )
 
+// Stale platform-usage reservations (ADR-0021): the final accounting net for
+// reservations whose settlement was lost (exhausted retries, crash, deploy).
+// Bounded per tick; applies the provider-boundary rule — it never blindly
+// releases a reservation after provider work may have begun.
+crons.interval(
+  "reconcile stale usage reservations",
+  { minutes: 10 },
+  internal.usageAllowance.reconcileStaleUsageReservations,
+  {}
+)
+
 export default crons

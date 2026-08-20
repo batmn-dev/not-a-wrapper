@@ -33,32 +33,22 @@ export async function getMessageUsage(
   try {
     const regularUsage = await fetchQuery(
       api.usage.checkUsage,
-      { isProModel: false, anonymousId },
+      { anonymousId },
       token ? { token } : undefined
     )
 
-    // For authenticated users, also fetch pro model usage
-    let proUsage = { count: 0, remaining: DAILY_LIMIT_PRO_MODELS }
-    if (isAuthenticated) {
-      const proResult = await fetchQuery(
-        api.usage.checkUsage,
-        { isProModel: true, anonymousId },
-        token ? { token } : undefined
-      )
-      proUsage = {
-        count: proResult.count ?? 0,
-        remaining: proResult.remaining,
-      }
-    }
-
     // Use the limit from Convex to keep dailyLimit consistent with the enforced limit
     // (handles edge cases like anonymous authenticated users or user not found)
+    // The pro-model counter tier is retired (ADR-0021): platform spend is
+    // governed by the usage allowance, not a per-day pro-message count. The
+    // pro fields stay in the response shape for deployed-client compatibility
+    // and always report "nothing consumed".
     return {
       dailyCount: regularUsage.count ?? 0,
-      dailyProCount: proUsage.count,
+      dailyProCount: 0,
       dailyLimit: regularUsage.limit,
       remaining: regularUsage.remaining,
-      remainingPro: proUsage.remaining,
+      remainingPro: DAILY_LIMIT_PRO_MODELS,
     }
   } catch (error) {
     console.error("Error fetching usage from Convex:", error)

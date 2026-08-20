@@ -108,16 +108,37 @@ export function selectChatTitleModelConfig(
   })[0]!
 }
 
+/**
+ * The title call's identity and usage ride alongside the title so the
+ * platform-allowance settlement can meter the title as its own billable
+ * operation at the TITLE route's rates (ADR-0021) — never silently omitted,
+ * never charged at the answer model's price.
+ */
+export type GeneratedChatTitle = {
+  title: string
+  /** Title-model route id the call executed on (for attribution). */
+  modelId: string
+  usage: { inputTokens?: number; outputTokens?: number }
+}
+
 export async function generateChatTitle(args: {
   generateText: typeof import("ai").generateText
   model: LanguageModel
+  /** Route id of `model`, reported back for cost attribution. */
+  modelId: string
   userText: string
   abortSignal?: AbortSignal
-}): Promise<string> {
+}): Promise<GeneratedChatTitle> {
   const userText = args.userText
     .trim()
     .slice(0, CHAT_TITLE_MAX_INPUT_CHARACTERS)
-  if (!userText) return CHAT_TITLE_PLACEHOLDER
+  if (!userText) {
+    return {
+      title: CHAT_TITLE_PLACEHOLDER,
+      modelId: args.modelId,
+      usage: { inputTokens: 0, outputTokens: 0 },
+    }
+  }
 
   const result = await args.generateText({
     model: args.model,
@@ -129,5 +150,12 @@ export async function generateChatTitle(args: {
     abortSignal: args.abortSignal,
   })
 
-  return sanitizeGeneratedChatTitle(result.text, userText)
+  return {
+    title: sanitizeGeneratedChatTitle(result.text, userText),
+    modelId: args.modelId,
+    usage: {
+      inputTokens: result.usage?.inputTokens,
+      outputTokens: result.usage?.outputTokens,
+    },
+  }
 }

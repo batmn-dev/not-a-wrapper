@@ -57,6 +57,7 @@ import {
   getPostHogClient,
 } from "@/lib/posthog"
 import { scrubForAnalytics } from "@/lib/posthog/scrub"
+import { platformOutputTokenBudget } from "@/lib/usage/platform-usage-estimate"
 import { prepareToolRuntime, type ToolRuntime } from "@/lib/tools/runtime"
 import {
   buildFinishToolInvocationStreamMetadata,
@@ -161,6 +162,12 @@ export type ChatTurnInput = {
   /** Server-only credential fact resolved once during route admission. */
   credential: ProviderCredentialResolution
   /**
+   * Platform allowance reservation admitted with the route (ADR-0021);
+   * attached to the generation run at durable prepare. Present exactly when
+   * `route.credentialSource` is "platform" and the actor is authenticated.
+   */
+  reservationId?: Id<"usageReservations">
+  /**
    * Sampled chat-performance session (PR 0b). Absent/no-op by default; when
    * sampled it wraps preparation stages in content-free spans and receives
    * checkpoint counters from the durable runtime.
@@ -215,6 +222,8 @@ type ToolExecutionOutcome =
 type PreparedTurn = {
   aiModel: ReturnType<typeof createLanguageModel>
   titleModel: ReturnType<typeof createLanguageModel>
+  /** Title-route id, reported with the title call's usage (ADR-0021). */
+  titleModelId: string
   modelConfig: ModelConfig
   provider: Provider
   normalizedChatVersion: number
@@ -395,6 +404,7 @@ export function createChatTurnRuntime(args: {
     convexToken,
     credential,
     route,
+    reservationId,
   } = input
   // No-op unless the route sampled this request (rate 0 short-circuits).
   const perf = input.perf ?? createChatPerfServerSession(null, { rate: 0 })
@@ -422,6 +432,7 @@ export function createChatTurnRuntime(args: {
       regeneration,
       expectedVisibleMessageCount,
       tailMessageId,
+      reservationId,
     },
     deps: {
       fetchMutation: deps.fetchMutation,
@@ -521,10 +532,8 @@ export function createChatTurnRuntime(args: {
 
     // Search is provided only through visible, auditable tool calls.
     const aiModel = createLanguageModel(modelConfig, apiKey)
-    const titleModel = createLanguageModel(
-      selectChatTitleModelConfig(allModels, modelConfig),
-      apiKey
-    )
+    const titleModelConfig = selectChatTitleModelConfig(allModels, modelConfig)
+    const titleModel = createLanguageModel(titleModelConfig, apiKey)
 
     const phClient = deps.getPostHogClient()
     const normalizedChatVersion = normalizeChatVersion(chatVersion, messages)
@@ -1012,6 +1021,7 @@ export function createChatTurnRuntime(args: {
     prepared = {
       aiModel,
       titleModel,
+      titleModelId: titleModelConfig.id,
       modelConfig,
       provider: resolvedProvider,
       normalizedChatVersion,
@@ -1055,6 +1065,8 @@ export function createChatTurnRuntime(args: {
     const {
       aiModel,
       titleModel,
+      titleModelId,
+      modelConfig,
       provider: resolvedProvider,
       normalizedChatVersion,
       hasAnyTools,
@@ -1288,6 +1300,14 @@ export function createChatTurnRuntime(args: {
         tools: tool.tools,
         stopWhen: isStepCount(maxSteps),
         abortSignal: executionSignal,
+        // Platform-funded runs cap per-step output at the SAME route-aware
+        // budget the allowance reservation used (ADR-0021), so the
+        // reservation and the runtime limit agree — including fixed-thinking
+        // headroom, which must exceed any Anthropic thinking budget. BYOK
+        // runs stay uncapped — their spend is the user's own key.
+        ...(credential.source === "platform"
+          ? { maxOutputTokens: platformOutputTokenBudget(modelConfig) }
+          : {}),
         // Request dimensions use Sentry because AI SDK 7 telemetry has no
         // per-call metadata field.
         telemetry: {
@@ -1306,6 +1326,23 @@ export function createChatTurnRuntime(args: {
           observedToolCalls += toolCalls.length
           lastProgressAtMs = Date.now()
           lastStepFinishReason = finishReason ?? null
+
+          // Durable persistence of the step's tool invocations AND its token
+          // usage — EVERY step, tool calls or not (ADR-0021): the per-step
+          // usage accumulates on the run row as settlement evidence, so
+          // abort/failure/reaper accounting never depends on the happy-path
+          // onEnd aggregate. Status derivation lives inside the module, off
+          // the bound ToolFacts. Fire-and-forget by contract.
+          lifecycle.stream.recordStep({
+            stepNumber: stepCounter,
+            usage: {
+              inputTokens: usage?.inputTokens,
+              outputTokens: usage?.outputTokens,
+            },
+            toolCalls,
+            toolResults,
+          })
+
           if (toolCalls.length === 0) return
 
           // Built-in Tool budget accounting plus Tool outcome recording — one
@@ -1318,15 +1355,6 @@ export function createChatTurnRuntime(args: {
             toolResults,
             usage,
             finishReason,
-          })
-
-          // Durable persistence of the step's tool invocations — status
-          // derivation (completed/failed/pending_approval/called) lives inside
-          // the module, off the bound ToolFacts. Fire-and-forget by contract.
-          lifecycle.stream.recordStep({
-            stepNumber: stepCounter,
-            toolCalls,
-            toolResults,
           })
 
           if (finishReason === "tool-calls") {
@@ -1724,6 +1752,7 @@ export function createChatTurnRuntime(args: {
       ? generateChatTitle({
           generateText: deps.generateText,
           model: titleModel,
+          modelId: titleModelId,
           userText: titleRequest.userText,
           abortSignal: titleSignal,
         }).catch((error: unknown) => {
@@ -1745,6 +1774,16 @@ export function createChatTurnRuntime(args: {
         })
       : null
 
+    // Title-call usage evidence for allowance settlement (ADR-0021):
+    // "not-run" when no title was requested this turn; the observed usage
+    // when the call finished; "unknown" when it failed or was cancelled (a
+    // call may still have consumed tokens — settled at the estimate).
+    const titleUsageForSettlement: Promise<
+      { inputTokens?: number; outputTokens?: number } | "not-run" | "unknown"
+    > = titleTask
+      ? titleTask.then((generated) => generated?.usage ?? ("unknown" as const))
+      : Promise.resolve("not-run" as const)
+
     if (
       titleTask &&
       titleRequest &&
@@ -1752,14 +1791,14 @@ export function createChatTurnRuntime(args: {
       convexToken
     ) {
       deps.after(async () => {
-        const title = await titleTask
-        if (!title) return
+        const generated = await titleTask
+        if (!generated) return
         try {
           await deps.fetchMutation(
             api.chats.applyGeneratedTitle,
             {
               chatId: chatId as Id<"chats">,
-              title,
+              title: generated.title,
               generation: titleRequest.generation,
             },
             { token: convexToken }
@@ -1810,10 +1849,18 @@ export function createChatTurnRuntime(args: {
       // failing the response pipe and erasing a delivered answer.
       onEnd: async ({ responseMessage, isAborted, finishReason }) => {
         try {
+          // Platform-funded completions wait for the (bounded, ≤8s) title
+          // call's usage so the settlement charges the title at its actual
+          // cost; BYOK/guest settles immediately — allowance is untouched.
+          const titleUsage =
+            credential.source === "platform"
+              ? await titleUsageForSettlement
+              : undefined
           await lifecycle.envelope.settle({
             responseMessage,
             isAborted,
             finishReason,
+            titleUsage,
           })
         } finally {
           // Settlement owns request-scoped teardown (see the factory-level
@@ -1888,7 +1935,7 @@ export function createChatTurnRuntime(args: {
                 guestTitleAbortController?.abort()
               }
               const title =
-                generatedTitle ??
+                generatedTitle?.title ??
                 (durableTurn.mode === "guest"
                   ? fallbackChatTitle(titleRequest.userText)
                   : null)

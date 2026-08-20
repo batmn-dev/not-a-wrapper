@@ -74,6 +74,12 @@ export type DurableTurnInput = {
   regeneration?: ChatTurnRegenerationRequest
   expectedVisibleMessageCount?: number
   tailMessageId?: string
+  /**
+   * Platform-usage reservation admitted with the route (ADR-0021). Crosses
+   * into the signed admission proof and attaches to the run inside
+   * prepareGeneration's transaction.
+   */
+  reservationId?: Id<"usageReservations">
 }
 
 // Durable worker wire — the post-prepare write channel (ADR-0011).
@@ -226,6 +232,13 @@ export type StreamFinishFacts = {
 /** One recorded step's tool activity — the durable-persistence view of it. */
 export type DurableStepRecord = {
   stepNumber: number
+  /**
+   * The step's token usage (ADR-0021): accumulated onto the run row as
+   * durable settlement evidence, so abort/failure/reaper accounting does not
+   * depend on the happy-path onEnd aggregate. Fired for EVERY step, tool
+   * calls or not.
+   */
+  usage?: { inputTokens?: number; outputTokens?: number }
   toolCalls: ReadonlyArray<{
     toolCallId: string
     toolName: string
@@ -304,9 +317,22 @@ export type DurableStreamBinding = {
       responseMessage: UIMessage
       isAborted: boolean
       finishReason?: string
+      /**
+       * Title-call evidence for allowance settlement (ADR-0021): observed
+       * usage, "not-run" (no title requested), or "unknown" (a title call may
+       * have run but its usage never arrived). Only meaningful for
+       * platform-funded runs; ignored elsewhere.
+       */
+      titleUsage?: TitleUsageForSettlement
     }): Promise<DurableSettlementReceipt>
   }
 }
+
+/** Mirror of the Convex-side TitleUsageEvidence wire shape (ADR-0021). */
+export type TitleUsageForSettlement =
+  | { inputTokens?: number; outputTokens?: number }
+  | "not-run"
+  | "unknown"
 
 export type DurableTurnRuntime = {
   /** Observability dimension only — callers MUST NOT branch on it. */
@@ -866,6 +892,7 @@ export function createConvexDurableTurn(args: {
     regeneration,
     expectedVisibleMessageCount,
     tailMessageId,
+    reservationId,
   } = input
   const { fetchMutation } = deps
 
@@ -1251,6 +1278,7 @@ export function createConvexDurableTurn(args: {
         provider,
         route,
         grantDigest,
+        reservationId,
         issuedAt: admissionIssuedAt,
       })
 
@@ -1279,6 +1307,7 @@ export function createConvexDurableTurn(args: {
           regeneration,
           approvalResponses,
           grantDigest,
+          reservationId,
           admissionIssuedAt,
           admissionProof,
         },
@@ -1498,7 +1527,7 @@ export function createConvexDurableTurn(args: {
             tracker.onChunk(chunk)
           },
 
-          recordStep({ stepNumber, toolCalls, toolResults }) {
+          recordStep({ stepNumber, usage, toolCalls, toolResults }) {
             const invocations: ToolInvocationForPersistence[] = toolCalls.map(
               (call) => {
                 const result = toolResults?.find(
@@ -1529,6 +1558,16 @@ export function createConvexDurableTurn(args: {
             void workerWrite("recordToolInvocations", {
               messageId: currentMessageId,
               stepNumber,
+              ...(usage &&
+              (typeof usage.inputTokens === "number" ||
+                typeof usage.outputTokens === "number")
+                ? {
+                    usage: {
+                      inputTokens: usage.inputTokens,
+                      outputTokens: usage.outputTokens,
+                    },
+                  }
+                : {}),
               invocations,
             }).catch((error: unknown) => {
               if (noteIfGrantRejection(error, "tool-invocations")) return
@@ -1578,7 +1617,7 @@ export function createConvexDurableTurn(args: {
             }
           },
 
-          async settle({ responseMessage, isAborted, finishReason }) {
+          async settle({ responseMessage, isAborted, finishReason, titleUsage }) {
             // Heartbeat policy (gameplan §10 "Runtime terminal convergence"):
             // stay alive through the bounded terminal retries — a mid-retry
             // reaping would race the write — then stop on EVERY exit. A
@@ -1691,6 +1730,7 @@ export function createConvexDurableTurn(args: {
                 ),
                 finishReason: capturedFinish?.finishReason ?? finishReason,
                 usage: capturedFinish?.usage,
+                titleUsage,
                 totalToolCalls: toolCounts.totalToolCalls,
                 failedToolCalls: toolCounts.failedToolCalls,
               })

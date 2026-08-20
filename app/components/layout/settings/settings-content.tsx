@@ -23,6 +23,7 @@ import { ThemeSelection } from "./appearance/theme-selection"
 import { DeveloperTools } from "./connections/developer-tools"
 import { McpServers } from "./connections/mcp-servers"
 import { SettingsSignOutButton } from "./general/account-management"
+import { UsageSection } from "./general/usage-section"
 import { UserProfile } from "./general/user-profile"
 import { ModelsSettings } from "./models/models-settings"
 import { SettingsCloseButton, SettingsPageHeader } from "./settings-page-header"
@@ -186,6 +187,7 @@ export function SettingsContent() {
           <div className="p-4">
             <TabsContent value="general" className="mt-0 space-y-6">
               <UserProfile />
+              <UsageSection />
               {isMobile ? (
                 <div className="[--sidebar-row-outer-inset:0px]">
                   <SettingsSignOutButton />

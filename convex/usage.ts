@@ -1,9 +1,24 @@
 import { v } from "convex/values"
 import { optionalAuthMutation, optionalAuthQuery } from "./lib/authedFunctions"
 
+/**
+ * Daily message counters — ABUSE RATE LIMITS ONLY (ADR-0021).
+ *
+ * These counters protect the application from request abuse; they are NOT the
+ * economic admission system. Platform-funded spend is admitted by the atomic
+ * allowance reservation in convex/usageAllowance.ts, and BYOK messages bypass
+ * allowance entirely while still counting here as ordinary requests.
+ *
+ * The former pro-model counters (users.dailyProMessageCount/dailyProReset)
+ * are retired: they conflated "expensive model" with "platform-funded spend"
+ * and charged BYOK messages against an economic limit. The schema fields stay
+ * optional for production compatibility but are no longer read or written.
+ * `isProModel` is still accepted (and ignored) for deploy compatibility with
+ * in-flight clients.
+ */
+
 const NON_AUTH_DAILY_MESSAGE_LIMIT = 5
 const AUTH_DAILY_MESSAGE_LIMIT = 1000
-const DAILY_LIMIT_PRO_MODELS = 500
 const USAGE_ERROR_CODES = {
   ANONYMOUS_ID_REQUIRED: "ANONYMOUS_ID_REQUIRED",
   USER_NOT_FOUND: "USER_NOT_FOUND",
@@ -23,10 +38,11 @@ function getStartOfDayMs(): number {
  */
 export const checkUsage = optionalAuthQuery({
   args: {
-    isProModel: v.boolean(),
+    // Deploy-compat only: ignored. The pro-model economic tier is retired.
+    isProModel: v.optional(v.boolean()),
     anonymousId: v.optional(v.string()),
   },
-  handler: async (ctx, { isProModel, anonymousId }) => {
+  handler: async (ctx, { anonymousId }) => {
     const startOfDayMs = getStartOfDayMs()
 
     if (!ctx.identity) {
@@ -82,22 +98,6 @@ export const checkUsage = optionalAuthQuery({
       }
     }
 
-    if (isProModel) {
-      const lastReset = user.dailyProReset ?? 0
-      const isNewDay = lastReset < startOfDayMs
-      const count = isNewDay ? 0 : (user.dailyProMessageCount ?? 0)
-      const remaining = Math.max(0, DAILY_LIMIT_PRO_MODELS - count)
-
-      return {
-        canSend: count < DAILY_LIMIT_PRO_MODELS,
-        remaining,
-        limit: DAILY_LIMIT_PRO_MODELS,
-        count,
-        isProModel: true,
-      }
-    }
-
-    // Regular model limits
     const limit = user.anonymous
       ? NON_AUTH_DAILY_MESSAGE_LIMIT
       : AUTH_DAILY_MESSAGE_LIMIT
@@ -124,10 +124,11 @@ export const checkUsage = optionalAuthQuery({
  */
 export const incrementUsage = optionalAuthMutation({
   args: {
-    isProModel: v.boolean(),
+    // Deploy-compat only: ignored. The pro-model economic tier is retired.
+    isProModel: v.optional(v.boolean()),
     anonymousId: v.optional(v.string()),
   },
-  handler: async (ctx, { isProModel, anonymousId }) => {
+  handler: async (ctx, { anonymousId }) => {
     const startOfDayMs = getStartOfDayMs()
 
     if (!ctx.identity) {
@@ -163,28 +164,14 @@ export const incrementUsage = optionalAuthMutation({
     if (!user) return
 
     const now = Date.now()
+    const lastReset = user.dailyReset ?? 0
+    const isNewDay = lastReset < startOfDayMs
 
-    if (isProModel) {
-      const lastReset = user.dailyProReset ?? 0
-      const isNewDay = lastReset < startOfDayMs
-
-      await ctx.db.patch(user._id, {
-        dailyProMessageCount: isNewDay
-          ? 1
-          : (user.dailyProMessageCount ?? 0) + 1,
-        dailyProReset: isNewDay ? startOfDayMs : user.dailyProReset,
-        lastActiveAt: now,
-      })
-    } else {
-      const lastReset = user.dailyReset ?? 0
-      const isNewDay = lastReset < startOfDayMs
-
-      await ctx.db.patch(user._id, {
-        messageCount: (user.messageCount ?? 0) + 1,
-        dailyMessageCount: isNewDay ? 1 : (user.dailyMessageCount ?? 0) + 1,
-        dailyReset: isNewDay ? startOfDayMs : user.dailyReset,
-        lastActiveAt: now,
-      })
-    }
+    await ctx.db.patch(user._id, {
+      messageCount: (user.messageCount ?? 0) + 1,
+      dailyMessageCount: isNewDay ? 1 : (user.dailyMessageCount ?? 0) + 1,
+      dailyReset: isNewDay ? startOfDayMs : user.dailyReset,
+      lastActiveAt: now,
+    })
   },
 })

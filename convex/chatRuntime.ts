@@ -63,6 +63,11 @@ import {
   vToolInvocationStreamMetadata,
   type PersistedMessageMetadata,
 } from "./lib/messageMetadata"
+import {
+  attachReservationToRun,
+  settleUsageForTerminalRun,
+  type TitleUsageEvidence,
+} from "./usageAllowance"
 
 const MAX_PREVIEW_LENGTH = 500
 
@@ -96,10 +101,19 @@ const vUsage = v.object({
 })
 
 /**
- * One declaration per generation-run write op. The user-token mutations below
- * and their grant-authorized worker twins (convex/chatRuntimeWorker.ts) spread
- * these same shapes, so a field added or renamed on one authenticator is a
- * compile + validator change on both — the Chat turn wire contract pattern.
+ * One declaration per generation-run write op. The grant-authorized worker
+ * mutations (convex/chatRuntimeWorker.ts) spread these shapes, so a field
+ * added or renamed here is a compile + validator change on the wire — the
+ * Chat turn wire contract pattern.
+ *
+ * These ops have NO public user-token registrations. Post-prepare run writes
+ * travel ONLY the Execution-grant worker wire (ADR-0011): since ADR-0021,
+ * `markGenerationRunCompleted.usage` is the authoritative settlement input,
+ * so a user-token twin would let a chat owner settle their own platform
+ * reservation at a self-declared (near-zero) cost. The user token authorizes
+ * admission (`prepareGeneration`) and Stop only; `stopGenerationRun` stays
+ * public because it carries no usage input — settlement evidence still
+ * arrives via the grant wire or the reaper's boundary rule.
  */
 export const generationRunWriteArgs = {
   markGenerationWorkStarted: {
@@ -119,6 +133,9 @@ export const generationRunWriteArgs = {
   recordToolInvocations: {
     messageId: v.id("messages"),
     stepNumber: v.optional(v.number()),
+    // Per-step token usage — durable evidence so abort/failure settlement
+    // does not depend on the happy-path onEnd aggregate (ADR-0021).
+    usage: v.optional(vUsage),
     invocations: v.array(
       v.object({
         toolCallId: v.string(),
@@ -149,6 +166,13 @@ export const generationRunWriteArgs = {
     metadata: v.optional(vToolInvocationStreamMetadata),
     finishReason: v.optional(v.string()),
     usage: v.optional(vUsage),
+    // Title-call evidence for allowance settlement (ADR-0021): observed
+    // usage, "not-run" (no title requested this turn), or "unknown" (a title
+    // call may have run but its usage never arrived — the title component
+    // settles at its reservation-time estimate, visibly marked).
+    titleUsage: v.optional(
+      v.union(vUsage, v.literal("not-run"), v.literal("unknown"))
+    ),
     totalToolCalls: v.optional(v.number()),
     failedToolCalls: v.optional(v.number()),
   },
@@ -702,6 +726,21 @@ async function applyLifecycleVerdict(
   // run's live spinner.
   await projectRunStatusToChat(ctx, run, verdict.run.status, now)
 
+  // Allowance accounting rides the SAME transaction as the terminal commit
+  // (ADR-0021): every lifecycle-verdict terminal (fail/abort/stop/supersede/
+  // lease-expired/approval-expired/continuation-lost) applies the provider-
+  // boundary rule — release before workStartedAt, settle observed or
+  // estimated usage after. Idempotent; BYOK/anonymous runs have no
+  // reservation and no-op structurally.
+  if (verdict.run.settle) {
+    await settleUsageForTerminalRun(
+      ctx,
+      run,
+      {},
+      verdict.run.terminalReason ?? verdict.run.status
+    )
+  }
+
   return assistantMessageId
 }
 
@@ -838,6 +877,9 @@ async function closeSupersededGenerationsForChat(
             ...LEASE_CLEAR,
             assistantMessageId: supersededMessageId,
           })
+          if (verdict.run.settle) {
+            await settleUsageForTerminalRun(ctx, run, {}, "superseded")
+          }
         }
       }
     }
@@ -1272,6 +1314,9 @@ export async function denyPendingApprovalsForChat(
           ...grantRevocationForStatus(verdict.run.status),
           ...LEASE_CLEAR,
         })
+        if (verdict.run.settle) {
+          await settleUsageForTerminalRun(ctx, run, {}, "approvals_denied")
+        }
       }
     }
   }
@@ -1435,6 +1480,11 @@ export async function applyApprovalResponses(
       ...grantRevocationForStatus(verdict.run.status),
       ...LEASE_CLEAR,
     })
+    // Normally settled at the approval pause (the completion-downgrade write);
+    // this defensive call only lands when that settlement never arrived.
+    if (verdict.run.settle) {
+      await settleUsageForTerminalRun(ctx, run, {}, "approvals_resolved")
+    }
   }
 
   return updatedMessage
@@ -1473,6 +1523,13 @@ type PrepareGenerationForChatArgs = {
   approvalResponses?: GenerationApprovalResponse[]
   /** SHA-256 hex digest of the run-scoped worker secret (ADR-0011). */
   grantDigest?: string
+  /**
+   * Platform-usage reservation to attach to the run (ADR-0021). Verified by
+   * the signed admission proof; present exactly when the route resolver
+   * reserved platform allowance for this request. Attach happens inside this
+   * transaction, so a platform-funded run can never exist unaccounted.
+   */
+  reservationId?: Id<"usageReservations">
 }
 
 export async function prepareGenerationForChat(
@@ -1583,6 +1640,19 @@ export async function prepareGenerationForChat(
         }
       : {}),
   })
+
+  // Attach the platform-usage reservation to its run transactionally
+  // (ADR-0021): fail closed — a reservation that cannot attach rolls back
+  // the whole prepare, so a platform-funded run never executes unaccounted.
+  if (args.reservationId) {
+    await attachReservationToRun(ctx, {
+      reservationId: args.reservationId,
+      requestId: args.requestId,
+      userId: owner.user._id,
+      runId,
+      now,
+    })
+  }
 
   let assistantMessageId: Id<"messages">
   let assistantOrder: number
@@ -1767,6 +1837,7 @@ export async function prepareGenerationWithVerifiedAdmission(
       provider: args.provider,
       route: args.route,
       grantDigest: args.grantDigest,
+      reservationId: args.reservationId,
       issuedAt: admissionIssuedAt,
     },
     admissionProof,
@@ -1806,6 +1877,7 @@ export const prepareGeneration = mutation({
     regeneration: v.optional(vRegenerationIntent),
     approvalResponses: v.optional(v.array(vApprovalResponse)),
     grantDigest: v.optional(v.string()),
+    reservationId: v.optional(v.id("usageReservations")),
     admissionIssuedAt: v.number(),
     admissionProof: v.string(),
   },
@@ -1839,26 +1911,6 @@ export const getApprovalRouteFacts = authenticatedQuery({
       model: run.model,
     }
   },
-})
-
-export const updateAssistantSnapshot = ownedGenerationRunMutation({
-  args: generationRunWriteArgs.updateAssistantSnapshot,
-  handler: async (ctx, args) =>
-    updateAssistantSnapshotForChat(
-      ctx,
-      { user: ctx.user, chat: ctx.chat, run: ctx.run },
-      args
-    ),
-})
-
-export const markGenerationWorkStarted = ownedGenerationRunMutation({
-  args: generationRunWriteArgs.markGenerationWorkStarted,
-  handler: async (ctx, args) =>
-    markGenerationWorkStartedForChat(
-      ctx,
-      { user: ctx.user, chat: ctx.chat, run: ctx.run },
-      args
-    ),
 })
 
 /**
@@ -2042,16 +2094,6 @@ export async function heartbeatGenerationRunForChat(
   return { kind: "renewed", leaseExpiresAt }
 }
 
-export const markGenerationRunCompleted = ownedGenerationRunMutation({
-  args: generationRunWriteArgs.markGenerationRunCompleted,
-  handler: async (ctx, args) =>
-    markGenerationRunCompletedForChat(
-      ctx,
-      { user: ctx.user, chat: ctx.chat, run: ctx.run },
-      args
-    ),
-})
-
 export async function markGenerationRunCompletedForChat(
   ctx: MutationCtx,
   owner: AuthenticatedRunOwner,
@@ -2066,6 +2108,7 @@ export async function markGenerationRunCompletedForChat(
       outputTokens?: number
       totalTokens?: number
     }
+    titleUsage?: TitleUsageEvidence
     totalToolCalls?: number
     failedToolCalls?: number
   }
@@ -2108,8 +2151,10 @@ export async function markGenerationRunCompletedForChat(
     completedAt: verdict.run.settle ? now : undefined,
     updatedAt: now,
     finishReason: args.finishReason,
-    inputTokens: args.usage?.inputTokens,
-    outputTokens: args.usage?.outputTokens,
+    // The onEnd aggregate is authoritative; when it is absent, keep the
+    // per-step accumulated evidence instead of erasing it (ADR-0021).
+    inputTokens: args.usage?.inputTokens ?? run.inputTokens,
+    outputTokens: args.usage?.outputTokens ?? run.outputTokens,
     totalToolCalls: args.totalToolCalls,
     failedToolCalls: args.failedToolCalls,
     ...(args.metadata?.workDurationMs !== undefined
@@ -2127,17 +2172,35 @@ export async function markGenerationRunCompletedForChat(
   // projection is hooked here. verdict.run.status is "completed", or
   // "awaiting_approval" when the finish still has pending approvals.
   await projectRunStatusToChat(ctx, run, verdict.run.status, now)
-}
 
-export const markGenerationRunFailed = ownedGenerationRunMutation({
-  args: generationRunWriteArgs.markGenerationRunFailed,
-  handler: async (ctx, args) =>
-    markGenerationRunFailedForChat(
-      ctx,
-      { user: ctx.user, chat: ctx.chat, run: ctx.run },
-      args
-    ),
-})
+  // Allowance settlement (ADR-0021): the provider invocation has ended on
+  // BOTH outcomes — completed AND the awaiting_approval downgrade (an
+  // approval continuation is a new request with its own reservation) — so
+  // this run's usage settles now, with the aggregate the write carried.
+  await settleUsageForTerminalRun(
+    ctx,
+    run,
+    {
+      // Only an aggregate that actually carries token counts is "actual"
+      // evidence; an absent or empty one falls to the observed/estimated
+      // boundary rule inside the helper (never a zero-cost "actual").
+      ...(args.usage &&
+      (typeof args.usage.inputTokens === "number" ||
+        typeof args.usage.outputTokens === "number")
+        ? {
+            usage: {
+              inputTokens: args.usage.inputTokens,
+              outputTokens: args.usage.outputTokens,
+            },
+          }
+        : {}),
+      titleUsage: args.titleUsage ?? "unknown",
+    },
+    verdict.run.status === "awaiting_approval"
+      ? "approval_pause"
+      : "completed"
+  )
+}
 
 export async function markGenerationRunFailedForChat(
   ctx: MutationCtx,
@@ -2171,16 +2234,6 @@ export async function markGenerationRunFailedForChat(
   )
 }
 
-export const markGenerationRunAborted = ownedGenerationRunMutation({
-  args: generationRunWriteArgs.markGenerationRunAborted,
-  handler: async (ctx, args) =>
-    markGenerationRunAbortedForChat(
-      ctx,
-      { user: ctx.user, chat: ctx.chat, run: ctx.run },
-      args
-    ),
-})
-
 export async function markGenerationRunAbortedForChat(
   ctx: MutationCtx,
   owner: AuthenticatedRunOwner,
@@ -2212,16 +2265,6 @@ export async function markGenerationRunAbortedForChat(
     args.workDurationMs
   )
 }
-
-export const createToolApprovalRequest = ownedGenerationRunMutation({
-  args: generationRunWriteArgs.createToolApprovalRequest,
-  handler: async (ctx, args) =>
-    createToolApprovalRequestForChat(
-      ctx,
-      { user: ctx.user, chat: ctx.chat, run: ctx.run },
-      args
-    ),
-})
 
 export async function createToolApprovalRequestForChat(
   ctx: MutationCtx,
@@ -2578,22 +2621,13 @@ export const denyToolCall = mutation({
   handler: async (ctx, args) => resolveToolCallDecision(ctx, args, "denied"),
 })
 
-export const recordToolInvocations = ownedGenerationRunMutation({
-  args: generationRunWriteArgs.recordToolInvocations,
-  handler: async (ctx, args) =>
-    recordToolInvocationsForChat(
-      ctx,
-      { user: ctx.user, chat: ctx.chat, run: ctx.run },
-      args
-    ),
-})
-
 export async function recordToolInvocationsForChat(
   ctx: MutationCtx,
   owner: AuthenticatedRunOwner,
   args: {
     messageId: Id<"messages">
     stepNumber?: number
+    usage?: { inputTokens?: number; outputTokens?: number }
     invocations: Array<{
       toolCallId: string
       toolName: string
@@ -2681,10 +2715,27 @@ export async function recordToolInvocationsForChat(
     }
   }
 
-  if (args.invocations.length > 0) {
+  // Per-step usage accumulation (ADR-0021): durable evidence for the abort/
+  // failure/reaper settlement paths, which cannot rely on the happy-path
+  // onEnd aggregate. The completion write later REPLACES the accumulation
+  // with the SDK's authoritative all-steps aggregate.
+  const stepInputTokens = args.usage?.inputTokens ?? 0
+  const stepOutputTokens = args.usage?.outputTokens ?? 0
+  const hasStepUsage = stepInputTokens > 0 || stepOutputTokens > 0
+
+  if (args.invocations.length > 0 || hasStepUsage) {
     // Accepted tool activity is progress evidence (gameplan §5) — not
     // liveness; the heartbeat alone renews the lease.
-    await ctx.db.patch(run._id, { lastProgressAt: now, updatedAt: now })
+    await ctx.db.patch(run._id, {
+      lastProgressAt: now,
+      updatedAt: now,
+      ...(hasStepUsage
+        ? {
+            inputTokens: (run.inputTokens ?? 0) + stepInputTokens,
+            outputTokens: (run.outputTokens ?? 0) + stepOutputTokens,
+          }
+        : {}),
+    })
   }
 }
 
