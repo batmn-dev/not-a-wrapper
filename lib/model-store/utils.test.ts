@@ -67,9 +67,9 @@ describe("resolvePreferredModelId", () => {
     ).toBe("gpt-5.1")
   })
 
-  it("normalizes a legacy routed chat model to its logical identity", () => {
+  it("preserves a legacy routed chat model for server route selection", () => {
     // The wrapped Sonnet 5 route is mapped onto the direct logical model
-    // (ADR-0020) — an old chat that stored the routed id resolves to it.
+    // (ADR-0020), but an old chat keeps its route hint for the next request.
     expect(
       resolvePreferredModelId({
         models: VISIBLE_MODELS,
@@ -77,7 +77,7 @@ describe("resolvePreferredModelId", () => {
         currentModelId: "openrouter:anthropic/claude-sonnet-5",
         preferredModelIds: [],
       })
-    ).toBe("claude-sonnet-5")
+    ).toBe("openrouter:anthropic/claude-sonnet-5")
   })
 
   it("prefers the first accessible visible stored model before hidden legacy models", () => {

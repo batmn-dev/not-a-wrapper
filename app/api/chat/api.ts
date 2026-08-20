@@ -145,13 +145,14 @@ export type ChatRouteAdmission = {
 }
 
 function turnRequiresVision(messages: UIMessage[]): boolean {
-  return messages.some((message) =>
-    message.parts.some(
-      (part) =>
-        part.type === "file" &&
-        typeof part.mediaType === "string" &&
-        part.mediaType.startsWith("image/")
-    )
+  const currentTurn = messages.at(-1)
+  if (currentTurn?.role !== "user") return false
+
+  return currentTurn.parts.some(
+    (part) =>
+      part.type === "file" &&
+      typeof part.mediaType === "string" &&
+      part.mediaType.startsWith("image/")
   )
 }
 
@@ -174,7 +175,15 @@ async function getPinnedContinuationProvider(
     api.chatRuntime.getApprovalRouteFacts,
     { approvalId },
     { token }
-  )
+  ).catch((error: unknown) => {
+    console.warn(
+      JSON.stringify({
+        _tag: "approval_route_facts_lookup_failed",
+        errorType: error instanceof Error ? error.name : typeof error,
+      })
+    )
+    return null
+  })
   const provider = facts?.provider
   return provider && provider in MODEL_PROVIDER_IDENTITY
     ? (provider as Provider)

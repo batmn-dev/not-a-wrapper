@@ -1,3 +1,5 @@
+import { resolveModelSelections } from "@/lib/models/catalog"
+
 export type LayoutType = "sidebar" | "fullscreen"
 
 /**
@@ -49,6 +51,15 @@ export function normalizeStreamingPresentation(
   return value === "quick" ? "quick" : "smooth"
 }
 
+/** Collapse persisted legacy route ids into the logical model identities. */
+export function normalizeHiddenModels(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+
+  return resolveModelSelections(
+    value.filter((modelId): modelId is string => typeof modelId === "string")
+  )
+}
+
 export function convertFromApiFormat(
   apiData: UserPreferencesApiFormat
 ): UserPreferences {
@@ -61,7 +72,7 @@ export function convertFromApiFormat(
     streamingPresentation: normalizeStreamingPresentation(
       apiData.streaming_presentation
     ),
-    hiddenModels: apiData.hidden_models || [],
+    hiddenModels: normalizeHiddenModels(apiData.hidden_models),
   }
 }
 

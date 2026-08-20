@@ -300,6 +300,48 @@ describe("validateAndResolveChatCredential", () => {
     )
   })
 
+  it("does not require vision for images from an earlier turn", async () => {
+    vi.mocked(resolveModelRoute).mockResolvedValue({
+      ok: true,
+      route: resolvedRoute,
+      apiKey: "sk-or-byok",
+    })
+
+    await validateAndResolveChatCredential({
+      model: "sonar",
+      isAuthenticated: true,
+      token: "convex-token",
+      messages: [
+        {
+          id: "u1",
+          role: "user",
+          parts: [
+            { type: "text", text: "what is this?" },
+            {
+              type: "file",
+              mediaType: "image/png",
+              url: "convex://file-1",
+            },
+          ],
+        },
+        {
+          id: "a1",
+          role: "assistant",
+          parts: [{ type: "text", text: "It is a diagram." }],
+        },
+        {
+          id: "u2",
+          role: "user",
+          parts: [{ type: "text", text: "Search for related work." }],
+        },
+      ] as UIMessage[],
+    })
+
+    expect(resolveModelRoute).toHaveBeenCalledWith(
+      expect.objectContaining({ requiredCapabilities: undefined })
+    )
+  })
+
   it("pins an approval continuation to the paused run's provider", async () => {
     vi.mocked(fetchQuery).mockResolvedValue({
       provider: "anthropic",
@@ -342,5 +384,58 @@ describe("validateAndResolveChatCredential", () => {
     expect(resolveModelRoute).toHaveBeenCalledWith(
       expect.objectContaining({ pinnedProviderId: "anthropic" })
     )
+  })
+
+  it("continues without a provider pin when the approval lookup fails", async () => {
+    const lookupError = new Error("Convex transport failed")
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    vi.mocked(fetchQuery).mockRejectedValue(lookupError)
+    vi.mocked(resolveModelRoute).mockResolvedValue({
+      ok: true,
+      route: resolvedRoute,
+      apiKey: "sk-or-byok",
+    })
+
+    await expect(
+      validateAndResolveChatCredential({
+        model: "claude-sonnet-5",
+        isAuthenticated: true,
+        token: "convex-token",
+        messages: [
+          ...textMessages,
+          {
+            id: "a1",
+            role: "assistant",
+            parts: [
+              {
+                type: "dynamic-tool",
+                toolName: "search",
+                toolCallId: "call-1",
+                state: "approval-responded",
+                approval: { id: "appr-1", approved: true },
+              },
+            ],
+          },
+        ] as unknown as UIMessage[],
+      })
+    ).resolves.toEqual({
+      route: resolvedRoute,
+      credential: {
+        provider: "openrouter",
+        apiKey: "sk-or-byok",
+        source: "byok",
+      },
+    })
+
+    expect(resolveModelRoute).toHaveBeenCalledWith(
+      expect.objectContaining({ pinnedProviderId: undefined })
+    )
+    expect(warn).toHaveBeenCalledWith(
+      JSON.stringify({
+        _tag: "approval_route_facts_lookup_failed",
+        errorType: "Error",
+      })
+    )
+    warn.mockRestore()
   })
 })

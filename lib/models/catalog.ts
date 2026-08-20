@@ -249,7 +249,7 @@ export function toLogicalModelView(model: LogicalModel): LogicalModelView {
       (route) => route.config.reasoningText === true
     ),
     tools: model.routes.some((route) => Boolean(route.config.tools))
-      ? (canonical.tools ?? true)
+      ? true
       : canonical.tools,
     routes: model.routes.map((route) => ({
       id: route.id,

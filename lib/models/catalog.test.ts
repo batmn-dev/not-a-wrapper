@@ -6,6 +6,7 @@ import {
   resolveModelSelection,
   resolveModelSelections,
   ROUTE_CONFIGS,
+  toLogicalModelView,
 } from "./catalog"
 import type { ModelConfig } from "./types"
 
@@ -89,6 +90,21 @@ describe("compileLogicalCatalog", () => {
         }),
       ])
     ).toThrow(/two/)
+  })
+
+  it("reports tools when a non-canonical route supports them", () => {
+    const [model] = compileLogicalCatalog([
+      makeConfig({ id: "direct-a", providerId: "anthropic", tools: false }),
+      makeConfig({
+        id: "openrouter:vendor/a",
+        providerId: "openrouter",
+        idKind: "wrapped",
+        logicalModelId: "direct-a",
+        tools: true,
+      }),
+    ])
+
+    expect(toLogicalModelView(model!).tools).toBe(true)
   })
 })
 

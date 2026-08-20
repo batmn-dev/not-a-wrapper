@@ -159,8 +159,10 @@ export function resolvePreferredModelId({
     modelId: string | null | undefined
   ): string | null => {
     if (!modelId) return null
-    const resolvedModelId = resolveModelSelection(modelId).modelId
-    return getModelInfo(resolvedModelId) ? resolvedModelId : null
+    const selection = resolveModelSelection(modelId)
+    return getModelInfo(selection.modelId)
+      ? (selection.legacyRouteHint ?? selection.modelId)
+      : null
   }
 
   const normalizedCurrentModelId = normalizeRoutableModelId(currentModelId)

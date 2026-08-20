@@ -1,5 +1,9 @@
 import { v } from "convex/values"
-import { authenticatedMutation, maybeAuthQuery } from "./lib/authedFunctions"
+import {
+  authenticatedMutation,
+  authenticatedQuery,
+  maybeAuthQuery,
+} from "./lib/authedFunctions"
 
 /**
  * Get all API keys for current user (encrypted)
@@ -45,15 +49,12 @@ export const getProviderStatus = maybeAuthQuery({
  * "priority" (the historical BYOK-first behavior). Never exposes encrypted
  * or decrypted key material.
  */
-export const getKeySettings = maybeAuthQuery({
+export const getKeySettings = authenticatedQuery({
   args: {},
   handler: async (ctx) => {
-    const user = ctx.user
-    if (!user) return []
-
     const keys = await ctx.db
       .query("userKeys")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
       .collect()
 
     return keys.map((key) => ({

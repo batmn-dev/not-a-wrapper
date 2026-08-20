@@ -48,7 +48,7 @@ choice in one server-owned resolver.
 
 ## Route resolver
 
-`resolveModelRoute` (`lib/models/route-resolver.ts`, server-only) replaces
+`resolveModelRoute` (`lib/model-route-resolver.ts`, server-only) replaces
 the provider derivation inside `validateAndResolveChatCredential`. Inputs:
 the (possibly legacy) selected id, auth state, the Convex token, required
 capabilities (vision when the turn carries images), and an optional pinned
