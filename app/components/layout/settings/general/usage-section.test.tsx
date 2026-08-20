@@ -86,9 +86,7 @@ describe("UsageSection", () => {
     expect(container?.textContent).toContain("…")
     expect(meter?.hasAttribute("data-indeterminate")).toBe(true)
     expect(meter?.hasAttribute("aria-valuenow")).toBe(false)
-    expect(meter?.getAttribute("aria-valuetext")).toBe(
-      "indeterminate progress"
-    )
+    expect(meter?.getAttribute("aria-valuetext")).toBe("indeterminate progress")
     expect(indicator?.className).toContain("data-[indeterminate]:hidden")
   })
 

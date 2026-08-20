@@ -1,7 +1,7 @@
 "use client"
 
-import { api } from "@/convex/_generated/api"
 import { Progress } from "@/components/ui/progress"
+import { api } from "@/convex/_generated/api"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
 import type { FunctionReturnType } from "convex/server"
 import {
@@ -41,18 +41,14 @@ function getUsageDisplay(allowance: Allowance) {
 
   return {
     exhausted: granted > 0 && spent + reserved >= granted,
-    meterValue: Math.round(
-      Math.min(1, usedFraction + pendingFraction) * 100
-    ),
+    meterValue: Math.round(Math.min(1, usedFraction + pendingFraction) * 100),
     refillDate: new Intl.DateTimeFormat("en-US", {
       month: "short",
       day: "numeric",
       timeZone: "UTC",
     }).format(new Date(allowance.periodEnd)),
     usageLabel: `${formatPercent(usedFraction)} used${
-      reserved > 0
-        ? ` · ${formatPercent(pendingFraction)} pending`
-        : ""
+      reserved > 0 ? ` · ${formatPercent(pendingFraction)} pending` : ""
     }`,
   }
 }
