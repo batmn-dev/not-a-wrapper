@@ -520,6 +520,68 @@ describe("durable turn runtime — settlement ordering", () => {
       partsSnapshot: RESPONSE_MESSAGE.parts,
     })
   })
+
+  it("drains observed step usage before abort settlement", async () => {
+    const stepDeferred = createDeferred<undefined>()
+    const wire = makeRecordingWire({
+      responders: {
+        recordToolInvocations: () => stepDeferred.promise,
+      },
+    })
+    const { turn } = await makePreparedTurn({ wire })
+    const binding = turn.bind(makeToolFacts())
+
+    binding.stream.recordStep({
+      stepNumber: 1,
+      usage: { inputTokens: 111, outputTokens: 22 },
+      toolCalls: [] as never,
+      toolResults: [] as never,
+    })
+    const abortPromise = binding.stream.onAbort("stream aborted", 2500)
+    await flush()
+
+    expect(wireCalls(wire, "markGenerationRunAborted")).toHaveLength(0)
+
+    stepDeferred.resolve(undefined)
+    await abortPromise
+
+    const ops = orderedOps(wire)
+    expect(ops.indexOf("recordToolInvocations")).toBeLessThan(
+      ops.indexOf("markGenerationRunAborted")
+    )
+  })
+
+  it("drains observed step usage before stream-error settlement", async () => {
+    const stepDeferred = createDeferred<undefined>()
+    const wire = makeRecordingWire({
+      responders: {
+        recordToolInvocations: () => stepDeferred.promise,
+      },
+    })
+    const { turn } = await makePreparedTurn({ wire })
+    const binding = turn.bind(makeToolFacts())
+
+    binding.stream.recordStep({
+      stepNumber: 1,
+      usage: { inputTokens: 111, outputTokens: 22 },
+      toolCalls: [] as never,
+      toolResults: [] as never,
+    })
+    binding.stream.noteStreamError("provider exploded", 2500)
+    await flush()
+
+    expect(wireCalls(wire, "markGenerationRunFailed")).toHaveLength(0)
+
+    stepDeferred.resolve(undefined)
+    await vi.waitFor(() => {
+      expect(wireCalls(wire, "markGenerationRunFailed")).toHaveLength(1)
+    })
+
+    const ops = orderedOps(wire)
+    expect(ops.indexOf("recordToolInvocations")).toBeLessThan(
+      ops.indexOf("markGenerationRunFailed")
+    )
+  })
 })
 
 describe("durable turn runtime — settlement receipts (never rejects)", () => {
@@ -1284,6 +1346,28 @@ describe("durable turn runtime — prepare() error mapping and grant minting", (
     })
   })
 
+  it("maps a stale canonical generation plan to a retryable branded 409", async () => {
+    const fetchMutation = makeRecordingFetchMutation({
+      prepareResponder: () => {
+        throw { data: { code: "generation_input_changed" } }
+      },
+    })
+    const turn = makeConvexTurn(
+      makeInput({ generationInputHash: "a".repeat(64) }) as DurableTurnInput & {
+        convexToken: string
+      },
+      fetchMutation,
+      makeRecordingWire()
+    )
+
+    await expect(turn.prepare({ provider: "openai" })).rejects.toMatchObject({
+      name: "PublicChatHttpError",
+      statusCode: 409,
+      code: "GENERATION_INPUT_CHANGED",
+      message: "This chat changed before generation started. Please try again.",
+    })
+  })
+
   it("passes a concurrency-guard rejection through untouched (no 400 remap)", async () => {
     const guardError = new Error("expectedVisibleMessageCount mismatch")
     const fetchMutation = makeRecordingFetchMutation({
@@ -1546,6 +1630,36 @@ describe("durable turn runtime — fail() at each phase", () => {
       messageId: "msg1",
       error: "provider exploded",
     })
+  })
+
+  it("drains observed step usage before an outer failure settles the run", async () => {
+    const stepDeferred = createDeferred<undefined>()
+    const wire = makeRecordingWire({
+      responders: {
+        recordToolInvocations: () => stepDeferred.promise,
+      },
+    })
+    const { turn } = await makePreparedTurn({ wire })
+    const binding = turn.bind(makeToolFacts())
+
+    binding.stream.recordStep({
+      stepNumber: 1,
+      usage: { inputTokens: 111, outputTokens: 22 },
+      toolCalls: [] as never,
+      toolResults: [] as never,
+    })
+    const failPromise = turn.fail("provider exploded")
+    await flush()
+
+    expect(wireCalls(wire, "markGenerationRunFailed")).toHaveLength(0)
+
+    stepDeferred.resolve(undefined)
+    await failPromise
+
+    const ops = orderedOps(wire)
+    expect(ops.indexOf("recordToolInvocations")).toBeLessThan(
+      ops.indexOf("markGenerationRunFailed")
+    )
   })
 
   it("warns and resolves when the failure write itself rejects", async () => {

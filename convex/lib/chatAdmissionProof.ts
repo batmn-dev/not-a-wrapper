@@ -20,6 +20,8 @@ export type ChatAdmissionProofPayload = {
   /** Platform-usage reservation attached at prepare (ADR-0021). Signing it
    * makes a forged or swapped reservation attach unrepresentable. */
   reservationId?: string
+  /** Canonical durable-input plan confirmed transactionally at prepare. */
+  generationInputHash?: string
   issuedAt: number
 }
 
@@ -46,19 +48,39 @@ function serializeAdmission(payload: ChatAdmissionProofPayload): string {
       : null,
     payload.grantDigest ?? null,
     payload.reservationId ?? null,
+    payload.generationInputHash ?? null,
     payload.issuedAt,
   ])
 }
 
 /**
- * Deploy-skew shim (delete after one full Next+Convex deploy cycle carrying
- * the reservationId slot): the pre-ADR-0021 serialization, without the
- * reservationId element. A stale signer paired with a fresh verifier — or
- * vice versa — would otherwise reject EVERY proof during the deploy window,
- * an availability outage for all chat turns. Only proofs WITHOUT a
- * reservation may verify against this shape: a reservation-carrying proof is
- * new-format by construction.
+ * Deploy-skew shim for the immediately previous format, which carried the
+ * reservation but not the generation-input hash. Only a hash-less payload may
+ * verify against it: a hash-carrying proof is new-format by construction.
  */
+function serializeAdmissionWithoutInputHash(
+  payload: ChatAdmissionProofPayload
+): string {
+  return JSON.stringify([
+    "chat-admission-v1",
+    payload.chatId,
+    payload.requestId,
+    payload.model,
+    payload.provider,
+    payload.route
+      ? [
+          payload.route.routeId,
+          payload.route.credentialSource,
+          payload.route.routeReason,
+        ]
+      : null,
+    payload.grantDigest ?? null,
+    payload.reservationId ?? null,
+    payload.issuedAt,
+  ])
+}
+
+/** Pre-ADR-0021 format, retained for one more deploy-skew window. */
 function serializeAdmissionLegacy(payload: ChatAdmissionProofPayload): string {
   return JSON.stringify([
     "chat-admission-v1",
@@ -107,13 +129,27 @@ export function verifyChatAdmissionProof(
     options.secret ?? process.env.CHAT_ADMISSION_SECRET
   )
   if (
-    timingSafeEqualHex(hmacSha256Hex(secret, serializeAdmission(payload)), proof)
+    timingSafeEqualHex(
+      hmacSha256Hex(secret, serializeAdmission(payload)),
+      proof
+    )
   ) {
     return true
   }
-  // Deploy-skew fallback: a proof minted by a signer that predates the
-  // reservationId slot. Never applicable to reservation-carrying proofs.
+  // Deploy-skew fallbacks are intentionally one-way: a fresh verifier accepts
+  // a stale signer only when every field absent from the old format is also
+  // absent from the payload.
+  if (
+    payload.generationInputHash === undefined &&
+    timingSafeEqualHex(
+      hmacSha256Hex(secret, serializeAdmissionWithoutInputHash(payload)),
+      proof
+    )
+  ) {
+    return true
+  }
   return (
+    payload.generationInputHash === undefined &&
     payload.reservationId === undefined &&
     timingSafeEqualHex(
       hmacSha256Hex(secret, serializeAdmissionLegacy(payload)),

@@ -13,7 +13,7 @@ import {
   computeUsageCredits,
   grantEventKey,
   isValidCreditAmount,
-  isValidPricingSnapshot,
+  isValidUsageReservationArgs,
   releaseEventKey,
   reservationPayloadFingerprint,
   reserveEventKey,
@@ -30,8 +30,15 @@ import {
   authenticatedMutation,
   authenticatedQuery,
 } from "./lib/authedFunctions"
+import {
+  usageReservationAuthorizationAudience,
+  verifyUsageReservationAuthorization,
+} from "./lib/usageReservationAuthorization"
+import {
+  usageReservationArgValidators,
+  type UsageReservationArgs,
+} from "./lib/usageValidators"
 import { evaluateFixedWindow } from "./rateLimits"
-import { vPricingSnapshot } from "./lib/usageValidators"
 
 /**
  * Platform usage allowance (ADR-0021): atomic reserve-and-settle accounting
@@ -158,9 +165,10 @@ async function patchBucketBalances(
   await ctx.db.patch(bucket._id, { ...next, updatedAt: now })
 }
 
-// Reserve-mutation abuse throttle: fixed-window per user, reusing the shared
-// apiRateLimits table + pure window arithmetic. Generous by design — one
-// reservation per chat turn means legitimate users stay far below it.
+// Defense-in-depth reserve throttle: fixed-window per user, reusing the shared
+// apiRateLimits table + pure window arithmetic. The signed authorization below
+// is the authority boundary; this limits abuse through the legitimate server
+// route or damage from a future signer regression.
 const RESERVE_RATE_LIMIT = { limit: 30, windowMs: 60_000 }
 const RESERVE_RATE_BUCKET = "usage_reserve"
 
@@ -209,7 +217,7 @@ export type ReserveUsageResult =
       availableCredits: number
       requiredCredits: number
     }
-  /** Abuse throttle on the public mutation — never hit by legitimate turns. */
+  /** Defense-in-depth throttle — never hit by legitimate turns. */
   | { kind: "rate_limited"; retryAfterMs: number }
 
 /**
@@ -219,43 +227,25 @@ export type ReserveUsageResult =
  * (userId, requestId): an identical replay returns the existing reservation,
  * a payload change on a reused request id is a typed conflict.
  */
-export type ReserveUsageArgs = {
-  requestId: string
-  chatId: string
-  modelId: string
-  routeId: string
-  providerId: string
-  estimatedCredits: number
-  estimatedInputTokens?: number
-  estimatedOutputTokens?: number
-  titleEstimatedCredits?: number
-  pricingSnapshot: PricingSnapshot
-}
+export type ReserveUsageArgs = UsageReservationArgs
 
-/** Handler core, exported for tests (the registered wrapper injects ctx.user). */
+/**
+ * Trusted handler core, exported for tests. The registered public wrapper must
+ * verify server authorization before calling it; other callers must not bypass
+ * that boundary.
+ */
 export async function reserveUsageForUser(
   ctx: MutationCtx,
   user: Doc<"users">,
   args: ReserveUsageArgs
 ): Promise<ReserveUsageResult> {
   {
-    if (
-      !isValidCreditAmount(args.estimatedCredits) ||
-      (args.titleEstimatedCredits !== undefined &&
-        !isValidCreditAmount(args.titleEstimatedCredits)) ||
-      !isValidPricingSnapshot(args.pricingSnapshot)
-    ) {
+    if (!isValidUsageReservationArgs(args)) {
       throw new Error("Invalid usage reservation payload")
     }
 
     const now = Date.now()
-    const fingerprint = reservationPayloadFingerprint({
-      modelId: args.modelId,
-      routeId: args.routeId,
-      providerId: args.providerId,
-      estimatedCredits: args.estimatedCredits,
-      pricingSnapshot: args.pricingSnapshot,
-    })
+    const fingerprint = reservationPayloadFingerprint(args)
 
     const existing = await ctx.db
       .query("usageReservations")
@@ -264,7 +254,22 @@ export async function reserveUsageForUser(
       )
       .unique()
     if (existing) {
-      if (existing.payloadFingerprint !== fingerprint) {
+      const existingSemanticFingerprint = reservationPayloadFingerprint({
+        requestId: existing.requestId,
+        chatId: existing.chatId,
+        modelId: existing.modelId,
+        routeId: existing.routeId,
+        providerId: existing.providerId,
+        estimatedCredits: existing.estimatedCredits,
+        estimatedInputTokens: existing.estimatedInputTokens,
+        estimatedOutputTokens: existing.estimatedOutputTokens,
+        titleEstimatedCredits: existing.titleEstimatedCredits,
+        pricingSnapshot: existing.pricingSnapshot,
+      })
+      if (
+        existing.payloadFingerprint !== fingerprint &&
+        existingSemanticFingerprint !== fingerprint
+      ) {
         warnUsage("usage_reserve_conflict", {
           requestId: args.requestId,
           reservationId: existing._id,
@@ -282,6 +287,9 @@ export async function reserveUsageForUser(
         })
         return { kind: "conflict" }
       }
+      if (existing.payloadFingerprint !== fingerprint) {
+        await ctx.db.patch(existing._id, { payloadFingerprint: fingerprint })
+      }
       logUsage("usage_reserve_replay", {
         requestId: args.requestId,
         reservationId: existing._id,
@@ -290,11 +298,9 @@ export async function reserveUsageForUser(
       return { kind: "idempotent_replay", reservationId: existing._id }
     }
 
-    // Abuse throttle (ADR-0021): `reserve` is a public mutation, so a client
-    // could flood zero-cost reservations directly and starve the bounded
-    // reconciler. The ceiling sits far above any legitimate turn rate (one
-    // reservation per chat turn); the chat path is additionally bounded by
-    // the daily message limit.
+    // Defense in depth (ADR-0021): authorization proves the Next server
+    // derived this payload, while the throttle bounds repeated legitimate
+    // server admissions from one account.
     const throttle = await consumeReserveRateLimit(ctx, user._id, now)
     if (!throttle.allowed) {
       warnUsage("usage_reserve_rate_limited", {
@@ -379,26 +385,109 @@ export async function reserveUsageForUser(
   }
 }
 
+const vReserveUsageResult = v.union(
+  v.object({
+    kind: v.literal("reserved"),
+    reservationId: v.id("usageReservations"),
+  }),
+  v.object({
+    kind: v.literal("idempotent_replay"),
+    reservationId: v.id("usageReservations"),
+  }),
+  v.object({ kind: v.literal("conflict") }),
+  v.object({
+    kind: v.literal("insufficient_allowance"),
+    availableCredits: v.number(),
+    requiredCredits: v.number(),
+  }),
+  v.object({
+    kind: v.literal("rate_limited"),
+    retryAfterMs: v.number(),
+  })
+)
+
+type AuthenticatedMutationCtx = MutationCtx & { user: Doc<"users"> }
+
+/** Testable handler seam for the temporary old-signature rollout endpoint. */
+export async function reserveLegacyHandler(
+  ctx: AuthenticatedMutationCtx,
+  args: ReserveUsageArgs
+): Promise<ReserveUsageResult> {
+  warnUsage("usage_reserve_legacy_rejected", {
+    requestId: args.requestId,
+    userId: ctx.user._id,
+  })
+  return {
+    kind: "insufficient_allowance",
+    availableCredits: 0,
+    requiredCredits: isValidCreditAmount(args.estimatedCredits)
+      ? args.estimatedCredits
+      : 0,
+  }
+}
+
 /**
- * Atomic platform-usage reservation — the ONE admission decision for
- * platform-funded spend (see reserveUsageForUser). Called by the route
- * resolver walking platform candidates via the authenticated user token.
+ * Rolling-deploy compatibility for servers built before authorization was
+ * added. It preserves the old validator but fails closed without mutating
+ * allowance; the production deploy preflight requires the authorized endpoint
+ * to have landed in an earlier expansion deployment before this contraction.
  */
 export const reserve = authenticatedMutation({
+  args: usageReservationArgValidators,
+  returns: vReserveUsageResult,
+  handler: reserveLegacyHandler,
+})
+
+export type AuthorizedReserveUsageArgs = ReserveUsageArgs & {
+  authorizationIssuedAt: number
+  authorizationProof: string
+}
+
+/**
+ * Testable public-boundary handler. Its user comes only from the authenticated
+ * Convex context, never from caller arguments, and authorization runs before
+ * the trusted core can read or write allowance state.
+ */
+export async function reserveAuthorizedHandler(
+  ctx: AuthenticatedMutationCtx,
+  args: AuthorizedReserveUsageArgs
+): Promise<ReserveUsageResult> {
+  const { authorizationIssuedAt, authorizationProof, ...reservationArgs } = args
+  const authorized = verifyUsageReservationAuthorization(
+    {
+      ...reservationArgs,
+      workosUserId: ctx.user.workosUserId,
+      deploymentUrl: usageReservationAuthorizationAudience(
+        process.env.CONVEX_CLOUD_URL
+      ),
+      issuedAt: authorizationIssuedAt,
+    },
+    authorizationProof
+  )
+  if (!authorized) {
+    warnUsage("usage_reserve_authorization_rejected", {
+      requestId: reservationArgs.requestId,
+      userId: ctx.user._id,
+    })
+    throw new Error("Invalid usage reservation authorization")
+  }
+  return reserveUsageForUser(ctx, ctx.user, reservationArgs)
+}
+
+/**
+ * Atomic platform-usage reservation — the ONE admission decision for
+ * platform-funded spend (see reserveUsageForUser). This versioned endpoint is
+ * called by new servers without changing the old mutation's validator, while
+ * making signed server authorization mandatory on the trusted path.
+ */
+export const reserveAuthorized = authenticatedMutation({
   args: {
-    requestId: v.string(),
-    chatId: v.string(),
-    modelId: v.string(),
-    routeId: v.string(),
-    providerId: v.string(),
-    estimatedCredits: v.number(),
-    estimatedInputTokens: v.optional(v.number()),
-    estimatedOutputTokens: v.optional(v.number()),
-    titleEstimatedCredits: v.optional(v.number()),
-    pricingSnapshot: vPricingSnapshot,
+    ...usageReservationArgValidators,
+    authorizationIssuedAt: v.number(),
+    authorizationProof: v.string(),
   },
-  handler: async (ctx, args): Promise<ReserveUsageResult> =>
-    reserveUsageForUser(ctx, ctx.user, args),
+  returns: vReserveUsageResult,
+  handler: reserveAuthorizedHandler,
 })
 
 /**
@@ -717,7 +806,12 @@ export async function settleUsageForTerminalRun(
     return
   }
   if (reason === "provider_error" && (run.lastSnapshotSequence ?? 0) === 0) {
-    await releaseReservation(ctx, reservation, "provider_error_before_output", now)
+    await releaseReservation(
+      ctx,
+      reservation,
+      "provider_error_before_output",
+      now
+    )
     return
   }
 
@@ -935,11 +1029,15 @@ export const auditUsageBucket = internalQuery({
       folded.reserved === bucket.reservedCredits &&
       folded.spent === bucket.spentCredits &&
       bucketInvariantHolds(bucket)
-    return { ok: matches, folded, bucket: {
-      grantedCredits: bucket.grantedCredits,
-      availableCredits: bucket.availableCredits,
-      reservedCredits: bucket.reservedCredits,
-      spentCredits: bucket.spentCredits,
-    } }
+    return {
+      ok: matches,
+      folded,
+      bucket: {
+        grantedCredits: bucket.grantedCredits,
+        availableCredits: bucket.availableCredits,
+        reservedCredits: bucket.reservedCredits,
+        spentCredits: bucket.spentCredits,
+      },
+    }
   },
 })

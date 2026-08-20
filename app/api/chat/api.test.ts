@@ -312,6 +312,7 @@ describe("validateAndResolveChatCredential", () => {
     const admitted = await validateAndResolveChatCredential({
       model: "gpt-5-mini",
       isAuthenticated: true,
+      workosUserId: "workos-user-1",
       token: "convex-token",
       messages: textMessages,
       requestId: "req-42",
@@ -323,6 +324,7 @@ describe("validateAndResolveChatCredential", () => {
     expect(resolveModelRoute).toHaveBeenCalledWith(
       expect.objectContaining({
         platformFunding: {
+          workosUserId: "workos-user-1",
           requestId: "req-42",
           chatId: "j57abc123",
           messages: textMessages,

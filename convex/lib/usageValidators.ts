@@ -1,4 +1,4 @@
-import { v } from "convex/values"
+import { v, type Infer } from "convex/values"
 
 /**
  * Shared validators for the platform-allowance tables and mutation args
@@ -21,6 +21,28 @@ export const vPricingSnapshot = v.object({
   primary: vRoutePricingRate,
   title: v.optional(vRoutePricingRate),
 })
+
+/**
+ * The complete caller-controlled reservation payload. Keep this as the single
+ * source for both Convex validation and TypeScript so adding a field also
+ * widens the authorization payload and trips its exhaustive serializer.
+ */
+export const usageReservationArgValidators = {
+  requestId: v.string(),
+  chatId: v.string(),
+  modelId: v.string(),
+  routeId: v.string(),
+  providerId: v.string(),
+  estimatedCredits: v.number(),
+  estimatedInputTokens: v.optional(v.number()),
+  estimatedOutputTokens: v.optional(v.number()),
+  titleEstimatedCredits: v.optional(v.number()),
+  pricingSnapshot: vPricingSnapshot,
+}
+
+export const vUsageReservationArgs = v.object(usageReservationArgValidators)
+
+export type UsageReservationArgs = Infer<typeof vUsageReservationArgs>
 
 export const vUsageReservationStatus = v.union(
   v.literal("reserved"),

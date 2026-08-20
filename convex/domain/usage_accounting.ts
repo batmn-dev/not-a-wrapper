@@ -1,3 +1,10 @@
+import type { Infer } from "convex/values"
+import type {
+  vPricingSnapshot,
+  vRoutePricingRate,
+  vUsageReservationArgs,
+} from "../lib/usageValidators"
+
 /**
  * Platform allowance accounting math (ADR-0021) — pure, integer-only, shared
  * by the Convex allowance module (reserve/settle/release) and the Next-side
@@ -14,25 +21,9 @@ export const TOKENS_PER_RATE_UNIT = 1_000_000
  * the pricing generation the rates were compiled from; a catalog change after
  * reservation never re-prices an in-flight request.
  */
-export type RoutePricingRate = {
-  modelId: string
-  routeId: string
-  providerId: string
-  upstreamModelId: string
-  /** Integer credits (micro-USD) per 1M input tokens. */
-  inputCreditsPerMTok: number
-  /** Integer credits (micro-USD) per 1M output tokens. */
-  outputCreditsPerMTok: number
-}
+export type RoutePricingRate = Infer<typeof vRoutePricingRate>
 
-export type PricingSnapshot = {
-  revision: string
-  currency: "USD"
-  /** The answer route's rates. */
-  primary: RoutePricingRate
-  /** The title-generation route's rates, when a title call may run. */
-  title?: RoutePricingRate
-}
+export type PricingSnapshot = Infer<typeof vPricingSnapshot>
 
 export type UsageTokens = {
   inputTokens?: number
@@ -123,8 +114,7 @@ export function applySettle(
 ): BucketBalances {
   return {
     ...bucket,
-    availableCredits:
-      bucket.availableCredits + reservedCredits - actualCredits,
+    availableCredits: bucket.availableCredits + reservedCredits - actualCredits,
     reservedCredits: bucket.reservedCredits - reservedCredits,
     spentCredits: bucket.spentCredits + actualCredits,
   }
@@ -170,51 +160,114 @@ export function releaseEventKey(reservationId: string): string {
  * never pass as identical. Deliberately excludes volatile fields like
  * timestamps.
  */
-export function reservationPayloadFingerprint(args: {
-  modelId: string
-  routeId: string
-  providerId: string
-  estimatedCredits: number
-  pricingSnapshot: PricingSnapshot
-}): string {
-  const { primary, title, revision } = args.pricingSnapshot
+function pricingRateFingerprintValue(rate: RoutePricingRate) {
+  const {
+    modelId,
+    routeId,
+    providerId,
+    upstreamModelId,
+    inputCreditsPerMTok,
+    outputCreditsPerMTok,
+    ...unserialized
+  } = rate
+  unserialized satisfies Record<string, never>
   return [
-    "v2",
-    args.modelId,
-    args.routeId,
-    args.providerId,
-    String(args.estimatedCredits),
+    modelId,
+    routeId,
+    providerId,
+    upstreamModelId,
+    inputCreditsPerMTok,
+    outputCreditsPerMTok,
+  ] as const
+}
+
+function pricingSnapshotFingerprintValue(snapshot: PricingSnapshot) {
+  const { revision, currency, primary, title, ...unserialized } = snapshot
+  unserialized satisfies Record<string, never>
+  return [
     revision,
-    String(primary.inputCreditsPerMTok),
-    String(primary.outputCreditsPerMTok),
-    title ? String(title.inputCreditsPerMTok) : "-",
-    title ? String(title.outputCreditsPerMTok) : "-",
-  ].join("|")
+    currency,
+    pricingRateFingerprintValue(primary),
+    title ? pricingRateFingerprintValue(title) : null,
+  ] as const
+}
+
+export function reservationPayloadFingerprint(
+  args: Infer<typeof vUsageReservationArgs>
+): string {
+  const {
+    requestId: _requestId,
+    chatId,
+    modelId,
+    routeId,
+    providerId,
+    estimatedCredits,
+    estimatedInputTokens,
+    estimatedOutputTokens,
+    titleEstimatedCredits,
+    pricingSnapshot,
+    ...unserialized
+  } = args
+  // requestId is the indexed idempotency key, not part of the payload compared
+  // within that key. Every other mutable fact must be serialized.
+  unserialized satisfies Record<string, never>
+
+  return JSON.stringify([
+    "usage-reservation-fingerprint-v3",
+    chatId,
+    modelId,
+    routeId,
+    providerId,
+    estimatedCredits,
+    estimatedInputTokens ?? null,
+    estimatedOutputTokens ?? null,
+    titleEstimatedCredits ?? null,
+    pricingSnapshotFingerprintValue(pricingSnapshot),
+  ])
 }
 
 /** Validate an integer credit amount crossing a trust boundary. */
 export function isValidCreditAmount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+}
+
+/** Validate a non-negative integer token estimate crossing a trust boundary. */
+export function isValidTokenEstimate(
+  value: unknown
+): value is number | undefined {
   return (
-    typeof value === "number" &&
-    Number.isSafeInteger(value) &&
-    value >= 0
+    value === undefined ||
+    (typeof value === "number" && Number.isSafeInteger(value) && value >= 0)
   )
 }
 
 /** Validate a pricing snapshot crossing a trust boundary (shape + integers). */
-export function isValidPricingSnapshot(
-  snapshot: PricingSnapshot
-): boolean {
+export function isValidPricingSnapshot(snapshot: PricingSnapshot): boolean {
   const rateValid = (rate: RoutePricingRate) =>
     isValidCreditAmount(rate.inputCreditsPerMTok) &&
     isValidCreditAmount(rate.outputCreditsPerMTok) &&
     rate.modelId.length > 0 &&
     rate.routeId.length > 0 &&
-    rate.providerId.length > 0
+    rate.providerId.length > 0 &&
+    rate.upstreamModelId.length > 0
   return (
     snapshot.currency === "USD" &&
     snapshot.revision.length > 0 &&
     rateValid(snapshot.primary) &&
     (snapshot.title === undefined || rateValid(snapshot.title))
+  )
+}
+
+/** Validate every numeric reservation fact before hashing or persistence. */
+export function isValidUsageReservationArgs(
+  args: Infer<typeof vUsageReservationArgs>
+): boolean {
+  return (
+    isValidCreditAmount(args.estimatedCredits) &&
+    isValidTokenEstimate(args.estimatedInputTokens) &&
+    isValidTokenEstimate(args.estimatedOutputTokens) &&
+    (args.titleEstimatedCredits === undefined ||
+      isValidCreditAmount(args.titleEstimatedCredits)) &&
+    isValidPricingSnapshot(args.pricingSnapshot)
   )
 }

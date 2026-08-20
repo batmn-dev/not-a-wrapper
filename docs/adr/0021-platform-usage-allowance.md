@@ -45,10 +45,10 @@ Centralized in one typed module (`convex/domain/usage_plan_policy.ts`). The
 grant sizes below are **provisional placeholders** pending product-owner
 confirmation; changing them is a one-constant edit:
 
-| Plan       | Selector               | Included grant / period      | Refill interval    | Renewal anchor              |
-| ---------- | ---------------------- | ---------------------------- | ------------------ | --------------------------- |
-| free-v1    | default                | 1,000,000 credits ($1.00)    | UTC calendar month | month boundary (no per-user anchor) |
-| premium-v1 | `users.premium ⩵ true` | 10,000,000 credits ($10.00)  | UTC calendar month | month boundary (no per-user anchor) |
+| Plan       | Selector               | Included grant / period     | Refill interval    | Renewal anchor                      |
+| ---------- | ---------------------- | --------------------------- | ------------------ | ----------------------------------- |
+| free-v1    | default                | 1,000,000 credits ($1.00)   | UTC calendar month | month boundary (no per-user anchor) |
+| premium-v1 | `users.premium ⩵ true` | 10,000,000 credits ($10.00) | UTC calendar month | month boundary (no per-user anchor) |
 
 - **Bucket identity:** `(userId, bucketKind: "included", periodKey)` where
   `periodKey` is the UTC month (`"2026-08"`). Lazy creation: the first
@@ -93,22 +93,29 @@ race-free without SQL unique constraints.
 
 ## Atomic operations
 
-- **Reserve** (`usageAllowance.reserve`, authenticated mutation, called by
-  the route resolver walking platform candidates): ensure current bucket →
-  idempotency check on `(userId, requestId)` (an identical fingerprint on a
-  STILL-RESERVED row replays; a different fingerprint, or any replay of a
-  settled/released row, is a typed conflict — settled or refunded money is
-  never re-admitted) → admission check → atomically decrement available,
-  increment reserved, insert reservation + `reserve` ledger entry. Typed
-  results: `reserved | insufficient_allowance | idempotent_replay | conflict
-  | rate_limited`. The payload fingerprint covers the snapshot's INTEGER
-  RATES, not just its revision string, so a forged cheaper snapshot can
-  never replay as identical. Because `reserve` is a public mutation, a
-  per-user fixed-window throttle (30/minute, reusing the `apiRateLimits`
-  seam) bounds direct-call floods that would otherwise starve the bounded
-  reconciler; legitimate turns (one reservation each) never approach it.
-  There is no separate "check balance" query; the reservation IS the
-  admission.
+- **Reserve** (`usageAllowance.reserveAuthorized`, authenticated mutation,
+  called by the server-side route resolver walking platform candidates): verify a
+  short-lived HMAC authorization over the authenticated WorkOS subject and
+  EVERY immutable reservation fact → ensure current bucket → idempotency
+  check on `(userId, requestId)` (an identical fingerprint on a STILL-RESERVED
+  row replays; a different fingerprint, or any replay of a settled/released
+  row, is a typed conflict — settled or refunded money is never re-admitted)
+  → admission check → atomically decrement available, increment reserved,
+  insert reservation + `reserve` ledger entry. Typed results are `reserved`,
+  `insufficient_allowance`, `idempotent_replay`, `conflict`, and `rate_limited`.
+  Although Convex registers the mutation publicly so the Next route can call
+  it with the user's JWT, an authenticated browser cannot mint the required
+  server authorization. Its domain-separated tuple covers identity, request,
+  chat, route, token estimates, integer credit estimate, and the complete
+  pricing snapshot. The 30/minute per-user throttle remains defense in depth
+  for abuse through the legitimate server route; reconciliation capacity is
+  no longer a security boundary for arbitrary client-created rows. There is
+  no separate "check balance" query; the reservation IS the admission.
+  The old-signature `usageAllowance.reserve` remains temporarily as a
+  fail-closed rolling-deploy shim: it preserves the old validator but never
+  mutates allowance. The deployment guard below prevents this contraction from
+  landing until an earlier expansion deployment has activated the authorized
+  caller.
 - **Attach**: `prepareGeneration` receives `reservationId` inside the signed
   admission proof (ADR-0020's HMAC tuple gains the reservation id) and
   patches `reservation.generationRunId = runId` in the same transaction that
@@ -141,15 +148,15 @@ best-effort fire-and-forget write (ADR-0011's `markGenerationWorkStarted`),
 so its absence must never refund a run that provably consumed usage. The
 settlement decision, in order:
 
-| Evidence at terminal                          | Accounting |
-| --------------------------------------------- | ---------- |
-| onEnd aggregate usage present                  | settle actual (`basis: actual`; `actual_with_estimated_title` when the title call's usage never arrived or carried no token counts) |
-| Per-step accumulated usage present             | settle observed (`basis: observed_partial`) — the runtime records EVERY step's usage durably, tool calls or not |
-| No evidence, `workStartedAt` never written     | release (provider consumption never began) |
+| Evidence at terminal                                                                                        | Accounting                                                                                                                                                                        |
+| ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| onEnd aggregate usage present                                                                               | settle actual (`basis: actual`; `actual_with_estimated_title` when the title call's usage never arrived or carried no token counts)                                               |
+| Per-step accumulated usage present                                                                          | settle observed (`basis: observed_partial`) — the runtime records EVERY step's usage durably, tool calls or not                                                                   |
+| No evidence, `workStartedAt` never written                                                                  | release (provider consumption never began)                                                                                                                                        |
 | No evidence, terminal is `provider_error` with ZERO accepted content checkpoints (`lastSnapshotSequence` 0) | release (`provider_error_before_output`) — an instant 400/401/429 is not billed by providers; charging the full estimate for a provider outage would drain allowances for nothing |
-| No evidence otherwise (user Stop mid-step, reaped lease) | settle the reserved estimate (`basis: estimated_after_unknown_usage`) — the provider may have generated tokens nobody observed; never silently refunded |
-| Duplicate terminal delivery                    | absorbed by first-terminal-wins **and** the reservation status guard — no second charge |
-| Awaiting approval                              | the pause settles this run's usage; an approval continuation is a NEW request → new reservation → new run |
+| No evidence otherwise (user Stop mid-step, reaped lease)                                                    | settle the reserved estimate (`basis: estimated_after_unknown_usage`) — the provider may have generated tokens nobody observed; never silently refunded                           |
+| Duplicate terminal delivery                                                                                 | absorbed by first-terminal-wins **and** the reservation status guard — no second charge                                                                                           |
+| Awaiting approval                                                                                           | the pause settles this run's usage; an approval continuation is a NEW request → new reservation → new run                                                                         |
 
 Lease-expired / approval-expired / continuation-lost / superseded all apply
 the same table through the shared lifecycle-verdict path.
@@ -157,11 +164,12 @@ the same table through the shared lifecycle-verdict path.
 Per-step usage evidence: `recordToolInvocations` (fired every step, not just
 tool steps) now carries the step's token usage and accumulates it onto the
 run row while streaming, so abort/failure/reaper settlement does not depend
-on the happy-path `onEnd` callback. Completion overwrites the accumulation
-with the SDK's authoritative all-steps aggregate (the existing ai@7 `onEnd`
-behavior is preserved).
+on the happy-path `onEnd` callback. The runtime drains every already-started
+step write before any local abort/failure/completion mutation can revoke its
+grant. Completion overwrites the accumulation with the SDK's authoritative
+all-steps aggregate (the existing ai@7 `onEnd` behavior is preserved).
 
-The stale-reservation reconciler (cron, cursor-bounded, idempotent) is the
+The stale-reservation reconciler (cron, batch-bounded, idempotent) is the
 final net: old `reserved` rows whose run is terminal apply the boundary rule;
 unattached old rows release; rows on non-terminal runs are left to the run
 reapers. It never releases a reservation after provider work may have begun.
@@ -195,6 +203,37 @@ For authenticated users, platform funding additionally requires a **durable
 chat** (reservation/settlement need the generation-run lifecycle); an
 authenticated turn against a local chat id skips the platform tier.
 
+### Authorization endpoint rollout
+
+The mutation name is versioned because Convex validators reject both missing
+and extra fields. This repository's Vercel build compiles Next and then pushes
+Convex before Vercel promotes the new output, so the actual boundary is old
+Next → new Convex → new Next. A secure, availability-preserving rollout
+therefore requires two source revisions:
+
+1. **Expand:** add `reserveAuthorized` and switch Next to the version-skew
+   adapter while leaving the old `reserve` behavior unchanged. Deploy this
+   revision and wait until Vercel reports the new production deployment active.
+2. **Contract:** deploy this revision, which makes legacy `reserve` fail closed.
+   `scripts/usage-reservation-rollout-preflight.mjs` inspects the currently
+   deployed function spec and blocks production if `reserveAuthorized` did not
+   land in the earlier expansion.
+
+Do not deploy the expansion and contraction together from a production
+baseline that exposes only unsigned `reserve`: no runtime check can distinguish
+an old Next call from an authenticated browser using the same JWT.
+
+The new adapter falls back to the old signature only when Convex explicitly
+reports that `reserveAuthorized` does not exist. Authorization failures,
+validation failures, and all other runtime errors never downgrade. The HMAC
+also binds `NEXT_PUBLIC_CONVEX_URL`, which the verifier compares with its own
+`CONVEX_CLOUD_URL`, so a captured proof cannot cross deployments. Production
+and Preview must not share `CHAT_ADMISSION_SECRET`; deployments needing a
+stronger boundary from sibling previews should use per-preview secrets rather
+than the shared Preview default. Remove the missing-function fallback and
+legacy mutation only after the rollback window no longer includes unsigned
+servers.
+
 ## Estimation and the output policy
 
 `estimatePlatformUsage` (pure, documented heuristics): input ≈
@@ -212,13 +251,13 @@ control, not the final charge.
 
 ## Platform-paid operation inventory
 
-| Operation | Treatment |
-| --------- | --------- |
-| Main `streamText` generation (all steps) | metered (primary snapshot) |
-| Automatic title generation | metered (title route's own snapshot; `generateChatTitle` returns usage + model identity) |
-| Exa search / extract on the platform key | **subsidized**, bounded by the existing per-tool `toolLimitBuckets` budgets (platform key mode) |
+| Operation                                    | Treatment                                                                                                                                     |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Main `streamText` generation (all steps)     | metered (primary snapshot)                                                                                                                    |
+| Automatic title generation                   | metered (title route's own snapshot; `generateChatTitle` returns usage + model identity)                                                      |
+| Exa search / extract on the platform key     | **subsidized**, bounded by the existing per-tool `toolLimitBuckets` budgets (platform key mode)                                               |
 | Anonymous turns on `NON_AUTH_ALLOWED_MODELS` | **subsidized**, bounded by the 5/day guest limit + anonymous step cap; anonymous ids are client-controlled, so no cash-like wallet is created |
-| Image/audio generation | not applicable today (no platform-listed route bills non-token modalities); a future one must add rates or be explicitly subsidized |
+| Image/audio generation                       | not applicable today (no platform-listed route bills non-token modalities); a future one must add rates or be explicitly subsidized           |
 
 ## Existing counters
 

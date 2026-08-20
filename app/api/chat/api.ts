@@ -121,6 +121,8 @@ type ChatCredentialAdmissionParams = {
   /** The requested model id — logical, legacy alias, or old routed id. */
   model: string
   isAuthenticated: boolean
+  /** Server-derived WorkOS subject; never accepted from the request body. */
+  workosUserId?: string
   token?: string
   /** The turn's wire messages: capability requirements + approval pinning. */
   messages: UIMessage[]
@@ -129,6 +131,8 @@ type ChatCredentialAdmissionParams = {
   chatId: string
   systemPrompt?: string
   enableSearch: boolean
+  /** Server-planned approval continuation pin, when this is one. */
+  pinnedProviderId?: Provider
 }
 
 export type ChatRouteAdmission = {
@@ -245,22 +249,28 @@ function toAdmissionError(
 export async function validateAndResolveChatCredential({
   model,
   isAuthenticated,
+  workosUserId,
   token,
   messages,
   requestId,
   chatId,
   systemPrompt,
   enableSearch,
+  pinnedProviderId: plannedPinnedProviderId,
 }: ChatCredentialAdmissionParams): Promise<ChatRouteAdmission> {
-  const pinnedProviderId = isAuthenticated
-    ? await getPinnedContinuationProvider(messages, token)
-    : undefined
+  const pinnedProviderId =
+    plannedPinnedProviderId ??
+    (isAuthenticated
+      ? await getPinnedContinuationProvider(messages, token)
+      : undefined)
 
   // Platform funding requires the durable accounting lifecycle (ADR-0021):
   // authenticated turns against a local/optimistic chat id cannot reserve or
   // settle, so they get no funding context and skip the platform tier.
-  const canReservePlatformUsage =
-    isAuthenticated && Boolean(token) && isServerChatId(chatId)
+  const platformFundingIdentity =
+    isAuthenticated && workosUserId && token && isServerChatId(chatId)
+      ? { workosUserId }
+      : undefined
 
   const resolution = await resolveModelRoute({
     modelId: model,
@@ -270,9 +280,10 @@ export async function validateAndResolveChatCredential({
       ? { vision: true }
       : undefined,
     pinnedProviderId,
-    ...(canReservePlatformUsage
+    ...(platformFundingIdentity
       ? {
           platformFunding: {
+            workosUserId: platformFundingIdentity.workosUserId,
             requestId,
             chatId,
             messages,

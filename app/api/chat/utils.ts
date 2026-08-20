@@ -3,7 +3,7 @@ import type { ModelMessage } from "ai"
 import { normalizeChatError, type PublicChatErrorContext } from "./public-error"
 import {
   isPublicChatHttpError,
-  type PublicChatHttpError,
+  PublicChatHttpError,
 } from "./public-http-error"
 
 /**
@@ -132,6 +132,19 @@ export function isConvexArgumentValidationError(error: unknown): boolean {
   return (
     error instanceof Error && error.message.includes("ArgumentValidationError")
   )
+}
+
+/** Keep malformed durable identifiers on one stable, client-safe 400 contract. */
+export function toInvalidDurableRequestError(
+  error: unknown
+): PublicChatHttpError | null {
+  if (!isConvexArgumentValidationError(error)) return null
+  return new PublicChatHttpError({
+    message: "Request does not reference a valid durable chat",
+    statusCode: 400,
+    code: "INVALID_REQUEST",
+    cause: error,
+  })
 }
 
 /**

@@ -699,6 +699,41 @@ describe("prepareGenerationForChat", () => {
     })
   })
 
+  it("rejects a stale generation-input hash before mutating chat history or runs", async () => {
+    const { user, chat, chatId, userId } = createOwnerFixture()
+    const existingMessage = createStoredMessage({
+      id: "message_user_existing",
+      chatId,
+      userId,
+      orderId: 0,
+      clientMessageId: "user-existing",
+      role: "user",
+      content: "canonical history changed",
+      createdAt: 1000,
+    })
+    const { ctx, tables } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages: [existingMessage],
+    })
+
+    await expect(
+      prepareGenerationForChat(ctx, {
+        chatId,
+        requestId: "request_stale_generation_input",
+        model: "gpt-5-mini",
+        provider: "openai",
+        generationInputHash: "0".repeat(64),
+      })
+    ).rejects.toMatchObject({
+      data: { code: "generation_input_changed" },
+    })
+
+    expect(tables.generationRuns).toHaveLength(0)
+    expect(tables.messages).toEqual([existingMessage])
+    expect(tables.chats[0]).toEqual(chat)
+  })
+
   it("rejects a tampered route receipt before prepare writes", async () => {
     const { user, chat, chatId } = createOwnerFixture()
     const { ctx, tables } = createMutationCtx({

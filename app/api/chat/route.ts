@@ -1,7 +1,7 @@
 import { api } from "@/convex/_generated/api"
 import { getWorkosSession } from "@/lib/auth/workos"
+import { parseChatTurnRequest } from "@/lib/chat-messages/chat-turn-contract"
 import { resolveModelSelection } from "@/lib/models/catalog"
-import { fetchMutation } from "convex/nextjs"
 import {
   classifyChatError,
   getToolDimensionForError,
@@ -14,17 +14,20 @@ import {
   getSanitizedExceptionSummary,
   sanitizeExceptionForTelemetry,
 } from "@/lib/observability/sentry-scrubbing"
+import { MODEL_PROVIDER_IDENTITY, type Provider } from "@/lib/provider-identity"
 import * as Sentry from "@sentry/nextjs"
+import { fetchMutation } from "convex/nextjs"
 import {
   checkServerSideUsage,
   incrementServerSideUsage,
   validateAndResolveChatCredential,
 } from "./api"
-import { parseChatTurnRequest } from "@/lib/chat-messages/chat-turn-contract"
 import {
   createChatTurnRuntime,
   type ChatTurnRuntime,
 } from "./chat-turn-runtime"
+import { preflightDurableGenerationInput } from "./durable-generation-input"
+import { isDurableConvexChat } from "./durable-turn-runtime"
 import { createErrorResponse } from "./utils"
 
 // Top-line chat-turn budget. Next.js statically analyzes segment config, so
@@ -55,9 +58,7 @@ export async function POST(req: Request) {
   // through perf spans — never persisted to chat/run/message docs and never
   // used as an admission idempotency key. (`requestId` above is generated
   // after arrival, so it cannot correlate earlier client marks.)
-  const perf = createChatPerfServerSession(
-    req.headers.get(CHAT_PERF_ID_HEADER)
-  )
+  const perf = createChatPerfServerSession(req.headers.get(CHAT_PERF_ID_HEADER))
   // Pre-runtime telemetry fallbacks: read by the catch when the error is thrown
   // before the runtime exists (parse / validation / usage admission). Once the
   // runtime is constructed, its `fail()` owns the rich capture.
@@ -202,6 +203,29 @@ export async function POST(req: Request) {
           // Abuse rate limit only (ADR-0021) — the economic admission is the
           // atomic allowance reservation inside credential resolution below.
           await checkServerSideUsage(convexToken, anonymousId)
+          const generationInput = isDurableConvexChat({
+            isAuthenticated,
+            convexToken,
+            chatId,
+          })
+            ? await perf.span("attachment_resolution", () =>
+                preflightDurableGenerationInput({
+                  chatId,
+                  token: convexToken!,
+                  messages,
+                  expectedVisibleMessageCount,
+                  tailMessageId,
+                  edit,
+                  regeneration,
+                })
+              )
+            : undefined
+          const plannedPinnedProvider = generationInput?.pinnedProvider
+          const pinnedProviderId =
+            plannedPinnedProvider &&
+            plannedPinnedProvider in MODEL_PROVIDER_IDENTITY
+              ? (plannedPinnedProvider as Provider)
+              : undefined
           const resolvedAdmission = await perf.span(
             "credential_resolution",
             () =>
@@ -210,12 +234,14 @@ export async function POST(req: Request) {
                 // route hint an old `openrouter:*` chat id carries.
                 model: requestedModel,
                 isAuthenticated,
+                workosUserId: authUserId,
                 token: convexToken,
-                messages,
+                messages: generationInput?.messages ?? messages,
                 requestId,
                 chatId,
                 systemPrompt,
                 enableSearch: enableSearch ?? false,
+                pinnedProviderId,
               })
           )
           // Arm the release hook the moment a reservation exists — BEFORE
@@ -232,7 +258,7 @@ export async function POST(req: Request) {
               )
           }
           await incrementServerSideUsage(convexToken, anonymousId)
-          return resolvedAdmission
+          return { ...resolvedAdmission, generationInput }
         })
     )
     Sentry.setTag("chat_route_id", admission.route.routeId)
@@ -257,6 +283,7 @@ export async function POST(req: Request) {
         credential: admission.credential,
         route: admission.route,
         reservationId: admission.reservationId,
+        generationInput: admission.generationInput,
         perf,
       },
     })

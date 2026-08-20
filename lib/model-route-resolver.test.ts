@@ -1,13 +1,21 @@
+import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import type { Provider } from "@/lib/provider-identity"
-import { describe, expect, it } from "vitest"
+import { fetchMutation } from "convex/nextjs"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
+  reserveAuthorizedPlatformUsage,
   resolveModelRoute,
   type ApiKeyPreference,
   type PlatformFundingContext,
   type ReservePlatformUsageArgs,
   type RouteResolverDeps,
 } from "./model-route-resolver"
+
+vi.mock("convex/nextjs", () => ({
+  fetchMutation: vi.fn(),
+  fetchQuery: vi.fn(),
+}))
 
 const RESERVATION_ID = "res-1" as Id<"usageReservations">
 
@@ -24,7 +32,9 @@ function makeDeps({
   freeModels = ["gpt-5-mini"],
   reserve = () => ({ kind: "reserved", reservationId: RESERVATION_ID }),
 }: {
-  userKeys?: Partial<Record<Provider, { key: string; preference: ApiKeyPreference }>>
+  userKeys?: Partial<
+    Record<Provider, { key: string; preference: ApiKeyPreference }>
+  >
   platformKeys?: Provider[]
   freeModels?: string[]
   reserve?: ReserveBehavior
@@ -51,6 +61,7 @@ function makeDeps({
 }
 
 const funding: PlatformFundingContext = {
+  workosUserId: "workos-user-1",
   requestId: "req-1",
   chatId: "chat-1",
   messages: [
@@ -64,6 +75,107 @@ const authed = {
   token: "tok",
   platformFunding: funding,
 } as const
+
+const authorizedReserveArgs: ReservePlatformUsageArgs = {
+  token: "tok",
+  workosUserId: "workos-user-1",
+  requestId: "req-1",
+  chatId: "chat-1",
+  modelId: "gpt-5-mini",
+  routeId: "gpt-5-mini",
+  providerId: "openai",
+  estimatedCredits: 100,
+  estimatedInputTokens: 10,
+  estimatedOutputTokens: 20,
+  titleEstimatedCredits: 5,
+  pricingSnapshot: {
+    revision: "catalog-v1",
+    currency: "USD",
+    primary: {
+      modelId: "gpt-5-mini",
+      routeId: "gpt-5-mini",
+      providerId: "openai",
+      upstreamModelId: "gpt-5-mini",
+      inputCreditsPerMTok: 250_000,
+      outputCreditsPerMTok: 2_000_000,
+    },
+  },
+}
+
+describe("authorized usage reservation rollout", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubEnv(
+      "CHAT_ADMISSION_SECRET",
+      "test-chat-admission-secret-with-at-least-32-bytes"
+    )
+    vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://preview-one.convex.cloud")
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it("falls back to the legacy signature only when the versioned mutation is absent", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    vi.mocked(fetchMutation)
+      .mockRejectedValueOnce(
+        new Error("Function not found: usageAllowance:reserveAuthorized")
+      )
+      .mockResolvedValueOnce({
+        kind: "reserved",
+        reservationId: RESERVATION_ID,
+      } as never)
+
+    await expect(
+      reserveAuthorizedPlatformUsage(authorizedReserveArgs)
+    ).resolves.toEqual({
+      kind: "reserved",
+      reservationId: RESERVATION_ID,
+    })
+
+    expect(fetchMutation).toHaveBeenNthCalledWith(
+      1,
+      api.usageAllowance.reserveAuthorized,
+      expect.objectContaining({
+        requestId: "req-1",
+        authorizationIssuedAt: expect.any(Number),
+        authorizationProof: expect.stringMatching(/^[0-9a-f]{64}$/),
+      }),
+      { token: "tok" }
+    )
+    expect(fetchMutation).toHaveBeenNthCalledWith(
+      2,
+      api.usageAllowance.reserve,
+      expect.not.objectContaining({
+        authorizationIssuedAt: expect.anything(),
+        authorizationProof: expect.anything(),
+        workosUserId: expect.anything(),
+      }),
+      { token: "tok" }
+    )
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("usage_reserve_authorized_endpoint_missing")
+    )
+  })
+
+  it("never downgrades an authorization or runtime failure", async () => {
+    const authorizationError = new Error(
+      "Invalid usage reservation authorization"
+    )
+    vi.mocked(fetchMutation).mockRejectedValueOnce(authorizationError)
+
+    await expect(
+      reserveAuthorizedPlatformUsage(authorizedReserveArgs)
+    ).rejects.toBe(authorizationError)
+    expect(fetchMutation).toHaveBeenCalledTimes(1)
+    expect(fetchMutation).toHaveBeenCalledWith(
+      api.usageAllowance.reserveAuthorized,
+      expect.any(Object),
+      { token: "tok" }
+    )
+  })
+})
 
 describe("resolveModelRoute", () => {
   it("prefers priority BYOK over platform entitlement", async () => {
@@ -101,6 +213,7 @@ describe("resolveModelRoute", () => {
     })
     expect(deps.reserveCalls).toHaveLength(1)
     expect(deps.reserveCalls[0]).toMatchObject({
+      workosUserId: "workos-user-1",
       requestId: "req-1",
       chatId: "chat-1",
       modelId: "gpt-5-mini",

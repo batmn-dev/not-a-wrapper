@@ -1,15 +1,19 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import type { Doc, Id } from "./_generated/dataModel"
 import type { MutationCtx } from "./_generated/server"
 import type { PricingSnapshot } from "./domain/usage_accounting"
+import { signUsageReservationAuthorization } from "./lib/usageReservationAuthorization"
 import {
   attachReservationToRun,
   ensureCurrentUsageBucket,
   reconcileStaleUsageReservationsPass,
   releaseUnattachedForUser,
+  reserveAuthorizedHandler,
+  reserveLegacyHandler,
   reserveUsageForUser,
   settleUsageForTerminalRun,
   STALE_RESERVATION_MS,
+  type AuthorizedReserveUsageArgs,
   type ReserveUsageArgs,
 } from "./usageAllowance"
 
@@ -42,8 +46,7 @@ function createCtx(input: Partial<Tables> = {}) {
 
   const ctx = {
     db: {
-      get: async (id: string) =>
-        all().find((doc) => doc._id === id) ?? null,
+      get: async (id: string) => all().find((doc) => doc._id === id) ?? null,
       insert: async (tableName: keyof Tables, value: object) => {
         const id = `${tableName}_${++counter}`
         ;(tables[tableName] as object[]).push({
@@ -73,19 +76,20 @@ function createCtx(input: Partial<Tables> = {}) {
             },
           }
           build(q)
-          const results = (tables[tableName] as Array<Record<string, unknown>>)
-            .filter((doc) => {
-              for (const [field, value] of filters) {
-                if (doc[field] !== value) return false
+          const results = (
+            tables[tableName] as Array<Record<string, unknown>>
+          ).filter((doc) => {
+            for (const [field, value] of filters) {
+              if (doc[field] !== value) return false
+            }
+            for (const range of ranges) {
+              const current = doc[range.field]
+              if (typeof current !== "number" || current >= range.value) {
+                return false
               }
-              for (const range of ranges) {
-                const current = doc[range.field]
-                if (typeof current !== "number" || current >= range.value) {
-                  return false
-                }
-              }
-              return true
-            })
+            }
+            return true
+          })
           return {
             unique: async () => {
               expect(results.length).toBeLessThanOrEqual(1)
@@ -109,6 +113,15 @@ const user = {
   email: "batman@example.com",
 } as Doc<"users">
 
+const OTHER_USER = {
+  ...user,
+  _id: "users_2" as Id<"users">,
+  workosUserId: "workos_2",
+  email: "robin@example.com",
+} as Doc<"users">
+const AUTHORIZATION_SECRET = "test-usage-reservation-secret-with-32-bytes"
+const DEPLOYMENT_URL = "https://preview-one.convex.cloud"
+
 const snapshot: PricingSnapshot = {
   revision: "rev-test",
   currency: "USD",
@@ -130,7 +143,9 @@ const snapshot: PricingSnapshot = {
   },
 }
 
-function reserveArgs(overrides: Partial<ReserveUsageArgs> = {}): ReserveUsageArgs {
+function reserveArgs(
+  overrides: Partial<ReserveUsageArgs> = {}
+): ReserveUsageArgs {
   return {
     requestId: "req-1",
     chatId: "chat-1",
@@ -143,6 +158,56 @@ function reserveArgs(overrides: Partial<ReserveUsageArgs> = {}): ReserveUsageArg
     ...overrides,
   }
 }
+
+function authenticatedCtx(ctx: MutationCtx, authenticatedUser = user) {
+  return { ...ctx, user: authenticatedUser }
+}
+
+function authorizedReserveArgs({
+  authenticatedUser = user,
+  signedUser = authenticatedUser,
+  issuedAt = Date.now(),
+  overrides,
+  deploymentUrl = DEPLOYMENT_URL,
+}: {
+  authenticatedUser?: Doc<"users">
+  signedUser?: Doc<"users">
+  issuedAt?: number
+  overrides?: Partial<ReserveUsageArgs>
+  deploymentUrl?: string
+} = {}): {
+  authenticatedUser: Doc<"users">
+  args: AuthorizedReserveUsageArgs
+} {
+  const reservationArgs = reserveArgs(overrides)
+  return {
+    authenticatedUser,
+    args: {
+      ...reservationArgs,
+      authorizationIssuedAt: issuedAt,
+      authorizationProof: signUsageReservationAuthorization(
+        {
+          ...reservationArgs,
+          workosUserId: signedUser.workosUserId,
+          deploymentUrl,
+          issuedAt,
+        },
+        AUTHORIZATION_SECRET
+      ),
+    },
+  }
+}
+
+function expectNoAllowanceWrites(tables: Tables): void {
+  expect(tables.usageBuckets).toHaveLength(0)
+  expect(tables.usageReservations).toHaveLength(0)
+  expect(tables.usageLedgerEntries).toHaveLength(0)
+  expect(tables.apiRateLimits).toHaveLength(0)
+}
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
 function bucketOf(tables: Tables) {
   expect(tables.usageBuckets).toHaveLength(1)
@@ -190,6 +255,23 @@ describe("reserve", () => {
     expect(tables.usageReservations).toHaveLength(1)
   })
 
+  it("semantically replays and upgrades a reservation with the legacy fingerprint", async () => {
+    const { ctx, tables } = createCtx({ users: [user] })
+    const first = await reserveUsageForUser(ctx, user, reserveArgs())
+    tables.usageReservations[0]!.payloadFingerprint = "v2|legacy"
+
+    await expect(
+      reserveUsageForUser(ctx, user, reserveArgs())
+    ).resolves.toEqual({
+      kind: "idempotent_replay",
+      reservationId: (first as { reservationId: string }).reservationId,
+    })
+    expect(tables.usageReservations[0]!.payloadFingerprint).toContain(
+      "usage-reservation-fingerprint-v3"
+    )
+    expect(tables.usageReservations).toHaveLength(1)
+  })
+
   it("rejects a reused request id whose payload changed", async () => {
     const { ctx, tables } = createCtx({ users: [user] })
     await reserveUsageForUser(ctx, user, reserveArgs())
@@ -214,6 +296,18 @@ describe("reserve", () => {
     expect(bucketOf(tables).reservedCredits).toBe(0)
     expect(tables.usageReservations).toHaveLength(0)
   })
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5])(
+    "rejects invalid token estimate %s before any write",
+    async (estimatedInputTokens) => {
+      const { ctx, tables } = createCtx({ users: [user] })
+
+      await expect(
+        reserveUsageForUser(ctx, user, reserveArgs({ estimatedInputTokens }))
+      ).rejects.toThrow("Invalid usage reservation payload")
+      expectNoAllowanceWrites(tables)
+    }
+  )
 
   it("cannot double-admit two reservations past the balance", async () => {
     // Serializable mutations: the second reservation sees the first's
@@ -407,8 +501,9 @@ describe("settlement", () => {
       titleUsage: "not-run",
     })
     expect(bucketOf(tables).spentCredits).toBe(spentAfterFirst)
-    expect(tables.usageLedgerEntries.filter((e) => e.type === "settle"))
-      .toHaveLength(1)
+    expect(
+      tables.usageLedgerEntries.filter((e) => e.type === "settle")
+    ).toHaveLength(1)
   })
 
   it("rejects settle-after-release as an invariant violation", async () => {
@@ -456,9 +551,9 @@ describe("settlement", () => {
     })
     const spent = bucketOf(tables).spentCredits
     // releaseUnattached refuses both settled status AND attached rows.
-    await expect(
-      releaseUnattachedForUser(ctx, user, "req-1")
-    ).resolves.toEqual({ released: false })
+    await expect(releaseUnattachedForUser(ctx, user, "req-1")).resolves.toEqual(
+      { released: false }
+    )
     expect(bucketOf(tables).spentCredits).toBe(spent)
   })
 })
@@ -564,6 +659,8 @@ describe("reserve hardening", () => {
   })
 
   it("throttles a reservation flood without touching balances", async () => {
+    // This invokes the trusted core after the public wrapper's signed
+    // authorization boundary, tested separately below.
     // Freeze the clock so all 40 attempts land in ONE fixed window.
     vi.useFakeTimers()
     vi.setSystemTime(1_787_200_000_000)
@@ -584,6 +681,90 @@ describe("reserve hardening", () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe("reserve authorization boundary", () => {
+  it("accepts and idempotently replays a proof for the authenticated user and deployment", async () => {
+    vi.stubEnv("CHAT_ADMISSION_SECRET", AUTHORIZATION_SECRET)
+    vi.stubEnv("CONVEX_CLOUD_URL", DEPLOYMENT_URL)
+    const { ctx, tables } = createCtx({ users: [user] })
+    const authorized = authorizedReserveArgs()
+
+    const authenticated = authenticatedCtx(ctx, authorized.authenticatedUser)
+    const first = await reserveAuthorizedHandler(authenticated, authorized.args)
+    expect(first).toMatchObject({ kind: "reserved" })
+    await expect(
+      reserveAuthorizedHandler(authenticated, authorized.args)
+    ).resolves.toEqual({
+      kind: "idempotent_replay",
+      reservationId: (first as { reservationId: string }).reservationId,
+    })
+    expect(tables.usageReservations).toHaveLength(1)
+  })
+
+  it.each([
+    {
+      name: "malformed proof",
+      build: () => {
+        const authorized = authorizedReserveArgs()
+        return {
+          ...authorized,
+          args: { ...authorized.args, authorizationProof: "not-a-proof" },
+        }
+      },
+    },
+    {
+      name: "another WorkOS subject",
+      build: () =>
+        authorizedReserveArgs({
+          authenticatedUser: OTHER_USER,
+          signedUser: user,
+        }),
+    },
+    {
+      name: "expired timestamp",
+      build: () => authorizedReserveArgs({ issuedAt: Date.now() - 60_001 }),
+    },
+    {
+      name: "tampered reservation field",
+      build: () => {
+        const authorized = authorizedReserveArgs()
+        return {
+          ...authorized,
+          args: { ...authorized.args, estimatedCredits: 1 },
+        }
+      },
+    },
+    {
+      name: "another deployment",
+      build: () =>
+        authorizedReserveArgs({
+          deploymentUrl: "https://preview-two.convex.cloud",
+        }),
+    },
+  ])("rejects $name before any allowance write", async ({ build }) => {
+    vi.stubEnv("CHAT_ADMISSION_SECRET", AUTHORIZATION_SECRET)
+    vi.stubEnv("CONVEX_CLOUD_URL", DEPLOYMENT_URL)
+    const { ctx, tables } = createCtx({ users: [user, OTHER_USER] })
+    const unauthorized = build()
+
+    await expect(
+      reserveAuthorizedHandler(
+        authenticatedCtx(ctx, unauthorized.authenticatedUser),
+        unauthorized.args
+      )
+    ).rejects.toThrow("Invalid usage reservation authorization")
+    expectNoAllowanceWrites(tables)
+  })
+
+  it("keeps the legacy endpoint fail-closed by default", async () => {
+    const { ctx, tables } = createCtx({ users: [user] })
+
+    await expect(
+      reserveLegacyHandler(authenticatedCtx(ctx), reserveArgs())
+    ).resolves.toMatchObject({ kind: "insufficient_allowance" })
+    expectNoAllowanceWrites(tables)
   })
 })
 

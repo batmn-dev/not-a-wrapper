@@ -120,10 +120,15 @@ describe("reservation payload fingerprint", () => {
     },
   }
   const base = {
+    requestId: "request-1",
+    chatId: "chat-1",
     modelId: "gpt-5-mini",
     routeId: "gpt-5-mini",
     providerId: "openai",
     estimatedCredits: 1_234,
+    estimatedInputTokens: 100,
+    estimatedOutputTokens: 200,
+    titleEstimatedCredits: 12,
     pricingSnapshot: snapshot,
   }
 
@@ -136,6 +141,12 @@ describe("reservation payload fingerprint", () => {
     )
     expect(reservationPayloadFingerprint(base)).not.toBe(
       reservationPayloadFingerprint({ ...base, routeId: "other-route" })
+    )
+    expect(reservationPayloadFingerprint(base)).not.toBe(
+      reservationPayloadFingerprint({ ...base, chatId: "chat-2" })
+    )
+    expect(reservationPayloadFingerprint(base)).not.toBe(
+      reservationPayloadFingerprint({ ...base, estimatedInputTokens: 101 })
     )
   })
 

@@ -1,5 +1,10 @@
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
+import {
+  signUsageReservationAuthorization,
+  usageReservationAuthorizationAudience,
+} from "@/convex/lib/usageReservationAuthorization"
+import type { UsageReservationArgs } from "@/convex/lib/usageValidators"
 import type { ReserveUsageResult } from "@/convex/usageAllowance"
 import { getProviderStrategy } from "@/lib/openproviders/provider-strategy"
 import type { Provider } from "@/lib/provider-identity"
@@ -42,10 +47,7 @@ import {
 export type ApiKeyPreference = "priority" | "fallback"
 
 export type RouteReason =
-  | "priority_byok"
-  | "platform"
-  | "fallback_byok"
-  | "legacy_route_hint"
+  "priority_byok" | "platform" | "fallback_byok" | "legacy_route_hint"
 
 export type ResolvedModelRoute = {
   modelId: string
@@ -101,6 +103,8 @@ export type RequiredRouteCapabilities = {
  * this context skips the platform tier entirely.
  */
 export type PlatformFundingContext = {
+  /** Server-authenticated WorkOS subject bound into the reserve capability. */
+  workosUserId: string
   requestId: string
   chatId: string
   /** The turn's wire messages + prompt — estimation inputs only. */
@@ -110,18 +114,13 @@ export type PlatformFundingContext = {
   toolsLikely: boolean
 }
 
-export type ReservePlatformUsageArgs = {
+export type ReservePlatformUsageArgs = Omit<
+  UsageReservationArgs,
+  "providerId"
+> & {
   token: string
-  requestId: string
-  chatId: string
-  modelId: string
-  routeId: string
+  workosUserId: string
   providerId: Provider
-  estimatedCredits: number
-  estimatedInputTokens: number
-  estimatedOutputTokens: number
-  titleEstimatedCredits: number
-  pricingSnapshot: NonNullable<ReturnType<typeof buildPricingSnapshot>>
 }
 
 export type ResolveModelRouteArgs = {
@@ -145,9 +144,9 @@ export type ResolveModelRouteArgs = {
 }
 
 export type RouteResolverDeps = {
-  getKeySettings(token: string): Promise<
-    Array<{ provider: string; preference: ApiKeyPreference }>
-  >
+  getKeySettings(
+    token: string
+  ): Promise<Array<{ provider: string; preference: ApiKeyPreference }>>
   getUserKey(provider: Provider, token: string): Promise<string | null>
   getPlatformKey(provider: Provider): string | undefined
   entitlement: PlatformEntitlement
@@ -161,6 +160,54 @@ export type RouteResolverDeps = {
   ): Promise<ReserveUsageResult>
 }
 
+function isMissingAuthorizedReserveMutation(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const missingFunction =
+    error.message.includes("Could not find public function") ||
+    error.message.includes("Function not found") ||
+    error.message.includes("FunctionNotFound")
+  return missingFunction && error.message.includes("reserveAuthorized")
+}
+
+/**
+ * Version-skew adapter for rollback or a Next build reaching older Convex
+ * functions. Only a confirmed missing-function error falls back to the legacy
+ * mutation. Once Convex has `reserveAuthorized`, authorization failures pass
+ * through and never downgrade to the unsigned path.
+ */
+export async function reserveAuthorizedPlatformUsage({
+  token,
+  workosUserId,
+  ...args
+}: ReservePlatformUsageArgs): Promise<ReserveUsageResult> {
+  const authorizationIssuedAt = Date.now()
+  const authorizationProof = signUsageReservationAuthorization({
+    ...args,
+    workosUserId,
+    deploymentUrl: usageReservationAuthorizationAudience(
+      process.env.NEXT_PUBLIC_CONVEX_URL
+    ),
+    issuedAt: authorizationIssuedAt,
+  })
+
+  try {
+    return await fetchMutation(
+      api.usageAllowance.reserveAuthorized,
+      { ...args, authorizationIssuedAt, authorizationProof },
+      { token }
+    )
+  } catch (error) {
+    if (!isMissingAuthorizedReserveMutation(error)) throw error
+    console.warn(
+      JSON.stringify({
+        _tag: "usage_reserve_authorized_endpoint_missing",
+        requestId: args.requestId,
+      })
+    )
+    return fetchMutation(api.usageAllowance.reserve, args, { token })
+  }
+}
+
 const defaultDeps: RouteResolverDeps = {
   getKeySettings: (token) =>
     fetchQuery(api.userKeys.getKeySettings, {}, { token }),
@@ -168,8 +215,7 @@ const defaultDeps: RouteResolverDeps = {
   getPlatformKey: (provider) =>
     process.env[getProviderStrategy(provider).envVarName],
   entitlement: freeModelsPlatformEntitlement,
-  reservePlatformUsage: ({ token, ...args }) =>
-    fetchMutation(api.usageAllowance.reserve, args, { token }),
+  reservePlatformUsage: reserveAuthorizedPlatformUsage,
 }
 
 type Candidate = {
@@ -339,6 +385,7 @@ export async function resolveModelRoute(
       })
       const reserved = await deps.reservePlatformUsage({
         token: args.token,
+        workosUserId: funding.workosUserId,
         requestId: funding.requestId,
         chatId: funding.chatId,
         modelId: model.id,

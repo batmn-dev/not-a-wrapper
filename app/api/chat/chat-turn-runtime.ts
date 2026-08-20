@@ -5,11 +5,11 @@ import type {
   ChatTurnEditRequest,
   ChatTurnRegenerationRequest,
 } from "@/lib/chat-messages/chat-turn-contract"
-import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import {
   getReasoningDurationMs,
   getWorkDurationMs,
 } from "@/lib/chat-messages/metadata"
+import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import {
   fallbackChatTitle,
   generateChatTitle,
@@ -24,8 +24,8 @@ import {
   MCP_MAX_STEP_COUNT,
   SYSTEM_PROMPT_DEFAULT,
 } from "@/lib/config"
-import { getAllModels } from "@/lib/models"
 import type { ResolvedModelRoute } from "@/lib/model-route-resolver"
+import { getAllModels } from "@/lib/models"
 import type { ModelConfig } from "@/lib/models/types"
 import {
   flushBraintrust,
@@ -57,7 +57,6 @@ import {
   getPostHogClient,
 } from "@/lib/posthog"
 import { scrubForAnalytics } from "@/lib/posthog/scrub"
-import { platformOutputTokenBudget } from "@/lib/usage/platform-usage-estimate"
 import { prepareToolRuntime, type ToolRuntime } from "@/lib/tools/runtime"
 import {
   buildFinishToolInvocationStreamMetadata,
@@ -65,6 +64,7 @@ import {
   type ToolInvocationMetadataByCallId,
   type ToolInvocationMetadataByName,
 } from "@/lib/tools/ui-metadata"
+import { platformOutputTokenBudget } from "@/lib/usage/platform-usage-estimate"
 import type {
   ApiKeySource,
   Provider,
@@ -94,6 +94,7 @@ import { after } from "next/server"
 import { adaptHistoryForProvider } from "./adapters"
 import type { AdaptationContext, AdaptationWarning } from "./adapters/types"
 import { splitAndValidateApprovalContinuation } from "./approval-continuation"
+import type { DurableGenerationInputPlan } from "./durable-generation-input"
 import {
   createDurableTurnRuntime,
   isDurableConvexChat,
@@ -111,10 +112,6 @@ import { normalizeChatError, type PublicChatError } from "./public-error"
 import { PublicChatHttpError } from "./public-http-error"
 import { createReasoningActivityTracker } from "./reasoning-activity-tracker"
 import {
-  createWorkDurationTracker,
-  type WorkDurationTracker,
-} from "./work-duration-tracker"
-import {
   getTextFilePartReferences,
   prepareTextFilePartsForModelInput,
 } from "./text-file-parts"
@@ -123,6 +120,10 @@ import {
   createWordChunkingTransform,
   isWordChunkingEligible,
 } from "./word-chunking-transform"
+import {
+  createWorkDurationTracker,
+  type WorkDurationTracker,
+} from "./work-duration-tracker"
 
 // Request-scoped execution behind the route's HTTP adapter. `prepare()` may
 // fail before model execution; `toResponse()` owns the stream lifecycle; and
@@ -167,6 +168,8 @@ export type ChatTurnInput = {
    * `route.credentialSource` is "platform" and the actor is authenticated.
    */
   reservationId?: Id<"usageReservations">
+  /** Canonical durable input already used for route and allowance admission. */
+  generationInput?: DurableGenerationInputPlan
   /**
    * Sampled chat-performance session (PR 0b). Absent/no-op by default; when
    * sampled it wraps preparation stages in content-free spans and receives
@@ -405,6 +408,7 @@ export function createChatTurnRuntime(args: {
     credential,
     route,
     reservationId,
+    generationInput,
   } = input
   // No-op unless the route sampled this request (rate 0 short-circuits).
   const perf = input.perf ?? createChatPerfServerSession(null, { rate: 0 })
@@ -432,6 +436,7 @@ export function createChatTurnRuntime(args: {
       regeneration,
       expectedVisibleMessageCount,
       tailMessageId,
+      generationInputHash: generationInput?.inputHash,
       reservationId,
     },
     deps: {
@@ -643,8 +648,11 @@ export function createChatTurnRuntime(args: {
     // client reuse in warm containers. No separate after() registrations: the
     // backstop above already covers never-started turns.
 
-    // Durable prepare returns canonical history and rejects invalid turn input.
-    let canonicalMessages = await perf.span("durable_prepare", () =>
+    // Durable prepare confirms the read-only input plan before mutating. A
+    // planned durable turn then reuses the exact attachment-expanded messages
+    // that allowance admission priced; legacy/guest callers use prepare's
+    // returned history as before.
+    const preparedDurableMessages = await perf.span("durable_prepare", () =>
       durableTurn.prepare({
         provider: resolvedProvider,
         route: {
@@ -654,6 +662,7 @@ export function createChatTurnRuntime(args: {
         },
       })
     )
+    let canonicalMessages = generationInput?.messages ?? preparedDurableMessages
 
     // History system messages are untrusted artifacts; trusted instructions use
     // streamText's separate `instructions` input.
@@ -698,25 +707,32 @@ export function createChatTurnRuntime(args: {
       continuationBaseMetadata
     )
 
-    const textFileReferences = getTextFilePartReferences(validatedMessages)
-    const trustedTextAttachments =
-      durableRuntimeEnabled && convexToken && textFileReferences.length > 0
-        ? await deps.fetchQuery(
-            api.files.getTrustedTextAttachmentsForChat,
-            {
-              chatId: chatId as Id<"chats">,
-              references: textFileReferences,
-            },
-            { token: convexToken }
-          )
-        : []
+    const textFileModelInput = generationInput
+      ? {
+          messages: validatedMessages,
+          ...generationInput.textFileStats,
+        }
+      : await (async () => {
+          const textFileReferences =
+            getTextFilePartReferences(validatedMessages)
+          const trustedTextAttachments =
+            durableRuntimeEnabled &&
+            convexToken &&
+            textFileReferences.length > 0
+              ? await deps.fetchQuery(
+                  api.files.getTrustedTextAttachmentsForChat,
+                  {
+                    chatId: chatId as Id<"chats">,
+                    references: textFileReferences,
+                  },
+                  { token: convexToken }
+                )
+              : []
 
-    const textFileModelInput = await prepareTextFilePartsForModelInput(
-      validatedMessages,
-      {
-        trustedAttachments: trustedTextAttachments,
-      }
-    )
+          return await prepareTextFilePartsForModelInput(validatedMessages, {
+            trustedAttachments: trustedTextAttachments,
+          })
+        })()
 
     if (textFileModelInput.convertedCount > 0) {
       console.log(
@@ -1332,7 +1348,8 @@ export function createChatTurnRuntime(args: {
           // usage accumulates on the run row as settlement evidence, so
           // abort/failure/reaper accounting never depends on the happy-path
           // onEnd aggregate. Status derivation lives inside the module, off
-          // the bound ToolFacts. Fire-and-forget by contract.
+          // the bound ToolFacts. This callback does not backpressure the SDK;
+          // the durable runtime drains the write before terminal settlement.
           lifecycle.stream.recordStep({
             stepNumber: stepCounter,
             usage: {

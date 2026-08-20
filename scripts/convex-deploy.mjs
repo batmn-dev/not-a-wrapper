@@ -3,6 +3,8 @@ import { spawnSync } from "node:child_process"
 import { pathToFileURL } from "node:url"
 
 const PREFLIGHT_SCRIPT = "scripts/convex-schema-contract-preflight.mjs"
+const USAGE_RESERVATION_ROLLOUT_PREFLIGHT_SCRIPT =
+  "scripts/usage-reservation-rollout-preflight.mjs"
 const PREFLIGHT_DEPLOY_KEY_ENV = "CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY"
 const CONVEX_DEPLOY_KEY_ENV = "CONVEX_DEPLOY_KEY"
 const BASE_DEPLOY_ARGS = [
@@ -69,9 +71,12 @@ export function convexDeployArgs(extraArgs = []) {
 }
 
 export function deployPlanForEnv({ env = process.env, extraArgs = [] } = {}) {
+  const mode = deployPreflightMode(env)
   return {
-    mode: deployPreflightMode(env),
+    mode,
     preflightArgs: preflightArgsForDeployEnv(env),
+    usageReservationRolloutPreflightArgs:
+      mode === "prod" ? [USAGE_RESERVATION_ROLLOUT_PREFLIGHT_SCRIPT] : null,
     deployArgs: convexDeployArgs(extraArgs),
   }
 }
@@ -106,6 +111,9 @@ export function runDeploy({
     plan.preflightArgs,
     preflightEnvForDeployEnv(env)
   )
+  if (plan.usageReservationRolloutPreflightArgs) {
+    runCommand(process.execPath, plan.usageReservationRolloutPreflightArgs, env)
+  }
   runCommand("convex", plan.deployArgs, env)
 }
 

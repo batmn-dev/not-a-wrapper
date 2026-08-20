@@ -62,6 +62,16 @@
 
 ## Correctness and maintenance
 
+- **Assistant responsiveness:** investigate and improve time to first token and
+  text-streaming feel end to end. Known suspects are catalogued in
+  `docs/streaming-regression-suspects-2026-08-20.md`: the platform
+  `maxOutputTokens` cap (no reasoning headroom for OpenAI/Google), route
+  flapping incl. first-turn local chat ids skipping the platform tier,
+  sequential Convex roundtrips on the admission critical path
+  (reserve/getKeySettings/getUserKey), and settle waiting on title usage.
+  Beyond fixing those, look for anything else that makes responses feel fast:
+  parallelize admission reads, measure TTFT via the chat-perf spans, and
+  re-verify perceived streaming smoothness in the browser.
 - **Edit/regeneration freshness:** replace the selected-message count proxy with
   a server-issued revision or equivalent identity-bearing token. Verify that a
   rapid regenerate → branch-switch → send → regenerate sequence cannot
