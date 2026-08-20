@@ -3,6 +3,7 @@
 import { api } from "@/convex/_generated/api"
 import { Progress } from "@/components/ui/progress"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
+import type { FunctionReturnType } from "convex/server"
 import {
   SettingsField,
   SettingsFieldContent,
@@ -27,6 +28,35 @@ function formatPercent(fraction: number): string {
   return `${Math.min(100, Math.round(percent))}%`
 }
 
+type Allowance = FunctionReturnType<
+  typeof api.usageAllowance.getCurrentAllowance
+>
+
+function getUsageDisplay(allowance: Allowance) {
+  const granted = allowance.grantedCredits
+  const spent = allowance.spentCredits
+  const reserved = allowance.reservedCredits
+  const usedFraction = granted > 0 ? spent / granted : 0
+  const pendingFraction = granted > 0 ? reserved / granted : 0
+
+  return {
+    exhausted: granted > 0 && spent + reserved >= granted,
+    meterValue: Math.round(
+      Math.min(1, usedFraction + pendingFraction) * 100
+    ),
+    refillDate: new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    }).format(new Date(allowance.periodEnd)),
+    usageLabel: `${formatPercent(usedFraction)} used${
+      reserved > 0
+        ? ` · ${formatPercent(pendingFraction)} pending`
+        : ""
+    }`,
+  }
+}
+
 export function UsageSection() {
   const { data: allowance, isAuthReady } = usePerUserQuery(
     api.usageAllowance.getCurrentAllowance
@@ -34,20 +64,7 @@ export function UsageSection() {
 
   if (!isAuthReady) return null
 
-  const granted = allowance?.grantedCredits ?? 0
-  const spent = allowance?.spentCredits ?? 0
-  const reserved = allowance?.reservedCredits ?? 0
-  const usedFraction = granted > 0 ? spent / granted : 0
-  const pendingFraction = granted > 0 ? reserved / granted : 0
-  const meterFraction = Math.min(1, usedFraction + pendingFraction)
-  const exhausted = granted > 0 && spent + reserved >= granted
-  const refillDate =
-    allowance === undefined
-      ? null
-      : new Intl.DateTimeFormat(undefined, {
-          month: "short",
-          day: "numeric",
-        }).format(new Date(allowance.periodEnd))
+  const display = allowance === undefined ? null : getUsageDisplay(allowance)
 
   return (
     <SettingsFieldGroup aria-label="Included usage">
@@ -57,23 +74,17 @@ export function UsageSection() {
             <div className="flex items-baseline justify-between gap-4">
               <SettingsFieldLabel>Included usage</SettingsFieldLabel>
               <span className="text-foreground text-sm leading-6">
-                {allowance === undefined
-                  ? "…"
-                  : `${formatPercent(usedFraction)} used${
-                      reserved > 0
-                        ? ` · ${formatPercent(pendingFraction)} pending`
-                        : ""
-                    }`}
+                {display?.usageLabel ?? "…"}
               </span>
             </div>
             <Progress
-              value={Math.round(meterFraction * 100)}
+              value={display?.meterValue ?? null}
               aria-label="Included allowance used this period"
             />
             <SettingsFieldDescription>
-              {exhausted
-                ? `Your included allowance is used up. It refills ${refillDate ?? "next period"}; messages sent with your own API keys keep working.`
-                : `Refills ${refillDate ?? "monthly"}. Cost varies by model, context length, attachments, tools, and search, so the meter can move faster on heavier messages.`}
+              {display?.exhausted
+                ? `Your included allowance is used up. It refills ${display.refillDate}; messages sent with your own API keys keep working.`
+                : `Refills ${display?.refillDate ?? "monthly"}. Cost varies by model, context length, attachments, tools, and search, so the meter can move faster on heavier messages.`}
             </SettingsFieldDescription>
             <SettingsFieldDescription>
               Messages sent using your API keys do not use your included

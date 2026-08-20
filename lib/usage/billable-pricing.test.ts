@@ -73,17 +73,16 @@ describe("billable route pricing (ADR-0021)", () => {
   })
 
   it("keeps a built snapshot stable when the catalog object mutates", () => {
-    const route = routeOf("gpt-5-mini")
+    const source = routeOf("gpt-5-mini")
+    const route = { ...source, config: { ...source.config, inputCost: 1 } }
     const snapshot = buildPricingSnapshot(route)!
     const before = snapshot.primary.inputCreditsPerMTok
     // A later catalog change must not re-price an already-built snapshot.
-    const mutated = {
-      ...route,
-      config: { ...route.config, inputCost: (route.config.inputCost ?? 0) * 10 },
-    }
-    const rebuilt = buildPricingSnapshot(mutated)!
+    route.config.inputCost = 10
     expect(snapshot.primary.inputCreditsPerMTok).toBe(before)
-    expect(rebuilt.primary.inputCreditsPerMTok).not.toBe(before)
+    expect(buildPricingSnapshot(route)!.primary.inputCreditsPerMTok).not.toBe(
+      before
+    )
   })
 })
 

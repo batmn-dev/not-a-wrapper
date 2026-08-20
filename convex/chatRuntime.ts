@@ -2986,8 +2986,9 @@ export async function recordToolInvocationsForChat(
 
   // Per-step usage accumulation (ADR-0021): durable evidence for the abort/
   // failure/reaper settlement paths, which cannot rely on the happy-path
-  // onEnd aggregate. The completion write later REPLACES the accumulation
-  // with the SDK's authoritative all-steps aggregate.
+  // onEnd aggregate. The completion write replaces each accumulated token
+  // count when the SDK's authoritative all-steps aggregate includes it;
+  // otherwise it preserves the accumulated value.
   const stepInputTokens = args.usage?.inputTokens ?? 0
   const stepOutputTokens = args.usage?.outputTokens ?? 0
   const hasStepUsage = stepInputTokens > 0 || stepOutputTokens > 0

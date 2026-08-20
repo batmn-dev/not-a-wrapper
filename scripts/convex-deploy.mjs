@@ -72,11 +72,17 @@ export function convexDeployArgs(extraArgs = []) {
 
 export function deployPlanForEnv({ env = process.env, extraArgs = [] } = {}) {
   const mode = deployPreflightMode(env)
+  const isProductionDeployment =
+    env.VERCEL_ENV === "production" ||
+    (!env.VERCEL_ENV && mode === "prod")
+
   return {
     mode,
     preflightArgs: preflightArgsForDeployEnv(env),
     usageReservationRolloutPreflightArgs:
-      mode === "prod" ? [USAGE_RESERVATION_ROLLOUT_PREFLIGHT_SCRIPT] : null,
+      isProductionDeployment
+        ? [USAGE_RESERVATION_ROLLOUT_PREFLIGHT_SCRIPT]
+        : null,
     deployArgs: convexDeployArgs(extraArgs),
   }
 }

@@ -427,6 +427,37 @@ describe("Convex schema contraction helpers", () => {
     })
   })
 
+  it("runs the reservation rollout preflight only for production deployments", () => {
+    const rolloutPreflightArgs = [
+      "scripts/usage-reservation-rollout-preflight.mjs",
+    ]
+
+    expect(
+      deployPlanForEnv({
+        env: {
+          VERCEL_ENV: "preview",
+          CONVEX_SCHEMA_PREFLIGHT_MODE: "prod",
+        },
+      }).usageReservationRolloutPreflightArgs
+    ).toBeNull()
+    expect(
+      deployPlanForEnv({
+        env: {
+          VERCEL_ENV: "production",
+          CONVEX_SCHEMA_PREFLIGHT_MODE: "dry-run",
+        },
+      }).usageReservationRolloutPreflightArgs
+    ).toEqual(rolloutPreflightArgs)
+    expect(
+      deployPlanForEnv({ env: {} }).usageReservationRolloutPreflightArgs
+    ).toEqual(rolloutPreflightArgs)
+    expect(
+      deployPlanForEnv({
+        env: { CONVEX_SCHEMA_PREFLIGHT_MODE: "dry-run" },
+      }).usageReservationRolloutPreflightArgs
+    ).toBeNull()
+  })
+
   it("passes the preflight deploy key only to the preflight subprocess", () => {
     const env = {
       VERCEL_ENV: "production",

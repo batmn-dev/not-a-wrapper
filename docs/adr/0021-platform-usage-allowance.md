@@ -114,8 +114,9 @@ race-free without SQL unique constraints.
   it with the user's JWT, an authenticated browser cannot mint the required
   server authorization. Its domain-separated tuple covers identity, request,
   chat, route, token estimates, integer credit estimate, and the complete
-  pricing snapshot. The 30/minute per-user throttle remains defense in depth
-  for abuse through the legitimate server route; reconciliation capacity is
+  pricing snapshot. A per-user throttle of 30 requests per minute remains
+  defense in depth for abuse through the legitimate server route;
+  reconciliation capacity is
   no longer a security boundary for arbitrary client-created rows. There is
   no separate "check balance" query; the reservation IS the admission.
   The old-signature `usageAllowance.reserve` remains temporarily as a
