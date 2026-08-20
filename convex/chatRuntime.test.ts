@@ -5,6 +5,7 @@ import {
   applyApprovalResponses,
   createToolApprovalRequestForChat,
   denyPendingApprovalsForChat,
+  generationRunWriteArgs,
   heartbeatGenerationRunForChat,
   markGenerationWorkStartedForChat,
   markGenerationRunAbortedForChat,
@@ -41,6 +42,9 @@ type TableDocuments = {
   users: Doc<"users">[]
   chats: Doc<"chats">[]
   projects: Doc<"projects">[]
+  usageBuckets: Doc<"usageBuckets">[]
+  usageReservations: Doc<"usageReservations">[]
+  usageLedgerEntries: Doc<"usageLedgerEntries">[]
 }
 
 type TableName = keyof TableDocuments
@@ -100,6 +104,9 @@ function createMutationCtx(
     users: [],
     chats: [],
     projects: [],
+    usageBuckets: [],
+    usageReservations: [],
+    usageLedgerEntries: [],
     ...tablesInput,
   }
   const patches: Array<{
@@ -491,6 +498,9 @@ function createGenerationRunLinkageFixture() {
     users: [user],
     chats: [chat],
     projects: [],
+    usageBuckets: [],
+    usageReservations: [],
+    usageLedgerEntries: [],
   }
 
   return {
@@ -687,6 +697,41 @@ describe("prepareGenerationForChat", () => {
       model: "claude-sonnet-5",
       provider: "openrouter",
     })
+  })
+
+  it("rejects a stale generation-input hash before mutating chat history or runs", async () => {
+    const { user, chat, chatId, userId } = createOwnerFixture()
+    const existingMessage = createStoredMessage({
+      id: "message_user_existing",
+      chatId,
+      userId,
+      orderId: 0,
+      clientMessageId: "user-existing",
+      role: "user",
+      content: "canonical history changed",
+      createdAt: 1000,
+    })
+    const { ctx, tables } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages: [existingMessage],
+    })
+
+    await expect(
+      prepareGenerationForChat(ctx, {
+        chatId,
+        requestId: "request_stale_generation_input",
+        model: "gpt-5-mini",
+        provider: "openai",
+        generationInputHash: "0".repeat(64),
+      })
+    ).rejects.toMatchObject({
+      data: { code: "generation_input_changed" },
+    })
+
+    expect(tables.generationRuns).toHaveLength(0)
+    expect(tables.messages).toEqual([existingMessage])
+    expect(tables.chats[0]).toEqual(chat)
   })
 
   it("rejects a tampered route receipt before prepare writes", async () => {
@@ -5357,5 +5402,328 @@ describe("chat status projection", () => {
       statusRunId: runBId,
     })
     expect(chat.lastRunStatus).toBeUndefined()
+  })
+})
+
+describe("allowance settlement rides terminal transitions (ADR-0021)", () => {
+  const pricingSnapshot = {
+    revision: "rev-test",
+    currency: "USD" as const,
+    primary: {
+      modelId: "gpt-5",
+      routeId: "gpt-5",
+      providerId: "openai",
+      upstreamModelId: "gpt-5",
+      inputCreditsPerMTok: 750_000,
+      outputCreditsPerMTok: 4_500_000,
+    },
+  }
+
+  function createAllowanceFixture(options: { workStartedAt?: number } = {}) {
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const runId = asId<"generationRuns">("run_1")
+    const messageId = asId<"messages">("message_1")
+    const run = {
+      ...createGenerationRun({
+        id: "run_1",
+        chatId,
+        userId,
+        assistantMessageId: messageId,
+      }),
+      ...(options.workStartedAt !== undefined
+        ? { workStartedAt: options.workStartedAt }
+        : {}),
+    }
+    const message = createAssistantRuntimeMessage({
+      id: "message_1",
+      chatId,
+      runId,
+      orderId: 1,
+    })
+    const bucket = {
+      _id: asId<"usageBuckets">("bucket_1"),
+      _creationTime: 1,
+      userId,
+      bucketKind: "included" as const,
+      periodKey: "2026-08",
+      periodStart: 0,
+      periodEnd: 10_000_000,
+      planId: "free-v1",
+      grantedCredits: 1_000_000,
+      availableCredits: 900_000,
+      reservedCredits: 100_000,
+      spentCredits: 0,
+      status: "active" as const,
+      createdAt: 1,
+      updatedAt: 1,
+    } satisfies Doc<"usageBuckets">
+    const reservation = {
+      _id: asId<"usageReservations">("reservation_1"),
+      _creationTime: 1,
+      userId,
+      requestId: "request_1",
+      bucketId: bucket._id,
+      generationRunId: runId,
+      chatId: String(chatId),
+      modelId: "gpt-5",
+      routeId: "gpt-5",
+      providerId: "openai",
+      status: "reserved" as const,
+      estimatedCredits: 100_000,
+      reservedCredits: 100_000,
+      titleEstimatedCredits: 500,
+      pricingSnapshot,
+      payloadFingerprint: "fp",
+      reservedAt: 1,
+      updatedAt: 1,
+    } satisfies Doc<"usageReservations">
+
+    const tables: TableDocuments = {
+      toolApprovalRequests: [],
+      generationRuns: [run],
+      reaperCheckpoints: [],
+      messages: [message],
+      assistantMessageSnapshots: [],
+      toolInvocations: [],
+      users: [user],
+      chats: [chat],
+      projects: [],
+      usageBuckets: [bucket],
+      usageReservations: [reservation],
+      usageLedgerEntries: [],
+    }
+    return { tables, runId, messageId, chatId, userId, chat, run }
+  }
+
+  it("completion settles actual aggregate usage against the reservation", async () => {
+    const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
+    const { ctx, tables } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunCompletedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        content: "done",
+        parts: [{ type: "text", text: "done" }],
+        usage: { inputTokens: 1_000, outputTokens: 100, totalTokens: 1_100 },
+        titleUsage: "not-run",
+      }
+    )
+
+    // 750 input + 450 output credits at the fixture rates.
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "settled",
+      settlementBasis: "actual",
+      actualCredits: 1_200,
+    })
+    expect(tables.usageBuckets[0]).toMatchObject({
+      availableCredits: 998_800,
+      reservedCredits: 0,
+      spentCredits: 1_200,
+    })
+  })
+
+  it("a pre-provider-work failure releases the full reservation", async () => {
+    const fixture = createAllowanceFixture() // no workStartedAt
+    const { ctx, tables } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunFailedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      { messageId: fixture.messageId, error: "provider rejected the key" }
+    )
+
+    expect(tables.usageReservations[0]).toMatchObject({ status: "released" })
+    expect(tables.usageBuckets[0]).toMatchObject({
+      availableCredits: 1_000_000,
+      reservedCredits: 0,
+      spentCredits: 0,
+    })
+  })
+
+  it("a post-provider-work abort without usage settles the estimate", async () => {
+    const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
+    const { ctx, tables } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunAbortedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      { messageId: fixture.messageId, reason: "stopped by user" }
+    )
+
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "settled",
+      settlementBasis: "estimated_after_unknown_usage",
+      actualCredits: 100_000,
+    })
+    expect(tables.usageBuckets[0]).toMatchObject({
+      availableCredits: 900_000,
+      spentCredits: 100_000,
+      reservedCredits: 0,
+    })
+  })
+
+  it("duplicate terminal delivery cannot double-charge", async () => {
+    const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
+    const { ctx, tables } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunCompletedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        content: "done",
+        parts: [{ type: "text", text: "done" }],
+        usage: { inputTokens: 1_000, outputTokens: 100 },
+        titleUsage: "not-run",
+      }
+    )
+    // The deliberate failed-over-completed convergence still must not
+    // re-charge: the reservation settled once, the second settle is absorbed.
+    await markGenerationRunFailedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      { messageId: fixture.messageId, error: "late envelope failure" }
+    )
+
+    expect(
+      tables.usageLedgerEntries.filter((entry) => entry.type === "settle")
+    ).toHaveLength(1)
+    expect(tables.usageBuckets[0]).toMatchObject({ spentCredits: 1_200 })
+  })
+
+  it("an approval pause settles the paused run's usage", async () => {
+    const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
+    fixture.tables.toolApprovalRequests.push({
+      _id: asId<"toolApprovalRequests">("approval_1"),
+      _creationTime: 1,
+      chatId: fixture.chatId,
+      runId: fixture.runId,
+      assistantMessageId: fixture.messageId,
+      userId: fixture.userId,
+      toolCallId: "call_1",
+      toolName: "search",
+      source: "mcp",
+      riskClass: "unknown",
+      approvalId: "appr_1",
+      status: "pending",
+      createdAt: 1,
+    })
+    const { ctx, tables } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunCompletedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        content: "paused",
+        parts: [{ type: "text", text: "paused" }],
+        usage: { inputTokens: 1_000, outputTokens: 100 },
+        titleUsage: "not-run",
+      }
+    )
+
+    expect(tables.generationRuns[0]!.status).toBe("awaiting_approval")
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "settled",
+      settlementBasis: "actual",
+      terminalReason: "approval_pause",
+    })
+  })
+
+  it("the lease reaper settles a dead worker's reservation conservatively", async () => {
+    const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
+    fixture.tables.generationRuns[0] = {
+      ...fixture.tables.generationRuns[0]!,
+      heartbeatAt: 1_000,
+      leaseExpiresAt: Date.now() - 60_000,
+    }
+    const { ctx, tables } = createMutationCtx(fixture.tables)
+
+    const { reaped } = await reapExpiredGenerationRunsPass(ctx)
+    expect(reaped).toBe(1)
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "settled",
+      settlementBasis: "estimated_after_unknown_usage",
+    })
+  })
+
+  it("per-step usage accumulates as durable settlement evidence", async () => {
+    const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
+    const { ctx, tables } = createMutationCtx(fixture.tables)
+
+    await recordToolInvocationsForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        stepNumber: 1,
+        usage: { inputTokens: 600, outputTokens: 40 },
+        invocations: [],
+      }
+    )
+    await recordToolInvocationsForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        stepNumber: 2,
+        usage: { inputTokens: 400, outputTokens: 60 },
+        invocations: [],
+      }
+    )
+    expect(tables.generationRuns[0]).toMatchObject({
+      inputTokens: 1_000,
+      outputTokens: 100,
+    })
+
+    // A mid-stream abort now settles from the accumulated evidence, plus the
+    // conservative title estimate.
+    await markGenerationRunAbortedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      { messageId: fixture.messageId, reason: "stopped by user" }
+    )
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "settled",
+      settlementBasis: "observed_partial",
+      actualCredits: 1_200 + 500,
+    })
+  })
+})
+
+describe("generation-run write trust boundary (ADR-0011 / ADR-0021)", () => {
+  it("registers every post-prepare run write only as a grant-authorized internal mutation", async () => {
+    const runtimeModule: Record<string, unknown> = await import("./chatRuntime")
+    const workerModule: Record<string, unknown> = await import(
+      "./chatRuntimeWorker"
+    )
+    const writeOps = Object.keys(generationRunWriteArgs)
+    expect(writeOps.length).toBeGreaterThan(0)
+
+    for (const op of writeOps) {
+      // No user-token twin may exist: `markGenerationRunCompleted.usage` is
+      // the authoritative allowance-settlement input, so any public
+      // registration would let a chat owner settle their own platform
+      // reservation at a self-declared (near-zero) cost.
+      expect(op in runtimeModule, `${op} must not be user-token callable`).toBe(
+        false
+      )
+      const workerFn = workerModule[op] as
+        | { isMutation?: boolean; isInternal?: boolean; isPublic?: boolean }
+        | undefined
+      expect(
+        workerFn?.isMutation === true && workerFn.isInternal === true,
+        `${op} must be a grant-authorized internal mutation on the worker wire`
+      ).toBe(true)
+      expect(workerFn?.isPublic).toBeUndefined()
+    }
+
+    // Stop stays user-callable by design: it carries no usage or settlement
+    // input, and settlement evidence still arrives via the grant wire or the
+    // reaper's boundary rule.
+    const stop = runtimeModule.stopGenerationRun as { isPublic?: boolean }
+    expect(stop.isPublic).toBe(true)
   })
 })

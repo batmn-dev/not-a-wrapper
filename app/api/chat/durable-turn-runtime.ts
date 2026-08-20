@@ -38,7 +38,7 @@ import type {
 import { getToolName, isToolUIPart } from "ai"
 import { fetchMutation as defaultFetchMutation } from "convex/nextjs"
 import { PublicChatHttpError } from "./public-http-error"
-import { isConvexArgumentValidationError } from "./utils"
+import { toInvalidDurableRequestError } from "./utils"
 
 // Owns durable preparation, snapshots, tool invocations, approvals, and turn
 // settlement — the typed receipt that keeps answer delivery independent from
@@ -74,6 +74,14 @@ export type DurableTurnInput = {
   regeneration?: ChatTurnRegenerationRequest
   expectedVisibleMessageCount?: number
   tailMessageId?: string
+  /** Read-only canonical input plan confirmed inside prepareGeneration. */
+  generationInputHash?: string
+  /**
+   * Platform-usage reservation admitted with the route (ADR-0021). Crosses
+   * into the signed admission proof and attaches to the run inside
+   * prepareGeneration's transaction.
+   */
+  reservationId?: Id<"usageReservations">
 }
 
 // Durable worker wire — the post-prepare write channel (ADR-0011).
@@ -146,17 +154,14 @@ export function createHttpDurableWorkerWire(options: {
 }): DurableWorkerWire {
   const fetchImpl = options.fetchImpl ?? fetch
   return async ({ op, args }) => {
-    const response = await fetchImpl(
-      `${getConvexSiteUrl()}/chat-turn/worker`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${options.secret}`,
-        },
-        body: JSON.stringify({ op, args }),
-      }
-    )
+    const response = await fetchImpl(`${getConvexSiteUrl()}/chat-turn/worker`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${options.secret}`,
+      },
+      body: JSON.stringify({ op, args }),
+    })
     if (!response.ok) {
       const detail = await response.text().catch(() => "")
       throw new DurableWorkerWriteError({
@@ -226,6 +231,13 @@ export type StreamFinishFacts = {
 /** One recorded step's tool activity — the durable-persistence view of it. */
 export type DurableStepRecord = {
   stepNumber: number
+  /**
+   * The step's token usage (ADR-0021): accumulated onto the run row as
+   * durable settlement evidence, so abort/failure/reaper accounting does not
+   * depend on the happy-path onEnd aggregate. Fired for EVERY step, tool
+   * calls or not.
+   */
+  usage?: { inputTokens?: number; outputTokens?: number }
   toolCalls: ReadonlyArray<{
     toolCallId: string
     toolName: string
@@ -268,7 +280,10 @@ export type DurableSettlementReceipt =
 export type DurableStreamBinding = {
   /** Spread into the streamText options object. */
   streamTextExtras: DurableStreamTextExtras
-  /** The streamText-callback half. void = fire-and-forget BY CONTRACT. */
+  /**
+   * The streamText-callback half. Void methods do not backpressure the SDK,
+   * but their terminal-relevant writes are drained before local settlement.
+   */
   stream: {
     /** Begin persisting the provider-consumption boundary before response exposure. */
     startWork(startedAt: number): Promise<void>
@@ -293,8 +308,8 @@ export type DurableStreamBinding = {
     }
     /**
      * Envelope-onEnd settlement. Internal ordering, load-bearing:
-     * allSettled(approvalWritePromises) → flush → final full-parts snapshot →
-     * markAborted | markCompleted (bounded retry). LOUD-FALLBACK CONTRACT: a
+     * allSettled(approval + step writes) → flush → final full-parts snapshot
+     * → markAborted | markCompleted (bounded retry). LOUD-FALLBACK CONTRACT: a
      * completed path without a prior `captureFinish()` emits
      * `durable_finish_handoff_missed` (warn + Sentry) BEFORE falling back to
      * `countToolParts`. NEVER rejects — persistence failure resolves a
@@ -304,9 +319,20 @@ export type DurableStreamBinding = {
       responseMessage: UIMessage
       isAborted: boolean
       finishReason?: string
+      /**
+       * Title-call evidence for allowance settlement (ADR-0021): observed
+       * usage, "not-run" (no title requested), or "unknown" (a title call may
+       * have run but its usage never arrived). Only meaningful for
+       * platform-funded runs; ignored elsewhere.
+       */
+      titleUsage?: TitleUsageForSettlement
     }): Promise<DurableSettlementReceipt>
   }
 }
+
+/** Mirror of the Convex-side TitleUsageEvidence wire shape (ADR-0021). */
+export type TitleUsageForSettlement =
+  { inputTokens?: number; outputTokens?: number } | "not-run" | "unknown"
 
 export type DurableTurnRuntime = {
   /** Observability dimension only — callers MUST NOT branch on it. */
@@ -350,10 +376,7 @@ export type DurableTurnRuntime = {
       routeId: string
       credentialSource: "platform" | "byok"
       routeReason:
-        | "priority_byok"
-        | "platform"
-        | "fallback_byok"
-        | "legacy_route_hint"
+        "priority_byok" | "platform" | "fallback_byok" | "legacy_route_hint"
     }
   }): Promise<MessageAISDK[]>
 
@@ -414,6 +437,28 @@ export function getLatestUserMessage(
     if (message.role === "user") return message
   }
   return undefined
+}
+
+export function buildDurablePrepareIntent(input: {
+  messages: UIMessage[]
+  edit?: ChatTurnEditRequest
+  regeneration?: ChatTurnRegenerationRequest
+}) {
+  const approvalResponses = extractApprovalResponses(input.messages)
+  if (input.regeneration && approvalResponses.length > 0) {
+    throw new PublicChatHttpError({
+      message: "Regeneration cannot continue pending approvals",
+      statusCode: 400,
+      code: "INVALID_REQUEST",
+    })
+  }
+
+  const latestUserMessage =
+    input.edit || input.regeneration || hasApprovalResponse(input.messages)
+      ? undefined
+      : getLatestUserMessage(input.messages)
+
+  return { approvalResponses, latestUserMessage }
 }
 
 export function toDurableUiMessage(message: Doc<"messages">): DurableUiMessage {
@@ -575,6 +620,26 @@ function withWorkerWriteTimeout<T>(
 
   return Promise.race([write, timeoutPromise]).finally(() => {
     if (timeout) clearTimeout(timeout)
+  })
+}
+
+/**
+ * Let already-started worker writes settle before a terminal mutation revokes
+ * their grant. The bound matches one worker-write timeout, so settlement never
+ * waits forever on a transport that stopped responding.
+ */
+async function drainPendingWrites(
+  pendingWrites: ReadonlyArray<Promise<unknown>>
+): Promise<void> {
+  if (pendingWrites.length === 0) return
+
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, WORKER_WRITE_TIMEOUT_MS)
+    timer.unref?.()
+    void Promise.allSettled(pendingWrites).then(() => {
+      clearTimeout(timer)
+      resolve()
+    })
   })
 }
 
@@ -866,6 +931,8 @@ export function createConvexDurableTurn(args: {
     regeneration,
     expectedVisibleMessageCount,
     tailMessageId,
+    generationInputHash,
+    reservationId,
   } = input
   const { fetchMutation } = deps
 
@@ -886,6 +953,12 @@ export function createConvexDurableTurn(args: {
   let originalMessages: DurableUiMessage[] = []
   let snapshotTracker: ReturnType<typeof createDurableSnapshotTracker> | null =
     null
+
+  // onStepEnd cannot backpressure every AI SDK terminal callback, but its
+  // usage write is settlement evidence. Keep the promises at turn scope so
+  // abort, provider failure, and outer fail() all drain observed usage before
+  // a terminal mutation revokes the execution grant.
+  const stepWritePromises: Promise<unknown>[] = []
 
   // One-shot guards — programming errors, not ops events.
   let prepareCalled = false
@@ -1230,19 +1303,8 @@ export function createConvexDurableTurn(args: {
       }
       prepareCalled = true
 
-      const approvalResponses = extractApprovalResponses(messages)
-      if (regeneration && approvalResponses.length > 0) {
-        throw new PublicChatHttpError({
-          message: "Regeneration cannot continue pending approvals",
-          statusCode: 400,
-          code: "INVALID_REQUEST",
-        })
-      }
-
-      const latestUserMessage =
-        edit || regeneration || hasApprovalResponse(messages)
-          ? undefined
-          : getLatestUserMessage(messages)
+      const { approvalResponses, latestUserMessage } =
+        buildDurablePrepareIntent({ messages, edit, regeneration })
       const admissionIssuedAt = Date.now()
       const admissionProof = admissionProofSigner({
         chatId,
@@ -1251,6 +1313,8 @@ export function createConvexDurableTurn(args: {
         provider,
         route,
         grantDigest,
+        reservationId,
+        generationInputHash,
         issuedAt: admissionIssuedAt,
       })
 
@@ -1278,7 +1342,9 @@ export function createConvexDurableTurn(args: {
           edit,
           regeneration,
           approvalResponses,
+          generationInputHash,
           grantDigest,
+          reservationId,
           admissionIssuedAt,
           admissionProof,
         },
@@ -1316,23 +1382,28 @@ export function createConvexDurableTurn(args: {
             code: "APPROVAL_UNRESOLVED",
           })
         }
+        if (conflictCode === "generation_input_changed") {
+          throw new PublicChatHttpError({
+            message:
+              "This chat changed before generation started. Please try again.",
+            statusCode: 409,
+            code: "GENERATION_INPUT_CHANGED",
+          })
+        }
         // `isServerChatId` only rules out local/optimistic prefixes, so a
         // crafted or corrupted id reaches the durable contract here and Convex
         // rejects it with argument validation. That is a request-shape fault:
         // map it to the route's 400 instead of a 500 that leaks Convex error
         // internals. Everything else (concurrency guards, transient failures)
         // passes through unchanged.
-        if (isConvexArgumentValidationError(error)) {
+        const invalidRequest = toInvalidDurableRequestError(error)
+        if (invalidRequest) {
           warnDurable("durable_prepare_argument_rejected", {
             requestId,
             chatId,
             error: describeError(error),
           })
-          throw new PublicChatHttpError({
-            message: "Request does not reference a valid durable chat",
-            statusCode: 400,
-            code: "INVALID_REQUEST",
-          })
+          throw invalidRequest
         }
         throw error
       })
@@ -1498,7 +1569,7 @@ export function createConvexDurableTurn(args: {
             tracker.onChunk(chunk)
           },
 
-          recordStep({ stepNumber, toolCalls, toolResults }) {
+          recordStep({ stepNumber, usage, toolCalls, toolResults }) {
             const invocations: ToolInvocationForPersistence[] = toolCalls.map(
               (call) => {
                 const result = toolResults?.find(
@@ -1526,27 +1597,42 @@ export function createConvexDurableTurn(args: {
               }
             )
 
-            void workerWrite("recordToolInvocations", {
-              messageId: currentMessageId,
-              stepNumber,
-              invocations,
-            }).catch((error: unknown) => {
-              if (noteIfGrantRejection(error, "tool-invocations")) return
-              warnDurable("canonical_tool_invocation_write_failed", {
-                requestId,
-                chatId,
-                runId: currentRunId,
-                error: describeError(error),
+            stepWritePromises.push(
+              workerWrite("recordToolInvocations", {
+                messageId: currentMessageId,
+                stepNumber,
+                ...(usage &&
+                (typeof usage.inputTokens === "number" ||
+                  typeof usage.outputTokens === "number")
+                  ? {
+                      usage: {
+                        inputTokens: usage.inputTokens,
+                        outputTokens: usage.outputTokens,
+                      },
+                    }
+                  : {}),
+                invocations,
+              }).catch((error: unknown) => {
+                if (noteIfGrantRejection(error, "tool-invocations")) return
+                warnDurable("canonical_tool_invocation_write_failed", {
+                  requestId,
+                  chatId,
+                  runId: currentRunId,
+                  error: describeError(error),
+                })
               })
-            })
+            )
           },
 
           noteStreamError(errorMessage, workDurationMs) {
-            void workerWrite("markGenerationRunFailed", {
-              messageId: currentMessageId,
-              error: errorMessage,
-              workDurationMs,
-            }).catch((error: unknown) => {
+            void (async () => {
+              await drainPendingWrites(stepWritePromises)
+              await workerWrite("markGenerationRunFailed", {
+                messageId: currentMessageId,
+                error: errorMessage,
+                workDurationMs,
+              })
+            })().catch((error: unknown) => {
               if (noteIfGrantRejection(error, "stream-error")) return
               warnDurable("durable_run_failed_write_failed", {
                 requestId,
@@ -1558,6 +1644,7 @@ export function createConvexDurableTurn(args: {
           },
 
           async onAbort(reason, workDurationMs) {
+            await drainPendingWrites(stepWritePromises)
             await tracker.flush().catch(() => {})
             await markRunAborted(reason, workDurationMs)
             // The run is settled (or unreachable); the envelope settle that
@@ -1578,7 +1665,12 @@ export function createConvexDurableTurn(args: {
             }
           },
 
-          async settle({ responseMessage, isAborted, finishReason }) {
+          async settle({
+            responseMessage,
+            isAborted,
+            finishReason,
+            titleUsage,
+          }) {
             // Heartbeat policy (gameplan §10 "Runtime terminal convergence"):
             // stay alive through the bounded terminal retries — a mid-retry
             // reaping would race the write — then stop on EVERY exit. A
@@ -1611,17 +1703,14 @@ export function createConvexDurableTurn(args: {
 
               // Bounded: settlement runs inside the route's reserve tail —
               // one worker-write timeout is the most any straggling approval
-              // write may hold it (the writes carry their own catch logging).
+              // or step write may hold it (the writes carry their own catch
+              // logging).
               // The losing timer is cancelled — the common already-settled
               // case must not pin the process for the full timeout.
-              await new Promise<void>((resolve) => {
-                const timer = setTimeout(resolve, WORKER_WRITE_TIMEOUT_MS)
-                timer.unref?.()
-                void Promise.allSettled(approvalWritePromises).then(() => {
-                  clearTimeout(timer)
-                  resolve()
-                })
-              })
+              await drainPendingWrites([
+                ...approvalWritePromises,
+                ...stepWritePromises,
+              ])
               await tracker.flush().catch(() => {})
 
               // Content survival before ANY terminal transition (ADR-0011): the
@@ -1691,6 +1780,7 @@ export function createConvexDurableTurn(args: {
                 ),
                 finishReason: capturedFinish?.finishReason ?? finishReason,
                 usage: capturedFinish?.usage,
+                titleUsage,
                 totalToolCalls: toolCounts.totalToolCalls,
                 failedToolCalls: toolCounts.failedToolCalls,
               })
@@ -1726,6 +1816,7 @@ export function createConvexDurableTurn(args: {
       // not the ordering — is what prevents a stalled write from leaving
       // the loop renewing forever.
       try {
+        await drainPendingWrites(stepWritePromises)
         await withWorkerWriteTimeout(
           workerWrite("markGenerationRunFailed", {
             messageId: currentMessageId,

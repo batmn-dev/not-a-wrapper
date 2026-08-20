@@ -5,6 +5,7 @@ import {
   createErrorResponse,
   excludeSystemRoleMessages,
   isConvexArgumentValidationError,
+  toInvalidDurableRequestError,
 } from "./utils"
 
 describe("isConvexArgumentValidationError", () => {
@@ -17,6 +18,12 @@ describe("isConvexArgumentValidationError", () => {
       false
     )
     expect(isConvexArgumentValidationError("not-an-error")).toBe(false)
+    expect(toInvalidDurableRequestError(convexShape)).toMatchObject({
+      name: "PublicChatHttpError",
+      statusCode: 400,
+      code: "INVALID_REQUEST",
+    })
+    expect(toInvalidDurableRequestError(new Error("stream aborted"))).toBeNull()
   })
 })
 

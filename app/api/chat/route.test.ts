@@ -8,6 +8,7 @@ import {
   validateAndResolveChatCredential,
 } from "./api"
 import { createChatTurnRuntime } from "./chat-turn-runtime"
+import { preflightDurableGenerationInput } from "./durable-generation-input"
 import { PublicChatHttpError } from "./public-http-error"
 import { maxDuration, POST } from "./route"
 
@@ -48,6 +49,10 @@ vi.mock("./chat-turn-runtime", () => ({
   createChatTurnRuntime: vi.fn(),
 }))
 
+vi.mock("./durable-generation-input", () => ({
+  preflightDurableGenerationInput: vi.fn(),
+}))
+
 const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
 const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
 
@@ -62,6 +67,27 @@ function makeRequest(): Request {
       model: "test-model",
     }),
   })
+}
+
+const canonicalMessages = [
+  {
+    id: "canonical-u1",
+    role: "user" as const,
+    parts: [{ type: "text" as const, text: "canonical hello" }],
+  },
+]
+
+function makeGenerationInput() {
+  return {
+    inputHash: "a".repeat(64),
+    messages: canonicalMessages,
+    textFileStats: {
+      convertedCount: 0,
+      failedCount: 0,
+      truncatedCount: 0,
+      skippedCount: 0,
+    },
+  }
 }
 
 describe("/api/chat route", () => {
@@ -86,6 +112,9 @@ describe("/api/chat route", () => {
         source: "byok",
       },
     })
+    vi.mocked(preflightDurableGenerationInput).mockResolvedValue(
+      makeGenerationInput()
+    )
   })
 
   afterEach(() => {
@@ -103,6 +132,7 @@ describe("/api/chat route", () => {
 
   it("preserves check-resolve-increment ordering and passes one credential snapshot to the runtime", async () => {
     const order: string[] = []
+    const generationInput = makeGenerationInput()
     const admission = {
       route: {
         modelId: "test-model",
@@ -120,6 +150,10 @@ describe("/api/chat route", () => {
     } as const
     vi.mocked(checkServerSideUsage).mockImplementation(async () => {
       order.push("check")
+    })
+    vi.mocked(preflightDurableGenerationInput).mockImplementation(async () => {
+      order.push("preflight")
+      return generationInput
     })
     vi.mocked(validateAndResolveChatCredential).mockImplementation(async () => {
       order.push("resolve")
@@ -139,6 +173,7 @@ describe("/api/chat route", () => {
       order.push("runtime")
       expect(args.input.credential).toBe(admission.credential)
       expect(args.input.route).toBe(admission.route)
+      expect(args.input.generationInput).toBe(generationInput)
       return { prepare, toResponse, fail: vi.fn() }
     })
 
@@ -147,6 +182,7 @@ describe("/api/chat route", () => {
     expect(await response.text()).toBe("ok")
     expect(order).toEqual([
       "check",
+      "preflight",
       "resolve",
       "increment",
       "runtime",
@@ -156,8 +192,13 @@ describe("/api/chat route", () => {
     expect(validateAndResolveChatCredential).toHaveBeenCalledWith({
       model: "test-model",
       isAuthenticated: true,
+      workosUserId: "user-1",
       token: "convex-token",
-      messages: expect.any(Array),
+      messages: canonicalMessages,
+      requestId: expect.any(String),
+      chatId: "chat-1",
+      systemPrompt: undefined,
+      enableSearch: false,
     })
   })
 
@@ -234,6 +275,27 @@ describe("/api/chat route", () => {
     const body = await response.text()
     expect(body).not.toContain("ENCRYPTED_CONTENT_HTTP_SENTINEL")
     expect(body).toContain("INTERNAL_ERROR")
+  })
+
+  it("returns the preflight malformed-chat contract before credential resolution", async () => {
+    vi.mocked(preflightDurableGenerationInput).mockRejectedValueOnce(
+      new PublicChatHttpError({
+        message: "Request does not reference a valid durable chat",
+        statusCode: 400,
+        code: "INVALID_REQUEST",
+      })
+    )
+
+    const response = await POST(makeRequest())
+
+    await expect(response.json()).resolves.toEqual({
+      error: "Request does not reference a valid durable chat",
+      code: "INVALID_REQUEST",
+    })
+    expect(response.status).toBe(400)
+    expect(validateAndResolveChatCredential).not.toHaveBeenCalled()
+    expect(incrementServerSideUsage).not.toHaveBeenCalled()
+    expect(createChatTurnRuntime).not.toHaveBeenCalled()
   })
 
   it("returns 400 for malformed JSON without capturing to Sentry", async () => {

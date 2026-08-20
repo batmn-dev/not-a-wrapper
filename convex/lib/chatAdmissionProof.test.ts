@@ -93,6 +93,69 @@ describe("chat admission proof", () => {
     ).toBe(false)
   })
 
+  it("accepts a legacy pre-reservation proof only without a reservation", () => {
+    // Deploy-skew shim (ADR-0021): a signer that predates the reservationId
+    // slot serialized [.., grantDigest, issuedAt] with no reservation slot.
+    // Recreate that signature by signing a payload the CURRENT serializer
+    // renders identically to the legacy shape — i.e. verify against the
+    // exported legacy path via a hand-built HMAC.
+    const legacySerialized = JSON.stringify([
+      "chat-admission-v1",
+      payload.chatId,
+      payload.requestId,
+      payload.model,
+      payload.provider,
+      payload.route
+        ? [
+            payload.route.routeId,
+            payload.route.credentialSource,
+            payload.route.routeReason,
+          ]
+        : null,
+      payload.grantDigest ?? null,
+      payload.issuedAt,
+    ])
+    const legacyProof = hmacSha256Hex(SECRET, legacySerialized)
+
+    expect(
+      verifyChatAdmissionProof(payload, legacyProof, {
+        secret: SECRET,
+        now: NOW,
+      })
+    ).toBe(true)
+    // A reservation-carrying payload must NEVER verify against the legacy
+    // shape — reservations are new-format by construction.
+    expect(
+      verifyChatAdmissionProof(
+        { ...payload, reservationId: "res-1" },
+        legacyProof,
+        { secret: SECRET, now: NOW }
+      )
+    ).toBe(false)
+  })
+
+  it("binds the reservation id into the signed tuple", () => {
+    const withReservation = { ...payload, reservationId: "res-1" }
+    const proof = signChatAdmissionProof(withReservation, SECRET)
+    expect(
+      verifyChatAdmissionProof(withReservation, proof, {
+        secret: SECRET,
+        now: NOW,
+      })
+    ).toBe(true)
+    // Swapping or dropping the reservation invalidates the proof.
+    expect(
+      verifyChatAdmissionProof(
+        { ...payload, reservationId: "res-2" },
+        proof,
+        { secret: SECRET, now: NOW }
+      )
+    ).toBe(false)
+    expect(
+      verifyChatAdmissionProof(payload, proof, { secret: SECRET, now: NOW })
+    ).toBe(false)
+  })
+
   it("rejects malformed proofs and weak secrets", () => {
     expect(
       verifyChatAdmissionProof(payload, "not-a-proof", {

@@ -1,10 +1,27 @@
+import { api } from "@/convex/_generated/api"
+import type { Id } from "@/convex/_generated/dataModel"
 import type { Provider } from "@/lib/provider-identity"
-import { describe, expect, it } from "vitest"
+import { fetchMutation } from "convex/nextjs"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
+  reserveAuthorizedPlatformUsage,
   resolveModelRoute,
   type ApiKeyPreference,
+  type PlatformFundingContext,
+  type ReservePlatformUsageArgs,
   type RouteResolverDeps,
 } from "./model-route-resolver"
+
+vi.mock("convex/nextjs", () => ({
+  fetchMutation: vi.fn(),
+  fetchQuery: vi.fn(),
+}))
+
+const RESERVATION_ID = "res-1" as Id<"usageReservations">
+
+type ReserveBehavior = (
+  args: ReservePlatformUsageArgs
+) => Awaited<ReturnType<RouteResolverDeps["reservePlatformUsage"]>>
 
 // Deterministic fixture deps: real catalog, injected keys and entitlement.
 // "claude-sonnet-5" carries two routes (anthropic direct + openrouter);
@@ -13,12 +30,18 @@ function makeDeps({
   userKeys = {},
   platformKeys = ["openai", "mistral", "openrouter"],
   freeModels = ["gpt-5-mini"],
+  reserve = () => ({ kind: "reserved", reservationId: RESERVATION_ID }),
 }: {
-  userKeys?: Partial<Record<Provider, { key: string; preference: ApiKeyPreference }>>
+  userKeys?: Partial<
+    Record<Provider, { key: string; preference: ApiKeyPreference }>
+  >
   platformKeys?: Provider[]
   freeModels?: string[]
-} = {}): RouteResolverDeps {
+  reserve?: ReserveBehavior
+} = {}): RouteResolverDeps & { reserveCalls: ReservePlatformUsageArgs[] } {
+  const reserveCalls: ReservePlatformUsageArgs[] = []
   return {
+    reserveCalls,
     getKeySettings: async () =>
       Object.entries(userKeys).map(([provider, entry]) => ({
         provider,
@@ -30,10 +53,129 @@ function makeDeps({
     entitlement: {
       isRouteEligible: ({ modelId }) => freeModels.includes(modelId),
     },
+    reservePlatformUsage: async (args) => {
+      reserveCalls.push(args)
+      return reserve(args)
+    },
   }
 }
 
-const authed = { isAuthenticated: true, token: "tok" } as const
+const funding: PlatformFundingContext = {
+  workosUserId: "workos-user-1",
+  requestId: "req-1",
+  chatId: "chat-1",
+  messages: [
+    { id: "u1", role: "user", parts: [{ type: "text", text: "hello" }] },
+  ] as PlatformFundingContext["messages"],
+  toolsLikely: false,
+}
+
+const authed = {
+  isAuthenticated: true,
+  token: "tok",
+  platformFunding: funding,
+} as const
+
+const authorizedReserveArgs: ReservePlatformUsageArgs = {
+  token: "tok",
+  workosUserId: "workos-user-1",
+  requestId: "req-1",
+  chatId: "chat-1",
+  modelId: "gpt-5-mini",
+  routeId: "gpt-5-mini",
+  providerId: "openai",
+  estimatedCredits: 100,
+  estimatedInputTokens: 10,
+  estimatedOutputTokens: 20,
+  titleEstimatedCredits: 5,
+  pricingSnapshot: {
+    revision: "catalog-v1",
+    currency: "USD",
+    primary: {
+      modelId: "gpt-5-mini",
+      routeId: "gpt-5-mini",
+      providerId: "openai",
+      upstreamModelId: "gpt-5-mini",
+      inputCreditsPerMTok: 250_000,
+      outputCreditsPerMTok: 2_000_000,
+    },
+  },
+}
+
+describe("authorized usage reservation rollout", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubEnv(
+      "CHAT_ADMISSION_SECRET",
+      "test-chat-admission-secret-with-at-least-32-bytes"
+    )
+    vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://preview-one.convex.cloud")
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it("falls back to the legacy signature only when the versioned mutation is absent", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    vi.mocked(fetchMutation)
+      .mockRejectedValueOnce(
+        new Error("Function not found: usageAllowance:reserveAuthorized")
+      )
+      .mockResolvedValueOnce({
+        kind: "reserved",
+        reservationId: RESERVATION_ID,
+      } as never)
+
+    await expect(
+      reserveAuthorizedPlatformUsage(authorizedReserveArgs)
+    ).resolves.toEqual({
+      kind: "reserved",
+      reservationId: RESERVATION_ID,
+    })
+
+    expect(fetchMutation).toHaveBeenNthCalledWith(
+      1,
+      api.usageAllowance.reserveAuthorized,
+      expect.objectContaining({
+        requestId: "req-1",
+        authorizationIssuedAt: expect.any(Number),
+        authorizationProof: expect.stringMatching(/^[0-9a-f]{64}$/),
+      }),
+      { token: "tok" }
+    )
+    expect(fetchMutation).toHaveBeenNthCalledWith(
+      2,
+      api.usageAllowance.reserve,
+      expect.not.objectContaining({
+        authorizationIssuedAt: expect.anything(),
+        authorizationProof: expect.anything(),
+        workosUserId: expect.anything(),
+      }),
+      { token: "tok" }
+    )
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("usage_reserve_authorized_endpoint_missing")
+    )
+  })
+
+  it("never downgrades an authorization or runtime failure", async () => {
+    const authorizationError = new Error(
+      "Invalid usage reservation authorization"
+    )
+    vi.mocked(fetchMutation).mockRejectedValueOnce(authorizationError)
+
+    await expect(
+      reserveAuthorizedPlatformUsage(authorizedReserveArgs)
+    ).rejects.toBe(authorizationError)
+    expect(fetchMutation).toHaveBeenCalledTimes(1)
+    expect(fetchMutation).toHaveBeenCalledWith(
+      api.usageAllowance.reserveAuthorized,
+      expect.any(Object),
+      { token: "tok" }
+    )
+  })
+})
 
 describe("resolveModelRoute", () => {
   it("prefers priority BYOK over platform entitlement", async () => {
@@ -55,18 +197,162 @@ describe("resolveModelRoute", () => {
     })
   })
 
-  it("prefers platform entitlement over fallback BYOK", async () => {
+  it("prefers platform entitlement over fallback BYOK and reserves allowance", async () => {
+    const deps = makeDeps({
+      userKeys: { openai: { key: "sk-user", preference: "fallback" } },
+    })
     const result = await resolveModelRoute(
       { modelId: "gpt-5-mini", ...authed },
-      makeDeps({
-        userKeys: { openai: { key: "sk-user", preference: "fallback" } },
-      })
+      deps
     )
     expect(result).toMatchObject({
       ok: true,
       apiKey: "platform-openai",
+      reservationId: RESERVATION_ID,
       route: { credentialSource: "platform", routeReason: "platform" },
     })
+    expect(deps.reserveCalls).toHaveLength(1)
+    expect(deps.reserveCalls[0]).toMatchObject({
+      workosUserId: "workos-user-1",
+      requestId: "req-1",
+      chatId: "chat-1",
+      modelId: "gpt-5-mini",
+      routeId: "gpt-5-mini",
+      providerId: "openai",
+    })
+    expect(deps.reserveCalls[0]!.estimatedCredits).toBeGreaterThan(0)
+    expect(deps.reserveCalls[0]!.pricingSnapshot.primary.routeId).toBe(
+      "gpt-5-mini"
+    )
+  })
+
+  it("priority BYOK bypasses platform reservation entirely", async () => {
+    const deps = makeDeps({
+      userKeys: { openai: { key: "sk-user", preference: "priority" } },
+    })
+    const result = await resolveModelRoute(
+      { modelId: "gpt-5-mini", ...authed },
+      deps
+    )
+    expect(result).toMatchObject({
+      ok: true,
+      apiKey: "sk-user",
+      route: { credentialSource: "byok", routeReason: "priority_byok" },
+    })
+    expect(deps.reserveCalls).toHaveLength(0)
+    expect(
+      (result as { reservationId?: unknown }).reservationId
+    ).toBeUndefined()
+  })
+
+  it("falls through to fallback BYOK when allowance is insufficient", async () => {
+    const deps = makeDeps({
+      userKeys: { openai: { key: "sk-user", preference: "fallback" } },
+      reserve: () => ({
+        kind: "insufficient_allowance",
+        availableCredits: 0,
+        requiredCredits: 100,
+      }),
+    })
+    const result = await resolveModelRoute(
+      { modelId: "gpt-5-mini", ...authed },
+      deps
+    )
+    expect(result).toMatchObject({
+      ok: true,
+      apiKey: "sk-user",
+      route: { credentialSource: "byok", routeReason: "fallback_byok" },
+    })
+    expect(deps.reserveCalls).toHaveLength(1)
+  })
+
+  it("fails typed insufficient_allowance when no BYOK route can serve", async () => {
+    const deps = makeDeps({
+      reserve: () => ({
+        kind: "insufficient_allowance",
+        availableCredits: 0,
+        requiredCredits: 100,
+      }),
+    })
+    const result = await resolveModelRoute(
+      { modelId: "gpt-5-mini", ...authed },
+      deps
+    )
+    expect(result).toMatchObject({
+      ok: false,
+      reason: "insufficient_allowance",
+      keyProviders: ["openai"],
+    })
+  })
+
+  it("tries a later platform candidate after a failed reservation", async () => {
+    // Both claude-sonnet-5 routes are platform-listed; the direct anthropic
+    // route's reservation is denied, the (cheaper) OpenRouter route lands.
+    const deps = makeDeps({
+      platformKeys: ["anthropic", "openrouter"],
+      freeModels: ["claude-sonnet-5"],
+      reserve: (args) =>
+        args.providerId === "anthropic"
+          ? {
+              kind: "insufficient_allowance",
+              availableCredits: 10,
+              requiredCredits: 100,
+            }
+          : { kind: "reserved", reservationId: RESERVATION_ID },
+    })
+    const result = await resolveModelRoute(
+      { modelId: "claude-sonnet-5", ...authed },
+      deps
+    )
+    expect(result).toMatchObject({
+      ok: true,
+      reservationId: RESERVATION_ID,
+      route: {
+        providerId: "openrouter",
+        routeId: "openrouter:anthropic/claude-sonnet-5",
+        credentialSource: "platform",
+      },
+    })
+    expect(deps.reserveCalls.map((call) => call.providerId)).toEqual([
+      "anthropic",
+      "openrouter",
+    ])
+  })
+
+  it("treats an idempotent reservation replay as admission", async () => {
+    const deps = makeDeps({
+      reserve: () => ({
+        kind: "idempotent_replay",
+        reservationId: RESERVATION_ID,
+      }),
+    })
+    const result = await resolveModelRoute(
+      { modelId: "gpt-5-mini", ...authed },
+      deps
+    )
+    expect(result).toMatchObject({
+      ok: true,
+      reservationId: RESERVATION_ID,
+      route: { credentialSource: "platform" },
+    })
+  })
+
+  it("skips the platform tier when no funding context exists", async () => {
+    // Authenticated turn against a non-durable chat: reservation/settlement
+    // are impossible, so platform candidates are ineligible (ADR-0021).
+    const deps = makeDeps({
+      userKeys: { openai: { key: "sk-user", preference: "fallback" } },
+    })
+    const result = await resolveModelRoute(
+      { modelId: "gpt-5-mini", isAuthenticated: true, token: "tok" },
+      deps
+    )
+    expect(result).toMatchObject({
+      ok: true,
+      apiKey: "sk-user",
+      route: { credentialSource: "byok", routeReason: "fallback_byok" },
+    })
+    expect(deps.reserveCalls).toHaveLength(0)
   })
 
   it("uses fallback BYOK when the platform is ineligible", async () => {

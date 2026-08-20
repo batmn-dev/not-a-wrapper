@@ -1,6 +1,12 @@
 import { defineSchema, defineTable } from "convex/server"
 import { v } from "convex/values"
 import { vToolInvocationStreamMetadata } from "./lib/messageMetadata"
+import {
+  vLedgerEntryType,
+  vPricingSnapshot,
+  vSettlementBasis,
+  vUsageReservationStatus,
+} from "./lib/usageValidators"
 
 const messageStatus = v.union(
   v.literal("submitted"),
@@ -460,6 +466,102 @@ export default defineSchema({
     .index("by_chat", ["chatId"])
     .index("by_user", ["userId"])
     .index("by_storage", ["storageId"]),
+
+  // --- Platform usage allowance (ADR-0021) ---
+  // The materialized balance is the fast read model; every change is
+  // evidenced by an append-only usageLedgerEntries row. All credit amounts
+  // are integers: 1 credit = 1 micro-USD of platform cost.
+
+  // One included-allowance bucket per user per plan period (UTC month),
+  // materialized lazily. Invariant (pinned by tests):
+  //   availableCredits = grantedCredits - spentCredits - reservedCredits
+  // Settlement may drive availableCredits negative (overruns are recorded,
+  // never clamped); a negative balance blocks new reservations until the
+  // next period's grant. bucketKind is a union of one today so a purchased
+  // "overage" bucket can be added later without redesigning reserve/settle.
+  usageBuckets: defineTable({
+    userId: v.id("users"),
+    bucketKind: v.literal("included"),
+    periodKey: v.string(), // e.g. "2026-08"
+    periodStart: v.number(),
+    periodEnd: v.number(),
+    planId: v.string(),
+    grantedCredits: v.number(),
+    availableCredits: v.number(),
+    reservedCredits: v.number(),
+    spentCredits: v.number(),
+    status: v.literal("active"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_kind_period", ["userId", "bucketKind", "periodKey"])
+    .index("by_user", ["userId"]),
+
+  // One durable record per platform-funded generation request. Keyed by the
+  // authenticated (userId, requestId) before the run exists; attached to its
+  // generationRunId transactionally inside prepareGeneration (the id rides
+  // the signed admission proof, so a forged attach is impossible). The
+  // pricing snapshot pins reservation-time rates: settlement always prices
+  // with the SAME snapshot even if the catalog changed mid-request. Never
+  // carries key material or message content.
+  usageReservations: defineTable({
+    userId: v.id("users"),
+    requestId: v.string(),
+    bucketId: v.id("usageBuckets"),
+    generationRunId: v.optional(v.id("generationRuns")),
+    chatId: v.string(),
+    modelId: v.string(),
+    routeId: v.string(),
+    providerId: v.string(),
+    status: vUsageReservationStatus,
+    estimatedCredits: v.number(),
+    estimatedInputTokens: v.optional(v.number()),
+    estimatedOutputTokens: v.optional(v.number()),
+    reservedCredits: v.number(),
+    actualCredits: v.optional(v.number()),
+    settlementBasis: v.optional(vSettlementBasis),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    titleCredits: v.optional(v.number()),
+    /** Title component of the estimate — the conservative fallback charge
+     * when a title call may have run but its usage never arrived. */
+    titleEstimatedCredits: v.optional(v.number()),
+    pricingSnapshot: vPricingSnapshot,
+    payloadFingerprint: v.string(),
+    reservedAt: v.number(),
+    attachedAt: v.optional(v.number()),
+    settledAt: v.optional(v.number()),
+    releasedAt: v.optional(v.number()),
+    terminalReason: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_user_request", ["userId", "requestId"])
+    .index("by_run", ["generationRunId"])
+    .index("by_status_reserved_at", ["status", "reservedAt"])
+    .index("by_user_reserved_at", ["userId", "reservedAt"]),
+
+  // Append-only accounting evidence. Rows are NEVER updated or deleted in
+  // normal operation; corrections are compensating "adjustment" entries.
+  // eventKey is the deterministic idempotency identity (grant:{user}:{period},
+  // reserve:{reservationId}, ...) enforced by an indexed read inside the
+  // inserting mutation.
+  usageLedgerEntries: defineTable({
+    userId: v.id("users"),
+    bucketId: v.id("usageBuckets"),
+    reservationId: v.optional(v.id("usageReservations")),
+    eventKey: v.string(),
+    type: vLedgerEntryType,
+    deltaAvailableCredits: v.number(),
+    deltaReservedCredits: v.number(),
+    deltaSpentCredits: v.number(),
+    /** Plan or pricing revision relevant to the event, when applicable. */
+    revision: v.optional(v.string()),
+    reason: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_event_key", ["eventKey"])
+    .index("by_bucket", ["bucketId"])
+    .index("by_user_created", ["userId", "createdAt"]),
 
   // Anonymous usage tracking (for rate limiting unauthenticated users)
   anonymousUsage: defineTable({

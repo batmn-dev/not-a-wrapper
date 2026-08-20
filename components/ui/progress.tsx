@@ -10,7 +10,7 @@ function Progress({
     <ProgressPrimitive.Root data-slot="progress" value={value} {...props}>
       <ProgressPrimitive.Track
         className={cn(
-          "bg-primary/20 relative h-2 w-full overflow-hidden rounded-full",
+          "bg-primary/20 data-[indeterminate]:bg-muted relative h-2 w-full overflow-hidden rounded-full",
           className
         )}
       >
@@ -18,7 +18,7 @@ function Progress({
             transform would re-hardcode the 0–100 assumption. */}
         <ProgressPrimitive.Indicator
           data-slot="progress-indicator"
-          className="bg-primary h-full transition-all"
+          className="bg-primary h-full transition-all data-[indeterminate]:hidden"
         />
       </ProgressPrimitive.Track>
     </ProgressPrimitive.Root>

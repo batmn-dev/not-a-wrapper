@@ -558,14 +558,18 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     ])
     expect(wire.calls.at(-1)?.op).toBe("markGenerationRunCompleted")
 
+    // EVERY step records durably (ADR-0021): the four tool steps carry their
+    // invocations, and the final text-only step still writes its per-step
+    // usage as abort/failure settlement evidence.
     const invocationWrites = wireCalls(wire, "recordToolInvocations")
-    expect(invocationWrites).toHaveLength(TOOL_STEPS)
+    expect(invocationWrites).toHaveLength(TOOL_STEPS + 1)
     expect(
       invocationWrites.map((call) => call.args.stepNumber)
-    ).toEqual([1, 2, 3, 4])
+    ).toEqual([1, 2, 3, 4, 5])
     expect(invocationWrites[0].args).toMatchObject({
       runId: "run1",
       messageId: "msg1",
+      usage: { inputTokens: 10, outputTokens: 5 },
       invocations: [
         expect.objectContaining({
           toolCallId: "call-1",
@@ -574,6 +578,12 @@ describe("chat turn runtime × real ai@7 streamText", () => {
           status: "completed",
         }),
       ],
+    })
+    const finalStepWrite = invocationWrites.at(-1)!
+    expect(finalStepWrite.args).toMatchObject({
+      stepNumber: TOOL_STEPS + 1,
+      invocations: [],
+      usage: { inputTokens: 10, outputTokens: 5 },
     })
 
     expect(

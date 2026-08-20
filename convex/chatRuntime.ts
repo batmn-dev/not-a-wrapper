@@ -24,7 +24,10 @@ import {
   isWorkerExecutingStatus,
   RESOLVED_APPROVAL_CONTINUATION_GRACE_MS,
 } from "./domain/generation_run_liveness"
-import { createMessageBranchWriter } from "./domain/message_branch_writes"
+import {
+  createMessageBranchWriter,
+  planSelectedPathAfterUserMessage,
+} from "./domain/message_branch_writes"
 import {
   createBranchContext,
   getEffectiveParentIdFromContext,
@@ -53,6 +56,7 @@ import {
 } from "./lib/auth"
 import {
   authenticatedQuery,
+  ownedChatQuery,
   ownedGenerationRunMutation,
 } from "./lib/authedFunctions"
 import {
@@ -63,6 +67,12 @@ import {
   vToolInvocationStreamMetadata,
   type PersistedMessageMetadata,
 } from "./lib/messageMetadata"
+import { sha256Hex, timingSafeEqualHex } from "./lib/sha256"
+import {
+  attachReservationToRun,
+  settleUsageForTerminalRun,
+  type TitleUsageEvidence,
+} from "./usageAllowance"
 
 const MAX_PREVIEW_LENGTH = 500
 
@@ -96,10 +106,19 @@ const vUsage = v.object({
 })
 
 /**
- * One declaration per generation-run write op. The user-token mutations below
- * and their grant-authorized worker twins (convex/chatRuntimeWorker.ts) spread
- * these same shapes, so a field added or renamed on one authenticator is a
- * compile + validator change on both — the Chat turn wire contract pattern.
+ * One declaration per generation-run write op. The grant-authorized worker
+ * mutations (convex/chatRuntimeWorker.ts) spread these shapes, so a field
+ * added or renamed here is a compile + validator change on the wire — the
+ * Chat turn wire contract pattern.
+ *
+ * These ops have NO public user-token registrations. Post-prepare run writes
+ * travel ONLY the Execution-grant worker wire (ADR-0011): since ADR-0021,
+ * `markGenerationRunCompleted.usage` is the authoritative settlement input,
+ * so a user-token twin would let a chat owner settle their own platform
+ * reservation at a self-declared (near-zero) cost. The user token authorizes
+ * admission (`prepareGeneration`) and Stop only; `stopGenerationRun` stays
+ * public because it carries no usage input — settlement evidence still
+ * arrives via the grant wire or the reaper's boundary rule.
  */
 export const generationRunWriteArgs = {
   markGenerationWorkStarted: {
@@ -119,6 +138,9 @@ export const generationRunWriteArgs = {
   recordToolInvocations: {
     messageId: v.id("messages"),
     stepNumber: v.optional(v.number()),
+    // Per-step token usage — durable evidence so abort/failure settlement
+    // does not depend on the happy-path onEnd aggregate (ADR-0021).
+    usage: v.optional(vUsage),
     invocations: v.array(
       v.object({
         toolCallId: v.string(),
@@ -149,6 +171,13 @@ export const generationRunWriteArgs = {
     metadata: v.optional(vToolInvocationStreamMetadata),
     finishReason: v.optional(v.string()),
     usage: v.optional(vUsage),
+    // Title-call evidence for allowance settlement (ADR-0021): observed
+    // usage, "not-run" (no title requested this turn), or "unknown" (a title
+    // call may have run but its usage never arrived — the title component
+    // settles at its reservation-time estimate, visibly marked).
+    titleUsage: v.optional(
+      v.union(vUsage, v.literal("not-run"), v.literal("unknown"))
+    ),
     totalToolCalls: v.optional(v.number()),
     failedToolCalls: v.optional(v.number()),
   },
@@ -652,11 +681,7 @@ async function applyLifecycleVerdict(
   now: number,
   explicitWorkDurationMs?: number
 ): Promise<Id<"messages"> | undefined> {
-  const workDurationMs = resolveWorkDurationMs(
-    run,
-    now,
-    explicitWorkDurationMs
-  )
+  const workDurationMs = resolveWorkDurationMs(run, now, explicitWorkDurationMs)
   let assistantMessageId = run.assistantMessageId
   if (resolved) {
     const survivingId = await applyMessageResolution(
@@ -702,6 +727,22 @@ async function applyLifecycleVerdict(
   // run's live spinner.
   await projectRunStatusToChat(ctx, run, verdict.run.status, now)
 
+  // Allowance accounting rides the SAME transaction as the terminal commit
+  // (ADR-0021): every lifecycle-verdict terminal (fail/abort/stop/supersede/
+  // lease-expired/approval-expired/continuation-lost) applies the provider-
+  // boundary rule — release before workStartedAt, settle observed or
+  // estimated usage after. Idempotent; BYOK/anonymous runs have no
+  // reservation and no-op structurally.
+  if (verdict.run.settle) {
+    await settleUsageForTerminalRun(
+      ctx,
+      run,
+      {},
+      verdict.run.terminalReason ?? verdict.run.status,
+      verdict.run.terminalReason
+    )
+  }
+
   return assistantMessageId
 }
 
@@ -716,15 +757,11 @@ function resolveWorkDurationMs(
   // Only a worker-executing run has an active provider segment. Completion
   // freezes workDurationMs before an approval pause, so later Stop/reaper
   // settlement must not add the human wait from the retained start marker.
-  if (
-    run.workStartedAt === undefined ||
-    !isWorkerExecutingStatus(run.status)
-  ) {
+  if (run.workStartedAt === undefined || !isWorkerExecutingStatus(run.status)) {
     return run.workDurationMs
   }
   return (
-    Math.max(0, run.workDurationMs ?? 0) +
-    Math.max(0, now - run.workStartedAt)
+    Math.max(0, run.workDurationMs ?? 0) + Math.max(0, now - run.workStartedAt)
   )
 }
 
@@ -838,6 +875,15 @@ async function closeSupersededGenerationsForChat(
             ...LEASE_CLEAR,
             assistantMessageId: supersededMessageId,
           })
+          if (verdict.run.settle) {
+            await settleUsageForTerminalRun(
+              ctx,
+              run,
+              {},
+              "superseded",
+              verdict.run.terminalReason
+            )
+          }
         }
       }
     }
@@ -918,20 +964,56 @@ export async function applyRegenerationIntentForGeneration(
   },
   now: number
 ) {
+  const currentMessages = await listMessages(ctx, args.chatId)
+  const regenerationPlan = resolveRegenerationInputPlan(
+    currentMessages,
+    args.regeneration
+  )
+
+  await denyPendingApprovalsForChat(
+    ctx,
+    args.chatId,
+    owner.user._id,
+    "auto-denied: new generation started"
+  )
+
+  const assistantMessage = await createMessageBranchWriter(ctx, {
+    chatId: args.chatId,
+    now,
+  }).writeAssistantPlaceholder({
+    generationRunId: args.runId,
+    requestId: args.requestId,
+    model: args.model,
+    provider: args.provider,
+    replaces: regenerationPlan.targetMessage._id,
+  })
+  const assistantMessageId = assistantMessage._id
+  const assistantOrder = assistantMessage.orderId
+
+  return {
+    assistantMessageId,
+    assistantOrder,
+    messages: regenerationPlan.messages,
+  }
+}
+
+function resolveRegenerationInputPlan(
+  currentMessages: Doc<"messages">[],
+  regeneration: GenerationRegenerationIntent
+) {
   // Guard contract: count the RAW projection — the same derivation the
   // client read (messages.ts) rendered from — deliberately un-normalized.
   // Normalization happens inside the Message branch writer AFTER this guard;
   // a normalize-before-guard pass is the "falsely rejected after a rapid
   // multi-branch session" bug class.
-  const currentMessages = await listMessages(ctx, args.chatId)
   const selectedMessages = getVisibleSelectedMessages(currentMessages)
-  if (selectedMessages.length !== args.regeneration.expectedChatVersion) {
+  if (selectedMessages.length !== regeneration.expectedChatVersion) {
     throw new Error("Chat changed since regeneration started")
   }
 
   const targetIndex = findMessageIndexByUiId(
     selectedMessages,
-    args.regeneration.targetAssistantMessageId
+    regeneration.targetAssistantMessageId
   )
   if (targetIndex === -1) throw new Error("Regeneration target not found")
 
@@ -940,7 +1022,7 @@ export async function applyRegenerationIntentForGeneration(
     throw new Error("Regeneration target must be an assistant message")
   }
 
-  if (targetMessage.createdAt !== args.regeneration.targetAssistantCreatedAt) {
+  if (targetMessage.createdAt !== regeneration.targetAssistantCreatedAt) {
     throw new Error("Regeneration target version changed")
   }
 
@@ -962,7 +1044,7 @@ export async function applyRegenerationIntentForGeneration(
 
   const requestedPrecedingUser = findMessageByUiId(
     selectedMessages,
-    args.regeneration.precedingUserMessageId
+    regeneration.precedingUserMessageId
   )
   const pairedUser = selectedMessages[pairedUserIndex]
   if (
@@ -974,29 +1056,8 @@ export async function applyRegenerationIntentForGeneration(
     throw new Error("Regeneration preceding user message mismatch")
   }
 
-  await denyPendingApprovalsForChat(
-    ctx,
-    args.chatId,
-    owner.user._id,
-    "auto-denied: new generation started"
-  )
-
-  const assistantMessage = await createMessageBranchWriter(ctx, {
-    chatId: args.chatId,
-    now,
-  }).writeAssistantPlaceholder({
-    generationRunId: args.runId,
-    requestId: args.requestId,
-    model: args.model,
-    provider: args.provider,
-    replaces: targetMessage._id,
-  })
-  const assistantMessageId = assistantMessage._id
-  const assistantOrder = assistantMessage.orderId
-
   return {
-    assistantMessageId,
-    assistantOrder,
+    targetMessage,
     messages: projectModelHistoryMessages(
       selectedMessages.slice(0, pairedUserIndex + 1)
     ),
@@ -1015,45 +1076,8 @@ export async function applyEditIntentForGeneration(
   },
   now: number
 ): Promise<number | undefined> {
-  // Same guard contract as the regeneration guard above: raw projection,
-  // matching the client's rendered count; never normalize before guarding.
   const currentMessages = await listMessages(ctx, args.chatId)
-  const selectedMessages = getVisibleSelectedMessages(currentMessages)
-  if (selectedMessages.length !== args.edit.expectedChatVersion) {
-    throw new Error("Chat changed since edit started")
-  }
-
-  const editedMessage = findMessageByUiId(
-    selectedMessages,
-    args.edit.editedMessageId
-  )
-  const replacementMessage = currentMessages.find(
-    (message) =>
-      message.role === "user" &&
-      message.clientMessageId === args.edit.replacementMessage.id
-  )
-
-  if (!editedMessage && !replacementMessage) {
-    throw new Error("Edited message not found")
-  }
-
-  if (editedMessage && editedMessage.role !== "user") {
-    throw new Error("Edited message must be a user message")
-  }
-
-  if (
-    editedMessage &&
-    editedMessage.createdAt !== args.edit.editCutoffTimestamp
-  ) {
-    throw new Error("Edited message version changed")
-  }
-
-  const firstSelectedUserMessage = selectedMessages.find(
-    (message) => message.role === "user"
-  )
-  const isEditingFirstSelectedUserMessage =
-    editedMessage !== undefined &&
-    firstSelectedUserMessage?._id === editedMessage._id
+  const editPlan = resolveEditInputPlan(currentMessages, args.edit)
 
   await createMessageBranchWriter(ctx, {
     chatId: args.chatId,
@@ -1066,12 +1090,12 @@ export async function applyEditIntentForGeneration(
     requestId: args.requestId,
     model: args.model,
     provider: args.provider,
-    replaces: editedMessage?._id,
+    replaces: editPlan.editedMessage?._id,
   })
 
   if (
     args.edit.regenerateTitle &&
-    isEditingFirstSelectedUserMessage &&
+    editPlan.isEditingFirstSelectedUserMessage &&
     owner.chat.titleSource !== "user"
   ) {
     const titleGeneration = (owner.chat.titleGeneration ?? 0) + 1
@@ -1084,6 +1108,54 @@ export async function applyEditIntentForGeneration(
   }
 
   return undefined
+}
+
+function resolveEditInputPlan(
+  currentMessages: Doc<"messages">[],
+  edit: GenerationEditIntent
+) {
+  // Same guard contract as the regeneration guard above: raw projection,
+  // matching the client's rendered count; never normalize before guarding.
+  const selectedMessages = getVisibleSelectedMessages(currentMessages)
+  if (selectedMessages.length !== edit.expectedChatVersion) {
+    throw new Error("Chat changed since edit started")
+  }
+
+  const editedMessage = findMessageByUiId(
+    selectedMessages,
+    edit.editedMessageId
+  )
+  const replacementMessage = currentMessages.find(
+    (message) =>
+      message.role === "user" &&
+      message.clientMessageId === edit.replacementMessage.id
+  )
+
+  if (!editedMessage && !replacementMessage) {
+    throw new Error("Edited message not found")
+  }
+
+  if (editedMessage && editedMessage.role !== "user") {
+    throw new Error("Edited message must be a user message")
+  }
+
+  if (editedMessage && editedMessage.createdAt !== edit.editCutoffTimestamp) {
+    throw new Error("Edited message version changed")
+  }
+
+  const firstSelectedUserMessage = selectedMessages.find(
+    (message) => message.role === "user"
+  )
+  const isEditingFirstSelectedUserMessage =
+    editedMessage !== undefined &&
+    firstSelectedUserMessage?._id === editedMessage._id
+
+  return {
+    selectedMessages,
+    editedMessage,
+    replacementMessage,
+    isEditingFirstSelectedUserMessage,
+  }
 }
 
 function applyApprovalResponseToParts(
@@ -1272,6 +1344,15 @@ export async function denyPendingApprovalsForChat(
           ...grantRevocationForStatus(verdict.run.status),
           ...LEASE_CLEAR,
         })
+        if (verdict.run.settle) {
+          await settleUsageForTerminalRun(
+            ctx,
+            run,
+            {},
+            "approvals_denied",
+            verdict.run.terminalReason
+          )
+        }
       }
     }
   }
@@ -1435,6 +1516,17 @@ export async function applyApprovalResponses(
       ...grantRevocationForStatus(verdict.run.status),
       ...LEASE_CLEAR,
     })
+    // Normally settled at the approval pause (the completion-downgrade write);
+    // this defensive call only lands when that settlement never arrived.
+    if (verdict.run.settle) {
+      await settleUsageForTerminalRun(
+        ctx,
+        run,
+        {},
+        "approvals_resolved",
+        verdict.run.terminalReason
+      )
+    }
   }
 
   return updatedMessage
@@ -1450,6 +1542,229 @@ type GenerationApprovalResponse = {
   approved: boolean
   reason?: string
 }
+
+type GenerationInputPlanArgs = {
+  chatId: Id<"chats">
+  expectedVisibleMessageCount?: number
+  tailMessageId?: string
+  latestUserMessage?: {
+    id: string
+    role: "user" | "assistant" | "system" | "data"
+    content?: string
+    parts: unknown
+  }
+  edit?: GenerationEditIntent
+  regeneration?: GenerationRegenerationIntent
+  approvalResponses?: GenerationApprovalResponse[]
+}
+
+export type GenerationInputPlan = {
+  inputHash: string
+  messages: Doc<"messages">[]
+  pinnedProvider?: string
+}
+
+function validateGenerationInputIntent(args: GenerationInputPlanArgs): void {
+  const approvalResponses = args.approvalResponses ?? []
+  if (args.edit && args.regeneration) {
+    throw new Error("Regeneration cannot be combined with edit generation")
+  }
+  if (args.regeneration && args.latestUserMessage) {
+    throw new Error("Regeneration cannot include a latest user message")
+  }
+  if ((args.edit || args.regeneration) && approvalResponses.length > 0) {
+    throw new Error("Generation cannot continue pending approvals")
+  }
+}
+
+function generationInputHash(messages: Doc<"messages">[]): string {
+  return sha256Hex(
+    JSON.stringify([
+      "generation-input-v1",
+      messages.map((message) => [
+        message.clientMessageId ?? String(message._id),
+        message.role,
+        message.content,
+        message.parts,
+      ]),
+    ])
+  )
+}
+
+async function planApprovalInput(
+  ctx: QueryCtx | MutationCtx,
+  owner: AuthenticatedChatOwner,
+  messages: Doc<"messages">[],
+  responses: GenerationApprovalResponse[],
+  expectedProvider?: string
+): Promise<{ messages: Doc<"messages">[]; pinnedProvider?: string }> {
+  if (responses.length === 0) return { messages }
+
+  let plannedMessages = messages
+  let pinnedProvider: string | undefined
+  for (const response of responses) {
+    const approval = await ctx.db
+      .query("toolApprovalRequests")
+      .withIndex("by_approval", (q) => q.eq("approvalId", response.approvalId))
+      .unique()
+    if (
+      !approval ||
+      approval.chatId !== owner.chat._id ||
+      approval.userId !== owner.user._id ||
+      approval.toolCallId !== response.toolCallId ||
+      approval.toolName !== response.toolName
+    ) {
+      throw new ConvexError({
+        code: "approval_continuation_conflict",
+        message: "Approval continuation does not match the paused tool call",
+      })
+    }
+
+    const approvalRun = await ctx.db.get(approval.runId)
+    if (!approvalRun || approvalRun.chatId !== owner.chat._id) {
+      throw new ConvexError({
+        code: "approval_provider_mismatch",
+        message: "Approval continuation provider changed",
+      })
+    }
+    if (
+      (expectedProvider && approvalRun.provider !== expectedProvider) ||
+      (pinnedProvider && approvalRun.provider !== pinnedProvider)
+    ) {
+      throw new ConvexError({
+        code: "approval_provider_mismatch",
+        message: "Approval continuation provider changed",
+      })
+    }
+    pinnedProvider = approvalRun.provider
+
+    const canonicalDecision = resolveCanonicalApprovalDecision(
+      approval,
+      response
+    )
+    const message = findMessageByUiId(plannedMessages, response.messageId)
+    if (!message || message.chatId !== owner.chat._id) {
+      throw new ConvexError({
+        code: "approval_continuation_conflict",
+        message: "Approval continuation does not match a message in this chat",
+      })
+    }
+    plannedMessages = plannedMessages.map((candidate) =>
+      candidate._id === message._id
+        ? {
+            ...candidate,
+            parts: applyApprovalResponseToParts(candidate.parts, {
+              ...response,
+              approved: canonicalDecision.approved,
+              reason: canonicalDecision.reason,
+            }),
+            status: "streaming" as const,
+          }
+        : candidate
+    )
+  }
+
+  return { messages: plannedMessages, pinnedProvider }
+}
+
+/**
+ * Read-only source of truth for the provider input of one durable turn. The
+ * route reserves against this plan; `prepareGeneration` recomputes it inside
+ * its transaction before any write and rejects a stale hash.
+ */
+export async function planGenerationInputForChat(
+  ctx: QueryCtx | MutationCtx,
+  owner: AuthenticatedChatOwner,
+  args: GenerationInputPlanArgs,
+  options: { continuationProvider?: string } = {}
+): Promise<GenerationInputPlan> {
+  validateGenerationInputIntent(args)
+  const currentMessages = await listMessages(ctx, args.chatId)
+  const approvalResponses = args.approvalResponses ?? []
+  let modelHistory: Doc<"messages">[]
+  let pinnedProvider: string | undefined
+
+  if (args.regeneration) {
+    modelHistory = resolveRegenerationInputPlan(
+      currentMessages,
+      args.regeneration
+    ).messages
+  } else if (args.edit) {
+    const editPlan = resolveEditInputPlan(currentMessages, args.edit)
+    modelHistory = projectModelHistoryMessages(
+      planSelectedPathAfterUserMessage(currentMessages, {
+        chatId: args.chatId,
+        now:
+          editPlan.editedMessage?.createdAt ??
+          (currentMessages.at(-1)?.createdAt ?? 0) + 1,
+        input: {
+          clientMessageId: args.edit.replacementMessage.id,
+          userId: owner.user._id,
+          content: args.edit.replacementMessage.content,
+          parts: args.edit.replacementMessage.parts,
+          replaces: editPlan.editedMessage?._id,
+        },
+      })
+    )
+  } else if (approvalResponses.length > 0) {
+    const approvalPlan = await planApprovalInput(
+      ctx,
+      owner,
+      currentMessages,
+      approvalResponses,
+      options.continuationProvider
+    )
+    pinnedProvider = approvalPlan.pinnedProvider
+    modelHistory = projectModelHistoryMessages(
+      getSelectedPath(approvalPlan.messages)
+    )
+  } else if (args.latestUserMessage) {
+    validateSelectedPathToken(currentMessages, {
+      expectedVisibleMessageCount: args.expectedVisibleMessageCount,
+      tailMessageId: args.tailMessageId,
+    })
+    modelHistory = projectModelHistoryMessages(
+      planSelectedPathAfterUserMessage(currentMessages, {
+        chatId: args.chatId,
+        now: currentMessages.at(-1)?.createdAt ?? 0,
+        input: {
+          clientMessageId: args.latestUserMessage.id,
+          userId: owner.user._id,
+          content:
+            args.latestUserMessage.content ??
+            extractTextFromMessageParts(args.latestUserMessage.parts),
+          parts: args.latestUserMessage.parts,
+        },
+      })
+    )
+  } else {
+    modelHistory = projectModelHistoryMessages(getSelectedPath(currentMessages))
+  }
+
+  return {
+    inputHash: generationInputHash(modelHistory),
+    messages: modelHistory,
+    ...(pinnedProvider ? { pinnedProvider } : {}),
+  }
+}
+
+export const planGenerationInput = ownedChatQuery({
+  args: {
+    expectedVisibleMessageCount: v.optional(v.number()),
+    tailMessageId: v.optional(v.string()),
+    latestUserMessage: v.optional(vStoredMessage),
+    edit: v.optional(vEditIntent),
+    regeneration: v.optional(vRegenerationIntent),
+    approvalResponses: v.optional(v.array(vApprovalResponse)),
+  },
+  returns: v.object({
+    inputHash: v.string(),
+    messages: v.array(v.any()),
+    pinnedProvider: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) =>
+    planGenerationInputForChat(ctx, { chat: ctx.chat, user: ctx.user }, args),
+})
 
 type GenerationRouteReceipt = ChatAdmissionRouteReceipt
 
@@ -1471,8 +1786,17 @@ type PrepareGenerationForChatArgs = {
   edit?: GenerationEditIntent
   regeneration?: GenerationRegenerationIntent
   approvalResponses?: GenerationApprovalResponse[]
+  /** Canonical durable-input plan hash confirmed before prepare mutates state. */
+  generationInputHash?: string
   /** SHA-256 hex digest of the run-scoped worker secret (ADR-0011). */
   grantDigest?: string
+  /**
+   * Platform-usage reservation to attach to the run (ADR-0021). Verified by
+   * the signed admission proof; present exactly when the route resolver
+   * reserved platform allowance for this request. Attach happens inside this
+   * transaction, so a platform-funded run can never exist unaccounted.
+   */
+  reservationId?: Id<"usageReservations">
 }
 
 export async function prepareGenerationForChat(
@@ -1483,16 +1807,17 @@ export async function prepareGenerationForChat(
   const now = nowMs()
   const approvalResponses = args.approvalResponses ?? []
 
-  if (args.edit && args.regeneration) {
-    throw new Error("Regeneration cannot be combined with edit generation")
-  }
-
-  if (args.regeneration && args.latestUserMessage) {
-    throw new Error("Regeneration cannot include a latest user message")
-  }
-
-  if ((args.edit || args.regeneration) && approvalResponses.length > 0) {
-    throw new Error("Generation cannot continue pending approvals")
+  validateGenerationInputIntent(args)
+  if (args.generationInputHash) {
+    const currentPlan = await planGenerationInputForChat(ctx, owner, args, {
+      continuationProvider: args.provider,
+    })
+    if (!timingSafeEqualHex(currentPlan.inputHash, args.generationInputHash)) {
+      throw new ConvexError({
+        code: "generation_input_changed",
+        message: "Chat changed after generation input was planned",
+      })
+    }
   }
 
   const latestUserMessage = args.edit
@@ -1583,6 +1908,19 @@ export async function prepareGenerationForChat(
         }
       : {}),
   })
+
+  // Attach the platform-usage reservation to its run transactionally
+  // (ADR-0021): fail closed — a reservation that cannot attach rolls back
+  // the whole prepare, so a platform-funded run never executes unaccounted.
+  if (args.reservationId) {
+    await attachReservationToRun(ctx, {
+      reservationId: args.reservationId,
+      requestId: args.requestId,
+      userId: owner.user._id,
+      runId,
+      now,
+    })
+  }
 
   let assistantMessageId: Id<"messages">
   let assistantOrder: number
@@ -1767,6 +2105,8 @@ export async function prepareGenerationWithVerifiedAdmission(
       provider: args.provider,
       route: args.route,
       grantDigest: args.grantDigest,
+      reservationId: args.reservationId,
+      generationInputHash: args.generationInputHash,
       issuedAt: admissionIssuedAt,
     },
     admissionProof,
@@ -1805,7 +2145,9 @@ export const prepareGeneration = mutation({
     edit: v.optional(vEditIntent),
     regeneration: v.optional(vRegenerationIntent),
     approvalResponses: v.optional(v.array(vApprovalResponse)),
+    generationInputHash: v.optional(v.string()),
     grantDigest: v.optional(v.string()),
+    reservationId: v.optional(v.id("usageReservations")),
     admissionIssuedAt: v.number(),
     admissionProof: v.string(),
   },
@@ -1839,26 +2181,6 @@ export const getApprovalRouteFacts = authenticatedQuery({
       model: run.model,
     }
   },
-})
-
-export const updateAssistantSnapshot = ownedGenerationRunMutation({
-  args: generationRunWriteArgs.updateAssistantSnapshot,
-  handler: async (ctx, args) =>
-    updateAssistantSnapshotForChat(
-      ctx,
-      { user: ctx.user, chat: ctx.chat, run: ctx.run },
-      args
-    ),
-})
-
-export const markGenerationWorkStarted = ownedGenerationRunMutation({
-  args: generationRunWriteArgs.markGenerationWorkStarted,
-  handler: async (ctx, args) =>
-    markGenerationWorkStartedForChat(
-      ctx,
-      { user: ctx.user, chat: ctx.chat, run: ctx.run },
-      args
-    ),
 })
 
 /**
@@ -2042,16 +2364,6 @@ export async function heartbeatGenerationRunForChat(
   return { kind: "renewed", leaseExpiresAt }
 }
 
-export const markGenerationRunCompleted = ownedGenerationRunMutation({
-  args: generationRunWriteArgs.markGenerationRunCompleted,
-  handler: async (ctx, args) =>
-    markGenerationRunCompletedForChat(
-      ctx,
-      { user: ctx.user, chat: ctx.chat, run: ctx.run },
-      args
-    ),
-})
-
 export async function markGenerationRunCompletedForChat(
   ctx: MutationCtx,
   owner: AuthenticatedRunOwner,
@@ -2066,6 +2378,7 @@ export async function markGenerationRunCompletedForChat(
       outputTokens?: number
       totalTokens?: number
     }
+    titleUsage?: TitleUsageEvidence
     totalToolCalls?: number
     failedToolCalls?: number
   }
@@ -2108,8 +2421,10 @@ export async function markGenerationRunCompletedForChat(
     completedAt: verdict.run.settle ? now : undefined,
     updatedAt: now,
     finishReason: args.finishReason,
-    inputTokens: args.usage?.inputTokens,
-    outputTokens: args.usage?.outputTokens,
+    // The onEnd aggregate is authoritative; when it is absent, keep the
+    // per-step accumulated evidence instead of erasing it (ADR-0021).
+    inputTokens: args.usage?.inputTokens ?? run.inputTokens,
+    outputTokens: args.usage?.outputTokens ?? run.outputTokens,
     totalToolCalls: args.totalToolCalls,
     failedToolCalls: args.failedToolCalls,
     ...(args.metadata?.workDurationMs !== undefined
@@ -2127,17 +2442,34 @@ export async function markGenerationRunCompletedForChat(
   // projection is hooked here. verdict.run.status is "completed", or
   // "awaiting_approval" when the finish still has pending approvals.
   await projectRunStatusToChat(ctx, run, verdict.run.status, now)
-}
 
-export const markGenerationRunFailed = ownedGenerationRunMutation({
-  args: generationRunWriteArgs.markGenerationRunFailed,
-  handler: async (ctx, args) =>
-    markGenerationRunFailedForChat(
-      ctx,
-      { user: ctx.user, chat: ctx.chat, run: ctx.run },
-      args
-    ),
-})
+  // Allowance settlement (ADR-0021): the provider invocation has ended on
+  // BOTH outcomes — completed AND the awaiting_approval downgrade (an
+  // approval continuation is a new request with its own reservation) — so
+  // this run's usage settles now, with the aggregate the write carried.
+  await settleUsageForTerminalRun(
+    ctx,
+    run,
+    {
+      // Only an aggregate that actually carries token counts is "actual"
+      // evidence; an absent or empty one falls to the observed/estimated
+      // boundary rule inside the helper (never a zero-cost "actual").
+      ...(args.usage &&
+      (typeof args.usage.inputTokens === "number" ||
+        typeof args.usage.outputTokens === "number")
+        ? {
+            usage: {
+              inputTokens: args.usage.inputTokens,
+              outputTokens: args.usage.outputTokens,
+            },
+          }
+        : {}),
+      titleUsage: args.titleUsage ?? "unknown",
+    },
+    verdict.run.status === "awaiting_approval" ? "approval_pause" : "completed",
+    verdict.run.terminalReason
+  )
+}
 
 export async function markGenerationRunFailedForChat(
   ctx: MutationCtx,
@@ -2171,16 +2503,6 @@ export async function markGenerationRunFailedForChat(
   )
 }
 
-export const markGenerationRunAborted = ownedGenerationRunMutation({
-  args: generationRunWriteArgs.markGenerationRunAborted,
-  handler: async (ctx, args) =>
-    markGenerationRunAbortedForChat(
-      ctx,
-      { user: ctx.user, chat: ctx.chat, run: ctx.run },
-      args
-    ),
-})
-
 export async function markGenerationRunAbortedForChat(
   ctx: MutationCtx,
   owner: AuthenticatedRunOwner,
@@ -2212,16 +2534,6 @@ export async function markGenerationRunAbortedForChat(
     args.workDurationMs
   )
 }
-
-export const createToolApprovalRequest = ownedGenerationRunMutation({
-  args: generationRunWriteArgs.createToolApprovalRequest,
-  handler: async (ctx, args) =>
-    createToolApprovalRequestForChat(
-      ctx,
-      { user: ctx.user, chat: ctx.chat, run: ctx.run },
-      args
-    ),
-})
 
 export async function createToolApprovalRequestForChat(
   ctx: MutationCtx,
@@ -2578,22 +2890,13 @@ export const denyToolCall = mutation({
   handler: async (ctx, args) => resolveToolCallDecision(ctx, args, "denied"),
 })
 
-export const recordToolInvocations = ownedGenerationRunMutation({
-  args: generationRunWriteArgs.recordToolInvocations,
-  handler: async (ctx, args) =>
-    recordToolInvocationsForChat(
-      ctx,
-      { user: ctx.user, chat: ctx.chat, run: ctx.run },
-      args
-    ),
-})
-
 export async function recordToolInvocationsForChat(
   ctx: MutationCtx,
   owner: AuthenticatedRunOwner,
   args: {
     messageId: Id<"messages">
     stepNumber?: number
+    usage?: { inputTokens?: number; outputTokens?: number }
     invocations: Array<{
       toolCallId: string
       toolName: string
@@ -2681,10 +2984,28 @@ export async function recordToolInvocationsForChat(
     }
   }
 
-  if (args.invocations.length > 0) {
+  // Per-step usage accumulation (ADR-0021): durable evidence for the abort/
+  // failure/reaper settlement paths, which cannot rely on the happy-path
+  // onEnd aggregate. The completion write replaces each accumulated token
+  // count when the SDK's authoritative all-steps aggregate includes it;
+  // otherwise it preserves the accumulated value.
+  const stepInputTokens = args.usage?.inputTokens ?? 0
+  const stepOutputTokens = args.usage?.outputTokens ?? 0
+  const hasStepUsage = stepInputTokens > 0 || stepOutputTokens > 0
+
+  if (args.invocations.length > 0 || hasStepUsage) {
     // Accepted tool activity is progress evidence (gameplan §5) — not
     // liveness; the heartbeat alone renews the lease.
-    await ctx.db.patch(run._id, { lastProgressAt: now, updatedAt: now })
+    await ctx.db.patch(run._id, {
+      lastProgressAt: now,
+      updatedAt: now,
+      ...(hasStepUsage
+        ? {
+            inputTokens: (run.inputTokens ?? 0) + stepInputTokens,
+            outputTokens: (run.outputTokens ?? 0) + stepOutputTokens,
+          }
+        : {}),
+    })
   }
 }
 
@@ -2857,12 +3178,7 @@ export async function reapExpiredToolApprovalsPass(
       const currentApproval = await ctx.db.get(approval._id)
       if (
         currentApproval &&
-        (await expireToolApprovalForChat(
-          ctx,
-          currentApproval,
-          now,
-          "reaper"
-        ))
+        (await expireToolApprovalForChat(ctx, currentApproval, now, "reaper"))
       ) {
         expired++
       }

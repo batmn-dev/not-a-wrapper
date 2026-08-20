@@ -1,4 +1,6 @@
+import { api } from "@/convex/_generated/api"
 import { getWorkosSession } from "@/lib/auth/workos"
+import { parseChatTurnRequest } from "@/lib/chat-messages/chat-turn-contract"
 import { resolveModelSelection } from "@/lib/models/catalog"
 import {
   classifyChatError,
@@ -12,17 +14,20 @@ import {
   getSanitizedExceptionSummary,
   sanitizeExceptionForTelemetry,
 } from "@/lib/observability/sentry-scrubbing"
+import { MODEL_PROVIDER_IDENTITY, type Provider } from "@/lib/provider-identity"
 import * as Sentry from "@sentry/nextjs"
+import { fetchMutation } from "convex/nextjs"
 import {
   checkServerSideUsage,
   incrementServerSideUsage,
   validateAndResolveChatCredential,
 } from "./api"
-import { parseChatTurnRequest } from "@/lib/chat-messages/chat-turn-contract"
 import {
   createChatTurnRuntime,
   type ChatTurnRuntime,
 } from "./chat-turn-runtime"
+import { preflightDurableGenerationInput } from "./durable-generation-input"
+import { isDurableConvexChat } from "./durable-turn-runtime"
 import { createErrorResponse } from "./utils"
 
 // Top-line chat-turn budget. Next.js statically analyzes segment config, so
@@ -53,9 +58,7 @@ export async function POST(req: Request) {
   // through perf spans — never persisted to chat/run/message docs and never
   // used as an admission idempotency key. (`requestId` above is generated
   // after arrival, so it cannot correlate earlier client marks.)
-  const perf = createChatPerfServerSession(
-    req.headers.get(CHAT_PERF_ID_HEADER)
-  )
+  const perf = createChatPerfServerSession(req.headers.get(CHAT_PERF_ID_HEADER))
   // Pre-runtime telemetry fallbacks: read by the catch when the error is thrown
   // before the runtime exists (parse / validation / usage admission). Once the
   // runtime is constructed, its `fail()` owns the rich capture.
@@ -64,6 +67,14 @@ export async function POST(req: Request) {
   let telemetryIsAuthenticated: boolean | undefined
   let telemetryMessageCount: number | undefined
   let turn: ChatTurnRuntime | null = null
+  // Set once admission reserves platform allowance (ADR-0021). On any error
+  // the catch releases the reservation if it never attached to a run — the
+  // release mutation is idempotent and refuses attached rows, whose run
+  // lifecycle owns their settlement. (A ref object: the assignment happens
+  // inside the admission span's closure, which TS flow analysis cannot see.)
+  const reservationRelease: { current: null | (() => Promise<unknown>) } = {
+    current: null,
+  }
 
   try {
     Sentry.setTag("route", "api/chat")
@@ -189,7 +200,32 @@ export async function POST(req: Request) {
       },
       () =>
         perf.span("usage_admission", async () => {
-          await checkServerSideUsage(convexToken, model, anonymousId)
+          // Abuse rate limit only (ADR-0021) — the economic admission is the
+          // atomic allowance reservation inside credential resolution below.
+          await checkServerSideUsage(convexToken, anonymousId)
+          const generationInput = isDurableConvexChat({
+            isAuthenticated,
+            convexToken,
+            chatId,
+          })
+            ? await perf.span("attachment_resolution", () =>
+                preflightDurableGenerationInput({
+                  chatId,
+                  token: convexToken!,
+                  messages,
+                  expectedVisibleMessageCount,
+                  tailMessageId,
+                  edit,
+                  regeneration,
+                })
+              )
+            : undefined
+          const plannedPinnedProvider = generationInput?.pinnedProvider
+          const pinnedProviderId =
+            plannedPinnedProvider &&
+            plannedPinnedProvider in MODEL_PROVIDER_IDENTITY
+              ? (plannedPinnedProvider as Provider)
+              : undefined
           const resolvedAdmission = await perf.span(
             "credential_resolution",
             () =>
@@ -198,12 +234,31 @@ export async function POST(req: Request) {
                 // route hint an old `openrouter:*` chat id carries.
                 model: requestedModel,
                 isAuthenticated,
+                workosUserId: authUserId,
                 token: convexToken,
-                messages,
+                messages: generationInput?.messages ?? messages,
+                requestId,
+                chatId,
+                systemPrompt,
+                enableSearch: enableSearch ?? false,
+                pinnedProviderId,
               })
           )
-          await incrementServerSideUsage(convexToken, model, anonymousId)
-          return resolvedAdmission
+          // Arm the release hook the moment a reservation exists — BEFORE
+          // anything else (the abuse increment below included) can throw, so
+          // no pre-runtime failure window leaves the reservation stranded
+          // until the reconciler.
+          if (resolvedAdmission.reservationId && convexToken) {
+            const token = convexToken
+            reservationRelease.current = () =>
+              fetchMutation(
+                api.usageAllowance.releaseUnattached,
+                { requestId },
+                { token }
+              )
+          }
+          await incrementServerSideUsage(convexToken, anonymousId)
+          return { ...resolvedAdmission, generationInput }
         })
     )
     Sentry.setTag("chat_route_id", admission.route.routeId)
@@ -227,6 +282,8 @@ export async function POST(req: Request) {
         convexToken,
         credential: admission.credential,
         route: admission.route,
+        reservationId: admission.reservationId,
+        generationInput: admission.generationInput,
         perf,
       },
     })
@@ -241,6 +298,23 @@ export async function POST(req: Request) {
         ...getSanitizedExceptionSummary(err),
       })
     )
+
+    // Pre-runtime failure after a platform reservation: release it while it
+    // is still unattached (a run was never created, so provider consumption
+    // structurally never began). An already-attached reservation is refused
+    // by the mutation and settles through its run's lifecycle instead.
+    const releaseReservation = reservationRelease.current
+    if (releaseReservation) {
+      await releaseReservation().catch((releaseError: unknown) => {
+        console.warn(
+          JSON.stringify({
+            _tag: "usage_reservation_release_failed",
+            requestId,
+            ...getSanitizedExceptionSummary(releaseError),
+          })
+        )
+      })
+    }
 
     if (turn) {
       // Post-runtime error: the turn owns MCP cleanup, the durable-run failure

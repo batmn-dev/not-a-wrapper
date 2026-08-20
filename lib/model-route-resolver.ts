@@ -1,8 +1,21 @@
 import { api } from "@/convex/_generated/api"
+import type { Id } from "@/convex/_generated/dataModel"
+import {
+  signUsageReservationAuthorization,
+  usageReservationAuthorizationAudience,
+} from "@/convex/lib/usageReservationAuthorization"
+import type { UsageReservationArgs } from "@/convex/lib/usageValidators"
+import type { ReserveUsageResult } from "@/convex/usageAllowance"
 import { getProviderStrategy } from "@/lib/openproviders/provider-strategy"
 import type { Provider } from "@/lib/provider-identity"
+import { buildPricingSnapshot } from "@/lib/usage/billable-pricing"
+import {
+  estimatePlatformUsage,
+  platformOutputTokenBudget,
+} from "@/lib/usage/platform-usage-estimate"
 import { getUserKeyFromConvex } from "@/lib/user-keys"
-import { fetchQuery } from "convex/nextjs"
+import type { UIMessage } from "ai"
+import { fetchMutation, fetchQuery } from "convex/nextjs"
 import {
   getLogicalModel,
   resolveModelSelection,
@@ -34,10 +47,7 @@ import {
 export type ApiKeyPreference = "priority" | "fallback"
 
 export type RouteReason =
-  | "priority_byok"
-  | "platform"
-  | "fallback_byok"
-  | "legacy_route_hint"
+  "priority_byok" | "platform" | "fallback_byok" | "legacy_route_hint"
 
 export type ResolvedModelRoute = {
   modelId: string
@@ -50,7 +60,13 @@ export type ResolvedModelRoute = {
 
 export type RouteResolutionFailure = {
   ok: false
-  reason: "model_not_found" | "auth_required" | "no_eligible_route"
+  reason:
+    | "model_not_found"
+    | "auth_required"
+    | "no_eligible_route"
+    /** Platform allowance could not cover any platform candidate and no
+     * usable BYOK route existed (ADR-0021). */
+    | "insufficient_allowance"
   modelId: string
   /**
    * Providers whose key would unlock a capability-eligible route — the
@@ -64,6 +80,12 @@ export type RouteResolutionSuccess = {
   route: ResolvedModelRoute
   /** The resolved credential. Consumed by the turn runtime; never logged. */
   apiKey: string
+  /**
+   * The platform-usage reservation admitted with this route (ADR-0021).
+   * Present exactly when `credentialSource` is "platform" and the actor is
+   * authenticated; attached to the generation run at durable prepare.
+   */
+  reservationId?: Id<"usageReservations">
 }
 
 export type RouteResolution = RouteResolutionSuccess | RouteResolutionFailure
@@ -71,6 +93,34 @@ export type RouteResolution = RouteResolutionSuccess | RouteResolutionFailure
 export type RequiredRouteCapabilities = {
   /** The turn carries image input; only vision routes are candidates. */
   vision?: boolean
+}
+
+/**
+ * The admission context a platform-funded candidate needs to reserve
+ * allowance before it may be chosen (ADR-0021). Present only for
+ * authenticated turns against durable chats — reservation and settlement
+ * require the generation-run lifecycle, so an authenticated turn without
+ * this context skips the platform tier entirely.
+ */
+export type PlatformFundingContext = {
+  /** Server-authenticated WorkOS subject bound into the reserve capability. */
+  workosUserId: string
+  requestId: string
+  chatId: string
+  /** The turn's wire messages + prompt — estimation inputs only. */
+  messages: UIMessage[]
+  systemPrompt?: string
+  /** Tools may run this turn (search enabled); widens the input estimate. */
+  toolsLikely: boolean
+}
+
+export type ReservePlatformUsageArgs = Omit<
+  UsageReservationArgs,
+  "providerId"
+> & {
+  token: string
+  workosUserId: string
+  providerId: Provider
 }
 
 export type ResolveModelRouteArgs = {
@@ -85,15 +135,77 @@ export type ResolveModelRouteArgs = {
    * Convex keeps the fail-closed enforcement either way.
    */
   pinnedProviderId?: Provider
+  /**
+   * Platform-funding admission context (ADR-0021). Absent → authenticated
+   * platform candidates are skipped (anonymous turns stay on the separate
+   * subsidized guest path and never reserve).
+   */
+  platformFunding?: PlatformFundingContext
 }
 
 export type RouteResolverDeps = {
-  getKeySettings(token: string): Promise<
-    Array<{ provider: string; preference: ApiKeyPreference }>
-  >
+  getKeySettings(
+    token: string
+  ): Promise<Array<{ provider: string; preference: ApiKeyPreference }>>
   getUserKey(provider: Provider, token: string): Promise<string | null>
   getPlatformKey(provider: Provider): string | undefined
   entitlement: PlatformEntitlement
+  /**
+   * The atomic allowance reservation (ADR-0021). A platform candidate is not
+   * eligible until this succeeds; there is deliberately no separate balance
+   * check (check-then-debit is the TOCTOU race the reservation removes).
+   */
+  reservePlatformUsage(
+    args: ReservePlatformUsageArgs
+  ): Promise<ReserveUsageResult>
+}
+
+function isMissingAuthorizedReserveMutation(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const missingFunction =
+    error.message.includes("Could not find public function") ||
+    error.message.includes("Function not found") ||
+    error.message.includes("FunctionNotFound")
+  return missingFunction && error.message.includes("reserveAuthorized")
+}
+
+/**
+ * Version-skew adapter for rollback or a Next build reaching older Convex
+ * functions. Only a confirmed missing-function error falls back to the legacy
+ * mutation. Once Convex has `reserveAuthorized`, authorization failures pass
+ * through and never downgrade to the unsigned path.
+ */
+export async function reserveAuthorizedPlatformUsage({
+  token,
+  workosUserId,
+  ...args
+}: ReservePlatformUsageArgs): Promise<ReserveUsageResult> {
+  const authorizationIssuedAt = Date.now()
+  const authorizationProof = signUsageReservationAuthorization({
+    ...args,
+    workosUserId,
+    deploymentUrl: usageReservationAuthorizationAudience(
+      process.env.NEXT_PUBLIC_CONVEX_URL
+    ),
+    issuedAt: authorizationIssuedAt,
+  })
+
+  try {
+    return await fetchMutation(
+      api.usageAllowance.reserveAuthorized,
+      { ...args, authorizationIssuedAt, authorizationProof },
+      { token }
+    )
+  } catch (error) {
+    if (!isMissingAuthorizedReserveMutation(error)) throw error
+    console.warn(
+      JSON.stringify({
+        _tag: "usage_reserve_authorized_endpoint_missing",
+        requestId: args.requestId,
+      })
+    )
+    return fetchMutation(api.usageAllowance.reserve, args, { token })
+  }
 }
 
 const defaultDeps: RouteResolverDeps = {
@@ -103,6 +215,7 @@ const defaultDeps: RouteResolverDeps = {
   getPlatformKey: (provider) =>
     process.env[getProviderStrategy(provider).envVarName],
   entitlement: freeModelsPlatformEntitlement,
+  reservePlatformUsage: reserveAuthorizedPlatformUsage,
 }
 
 type Candidate = {
@@ -238,6 +351,8 @@ export async function resolveModelRoute(
     })),
   ]
 
+  let sawInsufficientAllowance = false
+
   for (const candidate of tiers) {
     const apiKey =
       candidate.credentialSource === "byok"
@@ -248,9 +363,61 @@ export async function resolveModelRoute(
     // A stored key that no longer decrypts (stale ciphertext) or a missing
     // platform env key disqualifies the candidate, not the model.
     if (!apiKey) continue
+
+    // A platform candidate is not eligible until its allowance reservation
+    // lands (ADR-0021): estimate → snapshot → atomic reserve, all before the
+    // candidate can win. An unaffordable candidate falls through to the next
+    // (possibly cheaper) platform route, then to fallback BYOK. Funding
+    // requires the admission context (durable chat) — without it, or without
+    // valid billable pricing, the candidate fails closed.
+    let reservationId: Id<"usageReservations"> | undefined
+    if (candidate.credentialSource === "platform") {
+      const funding = args.platformFunding
+      if (!funding || !args.token) continue
+      const pricingSnapshot = buildPricingSnapshot(candidate.route)
+      if (!pricingSnapshot) continue
+      const estimate = estimatePlatformUsage({
+        messages: funding.messages,
+        systemPrompt: funding.systemPrompt,
+        toolsLikely: funding.toolsLikely,
+        pricingSnapshot,
+        outputTokenBudget: platformOutputTokenBudget(candidate.route.config),
+      })
+      const reserved = await deps.reservePlatformUsage({
+        token: args.token,
+        workosUserId: funding.workosUserId,
+        requestId: funding.requestId,
+        chatId: funding.chatId,
+        modelId: model.id,
+        routeId: candidate.route.id,
+        providerId: candidate.route.providerId,
+        estimatedCredits: estimate.estimatedCredits,
+        estimatedInputTokens: estimate.estimatedInputTokens,
+        estimatedOutputTokens: estimate.estimatedOutputTokens,
+        titleEstimatedCredits: estimate.titleEstimatedCredits,
+        pricingSnapshot,
+      })
+      if (reserved.kind === "insufficient_allowance") {
+        sawInsufficientAllowance = true
+        continue
+      }
+      if (reserved.kind === "conflict" || reserved.kind === "rate_limited") {
+        console.warn(
+          JSON.stringify({
+            _tag: "usage_reserve_candidate_skipped",
+            reason: reserved.kind,
+            routeId: candidate.route.id,
+          })
+        )
+        continue
+      }
+      reservationId = reserved.reservationId
+    }
+
     return {
       ok: true,
       apiKey,
+      ...(reservationId ? { reservationId } : {}),
       route: {
         modelId: model.id,
         routeId: candidate.route.id,
@@ -264,5 +431,9 @@ export async function resolveModelRoute(
     }
   }
 
-  return fail("no_eligible_route")
+  // Only when the allowance was the deciding factor: platform candidates
+  // existed and were denied for balance, and no BYOK route could serve.
+  return fail(
+    sawInsufficientAllowance ? "insufficient_allowance" : "no_eligible_route"
+  )
 }

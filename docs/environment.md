@@ -31,8 +31,11 @@ Required local `.env.local` values:
 - at least one AI provider key
 
 `WORKOS_COOKIE_PASSWORD` must be at least 32 characters.
-`CHAT_ADMISSION_SECRET` must be at least 32 bytes and must use the same value
-in `.env.local` and the target Convex deployment. Generate it with:
+`CHAT_ADMISSION_SECRET` signs both durable chat admission and platform-usage
+reservation authorization. It must be at least 32 bytes and must use the same
+value in `.env.local` and the target Convex deployment. Use a different secret
+for Production and Preview; use a per-preview secret when sibling-preview
+isolation is required. Generate it with:
 
 ```bash
 openssl rand -base64 32
@@ -80,8 +83,8 @@ bunx convex env set CHAT_ADMISSION_SECRET <same_value_as_vercel>
 declares `WORKOS_CLIENT_ID`, `WORKOS_API_KEY`, `WORKOS_WEBHOOK_SECRET`, and
 `CHAT_ADMISSION_SECRET` as required deployment env vars in
 `convex/convex.config.ts`. Set `CHAT_ADMISSION_SECRET` to the exact same value
-in the Next.js server and Convex; a mismatch makes durable chat admission fail
-closed before any run is created.
+in the Next.js server and Convex; a mismatch makes durable chat admission and
+platform-usage reservation fail closed before any run is created.
 
 To inspect configured Convex env names, use:
 
@@ -156,6 +159,12 @@ then redeploy it:
 ```bash
 pbpaste | bunx convex env set --deployment <preview-deployment> CHAT_ADMISSION_SECRET
 ```
+
+The shared Preview default makes all previews one signer trust domain. Usage
+reservation proofs still bind the exact `NEXT_PUBLIC_CONVEX_URL` and cannot be
+replayed across previews, but a preview with a per-deployment trust requirement
+must override both its Vercel and Convex values with a unique secret. Never use
+the Production secret as a Preview default.
 
 Vercel provides `VERCEL_BRANCH_URL` and
 `VERCEL_PROJECT_PRODUCTION_URL`. `convex.json` uses those values to configure
@@ -245,6 +254,15 @@ Production `convex deploy` must go through the shared deploy command:
 bun run convex:deploy
 ```
 
+The signed usage-reservation rollout is an expand/contract deployment, not one
+combined deploy. First deploy an expansion revision that adds
+`reserveAuthorized` and its Next adapter while leaving legacy `reserve`
+functional. Wait for that Vercel production deployment to become active. Then
+deploy the contraction that makes legacy `reserve` fail closed. The shared
+deploy command runs `scripts/usage-reservation-rollout-preflight.mjs` in
+production and blocks the contraction unless the currently deployed Convex
+function spec already contains `usageAllowance.reserveAuthorized`.
+
 > **Pre-launch scope.** Non-production data is disposable, but production deploys
 > still run schema-contraction preflight because Convex rejects strict schemas
 > when existing production documents contain removed fields. Set
@@ -287,16 +305,16 @@ settings.
 
 ## Troubleshooting
 
-| Symptom                                            | Check                                                                                                        |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `NEXT_PUBLIC_CONVEX_URL is required`               | Run `bunx convex dev` locally, or confirm Vercel uses the Convex deploy build command.                       |
-| WorkOS login redirects fail                        | Confirm `NEXT_PUBLIC_WORKOS_REDIRECT_URI` exactly matches the WorkOS redirect URI and ends in `/callback`.   |
-| Convex auth returns unauthenticated                | Confirm `WORKOS_CLIENT_ID` is set in Convex env and redeploy with `bunx convex dev` or `bunx convex deploy`. |
-| WorkOS webhook events fail                         | Confirm the endpoint URL, subscribed events, and `WORKOS_WEBHOOK_SECRET` in Convex env.                      |
-| Saved API keys stop decrypting                     | Restore the previous `ENCRYPTION_KEY` or migrate encrypted values before rotating it.                        |
-| Durable chat admission rejects before run creation | Confirm `CHAT_ADMISSION_SECRET` is present and identical in Vercel/local and the target Convex deployment.   |
-| `bun run env:check` rejects a custom local domain  | Set `ALLOW_NON_LOCAL_WORKOS_REDIRECT_URI=1` only for that check.                                             |
-| `CLERK_*` appears in env output                    | Remove stale Clerk variables after confirming the deployment is on WorkOS AuthKit.                           |
+| Symptom                                                                 | Check                                                                                                        |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `NEXT_PUBLIC_CONVEX_URL is required`                                    | Run `bunx convex dev` locally, or confirm Vercel uses the Convex deploy build command.                       |
+| WorkOS login redirects fail                                             | Confirm `NEXT_PUBLIC_WORKOS_REDIRECT_URI` exactly matches the WorkOS redirect URI and ends in `/callback`.   |
+| Convex auth returns unauthenticated                                     | Confirm `WORKOS_CLIENT_ID` is set in Convex env and redeploy with `bunx convex dev` or `bunx convex deploy`. |
+| WorkOS webhook events fail                                              | Confirm the endpoint URL, subscribed events, and `WORKOS_WEBHOOK_SECRET` in Convex env.                      |
+| Saved API keys stop decrypting                                          | Restore the previous `ENCRYPTION_KEY` or migrate encrypted values before rotating it.                        |
+| Durable chat admission or usage reservation rejects before run creation | Confirm `CHAT_ADMISSION_SECRET` is present and identical in Vercel/local and the target Convex deployment.   |
+| `bun run env:check` rejects a custom local domain                       | Set `ALLOW_NON_LOCAL_WORKOS_REDIRECT_URI=1` only for that check.                                             |
+| `CLERK_*` appears in env output                                         | Remove stale Clerk variables after confirming the deployment is on WorkOS AuthKit.                           |
 
 Use `bun run test` for test validation. The configured test runner is Vitest;
 raw `bun test` is not the project test command.

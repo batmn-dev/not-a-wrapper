@@ -973,10 +973,16 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
       failedToolCalls: 1,
       usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
     })
-    // The user token authorizes admission only; no completion via fetchMutation.
-    expect(
-      findCall(fetchMutation, api.chatRuntime.markGenerationRunCompleted)
-    ).toBeUndefined()
+    // The user token authorizes admission only. Post-prepare run writes have
+    // no public registrations at all (pinned in convex/chatRuntime.test.ts),
+    // so the only user-token mutations a turn may send are admission and the
+    // title persist.
+    const nonAdmissionCalls = fetchMutation.mock.calls.filter(
+      (call) =>
+        !sameRef(call[0], api.chatRuntime.prepareGeneration) &&
+        !sameRef(call[0], api.chats.applyGeneratedTitle)
+    )
+    expect(nonAdmissionCalls).toEqual([])
   })
 
   it("marks the run aborted (not completed) when the response stream is aborted", async () => {

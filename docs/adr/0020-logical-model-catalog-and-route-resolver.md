@@ -1,6 +1,8 @@
 # 0020 — Logical model catalog and the server route resolver
 
-**Status:** accepted **Date:** 2026-08-19 **Amends:** ADR-0007 (implements the
+**Status:** accepted **Date:** 2026-08-19 **Amended by:** ADR-0021 (the
+platform-entitlement seam gains its planned balance implementation: platform
+candidacy now also requires an atomic usage reservation) **Amends:** ADR-0007 (implements the
 logical-model/route layer it deferred) and ADR-0011 (the user token still
 authorizes admission, but server-resolved admission facts now also require a
 server proof); the snapshot-generated OpenRouter workflow is unchanged and
@@ -72,9 +74,10 @@ provider for approval continuations. It:
 **Platform entitlement** is a typed seam (`lib/models/platform-entitlement.ts`)
 whose only current implementation encodes the rules that already exist:
 `FREE_MODELS_IDS` for authenticated platform use, `NON_AUTH_ALLOWED_MODELS`
-for anonymous. A future plan/balance/quota system implements the same
-interface without touching the catalog or selector. No balances or counters
-are invented now.
+for anonymous. ADR-0021 extends authenticated platform admission at the same
+resolver boundary: list membership is necessary but not sufficient; candidacy
+also requires a fundable pricing snapshot and a successful atomic usage
+reservation. Billing state remains outside the catalog and selector.
 
 **API-key preference** — `userKeys.preference` (`"priority" | "fallback"`,
 optional, absent = priority) selects the tier a provider's BYOK candidates
@@ -125,9 +128,6 @@ its attestation rather than duplicating credential resolution.
   route: auth errors, content refusals, and anything after possible provider
   consumption stay terminal. A future failover needs its own retryable-error
   taxonomy and idempotency proof.
-- **Account balance / quota** — the entitlement seam is the extension point;
-  nothing is simulated now.
-
 ## Alternatives considered
 
 - **Minted logical ids** (`anthropic/claude-sonnet-5`-style namespace):

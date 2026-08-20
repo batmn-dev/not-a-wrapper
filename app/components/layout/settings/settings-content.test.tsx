@@ -49,6 +49,10 @@ vi.mock("./general/account-management", () => ({
   SettingsSignOutButton: () => <button type="button">Sign out</button>,
 }))
 
+vi.mock("./general/usage-section", () => ({
+  UsageSection: () => <div>Usage section</div>,
+}))
+
 vi.mock("./general/user-profile", () => ({
   UserProfile: () => <div>User profile</div>,
 }))

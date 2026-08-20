@@ -32,6 +32,7 @@ import {
   shouldRequireDiffBase,
   validatePreflightResults,
 } from "./convex-schema-contract-preflight.mjs"
+import { validateAuthorizedReserveFunctionSpec } from "./usage-reservation-rollout-preflight.mjs"
 
 const baseSchema = `
 import { defineSchema, defineTable } from "convex/server"
@@ -412,6 +413,7 @@ describe("Convex schema contraction helpers", () => {
         "--require-diff-base",
         "--dry-run",
       ],
+      usageReservationRolloutPreflightArgs: null,
       deployArgs: [
         "deploy",
         "--cmd-url-env-var-name",
@@ -423,6 +425,37 @@ describe("Convex schema contraction helpers", () => {
         "branch-name",
       ],
     })
+  })
+
+  it("runs the reservation rollout preflight only for production deployments", () => {
+    const rolloutPreflightArgs = [
+      "scripts/usage-reservation-rollout-preflight.mjs",
+    ]
+
+    expect(
+      deployPlanForEnv({
+        env: {
+          VERCEL_ENV: "preview",
+          CONVEX_SCHEMA_PREFLIGHT_MODE: "prod",
+        },
+      }).usageReservationRolloutPreflightArgs
+    ).toBeNull()
+    expect(
+      deployPlanForEnv({
+        env: {
+          VERCEL_ENV: "production",
+          CONVEX_SCHEMA_PREFLIGHT_MODE: "dry-run",
+        },
+      }).usageReservationRolloutPreflightArgs
+    ).toEqual(rolloutPreflightArgs)
+    expect(
+      deployPlanForEnv({ env: {} }).usageReservationRolloutPreflightArgs
+    ).toEqual(rolloutPreflightArgs)
+    expect(
+      deployPlanForEnv({
+        env: { CONVEX_SCHEMA_PREFLIGHT_MODE: "dry-run" },
+      }).usageReservationRolloutPreflightArgs
+    ).toBeNull()
   })
 
   it("passes the preflight deploy key only to the preflight subprocess", () => {
@@ -447,7 +480,40 @@ describe("Convex schema contraction helpers", () => {
     })
 
     expect(calls[0].env.CONVEX_DEPLOY_KEY).toBe("query-key")
+    expect(calls[1]).toMatchObject({
+      command: process.execPath,
+      args: ["scripts/usage-reservation-rollout-preflight.mjs"],
+    })
     expect(calls[1].env.CONVEX_DEPLOY_KEY).toBe("deploy-key")
+    expect(calls[2].env.CONVEX_DEPLOY_KEY).toBe("deploy-key")
+  })
+
+  it("blocks a reservation contraction until the authorized endpoint is deployed", () => {
+    expect(() =>
+      validateAuthorizedReserveFunctionSpec(
+        JSON.stringify({
+          functions: [
+            {
+              identifier: "usageAllowance.js:reserve",
+              visibility: { kind: "public" },
+            },
+          ],
+        })
+      )
+    ).toThrow("Usage reservation contraction blocked")
+
+    expect(() =>
+      validateAuthorizedReserveFunctionSpec(
+        JSON.stringify({
+          functions: [
+            {
+              identifier: "usageAllowance.js:reserveAuthorized",
+              visibility: { kind: "public" },
+            },
+          ],
+        })
+      )
+    ).not.toThrow()
   })
 
   it("runs preflight before Convex deploy using the selected deploy environment", () => {
