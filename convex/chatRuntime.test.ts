@@ -626,6 +626,52 @@ describe("prepareGenerationForChat", () => {
     vi.restoreAllMocks()
   })
 
+  it("persists the route-resolution receipt beside the logical model", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { user, chat, chatId } = createOwnerFixture()
+    const { ctx, tables } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages: [],
+    })
+
+    await prepareGenerationForChat(ctx, {
+      chatId,
+      requestId: "request_route_receipt",
+      model: "claude-sonnet-5",
+      provider: "openrouter",
+      expectedVisibleMessageCount: 0,
+      route: {
+        routeId: "openrouter:anthropic/claude-sonnet-5",
+        credentialSource: "byok",
+        routeReason: "priority_byok",
+      },
+      latestUserMessage: {
+        id: "user-new",
+        role: "user",
+        content: "hi",
+        parts: [{ type: "text", text: "hi" }],
+      },
+    })
+
+    expect(tables.generationRuns).toHaveLength(1)
+    expect(tables.generationRuns[0]).toMatchObject({
+      model: "claude-sonnet-5",
+      provider: "openrouter",
+      routeId: "openrouter:anthropic/claude-sonnet-5",
+      credentialSource: "byok",
+      routeReason: "priority_byok",
+    })
+    // The assistant placeholder keeps the logical model + resolved provider.
+    const assistant = tables.messages.find(
+      (message) => message.role === "assistant"
+    )
+    expect(assistant).toMatchObject({
+      model: "claude-sonnet-5",
+      provider: "openrouter",
+    })
+  })
+
   it("applies durable edit intent and creates the run in the same mutation path", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1700000000000)
     const { user, chat, userId, chatId } = createOwnerFixture()

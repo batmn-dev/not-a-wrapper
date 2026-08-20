@@ -45,6 +45,12 @@ type ProviderKeyPanelProps<P extends ProviderKeyConfig> = {
   renderTile: (provider: P, ctx: TileContext) => ReactNode
   /** Delete-confirmation body copy for the given provider name. */
   deleteDescription: (name: string) => ReactNode
+  /**
+   * Optional per-provider detail block rendered under the key form (e.g.
+   * BYOK's routing preference + served-models summary). Receives the selected
+   * provider id and whether a key is stored for it.
+   */
+  renderDetails?: (providerId: string, ctx: { hasKey: boolean }) => ReactNode
   onSaved?: (
     providerId: string,
     result: { isNewKey?: boolean }
@@ -68,6 +74,7 @@ export function ProviderKeyPanel<P extends ProviderKeyConfig>({
   tilesExtra,
   renderTile,
   deleteDescription,
+  renderDetails,
   onSaved,
   onDeleted,
 }: ProviderKeyPanelProps<P>) {
@@ -164,6 +171,9 @@ export function ProviderKeyPanel<P extends ProviderKeyConfig>({
               </div>
             </div>
           </div>
+          {renderDetails?.(keys.selectedProvider, {
+            hasKey: keys.hasKey(keys.selectedProvider),
+          })}
         </div>
       )}
 

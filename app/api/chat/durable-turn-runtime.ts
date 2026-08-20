@@ -336,7 +336,19 @@ export type DurableTurnRuntime = {
    * model history — durable: sanitized server history; guest: sanitized
    * input. One-shot.
    */
-  prepare(args: { provider: string }): Promise<MessageAISDK[]>
+  prepare(args: {
+    provider: string
+    /** Route-resolution receipt (ADR-0020), persisted on the run row. */
+    route?: {
+      routeId: string
+      credentialSource: "platform" | "byok"
+      routeReason:
+        | "priority_byok"
+        | "platform"
+        | "fallback_byok"
+        | "legacy_route_hint"
+    }
+  }): Promise<MessageAISDK[]>
 
   /** The provisional title version authorized by durable prepare. Guest turns
    * return null and let the parent derive the first-turn version locally. */
@@ -1201,7 +1213,7 @@ export function createConvexDurableTurn(args: {
       return [executionAbortController.signal]
     },
 
-    async prepare({ provider }) {
+    async prepare({ provider, route }) {
       if (prepareCalled) {
         throw new Error(
           "Durable turn runtime: prepare() may only be called once"
@@ -1230,6 +1242,7 @@ export function createConvexDurableTurn(args: {
           requestId,
           model,
           provider,
+          route,
           expectedVisibleMessageCount,
           tailMessageId,
           latestUserMessage: latestUserMessage

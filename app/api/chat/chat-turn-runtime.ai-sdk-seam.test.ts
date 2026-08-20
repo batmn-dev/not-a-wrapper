@@ -327,6 +327,14 @@ function makeInput(overrides: Partial<ChatTurnInput> = {}): ChatTurnInput {
       apiKey: "sk-test",
       source: "byok",
     },
+    route: {
+      modelId: MODEL_ID,
+      routeId: MODEL_ID,
+      providerId: "anthropic",
+      upstreamModelId: MODEL_ID,
+      credentialSource: "byok",
+      routeReason: "priority_byok",
+    },
     ...overrides,
   }
 }

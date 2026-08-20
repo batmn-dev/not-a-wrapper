@@ -24,6 +24,7 @@ import {
   SYSTEM_PROMPT_DEFAULT,
 } from "@/lib/config"
 import { getAllModels } from "@/lib/models"
+import type { ResolvedModelRoute } from "@/lib/model-route-resolver"
 import type { ModelConfig } from "@/lib/models/types"
 import {
   flushBraintrust,
@@ -132,12 +133,16 @@ import {
 /**
  * The validated, admitted Chat turn the route hands to the runtime: parse,
  * auth, validation 400/401, and usage admission have all happened already.
- * `model` is post-`resolveModelId`; `userId` is the resolved caller id.
+ * `model` is the LOGICAL model id (ADR-0020) — the identity persisted on
+ * chats/messages/runs; `route` names the concrete execution route the
+ * resolver chose. `userId` is the resolved caller id.
  */
 export type ChatTurnInput = {
   messages: MessageAISDK[]
   chatId: string
   model: string
+  /** Immutable route-resolution receipt from route admission (ADR-0020). */
+  route: ResolvedModelRoute
   // Optional: absent for a malformed request that passed shape validation;
   // prepare() falls back to SYSTEM_PROMPT_DEFAULT.
   systemPrompt?: string
@@ -385,6 +390,7 @@ export function createChatTurnRuntime(args: {
     isAuthenticated,
     convexToken,
     credential,
+    route,
   } = input
   // No-op unless the route sampled this request (rate 0 short-circuits).
   const perf = input.perf ?? createChatPerfServerSession(null, { rate: 0 })
@@ -478,7 +484,10 @@ export function createChatTurnRuntime(args: {
       { name: "chat.load_models", op: "chat.config" },
       async () => getAllModels()
     )
-    const modelConfig = allModels.find((m) => m.id === model)
+    // Model construction runs on the resolved ROUTE record (ADR-0020): its
+    // capabilities, pricing, and construction settings are route-specific.
+    // `model` stays the logical id every persisted document speaks in.
+    const modelConfig = allModels.find((m) => m.id === route.routeId)
 
     if (!modelConfig) {
       throw new PublicChatHttpError({
@@ -624,6 +633,11 @@ export function createChatTurnRuntime(args: {
     let canonicalMessages = await perf.span("durable_prepare", () =>
       durableTurn.prepare({
         provider: resolvedProvider,
+        route: {
+          routeId: route.routeId,
+          credentialSource: route.credentialSource,
+          routeReason: route.routeReason,
+        },
       })
     )
 

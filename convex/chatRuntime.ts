@@ -51,7 +51,10 @@ import {
   type AuthenticatedChatOwner,
   type AuthenticatedRunOwner,
 } from "./lib/auth"
-import { ownedGenerationRunMutation } from "./lib/authedFunctions"
+import {
+  authenticatedQuery,
+  ownedGenerationRunMutation,
+} from "./lib/authedFunctions"
 import {
   vToolInvocationStreamMetadata,
   type PersistedMessageMetadata,
@@ -1444,11 +1447,23 @@ type GenerationApprovalResponse = {
   reason?: string
 }
 
+type GenerationRouteReceipt = {
+  routeId: string
+  credentialSource: "platform" | "byok"
+  routeReason:
+    | "priority_byok"
+    | "platform"
+    | "fallback_byok"
+    | "legacy_route_hint"
+}
+
 type PrepareGenerationForChatArgs = {
   chatId: Id<"chats">
   requestId: string
   model: string
   provider: string
+  /** Route-resolution receipt (ADR-0020); absent only for legacy callers. */
+  route?: GenerationRouteReceipt
   expectedVisibleMessageCount?: number
   tailMessageId?: string
   latestUserMessage?: {
@@ -1550,6 +1565,13 @@ export async function prepareGenerationForChat(
     requestId: args.requestId,
     model: args.model,
     provider: args.provider,
+    ...(args.route
+      ? {
+          routeId: args.route.routeId,
+          credentialSource: args.route.credentialSource,
+          routeReason: args.route.routeReason,
+        }
+      : {}),
     status: "running",
     startedAt: now,
     updatedAt: now,
@@ -1736,6 +1758,18 @@ export const prepareGeneration = mutation({
     requestId: v.string(),
     model: v.string(),
     provider: v.string(),
+    route: v.optional(
+      v.object({
+        routeId: v.string(),
+        credentialSource: v.union(v.literal("platform"), v.literal("byok")),
+        routeReason: v.union(
+          v.literal("priority_byok"),
+          v.literal("platform"),
+          v.literal("fallback_byok"),
+          v.literal("legacy_route_hint")
+        ),
+      })
+    ),
     expectedVisibleMessageCount: v.optional(v.number()),
     tailMessageId: v.optional(v.string()),
     latestUserMessage: v.optional(vStoredMessage),
@@ -1745,6 +1779,34 @@ export const prepareGeneration = mutation({
     grantDigest: v.optional(v.string()),
   },
   handler: async (ctx, args) => prepareGenerationForChat(ctx, args),
+})
+
+/**
+ * Route-pin facts for an approval continuation (ADR-0020): the provider and
+ * route the paused run executed on. The route resolver constrains its
+ * candidates to this provider so a key added mid-pause can never re-route a
+ * continuation; `applyApprovalResponses` keeps the fail-closed enforcement.
+ * Owner-checked; returns null (never throws) so a stale approval id degrades
+ * to the unpinned path, where the transactional check still decides.
+ */
+export const getApprovalRouteFacts = authenticatedQuery({
+  args: { approvalId: v.string() },
+  handler: async (ctx, { approvalId }) => {
+    const approval = await ctx.db
+      .query("toolApprovalRequests")
+      .withIndex("by_approval", (q) => q.eq("approvalId", approvalId))
+      .unique()
+    if (!approval || approval.userId !== ctx.user._id) return null
+
+    const run = await ctx.db.get(approval.runId)
+    if (!run) return null
+
+    return {
+      provider: run.provider,
+      routeId: run.routeId ?? null,
+      model: run.model,
+    }
+  },
 })
 
 export const updateAssistantSnapshot = ownedGenerationRunMutation({

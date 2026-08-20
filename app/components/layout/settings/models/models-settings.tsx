@@ -2,9 +2,9 @@
 
 import { Icon } from "@/components/ui/icon"
 import { useModel } from "@/lib/model-store/provider"
-import { ModelConfig } from "@/lib/models/types"
+import type { LogicalModelView } from "@/lib/models/catalog"
 import { getVendorIcon } from "@/lib/provider-icons"
-import { getVendor } from "@/lib/provider-identity"
+import { getVendor, MODEL_PROVIDER_IDENTITY } from "@/lib/provider-identity"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import {
   RiAddLine,
@@ -16,8 +16,15 @@ import { AnimatePresence, motion, Reorder } from "framer-motion"
 import { useMemo, useState } from "react"
 import { useFavoriteModels } from "./use-favorite-models"
 
-type FavoriteModelItem = ModelConfig & {
+type FavoriteModelItem = LogicalModelView & {
   isFavorite: boolean
+}
+
+/** Route detail for the models-settings row: "Anthropic · OpenRouter". */
+function routeNamesFor(model: LogicalModelView): string {
+  return model.routes
+    .map((route) => MODEL_PROVIDER_IDENTITY[route.providerId].name)
+    .join(" · ")
 }
 
 export function ModelsSettings() {
@@ -59,19 +66,17 @@ export function ModelsSettings() {
         model.name.toLowerCase().includes(searchQuery.toLowerCase())
       )
 
+    // Group by the model MAKER's vendor identity (ADR-0020): routes never
+    // create vendor groups, so OpenRouter appears only as route detail.
     return availableModels.reduce(
       (acc, model) => {
-        // OpenRouter models get their own section instead of mixing with direct providers
-        const iconKey =
-          model.providerId === "openrouter"
-            ? "openrouter"
-            : model.icon || "unknown"
+        const vendorKey = model.baseProviderId || "unknown"
 
-        if (!acc[iconKey]) {
-          acc[iconKey] = []
+        if (!acc[vendorKey]) {
+          acc[vendorKey] = []
         }
 
-        acc[iconKey].push(model)
+        acc[vendorKey].push(model)
 
         return acc
       },
@@ -110,7 +115,7 @@ export function ModelsSettings() {
 
   // Wrapped models carry real vendor ids without registered icons (qwen,
   // z-ai, moonshotai, …) — getVendorIcon falls back to the OpenRouter icon.
-  const getModelVendorIcon = (model: ModelConfig) =>
+  const getModelVendorIcon = (model: LogicalModelView) =>
     getVendorIcon(model.baseProviderId)
 
   return (
@@ -145,7 +150,7 @@ export function ModelsSettings() {
                             {model.name}
                           </span>
                           <div className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-xs">
-                            {model.provider}
+                            {routeNamesFor(model)}
                           </div>
                         </div>
                         {model.description && (
@@ -208,17 +213,18 @@ export function ModelsSettings() {
 
         <div className="space-y-6 pb-6">
           {Object.entries(availableModelsByProvider).map(
-            ([iconKey, modelsGroup]) => {
-              // The group key is a vendor id (handles the OpenRouter section correctly)
-              const vendor = getVendor(iconKey)
-              const GroupIcon = getVendorIcon(iconKey)
+            ([vendorKey, modelsGroup]) => {
+              // The group key is the maker's vendor id; unregistered vendors
+              // (qwen, z-ai, …) keep their raw id as the label.
+              const vendor = getVendor(vendorKey)
+              const GroupIcon = getVendorIcon(vendorKey)
 
               return (
-                <div key={iconKey} className="space-y-3">
+                <div key={vendorKey} className="space-y-3">
                   <div className="flex items-center gap-2">
                     {vendor && <GroupIcon className="size-5" />}
                     <h4 className="font-medium text-balance">
-                      {vendor?.name || iconKey}
+                      {vendor?.name || vendorKey}
                     </h4>
                     <span className="text-muted-foreground text-sm">
                       ({modelsGroup.length} models)
@@ -227,19 +233,6 @@ export function ModelsSettings() {
 
                   <div className="space-y-2 pl-7">
                     {modelsGroup.map((model) => {
-                      // Wrapped models route via OpenRouter regardless of the
-                      // underlying vendor — keep the vendor icon for identity,
-                      // but label the route accurately ("via Gemini" on an
-                      // OpenRouter-served model misstates who serves it).
-                      const UnderlyingVendorIcon =
-                        model.providerId === "openrouter"
-                          ? getVendorIcon(model.icon)
-                          : null
-                      const viaLabel =
-                        model.providerId === "openrouter"
-                          ? "OpenRouter"
-                          : model.provider
-
                       return (
                         <motion.div
                           key={model.id}
@@ -252,12 +245,9 @@ export function ModelsSettings() {
                         >
                           <div className="flex flex-col">
                             <div className="flex items-center gap-2">
-                              {UnderlyingVendorIcon && (
-                                <UnderlyingVendorIcon className="size-4 shrink-0" />
-                              )}
                               <span className="text-sm">{model.name}</span>
                               <span className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 text-xs">
-                                via {viaLabel}
+                                {routeNamesFor(model)}
                               </span>
                             </div>
                             {model.description && (

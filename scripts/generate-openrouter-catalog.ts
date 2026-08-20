@@ -22,6 +22,7 @@
  */
 import { readFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
+import { directModels } from "@/lib/models/data/direct"
 import {
   OPENROUTER_ALLOWLIST,
   type OpenRouterAllowlistEntry,
@@ -186,6 +187,29 @@ export function buildModelConfig(
     )
   }
 
+  // `logicalModelId` (ADR-0020) must name an unmapped DIRECT catalog record —
+  // never another wrapped id — so the logical catalog can compile the two
+  // records into one model. Fail generation, not just downstream compilation.
+  if (entry.logicalModelId !== undefined) {
+    const target = directModels.find(
+      (model) => model.id === entry.logicalModelId
+    )
+    if (!target) {
+      throw new Error(
+        `Allowlist entry "${entry.slug}" maps to logical model ` +
+          `"${entry.logicalModelId}", which is not a direct catalog id ` +
+          `(lib/models/data/direct.ts). Map to the direct record's id, or ` +
+          `remove the mapping to keep the entry its own logical model.`
+      )
+    }
+    if (target.logicalModelId !== undefined) {
+      throw new Error(
+        `Allowlist entry "${entry.slug}" maps to "${entry.logicalModelId}", ` +
+          `which is itself mapped — chained logical mappings are ambiguous.`
+      )
+    }
+  }
+
   return {
     id: `openrouter:${entry.slug}`,
     name: entry.name,
@@ -194,6 +218,9 @@ export function buildModelConfig(
     providerId: MODEL_PROVIDER_IDENTITY.openrouter.id,
     catalogStatus: "visible",
     idKind: "wrapped",
+    ...(entry.logicalModelId === undefined
+      ? {}
+      : { logicalModelId: entry.logicalModelId }),
     verifiedAgainst: entry.slug,
     lastVerifiedAt: retrievedAt,
     modelFamily: entry.modelFamily,

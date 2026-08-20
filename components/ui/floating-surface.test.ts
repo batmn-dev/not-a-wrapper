@@ -66,6 +66,7 @@ describe("floating surface contract", () => {
     expect(css).toContain(
       "--tooltip-edge-shadow: 0 8px 18px rgba(15, 23, 42, 0.2);"
     )
+    expect(css).toContain("--tooltip-multiline-radius: 0.75rem;")
   })
 
   it.each([
@@ -172,6 +173,9 @@ describe("floating surface contract", () => {
     const morphingPopover = read("components/ui/morphing-popover.tsx")
 
     expect(tooltip).toContain("rounded-(--tooltip-radius)")
+    expect(tooltip).toContain(
+      "has-[[data-slot=tooltip-multiline]]:rounded-(--tooltip-multiline-radius)"
+    )
     expect(tooltip).toContain("px-3 py-[5px]")
     expect(tooltip).toContain("text-sm leading-[18px]")
     expect(tooltip).toContain(

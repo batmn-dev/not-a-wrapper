@@ -150,12 +150,13 @@ function makeToolRuntime(overrides: Record<string, unknown> = {}) {
 }
 
 function makeInput(overrides: Partial<ChatTurnInput> = {}): ChatTurnInput {
+  const model = overrides.model ?? "test-model"
   return {
     messages: [
       { id: "u1", role: "user", parts: [{ type: "text", text: "hello" }] },
     ] as ChatTurnInput["messages"],
     chatId: SERVER_CHAT_ID,
-    model: "test-model",
+    model,
     systemPrompt: "sys",
     enableSearch: false,
     chatVersion: 1,
@@ -168,6 +169,14 @@ function makeInput(overrides: Partial<ChatTurnInput> = {}): ChatTurnInput {
       provider: "anthropic",
       apiKey: "byok-key",
       source: "byok",
+    },
+    route: {
+      modelId: model,
+      routeId: model,
+      providerId: "anthropic",
+      upstreamModelId: model,
+      credentialSource: "byok",
+      routeReason: "priority_byok",
     },
     ...overrides,
   }

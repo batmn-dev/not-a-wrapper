@@ -3,12 +3,12 @@
 import { api } from "@/convex/_generated/api"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
 import { fetchClient } from "@/lib/fetch"
-import { getModelInfo } from "@/lib/models"
 import {
-  resolveModelId,
-  resolveModelIds,
-} from "@/lib/models/model-id-migration"
-import { ModelConfig } from "@/lib/models/types"
+  isLogicalModelId,
+  resolveModelSelection,
+  resolveModelSelections,
+  type LogicalModelView,
+} from "@/lib/models/catalog"
 import {
   createContext,
   useCallback,
@@ -40,7 +40,8 @@ const DEFAULT_KEY_STATUS: UserKeyStatus = {
 }
 
 type ModelContextType = {
-  models: ModelConfig[]
+  /** One entry per visible logical model (ADR-0020). */
+  models: LogicalModelView[]
   userKeyStatus: UserKeyStatus
   favoriteModels: string[]
   lastUsedModel: string | null
@@ -53,10 +54,6 @@ type ModelContextType = {
 
 const ModelContext = createContext<ModelContextType | undefined>(undefined)
 
-function isKnownModelId(modelId: string): boolean {
-  return getModelInfo(resolveModelId(modelId)) !== undefined
-}
-
 function normalizeFavoriteModels(value: unknown): string[] {
   if (!Array.isArray(value)) return []
 
@@ -64,12 +61,14 @@ function normalizeFavoriteModels(value: unknown): string[] {
     (entry): entry is string => typeof entry === "string"
   )
 
-  const resolvedFavorites = resolveModelIds(rawFavorites)
-  return resolvedFavorites.filter((entry) => isKnownModelId(entry))
+  // Logical normalization (ADR-0020): aliases, successions, and old routed
+  // ids collapse to logical ids, deduplicated while preserving user order.
+  const resolvedFavorites = resolveModelSelections(rawFavorites)
+  return resolvedFavorites.filter((entry) => isLogicalModelId(entry))
 }
 
 export function ModelProvider({ children }: { children: React.ReactNode }) {
-  const [rawModels, setRawModels] = useState<ModelConfig[]>([])
+  const [rawModels, setRawModels] = useState<LogicalModelView[]>([])
   // Keep first render deterministic between SSR and hydration.
   // Persisted browser values are applied after mount.
   const [favoriteModels, setFavoriteModels] = useState<string[]>([])
@@ -78,8 +77,8 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
   const [modelPrefsHydrated, setModelPrefsHydrated] = useState(false)
 
   const setLastUsedModel = useCallback((model: string) => {
-    const resolvedModel = resolveModelId(model)
-    if (!isKnownModelId(resolvedModel)) return
+    const resolvedModel = resolveModelSelection(model).modelId
+    if (!isLogicalModelId(resolvedModel)) return
     setLastUsedModelState(resolvedModel)
     try {
       localStorage.setItem("lastUsedModel", resolvedModel)
@@ -100,15 +99,21 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
     )
   }, [providers])
 
-  const models = useMemo<ModelConfig[]>(() => {
+  const models = useMemo<LogicalModelView[]>(() => {
     return rawModels.map((model) => {
+      // `accessible` from the server carries the platform half (free-model
+      // entitlement); a key for ANY of the model's routes unlocks the rest.
+      // Presentation-only — the server route resolver re-derives eligibility
+      // and the actual credential at admission.
       if (model.accessible) return model
 
-      const hasProviderKey = userKeyStatus[model.providerId] === true
+      const hasRouteKey = model.routes.some(
+        (route) => userKeyStatus[route.providerId] === true
+      )
 
       return {
         ...model,
-        accessible: hasProviderKey,
+        accessible: hasRouteKey,
       }
     })
   }, [rawModels, userKeyStatus])
@@ -187,10 +192,10 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
     try {
       const cachedLastUsedModel = localStorage.getItem("lastUsedModel")
       const resolvedLastUsedModel = cachedLastUsedModel
-        ? resolveModelId(cachedLastUsedModel)
+        ? resolveModelSelection(cachedLastUsedModel).modelId
         : null
 
-      if (resolvedLastUsedModel && isKnownModelId(resolvedLastUsedModel)) {
+      if (resolvedLastUsedModel && isLogicalModelId(resolvedLastUsedModel)) {
         setLastUsedModelState(resolvedLastUsedModel)
         if (resolvedLastUsedModel !== cachedLastUsedModel) {
           localStorage.setItem("lastUsedModel", resolvedLastUsedModel)

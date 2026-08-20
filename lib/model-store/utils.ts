@@ -1,7 +1,7 @@
 import { getDefaultModelForUser, NON_AUTH_ALLOWED_MODELS } from "@/lib/config"
 import { getModelInfo } from "@/lib/models"
+import { resolveModelSelection } from "@/lib/models/catalog"
 import { openrouterModels } from "@/lib/models/data/openrouter"
-import { resolveModelId } from "@/lib/models/model-id-migration"
 import type { ModelConfig } from "@/lib/models/types"
 
 /**
@@ -30,15 +30,17 @@ const DIRECT_PROVIDER_DEFAULT_MODEL_ORDER: string[] = [
 ]
 
 /**
- * Curated default model order for the model selector.
- * Direct-provider IDs are curated above. Wrapped OpenRouter IDs are generated
- * from the allowlist order, so derive that suffix from the generated catalog
- * instead of keeping a second manual copy here.
+ * Curated default model order for the selector. Direct-provider IDs are
+ * curated above; the OpenRouter-only suffix derives from the generated
+ * catalog's allowlist order. Wrapped records mapped onto a direct logical
+ * model (ADR-0020) are routes, not selector entries, so they are excluded.
  * Models not in this list preserve their original array-declaration order.
  */
 export const DEFAULT_MODEL_ORDER: string[] = [
   ...DIRECT_PROVIDER_DEFAULT_MODEL_ORDER,
-  ...openrouterModels.map((model) => model.id),
+  ...openrouterModels
+    .filter((model) => model.logicalModelId === undefined)
+    .map((model) => model.id),
 ]
 
 export function isModelVisibleInSelector(
@@ -48,11 +50,13 @@ export function isModelVisibleInSelector(
 }
 
 const NON_AUTH_ALLOWED_MODEL_IDS = new Set(
-  NON_AUTH_ALLOWED_MODELS.map((modelId) => resolveModelId(modelId))
+  NON_AUTH_ALLOWED_MODELS.map(
+    (modelId) => resolveModelSelection(modelId).modelId
+  )
 )
 
 export function isModelAllowedForAnonymous(modelId: string): boolean {
-  return NON_AUTH_ALLOWED_MODEL_IDS.has(resolveModelId(modelId))
+  return NON_AUTH_ALLOWED_MODEL_IDS.has(resolveModelSelection(modelId).modelId)
 }
 
 export function isModelSelectableForAuthState(
@@ -66,55 +70,56 @@ export function isModelSelectableForAuthState(
   return model.accessible === true
 }
 
+export type SelectorModelGroups<M extends ModelConfig = ModelConfig> = {
+  /** The user's favorites, in the user's order. Ranking, not a filter. */
+  favorites: M[]
+  /** Every other visible model, in the curated default order. */
+  others: M[]
+}
+
+function byDefaultOrder(a: ModelConfig, b: ModelConfig): number {
+  const aOrder = DEFAULT_MODEL_ORDER.indexOf(a.id)
+  const bOrder = DEFAULT_MODEL_ORDER.indexOf(b.id)
+  const aInList = aOrder !== -1
+  const bInList = bOrder !== -1
+
+  if (aInList && bInList) return aOrder - bOrder
+  if (aInList) return -1
+  if (bInList) return 1
+  return 0 // preserve original array-declaration order
+}
+
 /**
- * Utility function to filter and sort models based on favorites, search, and visibility
- * @param models - All available models
- * @param favoriteModels - Array of favorite model IDs
- * @param searchQuery - Search query to filter by model name
- * @param isModelHidden - Function to check if a model is hidden
- * @returns Filtered and sorted models
+ * Group the visible catalog for the selector. Favorites RANK models — they
+ * never hide the rest of the catalog — and search always covers the whole
+ * logical catalog. Only explicit user-hidden models are excluded.
  */
-export function filterAndSortModels(
-  models: ModelConfig[],
+export function groupModelsForSelector<M extends ModelConfig>(
+  models: M[],
   favoriteModels: string[],
   searchQuery: string,
   isModelHidden: (modelId: string) => boolean
-): ModelConfig[] {
+): SelectorModelGroups<M> {
   const selectorModels = models.filter(
-    (model) => isModelVisibleInSelector(model) && !isModelHidden(model.id)
-  )
-  const visibleFavoriteModels = favoriteModels.filter((favoriteModelId) =>
-    selectorModels.some((model) => model.id === favoriteModelId)
-  )
-  const shouldRestrictToFavorites = visibleFavoriteModels.length > 0
-
-  return selectorModels
-    .filter((model) => {
-      if (shouldRestrictToFavorites) {
-        return visibleFavoriteModels.includes(model.id)
-      }
-      return true
-    })
-    .filter((model) =>
+    (model) =>
+      isModelVisibleInSelector(model) &&
+      !isModelHidden(model.id) &&
       model.name.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  const favoriteRank = new Map(
+    favoriteModels.map((modelId, index) => [modelId, index])
+  )
+  const favorites = selectorModels
+    .filter((model) => favoriteRank.has(model.id))
+    .sort(
+      (a, b) => (favoriteRank.get(a.id) ?? 0) - (favoriteRank.get(b.id) ?? 0)
     )
-    .sort((a, b) => {
-      if (shouldRestrictToFavorites) {
-        const aIndex = visibleFavoriteModels.indexOf(a.id)
-        const bIndex = visibleFavoriteModels.indexOf(b.id)
-        return aIndex - bIndex
-      }
+  const others = selectorModels
+    .filter((model) => !favoriteRank.has(model.id))
+    .sort(byDefaultOrder)
 
-      const aOrder = DEFAULT_MODEL_ORDER.indexOf(a.id)
-      const bOrder = DEFAULT_MODEL_ORDER.indexOf(b.id)
-      const aInList = aOrder !== -1
-      const bInList = bOrder !== -1
-
-      if (aInList && bInList) return aOrder - bOrder
-      if (aInList) return -1
-      if (bInList) return 1
-      return 0 // preserve original array-declaration order
-    })
+  return { favorites, others }
 }
 
 type ResolvePreferredModelIdOptions = {
@@ -144,7 +149,7 @@ export function resolvePreferredModelId({
     modelId: string | null | undefined
   ): string | null => {
     if (!modelId) return null
-    const resolvedModelId = resolveModelId(modelId)
+    const resolvedModelId = resolveModelSelection(modelId).modelId
     return models.some((model) => model.id === resolvedModelId)
       ? resolvedModelId
       : null
@@ -154,7 +159,7 @@ export function resolvePreferredModelId({
     modelId: string | null | undefined
   ): string | null => {
     if (!modelId) return null
-    const resolvedModelId = resolveModelId(modelId)
+    const resolvedModelId = resolveModelSelection(modelId).modelId
     return getModelInfo(resolvedModelId) ? resolvedModelId : null
   }
 
@@ -197,15 +202,16 @@ export function resolvePreferredModelId({
     if (firstVisibleModelId) return firstVisibleModelId
   }
 
-  const defaultRoutableModelId = resolveModelId(
+  const defaultRoutableModelId = resolveModelSelection(
     getDefaultModelForUser(isAuthenticated)
-  )
+  ).modelId
   if (isAuthenticated || isModelAllowedForAnonymous(defaultRoutableModelId)) {
     return defaultRoutableModelId
   }
 
   if (defaultModelId) return defaultModelId
   return (
-    models[0]?.id ?? resolveModelId(getDefaultModelForUser(isAuthenticated))
+    models[0]?.id ??
+    resolveModelSelection(getDefaultModelForUser(isAuthenticated)).modelId
   )
 }

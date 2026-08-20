@@ -70,14 +70,14 @@ const modelSelectorMocks = {
       accessible: true,
     },
     {
-      id: "openrouter:openai/gpt-5.4",
-      name: "GPT-5.4",
+      id: "openrouter:z-ai/glm-5.2",
+      name: "GLM 5.2",
       provider: "OpenRouter",
       providerId: "openrouter",
       catalogStatus: "visible",
       idKind: "wrapped",
-      baseProviderId: "openai",
-      icon: "openai",
+      baseProviderId: "z-ai",
+      icon: "openrouter",
       accessible: true,
     },
     {
@@ -395,7 +395,7 @@ describe("ModelSelector", () => {
     const onSelect = renderSelector({ isUserAuthenticated: false })
 
     expect(document.body.textContent).toContain("GPT-5 Mini")
-    expect(document.body.textContent).toContain("OpenRouter")
+    expect(document.body.textContent).toContain("GLM 5.2")
     expect(
       document.body.querySelector('[data-testid="drawer-trigger"]')
     ).toBeTruthy()
@@ -407,7 +407,10 @@ describe("ModelSelector", () => {
     expect(onSelect).toHaveBeenCalledWith("gpt-5-mini")
   })
 
-  it("keeps OpenRouter route labels in options, not the selected trigger", () => {
+  it("normalizes a legacy routed selection to one logical row with no route suffix", () => {
+    // The old wrapped GPT-5.4 id is a ROUTE of the direct logical model now
+    // (ADR-0020): the trigger shows the logical identity, the catalog renders
+    // ONE GPT-5.4 row, and no row carries an OpenRouter route label.
     renderSelector({
       isUserAuthenticated: false,
       selectedModelId: "openrouter:openai/gpt-5.4",
@@ -422,16 +425,23 @@ describe("ModelSelector", () => {
     expect(trigger?.getAttribute("aria-label")).toBe(
       "Select model, current model GPT-5.4"
     )
-    expect(
-      Array.from(
-        document.body.querySelectorAll<HTMLButtonElement>(
-          '[data-testid="model-option"]'
-        )
-      ).some(
-        (option) =>
-          option.textContent?.includes("GPT-5.4") &&
-          option.textContent.includes("OpenRouter")
+
+    const options = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>(
+        '[data-testid="model-option"]'
       )
+    )
+    expect(
+      options.filter((option) => option.textContent?.includes("GPT-5.4"))
+    ).toHaveLength(1)
+    expect(
+      options.some((option) => option.textContent?.includes("OpenRouter"))
+    ).toBe(false)
+    // The normalized selection highlights the logical row.
+    expect(
+      options
+        .find((option) => option.textContent?.includes("GPT-5.4"))
+        ?.className.includes("bg-interactive-selected")
     ).toBe(true)
   })
 
@@ -496,7 +506,7 @@ describe("ModelSelector", () => {
     expect(onSelect).not.toHaveBeenCalled()
   })
 
-  it("preserves signed-in favorite and hidden-model filtering", () => {
+  it("ranks favorites first without hiding the rest of the catalog", () => {
     renderSelector({ isUserAuthenticated: true })
 
     const optionText = Array.from(
@@ -505,9 +515,14 @@ describe("ModelSelector", () => {
       )
     ).map((button) => button.textContent ?? "")
 
-    expect(optionText).toHaveLength(1)
+    // Favorite (gpt-5.4) leads; every non-hidden model stays reachable.
     expect(optionText[0]).toContain("GPT-5.4")
-    expect(optionText.join(" ")).not.toContain("GPT-5 Mini")
+    expect(optionText.join(" ")).toContain("GPT-5 Mini")
+    expect(optionText.join(" ")).toContain("GLM 5.2")
+    // Explicit user-hidden models stay hidden.
     expect(optionText.join(" ")).not.toContain("Claude Opus 4.6")
+    // Sections label the ranking.
+    expect(document.body.textContent).toContain("Favorites")
+    expect(document.body.textContent).toContain("All models")
   })
 })

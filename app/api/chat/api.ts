@@ -1,12 +1,16 @@
 import { api } from "@/convex/_generated/api"
-import { FREE_MODELS_IDS, NON_AUTH_ALLOWED_MODELS } from "@/lib/config"
+import { FREE_MODELS_IDS } from "@/lib/config"
 import { resolveModelId } from "@/lib/models/model-id-migration"
-import { getProviderForModel } from "@/lib/openproviders/provider-map"
 import {
-  getEffectiveProviderApiKey,
-  type ProviderCredentialResolution,
-} from "@/lib/user-keys"
+  resolveModelRoute,
+  type ResolvedModelRoute,
+  type RouteResolutionFailure,
+} from "@/lib/model-route-resolver"
+import { MODEL_PROVIDER_IDENTITY, type Provider } from "@/lib/provider-identity"
+import { type ProviderCredentialResolution } from "@/lib/user-keys"
+import type { UIMessage } from "ai"
 import { fetchMutation, fetchQuery } from "convex/nextjs"
+import { extractApprovalResponses } from "./durable-turn-runtime"
 import { PublicChatHttpError } from "./public-http-error"
 
 const USAGE_ERROR_CODES = {
@@ -125,48 +129,129 @@ export async function incrementServerSideUsage(
 }
 
 type ChatCredentialAdmissionParams = {
+  /** The requested model id — logical, legacy alias, or old routed id. */
   model: string
   isAuthenticated: boolean
   token?: string
+  /** The turn's wire messages: capability requirements + approval pinning. */
+  messages: UIMessage[]
 }
 
-/** Validate access and resolve the one credential snapshot used by the turn. */
-export async function validateAndResolveChatCredential({
-  model,
-  isAuthenticated,
-  token,
-}: ChatCredentialAdmissionParams): Promise<ProviderCredentialResolution> {
-  const resolvedModel = resolveModelId(model)
+export type ChatRouteAdmission = {
+  /** Immutable route-resolution receipt (ADR-0020), persisted on the run. */
+  route: ResolvedModelRoute
+  /** Server-only credential fact the turn runtime consumes. Never logged. */
+  credential: ProviderCredentialResolution
+}
 
-  if (
-    !isAuthenticated &&
-    !NON_AUTH_ALLOWED_MODELS.includes(resolvedModel)
-  ) {
-    throw new PublicChatHttpError({
+function turnRequiresVision(messages: UIMessage[]): boolean {
+  return messages.some((message) =>
+    message.parts.some(
+      (part) =>
+        part.type === "file" &&
+        typeof part.mediaType === "string" &&
+        part.mediaType.startsWith("image/")
+    )
+  )
+}
+
+/**
+ * Approval continuations must stay pinned to the paused run's route. The
+ * resolver is constrained to that provider here (best-effort, owner-checked
+ * read); Convex's transactional `approval_provider_mismatch` check remains
+ * the fail-closed enforcement either way.
+ */
+async function getPinnedContinuationProvider(
+  messages: UIMessage[],
+  token: string | undefined
+): Promise<Provider | undefined> {
+  if (!token) return undefined
+  const responses = extractApprovalResponses(messages)
+  const approvalId = responses[0]?.approvalId
+  if (!approvalId) return undefined
+
+  const facts = await fetchQuery(
+    api.chatRuntime.getApprovalRouteFacts,
+    { approvalId },
+    { token }
+  )
+  const provider = facts?.provider
+  return provider && provider in MODEL_PROVIDER_IDENTITY
+    ? (provider as Provider)
+    : undefined
+}
+
+function toAdmissionError(
+  failure: RouteResolutionFailure
+): PublicChatHttpError {
+  if (failure.reason === "auth_required") {
+    return new PublicChatHttpError({
       message:
         "This model requires authentication. Please sign in to access more models.",
       statusCode: 401,
       code: "AUTH_REQUIRED",
     })
   }
-
-  const provider = getProviderForModel(resolvedModel)
-  const credential = await getEffectiveProviderApiKey(
-    provider,
-    isAuthenticated ? token : undefined
-  )
-
-  if (
-    isAuthenticated &&
-    !FREE_MODELS_IDS.includes(resolvedModel) &&
-    credential.source !== "byok"
-  ) {
-    throw new PublicChatHttpError({
-      message: `This model requires an API key for ${provider}. Please add your API key in settings or use a free model.`,
-      statusCode: 401,
-      code: "MISSING_API_KEY",
+  if (failure.reason === "model_not_found") {
+    return new PublicChatHttpError({
+      message: `Model ${failure.modelId} not found`,
+      statusCode: 400,
+      code: "INVALID_REQUEST",
     })
   }
+  if (failure.keyProviders.length === 0) {
+    return new PublicChatHttpError({
+      message:
+        "This model has no route that supports this request (for example, image attachments).",
+      statusCode: 400,
+      code: "INVALID_REQUEST",
+    })
+  }
+  const providerNames = failure.keyProviders
+    .map((provider) => MODEL_PROVIDER_IDENTITY[provider].name)
+    .join(" or ")
+  return new PublicChatHttpError({
+    message: `This model requires an API key for ${providerNames}. Please add your API key in settings or use a free model.`,
+    statusCode: 401,
+    code: "MISSING_API_KEY",
+  })
+}
 
-  return credential
+/**
+ * Validate access and resolve the one route + credential snapshot used by
+ * the turn (ADR-0020). The client is never authoritative here: entitlement,
+ * key presence, and decryption are all re-derived server-side.
+ */
+export async function validateAndResolveChatCredential({
+  model,
+  isAuthenticated,
+  token,
+  messages,
+}: ChatCredentialAdmissionParams): Promise<ChatRouteAdmission> {
+  const pinnedProviderId = isAuthenticated
+    ? await getPinnedContinuationProvider(messages, token)
+    : undefined
+
+  const resolution = await resolveModelRoute({
+    modelId: model,
+    isAuthenticated,
+    token: isAuthenticated ? token : undefined,
+    requiredCapabilities: turnRequiresVision(messages)
+      ? { vision: true }
+      : undefined,
+    pinnedProviderId,
+  })
+
+  if (!resolution.ok) {
+    throw toAdmissionError(resolution)
+  }
+
+  return {
+    route: resolution.route,
+    credential: {
+      provider: resolution.route.providerId,
+      apiKey: resolution.apiKey,
+      source: resolution.route.credentialSource,
+    },
+  }
 }
