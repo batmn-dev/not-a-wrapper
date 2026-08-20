@@ -18,6 +18,7 @@ import {
   convertFromApiFormat,
   convertToApiFormat,
   defaultPreferences,
+  normalizeHiddenModels,
   normalizeStreamingPresentation,
   type LayoutType,
   type StreamingPresentation,
@@ -182,10 +183,14 @@ export function UserPreferencesProvider({
   )
 
   const preferences = useMemo(() => {
-    if (isAuthenticated) {
-      return { ...serverPreferences, ...optimisticUpdates }
+    const currentPreferences = isAuthenticated
+      ? { ...serverPreferences, ...optimisticUpdates }
+      : localStoragePrefs
+
+    return {
+      ...currentPreferences,
+      hiddenModels: normalizeHiddenModels(currentPreferences.hiddenModels),
     }
-    return localStoragePrefs
   }, [isAuthenticated, serverPreferences, optimisticUpdates, localStoragePrefs])
 
   const isLoading = isAuthenticated && convexPreferences === undefined

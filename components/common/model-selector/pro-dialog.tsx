@@ -17,6 +17,8 @@ import {
 import { api } from "@/convex/_generated/api"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { APP_NAME } from "@/lib/config"
+import { getLogicalModel, resolveModelSelection } from "@/lib/models/catalog"
+import { MODEL_PROVIDER_IDENTITY } from "@/lib/provider-identity"
 import { useUser } from "@/lib/user-store/provider"
 import { useMutation as useTanstackMutation } from "@tanstack/react-query"
 import { useMutation as useConvexMutation } from "convex/react"
@@ -43,6 +45,20 @@ export function ProModelDialog({
     },
   })
 
+  // The concise key-setup path: which providers' keys can serve this model.
+  const logicalModel = currentModel
+    ? getLogicalModel(resolveModelSelection(currentModel).modelId)
+    : undefined
+  const keyProviderNames = logicalModel
+    ? [
+        ...new Set(
+          logicalModel.routes.map(
+            (route) => MODEL_PROVIDER_IDENTITY[route.providerId].name
+          )
+        ),
+      ]
+    : []
+
   const renderContent = () => (
     <div className="flex max-h-[70vh] flex-col" key={currentModel}>
       <div className="relative">
@@ -62,11 +78,18 @@ export function ProModelDialog({
       <div className="flex-grow overflow-y-auto">
         <div className="px-6 py-4">
           <p className="text-muted-foreground">
-            To use it, connect your own API key. Not A Wrapper supports BYOK via{" "}
-            <span className="text-primary inline-flex font-medium">
-              OpenRouter
-            </span>
-            .
+            To use it, connect your own API key.{" "}
+            {keyProviderNames.length > 0 ? (
+              <>
+                This model runs with{" "}
+                <span className="text-primary inline-flex font-medium">
+                  {keyProviderNames.join(" or ")}
+                </span>
+                .
+              </>
+            ) : (
+              <>{APP_NAME} supports BYOK across providers.</>
+            )}
           </p>
           <p className="text-muted-foreground mt-1">
             Go to{" "}

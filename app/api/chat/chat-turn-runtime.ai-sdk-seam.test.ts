@@ -327,6 +327,14 @@ function makeInput(overrides: Partial<ChatTurnInput> = {}): ChatTurnInput {
       apiKey: "sk-test",
       source: "byok",
     },
+    route: {
+      modelId: MODEL_ID,
+      routeId: MODEL_ID,
+      providerId: "anthropic",
+      upstreamModelId: MODEL_ID,
+      credentialSource: "byok",
+      routeReason: "priority_byok",
+    },
     ...overrides,
   }
 }
@@ -429,6 +437,7 @@ function makeDeps(
       null) as unknown as ChatTurnDeps["getPostHogClient"],
     durableWorkerWire: wire,
     durableSettleRetryDelaysMs: [0],
+    chatAdmissionProofSigner: () => "f".repeat(64),
   }
 }
 

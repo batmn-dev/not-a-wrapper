@@ -7,6 +7,25 @@ type TooltipShortcutProps = Omit<React.ComponentProps<"span">, "children"> & {
   detail?: React.ReactNode
 }
 
+type TooltipMultilineProps = React.ComponentProps<"span">
+
+/**
+ * Stacks related tooltip lines and opts the surface into multiline rounding.
+ * Single-line tooltips keep the pill-shaped default.
+ */
+function TooltipMultiline({ className, ...props }: TooltipMultilineProps) {
+  return (
+    <span
+      data-slot="tooltip-multiline"
+      className={cn(
+        "flex flex-col items-center text-center leading-tight",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
 /**
  * Tooltip label + keyboard shortcut composition.
  * Shortcut keys stay unboxed, inherit the tooltip's tertiary token, and use
@@ -128,7 +147,7 @@ function TooltipContent({
           data-slot="tooltip-content"
           data-variant={variant}
           className={cn(
-            "z-50 inline-flex w-fit max-w-xs items-center gap-2 rounded-(--tooltip-radius) px-3 py-[5px] [font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,'Segoe_UI',Helvetica,'Apple_Color_Emoji',Arial,sans-serif,'Segoe_UI_Emoji','Segoe_UI_Symbol'] text-sm leading-[18px] font-semibold tracking-[-0.15px] transition-opacity duration-150 ease-[cubic-bezier(0.4,0,0.2,1)]",
+            "z-50 inline-flex w-fit max-w-xs items-center gap-2 rounded-(--tooltip-radius) px-3 py-[5px] [font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,'Segoe_UI',Helvetica,'Apple_Color_Emoji',Arial,sans-serif,'Segoe_UI_Emoji','Segoe_UI_Symbol'] text-sm leading-[18px] font-semibold tracking-[-0.15px] transition-opacity duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] has-[[data-slot=tooltip-multiline]]:rounded-(--tooltip-multiline-radius)",
             variant === "default"
               ? "dark shadow-tooltip border border-[var(--border-tooltip)] bg-[var(--bg-tooltip)] text-white"
               : "bg-popover text-popover-foreground shadow-floating-surface font-medium",
@@ -157,6 +176,7 @@ export {
   Tooltip,
   TooltipTrigger,
   TooltipContent,
+  TooltipMultiline,
   TooltipProvider,
   TooltipShortcut,
 }

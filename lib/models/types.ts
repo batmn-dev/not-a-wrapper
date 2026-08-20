@@ -32,6 +32,15 @@ type ModelConfig = {
 
   catalogStatus: ModelCatalogStatus
   idKind: Exclude<ModelIdKind, "alias">
+  /**
+   * Explicit logical-model mapping (ADR-0020). A route record whose model is
+   * already represented by a direct catalog entry names that entry here; the
+   * logical catalog compiles both records into ONE selector model with two
+   * routes. Absent → this record is its own logical model (its id doubles as
+   * the logical id). Never inferred from display names; a target that is
+   * missing or itself mapped fails catalog compilation loudly.
+   */
+  logicalModelId?: string
   replacementModelId?: string
   verifiedAgainst?: string
   lastVerifiedAt?: string

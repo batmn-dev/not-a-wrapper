@@ -9,6 +9,7 @@ import {
   MessageContent,
 } from "@/components/ui/message"
 import { SystemMessage } from "@/components/ui/system-message"
+import { TooltipMultiline } from "@/components/ui/tooltip"
 import { deriveAssistantActivityPresentation } from "@/lib/chat-messages/assistant-activity"
 import {
   deriveAssistantTurnPhase,
@@ -371,12 +372,12 @@ export function MessageAssistant({
                 <MessageActionButton
                   label={`Try again with ${retryModelName}`}
                   tooltip={
-                    <span className="flex flex-col items-center text-center leading-tight">
+                    <TooltipMultiline>
                       <span className="font-medium">Try again...</span>
                       <span className="text-[var(--text-tertiary)]">
                         Using {retryModelName}
                       </span>
-                    </span>
+                    </TooltipMultiline>
                   }
                   delay={0}
                   onClick={() => onReload?.(messageId)}

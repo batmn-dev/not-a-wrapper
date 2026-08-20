@@ -1,6 +1,10 @@
+import type { UIMessage } from "ai"
 import { fetchQuery } from "convex/nextjs"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { getEffectiveProviderApiKey } from "@/lib/user-keys"
+import {
+  resolveModelRoute,
+  type RouteResolutionFailure,
+} from "@/lib/model-route-resolver"
 import {
   checkServerSideUsage,
   validateAndResolveChatCredential,
@@ -12,8 +16,8 @@ vi.mock("convex/nextjs", () => ({
   fetchQuery: vi.fn(),
 }))
 
-vi.mock("@/lib/user-keys", () => ({
-  getEffectiveProviderApiKey: vi.fn(),
+vi.mock("@/lib/model-route-resolver", () => ({
+  resolveModelRoute: vi.fn(),
 }))
 
 describe("checkServerSideUsage", () => {
@@ -144,99 +148,294 @@ describe("checkServerSideUsage", () => {
 })
 
 describe("validateAndResolveChatCredential", () => {
-  it("enforces the essential paid, free, and guest policy table", async () => {
-    const cases = [
-      {
-        name: "paid model with BYOK",
-        model: "gpt-5.2",
+  const textMessages = [
+    {
+      id: "u1",
+      role: "user",
+      parts: [{ type: "text", text: "hello" }],
+    },
+  ] as UIMessage[]
+
+  const resolvedRoute = {
+    modelId: "claude-sonnet-5",
+    routeId: "openrouter:anthropic/claude-sonnet-5",
+    providerId: "openrouter",
+    upstreamModelId: "anthropic/claude-sonnet-5",
+    credentialSource: "byok",
+    routeReason: "priority_byok",
+  } as const
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("returns the route receipt plus the credential snapshot it implies", async () => {
+    vi.mocked(resolveModelRoute).mockResolvedValue({
+      ok: true,
+      route: resolvedRoute,
+      apiKey: "sk-or-byok",
+    })
+
+    await expect(
+      validateAndResolveChatCredential({
+        model: "openrouter:anthropic/claude-sonnet-5",
         isAuthenticated: true,
         token: "convex-token",
-        credential: {
-          provider: "openai",
-          apiKey: "byok-key",
-          source: "byok",
+        messages: textMessages,
+      })
+    ).resolves.toEqual({
+      route: resolvedRoute,
+      credential: {
+        provider: "openrouter",
+        apiKey: "sk-or-byok",
+        source: "byok",
+      },
+    })
+
+    expect(resolveModelRoute).toHaveBeenCalledWith({
+      modelId: "openrouter:anthropic/claude-sonnet-5",
+      isAuthenticated: true,
+      token: "convex-token",
+      requiredCapabilities: undefined,
+      pinnedProviderId: undefined,
+    })
+  })
+
+  it("maps resolver failures to the public admission contract", async () => {
+    const cases: Array<{
+      failure: RouteResolutionFailure
+      expected: Record<string, unknown>
+    }> = [
+      {
+        failure: {
+          ok: false,
+          reason: "auth_required",
+          modelId: "claude-sonnet-5",
+          keyProviders: [],
         },
-        expected: "resolve",
+        expected: { statusCode: 401, code: "AUTH_REQUIRED" },
       },
       {
-        name: "paid model with platform credential",
-        model: "gpt-5.2",
-        isAuthenticated: true,
-        token: "convex-token",
-        credential: {
-          provider: "openai",
-          apiKey: "platform-key",
-          source: "platform",
+        failure: {
+          ok: false,
+          reason: "model_not_found",
+          modelId: "missing-model",
+          keyProviders: [],
         },
-        expected: "MISSING_API_KEY",
+        expected: { statusCode: 400, code: "INVALID_REQUEST" },
       },
       {
-        name: "free model with platform credential",
-        model: "gpt-5-mini",
-        isAuthenticated: true,
-        token: "convex-token",
-        credential: {
-          provider: "openai",
-          apiKey: "platform-key",
-          source: "platform",
+        failure: {
+          ok: false,
+          reason: "no_eligible_route",
+          modelId: "claude-sonnet-5",
+          keyProviders: ["anthropic", "openrouter"],
         },
-        expected: "resolve",
+        expected: {
+          statusCode: 401,
+          code: "MISSING_API_KEY",
+          message: expect.stringContaining("Anthropic or OpenRouter"),
+        },
       },
       {
-        name: "allowed guest model",
-        model: "gpt-5-mini",
-        isAuthenticated: false,
-        token: undefined,
-        credential: {
-          provider: "openai",
-          apiKey: "platform-key",
-          source: "platform",
+        // Capability mismatch: no candidate route at all.
+        failure: {
+          ok: false,
+          reason: "no_eligible_route",
+          modelId: "claude-sonnet-5",
+          keyProviders: [],
         },
-        expected: "resolve",
+        expected: { statusCode: 400, code: "INVALID_REQUEST" },
       },
-      {
-        name: "disallowed guest model",
-        model: "gpt-5.2",
-        isAuthenticated: false,
-        token: undefined,
-        credential: undefined,
-        expected: "AUTH_REQUIRED",
-      },
-    ] as const
+    ]
 
     for (const testCase of cases) {
-      vi.mocked(getEffectiveProviderApiKey).mockReset()
-      if (testCase.credential) {
-        vi.mocked(getEffectiveProviderApiKey).mockResolvedValue(
-          testCase.credential
-        )
-      }
+      vi.mocked(resolveModelRoute).mockResolvedValue(testCase.failure)
 
-      const result = validateAndResolveChatCredential({
-        model: testCase.model,
-        isAuthenticated: testCase.isAuthenticated,
-        token: testCase.token,
-      })
+      const error = await validateAndResolveChatCredential({
+        model: "claude-sonnet-5",
+        isAuthenticated: true,
+        token: "convex-token",
+        messages: textMessages,
+      }).then(
+        () => null,
+        (caught) => caught
+      )
 
-      if (testCase.expected === "resolve") {
-        await expect(result, testCase.name).resolves.toEqual(
-          testCase.credential
-        )
-      } else {
-        await expect(result, testCase.name).rejects.toMatchObject({
-          statusCode: 401,
-          code: testCase.expected,
-        })
-      }
-
-      if (testCase.expected === "AUTH_REQUIRED") {
-        expect(getEffectiveProviderApiKey, testCase.name).not.toHaveBeenCalled()
-      } else {
-        expect(getEffectiveProviderApiKey, testCase.name).toHaveBeenCalledWith(
-          "openai",
-          testCase.isAuthenticated ? testCase.token : undefined
-        )
-      }
+      expect(error).toMatchObject(testCase.expected)
+      // Secrets never ride admission errors.
+      expect(JSON.stringify(error)).not.toContain("sk-")
     }
+  })
+
+  it("requires vision routes when the turn carries image attachments", async () => {
+    vi.mocked(resolveModelRoute).mockResolvedValue({
+      ok: true,
+      route: resolvedRoute,
+      apiKey: "sk-or-byok",
+    })
+
+    await validateAndResolveChatCredential({
+      model: "claude-sonnet-5",
+      isAuthenticated: true,
+      token: "convex-token",
+      messages: [
+        {
+          id: "u1",
+          role: "user",
+          parts: [
+            { type: "text", text: "what is this?" },
+            {
+              type: "file",
+              mediaType: "image/png",
+              url: "convex://file-1",
+            },
+          ],
+        },
+      ] as UIMessage[],
+    })
+
+    expect(resolveModelRoute).toHaveBeenCalledWith(
+      expect.objectContaining({ requiredCapabilities: { vision: true } })
+    )
+  })
+
+  it("does not require vision for images from an earlier turn", async () => {
+    vi.mocked(resolveModelRoute).mockResolvedValue({
+      ok: true,
+      route: resolvedRoute,
+      apiKey: "sk-or-byok",
+    })
+
+    await validateAndResolveChatCredential({
+      model: "sonar",
+      isAuthenticated: true,
+      token: "convex-token",
+      messages: [
+        {
+          id: "u1",
+          role: "user",
+          parts: [
+            { type: "text", text: "what is this?" },
+            {
+              type: "file",
+              mediaType: "image/png",
+              url: "convex://file-1",
+            },
+          ],
+        },
+        {
+          id: "a1",
+          role: "assistant",
+          parts: [{ type: "text", text: "It is a diagram." }],
+        },
+        {
+          id: "u2",
+          role: "user",
+          parts: [{ type: "text", text: "Search for related work." }],
+        },
+      ] as UIMessage[],
+    })
+
+    expect(resolveModelRoute).toHaveBeenCalledWith(
+      expect.objectContaining({ requiredCapabilities: undefined })
+    )
+  })
+
+  it("pins an approval continuation to the paused run's provider", async () => {
+    vi.mocked(fetchQuery).mockResolvedValue({
+      provider: "anthropic",
+      routeId: "claude-sonnet-5",
+      model: "claude-sonnet-5",
+    })
+    vi.mocked(resolveModelRoute).mockResolvedValue({
+      ok: true,
+      route: { ...resolvedRoute, providerId: "anthropic" },
+      apiKey: "sk-ant-byok",
+    })
+
+    await validateAndResolveChatCredential({
+      model: "claude-sonnet-5",
+      isAuthenticated: true,
+      token: "convex-token",
+      messages: [
+        ...textMessages,
+        {
+          id: "a1",
+          role: "assistant",
+          parts: [
+            {
+              type: "dynamic-tool",
+              toolName: "search",
+              toolCallId: "call-1",
+              state: "approval-responded",
+              approval: { id: "appr-1", approved: true },
+            },
+          ],
+        },
+      ] as unknown as UIMessage[],
+    })
+
+    expect(fetchQuery).toHaveBeenCalledWith(
+      expect.anything(),
+      { approvalId: "appr-1" },
+      { token: "convex-token" }
+    )
+    expect(resolveModelRoute).toHaveBeenCalledWith(
+      expect.objectContaining({ pinnedProviderId: "anthropic" })
+    )
+  })
+
+  it("continues without a provider pin when the approval lookup fails", async () => {
+    const lookupError = new Error("Convex transport failed")
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    vi.mocked(fetchQuery).mockRejectedValue(lookupError)
+    vi.mocked(resolveModelRoute).mockResolvedValue({
+      ok: true,
+      route: resolvedRoute,
+      apiKey: "sk-or-byok",
+    })
+
+    await expect(
+      validateAndResolveChatCredential({
+        model: "claude-sonnet-5",
+        isAuthenticated: true,
+        token: "convex-token",
+        messages: [
+          ...textMessages,
+          {
+            id: "a1",
+            role: "assistant",
+            parts: [
+              {
+                type: "dynamic-tool",
+                toolName: "search",
+                toolCallId: "call-1",
+                state: "approval-responded",
+                approval: { id: "appr-1", approved: true },
+              },
+            ],
+          },
+        ] as unknown as UIMessage[],
+      })
+    ).resolves.toEqual({
+      route: resolvedRoute,
+      credential: {
+        provider: "openrouter",
+        apiKey: "sk-or-byok",
+        source: "byok",
+      },
+    })
+
+    expect(resolveModelRoute).toHaveBeenCalledWith(
+      expect.objectContaining({ pinnedProviderId: undefined })
+    )
+    expect(warn).toHaveBeenCalledWith(
+      JSON.stringify({
+        _tag: "approval_route_facts_lookup_failed",
+        errorType: "Error",
+      })
+    )
+    warn.mockRestore()
   })
 })

@@ -12,6 +12,7 @@ function envContent(overrides = {}) {
     CONVEX_DEPLOYMENT: "dev:test",
     NEXT_PUBLIC_CONVEX_URL: "https://test.convex.cloud",
     CSRF_SECRET: "csrf-secret",
+    CHAT_ADMISSION_SECRET: "a".repeat(32),
     ENCRYPTION_KEY: validEncryptionKey,
     OPENAI_API_KEY: "sk-test",
     ...overrides,
@@ -44,6 +45,14 @@ describe("validateEnvContent", () => {
 
     expect(result.errors).toContain(
       "WORKOS_COOKIE_PASSWORD must be at least 32 characters"
+    )
+  })
+
+  it("fails when CHAT_ADMISSION_SECRET is too short", () => {
+    const result = validate({ CHAT_ADMISSION_SECRET: "short" })
+
+    expect(result.errors).toContain(
+      "CHAT_ADMISSION_SECRET must be at least 32 bytes"
     )
   })
 

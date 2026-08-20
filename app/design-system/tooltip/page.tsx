@@ -12,6 +12,7 @@ import { Kbd } from "@/components/ui/kbd"
 import {
   Tooltip,
   TooltipContent,
+  TooltipMultiline,
   TooltipShortcut,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
@@ -31,6 +32,30 @@ export function TooltipDefault() {
         Hover me
       </TooltipTrigger>
       <TooltipContent>Add to library</TooltipContent>
+    </Tooltip>
+  )
+}`
+
+const multilineCode = `import { Button } from "@/components/ui/button"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipMultiline,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+
+export function TooltipWithMultipleLines() {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<Button variant="outline" />}>
+        Retry
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        <TooltipMultiline>
+          <span>Try again...</span>
+          <span className="text-[var(--text-tertiary)]">Using GPT-5.5</span>
+        </TooltipMultiline>
+      </TooltipContent>
     </Tooltip>
   )
 }`
@@ -101,6 +126,13 @@ const apiRows = [
     description: "Hides the caret pointing at the trigger.",
   },
   {
+    prop: "TooltipMultiline",
+    type: "ComponentProps<\"span\">",
+    defaultValue: "—",
+    description:
+      "Stacks related lines and applies the smaller multiline surface radius.",
+  },
+  {
     prop: "TooltipShortcut label / detail",
     type: "ReactNode / ReactNode",
     defaultValue: "—",
@@ -137,6 +169,28 @@ export default function TooltipPage() {
               Hover me
             </TooltipTrigger>
             <TooltipContent>Add to library</TooltipContent>
+          </Tooltip>
+        </ComponentPreview>
+      </DsSection>
+
+      <DsSection
+        id="multiline"
+        title="Multiple lines"
+        description="TooltipMultiline stacks related details and switches the surface from the single-line pill to a smaller corner radius."
+      >
+        <ComponentPreview code={multilineCode} sourceCode={tooltipSource}>
+          <Tooltip>
+            <TooltipTrigger render={<Button variant="outline" />}>
+              Retry
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <TooltipMultiline>
+                <span>Try again...</span>
+                <span className="text-[var(--text-tertiary)]">
+                  Using GPT-5.5
+                </span>
+              </TooltipMultiline>
+            </TooltipContent>
           </Tooltip>
         </ComponentPreview>
       </DsSection>

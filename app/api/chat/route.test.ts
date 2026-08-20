@@ -72,9 +72,19 @@ describe("/api/chat route", () => {
       accessToken: "convex-token",
     } as Awaited<ReturnType<typeof getWorkosSession>>)
     vi.mocked(validateAndResolveChatCredential).mockResolvedValue({
-      provider: "openai",
-      apiKey: "test-key",
-      source: "byok",
+      route: {
+        modelId: "test-model",
+        routeId: "test-model",
+        providerId: "openai",
+        upstreamModelId: "test-model",
+        credentialSource: "byok",
+        routeReason: "priority_byok",
+      },
+      credential: {
+        provider: "openai",
+        apiKey: "test-key",
+        source: "byok",
+      },
     })
   })
 
@@ -93,17 +103,27 @@ describe("/api/chat route", () => {
 
   it("preserves check-resolve-increment ordering and passes one credential snapshot to the runtime", async () => {
     const order: string[] = []
-    const credential = {
-      provider: "openai",
-      apiKey: "credential-snapshot",
-      source: "byok",
+    const admission = {
+      route: {
+        modelId: "test-model",
+        routeId: "test-model",
+        providerId: "openai",
+        upstreamModelId: "test-model",
+        credentialSource: "byok",
+        routeReason: "priority_byok",
+      },
+      credential: {
+        provider: "openai",
+        apiKey: "credential-snapshot",
+        source: "byok",
+      },
     } as const
     vi.mocked(checkServerSideUsage).mockImplementation(async () => {
       order.push("check")
     })
     vi.mocked(validateAndResolveChatCredential).mockImplementation(async () => {
       order.push("resolve")
-      return credential
+      return admission
     })
     vi.mocked(incrementServerSideUsage).mockImplementation(async () => {
       order.push("increment")
@@ -117,7 +137,8 @@ describe("/api/chat route", () => {
     })
     vi.mocked(createChatTurnRuntime).mockImplementation((args) => {
       order.push("runtime")
-      expect(args.input.credential).toBe(credential)
+      expect(args.input.credential).toBe(admission.credential)
+      expect(args.input.route).toBe(admission.route)
       return { prepare, toResponse, fail: vi.fn() }
     })
 
@@ -136,6 +157,7 @@ describe("/api/chat route", () => {
       model: "test-model",
       isAuthenticated: true,
       token: "convex-token",
+      messages: expect.any(Array),
     })
   })
 

@@ -204,6 +204,21 @@ export default defineSchema({
     requestId: v.string(),
     model: v.string(),
     provider: v.string(),
+    // Route-resolution receipt (ADR-0020): which concrete route executed the
+    // logical `model`, on whose credentials, and why the resolver chose it.
+    // Optional for documents that predate the resolver; never key material.
+    routeId: v.optional(v.string()),
+    credentialSource: v.optional(
+      v.union(v.literal("platform"), v.literal("byok"))
+    ),
+    routeReason: v.optional(
+      v.union(
+        v.literal("priority_byok"),
+        v.literal("platform"),
+        v.literal("fallback_byok"),
+        v.literal("legacy_route_hint")
+      )
+    ),
     status: generationRunStatus,
     // Compatibility field: no longer written, but production may still contain
     // older run docs. Drop only after preflight proves zero legacy documents.
@@ -414,6 +429,12 @@ export default defineSchema({
     provider: v.string(),
     encryptedKey: v.string(),
     iv: v.string(),
+    // Routing-policy preference (ADR-0020): where this key's routes sit in
+    // the route resolver's candidate order. Absent = "priority" (the
+    // historical BYOK-first behavior). Metadata only — never key material.
+    preference: v.optional(
+      v.union(v.literal("priority"), v.literal("fallback"))
+    ),
   })
     .index("by_user", ["userId"])
     .index("by_user_provider", ["userId", "provider"]),

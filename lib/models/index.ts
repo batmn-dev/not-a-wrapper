@@ -1,33 +1,18 @@
-import { FREE_MODELS_IDS } from "../config"
-import { claudeModels } from "./data/claude"
-import { deepseekModels } from "./data/deepseek"
-import { geminiModels } from "./data/gemini"
-import { grokModels } from "./data/grok"
-import { mistralModels } from "./data/mistral"
-import { openaiModels } from "./data/openai"
-import { openrouterModels } from "./data/openrouter"
-import { perplexityModels } from "./data/perplexity"
+import {
+  LOGICAL_MODELS,
+  ROUTE_CONFIGS,
+  toLogicalModelView,
+  type LogicalModel,
+  type LogicalModelView,
+} from "./catalog"
+import { isPlatformEligibleModelForActor } from "./platform-entitlement"
 import { resolveModelId } from "./model-id-migration"
 import { ModelConfig } from "./types"
 
-// Static models (always available)
-const STATIC_MODELS: ModelConfig[] = [
-  ...openaiModels,
-  ...mistralModels,
-  ...deepseekModels,
-  ...claudeModels,
-  ...grokModels,
-  ...perplexityModels,
-  ...geminiModels,
-  ...openrouterModels,
-]
-
-function withBaseAccessFlags(models: ModelConfig[]): ModelConfig[] {
-  return models.map((model) => ({
-    ...model,
-    accessible: FREE_MODELS_IDS.includes(model.id),
-  }))
-}
+// Route records (ModelConfig) remain the execution-level registry; logical
+// models (ADR-0020) are the selector/preference vocabulary compiled from
+// them in lib/models/catalog.ts.
+const STATIC_MODELS: ModelConfig[] = ROUTE_CONFIGS
 
 export function isVisibleModel(
   model: Pick<ModelConfig, "catalogStatus">
@@ -35,15 +20,9 @@ export function isVisibleModel(
   return model.catalogStatus === "visible"
 }
 
-// Function to get all models
+/** Every executable route record (direct + wrapped), any catalog status. */
 export async function getAllModels(): Promise<ModelConfig[]> {
   return STATIC_MODELS
-}
-
-export async function getRoutableModelsWithAccessFlags(): Promise<
-  ModelConfig[]
-> {
-  return withBaseAccessFlags(await getAllModels())
 }
 
 export async function getVisibleModels(): Promise<ModelConfig[]> {
@@ -51,10 +30,26 @@ export async function getVisibleModels(): Promise<ModelConfig[]> {
   return models.filter((model) => isVisibleModel(model))
 }
 
-export async function getVisibleModelsWithAccessFlags(): Promise<
-  ModelConfig[]
-> {
-  return withBaseAccessFlags(await getVisibleModels())
+/** Every logical model, any catalog status. */
+export function getLogicalModels(): LogicalModel[] {
+  return LOGICAL_MODELS
+}
+
+export function getVisibleLogicalModels(): LogicalModel[] {
+  return LOGICAL_MODELS.filter((model) => isVisibleModel(model))
+}
+
+/**
+ * The selector payload: one view per visible logical model. `accessible`
+ * carries only the PLATFORM half of availability (free-model entitlement for
+ * an authenticated user); the client ORs in per-route key presence, and the
+ * server route resolver remains the authority at admission.
+ */
+export function getVisibleLogicalModelViews(): LogicalModelView[] {
+  return getVisibleLogicalModels().map((model) => ({
+    ...toLogicalModelView(model),
+    accessible: isPlatformEligibleModelForActor(model.id, true),
+  }))
 }
 
 export async function getModelsForProvider(
@@ -72,20 +67,9 @@ export async function getModelsForProvider(
   return providerModels
 }
 
-// Function to get models based on user's available providers
-export async function getModelsForUserProviders(
-  providers: string[]
-): Promise<ModelConfig[]> {
-  const providerModels = await Promise.all(
-    providers.map((provider) => getModelsForProvider(provider))
-  )
-
-  const flatProviderModels = providerModels.flat()
-
-  return flatProviderModels
-}
-
-// Synchronous function to get model info for simple lookups
+// Synchronous route-record lookup. Accepts any historical id: aliases and
+// successions resolve first, and every logical id doubles as its canonical
+// route id, so logical selections resolve here too.
 export function getModelInfo(modelId: string): ModelConfig | undefined {
   const resolvedModelId = resolveModelId(modelId)
   return STATIC_MODELS.find((model) => model.id === resolvedModelId)

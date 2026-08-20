@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   convertFromApiFormat,
   convertToApiFormat,
+  normalizeHiddenModels,
   normalizeStreamingPresentation,
 } from "./utils"
 
@@ -34,5 +35,23 @@ describe("user preference streamingPresentation", () => {
     expect(convertFromApiFormat(apiPreference).streamingPresentation).toBe(
       "quick"
     )
+  })
+})
+
+describe("user preference hiddenModels", () => {
+  it("normalizes legacy wrapped route ids to logical model ids", () => {
+    const hiddenModels = [
+      "openrouter:anthropic/claude-sonnet-5",
+      "claude-sonnet-5",
+      "gpt-5.4",
+    ]
+
+    expect(normalizeHiddenModels(hiddenModels)).toEqual([
+      "claude-sonnet-5",
+      "gpt-5.4",
+    ])
+    expect(
+      convertFromApiFormat({ hidden_models: hiddenModels }).hiddenModels
+    ).toEqual(["claude-sonnet-5", "gpt-5.4"])
   })
 })

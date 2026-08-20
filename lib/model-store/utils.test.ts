@@ -2,7 +2,7 @@ import { getDefaultModelForUser } from "@/lib/config"
 import type { ModelConfig } from "@/lib/models/types"
 import { describe, expect, it } from "vitest"
 import {
-  filterAndSortModels,
+  groupModelsForSelector,
   isModelAllowedForAnonymous,
   isModelSelectableForAuthState,
   resolvePreferredModelId,
@@ -67,6 +67,19 @@ describe("resolvePreferredModelId", () => {
     ).toBe("gpt-5.1")
   })
 
+  it("preserves a legacy routed chat model for server route selection", () => {
+    // The wrapped Sonnet 5 route is mapped onto the direct logical model
+    // (ADR-0020), but an old chat keeps its route hint for the next request.
+    expect(
+      resolvePreferredModelId({
+        models: VISIBLE_MODELS,
+        isAuthenticated: true,
+        currentModelId: "openrouter:anthropic/claude-sonnet-5",
+        preferredModelIds: [],
+      })
+    ).toBe("openrouter:anthropic/claude-sonnet-5")
+  })
+
   it("prefers the first accessible visible stored model before hidden legacy models", () => {
     expect(
       resolvePreferredModelId({
@@ -116,22 +129,61 @@ describe("model access by auth state", () => {
   })
 })
 
-describe("filterAndSortModels", () => {
+describe("groupModelsForSelector", () => {
   const isModelHidden = () => false
 
   it("prunes models marked invisible for selectors", () => {
-    expect(
-      filterAndSortModels(MODELS, [], "", isModelHidden).map(
-        (model) => model.id
-      )
-    ).not.toContain("gpt-4.1")
+    const { favorites, others } = groupModelsForSelector(
+      MODELS,
+      [],
+      "",
+      isModelHidden
+    )
+    const ids = [...favorites, ...others].map((model) => model.id)
+    expect(ids).not.toContain("gpt-4.1")
   })
 
-  it("falls back to curated visible models when favorites only contain hidden models", () => {
-    expect(
-      filterAndSortModels(MODELS, ["gpt-4.1"], "", isModelHidden).map(
-        (model) => model.id
-      )
-    ).toEqual(["claude-haiku-4-5-20251001", "gpt-5.4", "gpt-5-mini"])
+  it("ranks favorites without hiding the rest of the catalog", () => {
+    const { favorites, others } = groupModelsForSelector(
+      MODELS,
+      ["gpt-5-mini", "claude-haiku-4-5-20251001"],
+      "",
+      isModelHidden
+    )
+
+    expect(favorites.map((model) => model.id)).toEqual([
+      "gpt-5-mini",
+      "claude-haiku-4-5-20251001",
+    ])
+    expect(others.map((model) => model.id)).toEqual(["gpt-5.4"])
+  })
+
+  it("searches the whole catalog, not just favorites", () => {
+    const { favorites, others } = groupModelsForSelector(
+      MODELS,
+      ["gpt-5-mini"],
+      "gpt-5.4",
+      isModelHidden
+    )
+
+    expect(favorites).toEqual([])
+    expect(others.map((model) => model.id)).toEqual(["gpt-5.4"])
+  })
+
+  it("keeps locked models visible", () => {
+    const { others } = groupModelsForSelector(MODELS, [], "", isModelHidden)
+    expect(others.some((model) => model.id === "gpt-5.4")).toBe(true)
+  })
+
+  it("still honors explicit user-hidden models", () => {
+    const { favorites, others } = groupModelsForSelector(
+      MODELS,
+      ["gpt-5-mini"],
+      "",
+      (modelId) => modelId === "gpt-5-mini"
+    )
+
+    expect(favorites).toEqual([])
+    expect(others.some((model) => model.id === "gpt-5-mini")).toBe(false)
   })
 })

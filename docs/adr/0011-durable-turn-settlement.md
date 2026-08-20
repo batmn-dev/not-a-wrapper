@@ -43,7 +43,9 @@ Deepen the **Durable turn runtime** into **Durable turn settlement**
 ### 1. Execution grant — run-scoped worker authority
 
 The user's Convex token authorizes exactly one call: `prepareGeneration`
-(admission). At construction the Convex adapter mints a 32-byte random
+(admission). ADR-0020 additionally requires the Next.js server's signed
+admission proof before Convex accepts that call. At construction the Convex
+adapter mints a 32-byte random
 **execution grant** secret; its SHA-256 digest rides the admission call and
 is stored on the `generationRuns` row (`grantDigest`, `grantExpiresAt` =
 now + 60 min). Every post-prepare write travels the **Durable worker wire**:

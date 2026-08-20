@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
 import {
   getAllModels,
+  getVisibleLogicalModelViews,
   getVisibleModels,
-  getVisibleModelsWithAccessFlags,
 } from "./index"
 
 describe("model catalog exposure", () => {
@@ -41,8 +41,8 @@ describe("model catalog exposure", () => {
     expect(invalidLegacyReplacementTargets).toEqual([])
   })
 
-  it("adds access flags only to the curated visible catalog", async () => {
-    const models = await getVisibleModelsWithAccessFlags()
+  it("flags platform access only on the free-listed logical models", () => {
+    const models = getVisibleLogicalModelViews()
 
     expect(models.find((model) => model.id === "gpt-5-mini")?.accessible).toBe(
       true

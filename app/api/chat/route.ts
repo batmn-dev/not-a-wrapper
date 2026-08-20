@@ -1,5 +1,5 @@
 import { getWorkosSession } from "@/lib/auth/workos"
-import { resolveModelId } from "@/lib/models/model-id-migration"
+import { resolveModelSelection } from "@/lib/models/catalog"
 import {
   classifyChatError,
   getToolDimensionForError,
@@ -140,7 +140,10 @@ export async function POST(req: Request) {
       edit,
       regeneration,
     } = parsed.request
-    const model = resolveModelId(requestedModel)
+    // Logical identity (ADR-0020): aliases, successions, and old routed ids
+    // all normalize to the logical model id; the route resolver below decides
+    // the concrete execution route (and re-derives the legacy hint itself).
+    const model = resolveModelSelection(requestedModel).modelId
     telemetryChatId = chatId
     telemetryModel = model
     telemetryMessageCount = Array.isArray(messages)
@@ -174,7 +177,7 @@ export async function POST(req: Request) {
     const anonymousId = !isAuthenticated ? clientUserId! : undefined
 
     // Server-side usage admission — enforces rate limits before a turn runs.
-    const credential = await Sentry.startSpan(
+    const admission = await Sentry.startSpan(
       {
         name: "chat.usage_checks",
         op: "chat.validation",
@@ -187,19 +190,23 @@ export async function POST(req: Request) {
       () =>
         perf.span("usage_admission", async () => {
           await checkServerSideUsage(convexToken, model, anonymousId)
-          const resolvedCredential = await perf.span(
+          const resolvedAdmission = await perf.span(
             "credential_resolution",
             () =>
               validateAndResolveChatCredential({
-                model,
+                // The RAW selection: the resolver re-derives the legacy
+                // route hint an old `openrouter:*` chat id carries.
+                model: requestedModel,
                 isAuthenticated,
                 token: convexToken,
+                messages,
               })
           )
           await incrementServerSideUsage(convexToken, model, anonymousId)
-          return resolvedCredential
+          return resolvedAdmission
         })
     )
+    Sentry.setTag("chat_route_id", admission.route.routeId)
 
     turn = createChatTurnRuntime({
       input: {
@@ -218,7 +225,8 @@ export async function POST(req: Request) {
         anonymousId,
         isAuthenticated,
         convexToken,
-        credential,
+        credential: admission.credential,
+        route: admission.route,
         perf,
       },
     })

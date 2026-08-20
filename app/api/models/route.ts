@@ -1,9 +1,12 @@
-import { getAllModels, getVisibleModelsWithAccessFlags } from "@/lib/models"
+import { getAllModels, getVisibleLogicalModelViews } from "@/lib/models"
 import { NextResponse } from "next/server"
 
 export async function GET() {
   try {
-    const models = await getVisibleModelsWithAccessFlags()
+    // One entry per visible logical model (ADR-0020). `accessible` is only
+    // the platform half; the client ORs in per-route key presence and the
+    // chat route's resolver stays authoritative at admission.
+    const models = getVisibleLogicalModelViews()
 
     return new Response(JSON.stringify({ models }), {
       status: 200,
@@ -24,10 +27,8 @@ export async function GET() {
 
 export async function POST() {
   try {
-    const [models, allModels] = await Promise.all([
-      getVisibleModelsWithAccessFlags(),
-      getAllModels(),
-    ])
+    const models = getVisibleLogicalModelViews()
+    const allModels = await getAllModels()
 
     return NextResponse.json({
       message: "Models refreshed",

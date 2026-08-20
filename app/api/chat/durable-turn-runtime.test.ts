@@ -189,6 +189,7 @@ function makeConvexTurn(
         fetchMutation as unknown as typeof import("convex/nextjs").fetchMutation,
       workerWire: wire,
       settleRetryDelaysMs: [0, 0],
+      admissionProofSigner: () => "f".repeat(64),
     },
   })
 }
@@ -1311,6 +1312,8 @@ describe("durable turn runtime — prepare() error mapping and grant minting", (
     // 64-hex SHA-256 — never the raw secret (which is 64 hex of entropy too,
     // but the digest is deterministic given the secret; assert shape only).
     expect(prepareArgs.grantDigest).toMatch(/^[0-9a-f]{64}$/)
+    expect(prepareArgs.admissionIssuedAt).toEqual(expect.any(Number))
+    expect(prepareArgs.admissionProof).toBe("f".repeat(64))
     // The user token authorizes the admission call and nothing after it.
     expect(prepareCall?.[2]).toEqual({ token: "tok" })
   })

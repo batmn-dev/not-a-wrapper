@@ -27,10 +27,11 @@ import {
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { useModel } from "@/lib/model-store/provider"
 import {
-  filterAndSortModels,
+  groupModelsForSelector,
   isModelSelectableForAuthState,
 } from "@/lib/model-store/utils"
 import { getModelInfo } from "@/lib/models"
+import { resolveModelSelection } from "@/lib/models/catalog"
 import { ModelConfig } from "@/lib/models/types"
 import { getVendorIcon } from "@/lib/provider-icons"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
@@ -52,10 +53,6 @@ type ModelSelectorProps = {
   variant?: "default" | "composer"
 }
 
-function getModelRouteLabel(model: ModelConfig | null | undefined) {
-  return model?.providerId === "openrouter" ? "OpenRouter" : null
-}
-
 function ModelOptionContent({
   model,
   isLocked,
@@ -63,8 +60,9 @@ function ModelOptionContent({
   model: ModelConfig
   isLocked: boolean
 }) {
-  const routeLabel = getModelRouteLabel(model)
-
+  // The icon is the model MAKER's vendor identity; execution routes never
+  // surface in the ordinary selector row (ADR-0020) — route details live in
+  // API-key and model settings.
   return (
     <>
       <div className="flex min-w-0 items-center gap-2">
@@ -74,11 +72,6 @@ function ModelOptionContent({
           className="shrink-0"
         />
         <span className="truncate text-sm">{model.name}</span>
-        {routeLabel && (
-          <span className="text-muted-foreground shrink-0 text-xs">
-            {routeLabel}
-          </span>
-        )}
       </div>
       {isLocked ? (
         <div className="border-input-border bg-muted text-muted-foreground flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
@@ -90,45 +83,19 @@ function ModelOptionContent({
   )
 }
 
-function ModelSelectorList({
+function ModelSelectorRows({
   models,
-  isLoading,
   isMobile,
   isUserAuthenticated,
   selectedModelId,
   onSelect,
 }: {
   models: ModelConfig[]
-  isLoading: boolean
   isMobile: boolean
   isUserAuthenticated: boolean
   selectedModelId: string | null
   onSelect: (modelId: string, isLocked: boolean) => void
 }) {
-  if (isLoading) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-        <p className="text-muted-foreground mb-2 text-sm">Loading models...</p>
-      </div>
-    )
-  }
-
-  if (models.length === 0) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-        <p className="text-muted-foreground mb-1 text-sm">No results found.</p>
-        <a
-          href="https://github.com/batmn-dev/not-a-wrapper/issues/new?title=Model%20Request%3A%20"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-muted-foreground text-sm underline"
-        >
-          Request a new model
-        </a>
-      </div>
-    )
-  }
-
   return models.map((model) => {
     const isLocked = !isModelSelectableForAuthState(model, isUserAuthenticated)
     const className = cn(
@@ -161,6 +128,72 @@ function ModelSelectorList({
   })
 }
 
+function ModelSelectorList({
+  favorites,
+  others,
+  isLoading,
+  isMobile,
+  isUserAuthenticated,
+  selectedModelId,
+  onSelect,
+}: {
+  favorites: ModelConfig[]
+  others: ModelConfig[]
+  isLoading: boolean
+  isMobile: boolean
+  isUserAuthenticated: boolean
+  selectedModelId: string | null
+  onSelect: (modelId: string, isLocked: boolean) => void
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center p-6 text-center">
+        <p className="text-muted-foreground mb-2 text-sm">Loading models...</p>
+      </div>
+    )
+  }
+
+  if (favorites.length === 0 && others.length === 0) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center p-6 text-center">
+        <p className="text-muted-foreground mb-1 text-sm">No results found.</p>
+        <a
+          href="https://github.com/batmn-dev/not-a-wrapper/issues/new?title=Model%20Request%3A%20"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-muted-foreground text-sm underline"
+        >
+          Request a new model
+        </a>
+      </div>
+    )
+  }
+
+  const rowProps = { isMobile, isUserAuthenticated, selectedModelId, onSelect }
+  const sectionLabelClassName = cn(
+    "text-muted-foreground text-xs font-medium",
+    isMobile ? "px-3 pt-2 pb-1" : "px-2 pt-1.5 pb-1"
+  )
+
+  // Favorites rank; every other model stays reachable beneath them.
+  if (favorites.length === 0) {
+    return <ModelSelectorRows models={others} {...rowProps} />
+  }
+
+  return (
+    <>
+      <div className={sectionLabelClassName}>Favorites</div>
+      <ModelSelectorRows models={favorites} {...rowProps} />
+      {others.length > 0 && (
+        <>
+          <div className={sectionLabelClassName}>All models</div>
+          <ModelSelectorRows models={others} {...rowProps} />
+        </>
+      )}
+    </>
+  )
+}
+
 export function ModelSelector({
   className,
   isUserAuthenticated = true,
@@ -184,9 +217,14 @@ export function ModelSelector({
   const searchInputRef = useRef<HTMLInputElement>(null)
   const selectionCommittedRef = useRef(false)
 
-  const currentModel = selectedModelId
-    ? (models.find((model) => model.id === selectedModelId) ??
-      getModelInfo(selectedModelId))
+  // A persisted selection may be a legacy routed id; the trigger shows the
+  // logical model identity either way.
+  const normalizedSelectedModelId = selectedModelId
+    ? resolveModelSelection(selectedModelId).modelId
+    : null
+  const currentModel = normalizedSelectedModelId
+    ? (models.find((model) => model.id === normalizedSelectedModelId) ??
+      getModelInfo(normalizedSelectedModelId))
     : null
 
   useKeyShortcut(
@@ -239,7 +277,7 @@ export function ModelSelector({
     e.stopPropagation()
   }
 
-  const filteredModels = filterAndSortModels(
+  const { favorites, others } = groupModelsForSelector(
     models,
     isUserAuthenticated ? favoriteModels || [] : [],
     searchQuery,
@@ -323,11 +361,12 @@ export function ModelSelector({
             </div>
             <div className="flex h-full flex-col space-y-0 overflow-y-auto px-4 pb-6">
               <ModelSelectorList
-                models={filteredModels}
+                favorites={favorites}
+                others={others}
                 isLoading={isLoadingModels}
                 isMobile
                 isUserAuthenticated={isUserAuthenticated}
-                selectedModelId={selectedModelId}
+                selectedModelId={normalizedSelectedModelId}
                 onSelect={handleSelect}
               />
             </div>
@@ -407,11 +446,12 @@ export function ModelSelector({
           <div className="before:from-floating-surface after:from-floating-surface relative mt-[2px] rounded-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-3 before:bg-gradient-to-b before:to-transparent before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:z-10 after:h-4 after:bg-gradient-to-t after:to-transparent after:content-['']">
             <div className="[&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 max-h-[min(var(--model-selector-list-max-height),max(0px,calc(var(--available-height)-var(--model-selector-fixed-height))))] scroll-py-2 [scrollbar-width:thin] [scrollbar-color:color-mix(in_oklab,var(--muted-foreground)_35%,transparent)_transparent] [scrollbar-gutter:stable] overflow-x-hidden overflow-y-auto overscroll-contain py-1 pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent">
               <ModelSelectorList
-                models={filteredModels}
+                favorites={favorites}
+                others={others}
                 isLoading={isLoadingModels}
                 isMobile={false}
                 isUserAuthenticated={isUserAuthenticated}
-                selectedModelId={selectedModelId}
+                selectedModelId={normalizedSelectedModelId}
                 onSelect={handleSelect}
               />
             </div>

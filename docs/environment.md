@@ -26,10 +26,18 @@ Required local `.env.local` values:
 - `CONVEX_DEPLOYMENT`
 - `NEXT_PUBLIC_CONVEX_URL`
 - `CSRF_SECRET`
+- `CHAT_ADMISSION_SECRET`
 - `ENCRYPTION_KEY`
 - at least one AI provider key
 
 `WORKOS_COOKIE_PASSWORD` must be at least 32 characters.
+`CHAT_ADMISSION_SECRET` must be at least 32 bytes and must use the same value
+in `.env.local` and the target Convex deployment. Generate it with:
+
+```bash
+openssl rand -base64 32
+```
+
 `ENCRYPTION_KEY` must be base64 and decode to exactly 32 bytes:
 
 ```bash
@@ -64,12 +72,16 @@ the target Convex deployment:
 bunx convex env set WORKOS_CLIENT_ID <client_id>
 bunx convex env set WORKOS_API_KEY <api_key>
 bunx convex env set WORKOS_WEBHOOK_SECRET <secret>
+bunx convex env set CHAT_ADMISSION_SECRET <same_value_as_vercel>
 ```
 
 `WORKOS_ACTION_SECRET` is only needed if WorkOS actions are added later.
 `WORKOS_WEBHOOK_SECRET` belongs in Convex env, not Vercel. The Convex app
-declares `WORKOS_CLIENT_ID`, `WORKOS_API_KEY`, and `WORKOS_WEBHOOK_SECRET` as
-required deployment env vars in `convex/convex.config.ts`.
+declares `WORKOS_CLIENT_ID`, `WORKOS_API_KEY`, `WORKOS_WEBHOOK_SECRET`, and
+`CHAT_ADMISSION_SECRET` as required deployment env vars in
+`convex/convex.config.ts`. Set `CHAT_ADMISSION_SECRET` to the exact same value
+in the Next.js server and Convex; a mismatch makes durable chat admission fail
+closed before any run is created.
 
 To inspect configured Convex env names, use:
 
@@ -115,6 +127,7 @@ Set these Vercel Preview environment variables:
 - `NEXT_PUBLIC_WORKOS_REDIRECT_URI`
 - `CONVEX_DEPLOY_KEY`
 - `CSRF_SECRET`
+- `CHAT_ADMISSION_SECRET`
 - `ENCRYPTION_KEY`
 - AI provider keys needed by the deployment
 - optional analytics and observability keys
@@ -127,6 +140,22 @@ Use a Convex preview deploy key for `CONVEX_DEPLOY_KEY`.
 `CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY` is not needed for normal previews because
 preview deploys run a dry-run schema preflight. Set it only if
 `CONVEX_SCHEMA_PREFLIGHT_MODE=prod` is deliberately enabled for a preview.
+
+Vercel variables are not copied into Convex. Before creating a preview, set
+every required Convex variable declared in `convex/convex.config.ts` as a
+[project Preview default](https://docs.convex.dev/production/environment-variables#project-environment-variable-defaults).
+In particular, `CHAT_ADMISSION_SECRET` must use the exact Vercel Preview value:
+
+```bash
+pbpaste | bunx convex env default set CHAT_ADMISSION_SECRET --type preview
+```
+
+Defaults apply only to new deployments. Update any existing preview directly,
+then redeploy it:
+
+```bash
+pbpaste | bunx convex env set --deployment <preview-deployment> CHAT_ADMISSION_SECRET
+```
 
 Vercel provides `VERCEL_BRANCH_URL` and
 `VERCEL_PROJECT_PRODUCTION_URL`. `convex.json` uses those values to configure
@@ -170,6 +199,7 @@ Set these Vercel Production environment variables:
 - `CONVEX_DEPLOY_KEY`
 - `CONVEX_SCHEMA_PREFLIGHT_DEPLOY_KEY`
 - `CSRF_SECRET`
+- `CHAT_ADMISSION_SECRET`
 - `ENCRYPTION_KEY`
 - AI provider keys needed by the deployment
 - optional analytics and observability keys
@@ -257,15 +287,16 @@ settings.
 
 ## Troubleshooting
 
-| Symptom                                           | Check                                                                                                        |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `NEXT_PUBLIC_CONVEX_URL is required`              | Run `bunx convex dev` locally, or confirm Vercel uses the Convex deploy build command.                       |
-| WorkOS login redirects fail                       | Confirm `NEXT_PUBLIC_WORKOS_REDIRECT_URI` exactly matches the WorkOS redirect URI and ends in `/callback`.   |
-| Convex auth returns unauthenticated               | Confirm `WORKOS_CLIENT_ID` is set in Convex env and redeploy with `bunx convex dev` or `bunx convex deploy`. |
-| WorkOS webhook events fail                        | Confirm the endpoint URL, subscribed events, and `WORKOS_WEBHOOK_SECRET` in Convex env.                      |
-| Saved API keys stop decrypting                    | Restore the previous `ENCRYPTION_KEY` or migrate encrypted values before rotating it.                        |
-| `bun run env:check` rejects a custom local domain | Set `ALLOW_NON_LOCAL_WORKOS_REDIRECT_URI=1` only for that check.                                             |
-| `CLERK_*` appears in env output                   | Remove stale Clerk variables after confirming the deployment is on WorkOS AuthKit.                           |
+| Symptom                                            | Check                                                                                                        |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `NEXT_PUBLIC_CONVEX_URL is required`               | Run `bunx convex dev` locally, or confirm Vercel uses the Convex deploy build command.                       |
+| WorkOS login redirects fail                        | Confirm `NEXT_PUBLIC_WORKOS_REDIRECT_URI` exactly matches the WorkOS redirect URI and ends in `/callback`.   |
+| Convex auth returns unauthenticated                | Confirm `WORKOS_CLIENT_ID` is set in Convex env and redeploy with `bunx convex dev` or `bunx convex deploy`. |
+| WorkOS webhook events fail                         | Confirm the endpoint URL, subscribed events, and `WORKOS_WEBHOOK_SECRET` in Convex env.                      |
+| Saved API keys stop decrypting                     | Restore the previous `ENCRYPTION_KEY` or migrate encrypted values before rotating it.                        |
+| Durable chat admission rejects before run creation | Confirm `CHAT_ADMISSION_SECRET` is present and identical in Vercel/local and the target Convex deployment.   |
+| `bun run env:check` rejects a custom local domain  | Set `ALLOW_NON_LOCAL_WORKOS_REDIRECT_URI=1` only for that check.                                             |
+| `CLERK_*` appears in env output                    | Remove stale Clerk variables after confirming the deployment is on WorkOS AuthKit.                           |
 
 Use `bun run test` for test validation. The configured test runner is Vitest;
 raw `bun test` is not the project test command.

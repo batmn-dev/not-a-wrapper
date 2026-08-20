@@ -522,6 +522,7 @@
   --bg-tooltip: #1b1b1b;
   --border-tooltip: rgba(255, 255, 255, 0.05);
   --tooltip-edge-shadow: 0 8px 18px rgba(15, 23, 42, 0.2);
+  --tooltip-multiline-radius: 0.75rem;
   --tooltip-radius: 9999px;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);

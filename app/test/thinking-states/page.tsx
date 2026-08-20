@@ -37,6 +37,7 @@ import {
 import { useStickyPaddingBottom } from "@/components/ui/scroll-root"
 import { SystemMessage } from "@/components/ui/system-message"
 import { ThinkingBar } from "@/components/ui/thinking-bar"
+import { TooltipMultiline } from "@/components/ui/tooltip"
 import { MessagesProvider } from "@/lib/chat-store/messages/provider"
 import { cn } from "@/lib/utils"
 import { RiFileCopyLine, RiRefreshLine } from "@remixicon/react"
@@ -372,10 +373,10 @@ function CopyRegenActions() {
       </MessageAction>
       <MessageAction
         tooltip={
-          <span className="flex flex-col items-center text-center leading-tight">
+          <TooltipMultiline>
             <span className="font-medium">Try again...</span>
             <span className="text-[var(--text-tertiary)]">Using GPT-5.5</span>
-          </span>
+          </TooltipMultiline>
         }
         side="bottom"
         delay={0}

@@ -21,6 +21,7 @@ const REQUIRED_LOCAL_VARS = [
   "CONVEX_DEPLOYMENT",
   "NEXT_PUBLIC_CONVEX_URL",
   "CSRF_SECRET",
+  "CHAT_ADMISSION_SECRET",
   "ENCRYPTION_KEY",
 ]
 
@@ -125,6 +126,13 @@ export function validateEnvContent(content, options = {}) {
     env.WORKOS_COOKIE_PASSWORD.length < 32
   ) {
     errors.push("WORKOS_COOKIE_PASSWORD must be at least 32 characters")
+  }
+
+  if (
+    hasValue(env, "CHAT_ADMISSION_SECRET") &&
+    Buffer.byteLength(env.CHAT_ADMISSION_SECRET, "utf8") < 32
+  ) {
+    errors.push("CHAT_ADMISSION_SECRET must be at least 32 bytes")
   }
 
   if (hasValue(env, "NEXT_PUBLIC_WORKOS_REDIRECT_URI")) {

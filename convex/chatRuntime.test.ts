@@ -11,6 +11,7 @@ import {
   markGenerationRunCompletedForChat,
   markGenerationRunFailedForChat,
   prepareGenerationForChat,
+  prepareGenerationWithVerifiedAdmission,
   reapExpiredGenerationRunsPass,
   reapExpiredToolApprovalsPass,
   reapResolvedApprovalPausesPass,
@@ -27,6 +28,7 @@ import {
 } from "./domain/generation_run_liveness"
 import { getSelectedPathMessages } from "./domain/message_branches"
 import type { AuthenticatedRunOwner } from "./lib/auth"
+import { signChatAdmissionProof } from "./lib/chatAdmissionProof"
 import { selectBranchForChat } from "./messages"
 
 type TableDocuments = {
@@ -624,6 +626,108 @@ describe("edit intent wire validator", () => {
 describe("prepareGenerationForChat", () => {
   afterEach(() => {
     vi.restoreAllMocks()
+  })
+
+  it("persists the route-resolution receipt beside the logical model", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000)
+    const { user, chat, chatId } = createOwnerFixture()
+    const { ctx, tables } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages: [],
+    })
+
+    const admission = {
+      chatId,
+      requestId: "request_route_receipt",
+      model: "claude-sonnet-5",
+      provider: "openrouter",
+      expectedVisibleMessageCount: 0,
+      route: {
+        routeId: "openrouter:anthropic/claude-sonnet-5",
+        credentialSource: "byok" as const,
+        routeReason: "priority_byok" as const,
+      },
+      latestUserMessage: {
+        id: "user-new",
+        role: "user" as const,
+        content: "hi",
+        parts: [{ type: "text", text: "hi" }],
+      },
+      grantDigest: "a".repeat(64),
+      admissionIssuedAt: 1700000000000,
+    }
+    const secret = "test-chat-admission-secret-with-32-bytes"
+
+    await prepareGenerationWithVerifiedAdmission(
+      ctx,
+      {
+        ...admission,
+        admissionProof: signChatAdmissionProof(
+          { ...admission, issuedAt: admission.admissionIssuedAt },
+          secret
+        ),
+      },
+      { secret, now: admission.admissionIssuedAt }
+    )
+
+    expect(tables.generationRuns).toHaveLength(1)
+    expect(tables.generationRuns[0]).toMatchObject({
+      model: "claude-sonnet-5",
+      provider: "openrouter",
+      routeId: "openrouter:anthropic/claude-sonnet-5",
+      credentialSource: "byok",
+      routeReason: "priority_byok",
+    })
+    // The assistant placeholder keeps the logical model + resolved provider.
+    const assistant = tables.messages.find(
+      (message) => message.role === "assistant"
+    )
+    expect(assistant).toMatchObject({
+      model: "claude-sonnet-5",
+      provider: "openrouter",
+    })
+  })
+
+  it("rejects a tampered route receipt before prepare writes", async () => {
+    const { user, chat, chatId } = createOwnerFixture()
+    const { ctx, tables } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages: [],
+    })
+    const issuedAt = 1700000000000
+    const secret = "test-chat-admission-secret-with-32-bytes"
+    const signed = {
+      chatId,
+      requestId: "request_tampered_route",
+      model: "claude-sonnet-5",
+      provider: "openrouter",
+      route: {
+        routeId: "openrouter:anthropic/claude-sonnet-5",
+        credentialSource: "byok" as const,
+        routeReason: "priority_byok" as const,
+      },
+      grantDigest: "a".repeat(64),
+      issuedAt,
+    }
+
+    await expect(
+      prepareGenerationWithVerifiedAdmission(
+        ctx,
+        {
+          ...signed,
+          route: { ...signed.route, credentialSource: "platform" },
+          admissionIssuedAt: issuedAt,
+          admissionProof: signChatAdmissionProof(signed, secret),
+        },
+        { secret, now: issuedAt }
+      )
+    ).rejects.toMatchObject({
+      data: { code: "admission_proof_invalid" },
+    })
+    expect(tables.generationRuns).toHaveLength(0)
+    expect(tables.messages).toHaveLength(0)
   })
 
   it("applies durable edit intent and creates the run in the same mutation path", async () => {

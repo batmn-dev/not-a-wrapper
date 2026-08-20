@@ -1,6 +1,6 @@
 import { authenticatedRoute } from "@/app/api/_lib/authenticated-route"
 import { api } from "@/convex/_generated/api"
-import { resolveModelIds } from "@/lib/models/model-id-migration"
+import { resolveModelSelections } from "@/lib/models/catalog"
 import { NextResponse } from "next/server"
 
 export const POST = authenticatedRoute(async (request, { convex }) => {
@@ -21,7 +21,7 @@ export const POST = authenticatedRoute(async (request, { convex }) => {
         { status: 400 }
       )
     }
-    const normalizedFavoriteModels = resolveModelIds(favorite_models)
+    const normalizedFavoriteModels = resolveModelSelections(favorite_models)
 
     await convex.mutation(api.users.updateFavoriteModels, {
       favoriteModels: normalizedFavoriteModels,
@@ -44,7 +44,7 @@ export const GET = authenticatedRoute(async (_request, { convex }) => {
   try {
     const user = await convex.query(api.users.getCurrent, {})
     const favoriteModels = user?.favoriteModels ?? []
-    const normalizedFavoriteModels = resolveModelIds(favoriteModels)
+    const normalizedFavoriteModels = resolveModelSelections(favoriteModels)
 
     if (
       JSON.stringify(normalizedFavoriteModels) !==

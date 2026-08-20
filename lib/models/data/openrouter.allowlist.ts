@@ -53,6 +53,15 @@ export type OpenRouterAllowlistEntry = {
   baseProviderId: string
   /** Vendor-registry icon key; "openrouter" when the vendor has no own icon. */
   icon: string
+  /**
+   * Explicit logical-model mapping (ADR-0020): the DIRECT catalog id this
+   * wrapped entry is a second route to. The generator copies it onto the
+   * generated record; the logical catalog then compiles both into one
+   * selector model. Leave absent for OpenRouter-only models (they compile
+   * into their own logical model). `:free` pool entries stay unmapped even
+   * when a paid sibling exists — the free pool is a distinct serving tier.
+   */
+  logicalModelId?: string
   speed: NonNullable<ModelConfig["speed"]>
   intelligence: NonNullable<ModelConfig["intelligence"]>
   openSource: boolean
@@ -141,6 +150,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   // ——— Paid, BYOK-gated (server 401s without a user OpenRouter key) ———
   {
     slug: "anthropic/claude-sonnet-5",
+    logicalModelId: "claude-sonnet-5",
     name: "Claude Sonnet 5",
     description:
       "Anthropic's Claude Sonnet 5 via OpenRouter — frontier coding and agent performance at intro pricing ($2/$10 through 2026-08-31, then $3/$15).",
@@ -154,6 +164,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   },
   {
     slug: "anthropic/claude-opus-4.8",
+    logicalModelId: "claude-opus-4-8",
     name: "Claude Opus 4.8",
     description:
       "Anthropic's Claude Opus 4.8 via OpenRouter — deep-reasoning flagship with a 1M-token context.",
@@ -167,6 +178,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   },
   {
     slug: "anthropic/claude-fable-5",
+    logicalModelId: "claude-fable-5",
     name: "Claude Fable 5",
     description:
       "Anthropic's Mythos-tier Claude Fable 5 via OpenRouter. Safety classifiers may end dual-use asks with a refusal stop reason, and upstream restricts serving to 30-day-retention orgs.",
@@ -180,6 +192,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   },
   {
     slug: "anthropic/claude-haiku-4.5",
+    logicalModelId: "claude-haiku-4-5-20251001",
     name: "Claude Haiku 4.5",
     description:
       "Anthropic's fastest Claude tier via OpenRouter — near-frontier intelligence at low cost.",
@@ -193,6 +206,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   },
   {
     slug: "openai/gpt-5.5",
+    logicalModelId: "gpt-5.5",
     name: "GPT-5.5",
     description:
       "OpenAI's GPT-5.5 flagship via OpenRouter — 1M-token-context reasoning generalist.",
@@ -206,6 +220,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   },
   {
     slug: "openai/gpt-5.4",
+    logicalModelId: "gpt-5.4",
     name: "GPT-5.4",
     description:
       "OpenAI's GPT-5.4 workhorse via OpenRouter — strong reasoning at mid-tier pricing.",
@@ -219,6 +234,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   },
   {
     slug: "openai/gpt-5.4-mini",
+    logicalModelId: "gpt-5.4-mini",
     name: "GPT-5.4 Mini",
     description:
       "OpenAI's GPT-5.4 Mini via OpenRouter — fast, low-cost reasoning tier.",
@@ -232,6 +248,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   },
   {
     slug: "google/gemini-3.5-flash",
+    logicalModelId: "gemini-3.5-flash",
     name: "Gemini 3.5 Flash",
     description:
       "Google's Gemini 3.5 Flash via OpenRouter — fast multimodal reasoning with a 1M-token context.",
@@ -245,6 +262,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   },
   {
     slug: "google/gemini-3.1-pro-preview",
+    logicalModelId: "gemini-3.1-pro-preview",
     name: "Gemini 3.1 Pro (Preview)",
     description:
       "Google's Gemini 3.1 Pro preview via OpenRouter — flagship multimodal reasoning. Preview id: retire with a succession entry when the stable ships.",
@@ -258,6 +276,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   },
   {
     slug: "google/gemini-3.1-flash-lite",
+    logicalModelId: "gemini-3.1-flash-lite",
     name: "Gemini 3.1 Flash Lite",
     description:
       "Google's cheapest Gemini 3.1 tier via OpenRouter — high-volume multimodal workhorse.",
@@ -271,6 +290,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   },
   {
     slug: "x-ai/grok-4.3",
+    logicalModelId: "grok-4.3",
     name: "Grok 4.3",
     description:
       "xAI's Grok 4.3 via OpenRouter — 1M-token-context reasoning flagship.",
