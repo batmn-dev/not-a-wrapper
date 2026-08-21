@@ -1,6 +1,6 @@
 # 0007 — Snapshot-generated OpenRouter catalog
 
-**Status:** accepted **Date:** 2026-07-05
+**Status:** accepted, amended by ADR-0022 **Date:** 2026-07-05
 
 **Context.** The OpenRouter catalog is our highest-churn model surface:
 `:free` ids get delisted without notice (2026-07-04 incident, commit
@@ -22,7 +22,10 @@ re-generates offline and fails on diff (wired into CI). Generation fails
 loudly when an allowlisted id is absent from the snapshot, printing the
 succession stub for `lib/models/model-id-migration.ts`.
 
-## Curation Policy
+## Original Curation Policy
+
+ADR-0022 replaces the small per-vendor cap below with a broad, reference-led
+chat catalog. The snapshot/generator mechanics in this ADR remain unchanged.
 
 The allowlist is intentionally selective. Per vendor, keep at most the
 flagship + workhorse models, plus one specialist where the family warrants it

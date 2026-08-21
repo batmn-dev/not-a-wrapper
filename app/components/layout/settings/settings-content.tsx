@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { cn, isDev } from "@/lib/utils"
 import {
+  RiBarChartBoxLine,
   RiBox3Line,
   RiBrushLine,
   RiCloseLine,
@@ -31,6 +32,7 @@ import { ToolKeys } from "./tools/tool-keys"
 
 const SETTINGS_TABS = [
   { value: "general", label: "General", icon: RiSettings3Line },
+  { value: "usage", label: "Usage", icon: RiBarChartBoxLine },
   { value: "appearance", label: "Appearance", icon: RiBrushLine },
   { value: "apikeys", label: "API Keys", icon: RiKeyLine },
   { value: "models", label: "Models", icon: RiBox3Line },
@@ -95,7 +97,7 @@ export function SettingsContent() {
       ) : (
         <nav
           aria-label="Settings"
-          className="bg-popover border-border flex w-48 shrink-0 flex-col border-r"
+          className="bg-popover border-border flex w-56 shrink-0 flex-col border-r"
         >
           <div className="px-3 pt-3">
             <form
@@ -187,12 +189,15 @@ export function SettingsContent() {
           <div className="p-4">
             <TabsContent value="general" className="mt-0 space-y-6">
               <UserProfile />
-              <UsageSection />
               {isMobile ? (
                 <div className="[--sidebar-row-outer-inset:0px]">
                   <SettingsSignOutButton />
                 </div>
               ) : null}
+            </TabsContent>
+
+            <TabsContent value="usage" className="mt-0">
+              <UsageSection />
             </TabsContent>
 
             <TabsContent value="appearance" className="mt-0 space-y-6">

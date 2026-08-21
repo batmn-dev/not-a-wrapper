@@ -1,0 +1,25 @@
+import { forwardRef, type SVGProps } from "react"
+
+export type GLMIconProps = {
+  size?: number | string
+} & SVGProps<SVGSVGElement>
+
+export const GLMIcon = forwardRef<SVGSVGElement, GLMIconProps>(
+  ({ size = 24, width, height, ...props }, ref) => (
+    <svg
+      ref={ref}
+      xmlns="http://www.w3.org/2000/svg"
+      width={width ?? size}
+      height={height ?? size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      {...props}
+    >
+      <path d="M12.105 2L9.927 4.953H.653L2.83 2h9.276zM23.254 19.048L21.078 22h-9.242l2.174-2.952h9.244zM24 2L9.264 22H0L14.736 2H24z" />
+    </svg>
+  )
+)
+
+GLMIcon.displayName = "GLMIcon"
+
+export default GLMIcon

@@ -122,10 +122,22 @@ describe("floating surface contract", () => {
 
     expect(composerMenu).not.toContain("composerPlusMenuItemClassName")
     expect(composerMenu).not.toContain("rounded-[16px]")
+    expect(composerMenu).toContain("disabled={!isFileUploadAvailable}")
+    expect(composerMenu).toContain("disabled={isSearchDisabled}")
+    expect(composerMenu).not.toContain("cursor-not-allowed opacity-50")
+    expect(composerMenu).not.toContain("aria-disabled=")
     expect(sidebarMenu).not.toContain("sidebarMenuRadioItemClassName")
     expect(sidebarMenu).not.toContain("rounded-[16px]")
     expect(menubar).not.toContain("focus:bg-interactive-selected")
     expect(menubar).not.toContain("data-open:bg-interactive-selected")
+  })
+
+  it("keeps disabled menu items visually inert across primitive state shapes", () => {
+    const css = read("app/globals.css")
+
+    expect(css).toMatch(
+      /\.menu-item-hoverable:is\([\s\S]*?\[aria-disabled="true"\],[\s\S]*?\[data-disabled\][\s\S]*?\):is\([\s\S]*?:hover,[\s\S]*?:focus,[\s\S]*?\[data-highlighted\],[\s\S]*?\[data-open\],[\s\S]*?\[data-popup-open\],[\s\S]*?\[data-selected\][\s\S]*?\) \{\s*background-color: transparent;/
+    )
   })
 
   it("uses a menu-owned leading slot without changing glyph sizing", () => {

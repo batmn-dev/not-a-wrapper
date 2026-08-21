@@ -263,7 +263,10 @@ describe("resolveModelRoute", () => {
       apiKey: "sk-user",
       route: { credentialSource: "byok", routeReason: "fallback_byok" },
     })
-    expect(deps.reserveCalls).toHaveLength(1)
+    expect(deps.reserveCalls.map((call) => call.providerId)).toEqual([
+      "openai",
+      "openrouter",
+    ])
   })
 
   it("fails typed insufficient_allowance when no BYOK route can serve", async () => {
@@ -281,7 +284,7 @@ describe("resolveModelRoute", () => {
     expect(result).toMatchObject({
       ok: false,
       reason: "insufficient_allowance",
-      keyProviders: ["openai"],
+      keyProviders: ["openai", "openrouter"],
     })
   })
 

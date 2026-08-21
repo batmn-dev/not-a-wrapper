@@ -1,6 +1,9 @@
 export type { Provider } from "@/lib/provider-identity"
 
 export type OpenAIModel =
+  | "gpt-5.6-sol"
+  | "gpt-5.6-terra"
+  | "gpt-5.6-luna"
   | "o1"
   | "o1-2024-12-17"
   | "o1-preview"
@@ -62,9 +65,13 @@ export type MistralModel =
   | "ministral-3b-2512"
   | "ministral-8b-latest"
   | "ministral-8b-2512"
+  | "ministral-14b-latest"
+  | "ministral-14b-2512"
   | "mistral-large-latest"
   | "mistral-large-2512"
+  | "mistral-medium-3-5"
   | "mistral-small-latest"
+  | "mistral-small-2603"
   | "mistral-small-2506"
   | "pixtral-large-latest"
   | "pixtral-large-2411"
@@ -131,9 +138,7 @@ export type XaiModel =
   | "grok-4-1-fast-non-reasoning"
   | "grok-code-fast-1"
 
-export type OpenRouterModel =
-  | "openrouter:openai/gpt-oss-120b:free"
-  | "openrouter:meta-llama/llama-3.3-70b-instruct:free"
+export type OpenRouterModel = `openrouter:${string}/${string}`
 
 export type SupportedModel =
   | OpenAIModel

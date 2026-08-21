@@ -4,10 +4,9 @@
 // (`openrouter.allowlist.ts`, editorial). Never hand-edit the generated file;
 // refresh with `bun run catalog:openrouter:refresh`.
 //
-// Incident history: 2026-07-04 — OpenRouter delisted both then-current free
-// entries (`deepseek/deepseek-r1:free`, `meta-llama/llama-3.3-8b-instruct:free`)
-// overnight; the live API returned "No endpoints found". Successions live in
+// Incident history: OpenRouter has repeatedly delisted free-pool ids without
+// notice (2026-07-04 and 2026-08-20). Successions live in
 // `lib/models/model-id-migration.ts`. That churn class is why this catalog is
-// generated: a delisting is now a loud generator failure with a ready-to-paste
+// generated: a delisting is a loud generator failure with a ready-to-paste
 // succession stub, not an archaeology session.
 export { openrouterModels } from "./openrouter.generated"

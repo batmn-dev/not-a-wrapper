@@ -61,6 +61,13 @@ export type KnownVendorId =
   | "anthropic"
   | "meta"
   | "perplexity"
+  | "moonshotai"
+  | "z-ai"
+  | "nvidia"
+  | "minimax"
+  | "qwen"
+  | "xiaomi"
+  | "inclusionai"
 
 export type VendorIdentity = {
   id: KnownVendorId
@@ -80,6 +87,13 @@ export const VENDORS: Record<KnownVendorId, VendorIdentity> = {
   anthropic: { id: "anthropic", name: "Anthropic" },
   meta: { id: "meta", name: "Meta" },
   perplexity: { id: "perplexity", name: "Perplexity" },
+  moonshotai: { id: "moonshotai", name: "Moonshot AI" },
+  "z-ai": { id: "z-ai", name: "Z.ai" },
+  nvidia: { id: "nvidia", name: "NVIDIA" },
+  minimax: { id: "minimax", name: "MiniMax" },
+  qwen: { id: "qwen", name: "Qwen" },
+  xiaomi: { id: "xiaomi", name: "Xiaomi" },
+  inclusionai: { id: "inclusionai", name: "inclusionAI" },
 }
 
 export function isKnownVendorId(id: string): id is KnownVendorId {

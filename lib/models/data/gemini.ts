@@ -104,8 +104,7 @@ const geminiModels: ModelConfig[] = [
     name: "Gemini 2.5 Flash-Lite",
     provider: "Google",
     providerId: "google",
-    catalogStatus: "legacy",
-    replacementModelId: "gemini-3.1-flash-lite",
+    catalogStatus: "visible",
     idKind: "stable",
     lastVerifiedAt: "2026-03-08",
     modelFamily: "Gemini",
@@ -127,6 +126,7 @@ const geminiModels: ModelConfig[] = [
     intelligence: "Low",
     website: "https://gemini.google.com",
     apiDocs: "https://ai.google.dev/api/docs",
+    releasedAt: "2025-07-22",
     icon: "gemini",
   },
   {
@@ -134,8 +134,7 @@ const geminiModels: ModelConfig[] = [
     name: "Gemini 2.5 Flash",
     provider: "Google",
     providerId: "google",
-    catalogStatus: "legacy",
-    replacementModelId: "gemini-3.5-flash",
+    catalogStatus: "visible",
     idKind: "stable",
     lastVerifiedAt: "2026-03-08",
     modelFamily: "Gemini",
@@ -157,6 +156,7 @@ const geminiModels: ModelConfig[] = [
     intelligence: "Medium",
     website: "https://gemini.google.com",
     apiDocs: "https://ai.google.dev/api/docs",
+    releasedAt: "2025-06-17",
     icon: "gemini",
   },
   {
@@ -164,8 +164,7 @@ const geminiModels: ModelConfig[] = [
     name: "Gemini 2.5 Pro",
     provider: "Google",
     providerId: "google",
-    catalogStatus: "legacy",
-    replacementModelId: "gemini-3.1-pro-preview",
+    catalogStatus: "visible",
     idKind: "stable",
     lastVerifiedAt: "2026-03-08",
     modelFamily: "Gemini",
@@ -187,6 +186,7 @@ const geminiModels: ModelConfig[] = [
     intelligence: "High",
     website: "https://gemini.google.com",
     apiDocs: "https://ai.google.dev/api/docs",
+    releasedAt: "2025-06-17",
     icon: "gemini",
   },
   {
@@ -217,7 +217,7 @@ const geminiModels: ModelConfig[] = [
     apiDocs: "https://ai.google.dev/api/docs",
     modelPage: "https://ai.google.dev/gemma",
     releasedAt: "2024-12-01",
-    icon: "gemini",
+    icon: "google",
   },
 ]
 

@@ -12,8 +12,8 @@ export const DAILY_LIMIT_PRO_MODELS = 500
 export const NON_AUTH_ALLOWED_MODELS = ["gpt-5-mini"]
 
 export const FREE_MODELS_IDS = [
-  "openrouter:openai/gpt-oss-120b:free",
-  "openrouter:meta-llama/llama-3.3-70b-instruct:free",
+  "openrouter:google/gemma-4-26b-a4b-it:free",
+  "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
   "pixtral-large-2411",
   "mistral-large-2512",
   "gpt-5-mini",
@@ -118,7 +118,6 @@ You're honest about limitations and uncertainties. When you don't know something
 For mathematical notation, use double-dollar delimiters ($$...$$) for inline math. For display math, put the opening and closing $$ delimiters on separate lines. Do not use single-dollar delimiters for math because single dollar signs are reserved for currency and literal text.
 
 You respect the user's time by being concise when appropriate and thorough when the situation calls for it.`
-
 
 // Context Management (Anthropic Best Practices)
 /**

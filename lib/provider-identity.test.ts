@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { getAllModels } from "./models"
-import {
-  isKnownVendorId,
-  MODEL_PROVIDER_IDENTITY,
-} from "./provider-identity"
+import { isKnownVendorId, MODEL_PROVIDER_IDENTITY } from "./provider-identity"
 
 /**
  * Inventory-drift guard for the Provider identity module (CONTEXT.md).
@@ -32,6 +29,22 @@ describe("provider identity inventory", () => {
     const drift = (await getAllModels())
       .filter((model) => !model.icon || !isKnownVendorId(model.icon))
       .map((model) => `${model.id}: ${model.icon}`)
+    expect(drift).toEqual([])
+  })
+
+  it("groups direct models under their provider company", async () => {
+    const drift = (await getAllModels())
+      .filter((model) => model.providerId !== "openrouter")
+      .filter(
+        (model) =>
+          model.baseProviderId !==
+          MODEL_PROVIDER_IDENTITY[model.providerId].vendorId
+      )
+      .map(
+        (model) =>
+          `${model.id}: ${model.baseProviderId} ≠ ${MODEL_PROVIDER_IDENTITY[model.providerId].vendorId}`
+      )
+
     expect(drift).toEqual([])
   })
 })

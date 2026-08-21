@@ -488,7 +488,7 @@ describe("Convex schema contraction helpers", () => {
     expect(calls[2].env.CONVEX_DEPLOY_KEY).toBe("deploy-key")
   })
 
-  it("blocks a reservation contraction until the authorized endpoint is deployed", () => {
+  it("blocks a reservation contraction from a legacy-only deployment", () => {
     expect(() =>
       validateAuthorizedReserveFunctionSpec(
         JSON.stringify({
@@ -501,8 +501,10 @@ describe("Convex schema contraction helpers", () => {
         })
       )
     ).toThrow("Usage reservation contraction blocked")
+  })
 
-    expect(() =>
+  it("allows a contraction after the authorized endpoint is deployed", () => {
+    expect(
       validateAuthorizedReserveFunctionSpec(
         JSON.stringify({
           functions: [
@@ -513,7 +515,22 @@ describe("Convex schema contraction helpers", () => {
           ],
         })
       )
-    ).not.toThrow()
+    ).toBe("authorized-endpoint-active")
+  })
+
+  it("allows a secure initial rollout when no legacy endpoint is deployed", () => {
+    expect(
+      validateAuthorizedReserveFunctionSpec(
+        JSON.stringify({
+          functions: [
+            {
+              identifier: "chats.js:list",
+              visibility: { kind: "public" },
+            },
+          ],
+        })
+      )
+    ).toBe("no-legacy-endpoint")
   })
 
   it("runs preflight before Convex deploy using the selected deploy environment", () => {

@@ -1,7 +1,10 @@
 import type { UIMessage } from "ai"
 
 export type AdaptationContext = {
+  /** Logical model identity used for model-specific replay behavior. */
   targetModelId: string
+  /** Resolved execution route used to identify wrapped providers. */
+  targetRouteId?: string
   hasTools: boolean
   sourceProviderHint?: string
   maxHistoryTokens?: number

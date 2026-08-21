@@ -10,7 +10,9 @@ import {
 } from "./catalog"
 import type { ModelConfig } from "./types"
 
-function makeConfig(overrides: Partial<ModelConfig> & { id: string }): ModelConfig {
+function makeConfig(
+  overrides: Partial<ModelConfig> & { id: string }
+): ModelConfig {
   return {
     name: overrides.id,
     provider: "Test",
@@ -150,6 +152,39 @@ describe("production logical catalog", () => {
     expect(glm?.routes.map((route) => route.providerId)).toEqual(["openrouter"])
   })
 
+  it.each([
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "mistral-medium-3-5",
+    "mistral-small-2603",
+    "ministral-14b-2512",
+    "openrouter:qwen/qwen3.8-27b",
+    "openrouter:stealth/ox-alpha",
+    "openrouter:deepseek/deepseek-v3.2",
+    "openrouter:google/gemini-3.7-flash",
+    "openrouter:minimax/minimax-m2.7",
+    "openrouter:moonshotai/kimi-k3",
+    "openrouter:openai/gpt-5.5-pro",
+    "openrouter:z-ai/glm-5v-turbo",
+    "openrouter:x-ai/grok-4.6",
+  ])("keeps reference-catalog route %s visible", (modelId) => {
+    expect(getLogicalModel(modelId)?.catalogStatus).toBe("visible")
+  })
+
+  it.each([
+    ["claude-sonnet-4-6", "openrouter:anthropic/claude-sonnet-4.6"],
+    ["gpt-4.1", "openrouter:openai/gpt-4.1"],
+    ["gemini-2.5-pro", "openrouter:google/gemini-2.5-pro"],
+  ])(
+    "adds the reference route to direct logical model %s",
+    (modelId, routeId) => {
+      const model = getLogicalModel(modelId)
+      expect(model?.catalogStatus).toBe("visible")
+      expect(model?.routes.map((route) => route.id)).toContain(routeId)
+    }
+  )
+
   it("keeps route-specific facts on the route, not the model", () => {
     const sonnet = getLogicalModel("claude-sonnet-5")!
     const direct = sonnet.routes[0]!.config
@@ -162,16 +197,18 @@ describe("production logical catalog", () => {
 
 describe("resolveModelSelection", () => {
   it("resolves a merged wrapped id to its logical model with a route hint", () => {
-    expect(resolveModelSelection("openrouter:anthropic/claude-sonnet-5")).toEqual({
+    expect(
+      resolveModelSelection("openrouter:anthropic/claude-sonnet-5")
+    ).toEqual({
       modelId: "claude-sonnet-5",
       legacyRouteHint: "openrouter:anthropic/claude-sonnet-5",
     })
   })
 
   it("keeps aliases and successions resolving first", () => {
-    // Alias chain: deepseek-r1 → delisted free R1 → succession to GPT-OSS.
+    // Alias chain: deepseek-r1 → delisted free R1 → live GPT-OSS route.
     expect(resolveModelSelection("deepseek-r1")).toEqual({
-      modelId: "openrouter:openai/gpt-oss-120b:free",
+      modelId: "openrouter:openai/gpt-oss-120b",
     })
   })
 

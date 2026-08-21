@@ -31,17 +31,18 @@ const DIRECT_PROVIDER_DEFAULT_MODEL_ORDER: string[] = [
 
 /**
  * Curated default model order for the selector. Direct-provider IDs are
- * curated above; the OpenRouter-only suffix derives from the generated
- * catalog's allowlist order. Wrapped records mapped onto a direct logical
- * model (ADR-0020) are routes, not selector entries, so they are excluded.
- * Models not in this list preserve their original array-declaration order.
+ * curated above; the remaining order derives from the generated OpenRouter
+ * catalog. Wrapped records use their logical model id (ADR-0020), so a model
+ * added through OpenRouter still lands in the composer's curated order even
+ * when its selector identity is a direct-provider model. Models not in this
+ * list preserve their original array-declaration order.
  */
-export const DEFAULT_MODEL_ORDER: string[] = [
-  ...DIRECT_PROVIDER_DEFAULT_MODEL_ORDER,
-  ...openrouterModels
-    .filter((model) => model.logicalModelId === undefined)
-    .map((model) => model.id),
-]
+export const DEFAULT_MODEL_ORDER: string[] = Array.from(
+  new Set([
+    ...DIRECT_PROVIDER_DEFAULT_MODEL_ORDER,
+    ...openrouterModels.map((model) => model.logicalModelId ?? model.id),
+  ])
+)
 
 export function isModelVisibleInSelector(
   model: Pick<ModelConfig, "catalogStatus">

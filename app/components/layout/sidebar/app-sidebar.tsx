@@ -738,12 +738,12 @@ function CollapsedHeaderToggle() {
           />
         }
       >
-        <NawIcon className="absolute inset-0 m-auto size-5 opacity-100 transition-opacity delay-0 duration-[1ms] group-hover/tiny-bar:opacity-0 group-hover/tiny-bar:delay-150 group-focus-visible/open-sidebar:opacity-0 group-focus-visible/open-sidebar:delay-0" />
+        <NawIcon className="absolute inset-0 m-auto size-5 opacity-100 transition-opacity duration-[1ms] group-hover/tiny-bar:opacity-0 group-focus-visible/open-sidebar:opacity-0" />
         <Icon
           icon={RiSideBarLine}
           slotSize={20}
           glyphInset={0}
-          className="absolute inset-0 m-auto opacity-0 transition-opacity delay-0 duration-[1ms] group-hover/tiny-bar:opacity-100 group-hover/tiny-bar:delay-150 group-focus-visible/open-sidebar:opacity-100 group-focus-visible/open-sidebar:delay-0"
+          className="absolute inset-0 m-auto opacity-0 transition-opacity duration-[1ms] group-hover/tiny-bar:opacity-100 group-focus-visible/open-sidebar:opacity-100"
         />
       </TooltipTrigger>
       <TooltipContent side="right">Open sidebar</TooltipContent>

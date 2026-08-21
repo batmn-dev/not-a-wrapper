@@ -43,9 +43,9 @@ export function SettingsDialog({
         className="flex flex-col gap-0 overflow-hidden p-0"
         style={{
           height: "calc(100dvh - 2rem)",
-          maxHeight: "720px",
+          maxHeight: "800px",
           width: "calc(100vw - 2rem)",
-          maxWidth: "824px",
+          maxWidth: "960px",
         }}
       >
         <DialogTitle className="sr-only">Settings</DialogTitle>

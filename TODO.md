@@ -1,5 +1,14 @@
 # To Do
 
+## Urgent
+
+- **Security dependency update:** upgrade `next`, `@next/bundle-analyzer`, and
+  `eslint-config-next` from `16.2.10` to at least `16.3.1`; upgrade `dompurify`
+  from `3.4.11` to `3.4.14`; and upgrade `postcss` from `8.5.16` to `8.5.26`.
+  Re-run the dependency audit and relevant build, lint, sanitization, and Server
+  Action checks. Recheck Next.js on or after August 26, 2026 for the announced
+  critical security release and adopt its patched `16.3.x` version.
+
 ## Product backlog
 
 - **Dynamic Activity-panel source presentation:** adapt each source item to the
@@ -62,6 +71,24 @@
 
 ## Correctness and maintenance
 
+- **Coordinated AI and Convex dependency update:** upgrade the AI SDK v7 stack
+  atomically, including `ai`, `@ai-sdk/react`, all provider packages,
+  `@ai-sdk/mcp`, `@ai-sdk/provider`, and `@ai-sdk/provider-utils`; upgrade
+  `@convex-dev/agent` to its AI SDK v7-compatible `0.7.x` line; and update
+  `convex` and `convex-helpers`. Remove or revise the temporary AI SDK v6 peer
+  mismatch comment after compatibility is restored, then verify type safety,
+  provider routing, streaming, tools, approvals, and durable message behavior.
+- **Routine compatible dependency refresh:** update the remaining compatible
+  patch and minor releases, including React, Sentry, Braintrust, PostHog,
+  WorkOS, TanStack Query, Shiki, Base UI, React Hook Form, Tailwind, Vitest, and
+  Prettier. Update the declared package manager from `bun@1.3.1` to
+  `bun@1.3.14`, refresh safe transitive dependencies such as `undici`, rerun the
+  dependency audit, and validate with the normal project checks.
+- **Staged major dependency upgrades:** evaluate TypeScript 6 before TypeScript
+  7 and wait for compatible compiler-API tooling; keep `@types/node` aligned
+  with the supported runtime; defer jsdom 30 until the Node engine floor is
+  compatible; and handle ESLint 10, Motion 13, and Recharts 3.10 as separate,
+  focused upgrades with migration-specific lint, animation, and visual checks.
 - **Assistant responsiveness:** investigate and improve time to first token and
   text-streaming feel end to end. Known suspects are catalogued in
   `docs/streaming-regression-suspects-2026-08-20.md`: the platform

@@ -14,13 +14,13 @@ describe("createLanguageModel", () => {
       "gpt-5-mini"
     )
     expect(createLanguageModel("deepseek-r1", "test-api-key").modelId).toBe(
-      "openai/gpt-oss-120b:free"
+      "openai/gpt-oss-120b"
     )
   })
 
   it("uses OpenRouter runtime behavior for prefixed model ids", () => {
     const model = createLanguageModel(
-      "openrouter:openai/gpt-oss-120b:free",
+      "openrouter:openai/gpt-oss-120b",
       "test-api-key"
     ) as unknown as {
       config?: { compatibility?: string }
@@ -29,12 +29,12 @@ describe("createLanguageModel", () => {
     }
 
     expect(model.provider).toBe("openrouter")
-    expect(model.modelId).toBe("openai/gpt-oss-120b:free")
+    expect(model.modelId).toBe("openai/gpt-oss-120b")
     expect(model.config?.compatibility).toBe("strict")
   })
 
   it("feeds the catalog's construction reasoning settings into the model", () => {
-    const gptOss = getModelInfo("openrouter:openai/gpt-oss-120b:free")
+    const gptOss = getModelInfo("openrouter:openai/gpt-oss-120b")
     expect(gptOss?.reasoning).toEqual({ effort: "medium" })
 
     const configured = createLanguageModel(gptOss!, "test-api-key") as {
@@ -44,7 +44,7 @@ describe("createLanguageModel", () => {
 
     // Bare string ids carry no catalog config — prior construction unchanged.
     const bare = createLanguageModel(
-      "openrouter:openai/gpt-oss-120b:free",
+      "openrouter:openai/gpt-oss-120b",
       "test-api-key"
     ) as { settings?: { reasoning?: unknown } }
     expect(bare.settings?.reasoning).toBeUndefined()
