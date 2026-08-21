@@ -302,6 +302,25 @@ describe("ModelSelector", () => {
     ).toBe(false)
   })
 
+  it("disables the composer tooltip while the model popover is open", () => {
+    renderSelector({ isUserAuthenticated: false, variant: "composer" })
+
+    const toggleModelPopover = useKeyShortcutMock.mock.calls.at(-1)?.[1] as
+      | (() => void)
+      | undefined
+    const tooltipTrigger = document.body.querySelector<HTMLElement>(
+      '[data-slot="tooltip-trigger"]'
+    )
+
+    expect(tooltipTrigger?.hasAttribute("data-trigger-disabled")).toBe(false)
+
+    act(() => {
+      toggleModelPopover?.()
+    })
+
+    expect(tooltipTrigger?.hasAttribute("data-trigger-disabled")).toBe(true)
+  })
+
   function getModelOption(name: string) {
     const option = Array.from(
       document.body.querySelectorAll<HTMLButtonElement>(

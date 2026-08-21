@@ -401,7 +401,10 @@ export function ModelSelector({
         }}
       >
         {isComposerVariant ? (
-          <Tooltip disableHoverablePopup>
+          <Tooltip
+            disableHoverablePopup
+            disabled={isDropdownOpen}
+          >
             <TooltipTrigger render={<span className="inline-flex min-w-0" />}>
               <DropdownMenuTrigger render={trigger} />
             </TooltipTrigger>

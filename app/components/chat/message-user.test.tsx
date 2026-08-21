@@ -70,6 +70,13 @@ describe("MessageUser attachments", () => {
       )
     ).toBeTruthy()
   })
+
+  it("uses the reference turn heading level", () => {
+    renderMessage(undefined)
+
+    expect(container?.querySelector("h4")?.textContent).toBe("You said:")
+    expect(container?.querySelector("h5")).toBeNull()
+  })
 })
 
 describe("MessageUser edits", () => {

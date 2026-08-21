@@ -125,6 +125,10 @@ describe("ThreadScrollEdge", () => {
 
     container = document.createElement("div")
     container.setAttribute("data-scroll-root", "")
+    Object.defineProperties(container, {
+      clientHeight: { configurable: true, value: 1000 },
+      scrollHeight: { configurable: true, value: 2000 },
+    })
     document.body.appendChild(container)
     root = createRoot(container)
   })
@@ -183,9 +187,8 @@ describe("ThreadScrollEdge", () => {
     })
   }
 
-  it("pins after Strict Mode cancels the first effect pass", () => {
+  it("pins before the next animation frame in Strict Mode", () => {
     render("user-1", true)
-    flushFrames()
 
     expect(scrollIntoView).toHaveBeenCalledOnce()
     expect(scrollIntoView).toHaveBeenCalledWith({
@@ -258,6 +261,20 @@ describe("ThreadScrollEdge", () => {
     flushFrames()
 
     expect(scrollIntoView).toHaveBeenCalledOnce()
+  })
+
+  it("does not schedule a second pin when optimistic insertion already reached the edge", () => {
+    container.scrollTop = 1000
+
+    render("user-1")
+    Object.defineProperty(container, "scrollHeight", {
+      configurable: true,
+      value: 3200,
+    })
+    flushFrames()
+
+    expect(scrollIntoView).not.toHaveBeenCalled()
+    expect(container.hasAttribute("data-scroll-from-end")).toBe(false)
   })
 
   it("leaves manual scroll ownership released without threshold reactivation", () => {

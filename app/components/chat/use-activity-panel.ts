@@ -102,6 +102,47 @@ export function isGenerationActive(
   return isSubmitting || status === "submitted" || status === "streaming"
 }
 
+/**
+ * The pending row owns the pre-content handoff, even after persistence adopts
+ * the real assistant id. A durable assistant shell can arrive before the local
+ * stream publishes its first renderable part; handing the row over at identity
+ * adoption would briefly replace the 32px Thinking slot with an empty turn.
+ */
+export function shouldRenderPendingAssistantTurn({
+  messages,
+  status,
+  isSubmitting,
+}: {
+  messages: UIMessage[]
+  status: ChatStatus
+  isSubmitting: boolean
+}): boolean {
+  if (!isGenerationActive(status, isSubmitting)) return false
+
+  const lastMessage = messages[messages.length - 1]
+  if (lastMessage?.role === "user") return true
+  if (lastMessage?.role !== "assistant") return false
+
+  const durableStatus = messageRenderStatus(lastMessage)
+  if (
+    durableStatus !== "ready" &&
+    durableStatus !== "submitted" &&
+    durableStatus !== "streaming"
+  ) {
+    return false
+  }
+
+  const view = deriveAssistantTurnView(lastMessage, status)
+  const hasRenderableEvidence =
+    view.text.trim().length > 0 ||
+    view.toolParts.length > 0 ||
+    view.sources.length > 0 ||
+    view.searchImageResults.length > 0 ||
+    view.reasoning.hasObservedActivity
+
+  return !hasRenderableEvidence
+}
+
 function getActivityTurnId(message: UIMessage | undefined): string | undefined {
   if (!message) return undefined
 
@@ -151,11 +192,14 @@ export function selectActivityPanelTarget({
   selectedActivityTurnId?: string
 }): ActivityPanelTarget {
   const generationActive = isGenerationActive(status, isSubmitting)
-  const hasPendingAssistantTurn =
-    generationActive && messages[messages.length - 1]?.role === "user"
+  const hasPendingAssistantTurn = shouldRenderPendingAssistantTurn({
+    messages,
+    status,
+    isSubmitting,
+  })
 
-  // During submit preflight, the next assistant turn has no server/client id
-  // yet, so the generation-following default is the pending placeholder.
+  // Before the first renderable part, assistant identity adoption is not a
+  // visual handoff: the generation-following default remains the placeholder.
   const defaultMessage = hasPendingAssistantTurn
     ? undefined
     : findLastAssistantTurn(messages)

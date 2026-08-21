@@ -22,7 +22,6 @@ import { isRouteDurableChat } from "@/lib/chat-turn/chat-turn-controller"
 import { cn } from "@/lib/utils"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { useUser } from "@/lib/user-store/provider"
-import { AnimatePresence, motion } from "motion/react"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
@@ -456,36 +455,26 @@ function ChatInner({
               project={project}
               onStartChat={() => composerRef.current?.focus()}
             />
+          ) : showOnboarding ? (
+            <div className="relative flex shrink basis-auto flex-col justify-end max-sm:grow max-sm:justify-center sm:min-h-[calc(42svh-var(--spacing-app-header))]">
+              <div
+                className="flex justify-center"
+                data-splash-headline-option="WHATS_ON_YOUR_MIND"
+              >
+                <div className="hidden text-center sm:mb-[22px] sm:block">
+                  <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
+                    What&apos;s on your mind?
+                  </h1>
+                </div>
+                <div className="flex h-full w-full shrink flex-col items-center justify-center px-4 text-center sm:hidden">
+                  <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
+                    What&apos;s on your mind?
+                  </h1>
+                </div>
+              </div>
+            </div>
           ) : (
-            <AnimatePresence initial={false} mode="popLayout">
-              {showOnboarding ? (
-                <motion.div
-                  key="onboarding"
-                  className="relative flex shrink basis-auto flex-col justify-end max-sm:grow max-sm:justify-center sm:min-h-[calc(42svh-var(--spacing-app-header))]"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                >
-                  <div
-                    className="flex justify-center"
-                    data-splash-headline-option="WHATS_ON_YOUR_MIND"
-                  >
-                    <div className="hidden text-center sm:mb-[22px] sm:block">
-                      <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
-                        What&apos;s on your mind?
-                      </h1>
-                    </div>
-                    <div className="flex h-full w-full shrink flex-col items-center justify-center px-4 text-center sm:hidden">
-                      <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
-                        What&apos;s on your mind?
-                      </h1>
-                    </div>
-                  </div>
-                </motion.div>
-              ) : (
-                <Conversation key="conversation" {...conversationProps} />
-              )}
-            </AnimatePresence>
+            <Conversation {...conversationProps} />
           )}
 
           <ThreadBottomContainer

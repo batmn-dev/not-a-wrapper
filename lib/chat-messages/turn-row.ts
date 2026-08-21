@@ -23,6 +23,7 @@ export type AssistantTurnRowModel = BaseTurnRowModel & {
   view: AssistantTurnView
   isLast?: boolean
   retryModelId?: string
+  retryDisabled?: boolean
   status?: DurableMessageStatus | "ready" | "error"
   finishReason?: string
 }
@@ -107,6 +108,7 @@ export function turnRowModelsEqual(
       assistantTurnViewsEqual(previous.view, next.view) &&
       previous.isLast === next.isLast &&
       previous.retryModelId === next.retryModelId &&
+      previous.retryDisabled === next.retryDisabled &&
       previous.status === next.status &&
       previous.finishReason === next.finishReason
     )

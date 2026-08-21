@@ -112,6 +112,7 @@ function MessageInner({
         copyToClipboard={copyToClipboard}
         onReload={onReload}
         retryModelId={model.retryModelId}
+        retryDisabled={model.retryDisabled}
         isLast={model.isLast}
         view={model.view}
         status={model.status}

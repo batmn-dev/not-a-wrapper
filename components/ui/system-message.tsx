@@ -69,6 +69,7 @@ export type SystemMessageProps = React.ComponentProps<"div"> &
     cta?: {
       label: string
       onClick?: () => void
+      disabled?: boolean
       variant?: "solid" | "outline" | "ghost"
     }
   }
@@ -127,7 +128,12 @@ export function SystemMessage({
       </div>
 
       {cta && (
-        <Button variant="default" size="sm" onClick={cta.onClick}>
+        <Button
+          variant="default"
+          size="sm"
+          onClick={cta.onClick}
+          disabled={cta.disabled}
+        >
           {cta.label}
         </Button>
       )}

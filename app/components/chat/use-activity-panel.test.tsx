@@ -517,6 +517,41 @@ describe("useActivityPanel ownership", () => {
     expect(latest!.panelCanOpen).toBe(false)
   })
 
+  it("keeps the pending target until an adopted assistant has renderable evidence", () => {
+    const emptyAssistant = {
+      id: "a2",
+      role: "assistant",
+      parts: [],
+    } as unknown as UIMessage
+
+    render({
+      messages: [user("u1"), assistant("a1"), user("u2"), emptyAssistant],
+      status: "ready",
+      isSubmitting: true,
+    })
+
+    expect(latest!.defaultActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
+    expect(latest!.panelActivityTurnId).toBe(PENDING_ACTIVITY_TURN_ID)
+    expect(latest!.panelCanOpen).toBe(false)
+
+    render({
+      messages: [
+        user("u1"),
+        assistant("a1"),
+        user("u2"),
+        {
+          ...emptyAssistant,
+          parts: [{ type: "text", text: "First response text" }],
+        },
+      ],
+      status: "streaming",
+      isSubmitting: false,
+    })
+
+    expect(latest!.defaultActivityTurnId).toBe("a2")
+    expect(latest!.panelActivityTurnId).toBe("a2")
+  })
+
   it("follows only the default streaming turn and changes its turn key", () => {
     render({
       messages: [

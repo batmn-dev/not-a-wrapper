@@ -117,6 +117,33 @@
     }
   }
 
+  @keyframes loading-shimmer {
+    from {
+      background-position: -100% 0;
+    }
+    to {
+      background-position: 250% 0;
+    }
+  }
+
+  @keyframes loading-shimmer-rtl {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -150% 0;
+    }
+  }
+
+  @keyframes assistant-response-content-enter {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
   @keyframes caret-blink {
     0%,
     100% {
@@ -808,6 +835,62 @@
 }
 
 @layer utilities {
+  .loading-shimmer-tertiary {
+    --shimmer-contrast: rgb(255 255 255 / 75%);
+    --shimmer-text-secondary: var(--text-tertiary);
+    background: var(--shimmer-text-secondary)
+      linear-gradient(
+        to right,
+        var(--shimmer-text-secondary) 0%,
+        var(--shimmer-contrast) 40%,
+        var(--shimmer-contrast) 60%,
+        var(--shimmer-text-secondary) 100%
+      );
+    background-position: -100% 0;
+    background-repeat: no-repeat;
+    background-size: 50% 200%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation-name: loading-shimmer;
+    animation-duration: 1400ms;
+    animation-iteration-count: infinite;
+    animation-delay: 0s;
+    display: inline-block;
+  }
+
+  .dark .loading-shimmer-tertiary {
+    --shimmer-contrast: rgb(0 0 0 / 60%);
+  }
+
+  [dir="rtl"] .loading-shimmer-tertiary {
+    background-image: linear-gradient(
+      to left,
+      var(--shimmer-text-secondary) 0%,
+      var(--shimmer-contrast) 40%,
+      var(--shimmer-contrast) 60%,
+      var(--shimmer-text-secondary) 100%
+    );
+    background-position: 200% 0;
+    animation-name: loading-shimmer-rtl;
+  }
+
+  .streaming-animation {
+    animation: assistant-response-content-enter 180ms ease-out both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .loading-shimmer-tertiary {
+      background: none;
+      -webkit-text-fill-color: currentColor;
+      animation: none;
+    }
+
+    .streaming-animation {
+      animation: none;
+    }
+  }
+
   .menu-item-hoverable {
     border-block: 1px solid transparent;
     background-clip: padding-box;

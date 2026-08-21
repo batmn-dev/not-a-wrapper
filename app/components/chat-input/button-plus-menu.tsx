@@ -21,6 +21,7 @@ import {
   RiCheckLine,
   RiGlobalLine,
 } from "@remixicon/react"
+import { useState } from "react"
 import { PopoverContentAuth } from "./popover-content-auth"
 
 const composerPlusIcon = (
@@ -60,11 +61,13 @@ export function ButtonPlusMenu({
   fileUploadDisabledMessage,
   searchDisabledMessage,
 }: ButtonPlusMenuProps) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+
   // Unauthenticated: show auth popover instead of dropdown
   if (!isUserAuthenticated) {
     return (
-      <Popover>
-        <Tooltip disableHoverablePopup>
+      <Popover open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+        <Tooltip disableHoverablePopup disabled={isMenuOpen}>
           <TooltipTrigger render={<span className="inline-flex" />}>
             <PopoverTrigger
               render={
@@ -93,8 +96,8 @@ export function ButtonPlusMenu({
 
   return (
     <>
-      <DropdownMenu>
-        <Tooltip disableHoverablePopup>
+      <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+        <Tooltip disableHoverablePopup disabled={isMenuOpen}>
           <TooltipTrigger render={<span className="inline-flex" />}>
             <DropdownMenuTrigger
               render={

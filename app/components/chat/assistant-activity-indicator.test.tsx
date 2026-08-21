@@ -45,14 +45,20 @@ describe("AssistantActivityIndicator", () => {
     expect(container.querySelector("[aria-expanded]")).toBeNull()
     expect(container.querySelector("[aria-controls]")).toBeNull()
 
-    const statusRows = container.querySelectorAll(
+    const liveStatus = container.querySelector(
+      '[data-activity-presentation="live-status"]'
+    )
+    expect(liveStatus?.getAttribute("aria-busy")).toBe("true")
+    expect(liveStatus?.className).toContain("min-h-8")
+    expect(
+      liveStatus?.querySelector(".loading-shimmer-tertiary")?.tagName
+    ).toBe("DIV")
+
+    const passiveStatus = container.querySelector(
       '[data-slot="activity-status-row"]'
     )
-    expect(statusRows).toHaveLength(2)
-    for (const statusRow of statusRows) {
-      expect(statusRow.className).toContain("h-6")
-      expect(statusRow.className).toContain("gap-0.5")
-    }
+    expect(passiveStatus?.className).toContain("h-6")
+    expect(passiveStatus?.className).toContain("gap-0.5")
 
     act(() => root.unmount())
   })
