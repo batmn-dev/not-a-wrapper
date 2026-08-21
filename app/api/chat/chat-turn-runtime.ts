@@ -101,6 +101,7 @@ import {
   type DurableStreamBinding,
   type DurableTurnRuntime,
   type DurableWorkerWire,
+  type TitleUsageForSettlement,
 } from "./durable-turn-runtime"
 import { lowerForeignHostedToolParts } from "./hosted-tool-lowering"
 import {
@@ -226,7 +227,7 @@ type PreparedTurn = {
   aiModel: ReturnType<typeof createLanguageModel>
   titleModel: ReturnType<typeof createLanguageModel>
   /** Title-route id, reported with the title call's usage (ADR-0021). */
-  titleModelId: string
+  titleRouteId: string
   modelConfig: ModelConfig
   provider: Provider
   normalizedChatVersion: number
@@ -1038,7 +1039,7 @@ export function createChatTurnRuntime(args: {
     prepared = {
       aiModel,
       titleModel,
-      titleModelId: titleModelConfig.id,
+      titleRouteId: titleModelConfig.id,
       modelConfig,
       provider: resolvedProvider,
       normalizedChatVersion,
@@ -1082,7 +1083,7 @@ export function createChatTurnRuntime(args: {
     const {
       aiModel,
       titleModel,
-      titleModelId,
+      titleRouteId,
       modelConfig,
       provider: resolvedProvider,
       normalizedChatVersion,
@@ -1770,10 +1771,10 @@ export function createChatTurnRuntime(args: {
       ? generateChatTitle({
           generateText: deps.generateText,
           model: titleModel,
-          modelId: titleModelId,
+          routeId: titleRouteId,
           // The answer model just accepted this credential; if the catalog's
           // title route has been retired upstream (404), name the chat with it.
-          fallback: { model: aiModel, modelId: model },
+          fallback: { model: aiModel, routeId: route.routeId },
           userText: titleRequest.userText,
           abortSignal: titleSignal,
         }).catch((error: unknown) => {
@@ -1799,10 +1800,16 @@ export function createChatTurnRuntime(args: {
     // "not-run" when no title was requested this turn; the observed usage
     // when the call finished; "unknown" when it failed or was cancelled (a
     // call may still have consumed tokens — settled at the estimate).
-    const titleUsageForSettlement: Promise<
-      { inputTokens?: number; outputTokens?: number } | "not-run" | "unknown"
-    > = titleTask
-      ? titleTask.then((generated) => generated?.usage ?? ("unknown" as const))
+    const titleUsageForSettlement: Promise<TitleUsageForSettlement> = titleTask
+      ? titleTask.then((generated) =>
+          generated
+            ? {
+                routeId: generated.routeId,
+                pricingRole: generated.pricingRole,
+                ...generated.usage,
+              }
+            : ("unknown" as const)
+        )
       : Promise.resolve("not-run" as const)
 
     if (

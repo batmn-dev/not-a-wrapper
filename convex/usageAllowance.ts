@@ -1,11 +1,11 @@
 import { v } from "convex/values"
 import type { Doc, Id } from "./_generated/dataModel"
-import type { GenerationRunTerminalReason } from "./domain/generation_run_lifecycle"
 import {
   internalMutation,
   internalQuery,
   type MutationCtx,
 } from "./_generated/server"
+import type { GenerationRunTerminalReason } from "./domain/generation_run_lifecycle"
 import {
   applyRelease,
   applyReserve,
@@ -626,14 +626,44 @@ async function settleReservation(
   }
 }
 
+type LegacyTitleUsageEvidence = UsageTokens & {
+  routeId?: never
+  pricingRole?: never
+}
+
+type RoutedTitleUsageEvidence = UsageTokens & {
+  routeId: string
+  pricingRole: "title" | "primary"
+}
+
 /** The completion write's title-usage evidence (ADR-0021). */
-export type TitleUsageEvidence = UsageTokens | "not-run" | "unknown"
+export type TitleUsageEvidence =
+  LegacyTitleUsageEvidence | RoutedTitleUsageEvidence | "not-run" | "unknown"
 
 export type TerminalUsageEvidence = {
   /** Provider-reported aggregate usage — present only on the completion path. */
   usage?: UsageTokens
   /** Title-call evidence riding the completion write. */
   titleUsage?: TitleUsageEvidence
+}
+
+function resolveTitleUsageRate(
+  snapshot: PricingSnapshot,
+  titleUsage: LegacyTitleUsageEvidence | RoutedTitleUsageEvidence
+): PricingSnapshot["primary"] | undefined {
+  // Compatibility for active workers from before priced-route evidence: they
+  // could only report token counts, which historically meant the title route.
+  if (
+    titleUsage.routeId === undefined ||
+    titleUsage.pricingRole === undefined
+  ) {
+    return snapshot.title ?? snapshot.primary
+  }
+  const rate =
+    titleUsage.pricingRole === "primary"
+      ? snapshot.primary
+      : (snapshot.title ?? snapshot.primary)
+  return rate.routeId === titleUsage.routeId ? rate : undefined
 }
 
 /**
@@ -709,7 +739,6 @@ export async function settleUsageForTerminalRun(
     // object without a single numeric field is NOT observed usage — the
     // provider omitted it, so the title component settles at its estimate
     // and the basis says so.
-    const titleRate = snapshot.title ?? snapshot.primary
     const titleObserved =
       evidence.titleUsage !== undefined &&
       evidence.titleUsage !== "unknown" &&
@@ -718,14 +747,30 @@ export async function settleUsageForTerminalRun(
         typeof evidence.titleUsage.outputTokens === "number")
         ? evidence.titleUsage
         : undefined
+    const titleRate = titleObserved
+      ? resolveTitleUsageRate(snapshot, titleObserved)
+      : undefined
+    if (titleObserved && !titleRate) {
+      // The worker is trusted, but only reservation-pinned rates may move
+      // allowance. Preserve completion and settle conservatively at the title
+      // estimate while making route drift visible for investigation.
+      warnUsage("usage_title_route_unrecognized", {
+        reservationId: reservation._id,
+        runId: run._id,
+        routeId: titleObserved.routeId,
+        pricingRole: titleObserved.pricingRole,
+        primaryRouteId: snapshot.primary.routeId,
+        titleRouteId: snapshot.title?.routeId,
+      })
+    }
     const titleCredits =
       evidence.titleUsage === "not-run"
         ? 0
-        : titleObserved
+        : titleObserved && titleRate
           ? computeUsageCredits(titleRate, titleObserved)
           : titleEstimate
     const basis: SettlementBasis =
-      evidence.titleUsage === "not-run" || titleObserved
+      evidence.titleUsage === "not-run" || (titleObserved && titleRate)
         ? "actual"
         : "actual_with_estimated_title"
     await settleReservation(

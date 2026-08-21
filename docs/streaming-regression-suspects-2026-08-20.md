@@ -30,7 +30,8 @@ model identities + server-owned route selection).
    `validateAndResolveChatCredential` supplies the route resolver's
    `platformFunding` context only when `isServerChatId(chatId)`
    (`app/api/chat/api.ts`), so **the first turn of a new chat (local optimistic
-   id) can never take the platform tier** and silently falls to fallback BYOK.
+   id) can never take the platform tier** and may select an eligible priority
+   or fallback BYOK route; otherwise, route resolution fails.
 3. **Time-to-first-token grew by 1–2 sequential Convex roundtrips.**
    `usageAllowance.reserveAuthorized` mutation now sits on the admission
    critical path (`lib/model-route-resolver.ts`), and #143 added a per-turn

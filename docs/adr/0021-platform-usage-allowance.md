@@ -146,15 +146,15 @@ best-effort fire-and-forget write (ADR-0011's `markGenerationWorkStarted`),
 so its absence must never refund a run that provably consumed usage. The
 settlement decision, in order:
 
-| Evidence at terminal                                                                                        | Accounting                                                                                                                                                                        |
-| ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| onEnd aggregate usage present                                                                               | settle actual (`basis: actual`; `actual_with_estimated_title` when the title call's usage never arrived or carried no token counts)                                               |
-| Per-step accumulated usage present                                                                          | settle observed (`basis: observed_partial`) — the runtime records EVERY step's usage durably, tool calls or not                                                                   |
-| No evidence, `workStartedAt` never written                                                                  | release (provider consumption never began)                                                                                                                                        |
-| No evidence, terminal is `provider_error` with ZERO accepted content checkpoints (`lastSnapshotSequence` 0) | release (`provider_error_before_output`) — an instant 400/401/429 is not billed by providers; charging the full estimate for a provider outage would drain allowances for nothing |
-| No evidence otherwise (user Stop mid-step, reaped lease)                                                    | settle the reserved estimate (`basis: estimated_after_unknown_usage`) — the provider may have generated tokens nobody observed; never silently refunded                           |
-| Duplicate terminal delivery                                                                                 | absorbed by first-terminal-wins **and** the reservation status guard — no second charge                                                                                           |
-| Awaiting approval                                                                                           | the pause settles this run's usage; an approval continuation is a NEW request → new reservation → new run                                                                         |
+| Evidence at terminal                                                                                        | Accounting                                                                                                                                                                          |
+| ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| onEnd aggregate usage present                                                                               | settle actual (`basis: actual`; `actual_with_estimated_title` when the title call's usage never arrived, carried no token counts, or named a route absent from the pinned snapshot) |
+| Per-step accumulated usage present                                                                          | settle observed (`basis: observed_partial`) — the runtime records EVERY step's usage durably, tool calls or not                                                                     |
+| No evidence, `workStartedAt` never written                                                                  | release (provider consumption never began)                                                                                                                                          |
+| No evidence, terminal is `provider_error` with ZERO accepted content checkpoints (`lastSnapshotSequence` 0) | release (`provider_error_before_output`) — an instant 400/401/429 is not billed by providers; charging the full estimate for a provider outage would drain allowances for nothing   |
+| No evidence otherwise (user Stop mid-step, reaped lease)                                                    | settle the reserved estimate (`basis: estimated_after_unknown_usage`) — the provider may have generated tokens nobody observed; never silently refunded                             |
+| Duplicate terminal delivery                                                                                 | absorbed by first-terminal-wins **and** the reservation status guard — no second charge                                                                                             |
+| Awaiting approval                                                                                           | the pause settles this run's usage; an approval continuation is a NEW request → new reservation → new run                                                                           |
 
 Lease-expired / approval-expired / continuation-lost / superseded all apply
 the same table through the shared lifecycle-verdict path.
@@ -166,6 +166,16 @@ on the happy-path `onEnd` callback. The runtime drains every already-started
 step write before any local abort/failure/completion mutation can revoke its
 grant. Completion overwrites the accumulation with the SDK's authoritative
 all-steps aggregate (the existing ai@7 `onEnd` behavior is preserved).
+
+Title usage carries the concrete `routeId` that executed the call and its
+`pricingRole` (`title` or `primary`). Settlement matches both only against the
+reservation's corresponding immutable snapshot, so a retired title model that
+falls back to the answer route is priced at the answer route's pinned rate. An
+unknown or mismatched identity is logged and uses the conservative title
+estimate; it never introduces an unpinned rate or rolls back completion. During
+the Convex-first deployment window, the worker validator also accepts the prior
+token-only evidence shape and prices it at the reserved title route. New
+workers always send route-aware evidence.
 
 The stale-reservation reconciler (cron, batch-bounded, idempotent) is the
 final net: old `reserved` rows whose run is terminal apply the boundary rule;
@@ -236,7 +246,7 @@ control, not the final charge.
 | Operation                                    | Treatment                                                                                                                                     |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | Main `streamText` generation (all steps)     | metered (primary snapshot)                                                                                                                    |
-| Automatic title generation                   | metered (title route's own snapshot; `generateChatTitle` returns usage + model identity)                                                      |
+| Automatic title generation                   | metered (executed title or fallback route's pinned snapshot; `generateChatTitle` returns usage + route identity)                              |
 | Exa search / extract on the platform key     | **subsidized**, bounded by the existing per-tool `toolLimitBuckets` budgets (platform key mode)                                               |
 | Anonymous turns on `NON_AUTH_ALLOWED_MODELS` | **subsidized**, bounded by the 5/day guest limit + anonymous step cap; anonymous ids are client-controlled, so no cash-like wallet is created |
 | Image/audio generation                       | not applicable today (no platform-listed route bills non-token modalities); a future one must add rates or be explicitly subsidized           |

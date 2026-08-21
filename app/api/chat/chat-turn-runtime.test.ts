@@ -3,6 +3,7 @@ import { getAllModels } from "@/lib/models"
 import { prepareToolRuntime } from "@/lib/tools/runtime"
 import * as Sentry from "@sentry/nextjs"
 import {
+  APICallError,
   convertToModelMessages,
   safeValidateUIMessages,
   toUIMessageStream,
@@ -801,6 +802,115 @@ describe("createChatTurnRuntime — generated titles", () => {
         generation: 1,
       }
     )
+  })
+
+  it("settles retired-title fallback usage against the resolved answer route", async () => {
+    const answerRouteId = "openrouter:google/gemini-3.1-flash-lite"
+    const titleRouteId = "openrouter:google/gemini-2.5-flash-lite"
+    vi.mocked(getAllModels).mockResolvedValue([
+      {
+        id: answerRouteId,
+        provider: "OpenRouter",
+        providerId: "openrouter",
+        catalogStatus: "visible",
+        reasoningText: true,
+        speed: "Medium",
+        inputCost: 1,
+        outputCost: 1,
+        tools: false,
+      },
+      {
+        id: titleRouteId,
+        provider: "OpenRouter",
+        providerId: "openrouter",
+        catalogStatus: "visible",
+        reasoningText: false,
+        speed: "Fast",
+        tags: ["cheap"],
+        inputCost: 0.1,
+        outputCost: 0.2,
+        tools: false,
+      },
+    ] as unknown as Awaited<ReturnType<typeof getAllModels>>)
+    const retired = new APICallError({
+      message: "This model is no longer available.",
+      url: "https://openrouter.ai/api/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 404,
+    })
+    const generateText = vi
+      .fn()
+      .mockRejectedValueOnce(retired)
+      .mockResolvedValueOnce({
+        text: "Fallback Route Attribution",
+        usage: { inputTokens: 90, outputTokens: 4 },
+      })
+    const harness = makeStreamHarness()
+    const fetchMutation = vi.fn(async (ref: unknown) => {
+      if (sameRef(ref, api.chatRuntime.prepareGeneration)) {
+        return {
+          runId: "run1",
+          assistantMessageId: "msg1",
+          assistantOrder: 1,
+          messages: [],
+          titleGeneration: 1,
+        }
+      }
+      return undefined
+    })
+    const wire = makeWorkerWire()
+    const runtime = createChatTurnRuntime({
+      input: makeInput({
+        model: "gemini-3.1-flash-lite",
+        credential: {
+          provider: "openrouter",
+          apiKey: "platform-key",
+          source: "platform",
+        },
+        route: {
+          modelId: "gemini-3.1-flash-lite",
+          routeId: answerRouteId,
+          providerId: "openrouter",
+          upstreamModelId: "google/gemini-3.1-flash-lite",
+          credentialSource: "platform",
+          routeReason: "platform",
+        },
+      }),
+      deps: makeDeps(harness, fetchMutation, {
+        generateText: generateText as unknown as ChatTurnDeps["generateText"],
+        durableWorkerWire: wire,
+      }),
+    })
+
+    await runtime.prepare()
+    const response = await runtime.toResponse(notAbortedSignal())
+    await response.text()
+    await harness.captured.streamOpts.onEnd({
+      text: "answer",
+      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      steps: [],
+      finishReason: "stop",
+    })
+    await harness.captured.responseOpts.onEnd({
+      responseMessage: {
+        id: "msg1",
+        role: "assistant",
+        parts: [{ type: "text", text: "answer" }],
+        metadata: {},
+      },
+      isAborted: false,
+      finishReason: "stop",
+    })
+
+    expect(generateText).toHaveBeenCalledTimes(2)
+    expect(
+      wireCall(wire, "markGenerationRunCompleted")?.args.titleUsage
+    ).toEqual({
+      routeId: answerRouteId,
+      pricingRole: "primary",
+      inputTokens: 90,
+      outputTokens: 4,
+    })
   })
 
   it("streams a transient title update for a guest first turn", async () => {

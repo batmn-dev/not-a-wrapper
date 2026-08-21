@@ -54,12 +54,13 @@ describe("chat title generation", () => {
           typeof generateChatTitle
         >[0]["generateText"],
         model,
-        modelId: "gpt-5.4-mini",
+        routeId: "gpt-5.4-mini",
         userText: "How can I improve response streaming?",
       })
     ).resolves.toEqual({
       title: "Streaming Response Optimization",
-      modelId: "gpt-5.4-mini",
+      routeId: "gpt-5.4-mini",
+      pricingRole: "title",
       usage: { inputTokens: 120, outputTokens: 6 },
     })
 
@@ -100,13 +101,14 @@ describe("chat title generation", () => {
           typeof generateChatTitle
         >[0]["generateText"],
         model: titleModel,
-        modelId: "gemini-2.5-flash-lite",
-        fallback: { model: answerModel, modelId: "gemini-3.1-flash-lite" },
+        routeId: "gemini-2.5-flash-lite",
+        fallback: { model: answerModel, routeId: "gemini-3.1-flash-lite" },
         userText: "Name two classic sans-serif typefaces.",
       })
     ).resolves.toEqual({
       title: "Sans-Serif Classics",
-      modelId: "gemini-3.1-flash-lite",
+      routeId: "gemini-3.1-flash-lite",
+      pricingRole: "primary",
       usage: { inputTokens: 90, outputTokens: 4 },
     })
     expect(generateText).toHaveBeenCalledTimes(2)
@@ -127,8 +129,8 @@ describe("chat title generation", () => {
           typeof generateChatTitle
         >[0]["generateText"],
         model: titleModel,
-        modelId: "gemini-2.5-flash-lite",
-        fallback: { model: answerModel, modelId: "gemini-3.1-flash-lite" },
+        routeId: "gemini-2.5-flash-lite",
+        fallback: { model: answerModel, routeId: "gemini-3.1-flash-lite" },
         userText: "Name two classic sans-serif typefaces.",
       })
     ).rejects.toBe(unavailable)
