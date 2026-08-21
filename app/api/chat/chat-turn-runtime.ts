@@ -1771,6 +1771,9 @@ export function createChatTurnRuntime(args: {
           generateText: deps.generateText,
           model: titleModel,
           modelId: titleModelId,
+          // The answer model just accepted this credential; if the catalog's
+          // title route has been retired upstream (404), name the chat with it.
+          fallback: { model: aiModel, modelId: model },
           userText: titleRequest.userText,
           abortSignal: titleSignal,
         }).catch((error: unknown) => {

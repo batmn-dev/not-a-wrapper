@@ -1,3 +1,4 @@
+import { APICallError } from "ai"
 import { describe, expect, it, vi } from "vitest"
 import {
   fallbackChatTitle,
@@ -70,6 +71,68 @@ describe("chat title generation", () => {
         timeout: 8_000,
       })
     )
+  })
+
+  it("names the chat with the fallback route when the title route is retired upstream", async () => {
+    const titleModel = { id: "retired" } as unknown as Parameters<
+      typeof generateChatTitle
+    >[0]["model"]
+    const answerModel = { id: "answer" } as unknown as Parameters<
+      typeof generateChatTitle
+    >[0]["model"]
+    const retired = new APICallError({
+      message: "This model is no longer available to new users.",
+      url: "https://generativelanguage.googleapis.com/v1beta/models/x",
+      requestBodyValues: {},
+      statusCode: 404,
+    })
+    const generateText = vi.fn(async ({ model }: { model: unknown }) => {
+      if (model === titleModel) throw retired
+      return {
+        text: "Sans-Serif Classics",
+        usage: { inputTokens: 90, outputTokens: 4 },
+      }
+    })
+
+    await expect(
+      generateChatTitle({
+        generateText: generateText as unknown as Parameters<
+          typeof generateChatTitle
+        >[0]["generateText"],
+        model: titleModel,
+        modelId: "gemini-2.5-flash-lite",
+        fallback: { model: answerModel, modelId: "gemini-3.1-flash-lite" },
+        userText: "Name two classic sans-serif typefaces.",
+      })
+    ).resolves.toEqual({
+      title: "Sans-Serif Classics",
+      modelId: "gemini-3.1-flash-lite",
+      usage: { inputTokens: 90, outputTokens: 4 },
+    })
+    expect(generateText).toHaveBeenCalledTimes(2)
+
+    // Anything but a retired route propagates; the fallback is not a retry.
+    const unavailable = new APICallError({
+      message: "overloaded",
+      url: "https://example.test",
+      requestBodyValues: {},
+      statusCode: 503,
+    })
+    const failing = vi.fn(async () => {
+      throw unavailable
+    })
+    await expect(
+      generateChatTitle({
+        generateText: failing as unknown as Parameters<
+          typeof generateChatTitle
+        >[0]["generateText"],
+        model: titleModel,
+        modelId: "gemini-2.5-flash-lite",
+        fallback: { model: answerModel, modelId: "gemini-3.1-flash-lite" },
+        userText: "Name two classic sans-serif typefaces.",
+      })
+    ).rejects.toBe(unavailable)
+    expect(failing).toHaveBeenCalledTimes(1)
   })
 
   it("prefers a fast inexpensive non-reasoning model from the same provider", () => {

@@ -1,5 +1,5 @@
 import type { ModelConfig } from "@/lib/models/types"
-import type { LanguageModel } from "ai"
+import { APICallError, type LanguageModel } from "ai"
 
 export const CHAT_TITLE_PLACEHOLDER = "New chat"
 export const INITIAL_CHAT_TITLE_GENERATION = 1
@@ -121,11 +121,31 @@ export type GeneratedChatTitle = {
   usage: { inputTokens?: number; outputTokens?: number }
 }
 
+export type ChatTitleModelRoute = {
+  model: LanguageModel
+  /** Route id of `model`, reported back for cost attribution. */
+  modelId: string
+}
+
+/**
+ * A provider answering 404 for the title route means the catalog entry is
+ * stale (retired or renamed upstream) — e.g. Google's "no longer available to
+ * new users" — not that the request was bad. Any other failure propagates.
+ */
+function isRetiredModelError(error: unknown): boolean {
+  return APICallError.isInstance(error) && error.statusCode === 404
+}
+
 export async function generateChatTitle(args: {
   generateText: typeof import("ai").generateText
   model: LanguageModel
   /** Route id of `model`, reported back for cost attribution. */
   modelId: string
+  /**
+   * Tried once when the title route is retired upstream (404). The answer
+   * model is the natural choice: it just accepted the same credential.
+   */
+  fallback?: ChatTitleModelRoute
   userText: string
   abortSignal?: AbortSignal
 }): Promise<GeneratedChatTitle> {
@@ -140,22 +160,30 @@ export async function generateChatTitle(args: {
     }
   }
 
-  const result = await args.generateText({
-    model: args.model,
-    instructions: CHAT_TITLE_INSTRUCTIONS,
-    prompt: `<user-message>\n${userText}\n</user-message>`,
-    maxOutputTokens: 48,
-    maxRetries: 1,
-    timeout: CHAT_TITLE_TIMEOUT_MS,
-    abortSignal: args.abortSignal,
-  })
+  const generate = async (route: ChatTitleModelRoute) => {
+    const result = await args.generateText({
+      model: route.model,
+      instructions: CHAT_TITLE_INSTRUCTIONS,
+      prompt: `<user-message>\n${userText}\n</user-message>`,
+      maxOutputTokens: 48,
+      maxRetries: 1,
+      timeout: CHAT_TITLE_TIMEOUT_MS,
+      abortSignal: args.abortSignal,
+    })
+    return {
+      title: sanitizeGeneratedChatTitle(result.text, userText),
+      modelId: route.modelId,
+      usage: {
+        inputTokens: result.usage?.inputTokens,
+        outputTokens: result.usage?.outputTokens,
+      },
+    }
+  }
 
-  return {
-    title: sanitizeGeneratedChatTitle(result.text, userText),
-    modelId: args.modelId,
-    usage: {
-      inputTokens: result.usage?.inputTokens,
-      outputTokens: result.usage?.outputTokens,
-    },
+  try {
+    return await generate({ model: args.model, modelId: args.modelId })
+  } catch (error) {
+    if (!args.fallback || !isRetiredModelError(error)) throw error
+    return generate(args.fallback)
   }
 }
