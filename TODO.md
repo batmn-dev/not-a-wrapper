@@ -62,13 +62,6 @@
 
 ## Correctness and maintenance
 
-- **Coordinated AI and Convex dependency update:** upgrade the AI SDK v7 stack
-  atomically, including `ai`, `@ai-sdk/react`, all provider packages,
-  `@ai-sdk/mcp`, `@ai-sdk/provider`, and `@ai-sdk/provider-utils`; upgrade
-  `@convex-dev/agent` to its AI SDK v7-compatible `0.7.x` line; and update
-  `convex` and `convex-helpers`. Remove or revise the temporary AI SDK v6 peer
-  mismatch comment after compatibility is restored, then verify type safety,
-  provider routing, streaming, tools, approvals, and durable message behavior.
 - **Routine compatible dependency refresh:** update the remaining compatible
   patch and minor releases, including React, Sentry, Braintrust, PostHog,
   WorkOS, TanStack Query, Shiki, Base UI, React Hook Form, Tailwind, Vitest, and
