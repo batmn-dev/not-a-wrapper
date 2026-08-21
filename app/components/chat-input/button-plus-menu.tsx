@@ -126,14 +126,8 @@ export function ButtonPlusMenu({
             <TooltipTrigger
               render={
                 <DropdownMenuItem
-                  aria-disabled={!isFileUploadAvailable || undefined}
-                  className={cn(
-                    !isFileUploadAvailable && "cursor-not-allowed opacity-50"
-                  )}
-                  onClick={() => {
-                    if (!isFileUploadAvailable) return
-                    onOpenFilePicker()
-                  }}
+                  disabled={!isFileUploadAvailable}
+                  onClick={onOpenFilePicker}
                 />
               }
             >
@@ -154,13 +148,8 @@ export function ButtonPlusMenu({
               render={
                 <DropdownMenuItem
                   closeOnClick={false}
-                  className={cn(
-                    isSearchDisabled && "cursor-not-allowed opacity-50"
-                  )}
-                  onClick={() => {
-                    if (isSearchDisabled) return
-                    onToggleSearch(!enableSearch)
-                  }}
+                  disabled={isSearchDisabled}
+                  onClick={() => onToggleSearch(!enableSearch)}
                 />
               }
             >

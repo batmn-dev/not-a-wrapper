@@ -18,7 +18,7 @@ function Progress({
             transform would re-hardcode the 0–100 assumption. */}
         <ProgressPrimitive.Indicator
           data-slot="progress-indicator"
-          className="bg-primary h-full transition-all data-[indeterminate]:hidden"
+          className="bg-primary h-full rounded-full transition-all data-[indeterminate]:hidden"
         />
       </ProgressPrimitive.Track>
     </ProgressPrimitive.Root>

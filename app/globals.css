@@ -357,6 +357,8 @@
   --color-status-success-foreground: var(--status-success-foreground);
   --color-claude-logo: var(--claude-logo);
   --color-deepseek-logo: var(--deepseek-logo);
+  --color-nvidia-logo: var(--nvidia-logo);
+  --color-perplexity-logo: var(--perplexity-logo);
   --color-link: var(--link);
   --color-link-hover: var(--link-hover);
   --color-disabled-foreground: var(--text-disabled);
@@ -537,6 +539,10 @@
   /* Claude logo color (--cds-clay in their web browser) */
   --claude-logo: oklch(0.6724 0.1308 38.76);
   --deepseek-logo: oklch(0.5703 0.2334 266.6);
+  /* NVIDIA logo color */
+  --nvidia-logo: oklch(0.713 0.1942 130.8);
+  /* Perplexity logo color (--fg-primary on perplexity.ai) */
+  --perplexity-logo: #27251e;
 
   --border-subtle: oklch(0 0 0 / 0.05);
   --border-default: oklch(0 0 0 / 0.1);
@@ -686,6 +692,8 @@
   /* Claude logo color (--cds-clay in their web browser) */
   --claude-logo: oklch(0.6724 0.1308 38.76);
   --deepseek-logo: oklch(0.6473 0.1858 265.19);
+  /* Perplexity logo color (--fg-primary on perplexity.ai) */
+  --perplexity-logo: #d6d5d4;
 
   --border-subtle: oklch(1 0 0 / 0.05);
   --border-default: oklch(1 0 0 / 0.15);
@@ -805,17 +813,28 @@
     background-clip: padding-box;
   }
 
-  .menu-item-hoverable:where(
-    :disabled,
-    [aria-disabled="true"],
-    [data-disabled]
-  ) {
+  .menu-item-hoverable:is(:disabled, [aria-disabled="true"], [data-disabled]) {
     color: var(--text-tertiary);
   }
 
-  .menu-item-hoverable:where(:disabled, [aria-disabled="true"], [data-disabled])
+  .menu-item-hoverable:is(:disabled, [aria-disabled="true"], [data-disabled])
     > :first-child {
     opacity: 0.5;
+  }
+
+  .menu-item-hoverable:is(
+      :disabled,
+      [aria-disabled="true"],
+      [data-disabled]
+    ):is(
+      :hover,
+      :focus,
+      [data-highlighted],
+      [data-open],
+      [data-popup-open],
+      [data-selected]
+    ) {
+    background-color: transparent;
   }
 
   .sidebar-row {

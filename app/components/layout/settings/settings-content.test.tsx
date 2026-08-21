@@ -117,6 +117,32 @@ describe("SettingsContent", () => {
     expect(signOutButton).toBeTruthy()
   })
 
+  it("moves usage out of General and into its own tab", async () => {
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+
+    await act(async () => {
+      root?.render(<SettingsContent />)
+    })
+
+    expect(container.textContent).not.toContain("Usage section")
+
+    const usageTab = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(
+        'button[data-slot="tabs-trigger"]'
+      )
+    ).find((trigger) => trigger.textContent === "Usage")
+
+    expect(usageTab).toBeTruthy()
+    if (!usageTab) return
+
+    await act(async () => usageTab.click())
+
+    expect(container.textContent).toContain("Usage section")
+    expect(container.textContent).not.toContain("User profile")
+  })
+
   it("keeps the selected desktop tab visible while filtering", async () => {
     settingsContentMocks.isMobile = false
     container = document.createElement("div")

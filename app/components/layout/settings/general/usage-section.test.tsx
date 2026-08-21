@@ -83,14 +83,15 @@ describe("UsageSection", () => {
       '[data-slot="progress-indicator"]'
     )
 
-    expect(container?.textContent).toContain("…")
+    expect(container?.textContent).toContain("… remaining")
     expect(meter?.hasAttribute("data-indeterminate")).toBe(true)
     expect(meter?.hasAttribute("aria-valuenow")).toBe(false)
     expect(meter?.getAttribute("aria-valuetext")).toBe("indeterminate progress")
+    expect(indicator?.className).toContain("rounded-full")
     expect(indicator?.className).toContain("data-[indeterminate]:hidden")
   })
 
-  it("renders a resolved zero-credit allowance as zero percent", () => {
+  it("renders a resolved zero-credit allowance as zero percent remaining", () => {
     renderUsage({
       data: {
         planId: "free",
@@ -107,8 +108,30 @@ describe("UsageSection", () => {
 
     const meter = getMeter()
 
-    expect(container?.textContent).toContain("0% used")
+    expect(container?.textContent).toContain("0% remaining")
     expect(meter?.hasAttribute("data-indeterminate")).toBe(false)
     expect(meter?.getAttribute("aria-valuenow")).toBe("0")
+  })
+
+  it("fills only the used portion while labeling the remaining percentage", () => {
+    renderUsage({
+      data: {
+        planId: "free",
+        periodStart: Date.UTC(2026, 7, 1),
+        periodEnd: Date.UTC(2026, 8, 1),
+        grantedCredits: 1_000,
+        availableCredits: 930,
+        reservedCredits: 20,
+        spentCredits: 50,
+      },
+      isAuthReady: true,
+      isLoading: false,
+    })
+
+    const meter = getMeter()
+
+    expect(container?.textContent).toContain("93% remaining")
+    expect(container?.textContent).toContain("Resets")
+    expect(meter?.getAttribute("aria-valuenow")).toBe("7")
   })
 })

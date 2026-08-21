@@ -3,8 +3,12 @@
 import { Icon } from "@/components/ui/icon"
 import { useModel } from "@/lib/model-store/provider"
 import type { LogicalModelView } from "@/lib/models/catalog"
+import {
+  compareModelsForProviderSection,
+  compareProviderSections,
+} from "@/lib/models/sort"
 import { getVendorIcon } from "@/lib/provider-icons"
-import { getVendor, MODEL_PROVIDER_IDENTITY } from "@/lib/provider-identity"
+import { getVendor } from "@/lib/provider-identity"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import {
   RiAddLine,
@@ -12,19 +16,12 @@ import {
   RiStarLine,
   RiSubtractLine,
 } from "@remixicon/react"
-import { AnimatePresence, motion, Reorder } from "framer-motion"
+import { Reorder } from "framer-motion"
 import { useMemo, useState } from "react"
 import { useFavoriteModels } from "./use-favorite-models"
 
 type FavoriteModelItem = LogicalModelView & {
   isFavorite: boolean
-}
-
-/** Route detail for the models-settings row: "Anthropic · OpenRouter". */
-function routeNamesFor(model: LogicalModelView): string {
-  return model.routes
-    .map((route) => MODEL_PROVIDER_IDENTITY[route.providerId].name)
-    .join(" · ")
 }
 
 export function ModelsSettings() {
@@ -66,9 +63,9 @@ export function ModelsSettings() {
         model.name.toLowerCase().includes(searchQuery.toLowerCase())
       )
 
-    // Group by the model MAKER's vendor identity (ADR-0020): routes never
-    // create vendor groups, so OpenRouter appears only as route detail.
-    return availableModels.reduce(
+    // Group by the model maker's vendor identity (ADR-0020); execution routes
+    // never create vendor groups.
+    const modelsByProvider = availableModels.reduce(
       (acc, model) => {
         const vendorKey = model.baseProviderId || "unknown"
 
@@ -82,6 +79,12 @@ export function ModelsSettings() {
       },
       {} as Record<string, typeof models>
     )
+
+    for (const modelsGroup of Object.values(modelsByProvider)) {
+      modelsGroup.sort(compareModelsForProviderSection)
+    }
+
+    return modelsByProvider
   }, [models, currentFavoriteModels, isModelHidden, searchQuery])
 
   const handleReorder = (newOrder: FavoriteModelItem[]) => {
@@ -113,8 +116,8 @@ export function ModelsSettings() {
     updateFavoriteModels(newIds)
   }
 
-  // Wrapped models carry real vendor ids without registered icons (qwen,
-  // z-ai, moonshotai, …) — getVendorIcon falls back to the OpenRouter icon.
+  // Wrapped models can carry real vendor ids without registered icons;
+  // getVendorIcon falls back to the OpenRouter icon.
   const getModelVendorIcon = (model: LogicalModelView) =>
     getVendorIcon(model.baseProviderId)
 
@@ -124,73 +127,62 @@ export function ModelsSettings() {
         <h4 className="mb-3 text-sm font-medium text-balance">
           Your favorites ({favoriteModels.length})
         </h4>
-        <AnimatePresence initial={false}>
-          {favoriteModels.length > 0 ? (
-            <Reorder.Group
-              axis="y"
-              values={favoriteModels}
-              onReorder={handleReorder}
-              className="space-y-2"
-            >
-              {favoriteModels.map((model) => {
-                const VendorIcon = getModelVendorIcon(model)
+        {favoriteModels.length > 0 ? (
+          <Reorder.Group
+            axis="y"
+            values={favoriteModels}
+            onReorder={handleReorder}
+            className="space-y-2"
+          >
+            {favoriteModels.map((model) => {
+              const VendorIcon = getModelVendorIcon(model)
 
-                return (
-                  <Reorder.Item key={model.id} value={model} className="group">
-                    <div className="border-border flex items-center gap-3 rounded-lg border bg-transparent p-3">
-                      <div className="text-muted-foreground cursor-grab opacity-60 transition-opacity group-hover:opacity-100 active:cursor-grabbing">
-                        <Icon icon={RiDraggable} slotSize={16} />
-                      </div>
-
-                      {VendorIcon && <VendorIcon className="size-5 shrink-0" />}
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate font-medium">
-                            {model.name}
-                          </span>
-                          <div className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-xs">
-                            {routeNamesFor(model)}
-                          </div>
-                        </div>
-                        {model.description && (
-                          <p className="text-muted-foreground mt-1 truncate text-xs">
-                            {model.description}
-                          </p>
-                        )}
-                      </div>
-
-                      <button
-                        onClick={() => removeFavorite(model.id)}
-                        type="button"
-                        className="text-muted-foreground rounded-md border p-1 opacity-0 transition-all group-hover:opacity-100"
-                        title="Remove from favorites"
-                      >
-                        <Icon icon={RiSubtractLine} slotSize={16} />
-                      </button>
+              return (
+                <Reorder.Item key={model.id} value={model} className="group">
+                  <div className="border-border flex items-center gap-3 rounded-lg border bg-transparent p-3">
+                    <div className="text-muted-foreground cursor-grab opacity-60 transition-opacity group-hover:opacity-100 active:cursor-grabbing">
+                      <Icon icon={RiDraggable} slotSize={16} />
                     </div>
-                  </Reorder.Item>
-                )
-              })}
-            </Reorder.Group>
-          ) : (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="border-border text-muted-foreground flex h-32 items-center justify-center rounded-lg border-2 border-dashed"
-            >
-              <div className="text-center">
-                <Icon
-                  icon={RiStarLine}
-                  slotSize={32}
-                  className="mx-auto mb-2 opacity-50"
-                />
-                <p className="text-sm">No favorite models yet</p>
-                <p className="text-xs">Add models from the list below</p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+
+                    {VendorIcon && <VendorIcon className="size-5 shrink-0" />}
+
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">
+                        {model.name}
+                      </span>
+                      {model.description && (
+                        <p className="text-muted-foreground mt-1 truncate text-xs">
+                          {model.description}
+                        </p>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => removeFavorite(model.id)}
+                      type="button"
+                      className="text-muted-foreground rounded-md border p-1 opacity-0 transition-all group-hover:opacity-100"
+                      title="Remove from favorites"
+                    >
+                      <Icon icon={RiSubtractLine} slotSize={16} />
+                    </button>
+                  </div>
+                </Reorder.Item>
+              )
+            })}
+          </Reorder.Group>
+        ) : (
+          <div className="border-border text-muted-foreground flex h-32 items-center justify-center rounded-lg border-2 border-dashed">
+            <div className="text-center">
+              <Icon
+                icon={RiStarLine}
+                slotSize={32}
+                className="mx-auto mb-2 opacity-50"
+              />
+              <p className="text-sm">No favorite models yet</p>
+              <p className="text-xs">Add models from the list below</p>
+            </div>
+          </div>
+        )}
       </div>
 
       <div>
@@ -212,10 +204,10 @@ export function ModelsSettings() {
         </div>
 
         <div className="space-y-6 pb-6">
-          {Object.entries(availableModelsByProvider).map(
-            ([vendorKey, modelsGroup]) => {
-              // The group key is the maker's vendor id; unregistered vendors
-              // (qwen, z-ai, …) keep their raw id as the label.
+          {Object.entries(availableModelsByProvider)
+            .sort(([a], [b]) => compareProviderSections(a, b))
+            .map(([vendorKey, modelsGroup]) => {
+              // Unregistered vendors keep their raw id as the group label.
               const vendor = getVendor(vendorKey)
               const GroupIcon = getVendorIcon(vendorKey)
 
@@ -226,52 +218,36 @@ export function ModelsSettings() {
                     <h4 className="font-medium text-balance">
                       {vendor?.name || vendorKey}
                     </h4>
-                    <span className="text-muted-foreground text-sm">
-                      ({modelsGroup.length} models)
-                    </span>
                   </div>
 
                   <div className="space-y-2 pl-7">
-                    {modelsGroup.map((model) => {
-                      return (
-                        <motion.div
-                          key={model.id}
-                          layout
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          transition={{ duration: 0.2 }}
-                          className="flex items-center justify-between py-1"
+                    {modelsGroup.map((model) => (
+                      <div
+                        key={model.id}
+                        className="flex items-center justify-between py-1"
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-sm">{model.name}</span>
+                          {model.description && (
+                            <span className="text-muted-foreground text-xs">
+                              {model.description}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => toggleFavorite(model.id)}
+                          type="button"
+                          className="text-muted-foreground hover:text-foreground border-border rounded-md border p-1 transition-colors"
+                          title="Add to favorites"
                         >
-                          <div className="flex flex-col">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm">{model.name}</span>
-                              <span className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 text-xs">
-                                {routeNamesFor(model)}
-                              </span>
-                            </div>
-                            {model.description && (
-                              <span className="text-muted-foreground text-xs">
-                                {model.description}
-                              </span>
-                            )}
-                          </div>
-                          <button
-                            onClick={() => toggleFavorite(model.id)}
-                            type="button"
-                            className="text-muted-foreground hover:text-foreground border-border rounded-md border p-1 transition-colors"
-                            title="Add to favorites"
-                          >
-                            <Icon icon={RiAddLine} slotSize={16} />
-                          </button>
-                        </motion.div>
-                      )
-                    })}
+                          <Icon icon={RiAddLine} slotSize={16} />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )
-            }
-          )}
+            })}
         </div>
 
         {Object.keys(availableModelsByProvider).length === 0 && (

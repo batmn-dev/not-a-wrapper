@@ -48,13 +48,13 @@ describe("provider strategy registry", () => {
   it("strips the openrouter: prefix when building the model", () => {
     const model = getProviderStrategy("openrouter")
       .instance("byok-key")
-      .languageModel("openrouter:openai/gpt-oss-120b:free") as {
+      .languageModel("openrouter:openai/gpt-oss-120b") as {
       modelId?: string
       provider?: string
       specificationVersion?: string
     }
     expect(model.provider).toBe("openrouter")
-    expect(model.modelId).toBe("openai/gpt-oss-120b:free")
+    expect(model.modelId).toBe("openai/gpt-oss-120b")
     expect(model.specificationVersion).toBe("v4")
   })
 
@@ -62,7 +62,7 @@ describe("provider strategy registry", () => {
   // its `.chat(id, settings)` vocabulary; absent settings must construct
   // exactly the pre-seam model; other strategies ignore the argument.
   describe("construction settings", () => {
-    const OPENROUTER_ID = "openrouter:openai/gpt-oss-120b:free"
+    const OPENROUTER_ID = "openrouter:openai/gpt-oss-120b"
     type OpenRouterModelShape = {
       modelId?: string
       settings?: { reasoning?: unknown }

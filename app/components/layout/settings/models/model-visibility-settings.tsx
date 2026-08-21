@@ -2,6 +2,10 @@
 
 import { Switch } from "@/components/ui/switch"
 import { useModel } from "@/lib/model-store/provider"
+import {
+  compareModelsForProviderSection,
+  compareProviderSections,
+} from "@/lib/models/sort"
 import { getVendorIcon } from "@/lib/provider-icons"
 import { getVendor } from "@/lib/provider-identity"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
@@ -21,18 +25,25 @@ export function ModelVisibilitySettings() {
 
   const modelsByProvider = filteredModels.reduce(
     (acc, model) => {
-      const iconKey = model.icon || "unknown"
+      // Section ownership follows the model maker, not its product-brand icon
+      // or execution route. For example, every Claude model belongs to the
+      // Anthropic section even when its row keeps the Claude icon.
+      const providerKey = model.baseProviderId || "unknown"
 
-      if (!acc[iconKey]) {
-        acc[iconKey] = []
+      if (!acc[providerKey]) {
+        acc[providerKey] = []
       }
 
-      acc[iconKey].push(model)
+      acc[providerKey].push(model)
 
       return acc
     },
     {} as Record<string, typeof models>
   )
+
+  for (const modelsGroup of Object.values(modelsByProvider)) {
+    modelsGroup.sort(compareModelsForProviderSection)
+  }
 
   const handleToggle = (modelId: string) => {
     const currentState =
@@ -112,65 +123,67 @@ export function ModelVisibilitySettings() {
       </div>
 
       <div className="space-y-6 pb-6">
-        {Object.entries(modelsByProvider).map(([iconKey, modelsGroup]) => {
-          const vendor = getVendor(iconKey)
-          const GroupIcon = getVendorIcon(iconKey)
+        {Object.entries(modelsByProvider)
+          .sort(([a], [b]) => compareProviderSections(a, b))
+          .map(([providerKey, modelsGroup]) => {
+            const vendor = getVendor(providerKey)
+            const GroupIcon = getVendorIcon(providerKey)
 
-          return (
-            <div key={iconKey} className="space-y-3">
-              <div className="flex items-center gap-2">
-                {vendor && <GroupIcon className="size-5" />}
-                <h4 className="font-medium text-balance">
-                  {vendor?.name || iconKey}
-                </h4>
-                <span className="text-muted-foreground text-sm">
-                  ({modelsGroup.length} models)
-                </span>
-                <div className="ml-auto flex items-center gap-2">
-                  <span className="text-muted-foreground text-xs">All</span>
-                  <Switch
-                    checked={getGroupVisibility(modelsGroup) === true}
-                    onCheckedChange={() => handleGroupToggle(modelsGroup)}
-                    className={
-                      getGroupVisibility(modelsGroup) === "indeterminate"
-                        ? "opacity-60"
-                        : ""
-                    }
-                  />
+            return (
+              <div key={providerKey} className="space-y-3">
+                <div className="flex items-center gap-2">
+                  {vendor && <GroupIcon className="size-5" />}
+                  <h4 className="font-medium text-balance">
+                    {vendor?.name || providerKey}
+                  </h4>
+                  <span className="text-muted-foreground text-sm">
+                    ({modelsGroup.length} models)
+                  </span>
+                  <div className="ml-auto flex items-center gap-2">
+                    <span className="text-muted-foreground text-xs">All</span>
+                    <Switch
+                      checked={getGroupVisibility(modelsGroup) === true}
+                      onCheckedChange={() => handleGroupToggle(modelsGroup)}
+                      className={
+                        getGroupVisibility(modelsGroup) === "indeterminate"
+                          ? "opacity-60"
+                          : ""
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2 pl-7">
+                  {modelsGroup.map((model) => {
+                    return (
+                      <div
+                        key={model.id}
+                        className="flex items-center justify-between py-1"
+                      >
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm">{model.name}</span>
+                            <span className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 text-xs">
+                              via {model.provider}
+                            </span>
+                          </div>
+                          {model.description && (
+                            <span className="text-muted-foreground text-xs">
+                              {model.description}
+                            </span>
+                          )}
+                        </div>
+                        <Switch
+                          checked={getModelVisibility(model.id)}
+                          onCheckedChange={() => handleToggle(model.id)}
+                        />
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
-
-              <div className="space-y-2 pl-7">
-                {modelsGroup.map((model) => {
-                  return (
-                    <div
-                      key={model.id}
-                      className="flex items-center justify-between py-1"
-                    >
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm">{model.name}</span>
-                          <span className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 text-xs">
-                            via {model.provider}
-                          </span>
-                        </div>
-                        {model.description && (
-                          <span className="text-muted-foreground text-xs">
-                            {model.description}
-                          </span>
-                        )}
-                      </div>
-                      <Switch
-                        checked={getModelVisibility(model.id)}
-                        onCheckedChange={() => handleToggle(model.id)}
-                      />
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )
-        })}
+            )
+          })}
       </div>
 
       {filteredModels.length === 0 && (
