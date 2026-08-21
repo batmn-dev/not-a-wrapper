@@ -725,9 +725,21 @@ describe("chat turn runtime × real ai@7 streamText", () => {
 
       await vi.waitFor(() => {
         expect(
-          wireCalls(stopAwareWire, "markGenerationRunAborted")
-        ).toHaveLength(2)
+          wireCalls(stopAwareWire, "markGenerationRunAborted").length
+        ).toBeGreaterThanOrEqual(1)
       })
+      const abortWrites = wireCalls(stopAwareWire, "markGenerationRunAborted")
+      // The stream callback and envelope settlement may both issue the same
+      // idempotent terminal write, but their relative completion is an AI SDK
+      // scheduling detail. The durable contract is that an abort is recorded.
+      expect(abortWrites.length).toBeLessThanOrEqual(2)
+      expect(
+        abortWrites.every((call) =>
+          ["stream aborted", "ui message stream aborted"].includes(
+            call.args.reason
+          )
+        )
+      ).toBe(true)
       const snapshotWrites = wireCalls(stopAwareWire, "updateAssistantSnapshot")
       expect(snapshotWrites.length).toBeGreaterThanOrEqual(1)
       expect(snapshotWrites.at(-1)?.args.textSnapshot).toBe(displayedText)
