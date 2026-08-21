@@ -734,11 +734,13 @@ describe("chat turn runtime × real ai@7 streamText", () => {
       // scheduling detail. The durable contract is that an abort is recorded.
       expect(abortWrites.length).toBeLessThanOrEqual(2)
       expect(
-        abortWrites.every((call) =>
-          ["stream aborted", "ui message stream aborted"].includes(
-            call.args.reason
+        abortWrites.every((call) => {
+          const reason = call.args.reason
+          return (
+            typeof reason === "string" &&
+            ["stream aborted", "ui message stream aborted"].includes(reason)
           )
-        )
+        })
       ).toBe(true)
       const snapshotWrites = wireCalls(stopAwareWire, "updateAssistantSnapshot")
       expect(snapshotWrites.length).toBeGreaterThanOrEqual(1)
