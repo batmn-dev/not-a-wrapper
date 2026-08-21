@@ -1,14 +1,5 @@
 # To Do
 
-## Urgent
-
-- **Security dependency update:** upgrade `next`, `@next/bundle-analyzer`, and
-  `eslint-config-next` from `16.2.10` to at least `16.3.1`; upgrade `dompurify`
-  from `3.4.11` to `3.4.14`; and upgrade `postcss` from `8.5.16` to `8.5.26`.
-  Re-run the dependency audit and relevant build, lint, sanitization, and Server
-  Action checks. Recheck Next.js on or after August 26, 2026 for the announced
-  critical security release and adopt its patched `16.3.x` version.
-
 ## Product backlog
 
 - **Dynamic Activity-panel source presentation:** adapt each source item to the
@@ -99,9 +90,5 @@
   Beyond fixing those, look for anything else that makes responses feel fast:
   parallelize admission reads, measure TTFT via the chat-perf spans, and
   re-verify perceived streaming smoothness in the browser.
-- **Edit/regeneration freshness:** replace the selected-message count proxy with
-  a server-issued revision or equivalent identity-bearing token. Verify that a
-  rapid regenerate → branch-switch → send → regenerate sequence cannot
-  falsely reject a subsequent in-session edit as stale.
 - **Model presentation:** centralize route labels and icon precedence currently
   duplicated across model selectors and settings.
