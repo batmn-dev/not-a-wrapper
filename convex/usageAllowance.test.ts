@@ -9,7 +9,6 @@ import {
   reconcileStaleUsageReservationsPass,
   releaseUnattachedForUser,
   reserveAuthorizedHandler,
-  reserveLegacyHandler,
   reserveUsageForUser,
   settleUsageForTerminalRun,
   STALE_RESERVATION_MS,
@@ -134,12 +133,12 @@ const snapshot: PricingSnapshot = {
     outputCreditsPerMTok: 4_500_000,
   },
   title: {
-    modelId: "gpt-5-mini",
-    routeId: "gpt-5-mini",
+    modelId: "gpt-5-nano",
+    routeId: "gpt-5-nano",
     providerId: "openai",
-    upstreamModelId: "gpt-5-mini",
-    inputCreditsPerMTok: 750_000,
-    outputCreditsPerMTok: 4_500_000,
+    upstreamModelId: "gpt-5-nano",
+    inputCreditsPerMTok: 100_000,
+    outputCreditsPerMTok: 500_000,
   },
 }
 
@@ -253,31 +252,6 @@ describe("reserve", () => {
     })
     expect(bucketOf(tables).reservedCredits).toBe(100_000)
     expect(tables.usageReservations).toHaveLength(1)
-  })
-
-  it("semantically replays and upgrades a reservation with the legacy fingerprint", async () => {
-    const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
-    const { ctx, tables } = createCtx({ users: [user] })
-    const first = await reserveUsageForUser(ctx, user, reserveArgs())
-    tables.usageReservations[0]!.payloadFingerprint = "v2|legacy"
-
-    await expect(
-      reserveUsageForUser(ctx, user, reserveArgs())
-    ).resolves.toEqual({
-      kind: "idempotent_replay",
-      reservationId: (first as { reservationId: string }).reservationId,
-    })
-    expect(tables.usageReservations[0]!.payloadFingerprint).toContain(
-      "usage-reservation-fingerprint-v3"
-    )
-    expect(tables.usageReservations).toHaveLength(1)
-    // The in-place upgrade is audited, never silent.
-    expect(
-      log.mock.calls.some((call) =>
-        String(call[0]).includes("usage_reserve_fingerprint_migrated")
-      )
-    ).toBe(true)
-    log.mockRestore()
   })
 
   it("rejects a reused request id whose payload changed", async () => {
@@ -452,13 +426,38 @@ describe("settlement", () => {
     })
   })
 
-  it("includes observed title usage at the title route's rates", async () => {
+  it("prices route-aware title usage at the title route's rates", async () => {
     const { ctx, tables } = createCtx({ users: [user] })
     const run = await reservedRunFixture(ctx, { workStartedAt: 1 })
     await settleUsageForTerminalRun(ctx, run, {
       usage: { inputTokens: 1_000, outputTokens: 100 },
-      // 400 in / 8 out → ceil(300)=300 + ceil(36)=36 = 336 credits.
-      titleUsage: { inputTokens: 400, outputTokens: 8 },
+      // 400 in / 8 out → ceil(40)=40 + ceil(4)=4 = 44 credits.
+      titleUsage: {
+        routeId: "gpt-5-nano",
+        pricingRole: "title",
+        inputTokens: 400,
+        outputTokens: 8,
+      },
+    })
+    expect(tables.usageReservations[0]).toMatchObject({
+      settlementBasis: "actual",
+      titleCredits: 44,
+      actualCredits: 1_244,
+    })
+  })
+
+  it("prices fallback title usage at the executed primary route's rates", async () => {
+    const { ctx, tables } = createCtx({ users: [user] })
+    const run = await reservedRunFixture(ctx, { workStartedAt: 1 })
+    await settleUsageForTerminalRun(ctx, run, {
+      usage: { inputTokens: 1_000, outputTokens: 100 },
+      // The retired title route fell back to the answer route: 300 + 36.
+      titleUsage: {
+        routeId: "gpt-5-mini",
+        pricingRole: "primary",
+        inputTokens: 400,
+        outputTokens: 8,
+      },
     })
     expect(tables.usageReservations[0]).toMatchObject({
       settlementBasis: "actual",
@@ -466,6 +465,50 @@ describe("settlement", () => {
       actualCredits: 1_536,
     })
   })
+
+  it("accepts legacy token-only title evidence at the title route's rates", async () => {
+    const { ctx, tables } = createCtx({ users: [user] })
+    const run = await reservedRunFixture(ctx, { workStartedAt: 1 })
+    await settleUsageForTerminalRun(ctx, run, {
+      usage: { inputTokens: 1_000, outputTokens: 100 },
+      titleUsage: { inputTokens: 400, outputTokens: 8 },
+    })
+    expect(tables.usageReservations[0]).toMatchObject({
+      settlementBasis: "actual",
+      titleCredits: 44,
+      actualCredits: 1_244,
+    })
+  })
+
+  it.each([
+    ["an unpinned route", "unreserved-route", "primary"],
+    ["a mismatched pricing role", "gpt-5-mini", "title"],
+  ] as const)(
+    "estimates and logs title usage from %s",
+    async (_case, routeId, pricingRole) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+      const { ctx, tables } = createCtx({ users: [user] })
+      const run = await reservedRunFixture(ctx, { workStartedAt: 1 })
+      await settleUsageForTerminalRun(ctx, run, {
+        usage: { inputTokens: 1_000, outputTokens: 100 },
+        titleUsage: {
+          routeId,
+          pricingRole,
+          inputTokens: 400,
+          outputTokens: 8,
+        },
+      })
+      expect(tables.usageReservations[0]).toMatchObject({
+        settlementBasis: "actual_with_estimated_title",
+        titleCredits: 1_000,
+        actualCredits: 2_200,
+      })
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('"_tag":"usage_title_route_unrecognized"')
+      )
+      warn.mockRestore()
+    }
+  )
 
   it("settles observed per-step usage when the aggregate never arrived", async () => {
     const { ctx, tables } = createCtx({ users: [user] })
@@ -810,15 +853,6 @@ describe("reserve authorization boundary", () => {
         unauthorized.args
       )
     ).rejects.toThrow("Invalid usage reservation authorization")
-    expectNoAllowanceWrites(tables)
-  })
-
-  it("keeps the legacy endpoint fail-closed by default", async () => {
-    const { ctx, tables } = createCtx({ users: [user] })
-
-    await expect(
-      reserveLegacyHandler(authenticatedCtx(ctx), reserveArgs())
-    ).resolves.toMatchObject({ kind: "insufficient_allowance" })
     expectNoAllowanceWrites(tables)
   })
 })

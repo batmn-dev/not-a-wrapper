@@ -104,9 +104,13 @@ const geminiModels: ModelConfig[] = [
     name: "Gemini 2.5 Flash-Lite",
     provider: "Google",
     providerId: "google",
-    catalogStatus: "visible",
+    // 2026-08-21: the Gemini API answers 404 "no longer available to new
+    // users" for this id (it recommends gemini-3.5-flash-lite). Kept as a
+    // legacy route for existing chats; no longer selectable or title-eligible.
+    catalogStatus: "legacy",
+    replacementModelId: "gemini-3.1-flash-lite",
     idKind: "stable",
-    lastVerifiedAt: "2026-03-08",
+    lastVerifiedAt: "2026-08-21",
     modelFamily: "Gemini",
     baseProviderId: "google",
     description:

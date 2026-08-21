@@ -291,9 +291,10 @@ function deriveCompletion(
   durationSeconds: number | undefined,
   status: AssistantTurnRenderStatus | undefined
 ): AssistantActivityCompletion {
-  const hasError = entries.some(
-    (entry) => entry.status === "error" || entry.status === "denied"
-  )
+  // A user-denied tool is a decision, not a failure: the entry itself reads
+  // "<tool> denied" and the run continues to a normal answer. Only tool errors
+  // and a failed/errored turn make the completion row "Run failed".
+  const hasError = entries.some((entry) => entry.status === "error")
   const hasStopped = entries.some((entry) => entry.status === "stopped")
   if (hasError || status === "error" || status === "failed") {
     return {

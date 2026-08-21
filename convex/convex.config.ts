@@ -13,10 +13,9 @@ const app = defineApp({
 })
 
 app.use(workOSAuthKit)
-// @convex-dev/agent peers on `ai ^6` while the app runs ai@7. That is safe
-// ONLY because the component is registered config-only: nothing app-side may
-// import its JS client surface or pass AI SDK objects (models, tools,
-// messages) into its APIs until it ships an ai@7-compatible release.
+// @convex-dev/agent is registered config-only: nothing app-side imports its
+// JS client surface or passes AI SDK objects (models, tools, messages) into
+// its APIs. Keep it that way unless an ADR adopts the component as a runtime.
 app.use(agent)
 
 export default app

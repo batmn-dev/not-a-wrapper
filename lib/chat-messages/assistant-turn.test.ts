@@ -1253,6 +1253,48 @@ describe("deriveAssistantActivityPresentation", () => {
     })
   })
 
+  it("does not report a user-denied tool as a failed run", () => {
+    const view = viewOf(
+      [
+        {
+          type: "tool-ask_question",
+          toolCallId: "tool-denied",
+          state: "output-denied",
+          input: { question: "What does streamText do?" },
+          approval: {
+            id: "approval-1",
+            approved: false,
+            reason: "Denied by user",
+          },
+        },
+        {
+          type: "text",
+          text: "That call was denied, so here is a best-effort answer.",
+        },
+      ],
+      "ready"
+    )
+    const presentation = deriveAssistantActivityPresentation(view, {
+      kind: "settled",
+    })
+
+    expect(presentation).toMatchObject({
+      kind: "disclosure",
+      activity: {
+        entries: [
+          {
+            id: "tool-tool-denied",
+            kind: "tool",
+            status: "denied",
+            detail: "Denied by user",
+          },
+        ],
+        completion: { kind: "completion", status: "complete", detail: "Done" },
+      },
+    })
+  })
+
+
   it("keeps completion present while the answer is responding", () => {
     const view = viewOf([
       {

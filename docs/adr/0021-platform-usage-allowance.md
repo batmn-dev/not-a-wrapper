@@ -101,12 +101,7 @@ race-free without SQL unique constraints.
   EVERY immutable reservation fact → ensure current bucket → idempotency
   check on `(userId, requestId)` (an identical fingerprint on a STILL-RESERVED
   row replays; a different fingerprint, or any replay of a settled/released
-  row, is a typed conflict — settled or refunded money is never re-admitted.
-  Rolling-deploy exception: a stored fingerprint written by an older
-  serializer is accepted when recomputing the fingerprint from the stored
-  row's semantic fields matches the incoming one; the row's fingerprint is
-  upgraded in place and the migration is logged. Remove this shim once the
-  rollout preflight confirms no old-format live rows remain)
+  row, is a typed conflict — settled or refunded money is never re-admitted)
   → admission check → atomically decrement available, increment reserved,
   insert reservation + `reserve` ledger entry. Typed results are `reserved`,
   `insufficient_allowance`, `idempotent_replay`, `conflict`, and `rate_limited`.
@@ -119,12 +114,6 @@ race-free without SQL unique constraints.
   reconciliation capacity is
   no longer a security boundary for arbitrary client-created rows. There is
   no separate "check balance" query; the reservation IS the admission.
-  The old-signature `usageAllowance.reserve` remains temporarily as a
-  fail-closed rolling-deploy shim: it preserves the old validator but never
-  mutates allowance. The deployment guard below blocks this contraction when
-  production exposes only the unsigned legacy endpoint. It permits a secure
-  initial rollout when production exposes neither reservation endpoint because
-  no old server can call the absent legacy mutation.
 - **Attach**: `prepareGeneration` receives `reservationId` inside the signed
   admission proof (ADR-0020's HMAC tuple gains the reservation id) and
   patches `reservation.generationRunId = runId` in the same transaction that
@@ -157,15 +146,15 @@ best-effort fire-and-forget write (ADR-0011's `markGenerationWorkStarted`),
 so its absence must never refund a run that provably consumed usage. The
 settlement decision, in order:
 
-| Evidence at terminal                                                                                        | Accounting                                                                                                                                                                        |
-| ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| onEnd aggregate usage present                                                                               | settle actual (`basis: actual`; `actual_with_estimated_title` when the title call's usage never arrived or carried no token counts)                                               |
-| Per-step accumulated usage present                                                                          | settle observed (`basis: observed_partial`) — the runtime records EVERY step's usage durably, tool calls or not                                                                   |
-| No evidence, `workStartedAt` never written                                                                  | release (provider consumption never began)                                                                                                                                        |
-| No evidence, terminal is `provider_error` with ZERO accepted content checkpoints (`lastSnapshotSequence` 0) | release (`provider_error_before_output`) — an instant 400/401/429 is not billed by providers; charging the full estimate for a provider outage would drain allowances for nothing |
-| No evidence otherwise (user Stop mid-step, reaped lease)                                                    | settle the reserved estimate (`basis: estimated_after_unknown_usage`) — the provider may have generated tokens nobody observed; never silently refunded                           |
-| Duplicate terminal delivery                                                                                 | absorbed by first-terminal-wins **and** the reservation status guard — no second charge                                                                                           |
-| Awaiting approval                                                                                           | the pause settles this run's usage; an approval continuation is a NEW request → new reservation → new run                                                                         |
+| Evidence at terminal                                                                                        | Accounting                                                                                                                                                                          |
+| ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| onEnd aggregate usage present                                                                               | settle actual (`basis: actual`; `actual_with_estimated_title` when the title call's usage never arrived, carried no token counts, or named a route absent from the pinned snapshot) |
+| Per-step accumulated usage present                                                                          | settle observed (`basis: observed_partial`) — the runtime records EVERY step's usage durably, tool calls or not                                                                     |
+| No evidence, `workStartedAt` never written                                                                  | release (provider consumption never began)                                                                                                                                          |
+| No evidence, terminal is `provider_error` with ZERO accepted content checkpoints (`lastSnapshotSequence` 0) | release (`provider_error_before_output`) — an instant 400/401/429 is not billed by providers; charging the full estimate for a provider outage would drain allowances for nothing   |
+| No evidence otherwise (user Stop mid-step, reaped lease)                                                    | settle the reserved estimate (`basis: estimated_after_unknown_usage`) — the provider may have generated tokens nobody observed; never silently refunded                             |
+| Duplicate terminal delivery                                                                                 | absorbed by first-terminal-wins **and** the reservation status guard — no second charge                                                                                             |
+| Awaiting approval                                                                                           | the pause settles this run's usage; an approval continuation is a NEW request → new reservation → new run                                                                           |
 
 Lease-expired / approval-expired / continuation-lost / superseded all apply
 the same table through the shared lifecycle-verdict path.
@@ -177,6 +166,16 @@ on the happy-path `onEnd` callback. The runtime drains every already-started
 step write before any local abort/failure/completion mutation can revoke its
 grant. Completion overwrites the accumulation with the SDK's authoritative
 all-steps aggregate (the existing ai@7 `onEnd` behavior is preserved).
+
+Title usage carries the concrete `routeId` that executed the call and its
+`pricingRole` (`title` or `primary`). Settlement matches both only against the
+reservation's corresponding immutable snapshot, so a retired title model that
+falls back to the answer route is priced at the answer route's pinned rate. An
+unknown or mismatched identity is logged and uses the conservative title
+estimate; it never introduces an unpinned rate or rolls back completion. During
+the Convex-first deployment window, the worker validator also accepts the prior
+token-only evidence shape and prices it at the reserved title route. New
+workers always send route-aware evidence.
 
 The stale-reservation reconciler (cron, batch-bounded, idempotent) is the
 final net: old `reserved` rows whose run is terminal apply the boundary rule;
@@ -212,42 +211,20 @@ For authenticated users, platform funding additionally requires a **durable
 chat** (reservation/settlement need the generation-run lifecycle); an
 authenticated turn against a local chat id skips the platform tier.
 
-### Authorization endpoint rollout
+### Authorization endpoint
 
-The mutation name is versioned because Convex validators reject both missing
-and extra fields. This repository's Vercel build compiles Next and then pushes
-Convex before Vercel promotes the new output, so the actual boundary is old
-Next → new Convex → new Next. When production already exposes unsigned
-`reserve`, a secure, availability-preserving rollout requires two source
-revisions:
-
-1. **Expand:** add `reserveAuthorized` and switch Next to the version-skew
-   adapter while leaving the old `reserve` behavior unchanged. Deploy this
-   revision and wait until Vercel reports the new production deployment active.
-2. **Contract:** deploy this revision, which makes legacy `reserve` fail closed.
-   `scripts/usage-reservation-rollout-preflight.mjs` inspects the currently
-   deployed function spec and blocks production if `reserveAuthorized` did not
-   land in the earlier expansion.
-
-Do not deploy the expansion and contraction together from a production
-baseline that exposes only unsigned `reserve`: no runtime check can distinguish
-an old Next call from an authenticated browser using the same JWT.
-
-When production exposes neither reservation endpoint, the guard permits the
-secure final state to deploy directly. That initial rollout cannot break an old
-Next caller because the old application has no reservation mutation to call,
-and it avoids temporarily introducing an unsigned allowance-writing endpoint.
-
-The new adapter falls back to the old signature only when Convex explicitly
-reports that `reserveAuthorized` does not exist. Authorization failures,
-validation failures, and all other runtime errors never downgrade. The HMAC
-also binds `NEXT_PUBLIC_CONVEX_URL`, which the verifier compares with its own
+The Next server calls only `usageAllowance.reserveAuthorized`; there is no
+unsigned legacy reservation mutation or missing-function fallback. The HMAC
+binds `NEXT_PUBLIC_CONVEX_URL`, which the verifier compares with its own
 `CONVEX_CLOUD_URL`, so a captured proof cannot cross deployments. Production
 and Preview must not share `CHAT_ADMISSION_SECRET`; deployments needing a
 stronger boundary from sibling previews should use per-preview secrets rather
-than the shared Preview default. Remove the missing-function fallback and
-legacy mutation only after the rollback window no longer includes unsigned
-servers.
+than the shared Preview default.
+
+The initial production rollout landed directly from a baseline that exposed no
+reservation endpoint, so no old server depended on a legacy signature. Future
+public mutation signature changes must use an explicit expand/contract rollout
+when the active Next build depends on the old signature.
 
 ## Estimation and the output policy
 
@@ -269,7 +246,7 @@ control, not the final charge.
 | Operation                                    | Treatment                                                                                                                                     |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | Main `streamText` generation (all steps)     | metered (primary snapshot)                                                                                                                    |
-| Automatic title generation                   | metered (title route's own snapshot; `generateChatTitle` returns usage + model identity)                                                      |
+| Automatic title generation                   | metered (executed title or fallback route's pinned snapshot; `generateChatTitle` returns usage + route identity)                              |
 | Exa search / extract on the platform key     | **subsidized**, bounded by the existing per-tool `toolLimitBuckets` budgets (platform key mode)                                               |
 | Anonymous turns on `NON_AUTH_ALLOWED_MODELS` | **subsidized**, bounded by the 5/day guest limit + anonymous step cap; anonymous ids are client-controlled, so no cash-like wallet is created |
 | Image/audio generation                       | not applicable today (no platform-listed route bills non-token modalities); a future one must add rates or be explicitly subsidized           |

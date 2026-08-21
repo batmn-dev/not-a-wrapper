@@ -1,5 +1,5 @@
 import type { ModelConfig } from "@/lib/models/types"
-import type { LanguageModel } from "ai"
+import { APICallError, type LanguageModel } from "ai"
 
 export const CHAT_TITLE_PLACEHOLDER = "New chat"
 export const INITIAL_CHAT_TITLE_GENERATION = 1
@@ -111,21 +111,43 @@ export function selectChatTitleModelConfig(
 /**
  * The title call's identity and usage ride alongside the title so the
  * platform-allowance settlement can meter the title as its own billable
- * operation at the TITLE route's rates (ADR-0021) — never silently omitted,
- * never charged at the answer model's price.
+ * operation at the concrete route's pinned rates (ADR-0021), including when a
+ * retired title route falls back to the answer route.
  */
 export type GeneratedChatTitle = {
   title: string
-  /** Title-model route id the call executed on (for attribution). */
-  modelId: string
+  /** Concrete model route the call executed on (for attribution). */
+  routeId: string
+  /** Selects one of the immutable reservation snapshot's known rates. */
+  pricingRole: "title" | "primary"
   usage: { inputTokens?: number; outputTokens?: number }
+}
+
+export type ChatTitleModelRoute = {
+  model: LanguageModel
+  /** Route id of `model`, reported back for cost attribution. */
+  routeId: string
+}
+
+/**
+ * A provider answering 404 for the title route means the catalog entry is
+ * stale (retired or renamed upstream) — e.g. Google's "no longer available to
+ * new users" — not that the request was bad. Any other failure propagates.
+ */
+function isRetiredModelError(error: unknown): boolean {
+  return APICallError.isInstance(error) && error.statusCode === 404
 }
 
 export async function generateChatTitle(args: {
   generateText: typeof import("ai").generateText
   model: LanguageModel
   /** Route id of `model`, reported back for cost attribution. */
-  modelId: string
+  routeId: string
+  /**
+   * Tried once when the title route is retired upstream (404). The answer
+   * model is the natural choice: it just accepted the same credential.
+   */
+  fallback?: ChatTitleModelRoute
   userText: string
   abortSignal?: AbortSignal
 }): Promise<GeneratedChatTitle> {
@@ -135,27 +157,40 @@ export async function generateChatTitle(args: {
   if (!userText) {
     return {
       title: CHAT_TITLE_PLACEHOLDER,
-      modelId: args.modelId,
+      routeId: args.routeId,
+      pricingRole: "title",
       usage: { inputTokens: 0, outputTokens: 0 },
     }
   }
 
-  const result = await args.generateText({
-    model: args.model,
-    instructions: CHAT_TITLE_INSTRUCTIONS,
-    prompt: `<user-message>\n${userText}\n</user-message>`,
-    maxOutputTokens: 48,
-    maxRetries: 1,
-    timeout: CHAT_TITLE_TIMEOUT_MS,
-    abortSignal: args.abortSignal,
-  })
+  const generate = async (
+    route: ChatTitleModelRoute,
+    pricingRole: GeneratedChatTitle["pricingRole"]
+  ) => {
+    const result = await args.generateText({
+      model: route.model,
+      instructions: CHAT_TITLE_INSTRUCTIONS,
+      prompt: `<user-message>\n${userText}\n</user-message>`,
+      maxOutputTokens: 48,
+      maxRetries: 1,
+      timeout: CHAT_TITLE_TIMEOUT_MS,
+      abortSignal: args.abortSignal,
+    })
+    return {
+      title: sanitizeGeneratedChatTitle(result.text, userText),
+      routeId: route.routeId,
+      pricingRole,
+      usage: {
+        inputTokens: result.usage?.inputTokens,
+        outputTokens: result.usage?.outputTokens,
+      },
+    }
+  }
 
-  return {
-    title: sanitizeGeneratedChatTitle(result.text, userText),
-    modelId: args.modelId,
-    usage: {
-      inputTokens: result.usage?.inputTokens,
-      outputTokens: result.usage?.outputTokens,
-    },
+  try {
+    return await generate({ model: args.model, routeId: args.routeId }, "title")
+  } catch (error) {
+    if (!args.fallback || !isRetiredModelError(error)) throw error
+    return generate(args.fallback, "primary")
   }
 }

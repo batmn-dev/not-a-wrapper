@@ -330,9 +330,10 @@ export type DurableStreamBinding = {
   }
 }
 
-/** Mirror of the Convex-side TitleUsageEvidence wire shape (ADR-0021). */
-export type TitleUsageForSettlement =
-  { inputTokens?: number; outputTokens?: number } | "not-run" | "unknown"
+/** Convex-owned title-usage wire shape (ADR-0021), derived to prevent drift. */
+export type TitleUsageForSettlement = NonNullable<
+  DurableWorkerPayloads["markGenerationRunCompleted"]["titleUsage"]
+>
 
 export type DurableTurnRuntime = {
   /** Observability dimension only — callers MUST NOT branch on it. */

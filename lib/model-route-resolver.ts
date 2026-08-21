@@ -160,20 +160,10 @@ export type RouteResolverDeps = {
   ): Promise<ReserveUsageResult>
 }
 
-function isMissingAuthorizedReserveMutation(error: unknown): boolean {
-  if (!(error instanceof Error)) return false
-  const missingFunction =
-    error.message.includes("Could not find public function") ||
-    error.message.includes("Function not found") ||
-    error.message.includes("FunctionNotFound")
-  return missingFunction && error.message.includes("reserveAuthorized")
-}
-
 /**
- * Version-skew adapter for rollback or a Next build reaching older Convex
- * functions. Only a confirmed missing-function error falls back to the legacy
- * mutation. Once Convex has `reserveAuthorized`, authorization failures pass
- * through and never downgrade to the unsigned path.
+ * Reserve platform allowance through the signed server-authorized mutation.
+ * Authorization and runtime failures pass through without downgrading to an
+ * unsigned path.
  */
 export async function reserveAuthorizedPlatformUsage({
   token,
@@ -190,22 +180,11 @@ export async function reserveAuthorizedPlatformUsage({
     issuedAt: authorizationIssuedAt,
   })
 
-  try {
-    return await fetchMutation(
-      api.usageAllowance.reserveAuthorized,
-      { ...args, authorizationIssuedAt, authorizationProof },
-      { token }
-    )
-  } catch (error) {
-    if (!isMissingAuthorizedReserveMutation(error)) throw error
-    console.warn(
-      JSON.stringify({
-        _tag: "usage_reserve_authorized_endpoint_missing",
-        requestId: args.requestId,
-      })
-    )
-    return fetchMutation(api.usageAllowance.reserve, args, { token })
-  }
+  return fetchMutation(
+    api.usageAllowance.reserveAuthorized,
+    { ...args, authorizationIssuedAt, authorizationProof },
+    { token }
+  )
 }
 
 const defaultDeps: RouteResolverDeps = {

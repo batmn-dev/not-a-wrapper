@@ -102,7 +102,7 @@ const authorizedReserveArgs: ReservePlatformUsageArgs = {
   },
 }
 
-describe("authorized usage reservation rollout", () => {
+describe("authorized usage reservation", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.stubEnv(
@@ -116,16 +116,11 @@ describe("authorized usage reservation rollout", () => {
     vi.unstubAllEnvs()
   })
 
-  it("falls back to the legacy signature only when the versioned mutation is absent", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
-    vi.mocked(fetchMutation)
-      .mockRejectedValueOnce(
-        new Error("Function not found: usageAllowance:reserveAuthorized")
-      )
-      .mockResolvedValueOnce({
-        kind: "reserved",
-        reservationId: RESERVATION_ID,
-      } as never)
+  it("sends a signed authorization proof to the reservation mutation", async () => {
+    vi.mocked(fetchMutation).mockResolvedValueOnce({
+      kind: "reserved",
+      reservationId: RESERVATION_ID,
+    } as never)
 
     await expect(
       reserveAuthorizedPlatformUsage(authorizedReserveArgs)
@@ -134,8 +129,7 @@ describe("authorized usage reservation rollout", () => {
       reservationId: RESERVATION_ID,
     })
 
-    expect(fetchMutation).toHaveBeenNthCalledWith(
-      1,
+    expect(fetchMutation).toHaveBeenCalledWith(
       api.usageAllowance.reserveAuthorized,
       expect.objectContaining({
         requestId: "req-1",
@@ -144,19 +138,7 @@ describe("authorized usage reservation rollout", () => {
       }),
       { token: "tok" }
     )
-    expect(fetchMutation).toHaveBeenNthCalledWith(
-      2,
-      api.usageAllowance.reserve,
-      expect.not.objectContaining({
-        authorizationIssuedAt: expect.anything(),
-        authorizationProof: expect.anything(),
-        workosUserId: expect.anything(),
-      }),
-      { token: "tok" }
-    )
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining("usage_reserve_authorized_endpoint_missing")
-    )
+    expect(fetchMutation).toHaveBeenCalledTimes(1)
   })
 
   it("never downgrades an authorization or runtime failure", async () => {

@@ -1,11 +1,11 @@
 import { v } from "convex/values"
 import type { Doc, Id } from "./_generated/dataModel"
-import type { GenerationRunTerminalReason } from "./domain/generation_run_lifecycle"
 import {
   internalMutation,
   internalQuery,
   type MutationCtx,
 } from "./_generated/server"
+import type { GenerationRunTerminalReason } from "./domain/generation_run_lifecycle"
 import {
   applyRelease,
   applyReserve,
@@ -13,7 +13,6 @@ import {
   bucketInvariantHolds,
   computeUsageCredits,
   grantEventKey,
-  isValidCreditAmount,
   isValidUsageReservationArgs,
   releaseEventKey,
   reservationPayloadFingerprint,
@@ -231,27 +230,6 @@ export type ReserveUsageResult =
 export type ReserveUsageArgs = UsageReservationArgs
 
 /**
- * The reservation row's semantic payload — exactly the fields the fingerprint
- * covers, projected back out of a stored row. Shared by replay detection and
- * the fingerprint self-migration so the projection cannot drift from the
- * reserve-time args shape.
- */
-function reservationPayloadOf(row: Doc<"usageReservations">): ReserveUsageArgs {
-  return {
-    requestId: row.requestId,
-    chatId: row.chatId,
-    modelId: row.modelId,
-    routeId: row.routeId,
-    providerId: row.providerId,
-    estimatedCredits: row.estimatedCredits,
-    estimatedInputTokens: row.estimatedInputTokens,
-    estimatedOutputTokens: row.estimatedOutputTokens,
-    titleEstimatedCredits: row.titleEstimatedCredits,
-    pricingSnapshot: row.pricingSnapshot,
-  }
-}
-
-/**
  * Trusted handler core, exported for tests. The registered public wrapper must
  * verify server authorization before calling it; other callers must not bypass
  * that boundary.
@@ -276,13 +254,7 @@ export async function reserveUsageForUser(
       )
       .unique()
     if (existing) {
-      const existingSemanticFingerprint = reservationPayloadFingerprint(
-        reservationPayloadOf(existing)
-      )
-      if (
-        existing.payloadFingerprint !== fingerprint &&
-        existingSemanticFingerprint !== fingerprint
-      ) {
+      if (existing.payloadFingerprint !== fingerprint) {
         warnUsage("usage_reserve_conflict", {
           requestId: args.requestId,
           reservationId: existing._id,
@@ -299,17 +271,6 @@ export async function reserveUsageForUser(
           status: existing.status,
         })
         return { kind: "conflict" }
-      }
-      if (existing.payloadFingerprint !== fingerprint) {
-        // Deploy-skew shim (ADR-0021 rollout): the stored fingerprint was
-        // written by an older serializer; semantic equality proved the replay,
-        // so upgrade the row in place. Audited — remove once the rollout
-        // preflight confirms no old-format live rows remain.
-        await ctx.db.patch(existing._id, { payloadFingerprint: fingerprint })
-        logUsage("usage_reserve_fingerprint_migrated", {
-          requestId: args.requestId,
-          reservationId: existing._id,
-        })
       }
       logUsage("usage_reserve_replay", {
         requestId: args.requestId,
@@ -429,36 +390,6 @@ const vReserveUsageResult = v.union(
 
 type AuthenticatedMutationCtx = MutationCtx & { user: Doc<"users"> }
 
-/** Testable handler seam for the temporary old-signature rollout endpoint. */
-export async function reserveLegacyHandler(
-  ctx: AuthenticatedMutationCtx,
-  args: ReserveUsageArgs
-): Promise<ReserveUsageResult> {
-  warnUsage("usage_reserve_legacy_rejected", {
-    requestId: args.requestId,
-    userId: ctx.user._id,
-  })
-  return {
-    kind: "insufficient_allowance",
-    availableCredits: 0,
-    requiredCredits: isValidCreditAmount(args.estimatedCredits)
-      ? args.estimatedCredits
-      : 0,
-  }
-}
-
-/**
- * Rolling-deploy compatibility for servers built before authorization was
- * added. It preserves the old validator but fails closed without mutating
- * allowance; the production deploy preflight requires the authorized endpoint
- * to have landed in an earlier expansion deployment before this contraction.
- */
-export const reserve = authenticatedMutation({
-  args: usageReservationArgValidators,
-  returns: vReserveUsageResult,
-  handler: reserveLegacyHandler,
-})
-
 export type AuthorizedReserveUsageArgs = ReserveUsageArgs & {
   authorizationIssuedAt: number
   authorizationProof: string
@@ -497,9 +428,9 @@ export async function reserveAuthorizedHandler(
 
 /**
  * Atomic platform-usage reservation — the ONE admission decision for
- * platform-funded spend (see reserveUsageForUser). This versioned endpoint is
- * called by new servers without changing the old mutation's validator, while
- * making signed server authorization mandatory on the trusted path.
+ * platform-funded spend (see reserveUsageForUser). The Next server signs the
+ * complete reservation payload, making server authorization mandatory on the
+ * trusted path.
  */
 export const reserveAuthorized = authenticatedMutation({
   args: {
@@ -695,8 +626,19 @@ async function settleReservation(
   }
 }
 
+type LegacyTitleUsageEvidence = UsageTokens & {
+  routeId?: never
+  pricingRole?: never
+}
+
+type RoutedTitleUsageEvidence = UsageTokens & {
+  routeId: string
+  pricingRole: "title" | "primary"
+}
+
 /** The completion write's title-usage evidence (ADR-0021). */
-export type TitleUsageEvidence = UsageTokens | "not-run" | "unknown"
+export type TitleUsageEvidence =
+  LegacyTitleUsageEvidence | RoutedTitleUsageEvidence | "not-run" | "unknown"
 
 export type TerminalUsageEvidence = {
   /** Provider-reported aggregate usage — present only on the completion path. */
@@ -705,13 +647,32 @@ export type TerminalUsageEvidence = {
   titleUsage?: TitleUsageEvidence
 }
 
+function resolveTitleUsageRate(
+  snapshot: PricingSnapshot,
+  titleUsage: LegacyTitleUsageEvidence | RoutedTitleUsageEvidence
+): PricingSnapshot["primary"] | undefined {
+  // Compatibility for active workers from before priced-route evidence: they
+  // could only report token counts, which historically meant the title route.
+  if (
+    titleUsage.routeId === undefined ||
+    titleUsage.pricingRole === undefined
+  ) {
+    return snapshot.title ?? snapshot.primary
+  }
+  const rate =
+    titleUsage.pricingRole === "primary"
+      ? snapshot.primary
+      : (snapshot.title ?? snapshot.primary)
+  return rate.routeId === titleUsage.routeId ? rate : undefined
+}
+
 /**
  * The ONE accounting decision for a run's terminal transition (ADR-0021's
  * provider-boundary rule). Invoked inside the same mutation that commits the
  * lifecycle transition, for EVERY terminal path — completion, failure, abort,
  * stop, supersession, and all three reapers. Idempotent: a duplicate terminal
  * or an already-settled reservation changes nothing; a run without a
- * reservation (BYOK, anonymous, legacy) is a structural no-op.
+ * reservation (BYOK, anonymous, or pre-allowance) is a structural no-op.
  */
 export async function settleUsageForTerminalRun(
   ctx: MutationCtx,
@@ -778,7 +739,6 @@ export async function settleUsageForTerminalRun(
     // object without a single numeric field is NOT observed usage — the
     // provider omitted it, so the title component settles at its estimate
     // and the basis says so.
-    const titleRate = snapshot.title ?? snapshot.primary
     const titleObserved =
       evidence.titleUsage !== undefined &&
       evidence.titleUsage !== "unknown" &&
@@ -787,14 +747,30 @@ export async function settleUsageForTerminalRun(
         typeof evidence.titleUsage.outputTokens === "number")
         ? evidence.titleUsage
         : undefined
+    const titleRate = titleObserved
+      ? resolveTitleUsageRate(snapshot, titleObserved)
+      : undefined
+    if (titleObserved && !titleRate) {
+      // The worker is trusted, but only reservation-pinned rates may move
+      // allowance. Preserve completion and settle conservatively at the title
+      // estimate while making route drift visible for investigation.
+      warnUsage("usage_title_route_unrecognized", {
+        reservationId: reservation._id,
+        runId: run._id,
+        routeId: titleObserved.routeId,
+        pricingRole: titleObserved.pricingRole,
+        primaryRouteId: snapshot.primary.routeId,
+        titleRouteId: snapshot.title?.routeId,
+      })
+    }
     const titleCredits =
       evidence.titleUsage === "not-run"
         ? 0
-        : titleObserved
+        : titleObserved && titleRate
           ? computeUsageCredits(titleRate, titleObserved)
           : titleEstimate
     const basis: SettlementBasis =
-      evidence.titleUsage === "not-run" || titleObserved
+      evidence.titleUsage === "not-run" || (titleObserved && titleRate)
         ? "actual"
         : "actual_with_estimated_title"
     await settleReservation(

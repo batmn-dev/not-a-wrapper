@@ -105,6 +105,13 @@ const vUsage = v.object({
   totalTokens: v.optional(v.number()),
 })
 
+const vRoutedTitleUsage = v.object({
+  routeId: v.string(),
+  pricingRole: v.union(v.literal("title"), v.literal("primary")),
+  inputTokens: v.optional(v.number()),
+  outputTokens: v.optional(v.number()),
+})
+
 /**
  * One declaration per generation-run write op. The grant-authorized worker
  * mutations (convex/chatRuntimeWorker.ts) spread these shapes, so a field
@@ -171,12 +178,19 @@ export const generationRunWriteArgs = {
     metadata: v.optional(vToolInvocationStreamMetadata),
     finishReason: v.optional(v.string()),
     usage: v.optional(vUsage),
-    // Title-call evidence for allowance settlement (ADR-0021): observed
-    // usage, "not-run" (no title requested this turn), or "unknown" (a title
-    // call may have run but its usage never arrived — the title component
-    // settles at its reservation-time estimate, visibly marked).
+    // Title-call evidence for allowance settlement (ADR-0021): new workers
+    // bind observed usage to the executed route and one of the reservation's
+    // two immutable pricing roles. The token-only object remains accepted
+    // during the Convex-first deployment window for active old Next workers.
+    // "not-run" means no title was requested; "unknown" means a call may have
+    // run but its usage never arrived.
     titleUsage: v.optional(
-      v.union(vUsage, v.literal("not-run"), v.literal("unknown"))
+      v.union(
+        vRoutedTitleUsage,
+        vUsage,
+        v.literal("not-run"),
+        v.literal("unknown")
+      )
     ),
     totalToolCalls: v.optional(v.number()),
     failedToolCalls: v.optional(v.number()),
