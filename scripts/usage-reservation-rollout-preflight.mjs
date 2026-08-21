@@ -3,6 +3,14 @@ import { spawnSync } from "node:child_process"
 import { pathToFileURL } from "node:url"
 
 export const AUTHORIZED_RESERVE_FUNCTION = "usageAllowance.js:reserveAuthorized"
+export const LEGACY_RESERVE_FUNCTION = "usageAllowance.js:reserve"
+
+function hasPublicFunction(functions, identifier) {
+  return functions.some(
+    (fn) =>
+      fn?.identifier === identifier && fn?.visibility?.kind === "public"
+  )
+}
 
 export function validateAuthorizedReserveFunctionSpec(rawSpec) {
   let spec
@@ -12,17 +20,16 @@ export function validateAuthorizedReserveFunctionSpec(rawSpec) {
     throw new Error("Could not parse the deployed Convex function spec")
   }
   const functions = Array.isArray(spec?.functions) ? spec.functions : []
-  if (
-    !functions.some(
-      (fn) =>
-        fn?.identifier === AUTHORIZED_RESERVE_FUNCTION &&
-        fn?.visibility?.kind === "public"
-    )
-  ) {
-    throw new Error(
-      "Usage reservation contraction blocked: deploy and activate the expansion revision containing usageAllowance.reserveAuthorized before making legacy reserve fail closed"
-    )
+  if (hasPublicFunction(functions, AUTHORIZED_RESERVE_FUNCTION)) {
+    return "authorized-endpoint-active"
   }
+  if (!hasPublicFunction(functions, LEGACY_RESERVE_FUNCTION)) {
+    return "no-legacy-endpoint"
+  }
+
+  throw new Error(
+    "Usage reservation contraction blocked: deploy and activate the expansion revision containing usageAllowance.reserveAuthorized before making legacy reserve fail closed"
+  )
 }
 
 export function runUsageReservationRolloutPreflight({
@@ -39,12 +46,16 @@ export function runUsageReservationRolloutPreflight({
       result.stderr?.trim() || "Could not inspect deployed Convex functions"
     )
   }
-  validateAuthorizedReserveFunctionSpec(result.stdout)
+  return validateAuthorizedReserveFunctionSpec(result.stdout)
 }
 
 function runCli() {
-  runUsageReservationRolloutPreflight()
-  console.log("Usage reservation expansion is active; contraction may deploy.")
+  const state = runUsageReservationRolloutPreflight()
+  console.log(
+    state === "authorized-endpoint-active"
+      ? "Usage reservation expansion is active; contraction may deploy."
+      : "No legacy usage reservation endpoint is deployed; secure initial rollout may deploy."
+  )
 }
 
 if (
