@@ -27,13 +27,13 @@ model identities + server-owned route selection).
    Observed live: gpt-5-mini ran `platform` → `priority_byok` →
    `fallback_byok` → `platform` within 40 minutes. Different credential =
    different upstream + different output cap per turn. Structural cause:
-   `canReservePlatformUsage` requires `isServerChatId(chatId)`
-   (`app/api/chat/api.ts`), so **the first turn of a new chat (local
-   optimistic id) can never take the platform tier** and silently falls to
-   fallback BYOK.
+   `validateAndResolveChatCredential` supplies the route resolver's
+   `platformFunding` context only when `isServerChatId(chatId)`
+   (`app/api/chat/api.ts`), so **the first turn of a new chat (local optimistic
+   id) can never take the platform tier** and silently falls to fallback BYOK.
 3. **Time-to-first-token grew by 1–2 sequential Convex roundtrips.**
-   `usageAllowance.reserve` mutation now sits on the admission critical path
-   (`lib/model-route-resolver.ts`), and #143 added a per-turn
+   `usageAllowance.reserveAuthorized` mutation now sits on the admission
+   critical path (`lib/model-route-resolver.ts`), and #143 added a per-turn
    `getKeySettings` query plus per-candidate `getUserKey` lookups —
    ~50–150 ms each, all before `streamText` starts.
 4. **End-of-stream settle waits on the title call** (platform runs,

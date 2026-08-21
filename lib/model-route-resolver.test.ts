@@ -102,7 +102,7 @@ const authorizedReserveArgs: ReservePlatformUsageArgs = {
   },
 }
 
-describe("authorized usage reservation rollout", () => {
+describe("authorized usage reservation", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.stubEnv(

@@ -230,27 +230,6 @@ export type ReserveUsageResult =
 export type ReserveUsageArgs = UsageReservationArgs
 
 /**
- * The reservation row's semantic payload — exactly the fields the fingerprint
- * covers, projected back out of a stored row. Shared by replay detection and
- * the fingerprint self-migration so the projection cannot drift from the
- * reserve-time args shape.
- */
-function reservationPayloadOf(row: Doc<"usageReservations">): ReserveUsageArgs {
-  return {
-    requestId: row.requestId,
-    chatId: row.chatId,
-    modelId: row.modelId,
-    routeId: row.routeId,
-    providerId: row.providerId,
-    estimatedCredits: row.estimatedCredits,
-    estimatedInputTokens: row.estimatedInputTokens,
-    estimatedOutputTokens: row.estimatedOutputTokens,
-    titleEstimatedCredits: row.titleEstimatedCredits,
-    pricingSnapshot: row.pricingSnapshot,
-  }
-}
-
-/**
  * Trusted handler core, exported for tests. The registered public wrapper must
  * verify server authorization before calling it; other callers must not bypass
  * that boundary.
@@ -275,13 +254,7 @@ export async function reserveUsageForUser(
       )
       .unique()
     if (existing) {
-      const existingSemanticFingerprint = reservationPayloadFingerprint(
-        reservationPayloadOf(existing)
-      )
-      if (
-        existing.payloadFingerprint !== fingerprint &&
-        existingSemanticFingerprint !== fingerprint
-      ) {
+      if (existing.payloadFingerprint !== fingerprint) {
         warnUsage("usage_reserve_conflict", {
           requestId: args.requestId,
           reservationId: existing._id,
@@ -298,17 +271,6 @@ export async function reserveUsageForUser(
           status: existing.status,
         })
         return { kind: "conflict" }
-      }
-      if (existing.payloadFingerprint !== fingerprint) {
-        // Deploy-skew shim (ADR-0021 rollout): the stored fingerprint was
-        // written by an older serializer; semantic equality proved the replay,
-        // so upgrade the row in place. Audited — remove once the rollout
-        // preflight confirms no old-format live rows remain.
-        await ctx.db.patch(existing._id, { payloadFingerprint: fingerprint })
-        logUsage("usage_reserve_fingerprint_migrated", {
-          requestId: args.requestId,
-          reservationId: existing._id,
-        })
       }
       logUsage("usage_reserve_replay", {
         requestId: args.requestId,
@@ -680,7 +642,7 @@ export type TerminalUsageEvidence = {
  * lifecycle transition, for EVERY terminal path — completion, failure, abort,
  * stop, supersession, and all three reapers. Idempotent: a duplicate terminal
  * or an already-settled reservation changes nothing; a run without a
- * reservation (BYOK, anonymous, legacy) is a structural no-op.
+ * reservation (BYOK, anonymous, or pre-allowance) is a structural no-op.
  */
 export async function settleUsageForTerminalRun(
   ctx: MutationCtx,

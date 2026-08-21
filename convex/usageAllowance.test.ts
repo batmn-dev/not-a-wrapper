@@ -254,31 +254,6 @@ describe("reserve", () => {
     expect(tables.usageReservations).toHaveLength(1)
   })
 
-  it("semantically replays and upgrades a reservation with the legacy fingerprint", async () => {
-    const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
-    const { ctx, tables } = createCtx({ users: [user] })
-    const first = await reserveUsageForUser(ctx, user, reserveArgs())
-    tables.usageReservations[0]!.payloadFingerprint = "v2|legacy"
-
-    await expect(
-      reserveUsageForUser(ctx, user, reserveArgs())
-    ).resolves.toEqual({
-      kind: "idempotent_replay",
-      reservationId: (first as { reservationId: string }).reservationId,
-    })
-    expect(tables.usageReservations[0]!.payloadFingerprint).toContain(
-      "usage-reservation-fingerprint-v3"
-    )
-    expect(tables.usageReservations).toHaveLength(1)
-    // The in-place upgrade is audited, never silent.
-    expect(
-      log.mock.calls.some((call) =>
-        String(call[0]).includes("usage_reserve_fingerprint_migrated")
-      )
-    ).toBe(true)
-    log.mockRestore()
-  })
-
   it("rejects a reused request id whose payload changed", async () => {
     const { ctx, tables } = createCtx({ users: [user] })
     await reserveUsageForUser(ctx, user, reserveArgs())

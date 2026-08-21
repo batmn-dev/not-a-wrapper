@@ -101,12 +101,7 @@ race-free without SQL unique constraints.
   EVERY immutable reservation fact → ensure current bucket → idempotency
   check on `(userId, requestId)` (an identical fingerprint on a STILL-RESERVED
   row replays; a different fingerprint, or any replay of a settled/released
-  row, is a typed conflict — settled or refunded money is never re-admitted.
-  Rolling-deploy exception: a stored fingerprint written by an older
-  serializer is accepted when recomputing the fingerprint from the stored
-  row's semantic fields matches the incoming one; the row's fingerprint is
-  upgraded in place and the migration is logged. Remove this shim once the
-  rollout preflight confirms no old-format live rows remain)
+  row, is a typed conflict — settled or refunded money is never re-admitted)
   → admission check → atomically decrement available, increment reserved,
   insert reservation + `reserve` ledger entry. Typed results are `reserved`,
   `insufficient_allowance`, `idempotent_replay`, `conflict`, and `rate_limited`.
