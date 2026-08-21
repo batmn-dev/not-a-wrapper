@@ -62,6 +62,13 @@
 
 ## Correctness and maintenance
 
+- **Retired Google title model:** `selectChatTitleModelConfig` picks the cheapest
+  visible same-provider model, which for Google is `gemini-2.5-flash-lite`; Google
+  now returns 404 "no longer available to new users" for it, so every new Gemini
+  chat stays titled "New chat" (`chat_title_generation_failed`, AI_APICallError).
+  Mark the retired 2.5 Flash models non-visible in the Google catalog (Google
+  points at `gemini-3.5-flash-lite`) and make title selection skip models the
+  provider has retired.
 - **Routine compatible dependency refresh:** update the remaining compatible
   patch and minor releases, including React, Sentry, Braintrust, PostHog,
   WorkOS, TanStack Query, Shiki, Base UI, React Hook Form, Tailwind, Vitest, and
