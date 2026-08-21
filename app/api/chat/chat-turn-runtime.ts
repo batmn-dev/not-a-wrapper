@@ -751,6 +751,7 @@ export function createChatTurnRuntime(args: {
 
     const adaptationContext: AdaptationContext = {
       targetModelId: model,
+      targetRouteId: route.routeId,
       hasTools: hasAnyTools,
       sourceProviderHint: resolvedProvider,
     }

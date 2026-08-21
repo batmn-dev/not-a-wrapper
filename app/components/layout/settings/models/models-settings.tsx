@@ -160,7 +160,7 @@ export function ModelsSettings() {
                     <button
                       onClick={() => removeFavorite(model.id)}
                       type="button"
-                      className="text-muted-foreground rounded-md border p-1 opacity-0 transition-all group-hover:opacity-100"
+                      className="text-muted-foreground focus-visible:ring-focus-ring rounded-md border p-1 opacity-0 transition-all group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2"
                       title="Remove from favorites"
                     >
                       <Icon icon={RiSubtractLine} slotSize={16} />

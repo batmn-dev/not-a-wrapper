@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { anthropicAdapter } from "../anthropic"
 import { defaultAdapter } from "../default"
 import { resolveAdapter } from "../index"
+import { openaiAdapter } from "../openai"
 import { openaiCompatibleAdapter } from "../openai-compatible"
 
 describe("OpenRouter underlying-vendor adapter routing", () => {
@@ -31,6 +32,11 @@ describe("OpenRouter underlying-vendor adapter routing", () => {
       expectedProviderId: "meta-llama",
     },
     {
+      targetModelId: "openrouter:stealth/ox-alpha",
+      expectedAdapter: openaiCompatibleAdapter,
+      expectedProviderId: "stealth",
+    },
+    {
       targetModelId: "openrouter:unknown-org/mystery-model",
       expectedAdapter: defaultAdapter,
       expectedProviderId: "default",
@@ -47,4 +53,15 @@ describe("OpenRouter underlying-vendor adapter routing", () => {
       expect(effectiveProviderId).toBe(expectedProviderId)
     })
   }
+
+  it("uses the resolved route when the target model is a merged logical id", () => {
+    const { adapter, effectiveProviderId } = resolveAdapter("openrouter", {
+      targetModelId: "gpt-4.1",
+      targetRouteId: "openrouter:openai/gpt-4.1",
+      hasTools: true,
+    })
+
+    expect(adapter).toBe(openaiAdapter)
+    expect(effectiveProviderId).toBe("openai")
+  })
 })

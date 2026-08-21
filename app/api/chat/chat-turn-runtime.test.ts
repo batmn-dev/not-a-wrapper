@@ -379,6 +379,45 @@ describe("createChatTurnRuntime — prepare()", () => {
     )
   })
 
+  it("passes the resolved route id separately from the logical model id for history adaptation", async () => {
+    const routeId = "openrouter:openai/gpt-4.1"
+    vi.mocked(getAllModels).mockResolvedValue([
+      { id: routeId, provider: "OpenRouter", tools: true },
+    ] as unknown as Awaited<ReturnType<typeof getAllModels>>)
+
+    const runtime = createChatTurnRuntime({
+      input: makeInput({
+        model: "gpt-4.1",
+        credential: {
+          provider: "openrouter",
+          apiKey: "byok-key",
+          source: "byok",
+        },
+        route: {
+          modelId: "gpt-4.1",
+          routeId,
+          providerId: "openrouter",
+          upstreamModelId: "openai/gpt-4.1",
+          credentialSource: "byok",
+          routeReason: "priority_byok",
+        },
+      }),
+      deps: makeDeps(makeStreamHarness(), makeFetchMutation()),
+    })
+
+    await runtime.prepare()
+
+    expect(adaptHistoryForProvider).toHaveBeenCalledWith(
+      expect.any(Array),
+      "openrouter",
+      expect.objectContaining({
+        targetModelId: "gpt-4.1",
+        targetRouteId: routeId,
+      }),
+      expect.any(Object)
+    )
+  })
+
   it("rejects a provider-switched approval before durable prepare mutates state", async () => {
     const { anthropic } = await import("@ai-sdk/anthropic")
     vi.mocked(prepareToolRuntime).mockResolvedValue(

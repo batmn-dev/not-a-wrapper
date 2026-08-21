@@ -36,6 +36,7 @@ const OPENAI_COMPATIBLE_VENDORS = [
   "xiaomi",
   "inclusionai",
   "nvidia",
+  "stealth",
 ] as const
 
 const KNOWN_UNDERLYING_PROVIDERS = [
@@ -83,7 +84,9 @@ export function resolveAdapter(
   context: AdaptationContext
 ): { adapter: ProviderHistoryAdapter; effectiveProviderId: string } {
   if (providerId === "openrouter") {
-    const underlyingProvider = extractUnderlyingProvider(context.targetModelId)
+    const underlyingProvider = extractUnderlyingProvider(
+      context.targetRouteId ?? context.targetModelId
+    )
     const effectiveProviderId = underlyingProvider ?? "default"
     return {
       adapter:
