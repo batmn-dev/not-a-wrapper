@@ -9,7 +9,6 @@ import {
   reconcileStaleUsageReservationsPass,
   releaseUnattachedForUser,
   reserveAuthorizedHandler,
-  reserveLegacyHandler,
   reserveUsageForUser,
   settleUsageForTerminalRun,
   STALE_RESERVATION_MS,
@@ -813,14 +812,6 @@ describe("reserve authorization boundary", () => {
     expectNoAllowanceWrites(tables)
   })
 
-  it("keeps the legacy endpoint fail-closed by default", async () => {
-    const { ctx, tables } = createCtx({ users: [user] })
-
-    await expect(
-      reserveLegacyHandler(authenticatedCtx(ctx), reserveArgs())
-    ).resolves.toMatchObject({ kind: "insufficient_allowance" })
-    expectNoAllowanceWrites(tables)
-  })
 })
 
 describe("attach", () => {

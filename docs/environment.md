@@ -254,17 +254,6 @@ Production `convex deploy` must go through the shared deploy command:
 bun run convex:deploy
 ```
 
-When production already exposes unsigned `usageAllowance.reserve`, the signed
-usage-reservation rollout requires separate expand and contract deployments.
-First deploy `reserveAuthorized` and its Next adapter while leaving legacy
-`reserve` functional. Wait for that Vercel production deployment to become
-active, then deploy the contraction that makes legacy `reserve` fail closed.
-The shared deploy command runs
-`scripts/usage-reservation-rollout-preflight.mjs` in production and blocks a
-legacy-only contraction until `reserveAuthorized` is active. If production
-exposes neither reservation endpoint, the guard permits the secure final state
-to deploy directly because no old server depends on legacy `reserve`.
-
 > **Pre-launch scope.** Non-production data is disposable, but production deploys
 > still run schema-contraction preflight because Convex rejects strict schemas
 > when existing production documents contain removed fields. Set

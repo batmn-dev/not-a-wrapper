@@ -13,7 +13,6 @@ import {
   bucketInvariantHolds,
   computeUsageCredits,
   grantEventKey,
-  isValidCreditAmount,
   isValidUsageReservationArgs,
   releaseEventKey,
   reservationPayloadFingerprint,
@@ -429,36 +428,6 @@ const vReserveUsageResult = v.union(
 
 type AuthenticatedMutationCtx = MutationCtx & { user: Doc<"users"> }
 
-/** Testable handler seam for the temporary old-signature rollout endpoint. */
-export async function reserveLegacyHandler(
-  ctx: AuthenticatedMutationCtx,
-  args: ReserveUsageArgs
-): Promise<ReserveUsageResult> {
-  warnUsage("usage_reserve_legacy_rejected", {
-    requestId: args.requestId,
-    userId: ctx.user._id,
-  })
-  return {
-    kind: "insufficient_allowance",
-    availableCredits: 0,
-    requiredCredits: isValidCreditAmount(args.estimatedCredits)
-      ? args.estimatedCredits
-      : 0,
-  }
-}
-
-/**
- * Rolling-deploy compatibility for servers built before authorization was
- * added. It preserves the old validator but fails closed without mutating
- * allowance; the production deploy preflight requires the authorized endpoint
- * to have landed in an earlier expansion deployment before this contraction.
- */
-export const reserve = authenticatedMutation({
-  args: usageReservationArgValidators,
-  returns: vReserveUsageResult,
-  handler: reserveLegacyHandler,
-})
-
 export type AuthorizedReserveUsageArgs = ReserveUsageArgs & {
   authorizationIssuedAt: number
   authorizationProof: string
@@ -497,9 +466,9 @@ export async function reserveAuthorizedHandler(
 
 /**
  * Atomic platform-usage reservation — the ONE admission decision for
- * platform-funded spend (see reserveUsageForUser). This versioned endpoint is
- * called by new servers without changing the old mutation's validator, while
- * making signed server authorization mandatory on the trusted path.
+ * platform-funded spend (see reserveUsageForUser). The Next server signs the
+ * complete reservation payload, making server authorization mandatory on the
+ * trusted path.
  */
 export const reserveAuthorized = authenticatedMutation({
   args: {

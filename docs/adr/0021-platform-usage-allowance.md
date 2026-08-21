@@ -119,12 +119,6 @@ race-free without SQL unique constraints.
   reconciliation capacity is
   no longer a security boundary for arbitrary client-created rows. There is
   no separate "check balance" query; the reservation IS the admission.
-  The old-signature `usageAllowance.reserve` remains temporarily as a
-  fail-closed rolling-deploy shim: it preserves the old validator but never
-  mutates allowance. The deployment guard below blocks this contraction when
-  production exposes only the unsigned legacy endpoint. It permits a secure
-  initial rollout when production exposes neither reservation endpoint because
-  no old server can call the absent legacy mutation.
 - **Attach**: `prepareGeneration` receives `reservationId` inside the signed
   admission proof (ADR-0020's HMAC tuple gains the reservation id) and
   patches `reservation.generationRunId = runId` in the same transaction that
@@ -212,42 +206,20 @@ For authenticated users, platform funding additionally requires a **durable
 chat** (reservation/settlement need the generation-run lifecycle); an
 authenticated turn against a local chat id skips the platform tier.
 
-### Authorization endpoint rollout
+### Authorization endpoint
 
-The mutation name is versioned because Convex validators reject both missing
-and extra fields. This repository's Vercel build compiles Next and then pushes
-Convex before Vercel promotes the new output, so the actual boundary is old
-Next → new Convex → new Next. When production already exposes unsigned
-`reserve`, a secure, availability-preserving rollout requires two source
-revisions:
-
-1. **Expand:** add `reserveAuthorized` and switch Next to the version-skew
-   adapter while leaving the old `reserve` behavior unchanged. Deploy this
-   revision and wait until Vercel reports the new production deployment active.
-2. **Contract:** deploy this revision, which makes legacy `reserve` fail closed.
-   `scripts/usage-reservation-rollout-preflight.mjs` inspects the currently
-   deployed function spec and blocks production if `reserveAuthorized` did not
-   land in the earlier expansion.
-
-Do not deploy the expansion and contraction together from a production
-baseline that exposes only unsigned `reserve`: no runtime check can distinguish
-an old Next call from an authenticated browser using the same JWT.
-
-When production exposes neither reservation endpoint, the guard permits the
-secure final state to deploy directly. That initial rollout cannot break an old
-Next caller because the old application has no reservation mutation to call,
-and it avoids temporarily introducing an unsigned allowance-writing endpoint.
-
-The new adapter falls back to the old signature only when Convex explicitly
-reports that `reserveAuthorized` does not exist. Authorization failures,
-validation failures, and all other runtime errors never downgrade. The HMAC
-also binds `NEXT_PUBLIC_CONVEX_URL`, which the verifier compares with its own
+The Next server calls only `usageAllowance.reserveAuthorized`; there is no
+unsigned legacy reservation mutation or missing-function fallback. The HMAC
+binds `NEXT_PUBLIC_CONVEX_URL`, which the verifier compares with its own
 `CONVEX_CLOUD_URL`, so a captured proof cannot cross deployments. Production
 and Preview must not share `CHAT_ADMISSION_SECRET`; deployments needing a
 stronger boundary from sibling previews should use per-preview secrets rather
-than the shared Preview default. Remove the missing-function fallback and
-legacy mutation only after the rollback window no longer includes unsigned
-servers.
+than the shared Preview default.
+
+The initial production rollout landed directly from a baseline that exposed no
+reservation endpoint, so no old server depended on a legacy signature. Future
+public mutation signature changes must use an explicit expand/contract rollout
+when the active Next build depends on the old signature.
 
 ## Estimation and the output policy
 
