@@ -42,7 +42,7 @@ export function LayoutApp({
             <div className="@container/main relative flex min-w-0 flex-1 -translate-y-[calc(env(safe-area-inset-bottom,0px)/2)] flex-col pt-[calc(env(safe-area-inset-bottom,0px)/2)]">
               <ScrollRoot>
                 {header === undefined ? (
-                  <Header hasSidebar={hasSidebar} />
+                  <Header hasSidebar={hasSidebar} fixedHeader="always" />
                 ) : (
                   header
                 )}

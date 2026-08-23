@@ -71,12 +71,13 @@ Rules:
   optimistic-row, and composer continuity); pathname conditionals in LayoutApp
   (rejected — the slot exists to avoid exactly that).
 
-## 2026-08-22 rendering addendum
+## 2026-08-23 rendering addendum
 
 The ownership and DOM-position decision above is unchanged. The live ChatGPT
 header contract has since been reverified as a transparent, shadowless sticky
-header with `data-fixed-header="never"`. `ScrollRoot` therefore zeroes sticky
-top padding from that attribute instead of subscribing to scroll position.
-Future fixed-header variants remain valid extension points, but the active chat
-header does not copy scroll state into React and does not need an effect-driven
-shadow.
+header whose fixed mode follows the resolved surface: home onboarding uses
+`data-fixed-header="always"`, while threads use `data-fixed-header="never"`.
+`ScrollRoot` therefore reserves the header height on onboarding and zeroes
+sticky top padding for threads without subscribing to scroll position. Future
+fixed-header variants remain valid extension points, and the active header does
+not copy scroll state into React or need an effect-driven shadow.

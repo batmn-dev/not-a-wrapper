@@ -34,7 +34,7 @@ import {
 } from "./activity/activity-panel-store"
 import { ChatStatusAnnouncer } from "./chat-announcer"
 import { resolveChatChrome } from "./chat-chrome"
-import { useSetChatChromeAppHeader } from "./chat-chrome-host"
+import { useSetChatChrome } from "./chat-chrome-host"
 import { ProjectChatDirectory } from "./project-chat-directory"
 import { ProjectDetailSurface } from "./project-detail-surface"
 import { ThreadBottomContainer } from "./thread-bottom-container"
@@ -354,15 +354,18 @@ function ChatInner({
   const showOnboarding = chrome.surface !== "thread"
   const projectOnboarding = chrome.surface === "project-onboarding"
 
-  // Publish the header fact to the shell's pre-<main> slot (chat-chrome-host).
+  // Publish the header facts to the shell's pre-<main> slot (chat-chrome-host).
   // The header must stay OUTSIDE the main landmark for the skip link and
   // banner role; layout-effect timing keeps the flip in the same paint as the
-  // surface swap. The route's SSR initialAppHeader matches this value on first
-  // render, so the effect is a no-op until a real client-side flip.
-  const setAppHeader = useSetChatChromeAppHeader()
+  // surface swap. The route's initial values keep SSR and hydration aligned;
+  // this publication selects the exact fixed mode before the first paint.
+  const setChrome = useSetChatChrome()
   useBrowserLayoutEffect(() => {
-    setAppHeader?.(chrome.appHeader)
-  }, [setAppHeader, chrome.appHeader])
+    setChrome?.({
+      appHeader: chrome.appHeader,
+      fixedHeader: chrome.fixedHeader,
+    })
+  }, [setChrome, chrome.appHeader, chrome.fixedHeader])
 
   // The sticky composer stack's measured footprint becomes
   // `--sticky-padding-bottom` (inline on the scroll root), the value the whole

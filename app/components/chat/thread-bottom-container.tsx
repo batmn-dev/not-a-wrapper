@@ -43,7 +43,7 @@ const ThreadBottomContainer = forwardRef<
         isProjectOnboarding
           ? "group/thread-bottom-container fixed inset-x-4 bottom-0 z-30 mx-auto max-w-(--project-detail-composer-width) bg-[linear-gradient(to_top,var(--background)_75%,transparent)] pt-5 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] md:static md:inset-auto md:z-auto md:mt-6 md:w-full md:bg-none md:p-0 md:max-lg:px-4"
           : cn(
-              `group/thread-bottom-container pointer-events-none sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col [--thread-component-gap:1.5rem] [--thread-scroll-control-offset:1.5rem] [--thread-scroll-to-bottom-banner-offset:0px] has-data-[has-thread-error]:pt-2 has-data-[has-thread-error]:[box-shadow:var(--sharp-edge-bottom-shadow)] md:pt-0 print:hidden ${THREAD_GUTTER_VARS} ${THREAD_MAXWIDTH_VARS}`,
+              `group/thread-bottom-container pointer-events-none sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col [--thread-component-gap:1.5rem] [--thread-scroll-control-offset:1.5rem] [--thread-scroll-to-bottom-banner-offset:0px] has-data-[has-thread-error]:pt-2 has-data-[has-thread-error]:[box-shadow:var(--sharp-edge-bottom-shadow)] group-data-keyboard-open/scroll-root:bottom-[var(--screen-keyboard-height,0px)] md:pt-0 print:hidden ${THREAD_GUTTER_VARS} ${THREAD_MAXWIDTH_VARS}`,
               isOnboarding && "sm:grow"
             ),
         className

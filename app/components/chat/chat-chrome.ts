@@ -1,3 +1,5 @@
+import type { HeaderFixedMode } from "@/app/components/layout/header"
+
 /**
  * The single decision site for chat-surface chrome (ADR-0017).
  *
@@ -24,6 +26,12 @@ export type ChatChrome = {
    * no desktop app header.
    */
   appHeader: boolean
+  /**
+   * Whether the sticky app header reserves its height in thread scroll
+   * geometry. Live ChatGPT uses `always` for home onboarding and `never` once
+   * the surface becomes a thread.
+   */
+  fixedHeader: HeaderFixedMode
 }
 
 export function resolveChatChrome({
@@ -37,10 +45,18 @@ export function resolveChatChrome({
 }): ChatChrome {
   const onboarding = chatId === null && messageCount === 0
   if (onboarding && hasProject) {
-    return { surface: "project-onboarding", appHeader: false }
+    return {
+      surface: "project-onboarding",
+      appHeader: false,
+      fixedHeader: "always",
+    }
   }
   if (onboarding) {
-    return { surface: "home-onboarding", appHeader: true }
+    return {
+      surface: "home-onboarding",
+      appHeader: true,
+      fixedHeader: "always",
+    }
   }
-  return { surface: "thread", appHeader: true }
+  return { surface: "thread", appHeader: true, fixedHeader: "never" }
 }

@@ -12,7 +12,15 @@ import Link from "next/link"
 import { DialogPublish } from "./dialog-publish"
 import { HeaderSidebarTrigger } from "./header-sidebar-trigger"
 
-export function Header({ hasSidebar }: { hasSidebar: boolean }) {
+export type HeaderFixedMode = "always" | "never"
+
+export function Header({
+  hasSidebar,
+  fixedHeader,
+}: {
+  hasSidebar: boolean
+  fixedHeader: HeaderFixedMode
+}) {
   const isMobile = useBreakpoint(768)
 
   const { user } = useUser()
@@ -23,7 +31,7 @@ export function Header({ hasSidebar }: { hasSidebar: boolean }) {
     <header
       id="page-header"
       className="h-header-height data-[fixed-header=less-than-xl]:@w-xl/main:bg-transparent data-[fixed-header=less-than-xl]:@w-xl/main:shadow-none pointer-events-none sticky top-0 z-20 flex shrink-0 items-center justify-between bg-transparent p-2 shadow-none transition-none select-none [view-transition-name:var(--vt-page-header)] *:pointer-events-auto pointer-coarse:p-2.5"
-      data-fixed-header="always"
+      data-fixed-header={fixedHeader}
     >
       <div className="flex shrink-0 items-center gap-2">
         {/* Hide logo/text when sidebar is present on desktop (sidebar has its own home link) */}

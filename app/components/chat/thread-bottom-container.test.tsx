@@ -83,6 +83,9 @@ describe("ThreadBottomContainer", () => {
     expect(footer?.classList.contains("pointer-events-none")).toBe(true)
     expect(footer?.classList.contains("print:hidden")).toBe(true)
     expect(footer?.classList.contains("bottom-0")).toBe(true)
+    expect(footer?.classList).toContain(
+      "group-data-keyboard-open/scroll-root:bottom-[var(--screen-keyboard-height,0px)]"
+    )
     expect(footer?.classList.contains("content-fade")).toBe(false)
     expect(
       [...(footer?.classList ?? [])].some((name) =>

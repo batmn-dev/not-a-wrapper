@@ -58,12 +58,20 @@ describe("Header", () => {
     container.remove()
   })
 
-  it("keeps the sticky header in the scroll root safe-area calculation", () => {
-    act(() => root.render(<Header hasSidebar />))
+  it("keeps onboarding headers in the scroll root safe-area calculation", () => {
+    act(() => root.render(<Header hasSidebar fixedHeader="always" />))
 
     const header = container.querySelector("#page-header")
     expect(header?.getAttribute("data-fixed-header")).toBe("always")
     expect(header?.className).toContain("h-header-height")
     expect(header?.className).toContain("sticky")
+  })
+
+  it("removes thread headers from the scroll root safe-area calculation", () => {
+    act(() => root.render(<Header hasSidebar fixedHeader="never" />))
+
+    expect(
+      container.querySelector("#page-header")?.getAttribute("data-fixed-header")
+    ).toBe("never")
   })
 })

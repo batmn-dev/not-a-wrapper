@@ -2,7 +2,16 @@
 
 import { Header } from "@/app/components/layout/header"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
-import { createContext, useContext, useMemo, useState } from "react"
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from "react"
+import type { ChatChrome } from "./chat-chrome"
+
+type ChatChromeState = Pick<ChatChrome, "appHeader" | "fixedHeader">
 
 /**
  * Host side of the chat chrome contract (ADR-0017, amended).
@@ -13,25 +22,38 @@ import { createContext, useContext, useMemo, useState } from "react"
  * landmark so the skip-to-content link actually bypasses it and `<header>`
  * keeps its implicit banner role; nesting it inside main forfeits both.
  *
- * Chat publishes the resolved appHeader fact pre-paint, and the shell's
- * header slot renders it. `initialAppHeader` mirrors the route's SSR-known
- * first surface so server HTML and hydration agree: /p/ always mounts as
- * project onboarding (false); / and /c/ always mount with the header (true).
+ * Chat publishes the resolved header facts pre-paint, and the shell's header
+ * slot renders them. The initial values mirror the route group's SSR-known
+ * first surface so server HTML and hydration agree; Chat publishes the exact
+ * thread mode before paint once the client surface resolves.
  */
 const ChatChromeContext = createContext<{
-  appHeader: boolean
-  setAppHeader: (appHeader: boolean) => void
+  chrome: ChatChromeState
+  setChrome: (chrome: ChatChromeState) => void
 } | null>(null)
 
 export function ChatChromeProvider({
   initialAppHeader,
+  initialFixedHeader,
   children,
 }: {
   initialAppHeader: boolean
+  initialFixedHeader: ChatChromeState["fixedHeader"]
   children: React.ReactNode
 }) {
-  const [appHeader, setAppHeader] = useState(initialAppHeader)
-  const value = useMemo(() => ({ appHeader, setAppHeader }), [appHeader])
+  const [chrome, setChromeState] = useState<ChatChromeState>({
+    appHeader: initialAppHeader,
+    fixedHeader: initialFixedHeader,
+  })
+  const setChrome = useCallback((nextChrome: ChatChromeState) => {
+    setChromeState((currentChrome) =>
+      currentChrome.appHeader === nextChrome.appHeader &&
+      currentChrome.fixedHeader === nextChrome.fixedHeader
+        ? currentChrome
+        : nextChrome
+    )
+  }, [])
+  const value = useMemo(() => ({ chrome, setChrome }), [chrome, setChrome])
   return (
     <ChatChromeContext.Provider value={value}>
       {children}
@@ -40,8 +62,8 @@ export function ChatChromeProvider({
 }
 
 /** Chat-side publisher. Null outside a provider (standalone mounts, tests). */
-export function useSetChatChromeAppHeader() {
-  return useContext(ChatChromeContext)?.setAppHeader ?? null
+export function useSetChatChrome() {
+  return useContext(ChatChromeContext)?.setChrome ?? null
 }
 
 /**
@@ -51,6 +73,11 @@ export function useSetChatChromeAppHeader() {
 export function ChatChromeHeader() {
   const context = useContext(ChatChromeContext)
   const { preferences } = useUserPreferences()
-  if (!context?.appHeader) return null
-  return <Header hasSidebar={preferences.layout === "sidebar"} />
+  if (!context?.chrome.appHeader) return null
+  return (
+    <Header
+      hasSidebar={preferences.layout === "sidebar"}
+      fixedHeader={context.chrome.fixedHeader}
+    />
+  )
 }

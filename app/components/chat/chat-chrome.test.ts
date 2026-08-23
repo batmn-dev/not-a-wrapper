@@ -7,13 +7,21 @@ describe("resolveChatChrome", () => {
   it("home onboarding shows the app header", () => {
     expect(
       resolveChatChrome({ chatId: null, messageCount: 0, hasProject: false })
-    ).toEqual({ surface: "home-onboarding", appHeader: true })
+    ).toEqual({
+      surface: "home-onboarding",
+      appHeader: true,
+      fixedHeader: "always",
+    })
   })
 
   it("project onboarding owns its chrome (no app header)", () => {
     expect(
       resolveChatChrome({ chatId: null, messageCount: 0, hasProject: true })
-    ).toEqual({ surface: "project-onboarding", appHeader: false })
+    ).toEqual({
+      surface: "project-onboarding",
+      appHeader: false,
+      fixedHeader: "always",
+    })
   })
 
   it("an optimistic first send flips to a thread WITH the app header before any navigation", () => {
@@ -22,7 +30,11 @@ describe("resolveChatChrome", () => {
     for (const hasProject of [false, true]) {
       expect(
         resolveChatChrome({ chatId: null, messageCount: 1, hasProject })
-      ).toEqual({ surface: "thread", appHeader: true })
+      ).toEqual({
+        surface: "thread",
+        appHeader: true,
+        fixedHeader: "never",
+      })
     }
   })
 
@@ -30,10 +42,18 @@ describe("resolveChatChrome", () => {
     for (const hasProject of [false, true]) {
       expect(
         resolveChatChrome({ chatId: "chat-1", messageCount: 0, hasProject })
-      ).toEqual({ surface: "thread", appHeader: true })
+      ).toEqual({
+        surface: "thread",
+        appHeader: true,
+        fixedHeader: "never",
+      })
       expect(
         resolveChatChrome({ chatId: "chat-1", messageCount: 4, hasProject })
-      ).toEqual({ surface: "thread", appHeader: true })
+      ).toEqual({
+        surface: "thread",
+        appHeader: true,
+        fixedHeader: "never",
+      })
     }
   })
 
