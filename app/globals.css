@@ -545,7 +545,9 @@
   --text-primary: var(--foreground);
   --text-secondary: oklch(0.478 0 0);
   --text-tertiary: oklch(0.65 0 0);
+  --text-quaternary: rgba(0, 0, 0, 0.188);
   --text-disabled: oklch(0.65 0 0);
+  --main-surface-secondary: var(--secondary);
   --link: oklch(0.501 0.127 254.712);
   --link-hover: oklch(0.419 0.106 255.109);
   --projects-content-max-width: 50.625rem;
@@ -709,7 +711,9 @@
   --text-primary: var(--foreground);
   --text-secondary: oklch(0.848 0 0);
   --text-tertiary: oklch(0.754 0 0);
+  --text-quaternary: rgba(255, 255, 255, 0.412);
   --text-disabled: oklch(1 0 0 / 0.412);
+  --main-surface-secondary: var(--secondary);
   --row-hover-surface: oklch(0.2 0 0);
   --link: oklch(0.767 0.122 253.354);
   --link-hover: var(--link);
@@ -1328,17 +1332,81 @@
     transform: translate(-50%, -50%);
   }
 
+  /* Unified composer editor metrics shared by the visible and fallback fields. */
+  .wcDTda_fallbackTextarea,
+  .wcDTda_prosemirror-parent .ProseMirror {
+    margin-top: calc(var(--spacing, 0.25rem) * 4);
+    margin-bottom: 0;
+    padding: 0 0 calc(var(--spacing, 0.25rem) * 4);
+    overflow-wrap: break-word;
+    font-size: var(--text-body-regular, 1rem);
+    line-height: var(--text-body-regular--line-height, 1.625rem);
+    font-weight: var(--text-body-regular--font-weight, 400);
+    font-variation-settings: "opsz"
+      var(--text-body-regular--optical-size, 16);
+    font-variant-ligatures: none;
+    font-feature-settings: "liga" 0;
+    white-space: break-spaces;
+    transform: translateY(-0.5px);
+  }
+
   .composer-prosemirror > p {
     min-height: 26px;
     margin: 0;
   }
 
-  .composer-prosemirror > .placeholder::before {
+  .wcDTda_prosemirror-parent.default-browser .placeholder::after {
+    position: relative;
     color: var(--text-tertiary);
     content: attr(data-placeholder);
-    float: left;
-    height: 0;
+    padding-left: 1px;
+    cursor: text;
     pointer-events: none;
+  }
+
+  .wcDTda_prosemirror-parent.default-browser
+    .placeholder
+    .ProseMirror-trailingBreak {
+    display: none !important;
+  }
+
+  .wcDTda_prosemirror-parent p.placeholder {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ChatGPT swaps to an absolute ::before placeholder in Firefox. A feature
+     query keeps that browser contract without UA-derived render state. */
+  @supports (-moz-appearance: none) {
+    .wcDTda_prosemirror-parent.default-browser .placeholder::after {
+      content: none;
+    }
+
+    .wcDTda_prosemirror-parent.default-browser .placeholder::before {
+      position: absolute;
+      color: var(--text-tertiary);
+      content: attr(data-placeholder);
+      padding-left: 1px;
+      cursor: text;
+      pointer-events: none;
+    }
+  }
+
+  .composer-submit-btn:disabled,
+  .composer-submit-btn[data-visually-disabled] {
+    color: rgb(244, 244, 244);
+    opacity: 0.35;
+  }
+
+  .composer-submit-btn[data-visually-disabled]:hover {
+    opacity: 0.35;
+  }
+
+  .dark .composer-submit-btn:disabled,
+  .dark .composer-submit-btn[data-visually-disabled] {
+    color: var(--main-surface-secondary);
+    background-color: var(--text-quaternary);
   }
 
   .shadow-short-composer,

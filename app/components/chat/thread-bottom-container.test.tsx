@@ -91,6 +91,9 @@ describe("ThreadBottomContainer", () => {
     expect(footer?.classList).toContain(
       "[--thread-scroll-control-offset:1.5rem]"
     )
+    expect(footer?.classList).toContain(
+      "@[53.5rem]/main:[--thread-content-max-width:48rem]"
+    )
     expect(
       composer?.closest("[data-thread-composer-column]")?.classList
     ).toContain("mb-[var(--thread-component-gap)]")

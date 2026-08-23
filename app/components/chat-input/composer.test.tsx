@@ -389,7 +389,9 @@ describe("Composer primary action", () => {
   })
 
   it("does not present Stop while submitting without a stop handler", () => {
+    const onTurn = vi.fn()
     const mounted = renderComposer({
+      onTurn,
       isSubmitting: true,
       status: "ready",
       stoppable: false,
@@ -400,9 +402,16 @@ describe("Composer primary action", () => {
       'button[aria-label="Send prompt"]'
     ) as HTMLButtonElement | null
     expect(sendButton).toBeTruthy()
-    expect(sendButton?.disabled).toBe(true)
+    expect(sendButton?.disabled).toBe(false)
+    expect(sendButton?.getAttribute("aria-disabled")).toBe("true")
+    expect(sendButton?.hasAttribute("data-visually-disabled")).toBe(true)
     expect(sendButton?.type).toBe("submit")
+    expect(sendButton?.className).toContain("composer-submit-btn")
     expect(sendButton?.className).toContain("pointer-fine:after:-inset-x-1")
+    expect(promptInputActionMockCalls.at(-1)?.disabled).toBeUndefined()
+
+    act(() => sendButton?.click())
+    expect(onTurn).not.toHaveBeenCalled()
   })
 
   it("routes native form submission through the guarded send contract", async () => {
@@ -637,7 +646,7 @@ describe("Composer primary action", () => {
     })
   })
 
-  it("keeps Send disabled while an attachment is uploading or failed", () => {
+  it("keeps Send visually disabled while an attachment is uploading or failed", () => {
     const source = {
       id: "attachment-1",
       kind: "selected-file" as const,
@@ -649,13 +658,12 @@ describe("Composer primary action", () => {
       { ...source, status: "uploading", attemptId: 1 },
     ]
     let mounted = renderComposer({ isSubmitting: false, status: "ready" })
-    expect(
-      (
-        mounted.querySelector(
-          '[data-testid="send-button"]'
-        ) as HTMLButtonElement
-      ).disabled
-    ).toBe(true)
+    const uploadingSend = mounted.querySelector(
+      '[data-testid="send-button"]'
+    ) as HTMLButtonElement
+    expect(uploadingSend.disabled).toBe(false)
+    expect(uploadingSend.getAttribute("aria-disabled")).toBe("true")
+    expect(uploadingSend.hasAttribute("data-visually-disabled")).toBe(true)
 
     act(() => root?.unmount())
     container?.remove()
@@ -671,13 +679,12 @@ describe("Composer primary action", () => {
       },
     ]
     mounted = renderComposer({ isSubmitting: false, status: "ready" })
-    expect(
-      (
-        mounted.querySelector(
-          '[data-testid="send-button"]'
-        ) as HTMLButtonElement
-      ).disabled
-    ).toBe(true)
+    const failedSend = mounted.querySelector(
+      '[data-testid="send-button"]'
+    ) as HTMLButtonElement
+    expect(failedSend.disabled).toBe(false)
+    expect(failedSend.getAttribute("aria-disabled")).toBe("true")
+    expect(failedSend.hasAttribute("data-visually-disabled")).toBe(true)
   })
 
   it("does not leak the previous scoped draft when the project scope changes", () => {

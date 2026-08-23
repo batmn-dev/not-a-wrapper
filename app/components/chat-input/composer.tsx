@@ -630,7 +630,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 </div>
                 <div className="cant-hover:gap-1.5 ms-auto flex items-center gap-2">
                   <PromptInputAction
-                    disabled={primaryAction.disabled}
                     tooltip={
                       primaryAction.mode === "send" ? (
                         <TooltipShortcut label={primaryAction.tooltip}>
@@ -643,8 +642,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   >
                     <Button
                       size="sm"
-                      className="size-9 rounded-full p-0 transition-colors duration-150 ease-out pointer-fine:relative pointer-fine:after:absolute pointer-fine:after:-inset-x-1 pointer-fine:after:inset-y-0 pointer-fine:after:content-['']"
-                      disabled={primaryAction.disabled}
+                      className="composer-submit-btn composer-submit-button-color size-9 rounded-full p-0 transition-colors duration-150 ease-out pointer-fine:relative pointer-fine:after:absolute pointer-fine:after:-inset-x-1 pointer-fine:after:inset-y-0 pointer-fine:after:content-['']"
+                      disabled={
+                        primaryAction.mode === "stop" &&
+                        primaryAction.disabled
+                      }
+                      visuallyDisabled={
+                        primaryAction.mode === "send" &&
+                        primaryAction.disabled
+                      }
                       type={primaryAction.buttonType}
                       id="composer-submit-button"
                       data-testid="send-button"

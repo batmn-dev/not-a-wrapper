@@ -289,6 +289,7 @@ describe("PromptInput responsive expansion", () => {
       "max-sm:group-not-data-expanded/composer:pb-2"
     )
     expect(editorScroller.className).toContain("vertical-scroll-fade-mask")
+    expect(editorScroller.className).toContain("wcDTda_prosemirror-parent")
     expect(editorScroller.className).toContain("default-browser")
     expect(editorScroller.className).toContain(
       "max-h-[max(30svh,5rem)]"
