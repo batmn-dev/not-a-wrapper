@@ -70,6 +70,7 @@ vi.mock("./message", () => ({
       text: string
       status?: string
       finishReason?: string
+      retryDisabled?: boolean
       view?: { reasoning?: { phase?: string } }
     }
     onReload?: (messageId: string) => void
@@ -78,8 +79,10 @@ vi.mock("./message", () => ({
       data-can-reload={Boolean(onReload)}
       data-finish-reason={model.finishReason}
       data-reasoning-phase={model.view?.reasoning?.phase}
+      data-retry-disabled={Boolean(model.retryDisabled)}
       data-status={model.status}
       data-testid={`message-${model.id}`}
+      disabled={model.retryDisabled}
       onClick={() => onReload?.(model.id)}
       type="button"
     >
@@ -164,13 +167,15 @@ describe("Conversation regeneration availability", () => {
     return onReload
   }
 
-  it("withholds reload handlers while a generation is active", () => {
+  it("keeps prior retry actions visible but disabled while a generation is active", () => {
     const onReload = renderConversation({ status: "streaming" })
     const priorAssistant = container?.querySelector(
       '[data-testid="message-assistant-1"]'
     ) as HTMLButtonElement | null
 
-    expect(priorAssistant?.dataset.canReload).toBe("false")
+    expect(priorAssistant?.dataset.canReload).toBe("true")
+    expect(priorAssistant?.dataset.retryDisabled).toBe("true")
+    expect(priorAssistant?.disabled).toBe(true)
 
     act(() => {
       priorAssistant?.click()
@@ -179,13 +184,15 @@ describe("Conversation regeneration availability", () => {
     expect(onReload).not.toHaveBeenCalled()
   })
 
-  it("withholds reload handlers during submit preflight", () => {
+  it("keeps prior retry actions visible but disabled during submit preflight", () => {
     const onReload = renderConversation({ isSubmitting: true })
     const priorAssistant = container?.querySelector(
       '[data-testid="message-assistant-1"]'
     ) as HTMLButtonElement | null
 
-    expect(priorAssistant?.dataset.canReload).toBe("false")
+    expect(priorAssistant?.dataset.canReload).toBe("true")
+    expect(priorAssistant?.dataset.retryDisabled).toBe("true")
+    expect(priorAssistant?.disabled).toBe(true)
 
     act(() => {
       priorAssistant?.click()
@@ -201,12 +208,32 @@ describe("Conversation regeneration availability", () => {
     ) as HTMLButtonElement | null
 
     expect(priorAssistant?.dataset.canReload).toBe("true")
+    expect(priorAssistant?.dataset.retryDisabled).toBe("false")
+    expect(priorAssistant?.disabled).toBe(false)
 
     act(() => {
       priorAssistant?.click()
     })
 
     expect(onReload).toHaveBeenCalledWith("assistant-1")
+  })
+
+  it("matches the reference turn sections and vertical rhythm", () => {
+    renderConversation()
+
+    const turns = Array.from(
+      container?.querySelectorAll<HTMLElement>(
+        '[data-testid^="conversation-turn-"]'
+      ) ?? []
+    )
+
+    expect(turns).toHaveLength(4)
+    expect(turns.every((turn) => turn.tagName === "SECTION")).toBe(true)
+    expect(turns[0]?.classList.contains("pt-3")).toBe(true)
+    expect(turns[0]?.classList.contains("pt-12")).toBe(false)
+    expect(turns[2]?.classList.contains("pt-12")).toBe(true)
+    expect(turns[3]?.classList.contains("pb-8")).toBe(true)
+    expect(turns[3]?.classList.contains("pb-10")).toBe(false)
   })
 
   it("hydrates finish reasons from durable metadata for historical and last rows", () => {
@@ -321,6 +348,44 @@ describe("Conversation regeneration availability", () => {
     expect(container?.querySelector('[data-testid="thinking"]')).toBeNull()
     expect(pendingMessage).toBeTruthy()
     expect(pendingMessage?.dataset.status).toBe("submitted")
+  })
+
+  it("keeps the pending row while an adopted assistant shell has no renderable evidence", () => {
+    cleanupRender()
+    const mounted = document.createElement("div")
+    document.body.appendChild(mounted)
+    container = mounted
+    root = createRoot(mounted)
+
+    const adoptedEmptyAssistant = [
+      { id: "user-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+      { id: "assistant-1", role: "assistant", parts: [] },
+    ] satisfies UIMessage[]
+
+    act(() => {
+      root?.render(
+        <Conversation
+          messages={adoptedEmptyAssistant}
+          status="ready"
+          isSubmitting
+          onEdit={vi.fn()}
+          onReload={vi.fn()}
+          isDurableChat
+        />
+      )
+    })
+
+    expect(
+      container?.querySelector(
+        `[data-testid="message-${PENDING_ACTIVITY_TURN_ID}"]`
+      )
+    ).toBeTruthy()
+    expect(
+      container?.querySelector('[data-testid="message-assistant-1"]')
+    ).toBeNull()
+    expect(container?.querySelectorAll('[data-turn="assistant"]')).toHaveLength(
+      1
+    )
   })
 
   it("pins the optimistic user turn during submission before response text", () => {
@@ -668,15 +733,17 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
     expect(wrappers).toHaveLength(1)
     const wrapper = wrappers?.[0]
     expect(wrapper).toBeTruthy()
+    expect(wrapper?.tagName).toBe("SECTION")
+    expect(wrapper?.getAttribute("data-turn")).toBe("user")
     if (originalWrapper) expect(wrapper).toBe(originalWrapper)
 
     const separators = container?.querySelectorAll('[role="separator"]')
     expect(separators).toHaveLength(expectedSeparatorCount)
     if (expectedSeparatorCount === 1) {
       const separator = separators?.[0]
-      expect(wrapper?.firstElementChild).toBe(separator)
+      expect(wrapper?.previousElementSibling).toBe(separator)
       expect(separator?.closest("[data-turn]")).toBeNull()
-      expect(wrapper?.querySelectorAll('[role="separator"]')).toHaveLength(1)
+      expect(wrapper?.querySelectorAll('[role="separator"]')).toHaveLength(0)
     }
 
     return wrapper as Element
@@ -709,7 +776,7 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
       expect.objectContaining({ url: "blob:optimistic-notes" })
     )
     const originalWrapper = assertLifecycleFrame(api(), qualifies ? 1 : 0)
-    const originalTurn = originalWrapper.querySelector('[data-turn="user"]')
+    const originalTurn = originalWrapper
     const originalSeparator = qualifies
       ? originalWrapper.querySelector('[role="separator"]')
       : null
@@ -718,7 +785,10 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
     )
     expect(pendingAssistant).toBeTruthy()
     expect(pendingAssistant?.querySelector('[role="separator"]')).toBeNull()
-    expect(pendingAssistant?.closest("[data-turn-id-container]")).toBeNull()
+    const pendingAssistantWrapper = pendingAssistant?.closest(
+      "[data-turn-id-container]"
+    )
+    expect(pendingAssistantWrapper).toBeTruthy()
 
     await act(async () => {
       lifecycle.authGate.resolve("fixture-user")
@@ -739,9 +809,7 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
       ).toBe(true)
     )
     const assertStableDomIdentity = () => {
-      expect(originalWrapper.querySelector('[data-turn="user"]')).toBe(
-        originalTurn
-      )
+      expect(originalWrapper).toBe(originalTurn)
       if (qualifies) {
         expect(originalWrapper.querySelector('[role="separator"]')).toBe(
           originalSeparator
@@ -781,6 +849,13 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
         '[data-turn-id-container="assistant-streaming"]'
       )
     ).toHaveLength(1)
+    const streamingAssistant = container?.querySelector(
+      '[data-turn-id="assistant-streaming"]'
+    )
+    expect(streamingAssistant).toBe(pendingAssistant)
+    expect(streamingAssistant?.closest("[data-turn-id-container]")).toBe(
+      pendingAssistantWrapper
+    )
 
     await act(async () => {
       const writer = lifecycle.getStreamWriter()

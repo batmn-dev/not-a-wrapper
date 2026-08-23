@@ -5,73 +5,65 @@ import { HistoryTrigger } from "@/app/components/history/history-trigger"
 import { ButtonNewChat } from "@/app/components/layout/button-new-chat"
 import { UserMenu } from "@/app/components/layout/user-menu"
 import { NawIcon } from "@/components/icons/naw"
-import { useScrollRoot } from "@/components/ui/scroll-root"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { APP_NAME } from "@/lib/config"
 import { useUser } from "@/lib/user-store/provider"
 import Link from "next/link"
-import { useEffect, useState } from "react"
 import { DialogPublish } from "./dialog-publish"
 import { HeaderSidebarTrigger } from "./header-sidebar-trigger"
 
-export function Header({ hasSidebar }: { hasSidebar: boolean }) {
+export type HeaderFixedMode = "always" | "never"
+
+export function Header({
+  hasSidebar,
+  fixedHeader,
+}: {
+  hasSidebar: boolean
+  fixedHeader: HeaderFixedMode
+}) {
   const isMobile = useBreakpoint(768)
 
   const { user } = useUser()
 
   const isLoggedIn = !!user
 
-  const { scrollRef } = useScrollRoot()
-  const [isScrolled, setIsScrolled] = useState(false)
-
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    const onScroll = () => setIsScrolled(el.scrollTop > 0)
-    el.addEventListener("scroll", onScroll, { passive: true })
-    onScroll()
-    return () => el.removeEventListener("scroll", onScroll)
-  }, [scrollRef])
-
   return (
     <header
-      className="h-app-header bg-background pointer-events-none sticky top-0 z-20 shrink-0 [box-shadow:var(--sharp-edge-top-shadow-placeholder)] data-[scrolled]:[box-shadow:var(--sharp-edge-top-shadow)] data-[fixed-header=less-than-xl]:@7xl/main:bg-transparent data-[fixed-header=less-than-xl]:@7xl/main:[box-shadow:none]! data-[fixed-header=less-than-xxl]:@[96rem]/main:bg-transparent data-[fixed-header=less-than-xxl]:@[96rem]/main:[box-shadow:none]!"
-      data-fixed-header="less-than-xl"
-      data-scrolled={isScrolled || undefined}
+      id="page-header"
+      className="h-header-height data-[fixed-header=less-than-xl]:@w-xl/main:bg-transparent data-[fixed-header=less-than-xl]:@w-xl/main:shadow-none pointer-events-none sticky top-0 z-20 flex shrink-0 items-center justify-between bg-transparent p-2 shadow-none transition-none select-none [view-transition-name:var(--vt-page-header)] *:pointer-events-auto pointer-coarse:p-2.5"
+      data-fixed-header={fixedHeader}
     >
-      <div className="relative mx-auto flex h-full max-w-full items-center justify-between px-2 pointer-coarse:px-2.5">
-        <div className="flex shrink-0 items-center gap-2">
-          {/* Hide logo/text when sidebar is present on desktop (sidebar has its own home link) */}
-          {!hasSidebar && (
-            <Link
-              href="/"
-              className="pointer-events-auto inline-flex items-center text-lg font-medium tracking-tight"
-            >
-              <NawIcon className="mr-1 size-4" />
-              {APP_NAME}
-            </Link>
-          )}
-          {/* Show toggle only on mobile (collapsed rail has its own toggle on desktop) */}
-          {hasSidebar && isMobile && <HeaderSidebarTrigger />}
-        </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {/* Hide logo/text when sidebar is present on desktop (sidebar has its own home link) */}
+        {!hasSidebar && (
+          <Link
+            href="/"
+            className="pointer-events-auto inline-flex items-center text-lg font-medium tracking-tight"
+          >
+            <NawIcon className="mr-1 size-4" />
+            {APP_NAME}
+          </Link>
+        )}
+        {/* Show toggle only on mobile (collapsed rail has its own toggle on desktop) */}
+        {hasSidebar && isMobile && <HeaderSidebarTrigger />}
+      </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-0 [&>*]:pointer-events-auto">
-          {!isLoggedIn ? (
-            <div className="flex items-center gap-2">
-              <AuthModalTrigger variant="outline">Log in</AuthModalTrigger>
-              <AuthModalTrigger className="max-[360px]:hidden">
-                Sign up
-              </AuthModalTrigger>
-            </div>
-          ) : (
-            <>
-              {!isMobile && <DialogPublish />}
-              <ButtonNewChat />
-              {!hasSidebar && <HistoryTrigger hasSidebar={hasSidebar} />}
-              {!hasSidebar && <UserMenu />}
-            </>
-          )}
-        </div>
+      <div className="flex shrink-0 items-center justify-end gap-0">
+        {!isLoggedIn ? (
+          <div className="flex items-center gap-2">
+            <AuthModalTrigger variant="outline">Log in</AuthModalTrigger>
+            <AuthModalTrigger className="max-[360px]:hidden">
+              Sign up
+            </AuthModalTrigger>
+          </div>
+        ) : (
+          <>
+            {!isMobile && <DialogPublish />}
+            <ButtonNewChat />
+            {!hasSidebar && <HistoryTrigger hasSidebar={hasSidebar} />}
+            {!hasSidebar && <UserMenu />}
+          </>
+        )}
       </div>
     </header>
   )

@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import React, { act, createRef } from "react"
+import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { QuoteButton } from "./quote-button"
@@ -24,6 +24,7 @@ describe("QuoteButton", () => {
 
   it("positions Add to chat above the selected text", () => {
     const messageContainer = document.createElement("div")
+    document.body.appendChild(messageContainer)
     vi.spyOn(messageContainer, "getBoundingClientRect").mockReturnValue({
       left: 20,
       top: 40,
@@ -35,26 +36,54 @@ describe("QuoteButton", () => {
       y: 40,
       toJSON: () => ({}),
     })
-    const messageContainerRef = createRef<HTMLElement>()
-    messageContainerRef.current = messageContainer
+    const range = {
+      getBoundingClientRect: () => ({
+        left: 120,
+        top: 160,
+        width: 240,
+        height: 48,
+        right: 360,
+        bottom: 208,
+      }),
+    } as Range
 
     act(() => {
       root.render(
         <QuoteButton
-          mousePosition={{ x: 120, y: 160 }}
+          container={messageContainer}
           onQuote={() => undefined}
-          messageContainerRef={messageContainerRef}
-          onDismiss={() => undefined}
+          range={range}
         />
       )
     })
 
     const button = container.querySelector("button")
-    const positioner = button?.parentElement
+    const layer = container.querySelector<HTMLElement>(
+      '[data-slot="selection-action"]'
+    )
+    const anchor = container.querySelector(
+      '[data-slot="selection-action-anchor"]'
+    )
+    const positioner = container.querySelector(
+      '[data-slot="selection-action-positioner"]'
+    )
 
     expect(button?.textContent).toBe("Add to chat")
-    expect(positioner?.style.left).toBe("100px")
-    expect(positioner?.style.top).toBe("60px")
-    expect(positioner?.style.transform).toBe("translateX(-50%)")
+    expect(anchor).not.toBeNull()
+    expect(positioner?.contains(button ?? null)).toBe(true)
+    expect(
+      layer?.style.getPropertyValue("--targeted-action-anchor-inline-start")
+    ).toBe("100px")
+    expect(
+      layer?.style.getPropertyValue("--targeted-action-anchor-block-start")
+    ).toBe("120px")
+    expect(
+      layer?.style.getPropertyValue("--targeted-action-anchor-inline-size")
+    ).toBe("240px")
+    expect(
+      layer?.style.getPropertyValue("--targeted-action-anchor-block-size")
+    ).toBe("48px")
+
+    messageContainer.remove()
   })
 })

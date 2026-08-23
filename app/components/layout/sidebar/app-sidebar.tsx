@@ -373,8 +373,7 @@ function SidebarExpandedNav({
   onMobileClose?: () => void
 }) {
   const scrollRef = useRef<HTMLElement>(null)
-  // Zero-rerender scroll tracking via data attributes
-  useScrollAttributes(scrollRef)
+  const scrollStateRef = useScrollAttributes(scrollRef)
 
   // Bounded sidebar (ADR-0005): load more window pages as the user nears the
   // bottom.
@@ -386,8 +385,8 @@ function SidebarExpandedNav({
       <h2 className="sr-only">Chat history</h2>
 
       <nav
-        ref={scrollRef}
-        className="group/scrollport relative flex h-full w-full min-w-0 flex-1 flex-col overflow-y-auto"
+        ref={scrollStateRef}
+        className="scroll-state-scrollport group/scrollport relative flex h-full w-full min-w-0 flex-1 flex-col overflow-y-auto"
         aria-label="Chat history"
       >
         {/* The action-group mask below owns the header seam. */}
@@ -462,10 +461,8 @@ function SidebarExpandedNav({
             className={cn(
               "pointer-events-none absolute inset-x-0 -bottom-(--sticky-spacer) h-(--sticky-spacer)",
               "bg-sidebar",
-              "tall:[box-shadow:var(--sharp-edge-top-shadow-placeholder)]",
-              "tall:group-data-[scrolled-from-top]/scrollport:[box-shadow:var(--sharp-edge-top-shadow)]",
-              "opacity-0 will-change-[opacity]",
-              "group-data-[scrolled-from-top]/scrollport:opacity-100"
+              "scroll-state-shadow-top scroll-state-opacity-top",
+              "will-change-[opacity]"
             )}
             aria-hidden="true"
           />
@@ -585,8 +582,7 @@ function SidebarExpandedNav({
           <div
             className={cn(
               "bg-sidebar sticky bottom-0 z-30 px-2 py-(--sidebar-footer-inset) empty:hidden",
-              "[box-shadow:var(--sharp-edge-bottom-shadow-placeholder)]",
-              "group-data-[scrolled-from-end]/scrollport:[box-shadow:var(--sharp-edge-bottom-shadow)]"
+              "scroll-state-shadow-bottom"
             )}
           >
             <UserMenu variant="sidebar" />

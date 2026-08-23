@@ -28,7 +28,7 @@ export function SettingsCloseButton() {
 
 export function SettingsPageHeader({ title }: SettingsPageHeaderProps) {
   return (
-    <header className="bg-popover sticky top-0 z-20 flex min-h-15 shrink-0 items-center py-3 pr-3 pl-4 [box-shadow:var(--sharp-edge-top-shadow-placeholder)] group-data-[scrolled-from-top]/settings-scrollport:[box-shadow:var(--sharp-edge-top-shadow)]">
+    <header className="scroll-state-shadow-top bg-popover sticky top-0 z-20 flex min-h-15 shrink-0 items-center py-3 pr-3 pl-4">
       <div className="w-full min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <h3 className="min-w-0 text-lg font-normal">

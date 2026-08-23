@@ -182,18 +182,19 @@ export function MessageUser({
     <MessageContainer
       as="div"
       className={cn("flex max-w-full flex-col gap-0", className)}
-      data-turn="user"
-      data-message-id={id}
-      data-message-author-role="user"
-      tabIndex={-1}
     >
-      <h5 className="sr-only">You said:</h5>
+      <h4 className="sr-only">You said:</h4>
       {/* Captured turn anatomy (box-chain verified 2026-07-11): a gap-4 content
           wrapper groups the `text-message` block(s); the action row is a
           ZERO-GAP column-level sibling, so the buttons sit p-1 (4px) under
           the bubble. */}
       <div className="flex max-w-full grow flex-col gap-4">
-        <div className="text-message relative flex min-h-8 w-full flex-col items-end gap-2 text-start break-words whitespace-normal">
+        <div
+          className="text-message relative flex min-h-8 w-full flex-col items-end gap-2 text-start break-words whitespace-normal"
+          data-message-id={id}
+          data-message-author-role="user"
+          dir="auto"
+        >
           <div className="flex w-full flex-col items-end gap-1 empty:hidden">
             {attachments?.map((attachment, index) => (
               <div
@@ -314,7 +315,7 @@ export function MessageUser({
           tabIndex={-1}
         >
           <MessageActionButton
-            label="Copy Message"
+            label="Copy message"
             tooltip={copied ? "Copied!" : "Copy Message"}
             onClick={copyToClipboard}
             icon={

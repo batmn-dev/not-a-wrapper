@@ -198,9 +198,7 @@ describe("ProjectsView essential behavior", () => {
   })
 
   it("restores URL filters and orders projects by persisted activity", async () => {
-    mocks.searchParams = new URLSearchParams(
-      "tab=created&q=a&sort=name-desc"
-    )
+    mocks.searchParams = new URLSearchParams("tab=created&q=a&sort=name-desc")
     mocks.perUserQuery = {
       data: [
         { ...ownedProjects[0], updatedAt: 3_000 },
@@ -215,8 +213,7 @@ describe("ProjectsView essential behavior", () => {
     ]
     expect(rows.map((row) => row.dataset.projectId)).toEqual(["p1", "p2"])
     expect(
-      container.querySelector<HTMLInputElement>("#projects-page-search")
-        ?.value
+      container.querySelector<HTMLInputElement>("#projects-page-search")?.value
     ).toBe("a")
     expect(
       container.querySelector("button[aria-current='page']")?.textContent
@@ -225,13 +222,14 @@ describe("ProjectsView essential behavior", () => {
     const search = container.querySelector<HTMLInputElement>(
       "#projects-page-search"
     )!
+    expect(search.className).toContain("keyboard-focused:outline-[1.5px]")
+    expect(search.hasAttribute("data-keyboard-focused")).toBe(false)
     await act(async () => setInputValue(search, "zzz"))
     expect(container.querySelector('[data-project-row="true"]')).toBeNull()
     expect(leafWithText("No matching projects")).toBeTruthy()
-    expect(mocks.replace).toHaveBeenCalledWith(
-      "/projects?tab=created&q=zzz",
-      { scroll: false }
-    )
+    expect(mocks.replace).toHaveBeenCalledWith("/projects?tab=created&q=zzz", {
+      scroll: false,
+    })
   })
 
   it("keeps the project grid keyboard-navigable without action keys navigating", async () => {
@@ -309,7 +307,9 @@ describe("ProjectsView essential behavior", () => {
     await act(async () => {
       nameInput
         .closest("form")
-        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+        ?.dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true })
+        )
     })
 
     expect(mocks.mutationCalls).toContainEqual({
@@ -319,7 +319,10 @@ describe("ProjectsView essential behavior", () => {
     expect(mocks.push).toHaveBeenCalledWith("/p/new-project-id")
 
     const firstRow = container.querySelector('[data-project-row="true"]')!
-    await act(async () => void click(firstRow.querySelector('[data-menu-item="delete"]')!))
+    await act(
+      async () =>
+        void click(firstRow.querySelector('[data-menu-item="delete"]')!)
+    )
     expect(
       mocks.mutationCalls.some(({ name }) => name === "projects:remove")
     ).toBe(false)
@@ -345,8 +348,8 @@ describe("ProjectsView essential behavior", () => {
       await Promise.resolve()
     })
     expect(
-      container.querySelector<HTMLElement>('[data-project-row="true"]')
-        ?.dataset.projectId
+      container.querySelector<HTMLElement>('[data-project-row="true"]')?.dataset
+        .projectId
     ).toBe("p1")
     expect(mocks.mutationCalls).toContainEqual({
       name: "projects:togglePinned",

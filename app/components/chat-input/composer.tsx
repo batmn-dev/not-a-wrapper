@@ -29,6 +29,7 @@ import {
   PromptInput,
   PromptInputAction,
   PromptInputActions,
+  type PromptInputEditorHandle,
   PromptInputFooter,
   PromptInputTextarea,
 } from "@/components/ui/prompt-input"
@@ -53,8 +54,10 @@ import {
   useRef,
   useState,
 } from "react"
+import { flushSync } from "react-dom"
 import { PromptSystem } from "../suggestions/prompt-system"
 import { ButtonPlusMenu } from "./button-plus-menu"
+import { runComposerSlideTransition } from "./composer-view-transition"
 import { FileList } from "./file-list"
 import { InputDropZone } from "./input-drop-zone"
 import { coordinateComposerPaste } from "./large-paste-policy"
@@ -108,6 +111,8 @@ type ComposerProps = {
   /** Surface-owned spacing below the composer shell. */
   bottomSpacing?: "default" | "none"
 }
+
+const DEFAULT_COMPOSER_ARIA_LABEL = "Chat with ChatGPT"
 
 const isOnlyWhitespace = (text: string) => !/[^\s]/.test(text)
 
@@ -205,7 +210,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       onLockedGuestModelSelect,
       draftScopeId,
       placeholder = "Ask anything",
-      ariaLabel,
+      ariaLabel = DEFAULT_COMPOSER_ARIA_LABEL,
       bottomSpacing = "default",
     },
     ref
@@ -224,10 +229,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       selectModelConfig?.tools === false ||
       selectModelConfig?.webSearch === false
     const isFileUploadAvailable = Boolean(selectModelConfig?.vision)
-    const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const editorRef = useRef<PromptInputEditorHandle>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const handleModelSelectionCommitted = useCallback(() => {
-      textareaRef.current?.focus({ preventScroll: true })
+      editorRef.current?.focus({ preventScroll: true })
     }, [])
 
     // Anonymous chat cannot use authenticated storage, so guests' generated
@@ -398,38 +403,30 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     }, [attachments, isSubmitting, localValue, status, stop, stoppable])
 
     const handlePrimaryActionClick = useCallback(() => {
-      if (primaryAction.disabled) {
+      if (primaryAction.disabled || primaryAction.intent !== "stop") {
         return
       }
 
-      if (primaryAction.intent === "stop") {
-        stop?.()
+      stop?.()
+    }, [primaryAction.disabled, primaryAction.intent, stop])
+
+    const handleComposerSubmit = useCallback(() => {
+      if (primaryAction.disabled || primaryAction.intent !== "send") {
         return
       }
 
-      void handleSend()
-    }, [handleSend, primaryAction.disabled, primaryAction.intent, stop])
-
-    const handleKeyDown = useCallback(
-      (e: React.KeyboardEvent) => {
-        if (e.key !== "Enter" || e.shiftKey) {
-          return
-        }
-
-        if (primaryAction.mode === "stop") {
-          return
-        }
-
-        if (!primaryAction.disabled) {
-          e.preventDefault()
-          void handleSend()
-        }
-      },
-      [handleSend, primaryAction.disabled, primaryAction.mode]
-    )
+      const send = () => {
+        void handleSend()
+      }
+      if (chatId === null) {
+        runComposerSlideTransition(() => flushSync(send))
+        return
+      }
+      send()
+    }, [chatId, handleSend, primaryAction.disabled, primaryAction.intent])
 
     const handlePaste = useCallback(
-      (e: React.ClipboardEvent) => {
+      (e: ClipboardEvent) => {
         const items = e.clipboardData?.items
         if (!items) return
 
@@ -489,9 +486,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         handleValueChange(restored.text)
         setAttachmentAnnouncement(`${attachment.file.name} restored.`)
         requestAnimationFrame(() => {
-          const textarea = textareaRef.current
-          textarea?.focus()
-          textarea?.setSelectionRange(
+          const editor = editorRef.current
+          editor?.focus()
+          editor?.setSelectionRange(
             restored.selectionStart,
             restored.selectionEnd
           )
@@ -527,14 +524,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             current ? `${current}\n\n${quoted}\n\n` : `${quoted}\n\n`
           )
           requestAnimationFrame(() => {
-            textareaRef.current?.focus()
+            editorRef.current?.focus()
           })
         },
         setText: (text: string) => {
           applyValue(text)
         },
         focus: () => {
-          textareaRef.current?.focus()
+          editorRef.current?.focus()
         },
       }),
       [applyValue, handleValueChange, valueRef]
@@ -563,17 +560,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         >
           <div
             className={cn(
-              "relative order-2 pb-3 sm:pb-4 md:order-1",
+              "pointer-events-auto relative z-1 order-2 flex flex-col pb-3 sm:pb-4 md:order-1",
               bottomSpacing === "none" && "pb-0 sm:pb-0"
             )}
-            onClick={() => textareaRef.current?.focus()}
+            onClick={() => editorRef.current?.focus()}
           >
             <PromptInput
-              className="relative z-10"
               expanded={localValue.includes("\n")}
-              maxHeight="max(30svh, 5rem)"
               value={localValue}
               onValueChange={handleValueChange}
+              onSubmit={handleComposerSubmit}
               formControls={
                 isUserAuthenticated ? (
                   <div className="hidden">
@@ -607,6 +603,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               <PromptInputActions
                 className="h-9 justify-start self-center [grid-area:leading]"
                 data-composer-leading="true"
+                data-composer-transition-slot="leading"
                 onClick={(e) => e.stopPropagation()}
               >
                 <ButtonPlusMenu
@@ -619,15 +616,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 />
               </PromptInputActions>
               <PromptInputTextarea
-                ref={textareaRef}
+                ref={editorRef}
                 placeholder={placeholder}
-                aria-label={ariaLabel ?? placeholder}
-                className={
-                  placeholder === "Ask anything"
-                    ? undefined
-                    : "placeholder-shown:[field-sizing:fixed] placeholder-shown:h-[42px] placeholder-shown:overflow-hidden placeholder-shown:text-ellipsis"
-                }
-                onKeyDown={handleKeyDown}
+                aria-label={ariaLabel}
                 onPaste={handlePaste}
                 containerClassName="[grid-area:primary]"
               />
@@ -635,6 +626,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               <PromptInputActions
                 className="cant-hover:gap-1.5 h-9 gap-1 self-center [grid-area:trailing]"
                 data-composer-trailing="true"
+                data-composer-transition-slot="trailing"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="cant-hover:gap-1.5 cant-hover:px-1.5 relative ms-1 flex items-center gap-1.5">
@@ -649,7 +641,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 </div>
                 <div className="cant-hover:gap-1.5 ms-auto flex items-center gap-2">
                   <PromptInputAction
-                    disabled={primaryAction.disabled}
                     tooltip={
                       primaryAction.mode === "send" ? (
                         <TooltipShortcut label={primaryAction.tooltip}>
@@ -662,13 +653,25 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   >
                     <Button
                       size="sm"
-                      className="size-9 rounded-full p-0 transition-colors duration-150 ease-out pointer-fine:relative pointer-fine:after:absolute pointer-fine:after:-inset-x-1 pointer-fine:after:inset-y-0 pointer-fine:after:content-['']"
-                      disabled={primaryAction.disabled}
-                      type="button"
+                      className="composer-submit-btn composer-submit-button-color size-9 rounded-full p-0 transition-colors duration-150 ease-out can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-['']"
+                      disabled={
+                        primaryAction.mode === "stop" &&
+                        primaryAction.disabled
+                      }
+                      visuallyDisabled={
+                        primaryAction.mode === "send" &&
+                        primaryAction.disabled
+                      }
+                      type={primaryAction.buttonType}
                       id="composer-submit-button"
                       data-testid="send-button"
-                      onClick={handlePrimaryActionClick}
+                      onClick={
+                        primaryAction.mode === "stop"
+                          ? handlePrimaryActionClick
+                          : undefined
+                      }
                       aria-label={primaryAction.ariaLabel}
+                      aria-disabled={primaryAction.disabled}
                     >
                       {primaryAction.mode === "stop" ? (
                         <StopBulkRoundedIcon slotSize={22} glyphSize={22} />

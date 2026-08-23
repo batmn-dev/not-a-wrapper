@@ -7,6 +7,7 @@ import {
 import { HistorySearchProvider } from "@/app/components/history/history-search-provider"
 import { Header } from "@/app/components/layout/header"
 import { AppSidebar } from "@/app/components/layout/sidebar/app-sidebar"
+import { MainContent } from "@/components/ui/main-content"
 import { ScrollRoot } from "@/components/ui/scroll-root"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 
@@ -37,22 +38,23 @@ export function LayoutApp({
       <ActivityPanelHostProvider>
         <div className="flex h-svh w-full overflow-hidden">
           {hasSidebar && <AppSidebar />}
-          {/* The container spans the scroll column and activity dock, so opening
-              the panel redistributes width without crossing container-query tiers. */}
-          <div className="@container/main relative flex min-w-0 flex-1">
-            <div className="relative flex min-w-0 flex-1 flex-col">
-              <ScrollRoot className="@[40rem]/main:[scrollbar-gutter:stable_both-edges] print:overflow-visible pointer-coarse:[scrollbar-width:none]">
-                {header === undefined ? <Header hasSidebar={hasSidebar} /> : header}
-                <main id="main" className="min-h-0 flex-1">
+          <div className="side-pane-shell-host relative flex min-w-0 flex-1">
+            <div className="@container/main relative flex min-w-0 flex-1 -translate-y-[calc(env(safe-area-inset-bottom,0px)/2)] flex-col pt-[calc(env(safe-area-inset-bottom,0px)/2)]">
+              <ScrollRoot>
+                {header === undefined ? (
+                  <Header hasSidebar={hasSidebar} fixedHeader="always" />
+                ) : (
+                  header
+                )}
+                <MainContent id="main" className="min-h-0 flex-1">
                   {children}
-                </main>
+                </MainContent>
               </ScrollRoot>
             </div>
-            {/* Activity panel docked track — a flex sibling of the scroll column
-                INSIDE the shared `@container/main` row, so it pushes the column
-                narrower without changing the container width. The scroll
-                machinery (ScrollRoot, composer, --thread-bottom-offset) does not
-                move (GA §7 R4). Collapsed to w-0 when closed / below lg. */}
+            {/* Activity panel docked track — a flex sibling of the scroll column,
+                so opening it narrows the source-parity `@container/main` column
+                without moving the scroll/composer machinery. Collapsed to w-0
+                when closed / below lg. */}
             <ActivityPanelDockSlot />
           </div>
         </div>

@@ -13,6 +13,8 @@ type MessageActionButtonProps = {
   /** Tooltip text; defaults to `label` (copy actions use "Copied!" when done). */
   tooltip?: ReactNode
   disabled?: boolean
+  /** Keeps a temporarily unavailable action discoverable and explains why. */
+  disabledReason?: ReactNode
   side?: "top" | "bottom" | "left" | "right"
   delay?: number
   size?: "default" | "branch"
@@ -31,15 +33,20 @@ export function MessageActionButton({
   onClick,
   tooltip,
   disabled,
+  disabledReason,
   side = "bottom",
   delay,
   size = "default",
 }: MessageActionButtonProps) {
   return (
-    <MessageAction tooltip={tooltip ?? label} side={side} delay={delay}>
+    <MessageAction
+      tooltip={disabledReason ?? tooltip ?? label}
+      side={side}
+      delay={delay}
+    >
       <button
         className={cn(
-          "text-muted-foreground flex items-center justify-center bg-transparent disabled:pointer-events-none disabled:opacity-50",
+          "text-muted-foreground flex items-center justify-center bg-transparent disabled:pointer-events-none disabled:opacity-50 aria-disabled:opacity-50",
           // Reference metrics: standard actions 32×32 / 8px radius; branch-pager
           // steppers 24×30 / 6px radius. Radii are pinned literals — their
           // rounded-lg/rounded-md resolve to 8/6px, ours to 10/8px.
@@ -48,7 +55,8 @@ export function MessageActionButton({
             : "h-8 w-8 rounded-[8px] pointer-coarse:w-10"
         )}
         aria-label={label}
-        onClick={onClick}
+        aria-disabled={disabledReason ? true : undefined}
+        onClick={disabledReason ? undefined : onClick}
         disabled={disabled}
         type="button"
       >

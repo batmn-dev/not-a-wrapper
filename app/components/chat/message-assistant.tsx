@@ -1,9 +1,5 @@
 import { Icon } from "@/components/ui/icon"
 import {
-  StreamingCaret,
-  type StreamingIndicatorVariant,
-} from "@/components/ui/loader"
-import {
   Message,
   MessageActions,
   MessageContent,
@@ -21,7 +17,7 @@ import { getDurableError } from "@/lib/chat-messages/metadata"
 import { getModelInfo } from "@/lib/models"
 import { cn } from "@/lib/utils"
 import { RiCheckLine, RiFileCopyLine, RiLoopRightLine } from "@remixicon/react"
-import { useCallback, useRef, useState } from "react"
+import { useCallback } from "react"
 import {
   useActivityPanelActions,
   useActivityPanelId,
@@ -46,6 +42,7 @@ type MessageAssistantProps = {
   copyToClipboard?: () => void
   onReload?: (messageId: string) => void
   retryModelId?: string
+  retryDisabled?: boolean
   status?: DurableMessageStatus | "ready" | "error"
   className?: string
   messageId: string
@@ -53,8 +50,6 @@ type MessageAssistantProps = {
   isDurableChat?: boolean
   finishReason?: string
 }
-
-const STREAMING_INDICATOR_VARIANT: StreamingIndicatorVariant = "caret"
 
 export function MessageAssistant({
   children,
@@ -64,6 +59,7 @@ export function MessageAssistant({
   copyToClipboard,
   onReload,
   retryModelId,
+  retryDisabled,
   status,
   className,
   messageId,
@@ -127,12 +123,14 @@ export function MessageAssistant({
     status === "awaiting_approval" ||
     status === "aborted" ||
     status === "failed"
+  const isBareThinkingStatus =
+    activityPresentation.kind === "live-status" &&
+    activityPresentation.semanticKind === "thinking"
+  const showInlineBusyPlaceholder = isBareThinkingStatus && !showMessageBody
+  const showMessageSlot = showMessageBody || showInlineBusyPlaceholder
 
-  const messageRef = useRef<HTMLDivElement>(null)
-  const { selectionInfo, clearSelection } = useAssistantMessageSelection(
-    messageRef,
-    true
-  )
+  const { selectionInfo, clearSelection, messageRef } =
+    useAssistantMessageSelection(true)
   const handleQuoteBtnClick = useCallback(() => {
     if (selectionInfo && onQuote) {
       onQuote(selectionInfo.text, selectionInfo.messageId)
@@ -158,81 +156,69 @@ export function MessageAssistant({
     panelActions?.openTurn(messageId, { section: "sources" })
   }, [panelActions, messageId])
 
-  const [contentCaretPhase, setContentCaretPhase] = useState<
-    "hidden" | "visible" | "fading"
-  >("hidden")
-  const showActiveContentCaret = Boolean(
-    isLast && status === "streaming" && hasContent
-  )
-
   const didStreamInSession = Boolean(isLast && finishReason)
-  const showFooterCaret = hasContent && contentCaretPhase !== "hidden"
   const copyableStatus =
     status !== "submitted" &&
     status !== "streaming" &&
     status !== "awaiting_approval"
-  const showFooterActions =
-    hasContent && copyableStatus && (!isLast || contentCaretPhase === "hidden")
-  const showFooterSlot = showFooterCaret || showFooterActions
-
-  if (showActiveContentCaret && contentCaretPhase !== "visible") {
-    setContentCaretPhase("visible")
-  } else if (
-    !showActiveContentCaret &&
-    status === "ready" &&
-    isLast &&
-    contentCaretPhase === "visible"
-  ) {
-    setContentCaretPhase("fading")
-  } else if (
-    (!isLast ||
-      !hasContent ||
-      (status !== "streaming" && status !== "ready")) &&
-    contentCaretPhase !== "hidden"
-  ) {
-    setContentCaretPhase("hidden")
-  }
+  const showFooterActions = hasContent && copyableStatus
 
   return (
     <Message
       as="div"
       className={cn("flex max-w-full flex-col gap-0", className)}
-      data-turn="assistant"
       data-turn-phase={phase.kind}
-      data-message-id={messageId}
-      data-message-author-role="assistant"
-      tabIndex={-1}
     >
-      <h6 className="sr-only">Assistant said:</h6>
-      {/* Captured turn anatomy (box-chain verified 2026-07-14): activity and
-          the `text-message` block are gap-4 siblings; the action row is a
-          ZERO-GAP column-level sibling — its p-1/-mt-1 metrics put the
-          buttons ~8px under the prose. Message parts flow in a gap-1 column. */}
+      <h4 className="sr-only">ChatGPT said:</h4>
+      {/* Captured turn anatomy (box-chain verified 2026-07-14 and 2026-08-21):
+          inspectable activity and the `text-message` block are gap-4 siblings.
+          A bare Thinking placeholder instead occupies that same message slot,
+          so first content replaces it without a vertical handoff. The action
+          row mounts only after the response settles; message parts flow in a
+          gap-1 column. */}
       <div className="flex max-w-full grow flex-col gap-4">
-        <AssistantActivityIndicator
-          presentation={activityPresentation}
-          open={isPanelTurnOpen}
-          onOpenChange={
-            panelActions ? handleActivityTriggerOpenChange : undefined
-          }
-          controlsId={panelId}
-        />
+        {isBareThinkingStatus ? null : (
+          <AssistantActivityIndicator
+            presentation={activityPresentation}
+            open={isPanelTurnOpen}
+            onOpenChange={
+              panelActions ? handleActivityTriggerOpenChange : undefined
+            }
+            controlsId={panelId}
+          />
+        )}
 
-        {showMessageBody ? (
+        {showMessageSlot ? (
           <div
             ref={messageRef}
-            className="text-message relative flex min-h-8 w-full flex-col gap-2 text-start break-words whitespace-normal"
-            // Inner data-message-id for quote selection — closest() finds this before the outer article
+            className="text-message relative flex min-h-8 w-full flex-col items-end gap-2 text-start break-words whitespace-normal outline-none"
+            // Inner data-message-id for quote selection — closest() finds this before the outer section
             data-message-id={messageId}
+            data-message-author-role="assistant"
+            data-turn-start-message={
+              isLast && !showInlineBusyPlaceholder ? "true" : undefined
+            }
+            dir="auto"
+            tabIndex={isLast && !showInlineBusyPlaceholder ? 0 : undefined}
           >
             <div className="flex w-full flex-col gap-1 empty:hidden">
+              {showInlineBusyPlaceholder ? (
+                <AssistantActivityIndicator
+                  presentation={activityPresentation}
+                  open={false}
+                />
+              ) : null}
+
               {searchImageResults.length > 0 && (
                 <SearchImages results={searchImageResults} />
               )}
 
               {contentNullOrEmpty ? null : (
                 <MessageContent
-                  className="markdown prose relative w-full bg-transparent p-0"
+                  className={cn(
+                    "markdown prose relative w-full bg-transparent p-0",
+                    status === "streaming" && "streaming-animation"
+                  )}
                   markdown={true}
                   // Live render state for the Markdown block model (plan PR 3):
                   // only a live message's terminal block may render as a
@@ -253,6 +239,7 @@ export function MessageAssistant({
                       ? {
                           label: "Regenerate",
                           onClick: () => onReload?.(messageId),
+                          disabled: retryDisabled,
                         }
                       : undefined
                   }
@@ -284,6 +271,7 @@ export function MessageAssistant({
                       ? {
                           label: "Retry",
                           onClick: () => onReload?.(messageId),
+                          disabled: retryDisabled,
                         }
                       : undefined
                   }
@@ -303,6 +291,7 @@ export function MessageAssistant({
                       ? {
                           label: "Retry",
                           onClick: () => onReload?.(messageId),
+                          disabled: retryDisabled,
                         }
                       : undefined
                   }
@@ -317,89 +306,83 @@ export function MessageAssistant({
 
             {selectionInfo && selectionInfo.messageId && (
               <QuoteButton
-                mousePosition={selectionInfo.position}
+                container={selectionInfo.container}
                 onQuote={handleQuoteBtnClick}
-                messageContainerRef={messageRef}
-                onDismiss={clearSelection}
+                range={selectionInfo.range}
               />
             )}
           </div>
         ) : null}
       </div>
 
-      {showFooterSlot && (
+      {showFooterActions && (
         <div className="relative z-0 flex min-h-[46px] justify-start">
-          {showFooterCaret && (
-            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center">
-              <StreamingCaret
-                visible={contentCaretPhase === "visible"}
-                variant={STREAMING_INDICATOR_VARIANT}
-                className="ml-px"
-                onFadeOutComplete={() => setContentCaretPhase("hidden")}
-              />
-            </div>
-          )}
-
-          {showFooterActions && (
-            <MessageActions
-              className={cn(
-                "-ms-2.5 -me-1 -mt-1 w-[calc(100%+0.625rem)] flex-wrap items-center gap-0 gap-y-4 p-1 select-none",
-                didStreamInSession && [
-                  "pointer-events-auto",
-                  "[mask-image:linear-gradient(to_right,black_33%,transparent_66%)]",
-                  "[mask-size:300%_100%]",
-                  "motion-safe:[animation:mask-reveal_1.5s_ease_forwards]",
-                  "motion-reduce:[mask-image:none]",
-                ]
-              )}
-            >
-              {/* Branch nav lives on the user message (the turn anchor); see
+          <MessageActions
+            aria-label="Response actions"
+            className={cn(
+              "-ms-2.5 -me-1 -mt-1 w-[calc(100%+0.625rem)] flex-wrap items-center gap-0 gap-y-4 p-1 select-none",
+              didStreamInSession && [
+                "pointer-events-auto",
+                "[mask-image:linear-gradient(to_right,black_33%,transparent_66%)]",
+                "[mask-size:300%_100%]",
+                "motion-safe:[animation:mask-reveal_1.5s_ease_forwards]",
+                "motion-reduce:[mask-image:none]",
+              ]
+            )}
+            role="group"
+            tabIndex={-1}
+          >
+            {/* Branch nav lives on the user message (the turn anchor); see
                     conversation.tsx + message-user.tsx. Assistant messages
                     intentionally render no branch control. */}
+            <MessageActionButton
+              label="Copy response"
+              tooltip={copied ? "Copied!" : "Copy Response"}
+              onClick={copyToClipboard}
+              icon={
+                copied ? (
+                  <Icon icon={RiCheckLine} slotSize={20} />
+                ) : (
+                  <Icon icon={RiFileCopyLine} slotSize={20} />
+                )
+              }
+            />
+            {canRegenerate ? (
               <MessageActionButton
-                label="Copy Response"
-                tooltip={copied ? "Copied!" : "Copy Response"}
-                onClick={copyToClipboard}
-                icon={
-                  copied ? (
-                    <Icon icon={RiCheckLine} slotSize={20} />
-                  ) : (
-                    <Icon icon={RiFileCopyLine} slotSize={20} />
-                  )
+                label={`Try again with ${retryModelName}`}
+                tooltip={
+                  <TooltipMultiline>
+                    <span className="font-medium">Try again...</span>
+                    <span className="text-[var(--text-tertiary)]">
+                      Using {retryModelName}
+                    </span>
+                  </TooltipMultiline>
                 }
+                delay={0}
+                disabledReason={
+                  retryDisabled
+                    ? "Wait for the current response to finish."
+                    : undefined
+                }
+                onClick={() => onReload?.(messageId)}
+                icon={<Icon icon={RiLoopRightLine} slotSize={20} />}
               />
-              {canRegenerate ? (
-                <MessageActionButton
-                  label={`Try again with ${retryModelName}`}
-                  tooltip={
-                    <TooltipMultiline>
-                      <span className="font-medium">Try again...</span>
-                      <span className="text-[var(--text-tertiary)]">
-                        Using {retryModelName}
-                      </span>
-                    </TooltipMultiline>
-                  }
-                  delay={0}
-                  onClick={() => onReload?.(messageId)}
-                  icon={<Icon icon={RiLoopRightLine} slotSize={20} />}
-                />
-              ) : null}
-              {/* Trailing sources badge (reference: last child of the
+            ) : null}
+            {/* Trailing sources badge (reference: last child of the
                     response-actions row). Settled turns only — while the turn
                     is live, source deltas stay panel-owned and this row's memo
                     deliberately ignores them; the settle re-render (status
                     flip / metadata adoption) is what reveals the badge with
                     the final deduped sources. */}
-              {!turnActive && panelActions && (
-                <SourcesBadge
-                  sources={view.sources}
-                  open={isPanelTurnOpen}
-                  onOpen={handleSourcesBadgeOpen}
-                  controlsId={panelId}
-                />
-              )}
-            </MessageActions>
-          )}
+            {!turnActive && panelActions && (
+              <SourcesBadge
+                sources={view.sources}
+                open={isPanelTurnOpen}
+                onOpen={handleSourcesBadgeOpen}
+                controlsId={panelId}
+              />
+            )}
+          </MessageActions>
         </div>
       )}
     </Message>

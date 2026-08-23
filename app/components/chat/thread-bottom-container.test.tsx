@@ -12,7 +12,10 @@ import {
   it,
   vi,
 } from "vitest"
-import { ThreadBottomContainer } from "./thread-bottom-container"
+import {
+  ThreadBottomContainer,
+  ThreadTail,
+} from "./thread-bottom-container"
 
 describe("ThreadBottomContainer", () => {
   let container: HTMLDivElement
@@ -73,21 +76,56 @@ describe("ThreadBottomContainer", () => {
     expect(
       footer?.children[1].hasAttribute("data-thread-scroll-control-layer")
     ).toBe(true)
-    expect(footer?.children[2].hasAttribute("data-thread-bottom-content")).toBe(
-      true
-    )
+    expect(footer?.children[2].id).toBe("thread-bottom")
+    expect(
+      footer?.children[2].querySelector("[data-thread-bottom-content]")
+    ).not.toBeNull()
     expect(footer?.classList.contains("pointer-events-none")).toBe(true)
     expect(footer?.classList.contains("print:hidden")).toBe(true)
+    expect(footer?.classList.contains("bottom-0")).toBe(true)
+    expect(footer?.classList).toContain(
+      "group-data-keyboard-open/scroll-root:bottom-[var(--screen-keyboard-height,0px)]"
+    )
+    expect(footer?.classList.contains("content-fade")).toBe(false)
+    expect(
+      [...(footer?.classList ?? [])].some((name) =>
+        name.startsWith("pb-[var(--safe-area-inset-bottom")
+      )
+    ).toBe(false)
     expect(footer?.classList).toContain(
       "[--thread-scroll-control-offset:1.5rem]"
     )
-    expect(composer?.closest("#thread-bottom")?.classList).toContain(
+    expect(footer?.classList).toContain(
+      "@[53.5rem]/main:[--thread-content-max-width:48rem]"
+    )
+    expect(
+      composer?.closest("[data-thread-composer-column]")?.classList
+    ).toContain("mb-[var(--thread-component-gap)]")
+    expect(
+      composer?.closest("[data-thread-composer-column]")?.classList
+    ).toContain(
       "pointer-events-auto"
     )
     expect(
       container.querySelector("[data-thread-scroll-control-visibility]")
         ?.classList
     ).toContain("pointer-events-auto")
+  })
+
+  it("gives the disclaimer the shared view-transition identity", () => {
+    act(() => {
+      root.render(
+        <ScrollRoot>
+          <ThreadTail>
+            <div />
+          </ThreadTail>
+        </ScrollRoot>
+      )
+    })
+
+    expect(
+      container.querySelector("[data-thread-disclaimer]")?.classList
+    ).toContain("[view-transition-name:var(--vt-disclaimer)]")
   })
 
   it("keeps the existing smooth scroll-to-bottom contract", () => {

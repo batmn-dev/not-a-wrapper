@@ -6,6 +6,7 @@
  * @customizations
  *   - Adds configurable `duration` prop (default: 4 seconds)
  *   - Adds configurable `spread` prop (default: 20, range: 5-45)
+ *   - Adds the captured tertiary status variant used by bare assistant work
  *   - Upstream has fixed animation timing; this project allows customization
  *   - Enables fine-tuning of shimmer effect speed and gradient width
  * @upgradeNotes
@@ -21,6 +22,7 @@ export type TextShimmerProps = {
   as?: string
   duration?: number
   spread?: number
+  variant?: "default" | "tertiary"
   children: React.ReactNode
 } & React.HTMLAttributes<HTMLElement>
 
@@ -29,11 +31,24 @@ export function TextShimmer({
   className,
   duration = 4,
   spread = 20,
+  variant = "default",
   children,
   ...props
 }: TextShimmerProps) {
-  const dynamicSpread = Math.min(Math.max(spread, 5), 45)
   const Component = as as React.ElementType
+
+  if (variant === "tertiary") {
+    return (
+      <Component
+        className={cn("loading-shimmer-tertiary", className)}
+        {...props}
+      >
+        {children}
+      </Component>
+    )
+  }
+
+  const dynamicSpread = Math.min(Math.max(spread, 5), 45)
 
   return (
     <Component

@@ -1,4 +1,5 @@
 import { ComponentPager } from "@/app/design-system/_components/component-pager"
+import { MainContent } from "@/components/ui/main-content"
 import {
   Table,
   TableBody,
@@ -23,9 +24,12 @@ import type { ReactNode } from "react"
 
 export function DsPage({ children }: { children: ReactNode }) {
   return (
-    <main id="main" className="w-full max-w-[960px] px-6 pt-10 pb-24 md:pt-28">
+    <MainContent
+      id="main"
+      className="w-full max-w-[960px] px-6 pt-10 pb-24 md:pt-28"
+    >
       {children}
-    </main>
+    </MainContent>
   )
 }
 

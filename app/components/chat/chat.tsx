@@ -22,7 +22,6 @@ import { isRouteDurableChat } from "@/lib/chat-turn/chat-turn-controller"
 import { cn } from "@/lib/utils"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { useUser } from "@/lib/user-store/provider"
-import { AnimatePresence, motion } from "motion/react"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
@@ -35,7 +34,7 @@ import {
 } from "./activity/activity-panel-store"
 import { ChatStatusAnnouncer } from "./chat-announcer"
 import { resolveChatChrome } from "./chat-chrome"
-import { useSetChatChromeAppHeader } from "./chat-chrome-host"
+import { useSetChatChrome } from "./chat-chrome-host"
 import { ProjectChatDirectory } from "./project-chat-directory"
 import { ProjectDetailSurface } from "./project-detail-surface"
 import { ThreadBottomContainer } from "./thread-bottom-container"
@@ -355,15 +354,18 @@ function ChatInner({
   const showOnboarding = chrome.surface !== "thread"
   const projectOnboarding = chrome.surface === "project-onboarding"
 
-  // Publish the header fact to the shell's pre-<main> slot (chat-chrome-host).
+  // Publish the header facts to the shell's pre-<main> slot (chat-chrome-host).
   // The header must stay OUTSIDE the main landmark for the skip link and
   // banner role; layout-effect timing keeps the flip in the same paint as the
-  // surface swap. The route's SSR initialAppHeader matches this value on first
-  // render, so the effect is a no-op until a real client-side flip.
-  const setAppHeader = useSetChatChromeAppHeader()
+  // surface swap. The route's initial values keep SSR and hydration aligned;
+  // this publication selects the exact fixed mode before the first paint.
+  const setChrome = useSetChatChrome()
   useBrowserLayoutEffect(() => {
-    setAppHeader?.(chrome.appHeader)
-  }, [setAppHeader, chrome.appHeader])
+    setChrome?.({
+      appHeader: chrome.appHeader,
+      fixedHeader: chrome.fixedHeader,
+    })
+  }, [setChrome, chrome.appHeader, chrome.fixedHeader])
 
   // The sticky composer stack's measured footprint becomes
   // `--sticky-padding-bottom` (inline on the scroll root), the value the whole
@@ -456,36 +458,26 @@ function ChatInner({
               project={project}
               onStartChat={() => composerRef.current?.focus()}
             />
+          ) : showOnboarding ? (
+            <div className="relative flex shrink basis-auto flex-col justify-end max-sm:grow max-sm:justify-center sm:min-h-[calc(42svh-var(--spacing-app-header))]">
+              <div
+                className="flex justify-center"
+                data-splash-headline-option="WHATS_ON_YOUR_MIND"
+              >
+                <div className="hidden text-center sm:mb-[22px] sm:block">
+                  <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
+                    What&apos;s on your mind?
+                  </h1>
+                </div>
+                <div className="flex h-full w-full shrink flex-col items-center justify-center px-4 text-center sm:hidden">
+                  <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
+                    What&apos;s on your mind?
+                  </h1>
+                </div>
+              </div>
+            </div>
           ) : (
-            <AnimatePresence initial={false} mode="popLayout">
-              {showOnboarding ? (
-                <motion.div
-                  key="onboarding"
-                  className="relative flex shrink basis-auto flex-col justify-end max-sm:grow max-sm:justify-center sm:min-h-[calc(42svh-var(--spacing-app-header))]"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                >
-                  <div
-                    className="flex justify-center"
-                    data-splash-headline-option="WHATS_ON_YOUR_MIND"
-                  >
-                    <div className="hidden text-center sm:mb-[22px] sm:block">
-                      <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
-                        What&apos;s on your mind?
-                      </h1>
-                    </div>
-                    <div className="flex h-full w-full shrink flex-col items-center justify-center px-4 text-center sm:hidden">
-                      <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
-                        What&apos;s on your mind?
-                      </h1>
-                    </div>
-                  </div>
-                </motion.div>
-              ) : (
-                <Conversation key="conversation" {...conversationProps} />
-              )}
-            </AnimatePresence>
+            <Conversation {...conversationProps} />
           )}
 
           <ThreadBottomContainer

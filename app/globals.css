@@ -16,7 +16,13 @@
 
 @custom-variant pointer-coarse (@media (pointer: coarse));
 @custom-variant pointer-fine (@media (pointer: fine));
+@custom-variant can-hover (@media (hover: hover));
 @custom-variant cant-hover (@media (hover: none));
+/* Tailwind requires each custom-variant name and selector on one physical line. */
+/* prettier-ignore */
+@custom-variant keyboard-focused (&:is(html[data-focus-mode="keyboard"] :focus-visible));
+/* prettier-ignore */
+@custom-variant not-keyboard-focused (&:not(:is(html[data-focus-mode="keyboard"] :focus-visible)));
 
 /* Viewport height variants for conditional sticky behavior */
 @custom-variant tall (@media (min-height: 40rem));
@@ -51,12 +57,20 @@
   }
 }
 
+@theme static {
+  /* ChatGPT's main-column container tiers. Keep the semantic names used by
+     the fixed-header contract instead of coupling it to Tailwind's size scale. */
+  --container-w-sm: 40rem;
+  --container-w-xl: 80rem;
+  --container-w-2xl: 96rem;
+}
+
 @theme {
   --font-mono: var(--font-geist-mono);
-  /* Captured header token (3.25rem = 52px). The scroll root's sticky-padding
-     and scroll-padding derive from it; --spacing-app-header aliases it so the
-     existing h-app-header utility stays in lockstep. */
+  /* The runtime token below is responsive; this theme value also emits the
+     source-shaped h-header-height utility. */
   --header-height: 3.25rem;
+  --spacing-header-height: var(--header-height);
   --spacing-app-header: var(--header-height);
   --text-heading-app: 1.75rem;
   --text-heading-app--line-height: 2.125rem;
@@ -114,6 +128,33 @@
     }
     to {
       background-position: 0% center;
+    }
+  }
+
+  @keyframes loading-shimmer {
+    from {
+      background-position: -100% 0;
+    }
+    to {
+      background-position: 250% 0;
+    }
+  }
+
+  @keyframes loading-shimmer-rtl {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -150% 0;
+    }
+  }
+
+  @keyframes assistant-response-content-enter {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
     }
   }
 
@@ -408,6 +449,8 @@
 }
 
 :root {
+  --header-height: calc(13 * var(--spacing));
+  --stage-scroll-gutter: stable both-edges;
   --sidebar-width: 16.25rem;
   --sidebar-header-height: 3.25rem;
   --sidebar-section-first-margin-top: 0.5rem;
@@ -463,6 +506,9 @@
   --tap-padding-pointer: 32px;
   --tap-padding: var(--tap-padding-mobile);
 
+  --scrollbar-color: #0000001a;
+  --scrollbar-color-hover: #0003;
+
   --header-z-index: 20;
 
   --background: oklch(0.991 0 0);
@@ -508,7 +554,9 @@
   --text-primary: var(--foreground);
   --text-secondary: oklch(0.478 0 0);
   --text-tertiary: oklch(0.65 0 0);
+  --text-quaternary: rgba(0, 0, 0, 0.188);
   --text-disabled: oklch(0.65 0 0);
+  --main-surface-secondary: var(--secondary);
   --link: oklch(0.501 0.127 254.712);
   --link-hover: oklch(0.419 0.106 255.109);
   --projects-content-max-width: 50.625rem;
@@ -612,7 +660,28 @@
     rgba(0, 0, 0, 0.06) 0px 32px 45.25px -2.5px,
     rgba(0, 0, 0, 0.04) 0px 52px 73.54px -3px;
 
-  --composer-bg: oklch(1 0 0);
+  --composer-surface-primary: oklch(1 0 0);
+  --composer-bg: var(--composer-surface-primary);
+  --default-theme-submit-btn-bg: var(--primary);
+  --default-theme-submit-btn-text: var(--primary-foreground);
+  --theme-submit-btn-bg: var(--default-theme-submit-btn-bg);
+  --theme-submit-btn-text: var(--default-theme-submit-btn-text);
+  --spring-fast: linear(
+    0,
+    0.01942 1.83%,
+    0.07956 4.02%,
+    0.47488 13.851%,
+    0.65981 19.572%,
+    0.79653 25.733%,
+    0.84834 29.083%,
+    0.89048 32.693%,
+    0.9246 36.734%,
+    0.95081 41.254%,
+    0.97012 46.425%,
+    0.98361 52.535%,
+    0.99665 68.277%,
+    0.99988
+  );
   --sharp-edge-top-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
   --sharp-edge-top-shadow-placeholder: 0 1px 0 transparent;
   --sharp-edge-bottom-shadow: 0 -1px 0 rgba(0, 0, 0, 0.05);
@@ -627,7 +696,15 @@
   --overlay-scrim-tablet: oklch(0.92 0.004 286 / 0.5);
 }
 
+@media (pointer: coarse) {
+  :root {
+    --header-height: calc(14 * var(--spacing));
+  }
+}
+
 .dark {
+  --scrollbar-color: #ffffff1a;
+  --scrollbar-color-hover: #fff3;
   --background: oklch(0 0 0);
   --foreground: oklch(1 0 0);
   --card: oklch(0.248 0 0);
@@ -666,7 +743,9 @@
   --text-primary: var(--foreground);
   --text-secondary: oklch(0.848 0 0);
   --text-tertiary: oklch(0.754 0 0);
+  --text-quaternary: rgba(255, 255, 255, 0.412);
   --text-disabled: oklch(1 0 0 / 0.412);
+  --main-surface-secondary: var(--composer-surface-primary);
   --row-hover-surface: oklch(0.2 0 0);
   --link: oklch(0.767 0.122 253.354);
   --link-hover: var(--link);
@@ -766,7 +845,8 @@
     rgba(0, 0, 0, 0.12) 0px 52px 73.54px -3px;
 
   /* Composer surface */
-  --composer-bg: oklch(0.248 0 0);
+  --composer-surface-primary: oklch(0.248 0 0);
+  --composer-bg: var(--composer-surface-primary);
   --sharp-edge-top-shadow: 0 1px 0 rgba(255, 255, 255, 0.05);
   --sharp-edge-top-shadow-placeholder: 0 1px 0 transparent;
   --sharp-edge-bottom-shadow: 0 -1px 0 rgba(255, 255, 255, 0.05);
@@ -805,9 +885,330 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  [data-scrollable-surface] {
+    scrollbar-color: var(--scrollbar-color) transparent;
+    scrollbar-width: thin;
+  }
+
+  @media (hover: hover) {
+    [data-scrollable-surface]:hover {
+      scrollbar-color: var(--scrollbar-color-hover) transparent;
+    }
+  }
+}
+
+@layer components {
+  /* Native scroll-state queries own edge presentation; inherited variables
+     below are populated only by the unsupported-browser fallback. */
+  .scroll-state-scrollport {
+    container-type: scroll-state;
+  }
+
+  .scroll-state-shadow-top {
+    box-shadow: var(
+      --scroll-state-top-shadow,
+      var(--sharp-edge-top-shadow-placeholder)
+    );
+  }
+
+  .scroll-state-shadow-bottom {
+    box-shadow: var(
+      --scroll-state-bottom-shadow,
+      var(--sharp-edge-bottom-shadow-placeholder)
+    );
+  }
+
+  .scroll-state-opacity-top {
+    opacity: var(--scroll-state-top-opacity, 0);
+  }
+
+  .scroll-state-opacity-bottom {
+    opacity: var(--scroll-state-bottom-opacity, 0);
+  }
+
+  @supports (container-type: scroll-state) {
+    @container scroll-state(scrollable: top) {
+      .scroll-state-shadow-top {
+        box-shadow: var(--sharp-edge-top-shadow);
+      }
+
+      .scroll-state-opacity-top {
+        opacity: 1;
+      }
+    }
+
+    @container scroll-state(scrollable: bottom) {
+      .scroll-state-shadow-bottom {
+        box-shadow: var(--sharp-edge-bottom-shadow);
+      }
+
+      .scroll-state-opacity-bottom {
+        opacity: 1;
+      }
+    }
+  }
+
+  .selection-action-anchor {
+    inline-size: var(--targeted-action-anchor-inline-size);
+    block-size: var(--targeted-action-anchor-block-size);
+    inset-block-start: var(--targeted-action-anchor-block-start);
+    inset-inline-start: var(--targeted-action-anchor-inline-start);
+    pointer-events: none;
+    position: absolute;
+    user-select: none;
+    anchor-name: --targeted-action-selection;
+  }
+
+  .selection-action-positioner {
+    inset-block-start: var(--targeted-action-anchor-block-start);
+    inset-inline-start: calc(
+      var(--targeted-action-anchor-inline-start) +
+        var(--targeted-action-anchor-inline-size) / 2
+    );
+    position: absolute;
+    transform: translate(-50%, calc(-100% - 0.5rem));
+  }
+
+  @supports (position-anchor: --targeted-action-selection) {
+    .selection-action-positioner {
+      inset: auto;
+      margin-block-end: 0.5rem;
+      position-anchor: --targeted-action-selection;
+      position-area: block-start center;
+      position: fixed;
+      position-try-fallbacks: flip-block;
+      transform: none;
+    }
+  }
+
+  @property --top-fade {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0;
+  }
+
+  @property --bottom-fade {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0;
+  }
+
+  @keyframes edge-fade {
+    0% {
+      --top-fade: 0;
+    }
+    3%,
+    100% {
+      --top-fade: var(--edge-fade-distance, 0.5lh);
+    }
+    0%,
+    97% {
+      --bottom-fade: var(--edge-fade-distance, 0.5lh);
+    }
+    100% {
+      --bottom-fade: 0;
+    }
+  }
+
+  @supports (scroll-timeline: --scroll-fade) {
+    .vertical-scroll-fade-mask {
+      mask: linear-gradient(
+        to bottom in oklch,
+        rgb(128 128 128 / 0%),
+        rgb(206 206 206) var(--top-fade) calc(100% - var(--bottom-fade)),
+        rgb(128 128 128 / 0%)
+      );
+      scroll-timeline: --scroll-fade y;
+      animation-name: edge-fade;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: --scroll-fade;
+    }
+
+    @supports (color: lab(0% 0 0)) {
+      .vertical-scroll-fade-mask {
+        mask: linear-gradient(
+          to bottom in oklch,
+          lab(53.6% 0 0 / 0),
+          lab(82.6% 0.0000298023 -0.0000119209) var(--top-fade)
+            calc(100% - var(--bottom-fade)),
+          lab(53.6% 0 0 / 0)
+        );
+      }
+    }
+  }
+
+  /* Source parity: keep visually hidden semantic text and KaTeX's hidden
+     MathML out of layout/paint work while retaining accessibility semantics. */
+  .sr-only,
+  .katex .katex-mathml {
+    contain: strict;
+    content-visibility: auto;
+    contain-intrinsic-size: 1px;
+  }
+
+  .safari-katex-mathml .katex .katex-mathml {
+    contain: none;
+    content-visibility: visible;
+  }
+
+  /* The persistent dock slot already owns open state. The shell derives the
+     scroll presentation from it instead of copying state onto an ancestor. */
+  .side-pane-shell-host:has(> [data-slot="activity-panel-dock"][data-expanded])
+    [data-scroll-root] {
+    scrollbar-width: none;
+  }
+
+  .side-pane-shell-host:has(> [data-slot="activity-panel-dock"][data-expanded])
+    [data-scroll-root]::-webkit-scrollbar {
+    display: none;
+  }
+
+  .composer-parent {
+    --composer-footer_height: var(--composer-bar_footer-current-height, 32px);
+    --composer-bar_height: var(--composer-bar_current-height, 52px);
+    --composer-bar_width: var(--composer-bar_current-width, 768px);
+    --mask-fill: linear-gradient(to bottom, white 0%, white 100%);
+    --mask-erase: linear-gradient(to bottom, black 0%, black 100%);
+  }
+}
+
+::view-transition,
+::view-transition-group(*),
+::view-transition-image-pair(*),
+::view-transition-old(*),
+::view-transition-new(*) {
+  pointer-events: none;
+}
+
+.composer-slide-transition {
+  --vt-composer: composer;
+}
+
+.composer-slide-transition::view-transition-old(composer),
+.composer-slide-transition::view-transition-group(composer) {
+  animation-duration: 0.5s;
+  animation-timing-function: var(--spring-fast);
+}
+
+/* Composer-part identities stay dormant until a surface transition explicitly
+   activates them. Ordinary sends continue to use the stable live DOM. */
+.composer-parts-transition {
+  --vt-composer: none;
+  --vt-composer-surface: composer-surface;
+  --vt-composer-leading: composer-leading;
+  --vt-composer-placeholder: composer-placeholder;
+  --vt-composer-trailing: composer-trailing;
+}
+
+.composer-parts-transition [data-composer-surface="true"] {
+  view-transition-group: contain;
+  view-transition-name: var(--vt-composer-surface);
+}
+
+.composer-parts-transition [data-composer-transition-slot="leading"] {
+  view-transition-name: var(--vt-composer-leading);
+}
+
+.composer-parts-transition .wcDTda_prosemirror-parent p.placeholder {
+  width: fit-content;
+  view-transition-name: var(--vt-composer-placeholder);
+}
+
+.composer-parts-transition [data-composer-transition-slot="trailing"] {
+  view-transition-name: var(--vt-composer-trailing);
+}
+
+.composer-parts-transition::view-transition-group(composer-surface) {
+  z-index: 999;
+  mix-blend-mode: normal;
+  transform-origin: center bottom;
+  animation-duration: 0.22s;
+  animation-timing-function: ease;
+}
+
+.composer-parts-transition::view-transition-group(composer-leading),
+.composer-parts-transition::view-transition-group(composer-placeholder),
+.composer-parts-transition::view-transition-group(composer-trailing) {
+  z-index: 1000;
+  mix-blend-mode: normal;
+  transform-origin: center bottom;
+  animation-duration: 0.22s;
+  animation-timing-function: ease;
+}
+
+/* Reserved for the pinned-widget surface: ChatGPT activates both stable
+   identities only for that transition, not for ordinary chat sends. */
+.pinned-widget-transition {
+  --vt-composer: composer;
+  --vt-disclaimer: disclaimer;
+}
+
+.pinned-widget-transition::view-transition-old(composer),
+.pinned-widget-transition::view-transition-group(composer),
+.pinned-widget-transition::view-transition-old(disclaimer),
+.pinned-widget-transition::view-transition-group(disclaimer) {
+  z-index: 999;
 }
 
 @layer utilities {
+  .loading-shimmer-tertiary {
+    --shimmer-contrast: rgb(255 255 255 / 75%);
+    --shimmer-text-secondary: var(--text-tertiary);
+    background: var(--shimmer-text-secondary)
+      linear-gradient(
+        to right,
+        var(--shimmer-text-secondary) 0%,
+        var(--shimmer-contrast) 40%,
+        var(--shimmer-contrast) 60%,
+        var(--shimmer-text-secondary) 100%
+      );
+    background-position: -100% 0;
+    background-repeat: no-repeat;
+    background-size: 50% 200%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation-name: loading-shimmer;
+    animation-duration: 1400ms;
+    animation-iteration-count: infinite;
+    animation-delay: 0s;
+    display: inline-block;
+  }
+
+  .dark .loading-shimmer-tertiary {
+    --shimmer-contrast: rgb(0 0 0 / 60%);
+  }
+
+  [dir="rtl"] .loading-shimmer-tertiary {
+    background-image: linear-gradient(
+      to left,
+      var(--shimmer-text-secondary) 0%,
+      var(--shimmer-contrast) 40%,
+      var(--shimmer-contrast) 60%,
+      var(--shimmer-text-secondary) 100%
+    );
+    background-position: 200% 0;
+    animation-name: loading-shimmer-rtl;
+  }
+
+  .streaming-animation {
+    animation: assistant-response-content-enter 180ms ease-out both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .loading-shimmer-tertiary {
+      background: none;
+      -webkit-text-fill-color: currentColor;
+      animation: none;
+    }
+
+    .streaming-animation {
+      animation: none;
+    }
+  }
+
   .menu-item-hoverable {
     border-block: 1px solid transparent;
     background-clip: padding-box;
@@ -1119,8 +1520,6 @@
 
   /* Extends invisible hit target without changing the 36px visible composer control. */
   .composer-btn {
-    position: relative;
-    z-index: 0;
     --tap-padding: var(--tap-padding-mobile);
   }
 
@@ -1141,6 +1540,96 @@
     min-width: var(--tap-padding);
     min-height: var(--tap-padding);
     transform: translate(-50%, -50%);
+  }
+
+  /* Unified composer editor metrics shared by the visible and fallback fields. */
+  .wcDTda_fallbackTextarea,
+  .wcDTda_prosemirror-parent .ProseMirror {
+    margin-top: calc(var(--spacing, 0.25rem) * 4);
+    margin-bottom: 0;
+    padding: 0 0 calc(var(--spacing, 0.25rem) * 4);
+    overflow-wrap: break-word;
+    font-size: var(--text-body-regular, 1rem);
+    line-height: var(--text-body-regular--line-height, 1.625rem);
+    font-weight: var(--text-body-regular--font-weight, 400);
+    font-variation-settings: "opsz" var(--text-body-regular--optical-size, 16);
+    font-variant-ligatures: none;
+    font-feature-settings: "liga" 0;
+    white-space: break-spaces;
+    transform: translateY(-0.5px);
+  }
+
+  .composer-prosemirror > p {
+    min-height: 26px;
+    margin: 0;
+  }
+
+  .wcDTda_prosemirror-parent.default-browser .placeholder::after {
+    position: relative;
+    color: var(--text-tertiary);
+    content: attr(data-placeholder);
+    padding-left: 1px;
+    cursor: text;
+    pointer-events: none;
+  }
+
+  .wcDTda_prosemirror-parent.default-browser
+    .placeholder
+    .ProseMirror-trailingBreak {
+    display: none !important;
+  }
+
+  .wcDTda_prosemirror-parent p.placeholder {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ChatGPT swaps to an absolute ::before placeholder in Firefox. A feature
+     query keeps that browser contract without UA-derived render state. */
+  @supports (-moz-appearance: none) {
+    .wcDTda_prosemirror-parent.default-browser .placeholder::after {
+      content: none;
+    }
+
+    .wcDTda_prosemirror-parent.default-browser .placeholder::before {
+      position: absolute;
+      color: var(--text-tertiary);
+      content: attr(data-placeholder);
+      padding-left: 1px;
+      cursor: text;
+      pointer-events: none;
+    }
+  }
+
+  .composer-submit-button-color {
+    color: var(--theme-submit-btn-text);
+    background-color: var(--theme-submit-btn-bg);
+  }
+
+  @media (hover: hover) {
+    .composer-submit-btn.composer-submit-button-color:not(
+        :disabled,
+        [data-visually-disabled]
+      ):hover {
+      background-color: var(--theme-submit-btn-bg);
+    }
+  }
+
+  .composer-submit-btn:disabled,
+  .composer-submit-btn[data-visually-disabled] {
+    color: rgb(244, 244, 244);
+    opacity: 0.35;
+  }
+
+  .composer-submit-btn[data-visually-disabled]:hover {
+    opacity: 0.35;
+  }
+
+  .dark .composer-submit-btn:disabled,
+  .dark .composer-submit-btn[data-visually-disabled] {
+    color: var(--main-surface-secondary);
+    background-color: var(--text-quaternary);
   }
 
   .shadow-short-composer,
@@ -1537,9 +2026,7 @@ code {
   width: 100%;
 }
 
-
 @media (prefers-reduced-motion: no-preference) {
-
   ::highlight(naw-stream-decay-0) {
     color: color-mix(in oklab, var(--foreground) 4%, transparent);
   }

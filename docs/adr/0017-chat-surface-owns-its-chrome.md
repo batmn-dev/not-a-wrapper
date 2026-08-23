@@ -70,3 +70,14 @@ Rules:
   first turn (rejected — the shallow handoff is load-bearing for stream,
   optimistic-row, and composer continuity); pathname conditionals in LayoutApp
   (rejected — the slot exists to avoid exactly that).
+
+## 2026-08-23 rendering addendum
+
+The ownership and DOM-position decision above is unchanged. The live ChatGPT
+header contract has since been reverified as a transparent, shadowless sticky
+header whose fixed mode follows the resolved surface: home onboarding uses
+`data-fixed-header="always"`, while threads use `data-fixed-header="never"`.
+`ScrollRoot` therefore reserves the header height on onboarding and zeroes
+sticky top padding for threads without subscribing to scroll position. Future
+fixed-header variants remain valid extension points, and the active header does
+not copy scroll state into React or need an effect-driven shadow.

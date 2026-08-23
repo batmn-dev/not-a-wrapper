@@ -30,12 +30,13 @@ vi.mock("./message-assistant", () => ({
     copyToClipboard?: () => void
     onReload?: (messageId: string) => void
     retryModelId?: string
+    retryDisabled?: boolean
   }) => {
     messageAssistantSpy()
     lastAssistantProps.current = props
     const { children, messageId, onReload } = props
     return (
-      <div>
+      <div data-testid="assistant-shell">
         <div>{children}</div>
         <button
           data-copied={Boolean(props.copied)}
@@ -47,7 +48,9 @@ vi.mock("./message-assistant", () => ({
         </button>
         <button
           data-can-reload={Boolean(onReload)}
+          data-retry-disabled={Boolean(props.retryDisabled)}
           data-testid="reload"
+          disabled={props.retryDisabled}
           type="button"
           onClick={() => onReload?.(messageId)}
         >
@@ -89,11 +92,15 @@ describe("Message memoization", () => {
   })
 
   function renderMessage({
+    id = "assistant-1",
     onReload,
     retryModelId,
+    retryDisabled,
   }: {
+    id?: string
     onReload?: (messageId: string) => void
     retryModelId?: string
+    retryDisabled?: boolean
   } = {}) {
     if (!container) {
       container = document.createElement("div")
@@ -105,11 +112,12 @@ describe("Message memoization", () => {
       root?.render(
         <Message
           model={{
-            id: "assistant-1",
+            id,
             kind: "assistant",
             text: "Approve this tool",
             view: EMPTY_VIEW,
             retryModelId,
+            retryDisabled,
           }}
           onEdit={() => {}}
           onReload={onReload}
@@ -158,6 +166,37 @@ describe("Message memoization", () => {
     renderMessage({ retryModelId: "gpt-5.5" })
 
     expect(lastAssistantProps.current.retryModelId).toBe("gpt-5.5")
+  })
+
+  it("updates assistant retry interactivity when only its disabled state changes", () => {
+    const onReload = vi.fn()
+
+    renderMessage({ onReload, retryDisabled: true })
+
+    const retry = container?.querySelector(
+      '[data-testid="reload"]'
+    ) as HTMLButtonElement | null
+    expect(retry?.dataset.canReload).toBe("true")
+    expect(retry?.dataset.retryDisabled).toBe("true")
+    expect(retry?.disabled).toBe(true)
+
+    renderMessage({ onReload, retryDisabled: false })
+
+    expect(retry?.dataset.retryDisabled).toBe("false")
+    expect(retry?.disabled).toBe(false)
+  })
+
+  it("preserves the assistant shell when the pending id adopts the streamed id", () => {
+    renderMessage({ id: "__pending_activity_turn__" })
+    const pendingShell = container?.querySelector(
+      '[data-testid="assistant-shell"]'
+    )
+
+    renderMessage({ id: "assistant-1" })
+
+    expect(
+      container?.querySelector('[data-testid="assistant-shell"]')
+    ).toBe(pendingShell)
   })
 })
 

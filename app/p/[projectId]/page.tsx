@@ -70,7 +70,10 @@ export default async function Page({ params }: Props) {
       {/* initialAppHeader={false}: /p/ always mounts as project onboarding,
           which owns its chrome (no app header). Chat publishes the flip to
           the shell's pre-<main> header slot after a first send (ADR-0017). */}
-      <ChatChromeProvider initialAppHeader={false}>
+      <ChatChromeProvider
+        initialAppHeader={false}
+        initialFixedHeader="always"
+      >
         <LayoutApp header={<ChatChromeHeader />}>
           {/* The project surface IS the Chat surface: the first turn allocates
             its chat (with projectId) inside the accepted turn and hands off

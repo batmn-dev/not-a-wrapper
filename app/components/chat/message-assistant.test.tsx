@@ -238,7 +238,149 @@ describe("MessageAssistant activity trigger", () => {
     expect(container?.textContent).toContain("Thinking")
     expect(container?.textContent).not.toContain("Generating")
     expect(container?.querySelector("button[aria-expanded]")).toBeNull()
-    expect(container?.querySelector(".text-message")).toBeNull()
+    const messageSlot = container?.querySelector(".text-message")
+    expect(messageSlot).toBeTruthy()
+    expect(messageSlot?.querySelector('[aria-busy="true"]')?.textContent).toBe(
+      "Thinking"
+    )
+    expect(
+      messageSlot?.querySelector(".loading-shimmer-tertiary")?.tagName
+    ).toBe("DIV")
+  })
+
+  it("replaces bare Thinking in the same message slot and settles the response presentation", async () => {
+    const store = makeStore({ panelTurnId: "pending-assistant" })
+
+    act(() => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="pending-assistant"
+            view={makeView([], "submitted")}
+            status="submitted"
+            isLast
+          >
+            {""}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    const messageSlot = container?.querySelector(".text-message")
+    expect(messageSlot?.querySelector('[aria-busy="true"]')).toBeTruthy()
+
+    await act(async () => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView(
+              [{ type: "text", text: "Hello from the assistant" }],
+              "streaming"
+            )}
+            status="streaming"
+            isLast
+          >
+            {"Hello from the assistant"}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+      await Promise.resolve()
+    })
+
+    const streamingMessageSlot = container?.querySelector(".text-message")
+    expect(streamingMessageSlot).toBe(messageSlot)
+    expect(streamingMessageSlot?.querySelector('[aria-busy="true"]')).toBeNull()
+    expect(
+      streamingMessageSlot?.querySelector(".streaming-animation")?.textContent
+    ).toContain("Hello from the assistant")
+
+    await act(async () => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView(
+              [{ type: "text", text: "Hello from the assistant" }],
+              "ready"
+            )}
+            status="ready"
+            isLast
+          >
+            {"Hello from the assistant"}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+      await Promise.resolve()
+    })
+
+    expect(container?.querySelector(".streaming-animation")).toBeNull()
+  })
+
+  it("keeps one 32px activity slot from bare Thinking into its disclosure", () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+
+    act(() => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView([], "submitted")}
+            status="submitted"
+            isLast
+          >
+            {""}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    const turn = container?.querySelector('[data-turn-phase="submitted"]')
+    const initialSlot = container?.querySelector(
+      '[data-slot="assistant-activity"]'
+    )
+    expect(initialSlot?.className).toContain("min-h-8")
+    expect(initialSlot?.getAttribute("data-activity-presentation")).toBe(
+      "live-status"
+    )
+
+    act(() => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView(
+              [
+                {
+                  type: "reasoning",
+                  text: "Visible reasoning",
+                  state: "streaming",
+                },
+              ] as unknown as UIMessage["parts"],
+              "streaming"
+            )}
+            status="streaming"
+            isLast
+          >
+            {""}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    const disclosureSlot = container?.querySelector(
+      '[data-slot="assistant-activity"]'
+    )
+    expect(container?.querySelector('[data-turn-phase="thinking"]')).toBe(turn)
+    expect(disclosureSlot?.className).toContain("min-h-8")
+    expect(disclosureSlot?.getAttribute("data-activity-presentation")).toBe(
+      "disclosure"
+    )
+    expect(
+      disclosureSlot?.querySelector(
+        'button[aria-label="Open activity: Thinking"]'
+      )
+    ).toBeTruthy()
   })
 
   it("shows only passive Thinking while opaque reasoning streams", () => {
@@ -541,7 +683,7 @@ describe("MessageAssistant activity trigger", () => {
 
     // Settled turn without sources: actions row renders, badge does not.
     expect(
-      container?.querySelector('button[aria-label="Copy Response"]')
+      container?.querySelector('button[aria-label="Copy response"]')
     ).toBeTruthy()
     expect(container?.querySelector('button[aria-label="Sources"]')).toBeNull()
 
@@ -573,6 +715,16 @@ describe("MessageAssistant activity trigger", () => {
 
   it("offers Copy Response only when the text is not still active or paused", async () => {
     const store = makeStore({ panelTurnId: "assistant-1" })
+    const hasFooterSlot = () => {
+      const assistant = container?.querySelector(
+        '[data-message-author-role="assistant"]'
+      )
+      return Boolean(
+        assistant
+          ?.closest("[data-turn-phase]")
+          ?.querySelector(".min-h-\\[46px\\]")
+      )
+    }
     const renderStatus = async (
       status:
         | "submitted"
@@ -611,16 +763,77 @@ describe("MessageAssistant activity trigger", () => {
     ] as const) {
       await renderStatus(status)
       expect(
-        container?.querySelector('button[aria-label="Copy Response"]')
+        container?.querySelector('button[aria-label="Copy response"]')
       ).toBeNull()
+      expect(hasFooterSlot()).toBe(false)
     }
 
     for (const status of ["ready", "aborted", "failed"] as const) {
       await renderStatus(status)
       expect(
-        container?.querySelector('button[aria-label="Copy Response"]')
+        container?.querySelector('button[aria-label="Copy response"]')
       ).toBeTruthy()
+      expect(hasFooterSlot()).toBe(true)
     }
+  })
+
+  it("matches reference heading, focus, and response-action semantics", () => {
+    const store = makeStore({ panelTurnId: "assistant-current" })
+
+    act(() => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-historical"
+            copied={false}
+            copyToClipboard={() => {}}
+            view={makeView(
+              [{ type: "text", text: "Historical answer" }],
+              "ready"
+            )}
+            status="ready"
+          >
+            {"Historical answer"}
+          </MessageAssistant>
+          <MessageAssistant
+            messageId="assistant-current"
+            copied={false}
+            copyToClipboard={() => {}}
+            isLast
+            view={makeView([{ type: "text", text: "Current answer" }], "ready")}
+            status="ready"
+          >
+            {"Current answer"}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    const assistants = Array.from(
+      container?.querySelectorAll<HTMLElement>(
+        '[data-message-author-role="assistant"]'
+      ) ?? []
+    )
+    const actionGroups = Array.from(
+      container?.querySelectorAll<HTMLElement>(
+        '[role="group"][aria-label="Response actions"]'
+      ) ?? []
+    )
+
+    expect(assistants).toHaveLength(2)
+    expect(assistants[0]?.getAttribute("tabindex")).toBeNull()
+    expect(assistants[1]?.getAttribute("tabindex")).toBe("0")
+    expect(
+      assistants.every(
+        (assistant) =>
+          assistant.closest("[data-turn-phase]")?.querySelector("h4")
+            ?.textContent === "ChatGPT said:"
+      )
+    ).toBe(true)
+    expect(actionGroups).toHaveLength(2)
+    expect(
+      actionGroups.every((group) => group.getAttribute("tabindex") === "-1")
+    ).toBe(true)
   })
 
   it("renders a durable output-length warning on a settled row", async () => {
@@ -682,6 +895,49 @@ describe("MessageAssistant activity trigger", () => {
 
     expect(document.body.textContent).toContain("Try again...")
     expect(document.body.textContent).toContain("Using GPT-5.5")
+  })
+
+  it("keeps retry visible with an explanation while another response is active", async () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+    const onReload = vi.fn()
+
+    await act(async () => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            isDurableChat
+            onReload={onReload}
+            retryDisabled
+            retryModelId="gpt-5.5"
+            view={makeView([], "ready")}
+            status="ready"
+          >
+            {"Assistant answer"}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    const retry = container?.querySelector(
+      'button[aria-label="Try again with GPT-5.5"]'
+    ) as HTMLButtonElement | null
+
+    expect(retry).toBeTruthy()
+    expect(retry?.getAttribute("aria-disabled")).toBe("true")
+
+    act(() => {
+      retry?.click()
+    })
+    expect(onReload).not.toHaveBeenCalled()
+
+    await act(async () => {
+      retry?.focus()
+      await Promise.resolve()
+    })
+    expect(document.body.textContent).toContain(
+      "Wait for the current response to finish."
+    )
   })
 
   it("renders full canonical text on non-last and settled rows", async () => {

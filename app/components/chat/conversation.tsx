@@ -13,7 +13,7 @@ import type { TurnRowModel } from "@/lib/chat-messages/turn-row"
 import type { EditTurnResult } from "@/lib/chat-turn/chat-turn-controller"
 import { cn } from "@/lib/utils"
 import { UIMessage as MessageType } from "@ai-sdk/react"
-import type { ReactNode } from "react"
+import { Fragment, type ReactNode } from "react"
 import {
   ConversationTimestamp,
   deriveConversationTimestampHeaders,
@@ -28,6 +28,7 @@ import { ThreadScrollEdge } from "./thread-scroll"
 import {
   isGenerationActive,
   PENDING_ACTIVITY_TURN_ID,
+  shouldRenderPendingAssistantTurn,
 } from "./use-activity-panel"
 
 type MessageRenderStatus = DurableMessageStatus | "ready" | "error"
@@ -63,21 +64,17 @@ function getMessageAttachments(
 }
 
 /**
- * TurnRow — the shared turn wrapper for both the mapped message rows and the
- * pending-assistant placeholder: the thread-gutter container (`as` = article or
- * div) around the byte-identical `group/turn-messages` max-width column. The
- * outer `className` is composed per-branch (the two intentionally differ) and
- * applied verbatim; the inner column is owned here.
+ * TurnRow — the stable section wrapper shared by mapped messages and the
+ * pending-assistant placeholder. Pending and real assistant content reconcile
+ * through this same DOM node; only its data identity and contents update.
  */
 function TurnRow({
-  as: As = "article",
   className,
   dataTurn,
   dataTurnId,
   dataTestId,
   children,
 }: {
-  as?: "article" | "div"
   className: string
   dataTurn: string
   dataTurnId?: string
@@ -85,19 +82,48 @@ function TurnRow({
   children: ReactNode
 }) {
   return (
-    <As
+    <section
       className={className}
+      data-turn-id-container={dataTurnId}
       data-turn={dataTurn}
       data-turn-id={dataTurnId}
       data-testid={dataTestId}
+      dir="auto"
     >
       <div
         className={`group/turn-messages relative mx-auto flex w-full max-w-[var(--thread-content-max-width,40rem)] min-w-0 flex-1 flex-col ${THREAD_MAXWIDTH_VARS}`}
       >
         {children}
       </div>
-    </As>
+    </section>
   )
+}
+
+type ConversationRenderRow =
+  | {
+      kind: "message"
+      key: string
+      message: ConversationMessage
+      index: number
+    }
+  | { kind: "pending"; key: string; index: number }
+
+function assistantTurnRowKey(userMessageId: string): string {
+  return `assistant-turn:${userMessageId}`
+}
+
+function messageTurnRowKey(
+  messages: ConversationMessage[],
+  index: number
+): string {
+  const message = messages[index]
+  const previousMessage = messages[index - 1]
+
+  if (message.role === "assistant" && previousMessage?.role === "user") {
+    return assistantTurnRowKey(previousMessage.id)
+  }
+
+  return `message:${message.id}`
 }
 
 type ConversationProps = {
@@ -152,8 +178,18 @@ export function Conversation({
   const generationActive = isGenerationActive(status, isSubmitting)
   const lastMessage = messages[messages.length - 1]
   const previousMessage = messages[messages.length - 2]
-  const hasPendingAssistantTurn =
-    generationActive && lastMessage?.role === "user"
+  const hasPendingAssistantTurn = shouldRenderPendingAssistantTurn({
+    messages,
+    status,
+    isSubmitting,
+  })
+  // Persistence can insert the real assistant shell before its first stream
+  // part. Keep that empty shell out of the rendered path so the pending row
+  // remains the single 32px owner until content can replace it atomically.
+  const renderedMessages =
+    hasPendingAssistantTurn && lastMessage?.role === "assistant"
+      ? messages.slice(0, -1)
+      : messages
   // Pin the active user turn as soon as its optimistic row is rendered. The
   // pending assistant row and response gutter already exist at that point, so
   // scrollIntoView can reserve the response area before first text arrives.
@@ -161,29 +197,91 @@ export function Conversation({
   // ThreadScrollEdge deduplicates the pin for the rest of the active turn.
   // Branch switches and load hydration never satisfy this (no active turn), so
   // they never scroll.
-  const pinTurnId =
-    !generationActive
-      ? null
-      : lastMessage?.role === "user"
-        ? lastMessage.id
-        : lastMessage?.role === "assistant" &&
-            previousMessage?.role === "user"
-          ? previousMessage.id
-          : null
-  const timestampHeaders = deriveConversationTimestampHeaders(messages, now)
+  const pinTurnId = !generationActive
+    ? null
+    : lastMessage?.role === "user"
+      ? lastMessage.id
+      : lastMessage?.role === "assistant" && previousMessage?.role === "user"
+        ? previousMessage.id
+        : null
+  const timestampHeaders = deriveConversationTimestampHeaders(
+    renderedMessages,
+    now
+  )
+  const renderRows: ConversationRenderRow[] = renderedMessages.map(
+    (message, index) => ({
+      kind: "message",
+      key: messageTurnRowKey(renderedMessages, index),
+      message,
+      index,
+    })
+  )
+
+  if (hasPendingAssistantTurn) {
+    const activeUserMessage =
+      lastMessage?.role === "user"
+        ? lastMessage
+        : lastMessage?.role === "assistant" && previousMessage?.role === "user"
+          ? previousMessage
+          : undefined
+
+    renderRows.push({
+      kind: "pending",
+      key: assistantTurnRowKey(
+        activeUserMessage?.id ?? PENDING_ACTIVITY_TURN_ID
+      ),
+      index: renderedMessages.length,
+    })
+  }
 
   return (
     <div className="relative -mb-(--composer-overlap-px) flex w-full grow basis-auto flex-col pb-(--composer-overlap-px) [--composer-overlap-px:28px]">
       <div className="flex w-full flex-col text-sm">
-        {messages?.map((message, index) => {
+        {renderRows.map((row) => {
+          if (row.kind === "pending") {
+            return (
+              <Fragment key={row.key}>
+                <TurnRow
+                  key="turn"
+                  className={cn(
+                    `mx-auto w-full scroll-mt-[calc(var(--header-height)+min(200px,max(70px,20svh)))] px-[var(--thread-content-margin,1rem)] pb-8 text-base ${THREAD_GUTTER_VARS}`,
+                    TURN_SCROLL_MARGIN_BOTTOM,
+                    row.index === 0 && "pt-3"
+                  )}
+                  dataTurn="assistant"
+                  dataTurnId={PENDING_ACTIVITY_TURN_ID}
+                  dataTestId={`conversation-turn-${row.index + 1}`}
+                >
+                  <Message
+                    model={{
+                      kind: "assistant",
+                      id: PENDING_ACTIVITY_TURN_ID,
+                      text: "",
+                      isLast: true,
+                      view: PENDING_TURN_VIEW,
+                      retryModelId,
+                      status: "submitted",
+                      isDurableChat,
+                    }}
+                    onEdit={onEdit}
+                    onReload={undefined}
+                    onSelectBranch={onSelectBranch}
+                    onQuote={onQuote}
+                  />
+                </TurnRow>
+              </Fragment>
+            )
+          }
+
+          const { message, index } = row
           const isLast =
-            index === messages.length - 1 &&
+            index === renderedMessages.length - 1 &&
             !hasPendingAssistantTurn &&
             status !== "submitted"
-          // The reference reserves the 40px turn tail on the LAST turn only; settled
+          // The reference reserves the 32px turn tail on the LAST turn only; settled
           // older turns end at their action row (verified live 2026-07-11).
           const isLastTurnRow =
-            index === messages.length - 1 && !hasPendingAssistantTurn
+            index === renderedMessages.length - 1 && !hasPendingAssistantTurn
           const isAssistant = message.role === "assistant"
           const isUser = message.role === "user"
 
@@ -192,7 +290,10 @@ export function Conversation({
           // the response's regenerate branch. Assistant messages never render the
           // control; selecting a response sibling still works because the branch
           // descriptor carries the assistant sibling ids.
-          const turnBranch = resolveTurnBranch(message, messages[index + 1])
+          const turnBranch = resolveTurnBranch(
+            message,
+            renderedMessages[index + 1]
+          )
           const durableStatus = (message as { status?: string }).status
           // Durable status wins only when it asserts a settled/paused OUTCOME
           // (aborted/failed/awaiting_approval). Durable LIVE statuses
@@ -230,6 +331,7 @@ export function Conversation({
               view,
               isLast,
               retryModelId,
+              retryDisabled: generationActive,
               status: messageStatus,
               isDurableChat,
               finishReason:
@@ -258,7 +360,7 @@ export function Conversation({
             <Message
               model={rowModel}
               onEdit={onEdit}
-              onReload={generationActive ? undefined : onReload}
+              onReload={onReload}
               onSelectBranch={onSelectBranch}
               onQuote={onQuote}
             />
@@ -267,15 +369,12 @@ export function Conversation({
           const timestampHeader = timestampHeaders[index]
 
           return (
-            <div
-              key={message.id}
-              className="w-full"
-              data-turn-id-container={message.id}
-            >
+            <Fragment key={row.key}>
               {timestampHeader && (
                 <ConversationTimestamp header={timestampHeader} now={now} />
               )}
               <TurnRow
+                key="turn"
                 className={cn(
                   `mx-auto w-full px-[var(--thread-content-margin,1rem)] text-base ${THREAD_GUTTER_VARS}`,
                   TURN_SCROLL_MARGIN_BOTTOM,
@@ -283,11 +382,11 @@ export function Conversation({
                     "scroll-mt-[var(--sticky-padding-top,var(--spacing-app-header))]",
                   isAssistant &&
                     "scroll-mt-[calc(var(--header-height)+min(200px,max(70px,20svh)))]",
-                  // Only the thread's FIRST turn is padded (pt-3); later
-                  // user turns get their spacing from the preceding action
-                  // row / timestamp (verified live 2026-07-11).
+                  // ChatGPT keeps the first turn 12px from the thread edge and
+                  // gives every later user prompt a 48px inter-turn lead-in.
                   index === 0 && "pt-3",
-                  isLastTurnRow && "pb-10"
+                  isUser && index > 0 && "pt-12",
+                  isLastTurnRow && "pb-8"
                 )}
                 dataTurn={message.role}
                 dataTurnId={message.id}
@@ -295,38 +394,9 @@ export function Conversation({
               >
                 {messageContent}
               </TurnRow>
-            </div>
+            </Fragment>
           )
         })}
-        {hasPendingAssistantTurn && (
-          <TurnRow
-            as="div"
-            className={cn(
-              `mx-auto w-full scroll-mt-[calc(var(--header-height)+min(200px,max(70px,20svh)))] px-[var(--thread-content-margin,1rem)] pb-10 text-base ${THREAD_GUTTER_VARS}`,
-              TURN_SCROLL_MARGIN_BOTTOM
-            )}
-            dataTurn="assistant"
-            dataTurnId={PENDING_ACTIVITY_TURN_ID}
-            dataTestId={`conversation-turn-${messages.length + 1}`}
-          >
-            <Message
-              model={{
-                kind: "assistant",
-                id: PENDING_ACTIVITY_TURN_ID,
-                text: "",
-                isLast: true,
-                view: PENDING_TURN_VIEW,
-                retryModelId,
-                status: "submitted",
-                isDurableChat,
-              }}
-              onEdit={onEdit}
-              onReload={undefined}
-              onSelectBranch={onSelectBranch}
-              onQuote={onQuote}
-            />
-          </TurnRow>
-        )}
         <ThreadScrollEdge
           chatId={chatId}
           streamActive={generationActive}

@@ -65,6 +65,7 @@ describe("turnRowModelsEqual", () => {
       status: "ready",
       isLast: true,
       retryModelId: "gpt-5.4",
+      retryDisabled: false,
       finishReason: "stop",
       view: deriveAssistantTurnView({ parts: [] }, "ready"),
     }
@@ -75,6 +76,7 @@ describe("turnRowModelsEqual", () => {
       { ...assistant, status: "error" as const },
       { ...assistant, isLast: false },
       { ...assistant, retryModelId: "claude-sonnet-4-6" },
+      { ...assistant, retryDisabled: true },
       { ...assistant, finishReason: "length" },
     ]) {
       expect(turnRowModelsEqual(assistant, changed)).toBe(false)

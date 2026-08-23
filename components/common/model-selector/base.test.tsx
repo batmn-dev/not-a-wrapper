@@ -302,6 +302,24 @@ describe("ModelSelector", () => {
     ).toBe(false)
   })
 
+  it("disables the composer tooltip while the model popover is open", () => {
+    renderSelector({ isUserAuthenticated: false, variant: "composer" })
+
+    const toggleModelPopover = useKeyShortcutMock.mock.calls.at(-1)?.[1] as
+      (() => void) | undefined
+    const tooltipTrigger = document.body.querySelector<HTMLElement>(
+      '[data-slot="tooltip-trigger"]'
+    )
+
+    expect(tooltipTrigger?.hasAttribute("data-trigger-disabled")).toBe(false)
+
+    act(() => {
+      toggleModelPopover?.()
+    })
+
+    expect(tooltipTrigger?.hasAttribute("data-trigger-disabled")).toBe(true)
+  })
+
   function getModelOption(name: string) {
     const option = Array.from(
       document.body.querySelectorAll<HTMLButtonElement>(
@@ -339,6 +357,9 @@ describe("ModelSelector", () => {
     expect(option.className).toContain("h-9")
     expect(option.className).toContain("rounded-lg")
     expect(option.className).not.toContain("mx-2.5")
+    expect(
+      document.body.querySelector("[data-scrollable-surface]")
+    ).not.toBeNull()
   })
 
   it("selects the anonymous model but opens auth for locked guest models", () => {
@@ -465,9 +486,9 @@ describe("ModelSelector", () => {
     )
     expect(trigger?.firstElementChild?.className).toContain("text-foreground")
     expect(trigger?.firstElementChild?.className).toContain("opacity-100")
-    expect(trigger?.className).toContain("pointer-fine:relative")
-    expect(trigger?.className).toContain("pointer-fine:after:absolute")
-    expect(trigger?.className).toContain("pointer-fine:after:-inset-x-1")
+    expect(trigger?.className).toContain("can-hover:relative")
+    expect(trigger?.className).toContain("can-hover:after:absolute")
+    expect(trigger?.className).toContain("can-hover:after:-inset-x-1")
     expect(trigger?.className).toContain("overflow-visible")
     expect(trigger?.className).toContain("px-3")
     expect(trigger?.className).not.toContain("overflow-hidden")
@@ -484,7 +505,7 @@ describe("ModelSelector", () => {
     )
 
     expect(trigger?.className).toContain("overflow-hidden")
-    expect(trigger?.className).not.toContain("pointer-fine:after:-inset-x-1")
+    expect(trigger?.className).not.toContain("can-hover:after:-inset-x-1")
   })
 
   it("disables the trigger and ignores option clicks when disabled", () => {

@@ -17,6 +17,8 @@ const GUTTER_THRESHOLDS = Array.from({ length: 101 }, (_, i) => i / 100)
 const PIN_RETRY_TIMEOUT_MS = 10_000
 /** Trailing-idle fallback for browsers without native `scrollend`. */
 const SCROLL_IDLE_FALLBACK_MS = 150
+/** Subpixel layout can leave a visually bottomed root within one CSS pixel. */
+const SCROLL_END_EPSILON_PX = 1
 
 function closestScrollRoot(el: Element | null): HTMLElement | null {
   return el?.closest<HTMLElement>("[data-scroll-root]") ?? null
@@ -24,6 +26,13 @@ function closestScrollRoot(el: Element | null): HTMLElement | null {
 
 function setScrollFromEnd(root: HTMLElement, scrolledFromEnd: boolean) {
   root.toggleAttribute("data-scroll-from-end", scrolledFromEnd)
+}
+
+function isAtScrollEnd(root: HTMLElement) {
+  return (
+    Math.abs(root.scrollHeight - root.scrollTop - root.clientHeight) <=
+    SCROLL_END_EPSILON_PX
+  )
 }
 
 function readPixelValue(value: string) {
@@ -208,10 +217,10 @@ export function ThreadScrollEdge({
     }
   }, [])
 
-  // (3) Stream lifecycle: `data-stream-active` on the root gives the gutter
-  // its reserved-space height class. Native scroll anchoring remains enabled;
-  // the one-shot pin owns submission, then browser anchoring and manual scroll
-  // ownership govern response growth and layout changes.
+  // (3) Stream lifecycle: `data-stream-active` gives descendants such as the
+  // gutter and scroll control their streaming presentation, and lets the root
+  // disable native scroll anchoring until the response settles. The one-shot
+  // submit pin remains the sole owner of live-turn placement.
   useBrowserLayoutEffect(() => {
     const rootEl = rootRef.current
     if (!rootEl) return
@@ -229,25 +238,31 @@ export function ThreadScrollEdge({
     }
   }, [])
 
-  // (4) Submit-time pinning through the rAF + retry pipeline.
-  useEffect(() => {
+  // (4) Submit-time pinning before paint, with a bounded mount retry. Waiting
+  // for another frame lets transient assistant DOM arrive before placement and
+  // produces a visible second jump; the optimistic turn is already committed
+  // when this layout lifecycle runs.
+  useBrowserLayoutEffect(() => {
     if (!pinTurnId) {
       pinnedTurnRef.current = null
       return
     }
     const rootEl = rootRef.current
     if (!rootEl || pinnedTurnRef.current === pinTurnId) return
-    let cancelRetry: (() => void) | null = null
-    const frame = requestAnimationFrame(() => {
+
+    // Optimistic insertion plus the response gutter normally places a send at
+    // the intended edge in the same commit. Capture that state immediately:
+    // streamed growth must not turn an already-correct placement into a second
+    // scroll.
+    if (isAtScrollEnd(rootEl)) {
       pinnedTurnRef.current = pinTurnId
-      if (!pinTurn(rootEl, pinTurnId)) {
-        cancelRetry = pinTurnWhenMounted(rootEl, pinTurnId)
-      }
-    })
-    return () => {
-      cancelAnimationFrame(frame)
-      cancelRetry?.()
+      setScrollFromEnd(rootEl, false)
+      return
     }
+
+    pinnedTurnRef.current = pinTurnId
+    if (pinTurn(rootEl, pinTurnId)) return
+    return pinTurnWhenMounted(rootEl, pinTurnId)
   }, [pinTurnId])
 
   // (5) Load restore — once per conversation, instant, before paint. A saved

@@ -22,7 +22,7 @@ export default function ChatLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <MessagesProvider>
-      <ChatChromeProvider initialAppHeader>
+      <ChatChromeProvider initialAppHeader initialFixedHeader="always">
         <LayoutApp header={<ChatChromeHeader />}>{children}</LayoutApp>
       </ChatChromeProvider>
     </MessagesProvider>

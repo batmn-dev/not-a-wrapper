@@ -186,6 +186,11 @@ export const designSystemComponents = [
     href: "/design-system/navigation-menu",
   },
   {
+    name: "Orb",
+    slug: "orb",
+    href: "/design-system/orb",
+  },
+  {
     name: "Pagination",
     slug: "pagination",
     href: "/design-system/pagination",

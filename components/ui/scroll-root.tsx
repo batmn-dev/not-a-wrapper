@@ -4,11 +4,11 @@
  * ScrollRoot — the single thread scroll container and owner of the
  * `group/scroll-root` contract.
  *
- * There is deliberately NO JS stick-to-bottom controller here. Native CSS
- * scroll anchoring (`overflow-anchor: auto`, the default) stays enabled through
- * submission, streaming, completion, branch switches, panel reflows and late
- * content. The thread controller performs one submit-time turn pin; after
- * that, browser anchoring and manual scroll ownership govern layout changes.
+ * There is deliberately NO JS stick-to-bottom controller here. The thread
+ * controller performs one submit-time turn pin. While the response is live,
+ * CSS disables native scroll anchoring so browser corrections cannot compete
+ * with that placement; outside streaming, native anchoring resumes for normal
+ * reflow and manual scroll ownership.
  *
  * The element owns the CSS variable system every scroll policy derives from:
  *
@@ -29,6 +29,8 @@
  * pure CSS group variants, without React state):
  *   data-stream-active     while a turn is in flight
  *   data-scroll-from-end   while the bottom sentinel is out of view
+ *   data-expanded-composer while the multiline composer owns the viewport
+ *   data-voice-focus-mode  reserved for the full-screen voice surface
  */
 import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { cn } from "@/lib/utils"
@@ -40,9 +42,12 @@ const MIN_VIRTUAL_KEYBOARD_HEIGHT = 80
 const SCREEN_KEYBOARD_HEIGHT_OVERRIDE_ATTRIBUTE =
   "data-screen-keyboard-height-override"
 
+type ScrollRootMode = "expanded-composer" | "voice-focus-mode"
+
 type ScrollRootContextValue = {
   scrollRef: React.RefObject<HTMLDivElement | null>
   scrollToBottom: (behavior?: ScrollBehavior) => void
+  setScrollRootMode: (mode: ScrollRootMode, active: boolean) => void
 }
 
 export const ScrollRootContext = createContext<ScrollRootContextValue | null>(
@@ -143,9 +148,16 @@ function ScrollRoot({ children, className, ...props }: ScrollRootProps) {
     el.scrollTo({ top: el.scrollHeight, behavior })
   }, [])
 
+  const setScrollRootMode = useCallback(
+    (mode: ScrollRootMode, active: boolean) => {
+      scrollRef.current?.toggleAttribute(`data-${mode}`, active)
+    },
+    []
+  )
+
   const contextValue = useMemo<ScrollRootContextValue>(
-    () => ({ scrollRef, scrollToBottom }),
-    [scrollToBottom]
+    () => ({ scrollRef, scrollToBottom, setScrollRootMode }),
+    [scrollToBottom, setScrollRootMode]
   )
 
   return (
@@ -153,13 +165,14 @@ function ScrollRoot({ children, className, ...props }: ScrollRootProps) {
       <div
         ref={scrollRef}
         data-scroll-root=""
+        data-scrollable-surface=""
         className={cn(
-          "group/scroll-root relative flex min-h-0 min-w-0 flex-1 [scrollbar-gutter:stable] flex-col overflow-x-clip overflow-y-auto",
-          "scroll-pt-(--header-height) [--safe-area-inset-bottom:env(safe-area-inset-bottom,0px)] [--sticky-padding-bottom:var(--safe-area-inset-bottom)] [--sticky-padding-top:var(--header-height)]",
+          "@w-sm/main:[scrollbar-gutter:var(--stage-scroll-gutter)] group/scroll-root relative flex min-h-0 min-w-0 flex-1 [scrollbar-gutter:stable] flex-col not-print:overflow-x-clip not-print:overflow-y-auto not-print:data-expanded-composer:overflow-y-hidden! data-stream-active:[overflow-anchor:none] not-print:data-voice-focus-mode:overflow-y-hidden! pointer-coarse:[scrollbar-width:none]",
+          "scroll-pt-(--header-height) [--sticky-padding-bottom:0px] [--sticky-padding-top:var(--header-height)]",
           "[--scroll-root-safe-area-inset-top:calc(var(--sticky-padding-top)+env(safe-area-inset-top,0px))]",
-          "[--scroll-root-safe-area-inset-bottom:calc(var(--sticky-padding-bottom)+var(--screen-keyboard-height,0px))]",
+          "[--scroll-root-safe-area-inset-bottom:calc(var(--sticky-padding-bottom)+var(--screen-keyboard-height,0px)+env(safe-area-inset-bottom,0px))]",
           "[--scroll-root-safe-area-height:calc(100lvh-var(--scroll-root-safe-area-inset-top)-var(--scroll-root-safe-area-inset-bottom))]",
-          "has-data-[fixed-header=less-than-xl]:@7xl/main:scroll-pt-0 has-data-[fixed-header=less-than-xl]:@7xl/main:[--sticky-padding-top:0px]",
+          "has-data-[fixed-header=never]:scroll-pt-0 has-data-[fixed-header=never]:[--sticky-padding-top:0px]",
           className
         )}
         {...props}
@@ -176,6 +189,10 @@ function useScrollRoot() {
     throw new Error("useScrollRoot must be used within a <ScrollRoot> provider")
   }
   return context
+}
+
+function useOptionalScrollRoot() {
+  return useContext(ScrollRootContext)
 }
 
 /**
@@ -254,4 +271,9 @@ function useStickyPaddingBottom(enabled: boolean) {
   )
 }
 
-export { ScrollRoot, useScrollRoot, useStickyPaddingBottom }
+export {
+  ScrollRoot,
+  useOptionalScrollRoot,
+  useScrollRoot,
+  useStickyPaddingBottom,
+}

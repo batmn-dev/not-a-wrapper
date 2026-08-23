@@ -43,8 +43,8 @@ const ThreadBottomContainer = forwardRef<
         isProjectOnboarding
           ? "group/thread-bottom-container fixed inset-x-4 bottom-0 z-30 mx-auto max-w-(--project-detail-composer-width) bg-[linear-gradient(to_top,var(--background)_75%,transparent)] pt-5 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] md:static md:inset-auto md:z-auto md:mt-6 md:w-full md:bg-none md:p-0 md:max-lg:px-4"
           : cn(
-              `group/thread-bottom-container pointer-events-none sticky bottom-[var(--screen-keyboard-height,0px)] isolate z-10 flex min-h-0 w-full basis-auto flex-col pb-[var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))] [--thread-component-gap:1.5rem] [--thread-scroll-control-offset:1.5rem] [--thread-scroll-to-bottom-banner-offset:0px] has-data-[has-thread-error]:pt-2 has-data-[has-thread-error]:[box-shadow:var(--sharp-edge-bottom-shadow)] md:pt-0 print:hidden ${THREAD_GUTTER_VARS} ${THREAD_MAXWIDTH_VARS}`,
-              isOnboarding ? "sm:grow" : "content-fade"
+              `group/thread-bottom-container pointer-events-none sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col [--thread-component-gap:1.5rem] [--thread-scroll-control-offset:1.5rem] [--thread-scroll-to-bottom-banner-offset:0px] has-data-[has-thread-error]:pt-2 has-data-[has-thread-error]:[box-shadow:var(--sharp-edge-bottom-shadow)] group-data-keyboard-open/scroll-root:bottom-[var(--screen-keyboard-height,0px)] md:pt-0 print:hidden ${THREAD_GUTTER_VARS} ${THREAD_MAXWIDTH_VARS}`,
+              isOnboarding && "sm:grow"
             ),
         className
       )}
@@ -80,23 +80,25 @@ const ThreadBottomContainer = forwardRef<
         )}
       </div>
 
-      <div
-        data-thread-bottom-content=""
-        className={
-          isProjectOnboarding
-            ? "w-full"
-            : "mx-auto w-full px-[var(--thread-content-margin,1rem)] pb-[var(--thread-component-gap)]"
-        }
-      >
+      <div id="thread-bottom" className="relative w-full">
         <div
-          id="thread-bottom"
+          data-thread-bottom-content=""
           className={
             isProjectOnboarding
-              ? "pointer-events-auto w-full"
-              : "pointer-events-auto mx-auto w-full max-w-[var(--thread-content-max-width,40rem)]"
+              ? "w-full"
+              : "relative z-1 mx-auto flex w-full flex-col px-[var(--thread-content-margin,1rem)]"
           }
         >
-          {children}
+          <div
+            data-thread-composer-column=""
+            className={
+              isProjectOnboarding
+                ? "pointer-events-auto w-full"
+                : "pointer-events-auto mx-auto mb-[var(--thread-component-gap)] w-full max-w-[var(--thread-content-max-width,40rem)]"
+            }
+          >
+            {children}
+          </div>
         </div>
       </div>
     </div>
@@ -112,7 +114,7 @@ function ThreadDisclaimer() {
       animate={{ height: "auto", opacity: 1, y: 0 }}
       exit={{ height: 0, opacity: 0, y: 8 }}
       transition={{ duration: 0.2, ease: "easeInOut" }}
-      className="relative min-h-9 w-full overflow-hidden pt-2 pb-4 text-center text-xs md:px-[60px]"
+      className="relative min-h-9 w-full overflow-hidden pt-2 pb-4 text-center text-xs [view-transition-name:var(--vt-disclaimer)] md:px-[60px]"
     >
       <div
         className={`px-[var(--thread-content-margin,1rem)] ${THREAD_GUTTER_VARS}`}

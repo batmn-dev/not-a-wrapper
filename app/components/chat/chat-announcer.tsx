@@ -65,12 +65,14 @@ export function ChatAnnouncerOutlet() {
     <>
       <div
         ref={politeRef}
+        role="status"
         aria-live="polite"
         aria-atomic="true"
         className="sr-only"
       />
       <div
         ref={assertiveRef}
+        role="alert"
         aria-live="assertive"
         aria-atomic="true"
         className="sr-only"

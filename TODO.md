@@ -64,6 +64,13 @@ demonstrated threat gap.
 
 ## Correctness and maintenance
 
+- **Document nuanced motion-performance exceptions:** update the front-end
+  guidance to distinguish the default prohibition on continuously repainting
+  animations from narrowly approved, behavior-critical exceptions. Require a
+  bounded live-state lifecycle, reduced-motion fallback, and measured profiling
+  before assigning severity or changing established behavior; prefer a
+  compositor-friendly equivalent when it preserves the same interaction and
+  visual result.
 - **Retired Google title model:** `selectChatTitleModelConfig` picks the cheapest
 visible same-provider model, which for Google is `gemini-2.5-flash-lite`; Google
 now returns 404 "no longer available to new users" for it, so every new Gemini
@@ -94,4 +101,3 @@ parallelize admission reads, measure TTFT via the chat-perf spans, and
 re-verify perceived streaming smoothness in the browser.
 - **Model presentation:** centralize route labels and icon precedence currently
 duplicated across model selectors and settings.
-
