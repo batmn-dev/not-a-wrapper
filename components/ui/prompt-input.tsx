@@ -688,7 +688,7 @@ const PromptInputTextarea = React.forwardRef<
         data-composer-editor-scroller="true"
         data-scrollable-surface=""
         data-slot="prompt-input-editor-scroller"
-        className="wcDTda_prosemirror-parent default-browser vertical-scroll-fade-mask max-h-52 max-h-[max(30svh,5rem)] min-h-[var(--deep-research-composer-extra-height,unset)] min-w-0 flex-1 scroll-py-4 [scrollbar-width:thin] overflow-auto group-data-[expanded-composer]/composer:h-full group-data-[expanded-composer]/composer:max-h-none! group-data-[expanded-composer-mode-button]/composer:pe-9"
+        className="wcDTda_prosemirror-parent default-browser vertical-scroll-fade-mask max-h-[max(30svh,5rem)] min-h-[var(--deep-research-composer-extra-height,unset)] min-w-0 flex-1 scroll-py-4 [scrollbar-width:thin] overflow-auto group-data-[expanded-composer]/composer:h-full group-data-[expanded-composer]/composer:max-h-none! group-data-[expanded-composer-mode-button]/composer:pe-9"
         style={{ maxHeight: maxHeightStyle }}
       >
         <textarea

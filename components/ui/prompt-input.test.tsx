@@ -299,7 +299,7 @@ describe("PromptInput responsive expansion", () => {
     expect(editorScroller.className).toContain("wcDTda_prosemirror-parent")
     expect(editorScroller.className).toContain("default-browser")
     expect(editorScroller.className).toContain("max-h-[max(30svh,5rem)]")
-    expect(editorScroller.className).toContain("max-h-52")
+    expect(editorScroller.className).not.toContain("max-h-52")
     expect(editorScroller.className).toContain("scroll-py-4")
     expect(editorScroller.style.maxHeight).toBe("")
     expect(editorWrapper.className).toContain("min-h-0")

@@ -51,7 +51,10 @@ function textOffsetToDocumentPosition(document: ProseMirrorNode, offset: number)
     resolved = paragraphOffset + paragraph.nodeSize
   })
 
-  return Math.min(Math.max(1, resolved), document.content.size)
+  return Math.min(
+    Math.max(1, resolved),
+    Math.max(1, document.content.size - 1)
+  )
 }
 
 function replacePromptInputDocument(view: EditorView, value: string) {
