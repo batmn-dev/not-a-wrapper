@@ -47,7 +47,9 @@ export function SettingsContent() {
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [activeTab, setActiveTab] = useState<TabType>("general")
   const [searchQuery, setSearchQuery] = useState("")
-  useScrollAttributes(contentScrollRef, { threshold: 0 })
+  const contentScrollStateRef = useScrollAttributes(contentScrollRef, {
+    threshold: 0,
+  })
   const normalizedQuery = searchQuery.trim().toLowerCase()
   const matchingTabs = normalizedQuery
     ? SETTINGS_TABS.filter((tab) =>
@@ -181,8 +183,8 @@ export function SettingsContent() {
 
       <div className="bg-popover flex min-h-0 min-w-0 flex-1 flex-col">
         <div
-          ref={contentScrollRef}
-          className="group/settings-scrollport relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+          ref={contentScrollStateRef}
+          className="scroll-state-scrollport group/settings-scrollport relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
         >
           {!isMobile ? <SettingsPageHeader title={activeTabLabel} /> : null}
 

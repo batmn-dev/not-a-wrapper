@@ -290,7 +290,7 @@ export function ModelSelector({
       className={cn(
         "min-w-0 shrink font-normal",
         isComposerVariant
-          ? "text-muted-foreground active:bg-interactive-pressed aria-expanded:bg-interactive-selected pointer-fine:hover:bg-interactive-hover h-9 max-w-none justify-start gap-1.5 overflow-visible rounded-full px-3 py-0 text-sm active:scale-100 pointer-fine:relative pointer-fine:after:absolute pointer-fine:after:-inset-x-1 pointer-fine:after:inset-y-0 pointer-fine:after:content-['']"
+          ? "text-muted-foreground active:bg-interactive-pressed aria-expanded:bg-interactive-selected can-hover:hover:bg-interactive-hover can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] h-9 max-w-none justify-start gap-1.5 overflow-visible rounded-full px-3 py-0 text-sm active:scale-100"
           : "max-w-full justify-between overflow-hidden rounded-lg text-lg",
         className
       )}
@@ -401,10 +401,7 @@ export function ModelSelector({
         }}
       >
         {isComposerVariant ? (
-          <Tooltip
-            disableHoverablePopup
-            disabled={isDropdownOpen}
-          >
+          <Tooltip disableHoverablePopup disabled={isDropdownOpen}>
             <TooltipTrigger render={<span className="inline-flex min-w-0" />}>
               <DropdownMenuTrigger render={trigger} />
             </TooltipTrigger>
@@ -447,7 +444,10 @@ export function ModelSelector({
             </div>
           </div>
           <div className="before:from-floating-surface after:from-floating-surface relative mt-[2px] rounded-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-3 before:bg-gradient-to-b before:to-transparent before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:z-10 after:h-4 after:bg-gradient-to-t after:to-transparent after:content-['']">
-            <div className="[&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 max-h-[min(var(--model-selector-list-max-height),max(0px,calc(var(--available-height)-var(--model-selector-fixed-height))))] scroll-py-2 [scrollbar-width:thin] [scrollbar-color:color-mix(in_oklab,var(--muted-foreground)_35%,transparent)_transparent] [scrollbar-gutter:stable] overflow-x-hidden overflow-y-auto overscroll-contain py-1 pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent">
+            <div
+              data-scrollable-surface=""
+              className="max-h-[min(var(--model-selector-list-max-height),max(0px,calc(var(--available-height)-var(--model-selector-fixed-height))))] scroll-py-2 [scrollbar-gutter:stable] overflow-x-hidden overflow-y-auto overscroll-contain py-1 pr-1"
+            >
               <ModelSelectorList
                 favorites={favorites}
                 others={others}

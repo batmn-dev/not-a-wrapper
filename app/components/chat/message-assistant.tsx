@@ -17,7 +17,7 @@ import { getDurableError } from "@/lib/chat-messages/metadata"
 import { getModelInfo } from "@/lib/models"
 import { cn } from "@/lib/utils"
 import { RiCheckLine, RiFileCopyLine, RiLoopRightLine } from "@remixicon/react"
-import { useCallback, useRef } from "react"
+import { useCallback } from "react"
 import {
   useActivityPanelActions,
   useActivityPanelId,
@@ -129,11 +129,8 @@ export function MessageAssistant({
   const showInlineBusyPlaceholder = isBareThinkingStatus && !showMessageBody
   const showMessageSlot = showMessageBody || showInlineBusyPlaceholder
 
-  const messageRef = useRef<HTMLDivElement>(null)
-  const { selectionInfo, clearSelection } = useAssistantMessageSelection(
-    messageRef,
-    true
-  )
+  const { selectionInfo, clearSelection, messageRef } =
+    useAssistantMessageSelection(true)
   const handleQuoteBtnClick = useCallback(() => {
     if (selectionInfo && onQuote) {
       onQuote(selectionInfo.text, selectionInfo.messageId)
@@ -309,10 +306,9 @@ export function MessageAssistant({
 
             {selectionInfo && selectionInfo.messageId && (
               <QuoteButton
-                mousePosition={selectionInfo.position}
+                container={selectionInfo.container}
                 onQuote={handleQuoteBtnClick}
-                messageContainerRef={messageRef}
-                onDismiss={clearSelection}
+                range={selectionInfo.range}
               />
             )}
           </div>

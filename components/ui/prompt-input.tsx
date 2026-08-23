@@ -47,21 +47,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import {
-  ComposerCollapseIcon,
-  ComposerExpandIcon,
-} from "@/lib/icons/composer"
+import { ComposerCollapseIcon, ComposerExpandIcon } from "@/lib/icons/composer"
 import { cn } from "@/lib/utils"
 import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
 import { EditorState } from "prosemirror-state"
 import { EditorView } from "prosemirror-view"
-import React, {
-  createContext,
-  useContext,
-  useRef,
-  useState,
-} from "react"
+import React, { createContext, useContext, useRef, useState } from "react"
 
 export type PromptInputEditorHandle = {
   focus: (options?: FocusOptions) => void
@@ -163,6 +155,12 @@ function PromptInput({
         ref={formRef}
         autoComplete="off"
         className={cn("group/composer relative z-1 w-full", className)}
+        style={
+          {
+            "--composer-border-radius": "28px",
+            viewTransitionName: "var(--vt-composer)",
+          } as React.CSSProperties
+        }
         data-expanded={isExpanded ? "" : undefined}
         data-expanded-composer={isExpandedComposer ? "" : undefined}
         data-expanded-composer-mode-button={isExpanded ? "" : undefined}
@@ -179,7 +177,7 @@ function PromptInput({
             data-expanded-composer={isExpandedComposer ? "" : undefined}
             data-slot="prompt-input-surface"
             className={cn(
-              "shadow-short-composer border-border-subtle relative flex cursor-text flex-col overflow-clip rounded-[28px] border-0 bg-[var(--composer-bg)] bg-clip-padding contain-inline-size [corner-shape:superellipse(1.1)] group-not-data-expanded/composer:min-h-[52px] motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out max-sm:not-dark:shadow-[0_0_0_1px_rgba(0,_0,_0,_0.04),0_2px_8px_0_rgba(0,_0,_0,_0.04),0px_4px_40px_8px_rgba(0,_0,_0,_0.025)]",
+              "shadow-short-composer border-border-subtle relative flex cursor-text flex-col overflow-clip rounded-[var(--composer-border-radius)] border-0 bg-[var(--composer-surface-primary)] bg-clip-padding contain-inline-size [corner-shape:superellipse(1.1)] group-not-data-expanded/composer:min-h-[52px] motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out max-sm:not-dark:shadow-[0_0_0_1px_rgba(0,_0,_0,_0.04),0_2px_8px_0_rgba(0,_0,_0,_0.04),0px_4px_40px_8px_rgba(0,_0,_0,_0.025)]",
               isExpandedComposer &&
                 "my-4 h-[min(calc(100svh-var(--header-height)-8rem),48rem)] max-h-[calc(100svh-var(--header-height)-8rem)]"
             )}
@@ -196,9 +194,7 @@ function PromptInput({
                   <TooltipTrigger
                     render={
                       <ComposerIconButton
-                        aria-label={
-                          isExpandedComposer ? "Collapse" : "Expand"
-                        }
+                        aria-label={isExpandedComposer ? "Collapse" : "Expand"}
                         aria-pressed={isExpandedComposer}
                         className="absolute end-2.5 top-2.5 z-10"
                         type="button"
@@ -229,7 +225,7 @@ function PromptInput({
               data-composer-body=""
               data-composer-grid=""
               data-composer-layout="true"
-              className="grid min-h-0 flex-1 grid-cols-[auto_1fr_auto] px-2 py-[9px] [--composer-compact-editor-padding-end:6px] [--composer-compact-editor-padding-start:7px] [grid-template-areas:'header_header_header'_'leading_primary_trailing'_'._footer_.'] group-not-data-expanded/composer:py-[5px] group-data-expanded/composer:grid-rows-[auto_minmax(0,1fr)_auto] group-data-expanded/composer:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] max-sm:group-not-data-expanded/composer:pb-2 max-sm:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] @max-[520px]/main:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing']"
+              className="grid min-h-0 flex-1 grid-cols-[auto_1fr_auto] px-2 py-[9px] [--composer-compact-editor-padding-end:6px] [--composer-compact-editor-padding-start:7px] [grid-template-areas:'header_header_header'_'leading_primary_trailing'_'._footer_.'] group-not-data-expanded/composer:py-[5px] group-data-expanded/composer:grid-rows-[auto_minmax(0,1fr)_auto] group-data-expanded/composer:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] max-sm:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] max-sm:group-not-data-expanded/composer:pb-2 @max-[520px]/main:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing']"
             >
               {children}
             </div>
@@ -299,10 +295,7 @@ function getCompactEditorWidth(textarea: HTMLTextAreaElement) {
 
   return Math.max(
     0,
-    contentWidth -
-      leadingWidth -
-      trailingWidth -
-      editorPadding
+    contentWidth - leadingWidth - trailingWidth - editorPadding
   )
 }
 
@@ -359,14 +352,12 @@ function getEditorAttributes({
   return {
     "aria-label": ariaLabel ?? "",
     "aria-multiline": "true",
-    ...(disabled
-      ? { "aria-disabled": "true", "aria-readonly": "true" }
-      : {}),
+    ...(disabled ? { "aria-disabled": "true", "aria-readonly": "true" } : {}),
     autocapitalize: "sentences",
     autocomplete: "off",
     autocorrect: "on",
     class: cn(
-      "composer-prosemirror text-foreground mt-4 block min-h-[42px] whitespace-break-spaces pb-4 text-base leading-[26px] outline-none",
+      "composer-prosemirror text-foreground block whitespace-break-spaces text-base leading-[26px] outline-none",
       className
     ),
     "data-virtualkeyboard": "true",
@@ -570,87 +561,88 @@ const PromptInputTextarea = React.forwardRef<
     [applyEditorLayout, disableAutosize]
   )
 
-  const mountEditor = React.useCallback((node: HTMLDivElement | null) => {
-    if (!node) return
+  const mountEditor = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      if (!node) return
 
-    let view: EditorView
-    const state = EditorState.create({
-      doc: createPromptInputDocument(callbacks.current.value),
-      plugins: createPromptInputPlugins(
-        () => callbacks.current.placeholder
-      ),
-      schema: promptInputSchema,
-    })
-    view = new EditorView(
-      { mount: node },
-      {
-        attributes: getEditorAttributes({
-          ariaLabel: callbacks.current.ariaLabel,
-          className: callbacks.current.className,
-          disabled: callbacks.current.disabled,
-        }),
-        dispatchTransaction(transaction) {
-          const nextState = view.state.apply(transaction)
-          view.updateState(nextState)
-          if (
-            !transaction.docChanged ||
-            transaction.getMeta("externalValue")
-          ) {
-            return
-          }
+      let view: EditorView
+      const state = EditorState.create({
+        doc: createPromptInputDocument(callbacks.current.value),
+        plugins: createPromptInputPlugins(() => callbacks.current.placeholder),
+        schema: promptInputSchema,
+      })
+      view = new EditorView(
+        { mount: node },
+        {
+          attributes: getEditorAttributes({
+            ariaLabel: callbacks.current.ariaLabel,
+            className: callbacks.current.className,
+            disabled: callbacks.current.disabled,
+          }),
+          dispatchTransaction(transaction) {
+            const nextState = view.state.apply(transaction)
+            view.updateState(nextState)
+            if (
+              !transaction.docChanged ||
+              transaction.getMeta("externalValue")
+            ) {
+              return
+            }
 
-          const nextValue = readPromptInputDocument(nextState.doc)
-          if (fallbackTextareaRef.current) {
-            fallbackTextareaRef.current.value = nextValue
-          }
-          applyEditorLayout(fallbackTextareaRef.current, nextValue)
-          callbacks.current.setValue(nextValue)
-        },
-        editable: () => !callbacks.current.disabled,
-        handleKeyDown(_view, event) {
-          if (callbacks.current.disabled || event.isComposing) return false
+            const nextValue = readPromptInputDocument(nextState.doc)
+            if (fallbackTextareaRef.current) {
+              fallbackTextareaRef.current.value = nextValue
+            }
+            applyEditorLayout(fallbackTextareaRef.current, nextValue)
+            callbacks.current.setValue(nextValue)
+          },
+          editable: () => !callbacks.current.disabled,
+          handleKeyDown(_view, event) {
+            if (callbacks.current.disabled || event.isComposing) return false
 
-          if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault()
-            callbacks.current.onSubmit?.()
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault()
+              callbacks.current.onSubmit?.()
+              callbacks.current.onKeyDown?.(event)
+              return true
+            }
+
             callbacks.current.onKeyDown?.(event)
-            return true
-          }
+            return event.defaultPrevented
+          },
+          handlePaste(_view, event) {
+            if (callbacks.current.disabled) return false
+            callbacks.current.onPaste?.(event)
+            return event.defaultPrevented
+          },
+          state,
+        }
+      )
+      viewRef.current = view
 
-          callbacks.current.onKeyDown?.(event)
-          return event.defaultPrevented
+      const handle: PromptInputEditorHandle = {
+        focus(options) {
+          view.dom.focus(options)
         },
-        handlePaste(_view, event) {
-          if (callbacks.current.disabled) return false
-          callbacks.current.onPaste?.(event)
-          return event.defaultPrevented
+        setSelectionRange(selectionStart, selectionEnd) {
+          setPromptInputSelection(view, selectionStart, selectionEnd)
         },
-        state,
       }
-    )
-    viewRef.current = view
+      editorHandleRef.current = handle
+      editorRef.current = handle
+      assignRef(forwardedRef.current, handle)
+      if (callbacks.current.autoFocus) handle.focus()
 
-    const handle: PromptInputEditorHandle = {
-      focus(options) {
-        view.dom.focus(options)
-      },
-      setSelectionRange(selectionStart, selectionEnd) {
-        setPromptInputSelection(view, selectionStart, selectionEnd)
-      },
-    }
-    editorHandleRef.current = handle
-    editorRef.current = handle
-    assignRef(forwardedRef.current, handle)
-    if (callbacks.current.autoFocus) handle.focus()
-
-    return () => {
-      if (viewRef.current === view) viewRef.current = null
-      if (editorHandleRef.current === handle) editorHandleRef.current = null
-      if (editorRef.current === handle) editorRef.current = null
-      assignRef(forwardedRef.current, null)
-      view.destroy()
-    }
-  }, [applyEditorLayout, editorRef])
+      return () => {
+        if (viewRef.current === view) viewRef.current = null
+        if (editorHandleRef.current === handle) editorHandleRef.current = null
+        if (editorRef.current === handle) editorRef.current = null
+        assignRef(forwardedRef.current, null)
+        view.destroy()
+      }
+    },
+    [applyEditorLayout, editorRef]
+  )
 
   useBrowserLayoutEffect(() => {
     const view = viewRef.current
@@ -688,14 +680,15 @@ const PromptInputTextarea = React.forwardRef<
       data-composer-editor-wrapper="true"
       data-slot="prompt-input-editor-wrapper"
       className={cn(
-        "-my-2.5 flex min-h-14 min-w-0 items-center overflow-x-hidden ps-[var(--composer-compact-editor-padding-start)] pe-[var(--composer-compact-editor-padding-end)] group-data-expanded/composer:mb-0 group-data-expanded/composer:ps-2.5 group-data-expanded/composer:pe-0 group-data-[expanded-composer]/composer:h-full",
+        "-my-2.5 flex min-h-0 min-w-0 items-stretch overflow-x-hidden ps-[var(--composer-compact-editor-padding-start)] pe-[var(--composer-compact-editor-padding-end)] group-data-expanded/composer:mb-0 group-data-expanded/composer:ps-2.5 group-data-expanded/composer:pe-0 group-data-[expanded-composer]/composer:h-full",
         containerClassName
       )}
     >
       <div
         data-composer-editor-scroller="true"
+        data-scrollable-surface=""
         data-slot="prompt-input-editor-scroller"
-        className="wcDTda_prosemirror-parent default-browser vertical-scroll-fade-mask min-h-[var(--deep-research-composer-extra-height,unset)] min-w-0 max-h-[max(30svh,5rem)] max-h-52 flex-1 scroll-py-4 overflow-auto [scrollbar-width:thin] group-data-[expanded-composer-mode-button]/composer:pe-9 group-data-[expanded-composer]/composer:h-full group-data-[expanded-composer]/composer:max-h-none!"
+        className="wcDTda_prosemirror-parent default-browser vertical-scroll-fade-mask max-h-52 max-h-[max(30svh,5rem)] min-h-[var(--deep-research-composer-extra-height,unset)] min-w-0 flex-1 scroll-py-4 [scrollbar-width:thin] overflow-auto group-data-[expanded-composer]/composer:h-full group-data-[expanded-composer]/composer:max-h-none! group-data-[expanded-composer-mode-button]/composer:pe-9"
         style={{ maxHeight: maxHeightStyle }}
       >
         <textarea

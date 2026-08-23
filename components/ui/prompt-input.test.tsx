@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import React, { act } from "react"
+import React, { act, StrictMode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import {
   afterAll,
@@ -259,6 +259,9 @@ describe("PromptInput responsive expansion", () => {
     const editorScroller = container.querySelector(
       '[data-composer-editor-scroller="true"]'
     ) as HTMLElement
+    const editorWrapper = container.querySelector(
+      '[data-composer-editor-wrapper="true"]'
+    ) as HTMLElement
 
     expect(editor.getAttribute("contenteditable")).toBe("true")
     expect(editor.getAttribute("role")).toBe("textbox")
@@ -270,6 +273,9 @@ describe("PromptInput responsive expansion", () => {
     expect(editor.getAttribute("autocapitalize")).toBe("sentences")
     expect(editor.getAttribute("spellcheck")).toBe("true")
     expect(editor.getAttribute("translate")).toBe("no")
+    expect(editor.className).not.toContain("min-h-[42px]")
+    expect(editor.className).not.toContain("mt-4")
+    expect(editor.className).not.toContain("pb-4")
     expect(editor.textContent).toBe("first line")
     expect(editor.querySelector("p")?.getAttribute("dir")).toBe("auto")
     expect(fallback.className).toContain("wcDTda_fallbackTextarea")
@@ -289,15 +295,23 @@ describe("PromptInput responsive expansion", () => {
       "max-sm:group-not-data-expanded/composer:pb-2"
     )
     expect(editorScroller.className).toContain("vertical-scroll-fade-mask")
+    expect(editorScroller.hasAttribute("data-scrollable-surface")).toBe(true)
     expect(editorScroller.className).toContain("wcDTda_prosemirror-parent")
     expect(editorScroller.className).toContain("default-browser")
-    expect(editorScroller.className).toContain(
-      "max-h-[max(30svh,5rem)]"
-    )
+    expect(editorScroller.className).toContain("max-h-[max(30svh,5rem)]")
     expect(editorScroller.className).toContain("max-h-52")
     expect(editorScroller.className).toContain("scroll-py-4")
     expect(editorScroller.style.maxHeight).toBe("")
-    expect(surface.className).toContain("rounded-[28px]")
+    expect(editorWrapper.className).toContain("min-h-0")
+    expect(editorWrapper.className).toContain("items-stretch")
+    expect(form.style.getPropertyValue("--composer-border-radius")).toBe("28px")
+    expect(form.style.getPropertyValue("view-transition-name")).toBe(
+      "var(--vt-composer)"
+    )
+    expect(surface.className).toContain(
+      "rounded-[var(--composer-border-radius)]"
+    )
+    expect(surface.className).toContain("bg-[var(--composer-surface-primary)]")
     expect(surface.className).toContain("[corner-shape:superellipse(1.1)]")
     expect(surface.className).toContain(
       "max-sm:not-dark:shadow-[0_0_0_1px_rgba(0,_0,_0,_0.04),0_2px_8px_0_rgba(0,_0,_0,_0.04),0px_4px_40px_8px_rgba(0,_0,_0,_0.025)]"
@@ -307,10 +321,50 @@ describe("PromptInput responsive expansion", () => {
 
     expect(container.querySelector("#prompt-textarea")).toBe(editor)
     expect(
-      Array.from(editor.querySelectorAll("p"), (paragraph) =>
-        paragraph.textContent
+      Array.from(
+        editor.querySelectorAll("p"),
+        (paragraph) => paragraph.textContent
       )
     ).toEqual(["second line", "third line"])
+  })
+
+  it("keeps one empty paragraph through the Strict Mode callback-ref remount", () => {
+    act(() => {
+      root.render(
+        <StrictMode>
+          <PromptInput value="" onValueChange={() => {}}>
+            <PromptInputTextarea
+              aria-label="Ask anything"
+              placeholder="Ask anything"
+            />
+          </PromptInput>
+        </StrictMode>
+      )
+    })
+
+    const editor = container.querySelector("#prompt-textarea") as HTMLElement
+    const paragraph = editor.querySelector("p")
+
+    expect(editor.querySelectorAll("p")).toHaveLength(1)
+    expect(paragraph?.getAttribute("data-empty-paragraph")).toBe("true")
+    expect(paragraph?.getAttribute("data-placeholder")).toBe("Ask anything")
+    expect(paragraph?.classList).toContain("placeholder")
+
+    act(() => {
+      root.render(
+        <StrictMode>
+          <PromptInput value={"\n"} onValueChange={() => {}}>
+            <PromptInputTextarea
+              aria-label="Ask anything"
+              placeholder="Ask anything"
+            />
+          </PromptInput>
+        </StrictMode>
+      )
+    })
+
+    expect(editor.querySelectorAll("p")).toHaveLength(2)
+    expect(editor.querySelector("p.placeholder")).toBeNull()
   })
 
   it("submits Enter and preserves Shift+Enter as a draft paragraph", () => {
@@ -387,11 +441,7 @@ describe("PromptInput responsive expansion", () => {
 
     act(() => {
       root.render(
-        <PromptInput
-          value="draft"
-          onSubmit={onSubmit}
-          onValueChange={() => {}}
-        >
+        <PromptInput value="draft" onSubmit={onSubmit} onValueChange={() => {}}>
           <PromptInputTextarea
             aria-label="Ask anything"
             onKeyDown={onKeyDown}
@@ -473,9 +523,7 @@ describe("PromptInput responsive expansion", () => {
     expect(expandButton.className).toContain("hover:bg-interactive-hover")
     expect(expandButton.className).toContain("active:bg-interactive-pressed")
     expect(expandButton.className).toContain("active:scale-100")
-    expect(
-      expandButton.querySelector('[data-slot="icon"]')
-    ).not.toBeNull()
+    expect(expandButton.querySelector('[data-slot="icon"]')).not.toBeNull()
     expect(
       expandButton.querySelector('[data-slot="icon"]')?.className
     ).toContain("text-[var(--text-secondary)]")
@@ -534,8 +582,7 @@ describe("PromptInput responsive expansion", () => {
       expandButton.focus()
     })
     expect(
-      document.body.querySelector('[data-slot="tooltip-content"]')
-        ?.textContent
+      document.body.querySelector('[data-slot="tooltip-content"]')?.textContent
     ).toBe("Expand")
 
     await act(async () => {
@@ -549,8 +596,7 @@ describe("PromptInput responsive expansion", () => {
       collapseButton.focus()
     })
     expect(
-      document.body.querySelector('[data-slot="tooltip-content"]')
-        ?.textContent
+      document.body.querySelector('[data-slot="tooltip-content"]')?.textContent
     ).toBe("Collapse")
   })
 })

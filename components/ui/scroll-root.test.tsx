@@ -178,6 +178,18 @@ describe("ScrollRoot viewport and footer measurement", () => {
     vi.unstubAllGlobals()
   })
 
+  it("opts the thread root into the shared scrollable-surface contract", () => {
+    act(() => {
+      root.render(<ScrollRoot>Thread</ScrollRoot>)
+    })
+
+    expect(
+      container
+        .querySelector("[data-scroll-root]")
+        ?.hasAttribute("data-scrollable-surface")
+    ).toBe(true)
+  })
+
   it("ignores a desktop viewport resize while the editor is focused", () => {
     act(() => {
       root.render(

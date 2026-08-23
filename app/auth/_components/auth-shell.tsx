@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
+import { MainContent } from "@/components/ui/main-content"
 import { APP_DOMAIN } from "@/lib/config"
 import { RiArrowLeftLine } from "@remixicon/react"
 import Link from "next/link"
@@ -13,7 +14,7 @@ type AuthShellProps = {
 
 export function AuthShell({ title, description, children }: AuthShellProps) {
   return (
-    <main
+    <MainContent
       id="main"
       className="bg-background text-foreground relative flex min-h-svh w-full flex-1 flex-col"
     >
@@ -62,6 +63,6 @@ export function AuthShell({ title, description, children }: AuthShellProps) {
           </footer>
         </section>
       </div>
-    </main>
+    </MainContent>
   )
 }

@@ -28,6 +28,8 @@ describe("Button visually disabled state", () => {
     expect(button.tabIndex).toBe(0)
     expect(button.getAttribute("aria-disabled")).toBe("true")
     expect(button.hasAttribute("data-visually-disabled")).toBe(true)
+    expect(button.className).toContain("keyboard-focused:ring-3")
+    expect(button.className).not.toContain("focus-visible:ring-3")
 
     act(() => button.click())
 

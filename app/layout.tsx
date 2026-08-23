@@ -5,6 +5,7 @@ import {
   ChatAnnouncerOutlet,
   ChatAnnouncerProvider,
 } from "@/app/components/chat/chat-announcer"
+import { FocusModeController } from "@/components/ui/focus-mode"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -65,8 +66,10 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} isolate antialiased`}
       >
+        <FocusModeController />
         <a
           href="#main"
+          data-skip-to-content=""
           className="bg-background text-foreground ring-border fixed inset-x-0 top-0 z-[100] mx-auto mt-4 w-fit rounded-2xl px-4 py-2 text-sm font-medium shadow-lg ring-1 not-focus:sr-only focus:outline-none"
         >
           Skip to content

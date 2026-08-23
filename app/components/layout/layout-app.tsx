@@ -7,6 +7,7 @@ import {
 import { HistorySearchProvider } from "@/app/components/history/history-search-provider"
 import { Header } from "@/app/components/layout/header"
 import { AppSidebar } from "@/app/components/layout/sidebar/app-sidebar"
+import { MainContent } from "@/components/ui/main-content"
 import { ScrollRoot } from "@/components/ui/scroll-root"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 
@@ -45,9 +46,9 @@ export function LayoutApp({
                 ) : (
                   header
                 )}
-                <main id="main" className="min-h-0 flex-1">
+                <MainContent id="main" className="min-h-0 flex-1">
                   {children}
-                </main>
+                </MainContent>
               </ScrollRoot>
             </div>
             {/* Activity panel docked track — a flex sibling of the scroll column,

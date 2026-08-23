@@ -349,8 +349,9 @@ describe("Composer primary action", () => {
 
     expect(button).toBeTruthy()
     expect(button?.disabled).toBe(false)
+    expect(button?.getAttribute("aria-disabled")).toBe("false")
     expect(button?.type).toBe("button")
-    expect(button?.className).toContain("pointer-fine:after:-inset-x-1")
+    expect(button?.className).toContain("can-hover:after:-inset-x-1")
 
     act(() => {
       button?.click()
@@ -407,7 +408,7 @@ describe("Composer primary action", () => {
     expect(sendButton?.hasAttribute("data-visually-disabled")).toBe(true)
     expect(sendButton?.type).toBe("submit")
     expect(sendButton?.className).toContain("composer-submit-btn")
-    expect(sendButton?.className).toContain("pointer-fine:after:-inset-x-1")
+    expect(sendButton?.className).toContain("can-hover:after:-inset-x-1")
     expect(promptInputActionMockCalls.at(-1)?.disabled).toBeUndefined()
 
     act(() => sendButton?.click())
@@ -438,6 +439,9 @@ describe("Composer primary action", () => {
     expect(promptInputMockCalls.at(-1)?.maxHeight).toBeUndefined()
     expect(defaultComposer.querySelector("textarea")?.placeholder).toBe(
       "Ask anything"
+    )
+    expect(defaultComposer.querySelector("textarea")?.ariaLabel).toBe(
+      "Chat with ChatGPT"
     )
     expect(
       defaultComposer

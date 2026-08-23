@@ -9,6 +9,7 @@ import { RiAddLine, RiFolderLine, RiFolderOpenFill } from "@remixicon/react"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 import type { ChatOrganization } from "./chat-organization"
+import { SidebarCollection, SidebarCollectionItem } from "./sidebar-collection"
 import type { SidebarProjectModel } from "./sidebar-composition"
 import { SidebarChatGroupActions } from "./sidebar-list"
 import { SidebarMenuItem } from "./sidebar-menu-item"
@@ -38,15 +39,6 @@ export function SidebarProject({
   if (!isAuthenticated) return null
 
   const isDirectoryActive = pathname === "/projects"
-  const projectRows = projects.map((project) => (
-    <SidebarProjectItem
-      key={project._id}
-      project={project}
-      isPinPending={isPinPending(project._id)}
-      onTogglePinned={() => onTogglePinned(project)}
-    />
-  ))
-
   return (
     <>
       {organization === "one-list" ? (
@@ -89,7 +81,17 @@ export function SidebarProject({
             />
           }
         >
-          {projectRows}
+          <SidebarCollection>
+            {projects.map((project) => (
+              <SidebarCollectionItem key={project._id}>
+                <SidebarProjectItem
+                  project={project}
+                  isPinPending={isPinPending(project._id)}
+                  onTogglePinned={() => onTogglePinned(project)}
+                />
+              </SidebarCollectionItem>
+            ))}
+          </SidebarCollection>
         </CollapsibleSection>
       )}
 

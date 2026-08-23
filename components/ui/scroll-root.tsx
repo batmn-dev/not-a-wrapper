@@ -165,8 +165,9 @@ function ScrollRoot({ children, className, ...props }: ScrollRootProps) {
       <div
         ref={scrollRef}
         data-scroll-root=""
+        data-scrollable-surface=""
         className={cn(
-          "@w-sm/main:[scrollbar-gutter:var(--stage-scroll-gutter)] pointer-coarse:[scrollbar-width:none] group/scroll-root relative flex min-h-0 min-w-0 flex-1 [scrollbar-gutter:stable] flex-col not-print:overflow-x-clip not-print:overflow-y-auto data-stream-active:[overflow-anchor:none] not-print:data-expanded-composer:overflow-y-hidden! not-print:data-voice-focus-mode:overflow-y-hidden!",
+          "@w-sm/main:[scrollbar-gutter:var(--stage-scroll-gutter)] group/scroll-root relative flex min-h-0 min-w-0 flex-1 [scrollbar-gutter:stable] flex-col not-print:overflow-x-clip not-print:overflow-y-auto not-print:data-expanded-composer:overflow-y-hidden! data-stream-active:[overflow-anchor:none] not-print:data-voice-focus-mode:overflow-y-hidden! pointer-coarse:[scrollbar-width:none]",
           "scroll-pt-(--header-height) [--sticky-padding-bottom:0px] [--sticky-padding-top:var(--header-height)]",
           "[--scroll-root-safe-area-inset-top:calc(var(--sticky-padding-top)+env(safe-area-inset-top,0px))]",
           "[--scroll-root-safe-area-inset-bottom:calc(var(--sticky-padding-bottom)+var(--screen-keyboard-height,0px)+env(safe-area-inset-bottom,0px))]",

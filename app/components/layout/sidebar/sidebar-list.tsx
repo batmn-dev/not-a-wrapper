@@ -21,8 +21,9 @@ import {
   RiMoreFill,
 } from "@remixicon/react"
 import Link from "next/link"
-import { useState, type ReactNode } from "react"
+import { Children, useState, type ReactNode } from "react"
 import type { ChatOrganization } from "./chat-organization"
+import { SidebarCollection, SidebarCollectionItem } from "./sidebar-collection"
 import { SidebarItem } from "./sidebar-item"
 
 type SidebarListProps = {
@@ -75,15 +76,22 @@ export function SidebarList({
       variant="sidebar"
       headerActions={headerActions}
     >
-      {beforeItems}
-      {items.map((chat) => (
-        <SidebarItem
-          key={chat.id}
-          chat={chat}
-          currentChatId={currentChatId}
-          presentation={getChatRowPresentation(chat, presentation)}
-        />
-      ))}
+      <SidebarCollection>
+        {Children.map(beforeItems, (item) =>
+          item == null ? null : (
+            <SidebarCollectionItem>{item}</SidebarCollectionItem>
+          )
+        )}
+        {items.map((chat) => (
+          <SidebarCollectionItem key={chat.id}>
+            <SidebarItem
+              chat={chat}
+              currentChatId={currentChatId}
+              presentation={getChatRowPresentation(chat, presentation)}
+            />
+          </SidebarCollectionItem>
+        ))}
+      </SidebarCollection>
     </CollapsibleSection>
   )
 }

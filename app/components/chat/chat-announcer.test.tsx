@@ -51,25 +51,31 @@ describe("ChatStatusAnnouncer durable presentation", () => {
     ["stopping", "Stopping generation."],
     ["possibly-stale", "Generation status is temporarily unavailable."],
     ["stopped", "Generation stopped."],
-  ] as const)("announces %s through the existing polite region", (state, text) => {
-    render(state)
+  ] as const)(
+    "announces %s through the existing polite region",
+    (state, text) => {
+      render(state)
 
-    expect(
-      document.querySelector('[aria-live="polite"]')?.textContent
-    ).toBe(text)
-    expect(
-      document.querySelector('[aria-live="assertive"]')?.textContent
-    ).toBe("")
-  })
+      expect(
+        document.querySelector('[role="status"][aria-live="polite"]')
+          ?.textContent
+      ).toBe(text)
+      expect(
+        document.querySelector('[role="alert"][aria-live="assertive"]')
+          ?.textContent
+      ).toBe("")
+    }
+  )
 
   it("announces durable failure through the existing assertive region", () => {
     render("failed")
 
     expect(
-      document.querySelector('[aria-live="polite"]')?.textContent
+      document.querySelector('[role="status"][aria-live="polite"]')?.textContent
     ).toBe("")
     expect(
-      document.querySelector('[aria-live="assertive"]')?.textContent
+      document.querySelector('[role="alert"][aria-live="assertive"]')
+        ?.textContent
     ).toBe("Generation failed.")
   })
 })

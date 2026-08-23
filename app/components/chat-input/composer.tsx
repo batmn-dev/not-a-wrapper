@@ -54,8 +54,10 @@ import {
   useRef,
   useState,
 } from "react"
+import { flushSync } from "react-dom"
 import { PromptSystem } from "../suggestions/prompt-system"
 import { ButtonPlusMenu } from "./button-plus-menu"
+import { runComposerSlideTransition } from "./composer-view-transition"
 import { FileList } from "./file-list"
 import { InputDropZone } from "./input-drop-zone"
 import { coordinateComposerPaste } from "./large-paste-policy"
@@ -109,6 +111,8 @@ type ComposerProps = {
   /** Surface-owned spacing below the composer shell. */
   bottomSpacing?: "default" | "none"
 }
+
+const DEFAULT_COMPOSER_ARIA_LABEL = "Chat with ChatGPT"
 
 const isOnlyWhitespace = (text: string) => !/[^\s]/.test(text)
 
@@ -206,7 +210,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       onLockedGuestModelSelect,
       draftScopeId,
       placeholder = "Ask anything",
-      ariaLabel,
+      ariaLabel = DEFAULT_COMPOSER_ARIA_LABEL,
       bottomSpacing = "default",
     },
     ref
@@ -411,8 +415,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         return
       }
 
-      void handleSend()
-    }, [handleSend, primaryAction.disabled, primaryAction.intent])
+      const send = () => {
+        void handleSend()
+      }
+      if (chatId === null) {
+        runComposerSlideTransition(() => flushSync(send))
+        return
+      }
+      send()
+    }, [chatId, handleSend, primaryAction.disabled, primaryAction.intent])
 
     const handlePaste = useCallback(
       (e: ClipboardEvent) => {
@@ -607,7 +618,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               <PromptInputTextarea
                 ref={editorRef}
                 placeholder={placeholder}
-                aria-label={ariaLabel ?? placeholder}
+                aria-label={ariaLabel}
                 onPaste={handlePaste}
                 containerClassName="[grid-area:primary]"
               />
@@ -642,7 +653,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   >
                     <Button
                       size="sm"
-                      className="composer-submit-btn composer-submit-button-color size-9 rounded-full p-0 transition-colors duration-150 ease-out pointer-fine:relative pointer-fine:after:absolute pointer-fine:after:-inset-x-1 pointer-fine:after:inset-y-0 pointer-fine:after:content-['']"
+                      className="composer-submit-btn composer-submit-button-color size-9 rounded-full p-0 transition-colors duration-150 ease-out can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-['']"
                       disabled={
                         primaryAction.mode === "stop" &&
                         primaryAction.disabled
@@ -660,6 +671,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                           : undefined
                       }
                       aria-label={primaryAction.ariaLabel}
+                      aria-disabled={primaryAction.disabled}
                     >
                       {primaryAction.mode === "stop" ? (
                         <StopBulkRoundedIcon slotSize={22} glyphSize={22} />

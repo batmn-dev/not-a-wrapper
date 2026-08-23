@@ -83,6 +83,7 @@ describe("ThreadBottomContainer", () => {
     expect(footer?.classList.contains("pointer-events-none")).toBe(true)
     expect(footer?.classList.contains("print:hidden")).toBe(true)
     expect(footer?.classList.contains("bottom-0")).toBe(true)
+    expect(footer?.classList.contains("content-fade")).toBe(false)
     expect(
       [...(footer?.classList ?? [])].some((name) =>
         name.startsWith("pb-[var(--safe-area-inset-bottom")
