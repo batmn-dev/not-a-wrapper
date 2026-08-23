@@ -51,12 +51,20 @@
   }
 }
 
+@theme static {
+  /* ChatGPT's main-column container tiers. Keep the semantic names used by
+     the fixed-header contract instead of coupling it to Tailwind's size scale. */
+  --container-w-sm: 40rem;
+  --container-w-xl: 80rem;
+  --container-w-2xl: 96rem;
+}
+
 @theme {
   --font-mono: var(--font-geist-mono);
-  /* Captured header token (3.25rem = 52px). The scroll root's sticky-padding
-     and scroll-padding derive from it; --spacing-app-header aliases it so the
-     existing h-app-header utility stays in lockstep. */
+  /* The runtime token below is responsive; this theme value also emits the
+     source-shaped h-header-height utility. */
   --header-height: 3.25rem;
+  --spacing-header-height: var(--header-height);
   --spacing-app-header: var(--header-height);
   --text-heading-app: 1.75rem;
   --text-heading-app--line-height: 2.125rem;
@@ -435,6 +443,8 @@
 }
 
 :root {
+  --header-height: calc(13 * var(--spacing));
+  --stage-scroll-gutter: stable both-edges;
   --sidebar-width: 16.25rem;
   --sidebar-header-height: 3.25rem;
   --sidebar-section-first-margin-top: 0.5rem;
@@ -654,6 +664,12 @@
   --overlay-scrim-tablet: oklch(0.92 0.004 286 / 0.5);
 }
 
+@media (pointer: coarse) {
+  :root {
+    --header-height: calc(14 * var(--spacing));
+  }
+}
+
 .dark {
   --background: oklch(0 0 0);
   --foreground: oklch(1 0 0);
@@ -831,6 +847,94 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  @property --top-fade {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0;
+  }
+
+  @property --bottom-fade {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0;
+  }
+
+  @keyframes edge-fade {
+    0% {
+      --top-fade: 0;
+    }
+    3%,
+    100% {
+      --top-fade: var(--edge-fade-distance, 0.5lh);
+    }
+    0%,
+    97% {
+      --bottom-fade: var(--edge-fade-distance, 0.5lh);
+    }
+    100% {
+      --bottom-fade: 0;
+    }
+  }
+
+  @supports (scroll-timeline: --scroll-fade) {
+    .vertical-scroll-fade-mask {
+      mask: linear-gradient(
+        to bottom in oklch,
+        rgb(128 128 128 / 0%),
+        rgb(206 206 206) var(--top-fade)
+          calc(100% - var(--bottom-fade)),
+        rgb(128 128 128 / 0%)
+      );
+      scroll-timeline: --scroll-fade y;
+      animation-name: edge-fade;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: --scroll-fade;
+    }
+
+    @supports (color: lab(0% 0 0)) {
+      .vertical-scroll-fade-mask {
+        mask: linear-gradient(
+          to bottom in oklch,
+          lab(53.6% 0 0 / 0),
+          lab(82.6% 0.0000298023 -0.0000119209) var(--top-fade)
+            calc(100% - var(--bottom-fade)),
+          lab(53.6% 0 0 / 0)
+        );
+      }
+    }
+  }
+
+  /* Source parity: keep visually hidden semantic text and KaTeX's hidden
+     MathML out of layout/paint work while retaining accessibility semantics. */
+  .sr-only,
+  .katex .katex-mathml {
+    contain: strict;
+    content-visibility: auto;
+    contain-intrinsic-size: 1px;
+  }
+
+  .safari-katex-mathml .katex .katex-mathml {
+    contain: none;
+    content-visibility: visible;
+  }
+
+  /* The persistent dock slot already owns open state. The shell derives the
+     scroll presentation from it instead of copying state onto an ancestor. */
+  .side-pane-shell-host:has(
+      > [data-slot="activity-panel-dock"][data-expanded]
+    ) [data-scroll-root] {
+    scrollbar-width: none;
+  }
+
+  .side-pane-shell-host:has(
+      > [data-slot="activity-panel-dock"][data-expanded]
+    ) [data-scroll-root]::-webkit-scrollbar {
+    display: none;
   }
 }
 
@@ -1202,8 +1306,6 @@
 
   /* Extends invisible hit target without changing the 36px visible composer control. */
   .composer-btn {
-    position: relative;
-    z-index: 0;
     --tap-padding: var(--tap-padding-mobile);
   }
 
@@ -1224,6 +1326,19 @@
     min-width: var(--tap-padding);
     min-height: var(--tap-padding);
     transform: translate(-50%, -50%);
+  }
+
+  .composer-prosemirror > p {
+    min-height: 26px;
+    margin: 0;
+  }
+
+  .composer-prosemirror > .placeholder::before {
+    color: var(--text-tertiary);
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
   }
 
   .shadow-short-composer,
@@ -1620,9 +1735,7 @@ code {
   width: 100%;
 }
 
-
 @media (prefers-reduced-motion: no-preference) {
-
   ::highlight(naw-stream-decay-0) {
     color: color-mix(in oklab, var(--foreground) 4%, transparent);
   }

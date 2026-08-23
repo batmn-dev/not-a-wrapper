@@ -18,6 +18,7 @@ import {
   PromptInputFooter,
   PromptInputTextarea,
 } from "./prompt-input"
+import { ScrollRoot } from "./scroll-root"
 
 let surfaceWidth = 768
 let leadingWidth = 36
@@ -78,6 +79,16 @@ describe("PromptInput responsive expansion", () => {
     resizeObservers = []
 
     vi.stubGlobal("ResizeObserver", ResizeObserverMock)
+    Object.defineProperties(Range.prototype, {
+      getBoundingClientRect: {
+        configurable: true,
+        value: () => rect(0),
+      },
+      getClientRects: {
+        configurable: true,
+        value: () => [],
+      },
+    })
     vi.stubGlobal(
       "matchMedia",
       vi.fn(() => ({
@@ -95,7 +106,10 @@ describe("PromptInput responsive expansion", () => {
     vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
       function getBoundingClientRect(this: Element) {
         if (!(this instanceof HTMLElement)) return rect(0)
-        if (this.dataset.composerSurface === "true") {
+        if (
+          this.dataset.composerSurface === "true" ||
+          this.dataset.composerLayout === "true"
+        ) {
           return rect(surfaceWidth)
         }
         if (this.dataset.composerLeading === "true") {
@@ -213,5 +227,329 @@ describe("PromptInput responsive expansion", () => {
     expect(observer?.disconnect).toHaveBeenCalledTimes(1)
 
     root = createRoot(container)
+  })
+
+  it("keeps one ProseMirror textbox across controlled draft replacements", () => {
+    const renderDraft = (value: string) => {
+      act(() => {
+        root.render(
+          <PromptInput value={value} onValueChange={() => {}}>
+            <PromptInputTextarea
+              aria-label="Ask anything"
+              placeholder="Ask anything"
+            />
+          </PromptInput>
+        )
+      })
+    }
+
+    renderDraft("first line")
+
+    const editor = container.querySelector("#prompt-textarea") as HTMLElement
+    const fallback = container.querySelector(
+      ".composer-fallback-textarea"
+    ) as HTMLTextAreaElement
+    const surface = container.querySelector(
+      '[data-composer-surface="true"]'
+    ) as HTMLElement
+    const form = container.querySelector("form") as HTMLFormElement
+    const layout = container.querySelector(
+      '[data-composer-layout="true"]'
+    ) as HTMLElement
+    const editorScroller = container.querySelector(
+      '[data-composer-editor-scroller="true"]'
+    ) as HTMLElement
+
+    expect(editor.getAttribute("contenteditable")).toBe("true")
+    expect(editor.getAttribute("role")).toBe("textbox")
+    expect(editor.getAttribute("aria-multiline")).toBe("true")
+    expect(editor.getAttribute("data-virtualkeyboard")).toBe("true")
+    expect(editor.getAttribute("autocomplete")).toBe("off")
+    expect(editor.getAttribute("inputmode")).toBe("text")
+    expect(editor.getAttribute("autocorrect")).toBe("on")
+    expect(editor.getAttribute("autocapitalize")).toBe("sentences")
+    expect(editor.getAttribute("spellcheck")).toBe("true")
+    expect(editor.getAttribute("translate")).toBe("no")
+    expect(editor.textContent).toBe("first line")
+    expect(editor.querySelector("p")?.getAttribute("dir")).toBe("auto")
+    expect(fallback.className).toContain("wcDTda_fallbackTextarea")
+    expect(fallback.getAttribute("aria-hidden")).toBeNull()
+    expect(fallback.getAttribute("tabindex")).toBeNull()
+    expect(fallback.getAttribute("readonly")).toBeNull()
+    expect(fallback.name).toBe("prompt-textarea")
+    expect(fallback.style.display).toBe("none")
+    expect(form.className).toContain("relative")
+    expect(form.className).toContain("z-1")
+    expect(layout.hasAttribute("data-composer-body")).toBe(true)
+    expect(layout.hasAttribute("data-composer-grid")).toBe(true)
+    expect(layout.className).toContain(
+      "@max-[520px]/main:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing']"
+    )
+    expect(layout.className).toContain(
+      "max-sm:group-not-data-expanded/composer:pb-2"
+    )
+    expect(editorScroller.className).toContain("vertical-scroll-fade-mask")
+    expect(editorScroller.className).toContain("default-browser")
+    expect(editorScroller.className).toContain(
+      "max-h-[max(30svh,5rem)]"
+    )
+    expect(editorScroller.className).toContain("max-h-52")
+    expect(editorScroller.className).toContain("scroll-py-4")
+    expect(editorScroller.style.maxHeight).toBe("")
+    expect(surface.className).toContain("rounded-[28px]")
+    expect(surface.className).toContain("[corner-shape:superellipse(1.1)]")
+    expect(surface.className).toContain(
+      "max-sm:not-dark:shadow-[0_0_0_1px_rgba(0,_0,_0,_0.04),0_2px_8px_0_rgba(0,_0,_0,_0.04),0px_4px_40px_8px_rgba(0,_0,_0,_0.025)]"
+    )
+
+    renderDraft("second line\nthird line")
+
+    expect(container.querySelector("#prompt-textarea")).toBe(editor)
+    expect(
+      Array.from(editor.querySelectorAll("p"), (paragraph) =>
+        paragraph.textContent
+      )
+    ).toEqual(["second line", "third line"])
+  })
+
+  it("submits Enter and preserves Shift+Enter as a draft paragraph", () => {
+    const onSubmit = vi.fn()
+    const onValueChange = vi.fn()
+
+    act(() => {
+      root.render(
+        <PromptInput
+          value="draft"
+          onSubmit={onSubmit}
+          onValueChange={onValueChange}
+        >
+          <PromptInputTextarea aria-label="Ask anything" />
+        </PromptInput>
+      )
+    })
+
+    const editor = container.querySelector("#prompt-textarea") as HTMLElement
+
+    act(() => {
+      editor.dispatchEvent(
+        new KeyboardEvent("keydown", { bubbles: true, key: "Enter" })
+      )
+    })
+    expect(onSubmit).toHaveBeenCalledOnce()
+    expect(onValueChange).not.toHaveBeenCalled()
+
+    act(() => {
+      editor.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          bubbles: true,
+          key: "Enter",
+          shiftKey: true,
+        })
+      )
+    })
+    expect(onValueChange).toHaveBeenLastCalledWith("\ndraft")
+  })
+
+  it("keeps IME composition and disabled submission inside the editor primitive", () => {
+    const onSubmit = vi.fn()
+    const onKeyDown = vi.fn()
+
+    act(() => {
+      root.render(
+        <PromptInput
+          disabled
+          value="draft"
+          onSubmit={onSubmit}
+          onValueChange={() => {}}
+        >
+          <PromptInputTextarea
+            aria-label="Ask anything"
+            onKeyDown={onKeyDown}
+          />
+        </PromptInput>
+      )
+    })
+
+    const editor = container.querySelector("#prompt-textarea") as HTMLElement
+    const form = container.querySelector("form") as HTMLFormElement
+
+    expect(editor.getAttribute("contenteditable")).toBe("false")
+    expect(editor.getAttribute("aria-disabled")).toBe("true")
+    expect(editor.getAttribute("aria-readonly")).toBe("true")
+
+    act(() => {
+      form.dispatchEvent(
+        new SubmitEvent("submit", { bubbles: true, cancelable: true })
+      )
+    })
+    expect(onSubmit).not.toHaveBeenCalled()
+
+    act(() => {
+      root.render(
+        <PromptInput
+          value="draft"
+          onSubmit={onSubmit}
+          onValueChange={() => {}}
+        >
+          <PromptInputTextarea
+            aria-label="Ask anything"
+            onKeyDown={onKeyDown}
+          />
+        </PromptInput>
+      )
+    })
+
+    const composingEnter = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: "Enter",
+    })
+    Object.defineProperty(composingEnter, "isComposing", { value: true })
+    act(() => editor.dispatchEvent(composingEnter))
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onKeyDown).not.toHaveBeenCalled()
+    expect(editor.getAttribute("aria-disabled")).toBeNull()
+    expect(editor.getAttribute("aria-readonly")).toBeNull()
+  })
+
+  it("uses ChatGPT's accessible expand control and root-owned scroll lock", () => {
+    const renderComposer = (expanded: boolean) => {
+      act(() => {
+        root.render(
+          <ScrollRoot>
+            <PromptInput
+              expanded={expanded}
+              value={expanded ? "first line\nsecond line" : "draft"}
+              onValueChange={() => {}}
+            >
+              <PromptInputTextarea aria-label="Ask anything" />
+              <PromptInputFooter aria-hidden="true" />
+            </PromptInput>
+          </ScrollRoot>
+        )
+      })
+    }
+
+    renderComposer(true)
+
+    const scrollRoot = container.querySelector(
+      "[data-scroll-root]"
+    ) as HTMLElement
+    const form = container.querySelector("form") as HTMLFormElement
+    const surface = container.querySelector(
+      '[data-composer-surface="true"]'
+    ) as HTMLElement
+    const editorWrapper = container.querySelector(
+      '[data-composer-editor-wrapper="true"]'
+    ) as HTMLElement
+    const editorScroller = container.querySelector(
+      '[data-composer-editor-scroller="true"]'
+    ) as HTMLElement
+    const expandButton = container.querySelector(
+      'button[aria-label="Expand"]'
+    ) as HTMLButtonElement
+
+    expect(form.hasAttribute("data-expanded-composer-mode-button")).toBe(true)
+    expect(editorWrapper.className).toContain(
+      "group-data-expanded/composer:ps-2.5"
+    )
+    expect(editorWrapper.className).toContain(
+      "group-data-expanded/composer:pe-0"
+    )
+    expect(editorWrapper.className).not.toContain(
+      "group-data-[expanded]/composer:px-2.5"
+    )
+    expect(editorScroller.className).toContain(
+      "group-data-[expanded-composer-mode-button]/composer:pe-9"
+    )
+    expect(
+      container.querySelector("[data-composer-controls-anchor]")
+    ).not.toBeNull()
+    expect(expandButton.type).toBe("button")
+    expect(expandButton.getAttribute("aria-pressed")).toBe("false")
+    expect(expandButton.getAttribute("data-slot")).toBe("tooltip-trigger")
+    expect(expandButton.className).toContain("hover:bg-interactive-hover")
+    expect(expandButton.className).toContain("active:bg-interactive-pressed")
+    expect(expandButton.className).toContain("active:scale-100")
+    expect(
+      expandButton.querySelector('[data-slot="icon"]')
+    ).not.toBeNull()
+    expect(
+      expandButton.querySelector('[data-slot="icon"]')?.className
+    ).toContain("text-[var(--text-secondary)]")
+    expect(expandButton.querySelector("svg")?.getAttribute("width")).toBe("20")
+    expect(expandButton.querySelector("path")?.getAttribute("fill")).toBe(
+      "currentColor"
+    )
+    expect(expandButton.querySelector("path")?.getAttribute("d")).toBe(
+      "M4.335 11a.665.665 0 0 1 1.33 0v3.335H9l.134.014a.665.665 0 0 1 0 1.302L9 15.665H5A.665.665 0 0 1 4.335 15zm10-2V5.665H11a.665.665 0 0 1 0-1.33h4l.134.014c.303.062.531.33.531.651v4a.665.665 0 1 1-1.33 0"
+    )
+
+    act(() => expandButton.click())
+
+    const collapseButton = container.querySelector(
+      'button[aria-label="Collapse"]'
+    ) as HTMLButtonElement
+    expect(collapseButton.getAttribute("aria-pressed")).toBe("true")
+    expect(collapseButton.querySelector("path")?.getAttribute("fill")).toBe(
+      "currentColor"
+    )
+    expect(form.hasAttribute("data-expanded-composer")).toBe(true)
+    expect(surface.hasAttribute("data-expanded-composer")).toBe(true)
+    expect(scrollRoot.hasAttribute("data-expanded-composer")).toBe(true)
+    expect(surface.className).toContain("[corner-shape:superellipse(1.1)]")
+    expect(surface.className).toContain(
+      "h-[min(calc(100svh-var(--header-height)-8rem),48rem)]"
+    )
+    expect(collapseButton.querySelector("path")?.getAttribute("d")).toBe(
+      "M7.335 16v-3.335H4a.665.665 0 1 1 0-1.33h4c.367 0 .665.298.665.665v4a.665.665 0 0 1-1.33 0m4-12a.665.665 0 1 1 1.33 0v3.335H16l.134.014a.665.665 0 0 1 0 1.302L16 8.665h-4A.665.665 0 0 1 11.335 8z"
+    )
+
+    renderComposer(false)
+    expect(scrollRoot.hasAttribute("data-expanded-composer")).toBe(false)
+    expect(surface.className).toContain("[corner-shape:superellipse(1.1)]")
+    expect(container.querySelector('button[aria-label="Expand"]')).toBeNull()
+  })
+
+  it("keeps the expand and collapse tooltip synchronized with the control", async () => {
+    await act(async () => {
+      root.render(
+        <PromptInput
+          expanded
+          value={"first line\nsecond line"}
+          onValueChange={() => {}}
+        >
+          <PromptInputTextarea aria-label="Ask anything" />
+        </PromptInput>
+      )
+    })
+
+    const expandButton = container.querySelector(
+      'button[aria-label="Expand"]'
+    ) as HTMLButtonElement
+
+    await act(async () => {
+      expandButton.focus()
+    })
+    expect(
+      document.body.querySelector('[data-slot="tooltip-content"]')
+        ?.textContent
+    ).toBe("Expand")
+
+    await act(async () => {
+      expandButton.click()
+    })
+    const collapseButton = container.querySelector(
+      'button[aria-label="Collapse"]'
+    ) as HTMLButtonElement
+    await act(async () => {
+      collapseButton.blur()
+      collapseButton.focus()
+    })
+    expect(
+      document.body.querySelector('[data-slot="tooltip-content"]')
+        ?.textContent
+    ).toBe("Collapse")
   })
 })

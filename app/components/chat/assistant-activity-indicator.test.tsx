@@ -48,6 +48,7 @@ describe("AssistantActivityIndicator", () => {
     const liveStatus = container.querySelector(
       '[data-activity-presentation="live-status"]'
     )
+    expect(liveStatus?.getAttribute("data-slot")).toBe("assistant-activity")
     expect(liveStatus?.getAttribute("aria-busy")).toBe("true")
     expect(liveStatus?.className).toContain("min-h-8")
     expect(
@@ -55,10 +56,17 @@ describe("AssistantActivityIndicator", () => {
     ).toBe("DIV")
 
     const passiveStatus = container.querySelector(
+      '[data-activity-presentation="passive"]'
+    )
+    expect(passiveStatus?.getAttribute("data-slot")).toBe(
+      "assistant-activity"
+    )
+    expect(passiveStatus?.className).toContain("min-h-8")
+    const passiveRow = passiveStatus?.querySelector(
       '[data-slot="activity-status-row"]'
     )
-    expect(passiveStatus?.className).toContain("h-6")
-    expect(passiveStatus?.className).toContain("gap-0.5")
+    expect(passiveRow?.className).toContain("h-6")
+    expect(passiveRow?.className).toContain("gap-0.5")
 
     act(() => root.unmount())
   })

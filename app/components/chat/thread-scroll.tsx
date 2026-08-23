@@ -217,10 +217,10 @@ export function ThreadScrollEdge({
     }
   }, [])
 
-  // (3) Stream lifecycle: `data-stream-active` on the root gives the gutter
-  // its reserved-space height class. Native scroll anchoring remains enabled;
-  // the one-shot pin owns submission, then browser anchoring and manual scroll
-  // ownership govern response growth and layout changes.
+  // (3) Stream lifecycle: `data-stream-active` gives descendants such as the
+  // gutter and scroll control their streaming presentation, and lets the root
+  // disable native scroll anchoring until the response settles. The one-shot
+  // submit pin remains the sole owner of live-turn placement.
   useBrowserLayoutEffect(() => {
     const rootEl = rootRef.current
     if (!rootEl) return

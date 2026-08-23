@@ -317,6 +317,72 @@ describe("MessageAssistant activity trigger", () => {
     expect(container?.querySelector(".streaming-animation")).toBeNull()
   })
 
+  it("keeps one 32px activity slot from bare Thinking into its disclosure", () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+
+    act(() => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView([], "submitted")}
+            status="submitted"
+            isLast
+          >
+            {""}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    const turn = container?.querySelector('[data-turn-phase="submitted"]')
+    const initialSlot = container?.querySelector(
+      '[data-slot="assistant-activity"]'
+    )
+    expect(initialSlot?.className).toContain("min-h-8")
+    expect(initialSlot?.getAttribute("data-activity-presentation")).toBe(
+      "live-status"
+    )
+
+    act(() => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView(
+              [
+                {
+                  type: "reasoning",
+                  text: "Visible reasoning",
+                  state: "streaming",
+                },
+              ] as unknown as UIMessage["parts"],
+              "streaming"
+            )}
+            status="streaming"
+            isLast
+          >
+            {""}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    const disclosureSlot = container?.querySelector(
+      '[data-slot="assistant-activity"]'
+    )
+    expect(container?.querySelector('[data-turn-phase="thinking"]')).toBe(turn)
+    expect(disclosureSlot?.className).toContain("min-h-8")
+    expect(disclosureSlot?.getAttribute("data-activity-presentation")).toBe(
+      "disclosure"
+    )
+    expect(
+      disclosureSlot?.querySelector(
+        'button[aria-label="Open activity: Thinking"]'
+      )
+    ).toBeTruthy()
+  })
+
   it("shows only passive Thinking while opaque reasoning streams", () => {
     const store = makeStore({ panelTurnId: "assistant-1" })
     const parts = [

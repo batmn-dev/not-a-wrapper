@@ -1,6 +1,6 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
+import { ComposerIconButton } from "@/components/ui/composer-icon-button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,7 +14,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
 import {
   RiAddLargeLine,
   RiAttachment2,
@@ -26,14 +25,6 @@ import { PopoverContentAuth } from "./popover-content-auth"
 
 const composerPlusIcon = (
   <Icon icon={RiAddLargeLine} slotSize={20} glyphInset={0} />
-)
-
-const plusTriggerClassName =
-  "composer-btn size-9 min-w-9 rounded-full p-0 hover:bg-interactive-hover active:bg-interactive-pressed"
-
-const authenticatedPlusTriggerClassName = cn(
-  plusTriggerClassName,
-  "aria-expanded:bg-interactive-selected"
 )
 
 const composerPlusMenuContentClassName = "w-[228px] min-w-[228px]"
@@ -71,10 +62,7 @@ export function ButtonPlusMenu({
           <TooltipTrigger render={<span className="inline-flex" />}>
             <PopoverTrigger
               render={
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className={plusTriggerClassName}
+                <ComposerIconButton
                   type="button"
                   id="composer-plus-btn"
                   data-testid="composer-plus-btn"
@@ -101,10 +89,8 @@ export function ButtonPlusMenu({
           <TooltipTrigger render={<span className="inline-flex" />}>
             <DropdownMenuTrigger
               render={
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className={authenticatedPlusTriggerClassName}
+                <ComposerIconButton
+                  className="aria-expanded:bg-interactive-selected"
                   type="button"
                   id="composer-plus-btn"
                   data-testid="composer-plus-btn"

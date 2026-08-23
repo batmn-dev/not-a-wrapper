@@ -7,52 +7,76 @@
  *   - `autoFocus` is enabled by default on PromptInputTextarea
  *   - Removes redundant `TooltipProvider` wrapper in `PromptInputAction`
  *   - Not A Wrapper uses app-level TooltipProvider for consistency and smaller bundle
- *   - Upstream uses useLayoutEffect; Not A Wrapper uses standard useEffect for SSR safety
+ *   - The public PromptInputTextarea name now hosts one stable ProseMirror
+ *     contenteditable plus a non-interactive textarea fallback
  *   - Editor layout: a grid/alignment wrapper contains a
- *     separate capped overflow scroller, while the textarea uses native
- *     `field-sizing: content` instead of an imperative pixel height
+ *     separate capped overflow scroller, while a hidden textarea preserves
+ *     the bounded, plain-text expansion measurement contract
  *   - Layout-loop hardening in PromptInputTextarea: the expansion decision is
  *     a pure function of (value, derived compact width) — it must not read
- *     layout that `textareaExpanded` itself influences; the passive effect
- *     skips values the change handler already laid out (consume-once ref);
- *     clone measurement is capped to a bounded prefix of the value; a single
- *     callback-ref-owned ResizeObserver remeasures when the expansion-
- *     invariant surface or side-control inline sizes change
+ *     layout that `textareaExpanded` itself influences; clone measurement is
+ *     capped to a bounded prefix of the value; a single callback-ref-owned
+ *     ResizeObserver remeasures when the expansion-invariant surface or
+ *     side-control inline sizes change
+ *   - Source-parity multiline expand/collapse mode owns the scroll root through
+ *     callback-ref-synchronized data attributes, with no effect or timeout
  * @upgradeNotes
  *   - Preserve autoFocus default on PromptInputTextarea
  *   - Do NOT re-add TooltipProvider wrapper in PromptInputAction
- *   - Verify useEffect vs useLayoutEffect for textarea auto-resize
+ *   - Preserve the callback-ref-owned ProseMirror lifecycle and plain-string
+ *     document boundary; do not remount the editor for controlled updates
  *   - Preserve the layout-loop hardening: no live-layout reads in the
- *     expansion decision, no double setTextareaExpanded dispatch per keystroke
+ *     expansion decision and no effect-driven layout dispatch per keystroke
  */
 "use client"
 
-import { Textarea } from "@/components/ui/textarea"
+import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
+import { ComposerIconButton } from "@/components/ui/composer-icon-button"
+import { Icon } from "@/components/ui/icon"
+import {
+  createPromptInputDocument,
+  createPromptInputPlugins,
+  promptInputSchema,
+  readPromptInputDocument,
+  replacePromptInputDocument,
+  setPromptInputSelection,
+} from "@/components/ui/prompt-input-editor"
+import { useOptionalScrollRoot } from "@/components/ui/scroll-root"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+  ComposerCollapseIcon,
+  ComposerExpandIcon,
+} from "@/lib/icons/composer"
 import { cn } from "@/lib/utils"
 import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
+import { EditorState } from "prosemirror-state"
+import { EditorView } from "prosemirror-view"
 import React, {
   createContext,
   useContext,
-  useEffect,
   useRef,
   useState,
 } from "react"
+
+export type PromptInputEditorHandle = {
+  focus: (options?: FocusOptions) => void
+  setSelectionRange: (selectionStart: number, selectionEnd: number) => void
+}
 
 type PromptInputContextType = {
   isLoading: boolean
   value: string
   setValue: (value: string) => void
   setTextareaExpanded: React.Dispatch<React.SetStateAction<boolean>>
-  maxHeight: number | string
+  maxHeight?: number | string
   onSubmit?: () => void
   disabled?: boolean
-  textareaRef: React.RefObject<HTMLTextAreaElement | null>
+  editorRef: React.RefObject<PromptInputEditorHandle | null>
 }
 
 const PromptInputContext = createContext<PromptInputContextType | undefined>(
@@ -84,7 +108,7 @@ function PromptInput({
   className,
   isLoading = false,
   expanded = false,
-  maxHeight = 240,
+  maxHeight,
   value,
   onValueChange,
   onSubmit,
@@ -94,8 +118,28 @@ function PromptInput({
 }: PromptInputProps) {
   const [internalValue, setInternalValue] = useState(value || "")
   const [textareaExpanded, setTextareaExpanded] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [expandedComposer, setExpandedComposer] = useState(false)
+  const editorRef = useRef<PromptInputEditorHandle>(null)
   const isExpanded = expanded || textareaExpanded
+  const isExpandedComposer = isExpanded && expandedComposer
+  const scrollRoot = useOptionalScrollRoot()
+
+  // React's adjust-during-render pattern keeps the derived mode from surviving
+  // a clear-on-send or externally restored one-line value. The callback ref
+  // below applies the root attribute during commit, so render stays pure.
+  if (!isExpanded && expandedComposer) {
+    setExpandedComposer(false)
+  }
+
+  const formRef = React.useCallback(
+    (node: HTMLFormElement | null) => {
+      scrollRoot?.setScrollRootMode(
+        "expanded-composer",
+        node !== null && isExpandedComposer
+      )
+    },
+    [isExpandedComposer, scrollRoot]
+  )
 
   const handleChange = (newValue: string) => {
     setInternalValue(newValue)
@@ -112,30 +156,83 @@ function PromptInput({
         maxHeight,
         onSubmit,
         disabled,
-        textareaRef,
+        editorRef,
       }}
     >
       <form
+        ref={formRef}
         autoComplete="off"
-        className={cn("group/composer w-full", className)}
+        className={cn("group/composer relative z-1 w-full", className)}
         data-expanded={isExpanded ? "" : undefined}
+        data-expanded-composer={isExpandedComposer ? "" : undefined}
+        data-expanded-composer-mode-button={isExpanded ? "" : undefined}
         data-type="unified-composer"
         onSubmit={(event) => {
           event.preventDefault()
-          onSubmit?.()
+          if (!disabled) onSubmit?.()
         }}
       >
         {formControls}
         <div className="relative">
           <div
             data-composer-surface="true"
+            data-expanded-composer={isExpandedComposer ? "" : undefined}
             data-slot="prompt-input-surface"
-            className="shadow-short-composer border-border-subtle relative grid cursor-text grid-cols-[auto_1fr_auto] overflow-clip rounded-[28px] border-0 bg-[var(--composer-bg)] bg-clip-padding px-2 py-[9px] contain-inline-size [--composer-compact-editor-padding-end:6px] [--composer-compact-editor-padding-start:7px] [grid-template-areas:'header_header_header'_'leading_primary_trailing'_'._footer_.'] group-not-data-[expanded]/composer:min-h-[52px] group-not-data-[expanded]/composer:py-[5px] group-data-[expanded]/composer:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out max-sm:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing']"
+            className={cn(
+              "shadow-short-composer border-border-subtle relative flex cursor-text flex-col overflow-clip rounded-[28px] border-0 bg-[var(--composer-bg)] bg-clip-padding contain-inline-size [corner-shape:superellipse(1.1)] group-not-data-expanded/composer:min-h-[52px] motion-safe:transition-colors motion-safe:duration-200 motion-safe:ease-in-out max-sm:not-dark:shadow-[0_0_0_1px_rgba(0,_0,_0,_0.04),0_2px_8px_0_rgba(0,_0,_0,_0.04),0px_4px_40px_8px_rgba(0,_0,_0,_0.025)]",
+              isExpandedComposer &&
+                "my-4 h-[min(calc(100svh-var(--header-height)-8rem),48rem)] max-h-[calc(100svh-var(--header-height)-8rem)]"
+            )}
             onClick={() => {
-              textareaRef.current?.focus()
+              editorRef.current?.focus()
             }}
           >
-            {children}
+            {isExpanded && (
+              <div
+                className="relative h-0 shrink-0"
+                data-composer-controls-anchor=""
+              >
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <ComposerIconButton
+                        aria-label={
+                          isExpandedComposer ? "Collapse" : "Expand"
+                        }
+                        aria-pressed={isExpandedComposer}
+                        className="absolute end-2.5 top-2.5 z-10"
+                        type="button"
+                        onClick={() =>
+                          setExpandedComposer((current) => !current)
+                        }
+                      >
+                        <Icon
+                          className="text-[var(--text-secondary)]"
+                          icon={
+                            isExpandedComposer
+                              ? ComposerCollapseIcon
+                              : ComposerExpandIcon
+                          }
+                          glyphInset={0}
+                          slotSize={20}
+                        />
+                      </ComposerIconButton>
+                    }
+                  />
+                  <TooltipContent side="bottom">
+                    {isExpandedComposer ? "Collapse" : "Expand"}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            )}
+            <div
+              data-composer-body=""
+              data-composer-grid=""
+              data-composer-layout="true"
+              className="grid min-h-0 flex-1 grid-cols-[auto_1fr_auto] px-2 py-[9px] [--composer-compact-editor-padding-end:6px] [--composer-compact-editor-padding-start:7px] [grid-template-areas:'header_header_header'_'leading_primary_trailing'_'._footer_.'] group-not-data-expanded/composer:py-[5px] group-data-expanded/composer:grid-rows-[auto_minmax(0,1fr)_auto] group-data-expanded/composer:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] max-sm:group-not-data-expanded/composer:pb-2 max-sm:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] @max-[520px]/main:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing']"
+            >
+              {children}
+            </div>
           </div>
         </div>
       </form>
@@ -157,11 +254,7 @@ function readPixels(value: string) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-function getCompactTextareaWidth(textarea: HTMLTextAreaElement) {
-  if (window.matchMedia("(max-width: 639px)").matches) {
-    return textarea.getBoundingClientRect().width
-  }
-
+function getCompactEditorWidth(textarea: HTMLTextAreaElement) {
   const surface = textarea.closest<HTMLElement>(
     '[data-composer-surface="true"]'
   )
@@ -169,13 +262,32 @@ function getCompactTextareaWidth(textarea: HTMLTextAreaElement) {
     return textarea.getBoundingClientRect().width
   }
 
-  const surfaceStyle = getComputedStyle(surface)
+  const layout = surface.querySelector<HTMLElement>(
+    '[data-composer-layout="true"]'
+  )
+  if (!layout) {
+    return textarea.getBoundingClientRect().width
+  }
+
+  const layoutStyle = getComputedStyle(layout)
   // These insets live on the surface so compact-width measurement remains
   // stable after the editor wrapper switches to its expanded padding.
   const contentWidth =
-    surface.getBoundingClientRect().width -
-    readPixels(surfaceStyle.paddingLeft) -
-    readPixels(surfaceStyle.paddingRight)
+    layout.getBoundingClientRect().width -
+    readPixels(layoutStyle.paddingLeft) -
+    readPixels(layoutStyle.paddingRight)
+  const editorPadding =
+    readPixels(
+      layoutStyle.getPropertyValue("--composer-compact-editor-padding-start")
+    ) +
+    readPixels(
+      layoutStyle.getPropertyValue("--composer-compact-editor-padding-end")
+    )
+
+  if (window.matchMedia("(max-width: 639px)").matches) {
+    return Math.max(0, contentWidth - editorPadding)
+  }
+
   const leadingWidth =
     surface
       .querySelector<HTMLElement>('[data-composer-leading="true"]')
@@ -190,14 +302,7 @@ function getCompactTextareaWidth(textarea: HTMLTextAreaElement) {
     contentWidth -
       leadingWidth -
       trailingWidth -
-      readPixels(
-        surfaceStyle.getPropertyValue(
-          "--composer-compact-editor-padding-start"
-        )
-      ) -
-      readPixels(
-        surfaceStyle.getPropertyValue("--composer-compact-editor-padding-end")
-      )
+      editorPadding
   )
 }
 
@@ -213,6 +318,7 @@ function measureTextareaScrollHeight(
   clone.value = value || " "
   clone.rows = 1
   clone.style.position = "absolute"
+  clone.style.display = "block"
   clone.style.visibility = "hidden"
   clone.style.pointerEvents = "none"
   clone.style.zIndex = "-1"
@@ -230,14 +336,7 @@ function measureTextareaScrollHeight(
   return scrollHeight
 }
 
-function getCollapsedTextareaHeight(textarea: HTMLTextAreaElement) {
-  const styles = getComputedStyle(textarea)
-  return (
-    readPixels(styles.lineHeight) +
-    readPixels(styles.paddingTop) +
-    readPixels(styles.paddingBottom)
-  )
-}
+const COLLAPSED_EDITOR_HEIGHT = 42
 
 /**
  * The expansion decision only needs "does this value wrap past one line?", so
@@ -248,20 +347,68 @@ function getCollapsedTextareaHeight(textarea: HTMLTextAreaElement) {
  */
 const EXPANSION_MEASURE_CHAR_LIMIT = 2000
 
+function getEditorAttributes({
+  ariaLabel,
+  className,
+  disabled,
+}: {
+  ariaLabel?: string
+  className?: string
+  disabled: boolean
+}) {
+  return {
+    "aria-label": ariaLabel ?? "",
+    "aria-multiline": "true",
+    ...(disabled
+      ? { "aria-disabled": "true", "aria-readonly": "true" }
+      : {}),
+    autocapitalize: "sentences",
+    autocomplete: "off",
+    autocorrect: "on",
+    class: cn(
+      "composer-prosemirror text-foreground mt-4 block min-h-[42px] whitespace-break-spaces pb-4 text-base leading-[26px] outline-none",
+      className
+    ),
+    "data-virtualkeyboard": "true",
+    id: "prompt-textarea",
+    inputmode: "text",
+    role: "textbox",
+    spellcheck: "true",
+    translate: "no",
+  }
+}
+
 export type PromptInputTextareaProps = {
   disableAutosize?: boolean
   containerClassName?: string
-} & React.ComponentProps<typeof Textarea>
+  className?: string
+  placeholder?: string
+  "aria-label"?: string
+  autoFocus?: boolean
+  disabled?: boolean
+  style?: React.CSSProperties
+  onKeyDown?: (event: KeyboardEvent) => void
+  onPaste?: (event: ClipboardEvent) => void
+}
 
-function PromptInputTextarea({
-  className,
-  containerClassName,
-  onKeyDown,
-  disableAutosize = false,
-  style,
-  ref,
-  ...props
-}: PromptInputTextareaProps) {
+const PromptInputTextarea = React.forwardRef<
+  PromptInputEditorHandle,
+  PromptInputTextareaProps
+>(function PromptInputTextarea(
+  {
+    className,
+    containerClassName,
+    onKeyDown,
+    onPaste,
+    disableAutosize = false,
+    style,
+    placeholder,
+    "aria-label": ariaLabel,
+    autoFocus = true,
+    disabled: disabledProp,
+  },
+  ref
+) {
   const {
     value,
     setValue,
@@ -269,10 +416,63 @@ function PromptInputTextarea({
     maxHeight,
     onSubmit,
     disabled,
-    textareaRef,
+    editorRef,
   } = usePromptInput()
+  const viewRef = useRef<EditorView | null>(null)
+  const editorHandleRef = useRef<PromptInputEditorHandle | null>(null)
+  const fallbackTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const forwardedRef = useRef(ref)
+  const callbacks = useRef({
+    ariaLabel,
+    autoFocus,
+    className,
+    disabled: disabled ?? disabledProp ?? false,
+    onKeyDown,
+    onPaste,
+    onSubmit,
+    placeholder,
+    setValue,
+    style,
+    value,
+  })
 
-  const applyTextareaLayout = React.useCallback(
+  useBrowserLayoutEffect(() => {
+    callbacks.current = {
+      ariaLabel,
+      autoFocus,
+      className,
+      disabled: disabled ?? disabledProp ?? false,
+      onKeyDown,
+      onPaste,
+      onSubmit,
+      placeholder,
+      setValue,
+      style,
+      value,
+    }
+
+    if (forwardedRef.current !== ref) {
+      assignRef(forwardedRef.current, null)
+      forwardedRef.current = ref
+      assignRef(ref, editorHandleRef.current)
+    }
+  }, [
+    ariaLabel,
+    autoFocus,
+    className,
+    disabled,
+    disabledProp,
+    onKeyDown,
+    onPaste,
+    onSubmit,
+    placeholder,
+    ref,
+    setValue,
+    style,
+    value,
+  ])
+
+  const applyEditorLayout = React.useCallback(
     (textarea: HTMLTextAreaElement | null, nextValue: string) => {
       if (disableAutosize || !textarea) {
         setTextareaExpanded(false)
@@ -284,8 +484,7 @@ function PromptInputTextarea({
       // the nested scroller below, not the textarea, owns the height cap.
       textarea.style.removeProperty("height")
 
-      const collapsedHeight = getCollapsedTextareaHeight(textarea)
-      const compactWidth = getCompactTextareaWidth(textarea)
+      const compactWidth = getCompactEditorWidth(textarea)
       const compactScrollHeight = measureTextareaScrollHeight(
         textarea,
         nextValue.slice(0, EXPANSION_MEASURE_CHAR_LIMIT),
@@ -301,32 +500,17 @@ function PromptInputTextarea({
       // one, so any value that wraps live wraps in the compact measurement.
       const shouldExpand =
         nextValue.length > 0 &&
-        (nextValue.includes("\n") || compactScrollHeight > collapsedHeight + 1)
+        (nextValue.includes("\n") ||
+          compactScrollHeight > COLLAPSED_EDITOR_HEIGHT + 1)
 
       setTextareaExpanded(shouldExpand)
     },
     [disableAutosize, setTextareaExpanded]
   )
 
-  // Consume-once handshake with handleChange: the effect exists for values
-  // that arrive OUTSIDE a change event (mount, draft restore, quote insert,
-  // clear-on-send). For typed input, handleChange already laid this exact
-  // value out — re-dispatching setTextareaExpanded from the passive effect
-  // both doubles the forced reflow per keystroke and feeds React's nested-
-  // update accounting during rapid input.
-  const eventLaidOutValueRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    const alreadyLaidOut = eventLaidOutValueRef.current === value
-    eventLaidOutValueRef.current = null
-    if (alreadyLaidOut) return
-    applyTextareaLayout(textareaRef.current, value)
-  }, [applyTextareaLayout, textareaRef, value])
-
-  const setTextareaRefs = React.useCallback(
+  const setFallbackTextareaRef = React.useCallback(
     (node: HTMLTextAreaElement | null) => {
-      textareaRef.current = node
-      assignRef(ref, node)
+      fallbackTextareaRef.current = node
 
       if (!node || disableAutosize) return
 
@@ -362,7 +546,7 @@ function PromptInputTextarea({
         }
 
         lastInlineSizes = nextInlineSizes
-        applyTextareaLayout(node, node.value)
+        applyEditorLayout(node, callbacks.current.value)
       }
 
       const resizeObserver =
@@ -373,30 +557,128 @@ function PromptInputTextarea({
       if (leading) resizeObserver?.observe(leading)
       if (trailing) resizeObserver?.observe(trailing)
       compactMedia.addEventListener("change", remeasureForGeometryChange)
+      applyEditorLayout(node, callbacks.current.value)
 
       return () => {
         resizeObserver?.disconnect()
         compactMedia.removeEventListener("change", remeasureForGeometryChange)
-        if (textareaRef.current === node) textareaRef.current = null
-        assignRef(ref, null)
+        if (fallbackTextareaRef.current === node) {
+          fallbackTextareaRef.current = null
+        }
       }
     },
-    [applyTextareaLayout, disableAutosize, ref, textareaRef]
+    [applyEditorLayout, disableAutosize]
   )
 
-  const handleChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    applyTextareaLayout(event.currentTarget, event.currentTarget.value)
-    eventLaidOutValueRef.current = event.currentTarget.value
-    setValue(event.currentTarget.value)
-  }
+  const mountEditor = React.useCallback((node: HTMLDivElement | null) => {
+    if (!node) return
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      onSubmit?.()
+    let view: EditorView
+    const state = EditorState.create({
+      doc: createPromptInputDocument(callbacks.current.value),
+      plugins: createPromptInputPlugins(
+        () => callbacks.current.placeholder
+      ),
+      schema: promptInputSchema,
+    })
+    view = new EditorView(
+      { mount: node },
+      {
+        attributes: getEditorAttributes({
+          ariaLabel: callbacks.current.ariaLabel,
+          className: callbacks.current.className,
+          disabled: callbacks.current.disabled,
+        }),
+        dispatchTransaction(transaction) {
+          const nextState = view.state.apply(transaction)
+          view.updateState(nextState)
+          if (
+            !transaction.docChanged ||
+            transaction.getMeta("externalValue")
+          ) {
+            return
+          }
+
+          const nextValue = readPromptInputDocument(nextState.doc)
+          if (fallbackTextareaRef.current) {
+            fallbackTextareaRef.current.value = nextValue
+          }
+          applyEditorLayout(fallbackTextareaRef.current, nextValue)
+          callbacks.current.setValue(nextValue)
+        },
+        editable: () => !callbacks.current.disabled,
+        handleKeyDown(_view, event) {
+          if (callbacks.current.disabled || event.isComposing) return false
+
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault()
+            callbacks.current.onSubmit?.()
+            callbacks.current.onKeyDown?.(event)
+            return true
+          }
+
+          callbacks.current.onKeyDown?.(event)
+          return event.defaultPrevented
+        },
+        handlePaste(_view, event) {
+          if (callbacks.current.disabled) return false
+          callbacks.current.onPaste?.(event)
+          return event.defaultPrevented
+        },
+        state,
+      }
+    )
+    viewRef.current = view
+
+    const handle: PromptInputEditorHandle = {
+      focus(options) {
+        view.dom.focus(options)
+      },
+      setSelectionRange(selectionStart, selectionEnd) {
+        setPromptInputSelection(view, selectionStart, selectionEnd)
+      },
     }
-    onKeyDown?.(e)
-  }
+    editorHandleRef.current = handle
+    editorRef.current = handle
+    assignRef(forwardedRef.current, handle)
+    if (callbacks.current.autoFocus) handle.focus()
+
+    return () => {
+      if (viewRef.current === view) viewRef.current = null
+      if (editorHandleRef.current === handle) editorHandleRef.current = null
+      if (editorRef.current === handle) editorRef.current = null
+      assignRef(forwardedRef.current, null)
+      view.destroy()
+    }
+  }, [applyEditorLayout, editorRef])
+
+  useBrowserLayoutEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+
+    view.setProps({
+      attributes: getEditorAttributes({
+        ariaLabel,
+        className,
+        disabled: disabled ?? disabledProp ?? false,
+      }),
+      editable: () => !(disabled ?? disabledProp ?? false),
+    })
+    replacePromptInputDocument(view, value)
+    view.updateState(view.state)
+    if (fallbackTextareaRef.current) {
+      fallbackTextareaRef.current.value = value
+    }
+    applyEditorLayout(fallbackTextareaRef.current, value)
+  }, [
+    applyEditorLayout,
+    ariaLabel,
+    className,
+    disabled,
+    disabledProp,
+    placeholder,
+    value,
+  ])
 
   const maxHeightStyle =
     typeof maxHeight === "number" ? `${maxHeight}px` : maxHeight
@@ -406,41 +688,38 @@ function PromptInputTextarea({
       data-composer-editor-wrapper="true"
       data-slot="prompt-input-editor-wrapper"
       className={cn(
-        "-my-2.5 flex min-h-14 min-w-0 items-center overflow-x-hidden ps-[var(--composer-compact-editor-padding-start)] pe-[var(--composer-compact-editor-padding-end)] group-data-[expanded]/composer:mb-0 group-data-[expanded]/composer:px-2.5",
+        "-my-2.5 flex min-h-14 min-w-0 items-center overflow-x-hidden ps-[var(--composer-compact-editor-padding-start)] pe-[var(--composer-compact-editor-padding-end)] group-data-expanded/composer:mb-0 group-data-expanded/composer:ps-2.5 group-data-expanded/composer:pe-0 group-data-[expanded-composer]/composer:h-full",
         containerClassName
       )}
     >
       <div
         data-composer-editor-scroller="true"
         data-slot="prompt-input-editor-scroller"
-        className="min-w-0 flex-1 [scrollbar-width:thin] overflow-auto"
+        className="default-browser vertical-scroll-fade-mask min-h-[var(--deep-research-composer-extra-height,unset)] min-w-0 max-h-[max(30svh,5rem)] max-h-52 flex-1 scroll-py-4 overflow-auto [scrollbar-width:thin] group-data-[expanded-composer-mode-button]/composer:pe-9 group-data-[expanded-composer]/composer:h-full group-data-[expanded-composer]/composer:max-h-none!"
         style={{ maxHeight: maxHeightStyle }}
       >
-        <Textarea
-          ref={setTextareaRefs}
-          autoFocus
+        <textarea
+          ref={setFallbackTextareaRef}
+          aria-label={ariaLabel}
+          autoCapitalize="sentences"
+          autoComplete="off"
+          autoCorrect="on"
+          className="wcDTda_fallbackTextarea composer-fallback-textarea"
           data-virtualkeyboard="true"
-          value={value}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          className={cn(
-            "text-foreground placeholder:text-[var(--text-tertiary)] mt-4 block min-h-[42px] resize-none overflow-y-visible rounded-none border-none bg-transparent px-0 pt-0 pb-4 text-base leading-[26px] shadow-none transition-none focus-visible:ring-0 focus-visible:ring-offset-0 dark:bg-transparent",
-            className
-          )}
-          style={{
-            ...style,
-            lineHeight: "26px",
-            overflowY: "hidden",
-            whiteSpace: "break-spaces",
-          }}
+          dir="auto"
+          inputMode="text"
+          name="prompt-textarea"
+          placeholder={placeholder}
+          spellCheck="true"
+          style={{ display: "none" }}
+          defaultValue={value}
           rows={1}
-          disabled={disabled}
-          {...props}
         />
+        <div ref={mountEditor} style={style} />
       </div>
     </div>
   )
-}
+})
 
 type PromptInputFooterProps = React.HTMLAttributes<HTMLDivElement>
 

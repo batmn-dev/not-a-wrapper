@@ -22,6 +22,7 @@ const promptInputMockCalls: Array<{
   maxHeight?: number | string
   value?: string
   onValueChange?: (value: string) => void
+  onSubmit?: () => void
 }> = []
 const promptInputActionMockCalls: Array<{
   disabled?: boolean
@@ -166,15 +167,32 @@ vi.mock("@/components/ui/prompt-input", () => ({
     maxHeight,
     value,
     onValueChange,
+    onSubmit,
   }: {
     children: React.ReactNode
     expanded?: boolean
     maxHeight?: number | string
     value?: string
     onValueChange?: (value: string) => void
+    onSubmit?: () => void
   }) => {
-    promptInputMockCalls.push({ expanded, maxHeight, value, onValueChange })
-    return <div>{children}</div>
+    promptInputMockCalls.push({
+      expanded,
+      maxHeight,
+      value,
+      onValueChange,
+      onSubmit,
+    })
+    return (
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          onSubmit?.()
+        }}
+      >
+        {children}
+      </form>
+    )
   },
   PromptInputAction: ({
     children,
@@ -188,19 +206,44 @@ vi.mock("@/components/ui/prompt-input", () => ({
     promptInputActionMockCalls.push({ disabled, tooltip })
     return <div>{children}</div>
   },
-  PromptInputActions: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
+  PromptInputActions: ({
+    children,
+    ...props
+  }: React.HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
   PromptInputFooter: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
   PromptInputTextarea: React.forwardRef<
-    HTMLTextAreaElement,
-    React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
+    {
+      focus: (options?: FocusOptions) => void
+      setSelectionRange: (start: number, end: number) => void
+    },
+    Omit<
+      React.TextareaHTMLAttributes<HTMLTextAreaElement>,
+      "onKeyDown" | "onPaste"
+    > & {
       containerClassName?: string
+      onKeyDown?: (event: KeyboardEvent) => void
+      onPaste?: (event: ClipboardEvent) => void
     }
-  >(function PromptInputTextarea({ containerClassName, ...props }, ref) {
-    return <textarea ref={ref} {...props} />
+  >(function PromptInputTextarea(
+    { containerClassName, onKeyDown, onPaste, ...props },
+    ref
+  ) {
+    const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+    React.useImperativeHandle(ref, () => ({
+      focus: (options) => textareaRef.current?.focus(options),
+      setSelectionRange: (start, end) =>
+        textareaRef.current?.setSelectionRange(start, end),
+    }))
+    return (
+      <textarea
+        ref={textareaRef}
+        onKeyDown={(event) => onKeyDown?.(event.nativeEvent)}
+        onPaste={(event) => onPaste?.(event.nativeEvent)}
+        {...props}
+      />
+    )
   }),
 }))
 
@@ -306,6 +349,7 @@ describe("Composer primary action", () => {
 
     expect(button).toBeTruthy()
     expect(button?.disabled).toBe(false)
+    expect(button?.type).toBe("button")
     expect(button?.className).toContain("pointer-fine:after:-inset-x-1")
 
     act(() => {
@@ -353,15 +397,36 @@ describe("Composer primary action", () => {
 
     expect(mounted.querySelector('button[aria-label="Stop"]')).toBeNull()
     const sendButton = mounted.querySelector(
-      'button[aria-label="Send message"]'
+      'button[aria-label="Send prompt"]'
     ) as HTMLButtonElement | null
     expect(sendButton).toBeTruthy()
     expect(sendButton?.disabled).toBe(true)
+    expect(sendButton?.type).toBe("submit")
     expect(sendButton?.className).toContain("pointer-fine:after:-inset-x-1")
+  })
+
+  it("routes native form submission through the guarded send contract", async () => {
+    composerMocks.draftValue = "send through form"
+    const onTurn = vi.fn(async () => true)
+
+    renderComposer({ onTurn, isSubmitting: false, status: "ready" })
+
+    await act(async () => {
+      promptInputMockCalls.at(-1)?.onSubmit?.()
+      await Promise.resolve()
+    })
+
+    expect(onTurn).toHaveBeenCalledOnce()
+    expect(onTurn).toHaveBeenCalledWith({
+      text: "send through form",
+      files: [],
+      attachments: [],
+    })
   })
 
   it("keeps the shared default placeholder and accepts narrow surface copy", () => {
     const defaultComposer = renderComposer({ status: "ready" })
+    expect(promptInputMockCalls.at(-1)?.maxHeight).toBeUndefined()
     expect(defaultComposer.querySelector("textarea")?.placeholder).toBe(
       "Ask anything"
     )
@@ -370,6 +435,21 @@ describe("Composer primary action", () => {
         .querySelector("textarea")
         ?.closest<HTMLDivElement>('div[class*="order-2"]')?.className
     ).toContain("sm:pb-4")
+    expect(
+      defaultComposer
+        .querySelector("textarea")
+        ?.closest<HTMLDivElement>('div[class*="order-2"]')?.className
+    ).toContain("z-1")
+    expect(
+      defaultComposer.querySelector(
+        '[data-composer-transition-slot="leading"]'
+      )
+    ).not.toBeNull()
+    expect(
+      defaultComposer.querySelector(
+        '[data-composer-transition-slot="trailing"]'
+      )
+    ).not.toBeNull()
 
     act(() => {
       root?.render(
@@ -541,6 +621,7 @@ describe("Composer primary action", () => {
       '[data-testid="send-button"]'
     ) as HTMLButtonElement
     expect(sendButton.disabled).toBe(false)
+    expect(sendButton.type).toBe("submit")
 
     await act(async () => {
       sendButton.click()

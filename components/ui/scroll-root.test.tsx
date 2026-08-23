@@ -11,7 +11,11 @@ import {
   it,
   vi,
 } from "vitest"
-import { ScrollRoot, useStickyPaddingBottom } from "./scroll-root"
+import {
+  ScrollRoot,
+  useScrollRoot,
+  useStickyPaddingBottom,
+} from "./scroll-root"
 
 class ResizeObserverStub {
   readonly callback: ResizeObserverCallback
@@ -55,6 +59,27 @@ function StickyFooterFixture({
         style={{ position: headerPosition }}
       />
     </div>
+  )
+}
+
+function ScrollModeFixture() {
+  const { setScrollRootMode } = useScrollRoot()
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setScrollRootMode("expanded-composer", true)}
+      >
+        Expand composer
+      </button>
+      <button
+        type="button"
+        onClick={() => setScrollRootMode("voice-focus-mode", true)}
+      >
+        Enter voice focus
+      </button>
+    </>
   )
 }
 
@@ -357,7 +382,7 @@ describe("ScrollRoot viewport and footer measurement", () => {
     expect(spacer.style.height).toBe("0px")
   })
 
-  it("keeps native scroll anchoring enabled while a stream is active", () => {
+  it("disables native scroll anchoring while a stream is active", () => {
     act(() => {
       root.render(
         <ScrollRoot data-stream-active="">
@@ -371,6 +396,55 @@ describe("ScrollRoot viewport and footer measurement", () => {
     ) as HTMLElement
 
     expect(scrollRoot.hasAttribute("data-stream-active")).toBe(true)
-    expect(scrollRoot.className).not.toContain("[overflow-anchor:none]")
+    expect(scrollRoot.className).toContain(
+      "data-stream-active:[overflow-anchor:none]"
+    )
+  })
+
+  it("owns expanded-composer scroll locking on the root", () => {
+    act(() => {
+      root.render(
+        <ScrollRoot>
+          <ScrollModeFixture />
+        </ScrollRoot>
+      )
+    })
+
+    const scrollRoot = container.querySelector(
+      "[data-scroll-root]"
+    ) as HTMLElement
+    const buttons = container.querySelectorAll("button")
+
+    expect(scrollRoot.className).toContain(
+      "not-print:data-expanded-composer:overflow-y-hidden!"
+    )
+    act(() => buttons[0]?.click())
+    expect(scrollRoot.hasAttribute("data-expanded-composer")).toBe(true)
+    act(() => buttons[1]?.click())
+    expect(scrollRoot.hasAttribute("data-voice-focus-mode")).toBe(true)
+    expect(scrollRoot.className).toContain(
+      "not-print:data-voice-focus-mode:overflow-y-hidden!"
+    )
+  })
+
+  it("exposes the complete fixed-header and safe-area variable contract", () => {
+    act(() => {
+      root.render(
+        <ScrollRoot>
+          <header data-fixed-header="never" />
+        </ScrollRoot>
+      )
+    })
+
+    const scrollRoot = container.querySelector(
+      "[data-scroll-root]"
+    ) as HTMLElement
+
+    expect(scrollRoot.className).toContain(
+      "has-data-[fixed-header=never]:[--sticky-padding-top:0px]"
+    )
+    expect(scrollRoot.className).toContain(
+      "[--scroll-root-safe-area-inset-bottom:calc(var(--sticky-padding-bottom)+var(--screen-keyboard-height,0px)+env(safe-area-inset-bottom,0px))]"
+    )
   })
 })
