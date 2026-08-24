@@ -308,6 +308,15 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
     expect(menu?.className).toContain("rounded-[20px]")
     expect(menu?.className).toContain("py-2.5")
     expect(menu?.className).not.toContain("w-[240px]")
+    // Content-sized: the rows set the width (capped at max-w-xs); the shared
+    // dropdown base's anchor-width sizing must NOT survive the merge, or the
+    // popover collapses to the + button's min-w floor and truncates labels.
+    expect(menu?.className).toContain("w-max")
+    expect(menu?.className).not.toContain("w-(--anchor-width)")
+    // Plain currentColor glyphs: no per-action icon tint on mobile rows.
+    expect(
+      menu?.querySelector('[class*="web-search-icon-foreground"]')
+    ).toBeNull()
     // Surface and shadow come from the shared floating-surface tokens — no
     // raw hex values or inline shadows on the menu.
     expect(menu?.className).toContain("bg-floating-surface")

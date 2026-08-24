@@ -357,7 +357,9 @@ export function ButtonPlusMenu({
           {/* ChatGPT's current mobile + menu (captured 2026-08-24): a compact
               content-sized popover on the main surface — rounded-[20px],
               py-2.5, 36px text-sm rows with plain 20px currentColor glyphs —
-              NOT the old dark icon-circle panel. */}
+              NOT the old dark icon-circle panel. `w-max` overrides the shared
+              dropdown base's anchor-width sizing: the popover is sized by its
+              rows (capped at max-w-xs), never by the 36px + button. */}
           <DropdownMenuContent
             side="top"
             sideOffset={0}
@@ -366,7 +368,7 @@ export function ButtonPlusMenu({
             animated={false}
             geometry="custom"
             data-content-appearance="touch-optimized"
-            className="max-h-(--available-height) max-w-xs overflow-y-auto rounded-[20px] py-2.5 [scrollbar-width:none]"
+            className="max-h-(--available-height) w-max max-w-xs overflow-y-auto rounded-[20px] py-2.5 [scrollbar-width:none]"
             onKeyDownCapture={(event) => {
               if (event.key === "Tab") event.preventDefault()
             }}
@@ -381,10 +383,11 @@ export function ButtonPlusMenu({
                   onClick={() => activateItem(item.itemId)}
                 >
                   <span className="flex min-w-0 items-center gap-1.5">
+                    {/* Mobile rows keep ChatGPT's plain currentColor glyphs —
+                        no per-action icon tint (that belongs to the @ menu). */}
                     <Icon
                       icon={item.action.icon}
                       glyphInset={0}
-                      iconClassName={item.action.iconClassName}
                       slotSize={20}
                     />
                     <span className="min-w-0 truncate">
@@ -409,7 +412,6 @@ export function ButtonPlusMenu({
                     <Icon
                       icon={item.action.icon}
                       glyphInset={0}
-                      iconClassName={item.action.iconClassName}
                       slotSize={20}
                     />
                     <span className="min-w-0 truncate">
