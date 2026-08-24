@@ -31,7 +31,7 @@ describe("floating surface contract", () => {
       "hover:bg-floating-menu-item-active focus:bg-floating-menu-item-active data-highlighted:bg-floating-menu-item-active data-open:bg-floating-menu-item-active data-popup-open:bg-floating-menu-item-active data-selected:bg-floating-menu-item-active"
     )
     expect(floatingMenuItemClassName).toBe(
-      `mx-2.5 h-9 rounded-(--floating-menu-item-radius) px-2 py-1.5 ${floatingMenuItemActiveClassName}`
+      `mx-2.5 h-(--floating-menu-item-height) rounded-(--floating-menu-item-radius) px-2 py-1.5 ${floatingMenuItemActiveClassName}`
     )
     expect(floatingMenuLabelClassName).toBe("mx-2.5 px-2 py-1.5")
     expect(floatingMenuSeparatorClassName).toBe(
@@ -43,8 +43,8 @@ describe("floating surface contract", () => {
     const css = read("app/globals.css")
 
     expect(css).toContain("--popover: oklch(0.222 0 0);")
-    expect(css).toContain("--floating-surface: #ffffff;")
-    expect(css).toContain("--floating-surface: #353535;")
+    expect(css).toContain("--floating-surface: oklch(1 0 0);")
+    expect(css).toContain("--floating-surface: oklch(0.305 0 0);")
     expect(css).toContain("--modal-centered-surface: #212121;")
     expect(css).toContain("--modal-search-surface: #212121;")
     expect(css).toMatch(
@@ -59,7 +59,31 @@ describe("floating surface contract", () => {
     )
     expect(css).toContain("--floating-menu-radius: 1.25rem;")
     expect(css).toContain("--floating-menu-item-radius: 0.75rem;")
+    expect(css).toContain(
+      "--floating-menu-item-height: calc(var(--spacing) * 9);"
+    )
+    expect(css).toMatch(
+      /--floating-menu-max-height:\s*calc\(\s*var\(--spacing\) \* 4 \+ var\(--floating-menu-item-height\) \* 10\s*\);/
+    )
+    expect(css).toMatch(
+      /@media \(pointer: coarse\)[\s\S]*?--floating-menu-item-height: calc\(var\(--spacing\) \* 10\);/
+    )
     expect(css).toContain("--floating-menu-divider: var(--border-default);")
+    expect(css).toContain(
+      "--composer-capability-accent: oklch(0.626 0.188 259.456);"
+    )
+    expect(css).toContain(
+      "--composer-capability-accent: oklch(0.72 0.137 253.307);"
+    )
+    expect(css).toContain(
+      "--composer-selection-background: oklch(0.684 0.157 256.21 / 0.35);"
+    )
+    expect(css).toContain(
+      "--web-search-icon-surface: oklch(0.941 0.043 218.859);"
+    )
+    expect(css).toContain(
+      "--web-search-icon-surface: oklch(0.334 0.02 221.692);"
+    )
     expect(css).toContain(
       "--modal-search-edge-shadow: 0 14px 62px rgba(0, 0, 0, 0.25);"
     )
@@ -88,6 +112,14 @@ describe("floating surface contract", () => {
     expect(source).toMatch(
       /geometry === "menu"\s*\?\s*floatingMenuItemClassName\s*:\s*floatingMenuItemActiveClassName/
     )
+  })
+
+  it("lets shared popovers anchor to a wider owning surface", () => {
+    const source = read("components/ui/popover.tsx")
+
+    expect(source).toContain('"align" | "alignOffset" | "anchor"')
+    expect(source).toContain("anchor={anchor}")
+    expect(source).toContain("container={portalContainer}")
   })
 
   it("gives select its measured stronger floating edge", () => {
@@ -122,10 +154,21 @@ describe("floating surface contract", () => {
 
     expect(composerMenu).not.toContain("composerPlusMenuItemClassName")
     expect(composerMenu).not.toContain("rounded-[16px]")
-    expect(composerMenu).toContain("disabled={!isFileUploadAvailable}")
-    expect(composerMenu).toContain("disabled={isSearchDisabled}")
+    expect(composerMenu).toContain("composerActionRegistry")
+    expect(composerMenu).toContain("visibleActions.map")
+    expect(composerMenu).not.toContain("<CommandInput")
+    expect(composerMenu).not.toContain('heading="Actions"')
+    expect(composerMenu).toContain("anchor={composerAnchor}")
+    expect(composerMenu).toContain("portalContainer={overlayContainerRef}")
+    expect(composerMenu).toContain("initialFocus={false}")
+    expect(composerMenu).toContain("data-highlighted={")
+    expect(composerMenu).not.toContain("focusInitialAction")
+    expect(composerMenu).toContain("action.description")
+    expect(composerMenu).toContain(
+      "aria-disabled={state.disabled || undefined}"
+    )
+    expect(composerMenu).toContain("if (!state.disabled) activateAction")
     expect(composerMenu).not.toContain("cursor-not-allowed opacity-50")
-    expect(composerMenu).not.toContain("aria-disabled=")
     expect(sidebarMenu).not.toContain("sidebarMenuRadioItemClassName")
     expect(sidebarMenu).not.toContain("rounded-[16px]")
     expect(menubar).not.toContain("focus:bg-interactive-selected")

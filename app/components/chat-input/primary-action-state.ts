@@ -9,6 +9,8 @@ type ResolveComposerPrimaryActionInput = {
   isAbortable: boolean
   /** True when a send action is currently valid. */
   canSend: boolean
+  /** True when emptiness is the reason Send is unavailable. */
+  isMessageEmpty: boolean
 }
 
 export type ComposerPrimaryActionState = {
@@ -24,6 +26,7 @@ export function resolveComposerPrimaryActionState({
   isStreaming,
   isAbortable,
   canSend,
+  isMessageEmpty,
 }: ResolveComposerPrimaryActionInput): ComposerPrimaryActionState {
   if (isStreaming) {
     return {
@@ -42,6 +45,6 @@ export function resolveComposerPrimaryActionState({
     buttonType: "submit",
     disabled: !canSend,
     ariaLabel: "Send prompt",
-    tooltip: "Send prompt",
+    tooltip: isMessageEmpty ? "Message is empty" : "Send prompt",
   }
 }

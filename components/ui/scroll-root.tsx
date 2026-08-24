@@ -15,7 +15,9 @@
  *   --sticky-padding-top                 header footprint (zeroed when the
  *                                        header goes fixed/transparent)
  *   --sticky-padding-bottom              JS-measured composer-stack footprint,
- *                                        written inline by useStickyPaddingBottom
+ *                                        written by useThreadViewportInsets
+ *   --keyboard-safe-area-bottom          max of measured keyboard geometry and
+ *                                        the browser keyboard-inset environment
  *   --scroll-root-safe-area-inset-*      paddings + keyboard + env(safe-area)
  *   --scroll-root-safe-area-height       100lvh minus both insets — the usable
  *                                        thread viewport every `.threadScrollVars`
@@ -31,16 +33,13 @@
  *   data-scroll-from-end   while the bottom sentinel is out of view
  *   data-expanded-composer while the multiline composer owns the viewport
  *   data-voice-focus-mode  reserved for the full-screen voice surface
+ *
+ * ChatLayout preserves this element across `/` and `/c/...` handoffs, so its
+ * keyboard controller and native scroll position survive route reconciliation.
  */
-import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
+import { createKeyboardViewportController } from "@/components/ui/keyboard-viewport"
 import { cn } from "@/lib/utils"
 import { createContext, useCallback, useContext, useMemo, useRef } from "react"
-
-const MIN_VIRTUAL_KEYBOARD_HEIGHT = 80
-// Keeps deterministic fixtures on the same root-owned token/cascade as runtime
-// viewport measurement instead of introducing a descendant override system.
-const SCREEN_KEYBOARD_HEIGHT_OVERRIDE_ATTRIBUTE =
-  "data-screen-keyboard-height-override"
 
 type ScrollRootMode = "expanded-composer" | "voice-focus-mode"
 
@@ -59,88 +58,16 @@ type ScrollRootProps = {
   className?: string
 } & React.HTMLAttributes<HTMLDivElement>
 
-function isVirtualKeyboardTarget(element: Element | null) {
-  return (
-    element instanceof HTMLElement && element.dataset.virtualkeyboard === "true"
-  )
-}
-
-/**
- * Keeps the scroll-root keyboard token tied to the visual viewport. The
- * editable element opts in with `data-virtualkeyboard="true"`, and the inset is
- * derived from the current layout/visual viewport mismatch. A desktop window
- * resize changes both viewports together, while an overlaid virtual keyboard
- * contracts only the visual viewport. Pinch zoom remains excluded.
- */
-function useScreenKeyboardHeight(
-  scrollRef: React.RefObject<HTMLDivElement | null>
-) {
-  useBrowserLayoutEffect(() => {
-    const root = scrollRef.current
-    const viewport = window.visualViewport
-    if (!root || !viewport) return
-
-    let frame: number | null = null
-
-    const write = () => {
-      frame = null
-      if (root.hasAttribute(SCREEN_KEYBOARD_HEIGHT_OVERRIDE_ATTRIBUTE)) return
-
-      const hasKeyboardTarget = isVirtualKeyboardTarget(document.activeElement)
-      const layoutViewportHeight = Math.max(
-        window.innerHeight,
-        document.documentElement.clientHeight,
-        root.getBoundingClientRect().height,
-        viewport.height + viewport.offsetTop
-      )
-
-      const obscuredHeight =
-        hasKeyboardTarget && viewport.scale === 1
-          ? Math.max(
-              0,
-              layoutViewportHeight - viewport.height - viewport.offsetTop
-            )
-          : 0
-      const keyboardHeight =
-        obscuredHeight >= MIN_VIRTUAL_KEYBOARD_HEIGHT ? obscuredHeight : 0
-
-      root.style.setProperty(
-        "--screen-keyboard-height",
-        `${Math.round(keyboardHeight * 100) / 100}px`
-      )
-      root.toggleAttribute("data-keyboard-open", keyboardHeight > 0)
-    }
-
-    const scheduleWrite = () => {
-      if (frame !== null) cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(write)
-    }
-
-    write()
-    viewport.addEventListener("resize", scheduleWrite)
-    viewport.addEventListener("scroll", scheduleWrite)
-    window.addEventListener("resize", scheduleWrite)
-    window.addEventListener("orientationchange", scheduleWrite)
-    document.addEventListener("focusin", scheduleWrite)
-    document.addEventListener("focusout", scheduleWrite)
-
-    return () => {
-      if (frame !== null) cancelAnimationFrame(frame)
-      viewport.removeEventListener("resize", scheduleWrite)
-      viewport.removeEventListener("scroll", scheduleWrite)
-      window.removeEventListener("resize", scheduleWrite)
-      window.removeEventListener("orientationchange", scheduleWrite)
-      document.removeEventListener("focusin", scheduleWrite)
-      document.removeEventListener("focusout", scheduleWrite)
-      root.style.removeProperty("--screen-keyboard-height")
-      root.removeAttribute("data-keyboard-open")
-    }
-  }, [scrollRef])
-}
-
 function ScrollRoot({ children, className, ...props }: ScrollRootProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
-  useScreenKeyboardHeight(scrollRef)
+  const keyboardCleanupRef = useRef<(() => void) | null>(null)
+  const setScrollRootRef = useCallback((node: HTMLDivElement | null) => {
+    keyboardCleanupRef.current?.()
+    keyboardCleanupRef.current = null
+    scrollRef.current = node
+    if (node)
+      keyboardCleanupRef.current = createKeyboardViewportController(node)
+  }, [])
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const el = scrollRef.current
@@ -163,14 +90,16 @@ function ScrollRoot({ children, className, ...props }: ScrollRootProps) {
   return (
     <ScrollRootContext.Provider value={contextValue}>
       <div
-        ref={scrollRef}
+        ref={setScrollRootRef}
         data-scroll-root=""
         data-scrollable-surface=""
         className={cn(
           "@w-sm/main:[scrollbar-gutter:var(--stage-scroll-gutter)] group/scroll-root relative flex min-h-0 min-w-0 flex-1 [scrollbar-gutter:stable] flex-col not-print:overflow-x-clip not-print:overflow-y-auto not-print:data-expanded-composer:overflow-y-hidden! data-stream-active:[overflow-anchor:none] not-print:data-voice-focus-mode:overflow-y-hidden! pointer-coarse:[scrollbar-width:none]",
           "scroll-pt-(--header-height) [--sticky-padding-bottom:0px] [--sticky-padding-top:var(--header-height)]",
+          "keyboard-open:[--keyboard-composer-safe-area:var(--composer-height,0px)] [--keyboard-composer-safe-area:0px]",
+          "[--keyboard-safe-area-bottom:max(var(--screen-keyboard-height,0px),env(keyboard-inset-height,0px))]",
           "[--scroll-root-safe-area-inset-top:calc(var(--sticky-padding-top)+env(safe-area-inset-top,0px))]",
-          "[--scroll-root-safe-area-inset-bottom:calc(var(--sticky-padding-bottom)+var(--screen-keyboard-height,0px)+env(safe-area-inset-bottom,0px))]",
+          "[--scroll-root-safe-area-inset-bottom:calc(var(--sticky-padding-bottom)+var(--keyboard-composer-safe-area)+var(--keyboard-safe-area-bottom)+env(safe-area-inset-bottom,0px))]",
           "[--scroll-root-safe-area-height:calc(100lvh-var(--scroll-root-safe-area-inset-top)-var(--scroll-root-safe-area-inset-bottom))]",
           "has-data-[fixed-header=never]:scroll-pt-0 has-data-[fixed-header=never]:[--sticky-padding-top:0px]",
           className
@@ -196,84 +125,94 @@ function useOptionalScrollRoot() {
 }
 
 /**
- * Measures the sticky composer stack (#thread-bottom-container) and writes its
- * footprint inline on the scroll root as `--sticky-padding-bottom` — the value
- * The value is set by a ResizeObserver writing
- * `getBoundingClientRect().height` inline. Everything downstream (safe-area
- * height, response height, the
- * bottom sentinel's offset) derives from it in CSS.
+ * Owns the thread viewport's measured inset inputs. The sticky footer writes
+ * `--sticky-padding-bottom`; its stable keyboard pin writes
+ * `--composer-height`. Everything downstream (safe-area height, response
+ * height, keyboard placement, and the bottom sentinel's offset) derives from
+ * those root-owned values in CSS.
  *
  * An absolutely positioned `[data-prompt-textarea-header]` sits outside normal
  * footer flow, so its measured height is first written to the stable overflow
  * spacer. The root measurement therefore includes the complete visible stack.
  *
- * Returns a ref callback for the sticky bottom container. Pass
- * `enabled: false` while the composer is in its onboarding (grown/centered)
- * layout, where its height is not a thread inset.
+ * Returns a ref callback for the sticky bottom container. The root publishes
+ * the visible stack in every surface so composer growth and the first
+ * onboarding-to-thread turn share one inset source.
  */
-function useStickyPaddingBottom(enabled: boolean) {
+function useThreadViewportInsets() {
   const cleanupRef = useRef<(() => void) | null>(null)
 
-  return useCallback(
-    (node: HTMLDivElement | null) => {
-      cleanupRef.current?.()
-      cleanupRef.current = null
-      if (!node || !enabled) return
-      const root = node.closest<HTMLElement>("[data-scroll-root]")
-      if (!root) return
-      const spacer = node.querySelector<HTMLElement>(
-        "[data-thread-footer-overflow-spacer]"
+  return useCallback((node: HTMLDivElement | null) => {
+    cleanupRef.current?.()
+    cleanupRef.current = null
+    if (!node) return
+    const root = node.closest<HTMLElement>("[data-scroll-root]")
+    if (!root) return
+    const spacer = node.querySelector<HTMLElement>(
+      "[data-thread-footer-overflow-spacer]"
+    )
+    const composer = node.querySelector<HTMLElement>(
+      "[data-composer-keyboard-pin]"
+    )
+    let promptHeader = node.querySelector<HTMLElement>(
+      "[data-prompt-textarea-header]"
+    )
+
+    const write = () => {
+      const overflowHeight =
+        promptHeader && getComputedStyle(promptHeader).position === "absolute"
+          ? promptHeader.getBoundingClientRect().height
+          : 0
+      if (spacer) spacer.style.height = `${overflowHeight}px`
+      root.style.setProperty(
+        "--sticky-padding-bottom",
+        `${node.getBoundingClientRect().height}px`
       )
-      let promptHeader = node.querySelector<HTMLElement>(
+      root.style.setProperty(
+        "--composer-height",
+        `${composer?.getBoundingClientRect().height ?? 0}px`
+      )
+    }
+
+    write()
+    const resizeObserver =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(write)
+    resizeObserver?.observe(node, { box: "border-box" })
+    if (composer) resizeObserver?.observe(composer, { box: "border-box" })
+    if (promptHeader)
+      resizeObserver?.observe(promptHeader, { box: "border-box" })
+
+    const mutationObserver = new MutationObserver(() => {
+      if (promptHeader && node.contains(promptHeader)) return
+      const nextHeader = node.querySelector<HTMLElement>(
         "[data-prompt-textarea-header]"
       )
-
-      const write = () => {
-        const overflowHeight =
-          promptHeader && getComputedStyle(promptHeader).position === "absolute"
-            ? promptHeader.getBoundingClientRect().height
-            : 0
-        if (spacer) spacer.style.height = `${overflowHeight}px`
-        root.style.setProperty(
-          "--sticky-padding-bottom",
-          `${node.getBoundingClientRect().height}px`
-        )
-      }
-
-      write()
-      const resizeObserver = new ResizeObserver(write)
-      resizeObserver.observe(node, { box: "border-box" })
+      if (nextHeader === promptHeader) return
+      if (promptHeader) resizeObserver?.unobserve(promptHeader)
+      promptHeader = nextHeader
       if (promptHeader)
-        resizeObserver.observe(promptHeader, { box: "border-box" })
+        resizeObserver?.observe(promptHeader, { box: "border-box" })
+      write()
+    })
+    mutationObserver.observe(node, { childList: true, subtree: true })
 
-      const mutationObserver = new MutationObserver(() => {
-        if (promptHeader && node.contains(promptHeader)) return
-        const nextHeader = node.querySelector<HTMLElement>(
-          "[data-prompt-textarea-header]"
-        )
-        if (nextHeader === promptHeader) return
-        if (promptHeader) resizeObserver.unobserve(promptHeader)
-        promptHeader = nextHeader
-        if (promptHeader)
-          resizeObserver.observe(promptHeader, { box: "border-box" })
-        write()
-      })
-      mutationObserver.observe(node, { childList: true, subtree: true })
-
-      cleanupRef.current = () => {
-        mutationObserver.disconnect()
-        resizeObserver.disconnect()
-        spacer?.style.removeProperty("height")
-        root.style.removeProperty("--sticky-padding-bottom")
-      }
-    },
-    [enabled]
-  )
+    cleanupRef.current = () => {
+      mutationObserver.disconnect()
+      resizeObserver?.disconnect()
+      spacer?.style.removeProperty("height")
+      root.style.removeProperty("--sticky-padding-bottom")
+      root.style.removeProperty("--composer-height")
+    }
+  }, [])
 }
+
+/** Compatibility name for non-thread callers that still measure one footer. */
+const useStickyPaddingBottom = useThreadViewportInsets
 
 export {
   ScrollRoot,
   useOptionalScrollRoot,
   useScrollRoot,
   useStickyPaddingBottom,
+  useThreadViewportInsets,
 }

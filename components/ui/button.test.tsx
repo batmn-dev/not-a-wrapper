@@ -39,4 +39,23 @@ describe("Button visually disabled state", () => {
     act(() => root.unmount())
     container.remove()
   })
+
+  it("keeps composer interaction colors owned by the composer primitive", () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    act(() => {
+      root.render(<Button variant="composer">Composer control</Button>)
+    })
+
+    const button = container.querySelector("button") as HTMLButtonElement
+    expect(button.className).toContain("text-foreground")
+    expect(button.className).not.toContain("hover:bg-interactive-hover")
+    expect(button.className).not.toContain("active:bg-interactive-pressed")
+    expect(button.className).toContain("active:scale-[0.96]")
+
+    act(() => root.unmount())
+    container.remove()
+  })
 })

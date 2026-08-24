@@ -29,14 +29,15 @@ import {
   PromptInput,
   PromptInputAction,
   PromptInputActions,
-  type PromptInputEditorHandle,
   PromptInputFooter,
   PromptInputTextarea,
+  type PromptInputActionQuery,
+  type PromptInputEditorHandle,
+  type PromptInputEntity,
 } from "@/components/ui/prompt-input"
 import { toast } from "@/components/ui/toast"
 import { TooltipShortcut } from "@/components/ui/tooltip"
 import {
-  ACCEPTED_FILE_PICKER_TYPES,
   type Attachment,
 } from "@/lib/file-handling"
 import { StopBulkRoundedIcon } from "@/lib/icons"
@@ -57,6 +58,10 @@ import {
 import { flushSync } from "react-dom"
 import { PromptSystem } from "../suggestions/prompt-system"
 import { ButtonPlusMenu } from "./button-plus-menu"
+import {
+  getComposerAction,
+  type ComposerActionId,
+} from "./composer-action-registry"
 import { runComposerSlideTransition } from "./composer-view-transition"
 import { FileList } from "./file-list"
 import { InputDropZone } from "./input-drop-zone"
@@ -113,6 +118,7 @@ type ComposerProps = {
 }
 
 const DEFAULT_COMPOSER_ARIA_LABEL = "Chat with ChatGPT"
+const WEB_SEARCH_ACTION = getComposerAction("web-search")
 
 const isOnlyWhitespace = (text: string) => !/[^\s]/.test(text)
 
@@ -230,10 +236,51 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       selectModelConfig?.webSearch === false
     const isFileUploadAvailable = Boolean(selectModelConfig?.vision)
     const editorRef = useRef<PromptInputEditorHandle>(null)
-    const fileInputRef = useRef<HTMLInputElement>(null)
+    const [actionQuery, setActionQuery] =
+      useState<PromptInputActionQuery | null>(null)
     const handleModelSelectionCommitted = useCallback(() => {
       editorRef.current?.focus({ preventScroll: true })
     }, [])
+    const composerEntities = useMemo<readonly PromptInputEntity[]>(
+      () =>
+        enableSearch
+          ? [
+              {
+                id: WEB_SEARCH_ACTION.id,
+                kind: "capability",
+                label: WEB_SEARCH_ACTION.label,
+              },
+            ]
+          : [],
+      [enableSearch]
+    )
+    const handleComposerEntitiesChange = useCallback(
+      (entities: readonly PromptInputEntity[]) => {
+        const hasWebSearch = entities.some(
+          (entity) => entity.id === WEB_SEARCH_ACTION.id
+        )
+        if (hasWebSearch !== enableSearch) setEnableSearch(hasWebSearch)
+      },
+      [enableSearch, setEnableSearch]
+    )
+    const handleActivateActionQuery = useCallback(
+      (actionId: ComposerActionId, query: PromptInputActionQuery) => {
+        const editor = editorRef.current
+        if (!editor) return false
+
+        return editor.replaceActionQuery(
+          query,
+          actionId === WEB_SEARCH_ACTION.id
+            ? {
+                id: WEB_SEARCH_ACTION.id,
+                kind: "capability",
+                label: WEB_SEARCH_ACTION.label,
+              }
+            : undefined
+        )
+      },
+      []
+    )
 
     // Anonymous chat cannot use authenticated storage, so guests' generated
     // pastes cross the turn seam as ordinary turn text.
@@ -388,6 +435,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       // is NOT overridden: isSubmitting has settled false by then.
       // Never present an enabled Stop without an actionable handler.
       const presentStop = Boolean(stop) && (canStop || Boolean(isSubmitting))
+      const attachmentsReady = attachments.every(
+        (attachment) => attachment.status === "ready"
+      )
+      const isMessageEmpty =
+        !isSubmitting &&
+        attachmentsReady &&
+        isOnlyWhitespace(localValue) &&
+        attachments.length === 0
       return resolveComposerPrimaryActionState({
         // Stop presents for a live LOCAL stream or any resolver-stoppable
         // run (background, awaiting-approval, possibly-stale — §8/§11):
@@ -397,8 +452,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         isAbortable: presentStop,
         canSend:
           !isSubmitting &&
-          attachments.every((attachment) => attachment.status === "ready") &&
+          attachmentsReady &&
           (!isOnlyWhitespace(localValue) || attachments.length > 0),
+        isMessageEmpty,
       })
     }, [attachments, isSubmitting, localValue, status, stop, stoppable])
 
@@ -567,29 +623,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           >
             <PromptInput
               expanded={localValue.includes("\n")}
+              entities={composerEntities}
+              onEntitiesChange={handleComposerEntitiesChange}
               value={localValue}
               onValueChange={handleValueChange}
               onSubmit={handleComposerSubmit}
-              formControls={
-                isUserAuthenticated ? (
-                  <div className="hidden">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      multiple
-                      accept={ACCEPTED_FILE_PICKER_TYPES}
-                      aria-hidden
-                      tabIndex={-1}
-                      onChange={(event) => {
-                        if (event.target.files?.length) {
-                          handleAttachmentUpload(Array.from(event.target.files))
-                          event.target.value = ""
-                        }
-                      }}
-                    />
-                  </div>
-                ) : null
-              }
             >
               <div className="min-w-0 [grid-area:header]">
                 <FileList
@@ -607,29 +645,31 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 onClick={(e) => e.stopPropagation()}
               >
                 <ButtonPlusMenu
-                  onOpenFilePicker={() => fileInputRef.current?.click()}
+                  actionQuery={actionQuery}
                   isUserAuthenticated={isUserAuthenticated}
                   isFileUploadAvailable={isFileUploadAvailable}
                   enableSearch={enableSearch}
+                  onActivateActionQuery={handleActivateActionQuery}
                   onToggleSearch={setEnableSearch}
                   isSearchDisabled={isSearchDisabled}
                 />
               </PromptInputActions>
               <PromptInputTextarea
                 ref={editorRef}
-                placeholder={placeholder}
+                placeholder={enableSearch ? "Search the web" : placeholder}
                 aria-label={ariaLabel}
+                onActionQueryChange={setActionQuery}
                 onPaste={handlePaste}
                 containerClassName="[grid-area:primary]"
               />
               <PromptInputFooter aria-hidden="true" />
               <PromptInputActions
-                className="cant-hover:gap-1.5 h-9 gap-1 self-center [grid-area:trailing]"
+                className="h-9 gap-1 self-center [grid-area:trailing]"
                 data-composer-trailing="true"
                 data-composer-transition-slot="trailing"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="cant-hover:gap-1.5 cant-hover:px-1.5 relative ms-1 flex items-center gap-1.5">
+                <div className="relative ms-1 flex items-center gap-1.5">
                   <ModelSelector
                     variant="composer"
                     selectedModelId={selectedModel}
@@ -639,10 +679,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                     onSelectionCommitted={handleModelSelectionCommitted}
                   />
                 </div>
-                <div className="cant-hover:gap-1.5 ms-auto flex items-center gap-2">
+                <div className="ms-auto flex items-center gap-2">
                   <PromptInputAction
                     tooltip={
-                      primaryAction.mode === "send" ? (
+                      primaryAction.mode === "send" &&
+                      !primaryAction.disabled ? (
                         <TooltipShortcut label={primaryAction.tooltip}>
                           <Kbd label="Enter">↵</Kbd>
                         </TooltipShortcut>
@@ -653,14 +694,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   >
                     <Button
                       size="sm"
-                      className="composer-submit-btn composer-submit-button-color size-9 rounded-full p-0 transition-colors duration-150 ease-out can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-['']"
+                      className="composer-submit-btn composer-submit-button-color can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] size-9 rounded-full p-0 transition-colors duration-150 ease-out"
                       disabled={
-                        primaryAction.mode === "stop" &&
-                        primaryAction.disabled
+                        primaryAction.mode === "stop" && primaryAction.disabled
                       }
                       visuallyDisabled={
-                        primaryAction.mode === "send" &&
-                        primaryAction.disabled
+                        primaryAction.mode === "send" && primaryAction.disabled
                       }
                       type={primaryAction.buttonType}
                       id="composer-submit-button"

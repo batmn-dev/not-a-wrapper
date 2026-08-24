@@ -34,7 +34,6 @@ import {
   ReasoningContent,
   ReasoningLabel,
 } from "@/components/ui/reasoning"
-import { useStickyPaddingBottom } from "@/components/ui/scroll-root"
 import { SystemMessage } from "@/components/ui/system-message"
 import { ThinkingBar } from "@/components/ui/thinking-bar"
 import { TooltipMultiline } from "@/components/ui/tooltip"
@@ -379,7 +378,6 @@ function CopyRegenActions() {
           </TooltipMultiline>
         }
         side="bottom"
-        delay={0}
       >
         <button
           className="hover:bg-accent/60 text-muted-foreground hover:text-foreground flex h-8 w-8 items-center justify-center rounded-lg bg-transparent transition pointer-coarse:h-10 pointer-coarse:w-10"
@@ -411,7 +409,6 @@ export default function ThinkingStatesTestPage() {
   const threadLifecycle = THREAD_LIFECYCLE_FIXTURES[threadLifecycleKey]
   const threadSurface = THREAD_SURFACE_FIXTURES[threadSurfaceKey]
   const threadInset = THREAD_INSET_FIXTURES[threadInsetKey]
-  const threadBottomRef = useStickyPaddingBottom(!threadSurface.isOnboarding)
   const fixtureRootRef = useRef<HTMLDivElement>(null)
   const { theme = "system", setTheme } = useTheme()
 
@@ -429,6 +426,8 @@ export default function ThinkingStatesTestPage() {
       "--screen-keyboard-height"
     )
     const wasKeyboardOpen = scrollRoot.hasAttribute("data-keyboard-open")
+    const wasDocumentKeyboardOpen =
+      document.documentElement.classList.contains("keyboard-open")
     const hadKeyboardHeightOverride = scrollRoot.hasAttribute(
       "data-screen-keyboard-height-override"
     )
@@ -444,6 +443,10 @@ export default function ThinkingStatesTestPage() {
     )
     scrollRoot.toggleAttribute(
       "data-keyboard-open",
+      Number.parseFloat(threadInset.keyboard) > 0
+    )
+    document.documentElement.classList.toggle(
+      "keyboard-open",
       Number.parseFloat(threadInset.keyboard) > 0
     )
 
@@ -469,6 +472,10 @@ export default function ThinkingStatesTestPage() {
         hadKeyboardHeightOverride
       )
       scrollRoot.toggleAttribute("data-keyboard-open", wasKeyboardOpen)
+      document.documentElement.classList.toggle(
+        "keyboard-open",
+        wasDocumentKeyboardOpen
+      )
     }
   }, [threadInset])
 
@@ -604,7 +611,7 @@ export default function ThinkingStatesTestPage() {
           </div>
           {/* ━━━ Conversation ━━━ */}
           <div className="relative -mb-(--composer-overlap-px) flex w-full grow basis-auto flex-col items-center pt-4 pb-(--composer-overlap-px) [--composer-overlap-px:28px]">
-            {threadSurface.isOnboarding ? (
+            {threadSurface.surface !== "thread" ? (
               <div className="flex min-h-[calc(42svh-var(--spacing-app-header))] w-full grow flex-col items-center justify-end max-sm:justify-center">
                 <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
                   What&apos;s on your mind?
@@ -903,9 +910,9 @@ export default function ThinkingStatesTestPage() {
                     &quot;Sources&quot; with stacked favicons; clicking expands
                     to a list of linked titles with formatted URLs. Favicons
                     load from Google&apos;s favicon service with graceful
-                    fallback on error. Uses
-                    <code>motion/react</code> for spring-based expand/collapse
-                    animation.
+                    fallback on error. Uses the shared native
+                    <code>&lt;details&gt;</code> disclosure with a CSS-native
+                    <code>::details-content</code> grid transition.
                   </StateAnnotation>
                 </AssistantShell>
 
@@ -1117,10 +1124,7 @@ export default function ThinkingStatesTestPage() {
           </div>
 
           {/* ━━━ Composer ━━━ */}
-          <ThreadBottomContainer
-            ref={threadBottomRef}
-            isOnboarding={threadSurface.isOnboarding}
-          >
+          <ThreadBottomContainer surface={threadSurface.surface}>
             <TurnContextProvider chatId={null} currentChat={null}>
               <Composer
                 chatId={null}

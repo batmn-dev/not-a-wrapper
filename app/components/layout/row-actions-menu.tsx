@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Icon } from "@/components/ui/icon"
+import { useIntentPrefetch } from "@/components/ui/intent-prefetch"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { RiLoader4Line, RiMoreFill } from "@remixicon/react"
 import { Fragment, type ReactElement, type ReactNode } from "react"
@@ -27,6 +28,8 @@ export type RowActionItem = {
   loading?: boolean
   disabled?: boolean
   separatorBefore?: boolean
+  /** Warms a lazy follow-up surface from focus, hover, touch, or visibility. */
+  prefetch?: () => void | Promise<unknown>
 }
 
 type RowActionsMenuProps = {
@@ -92,29 +95,34 @@ export function RowActionsMenu({
         {items.map((item) => (
           <Fragment key={item.key}>
             {item.separatorBefore && <DropdownMenuSeparator />}
-            <DropdownMenuItem
-              variant={item.variant}
-              disabled={item.disabled}
-              aria-label={item.ariaLabel}
-              onClick={(e) => {
-                e.stopPropagation()
-                item.onSelect()
-              }}
-            >
-              {item.loading ? (
-                <Icon
-                  icon={RiLoader4Line}
-                  slotSize={20}
-                  className="animate-spin"
-                />
-              ) : (
-                item.icon
-              )}
-              {item.label}
-            </DropdownMenuItem>
+            <RowActionMenuItem item={item} />
           </Fragment>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+function RowActionMenuItem({ item }: { item: RowActionItem }) {
+  const intentRef = useIntentPrefetch<HTMLDivElement>(item.prefetch)
+
+  return (
+    <DropdownMenuItem
+      ref={intentRef}
+      variant={item.variant}
+      disabled={item.disabled}
+      aria-label={item.ariaLabel}
+      onClick={(event) => {
+        event.stopPropagation()
+        item.onSelect()
+      }}
+    >
+      {item.loading ? (
+        <Icon icon={RiLoader4Line} slotSize={20} className="animate-spin" />
+      ) : (
+        item.icon
+      )}
+      {item.label}
+    </DropdownMenuItem>
   )
 }

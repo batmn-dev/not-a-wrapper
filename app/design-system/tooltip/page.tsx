@@ -87,11 +87,11 @@ export function TooltipWithShortcut() {
 
 const apiRows = [
   {
-    prop: "Tooltip delay",
-    type: "number",
-    defaultValue: "—",
+    prop: "TooltipProvider delay",
+    type: "fixed",
+    defaultValue: "0ms",
     description:
-      "Milliseconds before opening on hover. When set, the root wraps itself in a TooltipProvider with that delay.",
+      "Fixed by the primitive so every tooltip opens immediately and call sites cannot introduce timing drift.",
   },
   {
     prop: "Tooltip disableHoverablePopup",
@@ -127,7 +127,7 @@ const apiRows = [
   },
   {
     prop: "TooltipMultiline",
-    type: "ComponentProps<\"span\">",
+    type: 'ComponentProps<"span">',
     defaultValue: "—",
     description:
       "Stacks related lines and applies the smaller multiline surface radius.",
@@ -137,7 +137,7 @@ const apiRows = [
     type: "ReactNode / ReactNode",
     defaultValue: "—",
     description:
-      "Action label and optional trailing detail around Kbd children. Keys hide on coarse pointers.",
+      "One accessible action phrase with Kbd children rendered in the shared shortcut capsule. Keys hide on coarse pointers.",
   },
 ] as const
 
@@ -161,7 +161,7 @@ export default function TooltipPage() {
       <DsSection
         id="default"
         title="Default"
-        description="Opens on hover or keyboard focus with no delay. Use it only for supplementary hints — the UI must work without ever reading a tooltip."
+        description="Opens immediately from pointer hover or keyboard focus. Use it only for supplementary hints; the UI must work without ever reading a tooltip."
       >
         <ComponentPreview code={defaultCode} sourceCode={tooltipSource}>
           <Tooltip>
@@ -198,7 +198,7 @@ export default function TooltipPage() {
       <DsSection
         id="shortcut"
         title="Shortcut"
-        description="TooltipShortcut pairs the action label with Kbd keys, matching the sidebar and composer hints. Keys hide automatically on touch devices."
+        description="TooltipShortcut announces the action and keys as one phrase, then renders the keys in the shared 18px shortcut capsule. Keys hide automatically on touch devices."
       >
         <ComponentPreview code={shortcutCode} sourceCode={tooltipSource}>
           <Tooltip>
@@ -219,8 +219,8 @@ export default function TooltipPage() {
         <DsApiTable columnWidths={[28, 26, 12, 34]} rows={apiRows} />
         <DsParagraph className="mt-3">
           Remaining Base UI Tooltip props are forwarded from each wrapper.
-          TooltipContent renders its own portal and positioner; wrap groups of
-          tooltips in TooltipProvider to share delay timing.
+          TooltipContent renders its own portal and positioner. TooltipProvider
+          fixes the opening delay at 0ms for every tooltip.
         </DsParagraph>
       </DsSection>
     </DsPage>

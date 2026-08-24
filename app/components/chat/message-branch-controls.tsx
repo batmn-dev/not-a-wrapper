@@ -49,7 +49,6 @@ export function MessageBranchControls({
     >
       <MessageActionButton
         label="Previous branch"
-        delay={0}
         size="branch"
         disabled={!previousSibling}
         onClick={() => {
@@ -62,7 +61,6 @@ export function MessageBranchControls({
       </span>
       <MessageActionButton
         label="Next branch"
-        delay={0}
         size="branch"
         disabled={!nextSibling}
         onClick={() => {

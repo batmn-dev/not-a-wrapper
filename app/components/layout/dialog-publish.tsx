@@ -1,7 +1,6 @@
 "use client"
 
 import { headerActionButtonClassName } from "@/app/components/layout/header-action-button"
-import XIcon from "@/components/icons/x"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -18,54 +17,44 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { Icon } from "@/components/ui/icon"
-import { Input } from "@/components/ui/input"
+import { useIntentPrefetch } from "@/components/ui/intent-prefetch"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { useChatSession } from "@/lib/chat-store/session/provider"
-import { APP_DOMAIN } from "@/lib/config"
-import {
-  RiCheckLine,
-  RiFileCopyLine,
-  RiLoader4Line,
-  RiShare2Line,
-} from "@remixicon/react"
+import { RiLoader4Line, RiShare2Line } from "@remixicon/react"
 import { useMutation } from "convex/react"
-import type React from "react"
-import { useState } from "react"
+import { startTransition, useState } from "react"
+import { sharePublishedChat } from "./public-chat-share"
+import {
+  LazySharePublishContent,
+  preloadSharePublishContent,
+} from "./share-publish-content-loader"
 
 export function DialogPublish() {
   const [openDialog, setOpenDialog] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const { chatId } = useChatSession()
   const isMobile = useBreakpoint(768)
-  const [copied, setCopied] = useState(false)
-
+  const prefetchShareRef = useIntentPrefetch<HTMLButtonElement>(
+    preloadSharePublishContent
+  )
   const makePublicMutation = useMutation(api.chats.makePublic)
 
   if (!chatId) {
     return null
   }
 
-  const publicLink = `${APP_DOMAIN}/share/${chatId}`
-
-  const openPage = () => {
-    setOpenDialog(false)
-    window.open(publicLink, "_blank")
-  }
-
-  const shareOnX = () => {
-    setOpenDialog(false)
-    const X_TEXT = `Check out this conversation I shared with Not A Wrapper! ${publicLink}`
-    window.open(`https://x.com/intent/tweet?text=${X_TEXT}`, "_blank")
-  }
-
   const handlePublish = async () => {
     setIsLoading(true)
+    void preloadSharePublishContent()
 
     try {
-      await makePublicMutation({ chatId: chatId as Id<"chats"> })
-      setOpenDialog(true)
+      await sharePublishedChat({
+        chatId,
+        publish: () => makePublicMutation({ chatId: chatId as Id<"chats"> }),
+        openFallback: () => startTransition(() => setOpenDialog(true)),
+      })
     } catch (error) {
       console.error("Failed to make chat public:", error)
     } finally {
@@ -73,16 +62,9 @@ export function DialogPublish() {
     }
   }
 
-  const copyLink = () => {
-    navigator.clipboard.writeText(publicLink)
-    setCopied(true)
-    setTimeout(() => {
-      setCopied(false)
-    }, 2000)
-  }
-
   const trigger = (
     <Button
+      ref={prefetchShareRef}
       variant="ghost"
       className={`${headerActionButtonClassName} px-2.5 py-1.5`}
       onClick={handlePublish}
@@ -98,36 +80,10 @@ export function DialogPublish() {
   )
 
   const content = (
-    <>
-      <div className="grid gap-4">
-        <div className="grid gap-2">
-          <div className="flex items-center gap-1">
-            <div className="relative flex-1">
-              <Input id="slug" value={publicLink} readOnly className="flex-1" />
-              <Button
-                variant="outline"
-                onClick={copyLink}
-                className="bg-background hover:bg-background absolute top-0 right-0 rounded-l-none transition-colors"
-              >
-                {copied ? (
-                  <Icon icon={RiCheckLine} slotSize={16} />
-                ) : (
-                  <Icon icon={RiFileCopyLine} slotSize={16} />
-                )}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="flex gap-2">
-        <Button variant="outline" onClick={openPage} className="flex-1">
-          View Page
-        </Button>
-        <Button onClick={shareOnX} className="flex-1">
-          Share on <XIcon className="text-primary-foreground size-4" />
-        </Button>
-      </div>
-    </>
+    <LazySharePublishContent
+      chatId={chatId}
+      onClose={() => setOpenDialog(false)}
+    />
   )
 
   if (isMobile) {
@@ -144,7 +100,7 @@ export function DialogPublish() {
                 the future.
               </DrawerDescription>
             </DrawerHeader>
-            <div className="flex flex-col gap-4 px-4 pb-6">{content}</div>
+            <div className="px-4 pb-6">{content}</div>
           </DrawerContent>
         </Drawer>
       </>

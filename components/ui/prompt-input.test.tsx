@@ -14,10 +14,12 @@ import {
 } from "vitest"
 import {
   PromptInput,
+  PromptInputAction,
   PromptInputActions,
   PromptInputFooter,
   PromptInputTextarea,
 } from "./prompt-input"
+import { Button } from "./button"
 import { ScrollRoot } from "./scroll-root"
 
 let surfaceWidth = 768
@@ -229,6 +231,39 @@ describe("PromptInput responsive expansion", () => {
     root = createRoot(container)
   })
 
+  it("describes the focusable visually disabled action with its tooltip", () => {
+    act(() => {
+      root.render(
+        <PromptInput value="" onValueChange={() => {}}>
+          <PromptInputAction tooltip="Message is empty">
+            <Button visuallyDisabled aria-label="Send prompt" />
+          </PromptInputAction>
+        </PromptInput>
+      )
+    })
+
+    const button = container.querySelector(
+      'button[aria-label="Send prompt"]'
+    ) as HTMLButtonElement
+    const descriptionId = button.getAttribute("aria-describedby")
+
+    expect(button.hasAttribute("data-visually-disabled")).toBe(true)
+    expect(button.disabled).toBe(false)
+    expect(button.tabIndex).toBe(0)
+    expect(button.getAttribute("aria-disabled")).toBe("true")
+    expect(button.getAttribute("data-slot")).toBe("button")
+    expect(button.parentElement?.getAttribute("data-slot")).toBe(
+      "tooltip-trigger"
+    )
+    expect(button.parentElement?.getAttribute("aria-describedby")).toBe(
+      descriptionId
+    )
+    expect(descriptionId).toBeTruthy()
+    expect(document.getElementById(descriptionId ?? "")?.textContent).toBe(
+      "Message is empty"
+    )
+  })
+
   it("keeps one ProseMirror textbox across controlled draft replacements", () => {
     const renderDraft = (value: string) => {
       act(() => {
@@ -253,6 +288,9 @@ describe("PromptInput responsive expansion", () => {
       '[data-composer-surface="true"]'
     ) as HTMLElement
     const form = container.querySelector("form") as HTMLFormElement
+    const overlayHost = container.querySelector(
+      "[data-composer-overlay-host]"
+    ) as HTMLElement
     const layout = container.querySelector(
       '[data-composer-layout="true"]'
     ) as HTMLElement
@@ -286,6 +324,10 @@ describe("PromptInput responsive expansion", () => {
     expect(fallback.style.display).toBe("none")
     expect(form.className).toContain("relative")
     expect(form.className).toContain("z-1")
+    expect(overlayHost.parentElement?.parentElement).toBe(form)
+    expect(overlayHost.className).toContain("pointer-events-none")
+    expect(overlayHost.className).toContain("absolute")
+    expect(overlayHost.className).toContain("inset-0")
     expect(layout.hasAttribute("data-composer-body")).toBe(true)
     expect(layout.hasAttribute("data-composer-grid")).toBe(true)
     expect(layout.className).toContain(
@@ -304,6 +346,9 @@ describe("PromptInput responsive expansion", () => {
     expect(editorScroller.style.maxHeight).toBe("")
     expect(editorWrapper.className).toContain("min-h-0")
     expect(editorWrapper.className).toContain("items-stretch")
+    expect(editorWrapper.className).not.toContain(
+      "group-data-[expanded-composer]/composer:h-full"
+    )
     expect(form.style.getPropertyValue("--composer-border-radius")).toBe("28px")
     expect(form.style.getPropertyValue("view-transition-name")).toBe(
       "var(--vt-composer)"
@@ -365,6 +410,71 @@ describe("PromptInput responsive expansion", () => {
 
     expect(editor.querySelectorAll("p")).toHaveLength(2)
     expect(editor.querySelector("p.placeholder")).toBeNull()
+  })
+
+  it("renders protected typed entities inside the stable editor DOM", () => {
+    const entity = {
+      id: "web-search",
+      kind: "capability" as const,
+      label: "Web search",
+    }
+
+    act(() => {
+      root.render(
+        <PromptInput
+          entities={[entity]}
+          value="draft"
+          onEntitiesChange={() => {}}
+          onValueChange={() => {}}
+        >
+          <PromptInputTextarea aria-label="Ask anything" />
+        </PromptInput>
+      )
+    })
+
+    const editor = container.querySelector("#prompt-textarea") as HTMLElement
+    const cursorTarget = editor.querySelector(
+      "span[data-inline-selection-pill-cursor-target]"
+    )
+    const entityNode = editor.querySelector("span[data-inline-selection-pill]")
+
+    expect(cursorTarget?.getAttribute("aria-hidden")).toBe("true")
+    expect(cursorTarget?.textContent).toBe("\uFEFF")
+    expect(entityNode?.getAttribute("contenteditable")).toBe("false")
+    expect(entityNode?.getAttribute("data-id")).toBe("search")
+    expect(entityNode?.getAttribute("data-keyword")).toBe("Web search")
+    expect(entityNode?.getAttribute("data-system-hint-type")).toBe("search")
+    expect(entityNode?.querySelector("svg")?.getAttribute("aria-hidden")).toBe(
+      "true"
+    )
+    expect(entityNode?.querySelector("circle")?.getAttribute("fill")).toBe(
+      "var(--web-search-icon-surface)"
+    )
+    expect(entityNode?.querySelector("path")?.getAttribute("fill")).toBe(
+      "var(--web-search-icon-foreground)"
+    )
+    expect(entityNode?.textContent).toBe("Web search")
+    expect(entityNode?.nextSibling?.nodeType).toBe(Node.TEXT_NODE)
+    expect(entityNode?.nextSibling?.textContent).toBe(" draft")
+    expect(editor.querySelector(".ProseMirror-trailingBreak")).toBeNull()
+
+    act(() => {
+      root.render(
+        <PromptInput
+          entities={[{ ...entity }]}
+          value="draft"
+          onEntitiesChange={() => {}}
+          onValueChange={() => {}}
+        >
+          <PromptInputTextarea aria-label="Ask anything" />
+        </PromptInput>
+      )
+    })
+
+    expect(container.querySelector("#prompt-textarea")).toBe(editor)
+    expect(editor.querySelector("span[data-inline-selection-pill]")).toBe(
+      entityNode
+    )
   })
 
   it("submits Enter and preserves Shift+Enter as a draft paragraph", () => {
@@ -458,6 +568,22 @@ describe("PromptInput responsive expansion", () => {
     Object.defineProperty(composingEnter, "isComposing", { value: true })
     act(() => editor.dispatchEvent(composingEnter))
 
+    const imeEnter = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: "Enter",
+    })
+    Object.defineProperty(imeEnter, "keyCode", { value: 229 })
+    act(() => editor.dispatchEvent(imeEnter))
+
+    const alreadyHandledEnter = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: "Enter",
+    })
+    alreadyHandledEnter.preventDefault()
+    act(() => editor.dispatchEvent(alreadyHandledEnter))
+
     expect(onSubmit).not.toHaveBeenCalled()
     expect(onKeyDown).not.toHaveBeenCalled()
     expect(editor.getAttribute("aria-disabled")).toBeNull()
@@ -514,15 +640,25 @@ describe("PromptInput responsive expansion", () => {
     expect(editorScroller.className).toContain(
       "group-data-[expanded-composer-mode-button]/composer:pe-9"
     )
+    expect(editorWrapper.className).not.toContain(
+      "group-data-[expanded-composer]/composer:h-full"
+    )
+    expect(editorScroller.className).toContain(
+      "group-data-[expanded-composer]/composer:h-full"
+    )
     expect(
       container.querySelector("[data-composer-controls-anchor]")
     ).not.toBeNull()
     expect(expandButton.type).toBe("button")
     expect(expandButton.getAttribute("aria-pressed")).toBe("false")
     expect(expandButton.getAttribute("data-slot")).toBe("tooltip-trigger")
-    expect(expandButton.className).toContain("hover:bg-interactive-hover")
-    expect(expandButton.className).toContain("active:bg-interactive-pressed")
-    expect(expandButton.className).toContain("active:scale-100")
+    expect(expandButton.hasAttribute("data-composer-control")).toBe(true)
+    expect(expandButton.className).toContain("composer-btn")
+    expect(expandButton.className).not.toContain("hover:bg-interactive-hover")
+    expect(expandButton.className).not.toContain(
+      "active:bg-interactive-pressed"
+    )
+    expect(expandButton.className).toContain("active:scale-[0.96]")
     expect(expandButton.querySelector('[data-slot="icon"]')).not.toBeNull()
     expect(
       expandButton.querySelector('[data-slot="icon"]')?.className

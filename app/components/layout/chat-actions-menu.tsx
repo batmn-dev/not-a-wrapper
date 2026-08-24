@@ -12,8 +12,10 @@ import { RiDeleteBinLine, RiEditLine, RiShare2Line } from "@remixicon/react"
 import { useMutation } from "convex/react"
 import { useRouter } from "next/navigation"
 import type React from "react"
-import { useState } from "react"
+import { startTransition, useState } from "react"
+import { sharePublishedChat } from "./public-chat-share"
 import { RowActionsMenu, type RowActionItem } from "./row-actions-menu"
+import { preloadSharePublishContent } from "./share-publish-content-loader"
 import { SharePublishDrawer } from "./share-publish-drawer"
 import { DialogDeleteChat } from "./sidebar/dialog-delete-chat"
 
@@ -50,10 +52,8 @@ export function ChatActionsMenu({
   const makePublicMutation = useMutation(api.chats.makePublic)
 
   const handleConfirmDelete = async () => {
-    const deleted = await deleteChat(
-      chat.id,
-      chatId || undefined,
-      () => router.push("/")
+    const deleted = await deleteChat(chat.id, chatId || undefined, () =>
+      router.push("/")
     )
     if (deleted && chat.id === chatId) {
       await resetMessages()
@@ -62,9 +62,13 @@ export function ChatActionsMenu({
 
   const handleShare = async () => {
     setIsShareLoading(true)
+    void preloadSharePublishContent()
     try {
-      await makePublicMutation({ chatId: chat.id as Id<"chats"> })
-      setIsShareDrawerOpen(true)
+      await sharePublishedChat({
+        chatId: chat.id,
+        publish: () => makePublicMutation({ chatId: chat.id as Id<"chats"> }),
+        openFallback: () => startTransition(() => setIsShareDrawerOpen(true)),
+      })
     } catch (error) {
       console.error("Failed to make chat public:", error)
     } finally {
@@ -97,6 +101,7 @@ export function ChatActionsMenu({
             icon: <Icon icon={RiShare2Line} slotSize={20} />,
             label: "Share",
             onSelect: handleShare,
+            prefetch: preloadSharePublishContent,
             loading: isShareLoading,
             disabled: isShareLoading,
           } satisfies RowActionItem,

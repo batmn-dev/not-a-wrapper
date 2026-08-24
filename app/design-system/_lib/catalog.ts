@@ -91,6 +91,11 @@ export const designSystemComponents = [
     href: "/design-system/combobox",
   },
   {
+    name: "Composer Control",
+    slug: "composer-control",
+    href: "/design-system/composer-control",
+  },
+  {
     name: "Command",
     slug: "command",
     href: "/design-system/command",

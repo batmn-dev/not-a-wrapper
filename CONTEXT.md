@@ -202,6 +202,46 @@ The deep client module that assembles a **Chat turn** payload: it owns the draft
 _Avoid_: chat-input prop orchestration (the shallow 21-prop interface), parent-owned draft/file state, `quotedText`-style commands modeled as state
 _Status_: implemented 2026-07-03 (branch `darknight/gotham-by-gaslight`).
 
+**Composer control**:
+The shared secondary-action module inside the **Composer**. It owns the complete input-modality contract proven against ChatGPT: semantic hover and pressed tokens, open-state selectors, the invisible tap target, and the retained Button scale animation. Icon-only and text/model controls are adapters over this module; the send/stop action remains a distinct primary action. Callers own only local geometry such as grid placement or a menu hover bridge — never the interaction class or token state machine.
+_Avoid_: pairing `variant="composer"` with a caller-supplied magic class, duplicating touch/hover/open selectors in Composer callers, treating send as a secondary control
+_Status_: implemented 2026-08-23.
+
+**Composer action registry**:
+The typed catalog behind the Composer's “Add files and more” surface and ProseMirror `@` discovery. It owns action identity, full and compact labels, description, discovery keywords, icon, and command-vs-toggle behavior; Composer supplies live availability, selected state, and handlers. Wide-screen trigger discovery and every `@query` render the executable catalog in the Composer-owned overlay host while the ProseMirror textbox keeps DOM focus. The touch trigger instead uses the compact-label semantic menu proven against ChatGPT, moves focus into its menu items, and retains Tab within the open menu. On wide screens, Tab closes a trigger-open menu while keeping editor focus; for `@query`, Enter or Tab replaces the exact query range in one editor transaction. Escape suppresses that query session without changing text, and pointer or keyboard movement updates a separate `data-highlighted` action. The shared upload provider owns the one generic picker input used by the menu and drag/drop. Capability toggles project into protected ProseMirror atom entities while the Chat turn payload remains plain text; native range selection decorates the selected atom. Initial entity structure uses a leading cursor-target node and trailing spacer. Removing that spacer exposes a trailing cursor-target widget decoration, so the next Backspace deletes the entity without an ArrowLeft detour; typing replaces the decorated boundary. The raw-widget `ProseMirror-separator` remains display-none so it cannot create a false line. Because the trailing target never enters the document, both Backspaces remain one undo event.
+_Avoid_: per-menu action arrays, keydown-only `@` parsing outside the editor transaction, body-portaled wide-screen Composer actions, duplicating action metadata between responsive surfaces, moving DOM focus from the editor into wide-screen action rows, duplicate picker inputs, action labels duplicated between menus and editor entities, visual chips outside the ProseMirror document, serializing capability labels into user-message text
+_Status_: implemented 2026-08-23.
+
+**Chat disclosure**:
+The shared native `<details>` primitive for bordered tool/source disclosures. A stable `<summary>` owns keyboard and accessibility semantics; `::details-content` owns the 0fr→1fr grid reveal using `transition-behavior: allow-discrete`, the common spring timing token, and a 300ms duration. The body remains mounted across open/close.
+_Avoid_: React open state, conditional body mounting, Framer height measurement, call-site disclosure animation recipes
+_Status_: implemented 2026-08-23.
+
+**Keyboard viewport**:
+The browser module that publishes mobile-keyboard geometry without remounting or translating the **Composer** DOM. It owns two adapters behind one interface: Virtual Keyboard overlay geometry when supported and bounded `visualViewport` inference otherwise. It alone manages the document `keyboard-open` class, the root `data-keyboard-open` state, `--screen-keyboard-height`, focus-scoped listeners, animation-frame coalescing, and cleanup that restores browser overlay ownership.
+_Avoid_: per-composer viewport listeners, React state mirroring keyboard geometry, arbitrary close/open delays, browser adapters leaking into ScrollRoot
+_Status_: implemented 2026-08-23.
+
+**Thread viewport insets**:
+The ScrollRoot-owned measurement contract for the active Chat surface. One callback-ref lifecycle publishes the sticky footer footprint (`--sticky-padding-bottom`), keyboard-pinned Composer height (`--composer-height`), and absolute prompt-header overflow spacer. Header posture, keyboard geometry, CSS safe areas, turn scroll margins, and the bottom-edge observer derive from those inputs without copying geometry into React state. `ChatSurface` is the single product posture input to ThreadBottomContainer; separate onboarding/variant flags are invalid.
+_Avoid_: multiple ResizeObservers publishing related footer variables, caller-owned sticky measurement, `variant` plus `isOnboarding` flag matrices, remounting Composer during a surface flip
+_Status_: implemented 2026-08-23.
+
+**View transition**:
+The shared browser module (`components/ui/view-transition.ts`) that runs an atomic visual update. It owns hidden-document bypass, browser feature detection, typed transition metadata, document lifecycle classes, ready/finished rejection handling, and failure-safe cleanup. Product adapters such as the first-turn Composer slide supply only their scoped class, transition type, and update; they never recreate browser lifecycle policy.
+_Avoid_: feature detection and root-class cleanup inside each product caller, transitions in hidden tabs, untyped document attributes with no cleanup owner
+_Status_: implemented 2026-08-23.
+
+**Intent prefetch**:
+The callback-ref browser module that warms a lazy interaction surface from keyboard focus, pointer hover, touch start, and coarse-pointer visibility. Its loader deduplicates concurrent imports and re-arms after a failed import; the ref owns all listeners and IntersectionObserver cleanup. Product actions may explicitly call the same loader at activation, but never copy the intent event matrix.
+_Avoid_: per-trigger hover-only preload handlers, eager-loading every overlay, effect-owned global listeners, a click-only dynamic import waterfall
+_Status_: implemented 2026-08-23.
+
+**Public chat share**:
+The product module that publishes a chat and then selects its browser presentation: attempt a supported native Share target, treat user dismissal as terminal, and open the existing custom share surface only for unsupported capability or operational failure. Desktop Dialog and mobile Drawer are adapters over one shared fallback body and one link/text recipe.
+_Avoid_: duplicated copy/X/link bodies, opening a fallback behind a dismissed system share sheet, calling native share before the public link exists
+_Status_: implemented 2026-08-23.
+
 **Streaming renderer**:
 The active conversation surface that presents canonical assistant text as it arrives. It may coalesce presentation work within one browser frame, but it never owns a second delayed copy of the text or animates prose word by word; durable and shared recovery remain a separate concern.
 _Avoid_: presentation reveal, displayed-text store, prefix scheduler, word queue, prose animation, durable renderer
@@ -298,6 +338,11 @@ _Avoid_: provider options (reserved for the AI SDK field it produces), model tun
 ### Observability
 
 **Chat-performance instrumentation**:
-The content-free, off-by-default measurement seam for chat responsiveness (`lib/observability/chat-performance.ts` core + `chat-performance-client.ts` React hooks). Client turn/navigation marks go to the User Timing API behind the build-time `NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION` flag; server preparation spans and checkpoint counters emit `_tag:"chat_perf"` structured log lines behind per-request `CHAT_PERF_SAMPLE_RATE` sampling. Every event passes a per-event field allow-list (unknown fields — string fields especially — are rejected; strings must be declared enums or the correlation id, and credential-shaped values are refused). A per-turn random UUID crosses as the one-shot `x-chat-perf-id` header, is validated by the route, rides only spans, is never persisted to any document, never reused across turns, and is never an admission idempotency key. The flag/cohort seam later phases must use is fixed in `docs/chat-performance-rollout-seam.md`; the measurement protocol lives in `docs/measurements/chat-performance-runbook.md`.
+The content-free, off-by-default measurement seam for chat responsiveness (`lib/observability/chat-performance.ts` core + `chat-performance-client.ts` React hooks + the callback-ref-owned **Composer paint probe**). Client turn/navigation/composer-paint marks go to the User Timing API behind the build-time `NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION` flag; server preparation spans and checkpoint counters emit `_tag:"chat_perf"` structured log lines behind per-request `CHAT_PERF_SAMPLE_RATE` sampling. Every event passes a per-event field allow-list (unknown fields — string fields especially — are rejected; strings must be declared enums or the correlation id, and credential-shaped values are refused). A per-turn random UUID crosses as the one-shot `x-chat-perf-id` header, is validated by the route, rides only spans, is never persisted to any document, never reused across turns, and is never an admission idempotency key. The flag/cohort seam later phases must use is fixed in `docs/chat-performance-rollout-seam.md`; the measurement protocol lives in `docs/measurements/chat-performance-runbook.md`.
 _Avoid_: analytics (PostHog product analytics is a different sink and identity domain), tracing (Sentry spans exist independently; this seam owns only the plan's content-free performance events), live toggle (every NEXT_PUBLIC_ flag is a redeploy)
 _Status_: implemented 2026-07-22 (chat-responsiveness plan PR 0b; default off everywhere).
+
+**Composer paint probe**:
+The content-free controller (`lib/observability/composer-paint.ts`) attached to the stable ProseMirror editing DOM. It classifies eligible `keydown`/`beforeinput` pairs, marks editor paint after one animation frame and settled Composer paint after two, drops timestamps older than one second, and cancels frames/listeners with the editor callback-ref lifecycle. It emits no draft text, selection, key value, or input type, and returns a shared no-op controller while Chat-performance instrumentation is disabled.
+_Avoid_: per-keystroke React state, prompt content in performance entries, always-on listeners while instrumentation is off, effect-owned editor timing
+_Status_: implemented 2026-08-23.

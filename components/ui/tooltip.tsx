@@ -1,5 +1,8 @@
+"use client"
+
 import { cn } from "@/lib/utils"
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
+import * as React from "react"
 
 type TooltipShortcutProps = Omit<React.ComponentProps<"span">, "children"> & {
   label: React.ReactNode
@@ -8,6 +11,47 @@ type TooltipShortcutProps = Omit<React.ComponentProps<"span">, "children"> & {
 }
 
 type TooltipMultilineProps = React.ComponentProps<"span">
+
+const TooltipContentIdContext = React.createContext<string | undefined>(
+  undefined
+)
+
+function getNodeText(node: React.ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node)
+  }
+
+  if (!React.isValidElement<{ children?: React.ReactNode }>(node)) {
+    return React.Children.toArray(node).map(getNodeText).join("")
+  }
+
+  return getNodeText(node.props.children)
+}
+
+function getShortcutKeyLabels(children: React.ReactNode): string[] {
+  return React.Children.toArray(children).flatMap((child) => {
+    if (
+      !React.isValidElement<{
+        "aria-label"?: string
+        children?: React.ReactNode
+        label?: string
+      }>(child)
+    ) {
+      const text = getNodeText(child)
+      return text ? [text] : []
+    }
+
+    if (child.type === React.Fragment) {
+      return getShortcutKeyLabels(child.props.children)
+    }
+
+    const label =
+      child.props.label ??
+      child.props["aria-label"] ??
+      getNodeText(child.props.children)
+    return label ? [label] : []
+  })
+}
 
 /**
  * Stacks related tooltip lines and opts the surface into multiline rounding.
@@ -28,16 +72,23 @@ function TooltipMultiline({ className, ...props }: TooltipMultilineProps) {
 
 /**
  * Tooltip label + keyboard shortcut composition.
- * Shortcut keys stay unboxed, inherit the tooltip's tertiary token, and use
- * cap-height trimming so modifier glyphs align with the label text.
+ * The action is announced as one phrase while its visible keys sit in the
+ * same compact capsule as the reference tooltip.
  */
 function TooltipShortcut({
   label,
   children,
   detail,
   className,
+  "aria-label": ariaLabel,
   ...props
 }: TooltipShortcutProps) {
+  const actionAriaLabel =
+    ariaLabel ??
+    [getNodeText(label), ...getShortcutKeyLabels(children)]
+      .filter(Boolean)
+      .join(", ")
+
   return (
     <span
       data-slot="tooltip-shortcut"
@@ -49,82 +100,85 @@ function TooltipShortcut({
     >
       <span
         data-slot="tooltip-shortcut-action"
-        className="inline-flex items-center gap-2 whitespace-nowrap"
+        className="inline-flex items-center whitespace-nowrap"
       >
-        <span>{label}</span>
+        <span className="sr-only">{actionAriaLabel}</span>
         <span
-          data-slot="tooltip-shortcut-keys"
-          // The 1em key slots follow the reference sidebar-hint markup,
-          // where trailing slack is invisible. Inside a bordered tooltip a
-          // narrow final glyph (S, K…) would leave its slack reading as extra
-          // right padding, so the LAST key ink-fits instead.
-          className="inline-flex font-medium whitespace-pre text-[var(--text-tertiary)] [text-box:trim-both_text] pointer-coarse:hidden [&_kbd]:min-w-0 [&_kbd]:[align-items:normal] [&_kbd]:justify-normal [&_kbd]:[font-family:inherit] [&_kbd]:text-xs [&_kbd:last-child>span]:min-w-0 [&_kbd>span]:min-w-[1em]"
+          aria-hidden="true"
+          className="inline-flex items-center gap-1.5 whitespace-nowrap"
         >
-          {children}
+          <span>{label}</span>
+          <span
+            data-slot="tooltip-shortcut-keys"
+            className="-me-1.5 inline-flex h-[18px] items-center rounded-full bg-white/25 px-1.5 text-sm leading-[18px] font-semibold whitespace-pre text-[var(--text-secondary)] [text-box:trim-both_text] pointer-coarse:hidden [&_kbd]:h-[18px] [&_kbd]:min-w-0 [&_kbd]:[align-items:normal] [&_kbd]:justify-normal [&_kbd]:[font-family:inherit] [&_kbd]:text-sm [&_kbd]:leading-[18px] [&_kbd>span]:min-w-[1em]"
+          >
+            {children}
+          </span>
         </span>
       </span>
-      {/* Rendered only when present: the root's gap-2 would otherwise add a
-          phantom 8px of trailing space for an empty detail slot. */}
-      {detail != null && (
-        <span
-          data-slot="tooltip-shortcut-detail"
-          className="font-medium text-[var(--text-tertiary)]"
-        >
-          {detail}
-        </span>
-      )}
+      <span
+        data-slot="tooltip-shortcut-detail"
+        className="font-medium text-[var(--text-tertiary)] empty:hidden"
+      >
+        {detail}
+      </span>
     </span>
   )
 }
 
-function TooltipProvider({
-  delay = 0,
-  ...props
-}: TooltipPrimitive.Provider.Props) {
+function TooltipProvider(
+  props: Omit<TooltipPrimitive.Provider.Props, "delay">
+) {
   return (
     <TooltipPrimitive.Provider
       data-slot="tooltip-provider"
-      delay={delay}
       {...props}
+      delay={0}
     />
   )
 }
 
 function Tooltip({
-  delay,
   disableHoverablePopup = true,
   ...props
-}: TooltipPrimitive.Root.Props & {
-  delay?: number
-}) {
-  const root = (
-    <TooltipPrimitive.Root
-      data-slot="tooltip"
-      disableHoverablePopup={disableHoverablePopup}
+}: TooltipPrimitive.Root.Props) {
+  const contentId = `base-ui-${React.useId()}`
+  return (
+    <TooltipContentIdContext.Provider value={contentId}>
+      <TooltipPrimitive.Root
+        data-slot="tooltip"
+        disableHoverablePopup={disableHoverablePopup}
+        {...props}
+      />
+    </TooltipContentIdContext.Provider>
+  )
+}
+
+function TooltipTrigger({
+  "aria-describedby": ariaDescribedBy,
+  ...props
+}: TooltipPrimitive.Trigger.Props) {
+  const contentId = React.useContext(TooltipContentIdContext)
+
+  return (
+    <TooltipPrimitive.Trigger
+      data-slot="tooltip-trigger"
+      aria-describedby={ariaDescribedBy ?? contentId}
       {...props}
     />
   )
-
-  if (delay !== undefined) {
-    return <TooltipProvider delay={delay}>{root}</TooltipProvider>
-  }
-
-  return root
-}
-
-function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
 }
 
 function TooltipContent({
   className,
   side = "top",
-  sideOffset = 4,
+  sideOffset = 6,
   align = "center",
   alignOffset = 0,
   children,
   hideArrow = true,
   variant = "default",
+  role = "tooltip",
   ...props
 }: TooltipPrimitive.Popup.Props &
   Pick<
@@ -134,8 +188,10 @@ function TooltipContent({
     hideArrow?: boolean
     variant?: "default" | "outline"
   }) {
+  const contentId = React.useContext(TooltipContentIdContext)
+
   return (
-    <TooltipPrimitive.Portal>
+    <TooltipPrimitive.Portal keepMounted>
       <TooltipPrimitive.Positioner
         align={align}
         alignOffset={alignOffset}
@@ -144,18 +200,28 @@ function TooltipContent({
         className="isolate z-50"
       >
         <TooltipPrimitive.Popup
+          id={contentId}
+          role={role}
           data-slot="tooltip-content"
           data-variant={variant}
           className={cn(
-            "z-50 inline-flex w-fit max-w-xs items-center gap-2 rounded-(--tooltip-radius) px-3 py-[5px] [font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,'Segoe_UI',Helvetica,'Apple_Color_Emoji',Arial,sans-serif,'Segoe_UI_Emoji','Segoe_UI_Symbol'] text-sm leading-[18px] font-semibold tracking-[-0.15px] transition-opacity duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] has-[[data-slot=tooltip-multiline]]:rounded-(--tooltip-multiline-radius)",
+            "z-50 w-max max-w-[min(var(--container-xs),calc(100dvw-2*var(--spacing)))] overflow-hidden rounded-(--tooltip-radius) px-3 py-[5px] [font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,'Segoe_UI',Helvetica,'Apple_Color_Emoji',Arial,sans-serif,'Segoe_UI_Emoji','Segoe_UI_Symbol'] transition-opacity duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] select-none has-[[data-slot=tooltip-multiline]]:rounded-(--tooltip-multiline-radius) pointer-coarse:sr-only",
             variant === "default"
               ? "dark shadow-tooltip border border-[var(--border-tooltip)] bg-[var(--bg-tooltip)] text-white"
-              : "bg-popover text-popover-foreground shadow-floating-surface font-medium",
+              : "bg-popover text-popover-foreground shadow-floating-surface",
             className
           )}
           {...props}
         >
-          {children}
+          <div
+            data-slot="tooltip-content-text"
+            className={cn(
+              "text-center text-sm leading-[18px] tracking-[-0.15px] whitespace-pre-wrap",
+              variant === "default" ? "font-semibold" : "font-medium"
+            )}
+          >
+            {children}
+          </div>
           {!hideArrow && (
             <TooltipPrimitive.Arrow
               className={cn(

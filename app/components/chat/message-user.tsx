@@ -329,7 +329,6 @@ export function MessageUser({
           {isDurableChat && (
             <MessageActionButton
               label={isEditing ? "Cancel edit" : "Edit message"}
-              delay={0}
               onClick={isEditing ? handleEditCancel : handleEditStart}
               icon={
                 isEditing ? (

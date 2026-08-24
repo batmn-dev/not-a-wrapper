@@ -65,22 +65,18 @@ export function parseChatPerfIdHeader(
 // Event schema (allow-list; unknown fields and free-form strings rejected)
 
 type FieldSpec =
-  | { kind: "number" }
-  | { kind: "boolean" }
-  | { kind: "enum"; values: readonly string[] }
-  | { kind: "correlation" }
+  | { kind: "number"; required?: true }
+  | { kind: "boolean"; required?: true }
+  | { kind: "enum"; values: readonly string[]; required?: true }
+  | { kind: "correlation"; required?: true }
 
 const NUMBER: FieldSpec = { kind: "number" }
+const REQUIRED_NUMBER: FieldSpec = { kind: "number", required: true }
 const BOOLEAN: FieldSpec = { kind: "boolean" }
 const CORRELATION: FieldSpec = { kind: "correlation" }
 const oneOf = (...values: string[]): FieldSpec => ({ kind: "enum", values })
 
-const TERMINAL_OUTCOMES = [
-  "finish",
-  "error",
-  "abort",
-  "disconnect",
-] as const
+const TERMINAL_OUTCOMES = ["finish", "error", "abort", "disconnect"] as const
 
 export const CHAT_PERF_SPAN_NAMES = [
   "request_parse",
@@ -122,6 +118,8 @@ export type DetachedBindingGaugeEvent =
 const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
   // --- client turn marks (plan PR 0 step 3) ---
   chat_send_intent: { correlationId: CORRELATION },
+  "composer.keystroke_to_next_paint": { durationMs: REQUIRED_NUMBER },
+  "composer.keystroke_to_settled_paint": { durationMs: REQUIRED_NUMBER },
   optimistic_message_painted: { correlationId: CORRELATION },
   request_dispatched: { correlationId: CORRELATION },
   first_chunk_received: { correlationId: CORRELATION },
@@ -197,9 +195,7 @@ export type ChatPerfEventName = keyof typeof EVENT_SCHEMAS & string
 
 export type ChatPerfFields = Record<string, string | number | boolean>
 
-export type ChatPerfValidation =
-  | { ok: true }
-  | { ok: false; reason: string }
+export type ChatPerfValidation = { ok: true } | { ok: false; reason: string }
 
 /**
  * The schema gate every emission passes. Rejects unknown events, unknown
@@ -213,6 +209,12 @@ export function validateChatPerfEvent(
 ): ChatPerfValidation {
   const schema = EVENT_SCHEMAS[name]
   if (!schema) return { ok: false, reason: `unknown event: ${name}` }
+
+  for (const [key, spec] of Object.entries(schema)) {
+    if (spec.required && !Object.hasOwn(fields, key)) {
+      return { ok: false, reason: `missing required field: ${key}` }
+    }
+  }
 
   for (const [key, value] of Object.entries(fields)) {
     const spec = schema[key]

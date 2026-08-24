@@ -26,6 +26,7 @@ function useHydrated() {
 type FileUploadContextValue = {
   isDragging: boolean
   inputRef: React.RefObject<HTMLInputElement | null>
+  openFilePicker: () => void
   multiple?: boolean
   disabled?: boolean
 }
@@ -110,9 +111,13 @@ function FileUpload({
     }
   }
 
+  const openFilePicker = useCallback(() => {
+    if (!disabled) inputRef.current?.click()
+  }, [disabled])
+
   return (
     <FileUploadContext.Provider
-      value={{ isDragging, inputRef, multiple, disabled }}
+      value={{ isDragging, inputRef, openFilePicker, multiple, disabled }}
     >
       <input
         type="file"
@@ -122,6 +127,7 @@ function FileUpload({
         multiple={multiple}
         accept={accept}
         aria-hidden
+        tabIndex={-1}
         disabled={disabled}
       />
       {children}
@@ -137,7 +143,6 @@ function FileUploadTrigger({
   ...props
 }: FileUploadTriggerProps) {
   const context = useContext(FileUploadContext)
-  const handleClick = () => context?.inputRef.current?.click()
 
   const defaultProps: useRender.ElementProps<"button"> = {
     type: "button",
@@ -148,7 +153,7 @@ function FileUploadTrigger({
     disabled: context?.disabled,
     onClick: (e) => {
       e.stopPropagation()
-      handleClick()
+      context?.openFilePicker()
     },
   }
 
@@ -157,6 +162,14 @@ function FileUploadTrigger({
     render,
     props: mergeProps<"button">(defaultProps, props),
   })
+}
+
+function useFileUpload() {
+  const context = useContext(FileUploadContext)
+  if (!context) {
+    throw new Error("useFileUpload must be used within FileUpload")
+  }
+  return context
 }
 
 type FileUploadContentProps = React.HTMLAttributes<HTMLDivElement>
@@ -192,4 +205,4 @@ function FileUploadContent({
   return createPortal(content, document.body)
 }
 
-export { FileUpload, FileUploadTrigger, FileUploadContent }
+export { FileUpload, FileUploadTrigger, FileUploadContent, useFileUpload }
