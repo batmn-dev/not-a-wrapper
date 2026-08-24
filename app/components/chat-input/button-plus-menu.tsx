@@ -665,15 +665,19 @@ export function ButtonPlusMenu({
               {composerPlusTooltip}
             </TooltipContent>
           </Tooltip>
+          {/* ChatGPT's current mobile + menu (captured 2026-08-24): a compact
+              content-sized popover on the main surface — rounded-[20px],
+              py-2.5, 36px text-sm rows with plain 20px currentColor glyphs —
+              NOT the old dark icon-circle panel. */}
           <DropdownMenuContent
             side="top"
-            sideOffset={-44}
+            sideOffset={0}
             align="start"
-            alignOffset={-8}
+            alignOffset={-7}
             animated={false}
             geometry="custom"
             data-content-appearance="touch-optimized"
-            className="max-h-(--available-height) w-[240px] min-w-[240px] max-w-xs overflow-y-auto rounded-[28px] bg-floating-surface py-1.5 [--floating-menu-item-active:#414141] [scrollbar-width:none] dark:bg-[#1b1b1b] dark:shadow-[0_8px_16px_rgba(0,0,0,0.32),inset_0_0_1px_rgba(255,255,255,0.2),0_0_1px_rgba(0,0,0,0.62)]"
+            className="max-h-(--available-height) max-w-xs overflow-y-auto rounded-[20px] py-2.5 [scrollbar-width:none]"
             onKeyDownCapture={(event) => {
               if (event.key === "Tab") event.preventDefault()
             }}
@@ -682,18 +686,18 @@ export function ButtonPlusMenu({
               <DropdownMenuItem
                 geometry="custom"
                 disabled={addFilesState.disabled}
-                className="mx-1.5 h-12 gap-3 rounded-[28px] p-1.5 text-base/6"
+                className="mx-2.5 min-h-9 justify-between gap-6 rounded-[12px] px-2.5 py-1.5 text-sm"
                 onClick={() => activateItem("add-files")}
               >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#414141]">
+                <span className="flex min-w-0 items-center gap-1.5">
                   <Icon
                     icon={addFilesAction.icon}
                     glyphInset={0}
                     slotSize={20}
                   />
-                </span>
-                <span className="min-w-0 grow truncate">
-                  {addFilesAction.compactLabel}
+                  <span className="min-w-0 truncate">
+                    {addFilesAction.label}
+                  </span>
                 </span>
               </DropdownMenuItem>
             </DropdownMenuGroup>
@@ -703,19 +707,19 @@ export function ButtonPlusMenu({
               <DropdownMenuRadioItem
                 value="web-search"
                 disabled={webSearchState.disabled}
-                className="mx-1.5 h-12 gap-3 rounded-[28px] p-1.5 text-base/6"
+                className="mx-2.5 min-h-9 justify-between gap-6 rounded-[12px] px-2.5 py-1.5 text-sm"
                 onClick={() => activateItem("web-search")}
               >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#414141]">
+                <span className="flex min-w-0 items-center gap-1.5">
                   <Icon
                     icon={webSearchAction.icon}
                     glyphInset={0}
                     iconClassName={webSearchAction.iconClassName}
                     slotSize={20}
                   />
-                </span>
-                <span className="min-w-0 grow truncate">
-                  {webSearchAction.compactLabel}
+                  <span className="min-w-0 truncate">
+                    {webSearchAction.label}
+                  </span>
                 </span>
               </DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>

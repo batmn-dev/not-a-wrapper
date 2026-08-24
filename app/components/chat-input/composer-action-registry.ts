@@ -9,7 +9,6 @@ export type ComposerActionId = "add-files" | "web-search"
 export type ComposerActionDefinition = Readonly<{
   id: ComposerActionId
   label: string
-  compactLabel: string
   description: string
   keywords: readonly string[]
   icon: RemixiconComponentType
@@ -26,7 +25,6 @@ export const composerActionRegistry = [
   {
     id: "add-files",
     label: "Add photos & files",
-    compactLabel: "Files",
     description: "Upload from computer",
     keywords: ["attach", "image", "photo", "upload"],
     icon: RiAttachmentLine,
@@ -36,7 +34,6 @@ export const composerActionRegistry = [
   {
     id: "web-search",
     label: "Web search",
-    compactLabel: "Web search",
     description: "Find real-time news and info",
     keywords: ["browse", "internet", "search", "web"],
     icon: RiGlobalLine,

@@ -731,7 +731,10 @@
   --card-foreground: var(--foreground);
   --popover: oklch(0.222 0 0);
   --popover-foreground: var(--foreground);
-  --floating-surface: oklch(0.305 0 0);
+  /* ChatGPT's canonical dark menu surface (#353535, measured 2026-08-24) —
+   * their dark base surface is #000 and every floating menu overrides to
+   * this value, so the shared token carries it instead of per-menu hexes. */
+  --floating-surface: oklch(0.329 0 0);
   --floating-surface-foreground: #ffffff;
   --floating-surface-edge-shadow: inset 0 0 1px rgba(255, 255, 255, 0.2);
   --floating-select-edge-shadow:

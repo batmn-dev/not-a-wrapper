@@ -303,11 +303,21 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
     expect(menu?.getAttribute("data-content-appearance")).toBe(
       "touch-optimized"
     )
-    expect(menu?.className).toContain("w-[240px]")
-    expect(menu?.className).toContain("rounded-[28px]")
+    // ChatGPT's current mobile + menu: compact content-sized popover with
+    // plain glyph rows — not the old dark icon-circle panel.
+    expect(menu?.className).toContain("rounded-[20px]")
+    expect(menu?.className).toContain("py-2.5")
+    expect(menu?.className).not.toContain("w-[240px]")
+    // Surface and shadow come from the shared floating-surface tokens — no
+    // raw hex values or inline shadows on the menu.
+    expect(menu?.className).toContain("bg-floating-surface")
+    expect(menu?.className).toContain("shadow-floating-surface")
+    expect(menu?.className).not.toMatch(/#[0-9a-fA-F]{3,6}|rgba\(/)
     expect(filesItem?.getAttribute("role")).toBe("menuitem")
-    expect(filesItem?.className).toContain("h-12")
-    expect(filesItem?.textContent).toBe("Files")
+    expect(filesItem?.className).toContain("min-h-9")
+    expect(filesItem?.className).toContain("rounded-[12px]")
+    expect(filesItem?.textContent).toBe("Add photos & files")
+    expect(filesItem?.querySelector('[class*="rounded-full"]')).toBeNull()
     expect(menu?.textContent).not.toContain("Upload from computer")
     expect(webSearchItem?.getAttribute("role")).toBe("menuitemradio")
     expect(webSearchItem?.getAttribute("aria-checked")).toBe("false")

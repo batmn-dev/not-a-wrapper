@@ -17,7 +17,6 @@ describe("Composer action registry", () => {
     )
     expect(getComposerAction("web-search")).toMatchObject({
       behavior: "toggle",
-      compactLabel: "Web search",
       description: "Find real-time news and info",
       icon: RiGlobalLine,
       iconClassName: "text-[var(--web-search-icon-foreground)]",
@@ -25,7 +24,6 @@ describe("Composer action registry", () => {
       label: "Web search",
     })
     expect(getComposerAction("add-files")).toMatchObject({
-      compactLabel: "Files",
       description: "Upload from computer",
       icon: RiAttachmentLine,
       label: "Add photos & files",

@@ -44,7 +44,8 @@ describe("floating surface contract", () => {
 
     expect(css).toContain("--popover: oklch(0.222 0 0);")
     expect(css).toContain("--floating-surface: oklch(1 0 0);")
-    expect(css).toContain("--floating-surface: oklch(0.305 0 0);")
+    // ChatGPT's canonical dark menu surface #353535 (measured 2026-08-24).
+    expect(css).toContain("--floating-surface: oklch(0.329 0 0);")
     expect(css).toContain("--modal-centered-surface: #212121;")
     expect(css).toContain("--modal-search-surface: #212121;")
     expect(css).toMatch(
