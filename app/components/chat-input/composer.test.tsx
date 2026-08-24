@@ -355,6 +355,21 @@ describe("Composer primary action", () => {
     })
   }
 
+  it("keeps ChatGPT's trailing control spacing across input modes", () => {
+    const mounted = renderComposer({})
+    const trailing = mounted.querySelector<HTMLElement>(
+      "[data-composer-trailing]"
+    )
+    const [modelGroup, actionGroup] = Array.from(trailing?.children ?? [])
+
+    expect(trailing?.className).toContain("gap-1")
+    expect(trailing?.className).not.toContain("cant-hover:")
+    expect(modelGroup?.className).toContain("gap-1.5")
+    expect(modelGroup?.className).not.toContain("cant-hover:")
+    expect(actionGroup?.className).toContain("gap-2")
+    expect(actionGroup?.className).not.toContain("cant-hover:")
+  })
+
   it("projects Web Search into a typed entity and writes entity removal back", () => {
     composerMocks.enableSearch = true
     renderComposer({})

@@ -6,7 +6,6 @@ import { ComposerControl } from "@/components/ui/composer-control"
 import {
   Drawer,
   DrawerContent,
-  DrawerHeader,
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer"
@@ -37,7 +36,12 @@ import { ModelConfig } from "@/lib/models/types"
 import { getVendorIcon } from "@/lib/provider-icons"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
-import { RiArrowDownSLine, RiSearchLine, RiStarLine } from "@remixicon/react"
+import {
+  RiArrowDownSLine,
+  RiCheckLine,
+  RiSearchLine,
+  RiStarLine,
+} from "@remixicon/react"
 import { useRef, useState } from "react"
 import { ProModelDialog } from "./pro-dialog"
 
@@ -54,30 +58,63 @@ type ModelSelectorProps = {
   variant?: "default" | "composer"
 }
 
+// The responsive selector is one surface presented through two primitives.
+// Keep its color recipe shared so the mobile drawer and desktop menu cannot drift.
+const modelSelectorSurfaceClassName =
+  "bg-floating-surface text-floating-surface-foreground"
+
 function ModelOptionContent({
   model,
   isLocked,
+  isMobile,
+  isSelected,
 }: {
   model: ModelConfig
   isLocked: boolean
+  isMobile: boolean
+  isSelected: boolean
 }) {
   // The icon is the model MAKER's vendor identity; execution routes never
   // surface in the ordinary selector row (ADR-0020) — route details live in
   // API-key and model settings.
   return (
     <>
-      <div className="flex min-w-0 items-center gap-2">
+      <div
+        className={cn(
+          "flex min-w-0 items-center",
+          isMobile ? "gap-3" : "gap-2"
+        )}
+      >
         <Icon
           icon={getVendorIcon(model.icon)}
-          slotSize={20}
+          slotSize={isMobile ? 24 : 20}
+          glyphSize={isMobile ? 24 : undefined}
+          data-slot="model-option-icon"
           className="shrink-0"
         />
-        <span className="truncate text-sm">{model.name}</span>
+        <span
+          data-slot="model-name"
+          className={cn("truncate", isMobile ? "text-base" : "text-sm")}
+        >
+          {model.name}
+        </span>
       </div>
-      {isLocked ? (
-        <div className="border-input-border bg-muted text-muted-foreground flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
-          <Icon icon={RiStarLine} slotSize={8} />
-          <span>Locked</span>
+      {isLocked || isSelected ? (
+        <div className="flex shrink-0 items-center gap-2">
+          {isLocked ? (
+            <div className="border-input-border bg-muted text-muted-foreground flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
+              <Icon icon={RiStarLine} slotSize={8} />
+              <span>Locked</span>
+            </div>
+          ) : null}
+          {isSelected ? (
+            <Icon
+              icon={RiCheckLine}
+              slotSize={isMobile ? 20 : 16}
+              glyphSize={isMobile ? 20 : 16}
+              data-slot="selected-model-check"
+            />
+          ) : null}
         </div>
       ) : null}
     </>
@@ -97,14 +134,25 @@ function ModelSelectorRows({
   selectedModelId: string | null
   onSelect: (modelId: string, isLocked: boolean) => void
 }) {
-  return models.map((model) => {
+  return models.map((model, index) => {
     const isLocked = !isModelSelectableForAuthState(model, isUserAuthenticated)
+    const isSelected = selectedModelId === model.id
     const className = cn(
       "flex w-full items-center justify-between gap-2",
-      isMobile ? "px-3 py-2" : "h-9 rounded-lg px-2 py-1.5",
-      selectedModelId === model.id && "bg-interactive-selected"
+      isMobile ? "relative h-14 px-4 py-3" : "h-9 rounded-lg px-2 py-1.5",
+      isMobile &&
+        index > 0 &&
+        "before:bg-floating-menu-divider/60 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px before:content-['']",
+      isSelected && "bg-interactive-selected"
     )
-    const content = <ModelOptionContent model={model} isLocked={isLocked} />
+    const content = (
+      <ModelOptionContent
+        model={model}
+        isLocked={isLocked}
+        isMobile={isMobile}
+        isSelected={isSelected}
+      />
+    )
 
     return isMobile ? (
       <button
@@ -175,6 +223,39 @@ function ModelSelectorList({
     "text-muted-foreground text-xs font-medium",
     isMobile ? "px-3 pt-2 pb-1" : "px-2 pt-1.5 pb-1"
   )
+
+  if (isMobile) {
+    const sections = [
+      { label: "Favorites", models: favorites },
+      { label: "All models", models: others },
+    ].filter(({ models }) => models.length > 0)
+
+    return (
+      <div className="flex flex-col gap-5 pb-2">
+        {sections.map(({ label, models: sectionModels }) => (
+          <div
+            key={label}
+            data-slot="model-section"
+            role="group"
+            aria-label={label}
+          >
+            <div
+              data-slot="model-section-label"
+              className="text-muted-foreground px-3 pb-2 text-sm font-medium"
+            >
+              {label}
+            </div>
+            <div
+              data-slot="model-section-container"
+              className="bg-interactive-selected overflow-hidden rounded-3xl"
+            >
+              <ModelSelectorRows models={sectionModels} {...rowProps} />
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   // Favorites rank; every other model stays reachable beneath them.
   if (favorites.length === 0) {
@@ -340,28 +421,40 @@ export function ModelSelector({
           }}
         >
           <DrawerTrigger render={trigger} />
-          <DrawerContent>
-            <DrawerHeader>
-              <DrawerTitle>Select Model</DrawerTitle>
-            </DrawerHeader>
-            <div className="px-4 pb-2">
-              <div className="relative">
+          <DrawerContent
+            className={cn(
+              modelSelectorSurfaceClassName,
+              "dark:bg-floating-surface/80 overflow-hidden [--model-selector-mobile-header-height:5rem] data-[vaul-drawer-direction=bottom]:rounded-t-[2rem] dark:backdrop-blur-[10px]"
+            )}
+            handleClassName="bg-muted-foreground/60 absolute top-2 left-1/2 z-20 mt-0 h-1 w-11 -translate-x-1/2"
+          >
+            <DrawerTitle className="sr-only">Select Model</DrawerTitle>
+            <div
+              data-slot="model-selector-mobile-search"
+              className="from-floating-surface/80 to-floating-surface/0 pointer-events-none absolute inset-x-0 top-0 z-10 h-20 bg-gradient-to-b px-4 pt-5"
+            >
+              <div className="pointer-events-auto relative">
                 <Icon
                   icon={RiSearchLine}
-                  slotSize={16}
-                  className="text-muted-foreground absolute top-2.5 left-2.5"
+                  slotSize={20}
+                  glyphSize={20}
+                  data-slot="model-selector-search-icon"
+                  className="text-muted-foreground absolute top-1/2 left-4 z-10 -translate-y-1/2"
                 />
                 <Input
                   ref={searchInputRef}
                   placeholder="Search models..."
-                  className="pl-8"
+                  className="border-input-border bg-floating-surface/70 h-12 rounded-full border pl-10 shadow-none backdrop-blur-md focus-visible:ring-0"
                   value={searchQuery}
                   onChange={handleSearchChange}
                   onClick={(e) => e.stopPropagation()}
                 />
               </div>
             </div>
-            <div className="flex h-full flex-col space-y-0 overflow-y-auto px-4 pb-6">
+            <div
+              data-slot="model-selector-mobile-scroll"
+              className="flex h-full min-h-0 flex-col space-y-0 overflow-y-auto overscroll-contain px-4 pt-(--model-selector-mobile-header-height) pb-6"
+            >
               <ModelSelectorList
                 favorites={favorites}
                 others={others}
@@ -418,7 +511,10 @@ export function ModelSelector({
         )}
         <DropdownMenuContent
           geometry="custom"
-          className="w-[300px] overflow-hidden rounded-(--floating-menu-radius) p-1.5 [--model-selector-fixed-height:3rem] [--model-selector-list-max-height:18rem]"
+          className={cn(
+            modelSelectorSurfaceClassName,
+            "w-[300px] overflow-hidden rounded-(--floating-menu-radius) p-1.5 [--model-selector-fixed-height:3rem] [--model-selector-list-max-height:18rem]"
+          )}
           align={isComposerVariant ? "end" : "start"}
           sideOffset={4}
           animated={false}

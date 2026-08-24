@@ -181,14 +181,30 @@ vi.mock("@/components/ui/drawer", () => ({
   Drawer: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
-  DrawerContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  DrawerContent: ({
+    children,
+    className,
+    handleClassName,
+  }: {
+    children: React.ReactNode
+    className?: string
+    handleClassName?: string
+  }) => (
+    <div data-testid="model-drawer" className={className}>
+      <div data-testid="model-drawer-handle" className={handleClassName} />
+      {children}
+    </div>
   ),
-  DrawerHeader: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DrawerTitle: ({ children }: { children: React.ReactNode }) => (
-    <h2>{children}</h2>
+  DrawerTitle: ({
+    children,
+    className,
+  }: {
+    children: React.ReactNode
+    className?: string
+  }) => (
+    <h2 data-testid="model-drawer-title" className={className}>
+      {children}
+    </h2>
   ),
   DrawerTrigger: ({
     render,
@@ -354,11 +370,21 @@ describe("ModelSelector", () => {
     const option = getModelOption("GPT-5 Mini")
 
     expect(menu?.dataset.geometry).toBe("custom")
+    expect(menu?.className).toContain("bg-floating-surface")
     expect(menu?.className).toContain("p-1.5")
     expect(option.dataset.geometry).toBe("custom")
     expect(option.className).toContain("h-9")
     expect(option.className).toContain("rounded-lg")
     expect(option.className).not.toContain("mx-2.5")
+    expect(
+      document.body.querySelector('[data-slot="model-section"]')
+    ).toBeNull()
+    expect(
+      option.querySelector<HTMLElement>('[data-slot="model-name"]')?.className
+    ).toContain("text-sm")
+    expect(
+      option.querySelector('[data-slot="selected-model-check"]')
+    ).not.toBeNull()
     expect(
       document.body.querySelector("[data-scrollable-surface]")
     ).not.toBeNull()
@@ -415,16 +441,131 @@ describe("ModelSelector", () => {
 
   it("uses the same model list and selection rules in the mobile drawer", () => {
     breakpointMocks.isMobile = true
-    const onSelect = renderSelector({ isUserAuthenticated: false })
+    const onSelect = renderSelector({ isUserAuthenticated: true })
 
     expect(document.body.textContent).toContain("GPT-5 Mini")
     expect(document.body.textContent).toContain("GLM 5.2")
     expect(
       document.body.querySelector('[data-testid="drawer-trigger"]')
     ).toBeTruthy()
+    expect(
+      document.body.querySelector<HTMLElement>('[data-testid="model-drawer"]')
+        ?.className
+    ).toContain("bg-floating-surface")
+    expect(
+      document.body.querySelector<HTMLElement>('[data-testid="model-drawer"]')
+        ?.className
+    ).toContain("dark:bg-floating-surface/80")
+    expect(
+      document.body.querySelector<HTMLElement>('[data-testid="model-drawer"]')
+        ?.className
+    ).toContain("dark:backdrop-blur-[10px]")
+    expect(
+      document.body.querySelector<HTMLElement>('[data-testid="model-drawer"]')
+        ?.className
+    ).toContain("data-[vaul-drawer-direction=bottom]:rounded-t-[2rem]")
+    expect(
+      document.body.querySelector<HTMLElement>(
+        '[data-testid="model-drawer-title"]'
+      )?.className
+    ).toContain("sr-only")
+    expect(
+      document.body.querySelector<HTMLElement>(
+        '[data-testid="model-drawer-handle"]'
+      )?.className
+    ).toBe(
+      "bg-muted-foreground/60 absolute top-2 left-1/2 z-20 mt-0 h-1 w-11 -translate-x-1/2"
+    )
+    expect(
+      document.body.querySelector<HTMLElement>(
+        '[data-slot="model-selector-mobile-search"]'
+      )?.className
+    ).toContain("absolute")
+    expect(
+      document.body.querySelector<HTMLElement>(
+        '[data-slot="model-selector-mobile-search"]'
+      )?.className
+    ).toContain("from-floating-surface/80")
+    expect(
+      document.body.querySelector<HTMLElement>(
+        '[data-slot="model-selector-mobile-search"]'
+      )?.className
+    ).toContain("to-floating-surface/0")
+    expect(
+      document.body.querySelector<HTMLElement>(
+        '[data-slot="model-selector-mobile-scroll"]'
+      )?.className
+    ).toContain("pt-(--model-selector-mobile-header-height)")
+    expect(
+      document.body.querySelector<HTMLInputElement>(
+        'input[placeholder="Search models..."]'
+      )?.className
+    ).toContain("rounded-full")
+    expect(
+      document.body.querySelector<HTMLInputElement>(
+        'input[placeholder="Search models..."]'
+      )?.className
+    ).toContain("h-12")
+    expect(
+      document.body.querySelector<HTMLElement>(
+        '[data-slot="model-selector-search-icon"]'
+      )?.className
+    ).toContain("z-10")
+    const mobileOption = getModelOption("GPT-5 Mini")
+    expect(mobileOption.className).toContain("h-14")
+    expect(mobileOption.className).toContain("px-4")
+    expect(mobileOption.className).not.toContain(
+      "before:bg-floating-menu-divider/60"
+    )
+    const mobileModelIcon = mobileOption.querySelector<HTMLElement>(
+      '[data-slot="model-option-icon"]'
+    )
+    expect(mobileModelIcon?.style.getPropertyValue("--icon-slot-size")).toBe(
+      "24px"
+    )
+    expect(mobileModelIcon?.style.getPropertyValue("--icon-glyph-size")).toBe(
+      "24px"
+    )
+    expect(
+      mobileOption.querySelector<HTMLElement>('[data-slot="model-name"]')
+        ?.className
+    ).toContain("text-base")
+    expect(
+      mobileOption.querySelector('[data-slot="selected-model-check"]')
+    ).not.toBeNull()
+    const secondMobileOption = getModelOption("GLM 5.2")
+    expect(
+      secondMobileOption.querySelector('[data-slot="selected-model-check"]')
+    ).toBeNull()
+    expect(secondMobileOption.className).toContain(
+      "before:bg-floating-menu-divider/60"
+    )
+    expect(secondMobileOption.className).toContain("before:inset-x-0")
+    const sections = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[data-slot="model-section"]')
+    )
+    expect(sections).toHaveLength(2)
+    expect(
+      sections.map((section) =>
+        section
+          .querySelector('[data-slot="model-section-label"]')
+          ?.textContent?.trim()
+      )
+    ).toEqual(["Favorites", "All models"])
+    for (const section of sections) {
+      const label = section.querySelector('[data-slot="model-section-label"]')
+      const container = section.querySelector<HTMLElement>(
+        '[data-slot="model-section-container"]'
+      )
+
+      expect(container?.contains(label)).toBe(false)
+      expect(label?.className).toContain("text-sm")
+      expect(container?.className).toContain("bg-interactive-selected")
+      expect(container?.className).toContain("rounded-3xl")
+    }
 
     act(() => {
-      getModelOption("GPT-5 Mini").click()
+      mobileOption.click()
     })
 
     expect(onSelect).toHaveBeenCalledWith("gpt-5-mini")
