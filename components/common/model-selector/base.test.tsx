@@ -574,7 +574,8 @@ describe("ModelSelector", () => {
 
       expect(container?.contains(label)).toBe(false)
       expect(label?.className).toContain("text-sm")
-      expect(container?.className).toContain("bg-interactive-selected")
+      expect(container?.className).toContain("bg-muted/50")
+      expect(container?.className).toContain("dark:bg-muted/80")
       expect(container?.className).toContain("rounded-3xl")
     }
 

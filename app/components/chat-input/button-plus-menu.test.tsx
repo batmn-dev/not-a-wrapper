@@ -203,11 +203,18 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
       trigger: "@",
     } as const
 
-    // Loading: skeleton rows while the connector list resolves.
+    // Loading: ChatGPT's single shimmer row while connector suggestions resolve.
     renderMenu(syntheticQuery, undefined)
-    expect(
-      container.querySelector("[data-composer-menu-skeleton]")
-    ).not.toBeNull()
+    const skeleton = container.querySelector(
+      "[data-composer-menu-skeleton]"
+    ) as HTMLElement
+    expect(skeleton).not.toBeNull()
+    expect(skeleton.getAttribute("aria-hidden")).toBe("true")
+    expect(skeleton.getAttribute("role")).toBeNull()
+    expect(skeleton.className).toContain("skeleton")
+    expect(skeleton.querySelectorAll(".skeleton-child")).toHaveLength(2)
+    expect(skeleton.querySelector(".animate-pulse")).toBeNull()
+    expect(skeleton.closest('[aria-busy="true"]')).not.toBeNull()
 
     const github = {
       id: "srv1",
@@ -367,6 +374,15 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
               isFileUploadAvailable
               isSearchDisabled={false}
               isUserAuthenticated
+              connectors={[
+                {
+                  id: "github",
+                  name: "GitHub",
+                  description: "github.com",
+                  enabled: true,
+                },
+              ]}
+              onToggleConnector={() => {}}
               onToggleSearch={() => {}}
             />
             <div data-composer-overlay-host />
@@ -395,27 +411,48 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
     expect(menu?.className).toContain("rounded-[28px]")
     expect(menu?.className).toContain("min-w-60")
     expect(menu?.className).toContain("w-max")
-    // Live-measured cap: 6px block padding + 5.8 visible item-heights.
+    // Live source sets the visible-item cap through an element-scoped custom
+    // property, with 6.8 as the reusable stylesheet fallback.
+    expect(menu?.style.getPropertyValue("--min-items")).toBe("5.8")
     expect(menu?.className).toContain(
-      "5.8*var(--floating-menu-item-height)"
+      "var(--min-items,6.8)*var(--floating-menu-item-height)"
     )
     expect(menu?.className).toContain("py-1.5")
+    expect(menu?.className).toContain("bg-(--floating-menu-touch-surface)")
+    expect(menu?.className).toContain("shadow-floating-menu-touch")
+    expect(menu?.className).toContain("select-none")
 
     // Camera / Photos / Files rows with 36px full-round icon chips on the
-    // tertiary token, plus our Web search radio row in the same vocabulary.
+    // tertiary token, plus Web search and real connector rows in the same
+    // vocabulary.
     const labels = [...(menu?.querySelectorAll(".truncate") ?? [])].map(
       (node) => node.textContent
     )
-    expect(labels).toEqual(["Camera", "Photos", "Files", "Web search"])
+    expect(labels).toEqual([
+      "Camera",
+      "Photos",
+      "Files",
+      "Web search",
+      "GitHub",
+    ])
     const chips = menu?.querySelectorAll(
       '[class*="rounded-full"][class*="--floating-menu-touch-tertiary"]'
     )
-    expect(chips).toHaveLength(4)
-    const rows = menu?.querySelectorAll('[role="menuitem"],[role="menuitemradio"]')
+    expect(chips).toHaveLength(5)
+    const rows = menu?.querySelectorAll(
+      '[role="menuitem"],[role="menuitemradio"],[role="menuitemcheckbox"]'
+    )
     for (const row of rows ?? []) {
       expect(row.className).toContain("min-h-(--floating-menu-item-height)")
       expect(row.className).toContain("rounded-[28px]")
+      expect(row.className).toContain("scroll-m-1.5")
+      expect(row.className).toContain("cursor-auto")
     }
+    const connectorRow = [...(rows ?? [])].find(
+      (row) => row.textContent === "GitHub"
+    ) as HTMLElement
+    expect(connectorRow.getAttribute("role")).toBe("menuitemcheckbox")
+    expect(connectorRow.getAttribute("aria-checked")).toBe("true")
 
     // The camera/photo sources are hidden inputs outside the menu, with
     // ChatGPT's accept/capture contract; rows click them.
@@ -426,9 +463,11 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
       '[data-testid="composer-upload-photos-input"]'
     )
     expect(cameraInput?.getAttribute("accept")).toBe("image/*")
+    expect(cameraInput?.id).toBe("upload-camera")
     expect(cameraInput?.getAttribute("capture")).toBe("environment")
     expect(cameraInput?.multiple).toBe(true)
     expect(photosInput?.getAttribute("accept")).toBe("image/*")
+    expect(photosInput?.id).toBe("upload-photos")
     expect(photosInput?.hasAttribute("capture")).toBe(false)
 
     const cameraClick = vi.spyOn(cameraInput!, "click")
@@ -448,6 +487,51 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
       photosInput!.dispatchEvent(new Event("change", { bubbles: true }))
     })
     expect(onFilesAdded).toHaveBeenCalledWith([file])
+  })
+
+  it("toggles real connectors from the direct mobile menu", () => {
+    breakpointMocks.isMobile = true
+    breakpointMocks.isTouch = true
+    const onToggleConnector = vi.fn()
+
+    act(() => {
+      root.render(
+        <FileUpload onFilesAdded={() => {}}>
+          <form data-type="unified-composer">
+            <div id="prompt-textarea" role="textbox" tabIndex={0} />
+            <ButtonPlusMenu
+              connectors={[
+                {
+                  id: "github",
+                  name: "GitHub",
+                  description: "github.com",
+                  enabled: false,
+                },
+              ]}
+              enableSearch={false}
+              isFileUploadAvailable
+              isSearchDisabled={false}
+              isUserAuthenticated
+              onToggleConnector={onToggleConnector}
+              onToggleSearch={() => {}}
+            />
+            <div data-composer-overlay-host />
+          </form>
+        </FileUpload>
+      )
+    })
+
+    const trigger = container.querySelector(
+      '[aria-label="Add files and more"]'
+    ) as HTMLButtonElement
+    act(() => trigger.click())
+
+    const connectorRow = [...document.body.querySelectorAll('[role="menuitemcheckbox"]')].find(
+      (row) => row.textContent === "GitHub"
+    ) as HTMLElement
+    expect(connectorRow.getAttribute("aria-checked")).toBe("false")
+    act(() => connectorRow.click())
+    expect(onToggleConnector).toHaveBeenCalledWith("github")
   })
 
   it("keeps @ discovery editor-owned across filtering, Escape, and Tab activation", () => {

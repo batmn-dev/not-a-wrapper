@@ -242,8 +242,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       handleEntitiesChange: handleComposerEntitiesChange,
       activateActionQuery: handleActivateActionQuery,
     } = useComposerCapabilities({ enableSearch, setEnableSearch, editorRef })
-    const { connectors: menuConnectors, activateConnector: handleActivateConnector } =
-      useComposerConnectors({ isUserAuthenticated, editorRef })
+    const {
+      connectors: menuConnectors,
+      activateConnector: handleActivateConnector,
+      toggleConnector: handleToggleConnector,
+    } = useComposerConnectors({ isUserAuthenticated, editorRef })
     const handleOpenActionMenu = useCallback(() => {
       editorRef.current?.toggleSyntheticActionQuery()
     }, [])
@@ -623,6 +626,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   isSearchDisabled={isSearchDisabled}
                   connectors={menuConnectors}
                   onActivateConnector={handleActivateConnector}
+                  onToggleConnector={handleToggleConnector}
                   onOpenActionMenu={handleOpenActionMenu}
                   onCloseActionQuery={handleCloseActionQuery}
                 />

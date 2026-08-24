@@ -3,6 +3,7 @@
 import { ComposerIconButton } from "@/components/ui/composer-icon-button"
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
@@ -27,14 +28,17 @@ import {
 } from "@/components/ui/tooltip"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { useIsMobileDeviceOs } from "@/hooks/use-mobile-device-os"
-import {
-  RiAddLargeLine,
-  RiCameraLine,
-  RiImageLine,
-  RiPlugLine,
-} from "@remixicon/react"
+import { RiPlugLine } from "@remixicon/react"
 import { useCallback, useMemo, useRef } from "react"
 import { type ComposerActionId } from "./composer-action-registry"
+import {
+  ComposerCameraIcon,
+  ComposerCheckIcon,
+  ComposerGlobeIcon,
+  ComposerImageSquareIcon,
+  ComposerPaperclipIcon,
+  ComposerPlusIcon,
+} from "./composer-menu-icons"
 import {
   type ComposerActionAvailability,
   type ComposerMenuConnector,
@@ -44,7 +48,7 @@ import { PopoverContentAuth } from "./popover-content-auth"
 import { useComposerActionMenu } from "./use-composer-action-menu"
 
 const composerPlusIcon = (
-  <Icon icon={RiAddLargeLine} slotSize={20} glyphInset={0} />
+  <Icon icon={ComposerPlusIcon} slotSize={20} glyphInset={0} />
 )
 const composerPlusTooltip = (
   <TooltipShortcut label="Add files and more">
@@ -60,9 +64,16 @@ const composerPlusTooltip = (
  * 36px full-round chips on the tertiary surface with 20px glyphs, row
  * highlight on the same tertiary token, and no group separators. */
 const touchMenuRowClassName =
-  "mx-1.5 h-auto min-h-(--floating-menu-item-height) gap-3 rounded-[28px] border-y-0! [corner-shape:superellipse(1.1)] px-1.5 py-1.5 text-sm hover:bg-(--floating-menu-touch-tertiary) focus:bg-(--floating-menu-touch-tertiary) data-highlighted:bg-(--floating-menu-touch-tertiary)"
+  "mx-1.5 h-auto min-h-(--floating-menu-item-height) cursor-auto scroll-m-1.5 gap-3 rounded-[28px] border-y-0! [corner-shape:superellipse(1.1)] px-1.5 py-1.5 text-sm hover:bg-(--floating-menu-touch-tertiary) focus:bg-(--floating-menu-touch-tertiary) data-highlighted:bg-(--floating-menu-touch-tertiary)"
 const touchMenuChipClassName =
   "flex size-9 shrink-0 items-center justify-center rounded-full bg-(--floating-menu-touch-tertiary) text-foreground"
+const touchMenuActionIcons = {
+  "add-files": ComposerPaperclipIcon,
+  "web-search": ComposerGlobeIcon,
+} as const
+const touchMenuCheck = (
+  <Icon icon={ComposerCheckIcon} slotSize={16} glyphInset={0} />
+)
 
 type ButtonPlusMenuProps = {
   isUserAuthenticated: boolean
@@ -85,6 +96,8 @@ type ButtonPlusMenuProps = {
     connectorId: string,
     query: PromptInputActionQuery
   ) => boolean
+  /** Toggle an MCP connector from the direct mobile trigger menu. */
+  onToggleConnector?: (connectorId: string) => void
   /** Open (or toggle off) a synthetic action-query session in the editor —
    * the desktop + button drives the same menu as typing "@". */
   onOpenActionMenu?: () => void
@@ -104,6 +117,7 @@ export function ButtonPlusMenu({
   onActivateActionQuery,
   connectors,
   onActivateConnector,
+  onToggleConnector,
   onOpenActionMenu,
   onCloseActionQuery,
 }: ButtonPlusMenuProps) {
@@ -234,7 +248,7 @@ export function ButtonPlusMenu({
       side="bottom"
       sideOffset={8}
       align="start"
-      aria-busy={false}
+      aria-busy={isConnectorsLoading}
       role={undefined}
       tabIndex={undefined}
       initialFocus={false}
@@ -288,16 +302,13 @@ export function ButtonPlusMenu({
         ))}
       </div>
       {isConnectorsLoading && (
-        <div role="group" aria-hidden="true" data-composer-menu-skeleton="">
-          {[0, 1].map((index) => (
-            <div
-              key={index}
-              className="mx-2 flex h-(--floating-menu-item-height) items-center gap-3 px-2 py-1.5"
-            >
-              <span className="bg-interactive-hover size-5 shrink-0 animate-pulse rounded-full" />
-              <span className="bg-interactive-hover h-3 w-44 animate-pulse rounded-full" />
-            </div>
-          ))}
+        <div
+          aria-hidden="true"
+          className="skeleton group relative mx-1.5 flex min-h-(--floating-menu-item-height) w-auto items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 [--skeleton-opacity:0.75]"
+          data-composer-menu-skeleton=""
+        >
+          <div className="skeleton-child icon shrink-0 rounded-md" />
+          <div className="skeleton-child h-4 w-40 max-w-[70%] rounded-md" />
         </div>
       )}
       {connectorItems.length > 0 && (
@@ -396,13 +407,14 @@ export function ButtonPlusMenu({
                the fine-pointer popover below deliberately lacks it. */
             <DropdownMenuContent
               side="top"
-              sideOffset={0}
+              sideOffset={-45}
               align="start"
-              alignOffset={-7}
+              alignOffset={-8}
               animated={false}
               geometry="custom"
               data-content-appearance="touch-optimized"
-              className="max-h-[min(var(--available-height),calc(var(--spacing)*1.5+5.8*var(--floating-menu-item-height)))] w-max min-w-60 max-w-xs overflow-y-auto rounded-[28px] [corner-shape:superellipse(1.1)] py-1.5 [scrollbar-width:none] [overscroll-behavior:contain]"
+              style={{ "--min-items": 5.8 } as React.CSSProperties}
+              className="bg-(--floating-menu-touch-surface) shadow-floating-menu-touch max-h-[min(var(--available-height,50svh),calc(var(--spacing)*1.5+var(--min-items,6.8)*var(--floating-menu-item-height)))] w-max min-w-60 max-w-xs overflow-y-auto rounded-[28px] [corner-shape:superellipse(1.1)] py-1.5 select-none [scrollbar-width:none] [overscroll-behavior:contain]"
               onKeyDownCapture={(event) => {
                 if (event.key === "Tab") event.preventDefault()
               }}
@@ -415,7 +427,11 @@ export function ButtonPlusMenu({
                     onClick={() => cameraInputRef.current?.click()}
                   >
                     <span className={touchMenuChipClassName}>
-                      <Icon icon={RiCameraLine} glyphInset={0} slotSize={20} />
+                      <Icon
+                        icon={ComposerCameraIcon}
+                        glyphInset={0}
+                        slotSize={20}
+                      />
                     </span>
                     <span className="flex min-w-0 grow items-center gap-2.5">
                       <span className="truncate">Camera</span>
@@ -429,7 +445,11 @@ export function ButtonPlusMenu({
                     onClick={() => photosInputRef.current?.click()}
                   >
                     <span className={touchMenuChipClassName}>
-                      <Icon icon={RiImageLine} glyphInset={0} slotSize={20} />
+                      <Icon
+                        icon={ComposerImageSquareIcon}
+                        glyphInset={0}
+                        slotSize={20}
+                      />
                     </span>
                     <span className="flex min-w-0 grow items-center gap-2.5">
                       <span className="truncate">Photos</span>
@@ -446,7 +466,7 @@ export function ButtonPlusMenu({
                   >
                     <span className={touchMenuChipClassName}>
                       <Icon
-                        icon={item.action.icon}
+                        icon={touchMenuActionIcons[item.itemId]}
                         glyphInset={0}
                         slotSize={20}
                       />
@@ -467,12 +487,13 @@ export function ButtonPlusMenu({
                     key={item.itemId}
                     value={item.itemId}
                     disabled={item.disabled}
+                    indicator={touchMenuCheck}
                     className={touchMenuRowClassName}
                     onClick={() => activateItem(item.itemId)}
                   >
                     <span className={touchMenuChipClassName}>
                       <Icon
-                        icon={item.action.icon}
+                        icon={touchMenuActionIcons[item.itemId]}
                         glyphInset={0}
                         slotSize={20}
                       />
@@ -483,6 +504,22 @@ export function ButtonPlusMenu({
                   </DropdownMenuRadioItem>
                 ))}
               </DropdownMenuRadioGroup>
+              {connectors?.map((connector) => (
+                <DropdownMenuCheckboxItem
+                  key={connector.id}
+                  checked={connector.enabled}
+                  indicator={touchMenuCheck}
+                  className={touchMenuRowClassName}
+                  onCheckedChange={() => onToggleConnector?.(connector.id)}
+                >
+                  <span className={touchMenuChipClassName}>
+                    <Icon icon={RiPlugLine} glyphInset={0} slotSize={20} />
+                  </span>
+                  <span className="flex min-w-0 grow items-center gap-2.5">
+                    <span className="truncate">{connector.name}</span>
+                  </span>
+                </DropdownMenuCheckboxItem>
+              ))}
             </DropdownMenuContent>
           ) : (
             /* ChatGPT's fine-pointer narrow-width + menu (captured
@@ -552,6 +589,19 @@ export function ButtonPlusMenu({
                   </DropdownMenuRadioItem>
                 ))}
               </DropdownMenuRadioGroup>
+              {connectors?.map((connector) => (
+                <DropdownMenuCheckboxItem
+                  key={connector.id}
+                  checked={connector.enabled}
+                  className="mx-2.5 min-h-9 justify-between gap-6 rounded-[12px] px-2.5 py-1.5 text-sm"
+                  onCheckedChange={() => onToggleConnector?.(connector.id)}
+                >
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <Icon icon={RiPlugLine} glyphInset={0} slotSize={20} />
+                    <span className="min-w-0 truncate">{connector.name}</span>
+                  </span>
+                </DropdownMenuCheckboxItem>
+              ))}
             </DropdownMenuContent>
           )}
         </DropdownMenu>
@@ -567,6 +617,7 @@ export function ButtonPlusMenu({
               tabIndex={-1}
               aria-hidden="true"
               data-testid="composer-upload-photos-input"
+              id="upload-photos"
               accept="image/*"
               multiple
               onChange={handleTouchFileInputChange}
@@ -578,6 +629,7 @@ export function ButtonPlusMenu({
               tabIndex={-1}
               aria-hidden="true"
               data-testid="composer-upload-camera-input"
+              id="upload-camera"
               accept="image/*"
               capture="environment"
               multiple

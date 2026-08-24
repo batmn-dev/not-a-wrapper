@@ -132,6 +132,15 @@
     }
   }
 
+  @keyframes shimmer-skeleton {
+    from {
+      background-position: 100%;
+    }
+    to {
+      background-position: 0%;
+    }
+  }
+
   @keyframes loading-shimmer {
     from {
       background-position: -100% 0;
@@ -448,6 +457,7 @@
   --shadow-border-lg: var(--shadow-border-lg-value);
   --shadow-border-xl: var(--shadow-border-xl-value);
   --shadow-floating-surface: var(--floating-surface-edge-shadow);
+  --shadow-floating-menu-touch: var(--floating-menu-touch-edge-shadow);
   --shadow-floating-select: var(--floating-select-edge-shadow);
   --shadow-modal-centered: var(--modal-centered-edge-shadow);
   --shadow-modal-search: var(--modal-search-edge-shadow);
@@ -529,6 +539,8 @@
     0 0 0 1px #0000000a, 0 2px 8px #0000000a, 0 4px 80px 8px #00000006;
   --floating-select-edge-shadow:
     0 8px 12px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.62);
+  --floating-menu-touch-surface: #ffffff;
+  --floating-menu-touch-edge-shadow: var(--floating-select-edge-shadow);
   --floating-menu-item-active: rgba(0, 0, 0, 0.04);
   --floating-menu-divider: var(--border-default);
   /* ChatGPT's --bg-tertiary (measured 2026-08-24): the touch-optimized menu's
@@ -743,6 +755,8 @@
   --floating-select-edge-shadow:
     0 8px 16px rgba(0, 0, 0, 0.32), inset 0 0 1px rgba(255, 255, 255, 0.2),
     0 0 1px rgba(0, 0, 0, 0.62);
+  --floating-menu-touch-surface: #303030;
+  --floating-menu-touch-edge-shadow: var(--floating-select-edge-shadow);
   --floating-menu-item-active: rgba(255, 255, 255, 0.1);
   --floating-menu-divider: var(--border-default);
   --floating-menu-touch-tertiary: #414141;
@@ -1185,6 +1199,34 @@
 }
 
 @layer utilities {
+  [data-composer-menu-skeleton] .skeleton-child {
+    --skeleton-gradient-from: #e8e8e8;
+    --skeleton-gradient-to: #cdcdcd;
+    --skeleton-gradient-via: #f9f9f9;
+    border-color: transparent;
+    background-image: linear-gradient(
+      to right,
+      var(--skeleton-gradient-from),
+      var(--skeleton-gradient-via),
+      var(--skeleton-gradient-to)
+    );
+    background-size: 300%;
+    opacity: var(--skeleton-opacity);
+    will-change: auto;
+  }
+
+  .dark [data-composer-menu-skeleton] .skeleton-child {
+    --skeleton-gradient-from: #303030;
+    --skeleton-gradient-to: #414141;
+    --skeleton-gradient-via: #5d5d5d;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [data-composer-menu-skeleton] .skeleton-child {
+      animation: 2s ease-in-out infinite alternate-reverse shimmer-skeleton;
+    }
+  }
+
   .loading-shimmer-tertiary {
     --shimmer-contrast: rgb(255 255 255 / 75%);
     --shimmer-text-secondary: var(--text-tertiary);

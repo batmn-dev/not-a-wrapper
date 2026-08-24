@@ -18,6 +18,12 @@ class FakeVirtualKeyboard extends EventTarget {
   }
 }
 
+class FakeVisualViewport extends EventTarget {
+  height = 500
+  offsetTop = 0
+  scale = 1
+}
+
 describe("keyboard viewport controller (VirtualKeyboard branch)", () => {
   let keyboard: FakeVirtualKeyboard
   let root: HTMLDivElement
@@ -58,9 +64,9 @@ describe("keyboard viewport controller (VirtualKeyboard branch)", () => {
     input.focus()
     expect(isVirtualKeyboardOpen()).toBe(true)
     keyboard.setHeight(291.5)
-    expect(document.body.style.getPropertyValue("--screen-keyboard-height")).toBe(
-      "291.5px"
-    )
+    expect(
+      document.body.style.getPropertyValue("--screen-keyboard-height")
+    ).toBe("291.5px")
     expect(document.documentElement.classList.contains("keyboard-open")).toBe(
       true
     )
@@ -72,9 +78,9 @@ describe("keyboard viewport controller (VirtualKeyboard branch)", () => {
     expect(document.documentElement.classList.contains("keyboard-open")).toBe(
       true
     )
-    expect(document.body.style.getPropertyValue("--screen-keyboard-height")).toBe(
-      "0px"
-    )
+    expect(
+      document.body.style.getPropertyValue("--screen-keyboard-height")
+    ).toBe("0px")
   })
 
   it("dispatches keyboard-closed after blur once geometry settles at zero", () => {
@@ -109,6 +115,40 @@ describe("keyboard viewport controller (VirtualKeyboard branch)", () => {
     expect(closed).toHaveBeenCalledTimes(1)
   })
 
+  it("cancels a pending close signal when a keyboard target regains focus", () => {
+    const listener = vi.fn()
+    const unsubscribe = subscribeVirtualKeyboard(listener)
+
+    input.focus()
+    keyboard.setHeight(300)
+    input.blur()
+    vi.advanceTimersByTime(20) // requestAnimationFrame teardown
+
+    input.focus()
+    expect(isVirtualKeyboardOpen()).toBe(true)
+    expect(listener).toHaveBeenCalledTimes(2) // opened, then reopened
+
+    vi.advanceTimersByTime(1000)
+    expect(listener).toHaveBeenCalledTimes(2)
+    unsubscribe()
+  })
+
+  it("cancels a pending close signal when the controller unmounts", () => {
+    const listener = vi.fn()
+    const unsubscribe = subscribeVirtualKeyboard(listener)
+
+    input.focus()
+    keyboard.setHeight(300)
+    input.blur()
+    vi.advanceTimersByTime(20) // requestAnimationFrame teardown
+
+    cleanup?.()
+    cleanup = undefined
+    vi.advanceTimersByTime(1000)
+    expect(listener).toHaveBeenCalledTimes(1)
+    unsubscribe()
+  })
+
   it("runs the callback immediately when no keyboard is open", () => {
     const closed = vi.fn()
     closeVirtualKeyboard(closed)
@@ -132,5 +172,68 @@ describe("keyboard viewport controller (VirtualKeyboard branch)", () => {
     unsubscribe()
     input.focus()
     expect(listener).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe("keyboard viewport controller (visualViewport fallback)", () => {
+  let cleanup: (() => void) | undefined
+  let input: HTMLInputElement
+  let originalVisualViewport: PropertyDescriptor | undefined
+  let root: HTMLDivElement
+
+  beforeEach(() => {
+    vi.useFakeTimers({
+      toFake: ["requestAnimationFrame", "cancelAnimationFrame"],
+    })
+    delete (navigator as { virtualKeyboard?: unknown }).virtualKeyboard
+    originalVisualViewport = Object.getOwnPropertyDescriptor(
+      window,
+      "visualViewport"
+    )
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      value: new FakeVisualViewport(),
+    })
+    root = document.createElement("div")
+    input = document.createElement("input")
+    document.body.append(root, input)
+    vi.spyOn(root, "getBoundingClientRect").mockReturnValue({
+      height: 800,
+    } as DOMRect)
+    cleanup = createKeyboardViewportController(root)
+  })
+
+  afterEach(() => {
+    cleanup?.()
+    root.remove()
+    input.remove()
+    if (originalVisualViewport) {
+      Object.defineProperty(window, "visualViewport", originalVisualViewport)
+    } else {
+      delete (window as { visualViewport?: unknown }).visualViewport
+    }
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
+  it("keeps fallback geometry out of ChatGPT keyboard signals", () => {
+    const listener = vi.fn()
+    const unsubscribe = subscribeVirtualKeyboard(listener)
+
+    input.focus()
+    vi.advanceTimersByTime(20)
+
+    expect(root.hasAttribute("data-keyboard-open")).toBe(true)
+    expect(
+      document.body.style.getPropertyValue("--screen-keyboard-height")
+    ).toBe("300px")
+    expect(isVirtualKeyboardOpen()).toBe(false)
+    expect(listener).not.toHaveBeenCalled()
+
+    input.blur()
+    vi.advanceTimersByTime(20)
+    expect(root.hasAttribute("data-keyboard-open")).toBe(false)
+    expect(listener).not.toHaveBeenCalled()
+    unsubscribe()
   })
 })

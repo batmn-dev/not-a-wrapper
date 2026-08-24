@@ -247,7 +247,7 @@ function ModelSelectorList({
             </div>
             <div
               data-slot="model-section-container"
-              className="bg-interactive-selected overflow-hidden rounded-3xl"
+              className="bg-muted/50 dark:bg-muted/80 overflow-hidden rounded-3xl"
             >
               <ModelSelectorRows models={sectionModels} {...rowProps} />
             </div>

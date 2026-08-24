@@ -16,11 +16,10 @@ function parseComposerEntityPill(node: HTMLElement | string) {
   const id = node.dataset.id
   const label = node.dataset.keyword
   if (!id || !label) return false
+  const kind = node.dataset.symbol === "skillMention" ? "tool" : "capability"
   return {
-    id,
-    kind: node.dataset.symbol === "skillMention"
-      ? "tool"
-      : "capability",
+    id: kind === "capability" && id === "search" ? "web-search" : id,
+    kind,
     label,
     iconUrl: node.querySelector("img")?.getAttribute("src") ?? null,
   }

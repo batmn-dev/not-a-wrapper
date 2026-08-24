@@ -49,22 +49,28 @@ function useComposerConnectors({
   }, [isUserAuthenticated, mcpServers])
 
   const toggleMcpServer = useMutation(api.mcpServers.toggleEnabled)
-  const activateConnector = useCallback(
-    (connectorId: string, query: PromptInputActionQuery) => {
-      const editor = editorRef.current
-      if (!editor) return false
-      if (!editor.replaceActionQuery(query)) return false
+  const toggleConnector = useCallback(
+    (connectorId: string) => {
       void toggleMcpServer({
         serverId: connectorId as Id<"mcpServers">,
       }).catch(() => {
         toast({ title: "Couldn’t update the connector", status: "error" })
       })
+    },
+    [toggleMcpServer]
+  )
+  const activateConnector = useCallback(
+    (connectorId: string, query: PromptInputActionQuery) => {
+      const editor = editorRef.current
+      if (!editor) return false
+      if (!editor.replaceActionQuery(query)) return false
+      toggleConnector(connectorId)
       return true
     },
-    [editorRef, toggleMcpServer]
+    [editorRef, toggleConnector]
   )
 
-  return { connectors, activateConnector }
+  return { connectors, activateConnector, toggleConnector }
 }
 
 export { useComposerConnectors }

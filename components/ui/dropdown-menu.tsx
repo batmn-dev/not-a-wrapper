@@ -189,10 +189,12 @@ function DropdownMenuCheckboxItem({
   className,
   children,
   checked,
+  indicator,
   inset,
   ...props
 }: MenuPrimitive.CheckboxItem.Props & {
   inset?: boolean
+  indicator?: React.ReactNode
 }) {
   return (
     <MenuPrimitive.CheckboxItem
@@ -211,7 +213,7 @@ function DropdownMenuCheckboxItem({
         data-slot="dropdown-menu-checkbox-item-indicator"
       >
         <MenuPrimitive.CheckboxItemIndicator>
-          <Icon icon={RiCheckLine} />
+          {indicator ?? <Icon icon={RiCheckLine} />}
         </MenuPrimitive.CheckboxItemIndicator>
       </span>
       {children}
@@ -231,10 +233,12 @@ function DropdownMenuRadioGroup({ ...props }: MenuPrimitive.RadioGroup.Props) {
 function DropdownMenuRadioItem({
   className,
   children,
+  indicator,
   inset,
   ...props
 }: MenuPrimitive.RadioItem.Props & {
   inset?: boolean
+  indicator?: React.ReactNode
 }) {
   return (
     <MenuPrimitive.RadioItem
@@ -252,7 +256,7 @@ function DropdownMenuRadioItem({
         data-slot="dropdown-menu-radio-item-indicator"
       >
         <MenuPrimitive.RadioItemIndicator>
-          <Icon icon={RiCheckLine} />
+          {indicator ?? <Icon icon={RiCheckLine} />}
         </MenuPrimitive.RadioItemIndicator>
       </span>
       {children}
