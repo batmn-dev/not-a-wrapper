@@ -185,13 +185,20 @@ vi.mock("@/components/ui/drawer", () => ({
     children,
     className,
     handleClassName,
+    handleHitAreaClassName,
   }: {
     children: React.ReactNode
     className?: string
     handleClassName?: string
+    handleHitAreaClassName?: string
   }) => (
     <div data-testid="model-drawer" className={className}>
-      <div data-testid="model-drawer-handle" className={handleClassName} />
+      <div
+        data-testid="model-drawer-handle-hit-area"
+        className={handleHitAreaClassName}
+      >
+        <div data-testid="model-drawer-handle" className={handleClassName} />
+      </div>
       {children}
     </div>
   ),
@@ -475,6 +482,13 @@ describe("ModelSelector", () => {
       )?.className
     ).toBe(
       "bg-muted-foreground/60 absolute top-2 left-1/2 z-20 mt-0 h-1 w-11 -translate-x-1/2"
+    )
+    expect(
+      document.body.querySelector<HTMLElement>(
+        '[data-testid="model-drawer-handle-hit-area"]'
+      )?.className
+    ).toBe(
+      "pointer-events-auto absolute inset-x-0 top-0 z-20 h-5 touch-none"
     )
     expect(
       document.body.querySelector<HTMLElement>(
