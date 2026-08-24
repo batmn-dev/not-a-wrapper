@@ -4,6 +4,7 @@ import { ComposerIconButton } from "@/components/ui/composer-icon-button"
 import { useFileUpload } from "@/components/ui/file-upload"
 import { floatingMenuItemActiveClassName } from "@/components/ui/floating-surface"
 import { Icon } from "@/components/ui/icon"
+import { Kbd } from "@/components/ui/kbd"
 import type { PromptInputActionQuery } from "@/components/ui/prompt-input"
 import {
   Popover,
@@ -13,6 +14,7 @@ import {
 import {
   Tooltip,
   TooltipContent,
+  TooltipShortcut,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
@@ -33,6 +35,11 @@ import { PopoverContentAuth } from "./popover-content-auth"
 
 const composerPlusIcon = (
   <Icon icon={RiAddLargeLine} slotSize={20} glyphInset={0} />
+)
+const composerPlusTooltip = (
+  <TooltipShortcut label="Add files and more">
+    <Kbd>@</Kbd>
+  </TooltipShortcut>
 )
 
 type ButtonPlusMenuProps = {
@@ -337,7 +344,7 @@ export function ButtonPlusMenu({
             </PopoverTrigger>
           </TooltipTrigger>
           <TooltipContent side="bottom" hideArrow>
-            Add files and more
+            {composerPlusTooltip}
           </TooltipContent>
         </Tooltip>
         <PopoverContentAuth portalContainer={overlayContainerRef} />
@@ -349,29 +356,29 @@ export function ButtonPlusMenu({
     <Popover open={isMenuOpen} onOpenChange={handleMenuOpenChange}>
       <Tooltip disableHoverablePopup disabled={isMenuOpen}>
         <TooltipTrigger
-          render={
-            <ComposerIconButton
-              ref={setTriggerNode}
-              type="button"
-              id="composer-plus-btn"
-              data-testid="composer-plus-btn"
-              aria-label="Add files and more"
-              aria-expanded={isTriggerMenuOpen}
-              aria-haspopup="menu"
-              onClick={() => {
-                if (actionQuery) setDismissedActionQueryId(actionQuery.id)
-                setIsTriggerMenuOpen((open) => !open)
-                setHighlightedActionId(initialActionId)
-                focusEditor()
-              }}
-              onPointerDown={(event) => event.preventDefault()}
-            />
-          }
+          render={<span className="inline-flex" />}
         >
-          {composerPlusIcon}
+          <ComposerIconButton
+            ref={setTriggerNode}
+            type="button"
+            id="composer-plus-btn"
+            data-testid="composer-plus-btn"
+            aria-label="Add files and more"
+            aria-expanded={isTriggerMenuOpen}
+            aria-haspopup="menu"
+            onClick={() => {
+              if (actionQuery) setDismissedActionQueryId(actionQuery.id)
+              setIsTriggerMenuOpen((open) => !open)
+              setHighlightedActionId(initialActionId)
+              focusEditor()
+            }}
+            onPointerDown={(event) => event.preventDefault()}
+          >
+            {composerPlusIcon}
+          </ComposerIconButton>
         </TooltipTrigger>
         <TooltipContent side="bottom" hideArrow>
-          Add files and more
+          {composerPlusTooltip}
         </TooltipContent>
       </Tooltip>
       <PopoverContent

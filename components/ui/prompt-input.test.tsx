@@ -14,10 +14,12 @@ import {
 } from "vitest"
 import {
   PromptInput,
+  PromptInputAction,
   PromptInputActions,
   PromptInputFooter,
   PromptInputTextarea,
 } from "./prompt-input"
+import { Button } from "./button"
 import { ScrollRoot } from "./scroll-root"
 
 let surfaceWidth = 768
@@ -227,6 +229,27 @@ describe("PromptInput responsive expansion", () => {
     expect(observer?.disconnect).toHaveBeenCalledTimes(1)
 
     root = createRoot(container)
+  })
+
+  it("keeps tooltips hoverable around visually disabled actions", () => {
+    act(() => {
+      root.render(
+        <PromptInput value="" onValueChange={() => {}}>
+          <PromptInputAction tooltip="Message is empty">
+            <Button visuallyDisabled aria-label="Send prompt" />
+          </PromptInputAction>
+        </PromptInput>
+      )
+    })
+
+    const button = container.querySelector(
+      'button[aria-label="Send prompt"]'
+    ) as HTMLButtonElement
+    expect(button.hasAttribute("data-visually-disabled")).toBe(true)
+    expect(button.parentElement?.getAttribute("data-slot")).toBe(
+      "tooltip-trigger"
+    )
+    expect(button.getAttribute("data-slot")).toBe("button")
   })
 
   it("keeps one ProseMirror textbox across controlled draft replacements", () => {

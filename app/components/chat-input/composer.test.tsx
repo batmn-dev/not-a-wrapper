@@ -469,6 +469,14 @@ describe("Composer primary action", () => {
     expect(onTurn).not.toHaveBeenCalled()
   })
 
+  it('labels an empty disabled Send action as "Message is empty"', () => {
+    composerMocks.draftValue = ""
+
+    renderComposer({ isSubmitting: false, status: "ready" })
+
+    expect(promptInputActionMockCalls.at(-1)?.tooltip).toBe("Message is empty")
+  })
+
   it("routes native form submission through the guarded send contract", async () => {
     composerMocks.draftValue = "send through form"
     const onTurn = vi.fn(async () => true)

@@ -894,7 +894,12 @@ function PromptInputAction({
 
   return (
     <Tooltip {...tooltipProps}>
-      <TooltipTrigger render={trigger} disabled={disabled} />
+      <TooltipTrigger
+        render={<span className="inline-flex" />}
+        disabled={disabled}
+      >
+        {trigger}
+      </TooltipTrigger>
       <TooltipContent side={side} hideArrow={hideArrow} className={className}>
         {tooltip}
       </TooltipContent>

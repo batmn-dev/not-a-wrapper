@@ -54,6 +54,22 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
     const trigger = container.querySelector(
       '[aria-label="Add files and more"]'
     ) as HTMLButtonElement
+    expect(trigger.parentElement?.getAttribute("data-slot")).toBe(
+      "tooltip-trigger"
+    )
+    expect(trigger.getAttribute("data-slot")).not.toBe("tooltip-trigger")
+    const tooltipShortcut = document.querySelector(
+      '[data-slot="tooltip-shortcut"]'
+    )
+    expect(
+      tooltipShortcut?.querySelector(
+        '[data-slot="tooltip-shortcut-action"]'
+      )?.getAttribute("aria-label")
+    ).toBe("Add files and more, @")
+    expect(
+      tooltipShortcut?.querySelector('[data-slot="tooltip-shortcut-keys"]')
+        ?.textContent
+    ).toBe("@")
 
     act(() => {
       editor.focus()

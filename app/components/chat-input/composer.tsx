@@ -435,6 +435,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       // is NOT overridden: isSubmitting has settled false by then.
       // Never present an enabled Stop without an actionable handler.
       const presentStop = Boolean(stop) && (canStop || Boolean(isSubmitting))
+      const attachmentsReady = attachments.every(
+        (attachment) => attachment.status === "ready"
+      )
+      const isMessageEmpty =
+        !isSubmitting &&
+        attachmentsReady &&
+        isOnlyWhitespace(localValue) &&
+        attachments.length === 0
       return resolveComposerPrimaryActionState({
         // Stop presents for a live LOCAL stream or any resolver-stoppable
         // run (background, awaiting-approval, possibly-stale — §8/§11):
@@ -444,8 +452,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         isAbortable: presentStop,
         canSend:
           !isSubmitting &&
-          attachments.every((attachment) => attachment.status === "ready") &&
+          attachmentsReady &&
           (!isOnlyWhitespace(localValue) || attachments.length > 0),
+        isMessageEmpty,
       })
     }, [attachments, isSubmitting, localValue, status, stop, stoppable])
 
@@ -673,7 +682,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 <div className="ms-auto flex items-center gap-2">
                   <PromptInputAction
                     tooltip={
-                      primaryAction.mode === "send" ? (
+                      primaryAction.mode === "send" &&
+                      !primaryAction.disabled ? (
                         <TooltipShortcut label={primaryAction.tooltip}>
                           <Kbd label="Enter">↵</Kbd>
                         </TooltipShortcut>
