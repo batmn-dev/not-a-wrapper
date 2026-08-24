@@ -132,6 +132,15 @@
     }
   }
 
+  @keyframes shimmer-skeleton {
+    from {
+      background-position: 100%;
+    }
+    to {
+      background-position: 0%;
+    }
+  }
+
   @keyframes loading-shimmer {
     from {
       background-position: -100% 0;
@@ -448,6 +457,7 @@
   --shadow-border-lg: var(--shadow-border-lg-value);
   --shadow-border-xl: var(--shadow-border-xl-value);
   --shadow-floating-surface: var(--floating-surface-edge-shadow);
+  --shadow-floating-menu-touch: var(--floating-menu-touch-edge-shadow);
   --shadow-floating-select: var(--floating-select-edge-shadow);
   --shadow-modal-centered: var(--modal-centered-edge-shadow);
   --shadow-modal-search: var(--modal-search-edge-shadow);
@@ -529,8 +539,13 @@
     0 0 0 1px #0000000a, 0 2px 8px #0000000a, 0 4px 80px 8px #00000006;
   --floating-select-edge-shadow:
     0 8px 12px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.62);
+  --floating-menu-touch-surface: #ffffff;
+  --floating-menu-touch-edge-shadow: var(--floating-select-edge-shadow);
   --floating-menu-item-active: rgba(0, 0, 0, 0.04);
   --floating-menu-divider: var(--border-default);
+  /* ChatGPT's --bg-tertiary (measured 2026-08-24): the touch-optimized menu's
+   * icon-chip surface and touch highlight. */
+  --floating-menu-touch-tertiary: #f3f3f3;
   --floating-menu-radius: 1.25rem;
   --floating-menu-item-radius: 0.75rem;
   /* Shared pointer-modality row density; action menus consume this token. */
@@ -731,14 +746,20 @@
   --card-foreground: var(--foreground);
   --popover: oklch(0.222 0 0);
   --popover-foreground: var(--foreground);
-  --floating-surface: oklch(0.305 0 0);
+  /* ChatGPT's canonical dark menu surface (#353535, measured 2026-08-24) —
+   * their dark base surface is #000 and every floating menu overrides to
+   * this value, so the shared token carries it instead of per-menu hexes. */
+  --floating-surface: oklch(0.329 0 0);
   --floating-surface-foreground: #ffffff;
   --floating-surface-edge-shadow: inset 0 0 1px rgba(255, 255, 255, 0.2);
   --floating-select-edge-shadow:
     0 8px 16px rgba(0, 0, 0, 0.32), inset 0 0 1px rgba(255, 255, 255, 0.2),
     0 0 1px rgba(0, 0, 0, 0.62);
+  --floating-menu-touch-surface: #303030;
+  --floating-menu-touch-edge-shadow: var(--floating-select-edge-shadow);
   --floating-menu-item-active: rgba(255, 255, 255, 0.1);
   --floating-menu-divider: var(--border-default);
+  --floating-menu-touch-tertiary: #414141;
   --composer-capability-accent: oklch(0.72 0.137 253.307);
   --web-search-icon-surface: oklch(0.334 0.02 221.692);
   --web-search-icon-foreground: oklch(0.801 0.131 222.79);
@@ -1178,6 +1199,34 @@
 }
 
 @layer utilities {
+  [data-composer-menu-skeleton] .skeleton-child {
+    --skeleton-gradient-from: #e8e8e8;
+    --skeleton-gradient-to: #cdcdcd;
+    --skeleton-gradient-via: #f9f9f9;
+    border-color: transparent;
+    background-image: linear-gradient(
+      to right,
+      var(--skeleton-gradient-from),
+      var(--skeleton-gradient-via),
+      var(--skeleton-gradient-to)
+    );
+    background-size: 300%;
+    opacity: var(--skeleton-opacity);
+    will-change: auto;
+  }
+
+  .dark [data-composer-menu-skeleton] .skeleton-child {
+    --skeleton-gradient-from: #303030;
+    --skeleton-gradient-to: #414141;
+    --skeleton-gradient-via: #5d5d5d;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [data-composer-menu-skeleton] .skeleton-child {
+      animation: 2s ease-in-out infinite alternate-reverse shimmer-skeleton;
+    }
+  }
+
   .loading-shimmer-tertiary {
     --shimmer-contrast: rgb(255 255 255 / 75%);
     --shimmer-text-secondary: var(--text-tertiary);
@@ -1491,6 +1540,22 @@
     }
   }
 
+  /* The thread footer's gradient backdrop (ChatGPT threadFooterContentFade
+   * ::after, verified live 2026-08-24): a full-width, 80%-opaque surface
+   * behind the sticky footer whose top fades in over 32px, so thread content
+   * scrolling under the composer dims instead of hitting a hard edge. The
+   * footer must be `isolate` so z-index -1 stays inside its stacking context.
+   * ChatGPT also ships a >=720px container-query variant that clamps the
+   * backdrop to the thread column and adds a horizontal edge fade, but it is
+   * DEAD CODE live: the rule targets a container name their DOM never sets,
+   * so the shipped behavior everywhere is this full-width backdrop. */
+  .content-fade {
+    /* Declared where it is consumed: the fade height is a parameterization
+     * hook read by the ::after mask below. Nothing overrides it today —
+     * 32px matches ChatGPT's live behavior. */
+    --thread-footer-content-fade-height: 32px;
+  }
+
   .content-fade::after {
     content: "";
     position: absolute;
@@ -1505,42 +1570,17 @@
     -webkit-mask-image: linear-gradient(
       to bottom,
       transparent 0,
-      black 32px,
+      black var(--thread-footer-content-fade-height, 32px),
       black 100%
     );
     mask-image: linear-gradient(
       to bottom,
       transparent 0,
-      black 32px,
+      black var(--thread-footer-content-fade-height, 32px),
       black 100%
     );
     -webkit-mask-repeat: no-repeat;
     mask-repeat: no-repeat;
-  }
-
-  @container main (min-width: 720px) {
-    .content-fade::after {
-      -webkit-mask-image:
-        linear-gradient(to bottom, transparent 0, black 32px, black 100%),
-        linear-gradient(
-          to right,
-          transparent 0,
-          black 32px,
-          black calc(100% - 32px),
-          transparent 100%
-        );
-      mask-image:
-        linear-gradient(to bottom, transparent 0, black 32px, black 100%),
-        linear-gradient(
-          to right,
-          transparent 0,
-          black 32px,
-          black calc(100% - 32px),
-          transparent 100%
-        );
-      -webkit-mask-composite: source-in;
-      mask-composite: intersect;
-    }
   }
 
   /* Extends invisible hit target without changing the 36px visible composer control. */

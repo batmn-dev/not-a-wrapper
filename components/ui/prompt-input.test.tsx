@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 
+import { RI_GLOBAL_LINE_PATH } from "@/lib/icons/composer"
 import React, { act, StrictMode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import {
@@ -447,8 +448,9 @@ describe("PromptInput responsive expansion", () => {
     expect(entityNode?.querySelector("svg")?.getAttribute("aria-hidden")).toBe(
       "true"
     )
-    expect(entityNode?.querySelector("circle")?.getAttribute("fill")).toBe(
-      "var(--web-search-icon-surface)"
+    expect(entityNode?.querySelector("circle")).toBeNull()
+    expect(entityNode?.querySelector("path")?.getAttribute("d")).toBe(
+      RI_GLOBAL_LINE_PATH
     )
     expect(entityNode?.querySelector("path")?.getAttribute("fill")).toBe(
       "var(--web-search-icon-foreground)"

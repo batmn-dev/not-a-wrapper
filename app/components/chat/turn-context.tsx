@@ -103,7 +103,12 @@ export function TurnContextProvider({
     isChatLoading,
   })
 
-  const enableSearch = resolveWebSearchEnabled(preferences.webSearchEnabled)
+  // An authenticated preference is unknown until its Convex read settles.
+  // Keep capability UI inactive during that window instead of briefly
+  // projecting the product default as if the user selected Web search.
+  const enableSearch =
+    !preferencesLoading &&
+    resolveWebSearchEnabled(preferences.webSearchEnabled)
   const setEnableSearch = useCallback(
     (enabled: boolean) => {
       setWebSearchEnabled(enabled)

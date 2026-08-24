@@ -247,7 +247,7 @@ function ModelSelectorList({
             </div>
             <div
               data-slot="model-section-container"
-              className="bg-interactive-selected overflow-hidden rounded-3xl"
+              className="bg-muted/50 dark:bg-muted/80 overflow-hidden rounded-3xl"
             >
               <ModelSelectorRows models={sectionModels} {...rowProps} />
             </div>
@@ -427,6 +427,7 @@ export function ModelSelector({
               "dark:bg-floating-surface/80 overflow-hidden [--model-selector-mobile-header-height:5rem] data-[vaul-drawer-direction=bottom]:rounded-t-[2rem] dark:backdrop-blur-[10px]"
             )}
             handleClassName="bg-muted-foreground/60 absolute top-2 left-1/2 z-20 mt-0 h-1 w-11 -translate-x-1/2"
+            handleHitAreaClassName="pointer-events-auto absolute inset-x-0 top-0 z-20 h-5 touch-none"
           >
             <DrawerTitle className="sr-only">Select Model</DrawerTitle>
             <div

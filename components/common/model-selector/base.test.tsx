@@ -185,13 +185,20 @@ vi.mock("@/components/ui/drawer", () => ({
     children,
     className,
     handleClassName,
+    handleHitAreaClassName,
   }: {
     children: React.ReactNode
     className?: string
     handleClassName?: string
+    handleHitAreaClassName?: string
   }) => (
     <div data-testid="model-drawer" className={className}>
-      <div data-testid="model-drawer-handle" className={handleClassName} />
+      <div
+        data-testid="model-drawer-handle-hit-area"
+        className={handleHitAreaClassName}
+      >
+        <div data-testid="model-drawer-handle" className={handleClassName} />
+      </div>
       {children}
     </div>
   ),
@@ -478,6 +485,13 @@ describe("ModelSelector", () => {
     )
     expect(
       document.body.querySelector<HTMLElement>(
+        '[data-testid="model-drawer-handle-hit-area"]'
+      )?.className
+    ).toBe(
+      "pointer-events-auto absolute inset-x-0 top-0 z-20 h-5 touch-none"
+    )
+    expect(
+      document.body.querySelector<HTMLElement>(
         '[data-slot="model-selector-mobile-search"]'
       )?.className
     ).toContain("absolute")
@@ -560,7 +574,8 @@ describe("ModelSelector", () => {
 
       expect(container?.contains(label)).toBe(false)
       expect(label?.className).toContain("text-sm")
-      expect(container?.className).toContain("bg-interactive-selected")
+      expect(container?.className).toContain("bg-muted/50")
+      expect(container?.className).toContain("dark:bg-muted/80")
       expect(container?.className).toContain("rounded-3xl")
     }
 

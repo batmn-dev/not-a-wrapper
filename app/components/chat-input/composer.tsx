@@ -33,7 +33,6 @@ import {
   PromptInputTextarea,
   type PromptInputActionQuery,
   type PromptInputEditorHandle,
-  type PromptInputEntity,
 } from "@/components/ui/prompt-input"
 import { toast } from "@/components/ui/toast"
 import { TooltipShortcut } from "@/components/ui/tooltip"
@@ -58,10 +57,6 @@ import {
 import { flushSync } from "react-dom"
 import { PromptSystem } from "../suggestions/prompt-system"
 import { ButtonPlusMenu } from "./button-plus-menu"
-import {
-  getComposerAction,
-  type ComposerActionId,
-} from "./composer-action-registry"
 import { runComposerSlideTransition } from "./composer-view-transition"
 import { FileList } from "./file-list"
 import { InputDropZone } from "./input-drop-zone"
@@ -72,6 +67,8 @@ import {
   type PendingAttachment,
 } from "./pending-attachment"
 import { resolveComposerPrimaryActionState } from "./primary-action-state"
+import { useComposerCapabilities } from "./use-composer-capabilities"
+import { useComposerConnectors } from "./use-composer-connectors"
 
 export type ComposerTurnPayload = {
   text: string
@@ -118,7 +115,6 @@ type ComposerProps = {
 }
 
 const DEFAULT_COMPOSER_ARIA_LABEL = "Chat with ChatGPT"
-const WEB_SEARCH_ACTION = getComposerAction("web-search")
 
 const isOnlyWhitespace = (text: string) => !/[^\s]/.test(text)
 
@@ -241,46 +237,22 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const handleModelSelectionCommitted = useCallback(() => {
       editorRef.current?.focus({ preventScroll: true })
     }, [])
-    const composerEntities = useMemo<readonly PromptInputEntity[]>(
-      () =>
-        enableSearch
-          ? [
-              {
-                id: WEB_SEARCH_ACTION.id,
-                kind: "capability",
-                label: WEB_SEARCH_ACTION.label,
-              },
-            ]
-          : [],
-      [enableSearch]
-    )
-    const handleComposerEntitiesChange = useCallback(
-      (entities: readonly PromptInputEntity[]) => {
-        const hasWebSearch = entities.some(
-          (entity) => entity.id === WEB_SEARCH_ACTION.id
-        )
-        if (hasWebSearch !== enableSearch) setEnableSearch(hasWebSearch)
-      },
-      [enableSearch, setEnableSearch]
-    )
-    const handleActivateActionQuery = useCallback(
-      (actionId: ComposerActionId, query: PromptInputActionQuery) => {
-        const editor = editorRef.current
-        if (!editor) return false
-
-        return editor.replaceActionQuery(
-          query,
-          actionId === WEB_SEARCH_ACTION.id
-            ? {
-                id: WEB_SEARCH_ACTION.id,
-                kind: "capability",
-                label: WEB_SEARCH_ACTION.label,
-              }
-            : undefined
-        )
-      },
-      []
-    )
+    const {
+      entities: composerEntities,
+      handleEntitiesChange: handleComposerEntitiesChange,
+      activateActionQuery: handleActivateActionQuery,
+    } = useComposerCapabilities({ enableSearch, setEnableSearch, editorRef })
+    const {
+      connectors: menuConnectors,
+      activateConnector: handleActivateConnector,
+      toggleConnector: handleToggleConnector,
+    } = useComposerConnectors({ isUserAuthenticated, editorRef })
+    const handleOpenActionMenu = useCallback(() => {
+      editorRef.current?.toggleSyntheticActionQuery()
+    }, [])
+    const handleCloseActionQuery = useCallback(() => {
+      editorRef.current?.endActionQuery()
+    }, [])
 
     // Anonymous chat cannot use authenticated storage, so guests' generated
     // pastes cross the turn seam as ordinary turn text.
@@ -652,6 +624,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   onActivateActionQuery={handleActivateActionQuery}
                   onToggleSearch={setEnableSearch}
                   isSearchDisabled={isSearchDisabled}
+                  connectors={menuConnectors}
+                  onActivateConnector={handleActivateConnector}
+                  onToggleConnector={handleToggleConnector}
+                  onOpenActionMenu={handleOpenActionMenu}
+                  onCloseActionQuery={handleCloseActionQuery}
                 />
               </PromptInputActions>
               <PromptInputTextarea
@@ -694,7 +671,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   >
                     <Button
                       size="sm"
-                      className="composer-submit-btn composer-submit-button-color can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] size-9 rounded-full p-0 transition-colors duration-150 ease-out"
+                      className="composer-submit-btn composer-submit-button-color can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] size-9 rounded-full p-0 transition-colors duration-150 ease-out [view-transition-name:var(--vt-composer-speech-button)]"
                       disabled={
                         primaryAction.mode === "stop" && primaryAction.disabled
                       }

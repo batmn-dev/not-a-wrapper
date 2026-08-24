@@ -116,6 +116,7 @@ describe("TurnContextProvider snapshot contract", () => {
     mount()
 
     expect(seen.at(-1)?.snapshot.selectedModel).toBe("model-a")
+    expect(seen.at(-1)?.snapshot.enableSearch).toBe(false)
     expect(seen.at(-1)?.snapshot.isHydrated).toBe(false)
     expect(seen.at(-1)?.reactiveHydrated).toBe(false)
 

@@ -27,6 +27,9 @@ type FileUploadContextValue = {
   isDragging: boolean
   inputRef: React.RefObject<HTMLInputElement | null>
   openFilePicker: () => void
+  /** Feed files gathered by a caller-owned input (e.g. the touch menu's
+   * camera/photo-library inputs) into the same added-files pipeline. */
+  addFiles: (files: File[]) => void
   multiple?: boolean
   disabled?: boolean
 }
@@ -115,9 +118,17 @@ function FileUpload({
     if (!disabled) inputRef.current?.click()
   }, [disabled])
 
+  const addFiles = useCallback(
+    (files: File[]) => {
+      if (disabled || files.length === 0) return
+      onFilesAdded(multiple ? files : files.slice(0, 1))
+    },
+    [disabled, multiple, onFilesAdded]
+  )
+
   return (
     <FileUploadContext.Provider
-      value={{ isDragging, inputRef, openFilePicker, multiple, disabled }}
+      value={{ isDragging, inputRef, openFilePicker, addFiles, multiple, disabled }}
     >
       <input
         type="file"

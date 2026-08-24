@@ -3,6 +3,7 @@
 import { ComposerIconButton } from "@/components/ui/composer-icon-button"
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
@@ -11,7 +12,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useFileUpload } from "@/components/ui/file-upload"
-import { floatingMenuItemActiveClassName } from "@/components/ui/floating-surface"
 import { Icon } from "@/components/ui/icon"
 import { Kbd } from "@/components/ui/kbd"
 import type { PromptInputActionQuery } from "@/components/ui/prompt-input"
@@ -27,33 +27,53 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
-import { cn } from "@/lib/utils"
-import { RiAddLargeLine } from "@remixicon/react"
+import { useIsMobileDeviceOs } from "@/hooks/use-mobile-device-os"
+import { RiPlugLine } from "@remixicon/react"
+import { useCallback, useMemo, useRef } from "react"
+import { type ComposerActionId } from "./composer-action-registry"
 import {
-  useCallback,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentProps,
-} from "react"
+  ComposerCameraIcon,
+  ComposerCheckIcon,
+  ComposerGlobeIcon,
+  ComposerImageSquareIcon,
+  ComposerPaperclipIcon,
+  ComposerPlusIcon,
+} from "./composer-menu-icons"
 import {
-  composerActionRegistry,
-  getComposerAction,
-  getComposerActionQueryMatches,
-  type ComposerActionId,
-} from "./composer-action-registry"
+  type ComposerActionAvailability,
+  type ComposerMenuConnector,
+} from "./composer-menu-items"
+import { composerMenuRow } from "./composer-menu-row"
 import { PopoverContentAuth } from "./popover-content-auth"
+import { useComposerActionMenu } from "./use-composer-action-menu"
 
 const composerPlusIcon = (
-  <Icon icon={RiAddLargeLine} slotSize={20} glyphInset={0} />
+  <Icon icon={ComposerPlusIcon} slotSize={20} glyphInset={0} />
 )
 const composerPlusTooltip = (
   <TooltipShortcut label="Add files and more">
     <Kbd>@</Kbd>
   </TooltipShortcut>
 )
-const addFilesAction = getComposerAction("add-files")
-const webSearchAction = getComposerAction("web-search")
+
+/* ChatGPT's touch-optimized + menu treatment (decompiled from their
+ * production bundles + root CSS 2026-08-24; see reference-ui/ChatGPT/
+ * components/chat-composer/chatgpt-plus-menu-touch-optimized-2026-08-24.md):
+ * mobile-OS user agents get large icon-chip rows in a content-sized,
+ * rounded-28 superellipse popover — 6px row inline margin/padding, 12px gap,
+ * 36px full-round chips on the tertiary surface with 20px glyphs, row
+ * highlight on the same tertiary token, and no group separators. */
+const touchMenuRowClassName =
+  "mx-1.5 h-auto min-h-(--floating-menu-item-height) cursor-auto scroll-m-1.5 gap-3 rounded-[28px] border-y-0! [corner-shape:superellipse(1.1)] px-1.5 py-1.5 text-sm hover:bg-(--floating-menu-touch-tertiary) focus:bg-(--floating-menu-touch-tertiary) data-highlighted:bg-(--floating-menu-touch-tertiary)"
+const touchMenuChipClassName =
+  "flex size-9 shrink-0 items-center justify-center rounded-full bg-(--floating-menu-touch-tertiary) text-foreground"
+const touchMenuActionIcons = {
+  "add-files": ComposerPaperclipIcon,
+  "web-search": ComposerGlobeIcon,
+} as const
+const touchMenuCheck = (
+  <Icon icon={ComposerCheckIcon} slotSize={16} glyphInset={0} />
+)
 
 type ButtonPlusMenuProps = {
   isUserAuthenticated: boolean
@@ -70,6 +90,19 @@ type ButtonPlusMenuProps = {
     actionId: ComposerActionId,
     query: PromptInputActionQuery
   ) => boolean
+  /** MCP connectors for the @ menu; `undefined` while loading. */
+  connectors?: readonly ComposerMenuConnector[]
+  onActivateConnector?: (
+    connectorId: string,
+    query: PromptInputActionQuery
+  ) => boolean
+  /** Toggle an MCP connector from the direct mobile trigger menu. */
+  onToggleConnector?: (connectorId: string) => void
+  /** Open (or toggle off) a synthetic action-query session in the editor —
+   * the desktop + button drives the same menu as typing "@". */
+  onOpenActionMenu?: () => void
+  /** End the active action-query session (synthetic Escape / focus-out). */
+  onCloseActionQuery?: () => void
 }
 
 export function ButtonPlusMenu({
@@ -82,273 +115,107 @@ export function ButtonPlusMenu({
   searchDisabledMessage,
   actionQuery = null,
   onActivateActionQuery,
+  connectors,
+  onActivateConnector,
+  onToggleConnector,
+  onOpenActionMenu,
+  onCloseActionQuery,
 }: ButtonPlusMenuProps) {
-  const { openFilePicker } = useFileUpload()
+  const { openFilePicker, addFiles } = useFileUpload()
   const isMobile = useBreakpoint(768)
-  const [isTriggerMenuOpen, setIsTriggerMenuOpen] = useState(false)
-  const [dismissedActionQueryId, setDismissedActionQueryId] = useState<
-    number | null
-  >(null)
-  const [highlightedActionId, setHighlightedActionId] =
-    useState<ComposerActionId | null>(null)
-  const triggerRef = useRef<HTMLButtonElement | null>(null)
-  const overlayContainerRef = useRef<HTMLElement | null>(null)
-  const composerAnchor = useCallback(
-    () =>
-      triggerRef.current?.closest<HTMLFormElement>(
-        'form[data-type="unified-composer"]'
-      ) ?? triggerRef.current,
-    []
-  )
-  const focusEditor = useCallback(() => {
-    triggerRef.current
-      ?.closest<HTMLFormElement>('form[data-type="unified-composer"]')
-      ?.querySelector<HTMLElement>("#prompt-textarea")
-      ?.focus({ preventScroll: true })
-  }, [])
-
-  const queriedActions = useMemo(
-    () => (actionQuery ? getComposerActionQueryMatches(actionQuery.query) : []),
-    [actionQuery]
-  )
-  const isActionQueryOpen =
-    isUserAuthenticated &&
-    actionQuery !== null &&
-    actionQuery.id !== dismissedActionQueryId &&
-    queriedActions.length > 0
-  const menuSource = isActionQueryOpen
-    ? "action-query"
-    : isTriggerMenuOpen
-      ? "trigger"
-      : null
-  const isMenuOpen = menuSource !== null
-  const visibleActions =
-    menuSource === "action-query" ? queriedActions : composerActionRegistry
-
-  const getActionState = (actionId: ComposerActionId) => {
-    switch (actionId) {
-      case "add-files":
-        return {
-          disabled: !isFileUploadAvailable,
-          disabledMessage:
-            fileUploadDisabledMessage ??
-            "This model doesn\u2019t support file uploads",
-        }
-      case "web-search":
-        return {
-          disabled: isSearchDisabled,
-          disabledMessage:
-            searchDisabledMessage ??
-            "This model doesn\u2019t support web search",
-        }
-    }
-  }
-
-  const activateAction = useCallback(
-    (actionId: ComposerActionId) => {
-      const handledAsActionQuery =
-        menuSource === "action-query" &&
-        actionQuery !== null &&
-        onActivateActionQuery?.(actionId, actionQuery) === true
-
-      if (handledAsActionQuery) {
-        setDismissedActionQueryId(actionQuery.id)
-        if (actionId === "add-files") openFilePicker()
-      } else {
-        switch (actionId) {
-          case "add-files":
-            openFilePicker()
-            break
-          case "web-search":
-            onToggleSearch(!enableSearch)
-            break
-        }
-      }
-      setIsTriggerMenuOpen(false)
-      setHighlightedActionId(null)
-      focusEditor()
+  // ChatGPT parity: the touch treatment keys on the user-agent OS (iOS /
+  // Android / iPadOS-as-Mac), NOT pointer coarseness or width — a narrow
+  // desktop window keeps the compact plain-glyph popover.
+  const isTouchMenu = useIsMobileDeviceOs()
+  const cameraInputRef = useRef<HTMLInputElement | null>(null)
+  const photosInputRef = useRef<HTMLInputElement | null>(null)
+  const handleTouchFileInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = event.currentTarget.files
+      if (files?.length) addFiles(Array.from(files))
+      // ChatGPT parity: reset so re-picking the same file fires change again.
+      event.currentTarget.value = ""
     },
+    [addFiles]
+  )
+
+  // The registry stays product-neutral; this shell maps its live props onto
+  // per-action availability (and, for toggles, selection).
+  const availability = useMemo<ComposerActionAvailability>(
+    () => ({
+      "add-files": {
+        disabled: !isFileUploadAvailable,
+        disabledMessage:
+          fileUploadDisabledMessage ??
+          "This model doesn’t support file uploads",
+      },
+      "web-search": {
+        disabled: isSearchDisabled,
+        disabledMessage:
+          searchDisabledMessage ??
+          "This model doesn’t support web search",
+        selected: enableSearch,
+      },
+    }),
     [
-      actionQuery,
       enableSearch,
-      focusEditor,
-      menuSource,
-      onActivateActionQuery,
-      onToggleSearch,
-      openFilePicker,
+      fileUploadDisabledMessage,
+      isFileUploadAvailable,
+      isSearchDisabled,
+      searchDisabledMessage,
     ]
   )
 
-  const enabledActionIds = useMemo(
-    () =>
-      visibleActions.flatMap((action) =>
-        (action.id === "add-files"
-          ? !isFileUploadAvailable
-          : isSearchDisabled)
-          ? []
-          : [action.id]
-      ),
-    [isFileUploadAvailable, isSearchDisabled, visibleActions]
-  )
-  const initialActionId = enabledActionIds[0] ?? null
-  const resolvedHighlightedActionId =
-    highlightedActionId && enabledActionIds.includes(highlightedActionId)
-      ? highlightedActionId
-      : initialActionId
-
-  const moveHighlight = useCallback(
-    (direction: -1 | 1) => {
-      if (enabledActionIds.length === 0) return
-      const currentIndex = resolvedHighlightedActionId
-        ? enabledActionIds.indexOf(resolvedHighlightedActionId)
-        : -1
-      const nextIndex =
-        currentIndex < 0
-          ? direction > 0
-            ? 0
-            : enabledActionIds.length - 1
-          : (currentIndex + direction + enabledActionIds.length) %
-            enabledActionIds.length
-      setHighlightedActionId(enabledActionIds[nextIndex] ?? null)
-    },
-    [enabledActionIds, resolvedHighlightedActionId]
-  )
-
-  const handleComposerKeyDown = useCallback(
-    (event: KeyboardEvent) => {
-      if (
-        !isMenuOpen ||
-        event.defaultPrevented ||
-        event.isComposing ||
-        event.keyCode === 229 ||
-        !(event.target instanceof Element) ||
-        !event.target.closest("#prompt-textarea")
-      ) {
-        return
-      }
-
-      switch (event.key) {
-        case "ArrowDown":
-          event.preventDefault()
-          moveHighlight(1)
-          return
-        case "ArrowUp":
-          event.preventDefault()
-          moveHighlight(-1)
-          return
-        case "Home":
-          event.preventDefault()
-          setHighlightedActionId(initialActionId)
-          return
-        case "End":
-          event.preventDefault()
-          setHighlightedActionId(enabledActionIds.at(-1) ?? null)
-          return
-        case "Enter":
-          if (!resolvedHighlightedActionId) return
-          event.preventDefault()
-          activateAction(resolvedHighlightedActionId)
-          return
-        case "Escape":
-          event.preventDefault()
-          if (menuSource === "action-query" && actionQuery) {
-            setDismissedActionQueryId(actionQuery.id)
-          }
-          setIsTriggerMenuOpen(false)
-          setHighlightedActionId(null)
-          return
-        case "Tab":
-          event.preventDefault()
-          if (
-            menuSource === "action-query" &&
-            resolvedHighlightedActionId
-          ) {
-            activateAction(resolvedHighlightedActionId)
-          } else {
-            setIsTriggerMenuOpen(false)
-            setHighlightedActionId(null)
-          }
-          return
-        default:
-          if (
-            event.key.length === 1 &&
-            !event.altKey &&
-            !event.ctrlKey &&
-            !event.metaKey
-          ) {
-            const query = event.key.toLocaleLowerCase()
-            const match = composerActionRegistry.find(
-              (action) =>
-                enabledActionIds.includes(action.id) &&
-                action.label.toLocaleLowerCase().includes(query)
-            )
-            if (match) setHighlightedActionId(match.id)
-          }
+  const runAction = useCallback(
+    (actionId: ComposerActionId) => {
+      switch (actionId) {
+        case "add-files":
+          openFilePicker()
+          break
+        case "web-search":
+          onToggleSearch(!enableSearch)
+          break
       }
     },
-    [
-      enabledActionIds,
-      activateAction,
-      initialActionId,
-      isMenuOpen,
-      menuSource,
-      moveHighlight,
-      resolvedHighlightedActionId,
-      actionQuery,
-    ]
+    [enableSearch, onToggleSearch, openFilePicker]
   )
 
-  const setTriggerNode = useCallback(
-    (node: HTMLButtonElement | null) => {
-      triggerRef.current = node
-      const form = node?.closest<HTMLFormElement>(
-        'form[data-type="unified-composer"]'
-      )
-      overlayContainerRef.current =
-        form?.querySelector<HTMLElement>("[data-composer-overlay-host]") ?? null
-      if (!form) return
-
-      form.addEventListener("keydown", handleComposerKeyDown, true)
-      return () => {
-        form.removeEventListener("keydown", handleComposerKeyDown, true)
-        if (triggerRef.current === node) triggerRef.current = null
-        if (overlayContainerRef.current?.closest("form") === form) {
-          overlayContainerRef.current = null
-        }
-      }
-    },
-    [handleComposerKeyDown]
-  )
-
-  const handleMenuOpenChange: NonNullable<
-    ComponentProps<typeof Popover>["onOpenChange"]
-  > = (open, eventDetails) => {
-    if (
-      !open &&
-      eventDetails.reason === "focus-out" &&
-      document.activeElement?.matches("#prompt-textarea")
-    ) {
-      eventDetails.cancel()
-      return
-    }
-
-    if (!open && menuSource === "action-query" && actionQuery) {
-      setDismissedActionQueryId(actionQuery.id)
-    }
-    setIsTriggerMenuOpen(open)
-    setHighlightedActionId(open ? initialActionId : null)
-    if (open) focusEditor()
-  }
-
-  const handleTriggerMenuOpenChange = (open: boolean) => {
-    setIsTriggerMenuOpen(open)
-    setHighlightedActionId(open ? initialActionId : null)
-  }
+  const {
+    activateItem,
+    composerAnchor,
+    connectorItems,
+    dismissActionQuery,
+    handleActionQueryOpenChange,
+    handleAuthPopoverOpenChange,
+    handleSyntheticSessionToggle,
+    handleTriggerMenuOpenChange,
+    isActionQueryOpen,
+    isConnectorSectionVisible,
+    isConnectorsLoading,
+    isMenuOpen,
+    isTriggerMenuOpen,
+    overlayContainerRef,
+    actionItems,
+    resolvedHighlightedItemId,
+    setHighlightedItemId,
+    setTriggerNode,
+    triggerMenuItems,
+  } = useComposerActionMenu({
+    isUserAuthenticated,
+    actionQuery,
+    connectors,
+    availability,
+    onActivateActionQuery,
+    onActivateConnector,
+    onOpenActionMenu,
+    onCloseActionQuery,
+    onRunAction: runAction,
+  })
 
   // Unauthenticated: show auth popover instead of dropdown
   if (!isUserAuthenticated) {
     return (
-      <Popover open={isTriggerMenuOpen} onOpenChange={handleMenuOpenChange}>
+      <Popover open={isTriggerMenuOpen} onOpenChange={handleAuthPopoverOpenChange}>
         <Tooltip disableHoverablePopup disabled={isTriggerMenuOpen}>
           <TooltipTrigger render={<span className="inline-flex" />}>
             <PopoverTrigger
@@ -381,7 +248,7 @@ export function ButtonPlusMenu({
       side="bottom"
       sideOffset={8}
       align="start"
-      aria-busy={false}
+      aria-busy={isConnectorsLoading}
       role={undefined}
       tabIndex={undefined}
       initialFocus={false}
@@ -393,85 +260,114 @@ export function ButtonPlusMenu({
         role="group"
         className="empty:hidden [:not(:has(div:not([role=group])))]:hidden"
       >
-        {visibleActions.map((action) => {
-          const state = getActionState(action.id)
-          return (
-            <div key={action.id}>
-              <Tooltip disabled={!state.disabled}>
-                <TooltipTrigger
-                  render={
-                    <div
-                      ref={(node) => {
-                        if (
-                          node &&
-                          action.id === resolvedHighlightedActionId &&
-                          typeof node.scrollIntoView === "function"
-                        ) {
-                          node.scrollIntoView({ block: "nearest" })
-                        }
-                      }}
-                      aria-disabled={state.disabled || undefined}
-                      data-fill=""
-                      data-highlighted={
-                        action.id === resolvedHighlightedActionId
-                          ? ""
-                          : undefined
-                      }
-                      className={cn(
-                        floatingMenuItemActiveClassName,
-                        "menu-item-hoverable relative mx-2 flex h-(--floating-menu-item-height) cursor-pointer items-center gap-3 rounded-(--floating-menu-item-radius) px-2 py-1.5 text-sm outline-none select-none aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                      )}
-                      tabIndex={state.disabled ? -1 : 0}
-                      onClick={() => {
-                        if (!state.disabled) activateAction(action.id)
-                      }}
-                      onPointerDown={(event) => event.preventDefault()}
-                      onPointerMove={() => {
-                        if (!state.disabled) {
-                          setHighlightedActionId(action.id)
-                        }
-                      }}
-                      onKeyDown={(event) => {
-                        if (
-                          state.disabled ||
-                          (event.key !== "Enter" && event.key !== " ")
-                        ) {
-                          return
-                        }
-                        event.preventDefault()
-                        activateAction(action.id)
-                      }}
-                    />
-                  }
-                >
-                  <span className="relative flex size-5 shrink-0 items-center justify-center">
-                    <Icon icon={action.icon} glyphInset={0} slotSize={20} />
-                  </span>
-                  <span className="flex min-w-0 grow items-center gap-2.5">
-                    <span className="me-24 flex min-w-0 flex-1 items-baseline gap-3">
-                      <span className="text-foreground max-w-full min-w-0 shrink-0 truncate">
-                        {action.label}
+        {actionItems.map((item) => (
+          <div key={item.itemId}>
+            <Tooltip disabled={!item.disabled}>
+              <TooltipTrigger
+                render={composerMenuRow({
+                  itemId: item.itemId,
+                  disabled: item.disabled,
+                  highlighted: item.itemId === resolvedHighlightedItemId,
+                  onActivate: activateItem,
+                  onHighlight: setHighlightedItemId,
+                  children: (
+                    <>
+                      <span className="relative flex size-5 shrink-0 items-center justify-center">
+                        <Icon
+                          icon={item.action.icon}
+                          glyphInset={0}
+                          iconClassName={item.action.iconClassName}
+                          slotSize={20}
+                        />
                       </span>
-                      <span className="min-w-0 truncate text-[var(--text-tertiary)]">
-                        {action.description}
+                      <span className="flex min-w-0 grow items-center gap-2.5">
+                        <span className="me-24 flex min-w-0 flex-1 items-baseline gap-3">
+                          <span className="text-foreground max-w-full min-w-0 shrink-0 truncate">
+                            {item.action.label}
+                          </span>
+                          <span className="min-w-0 truncate text-[var(--text-tertiary)]">
+                            {item.action.description}
+                          </span>
+                        </span>
                       </span>
-                    </span>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="right" sideOffset={4}>
-                  {state.disabledMessage}
-                </TooltipContent>
-              </Tooltip>
-            </div>
-          )
-        })}
+                    </>
+                  ),
+                })}
+              />
+              <TooltipContent side="right" sideOffset={4}>
+                {item.disabledMessage}
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        ))}
       </div>
+      {isConnectorsLoading && (
+        <div
+          aria-hidden="true"
+          className="skeleton group relative mx-1.5 flex min-h-(--floating-menu-item-height) w-auto items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 [--skeleton-opacity:0.75]"
+          data-composer-menu-skeleton=""
+        >
+          <div className="skeleton-child icon shrink-0 rounded-md" />
+          <div className="skeleton-child h-4 w-40 max-w-[70%] rounded-md" />
+        </div>
+      )}
+      {connectorItems.length > 0 && (
+        <div role="group">
+          {connectorItems.map((item) => (
+            <div key={item.connector.id}>
+              {composerMenuRow({
+                itemId: item.itemId,
+                disabled: false,
+                highlighted: item.itemId === resolvedHighlightedItemId,
+                onActivate: activateItem,
+                onHighlight: setHighlightedItemId,
+                children: (
+                  <>
+                    <span className="relative flex size-5 shrink-0 items-center justify-center">
+                      <Icon
+                        icon={RiPlugLine}
+                        glyphInset={0}
+                        slotSize={20}
+                      />
+                    </span>
+                    <span className="flex min-w-0 grow items-baseline gap-3">
+                      <span className="text-foreground max-w-full min-w-0 shrink-0 truncate">
+                        {item.connector.name}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[var(--text-tertiary)]">
+                        {item.connector.description}
+                      </span>
+                      {item.connector.enabled && (
+                        <span className="shrink-0 text-xs text-[var(--text-tertiary)]">
+                          On
+                        </span>
+                      )}
+                    </span>
+                  </>
+                ),
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+      {isConnectorSectionVisible && actionQuery?.query === "" && (
+        <div
+          data-composer-menu-hint=""
+          className="mx-2 px-2 pt-2 pb-0.5 text-sm text-[var(--text-tertiary)] select-none"
+        >
+          Type to search actions &amp; connectors
+        </div>
+      )}
     </PopoverContent>
   )
 
   if (isMobile) {
-    const addFilesState = getActionState("add-files")
-    const webSearchState = getActionState("web-search")
+    const commandItems = triggerMenuItems.filter(
+      (item) => item.action.behavior === "command"
+    )
+    const toggleItems = triggerMenuItems.filter(
+      (item) => item.action.behavior === "toggle"
+    )
 
     return (
       <>
@@ -491,11 +387,7 @@ export function ButtonPlusMenu({
                     data-testid="composer-plus-btn"
                     aria-label="Add files and more"
                     aria-expanded={isTriggerMenuOpen}
-                    onClick={() => {
-                      if (actionQuery) {
-                        setDismissedActionQueryId(actionQuery.id)
-                      }
-                    }}
+                    onClick={dismissActionQuery}
                   />
                 }
               >
@@ -506,64 +398,248 @@ export function ButtonPlusMenu({
               {composerPlusTooltip}
             </TooltipContent>
           </Tooltip>
-          <DropdownMenuContent
-            side="top"
-            sideOffset={-44}
-            align="start"
-            alignOffset={-8}
-            animated={false}
-            geometry="custom"
-            data-content-appearance="touch-optimized"
-            className="max-h-(--available-height) w-[240px] min-w-[240px] max-w-xs overflow-y-auto rounded-[28px] bg-floating-surface py-1.5 [--floating-menu-item-active:#414141] [scrollbar-width:none] dark:bg-[#1b1b1b] dark:shadow-[0_8px_16px_rgba(0,0,0,0.32),inset_0_0_1px_rgba(255,255,255,0.2),0_0_1px_rgba(0,0,0,0.62)]"
-            onKeyDownCapture={(event) => {
-              if (event.key === "Tab") event.preventDefault()
-            }}
-          >
-            <DropdownMenuGroup>
-              <DropdownMenuItem
-                geometry="custom"
-                disabled={addFilesState.disabled}
-                className="mx-1.5 h-12 gap-3 rounded-[28px] p-1.5 text-base/6"
-                onClick={() => activateAction("add-files")}
-              >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#414141]">
-                  <Icon
-                    icon={addFilesAction.icon}
-                    glyphInset={0}
-                    slotSize={20}
-                  />
-                </span>
-                <span className="min-w-0 grow truncate">
-                  {addFilesAction.compactLabel}
-                </span>
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuRadioGroup
-              value={enableSearch ? "web-search" : ""}
+          {isTouchMenu ? (
+            /* ChatGPT's touch-optimized + menu (decompiled 2026-08-24): a
+               content-sized rounded-28 superellipse popover, min-w 240px,
+               height-capped by --floating-menu-item-height rows, with
+               Camera / Photos / Files icon-chip rows in place of the single
+               add-files row. data-content-appearance marks THIS treatment —
+               the fine-pointer popover below deliberately lacks it. */
+            <DropdownMenuContent
+              side="top"
+              sideOffset={-45}
+              align="start"
+              alignOffset={-8}
+              animated={false}
+              geometry="custom"
+              data-content-appearance="touch-optimized"
+              style={{ "--min-items": 5.8 } as React.CSSProperties}
+              className="bg-(--floating-menu-touch-surface) shadow-floating-menu-touch max-h-[min(var(--available-height,50svh),calc(var(--spacing)*1.5+var(--min-items,6.8)*var(--floating-menu-item-height)))] w-max min-w-60 max-w-xs overflow-y-auto rounded-[28px] [corner-shape:superellipse(1.1)] py-1.5 select-none [scrollbar-width:none] [overscroll-behavior:contain]"
+              onKeyDownCapture={(event) => {
+                if (event.key === "Tab") event.preventDefault()
+              }}
             >
-              <DropdownMenuRadioItem
-                value="web-search"
-                disabled={webSearchState.disabled}
-                className="mx-1.5 h-12 gap-3 rounded-[28px] p-1.5 text-base/6"
-                onClick={() => activateAction("web-search")}
+              <DropdownMenuGroup>
+                {isFileUploadAvailable && (
+                  <DropdownMenuItem
+                    geometry="custom"
+                    className={touchMenuRowClassName}
+                    onClick={() => cameraInputRef.current?.click()}
+                  >
+                    <span className={touchMenuChipClassName}>
+                      <Icon
+                        icon={ComposerCameraIcon}
+                        glyphInset={0}
+                        slotSize={20}
+                      />
+                    </span>
+                    <span className="flex min-w-0 grow items-center gap-2.5">
+                      <span className="truncate">Camera</span>
+                    </span>
+                  </DropdownMenuItem>
+                )}
+                {isFileUploadAvailable && (
+                  <DropdownMenuItem
+                    geometry="custom"
+                    className={touchMenuRowClassName}
+                    onClick={() => photosInputRef.current?.click()}
+                  >
+                    <span className={touchMenuChipClassName}>
+                      <Icon
+                        icon={ComposerImageSquareIcon}
+                        glyphInset={0}
+                        slotSize={20}
+                      />
+                    </span>
+                    <span className="flex min-w-0 grow items-center gap-2.5">
+                      <span className="truncate">Photos</span>
+                    </span>
+                  </DropdownMenuItem>
+                )}
+                {commandItems.map((item) => (
+                  <DropdownMenuItem
+                    key={item.itemId}
+                    geometry="custom"
+                    disabled={item.disabled}
+                    className={touchMenuRowClassName}
+                    onClick={() => activateItem(item.itemId)}
+                  >
+                    <span className={touchMenuChipClassName}>
+                      <Icon
+                        icon={touchMenuActionIcons[item.itemId]}
+                        glyphInset={0}
+                        slotSize={20}
+                      />
+                    </span>
+                    <span className="flex min-w-0 grow items-center gap-2.5">
+                      <span className="truncate">
+                        {item.action.touchLabel ?? item.action.label}
+                      </span>
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+              <DropdownMenuRadioGroup
+                value={toggleItems.find((item) => item.selected)?.itemId ?? ""}
               >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#414141] [--web-search-icon-foreground:currentColor] [--web-search-icon-surface:transparent]">
-                  <Icon
-                    icon={webSearchAction.icon}
-                    glyphInset={0}
-                    slotSize={20}
-                  />
-                </span>
-                <span className="min-w-0 grow truncate">
-                  {webSearchAction.compactLabel}
-                </span>
-              </DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
+                {toggleItems.map((item) => (
+                  <DropdownMenuRadioItem
+                    key={item.itemId}
+                    value={item.itemId}
+                    disabled={item.disabled}
+                    indicator={touchMenuCheck}
+                    className={touchMenuRowClassName}
+                    onClick={() => activateItem(item.itemId)}
+                  >
+                    <span className={touchMenuChipClassName}>
+                      <Icon
+                        icon={touchMenuActionIcons[item.itemId]}
+                        glyphInset={0}
+                        slotSize={20}
+                      />
+                    </span>
+                    <span className="flex min-w-0 grow items-center gap-2.5">
+                      <span className="truncate">{item.action.label}</span>
+                    </span>
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+              {connectors?.map((connector) => (
+                <DropdownMenuCheckboxItem
+                  key={connector.id}
+                  checked={connector.enabled}
+                  indicator={touchMenuCheck}
+                  className={touchMenuRowClassName}
+                  onCheckedChange={() => onToggleConnector?.(connector.id)}
+                >
+                  <span className={touchMenuChipClassName}>
+                    <Icon icon={RiPlugLine} glyphInset={0} slotSize={20} />
+                  </span>
+                  <span className="flex min-w-0 grow items-center gap-2.5">
+                    <span className="truncate">{connector.name}</span>
+                  </span>
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          ) : (
+            /* ChatGPT's fine-pointer narrow-width + menu (captured
+               2026-08-24): a compact content-sized popover on the main
+               surface — rounded-[20px], py-2.5, 36px text-sm rows with plain
+               20px currentColor glyphs — NOT the old dark icon-circle panel.
+               `w-max` overrides the shared dropdown base's anchor-width
+               sizing: the popover is sized by its rows (capped at max-w-xs),
+               never by the 36px + button. */
+            <DropdownMenuContent
+              side="top"
+              sideOffset={0}
+              align="start"
+              alignOffset={-7}
+              animated={false}
+              geometry="custom"
+              className="max-h-(--available-height) w-max max-w-xs overflow-y-auto rounded-[20px] py-2.5 [scrollbar-width:none]"
+              onKeyDownCapture={(event) => {
+                if (event.key === "Tab") event.preventDefault()
+              }}
+            >
+              <DropdownMenuGroup>
+                {commandItems.map((item) => (
+                  <DropdownMenuItem
+                    key={item.itemId}
+                    geometry="custom"
+                    disabled={item.disabled}
+                    className="mx-2.5 min-h-9 justify-between gap-6 rounded-[12px] px-2.5 py-1.5 text-sm"
+                    onClick={() => activateItem(item.itemId)}
+                  >
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      {/* Mobile rows keep ChatGPT's plain currentColor glyphs —
+                          no per-action icon tint (that belongs to the @ menu). */}
+                      <Icon
+                        icon={item.action.icon}
+                        glyphInset={0}
+                        slotSize={20}
+                      />
+                      <span className="min-w-0 truncate">
+                        {item.action.label}
+                      </span>
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+              <DropdownMenuRadioGroup
+                value={toggleItems.find((item) => item.selected)?.itemId ?? ""}
+              >
+                {toggleItems.map((item) => (
+                  <DropdownMenuRadioItem
+                    key={item.itemId}
+                    value={item.itemId}
+                    disabled={item.disabled}
+                    className="mx-2.5 min-h-9 justify-between gap-6 rounded-[12px] px-2.5 py-1.5 text-sm"
+                    onClick={() => activateItem(item.itemId)}
+                  >
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <Icon
+                        icon={item.action.icon}
+                        glyphInset={0}
+                        slotSize={20}
+                      />
+                      <span className="min-w-0 truncate">
+                        {item.action.label}
+                      </span>
+                    </span>
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+              {connectors?.map((connector) => (
+                <DropdownMenuCheckboxItem
+                  key={connector.id}
+                  checked={connector.enabled}
+                  className="mx-2.5 min-h-9 justify-between gap-6 rounded-[12px] px-2.5 py-1.5 text-sm"
+                  onCheckedChange={() => onToggleConnector?.(connector.id)}
+                >
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <Icon icon={RiPlugLine} glyphInset={0} slotSize={20} />
+                    <span className="min-w-0 truncate">{connector.name}</span>
+                  </span>
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          )}
         </DropdownMenu>
+        {isTouchMenu && isFileUploadAvailable && (
+          /* ChatGPT parity: the camera / photo-library sources are hidden
+             file inputs the touch rows click — mounted OUTSIDE the menu so
+             they survive the menu closing on row activation. */
+          <>
+            <input
+              ref={photosInputRef}
+              className="sr-only select-none"
+              type="file"
+              tabIndex={-1}
+              aria-hidden="true"
+              data-testid="composer-upload-photos-input"
+              id="upload-photos"
+              accept="image/*"
+              multiple
+              onChange={handleTouchFileInputChange}
+            />
+            <input
+              ref={cameraInputRef}
+              className="sr-only select-none"
+              type="file"
+              tabIndex={-1}
+              aria-hidden="true"
+              data-testid="composer-upload-camera-input"
+              id="upload-camera"
+              accept="image/*"
+              capture="environment"
+              multiple
+              onChange={handleTouchFileInputChange}
+            />
+          </>
+        )}
         <Popover
           open={isActionQueryOpen}
-          onOpenChange={handleMenuOpenChange}
+          onOpenChange={handleActionQueryOpenChange}
         >
           {editorOwnedContent}
         </Popover>
@@ -571,9 +647,12 @@ export function ButtonPlusMenu({
     )
   }
 
+  // Desktop: the + button and typed "@"/"/" drive ONE editor-owned query
+  // session (ChatGPT's synthetic session) — clicking + opens the same menu
+  // that typing "@" does, and typing filters it.
   return (
-    <Popover open={isMenuOpen} onOpenChange={handleMenuOpenChange}>
-      <Tooltip disableHoverablePopup disabled={isMenuOpen}>
+    <Popover open={isActionQueryOpen} onOpenChange={handleActionQueryOpenChange}>
+      <Tooltip disableHoverablePopup disabled={isActionQueryOpen}>
         <TooltipTrigger
           render={<span className="inline-flex" />}
         >
@@ -583,14 +662,9 @@ export function ButtonPlusMenu({
             id="composer-plus-btn"
             data-testid="composer-plus-btn"
             aria-label="Add files and more"
-            aria-expanded={isTriggerMenuOpen}
+            aria-expanded={isActionQueryOpen}
             aria-haspopup="menu"
-            onClick={() => {
-              if (actionQuery) setDismissedActionQueryId(actionQuery.id)
-              setIsTriggerMenuOpen((open) => !open)
-              setHighlightedActionId(initialActionId)
-              focusEditor()
-            }}
+            onClick={handleSyntheticSessionToggle}
             onPointerDown={(event) => event.preventDefault()}
           >
             {composerPlusIcon}

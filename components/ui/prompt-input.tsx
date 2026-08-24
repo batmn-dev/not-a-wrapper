@@ -36,18 +36,20 @@ import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { ComposerIconButton } from "@/components/ui/composer-icon-button"
 import { Icon } from "@/components/ui/icon"
 import {
+  createActionQueryPublisher,
   createPromptInputDocument,
   createPromptInputPlugins,
+  endPromptInputActionQuery,
   type PromptInputActionQuery,
   type PromptInputEntity,
   promptInputEntitiesEqual,
   promptInputSchema,
-  readPromptInputActionQuery,
   readPromptInputDocument,
   readPromptInputEntities,
   replacePromptInputActionQuery,
   replacePromptInputDocument,
   setPromptInputSelection,
+  toggleSyntheticPromptInputActionQuery,
 } from "@/components/ui/prompt-input-editor"
 import { useOptionalScrollRoot } from "@/components/ui/scroll-root"
 import {
@@ -73,6 +75,11 @@ export type PromptInputEditorHandle = {
     actionQuery: PromptInputActionQuery,
     entity?: PromptInputEntity
   ) => boolean
+  /** Open a synthetic action-query session at the caret (the + button), or
+   * close the current one when it is already synthetic — ChatGPT's toggle. */
+  toggleSyntheticActionQuery: () => void
+  /** End the active action-query session (synthetic Escape / focus-out). */
+  endActionQuery: () => void
   setSelectionRange: (selectionStart: number, selectionEnd: number) => void
 }
 
@@ -619,31 +626,9 @@ const PromptInputTextarea = React.forwardRef<
 
       let view: EditorView
       let paintController: ComposerPaintController | undefined
-      let actionQueryId = 0
-      let lastActionQueryRange: ReturnType<
-        typeof readPromptInputActionQuery
-      > = null
-      const publishActionQuery = (nextState: EditorState) => {
-        const nextRange = readPromptInputActionQuery(nextState)
-        if (
-          lastActionQueryRange?.from === nextRange?.from &&
-          lastActionQueryRange?.to === nextRange?.to &&
-          lastActionQueryRange?.query === nextRange?.query
-        ) {
-          return
-        }
-
-        if (
-          nextRange &&
-          (!lastActionQueryRange || nextRange.from !== lastActionQueryRange.from)
-        ) {
-          actionQueryId += 1
-        }
-        lastActionQueryRange = nextRange
-        callbacks.current.onActionQueryChange?.(
-          nextRange ? { ...nextRange, id: actionQueryId } : null
-        )
-      }
+      const publishActionQuery = createActionQueryPublisher((actionQuery) =>
+        callbacks.current.onActionQueryChange?.(actionQuery)
+      )
       const state = EditorState.create({
         doc: createPromptInputDocument(
           callbacks.current.value,
@@ -664,6 +649,9 @@ const PromptInputTextarea = React.forwardRef<
             const nextState = view.state.apply(transaction)
             view.updateState(nextState)
             paintController?.onEditorUpdate()
+            // The action-query plugin owns ChatGPT's re-evaluation rules
+            // (typed sessions on doc changes, synthetic sessions every
+            // transaction); publishing just diffs its state.
             publishActionQuery(nextState)
             if (
               !transaction.docChanged ||
@@ -732,6 +720,13 @@ const PromptInputTextarea = React.forwardRef<
             actionQuery,
             entity
           )
+        },
+        toggleSyntheticActionQuery() {
+          toggleSyntheticPromptInputActionQuery(view.state, view.dispatch)
+          view.focus()
+        },
+        endActionQuery() {
+          endPromptInputActionQuery(view.state, view.dispatch)
         },
         setSelectionRange(selectionStart, selectionEnd) {
           setPromptInputSelection(view, selectionStart, selectionEnd)

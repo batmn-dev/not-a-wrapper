@@ -8,6 +8,19 @@ import { forwardRef, useCallback, type ReactNode } from "react"
 import type { ChatSurface } from "./chat-chrome"
 import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
 
+/**
+ * One source for the footer's gutter + centered-column math. Every column in
+ * the sticky footer stack (the above-composer slot, the composer column, the
+ * disclaimer) composes these two strings, so a future consumer cannot drift
+ * the gutter or max-width tokens from the composer's. Kept as class constants
+ * rather than a wrapper component: the composer column renders in both
+ * posture branches, and a component appearing in only one branch would
+ * remount the composer on posture changes (a pinned DOM-identity contract).
+ */
+const threadColumnGutterClassName = "px-[var(--thread-content-margin,1rem)]"
+const threadColumnClassName =
+  "mx-auto w-full max-w-[var(--thread-content-max-width,40rem)]"
+
 type ThreadBottomContainerProps = {
   children: ReactNode
   className?: string
@@ -17,6 +30,12 @@ type ThreadBottomContainerProps = {
    * `variant` + `isOnboarding` flag combinations.
    */
   surface?: ChatSurface
+  /**
+   * System banners rendered above the composer inside the footer's fade
+   * backdrop (ChatGPT's empty:hidden slot between the overflow spacer and the
+   * scroll control — "continue generating", error retries, and similar).
+   */
+  aboveComposer?: ReactNode
 }
 
 /**
@@ -30,7 +49,7 @@ const ThreadBottomContainer = forwardRef<
   HTMLDivElement,
   ThreadBottomContainerProps
 >(function ThreadBottomContainer(
-  { children, className, surface = "thread" },
+  { children, className, surface = "thread", aboveComposer },
   forwardedRef
 ) {
   const isProjectOnboarding = surface === "project-onboarding"
@@ -55,7 +74,7 @@ const ThreadBottomContainer = forwardRef<
         isProjectOnboarding
           ? "group/thread-bottom-container fixed inset-x-4 bottom-0 z-30 mx-auto max-w-(--project-detail-composer-width) bg-[linear-gradient(to_top,var(--background)_75%,transparent)] pt-5 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] md:static md:inset-auto md:z-auto md:mt-6 md:w-full md:bg-none md:p-0 md:max-lg:px-4"
           : cn(
-              `group/thread-bottom-container pointer-events-none sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col [--thread-component-gap:1.5rem] [--thread-scroll-control-offset:1.5rem] [--thread-scroll-to-bottom-banner-offset:0px] has-data-[has-thread-error]:pt-2 has-data-[has-thread-error]:[box-shadow:var(--sharp-edge-bottom-shadow)] md:pt-0 print:hidden ${THREAD_GUTTER_VARS} ${THREAD_MAXWIDTH_VARS}`,
+              `group/thread-bottom-container content-fade pointer-events-none sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col [--thread-component-gap:1.5rem] [--thread-scroll-control-offset:1.5rem] [--thread-scroll-to-bottom-banner-offset:0px] has-data-[has-thread-error]:pt-2 has-data-[has-thread-error]:[box-shadow:var(--sharp-edge-bottom-shadow)] md:pt-0 print:hidden ${THREAD_GUTTER_VARS} ${THREAD_MAXWIDTH_VARS}`,
               isOnboarding && "sm:grow"
             ),
         className
@@ -67,6 +86,19 @@ const ThreadBottomContainer = forwardRef<
         aria-hidden="true"
         className="pointer-events-none"
       />
+
+      <div data-thread-above-composer="" className="w-full">
+        <div className={`mx-auto w-full ${threadColumnGutterClassName}`}>
+          <div className={`pointer-events-auto ${threadColumnClassName}`}>
+            <div
+              data-thread-above-composer-slot=""
+              className="pointer-events-auto mb-[var(--thread-component-gap)] w-full empty:hidden"
+            >
+              {aboveComposer}
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div
         data-thread-scroll-control-layer=""
@@ -98,7 +130,7 @@ const ThreadBottomContainer = forwardRef<
           className={
             isProjectOnboarding
               ? "w-full"
-              : "relative z-1 mx-auto flex w-full flex-col px-[var(--thread-content-margin,1rem)]"
+              : `relative z-1 mx-auto flex w-full flex-col ${threadColumnGutterClassName}`
           }
         >
           <div
@@ -106,7 +138,7 @@ const ThreadBottomContainer = forwardRef<
             className={
               isProjectOnboarding
                 ? "pointer-events-auto w-full"
-                : "pointer-events-auto mx-auto mb-[var(--thread-component-gap)] w-full max-w-[var(--thread-content-max-width,40rem)]"
+                : `pointer-events-auto mb-[var(--thread-component-gap)] ${threadColumnClassName}`
             }
           >
             <div
@@ -136,15 +168,19 @@ function ThreadDisclaimer() {
       animate={{ height: "auto", opacity: 1, y: 0 }}
       exit={{ height: 0, opacity: 0, y: 8 }}
       transition={{ duration: 0.2, ease: "easeInOut" }}
-      className="relative min-h-9 w-full overflow-hidden pt-2 pb-4 text-center text-xs [view-transition-name:var(--vt-disclaimer)] md:px-[60px]"
+      // ChatGPT keys the side padding to the thread container (their
+      // @w-sm/main = 40rem), not the viewport, so it tracks the sidebar.
+      className="relative min-h-9 w-full overflow-hidden pt-2 pb-4 text-center text-xs [view-transition-name:var(--vt-disclaimer)] @[40rem]/main:px-[60px]"
     >
       <div
-        className={`px-[var(--thread-content-margin,1rem)] ${THREAD_GUTTER_VARS}`}
+        className={`${threadColumnGutterClassName} ${THREAD_GUTTER_VARS}`}
       >
         <div
-          className={`mx-auto w-full max-w-[var(--thread-content-max-width,40rem)] ${THREAD_MAXWIDTH_VARS}`}
+          className={`${threadColumnClassName} ${THREAD_MAXWIDTH_VARS}`}
         >
-          <div className="bg-background pointer-events-auto mx-auto flex max-w-fit items-center justify-center rounded-full text-balance text-[var(--text-tertiary)] shadow-[0_0_8px_8px_var(--background)] select-none active:select-auto">
+          {/* ChatGPT parity: plain tertiary text with no background halo —
+              the strip fades under the composer with everything else. */}
+          <div className="pointer-events-auto mx-auto flex max-w-fit items-center justify-center text-balance text-[var(--text-tertiary)] select-none active:select-auto">
             Not A Wrapper can make mistakes. Check important info.
           </div>
         </div>
