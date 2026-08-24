@@ -1503,6 +1503,13 @@
    * backdrop to the thread column and adds a horizontal edge fade, but it is
    * DEAD CODE live: the rule targets a container name their DOM never sets,
    * so the shipped behavior everywhere is this full-width backdrop. */
+  .content-fade {
+    /* Declared where it is consumed: the fade height is a parameterization
+     * hook read by the ::after mask below. Nothing overrides it today —
+     * 32px matches ChatGPT's live behavior. */
+    --thread-footer-content-fade-height: 32px;
+  }
+
   .content-fade::after {
     content: "";
     position: absolute;

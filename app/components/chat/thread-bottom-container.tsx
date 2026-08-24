@@ -8,6 +8,19 @@ import { forwardRef, useCallback, type ReactNode } from "react"
 import type { ChatSurface } from "./chat-chrome"
 import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
 
+/**
+ * One source for the footer's gutter + centered-column math. Every column in
+ * the sticky footer stack (the above-composer slot, the composer column, the
+ * disclaimer) composes these two strings, so a future consumer cannot drift
+ * the gutter or max-width tokens from the composer's. Kept as class constants
+ * rather than a wrapper component: the composer column renders in both
+ * posture branches, and a component appearing in only one branch would
+ * remount the composer on posture changes (a pinned DOM-identity contract).
+ */
+const threadColumnGutterClassName = "px-[var(--thread-content-margin,1rem)]"
+const threadColumnClassName =
+  "mx-auto w-full max-w-[var(--thread-content-max-width,40rem)]"
+
 type ThreadBottomContainerProps = {
   children: ReactNode
   className?: string
@@ -75,8 +88,8 @@ const ThreadBottomContainer = forwardRef<
       />
 
       <div data-thread-above-composer="" className="w-full">
-        <div className="mx-auto w-full px-[var(--thread-content-margin,1rem)]">
-          <div className="pointer-events-auto mx-auto w-full max-w-[var(--thread-content-max-width,40rem)]">
+        <div className={`mx-auto w-full ${threadColumnGutterClassName}`}>
+          <div className={`pointer-events-auto ${threadColumnClassName}`}>
             <div
               data-thread-above-composer-slot=""
               className="pointer-events-auto mb-[var(--thread-component-gap)] w-full empty:hidden"
@@ -117,7 +130,7 @@ const ThreadBottomContainer = forwardRef<
           className={
             isProjectOnboarding
               ? "w-full"
-              : "relative z-1 mx-auto flex w-full flex-col px-[var(--thread-content-margin,1rem)]"
+              : `relative z-1 mx-auto flex w-full flex-col ${threadColumnGutterClassName}`
           }
         >
           <div
@@ -125,7 +138,7 @@ const ThreadBottomContainer = forwardRef<
             className={
               isProjectOnboarding
                 ? "pointer-events-auto w-full"
-                : "pointer-events-auto mx-auto mb-[var(--thread-component-gap)] w-full max-w-[var(--thread-content-max-width,40rem)]"
+                : `pointer-events-auto mb-[var(--thread-component-gap)] ${threadColumnClassName}`
             }
           >
             <div
@@ -160,10 +173,10 @@ function ThreadDisclaimer() {
       className="relative min-h-9 w-full overflow-hidden pt-2 pb-4 text-center text-xs [view-transition-name:var(--vt-disclaimer)] @[40rem]/main:px-[60px]"
     >
       <div
-        className={`px-[var(--thread-content-margin,1rem)] ${THREAD_GUTTER_VARS}`}
+        className={`${threadColumnGutterClassName} ${THREAD_GUTTER_VARS}`}
       >
         <div
-          className={`mx-auto w-full max-w-[var(--thread-content-max-width,40rem)] ${THREAD_MAXWIDTH_VARS}`}
+          className={`${threadColumnClassName} ${THREAD_MAXWIDTH_VARS}`}
         >
           {/* ChatGPT parity: plain tertiary text with no background halo —
               the strip fades under the composer with everything else. */}
