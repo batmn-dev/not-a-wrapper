@@ -38,16 +38,18 @@ import { Icon } from "@/components/ui/icon"
 import {
   createPromptInputDocument,
   createPromptInputPlugins,
+  endPromptInputActionQuery,
   type PromptInputActionQuery,
   type PromptInputEntity,
   promptInputEntitiesEqual,
   promptInputSchema,
-  readPromptInputActionQuery,
+  readPromptInputActionQuerySession,
   readPromptInputDocument,
   readPromptInputEntities,
   replacePromptInputActionQuery,
   replacePromptInputDocument,
   setPromptInputSelection,
+  toggleSyntheticPromptInputActionQuery,
 } from "@/components/ui/prompt-input-editor"
 import { useOptionalScrollRoot } from "@/components/ui/scroll-root"
 import {
@@ -73,6 +75,11 @@ export type PromptInputEditorHandle = {
     actionQuery: PromptInputActionQuery,
     entity?: PromptInputEntity
   ) => boolean
+  /** Open a synthetic action-query session at the caret (the + button), or
+   * close the current one when it is already synthetic — ChatGPT's toggle. */
+  toggleSyntheticActionQuery: () => void
+  /** End the active action-query session (synthetic Escape / focus-out). */
+  endActionQuery: () => void
   setSelectionRange: (selectionStart: number, selectionEnd: number) => void
 }
 
@@ -620,22 +627,37 @@ const PromptInputTextarea = React.forwardRef<
       let view: EditorView
       let paintController: ComposerPaintController | undefined
       let actionQueryId = 0
-      let lastActionQueryRange: ReturnType<
-        typeof readPromptInputActionQuery
-      > = null
+      let lastActionQueryRange: Omit<PromptInputActionQuery, "id"> | null = null
       const publishActionQuery = (nextState: EditorState) => {
-        const nextRange = readPromptInputActionQuery(nextState)
+        const session = readPromptInputActionQuerySession(nextState)
+        const nextRange =
+          session.active && session.range
+            ? {
+                from: session.range.from,
+                to: session.range.to,
+                query: session.query,
+                trigger: session.trigger,
+                isSynthetic: session.isSynthetic,
+              }
+            : null
         if (
           lastActionQueryRange?.from === nextRange?.from &&
           lastActionQueryRange?.to === nextRange?.to &&
-          lastActionQueryRange?.query === nextRange?.query
+          lastActionQueryRange?.query === nextRange?.query &&
+          lastActionQueryRange?.trigger === nextRange?.trigger &&
+          lastActionQueryRange?.isSynthetic === nextRange?.isSynthetic
         ) {
           return
         }
 
+        // A new id marks a new session, which clears the menu's Escape
+        // dismissal — matching ChatGPT's dismissedMatch keyed by trigger
+        // position and symbol.
         if (
           nextRange &&
-          (!lastActionQueryRange || nextRange.from !== lastActionQueryRange.from)
+          (!lastActionQueryRange ||
+            nextRange.from !== lastActionQueryRange.from ||
+            nextRange.trigger !== lastActionQueryRange.trigger)
         ) {
           actionQueryId += 1
         }
@@ -664,6 +686,9 @@ const PromptInputTextarea = React.forwardRef<
             const nextState = view.state.apply(transaction)
             view.updateState(nextState)
             paintController?.onEditorUpdate()
+            // The action-query plugin owns ChatGPT's re-evaluation rules
+            // (typed sessions on doc changes, synthetic sessions every
+            // transaction); publishing just diffs its state.
             publishActionQuery(nextState)
             if (
               !transaction.docChanged ||
@@ -732,6 +757,13 @@ const PromptInputTextarea = React.forwardRef<
             actionQuery,
             entity
           )
+        },
+        toggleSyntheticActionQuery() {
+          toggleSyntheticPromptInputActionQuery(view.state, view.dispatch)
+          view.focus()
+        },
+        endActionQuery() {
+          endPromptInputActionQuery(view.state, view.dispatch)
         },
         setSelectionRange(selectionStart, selectionEnd) {
           setPromptInputSelection(view, selectionStart, selectionEnd)

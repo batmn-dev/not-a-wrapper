@@ -11,6 +11,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useFileUpload } from "@/components/ui/file-upload"
+import {
+  closeVirtualKeyboard,
+  isVirtualKeyboardOpen,
+} from "@/components/ui/keyboard-viewport"
 import { floatingMenuItemActiveClassName } from "@/components/ui/floating-surface"
 import { Icon } from "@/components/ui/icon"
 import { Kbd } from "@/components/ui/kbd"
@@ -28,13 +32,14 @@ import {
 } from "@/components/ui/tooltip"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { cn } from "@/lib/utils"
-import { RiAddLargeLine } from "@remixicon/react"
+import { RiAddLargeLine, RiPlugLine } from "@remixicon/react"
 import {
   useCallback,
   useMemo,
   useRef,
   useState,
   type ComponentProps,
+  type ReactNode,
 } from "react"
 import {
   composerActionRegistry,
@@ -55,6 +60,18 @@ const composerPlusTooltip = (
 const addFilesAction = getComposerAction("add-files")
 const webSearchAction = getComposerAction("web-search")
 
+/** One MCP connector row in the @ menu. `undefined` for the whole list means
+ * the connectors are still loading (the menu shows skeleton rows). */
+export type ComposerMenuConnector = Readonly<{
+  id: string
+  name: string
+  description: string
+  enabled: boolean
+}>
+
+const connectorItemId = (connectorId: string) => `connector:${connectorId}`
+const CONNECTOR_ITEM_PREFIX = "connector:"
+
 type ButtonPlusMenuProps = {
   isUserAuthenticated: boolean
   isFileUploadAvailable: boolean
@@ -70,6 +87,17 @@ type ButtonPlusMenuProps = {
     actionId: ComposerActionId,
     query: PromptInputActionQuery
   ) => boolean
+  /** MCP connectors for the @ menu; `undefined` while loading. */
+  connectors?: readonly ComposerMenuConnector[]
+  onActivateConnector?: (
+    connectorId: string,
+    query: PromptInputActionQuery
+  ) => boolean
+  /** Open (or toggle off) a synthetic action-query session in the editor —
+   * the desktop + button drives the same menu as typing "@". */
+  onOpenActionMenu?: () => void
+  /** End the active action-query session (synthetic Escape / focus-out). */
+  onCloseActionQuery?: () => void
 }
 
 export function ButtonPlusMenu({
@@ -82,6 +110,10 @@ export function ButtonPlusMenu({
   searchDisabledMessage,
   actionQuery = null,
   onActivateActionQuery,
+  connectors,
+  onActivateConnector,
+  onOpenActionMenu,
+  onCloseActionQuery,
 }: ButtonPlusMenuProps) {
   const { openFilePicker } = useFileUpload()
   const isMobile = useBreakpoint(768)
@@ -89,8 +121,9 @@ export function ButtonPlusMenu({
   const [dismissedActionQueryId, setDismissedActionQueryId] = useState<
     number | null
   >(null)
-  const [highlightedActionId, setHighlightedActionId] =
-    useState<ComposerActionId | null>(null)
+  const [highlightedItemId, setHighlightedItemId] = useState<string | null>(
+    null
+  )
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const overlayContainerRef = useRef<HTMLElement | null>(null)
   const composerAnchor = useCallback(
@@ -111,19 +144,31 @@ export function ButtonPlusMenu({
     () => (actionQuery ? getComposerActionQueryMatches(actionQuery.query) : []),
     [actionQuery]
   )
+  // ChatGPT parity: "/" is the command menu (actions only); "@"/"+" typed
+  // triggers and the synthetic + session also search connectors.
+  const isConnectorSectionVisible =
+    actionQuery !== null && actionQuery.trigger !== "/"
+  const isConnectorsLoading =
+    isConnectorSectionVisible && connectors === undefined
+  const queriedConnectors = useMemo(() => {
+    if (!isConnectorSectionVisible || !connectors) return []
+    const normalizedQuery = (actionQuery?.query ?? "").toLocaleLowerCase()
+    if (!normalizedQuery) return connectors
+    return connectors.filter((connector) =>
+      `${connector.name} ${connector.description}`
+        .toLocaleLowerCase()
+        .includes(normalizedQuery)
+    )
+  }, [actionQuery, connectors, isConnectorSectionVisible])
+
   const isActionQueryOpen =
     isUserAuthenticated &&
     actionQuery !== null &&
     actionQuery.id !== dismissedActionQueryId &&
-    queriedActions.length > 0
-  const menuSource = isActionQueryOpen
-    ? "action-query"
-    : isTriggerMenuOpen
-      ? "trigger"
-      : null
-  const isMenuOpen = menuSource !== null
-  const visibleActions =
-    menuSource === "action-query" ? queriedActions : composerActionRegistry
+    (queriedActions.length > 0 ||
+      isConnectorsLoading ||
+      queriedConnectors.length > 0)
+  const isMenuOpen = isActionQueryOpen || isTriggerMenuOpen
 
   const getActionState = (actionId: ComposerActionId) => {
     switch (actionId) {
@@ -132,92 +177,115 @@ export function ButtonPlusMenu({
           disabled: !isFileUploadAvailable,
           disabledMessage:
             fileUploadDisabledMessage ??
-            "This model doesn\u2019t support file uploads",
+            "This model doesn’t support file uploads",
         }
       case "web-search":
         return {
           disabled: isSearchDisabled,
           disabledMessage:
             searchDisabledMessage ??
-            "This model doesn\u2019t support web search",
+            "This model doesn’t support web search",
         }
     }
   }
 
-  const activateAction = useCallback(
-    (actionId: ComposerActionId) => {
-      const handledAsActionQuery =
-        menuSource === "action-query" &&
-        actionQuery !== null &&
-        onActivateActionQuery?.(actionId, actionQuery) === true
-
-      if (handledAsActionQuery) {
-        setDismissedActionQueryId(actionQuery.id)
-        if (actionId === "add-files") openFilePicker()
+  const activateItem = useCallback(
+    (itemId: string) => {
+      if (itemId.startsWith(CONNECTOR_ITEM_PREFIX)) {
+        const connectorId = itemId.slice(CONNECTOR_ITEM_PREFIX.length)
+        if (
+          actionQuery !== null &&
+          onActivateConnector?.(connectorId, actionQuery) === true
+        ) {
+          setDismissedActionQueryId(actionQuery.id)
+        }
       } else {
-        switch (actionId) {
-          case "add-files":
-            openFilePicker()
-            break
-          case "web-search":
-            onToggleSearch(!enableSearch)
-            break
+        const actionId = itemId as ComposerActionId
+        const handledAsActionQuery =
+          isActionQueryOpen &&
+          actionQuery !== null &&
+          onActivateActionQuery?.(actionId, actionQuery) === true
+
+        if (handledAsActionQuery) {
+          setDismissedActionQueryId(actionQuery.id)
+          if (actionId === "add-files") openFilePicker()
+        } else {
+          switch (actionId) {
+            case "add-files":
+              openFilePicker()
+              break
+            case "web-search":
+              onToggleSearch(!enableSearch)
+              break
+          }
         }
       }
       setIsTriggerMenuOpen(false)
-      setHighlightedActionId(null)
+      setHighlightedItemId(null)
       focusEditor()
     },
     [
       actionQuery,
       enableSearch,
       focusEditor,
-      menuSource,
+      isActionQueryOpen,
       onActivateActionQuery,
+      onActivateConnector,
       onToggleSearch,
       openFilePicker,
     ]
   )
 
-  const enabledActionIds = useMemo(
-    () =>
-      visibleActions.flatMap((action) =>
+  const highlightableItemIds = useMemo(
+    () => [
+      ...queriedActions.flatMap((action) =>
         (action.id === "add-files"
           ? !isFileUploadAvailable
           : isSearchDisabled)
           ? []
-          : [action.id]
+          : [action.id as string]
       ),
-    [isFileUploadAvailable, isSearchDisabled, visibleActions]
+      ...queriedConnectors.map((connector) => connectorItemId(connector.id)),
+    ],
+    [isFileUploadAvailable, isSearchDisabled, queriedActions, queriedConnectors]
   )
-  const initialActionId = enabledActionIds[0] ?? null
-  const resolvedHighlightedActionId =
-    highlightedActionId && enabledActionIds.includes(highlightedActionId)
-      ? highlightedActionId
-      : initialActionId
+  const initialItemId = highlightableItemIds[0] ?? null
+  const resolvedHighlightedItemId =
+    highlightedItemId && highlightableItemIds.includes(highlightedItemId)
+      ? highlightedItemId
+      : initialItemId
 
   const moveHighlight = useCallback(
     (direction: -1 | 1) => {
-      if (enabledActionIds.length === 0) return
-      const currentIndex = resolvedHighlightedActionId
-        ? enabledActionIds.indexOf(resolvedHighlightedActionId)
+      if (highlightableItemIds.length === 0) return
+      const currentIndex = resolvedHighlightedItemId
+        ? highlightableItemIds.indexOf(resolvedHighlightedItemId)
         : -1
       const nextIndex =
         currentIndex < 0
           ? direction > 0
             ? 0
-            : enabledActionIds.length - 1
-          : (currentIndex + direction + enabledActionIds.length) %
-            enabledActionIds.length
-      setHighlightedActionId(enabledActionIds[nextIndex] ?? null)
+            : highlightableItemIds.length - 1
+          : (currentIndex + direction + highlightableItemIds.length) %
+            highlightableItemIds.length
+      setHighlightedItemId(highlightableItemIds[nextIndex] ?? null)
     },
-    [enabledActionIds, resolvedHighlightedActionId]
+    [highlightableItemIds, resolvedHighlightedItemId]
   )
+
+  const dismissActionQuery = useCallback(() => {
+    if (!actionQuery) return
+    if (actionQuery.isSynthetic) {
+      onCloseActionQuery?.()
+    } else {
+      setDismissedActionQueryId(actionQuery.id)
+    }
+  }, [actionQuery, onCloseActionQuery])
 
   const handleComposerKeyDown = useCallback(
     (event: KeyboardEvent) => {
       if (
-        !isMenuOpen ||
+        !isActionQueryOpen ||
         event.defaultPrevented ||
         event.isComposing ||
         event.keyCode === 229 ||
@@ -238,63 +306,38 @@ export function ButtonPlusMenu({
           return
         case "Home":
           event.preventDefault()
-          setHighlightedActionId(initialActionId)
+          setHighlightedItemId(initialItemId)
           return
         case "End":
           event.preventDefault()
-          setHighlightedActionId(enabledActionIds.at(-1) ?? null)
+          setHighlightedItemId(highlightableItemIds.at(-1) ?? null)
           return
         case "Enter":
-          if (!resolvedHighlightedActionId) return
+          if (!resolvedHighlightedItemId) return
           event.preventDefault()
-          activateAction(resolvedHighlightedActionId)
+          activateItem(resolvedHighlightedItemId)
           return
         case "Escape":
           event.preventDefault()
-          if (menuSource === "action-query" && actionQuery) {
-            setDismissedActionQueryId(actionQuery.id)
-          }
-          setIsTriggerMenuOpen(false)
-          setHighlightedActionId(null)
+          dismissActionQuery()
+          setHighlightedItemId(null)
           return
         case "Tab":
           event.preventDefault()
-          if (
-            menuSource === "action-query" &&
-            resolvedHighlightedActionId
-          ) {
-            activateAction(resolvedHighlightedActionId)
-          } else {
-            setIsTriggerMenuOpen(false)
-            setHighlightedActionId(null)
+          if (resolvedHighlightedItemId) {
+            activateItem(resolvedHighlightedItemId)
           }
           return
-        default:
-          if (
-            event.key.length === 1 &&
-            !event.altKey &&
-            !event.ctrlKey &&
-            !event.metaKey
-          ) {
-            const query = event.key.toLocaleLowerCase()
-            const match = composerActionRegistry.find(
-              (action) =>
-                enabledActionIds.includes(action.id) &&
-                action.label.toLocaleLowerCase().includes(query)
-            )
-            if (match) setHighlightedActionId(match.id)
-          }
       }
     },
     [
-      enabledActionIds,
-      activateAction,
-      initialActionId,
-      isMenuOpen,
-      menuSource,
+      activateItem,
+      dismissActionQuery,
+      highlightableItemIds,
+      initialItemId,
+      isActionQueryOpen,
       moveHighlight,
-      resolvedHighlightedActionId,
-      actionQuery,
+      resolvedHighlightedItemId,
     ]
   )
 
@@ -320,7 +363,32 @@ export function ButtonPlusMenu({
     [handleComposerKeyDown]
   )
 
-  const handleMenuOpenChange: NonNullable<
+  const handleActionQueryOpenChange: NonNullable<
+    ComponentProps<typeof Popover>["onOpenChange"]
+  > = (open, eventDetails) => {
+    if (open) return
+    if (
+      eventDetails.reason === "focus-out" &&
+      document.activeElement?.matches("#prompt-textarea")
+    ) {
+      eventDetails.cancel()
+      return
+    }
+    // A press on the + button is the session toggle, not an outside press —
+    // its own click handler closes (or reopens) the synthetic session.
+    if (
+      eventDetails.reason === "outside-press" &&
+      eventDetails.event.target instanceof Element &&
+      eventDetails.event.target.closest("#composer-plus-btn")
+    ) {
+      eventDetails.cancel()
+      return
+    }
+    dismissActionQuery()
+    setHighlightedItemId(null)
+  }
+
+  const handleAuthPopoverOpenChange: NonNullable<
     ComponentProps<typeof Popover>["onOpenChange"]
   > = (open, eventDetails) => {
     if (
@@ -331,24 +399,35 @@ export function ButtonPlusMenu({
       eventDetails.cancel()
       return
     }
-
-    if (!open && menuSource === "action-query" && actionQuery) {
-      setDismissedActionQueryId(actionQuery.id)
+    // ChatGPT parity: the + handler defers opening past keyboard collapse in
+    // both auth states.
+    if (open && isVirtualKeyboardOpen()) {
+      closeVirtualKeyboard(() => setIsTriggerMenuOpen(true))
+      return
     }
     setIsTriggerMenuOpen(open)
-    setHighlightedActionId(open ? initialActionId : null)
     if (open) focusEditor()
   }
 
   const handleTriggerMenuOpenChange = (open: boolean) => {
+    // ChatGPT parity (mobile + button): with the on-screen keyboard up, defer
+    // opening until the keyboard has actually closed — blur the editor, wait
+    // for the keyboard-closed signal (500ms fallback), then open.
+    if (open && isVirtualKeyboardOpen()) {
+      closeVirtualKeyboard(() => {
+        setIsTriggerMenuOpen(true)
+        setHighlightedItemId(initialItemId)
+      })
+      return
+    }
     setIsTriggerMenuOpen(open)
-    setHighlightedActionId(open ? initialActionId : null)
+    setHighlightedItemId(open ? initialItemId : null)
   }
 
   // Unauthenticated: show auth popover instead of dropdown
   if (!isUserAuthenticated) {
     return (
-      <Popover open={isTriggerMenuOpen} onOpenChange={handleMenuOpenChange}>
+      <Popover open={isTriggerMenuOpen} onOpenChange={handleAuthPopoverOpenChange}>
         <Tooltip disableHoverablePopup disabled={isTriggerMenuOpen}>
           <TooltipTrigger render={<span className="inline-flex" />}>
             <PopoverTrigger
@@ -374,6 +453,56 @@ export function ButtonPlusMenu({
     )
   }
 
+  const menuRowClassName = cn(
+    floatingMenuItemActiveClassName,
+    "menu-item-hoverable relative mx-2 flex h-(--floating-menu-item-height) cursor-pointer items-center gap-3 rounded-(--floating-menu-item-radius) px-2 py-1.5 text-sm outline-none select-none aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+  )
+
+  const menuRow = ({
+    itemId,
+    disabled,
+    children,
+  }: {
+    itemId: string
+    disabled: boolean
+    children: ReactNode
+  }) => (
+    <div
+      ref={(node) => {
+        if (
+          node &&
+          itemId === resolvedHighlightedItemId &&
+          typeof node.scrollIntoView === "function"
+        ) {
+          node.scrollIntoView({ block: "nearest" })
+        }
+      }}
+      aria-disabled={disabled || undefined}
+      data-fill=""
+      data-highlighted={
+        itemId === resolvedHighlightedItemId ? "" : undefined
+      }
+      className={menuRowClassName}
+      tabIndex={disabled ? -1 : 0}
+      onClick={() => {
+        if (!disabled) activateItem(itemId)
+      }}
+      onPointerDown={(event) => event.preventDefault()}
+      onPointerMove={() => {
+        if (!disabled) setHighlightedItemId(itemId)
+      }}
+      onKeyDown={(event) => {
+        if (disabled || (event.key !== "Enter" && event.key !== " ")) {
+          return
+        }
+        event.preventDefault()
+        activateItem(itemId)
+      }}
+    >
+      {children}
+    </div>
+  )
+
   const editorOwnedContent = (
     <PopoverContent
       anchor={composerAnchor}
@@ -393,71 +522,39 @@ export function ButtonPlusMenu({
         role="group"
         className="empty:hidden [:not(:has(div:not([role=group])))]:hidden"
       >
-        {visibleActions.map((action) => {
+        {queriedActions.map((action) => {
           const state = getActionState(action.id)
           return (
             <div key={action.id}>
               <Tooltip disabled={!state.disabled}>
                 <TooltipTrigger
-                  render={
-                    <div
-                      ref={(node) => {
-                        if (
-                          node &&
-                          action.id === resolvedHighlightedActionId &&
-                          typeof node.scrollIntoView === "function"
-                        ) {
-                          node.scrollIntoView({ block: "nearest" })
-                        }
-                      }}
-                      aria-disabled={state.disabled || undefined}
-                      data-fill=""
-                      data-highlighted={
-                        action.id === resolvedHighlightedActionId
-                          ? ""
-                          : undefined
-                      }
-                      className={cn(
-                        floatingMenuItemActiveClassName,
-                        "menu-item-hoverable relative mx-2 flex h-(--floating-menu-item-height) cursor-pointer items-center gap-3 rounded-(--floating-menu-item-radius) px-2 py-1.5 text-sm outline-none select-none aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                      )}
-                      tabIndex={state.disabled ? -1 : 0}
-                      onClick={() => {
-                        if (!state.disabled) activateAction(action.id)
-                      }}
-                      onPointerDown={(event) => event.preventDefault()}
-                      onPointerMove={() => {
-                        if (!state.disabled) {
-                          setHighlightedActionId(action.id)
-                        }
-                      }}
-                      onKeyDown={(event) => {
-                        if (
-                          state.disabled ||
-                          (event.key !== "Enter" && event.key !== " ")
-                        ) {
-                          return
-                        }
-                        event.preventDefault()
-                        activateAction(action.id)
-                      }}
-                    />
-                  }
-                >
-                  <span className="relative flex size-5 shrink-0 items-center justify-center">
-                    <Icon icon={action.icon} glyphInset={0} slotSize={20} />
-                  </span>
-                  <span className="flex min-w-0 grow items-center gap-2.5">
-                    <span className="me-24 flex min-w-0 flex-1 items-baseline gap-3">
-                      <span className="text-foreground max-w-full min-w-0 shrink-0 truncate">
-                        {action.label}
-                      </span>
-                      <span className="min-w-0 truncate text-[var(--text-tertiary)]">
-                        {action.description}
-                      </span>
-                    </span>
-                  </span>
-                </TooltipTrigger>
+                  render={menuRow({
+                    itemId: action.id,
+                    disabled: state.disabled,
+                    children: (
+                      <>
+                        <span className="relative flex size-5 shrink-0 items-center justify-center">
+                          <Icon
+                            icon={action.icon}
+                            glyphInset={0}
+                            iconClassName={action.iconClassName}
+                            slotSize={20}
+                          />
+                        </span>
+                        <span className="flex min-w-0 grow items-center gap-2.5">
+                          <span className="me-24 flex min-w-0 flex-1 items-baseline gap-3">
+                            <span className="text-foreground max-w-full min-w-0 shrink-0 truncate">
+                              {action.label}
+                            </span>
+                            <span className="min-w-0 truncate text-[var(--text-tertiary)]">
+                              {action.description}
+                            </span>
+                          </span>
+                        </span>
+                      </>
+                    ),
+                  })}
+                />
                 <TooltipContent side="right" sideOffset={4}>
                   {state.disabledMessage}
                 </TooltipContent>
@@ -466,6 +563,66 @@ export function ButtonPlusMenu({
           )
         })}
       </div>
+      {isConnectorsLoading && (
+        <div role="group" aria-hidden="true" data-composer-menu-skeleton="">
+          {[0, 1].map((index) => (
+            <div
+              key={index}
+              className="mx-2 flex h-(--floating-menu-item-height) items-center gap-3 px-2 py-1.5"
+            >
+              <span className="bg-interactive-hover size-5 shrink-0 animate-pulse rounded-full" />
+              <span className="bg-interactive-hover h-3 w-44 animate-pulse rounded-full" />
+            </div>
+          ))}
+        </div>
+      )}
+      {queriedConnectors.length > 0 && (
+        <div role="group">
+          {queriedConnectors.map((connector) => {
+            const itemId = connectorItemId(connector.id)
+            return (
+              <div key={connector.id}>
+                {menuRow({
+                  itemId,
+                  disabled: false,
+                  children: (
+                    <>
+                      <span className="relative flex size-5 shrink-0 items-center justify-center">
+                        <Icon
+                          icon={RiPlugLine}
+                          glyphInset={0}
+                          slotSize={20}
+                        />
+                      </span>
+                      <span className="flex min-w-0 grow items-baseline gap-3">
+                        <span className="text-foreground max-w-full min-w-0 shrink-0 truncate">
+                          {connector.name}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-[var(--text-tertiary)]">
+                          {connector.description}
+                        </span>
+                        {connector.enabled && (
+                          <span className="shrink-0 text-xs text-[var(--text-tertiary)]">
+                            On
+                          </span>
+                        )}
+                      </span>
+                    </>
+                  ),
+                })}
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {isConnectorSectionVisible && actionQuery?.query === "" && (
+        <div
+          data-composer-menu-hint=""
+          className="mx-2 px-2 pt-2 pb-0.5 text-sm text-[var(--text-tertiary)] select-none"
+        >
+          Type to search actions &amp; connectors
+        </div>
+      )}
     </PopoverContent>
   )
 
@@ -492,7 +649,9 @@ export function ButtonPlusMenu({
                     aria-label="Add files and more"
                     aria-expanded={isTriggerMenuOpen}
                     onClick={() => {
-                      if (actionQuery) {
+                      if (actionQuery?.isSynthetic) {
+                        onCloseActionQuery?.()
+                      } else if (actionQuery) {
                         setDismissedActionQueryId(actionQuery.id)
                       }
                     }}
@@ -524,7 +683,7 @@ export function ButtonPlusMenu({
                 geometry="custom"
                 disabled={addFilesState.disabled}
                 className="mx-1.5 h-12 gap-3 rounded-[28px] p-1.5 text-base/6"
-                onClick={() => activateAction("add-files")}
+                onClick={() => activateItem("add-files")}
               >
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#414141]">
                   <Icon
@@ -545,12 +704,13 @@ export function ButtonPlusMenu({
                 value="web-search"
                 disabled={webSearchState.disabled}
                 className="mx-1.5 h-12 gap-3 rounded-[28px] p-1.5 text-base/6"
-                onClick={() => activateAction("web-search")}
+                onClick={() => activateItem("web-search")}
               >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#414141] [--web-search-icon-foreground:currentColor] [--web-search-icon-surface:transparent]">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#414141]">
                   <Icon
                     icon={webSearchAction.icon}
                     glyphInset={0}
+                    iconClassName={webSearchAction.iconClassName}
                     slotSize={20}
                   />
                 </span>
@@ -563,7 +723,7 @@ export function ButtonPlusMenu({
         </DropdownMenu>
         <Popover
           open={isActionQueryOpen}
-          onOpenChange={handleMenuOpenChange}
+          onOpenChange={handleActionQueryOpenChange}
         >
           {editorOwnedContent}
         </Popover>
@@ -571,9 +731,12 @@ export function ButtonPlusMenu({
     )
   }
 
+  // Desktop: the + button and typed "@"/"/" drive ONE editor-owned query
+  // session (ChatGPT's synthetic session) — clicking + opens the same menu
+  // that typing "@" does, and typing filters it.
   return (
-    <Popover open={isMenuOpen} onOpenChange={handleMenuOpenChange}>
-      <Tooltip disableHoverablePopup disabled={isMenuOpen}>
+    <Popover open={isActionQueryOpen} onOpenChange={handleActionQueryOpenChange}>
+      <Tooltip disableHoverablePopup disabled={isActionQueryOpen}>
         <TooltipTrigger
           render={<span className="inline-flex" />}
         >
@@ -583,13 +746,11 @@ export function ButtonPlusMenu({
             id="composer-plus-btn"
             data-testid="composer-plus-btn"
             aria-label="Add files and more"
-            aria-expanded={isTriggerMenuOpen}
+            aria-expanded={isActionQueryOpen}
             aria-haspopup="menu"
             onClick={() => {
-              if (actionQuery) setDismissedActionQueryId(actionQuery.id)
-              setIsTriggerMenuOpen((open) => !open)
-              setHighlightedActionId(initialActionId)
-              focusEditor()
+              setHighlightedItemId(null)
+              onOpenActionMenu?.()
             }}
             onPointerDown={(event) => event.preventDefault()}
           >

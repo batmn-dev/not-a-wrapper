@@ -1,8 +1,8 @@
 import {
-  ComposerPaperclipIcon,
-  ComposerWebSearchIcon,
-} from "@/lib/icons/composer"
-import type { ComponentType, SVGProps } from "react"
+  RiAttachmentLine,
+  RiGlobalLine,
+  type RemixiconComponentType,
+} from "@remixicon/react"
 
 export type ComposerActionId = "add-files" | "web-search"
 
@@ -12,7 +12,8 @@ export type ComposerActionDefinition = Readonly<{
   compactLabel: string
   description: string
   keywords: readonly string[]
-  icon: ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
+  icon: RemixiconComponentType
+  iconClassName: string | undefined
   behavior: "command" | "toggle"
 }>
 
@@ -28,7 +29,8 @@ export const composerActionRegistry = [
     compactLabel: "Files",
     description: "Upload from computer",
     keywords: ["attach", "image", "photo", "upload"],
-    icon: ComposerPaperclipIcon,
+    icon: RiAttachmentLine,
+    iconClassName: undefined,
     behavior: "command",
   },
   {
@@ -37,7 +39,8 @@ export const composerActionRegistry = [
     compactLabel: "Web search",
     description: "Find real-time news and info",
     keywords: ["browse", "internet", "search", "web"],
-    icon: ComposerWebSearchIcon,
+    icon: RiGlobalLine,
+    iconClassName: "text-[var(--web-search-icon-foreground)]",
     behavior: "toggle",
   },
 ] as const satisfies readonly ComposerActionDefinition[]
@@ -51,7 +54,10 @@ export function getComposerAction(actionId: ComposerActionId) {
 }
 
 export function getComposerActionQueryMatches(query: string) {
-  const normalizedQuery = query.trim().toLocaleLowerCase()
+  // ChatGPT parity: one case-insensitive substring check against the item's
+  // concatenated searchable text, with no query trimming — multi-word queries
+  // match across field boundaries in order ("files upload"), never reordered.
+  const normalizedQuery = query.toLocaleLowerCase()
   if (!normalizedQuery) return composerActionRegistry
 
   return composerActionRegistry.filter((action) =>

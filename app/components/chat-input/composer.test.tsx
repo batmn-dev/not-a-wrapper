@@ -106,6 +106,9 @@ vi.mock("@/lib/user-store/provider", () => ({
 
 vi.mock("convex/react", () => ({
   useConvex: () => ({}),
+  useConvexAuth: () => ({ isAuthenticated: false, isLoading: false }),
+  useMutation: () => vi.fn(),
+  useQuery: () => undefined,
 }))
 
 vi.mock("@/app/hooks/use-chat-draft", () => ({

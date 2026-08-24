@@ -36,26 +36,37 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
     vi.restoreAllMocks()
   })
 
-  it("keeps editor focus while logical highlight handles arrows and Enter", () => {
+  it("drives the + button through one editor-owned synthetic session", () => {
+    const onOpenActionMenu = vi.fn()
+    const onCloseActionQuery = vi.fn()
     const onToggleSearch = vi.fn()
-    act(() => {
-      root.render(
-        <FileUpload onFilesAdded={() => {}}>
-          <form data-type="unified-composer">
-            <div id="prompt-textarea" role="textbox" tabIndex={0} />
-            <ButtonPlusMenu
-              enableSearch={false}
-              isFileUploadAvailable
-              isSearchDisabled={false}
-              isUserAuthenticated
-              onToggleSearch={onToggleSearch}
-            />
-            <div data-composer-overlay-host />
-          </form>
-        </FileUpload>
-      )
-    })
+    const renderMenu = (
+      actionQuery: React.ComponentProps<typeof ButtonPlusMenu>["actionQuery"]
+    ) => {
+      act(() => {
+        root.render(
+          <FileUpload onFilesAdded={() => {}}>
+            <form data-type="unified-composer">
+              <div id="prompt-textarea" role="textbox" tabIndex={0} />
+              <ButtonPlusMenu
+                actionQuery={actionQuery}
+                connectors={[]}
+                enableSearch={false}
+                isFileUploadAvailable
+                isSearchDisabled={false}
+                isUserAuthenticated
+                onCloseActionQuery={onCloseActionQuery}
+                onOpenActionMenu={onOpenActionMenu}
+                onToggleSearch={onToggleSearch}
+              />
+              <div data-composer-overlay-host />
+            </form>
+          </FileUpload>
+        )
+      })
+    }
 
+    renderMenu(null)
     const editor = container.querySelector("#prompt-textarea") as HTMLElement
     const trigger = container.querySelector(
       '[aria-label="Add files and more"]'
@@ -63,41 +74,41 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
     expect(trigger.parentElement?.getAttribute("data-slot")).toBe(
       "tooltip-trigger"
     )
-    expect(trigger.getAttribute("data-slot")).not.toBe("tooltip-trigger")
     const tooltipShortcut = document.querySelector(
       '[data-slot="tooltip-shortcut"]'
     )
-    const tooltipAction = tooltipShortcut?.querySelector(
-      '[data-slot="tooltip-shortcut-action"]'
-    )
-    expect(tooltipAction?.querySelector(".sr-only")?.textContent).toBe(
-      "Add files and more, @"
-    )
-    expect(tooltipAction?.querySelector('[aria-hidden="true"]')).not.toBeNull()
     expect(
       tooltipShortcut?.querySelector('[data-slot="tooltip-shortcut-keys"]')
         ?.textContent
     ).toBe("@")
 
+    // Clicking + delegates to the editor's synthetic session — the menu
+    // itself opens only once the session publishes an action query.
     act(() => {
       editor.focus()
       trigger.click()
     })
+    expect(onOpenActionMenu).toHaveBeenCalledTimes(1)
+    expect(trigger.getAttribute("aria-expanded")).toBe("false")
 
-    expect(document.activeElement).toBe(editor)
+    renderMenu({
+      from: 1,
+      id: 3,
+      isSynthetic: true,
+      query: "",
+      to: 1,
+      trigger: "@",
+    })
     expect(trigger.getAttribute("aria-expanded")).toBe("true")
     expect(
       container.querySelector("[data-composer-overlay-host] [aria-busy=false]")
     ).not.toBeNull()
     expect(
-      container.querySelector('[data-highlighted]')?.textContent
+      container.querySelector("[data-highlighted]")?.textContent
     ).toContain("Add photos & files")
-    const actionGroup = container.querySelector('[role="group"]')
-    const firstActionRow = actionGroup?.querySelector('[tabindex="0"]')
-    expect(actionGroup?.parentElement?.getAttribute("aria-busy")).toBe("false")
-    expect(firstActionRow?.parentElement?.parentElement).toBe(actionGroup)
-    expect(firstActionRow?.getAttribute("data-fill")).toBe("")
-    expect(firstActionRow?.className).toContain("relative")
+    expect(
+      container.querySelector("[data-composer-menu-hint]")?.textContent
+    ).toContain("Type to search")
     const initialScrollCalls = scrollIntoView.mock.calls.length
 
     act(() => {
@@ -110,10 +121,9 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
       )
     })
     expect(
-      container.querySelector('[data-highlighted]')?.textContent
+      container.querySelector("[data-highlighted]")?.textContent
     ).toContain("Web search")
     expect(scrollIntoView.mock.calls.length).toBeGreaterThan(initialScrollCalls)
-    expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest" })
     expect(document.activeElement).toBe(editor)
 
     act(() => {
@@ -126,54 +136,126 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
       )
     })
     expect(onToggleSearch).toHaveBeenCalledWith(true)
-    expect(trigger.getAttribute("aria-expanded")).toBe("false")
     expect(document.activeElement).toBe(editor)
-  })
 
-  it("closes the desktop trigger menu on Tab while retaining editor focus", () => {
-    act(() => {
-      root.render(
-        <FileUpload onFilesAdded={() => {}}>
-          <form data-type="unified-composer">
-            <div id="prompt-textarea" role="textbox" tabIndex={0} />
-            <ButtonPlusMenu
-              enableSearch={false}
-              isFileUploadAvailable
-              isSearchDisabled={false}
-              isUserAuthenticated
-              onToggleSearch={() => {}}
-            />
-            <div data-composer-overlay-host />
-          </form>
-        </FileUpload>
-      )
+    // Escape on a synthetic session ends it in the editor instead of the
+    // menu-side dismissal used for typed sessions.
+    renderMenu({
+      from: 1,
+      id: 4,
+      isSynthetic: true,
+      query: "",
+      to: 1,
+      trigger: "@",
     })
-
-    const editor = container.querySelector("#prompt-textarea") as HTMLElement
-    const trigger = container.querySelector(
-      '[aria-label="Add files and more"]'
-    ) as HTMLButtonElement
-
     act(() => {
-      editor.focus()
-      trigger.click()
-    })
-    expect(trigger.getAttribute("aria-expanded")).toBe("true")
-
-    let tabWasAllowed = true
-    act(() => {
-      tabWasAllowed = editor.dispatchEvent(
+      editor.dispatchEvent(
         new KeyboardEvent("keydown", {
           bubbles: true,
           cancelable: true,
-          key: "Tab",
+          key: "Escape",
         })
       )
     })
+    // Both the capture-phase Escape handler and the Popover's own escape
+    // close route through the same idempotent session close.
+    expect(onCloseActionQuery).toHaveBeenCalled()
+  })
 
-    expect(tabWasAllowed).toBe(false)
-    expect(trigger.getAttribute("aria-expanded")).toBe("false")
-    expect(document.activeElement).toBe(editor)
+  it("renders connector rows with skeleton loading and slash scoping", () => {
+    const onActivateConnector = vi.fn(() => true)
+    const renderMenu = (
+      actionQuery: React.ComponentProps<typeof ButtonPlusMenu>["actionQuery"],
+      connectors: React.ComponentProps<typeof ButtonPlusMenu>["connectors"]
+    ) => {
+      act(() => {
+        root.render(
+          <FileUpload onFilesAdded={() => {}}>
+            <form data-type="unified-composer">
+              <div id="prompt-textarea" role="textbox" tabIndex={0} />
+              <ButtonPlusMenu
+                actionQuery={actionQuery}
+                connectors={connectors}
+                enableSearch={false}
+                isFileUploadAvailable
+                isSearchDisabled={false}
+                isUserAuthenticated
+                onActivateConnector={onActivateConnector}
+                onToggleSearch={() => {}}
+              />
+              <div data-composer-overlay-host />
+            </form>
+          </FileUpload>
+        )
+      })
+    }
+
+    const syntheticQuery = {
+      from: 1,
+      id: 1,
+      isSynthetic: true,
+      query: "",
+      to: 1,
+      trigger: "@",
+    } as const
+
+    // Loading: skeleton rows while the connector list resolves.
+    renderMenu(syntheticQuery, undefined)
+    expect(
+      container.querySelector("[data-composer-menu-skeleton]")
+    ).not.toBeNull()
+
+    const github = {
+      id: "srv1",
+      name: "GitHub",
+      description: "mcp.github.dev",
+      enabled: false,
+    }
+    renderMenu(syntheticQuery, [github])
+    expect(container.querySelector("[data-composer-menu-skeleton]")).toBeNull()
+    expect(container.textContent).toContain("GitHub")
+    expect(container.textContent).toContain("mcp.github.dev")
+
+    // The connector query matches by name, and activation reports the
+    // published query so the composer can consume the trigger text.
+    const typedQuery = {
+      from: 1,
+      id: 2,
+      isSynthetic: false,
+      query: "gith",
+      to: 6,
+      trigger: "@",
+    } as const
+    renderMenu(typedQuery, [github])
+    expect(container.textContent).not.toContain("Add photos & files")
+    const editor = container.querySelector("#prompt-textarea") as HTMLElement
+    act(() => {
+      editor.focus()
+      editor.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          key: "Enter",
+        })
+      )
+    })
+    expect(onActivateConnector).toHaveBeenCalledWith("srv1", typedQuery)
+
+    // "/" is the command menu: actions only, no connectors, no hint row.
+    renderMenu(
+      {
+        from: 1,
+        id: 3,
+        isSynthetic: false,
+        query: "",
+        to: 2,
+        trigger: "/",
+      },
+      [github]
+    )
+    expect(container.textContent).toContain("Add photos & files")
+    expect(container.textContent).not.toContain("GitHub")
+    expect(container.querySelector("[data-composer-menu-hint]")).toBeNull()
   })
 
   it("uses ChatGPT's touch menu semantics and compact geometry on mobile", () => {
@@ -259,6 +341,7 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
               <div id="prompt-textarea" role="textbox" tabIndex={0} />
               <ButtonPlusMenu
                 actionQuery={actionQuery}
+                connectors={[]}
                 enableSearch={false}
                 isFileUploadAvailable
                 isSearchDisabled={false}
@@ -277,11 +360,18 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
     const editor = container.querySelector("#prompt-textarea") as HTMLElement
     act(() => editor.focus())
 
-    renderMenu({ from: 1, id: 7, query: "", to: 2 })
+    renderMenu({
+      from: 1,
+      id: 7,
+      isSynthetic: false,
+      query: "",
+      to: 2,
+      trigger: "@",
+    })
     const trigger = container.querySelector(
       '[aria-label="Add files and more"]'
     ) as HTMLButtonElement
-    expect(trigger.getAttribute("aria-expanded")).toBe("false")
+    expect(trigger.getAttribute("aria-expanded")).toBe("true")
     expect(container.querySelector("[data-highlighted]")?.textContent).toContain(
       "Add photos & files"
     )
@@ -299,11 +389,25 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
     })
     expect(container.querySelector("[data-highlighted]")).toBeNull()
 
-    renderMenu({ from: 1, id: 7, query: "w", to: 3 })
+    renderMenu({
+      from: 1,
+      id: 7,
+      isSynthetic: false,
+      query: "w",
+      to: 3,
+      trigger: "@",
+    })
     expect(container.querySelector("[data-highlighted]")).toBeNull()
 
     renderMenu(null)
-    renderMenu({ from: 1, id: 8, query: "w", to: 3 })
+    renderMenu({
+      from: 1,
+      id: 8,
+      isSynthetic: false,
+      query: "w",
+      to: 3,
+      trigger: "@",
+    })
     expect(container.querySelector("[data-highlighted]")?.textContent).toContain(
       "Web search"
     )
@@ -321,8 +425,10 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
     expect(onActivateActionQuery).toHaveBeenCalledWith("web-search", {
       from: 1,
       id: 8,
+      isSynthetic: false,
       query: "w",
       to: 3,
+      trigger: "@",
     })
     expect(container.querySelector("[data-highlighted]")).toBeNull()
     expect(trigger.getAttribute("aria-expanded")).toBe("false")

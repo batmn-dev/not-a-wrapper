@@ -1491,6 +1491,15 @@
     }
   }
 
+  /* The thread footer's gradient backdrop (ChatGPT threadFooterContentFade
+   * ::after, verified live 2026-08-24): a full-width, 80%-opaque surface
+   * behind the sticky footer whose top fades in over 32px, so thread content
+   * scrolling under the composer dims instead of hitting a hard edge. The
+   * footer must be `isolate` so z-index -1 stays inside its stacking context.
+   * ChatGPT also ships a >=720px container-query variant that clamps the
+   * backdrop to the thread column and adds a horizontal edge fade, but it is
+   * DEAD CODE live: the rule targets a container name their DOM never sets,
+   * so the shipped behavior everywhere is this full-width backdrop. */
   .content-fade::after {
     content: "";
     position: absolute;
@@ -1505,42 +1514,17 @@
     -webkit-mask-image: linear-gradient(
       to bottom,
       transparent 0,
-      black 32px,
+      black var(--thread-footer-content-fade-height, 32px),
       black 100%
     );
     mask-image: linear-gradient(
       to bottom,
       transparent 0,
-      black 32px,
+      black var(--thread-footer-content-fade-height, 32px),
       black 100%
     );
     -webkit-mask-repeat: no-repeat;
     mask-repeat: no-repeat;
-  }
-
-  @container main (min-width: 720px) {
-    .content-fade::after {
-      -webkit-mask-image:
-        linear-gradient(to bottom, transparent 0, black 32px, black 100%),
-        linear-gradient(
-          to right,
-          transparent 0,
-          black 32px,
-          black calc(100% - 32px),
-          transparent 100%
-        );
-      mask-image:
-        linear-gradient(to bottom, transparent 0, black 32px, black 100%),
-        linear-gradient(
-          to right,
-          transparent 0,
-          black 32px,
-          black calc(100% - 32px),
-          transparent 100%
-        );
-      -webkit-mask-composite: source-in;
-      mask-composite: intersect;
-    }
   }
 
   /* Extends invisible hit target without changing the 36px visible composer control. */

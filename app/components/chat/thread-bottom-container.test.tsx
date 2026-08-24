@@ -66,21 +66,28 @@ describe("ThreadBottomContainer", () => {
     const footer = container.querySelector("#thread-bottom-container")
     const composer = container.querySelector('[data-testid="composer"]')
 
-    expect(footer?.children).toHaveLength(3)
+    expect(footer?.children).toHaveLength(4)
     expect(
       footer?.children[0].hasAttribute("data-thread-footer-overflow-spacer")
     ).toBe(true)
     expect(
-      footer?.children[1].hasAttribute("data-thread-scroll-control-layer")
+      footer?.children[1].hasAttribute("data-thread-above-composer")
     ).toBe(true)
-    expect(footer?.children[2].id).toBe("thread-bottom")
     expect(
-      footer?.children[2].querySelector("[data-thread-bottom-content]")
+      footer?.children[1].querySelector("[data-thread-above-composer-slot]")
+        ?.classList
+    ).toContain("empty:hidden")
+    expect(
+      footer?.children[2].hasAttribute("data-thread-scroll-control-layer")
+    ).toBe(true)
+    expect(footer?.children[3].id).toBe("thread-bottom")
+    expect(
+      footer?.children[3].querySelector("[data-thread-bottom-content]")
     ).not.toBeNull()
     expect(footer?.classList.contains("pointer-events-none")).toBe(true)
     expect(footer?.classList.contains("print:hidden")).toBe(true)
     expect(footer?.classList).toContain("bottom-0")
-    expect(footer?.classList.contains("content-fade")).toBe(false)
+    expect(footer?.classList.contains("content-fade")).toBe(true)
     expect(
       [...(footer?.classList ?? [])].some((name) =>
         name.startsWith("pb-[var(--safe-area-inset-bottom")

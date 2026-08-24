@@ -458,12 +458,12 @@ function ChatInner({
                 className="flex justify-center"
                 data-splash-headline-option="WHATS_ON_YOUR_MIND"
               >
-                <div className="hidden text-center sm:mb-[22px] sm:block">
+                <div className="hidden text-center sm:mb-[22px] sm:block [view-transition-name:var(--vt-splash-screen-headline)]">
                   <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
                     What&apos;s on your mind?
                   </h1>
                 </div>
-                <div className="flex h-full w-full shrink flex-col items-center justify-center px-4 text-center sm:hidden">
+                <div className="flex h-full w-full shrink flex-col items-center justify-center px-4 text-center sm:hidden [view-transition-name:var(--vt-splash-screen-headline)]">
                   <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
                     What&apos;s on your mind?
                   </h1>

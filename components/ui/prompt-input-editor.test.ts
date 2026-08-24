@@ -10,9 +10,11 @@ import {
   promptInputEntitiesEqual,
   promptInputSchema,
   readPromptInputActionQuery,
+  readPromptInputActionQuerySession,
   readPromptInputDocument,
   readPromptInputEntities,
   replacePromptInputActionQuery,
+  toggleSyntheticPromptInputActionQuery,
   type PromptInputEntity,
 } from "./prompt-input-editor"
 
@@ -20,6 +22,7 @@ const webSearchEntity: PromptInputEntity = {
   id: "web-search",
   kind: "capability",
   label: "Web search",
+  iconUrl: null,
 }
 
 describe("PromptInput structured document", () => {
@@ -57,18 +60,228 @@ describe("PromptInput structured document", () => {
       )
     }
 
-    expect(readPromptInputActionQuery(withSelectionAtEnd("@web"))).toEqual({
+    const mention = (from: number, query: string, to: number) => ({
+      from,
+      query,
+      to,
+      trigger: "@",
+      isSynthetic: false,
+    })
+
+    expect(readPromptInputActionQuery(withSelectionAtEnd("@web"))).toEqual(
+      mention(1, "web", 5)
+    )
+    expect(readPromptInputActionQuery(withSelectionAtEnd("hello @w"))).toEqual(
+      mention(7, "w", 9)
+    )
+    expect(
+      readPromptInputActionQuery(withSelectionAtEnd("@add photos"))
+    ).toEqual(mention(1, "add photos", 12))
+    expect(readPromptInputActionQuery(withSelectionAtEnd("@a @b c"))).toEqual(
+      mention(4, "b c", 8)
+    )
+    expect(readPromptInputActionQuery(withSelectionAtEnd("hello@w"))).toBeNull()
+    expect(readPromptInputActionQuery(withSelectionAtEnd("@ "))).toBeNull()
+    expect(readPromptInputActionQuery(withSelectionAtEnd("@ web"))).toBeNull()
+
+    // "+" is a mention trigger with identical boundary rules (ChatGPT hI).
+    expect(readPromptInputActionQuery(withSelectionAtEnd("+web s"))).toEqual({
+      from: 1,
+      query: "web s",
+      to: 7,
+      trigger: "+",
+      isSynthetic: false,
+    })
+    expect(readPromptInputActionQuery(withSelectionAtEnd("2+2"))).toBeNull()
+  })
+
+  it("renders tool pills with an icon image and skillMention symbol", () => {
+    const node = promptInputSchema.nodes.composerEntity.create({
+      id: "connector:abc",
+      kind: "tool",
+      label: "GitHub",
+      iconUrl: "/icons/github.png",
+    })
+    const spec = node.type.spec.toDOM!(node) as unknown as unknown[]
+    const attrs = spec[1] as Record<string, string>
+    expect(attrs["data-symbol"]).toBe("skillMention")
+    expect(attrs["data-system-hint-type"]).toBe("connector:abc")
+    // Icon'd pills wrap icon + label in an inner primary-text container
+    // (ChatGPT renders connector labels in primary, not the pill accent).
+    const inner = spec[2] as unknown[]
+    expect(inner[0]).toBe("span")
+    expect((inner[1] as Record<string, string>).class).toContain(
+      "text-foreground"
+    )
+    const iconWrapper = inner[2] as unknown[]
+    expect(iconWrapper[0]).toBe("span")
+    expect((iconWrapper[2] as unknown[])[1]).toMatchObject({
+      src: "/icons/github.png",
+    })
+    expect((inner[3] as unknown[])[2]).toBe("GitHub")
+  })
+
+  it("keeps slash commands space-terminated and lets a later slash own the tail", () => {
+    const withSelectionAtEnd = (value: string) => {
+      const document = createPromptInputDocument(value)
+      const state = EditorState.create({
+        doc: document,
+        schema: promptInputSchema,
+      })
+      return state.apply(
+        state.tr.setSelection(
+          TextSelection.create(document, document.content.size - 1)
+        )
+      )
+    }
+
+    expect(readPromptInputActionQuery(withSelectionAtEnd("/web"))).toEqual({
       from: 1,
       query: "web",
       to: 5,
+      trigger: "/",
+      isSynthetic: false,
     })
-    expect(readPromptInputActionQuery(withSelectionAtEnd("hello @w"))).toEqual({
-      from: 7,
-      query: "w",
-      to: 9,
+    // Space ends the slash query entirely — unlike "@" it never spans words.
+    expect(readPromptInputActionQuery(withSelectionAtEnd("/web s"))).toBeNull()
+    // A later "/" that starts a word owns the tail: while its query is
+    // stale, the earlier "@" mention must NOT reactivate (ChatGPT rule).
+    expect(readPromptInputActionQuery(withSelectionAtEnd("@add /web"))).toEqual(
+      {
+        from: 6,
+        query: "web",
+        to: 10,
+        trigger: "/",
+        isSynthetic: false,
+      }
+    )
+    expect(
+      readPromptInputActionQuery(withSelectionAtEnd("@add /web s"))
+    ).toBeNull()
+    expect(readPromptInputActionQuery(withSelectionAtEnd("a/b"))).toBeNull()
+  })
+
+  it("runs synthetic sessions from a mapped anchor until adoption or close", () => {
+    let state = EditorState.create({
+      doc: createPromptInputDocument("hello "),
+      plugins: createPromptInputPlugins(() => "Ask anything"),
+      schema: promptInputSchema,
     })
-    expect(readPromptInputActionQuery(withSelectionAtEnd("hello@w"))).toBeNull()
-    expect(readPromptInputActionQuery(withSelectionAtEnd("@ "))).toBeNull()
+    const dispatch = (transaction: Parameters<typeof state.apply>[0]) => {
+      state = state.apply(transaction)
+    }
+    state = state.apply(
+      state.tr.setSelection(
+        TextSelection.create(state.doc, state.doc.content.size - 1)
+      )
+    )
+
+    toggleSyntheticPromptInputActionQuery(state, dispatch)
+    expect(readPromptInputActionQuerySession(state)).toMatchObject({
+      active: true,
+      isSynthetic: true,
+      query: "",
+      trigger: "@",
+    })
+
+    dispatch(state.tr.insertText("add photos"))
+    expect(readPromptInputActionQuerySession(state)).toMatchObject({
+      active: true,
+      isSynthetic: true,
+      query: "add photos",
+    })
+
+    // Typing a trigger at/after the anchor converts the session to typed.
+    dispatch(state.tr.insertText(" @web"))
+    expect(readPromptInputActionQuerySession(state)).toMatchObject({
+      active: true,
+      isSynthetic: false,
+      query: "web",
+      trigger: "@",
+    })
+
+    // Toggling while typed opens a fresh synthetic session at the caret;
+    // toggling while synthetic closes it.
+    toggleSyntheticPromptInputActionQuery(state, dispatch)
+    expect(readPromptInputActionQuerySession(state)).toMatchObject({
+      active: true,
+      isSynthetic: true,
+      query: "",
+    })
+    toggleSyntheticPromptInputActionQuery(state, dispatch)
+    expect(readPromptInputActionQuerySession(state).active).toBe(false)
+
+    // A caret before the anchor closes the session.
+    toggleSyntheticPromptInputActionQuery(state, dispatch)
+    dispatch(state.tr.setSelection(TextSelection.create(state.doc, 1)))
+    expect(readPromptInputActionQuerySession(state).active).toBe(false)
+  })
+
+  it("consumes a synthetic query range without expecting a trigger character", () => {
+    let state = EditorState.create({
+      doc: createPromptInputDocument(""),
+      plugins: createPromptInputPlugins(() => "Ask anything"),
+      schema: promptInputSchema,
+    })
+    const dispatch = (transaction: Parameters<typeof state.apply>[0]) => {
+      state = state.apply(transaction)
+    }
+    toggleSyntheticPromptInputActionQuery(state, dispatch)
+    dispatch(state.tr.insertText("web sea"))
+    const session = readPromptInputActionQuerySession(state)
+    expect(session).toMatchObject({ isSynthetic: true, query: "web sea" })
+
+    expect(
+      replacePromptInputActionQuery(
+        state,
+        dispatch,
+        {
+          id: 1,
+          from: session.range!.from,
+          to: session.range!.to,
+          query: session.query,
+          trigger: session.trigger,
+          isSynthetic: true,
+        },
+        webSearchEntity
+      )
+    ).toBe(true)
+    expect(readPromptInputDocument(state.doc)).toBe("")
+    expect(readPromptInputEntities(state.doc)).toEqual([webSearchEntity])
+    expect(readPromptInputActionQuerySession(state).active).toBe(false)
+  })
+
+  it("keeps activation valid for the published range after the caret moves", () => {
+    const document = createPromptInputDocument("hello @web search")
+    let state = EditorState.create({
+      doc: document,
+      plugins: createPromptInputPlugins(() => "Ask anything"),
+      schema: promptInputSchema,
+    })
+    state = state.apply(
+      state.tr.setSelection(
+        TextSelection.create(document, document.content.size - 1)
+      )
+    )
+    const query = readPromptInputActionQuery(state)
+    expect(query).toMatchObject({ query: "web search" })
+
+    state = state.apply(
+      state.tr.setSelection(TextSelection.create(state.doc, 1))
+    )
+    const dispatch = (transaction: Parameters<typeof state.apply>[0]) => {
+      state = state.apply(transaction)
+    }
+    expect(
+      replacePromptInputActionQuery(
+        state,
+        dispatch,
+        { ...query!, id: 1 },
+        webSearchEntity
+      )
+    ).toBe(true)
+    expect(readPromptInputDocument(state.doc)).toBe("hello ")
+    expect(readPromptInputEntities(state.doc)).toEqual([webSearchEntity])
   })
 
   it("replaces the exact @ query range with one typed capability entity", () => {

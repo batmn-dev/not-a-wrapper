@@ -155,7 +155,7 @@ describe("floating surface contract", () => {
     expect(composerMenu).not.toContain("composerPlusMenuItemClassName")
     expect(composerMenu).not.toContain("rounded-[16px]")
     expect(composerMenu).toContain("composerActionRegistry")
-    expect(composerMenu).toContain("visibleActions.map")
+    expect(composerMenu).toContain("queriedActions.map")
     expect(composerMenu).not.toContain("<CommandInput")
     expect(composerMenu).not.toContain('heading="Actions"')
     expect(composerMenu).toContain("anchor={composerAnchor}")
@@ -164,10 +164,8 @@ describe("floating surface contract", () => {
     expect(composerMenu).toContain("data-highlighted={")
     expect(composerMenu).not.toContain("focusInitialAction")
     expect(composerMenu).toContain("action.description")
-    expect(composerMenu).toContain(
-      "aria-disabled={state.disabled || undefined}"
-    )
-    expect(composerMenu).toContain("if (!state.disabled) activateAction")
+    expect(composerMenu).toContain("aria-disabled={disabled || undefined}")
+    expect(composerMenu).toContain("if (!disabled) activateItem")
     expect(composerMenu).not.toContain("cursor-not-allowed opacity-50")
     expect(sidebarMenu).not.toContain("sidebarMenuRadioItemClassName")
     expect(sidebarMenu).not.toContain("rounded-[16px]")

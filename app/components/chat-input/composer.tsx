@@ -44,8 +44,11 @@ import { StopBulkRoundedIcon } from "@/lib/icons"
 import { getModelInfo } from "@/lib/models"
 import { useUser } from "@/lib/user-store/provider"
 import { cn, debounce } from "@/lib/utils"
+import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
+import { api } from "@/convex/_generated/api"
+import type { Id } from "@/convex/_generated/dataModel"
 import { RiArrowUpLine } from "@remixicon/react"
-import { useConvex } from "convex/react"
+import { useConvex, useMutation } from "convex/react"
 import {
   forwardRef,
   useCallback,
@@ -57,7 +60,7 @@ import {
 } from "react"
 import { flushSync } from "react-dom"
 import { PromptSystem } from "../suggestions/prompt-system"
-import { ButtonPlusMenu } from "./button-plus-menu"
+import { ButtonPlusMenu, type ComposerMenuConnector } from "./button-plus-menu"
 import {
   getComposerAction,
   type ComposerActionId,
@@ -281,6 +284,56 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       },
       []
     )
+
+    // MCP connectors surface in the @ menu the way ChatGPT surfaces its
+    // connectors; activation toggles the server the runtime already consults
+    // per turn. `undefined` while the per-user query resolves drives the
+    // menu's skeleton rows.
+    const { data: mcpServers } = usePerUserQuery(
+      api.mcpServers.list,
+      isUserAuthenticated ? {} : "skip"
+    )
+    const menuConnectors = useMemo<
+      readonly ComposerMenuConnector[] | undefined
+    >(() => {
+      if (!isUserAuthenticated) return []
+      if (mcpServers === undefined) return undefined
+      return mcpServers.map((server) => {
+        let host = ""
+        try {
+          host = new URL(server.url).host
+        } catch {
+          host = server.url
+        }
+        return {
+          id: server._id,
+          name: server.name,
+          description: host,
+          enabled: server.enabled,
+        }
+      })
+    }, [isUserAuthenticated, mcpServers])
+    const toggleMcpServer = useMutation(api.mcpServers.toggleEnabled)
+    const handleActivateConnector = useCallback(
+      (connectorId: string, query: PromptInputActionQuery) => {
+        const editor = editorRef.current
+        if (!editor) return false
+        if (!editor.replaceActionQuery(query)) return false
+        void toggleMcpServer({
+          serverId: connectorId as Id<"mcpServers">,
+        }).catch(() => {
+          toast({ title: "Couldn’t update the connector", status: "error" })
+        })
+        return true
+      },
+      [toggleMcpServer]
+    )
+    const handleOpenActionMenu = useCallback(() => {
+      editorRef.current?.toggleSyntheticActionQuery()
+    }, [])
+    const handleCloseActionQuery = useCallback(() => {
+      editorRef.current?.endActionQuery()
+    }, [])
 
     // Anonymous chat cannot use authenticated storage, so guests' generated
     // pastes cross the turn seam as ordinary turn text.
@@ -652,6 +705,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   onActivateActionQuery={handleActivateActionQuery}
                   onToggleSearch={setEnableSearch}
                   isSearchDisabled={isSearchDisabled}
+                  connectors={menuConnectors}
+                  onActivateConnector={handleActivateConnector}
+                  onOpenActionMenu={handleOpenActionMenu}
+                  onCloseActionQuery={handleCloseActionQuery}
                 />
               </PromptInputActions>
               <PromptInputTextarea
@@ -694,7 +751,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   >
                     <Button
                       size="sm"
-                      className="composer-submit-btn composer-submit-button-color can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] size-9 rounded-full p-0 transition-colors duration-150 ease-out"
+                      className="composer-submit-btn composer-submit-button-color can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] size-9 rounded-full p-0 transition-colors duration-150 ease-out [view-transition-name:var(--vt-composer-speech-button)]"
                       disabled={
                         primaryAction.mode === "stop" && primaryAction.disabled
                       }
