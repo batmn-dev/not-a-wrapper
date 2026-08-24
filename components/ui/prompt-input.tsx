@@ -36,6 +36,7 @@ import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { ComposerIconButton } from "@/components/ui/composer-icon-button"
 import { Icon } from "@/components/ui/icon"
 import {
+  createActionQueryPublisher,
   createPromptInputDocument,
   createPromptInputPlugins,
   endPromptInputActionQuery,
@@ -43,7 +44,6 @@ import {
   type PromptInputEntity,
   promptInputEntitiesEqual,
   promptInputSchema,
-  readPromptInputActionQuerySession,
   readPromptInputDocument,
   readPromptInputEntities,
   replacePromptInputActionQuery,
@@ -626,46 +626,9 @@ const PromptInputTextarea = React.forwardRef<
 
       let view: EditorView
       let paintController: ComposerPaintController | undefined
-      let actionQueryId = 0
-      let lastActionQueryRange: Omit<PromptInputActionQuery, "id"> | null = null
-      const publishActionQuery = (nextState: EditorState) => {
-        const session = readPromptInputActionQuerySession(nextState)
-        const nextRange =
-          session.active && session.range
-            ? {
-                from: session.range.from,
-                to: session.range.to,
-                query: session.query,
-                trigger: session.trigger,
-                isSynthetic: session.isSynthetic,
-              }
-            : null
-        if (
-          lastActionQueryRange?.from === nextRange?.from &&
-          lastActionQueryRange?.to === nextRange?.to &&
-          lastActionQueryRange?.query === nextRange?.query &&
-          lastActionQueryRange?.trigger === nextRange?.trigger &&
-          lastActionQueryRange?.isSynthetic === nextRange?.isSynthetic
-        ) {
-          return
-        }
-
-        // A new id marks a new session, which clears the menu's Escape
-        // dismissal — matching ChatGPT's dismissedMatch keyed by trigger
-        // position and symbol.
-        if (
-          nextRange &&
-          (!lastActionQueryRange ||
-            nextRange.from !== lastActionQueryRange.from ||
-            nextRange.trigger !== lastActionQueryRange.trigger)
-        ) {
-          actionQueryId += 1
-        }
-        lastActionQueryRange = nextRange
-        callbacks.current.onActionQueryChange?.(
-          nextRange ? { ...nextRange, id: actionQueryId } : null
-        )
-      }
+      const publishActionQuery = createActionQueryPublisher((actionQuery) =>
+        callbacks.current.onActionQueryChange?.(actionQuery)
+      )
       const state = EditorState.create({
         doc: createPromptInputDocument(
           callbacks.current.value,

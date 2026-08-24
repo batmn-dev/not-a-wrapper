@@ -152,6 +152,12 @@ type PromptInputActionQuerySessionState = Readonly<{
   query: string
   range: { from: number; to: number } | null
   isSynthetic: boolean
+  /** Session identity. A new id marks a new session — it increments whenever
+   * a session opens at a new trigger position or with a new trigger symbol,
+   * matching ChatGPT's dismissedMatch key — so menu-side Escape dismissal
+   * clears exactly when a new session starts. Closed states keep the last id
+   * so reopening at the same position still counts as a new session. */
+  id: number
 }>
 
 type PromptInputActionQueryMeta =
@@ -164,6 +170,26 @@ const inactiveActionQuerySession: PromptInputActionQuerySessionState = {
   query: "",
   range: null,
   isSynthetic: false,
+  id: 0,
+}
+
+function closedActionQuerySession(
+  previous: PromptInputActionQuerySessionState
+): PromptInputActionQuerySessionState {
+  return previous.active
+    ? { ...inactiveActionQuerySession, id: previous.id }
+    : previous
+}
+
+function nextActionQuerySessionId(
+  previous: PromptInputActionQuerySessionState,
+  next: { trigger: PromptInputActionQueryTrigger; from: number }
+) {
+  return !previous.active ||
+    previous.range?.from !== next.from ||
+    previous.trigger !== next.trigger
+    ? previous.id + 1
+    : previous.id
 }
 
 const promptInputActionQueryPluginKey =
@@ -178,10 +204,10 @@ function createActionQueryPlugin() {
         const meta = transaction.getMeta(promptInputActionQueryPluginKey) as
           | PromptInputActionQueryMeta
           | undefined
-        if (meta && "close" in meta) return inactiveActionQuerySession
+        if (meta && "close" in meta) return closedActionQuerySession(previous)
         if (meta && "toggleSynthetic" in meta) {
           if (previous.active && previous.isSynthetic) {
-            return inactiveActionQuerySession
+            return closedActionQuerySession(previous)
           }
           const caret = newState.selection.from
           return {
@@ -190,10 +216,14 @@ function createActionQueryPlugin() {
             query: "",
             range: { from: caret, to: caret },
             isSynthetic: true,
+            id: nextActionQuerySessionId(previous, {
+              trigger: "@",
+              from: caret,
+            }),
           }
         }
         if (transaction.getMeta("externalValue")) {
-          return inactiveActionQuerySession
+          return closedActionQuerySession(previous)
         }
 
         const selection = newState.selection
@@ -203,7 +233,7 @@ function createActionQueryPlugin() {
             (!selection.empty && !selection.eq(oldState.selection)) ||
             selection.from < anchor
           ) {
-            return inactiveActionQuerySession
+            return closedActionQuerySession(previous)
           }
           const typed = readTypedActionQuery(selection.$from)
           if (typed && typed.from >= anchor) {
@@ -213,6 +243,7 @@ function createActionQueryPlugin() {
               query: typed.query,
               range: { from: typed.from, to: typed.to },
               isSynthetic: false,
+              id: nextActionQuerySessionId(previous, typed),
             }
           }
           const text = newState.doc.textBetween(
@@ -221,13 +252,17 @@ function createActionQueryPlugin() {
             "\n",
             "\n"
           )
-          if (text.includes("\n")) return inactiveActionQuerySession
+          if (text.includes("\n")) return closedActionQuerySession(previous)
           return {
             active: true,
             trigger: previous.trigger,
             query: text,
             range: { from: anchor, to: selection.from },
             isSynthetic: true,
+            id: nextActionQuerySessionId(previous, {
+              trigger: previous.trigger,
+              from: anchor,
+            }),
           }
         }
 
@@ -236,7 +271,7 @@ function createActionQueryPlugin() {
         }
         const typed = readTypedActionQuery(selection.$from)
         if (!typed) {
-          return previous.active ? inactiveActionQuerySession : previous
+          return previous.active ? closedActionQuerySession(previous) : previous
         }
         return {
           active: true,
@@ -244,6 +279,7 @@ function createActionQueryPlugin() {
           query: typed.query,
           range: { from: typed.from, to: typed.to },
           isSynthetic: false,
+          id: nextActionQuerySessionId(previous, typed),
         }
       },
     },
@@ -255,6 +291,43 @@ function readPromptInputActionQuerySession(state: EditorState) {
     promptInputActionQueryPluginKey.getState(state) ??
     inactiveActionQuerySession
   )
+}
+
+/**
+ * Diff-publishes the plugin's session state to a callback. The plugin owns
+ * ChatGPT's re-evaluation rules (typed sessions on doc changes, synthetic
+ * sessions every transaction) and session identity; publishing only suppresses
+ * consecutive equal queries, so consumers see each session change exactly once.
+ */
+function createActionQueryPublisher(
+  onActionQueryChange: (actionQuery: PromptInputActionQuery | null) => void
+) {
+  let last: PromptInputActionQuery | null = null
+  return (state: EditorState) => {
+    const session = readPromptInputActionQuerySession(state)
+    const next: PromptInputActionQuery | null =
+      session.active && session.range
+        ? {
+            id: session.id,
+            from: session.range.from,
+            to: session.range.to,
+            query: session.query,
+            trigger: session.trigger,
+            isSynthetic: session.isSynthetic,
+          }
+        : null
+    if (
+      last?.from === next?.from &&
+      last?.to === next?.to &&
+      last?.query === next?.query &&
+      last?.trigger === next?.trigger &&
+      last?.isSynthetic === next?.isSynthetic
+    ) {
+      return
+    }
+    last = next
+    onActionQueryChange(next)
+  }
 }
 
 function toggleSyntheticPromptInputActionQuery(
@@ -325,6 +398,7 @@ function replacePromptInputActionQuery(
 
 export {
   createActionQueryPlugin,
+  createActionQueryPublisher,
   endPromptInputActionQuery,
   readPromptInputActionQuery,
   readPromptInputActionQuerySession,

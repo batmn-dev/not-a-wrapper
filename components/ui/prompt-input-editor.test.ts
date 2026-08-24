@@ -217,6 +217,37 @@ describe("PromptInput structured document", () => {
     expect(readPromptInputActionQuerySession(state).active).toBe(false)
   })
 
+  it("keys session identity to trigger position and symbol", () => {
+    let state = EditorState.create({
+      doc: createPromptInputDocument(""),
+      plugins: createPromptInputPlugins(() => "Ask anything"),
+      schema: promptInputSchema,
+    })
+    const dispatch = (transaction: Parameters<typeof state.apply>[0]) => {
+      state = state.apply(transaction)
+    }
+
+    dispatch(state.tr.insertText("@"))
+    const opened = readPromptInputActionQuerySession(state)
+    expect(opened.active).toBe(true)
+
+    // Refining the query in place is the SAME session (Escape dismissal must
+    // survive it — ChatGPT's dismissedMatch is keyed by position + symbol).
+    dispatch(state.tr.insertText("w"))
+    const refined = readPromptInputActionQuerySession(state)
+    expect(refined).toMatchObject({ active: true, query: "w", id: opened.id })
+
+    // Removing the trigger closes the session but keeps the id, so reopening
+    // at the same position still counts as a new session.
+    dispatch(state.tr.delete(1, 3))
+    expect(readPromptInputActionQuerySession(state)).toMatchObject({
+      active: false,
+      id: opened.id,
+    })
+    dispatch(state.tr.insertText("@"))
+    expect(readPromptInputActionQuerySession(state).id).toBe(opened.id + 1)
+  })
+
   it("consumes a synthetic query range without expecting a trigger character", () => {
     let state = EditorState.create({
       doc: createPromptInputDocument(""),

@@ -1,5 +1,6 @@
 import {
   createActionQueryPlugin,
+  createActionQueryPublisher,
   endPromptInputActionQuery,
   readPromptInputActionQuery,
   readPromptInputActionQuerySession,
@@ -88,6 +89,7 @@ export type {
 }
 
 export {
+  createActionQueryPublisher,
   createPromptInputDocument,
   createPromptInputPlugins,
   deleteComposerEntityBackward,
