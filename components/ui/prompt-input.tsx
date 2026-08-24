@@ -895,11 +895,18 @@ function PromptInputAction({
   return (
     <Tooltip {...tooltipProps}>
       <TooltipTrigger
-        render={<span className="inline-flex" />}
         disabled={disabled}
-      >
-        {trigger}
-      </TooltipTrigger>
+        render={(triggerProps) => (
+          <span {...triggerProps} className="inline-flex">
+            {React.cloneElement(
+              trigger as React.ReactElement<React.AriaAttributes>,
+              {
+                "aria-describedby": triggerProps["aria-describedby"],
+              }
+            )}
+          </span>
+        )}
+      />
       <TooltipContent side={side} hideArrow={hideArrow} className={className}>
         {tooltip}
       </TooltipContent>

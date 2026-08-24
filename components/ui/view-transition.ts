@@ -79,7 +79,7 @@ function runViewTransition({
 
   try {
     const transition =
-      types.length > 0 && "ViewTransitionTypeSet" in transitionDocument
+      types.length > 0 && "ViewTransitionTypeSet" in window
         ? startViewTransition.call(transitionDocument, {
             update: runUpdate,
             types: [...types],

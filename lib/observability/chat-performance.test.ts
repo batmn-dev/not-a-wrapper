@@ -106,6 +106,16 @@ describe("event schema allow-list", () => {
     ).toBe(false)
   })
 
+  it.each([
+    "composer.keystroke_to_next_paint",
+    "composer.keystroke_to_settled_paint",
+  ])("requires durationMs for %s", (event) => {
+    expect(validateChatPerfEvent(event, {})).toEqual({
+      ok: false,
+      reason: "missing required field: durationMs",
+    })
+  })
+
   it("rejects any field carrying a credential-shaped value", () => {
     expect(
       validateChatPerfEvent("stream_terminal", {

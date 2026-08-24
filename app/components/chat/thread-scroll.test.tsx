@@ -345,9 +345,11 @@ describe("ThreadScrollEdge", () => {
     expect(scrollIntoView).toHaveBeenCalledOnce()
   })
 
-  it("tracks root-owned footer and keyboard insets for scroll-button visibility", () => {
-    container.style.setProperty("--sticky-padding-bottom", "108px")
-    container.style.setProperty("--keyboard-safe-area-bottom", "24px")
+  it("tracks the complete root-owned bottom safe area for scroll-button visibility", () => {
+    container.style.setProperty(
+      "--scroll-root-safe-area-inset-bottom",
+      "184px"
+    )
 
     act(() => {
       root.render(
@@ -366,17 +368,19 @@ describe("ThreadScrollEdge", () => {
 
     expect(
       intersectionObservers.some(
-        (observer) => observer.rootMargin === "0px 0px 132px"
+        (observer) => observer.rootMargin === "0px 0px 184px"
       )
     ).toBe(true)
 
-    container.style.setProperty("--sticky-padding-bottom", "204px")
-    container.style.setProperty("--keyboard-safe-area-bottom", "48px")
+    container.style.setProperty(
+      "--scroll-root-safe-area-inset-bottom",
+      "316px"
+    )
     act(() => {
       for (const observer of resizeObservers) observer.trigger()
     })
 
-    expect(intersectionObservers.at(-1)?.rootMargin).toBe("0px 0px 252px")
+    expect(intersectionObservers.at(-1)?.rootMargin).toBe("0px 0px 316px")
   })
 
   it("coalesces streamed child mutations without reading footer geometry", async () => {

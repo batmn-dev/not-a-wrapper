@@ -231,7 +231,7 @@ describe("PromptInput responsive expansion", () => {
     root = createRoot(container)
   })
 
-  it("keeps tooltips hoverable around visually disabled actions", () => {
+  it("describes the focusable visually disabled action with its tooltip", () => {
     act(() => {
       root.render(
         <PromptInput value="" onValueChange={() => {}}>
@@ -245,11 +245,23 @@ describe("PromptInput responsive expansion", () => {
     const button = container.querySelector(
       'button[aria-label="Send prompt"]'
     ) as HTMLButtonElement
+    const descriptionId = button.getAttribute("aria-describedby")
+
     expect(button.hasAttribute("data-visually-disabled")).toBe(true)
+    expect(button.disabled).toBe(false)
+    expect(button.tabIndex).toBe(0)
+    expect(button.getAttribute("aria-disabled")).toBe("true")
+    expect(button.getAttribute("data-slot")).toBe("button")
     expect(button.parentElement?.getAttribute("data-slot")).toBe(
       "tooltip-trigger"
     )
-    expect(button.getAttribute("data-slot")).toBe("button")
+    expect(button.parentElement?.getAttribute("aria-describedby")).toBe(
+      descriptionId
+    )
+    expect(descriptionId).toBeTruthy()
+    expect(document.getElementById(descriptionId ?? "")?.textContent).toBe(
+      "Message is empty"
+    )
   })
 
   it("keeps one ProseMirror textbox across controlled draft replacements", () => {

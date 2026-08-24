@@ -52,6 +52,17 @@ describe("SharePublishContent", () => {
     )
     act(() => viewPage?.click())
     expect(onClose).toHaveBeenCalledOnce()
-    expect(open).toHaveBeenCalledWith(input.value, "_blank")
+    expect(open).toHaveBeenCalledWith(input.value, "_blank", "noopener")
+
+    const shareOnX = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Share on")
+    )
+    act(() => shareOnX?.click())
+    expect(onClose).toHaveBeenCalledTimes(2)
+    expect(open).toHaveBeenLastCalledWith(
+      expect.stringContaining("https://x.com/intent/tweet"),
+      "_blank",
+      "noopener"
+    )
   })
 })

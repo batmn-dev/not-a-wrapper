@@ -61,12 +61,11 @@ function resolveRootLength(root: HTMLElement, property: string) {
 }
 
 function getScrollFromEndRootMargin(root: HTMLElement) {
-  const footerHeight = resolveRootLength(root, "--sticky-padding-bottom")
-  const keyboardHeight = resolveRootLength(
+  const bottomSafeArea = resolveRootLength(
     root,
-    "--keyboard-safe-area-bottom"
+    "--scroll-root-safe-area-inset-bottom"
   )
-  return `0px 0px ${footerHeight + keyboardHeight}px`
+  return `0px 0px ${bottomSafeArea}px`
 }
 
 function pinTurn(root: HTMLElement, turnId: string): boolean {

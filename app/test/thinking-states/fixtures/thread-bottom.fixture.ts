@@ -40,7 +40,7 @@ export const THREAD_SURFACE_FIXTURES = {
   },
   project: {
     label: "Project chat",
-    surface: "thread",
+    surface: "project-onboarding",
     draftScopeId: "project-thinking-states-playground",
     placeholder: "New chat in Interface parity",
   },

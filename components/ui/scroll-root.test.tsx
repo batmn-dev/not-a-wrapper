@@ -412,6 +412,70 @@ describe("ScrollRoot viewport and footer measurement", () => {
     root = createRoot(container)
   })
 
+  it("preserves Virtual Keyboard ownership across route-content handoffs", () => {
+    const keyboard = new VirtualKeyboardStub()
+    const removeKeyboardListener = vi.spyOn(keyboard, "removeEventListener")
+    Object.defineProperty(navigator, "virtualKeyboard", {
+      configurable: true,
+      value: keyboard,
+    })
+
+    act(() => {
+      root.render(
+        <ScrollRoot>
+          <textarea key="first-route" data-route="first" />
+        </ScrollRoot>
+      )
+    })
+
+    const firstEditor = container.querySelector(
+      "[data-route='first']"
+    ) as HTMLTextAreaElement
+    const originalScrollRoot = container.querySelector(
+      "[data-scroll-root]"
+    ) as HTMLElement
+    act(() => firstEditor.focus())
+    act(() => keyboard.setHeight(312))
+
+    act(() => {
+      root.render(
+        <ScrollRoot>
+          <textarea key="second-route" data-route="second" />
+        </ScrollRoot>
+      )
+    })
+
+    const secondEditor = container.querySelector(
+      "[data-route='second']"
+    ) as HTMLTextAreaElement
+    const settledScrollRoot = container.querySelector(
+      "[data-scroll-root]"
+    ) as HTMLElement
+
+    expect(settledScrollRoot).toBe(originalScrollRoot)
+    expect(removeKeyboardListener).not.toHaveBeenCalledWith(
+      "geometrychange",
+      expect.any(Function)
+    )
+    expect(
+      document.body.style.getPropertyValue("--screen-keyboard-height")
+    ).toBe("312px")
+
+    act(() => secondEditor.focus())
+    act(() => {
+      const callbacks = [...animationFrames.values()]
+      animationFrames.clear()
+      for (const callback of callbacks) callback(0)
+    })
+    act(() => keyboard.setHeight(284))
+
+    expect(
+      document.body.style.getPropertyValue("--screen-keyboard-height")
+    ).toBe("284px")
+    expect(settledScrollRoot.hasAttribute("data-keyboard-open")).toBe(true)
+    expect(document.documentElement.classList).toContain("keyboard-open")
+  })
+
   it("reserves an absolute prompt header before measuring the sticky root", () => {
     act(() => {
       root.render(

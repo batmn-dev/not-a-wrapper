@@ -100,15 +100,20 @@ function TooltipShortcut({
     >
       <span
         data-slot="tooltip-shortcut-action"
-        aria-label={actionAriaLabel || undefined}
-        className="inline-flex items-center gap-1.5 whitespace-nowrap"
+        className="inline-flex items-center whitespace-nowrap"
       >
-        <span aria-hidden="true">{label}</span>
+        <span className="sr-only">{actionAriaLabel}</span>
         <span
-          data-slot="tooltip-shortcut-keys"
-          className="-me-1.5 inline-flex h-[18px] items-center rounded-full bg-white/25 px-1.5 text-sm leading-[18px] font-semibold whitespace-pre text-[var(--text-secondary)] [text-box:trim-both_text] pointer-coarse:hidden [&_kbd]:h-[18px] [&_kbd]:min-w-0 [&_kbd]:[align-items:normal] [&_kbd]:justify-normal [&_kbd]:[font-family:inherit] [&_kbd]:text-sm [&_kbd]:leading-[18px] [&_kbd>span]:min-w-[1em]"
+          aria-hidden="true"
+          className="inline-flex items-center gap-1.5 whitespace-nowrap"
         >
-          {children}
+          <span>{label}</span>
+          <span
+            data-slot="tooltip-shortcut-keys"
+            className="-me-1.5 inline-flex h-[18px] items-center rounded-full bg-white/25 px-1.5 text-sm leading-[18px] font-semibold whitespace-pre text-[var(--text-secondary)] [text-box:trim-both_text] pointer-coarse:hidden [&_kbd]:h-[18px] [&_kbd]:min-w-0 [&_kbd]:[align-items:normal] [&_kbd]:justify-normal [&_kbd]:[font-family:inherit] [&_kbd]:text-sm [&_kbd]:leading-[18px] [&_kbd>span]:min-w-[1em]"
+          >
+            {children}
+          </span>
         </span>
       </span>
       <span

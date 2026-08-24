@@ -12,6 +12,9 @@ type StartViewTransition = (
 
 const transitionDocument = document as Document & {
   startViewTransition?: StartViewTransition
+}
+
+const transitionWindow = window as Window & {
   ViewTransitionTypeSet?: unknown
 }
 
@@ -19,7 +22,7 @@ afterEach(() => {
   document.documentElement.className = ""
   document.documentElement.removeAttribute("active-view-transition-type")
   Reflect.deleteProperty(transitionDocument, "startViewTransition")
-  Reflect.deleteProperty(transitionDocument, "ViewTransitionTypeSet")
+  Reflect.deleteProperty(transitionWindow, "ViewTransitionTypeSet")
   Object.defineProperty(document, "visibilityState", {
     configurable: true,
     value: "visible",
@@ -49,7 +52,7 @@ describe("runViewTransition", () => {
     const finished = new Promise<void>((resolve) => {
       finish = resolve
     })
-    transitionDocument.ViewTransitionTypeSet = class ViewTransitionTypeSet {}
+    transitionWindow.ViewTransitionTypeSet = class ViewTransitionTypeSet {}
     Reflect.set(
       transitionDocument,
       "startViewTransition",

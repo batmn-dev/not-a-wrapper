@@ -20,8 +20,8 @@ paragraph, text, and protected typed inline entities. Paragraph boundaries
 serialize to `\n`; entity atoms are presentation projections of typed Composer
 capabilities and never enter submitted text. Composer, draft persistence,
 attachment handling, and Chat turn payloads therefore continue to own ordinary
-strings. The editor exposes only the imperative focus and selection commands
-Composer already requires.
+strings. The editor exposes only the imperative `focus`, `setSelectionRange`,
+and `replaceActionQuery` commands Composer already requires.
 
 The EditorView owns its DOM through a callback ref and is synchronized before
 paint through the repository's browser-layout lifecycle. Input transactions

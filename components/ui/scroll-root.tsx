@@ -33,6 +33,9 @@
  *   data-scroll-from-end   while the bottom sentinel is out of view
  *   data-expanded-composer while the multiline composer owns the viewport
  *   data-voice-focus-mode  reserved for the full-screen voice surface
+ *
+ * ChatLayout preserves this element across `/` and `/c/...` handoffs, so its
+ * keyboard controller and native scroll position survive route reconciliation.
  */
 import { createKeyboardViewportController } from "@/components/ui/keyboard-viewport"
 import { cn } from "@/lib/utils"

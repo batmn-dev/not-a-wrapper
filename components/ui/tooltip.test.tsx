@@ -36,8 +36,15 @@ describe("TooltipShortcut", () => {
       </TooltipShortcut>
     )
 
-    expect(markup).toContain('aria-label="Thinking effort, Control, Shift, M"')
-    expect(markup).toContain('<span aria-hidden="true">Thinking effort</span>')
+    expect(markup).toContain(
+      '<span class="sr-only">Thinking effort, Control, Shift, M</span>'
+    )
+    expect(markup).toContain(
+      '<span aria-hidden="true" class="inline-flex items-center gap-1.5 whitespace-nowrap"><span>Thinking effort</span>'
+    )
+    expect(markup).not.toContain(
+      'data-slot="tooltip-shortcut-action" aria-label='
+    )
     expect(markup).toContain("gap-1.5")
     expect(markup).toContain("h-[18px]")
     expect(markup).toContain("rounded-full")
@@ -58,7 +65,9 @@ describe("TooltipShortcut", () => {
       </TooltipShortcut>
     )
 
-    expect(markup).toContain('aria-label="Search, Command, K"')
+    expect(markup).toContain(
+      '<span class="sr-only">Search, Command, K</span>'
+    )
   })
 
   it("preserves key names after Kbd children resolve to host elements", () => {
@@ -73,6 +82,8 @@ describe("TooltipShortcut", () => {
       </TooltipShortcut>
     )
 
-    expect(markup).toContain('aria-label="Search chats, Command, K"')
+    expect(markup).toContain(
+      '<span class="sr-only">Search chats, Command, K</span>'
+    )
   })
 })

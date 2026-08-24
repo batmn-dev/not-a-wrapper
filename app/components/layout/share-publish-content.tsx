@@ -24,12 +24,12 @@ export function SharePublishContent({
 
   const openPage = () => {
     onClose()
-    window.open(publicLink, "_blank")
+    window.open(publicLink, "_blank", "noopener")
   }
 
   const shareOnX = () => {
     onClose()
-    window.open(xIntentUrl, "_blank")
+    window.open(xIntentUrl, "_blank", "noopener")
   }
 
   const copyLink = async () => {
