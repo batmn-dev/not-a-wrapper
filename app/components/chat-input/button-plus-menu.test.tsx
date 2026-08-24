@@ -67,11 +67,13 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
     const tooltipShortcut = document.querySelector(
       '[data-slot="tooltip-shortcut"]'
     )
-    expect(
-      tooltipShortcut?.querySelector(
-        '[data-slot="tooltip-shortcut-action"]'
-      )?.getAttribute("aria-label")
-    ).toBe("Add files and more, @")
+    const tooltipAction = tooltipShortcut?.querySelector(
+      '[data-slot="tooltip-shortcut-action"]'
+    )
+    expect(tooltipAction?.querySelector(".sr-only")?.textContent).toBe(
+      "Add files and more, @"
+    )
+    expect(tooltipAction?.querySelector('[aria-hidden="true"]')).not.toBeNull()
     expect(
       tooltipShortcut?.querySelector('[data-slot="tooltip-shortcut-keys"]')
         ?.textContent
