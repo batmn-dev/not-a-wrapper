@@ -40,6 +40,16 @@ class VisualViewportStub extends EventTarget {
   scale = 1
 }
 
+class VirtualKeyboardStub extends EventTarget {
+  overlaysContent = false
+  boundingRect = { height: 0 } as DOMRectReadOnly
+
+  setHeight(height: number) {
+    this.boundingRect = { height } as DOMRectReadOnly
+    this.dispatchEvent(new Event("geometrychange"))
+  }
+}
+
 let resizeObservers: ResizeObserverStub[] = []
 let animationFrames = new Map<number, FrameRequestCallback>()
 let nextAnimationFrameId = 1
@@ -49,11 +59,12 @@ function StickyFooterFixture({
 }: {
   headerPosition: "absolute" | "static"
 }) {
-  const footerRef = useStickyPaddingBottom(true)
+  const footerRef = useStickyPaddingBottom()
 
   return (
     <div id="thread-bottom-container" ref={footerRef}>
       <div data-thread-footer-overflow-spacer="" />
+      <div data-composer-keyboard-pin="" />
       <div
         data-prompt-textarea-header=""
         style={{ position: headerPosition }}
@@ -90,6 +101,7 @@ describe("ScrollRoot viewport and footer measurement", () => {
   let originalVisualViewport: PropertyDescriptor | undefined
   let originalInnerHeight: PropertyDescriptor | undefined
   let originalClientHeight: PropertyDescriptor | undefined
+  let originalVirtualKeyboard: PropertyDescriptor | undefined
 
   function setLayoutViewportHeight(height: number) {
     Object.defineProperty(window, "innerHeight", {
@@ -134,6 +146,10 @@ describe("ScrollRoot viewport and footer measurement", () => {
       document.documentElement,
       "clientHeight"
     )
+    originalVirtualKeyboard = Object.getOwnPropertyDescriptor(
+      navigator,
+      "virtualKeyboard"
+    )
     Object.defineProperty(window, "visualViewport", {
       configurable: true,
       value: viewport,
@@ -174,6 +190,17 @@ describe("ScrollRoot viewport and footer measurement", () => {
     } else {
       Reflect.deleteProperty(document.documentElement, "clientHeight")
     }
+    if (originalVirtualKeyboard) {
+      Object.defineProperty(
+        navigator,
+        "virtualKeyboard",
+        originalVirtualKeyboard
+      )
+    } else {
+      Reflect.deleteProperty(navigator, "virtualKeyboard")
+    }
+    document.documentElement.classList.remove("keyboard-open")
+    document.body.style.removeProperty("--screen-keyboard-height")
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
@@ -207,9 +234,9 @@ describe("ScrollRoot viewport and footer measurement", () => {
     viewport.height = 500
     flushViewportResize()
 
-    expect(scrollRoot.style.getPropertyValue("--screen-keyboard-height")).toBe(
-      "0px"
-    )
+    expect(
+      document.body.style.getPropertyValue("--screen-keyboard-height")
+    ).toBe("0px")
     expect(scrollRoot.hasAttribute("data-keyboard-open")).toBe(false)
 
     setLayoutViewportHeight(800)
@@ -219,9 +246,9 @@ describe("ScrollRoot viewport and footer measurement", () => {
     viewport.height = 500
     flushViewportResize()
 
-    expect(scrollRoot.style.getPropertyValue("--screen-keyboard-height")).toBe(
-      "0px"
-    )
+    expect(
+      document.body.style.getPropertyValue("--screen-keyboard-height")
+    ).toBe("0px")
     expect(scrollRoot.hasAttribute("data-keyboard-open")).toBe(false)
   })
 
@@ -242,9 +269,9 @@ describe("ScrollRoot viewport and footer measurement", () => {
     viewport.height = 500
     flushViewportResize()
 
-    expect(scrollRoot.style.getPropertyValue("--screen-keyboard-height")).toBe(
-      "0px"
-    )
+    expect(
+      document.body.style.getPropertyValue("--screen-keyboard-height")
+    ).toBe("0px")
     expect(scrollRoot.hasAttribute("data-keyboard-open")).toBe(false)
   })
 
@@ -263,10 +290,13 @@ describe("ScrollRoot viewport and footer measurement", () => {
       "[data-scroll-root]"
     ) as HTMLElement
 
-    expect(scrollRoot.style.getPropertyValue("--screen-keyboard-height")).toBe(
-      "300px"
-    )
+    flushViewportResize()
+
+    expect(
+      document.body.style.getPropertyValue("--screen-keyboard-height")
+    ).toBe("300px")
     expect(scrollRoot.hasAttribute("data-keyboard-open")).toBe(true)
+    expect(document.documentElement.classList).toContain("keyboard-open")
   })
 
   it("restores and recomputes the keyboard inset without retaining stale state", () => {
@@ -284,28 +314,28 @@ describe("ScrollRoot viewport and footer measurement", () => {
 
     viewport.height = 500
     flushViewportResize()
-    expect(scrollRoot.style.getPropertyValue("--screen-keyboard-height")).toBe(
-      "300px"
-    )
+    expect(
+      document.body.style.getPropertyValue("--screen-keyboard-height")
+    ).toBe("300px")
 
     viewport.height = 800
     flushViewportResize()
-    expect(scrollRoot.style.getPropertyValue("--screen-keyboard-height")).toBe(
-      "0px"
-    )
+    expect(
+      document.body.style.getPropertyValue("--screen-keyboard-height")
+    ).toBe("0px")
     expect(scrollRoot.hasAttribute("data-keyboard-open")).toBe(false)
 
     viewport.height = 620
     flushViewportResize()
-    expect(scrollRoot.style.getPropertyValue("--screen-keyboard-height")).toBe(
-      "180px"
-    )
+    expect(
+      document.body.style.getPropertyValue("--screen-keyboard-height")
+    ).toBe("180px")
 
     viewport.height = 800
     flushViewportResize()
-    expect(scrollRoot.style.getPropertyValue("--screen-keyboard-height")).toBe(
-      "0px"
-    )
+    expect(
+      document.body.style.getPropertyValue("--screen-keyboard-height")
+    ).toBe("0px")
     expect(scrollRoot.hasAttribute("data-keyboard-open")).toBe(false)
   })
 
@@ -336,6 +366,52 @@ describe("ScrollRoot viewport and footer measurement", () => {
     )
   })
 
+  it("uses Virtual Keyboard geometry in overlay mode and restores browser ownership", () => {
+    const keyboard = new VirtualKeyboardStub()
+    Object.defineProperty(navigator, "virtualKeyboard", {
+      configurable: true,
+      value: keyboard,
+    })
+
+    act(() => {
+      root.render(
+        <ScrollRoot>
+          <textarea data-virtualkeyboard="true" />
+        </ScrollRoot>
+      )
+    })
+
+    const textarea = container.querySelector("textarea") as HTMLTextAreaElement
+    const scrollRoot = container.querySelector(
+      "[data-scroll-root]"
+    ) as HTMLElement
+    act(() => textarea.focus())
+    act(() => keyboard.setHeight(312))
+
+    expect(keyboard.overlaysContent).toBe(true)
+    expect(
+      document.body.style.getPropertyValue("--screen-keyboard-height")
+    ).toBe("312px")
+    expect(document.documentElement.classList).toContain("keyboard-open")
+    expect(scrollRoot.hasAttribute("data-keyboard-open")).toBe(true)
+
+    act(() => textarea.blur())
+    act(() => {
+      const callbacks = [...animationFrames.values()]
+      animationFrames.clear()
+      for (const callback of callbacks) callback(0)
+    })
+
+    expect(document.documentElement.classList).not.toContain("keyboard-open")
+    expect(
+      document.body.style.getPropertyValue("--screen-keyboard-height")
+    ).toBe("")
+
+    act(() => root.unmount())
+    expect(keyboard.overlaysContent).toBe(false)
+    root = createRoot(container)
+  })
+
   it("reserves an absolute prompt header before measuring the sticky root", () => {
     act(() => {
       root.render(
@@ -354,6 +430,9 @@ describe("ScrollRoot viewport and footer measurement", () => {
     const header = container.querySelector(
       "[data-prompt-textarea-header]"
     ) as HTMLElement
+    const composer = container.querySelector(
+      "[data-composer-keyboard-pin]"
+    ) as HTMLElement
     const spacer = container.querySelector(
       "[data-thread-footer-overflow-spacer]"
     ) as HTMLElement
@@ -363,6 +442,9 @@ describe("ScrollRoot viewport and footer measurement", () => {
     } as DOMRect)
     vi.spyOn(header, "getBoundingClientRect").mockReturnValue({
       height: 20,
+    } as DOMRect)
+    vi.spyOn(composer, "getBoundingClientRect").mockReturnValue({
+      height: 52,
     } as DOMRect)
 
     act(() => {
@@ -375,10 +457,14 @@ describe("ScrollRoot viewport and footer measurement", () => {
     expect(resizeObservers[0]?.observe).toHaveBeenCalledWith(header, {
       box: "border-box",
     })
+    expect(resizeObservers[0]?.observe).toHaveBeenCalledWith(composer, {
+      box: "border-box",
+    })
     expect(spacer.style.height).toBe("20px")
     expect(scrollRoot.style.getPropertyValue("--sticky-padding-bottom")).toBe(
       "116px"
     )
+    expect(scrollRoot.style.getPropertyValue("--composer-height")).toBe("52px")
 
     act(() => {
       root.render(
@@ -456,7 +542,13 @@ describe("ScrollRoot viewport and footer measurement", () => {
       "has-data-[fixed-header=never]:[--sticky-padding-top:0px]"
     )
     expect(scrollRoot.className).toContain(
-      "[--scroll-root-safe-area-inset-bottom:calc(var(--sticky-padding-bottom)+var(--screen-keyboard-height,0px)+env(safe-area-inset-bottom,0px))]"
+      "[--keyboard-safe-area-bottom:max(var(--screen-keyboard-height,0px),env(keyboard-inset-height,0px))]"
+    )
+    expect(scrollRoot.className).toContain(
+      "keyboard-open:[--keyboard-composer-safe-area:var(--composer-height,0px)]"
+    )
+    expect(scrollRoot.className).toContain(
+      "[--scroll-root-safe-area-inset-bottom:calc(var(--sticky-padding-bottom)+var(--keyboard-composer-safe-area)+var(--keyboard-safe-area-bottom)+env(safe-area-inset-bottom,0px))]"
     )
   })
 })

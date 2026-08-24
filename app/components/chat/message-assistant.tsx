@@ -358,7 +358,6 @@ export function MessageAssistant({
                     </span>
                   </TooltipMultiline>
                 }
-                delay={0}
                 disabledReason={
                   retryDisabled
                     ? "Wait for the current response to finish."

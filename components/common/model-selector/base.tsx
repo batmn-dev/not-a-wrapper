@@ -2,6 +2,7 @@
 
 import { useKeyShortcut } from "@/app/hooks/use-key-shortcut"
 import { Button } from "@/components/ui/button"
+import { ComposerControl } from "@/components/ui/composer-control"
 import {
   Drawer,
   DrawerContent,
@@ -284,13 +285,14 @@ export function ModelSelector({
     isUserAuthenticated ? isModelHidden : () => false
   )
 
+  const TriggerControl = isComposerVariant ? ComposerControl : Button
   const trigger = (
-    <Button
-      variant="ghost"
+    <TriggerControl
+      {...(!isComposerVariant && { variant: "ghost" as const })}
       className={cn(
         "min-w-0 shrink font-normal",
         isComposerVariant
-          ? "text-muted-foreground active:bg-interactive-pressed aria-expanded:bg-interactive-selected can-hover:hover:bg-interactive-hover can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] h-9 max-w-none justify-start gap-1.5 overflow-visible rounded-full px-3 py-0 text-sm active:scale-100"
+          ? "text-muted-foreground can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] h-9 max-w-none justify-start gap-1.5 overflow-visible rounded-full px-3 py-0 text-sm"
           : "max-w-full justify-between overflow-hidden rounded-lg text-lg",
         className
       )}
@@ -316,7 +318,7 @@ export function ModelSelector({
           className="shrink-0 opacity-50"
         />
       ) : null}
-    </Button>
+    </TriggerControl>
   )
 
   if (isMobile) {
@@ -402,9 +404,7 @@ export function ModelSelector({
       >
         {isComposerVariant ? (
           <Tooltip disableHoverablePopup disabled={isDropdownOpen}>
-            <TooltipTrigger render={<span className="inline-flex min-w-0" />}>
-              <DropdownMenuTrigger render={trigger} />
-            </TooltipTrigger>
+            <TooltipTrigger render={<DropdownMenuTrigger render={trigger} />} />
             <TooltipContent side="bottom" hideArrow>
               <TooltipShortcut label="Select model">
                 <Kbd label="Control">⌃</Kbd>

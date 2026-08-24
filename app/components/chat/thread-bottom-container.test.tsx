@@ -12,10 +12,7 @@ import {
   it,
   vi,
 } from "vitest"
-import {
-  ThreadBottomContainer,
-  ThreadTail,
-} from "./thread-bottom-container"
+import { ThreadBottomContainer, ThreadTail } from "./thread-bottom-container"
 
 describe("ThreadBottomContainer", () => {
   let container: HTMLDivElement
@@ -82,10 +79,7 @@ describe("ThreadBottomContainer", () => {
     ).not.toBeNull()
     expect(footer?.classList.contains("pointer-events-none")).toBe(true)
     expect(footer?.classList.contains("print:hidden")).toBe(true)
-    expect(footer?.classList.contains("bottom-0")).toBe(true)
-    expect(footer?.classList).toContain(
-      "group-data-keyboard-open/scroll-root:bottom-[var(--screen-keyboard-height,0px)]"
-    )
+    expect(footer?.classList).toContain("bottom-0")
     expect(footer?.classList.contains("content-fade")).toBe(false)
     expect(
       [...(footer?.classList ?? [])].some((name) =>
@@ -103,9 +97,17 @@ describe("ThreadBottomContainer", () => {
     ).toContain("mb-[var(--thread-component-gap)]")
     expect(
       composer?.closest("[data-thread-composer-column]")?.classList
-    ).toContain(
-      "pointer-events-auto"
+    ).toContain("pointer-events-auto")
+    const keyboardPin = composer?.closest("[data-composer-keyboard-pin]")
+    expect(keyboardPin?.classList).toContain("keyboard-open:fixed")
+    expect(keyboardPin?.classList).toContain("keyboard-open:start-3")
+    expect(keyboardPin?.classList).toContain("keyboard-open:end-3")
+    expect(keyboardPin?.classList).toContain(
+      "keyboard-open:bottom-[var(--screen-keyboard-height,0px)]"
     )
+    expect(
+      keyboardPin?.querySelector("[data-keyboard-open-mask]")
+    ).not.toBeNull()
     expect(
       container.querySelector("[data-thread-scroll-control-visibility]")
         ?.classList
@@ -126,6 +128,50 @@ describe("ThreadBottomContainer", () => {
     expect(
       container.querySelector("[data-thread-disclaimer]")?.classList
     ).toContain("[view-transition-name:var(--vt-disclaimer)]")
+  })
+
+  it("preserves composer DOM identity when keyboard positioning activates", () => {
+    const composer = container.querySelector('[data-testid="composer"]')
+
+    try {
+      document.documentElement.classList.add("keyboard-open")
+      expect(container.querySelector('[data-testid="composer"]')).toBe(composer)
+    } finally {
+      document.documentElement.classList.remove("keyboard-open")
+    }
+    expect(container.querySelector('[data-testid="composer"]')).toBe(composer)
+  })
+
+  it("preserves composer DOM identity while resolved surface posture changes", () => {
+    const composer = container.querySelector('[data-testid="composer"]')
+
+    act(() => {
+      root.render(
+        <ScrollRoot>
+          <ThreadBottomContainer surface="home-onboarding">
+            <div data-testid="composer" />
+          </ThreadBottomContainer>
+        </ScrollRoot>
+      )
+    })
+    expect(container.querySelector('[data-testid="composer"]')).toBe(composer)
+    expect(container.querySelector("[data-thread-scroll-control]")).toBeNull()
+
+    act(() => {
+      root.render(
+        <ScrollRoot>
+          <ThreadBottomContainer surface="project-onboarding">
+            <div data-testid="composer" />
+          </ThreadBottomContainer>
+        </ScrollRoot>
+      )
+    })
+    expect(container.querySelector('[data-testid="composer"]')).toBe(composer)
+    expect(
+      container
+        .querySelector("#thread-bottom-container")
+        ?.classList.contains("fixed")
+    ).toBe(true)
   })
 
   it("keeps the existing smooth scroll-to-bottom contract", () => {

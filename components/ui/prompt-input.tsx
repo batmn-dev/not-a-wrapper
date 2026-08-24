@@ -20,6 +20,8 @@
  *     side-control inline sizes change
  *   - Source-parity multiline expand/collapse mode owns the scroll root through
  *     callback-ref-synchronized data attributes, with no effect or timeout
+ *   - The stable editor callback ref owns content-free key-to-paint performance
+ *     measurement while diagnostic instrumentation is enabled
  * @upgradeNotes
  *   - Preserve autoFocus default on PromptInputTextarea
  *   - Do NOT re-add TooltipProvider wrapper in PromptInputAction
@@ -36,8 +38,14 @@ import { Icon } from "@/components/ui/icon"
 import {
   createPromptInputDocument,
   createPromptInputPlugins,
+  type PromptInputActionQuery,
+  type PromptInputEntity,
+  promptInputEntitiesEqual,
   promptInputSchema,
+  readPromptInputActionQuery,
   readPromptInputDocument,
+  readPromptInputEntities,
+  replacePromptInputActionQuery,
   replacePromptInputDocument,
   setPromptInputSelection,
 } from "@/components/ui/prompt-input-editor"
@@ -48,6 +56,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { ComposerCollapseIcon, ComposerExpandIcon } from "@/lib/icons/composer"
+import {
+  createComposerPaintController,
+  type ComposerPaintController,
+} from "@/lib/observability/composer-paint"
 import { cn } from "@/lib/utils"
 import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
@@ -57,13 +69,21 @@ import React, { createContext, useContext, useRef, useState } from "react"
 
 export type PromptInputEditorHandle = {
   focus: (options?: FocusOptions) => void
+  replaceActionQuery: (
+    actionQuery: PromptInputActionQuery,
+    entity?: PromptInputEntity
+  ) => boolean
   setSelectionRange: (selectionStart: number, selectionEnd: number) => void
 }
+
+export type { PromptInputActionQuery, PromptInputEntity }
 
 type PromptInputContextType = {
   isLoading: boolean
   value: string
   setValue: (value: string) => void
+  entities: readonly PromptInputEntity[]
+  setEntities: (entities: readonly PromptInputEntity[]) => void
   setTextareaExpanded: React.Dispatch<React.SetStateAction<boolean>>
   maxHeight?: number | string
   onSubmit?: () => void
@@ -87,6 +107,8 @@ type PromptInputProps = {
   isLoading?: boolean
   value?: string
   onValueChange?: (value: string) => void
+  entities?: readonly PromptInputEntity[]
+  onEntitiesChange?: (entities: readonly PromptInputEntity[]) => void
   expanded?: boolean
   maxHeight?: number | string
   onSubmit?: () => void
@@ -103,12 +125,17 @@ function PromptInput({
   maxHeight,
   value,
   onValueChange,
+  entities,
+  onEntitiesChange,
   onSubmit,
   disabled = false,
   children,
   formControls,
 }: PromptInputProps) {
   const [internalValue, setInternalValue] = useState(value || "")
+  const [internalEntities, setInternalEntities] = useState<
+    readonly PromptInputEntity[]
+  >([])
   const [textareaExpanded, setTextareaExpanded] = useState(false)
   const [expandedComposer, setExpandedComposer] = useState(false)
   const editorRef = useRef<PromptInputEditorHandle>(null)
@@ -138,12 +165,19 @@ function PromptInput({
     onValueChange?.(newValue)
   }
 
+  const handleEntitiesChange = (nextEntities: readonly PromptInputEntity[]) => {
+    setInternalEntities(nextEntities)
+    onEntitiesChange?.(nextEntities)
+  }
+
   return (
     <PromptInputContext.Provider
       value={{
         isLoading,
         value: value ?? internalValue,
         setValue: onValueChange ?? handleChange,
+        entities: entities ?? internalEntities,
+        setEntities: onEntitiesChange ?? handleEntitiesChange,
         setTextareaExpanded,
         maxHeight,
         onSubmit,
@@ -230,6 +264,10 @@ function PromptInput({
               {children}
             </div>
           </div>
+          <div
+            data-composer-overlay-host=""
+            className="pointer-events-none absolute inset-0 z-50 *:pointer-events-auto"
+          />
         </div>
       </form>
     </PromptInputContext.Provider>
@@ -378,6 +416,7 @@ export type PromptInputTextareaProps = {
   autoFocus?: boolean
   disabled?: boolean
   style?: React.CSSProperties
+  onActionQueryChange?: (query: PromptInputActionQuery | null) => void
   onKeyDown?: (event: KeyboardEvent) => void
   onPaste?: (event: ClipboardEvent) => void
 }
@@ -389,6 +428,7 @@ const PromptInputTextarea = React.forwardRef<
   {
     className,
     containerClassName,
+    onActionQueryChange,
     onKeyDown,
     onPaste,
     disableAutosize = false,
@@ -403,6 +443,8 @@ const PromptInputTextarea = React.forwardRef<
   const {
     value,
     setValue,
+    entities,
+    setEntities,
     setTextareaExpanded,
     maxHeight,
     onSubmit,
@@ -410,6 +452,7 @@ const PromptInputTextarea = React.forwardRef<
     editorRef,
   } = usePromptInput()
   const viewRef = useRef<EditorView | null>(null)
+  const paintControllerRef = useRef<ComposerPaintController | null>(null)
   const editorHandleRef = useRef<PromptInputEditorHandle | null>(null)
   const fallbackTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const forwardedRef = useRef(ref)
@@ -418,11 +461,14 @@ const PromptInputTextarea = React.forwardRef<
     autoFocus,
     className,
     disabled: disabled ?? disabledProp ?? false,
+    onActionQueryChange,
     onKeyDown,
     onPaste,
     onSubmit,
     placeholder,
     setValue,
+    entities,
+    setEntities,
     style,
     value,
   })
@@ -433,11 +479,14 @@ const PromptInputTextarea = React.forwardRef<
       autoFocus,
       className,
       disabled: disabled ?? disabledProp ?? false,
+      onActionQueryChange,
       onKeyDown,
       onPaste,
       onSubmit,
       placeholder,
       setValue,
+      entities,
+      setEntities,
       style,
       value,
     }
@@ -453,12 +502,15 @@ const PromptInputTextarea = React.forwardRef<
     className,
     disabled,
     disabledProp,
+    onActionQueryChange,
     onKeyDown,
     onPaste,
     onSubmit,
     placeholder,
     ref,
     setValue,
+    entities,
+    setEntities,
     style,
     value,
   ])
@@ -566,8 +618,37 @@ const PromptInputTextarea = React.forwardRef<
       if (!node) return
 
       let view: EditorView
+      let paintController: ComposerPaintController | undefined
+      let actionQueryId = 0
+      let lastActionQueryRange: ReturnType<
+        typeof readPromptInputActionQuery
+      > = null
+      const publishActionQuery = (nextState: EditorState) => {
+        const nextRange = readPromptInputActionQuery(nextState)
+        if (
+          lastActionQueryRange?.from === nextRange?.from &&
+          lastActionQueryRange?.to === nextRange?.to &&
+          lastActionQueryRange?.query === nextRange?.query
+        ) {
+          return
+        }
+
+        if (
+          nextRange &&
+          (!lastActionQueryRange || nextRange.from !== lastActionQueryRange.from)
+        ) {
+          actionQueryId += 1
+        }
+        lastActionQueryRange = nextRange
+        callbacks.current.onActionQueryChange?.(
+          nextRange ? { ...nextRange, id: actionQueryId } : null
+        )
+      }
       const state = EditorState.create({
-        doc: createPromptInputDocument(callbacks.current.value),
+        doc: createPromptInputDocument(
+          callbacks.current.value,
+          callbacks.current.entities
+        ),
         plugins: createPromptInputPlugins(() => callbacks.current.placeholder),
         schema: promptInputSchema,
       })
@@ -582,6 +663,8 @@ const PromptInputTextarea = React.forwardRef<
           dispatchTransaction(transaction) {
             const nextState = view.state.apply(transaction)
             view.updateState(nextState)
+            paintController?.onEditorUpdate()
+            publishActionQuery(nextState)
             if (
               !transaction.docChanged ||
               transaction.getMeta("externalValue")
@@ -590,15 +673,31 @@ const PromptInputTextarea = React.forwardRef<
             }
 
             const nextValue = readPromptInputDocument(nextState.doc)
+            const nextEntities = readPromptInputEntities(nextState.doc)
             if (fallbackTextareaRef.current) {
               fallbackTextareaRef.current.value = nextValue
             }
             applyEditorLayout(fallbackTextareaRef.current, nextValue)
             callbacks.current.setValue(nextValue)
+            if (
+              !promptInputEntitiesEqual(
+                nextEntities,
+                callbacks.current.entities
+              )
+            ) {
+              callbacks.current.setEntities(nextEntities)
+            }
           },
           editable: () => !callbacks.current.disabled,
           handleKeyDown(_view, event) {
-            if (callbacks.current.disabled || event.isComposing) return false
+            if (
+              callbacks.current.disabled ||
+              event.defaultPrevented ||
+              event.isComposing ||
+              event.keyCode === 229
+            ) {
+              return false
+            }
 
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault()
@@ -618,11 +717,21 @@ const PromptInputTextarea = React.forwardRef<
           state,
         }
       )
+      paintController = createComposerPaintController(view.dom)
+      paintControllerRef.current = paintController
       viewRef.current = view
 
       const handle: PromptInputEditorHandle = {
         focus(options) {
           view.dom.focus(options)
+        },
+        replaceActionQuery(actionQuery, entity) {
+          return replacePromptInputActionQuery(
+            view.state,
+            view.dispatch,
+            actionQuery,
+            entity
+          )
         },
         setSelectionRange(selectionStart, selectionEnd) {
           setPromptInputSelection(view, selectionStart, selectionEnd)
@@ -638,6 +747,10 @@ const PromptInputTextarea = React.forwardRef<
         if (editorHandleRef.current === handle) editorHandleRef.current = null
         if (editorRef.current === handle) editorRef.current = null
         assignRef(forwardedRef.current, null)
+        if (paintControllerRef.current === paintController) {
+          paintControllerRef.current = null
+        }
+        paintController.dispose()
         view.destroy()
       }
     },
@@ -656,12 +769,13 @@ const PromptInputTextarea = React.forwardRef<
       }),
       editable: () => !(disabled ?? disabledProp ?? false),
     })
-    replacePromptInputDocument(view, value)
+    replacePromptInputDocument(view, value, entities)
     view.updateState(view.state)
     if (fallbackTextareaRef.current) {
       fallbackTextareaRef.current.value = value
     }
     applyEditorLayout(fallbackTextareaRef.current, value)
+    paintControllerRef.current?.onComposerUpdate()
   }, [
     applyEditorLayout,
     ariaLabel,
@@ -669,6 +783,7 @@ const PromptInputTextarea = React.forwardRef<
     disabled,
     disabledProp,
     placeholder,
+    entities,
     value,
   ])
 
@@ -680,7 +795,7 @@ const PromptInputTextarea = React.forwardRef<
       data-composer-editor-wrapper="true"
       data-slot="prompt-input-editor-wrapper"
       className={cn(
-        "-my-2.5 flex min-h-0 min-w-0 items-stretch overflow-x-hidden ps-[var(--composer-compact-editor-padding-start)] pe-[var(--composer-compact-editor-padding-end)] group-data-expanded/composer:mb-0 group-data-expanded/composer:ps-2.5 group-data-expanded/composer:pe-0 group-data-[expanded-composer]/composer:h-full",
+        "-my-2.5 flex min-h-0 min-w-0 items-stretch overflow-x-hidden ps-[var(--composer-compact-editor-padding-start)] pe-[var(--composer-compact-editor-padding-end)] group-data-expanded/composer:mb-0 group-data-expanded/composer:ps-2.5 group-data-expanded/composer:pe-0",
         containerClassName
       )}
     >

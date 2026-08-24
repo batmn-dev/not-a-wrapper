@@ -75,12 +75,7 @@ const BOOLEAN: FieldSpec = { kind: "boolean" }
 const CORRELATION: FieldSpec = { kind: "correlation" }
 const oneOf = (...values: string[]): FieldSpec => ({ kind: "enum", values })
 
-const TERMINAL_OUTCOMES = [
-  "finish",
-  "error",
-  "abort",
-  "disconnect",
-] as const
+const TERMINAL_OUTCOMES = ["finish", "error", "abort", "disconnect"] as const
 
 export const CHAT_PERF_SPAN_NAMES = [
   "request_parse",
@@ -122,6 +117,8 @@ export type DetachedBindingGaugeEvent =
 const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
   // --- client turn marks (plan PR 0 step 3) ---
   chat_send_intent: { correlationId: CORRELATION },
+  "composer.keystroke_to_next_paint": { durationMs: NUMBER },
+  "composer.keystroke_to_settled_paint": { durationMs: NUMBER },
   optimistic_message_painted: { correlationId: CORRELATION },
   request_dispatched: { correlationId: CORRELATION },
   first_chunk_received: { correlationId: CORRELATION },
@@ -197,9 +194,7 @@ export type ChatPerfEventName = keyof typeof EVENT_SCHEMAS & string
 
 export type ChatPerfFields = Record<string, string | number | boolean>
 
-export type ChatPerfValidation =
-  | { ok: true }
-  | { ok: false; reason: string }
+export type ChatPerfValidation = { ok: true } | { ok: false; reason: string }
 
 /**
  * The schema gate every emission passes. Rejects unknown events, unknown

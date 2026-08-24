@@ -16,7 +16,6 @@ type MessageActionButtonProps = {
   /** Keeps a temporarily unavailable action discoverable and explains why. */
   disabledReason?: ReactNode
   side?: "top" | "bottom" | "left" | "right"
-  delay?: number
   size?: "default" | "branch"
 }
 
@@ -35,15 +34,10 @@ export function MessageActionButton({
   disabled,
   disabledReason,
   side = "bottom",
-  delay,
   size = "default",
 }: MessageActionButtonProps) {
   return (
-    <MessageAction
-      tooltip={disabledReason ?? tooltip ?? label}
-      side={side}
-      delay={delay}
-    >
+    <MessageAction tooltip={disabledReason ?? tooltip ?? label} side={side}>
       <button
         className={cn(
           "text-muted-foreground flex items-center justify-center bg-transparent disabled:pointer-events-none disabled:opacity-50 aria-disabled:opacity-50",

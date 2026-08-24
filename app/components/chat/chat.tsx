@@ -7,7 +7,6 @@ import {
 import { Conversation } from "@/app/components/chat/conversation"
 import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { useGlobalPromptFocus } from "@/app/hooks/use-global-prompt-focus"
-import { useStickyPaddingBottom } from "@/components/ui/scroll-root"
 import type { Id } from "@/convex/_generated/dataModel"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useChat } from "@/lib/chat-store/chats/use-chat"
@@ -19,9 +18,9 @@ import {
 } from "@/lib/chat-store/status/sidebar-chat-status"
 import type { Chats } from "@/lib/chat-store/types"
 import { isRouteDurableChat } from "@/lib/chat-turn/chat-turn-controller"
-import { cn } from "@/lib/utils"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { useUser } from "@/lib/user-store/provider"
+import { cn } from "@/lib/utils"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
@@ -367,11 +366,6 @@ function ChatInner({
     })
   }, [setChrome, chrome.appHeader, chrome.fixedHeader])
 
-  // The sticky composer stack's measured footprint becomes
-  // `--sticky-padding-bottom` (inline on the scroll root), the value the whole
-  // scroll-margin/gutter system derives its bottom inset from. Disabled during
-  // onboarding, where the container grows to center the composer.
-  const threadBottomRef = useStickyPaddingBottom(!showOnboarding)
   const projectComposerLabel = project
     ? `New chat in ${project.name}`
     : undefined
@@ -480,11 +474,7 @@ function ChatInner({
             <Conversation {...conversationProps} />
           )}
 
-          <ThreadBottomContainer
-            ref={threadBottomRef}
-            isOnboarding={showOnboarding}
-            variant={projectOnboarding ? "project-onboarding" : "thread"}
-          >
+          <ThreadBottomContainer surface={chrome.surface}>
             {composer}
           </ThreadBottomContainer>
 

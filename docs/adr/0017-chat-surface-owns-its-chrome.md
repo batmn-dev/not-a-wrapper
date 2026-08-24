@@ -81,3 +81,10 @@ header whose fixed mode follows the resolved surface: home onboarding uses
 sticky top padding for threads without subscribing to scroll position. Future
 fixed-header variants remain valid extension points, and the active header does
 not copy scroll state into React or need an effect-driven shadow.
+
+The resolved `ChatSurface` now also drives `ThreadBottomContainer` posture
+directly. The previous `variant` plus `isOnboarding` pair could express invalid
+combinations and duplicated the resolver's decision. This does not change the
+Composer's stable tree position: only the footer chrome changes across the
+onboarding-to-thread flip, so draft, attachment, editor, and focus identity are
+preserved.

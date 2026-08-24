@@ -345,24 +345,14 @@ describe("ThreadScrollEdge", () => {
     expect(scrollIntoView).toHaveBeenCalledOnce()
   })
 
-  it("tracks the measured footer height for scroll-button visibility", () => {
-    let footerHeight = 108
+  it("tracks root-owned footer and keyboard insets for scroll-button visibility", () => {
+    container.style.setProperty("--sticky-padding-bottom", "108px")
+    container.style.setProperty("--keyboard-safe-area-bottom", "24px")
 
     act(() => {
       root.render(
         <>
-          <div
-            id="thread-bottom-container"
-            ref={(element) => {
-              if (!element) return
-              vi.spyOn(element, "getBoundingClientRect").mockImplementation(
-                () =>
-                  ({
-                    height: footerHeight,
-                  }) as DOMRect
-              )
-            }}
-          />
+          <div id="thread-bottom-container" />
           <ThreadScrollEdge
             chatId="chat-1"
             streamActive={false}
@@ -376,19 +366,20 @@ describe("ThreadScrollEdge", () => {
 
     expect(
       intersectionObservers.some(
-        (observer) => observer.rootMargin === "0px 0px 108px"
+        (observer) => observer.rootMargin === "0px 0px 132px"
       )
     ).toBe(true)
 
-    footerHeight = 204
+    container.style.setProperty("--sticky-padding-bottom", "204px")
+    container.style.setProperty("--keyboard-safe-area-bottom", "48px")
     act(() => {
       for (const observer of resizeObservers) observer.trigger()
     })
 
-    expect(intersectionObservers.at(-1)?.rootMargin).toBe("0px 0px 204px")
+    expect(intersectionObservers.at(-1)?.rootMargin).toBe("0px 0px 252px")
   })
 
-  it("coalesces streamed child mutations without remeasuring a stable footer", async () => {
+  it("coalesces streamed child mutations without reading footer geometry", async () => {
     const measureFooter = vi.fn(() => ({ height: 108 }) as DOMRect)
 
     act(() => {
@@ -412,7 +403,7 @@ describe("ThreadScrollEdge", () => {
       )
     })
     flushFrames()
-    expect(measureFooter).toHaveBeenCalledOnce()
+    expect(measureFooter).not.toHaveBeenCalled()
 
     const streamedTurn = container.querySelector(
       '[data-turn-id="assistant-1"]'
@@ -426,7 +417,7 @@ describe("ThreadScrollEdge", () => {
     })
 
     expect(frames.size).toBe(1)
-    expect(measureFooter).toHaveBeenCalledOnce()
+    expect(measureFooter).not.toHaveBeenCalled()
     expect(
       queryRoot.mock.calls.filter(
         ([selector]) => selector === "#thread-bottom-container"
@@ -439,7 +430,7 @@ describe("ThreadScrollEdge", () => {
         ([selector]) => selector === "#thread-bottom-container"
       )
     ).toHaveLength(1)
-    expect(measureFooter).toHaveBeenCalledOnce()
+    expect(measureFooter).not.toHaveBeenCalled()
   })
 
   it("cancels a pending footer refresh during cleanup", async () => {

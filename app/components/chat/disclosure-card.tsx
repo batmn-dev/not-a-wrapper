@@ -3,14 +3,7 @@
 import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 import { RiArrowDownSLine } from "@remixicon/react"
-import { AnimatePresence, motion } from "motion/react"
-import { useState, type ReactNode } from "react"
-
-const TRANSITION = {
-  type: "spring",
-  duration: 0.2,
-  bounce: 0,
-} as const
+import type { ReactNode } from "react"
 
 type DisclosureCardProps = {
   /** Header content, left of the chevron (icon, title, badges, favicons…). */
@@ -24,9 +17,9 @@ type DisclosureCardProps = {
 
 /**
  * The single collapsible card the chat surface uses for tool steps and sources:
- * a bordered box + hover header + rotating chevron + framer height reveal.
- * Replaces three hand-rolled copies (each re-declaring the same spring
- * TRANSITION) with one header slot + body.
+ * a bordered box + native summary + rotating chevron + CSS-native details
+ * reveal. The body remains mounted so disclosure does not change its DOM
+ * identity when it opens or closes.
  */
 export function DisclosureCard({
   header,
@@ -34,20 +27,18 @@ export function DisclosureCard({
   defaultOpen = false,
   className,
 }: DisclosureCardProps) {
-  const [isExpanded, setIsExpanded] = useState(defaultOpen)
-
   return (
-    <div
+    <details
+      open={defaultOpen || undefined}
+      data-slot="disclosure-card"
       className={cn(
-        "border-border flex flex-col gap-0 overflow-hidden rounded-md border",
+        "chat-disclosure border-border group/disclosure overflow-hidden rounded-md border",
         className
       )}
     >
-      <button
-        type="button"
-        onClick={() => setIsExpanded((value) => !value)}
-        aria-expanded={isExpanded}
-        className="hover:bg-interactive-hover active:bg-interactive-pressed flex w-full flex-row items-center rounded-t-md px-3 py-2 transition-colors"
+      <summary
+        data-slot="disclosure-card-trigger"
+        className="hover:bg-interactive-hover active:bg-interactive-pressed flex w-full cursor-pointer list-none flex-row items-center rounded-t-md px-3 py-2 transition-colors [&::-webkit-details-marker]:hidden"
       >
         <div className="flex flex-1 flex-row items-center gap-2 text-left text-sm">
           {header}
@@ -55,26 +46,12 @@ export function DisclosureCard({
         <Icon
           icon={RiArrowDownSLine}
           slotSize={16}
-          className={cn(
-            "h-4 w-4 transition-transform",
-            isExpanded ? "rotate-180 transform" : ""
-          )}
+          className="h-4 w-4 transition-transform group-open/disclosure:rotate-180"
         />
-      </button>
-
-      <AnimatePresence initial={false}>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={TRANSITION}
-            className="overflow-hidden"
-          >
-            <div className="px-3 pt-3 pb-3">{children}</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+      </summary>
+      <div className="min-h-0 overflow-hidden">
+        <div className="px-3 pt-3 pb-3">{children}</div>
+      </div>
+    </details>
   )
 }

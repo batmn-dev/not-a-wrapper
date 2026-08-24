@@ -19,7 +19,15 @@ type ComposerHandle = import("./composer").ComposerHandle
 type PendingAttachment = import("./pending-attachment").PendingAttachment
 const promptInputMockCalls: Array<{
   expanded?: boolean
+  entities?: readonly {
+    id: string
+    kind: "capability"
+    label: string
+  }[]
   maxHeight?: number | string
+  onEntitiesChange?: (
+    entities: readonly { id: string; kind: "capability"; label: string }[]
+  ) => void
   value?: string
   onValueChange?: (value: string) => void
   onSubmit?: () => void
@@ -62,6 +70,8 @@ const composerMocks = vi.hoisted(() => ({
     delivery: "inline" as const,
     uploaded: null,
   })),
+  enableSearch: false,
+  setEnableSearch: vi.fn(),
 }))
 
 beforeAll(async () => {
@@ -75,8 +85,8 @@ vi.mock("@/app/components/chat/turn-context", () => ({
   useTurnContext: () => ({
     selectedModel: "openai/gpt-4.1-mini",
     handleModelChange: vi.fn(),
-    enableSearch: false,
-    setEnableSearch: vi.fn(),
+    enableSearch: composerMocks.enableSearch,
+    setEnableSearch: composerMocks.setEnableSearch,
     isAuthenticated: true,
     systemPrompt: "system",
     isHydrated: true,
@@ -164,21 +174,33 @@ vi.mock("@/components/ui/prompt-input", () => ({
   PromptInput: ({
     children,
     expanded,
+    entities,
     maxHeight,
+    onEntitiesChange,
     value,
     onValueChange,
     onSubmit,
   }: {
     children: React.ReactNode
     expanded?: boolean
+    entities?: readonly {
+      id: string
+      kind: "capability"
+      label: string
+    }[]
     maxHeight?: number | string
+    onEntitiesChange?: (
+      entities: readonly { id: string; kind: "capability"; label: string }[]
+    ) => void
     value?: string
     onValueChange?: (value: string) => void
     onSubmit?: () => void
   }) => {
     promptInputMockCalls.push({
       expanded,
+      entities,
       maxHeight,
+      onEntitiesChange,
       value,
       onValueChange,
       onSubmit,
@@ -274,6 +296,7 @@ describe("Composer primary action", () => {
     composerMocks.setDraftValueById.length = 0
     composerMocks.clearDraftById.length = 0
     composerMocks.attachments = []
+    composerMocks.enableSearch = false
     vi.clearAllMocks()
   })
 
@@ -331,6 +354,22 @@ describe("Composer primary action", () => {
       onValueChange?.(value)
     })
   }
+
+  it("projects Web Search into a typed entity and writes entity removal back", () => {
+    composerMocks.enableSearch = true
+    renderComposer({})
+
+    const promptInput = promptInputMockCalls.at(-1)
+    expect(promptInput?.entities).toEqual([
+      { id: "web-search", kind: "capability", label: "Web search" },
+    ])
+    expect(container?.querySelector("textarea")?.placeholder).toBe(
+      "Search the web"
+    )
+
+    act(() => promptInput?.onEntitiesChange?.([]))
+    expect(composerMocks.setEnableSearch).toHaveBeenCalledWith(false)
+  })
 
   it("keeps Stop actionable while streaming even with empty input", () => {
     const onTurn = vi.fn()
@@ -454,9 +493,7 @@ describe("Composer primary action", () => {
         ?.closest<HTMLDivElement>('div[class*="order-2"]')?.className
     ).toContain("z-1")
     expect(
-      defaultComposer.querySelector(
-        '[data-composer-transition-slot="leading"]'
-      )
+      defaultComposer.querySelector('[data-composer-transition-slot="leading"]')
     ).not.toBeNull()
     expect(
       defaultComposer.querySelector(

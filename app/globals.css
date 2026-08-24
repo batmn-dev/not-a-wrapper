@@ -18,6 +18,7 @@
 @custom-variant pointer-fine (@media (pointer: fine));
 @custom-variant can-hover (@media (hover: hover));
 @custom-variant cant-hover (@media (hover: none));
+@custom-variant keyboard-open (&:where(.keyboard-open *));
 /* Tailwind requires each custom-variant name and selector on one physical line. */
 /* prettier-ignore */
 @custom-variant keyboard-focused (&:is(html[data-focus-mode="keyboard"] :focus-visible));
@@ -376,6 +377,7 @@
   --color-floating-surface-foreground: var(--floating-surface-foreground);
   --color-floating-menu-item-active: var(--floating-menu-item-active);
   --color-floating-menu-divider: var(--floating-menu-divider);
+  --color-composer-capability-accent: var(--composer-capability-accent);
   --color-modal-centered: var(--modal-centered-surface);
   --color-modal-centered-foreground: var(--modal-centered-foreground);
   --color-modal-search: var(--modal-search-surface);
@@ -406,6 +408,10 @@
   --color-interactive-hover: var(--interactive-bg-hover);
   --color-interactive-selected: var(--interactive-bg-selected);
   --color-interactive-pressed: var(--interactive-bg-pressed);
+  --color-interactive-secondary-hover: var(--interactive-bg-secondary-hover);
+  --color-interactive-secondary-pressed: var(
+    --interactive-bg-secondary-pressed
+  );
   --color-row-hover: var(--row-hover-surface);
   --color-sidebar-row: var(--sidebar-row-bg);
   --color-activity-panel-border: var(--activity-panel-border);
@@ -517,7 +523,7 @@
   --card-foreground: var(--foreground);
   --popover: oklch(1 0 0);
   --popover-foreground: var(--foreground);
-  --floating-surface: #ffffff;
+  --floating-surface: oklch(1 0 0);
   --floating-surface-foreground: #0d0d0d;
   --floating-surface-edge-shadow:
     0 0 0 1px #0000000a, 0 2px 8px #0000000a, 0 4px 80px 8px #00000006;
@@ -527,7 +533,17 @@
   --floating-menu-divider: var(--border-default);
   --floating-menu-radius: 1.25rem;
   --floating-menu-item-radius: 0.75rem;
+  /* Shared pointer-modality row density; action menus consume this token. */
+  --floating-menu-item-height: calc(var(--spacing) * 9);
+  --floating-menu-max-height: calc(
+    var(--spacing) * 4 + var(--floating-menu-item-height) * 10
+  );
   --floating-menu-leading-slot-size: 1.25rem;
+  --composer-capability-accent: oklch(0.626 0.188 259.456);
+  --composer-selection-background: oklch(0.684 0.157 256.21 / 0.35);
+  /* Two-tone Web search glyph shared by the action row and editor entity. */
+  --web-search-icon-surface: oklch(0.941 0.043 218.859);
+  --web-search-icon-foreground: oklch(0.795 0.131 222.887);
   --modal-centered-surface: #ffffff;
   --modal-centered-foreground: #0d0d0d;
   --modal-centered-edge-shadow:
@@ -565,6 +581,8 @@
   --interactive-bg-hover: oklch(0 0 0 / 0.05);
   --interactive-bg-selected: oklch(0 0 0 / 0.05);
   --interactive-bg-pressed: oklch(0 0 0 / 0.1);
+  --interactive-bg-secondary-hover: oklch(0 0 0 / 0.05);
+  --interactive-bg-secondary-pressed: oklch(0 0 0 / 0.05);
   --sidebar-row-bg: oklch(0 0 0 / 0.05);
   --surface-hover: var(--interactive-bg-hover);
   --popover-bg-hover: oklch(0.964 0 0);
@@ -682,6 +700,7 @@
     0.99665 68.277%,
     0.99988
   );
+  --spring-common: var(--spring-fast);
   --sharp-edge-top-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
   --sharp-edge-top-shadow-placeholder: 0 1px 0 transparent;
   --sharp-edge-bottom-shadow: 0 -1px 0 rgba(0, 0, 0, 0.05);
@@ -699,6 +718,7 @@
 @media (pointer: coarse) {
   :root {
     --header-height: calc(14 * var(--spacing));
+    --floating-menu-item-height: calc(var(--spacing) * 10);
   }
 }
 
@@ -711,7 +731,7 @@
   --card-foreground: var(--foreground);
   --popover: oklch(0.222 0 0);
   --popover-foreground: var(--foreground);
-  --floating-surface: #353535;
+  --floating-surface: oklch(0.305 0 0);
   --floating-surface-foreground: #ffffff;
   --floating-surface-edge-shadow: inset 0 0 1px rgba(255, 255, 255, 0.2);
   --floating-select-edge-shadow:
@@ -719,6 +739,9 @@
     0 0 1px rgba(0, 0, 0, 0.62);
   --floating-menu-item-active: rgba(255, 255, 255, 0.1);
   --floating-menu-divider: var(--border-default);
+  --composer-capability-accent: oklch(0.72 0.137 253.307);
+  --web-search-icon-surface: oklch(0.334 0.02 221.692);
+  --web-search-icon-foreground: oklch(0.801 0.131 222.79);
   --modal-centered-surface: #212121;
   --modal-centered-foreground: #ffffff;
   --modal-centered-edge-shadow:
@@ -752,6 +775,8 @@
   --interactive-bg-hover: oklch(1 0 0 / 0.1);
   --interactive-bg-selected: oklch(1 0 0 / 0.1);
   --interactive-bg-pressed: oklch(1 0 0 / 0.15);
+  --interactive-bg-secondary-hover: oklch(1 0 0 / 0.1);
+  --interactive-bg-secondary-pressed: oklch(1 0 0 / 0.05);
   --sidebar-row-bg: oklch(1 0 0 / 0.1);
   --surface-hover: var(--interactive-bg-hover);
   --popover-bg-hover: oklch(0.309 0 0);
@@ -1523,6 +1548,30 @@
     --tap-padding: var(--tap-padding-mobile);
   }
 
+  @media (hover: hover) {
+    .composer-btn:where(:not(:disabled, :active)):hover {
+      background-color: var(--interactive-bg-secondary-hover);
+    }
+  }
+
+  @media (hover: none) {
+    .composer-btn:where(:not(:disabled, :active)) {
+      background-color: var(--interactive-bg-secondary-hover);
+    }
+  }
+
+  .composer-btn:where(:active, [data-is-open], [data-state="open"]) {
+    background-color: var(--interactive-bg-secondary-pressed);
+  }
+
+  /* Kept separate because Tailwind's CSS transform drops aria attributes from
+     a mixed :where() selector list. These are semantic control states, not
+     call-site styling hooks. */
+  .composer-btn[aria-expanded="true"],
+  .composer-btn[aria-pressed="true"] {
+    background-color: var(--interactive-bg-secondary-pressed);
+  }
+
   @media (pointer: fine) {
     .composer-btn {
       --tap-padding: var(--tap-padding-pointer);
@@ -1562,6 +1611,13 @@
   .composer-prosemirror > p {
     min-height: 26px;
     margin: 0;
+    white-space: pre-wrap;
+  }
+
+  /* ProseMirror uses this zero-size image only to keep a raw widget cursor
+     addressable. The global image reset must not turn it into a block line. */
+  .composer-prosemirror .ProseMirror-separator {
+    display: none;
   }
 
   .wcDTda_prosemirror-parent.default-browser .placeholder::after {
@@ -1671,16 +1727,64 @@ code {
   font-variation-settings: var(--default-mono-font-variation-settings);
 }
 
-.prose :is(h1, h2, h3, h4) {
+/* Match ChatGPT's UI-copy policy: prose authored as interface copy receives
+   balanced/pretty wrapping, while chat Markdown and editing surfaces preserve
+   ordinary browser wrapping and explicit truncation utilities stay in charge. */
+:is(h1, h2, h3, h4, h5, h6, [role="heading"]):where(
+  :not(
+    .markdown *,
+    [data-message-author-role] *,
+    [contenteditable],
+    [contenteditable] *,
+    [role="textbox"],
+    [role="textbox"] *,
+    [class*="line-clamp-"],
+    .truncate,
+    .whitespace-nowrap
+  )
+) {
   text-wrap: balance;
 }
-.prose p,
-.prose li {
-  text-wrap: wrap;
+
+:is(p):where(
+  :not(
+    .markdown *,
+    [data-message-author-role] *,
+    [contenteditable],
+    [contenteditable] *,
+    [role="textbox"],
+    [role="textbox"] *,
+    [class*="line-clamp-"],
+    .truncate,
+    .whitespace-nowrap
+  )
+) {
+  text-wrap: pretty;
 }
+
+.prose :is(h1, h2, h3, h4, h5, h6),
+.prose p,
+.prose li,
 .prose.prose-static p,
 .prose.prose-static li {
-  text-wrap: pretty;
+  text-wrap: wrap;
+}
+
+/* ChatGPT's native disclosure utility contract. Unsupported browsers retain
+   fully functional <details> behavior and simply omit the height transition. */
+.chat-disclosure::details-content {
+  display: grid;
+  grid-template-rows: 0fr;
+  overflow: clip;
+  overflow-clip-margin: 6px;
+  transition-behavior: allow-discrete;
+  transition-duration: 300ms;
+  transition-property: content-visibility, grid-template-rows;
+  transition-timing-function: var(--spring-common);
+}
+
+.chat-disclosure[open]::details-content {
+  grid-template-rows: 1fr;
 }
 
 .prose {

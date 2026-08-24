@@ -239,7 +239,7 @@ function FileTileSurface({
         </button>
       ) : null}
 
-      <Tooltip delay={0} disableHoverablePopup>
+      <Tooltip disableHoverablePopup>
         <TooltipTrigger
           render={
             <button

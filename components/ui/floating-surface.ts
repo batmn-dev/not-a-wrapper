@@ -19,7 +19,7 @@ const floatingMenuContentClassName = "rounded-(--floating-menu-radius) py-2.5"
 const floatingMenuItemActiveClassName =
   "hover:bg-floating-menu-item-active focus:bg-floating-menu-item-active data-highlighted:bg-floating-menu-item-active data-open:bg-floating-menu-item-active data-popup-open:bg-floating-menu-item-active data-selected:bg-floating-menu-item-active"
 
-const floatingMenuItemClassName = `mx-2.5 h-9 rounded-(--floating-menu-item-radius) px-2 py-1.5 ${floatingMenuItemActiveClassName}`
+const floatingMenuItemClassName = `mx-2.5 h-(--floating-menu-item-height) rounded-(--floating-menu-item-radius) px-2 py-1.5 ${floatingMenuItemActiveClassName}`
 
 const floatingMenuLabelClassName = "mx-2.5 px-2 py-1.5"
 

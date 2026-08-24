@@ -1,23 +1,22 @@
 "use client"
 
 import { ScrollButton } from "@/components/ui/scroll-button"
+import { useThreadViewportInsets } from "@/components/ui/scroll-root"
 import { cn } from "@/lib/utils"
 import { motion } from "motion/react"
-import { forwardRef, type ReactNode } from "react"
+import { forwardRef, useCallback, type ReactNode } from "react"
+import type { ChatSurface } from "./chat-chrome"
 import { THREAD_GUTTER_VARS, THREAD_MAXWIDTH_VARS } from "./thread-bounds"
 
 type ThreadBottomContainerProps = {
   children: ReactNode
   className?: string
-  isOnboarding?: boolean
   /**
-   * "project-onboarding" renders the project surface's composer chrome (mobile
-   * fixed gradient strip, desktop in-flow under the title) from THIS component
-   * so the composer occupies one stable tree position across the
-   * onboarding↔thread flip. A position swap would remount the Composer
-   * mid-send and drop its attachment previews, display text, and focus.
+   * The resolved Chat surface from the ADR-0017 policy Module. This keeps
+   * product posture out of the design-system primitives and prevents invalid
+   * `variant` + `isOnboarding` flag combinations.
    */
-  variant?: "thread" | "project-onboarding"
+  surface?: ChatSurface
 }
 
 /**
@@ -31,19 +30,32 @@ const ThreadBottomContainer = forwardRef<
   HTMLDivElement,
   ThreadBottomContainerProps
 >(function ThreadBottomContainer(
-  { children, className, isOnboarding = false, variant = "thread" },
-  ref
+  { children, className, surface = "thread" },
+  forwardedRef
 ) {
-  const isProjectOnboarding = variant === "project-onboarding"
+  const isProjectOnboarding = surface === "project-onboarding"
+  const isOnboarding = surface !== "thread"
+  const viewportInsetsRef = useThreadViewportInsets()
+  const setContainerRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      viewportInsetsRef(node)
+      if (typeof forwardedRef === "function") {
+        forwardedRef(node)
+      } else if (forwardedRef) {
+        forwardedRef.current = node
+      }
+    },
+    [forwardedRef, viewportInsetsRef]
+  )
   return (
     <div
       id="thread-bottom-container"
-      ref={ref}
+      ref={setContainerRef}
       className={cn(
         isProjectOnboarding
           ? "group/thread-bottom-container fixed inset-x-4 bottom-0 z-30 mx-auto max-w-(--project-detail-composer-width) bg-[linear-gradient(to_top,var(--background)_75%,transparent)] pt-5 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] md:static md:inset-auto md:z-auto md:mt-6 md:w-full md:bg-none md:p-0 md:max-lg:px-4"
           : cn(
-              `group/thread-bottom-container pointer-events-none sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col [--thread-component-gap:1.5rem] [--thread-scroll-control-offset:1.5rem] [--thread-scroll-to-bottom-banner-offset:0px] has-data-[has-thread-error]:pt-2 has-data-[has-thread-error]:[box-shadow:var(--sharp-edge-bottom-shadow)] group-data-keyboard-open/scroll-root:bottom-[var(--screen-keyboard-height,0px)] md:pt-0 print:hidden ${THREAD_GUTTER_VARS} ${THREAD_MAXWIDTH_VARS}`,
+              `group/thread-bottom-container pointer-events-none sticky bottom-0 isolate z-10 flex min-h-0 w-full basis-auto flex-col [--thread-component-gap:1.5rem] [--thread-scroll-control-offset:1.5rem] [--thread-scroll-to-bottom-banner-offset:0px] has-data-[has-thread-error]:pt-2 has-data-[has-thread-error]:[box-shadow:var(--sharp-edge-bottom-shadow)] md:pt-0 print:hidden ${THREAD_GUTTER_VARS} ${THREAD_MAXWIDTH_VARS}`,
               isOnboarding && "sm:grow"
             ),
         className
@@ -97,7 +109,17 @@ const ThreadBottomContainer = forwardRef<
                 : "pointer-events-auto mx-auto mb-[var(--thread-component-gap)] w-full max-w-[var(--thread-content-max-width,40rem)]"
             }
           >
-            {children}
+            <div
+              data-composer-keyboard-pin=""
+              className="keyboard-open:fixed keyboard-open:start-3 keyboard-open:end-3 keyboard-open:bottom-[var(--screen-keyboard-height,0px)] keyboard-open:z-50 keyboard-open:w-auto! keyboard-open:pb-2.5 relative [--keyboard-open-mask-bg:var(--background)]"
+            >
+              <div
+                data-keyboard-open-mask=""
+                aria-hidden="true"
+                className="keyboard-open:block keyboard-open:-bottom-[var(--screen-keyboard-height,0px)] keyboard-open:bg-[linear-gradient(to_bottom,transparent,var(--keyboard-open-mask-bg)),linear-gradient(to_bottom,transparent_var(--single-line-fade-height),var(--keyboard-open-mask-bg)_var(--single-line-fade-height))] keyboard-open:bg-size-[100%_var(--single-line-fade-height),100%_100%] keyboard-open:bg-position-[top,bottom] keyboard-open:bg-no-repeat pointer-events-none absolute inset-x-0 top-0 -z-10 hidden h-full bg-transparent [--single-line-fade-height:32px]"
+              />
+              {children}
+            </div>
           </div>
         </div>
       </div>

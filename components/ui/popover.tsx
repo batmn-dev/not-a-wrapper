@@ -27,20 +27,27 @@ function PopoverTrigger({
 // recipe. Consumers may change size, radius, spacing, and placement, but should
 // not add border/shadow classes unless they intentionally replace that edge.
 function PopoverContent({
+  anchor,
   className,
+  portalContainer,
   align = "center",
   alignOffset = 0,
   side = "bottom",
   sideOffset = 4,
+  geometry = "content",
   ...props
 }: PopoverPrimitive.Popup.Props &
   Pick<
     PopoverPrimitive.Positioner.Props,
-    "align" | "alignOffset" | "side" | "sideOffset"
-  >) {
+    "align" | "alignOffset" | "anchor" | "side" | "sideOffset"
+  > & {
+    geometry?: "content" | "custom"
+    portalContainer?: PopoverPrimitive.Portal.Props["container"]
+  }) {
   return (
-    <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Portal container={portalContainer}>
       <PopoverPrimitive.Positioner
+        anchor={anchor}
         align={align}
         alignOffset={alignOffset}
         side={side}
@@ -51,7 +58,9 @@ function PopoverContent({
           data-slot="popover-content"
           className={cn(
             floatingSurfaceClassName,
-            "z-50 flex w-72 flex-col gap-4 rounded-2xl p-1.5 text-sm outline-hidden",
+            geometry === "content" &&
+              "flex w-72 flex-col gap-4 rounded-2xl p-1.5 text-sm",
+            "z-50 outline-hidden",
             className
           )}
           {...props}

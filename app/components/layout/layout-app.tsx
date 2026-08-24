@@ -10,6 +10,7 @@ import { AppSidebar } from "@/app/components/layout/sidebar/app-sidebar"
 import { MainContent } from "@/components/ui/main-content"
 import { ScrollRoot } from "@/components/ui/scroll-root"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
+import { Fragment } from "react"
 
 export function LayoutApp({
   children,
@@ -41,11 +42,13 @@ export function LayoutApp({
           <div className="side-pane-shell-host relative flex min-w-0 flex-1">
             <div className="@container/main relative flex min-w-0 flex-1 -translate-y-[calc(env(safe-area-inset-bottom,0px)/2)] flex-col pt-[calc(env(safe-area-inset-bottom,0px)/2)]">
               <ScrollRoot>
-                {header === undefined ? (
-                  <Header hasSidebar={hasSidebar} fixedHeader="always" />
-                ) : (
-                  header
-                )}
+                <Fragment key="app-header">
+                  {header === undefined ? (
+                    <Header hasSidebar={hasSidebar} fixedHeader="always" />
+                  ) : (
+                    header
+                  )}
+                </Fragment>
                 <MainContent id="main" className="min-h-0 flex-1">
                   {children}
                 </MainContent>

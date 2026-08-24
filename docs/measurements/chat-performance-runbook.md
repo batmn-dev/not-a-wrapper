@@ -17,7 +17,7 @@ browser/server measurement.
 
 | Switch | Side | Effect |
 | --- | --- | --- |
-| `NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION=true` | client (build-time) | User Timing marks (`chat-perf:*`) for turn + navigation events, selected-conversation mapping counters, detached-binding gauges. Changing it requires a rebuild/redeploy. |
+| `NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION=true` | client (build-time) | User Timing marks (`chat-perf:*`) for turn, navigation, and content-free Composer paint events, selected-conversation mapping counters, and detached-binding gauges. Changing it requires a rebuild/redeploy. |
 | `CHAT_PERF_SAMPLE_RATE=<0..1>` | Next server (deploy-time) | Per-request sampling of `_tag:"chat_perf"` structured log lines: preparation spans and checkpoint counters. Start staging at `1`, production at `0.05`, reduce if overhead is measurable. |
 
 Correlation: when the client flag is on, each send mints a UUID, stamps its
@@ -58,7 +58,10 @@ never attach them to public issues.
 - Client: DevTools Performance panel → User Timings track (`chat-perf:*`),
   or `performance.getEntriesByType("mark")` in the console. Turn latency
   metrics are the deltas defined in plan §7.4 (e.g. `chat_send_intent` →
-  `first_visible_text`).
+  `first_visible_text`). Composer typing exposes
+  `composer.keystroke_to_next_paint` after one animation frame and
+  `composer.keystroke_to_settled_paint` after the following Composer commit
+  plus two animation frames; each mark contains only `durationMs`.
 - Server: filter logs for `"_tag":"chat_perf"`; join a single turn on
   `correlationId`. `stream_start` durationMs is request-to-provider-start.
 - Checkpoints: `event:"checkpoint"` kinds `attempt/accepted/authority_lost/

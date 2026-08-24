@@ -40,13 +40,31 @@ function readPixelValue(value: string) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+/** Resolve a root-owned CSS length after var()/env()/max() evaluation. */
+function resolveRootLength(root: HTMLElement, property: string) {
+  const inlineValue = root.style.getPropertyValue(property)
+  if (/^-?\d*\.?\d+px$/.test(inlineValue.trim())) {
+    return readPixelValue(inlineValue)
+  }
+
+  const probe = document.createElement("div")
+  probe.style.position = "absolute"
+  probe.style.visibility = "hidden"
+  probe.style.pointerEvents = "none"
+  probe.style.contain = "strict"
+  probe.style.width = "0"
+  probe.style.height = `var(${property}, 0px)`
+  root.appendChild(probe)
+  const resolved = probe.getBoundingClientRect().height
+  probe.remove()
+  return resolved
+}
+
 function getScrollFromEndRootMargin(root: HTMLElement) {
-  const footerHeight =
-    root
-      .querySelector<HTMLElement>("#thread-bottom-container")
-      ?.getBoundingClientRect().height ?? 0
-  const keyboardHeight = readPixelValue(
-    root.style.getPropertyValue("--screen-keyboard-height")
+  const footerHeight = resolveRootLength(root, "--sticky-padding-bottom")
+  const keyboardHeight = resolveRootLength(
+    root,
+    "--keyboard-safe-area-bottom"
   )
   return `0px 0px ${footerHeight + keyboardHeight}px`
 }

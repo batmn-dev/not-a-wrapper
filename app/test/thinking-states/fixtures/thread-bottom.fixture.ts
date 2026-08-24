@@ -34,19 +34,19 @@ export const THREAD_LIFECYCLE_FIXTURES = {
 export const THREAD_SURFACE_FIXTURES = {
   existing: {
     label: "Existing chat",
-    isOnboarding: false,
+    surface: "thread",
     draftScopeId: "thinking-states-playground",
     placeholder: "Ask anything",
   },
   project: {
     label: "Project chat",
-    isOnboarding: false,
+    surface: "thread",
     draftScopeId: "project-thinking-states-playground",
     placeholder: "New chat in Interface parity",
   },
   onboarding: {
     label: "Onboarding",
-    isOnboarding: true,
+    surface: "home-onboarding",
     draftScopeId: "thinking-states-onboarding",
     placeholder: "Ask anything",
   },
@@ -54,7 +54,7 @@ export const THREAD_SURFACE_FIXTURES = {
   ThreadSurfaceFixtureKey,
   {
     label: string
-    isOnboarding: boolean
+    surface: "project-onboarding" | "home-onboarding" | "thread"
     draftScopeId: string
     placeholder: string
   }

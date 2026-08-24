@@ -132,9 +132,11 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   },
   DropdownMenuTrigger: ({
     render,
+    ...props
   }: {
     render: React.ReactElement<Record<string, unknown>>
-  }) => React.cloneElement(render, { "data-testid": "model-trigger" }),
+  } & Record<string, unknown>) =>
+    React.cloneElement(render, { ...props, "data-testid": "model-trigger" }),
   DropdownMenuContent: ({
     children,
     className,
@@ -486,6 +488,11 @@ describe("ModelSelector", () => {
     )
     expect(trigger?.firstElementChild?.className).toContain("text-foreground")
     expect(trigger?.firstElementChild?.className).toContain("opacity-100")
+    expect(trigger?.hasAttribute("data-composer-control")).toBe(true)
+    expect(trigger?.className).toContain("composer-btn")
+    expect(trigger?.className).not.toContain("hover:bg-interactive-hover")
+    expect(trigger?.className).not.toContain("active:bg-interactive-pressed")
+    expect(trigger?.className).toContain("active:scale-[0.96]")
     expect(trigger?.className).toContain("can-hover:relative")
     expect(trigger?.className).toContain("can-hover:after:absolute")
     expect(trigger?.className).toContain("can-hover:after:-inset-x-1")
