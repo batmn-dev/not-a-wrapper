@@ -43,21 +43,43 @@ const KEYBOARD_CLOSED_EVENT = "keyboard-closed"
 const KEYBOARD_CLOSE_FALLBACK_MS = 500
 const KEYBOARD_CLOSE_SETTLE_MS = 100
 
-let keyboardEventTarget: EventTarget | null = null
-let isKeyboardOpen = false
-let focusedKeyboardElement: HTMLElement | null = null
+type VirtualKeyboardSignal =
+  | typeof KEYBOARD_OPENED_EVENT
+  | typeof KEYBOARD_CLOSED_EVENT
 
-function getKeyboardEventTarget() {
-  keyboardEventTarget ??= new EventTarget()
-  return keyboardEventTarget
-}
-
-function dispatchKeyboardEvent(name: string) {
-  getKeyboardEventTarget().dispatchEvent(new CustomEvent(name))
+/**
+ * The document-wide keyboard store (ChatGPT's controller keeps this state in
+ * a store with an event bus). Open-state writes and signal dispatches are
+ * deliberately decoupled: the controller keeps `isOpen` current per
+ * focus/geometry transition, while `keyboard-closed` fires only once the
+ * geometry has actually settled (or the fallback lands).
+ */
+const virtualKeyboardStore = {
+  isOpen: false,
+  focusedElement: null as HTMLElement | null,
+  events: new EventTarget(),
+  emit(signal: VirtualKeyboardSignal) {
+    this.events.dispatchEvent(new CustomEvent(signal))
+  },
 }
 
 function isVirtualKeyboardOpen() {
-  return isKeyboardOpen
+  return virtualKeyboardStore.isOpen
+}
+
+/**
+ * Notifies on every keyboard-opened / keyboard-closed signal and returns an
+ * unsubscribe. Pairs with `isVirtualKeyboardOpen` as a useSyncExternalStore
+ * seam for React consumers (keyboard-aware sheets, drawers).
+ */
+function subscribeVirtualKeyboard(listener: () => void) {
+  const { events } = virtualKeyboardStore
+  events.addEventListener(KEYBOARD_OPENED_EVENT, listener)
+  events.addEventListener(KEYBOARD_CLOSED_EVENT, listener)
+  return () => {
+    events.removeEventListener(KEYBOARD_OPENED_EVENT, listener)
+    events.removeEventListener(KEYBOARD_CLOSED_EVENT, listener)
+  }
 }
 
 /**
@@ -69,16 +91,16 @@ function isVirtualKeyboardOpen() {
 function closeVirtualKeyboard(onClosed?: () => void) {
   const active = document.activeElement
   const target =
-    focusedKeyboardElement ??
+    virtualKeyboardStore.focusedElement ??
     (isVirtualKeyboardTarget(active) ? (active as HTMLElement) : null)
-  if (!target || !isKeyboardOpen) {
+  if (!target || !virtualKeyboardStore.isOpen) {
     onClosed?.()
     return
   }
 
   const controller = new AbortController()
   target.blur()
-  getKeyboardEventTarget().addEventListener(
+  virtualKeyboardStore.events.addEventListener(
     KEYBOARD_CLOSED_EVENT,
     () => {
       controller.abort()
@@ -137,9 +159,9 @@ function createKeyboardViewportController(root: HTMLElement) {
       "keyboard-open",
       hadKeyboardClass || isOpen
     )
-    if (isOpen !== isKeyboardOpen) {
-      isKeyboardOpen = isOpen
-      dispatchKeyboardEvent(
+    if (isOpen !== virtualKeyboardStore.isOpen) {
+      virtualKeyboardStore.isOpen = isOpen
+      virtualKeyboardStore.emit(
         isOpen ? KEYBOARD_OPENED_EVENT : KEYBOARD_CLOSED_EVENT
       )
     }
@@ -174,20 +196,20 @@ function createKeyboardViewportController(root: HTMLElement) {
         if (keyboard.boundingRect.height !== 0) return
         window.setTimeout(() => {
           keyboard.removeEventListener("geometrychange", handleGeometry)
-          dispatchKeyboardEvent(KEYBOARD_CLOSED_EVENT)
+          virtualKeyboardStore.emit(KEYBOARD_CLOSED_EVENT)
           window.clearTimeout(fallback)
         }, KEYBOARD_CLOSE_SETTLE_MS)
       }
       fallback = window.setTimeout(() => {
         keyboard.removeEventListener("geometrychange", handleGeometry)
-        dispatchKeyboardEvent(KEYBOARD_CLOSED_EVENT)
+        virtualKeyboardStore.emit(KEYBOARD_CLOSED_EVENT)
       }, KEYBOARD_CLOSE_FALLBACK_MS)
       keyboard.addEventListener("geometrychange", handleGeometry)
     }
     const teardownWhenUnfocused = () => {
       frame = null
       if (keyboardTargetFocused) return
-      focusedKeyboardElement = null
+      virtualKeyboardStore.focusedElement = null
       keyboard.removeEventListener("geometrychange", applyGeometry)
       clearHeight()
       dispatchClosedWhenSettled()
@@ -196,10 +218,10 @@ function createKeyboardViewportController(root: HTMLElement) {
       const target = event.target as Element | null
       if (!isVirtualKeyboardTarget(target)) return
       keyboardTargetFocused = true
-      focusedKeyboardElement = target as HTMLElement
-      if (!isKeyboardOpen) {
-        isKeyboardOpen = true
-        dispatchKeyboardEvent(KEYBOARD_OPENED_EVENT)
+      virtualKeyboardStore.focusedElement = target as HTMLElement
+      if (!virtualKeyboardStore.isOpen) {
+        virtualKeyboardStore.isOpen = true
+        virtualKeyboardStore.emit(KEYBOARD_OPENED_EVENT)
       }
       if (frame !== null) {
         cancelAnimationFrame(frame)
@@ -209,7 +231,7 @@ function createKeyboardViewportController(root: HTMLElement) {
     }
     const handleFocusOut = () => {
       keyboardTargetFocused = false
-      isKeyboardOpen = false
+      virtualKeyboardStore.isOpen = false
       if (frame !== null) cancelAnimationFrame(frame)
       frame = requestAnimationFrame(teardownWhenUnfocused)
     }
@@ -224,8 +246,8 @@ function createKeyboardViewportController(root: HTMLElement) {
       keyboard.removeEventListener("geometrychange", applyGeometry)
       document.removeEventListener("focusin", handleFocusIn)
       document.removeEventListener("focusout", handleFocusOut)
-      isKeyboardOpen = false
-      focusedKeyboardElement = null
+      virtualKeyboardStore.isOpen = false
+      virtualKeyboardStore.focusedElement = null
       clearHeight()
     }
   }
@@ -236,7 +258,9 @@ function createKeyboardViewportController(root: HTMLElement) {
     frame = null
     const active = document.activeElement
     const hasKeyboardTarget = isVirtualKeyboardTarget(active)
-    focusedKeyboardElement = hasKeyboardTarget ? (active as HTMLElement) : null
+    virtualKeyboardStore.focusedElement = hasKeyboardTarget
+      ? (active as HTMLElement)
+      : null
     const layoutViewportHeight = Math.max(
       window.innerHeight,
       documentElement.clientHeight,
@@ -275,8 +299,8 @@ function createKeyboardViewportController(root: HTMLElement) {
     window.removeEventListener("orientationchange", scheduleViewportWrite)
     document.removeEventListener("focusin", scheduleViewportWrite)
     document.removeEventListener("focusout", scheduleViewportWrite)
-    isKeyboardOpen = false
-    focusedKeyboardElement = null
+    virtualKeyboardStore.isOpen = false
+    virtualKeyboardStore.focusedElement = null
     clearHeight()
   }
 }
@@ -285,4 +309,5 @@ export {
   closeVirtualKeyboard,
   createKeyboardViewportController,
   isVirtualKeyboardOpen,
+  subscribeVirtualKeyboard,
 }

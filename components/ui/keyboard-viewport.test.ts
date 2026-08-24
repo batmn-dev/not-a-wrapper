@@ -5,6 +5,7 @@ import {
   closeVirtualKeyboard,
   createKeyboardViewportController,
   isVirtualKeyboardOpen,
+  subscribeVirtualKeyboard,
 } from "./keyboard-viewport"
 
 class FakeVirtualKeyboard extends EventTarget {
@@ -112,5 +113,24 @@ describe("keyboard viewport controller (VirtualKeyboard branch)", () => {
     const closed = vi.fn()
     closeVirtualKeyboard(closed)
     expect(closed).toHaveBeenCalledTimes(1)
+  })
+
+  it("notifies subscribers on open and close signals until unsubscribed", () => {
+    const listener = vi.fn()
+    const unsubscribe = subscribeVirtualKeyboard(listener)
+
+    input.focus()
+    expect(isVirtualKeyboardOpen()).toBe(true)
+    expect(listener).toHaveBeenCalledTimes(1)
+
+    closeVirtualKeyboard()
+    vi.advanceTimersByTime(20) // requestAnimationFrame teardown
+    keyboard.setHeight(0)
+    vi.advanceTimersByTime(100) // settle delay
+    expect(listener).toHaveBeenCalledTimes(2)
+
+    unsubscribe()
+    input.focus()
+    expect(listener).toHaveBeenCalledTimes(2)
   })
 })

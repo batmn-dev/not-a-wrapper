@@ -33,7 +33,6 @@ import {
   PromptInputTextarea,
   type PromptInputActionQuery,
   type PromptInputEditorHandle,
-  type PromptInputEntity,
 } from "@/components/ui/prompt-input"
 import { toast } from "@/components/ui/toast"
 import { TooltipShortcut } from "@/components/ui/tooltip"
@@ -44,11 +43,8 @@ import { StopBulkRoundedIcon } from "@/lib/icons"
 import { getModelInfo } from "@/lib/models"
 import { useUser } from "@/lib/user-store/provider"
 import { cn, debounce } from "@/lib/utils"
-import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
-import { api } from "@/convex/_generated/api"
-import type { Id } from "@/convex/_generated/dataModel"
 import { RiArrowUpLine } from "@remixicon/react"
-import { useConvex, useMutation } from "convex/react"
+import { useConvex } from "convex/react"
 import {
   forwardRef,
   useCallback,
@@ -61,11 +57,6 @@ import {
 import { flushSync } from "react-dom"
 import { PromptSystem } from "../suggestions/prompt-system"
 import { ButtonPlusMenu } from "./button-plus-menu"
-import { type ComposerMenuConnector } from "./composer-menu-items"
-import {
-  getComposerAction,
-  type ComposerActionId,
-} from "./composer-action-registry"
 import { runComposerSlideTransition } from "./composer-view-transition"
 import { FileList } from "./file-list"
 import { InputDropZone } from "./input-drop-zone"
@@ -76,6 +67,8 @@ import {
   type PendingAttachment,
 } from "./pending-attachment"
 import { resolveComposerPrimaryActionState } from "./primary-action-state"
+import { useComposerCapabilities } from "./use-composer-capabilities"
+import { useComposerConnectors } from "./use-composer-connectors"
 
 export type ComposerTurnPayload = {
   text: string
@@ -122,7 +115,6 @@ type ComposerProps = {
 }
 
 const DEFAULT_COMPOSER_ARIA_LABEL = "Chat with ChatGPT"
-const WEB_SEARCH_ACTION = getComposerAction("web-search")
 
 const isOnlyWhitespace = (text: string) => !/[^\s]/.test(text)
 
@@ -245,90 +237,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const handleModelSelectionCommitted = useCallback(() => {
       editorRef.current?.focus({ preventScroll: true })
     }, [])
-    const composerEntities = useMemo<readonly PromptInputEntity[]>(
-      () =>
-        enableSearch
-          ? [
-              {
-                id: WEB_SEARCH_ACTION.id,
-                kind: "capability",
-                label: WEB_SEARCH_ACTION.label,
-              },
-            ]
-          : [],
-      [enableSearch]
-    )
-    const handleComposerEntitiesChange = useCallback(
-      (entities: readonly PromptInputEntity[]) => {
-        const hasWebSearch = entities.some(
-          (entity) => entity.id === WEB_SEARCH_ACTION.id
-        )
-        if (hasWebSearch !== enableSearch) setEnableSearch(hasWebSearch)
-      },
-      [enableSearch, setEnableSearch]
-    )
-    const handleActivateActionQuery = useCallback(
-      (actionId: ComposerActionId, query: PromptInputActionQuery) => {
-        const editor = editorRef.current
-        if (!editor) return false
-
-        return editor.replaceActionQuery(
-          query,
-          actionId === WEB_SEARCH_ACTION.id
-            ? {
-                id: WEB_SEARCH_ACTION.id,
-                kind: "capability",
-                label: WEB_SEARCH_ACTION.label,
-              }
-            : undefined
-        )
-      },
-      []
-    )
-
-    // MCP connectors surface in the @ menu the way ChatGPT surfaces its
-    // connectors; activation toggles the server the runtime already consults
-    // per turn. `undefined` while the per-user query resolves drives the
-    // menu's skeleton rows.
-    const { data: mcpServers } = usePerUserQuery(
-      api.mcpServers.list,
-      isUserAuthenticated ? {} : "skip"
-    )
-    const menuConnectors = useMemo<
-      readonly ComposerMenuConnector[] | undefined
-    >(() => {
-      if (!isUserAuthenticated) return []
-      if (mcpServers === undefined) return undefined
-      return mcpServers.map((server) => {
-        let host = ""
-        try {
-          host = new URL(server.url).host
-        } catch {
-          host = server.url
-        }
-        return {
-          id: server._id,
-          name: server.name,
-          description: host,
-          enabled: server.enabled,
-        }
-      })
-    }, [isUserAuthenticated, mcpServers])
-    const toggleMcpServer = useMutation(api.mcpServers.toggleEnabled)
-    const handleActivateConnector = useCallback(
-      (connectorId: string, query: PromptInputActionQuery) => {
-        const editor = editorRef.current
-        if (!editor) return false
-        if (!editor.replaceActionQuery(query)) return false
-        void toggleMcpServer({
-          serverId: connectorId as Id<"mcpServers">,
-        }).catch(() => {
-          toast({ title: "Couldn’t update the connector", status: "error" })
-        })
-        return true
-      },
-      [toggleMcpServer]
-    )
+    const {
+      entities: composerEntities,
+      handleEntitiesChange: handleComposerEntitiesChange,
+      activateActionQuery: handleActivateActionQuery,
+    } = useComposerCapabilities({ enableSearch, setEnableSearch, editorRef })
+    const { connectors: menuConnectors, activateConnector: handleActivateConnector } =
+      useComposerConnectors({ isUserAuthenticated, editorRef })
     const handleOpenActionMenu = useCallback(() => {
       editorRef.current?.toggleSyntheticActionQuery()
     }, [])
