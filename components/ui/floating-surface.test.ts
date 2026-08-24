@@ -150,24 +150,32 @@ describe("floating surface contract", () => {
 
   it("keeps standard menu consumers on shared geometry and active states", () => {
     const composerMenu = read("app/components/chat-input/button-plus-menu.tsx")
+    const composerMenuItems = read(
+      "app/components/chat-input/composer-menu-items.ts"
+    )
+    const composerMenuRow = read(
+      "app/components/chat-input/composer-menu-row.tsx"
+    )
     const sidebarMenu = read("app/components/layout/sidebar/sidebar-list.tsx")
     const menubar = read("components/ui/menubar.tsx")
 
     expect(composerMenu).not.toContain("composerPlusMenuItemClassName")
     expect(composerMenu).not.toContain("rounded-[16px]")
-    expect(composerMenu).toContain("composerActionRegistry")
-    expect(composerMenu).toContain("queriedActions.map")
+    expect(composerMenuItems).toContain("composerActionRegistry")
+    expect(composerMenu).toContain("actionItems.map")
     expect(composerMenu).not.toContain("<CommandInput")
     expect(composerMenu).not.toContain('heading="Actions"')
     expect(composerMenu).toContain("anchor={composerAnchor}")
     expect(composerMenu).toContain("portalContainer={overlayContainerRef}")
     expect(composerMenu).toContain("initialFocus={false}")
-    expect(composerMenu).toContain("data-highlighted={")
+    expect(composerMenuRow).toContain("data-highlighted={")
     expect(composerMenu).not.toContain("focusInitialAction")
     expect(composerMenu).toContain("action.description")
-    expect(composerMenu).toContain("aria-disabled={disabled || undefined}")
-    expect(composerMenu).toContain("if (!disabled) activateItem")
+    expect(composerMenuRow).toContain("aria-disabled={disabled || undefined}")
+    expect(composerMenuRow).toContain("if (!disabled) onActivate(itemId)")
+    expect(composerMenuRow).toContain("floatingMenuItemActiveClassName")
     expect(composerMenu).not.toContain("cursor-not-allowed opacity-50")
+    expect(composerMenuRow).not.toContain("cursor-not-allowed opacity-50")
     expect(sidebarMenu).not.toContain("sidebarMenuRadioItemClassName")
     expect(sidebarMenu).not.toContain("rounded-[16px]")
     expect(menubar).not.toContain("focus:bg-interactive-selected")

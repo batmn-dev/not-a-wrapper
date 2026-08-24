@@ -60,7 +60,8 @@ import {
 } from "react"
 import { flushSync } from "react-dom"
 import { PromptSystem } from "../suggestions/prompt-system"
-import { ButtonPlusMenu, type ComposerMenuConnector } from "./button-plus-menu"
+import { ButtonPlusMenu } from "./button-plus-menu"
+import { type ComposerMenuConnector } from "./composer-menu-items"
 import {
   getComposerAction,
   type ComposerActionId,
