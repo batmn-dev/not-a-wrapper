@@ -9,6 +9,9 @@ export type ComposerActionId = "add-files" | "web-search"
 export type ComposerActionDefinition = Readonly<{
   id: ComposerActionId
   label: string
+  /** ChatGPT's shouldShowShortLabel: the touch-optimized menu renders a short
+   * label ("Files") where the pointer menus use the full one. */
+  touchLabel?: string
   description: string
   keywords: readonly string[]
   icon: RemixiconComponentType
@@ -25,6 +28,7 @@ export const composerActionRegistry = [
   {
     id: "add-files",
     label: "Add photos & files",
+    touchLabel: "Files",
     description: "Upload from computer",
     keywords: ["attach", "image", "photo", "upload"],
     icon: RiAttachmentLine,

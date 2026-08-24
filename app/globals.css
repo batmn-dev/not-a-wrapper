@@ -531,6 +531,9 @@
     0 8px 12px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.62);
   --floating-menu-item-active: rgba(0, 0, 0, 0.04);
   --floating-menu-divider: var(--border-default);
+  /* ChatGPT's --bg-tertiary (measured 2026-08-24): the touch-optimized menu's
+   * icon-chip surface and touch highlight. */
+  --floating-menu-touch-tertiary: #f3f3f3;
   --floating-menu-radius: 1.25rem;
   --floating-menu-item-radius: 0.75rem;
   /* Shared pointer-modality row density; action menus consume this token. */
@@ -742,6 +745,7 @@
     0 0 1px rgba(0, 0, 0, 0.62);
   --floating-menu-item-active: rgba(255, 255, 255, 0.1);
   --floating-menu-divider: var(--border-default);
+  --floating-menu-touch-tertiary: #414141;
   --composer-capability-accent: oklch(0.72 0.137 253.307);
   --web-search-icon-surface: oklch(0.334 0.02 221.692);
   --web-search-icon-foreground: oklch(0.801 0.131 222.79);

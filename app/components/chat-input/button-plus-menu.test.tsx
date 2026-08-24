@@ -6,10 +6,13 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ButtonPlusMenu } from "./button-plus-menu"
 
-const breakpointMocks = vi.hoisted(() => ({ isMobile: false }))
+const breakpointMocks = vi.hoisted(() => ({ isMobile: false, isTouch: false }))
 
 vi.mock("@/hooks/use-breakpoint", () => ({
   useBreakpoint: () => breakpointMocks.isMobile,
+}))
+vi.mock("@/hooks/use-mobile-device-os", () => ({
+  useIsMobileDeviceOs: () => breakpointMocks.isTouch,
 }))
 vi.mock("./popover-content-auth", () => ({ PopoverContentAuth: () => null }))
 
@@ -20,6 +23,7 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
 
   beforeEach(() => {
     breakpointMocks.isMobile = false
+    breakpointMocks.isTouch = false
     container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
@@ -300,9 +304,9 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
 
     expect(menu?.getAttribute("role")).toBe("menu")
     expect(trigger.getAttribute("aria-expanded")).toBe("true")
-    expect(menu?.getAttribute("data-content-appearance")).toBe(
-      "touch-optimized"
-    )
+    // The fine-pointer narrow-width popover is NOT the touch treatment —
+    // data-content-appearance marks only the mobile-OS icon-chip variant.
+    expect(menu?.getAttribute("data-content-appearance")).toBeNull()
     // ChatGPT's current mobile + menu: compact content-sized popover with
     // plain glyph rows — not the old dark icon-circle panel.
     expect(menu?.className).toContain("rounded-[20px]")
@@ -346,6 +350,104 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
     expect(tabWasAllowed).toBe(false)
     expect(document.activeElement).toBe(filesItem)
     expect(menu?.hasAttribute("data-open")).toBe(true)
+  })
+
+  it("renders ChatGPT's touch-optimized icon-chip popover on mobile-OS devices", () => {
+    breakpointMocks.isMobile = true
+    breakpointMocks.isTouch = true
+    const onFilesAdded = vi.fn()
+
+    act(() => {
+      root.render(
+        <FileUpload onFilesAdded={onFilesAdded}>
+          <form data-type="unified-composer">
+            <div id="prompt-textarea" role="textbox" tabIndex={0} />
+            <ButtonPlusMenu
+              enableSearch={false}
+              isFileUploadAvailable
+              isSearchDisabled={false}
+              isUserAuthenticated
+              onToggleSearch={() => {}}
+            />
+            <div data-composer-overlay-host />
+          </form>
+        </FileUpload>
+      )
+    })
+
+    const trigger = container.querySelector(
+      '[aria-label="Add files and more"]'
+    ) as HTMLButtonElement
+    act(() => {
+      trigger.focus()
+      trigger.click()
+    })
+
+    const menu = document.body.querySelector<HTMLElement>(
+      '[data-slot="dropdown-menu-content"]'
+    )
+    // The touch treatment carries the appearance marker and ChatGPT's
+    // decompiled container geometry: rounded-28 superellipse, min-w 240px,
+    // item-height-capped, content-sized.
+    expect(menu?.getAttribute("data-content-appearance")).toBe(
+      "touch-optimized"
+    )
+    expect(menu?.className).toContain("rounded-[28px]")
+    expect(menu?.className).toContain("min-w-60")
+    expect(menu?.className).toContain("w-max")
+    // Live-measured cap: 6px block padding + 5.8 visible item-heights.
+    expect(menu?.className).toContain(
+      "5.8*var(--floating-menu-item-height)"
+    )
+    expect(menu?.className).toContain("py-1.5")
+
+    // Camera / Photos / Files rows with 36px full-round icon chips on the
+    // tertiary token, plus our Web search radio row in the same vocabulary.
+    const labels = [...(menu?.querySelectorAll(".truncate") ?? [])].map(
+      (node) => node.textContent
+    )
+    expect(labels).toEqual(["Camera", "Photos", "Files", "Web search"])
+    const chips = menu?.querySelectorAll(
+      '[class*="rounded-full"][class*="--floating-menu-touch-tertiary"]'
+    )
+    expect(chips).toHaveLength(4)
+    const rows = menu?.querySelectorAll('[role="menuitem"],[role="menuitemradio"]')
+    for (const row of rows ?? []) {
+      expect(row.className).toContain("min-h-(--floating-menu-item-height)")
+      expect(row.className).toContain("rounded-[28px]")
+    }
+
+    // The camera/photo sources are hidden inputs outside the menu, with
+    // ChatGPT's accept/capture contract; rows click them.
+    const cameraInput = container.querySelector<HTMLInputElement>(
+      '[data-testid="composer-upload-camera-input"]'
+    )
+    const photosInput = container.querySelector<HTMLInputElement>(
+      '[data-testid="composer-upload-photos-input"]'
+    )
+    expect(cameraInput?.getAttribute("accept")).toBe("image/*")
+    expect(cameraInput?.getAttribute("capture")).toBe("environment")
+    expect(cameraInput?.multiple).toBe(true)
+    expect(photosInput?.getAttribute("accept")).toBe("image/*")
+    expect(photosInput?.hasAttribute("capture")).toBe(false)
+
+    const cameraClick = vi.spyOn(cameraInput!, "click")
+    const cameraRow = [...(menu?.querySelectorAll('[role="menuitem"]') ?? [])].find(
+      (row) => row.textContent === "Camera"
+    ) as HTMLElement
+    act(() => cameraRow.click())
+    expect(cameraClick).toHaveBeenCalledTimes(1)
+
+    // Picked files feed the shared added-files pipeline and reset the input.
+    const file = new File(["x"], "shot.png", { type: "image/png" })
+    Object.defineProperty(photosInput!, "files", {
+      configurable: true,
+      value: { length: 1, 0: file, item: () => file, [Symbol.iterator]: [file][Symbol.iterator].bind([file]) },
+    })
+    act(() => {
+      photosInput!.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    expect(onFilesAdded).toHaveBeenCalledWith([file])
   })
 
   it("keeps @ discovery editor-owned across filtering, Escape, and Tab activation", () => {

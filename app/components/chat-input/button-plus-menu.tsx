@@ -26,8 +26,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
-import { RiAddLargeLine, RiPlugLine } from "@remixicon/react"
-import { useCallback, useMemo } from "react"
+import { useIsMobileDeviceOs } from "@/hooks/use-mobile-device-os"
+import {
+  RiAddLargeLine,
+  RiCameraLine,
+  RiImageLine,
+  RiPlugLine,
+} from "@remixicon/react"
+import { useCallback, useMemo, useRef } from "react"
 import { type ComposerActionId } from "./composer-action-registry"
 import {
   type ComposerActionAvailability,
@@ -45,6 +51,18 @@ const composerPlusTooltip = (
     <Kbd>@</Kbd>
   </TooltipShortcut>
 )
+
+/* ChatGPT's touch-optimized + menu treatment (decompiled from their
+ * production bundles + root CSS 2026-08-24; see reference-ui/ChatGPT/
+ * components/chat-composer/chatgpt-plus-menu-touch-optimized-2026-08-24.md):
+ * mobile-OS user agents get large icon-chip rows in a content-sized,
+ * rounded-28 superellipse popover — 6px row inline margin/padding, 12px gap,
+ * 36px full-round chips on the tertiary surface with 20px glyphs, row
+ * highlight on the same tertiary token, and no group separators. */
+const touchMenuRowClassName =
+  "mx-1.5 h-auto min-h-(--floating-menu-item-height) gap-3 rounded-[28px] border-y-0! [corner-shape:superellipse(1.1)] px-1.5 py-1.5 text-sm hover:bg-(--floating-menu-touch-tertiary) focus:bg-(--floating-menu-touch-tertiary) data-highlighted:bg-(--floating-menu-touch-tertiary)"
+const touchMenuChipClassName =
+  "flex size-9 shrink-0 items-center justify-center rounded-full bg-(--floating-menu-touch-tertiary) text-foreground"
 
 type ButtonPlusMenuProps = {
   isUserAuthenticated: boolean
@@ -89,8 +107,23 @@ export function ButtonPlusMenu({
   onOpenActionMenu,
   onCloseActionQuery,
 }: ButtonPlusMenuProps) {
-  const { openFilePicker } = useFileUpload()
+  const { openFilePicker, addFiles } = useFileUpload()
   const isMobile = useBreakpoint(768)
+  // ChatGPT parity: the touch treatment keys on the user-agent OS (iOS /
+  // Android / iPadOS-as-Mac), NOT pointer coarseness or width — a narrow
+  // desktop window keeps the compact plain-glyph popover.
+  const isTouchMenu = useIsMobileDeviceOs()
+  const cameraInputRef = useRef<HTMLInputElement | null>(null)
+  const photosInputRef = useRef<HTMLInputElement | null>(null)
+  const handleTouchFileInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = event.currentTarget.files
+      if (files?.length) addFiles(Array.from(files))
+      // ChatGPT parity: reset so re-picking the same file fires change again.
+      event.currentTarget.value = ""
+    },
+    [addFiles]
+  )
 
   // The registry stays product-neutral; this shell maps its live props onto
   // per-action availability (and, for toggles, selection).
@@ -354,75 +387,204 @@ export function ButtonPlusMenu({
               {composerPlusTooltip}
             </TooltipContent>
           </Tooltip>
-          {/* ChatGPT's current mobile + menu (captured 2026-08-24): a compact
-              content-sized popover on the main surface — rounded-[20px],
-              py-2.5, 36px text-sm rows with plain 20px currentColor glyphs —
-              NOT the old dark icon-circle panel. `w-max` overrides the shared
-              dropdown base's anchor-width sizing: the popover is sized by its
-              rows (capped at max-w-xs), never by the 36px + button. */}
-          <DropdownMenuContent
-            side="top"
-            sideOffset={0}
-            align="start"
-            alignOffset={-7}
-            animated={false}
-            geometry="custom"
-            data-content-appearance="touch-optimized"
-            className="max-h-(--available-height) w-max max-w-xs overflow-y-auto rounded-[20px] py-2.5 [scrollbar-width:none]"
-            onKeyDownCapture={(event) => {
-              if (event.key === "Tab") event.preventDefault()
-            }}
-          >
-            <DropdownMenuGroup>
-              {commandItems.map((item) => (
-                <DropdownMenuItem
-                  key={item.itemId}
-                  geometry="custom"
-                  disabled={item.disabled}
-                  className="mx-2.5 min-h-9 justify-between gap-6 rounded-[12px] px-2.5 py-1.5 text-sm"
-                  onClick={() => activateItem(item.itemId)}
-                >
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    {/* Mobile rows keep ChatGPT's plain currentColor glyphs —
-                        no per-action icon tint (that belongs to the @ menu). */}
-                    <Icon
-                      icon={item.action.icon}
-                      glyphInset={0}
-                      slotSize={20}
-                    />
-                    <span className="min-w-0 truncate">
-                      {item.action.label}
-                    </span>
-                  </span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuGroup>
-            <DropdownMenuRadioGroup
-              value={toggleItems.find((item) => item.selected)?.itemId ?? ""}
+          {isTouchMenu ? (
+            /* ChatGPT's touch-optimized + menu (decompiled 2026-08-24): a
+               content-sized rounded-28 superellipse popover, min-w 240px,
+               height-capped by --floating-menu-item-height rows, with
+               Camera / Photos / Files icon-chip rows in place of the single
+               add-files row. data-content-appearance marks THIS treatment —
+               the fine-pointer popover below deliberately lacks it. */
+            <DropdownMenuContent
+              side="top"
+              sideOffset={0}
+              align="start"
+              alignOffset={-7}
+              animated={false}
+              geometry="custom"
+              data-content-appearance="touch-optimized"
+              className="max-h-[min(var(--available-height),calc(var(--spacing)*1.5+5.8*var(--floating-menu-item-height)))] w-max min-w-60 max-w-xs overflow-y-auto rounded-[28px] [corner-shape:superellipse(1.1)] py-1.5 [scrollbar-width:none] [overscroll-behavior:contain]"
+              onKeyDownCapture={(event) => {
+                if (event.key === "Tab") event.preventDefault()
+              }}
             >
-              {toggleItems.map((item) => (
-                <DropdownMenuRadioItem
-                  key={item.itemId}
-                  value={item.itemId}
-                  disabled={item.disabled}
-                  className="mx-2.5 min-h-9 justify-between gap-6 rounded-[12px] px-2.5 py-1.5 text-sm"
-                  onClick={() => activateItem(item.itemId)}
-                >
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    <Icon
-                      icon={item.action.icon}
-                      glyphInset={0}
-                      slotSize={20}
-                    />
-                    <span className="min-w-0 truncate">
-                      {item.action.label}
+              <DropdownMenuGroup>
+                {isFileUploadAvailable && (
+                  <DropdownMenuItem
+                    geometry="custom"
+                    className={touchMenuRowClassName}
+                    onClick={() => cameraInputRef.current?.click()}
+                  >
+                    <span className={touchMenuChipClassName}>
+                      <Icon icon={RiCameraLine} glyphInset={0} slotSize={20} />
                     </span>
-                  </span>
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
+                    <span className="flex min-w-0 grow items-center gap-2.5">
+                      <span className="truncate">Camera</span>
+                    </span>
+                  </DropdownMenuItem>
+                )}
+                {isFileUploadAvailable && (
+                  <DropdownMenuItem
+                    geometry="custom"
+                    className={touchMenuRowClassName}
+                    onClick={() => photosInputRef.current?.click()}
+                  >
+                    <span className={touchMenuChipClassName}>
+                      <Icon icon={RiImageLine} glyphInset={0} slotSize={20} />
+                    </span>
+                    <span className="flex min-w-0 grow items-center gap-2.5">
+                      <span className="truncate">Photos</span>
+                    </span>
+                  </DropdownMenuItem>
+                )}
+                {commandItems.map((item) => (
+                  <DropdownMenuItem
+                    key={item.itemId}
+                    geometry="custom"
+                    disabled={item.disabled}
+                    className={touchMenuRowClassName}
+                    onClick={() => activateItem(item.itemId)}
+                  >
+                    <span className={touchMenuChipClassName}>
+                      <Icon
+                        icon={item.action.icon}
+                        glyphInset={0}
+                        slotSize={20}
+                      />
+                    </span>
+                    <span className="flex min-w-0 grow items-center gap-2.5">
+                      <span className="truncate">
+                        {item.action.touchLabel ?? item.action.label}
+                      </span>
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+              <DropdownMenuRadioGroup
+                value={toggleItems.find((item) => item.selected)?.itemId ?? ""}
+              >
+                {toggleItems.map((item) => (
+                  <DropdownMenuRadioItem
+                    key={item.itemId}
+                    value={item.itemId}
+                    disabled={item.disabled}
+                    className={touchMenuRowClassName}
+                    onClick={() => activateItem(item.itemId)}
+                  >
+                    <span className={touchMenuChipClassName}>
+                      <Icon
+                        icon={item.action.icon}
+                        glyphInset={0}
+                        slotSize={20}
+                      />
+                    </span>
+                    <span className="flex min-w-0 grow items-center gap-2.5">
+                      <span className="truncate">{item.action.label}</span>
+                    </span>
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          ) : (
+            /* ChatGPT's fine-pointer narrow-width + menu (captured
+               2026-08-24): a compact content-sized popover on the main
+               surface — rounded-[20px], py-2.5, 36px text-sm rows with plain
+               20px currentColor glyphs — NOT the old dark icon-circle panel.
+               `w-max` overrides the shared dropdown base's anchor-width
+               sizing: the popover is sized by its rows (capped at max-w-xs),
+               never by the 36px + button. */
+            <DropdownMenuContent
+              side="top"
+              sideOffset={0}
+              align="start"
+              alignOffset={-7}
+              animated={false}
+              geometry="custom"
+              className="max-h-(--available-height) w-max max-w-xs overflow-y-auto rounded-[20px] py-2.5 [scrollbar-width:none]"
+              onKeyDownCapture={(event) => {
+                if (event.key === "Tab") event.preventDefault()
+              }}
+            >
+              <DropdownMenuGroup>
+                {commandItems.map((item) => (
+                  <DropdownMenuItem
+                    key={item.itemId}
+                    geometry="custom"
+                    disabled={item.disabled}
+                    className="mx-2.5 min-h-9 justify-between gap-6 rounded-[12px] px-2.5 py-1.5 text-sm"
+                    onClick={() => activateItem(item.itemId)}
+                  >
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      {/* Mobile rows keep ChatGPT's plain currentColor glyphs —
+                          no per-action icon tint (that belongs to the @ menu). */}
+                      <Icon
+                        icon={item.action.icon}
+                        glyphInset={0}
+                        slotSize={20}
+                      />
+                      <span className="min-w-0 truncate">
+                        {item.action.label}
+                      </span>
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+              <DropdownMenuRadioGroup
+                value={toggleItems.find((item) => item.selected)?.itemId ?? ""}
+              >
+                {toggleItems.map((item) => (
+                  <DropdownMenuRadioItem
+                    key={item.itemId}
+                    value={item.itemId}
+                    disabled={item.disabled}
+                    className="mx-2.5 min-h-9 justify-between gap-6 rounded-[12px] px-2.5 py-1.5 text-sm"
+                    onClick={() => activateItem(item.itemId)}
+                  >
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <Icon
+                        icon={item.action.icon}
+                        glyphInset={0}
+                        slotSize={20}
+                      />
+                      <span className="min-w-0 truncate">
+                        {item.action.label}
+                      </span>
+                    </span>
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          )}
         </DropdownMenu>
+        {isTouchMenu && isFileUploadAvailable && (
+          /* ChatGPT parity: the camera / photo-library sources are hidden
+             file inputs the touch rows click — mounted OUTSIDE the menu so
+             they survive the menu closing on row activation. */
+          <>
+            <input
+              ref={photosInputRef}
+              className="sr-only select-none"
+              type="file"
+              tabIndex={-1}
+              aria-hidden="true"
+              data-testid="composer-upload-photos-input"
+              accept="image/*"
+              multiple
+              onChange={handleTouchFileInputChange}
+            />
+            <input
+              ref={cameraInputRef}
+              className="sr-only select-none"
+              type="file"
+              tabIndex={-1}
+              aria-hidden="true"
+              data-testid="composer-upload-camera-input"
+              accept="image/*"
+              capture="environment"
+              multiple
+              onChange={handleTouchFileInputChange}
+            />
+          </>
+        )}
         <Popover
           open={isActionQueryOpen}
           onOpenChange={handleActionQueryOpenChange}
